@@ -47,6 +47,9 @@ jobs:
             echo "Icon Composer does not support native pre-Tahoe preview export."
           fi
           "$tool" assets/prod/app-icon.icon \
+            --export-preview macOS Default 1024 1024 0.8046875 -45 \
+            "$RUNNER_TEMP/pulse-code-macos-safe-area-probe.png"
+          "$tool" assets/prod/app-icon.icon \
             --export-image \
             --output-file "$RUNNER_TEMP/pulse-code-macos-probe.png" \
             --platform macOS \
