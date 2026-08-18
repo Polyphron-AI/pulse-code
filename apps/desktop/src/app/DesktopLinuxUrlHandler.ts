@@ -20,7 +20,7 @@ import { makeComponentLogger } from "./DesktopObservability.ts";
 // our own handler entry pointing at the current AppImage and claim the
 // scheme default via xdg-mime, exactly what the file manager's "set as
 // default" checkbox would record in mimeapps.list.
-export const URL_HANDLER_DESKTOP_ENTRY_NAME = "t3code-url-handler.desktop";
+export const URL_HANDLER_DESKTOP_ENTRY_NAME = "pulsecode-url-handler.desktop";
 
 const { logInfo, logWarning } = makeComponentLogger("desktop-linux-url-handler");
 
@@ -70,7 +70,7 @@ export function escapeDesktopEntryExecArgument(value: string): string {
 export function renderUrlHandlerDesktopEntry(input: {
   readonly displayName: string;
   readonly execTarget: string;
-  readonly scheme: string;
+  readonly schemes: ReadonlyArray<string>;
 }): string {
   return [
     "[Desktop Entry]",
@@ -80,7 +80,7 @@ export function renderUrlHandlerDesktopEntry(input: {
     "Terminal=false",
     "NoDisplay=true",
     "StartupNotify=false",
-    `MimeType=x-scheme-handler/${input.scheme};`,
+    `MimeType=${input.schemes.map((scheme) => `x-scheme-handler/${scheme};`).join("")}`,
     "",
   ].join("\n");
 }
@@ -97,7 +97,7 @@ export const make = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
 
-  const scheme = ElectronProtocol.getDesktopScheme(environment.isDevelopment);
+  const schemes = ElectronProtocol.getDesktopSchemes(environment.isDevelopment);
   const desktopEntryPath = environment.path.join(
     environment.linuxApplicationsDir,
     URL_HANDLER_DESKTOP_ENTRY_NAME,
@@ -113,7 +113,7 @@ export const make = Effect.gen(function* () {
       renderUrlHandlerDesktopEntry({
         displayName: environment.displayName,
         execTarget,
-        scheme,
+        schemes,
       }),
     );
   }).pipe(
@@ -121,7 +121,7 @@ export const make = Effect.gen(function* () {
       (cause) =>
         new DesktopLinuxUrlHandlerRegistrationError({
           step: "write-desktop-entry",
-          scheme,
+          scheme: schemes[0] ?? ElectronProtocol.DESKTOP_PRODUCTION_SCHEME,
           desktopEntryPath,
           cause,
         }),
@@ -130,23 +130,25 @@ export const make = Effect.gen(function* () {
 
   const setDefaultHandler = Effect.scoped(
     Effect.gen(function* () {
-      const command = ChildProcess.make(
-        "xdg-mime",
-        ["default", URL_HANDLER_DESKTOP_ENTRY_NAME, `x-scheme-handler/${scheme}`],
-        {
-          stdin: "ignore",
-          stdout: "ignore",
-          stderr: "ignore",
-        },
-      );
-      const handle = yield* spawner.spawn(command);
-      const exitCode = yield* handle.exitCode;
-      if ((exitCode as unknown as number) !== 0) {
-        return yield* new DesktopLinuxUrlHandlerRegistrationError({
-          step: "set-default-handler",
-          scheme,
-          exitCode: Number(exitCode),
-        });
+      for (const scheme of schemes) {
+        const command = ChildProcess.make(
+          "xdg-mime",
+          ["default", URL_HANDLER_DESKTOP_ENTRY_NAME, `x-scheme-handler/${scheme}`],
+          {
+            stdin: "ignore",
+            stdout: "ignore",
+            stderr: "ignore",
+          },
+        );
+        const handle = yield* spawner.spawn(command);
+        const exitCode = yield* handle.exitCode;
+        if ((exitCode as unknown as number) !== 0) {
+          return yield* new DesktopLinuxUrlHandlerRegistrationError({
+            step: "set-default-handler",
+            scheme,
+            exitCode: Number(exitCode),
+          });
+        }
       }
     }),
   ).pipe(
@@ -155,7 +157,7 @@ export const make = Effect.gen(function* () {
         ? error
         : new DesktopLinuxUrlHandlerRegistrationError({
             step: "set-default-handler",
-            scheme,
+            scheme: schemes[0] ?? ElectronProtocol.DESKTOP_PRODUCTION_SCHEME,
             cause: error,
           }),
     ),
@@ -167,13 +169,13 @@ export const make = Effect.gen(function* () {
     }
     yield* writeDesktopEntry;
     yield* setDefaultHandler;
-    yield* logInfo("registered URL scheme handler", { scheme });
+    yield* logInfo("registered URL scheme handlers", { schemes });
   }).pipe(
     // Registration is best-effort: a missing xdg-mime or read-only home must
     // never block startup — the OS chooser remains as fallback.
     Effect.catch((error) =>
       logWarning("URL scheme handler registration failed", {
-        scheme,
+        scheme: error.scheme,
         step: error.step,
         message: error.message,
         ...(error.desktopEntryPath === undefined

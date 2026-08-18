@@ -4,7 +4,7 @@ import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 
-import { loadRepoEnv, resolvePublicConfig } from "./public-config.ts";
+import { loadRepoEnv, projectPulseCodeEnvAliases, resolvePublicConfig } from "./public-config.ts";
 
 const temporaryDirectories: string[] = [];
 
@@ -15,6 +15,24 @@ afterEach(() => {
 });
 
 describe("loadRepoEnv", () => {
+  it("projects arbitrary Pulse Code variables while preserving legacy aliases", () => {
+    expect(
+      projectPulseCodeEnvAliases({
+        PULSE_CODE_PORT: "4949",
+        PULSE_CODE_HOST: "pulse.example.test",
+        T3CODE_HOST: "legacy.example.test",
+        T3CODE_BUNDLED_DEV: "1",
+      }),
+    ).toEqual({
+      PULSE_CODE_PORT: "4949",
+      T3CODE_PORT: "4949",
+      PULSE_CODE_HOST: "pulse.example.test",
+      T3CODE_HOST: "pulse.example.test",
+      PULSE_CODE_BUNDLED_DEV: "1",
+      T3CODE_BUNDLED_DEV: "1",
+    });
+  });
+
   it("does not project cloud configuration for an unconfigured clone", () => {
     const env = loadRepoEnv({ baseEnv: {}, repoRoot: makeTemporaryDirectory() });
 
@@ -107,13 +125,16 @@ describe("loadRepoEnv", () => {
     expect(
       loadRepoEnv({
         baseEnv: {
-          T3CODE_RELAY_CLIENT_OTLP_TRACES_URL: "https://api.axiom.co/v1/traces",
-          T3CODE_RELAY_CLIENT_OTLP_TRACES_DATASET: "relay-client-traces",
-          T3CODE_RELAY_CLIENT_OTLP_TRACES_TOKEN: "relay-client-token",
+          PULSE_CODE_RELAY_CLIENT_OTLP_TRACES_URL: "https://api.axiom.co/v1/traces",
+          PULSE_CODE_RELAY_CLIENT_OTLP_TRACES_DATASET: "relay-client-traces",
+          PULSE_CODE_RELAY_CLIENT_OTLP_TRACES_TOKEN: "relay-client-token",
         },
         repoRoot: makeTemporaryDirectory(),
       }),
     ).toEqual({
+      PULSE_CODE_RELAY_CLIENT_OTLP_TRACES_URL: "https://api.axiom.co/v1/traces",
+      PULSE_CODE_RELAY_CLIENT_OTLP_TRACES_DATASET: "relay-client-traces",
+      PULSE_CODE_RELAY_CLIENT_OTLP_TRACES_TOKEN: "relay-client-token",
       T3CODE_RELAY_CLIENT_OTLP_TRACES_URL: "https://api.axiom.co/v1/traces",
       T3CODE_RELAY_CLIENT_OTLP_TRACES_DATASET: "relay-client-traces",
       T3CODE_RELAY_CLIENT_OTLP_TRACES_TOKEN: "relay-client-token",
@@ -127,16 +148,21 @@ describe("loadRepoEnv", () => {
     expect(
       loadRepoEnv({
         baseEnv: {
-          T3CODE_RELAY_URL: "https://relay.example.test",
-          T3CODE_MOBILE_OTLP_TRACES_URL: "https://api.axiom.co/v1/traces",
-          T3CODE_MOBILE_OTLP_TRACES_DATASET: "mobile-traces",
-          T3CODE_MOBILE_OTLP_TRACES_TOKEN: "mobile-token",
+          PULSE_CODE_RELAY_URL: "https://relay.example.test",
+          PULSE_CODE_MOBILE_OTLP_TRACES_URL: "https://api.axiom.co/v1/traces",
+          PULSE_CODE_MOBILE_OTLP_TRACES_DATASET: "mobile-traces",
+          PULSE_CODE_MOBILE_OTLP_TRACES_TOKEN: "mobile-token",
         },
         repoRoot: makeTemporaryDirectory(),
       }),
     ).toEqual({
+      PULSE_CODE_RELAY_URL: "https://relay.example.test",
       T3CODE_RELAY_URL: "https://relay.example.test",
+      VITE_PULSE_CODE_RELAY_URL: "https://relay.example.test",
       VITE_T3CODE_RELAY_URL: "https://relay.example.test",
+      PULSE_CODE_MOBILE_OTLP_TRACES_URL: "https://api.axiom.co/v1/traces",
+      PULSE_CODE_MOBILE_OTLP_TRACES_DATASET: "mobile-traces",
+      PULSE_CODE_MOBILE_OTLP_TRACES_TOKEN: "mobile-token",
       T3CODE_MOBILE_OTLP_TRACES_URL: "https://api.axiom.co/v1/traces",
       T3CODE_MOBILE_OTLP_TRACES_DATASET: "mobile-traces",
       T3CODE_MOBILE_OTLP_TRACES_TOKEN: "mobile-token",

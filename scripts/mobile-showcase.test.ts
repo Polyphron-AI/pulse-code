@@ -28,6 +28,8 @@ import {
   validateStoreAssetCount,
 } from "./mobile-showcase.ts";
 
+const normalizePath = (value: string) => value.replaceAll("\\", "/");
+
 const appleSpec: ShowcaseStoreAssetSpec = {
   store: "apple",
   directory: "apple/iphone-test",
@@ -123,22 +125,27 @@ it("parses validation-only mode", () => {
 it("selects an explicit CI Android ABI without changing the local default", () => {
   assert.equal(resolveShowcaseAndroidAbi(undefined), "arm64-v8a");
   assert.equal(resolveShowcaseAndroidAbi("x86_64"), "x86_64");
-  assert.throws(() => resolveShowcaseAndroidAbi("mips"), /Unsupported T3_SHOWCASE_ANDROID_ABI/u);
+  assert.throws(
+    () => resolveShowcaseAndroidAbi("mips"),
+    /Unsupported PULSE_CODE_SHOWCASE_ANDROID_ABI/u,
+  );
 });
 
 it("uses platform-correct default Android SDK roots", () => {
   assert.equal(
-    resolveAndroidSdkRoot({ HOME: "/Users/showcase" }, "darwin"),
+    normalizePath(resolveAndroidSdkRoot({ HOME: "/Users/showcase" }, "darwin")),
     "/Users/showcase/Library/Android/sdk",
   );
   assert.equal(
-    resolveAndroidSdkRoot({ HOME: "/home/showcase" }, "linux"),
+    normalizePath(resolveAndroidSdkRoot({ HOME: "/home/showcase" }, "linux")),
     "/home/showcase/Android/Sdk",
   );
   assert.equal(
-    resolveAndroidSdkRoot(
-      { HOME: "/home/showcase", ANDROID_SDK_ROOT: "/opt/android-sdk" },
-      "linux",
+    normalizePath(
+      resolveAndroidSdkRoot(
+        { HOME: "/home/showcase", ANDROID_SDK_ROOT: "/opt/android-sdk" },
+        "linux",
+      ),
     ),
     "/opt/android-sdk",
   );
@@ -164,7 +171,7 @@ it("expands both appearances into independent upload-ready directories", () => {
   assert.deepStrictEqual(
     captures.map((capture) => ({
       appearance: capture.appearance,
-      directory: showcaseCaptureDirectory("/captures", capture),
+      directory: normalizePath(showcaseCaptureDirectory("/captures", capture)),
     })),
     [
       { appearance: "light", directory: "/captures/apple/iphone-test/light/t3-code" },
@@ -189,7 +196,7 @@ it("expands themes into independent upload-ready directories per appearance", ()
 
   assert.deepStrictEqual(
     planShowcaseCaptures(config, options).map((capture) =>
-      showcaseCaptureDirectory("/captures", capture),
+      normalizePath(showcaseCaptureDirectory("/captures", capture)),
     ),
     [
       "/captures/apple/iphone-test/light/ocean",
@@ -302,7 +309,7 @@ it("selects a reachable LAN IPv4 address", () => {
 it("seeds a playful multi-environment project spectrum", () => {
   assert.deepStrictEqual(
     SHOWCASE_PROJECTS.map((project) => project.title),
-    ["T3 Code", "React", "Linux"],
+    ["Pulse Code", "React", "Linux"],
   );
   assert.deepStrictEqual(
     SHOWCASE_ENVIRONMENTS.map((environment) => environment.label),

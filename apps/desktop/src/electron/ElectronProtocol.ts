@@ -9,11 +9,21 @@ import * as Scope from "effect/Scope";
 import * as Electron from "electron";
 
 export const DESKTOP_HOST = "app";
-export const DESKTOP_PRODUCTION_SCHEME = "t3code";
-export const DESKTOP_DEVELOPMENT_SCHEME = "t3code-dev";
+export const DESKTOP_PRODUCTION_SCHEME = "pulsecode";
+export const DESKTOP_DEVELOPMENT_SCHEME = "pulsecode-dev";
+export const LEGACY_DESKTOP_PRODUCTION_SCHEME = "t3code";
+export const LEGACY_DESKTOP_DEVELOPMENT_SCHEME = "t3code-dev";
 
 export function getDesktopScheme(isDevelopment: boolean): string {
   return isDevelopment ? DESKTOP_DEVELOPMENT_SCHEME : DESKTOP_PRODUCTION_SCHEME;
+}
+
+export function getLegacyDesktopScheme(isDevelopment: boolean): string {
+  return isDevelopment ? LEGACY_DESKTOP_DEVELOPMENT_SCHEME : LEGACY_DESKTOP_PRODUCTION_SCHEME;
+}
+
+export function getDesktopSchemes(isDevelopment: boolean): ReadonlyArray<string> {
+  return [getDesktopScheme(isDevelopment), getLegacyDesktopScheme(isDevelopment)];
 }
 
 export function getDesktopOrigin(isDevelopment: boolean): string {
@@ -50,6 +60,7 @@ export class ElectronProtocolUnregistrationError extends Schema.TaggedErrorClass
 
 export interface DesktopProtocolRegistrationInput {
   readonly scheme: string;
+  readonly aliasSchemes?: ReadonlyArray<string>;
   readonly targetOrigin: URL;
   readonly backendOrigin: URL;
   readonly clerkFrontendApiHostname: string | undefined;
@@ -82,13 +93,15 @@ export function makeDesktopContentSecurityPolicy(input: DesktopProtocolRegistrat
   // connections by the network schemes the client supports instead of by host.
   const connectSources = ["'self'", "http:", "https:", "ws:", "wss:"];
 
+  const rendererSchemes = [input.scheme, ...(input.aliasSchemes ?? [])];
+
   return [
     "default-src 'self'",
     `script-src ${scriptSources.join(" ")}`,
     `connect-src ${connectSources.join(" ")}`,
-    `img-src 'self' ${input.scheme}: blob: data: http: https:`,
+    `img-src 'self' ${rendererSchemes.map((scheme) => `${scheme}:`).join(" ")} blob: data: http: https:`,
     "style-src 'self' 'unsafe-inline'",
-    `font-src 'self' ${input.scheme}: data:`,
+    `font-src 'self' ${rendererSchemes.map((scheme) => `${scheme}:`).join(" ")} data:`,
     "worker-src 'self' blob:",
     "frame-src 'self' https://challenges.cloudflare.com",
     "form-action 'self'",
@@ -109,26 +122,22 @@ function withContentSecurityPolicy(response: Response, policy: string): Response
  * Must run synchronously during process bootstrap, before Electron emits `ready`.
  */
 export function registerDesktopSchemePrivilegesSync(): void {
-  Electron.protocol.registerSchemesAsPrivileged([
-    {
-      scheme: DESKTOP_PRODUCTION_SCHEME,
+  Electron.protocol.registerSchemesAsPrivileged(
+    [
+      DESKTOP_PRODUCTION_SCHEME,
+      DESKTOP_DEVELOPMENT_SCHEME,
+      LEGACY_DESKTOP_PRODUCTION_SCHEME,
+      LEGACY_DESKTOP_DEVELOPMENT_SCHEME,
+    ].map((scheme) => ({
+      scheme,
       privileges: {
         standard: true,
         secure: true,
         supportFetchAPI: true,
         corsEnabled: true,
       },
-    },
-    {
-      scheme: DESKTOP_DEVELOPMENT_SCHEME,
-      privileges: {
-        standard: true,
-        secure: true,
-        supportFetchAPI: true,
-        corsEnabled: true,
-      },
-    },
-  ]);
+    })),
+  );
 }
 
 const registerDesktopSchemePrivileges = Effect.sync(registerDesktopSchemePrivilegesSync).pipe(
@@ -210,19 +219,24 @@ export const make = Effect.gen(function* () {
       if (yield* Ref.get(registered)) return;
 
       const contentSecurityPolicy = makeDesktopContentSecurityPolicy(input);
+      const schemes = [...new Set([input.scheme, ...(input.aliasSchemes ?? [])])];
 
       yield* Effect.acquireRelease(
         Effect.try({
           try: () => {
-            Electron.protocol.handle(input.scheme, (request) =>
-              proxyRequest(request, input.targetOrigin, contentSecurityPolicy),
-            );
+            for (const scheme of schemes) {
+              Electron.protocol.handle(scheme, (request) =>
+                proxyRequest(request, input.targetOrigin, contentSecurityPolicy),
+              );
+            }
           },
           catch: (cause) => new ElectronProtocolRegistrationError({ scheme: input.scheme, cause }),
         }).pipe(Effect.andThen(Ref.set(registered, true))),
         () =>
           Effect.try({
-            try: () => Electron.protocol.unhandle(input.scheme),
+            try: () => {
+              for (const scheme of schemes) Electron.protocol.unhandle(scheme);
+            },
             catch: (cause) =>
               new ElectronProtocolUnregistrationError({
                 scheme: input.scheme,

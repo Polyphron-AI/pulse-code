@@ -140,6 +140,8 @@ describe("ProjectSetupScriptRunner", () => {
           cwd: "/repo/worktrees/a",
           worktreePath: "/repo/worktrees/a",
           env: {
+            PULSE_CODE_PROJECT_ROOT: "/repo/project",
+            PULSE_CODE_WORKTREE_PATH: "/repo/worktrees/a",
             T3CODE_PROJECT_ROOT: "/repo/project",
             T3CODE_WORKTREE_PATH: "/repo/worktrees/a",
           },

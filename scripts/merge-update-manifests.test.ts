@@ -20,13 +20,13 @@ describe("merge-update-manifests", () => {
       "mac",
       `version: 0.0.4
 files:
-  - url: T3-Code-0.0.4-arm64.zip
+  - url: Pulse-Code-0.0.4-arm64.zip
     sha512: arm64zip
     size: 125621344
-  - url: T3-Code-0.0.4-arm64.dmg
+  - url: Pulse-Code-0.0.4-arm64.dmg
     sha512: arm64dmg
     size: 131754935
-path: T3-Code-0.0.4-arm64.zip
+path: Pulse-Code-0.0.4-arm64.zip
 sha512: arm64zip
 releaseDate: '2026-03-07T10:32:14.587Z'
 `,
@@ -37,13 +37,13 @@ releaseDate: '2026-03-07T10:32:14.587Z'
       "mac",
       `version: 0.0.4
 files:
-  - url: T3-Code-0.0.4-x64.zip
+  - url: Pulse-Code-0.0.4-x64.zip
     sha512: x64zip
     size: 132000112
-  - url: T3-Code-0.0.4-x64.dmg
+  - url: Pulse-Code-0.0.4-x64.dmg
     sha512: x64dmg
     size: 138148807
-path: T3-Code-0.0.4-x64.zip
+path: Pulse-Code-0.0.4-x64.zip
 sha512: x64zip
 releaseDate: '2026-03-07T10:36:07.540Z'
 `,
@@ -57,10 +57,10 @@ releaseDate: '2026-03-07T10:36:07.540Z'
     assert.deepStrictEqual(
       merged.files.map((file) => file.url),
       [
-        "T3-Code-0.0.4-arm64.zip",
-        "T3-Code-0.0.4-arm64.dmg",
-        "T3-Code-0.0.4-x64.zip",
-        "T3-Code-0.0.4-x64.dmg",
+        "Pulse-Code-0.0.4-arm64.zip",
+        "Pulse-Code-0.0.4-arm64.dmg",
+        "Pulse-Code-0.0.4-x64.zip",
+        "Pulse-Code-0.0.4-x64.dmg",
       ],
     );
 
@@ -74,13 +74,13 @@ releaseDate: '2026-03-07T10:36:07.540Z'
       "win",
       `version: 0.0.4
 files:
-  - url: T3-Code-0.0.4-arm64.exe
+  - url: Pulse-Code-0.0.4-arm64.exe
     sha512: arm64exe
     size: 125621344
-  - url: T3-Code-0.0.4-arm64.exe.blockmap
+  - url: Pulse-Code-0.0.4-arm64.exe.blockmap
     sha512: arm64blockmap
     size: 131754
-path: T3-Code-0.0.4-arm64.exe
+path: Pulse-Code-0.0.4-arm64.exe
 sha512: arm64exe
 releaseDate: '2026-03-07T10:32:14.587Z'
 `,
@@ -91,13 +91,13 @@ releaseDate: '2026-03-07T10:32:14.587Z'
       "win",
       `version: 0.0.4
 files:
-  - url: T3-Code-0.0.4-x64.exe
+  - url: Pulse-Code-0.0.4-x64.exe
     sha512: x64exe
     size: 132000112
-  - url: T3-Code-0.0.4-x64.exe.blockmap
+  - url: Pulse-Code-0.0.4-x64.exe.blockmap
     sha512: x64blockmap
     size: 138148
-path: T3-Code-0.0.4-x64.exe
+path: Pulse-Code-0.0.4-x64.exe
 sha512: x64exe
 releaseDate: '2026-03-07T10:36:07.540Z'
 `,
@@ -111,10 +111,10 @@ releaseDate: '2026-03-07T10:36:07.540Z'
     assert.deepStrictEqual(
       merged.files.map((file) => file.url),
       [
-        "T3-Code-0.0.4-arm64.exe",
-        "T3-Code-0.0.4-arm64.exe.blockmap",
-        "T3-Code-0.0.4-x64.exe",
-        "T3-Code-0.0.4-x64.exe.blockmap",
+        "Pulse-Code-0.0.4-arm64.exe",
+        "Pulse-Code-0.0.4-arm64.exe.blockmap",
+        "Pulse-Code-0.0.4-x64.exe",
+        "Pulse-Code-0.0.4-x64.exe.blockmap",
       ],
     );
 

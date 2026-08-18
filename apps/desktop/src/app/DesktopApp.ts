@@ -56,7 +56,7 @@ export class DesktopDevelopmentBackendPortRequiredError extends Schema.TaggedErr
   {},
 ) {
   override get message(): string {
-    return "T3CODE_PORT is required in desktop development.";
+    return "PULSE_CODE_PORT is required in desktop development (T3CODE_PORT is also supported).";
   }
 }
 
@@ -128,7 +128,7 @@ const handleFatalStartupError = Effect.fn("desktop.startup.handleFatalStartupErr
   const wasQuitting = yield* Ref.getAndSet(state.quitting, true);
   if (!wasQuitting) {
     yield* electronDialog.showErrorBox(
-      "T3 Code failed to start",
+      "Pulse Code failed to start",
       `Stage: ${stage}\n${message}${detail}`,
     );
   }
@@ -180,6 +180,7 @@ const bootstrap = Effect.gen(function* () {
     : backendConfig.httpBaseUrl;
   yield* electronProtocol.registerDesktopProtocol({
     scheme: ElectronProtocol.getDesktopScheme(environment.isDevelopment),
+    aliasSchemes: [ElectronProtocol.getLegacyDesktopScheme(environment.isDevelopment)],
     targetOrigin: rendererTarget,
     backendOrigin: backendConfig.httpBaseUrl,
     clerkFrontendApiHostname: DesktopClerk.desktopClerkFrontendApiHostname,

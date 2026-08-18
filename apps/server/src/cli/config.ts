@@ -12,10 +12,20 @@ import * as Schema from "effect/Schema";
 import * as SchemaIssue from "effect/SchemaIssue";
 import * as SchemaTransformation from "effect/SchemaTransformation";
 import { Argument, Flag } from "effect/unstable/cli";
+import { withLegacyConfigAlias } from "@t3tools/shared/configAliases";
 
 import { readBootstrapEnvelope } from "../bootstrap.ts";
 import * as ServerConfig from "../config.ts";
 import { expandHomePath, resolveBaseDir } from "../os-jank.ts";
+
+const pulseCodeConfig = <A>(
+  legacyName: string,
+  makeConfig: (name: string) => Config.Config<A>,
+): Config.Config<A> =>
+  withLegacyConfigAlias(
+    makeConfig(legacyName.replace(/^T3CODE_/, "PULSE_CODE_")),
+    makeConfig(legacyName),
+  );
 
 export const modeFlag = Flag.choice("mode", ServerConfig.RuntimeMode.literals).pipe(
   Flag.withDescription("Runtime mode. `desktop` keeps loopback defaults unless overridden."),
@@ -32,7 +42,7 @@ export const hostFlag = Flag.string("host").pipe(
 );
 export const baseDirFlag = Flag.string("base-dir").pipe(
   Flag.withDescription(
-    "Explicit T3 Code data directory; runtime state is stored under userdata (equivalent to T3CODE_HOME).",
+    "Explicit Pulse Code data directory; runtime state is stored under userdata (equivalent to PULSE_CODE_HOME; T3CODE_HOME remains supported).",
   ),
   Flag.optional,
 );
@@ -58,7 +68,7 @@ export const autoBootstrapProjectFromCwdFlag = Flag.boolean("auto-bootstrap-proj
 );
 export const logWebSocketEventsFlag = Flag.boolean("log-websocket-events").pipe(
   Flag.withDescription(
-    "Emit server-side logs for outbound WebSocket push traffic (equivalent to T3CODE_LOG_WS_EVENTS).",
+    "Emit server-side logs for outbound WebSocket push traffic (equivalent to PULSE_CODE_LOG_WS_EVENTS).",
   ),
   Flag.withAlias("log-ws-events"),
   Flag.optional,
@@ -76,37 +86,55 @@ export const tailscaleServePortFlag = Flag.integer("tailscale-serve-port").pipe(
 );
 
 const EnvServerConfig = Config.all({
-  logLevel: Config.logLevel("T3CODE_LOG_LEVEL").pipe(Config.withDefault("Info")),
-  traceMinLevel: Config.logLevel("T3CODE_TRACE_MIN_LEVEL").pipe(Config.withDefault("Info")),
-  traceTimingEnabled: Config.boolean("T3CODE_TRACE_TIMING_ENABLED").pipe(Config.withDefault(true)),
-  traceFile: Config.string("T3CODE_TRACE_FILE").pipe(
+  logLevel: pulseCodeConfig("T3CODE_LOG_LEVEL", Config.logLevel).pipe(Config.withDefault("Info")),
+  traceMinLevel: pulseCodeConfig("T3CODE_TRACE_MIN_LEVEL", Config.logLevel).pipe(
+    Config.withDefault("Info"),
+  ),
+  traceTimingEnabled: pulseCodeConfig("T3CODE_TRACE_TIMING_ENABLED", Config.boolean).pipe(
+    Config.withDefault(true),
+  ),
+  traceFile: pulseCodeConfig("T3CODE_TRACE_FILE", Config.string).pipe(
     Config.option,
     Config.map(Option.getOrUndefined),
   ),
-  traceMaxBytes: Config.int("T3CODE_TRACE_MAX_BYTES").pipe(Config.withDefault(10 * 1024 * 1024)),
-  traceMaxFiles: Config.int("T3CODE_TRACE_MAX_FILES").pipe(Config.withDefault(10)),
-  traceBatchWindowMs: Config.int("T3CODE_TRACE_BATCH_WINDOW_MS").pipe(Config.withDefault(1_000)),
-  otlpTracesUrl: Config.string("T3CODE_OTLP_TRACES_URL").pipe(
+  traceMaxBytes: pulseCodeConfig("T3CODE_TRACE_MAX_BYTES", Config.int).pipe(
+    Config.withDefault(10 * 1024 * 1024),
+  ),
+  traceMaxFiles: pulseCodeConfig("T3CODE_TRACE_MAX_FILES", Config.int).pipe(Config.withDefault(10)),
+  traceBatchWindowMs: pulseCodeConfig("T3CODE_TRACE_BATCH_WINDOW_MS", Config.int).pipe(
+    Config.withDefault(1_000),
+  ),
+  otlpTracesUrl: pulseCodeConfig("T3CODE_OTLP_TRACES_URL", Config.string).pipe(
     Config.option,
     Config.map(Option.getOrUndefined),
   ),
-  otlpMetricsUrl: Config.string("T3CODE_OTLP_METRICS_URL").pipe(
+  otlpMetricsUrl: pulseCodeConfig("T3CODE_OTLP_METRICS_URL", Config.string).pipe(
     Config.option,
     Config.map(Option.getOrUndefined),
   ),
-  otlpExportIntervalMs: Config.int("T3CODE_OTLP_EXPORT_INTERVAL_MS").pipe(
+  otlpExportIntervalMs: pulseCodeConfig("T3CODE_OTLP_EXPORT_INTERVAL_MS", Config.int).pipe(
     Config.withDefault(10_000),
   ),
-  otlpServiceName: Config.string("T3CODE_OTLP_SERVICE_NAME").pipe(Config.withDefault("t3-server")),
-  mode: Config.schema(ServerConfig.RuntimeMode, "T3CODE_MODE").pipe(
+  otlpServiceName: pulseCodeConfig("T3CODE_OTLP_SERVICE_NAME", Config.string).pipe(
+    Config.withDefault("t3-server"),
+  ),
+  mode: pulseCodeConfig("T3CODE_MODE", (name) =>
+    Config.schema(ServerConfig.RuntimeMode, name),
+  ).pipe(Config.option, Config.map(Option.getOrUndefined)),
+  port: pulseCodeConfig("T3CODE_PORT", Config.port).pipe(
     Config.option,
     Config.map(Option.getOrUndefined),
   ),
-  port: Config.port("T3CODE_PORT").pipe(Config.option, Config.map(Option.getOrUndefined)),
-  host: Config.string("T3CODE_HOST").pipe(Config.option, Config.map(Option.getOrUndefined)),
-  t3Home: Config.string("T3CODE_HOME").pipe(Config.option, Config.map(Option.getOrUndefined)),
+  host: pulseCodeConfig("T3CODE_HOST", Config.string).pipe(
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
+  t3Home: pulseCodeConfig("T3CODE_HOME", Config.string).pipe(
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
   devUrl: Config.url("VITE_DEV_SERVER_URL").pipe(Config.option, Config.map(Option.getOrUndefined)),
-  devAllowedOrigins: Config.string("T3CODE_DEV_ALLOWED_ORIGINS").pipe(
+  devAllowedOrigins: pulseCodeConfig("T3CODE_DEV_ALLOWED_ORIGINS", Config.string).pipe(
     Config.withDefault(""),
     Config.map((value) =>
       value
@@ -115,27 +143,27 @@ const EnvServerConfig = Config.all({
         .filter((entry) => entry.length > 0),
     ),
   ),
-  noBrowser: Config.boolean("T3CODE_NO_BROWSER").pipe(
+  noBrowser: pulseCodeConfig("T3CODE_NO_BROWSER", Config.boolean).pipe(
     Config.option,
     Config.map(Option.getOrUndefined),
   ),
-  bootstrapFd: Config.int("T3CODE_BOOTSTRAP_FD").pipe(
+  bootstrapFd: pulseCodeConfig("T3CODE_BOOTSTRAP_FD", Config.int).pipe(
     Config.option,
     Config.map(Option.getOrUndefined),
   ),
-  autoBootstrapProjectFromCwd: Config.boolean("T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD").pipe(
+  autoBootstrapProjectFromCwd: pulseCodeConfig(
+    "T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD",
+    Config.boolean,
+  ).pipe(Config.option, Config.map(Option.getOrUndefined)),
+  logWebSocketEvents: pulseCodeConfig("T3CODE_LOG_WS_EVENTS", Config.boolean).pipe(
     Config.option,
     Config.map(Option.getOrUndefined),
   ),
-  logWebSocketEvents: Config.boolean("T3CODE_LOG_WS_EVENTS").pipe(
+  tailscaleServeEnabled: pulseCodeConfig("T3CODE_TAILSCALE_SERVE", Config.boolean).pipe(
     Config.option,
     Config.map(Option.getOrUndefined),
   ),
-  tailscaleServeEnabled: Config.boolean("T3CODE_TAILSCALE_SERVE").pipe(
-    Config.option,
-    Config.map(Option.getOrUndefined),
-  ),
-  tailscaleServePort: Config.port("T3CODE_TAILSCALE_SERVE_PORT").pipe(
+  tailscaleServePort: pulseCodeConfig("T3CODE_TAILSCALE_SERVE_PORT", Config.port).pipe(
     Config.option,
     Config.map(Option.getOrUndefined),
   ),

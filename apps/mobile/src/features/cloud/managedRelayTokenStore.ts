@@ -1,14 +1,16 @@
 import { ManagedRelay } from "@t3tools/client-runtime/relay";
+import { RelayPublicClientId } from "@t3tools/contracts/relay";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as SecureStore from "expo-secure-store";
 
-const MANAGED_RELAY_TOKEN_CACHE_KEY = "t3code.cloud.relay-access-tokens";
+const MANAGED_RELAY_TOKEN_CACHE_KEY = "pulsecode.cloud.relay-access-tokens";
+const LEGACY_MANAGED_RELAY_TOKEN_CACHE_KEY = "t3code.cloud.relay-access-tokens";
 const MANAGED_RELAY_TOKEN_CACHE_VERSION = 1;
 
 const ManagedRelayAccessTokenCacheEntrySchema = Schema.Struct({
   accountId: Schema.String,
-  clientId: Schema.Literals(["t3-mobile", "t3-web"]),
+  clientId: RelayPublicClientId,
   relayUrl: Schema.String,
   thumbprint: Schema.String,
   scopes: Schema.Array(
@@ -53,7 +55,10 @@ function logStoreFailure(error: ManagedRelayTokenStoreError) {
 }
 
 const loadManagedRelayAccessTokens = Effect.tryPromise({
-  try: () => SecureStore.getItemAsync(MANAGED_RELAY_TOKEN_CACHE_KEY),
+  try: async () => {
+    const canonical = await SecureStore.getItemAsync(MANAGED_RELAY_TOKEN_CACHE_KEY);
+    return canonical ?? SecureStore.getItemAsync(LEGACY_MANAGED_RELAY_TOKEN_CACHE_KEY);
+  },
   catch: (cause) =>
     new ManagedRelayTokenStoreError({
       operation: "read",
@@ -95,7 +100,11 @@ const saveManagedRelayAccessTokens = (
     ),
     Effect.flatMap((encoded) =>
       Effect.tryPromise({
-        try: () => SecureStore.setItemAsync(MANAGED_RELAY_TOKEN_CACHE_KEY, encoded),
+        try: () =>
+          Promise.all([
+            SecureStore.setItemAsync(MANAGED_RELAY_TOKEN_CACHE_KEY, encoded),
+            SecureStore.setItemAsync(LEGACY_MANAGED_RELAY_TOKEN_CACHE_KEY, encoded),
+          ]).then(() => undefined),
         catch: (cause) =>
           new ManagedRelayTokenStoreError({
             operation: "write",
@@ -107,7 +116,11 @@ const saveManagedRelayAccessTokens = (
   );
 
 const clearManagedRelayAccessTokens = Effect.tryPromise({
-  try: () => SecureStore.deleteItemAsync(MANAGED_RELAY_TOKEN_CACHE_KEY),
+  try: () =>
+    Promise.all([
+      SecureStore.deleteItemAsync(MANAGED_RELAY_TOKEN_CACHE_KEY),
+      SecureStore.deleteItemAsync(LEGACY_MANAGED_RELAY_TOKEN_CACHE_KEY),
+    ]).then(() => undefined),
   catch: (cause) =>
     new ManagedRelayTokenStoreError({
       operation: "clear",

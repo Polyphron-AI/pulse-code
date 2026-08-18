@@ -18,9 +18,11 @@ import * as Semaphore from "effect/Semaphore";
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { HostProcessArchitecture, HostProcessPlatform } from "./hostProcess.ts";
+import { withLegacyConfigAlias } from "./configAliases.ts";
 
 export const CLOUDFLARED_VERSION = "2026.5.2";
-export const CLOUDFLARED_PATH_ENV_NAME = "T3CODE_CLOUDFLARED_PATH";
+export const CLOUDFLARED_PATH_ENV_NAME = "PULSE_CODE_CLOUDFLARED_PATH";
+export const LEGACY_CLOUDFLARED_PATH_ENV_NAME = "T3CODE_CLOUDFLARED_PATH";
 
 export type RelayClientExecutableSource = "override" | "managed" | "path";
 
@@ -113,8 +115,24 @@ const trimmedString = (name: string) =>
     ),
   );
 
+const optionalTrimmedString = (config: Config.Config<string>) =>
+  config.pipe(
+    Config.option,
+    Config.map(
+      Option.flatMap((value) => {
+        const trimmed = value.trim();
+        return trimmed.length > 0 ? Option.some(trimmed) : Option.none();
+      }),
+    ),
+  );
+
 const CloudflaredConfig = Config.all({
-  executableOverride: trimmedString(CLOUDFLARED_PATH_ENV_NAME),
+  executableOverride: optionalTrimmedString(
+    withLegacyConfigAlias(
+      Config.string(CLOUDFLARED_PATH_ENV_NAME),
+      Config.string(LEGACY_CLOUDFLARED_PATH_ENV_NAME),
+    ),
+  ),
   path: trimmedString("PATH"),
 });
 
@@ -368,7 +386,7 @@ export const makeCloudflaredRelayClient = Effect.fn("cloudflared.make")(function
     if (!releaseAsset) {
       return yield* new RelayClientInstallError({
         reason: "unsupported_platform",
-        message: `T3 Code does not provide a managed relay client binary for ${platform}-${arch}.`,
+        message: `Pulse Code does not provide a managed relay client binary for ${platform}-${arch}.`,
       });
     }
 

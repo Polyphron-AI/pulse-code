@@ -7,6 +7,8 @@ import {
   resolveMacLauncherPaths,
 } from "./electron-launcher.mjs";
 
+const normalizePath = (value) => value.replaceAll("\\", "/");
+
 describe("electron development launcher", () => {
   it("uses captured values only as fallbacks for a live runner environment", () => {
     const script = makeDevelopmentLauncherScript({
@@ -27,7 +29,12 @@ describe("electron development launcher", () => {
     assert.notInclude(script, "\nexport VITE_DEV_SERVER_URL=");
     assert.include(
       script,
-      "exec '/repo/node_modules/electron/Electron' --t3code-dev-root='/repo/apps/desktop' '/repo/apps/desktop/dist-electron/main.cjs' \"$@\"",
+      "if [ -z \"${PULSE_CODE_PORT:-}\" ]; then export PULSE_CODE_PORT='16566'; fi",
+    );
+    assert.include(script, "if [ -z \"${T3CODE_PORT:-}\" ]; then export T3CODE_PORT='16566'; fi");
+    assert.include(
+      script,
+      "exec '/repo/node_modules/electron/Electron' --pulse-code-dev-root='/repo/apps/desktop' '/repo/apps/desktop/dist-electron/main.cjs' \"$@\"",
     );
   });
 
@@ -53,18 +60,18 @@ describe("electron development launcher", () => {
 
   it("keeps the native Electron executable name inside the branded macOS bundle", () => {
     const paths = resolveMacLauncherPaths(
-      "/repo/apps/desktop/.electron-runtime/T3 Code (Dev).app",
-      "T3 Code (Dev)",
+      "/repo/apps/desktop/.electron-runtime/Pulse Code (Dev).app",
+      "Pulse Code (Dev)",
     );
 
-    assert.equal(paths.launcherExecutableName, "T3 Code (Dev) Launcher");
+    assert.equal(paths.launcherExecutableName, "Pulse Code (Dev) Launcher");
     assert.equal(
-      paths.launcherBinaryPath,
-      "/repo/apps/desktop/.electron-runtime/T3 Code (Dev).app/Contents/MacOS/T3 Code (Dev) Launcher",
+      normalizePath(paths.launcherBinaryPath),
+      "/repo/apps/desktop/.electron-runtime/Pulse Code (Dev).app/Contents/MacOS/Pulse Code (Dev) Launcher",
     );
     assert.equal(
-      paths.runtimeElectronBinaryPath,
-      "/repo/apps/desktop/.electron-runtime/T3 Code (Dev).app/Contents/MacOS/Electron",
+      normalizePath(paths.runtimeElectronBinaryPath),
+      "/repo/apps/desktop/.electron-runtime/Pulse Code (Dev).app/Contents/MacOS/Electron",
     );
 
     const script = makeDevelopmentLauncherScript({
@@ -74,8 +81,8 @@ describe("electron development launcher", () => {
       environment: {},
     });
     assert.include(
-      script,
-      "exec '/repo/apps/desktop/.electron-runtime/T3 Code (Dev).app/Contents/MacOS/Electron'",
+      normalizePath(script),
+      "exec '/repo/apps/desktop/.electron-runtime/Pulse Code (Dev).app/Contents/MacOS/Electron'",
     );
     assert.notInclude(script, "node_modules/electron");
   });
@@ -84,9 +91,12 @@ describe("electron development launcher", () => {
     const development = resolveMacLauncherIconPaths("/runtime", true);
     const production = resolveMacLauncherIconPaths("/runtime", false);
 
-    assert.match(development.sourceIconPath, /assets\/dev\/blueprint-macos-1024\.png$/);
-    assert.equal(development.generatedIconPath, "/runtime/icon-dev.icns");
-    assert.match(production.sourceIconPath, /assets\/prod\/black-macos-1024\.png$/);
-    assert.equal(production.generatedIconPath, "/runtime/icon-prod.icns");
+    assert.match(
+      normalizePath(development.sourceIconPath),
+      /assets\/dev\/blueprint-macos-1024\.png$/,
+    );
+    assert.equal(normalizePath(development.generatedIconPath), "/runtime/icon-dev.icns");
+    assert.match(normalizePath(production.sourceIconPath), /assets\/prod\/black-macos-1024\.png$/);
+    assert.equal(normalizePath(production.generatedIconPath), "/runtime/icon-prod.icns");
   });
 });

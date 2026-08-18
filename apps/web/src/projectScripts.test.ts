@@ -96,6 +96,8 @@ describe("projectScripts helpers", () => {
     });
 
     expect(env).toMatchObject({
+      PULSE_CODE_PROJECT_ROOT: "/repo",
+      PULSE_CODE_WORKTREE_PATH: "/repo/worktree-a",
       T3CODE_PROJECT_ROOT: "/repo",
       T3CODE_WORKTREE_PATH: "/repo/worktree-a",
     });
@@ -111,6 +113,7 @@ describe("projectScripts helpers", () => {
     });
 
     expect(env.T3CODE_PROJECT_ROOT).toBe("/custom-root");
+    expect(env.PULSE_CODE_PROJECT_ROOT).toBe("/custom-root");
     expect(env.CUSTOM_FLAG).toBe("1");
     expect(env.T3CODE_WORKTREE_PATH).toBeUndefined();
   });

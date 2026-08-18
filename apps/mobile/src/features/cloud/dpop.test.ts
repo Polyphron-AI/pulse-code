@@ -86,11 +86,31 @@ describe("mobile DPoP", () => {
 
       expect(second.thumbprint).toBe(first.thumbprint);
       expect(second.privateJwk).toEqual(first.privateJwk);
+      expect(secureStore.get("pulsecode.cloud.dpop-proof-key")).toBe(
+        secureStore.get("t3code.cloud.dpop-proof-key"),
+      );
+    }).pipe(Effect.provide(cryptoLayer)),
+  );
+
+  it.effect("migrates and reuses a legacy installation proof key", () =>
+    Effect.gen(function* () {
+      secureStore.clear();
+      const original = yield* loadOrCreateDpopProofKeyPair();
+      const encoded = secureStore.get("pulsecode.cloud.dpop-proof-key");
+      expect(encoded).toBeDefined();
+      secureStore.clear();
+      secureStore.set("t3code.cloud.dpop-proof-key", encoded!);
+
+      const restored = yield* loadOrCreateDpopProofKeyPair();
+
+      expect(restored.thumbprint).toBe(original.thumbprint);
+      expect(secureStore.get("pulsecode.cloud.dpop-proof-key")).toBe(encoded);
     }).pipe(Effect.provide(cryptoLayer)),
   );
 
   it.effect("rejects malformed persisted proof keys", () =>
     Effect.gen(function* () {
+      secureStore.clear();
       secureStore.set("t3code.cloud.dpop-proof-key", `{"kty":"EC","crv":"P-256","d":42}`);
 
       const error = yield* loadOrCreateDpopProofKeyPair().pipe(Effect.flip);

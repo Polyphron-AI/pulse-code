@@ -12,7 +12,12 @@ vi.mock("expo-secure-store", () => ({
   setItemAsync: vi.fn(),
 }));
 
-import { CONNECTION_CATALOG_KEY, LEGACY_CONNECTIONS_KEY, make } from "./catalog-store";
+import {
+  CONNECTION_CATALOG_KEY,
+  LEGACY_CONNECTION_CATALOG_KEY,
+  LEGACY_CONNECTIONS_KEY,
+  make,
+} from "./catalog-store";
 import { MobileSecureStorage } from "../persistence/mobile-secure-storage";
 
 function makeStorage(initial: Readonly<Record<string, string>>) {
@@ -48,19 +53,22 @@ describe("mobile connection catalog storage", () => {
     }),
   );
 
-  it.effect("replaces and removes a corrupt legacy catalog", () =>
-    Effect.gen(function* () {
-      const memory = makeStorage({
-        [LEGACY_CONNECTIONS_KEY]: JSON.stringify({ connections: [{ invalid: true }] }),
-      });
-      const catalog = yield* make().pipe(
-        Effect.provideService(MobileSecureStorage, memory.storage),
-      );
+  it.effect(
+    "replaces a corrupt oldest-format catalog without deleting the compatibility copy",
+    () =>
+      Effect.gen(function* () {
+        const memory = makeStorage({
+          [LEGACY_CONNECTIONS_KEY]: JSON.stringify({ connections: [{ invalid: true }] }),
+        });
+        const catalog = yield* make().pipe(
+          Effect.provideService(MobileSecureStorage, memory.storage),
+        );
 
-      expect((yield* catalog.read).targets).toEqual([]);
-      expect(memory.deleted).toEqual([LEGACY_CONNECTIONS_KEY]);
-      expect(memory.values.has(CONNECTION_CATALOG_KEY)).toBe(true);
-    }),
+        expect((yield* catalog.read).targets).toEqual([]);
+        expect(memory.deleted).toEqual([]);
+        expect(memory.values.has(CONNECTION_CATALOG_KEY)).toBe(true);
+        expect(memory.values.has(LEGACY_CONNECTION_CATALOG_KEY)).toBe(true);
+      }),
   );
 
   it.effect("falls back to valid legacy data when the current catalog is corrupt", () =>
@@ -87,11 +95,37 @@ describe("mobile connection catalog storage", () => {
       );
 
       expect((yield* catalog.read).targets).toHaveLength(1);
-      expect(memory.deleted).toEqual([CONNECTION_CATALOG_KEY, LEGACY_CONNECTIONS_KEY]);
+      expect(memory.deleted).toEqual([CONNECTION_CATALOG_KEY]);
 
       yield* catalog.update((document) => document);
       expect(memory.values.has(CONNECTION_CATALOG_KEY)).toBe(true);
-      expect(memory.values.has(LEGACY_CONNECTIONS_KEY)).toBe(false);
+      expect(memory.values.has(LEGACY_CONNECTION_CATALOG_KEY)).toBe(true);
+      expect(memory.values.has(LEGACY_CONNECTIONS_KEY)).toBe(true);
+    }),
+  );
+
+  it.effect("copies the versioned Pulse Code catalog forward and keeps it synchronized", () =>
+    Effect.gen(function* () {
+      const legacyCatalog = JSON.stringify({
+        schemaVersion: 1,
+        targets: [],
+        profiles: [],
+        credentials: [],
+        remoteDpopTokens: [],
+      });
+      const memory = makeStorage({ [LEGACY_CONNECTION_CATALOG_KEY]: legacyCatalog });
+      const catalog = yield* make().pipe(
+        Effect.provideService(MobileSecureStorage, memory.storage),
+      );
+
+      expect((yield* catalog.read).targets).toEqual([]);
+      expect(memory.values.get(CONNECTION_CATALOG_KEY)).toBe(legacyCatalog);
+
+      yield* catalog.update((document) => document);
+      expect(memory.values.get(CONNECTION_CATALOG_KEY)).toBe(
+        memory.values.get(LEGACY_CONNECTION_CATALOG_KEY),
+      );
+      expect(memory.deleted).toEqual([]);
     }),
   );
 });

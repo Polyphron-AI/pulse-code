@@ -2,10 +2,10 @@ import {
   RelayDpopAccessTokenScope,
   RelayEnvironmentConnectScope,
   RelayEnvironmentStatusScope,
-  RelayMobileClientId,
+  RelayMobileClientIds,
   RelayMobileRegistrationScope,
-  RelayWebClientId,
-  type RelayPublicClientId,
+  RelayPublicClientId,
+  RelayWebClientIds,
   type RelayEnvironmentLinkChallengeRequest,
 } from "@t3tools/contracts/relay";
 import { encodeOAuthScope, parseAllowedOAuthScope } from "@t3tools/shared/oauthScope";
@@ -49,7 +49,7 @@ const RelayDpopAccessTokenClaims = Schema.Struct({
   jti: Schema.String,
   iat: Schema.Int,
   exp: Schema.Int,
-  client_id: Schema.Literals([RelayMobileClientId, RelayWebClientId]),
+  client_id: RelayPublicClientId,
   scope: Schema.String,
   cnf: Schema.Struct({ jkt: Schema.String }),
 });
@@ -60,17 +60,22 @@ export type RelayDpopAccessTokenClaims = Omit<typeof RelayDpopAccessTokenClaims.
 const decodeLinkChallengeClaims = Schema.decodeUnknownEffect(LinkChallengeClaims);
 const decodeDpopAccessTokenClaims = Schema.decodeUnknownEffect(RelayDpopAccessTokenClaims);
 
+const mobileScopes = new Set<RelayDpopAccessTokenScope>([
+  RelayEnvironmentConnectScope,
+  RelayEnvironmentStatusScope,
+  RelayMobileRegistrationScope,
+]);
+const webScopes = new Set<RelayDpopAccessTokenScope>([
+  RelayEnvironmentConnectScope,
+  RelayEnvironmentStatusScope,
+]);
 const allowedScopesByClientId: Record<
   RelayPublicClientId,
   ReadonlySet<RelayDpopAccessTokenScope>
-> = {
-  [RelayMobileClientId]: new Set([
-    RelayEnvironmentConnectScope,
-    RelayEnvironmentStatusScope,
-    RelayMobileRegistrationScope,
-  ]),
-  [RelayWebClientId]: new Set([RelayEnvironmentConnectScope, RelayEnvironmentStatusScope]),
-};
+> = Object.fromEntries([
+  ...RelayMobileClientIds.map((clientId) => [clientId, mobileScopes] as const),
+  ...RelayWebClientIds.map((clientId) => [clientId, webScopes] as const),
+]) as Record<RelayPublicClientId, ReadonlySet<RelayDpopAccessTokenScope>>;
 
 function resolveDpopAccessTokenScopes(input: {
   readonly clientId: RelayPublicClientId;

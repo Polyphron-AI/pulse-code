@@ -2,6 +2,12 @@ import * as NodeCrypto from "node:crypto";
 
 import { describe, expect, it } from "@effect/vitest";
 import { signRelayJwt } from "@t3tools/shared/relayJwt";
+import {
+  LegacyRelayMobileClientId,
+  LegacyRelayWebClientId,
+  RelayMobileClientId,
+  RelayWebClientId,
+} from "@t3tools/contracts/relay";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
@@ -87,7 +93,7 @@ describe("RelayTokens", () => {
         jti: "access-token-1",
         issuedAtEpochSeconds: 100,
         expiresAtEpochSeconds: 1_900,
-        clientId: "t3-mobile",
+        clientId: RelayMobileClientId,
         scopes: ["environment:connect", "environment:status", "mobile:registration"],
       });
 
@@ -96,7 +102,7 @@ describe("RelayTokens", () => {
       ).toMatchObject({
         sub: "user_123",
         cnf: { jkt: "proof-key-thumbprint" },
-        client_id: "t3-mobile",
+        client_id: RelayMobileClientId,
         scope: ["environment:connect", "environment:status", "mobile:registration"],
       });
       expect(
@@ -114,14 +120,14 @@ describe("RelayTokens", () => {
         jti: "web-access-token-1",
         issuedAtEpochSeconds: 100,
         expiresAtEpochSeconds: 200,
-        clientId: "t3-web",
+        clientId: RelayWebClientId,
         scopes: ["environment:connect", "environment:status"],
       });
 
       expect(
         yield* relayTokens.verifyDpopAccessToken({ token, nowEpochSeconds: 150 }),
       ).toMatchObject({
-        client_id: "t3-web",
+        client_id: RelayWebClientId,
         scope: ["environment:connect", "environment:status"],
         cnf: { jkt: "web-proof-key-thumbprint" },
       });
@@ -133,10 +139,28 @@ describe("RelayTokens", () => {
       const relayTokens = yield* RelayTokens.RelayTokens;
       expect(
         relayTokens.resolveDpopAccessTokenScopes({
-          clientId: "t3-mobile",
+          clientId: LegacyRelayMobileClientId,
           scope: "environment:status environment:connect environment:status",
         }),
       ).toEqual(["environment:status", "environment:connect"]);
+    }).pipe(Effect.provide(layer)),
+  );
+
+  it.effect("continues to accept legacy Pulse Code public client ids", () =>
+    Effect.gen(function* () {
+      const relayTokens = yield* RelayTokens.RelayTokens;
+      expect(
+        relayTokens.resolveDpopAccessTokenScopes({
+          clientId: LegacyRelayMobileClientId,
+          scope: "environment:connect mobile:registration",
+        }),
+      ).toEqual(["environment:connect", "mobile:registration"]);
+      expect(
+        relayTokens.resolveDpopAccessTokenScopes({
+          clientId: LegacyRelayWebClientId,
+          scope: "environment:connect environment:status",
+        }),
+      ).toEqual(["environment:connect", "environment:status"]);
     }).pipe(Effect.provide(layer)),
   );
 

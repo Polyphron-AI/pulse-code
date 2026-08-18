@@ -88,6 +88,29 @@ describe("ElectronProtocol", () => {
     }).pipe(Effect.provide(ElectronProtocol.layer)),
   );
 
+  it.effect("serves canonical Pulse Code and legacy Pulse Code schemes together", () =>
+    Effect.gen(function* () {
+      handleMock.mockImplementation(() => undefined);
+      const protocol = yield* ElectronProtocol.ElectronProtocol;
+
+      yield* Effect.scoped(
+        protocol.registerDesktopProtocol({
+          scheme: "pulsecode",
+          aliasSchemes: ["t3code"],
+          targetOrigin: new URL("http://127.0.0.1:3773/"),
+          backendOrigin: new URL("http://127.0.0.1:3773/"),
+          clerkFrontendApiHostname: undefined,
+        }),
+      );
+
+      assert.deepEqual(
+        handleMock.mock.calls.map((call) => call[0]),
+        ["pulsecode", "t3code"],
+      );
+      assert.deepEqual(unhandleMock.mock.calls, [["pulsecode"], ["t3code"]]);
+    }).pipe(Effect.provide(ElectronProtocol.layer)),
+  );
+
   it.effect("rejects custom protocol requests for another host", () =>
     Effect.gen(function* () {
       let handler: ((request: Request) => Promise<Response>) | undefined;

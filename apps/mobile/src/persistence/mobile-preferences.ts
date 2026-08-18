@@ -12,8 +12,10 @@ import * as MobileDatabase from "./mobile-database";
 import * as MobileSecureStorage from "./mobile-secure-storage";
 import { MobileStorageDecodeError, MobileStorageEncodeError } from "./mobile-storage";
 
-const PREFERENCES_KEY = "t3code.preferences";
-const PREFERENCES_FALLBACK_KEY = "t3code.preferences.fallback";
+const PREFERENCES_KEY = "pulsecode.preferences";
+const LEGACY_PREFERENCES_KEY = "t3code.preferences";
+const PREFERENCES_FALLBACK_KEY = "pulsecode.preferences.fallback";
+const LEGACY_PREFERENCES_FALLBACK_KEY = "t3code.preferences.fallback";
 
 export interface Preferences {
   readonly liveActivitiesEnabled?: boolean;
@@ -251,18 +253,41 @@ export const make = Effect.fn("MobilePreferencesStore.make")(function* () {
         Effect.annotateLogs({ cause: databaseResult.failure }),
       );
       const fallback = yield* encode(PREFERENCES_FALLBACK_KEY, { payload, updatedAt: timestamp });
-      yield* secureStorage.setItem(PREFERENCES_FALLBACK_KEY, fallback);
+      yield* Effect.all(
+        [
+          secureStorage.setItem(PREFERENCES_FALLBACK_KEY, fallback),
+          secureStorage.setItem(LEGACY_PREFERENCES_FALLBACK_KEY, fallback),
+        ],
+        { concurrency: "unbounded", discard: true },
+      );
       return;
     }
-    yield* secureStorage
-      .removeItem(PREFERENCES_FALLBACK_KEY)
-      .pipe(
-        Effect.catch((error) =>
-          Effect.logWarning("Could not remove the mobile preferences fallback.").pipe(
-            Effect.annotateLogs({ error }),
-          ),
+    yield* Effect.all(
+      [
+        secureStorage.setItem(PREFERENCES_KEY, payload),
+        secureStorage.setItem(LEGACY_PREFERENCES_KEY, payload),
+      ],
+      { concurrency: "unbounded", discard: true },
+    ).pipe(
+      Effect.catch((error) =>
+        Effect.logWarning("Could not update the mobile preferences compatibility copy.").pipe(
+          Effect.annotateLogs({ error }),
         ),
-      );
+      ),
+    );
+    yield* Effect.all(
+      [
+        secureStorage.removeItem(PREFERENCES_FALLBACK_KEY),
+        secureStorage.removeItem(LEGACY_PREFERENCES_FALLBACK_KEY),
+      ],
+      { concurrency: "unbounded", discard: true },
+    ).pipe(
+      Effect.catch((error) =>
+        Effect.logWarning("Could not remove the mobile preferences fallback.").pipe(
+          Effect.annotateLogs({ error }),
+        ),
+      ),
+    );
   });
 
   const loadUnlocked = Effect.gen(function* () {
@@ -277,7 +302,12 @@ export const make = Effect.fn("MobilePreferencesStore.make")(function* () {
       );
     }
 
-    const fallbackResult = yield* Effect.result(secureStorage.getItem(PREFERENCES_FALLBACK_KEY));
+    const fallbackResult = yield* Effect.result(
+      Effect.gen(function* () {
+        const canonical = yield* secureStorage.getItem(PREFERENCES_FALLBACK_KEY);
+        return canonical ?? (yield* secureStorage.getItem(LEGACY_PREFERENCES_FALLBACK_KEY));
+      }),
+    );
     let fallbackJson: string | null = null;
     if (fallbackResult._tag === "Success") {
       fallbackJson = fallbackResult.success;
@@ -307,33 +337,33 @@ export const make = Effect.fn("MobilePreferencesStore.make")(function* () {
       parsed = storedPreferences;
       yield* Ref.update(lastUpdatedAt, (last) => Math.max(last, storedJson.value.updatedAt));
       if (fallbackJson !== null) {
-        yield* secureStorage
-          .removeItem(PREFERENCES_FALLBACK_KEY)
-          .pipe(
-            Effect.catch((error) =>
-              Effect.logWarning("Could not remove a stale mobile preferences fallback.").pipe(
-                Effect.annotateLogs({ error }),
-              ),
+        yield* Effect.all(
+          [
+            secureStorage.removeItem(PREFERENCES_FALLBACK_KEY),
+            secureStorage.removeItem(LEGACY_PREFERENCES_FALLBACK_KEY),
+          ],
+          { concurrency: "unbounded", discard: true },
+        ).pipe(
+          Effect.catch((error) =>
+            Effect.logWarning("Could not remove a stale mobile preferences fallback.").pipe(
+              Effect.annotateLogs({ error }),
             ),
-          );
+          ),
+        );
       }
     }
 
     if (parsed === null) {
-      const legacyJson = yield* secureStorage.getItem(PREFERENCES_KEY);
-      const legacyPreferences = parsePayload(legacyJson);
-      parsed = legacyPreferences;
-      if (legacyJson !== null && legacyPreferences !== null && databaseAvailable) {
-        yield* saveJson(legacyJson);
-        yield* secureStorage
-          .removeItem(PREFERENCES_KEY)
-          .pipe(
-            Effect.catch((error) =>
-              Effect.logWarning("Could not remove migrated mobile preferences.").pipe(
-                Effect.annotateLogs({ error }),
-              ),
-            ),
-          );
+      const canonicalJson = yield* secureStorage.getItem(PREFERENCES_KEY);
+      const canonicalPreferences = parsePayload(canonicalJson);
+      const legacyJson =
+        canonicalPreferences === null ? yield* secureStorage.getItem(LEGACY_PREFERENCES_KEY) : null;
+      const compatibilityJson = canonicalPreferences === null ? legacyJson : canonicalJson;
+      const compatibilityPreferences =
+        canonicalPreferences === null ? parsePayload(legacyJson) : canonicalPreferences;
+      parsed = compatibilityPreferences;
+      if (compatibilityJson !== null && compatibilityPreferences !== null && databaseAvailable) {
+        yield* saveJson(compatibilityJson);
       }
     }
 

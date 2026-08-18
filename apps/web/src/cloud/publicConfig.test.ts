@@ -27,6 +27,15 @@ describe("hasCloudPublicConfig", () => {
     expect(hasCloudPublicConfig()).toBe(true);
   });
 
+  it("prefers the Pulse Code relay URL while accepting the T3 Code alias", () => {
+    vi.stubEnv("VITE_CLERK_PUBLISHABLE_KEY", "pk_test_example");
+    vi.stubEnv("VITE_CLERK_JWT_TEMPLATE", "t3-relay");
+    vi.stubEnv("VITE_T3CODE_RELAY_URL", "http://legacy.example.test");
+    vi.stubEnv("VITE_PULSE_CODE_RELAY_URL", "https://pulse.example.test");
+
+    expect(hasCloudPublicConfig()).toBe(true);
+  });
+
   it("rejects an insecure relay URL", () => {
     vi.stubEnv("VITE_CLERK_PUBLISHABLE_KEY", "pk_test_example");
     vi.stubEnv("VITE_CLERK_JWT_TEMPLATE", "t3-relay");
@@ -39,7 +48,7 @@ describe("hasCloudPublicConfig", () => {
     vi.stubEnv("VITE_CLERK_JWT_TEMPLATE", "");
 
     expect(() => resolveRelayClerkTokenOptions()).toThrowError(
-      new CloudPublicConfigMissingError({ key: "T3CODE_CLERK_JWT_TEMPLATE" }),
+      new CloudPublicConfigMissingError({ key: "PULSE_CODE_CLERK_JWT_TEMPLATE" }),
     );
   });
 });

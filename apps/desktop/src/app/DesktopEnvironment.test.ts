@@ -7,15 +7,20 @@ import * as Option from "effect/Option";
 import * as DesktopEnvironment from "./DesktopEnvironment.ts";
 import * as DesktopConfig from "./DesktopConfig.ts";
 
+const normalizePath = (value: string) =>
+  value.replaceAll("\\", "/").replace(/^[A-Za-z]:(?=\/)/u, "");
+const assertPathEqual = (actual: string, expected: string) =>
+  assert.equal(normalizePath(actual), expected);
+
 const defaultInput = {
   dirname: "/repo/apps/desktop/dist-electron",
   homeDirectory: "/Users/alice",
   platform: "darwin",
   processArch: "arm64",
   appVersion: "0.0.22",
-  appPath: "/Applications/T3 Code.app/Contents/Resources/app.asar",
+  appPath: "/Applications/Pulse Code.app/Contents/Resources/app.asar",
   isPackaged: false,
-  resourcesPath: "/Applications/T3 Code.app/Contents/Resources",
+  resourcesPath: "/Applications/Pulse Code.app/Contents/Resources",
   runningUnderArm64Translation: false,
 } satisfies DesktopEnvironment.MakeDesktopEnvironmentInput;
 
@@ -51,34 +56,58 @@ describe("DesktopEnvironment", () => {
       );
 
       assert.equal(environment.isDevelopment, true);
-      assert.equal(environment.appDataDirectory, "/Users/alice/Library/Application Support");
-      assert.equal(environment.baseDir, "/tmp/t3");
-      assert.equal(environment.stateDir, "/tmp/t3/userdata");
-      assert.equal(environment.desktopSettingsPath, "/tmp/t3/userdata/desktop-settings.json");
-      assert.equal(environment.clientSettingsPath, "/tmp/t3/userdata/client-settings.json");
-      assert.equal(
+      assertPathEqual(environment.appDataDirectory, "/Users/alice/Library/Application Support");
+      assertPathEqual(environment.baseDir, "/tmp/t3");
+      assertPathEqual(environment.stateDir, "/tmp/t3/userdata");
+      assertPathEqual(environment.desktopSettingsPath, "/tmp/t3/userdata/desktop-settings.json");
+      assertPathEqual(environment.clientSettingsPath, "/tmp/t3/userdata/client-settings.json");
+      assertPathEqual(
         environment.savedEnvironmentRegistryPath,
         "/tmp/t3/userdata/saved-environments.json",
       );
-      assert.equal(environment.serverSettingsPath, "/tmp/t3/userdata/settings.json");
-      assert.equal(environment.logDir, "/tmp/t3/userdata/logs");
-      assert.equal(environment.browserArtifactsDir, "/tmp/t3/userdata/browser-artifacts");
-      assert.equal(environment.rootDir, "/repo");
-      assert.equal(environment.appRoot, "/repo");
-      assert.equal(environment.serverRoot, "/repo");
-      assert.equal(environment.backendEntryPath, "/repo/apps/server/dist/bin.mjs");
-      assert.equal(environment.backendCwd, "/repo");
+      assertPathEqual(environment.serverSettingsPath, "/tmp/t3/userdata/settings.json");
+      assertPathEqual(environment.logDir, "/tmp/t3/userdata/logs");
+      assertPathEqual(environment.browserArtifactsDir, "/tmp/t3/userdata/browser-artifacts");
+      assertPathEqual(environment.rootDir, "/repo");
+      assertPathEqual(environment.appRoot, "/repo");
+      assertPathEqual(environment.serverRoot, "/repo");
+      assertPathEqual(environment.backendEntryPath, "/repo/apps/server/dist/bin.mjs");
+      assertPathEqual(environment.backendCwd, "/repo");
       assert.equal(environment.appUserModelId, "com.t3tools.t3code.dev");
       assert.equal(environment.linuxWmClass, "t3code-dev");
+      assert.equal(environment.branding.baseName, "Pulse Code");
+      assert.equal(environment.displayName, "Pulse Code (Dev)");
+      assert.equal(environment.userDataDirName, "pulsecode-dev");
+      assert.deepEqual(environment.legacyUserDataDirNames, ["t3code-dev", "T3 Code (Dev)"]);
       assert.deepEqual(
         Option.map(environment.devServerUrl, (url) => url.href),
         Option.some("http://localhost:5173/"),
       );
-      assert.deepEqual(environment.devRemoteT3ServerEntryPath, Option.some("/remote/server.mjs"));
+      assert.deepEqual(
+        Option.map(environment.devRemoteT3ServerEntryPath, normalizePath),
+        Option.some("/remote/server.mjs"),
+      );
       assert.deepEqual(environment.configuredBackendPort, Option.some(4949));
       assert.deepEqual(environment.commitHashOverride, Option.some("0123456789abcdef"));
       assert.deepEqual(environment.otlpTracesUrl, Option.some("http://127.0.0.1:4318/v1/traces"));
       assert.equal(environment.otlpExportIntervalMs, 2500);
+    }),
+  );
+
+  it.effect("prefers Pulse Code environment names while accepting T3 Code aliases", () =>
+    Effect.gen(function* () {
+      const environment = yield* makeEnvironment(
+        {},
+        {
+          PULSE_CODE_HOME: "/tmp/pulse",
+          T3CODE_HOME: "/tmp/legacy",
+          PULSE_CODE_DESKTOP_APP_USER_MODEL_ID: "com.example.pulse",
+          T3CODE_DESKTOP_APP_USER_MODEL_ID: "com.example.legacy",
+        },
+      );
+
+      assertPathEqual(environment.baseDir, "/tmp/pulse");
+      assert.equal(environment.appUserModelId, "com.example.pulse");
     }),
   );
 
@@ -92,10 +121,10 @@ describe("DesktopEnvironment", () => {
       );
 
       assert.equal(environment.isDevelopment, false);
-      assert.equal(environment.stateDir, "/tmp/t3/userdata");
-      assert.equal(environment.logDir, "/tmp/t3/userdata/logs");
-      assert.equal(environment.browserArtifactsDir, "/tmp/t3/userdata/browser-artifacts");
-      assert.equal(environment.serverSettingsPath, "/tmp/t3/userdata/settings.json");
+      assertPathEqual(environment.stateDir, "/tmp/t3/userdata");
+      assertPathEqual(environment.logDir, "/tmp/t3/userdata/logs");
+      assertPathEqual(environment.browserArtifactsDir, "/tmp/t3/userdata/browser-artifacts");
+      assertPathEqual(environment.serverSettingsPath, "/tmp/t3/userdata/settings.json");
     }),
   );
 
@@ -108,9 +137,9 @@ describe("DesktopEnvironment", () => {
         resourcesPath: "/install/resources",
       });
 
-      assert.equal(environment.appRoot, "/install/resources/app.asar");
-      assert.equal(environment.serverRoot, "/install/resources/server.asar");
-      assert.equal(
+      assertPathEqual(environment.appRoot, "/install/resources/app.asar");
+      assertPathEqual(environment.serverRoot, "/install/resources/server.asar");
+      assertPathEqual(
         environment.backendEntryPath,
         "/install/resources/server.asar/apps/server/dist/bin.mjs",
       );
@@ -125,8 +154,8 @@ describe("DesktopEnvironment", () => {
       );
       const production = yield* makeEnvironment();
 
-      assert.equal(development.stateDir, "/Users/alice/.t3/dev");
-      assert.equal(production.stateDir, "/Users/alice/.t3/userdata");
+      assertPathEqual(development.stateDir, "/Users/alice/.t3/dev");
+      assertPathEqual(production.stateDir, "/Users/alice/.t3/userdata");
     }),
   );
 
@@ -158,7 +187,10 @@ describe("DesktopEnvironment", () => {
         Option.some("/Users/alice"),
       );
       assert.deepEqual(
-        environment.resolvePickFolderDefaultPath({ initialPath: "~/project" }),
+        Option.map(
+          environment.resolvePickFolderDefaultPath({ initialPath: "~/project" }),
+          normalizePath,
+        ),
         Option.some("/Users/alice/project"),
       );
     }),

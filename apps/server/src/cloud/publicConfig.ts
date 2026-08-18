@@ -5,6 +5,7 @@ import {
 } from "@t3tools/shared/connectAuth";
 import { clerkFrontendApiUrlFromPublishableKey } from "@t3tools/shared/relayAuth";
 import { normalizeSecureRelayUrl } from "@t3tools/shared/relayUrl";
+import { withLegacyConfigAlias } from "@t3tools/shared/configAliases";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
@@ -85,10 +86,18 @@ export function resolveRelayClientTracingConfig(
   env: Readonly<Record<string, string | undefined>> = process.env,
   fallback = buildTimeRelayClientTracing,
 ) {
-  const tracesUrl = env.T3CODE_RELAY_CLIENT_OTLP_TRACES_URL?.trim() || fallback.tracesUrl;
+  const tracesUrl =
+    env.PULSE_CODE_RELAY_CLIENT_OTLP_TRACES_URL?.trim() ||
+    env.T3CODE_RELAY_CLIENT_OTLP_TRACES_URL?.trim() ||
+    fallback.tracesUrl;
   const tracesDataset =
-    env.T3CODE_RELAY_CLIENT_OTLP_TRACES_DATASET?.trim() || fallback.tracesDataset;
-  const tracesToken = env.T3CODE_RELAY_CLIENT_OTLP_TRACES_TOKEN?.trim() || fallback.tracesToken;
+    env.PULSE_CODE_RELAY_CLIENT_OTLP_TRACES_DATASET?.trim() ||
+    env.T3CODE_RELAY_CLIENT_OTLP_TRACES_DATASET?.trim() ||
+    fallback.tracesDataset;
+  const tracesToken =
+    env.PULSE_CODE_RELAY_CLIENT_OTLP_TRACES_TOKEN?.trim() ||
+    env.T3CODE_RELAY_CLIENT_OTLP_TRACES_TOKEN?.trim() ||
+    fallback.tracesToken;
   const normalizedTracesUrl = normalizeSecureUrl(tracesUrl);
   return normalizedTracesUrl && tracesDataset && tracesToken
     ? { tracesUrl: normalizedTracesUrl, tracesDataset, tracesToken }
@@ -96,7 +105,10 @@ export function resolveRelayClientTracingConfig(
 }
 
 export function makeRelayUrlConfig(fallback = buildTimeRelayUrl) {
-  const runtimeConfig = Config.nonEmptyString("T3CODE_RELAY_URL");
+  const runtimeConfig = withLegacyConfigAlias(
+    Config.nonEmptyString("PULSE_CODE_RELAY_URL"),
+    Config.nonEmptyString("T3CODE_RELAY_URL"),
+  );
   return (fallback ? runtimeConfig.pipe(Config.withDefault(fallback)) : runtimeConfig).pipe(
     Config.mapOrFail(validateRelayUrl),
   );
@@ -110,6 +122,7 @@ export const relayUrlConfig = makeRelayUrlConfig();
  * matching hosted deployment.
  */
 export const hostedAppUrlConfig = makePublicValueConfig(
+  "PULSE_CODE_HOSTED_APP_URL",
   "T3CODE_HOSTED_APP_URL",
   DEFAULT_HOSTED_APP_URL,
 ).pipe(Config.mapOrFail(validateHostedAppUrl));
@@ -142,8 +155,11 @@ function validateHostedAppUrl(value: string) {
   }
 }
 
-function makePublicValueConfig(name: string, fallback: string) {
-  const runtimeConfig = Config.nonEmptyString(name);
+function makePublicValueConfig(canonicalName: string, legacyName: string, fallback: string) {
+  const runtimeConfig = withLegacyConfigAlias(
+    Config.nonEmptyString(canonicalName),
+    Config.nonEmptyString(legacyName),
+  );
   return (fallback ? runtimeConfig.pipe(Config.withDefault(fallback)) : runtimeConfig).pipe(
     Config.map((value) => value.trim()),
   );
@@ -172,10 +188,12 @@ export function makeCloudCliOAuthConfig({
 } = {}) {
   return Config.all({
     clerkPublishableKey: makePublicValueConfig(
+      "PULSE_CODE_CLERK_PUBLISHABLE_KEY",
       "T3CODE_CLERK_PUBLISHABLE_KEY",
       clerkPublishableKeyFallback,
     ),
     clientId: makePublicValueConfig(
+      "PULSE_CODE_CLERK_CLI_OAUTH_CLIENT_ID",
       "T3CODE_CLERK_CLI_OAUTH_CLIENT_ID",
       clerkCliOAuthClientIdFallback,
     ),
@@ -209,7 +227,14 @@ export function makeCloudCliOAuthConfig({
 export const cloudCliOAuthConfig = makeCloudCliOAuthConfig();
 
 export const hasCloudPublicConfig = Boolean(
-  (normalizeSecureRelayUrl(process.env.T3CODE_RELAY_URL ?? "") ?? buildTimeRelayUrl) &&
-  (process.env.T3CODE_CLERK_PUBLISHABLE_KEY?.trim() || buildTimeClerkPublishableKey) &&
-  (process.env.T3CODE_CLERK_CLI_OAUTH_CLIENT_ID?.trim() || buildTimeClerkCliOAuthClientId),
+  (normalizeSecureRelayUrl(
+    process.env.PULSE_CODE_RELAY_URL ?? process.env.T3CODE_RELAY_URL ?? "",
+  ) ??
+    buildTimeRelayUrl) &&
+  (process.env.PULSE_CODE_CLERK_PUBLISHABLE_KEY?.trim() ||
+    process.env.T3CODE_CLERK_PUBLISHABLE_KEY?.trim() ||
+    buildTimeClerkPublishableKey) &&
+  (process.env.PULSE_CODE_CLERK_CLI_OAUTH_CLIENT_ID?.trim() ||
+    process.env.T3CODE_CLERK_CLI_OAUTH_CLIENT_ID?.trim() ||
+    buildTimeClerkCliOAuthClientId),
 );

@@ -215,6 +215,10 @@
       "types": "./src/devHome.ts",
       "import": "./src/devHome.ts"
     },
+    "./configAliases": {
+      "types": "./src/configAliases.ts",
+      "import": "./src/configAliases.ts"
+    },
     "./devProxy": {
       "types": "./src/devProxy.ts",
       "import": "./src/devProxy.ts"

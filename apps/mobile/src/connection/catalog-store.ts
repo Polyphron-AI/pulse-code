@@ -13,7 +13,8 @@ import * as Semaphore from "effect/Semaphore";
 import * as MobileSecureStorage from "../persistence/mobile-secure-storage";
 import { migrateLegacyConnectionCatalog } from "./migration";
 
-export const CONNECTION_CATALOG_KEY = "t3code.connection-catalog.v1";
+export const CONNECTION_CATALOG_KEY = "pulsecode.connection-catalog.v1";
+export const LEGACY_CONNECTION_CATALOG_KEY = "t3code.connection-catalog.v1";
 export const LEGACY_CONNECTIONS_KEY = "t3code.connections";
 
 function catalogError(operation: string, cause: unknown) {
@@ -59,6 +60,16 @@ export const make = Effect.fn("mobile.connectionStorage.makeCatalogStore")(funct
   const state = yield* Ref.make<Option.Option<ConnectionCatalogDocumentType>>(Option.none());
   const lock = yield* Semaphore.make(1);
 
+  // Keep the last Pulse Code catalog current during the compatibility window so
+  // an older installed binary (or a rollback) can still see Pulse Code edits.
+  const writeCatalog = Effect.fn("mobile.connectionStorage.writeCatalogAliases")(function* (
+    catalog: ConnectionCatalogDocumentType,
+  ) {
+    const encoded = yield* encodeCatalog(catalog);
+    yield* setItem(CONNECTION_CATALOG_KEY, encoded);
+    yield* setItem(LEGACY_CONNECTION_CATALOG_KEY, encoded);
+  });
+
   const loadLegacyCatalog = Effect.fn("mobile.connectionStorage.loadLegacyCatalog")(function* () {
     const legacyRaw = yield* getItem(LEGACY_CONNECTIONS_KEY);
     const catalog =
@@ -73,11 +84,27 @@ export const make = Effect.fn("mobile.connectionStorage.makeCatalogStore")(funct
             ),
           );
     if (legacyRaw !== null && legacyRaw.trim() !== "") {
-      const encoded = yield* encodeCatalog(catalog);
-      yield* setItem(CONNECTION_CATALOG_KEY, encoded);
-      yield* deleteItem(LEGACY_CONNECTIONS_KEY);
+      yield* writeCatalog(catalog);
     }
     return catalog;
+  });
+
+  const loadLegacyVersionedCatalog = Effect.fn(
+    "mobile.connectionStorage.loadLegacyVersionedCatalog",
+  )(function* () {
+    const legacyRaw = yield* getItem(LEGACY_CONNECTION_CATALOG_KEY);
+    if (legacyRaw === null || legacyRaw.trim() === "") {
+      return yield* loadLegacyCatalog();
+    }
+    return yield* decodeCatalog(legacyRaw).pipe(
+      Effect.tap((catalog) => writeCatalog(catalog)),
+      Effect.catch((error) =>
+        Effect.logWarning("Discarding corrupt legacy mobile connection catalog", error).pipe(
+          Effect.andThen(deleteItem(LEGACY_CONNECTION_CATALOG_KEY)),
+          Effect.andThen(loadLegacyCatalog()),
+        ),
+      ),
+    );
   });
 
   const loadUnlocked = Effect.fn("mobile.connectionStorage.loadCatalog")(function* () {
@@ -92,12 +119,12 @@ export const make = Effect.fn("mobile.connectionStorage.makeCatalogStore")(funct
         Effect.catch((error) =>
           Effect.logWarning("Discarding corrupt mobile connection catalog", error).pipe(
             Effect.andThen(deleteItem(CONNECTION_CATALOG_KEY)),
-            Effect.andThen(loadLegacyCatalog()),
+            Effect.andThen(loadLegacyVersionedCatalog()),
           ),
         ),
       );
     } else {
-      catalog = yield* loadLegacyCatalog();
+      catalog = yield* loadLegacyVersionedCatalog();
     }
     yield* Ref.set(state, Option.some(catalog));
     return catalog;
@@ -109,8 +136,7 @@ export const make = Effect.fn("mobile.connectionStorage.makeCatalogStore")(funct
       yield* lock.withPermits(1)(
         Effect.gen(function* () {
           const next = transform(yield* loadUnlocked());
-          const encoded = yield* encodeCatalog(next);
-          yield* setItem(CONNECTION_CATALOG_KEY, encoded);
+          yield* writeCatalog(next);
           yield* Ref.set(state, Option.some(next));
         }),
       );

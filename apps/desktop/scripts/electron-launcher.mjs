@@ -1,4 +1,4 @@
-// This file mostly exists because we want dev mode to say "T3 Code (Dev)" instead of "electron"
+// This file mostly exists because we want dev mode to say "Pulse Code (Dev)" instead of "electron"
 
 import * as NodeChildProcess from "node:child_process";
 import * as NodeFS from "node:fs";
@@ -15,7 +15,7 @@ const repoRoot = NodePath.resolve(desktopDir, "..", "..");
 const devBundleIdSuffix = NodePath.basename(repoRoot)
   .toLowerCase()
   .replaceAll(/[^a-z0-9]+/g, "");
-export const APP_DISPLAY_NAME = isDevelopment ? "T3 Code (Dev)" : "T3 Code (Alpha)";
+export const APP_DISPLAY_NAME = isDevelopment ? "Pulse Code (Dev)" : "Pulse Code (Alpha)";
 export const APP_BUNDLE_ID = isDevelopment
   ? `com.t3tools.t3code.dev.${devBundleIdSuffix || "local"}`
   : "com.t3tools.t3code";
@@ -108,11 +108,32 @@ export function makeDevelopmentLauncherScript({
 }) {
   const envEntries = [
     ["VITE_DEV_SERVER_URL", environment.VITE_DEV_SERVER_URL],
-    ["T3CODE_PORT", environment.T3CODE_PORT],
-    ["T3CODE_HOME", environment.T3CODE_HOME],
-    ["T3CODE_COMMIT_HASH", environment.T3CODE_COMMIT_HASH],
-    ["T3CODE_OTLP_TRACES_URL", environment.T3CODE_OTLP_TRACES_URL],
-    ["T3CODE_OTLP_EXPORT_INTERVAL_MS", environment.T3CODE_OTLP_EXPORT_INTERVAL_MS],
+    ["PULSE_CODE_PORT", environment.PULSE_CODE_PORT ?? environment.T3CODE_PORT],
+    ["T3CODE_PORT", environment.PULSE_CODE_PORT ?? environment.T3CODE_PORT],
+    ["PULSE_CODE_HOME", environment.PULSE_CODE_HOME ?? environment.T3CODE_HOME],
+    ["T3CODE_HOME", environment.PULSE_CODE_HOME ?? environment.T3CODE_HOME],
+    [
+      "PULSE_CODE_COMMIT_HASH",
+      environment.PULSE_CODE_COMMIT_HASH ?? environment.T3CODE_COMMIT_HASH,
+    ],
+    ["T3CODE_COMMIT_HASH", environment.PULSE_CODE_COMMIT_HASH ?? environment.T3CODE_COMMIT_HASH],
+    [
+      "PULSE_CODE_OTLP_TRACES_URL",
+      environment.PULSE_CODE_OTLP_TRACES_URL ?? environment.T3CODE_OTLP_TRACES_URL,
+    ],
+    [
+      "T3CODE_OTLP_TRACES_URL",
+      environment.PULSE_CODE_OTLP_TRACES_URL ?? environment.T3CODE_OTLP_TRACES_URL,
+    ],
+    [
+      "PULSE_CODE_OTLP_EXPORT_INTERVAL_MS",
+      environment.PULSE_CODE_OTLP_EXPORT_INTERVAL_MS ?? environment.T3CODE_OTLP_EXPORT_INTERVAL_MS,
+    ],
+    [
+      "T3CODE_OTLP_EXPORT_INTERVAL_MS",
+      environment.PULSE_CODE_OTLP_EXPORT_INTERVAL_MS ?? environment.T3CODE_OTLP_EXPORT_INTERVAL_MS,
+    ],
+    ["PULSE_CODE_DESKTOP_APP_USER_MODEL_ID", APP_BUNDLE_ID],
     ["T3CODE_DESKTOP_APP_USER_MODEL_ID", APP_BUNDLE_ID],
   ].filter((entry) => typeof entry[1] === "string" && entry[1].trim().length > 0);
   return [
@@ -121,7 +142,7 @@ export function makeDevelopmentLauncherScript({
       ([name, value]) =>
         `if [ -z "\${${name}:-}" ]; then export ${name}=${shellSingleQuote(value)}; fi`,
     ),
-    `exec ${shellSingleQuote(electronBinaryPath)} --t3code-dev-root=${shellSingleQuote(desktopRoot)} ${shellSingleQuote(mainEntryPath)} "$@"`,
+    `exec ${shellSingleQuote(electronBinaryPath)} --pulse-code-dev-root=${shellSingleQuote(desktopRoot)} ${shellSingleQuote(mainEntryPath)} "$@"`,
     "",
   ].join("\n");
 }
@@ -347,7 +368,7 @@ function buildMacLauncher(electronBinaryPath) {
   if (isDevelopment) {
     // Keep Electron's native executable inside the branded bundle. Launching the
     // node_modules copy makes macOS associate the process (and Dock label) with
-    // Electron.app even though this bundle's Info.plist has the T3 Code name.
+    // Electron.app even though this bundle's Info.plist has the Pulse Code name.
     // Its conventional executable name also keeps Electron's default-app runtime
     // in development mode instead of making app.isPackaged report true.
     writeDevelopmentLauncherScript(launcherBinaryPath, runtimeElectronBinaryPath);

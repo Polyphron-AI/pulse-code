@@ -1,4 +1,4 @@
-const REPO = "pingdotgg/t3code";
+const REPO = "Polyphron-AI/pulse-code";
 
 export const RELEASES_URL = `https://github.com/${REPO}/releases`;
 

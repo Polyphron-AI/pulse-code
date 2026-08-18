@@ -33,6 +33,19 @@ it.effect("prefers a runtime relay URL override over the statically injected val
   }),
 );
 
+it.effect("prefers the Pulse Code relay URL over the supported T3 Code alias", () =>
+  Effect.gen(function* () {
+    const relayUrl = yield* makeRelayUrlConfig("https://embedded.example.test").pipe(
+      provideEnv({
+        PULSE_CODE_RELAY_URL: "https://pulse.example.test",
+        T3CODE_RELAY_URL: "https://legacy.example.test",
+      }),
+    );
+
+    assert.equal(relayUrl, "https://pulse.example.test");
+  }),
+);
+
 it.effect("requires a relay URL when the server bundle has no injected value", () =>
   makeRelayUrlConfig("").pipe(provideEnv({}), Effect.flip),
 );
@@ -113,6 +126,25 @@ it.effect("prefers runtime Clerk OAuth config overrides over statically injected
 
     assert.equal(config.tokenEndpoint, "https://runtime.example.test/oauth/token");
     assert.equal(config.clientId, "oauth_client_runtime");
+  }),
+);
+
+it.effect("prefers Pulse Code Clerk configuration over supported T3 Code aliases", () =>
+  Effect.gen(function* () {
+    const config = yield* makeCloudCliOAuthConfig({
+      clerkPublishableKeyFallback: "",
+      clerkCliOAuthClientIdFallback: "",
+    }).pipe(
+      provideEnv({
+        PULSE_CODE_CLERK_PUBLISHABLE_KEY: "pk_test_cHVsc2UuZXhhbXBsZS50ZXN0JA==",
+        PULSE_CODE_CLERK_CLI_OAUTH_CLIENT_ID: "oauth_client_pulse",
+        T3CODE_CLERK_PUBLISHABLE_KEY: "pk_test_bGVnYWN5LmV4YW1wbGUudGVzdCQ=",
+        T3CODE_CLERK_CLI_OAUTH_CLIENT_ID: "oauth_client_legacy",
+      }),
+    );
+
+    assert.equal(config.tokenEndpoint, "https://pulse.example.test/oauth/token");
+    assert.equal(config.clientId, "oauth_client_pulse");
   }),
 );
 

@@ -25,6 +25,9 @@ describe("DesktopApp errors", () => {
   it("reports the required development port", () => {
     const error = new DesktopDevelopmentBackendPortRequiredError();
 
-    assert.equal(error.message, "T3CODE_PORT is required in desktop development.");
+    assert.equal(
+      error.message,
+      "PULSE_CODE_PORT is required in desktop development (T3CODE_PORT is also supported).",
+    );
   });
 });

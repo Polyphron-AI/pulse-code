@@ -7,6 +7,7 @@
  * @module AnalyticsService
  */
 import { HostProcessArchitecture, HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import { withLegacyConfigAlias } from "@t3tools/shared/configAliases";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
@@ -28,18 +29,32 @@ interface BufferedAnalyticsEvent {
   readonly capturedAt: string;
 }
 
+const pulseCodeTelemetryConfig = <A>(
+  legacyName: `T3CODE_${string}`,
+  makeConfig: (name: string) => Config.Config<A>,
+) =>
+  withLegacyConfigAlias(
+    makeConfig(legacyName.replace(/^T3CODE_/, "PULSE_CODE_")),
+    makeConfig(legacyName),
+  );
+
 const TelemetryEnvConfig = Config.all({
-  posthogKey: Config.string("T3CODE_POSTHOG_KEY").pipe(
+  posthogKey: pulseCodeTelemetryConfig("T3CODE_POSTHOG_KEY", Config.string).pipe(
     Config.withDefault("phc_XOWci4oZP4VvLiEyrFqkFjP4CZn55mjYYBMREK5Wd6m"),
   ),
-  posthogHost: Config.string("T3CODE_POSTHOG_HOST").pipe(
+  posthogHost: pulseCodeTelemetryConfig("T3CODE_POSTHOG_HOST", Config.string).pipe(
     Config.withDefault("https://us.i.posthog.com"),
   ),
-  enabled: Config.boolean("T3CODE_TELEMETRY_ENABLED").pipe(Config.withDefault(true)),
-  flushBatchSize: Config.number("T3CODE_TELEMETRY_FLUSH_BATCH_SIZE").pipe(Config.withDefault(20)),
-  maxBufferedEvents: Config.number("T3CODE_TELEMETRY_MAX_BUFFERED_EVENTS").pipe(
-    Config.withDefault(1_000),
+  enabled: pulseCodeTelemetryConfig("T3CODE_TELEMETRY_ENABLED", Config.boolean).pipe(
+    Config.withDefault(true),
   ),
+  flushBatchSize: pulseCodeTelemetryConfig("T3CODE_TELEMETRY_FLUSH_BATCH_SIZE", Config.number).pipe(
+    Config.withDefault(20),
+  ),
+  maxBufferedEvents: pulseCodeTelemetryConfig(
+    "T3CODE_TELEMETRY_MAX_BUFFERED_EVENTS",
+    Config.number,
+  ).pipe(Config.withDefault(1_000)),
   wslDistroName: Config.string("WSL_DISTRO_NAME").pipe(Config.option),
 });
 

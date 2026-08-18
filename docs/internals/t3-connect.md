@@ -1,8 +1,8 @@
-# T3 Connect
+# Pulse Connect
 
-> For maintainers. Using T3 Code? See [docs/user](../user/).
+> For maintainers. Using Pulse Code? See [docs/user](../user/).
 
-T3 Connect uses one Clerk application for web, desktop, and mobile authentication. The relay verifies
+Pulse Connect uses one Clerk application for web, desktop, and mobile authentication. The relay verifies
 two kinds of bearer credential: template JWTs generated from the `t3-relay` template with the shared
 `t3-code-relay` audience, and Clerk OAuth tokens issued to the CLI. `verifyRelayClientBearerToken` in
 `infra/relay/src/http/Api.ts` tries the template/session path first and falls back to OAuth
@@ -14,7 +14,7 @@ For the wider system diagram, see
 
 ## Application Keys
 
-T3 Connect is disabled in a fresh clone. To enable it for source builds against the production
+Pulse Connect is disabled in a fresh clone. To enable it for source builds against the production
 deployment, copy the repository-root example file:
 
 ```sh
@@ -26,14 +26,14 @@ release builds). To target a different Clerk application or relay, set the value
 repository-root `.env` or `.env.local` file:
 
 ```dotenv
-T3CODE_CLERK_PUBLISHABLE_KEY=<publishable key>
-T3CODE_CLERK_JWT_TEMPLATE=<JWT template name>
-T3CODE_CLERK_CLI_OAUTH_CLIENT_ID=<public OAuth application client ID>
-T3CODE_RELAY_URL=https://relay.example.com
+PULSE_CODE_CLERK_PUBLISHABLE_KEY=<publishable key>
+PULSE_CODE_CLERK_JWT_TEMPLATE=<JWT template name>
+PULSE_CODE_CLERK_CLI_OAUTH_CLIENT_ID=<public OAuth application client ID>
+PULSE_CODE_RELAY_URL=https://relay.example.com
 ```
 
 The shared client loader projects these canonical values into framework-specific `VITE_*` and
-`EXPO_PUBLIC_*` aliases. Existing aliases remain accepted as overrides for compatibility, but new
+`EXPO_PUBLIC_*` aliases. Existing `T3CODE_*` aliases remain accepted for compatibility, but new
 client configuration should use the canonical names.
 
 Configuration precedence is:
@@ -46,12 +46,12 @@ The Clerk publishable key, JWT template name, CLI OAuth client ID, and relay URL
 identifiers, not secrets.
 Web, desktop, mobile, and bundled server builds statically inject the values they consume during
 their build step. A built artifact does not need an environment file at runtime. CI release builds
-should set `T3CODE_CLERK_PUBLISHABLE_KEY`, `T3CODE_CLERK_JWT_TEMPLATE`,
-`T3CODE_CLERK_CLI_OAUTH_CLIENT_ID`, and `T3CODE_RELAY_URL` before building. EAS preview and
+should set `PULSE_CODE_CLERK_PUBLISHABLE_KEY`, `PULSE_CODE_CLERK_JWT_TEMPLATE`,
+`PULSE_CODE_CLERK_CLI_OAUTH_CLIENT_ID`, and `PULSE_CODE_RELAY_URL` before building. EAS preview and
 production builds only need the Clerk publishable key, JWT template name, and relay URL in their EAS
 environment.
 
-When any client-facing public value is absent, cloud UI is omitted. The `t3 connect` command group is
+When any client-facing public value is absent, cloud UI is omitted. The `pulse connect` command group is
 always registered: when the CLI public values are absent, `makeCli` in `apps/server/src/bin.ts`
 registers a hidden fallback `connect` command that reports the missing configuration instead of
 silently vanishing from help. The bundled server still accepts runtime overrides for self-hosted or
@@ -73,21 +73,21 @@ personal developer stage.
 
 ## Headless CLI OAuth Application
 
-The `t3 connect` commands authorize a headless environment with a separate Clerk OAuth application.
+The `pulse connect` commands authorize a headless environment with a separate Clerk OAuth application.
 This uses an OAuth public client with PKCE, so the CLI stores no client secret.
 
 In **Clerk Dashboard > OAuth applications**:
 
-1. Create an OAuth application for the T3 CLI.
+1. Create an OAuth application for the Pulse Code CLI.
 2. Enable the **Public** option so authorization-code exchange uses PKCE.
 3. Add **both** allowed redirect URIs:
    - `http://127.0.0.1:34338/callback` for the loopback listener;
    - `https://app.t3.codes/connect/callback` for the hosted out-of-band flow. This is
      `connectCallbackUrl(DEFAULT_HOSTED_APP_URL)` from `packages/shared/src/connectAuth.ts`, so a
-     custom `T3CODE_HOSTED_APP_URL` means `$T3CODE_HOSTED_APP_URL/connect/callback` instead.
+     custom `PULSE_CODE_HOSTED_APP_URL` means `$PULSE_CODE_HOSTED_APP_URL/connect/callback` instead.
      Omitting it breaks headless and SSH authorization.
 4. Enable the `openid`, `profile`, and `email` scopes.
-5. Set `T3CODE_CLERK_CLI_OAUTH_CLIENT_ID` in the repository-root `.env` file and release build
+5. Set `PULSE_CODE_CLERK_CLI_OAUTH_CLIENT_ID` in the repository-root `.env` file and release build
    environment to the generated public client ID.
 
 Both CLI flows start at the hosted `/connect` page (`buildConnectAuthorizeRequestUrl` in
@@ -105,28 +105,29 @@ environment link.
 The connect command group is:
 
 ```sh
-t3 connect            # default: onboarding
-t3 connect login
-t3 connect link       # --publish-only
-t3 connect status     # --json
-t3 connect publish    # --disable
-t3 connect unlink
-t3 connect logout
+pulse connect            # default: onboarding
+pulse connect login
+pulse connect link       # --publish-only
+pulse connect status     # --json
+pulse connect publish    # --disable
+pulse connect unlink
+pulse connect logout
 ```
 
-`t3 serve` is a separate top-level command, not a connect subcommand.
+`pulse serve` is a separate top-level command, not a connect subcommand. The legacy `t3` binary
+continues to accept every command for installed scripts and older automation.
 
-`t3 connect login` opens the Clerk authorization flow and stores the CLI credential without enabling
-cloud exposure. `t3 connect link` installs the pinned managed `cloudflared` binary when needed,
+`pulse connect login` opens the Clerk authorization flow and stores the CLI credential without enabling
+cloud exposure. `pulse connect link` installs the pinned managed `cloudflared` binary when needed,
 authorizes when needed, and records durable intent to expose the environment. It works without a
-running T3 server. The next `t3 serve` or `t3 start` reconciles the relay link and launches the
-managed tunnel. `t3 connect unlink` records disabled intent immediately, stops a reachable running
+running Pulse Code server. The next `pulse serve` or `pulse start` reconciles the relay link and launches the
+managed tunnel. `pulse connect unlink` records disabled intent immediately, stops a reachable running
 connector, and attempts to revoke the relay-side environment record. It retains the stored CLI
-authorization so `t3 connect link` can re-enable exposure without another browser flow. `t3 connect
+authorization so `pulse connect link` can re-enable exposure without another browser flow. `pulse connect
 logout` performs the same cleanup and removes the stored CLI authorization.
 
 The background service has an independent lifecycle. Connect setup may offer to install it, but
-logout leaves it running; manage it with `t3 service status`, `install`, `update`, and `uninstall`.
+logout leaves it running; manage it with `pulse service status`, `install`, `update`, and `uninstall`.
 
 ### Headless and SSH authorization
 
@@ -152,10 +153,10 @@ In **Clerk Dashboard > JWT templates**, create a template with:
 | Name    | `t3-relay`                   |
 | Claims  | `{ "aud": "t3-code-relay" }` |
 
-Set `T3CODE_CLERK_JWT_TEMPLATE=t3-relay` in the repository-root `.env`, and set
+Set `PULSE_CODE_CLERK_JWT_TEMPLATE=t3-relay` in the repository-root `.env`, and set
 `CLERK_JWT_AUDIENCE=t3-code-relay` in `infra/relay/.env`. Define `CLERK_JWT_TEMPLATE` and
 `CLERK_JWT_AUDIENCE` in the production relay deployment environment as well. The stable `aud` value
-is shared by production and non-production relay stages. The client-facing `T3CODE_RELAY_URL` still
+is shared by production and non-production relay stages. The client-facing `PULSE_CODE_RELAY_URL` still
 selects the concrete relay deployment, but changing that URL does not require a JWT template change.
 
 ## Desktop OAuth Redirect Allowlist
@@ -165,14 +166,16 @@ In **Clerk Dashboard > Native applications**, enable the Native API and add thes
 mobile SSO redirect allowlist:
 
 ```text
+pulsecode-dev://app/
+pulsecode://app/
 t3code-dev://app/
 t3code://app/
 ```
 
-Local desktop development uses `t3code-dev://app`, while packaged builds use `t3code://app`. Add the
-matching origin to each Clerk instance's Backend API `allowed_origins` array as well. The development
-Clerk instance should only need `t3code-dev://app`; the production Clerk instance should only need
-`t3code://app`. `@clerk/electron` owns the native request adapter, encrypted Clerk token persistence,
+Local desktop development emits `pulsecode-dev://app`, while packaged builds emit
+`pulsecode://app`. The `t3code*` entries remain required for installed legacy builds and previously
+created callbacks. Add both matching origins to each Clerk instance's Backend API `allowed_origins`
+array as well. `@clerk/electron` owns the native request adapter, encrypted Clerk token persistence,
 external-browser OAuth transport, and callback delivery for initial sign-in and linked-account flows.
 
 There is currently no Dashboard UI for `allowed_origins`. Preserve any existing entries and update
@@ -182,7 +185,7 @@ the instance through the Backend API:
 curl -X PATCH https://api.clerk.com/v1/instance \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $CLERK_SECRET_KEY" \
-  -d '{"allowed_origins":["t3code://app"]}'
+  -d '{"allowed_origins":["pulsecode://app","t3code://app"]}'
 ```
 
 Never put `CLERK_SECRET_KEY` in the desktop app, a client-facing environment file, or a build
@@ -206,20 +209,20 @@ For a local signed build, add these values to `.env.local` or export them before
 desktop artifact command:
 
 ```dotenv
-T3CODE_APPLE_TEAM_ID=ABC1234567
-T3CODE_MACOS_PROVISIONING_PROFILE=/absolute/path/to/t3code.provisionprofile
+PULSE_CODE_APPLE_TEAM_ID=ABC1234567
+PULSE_CODE_MACOS_PROVISIONING_PROFILE=/absolute/path/to/t3code.provisionprofile
 # Optional: comma-separated override when Clerk's RP ID differs from the Frontend API hostname.
-T3CODE_CLERK_PASSKEY_RP_DOMAINS=example.clerk.accounts.dev,clerk.example.com
+PULSE_CODE_CLERK_PASSKEY_RP_DOMAINS=example.clerk.accounts.dev,clerk.example.com
 ```
 
-When `T3CODE_CLERK_PASSKEY_RP_DOMAINS` is absent, the build derives the RP domain from
-`T3CODE_CLERK_PUBLISHABLE_KEY`. Signed macOS builds fail early if the Team ID, provisioning profile,
+When `PULSE_CODE_CLERK_PASSKEY_RP_DOMAINS` is absent, the build derives the RP domain from
+`PULSE_CODE_CLERK_PUBLISHABLE_KEY`. Signed macOS builds fail early if the Team ID, provisioning profile,
 or RP-domain configuration is missing. The generated main-app entitlements include every configured
 `webcredentials:<domain>` entry; helper apps keep Electron's minimal default entitlements.
 
 The normal `dev:desktop` launcher is unsigned and cannot complete macOS passkey ceremonies. For
 renderer HMR, build and install a signed app first, run the renderer dev server, then launch the
-installed app executable with `VITE_DEV_SERVER_URL` and `T3CODE_PORT` set. Rebuild the signed app
+installed app executable with `VITE_DEV_SERVER_URL` and `PULSE_CODE_PORT` set. Rebuild the signed app
 after native dependency, main-process, preload, entitlement, provisioning, or signing changes;
 renderer-only changes can reuse the installed app.
 
@@ -228,8 +231,8 @@ binary from another:
 
 ```sh
 VITE_DEV_SERVER_URL=http://127.0.0.1:5733 \
-T3CODE_PORT=13773 \
-  "/Applications/T3 Code (Alpha).app/Contents/MacOS/T3 Code (Alpha)"
+PULSE_CODE_PORT=13773 \
+  "/Applications/Pulse Code (Alpha).app/Contents/MacOS/Pulse Code (Alpha)"
 ```
 
 After changing Associated Domains, bump the build version before rebuilding; macOS may otherwise
@@ -238,8 +241,8 @@ reuse stale Shared Web Credentials metadata for the same app/version pair.
 Verify the installed bundle before testing:
 
 ```sh
-codesign --verify --deep --strict "/Applications/T3 Code (Alpha).app"
-codesign -d --entitlements :- "/Applications/T3 Code (Alpha).app"
+codesign --verify --deep --strict "/Applications/Pulse Code (Alpha).app"
+codesign -d --entitlements :- "/Applications/Pulse Code (Alpha).app"
 ```
 
 The current mobile UI uses Clerk's native authentication view. If a future mobile browser OAuth
@@ -247,9 +250,9 @@ flow uses a custom redirect URI, add that exact URI to the same allowlist.
 
 ## Sign-in Surfaces
 
-Signed-in users manage T3 Connect under **Connections**. The settings sidebar also has dedicated
+Signed-in users manage Pulse Connect under **Connections**. The settings sidebar also has dedicated
 controls, rendered by `SettingsSidebarNav.tsx`: `T3ConnectSidebarSignIn` in the footer shows a
-**Sign in to T3 Connect** button while signed out, and `T3ConnectSidebarAvatar` shows a Clerk
+**Sign in to Pulse Connect** button while signed out, and `T3ConnectSidebarAvatar` shows a Clerk
 `UserButton` account control while signed in. Both are gated on cloud public configuration.
 Desktop renders the same web bundle, so it has them too. The waitlist enrollment flow from the
 private beta was removed when Connect went GA; sign-up is open unless a Clerk restriction below is

@@ -1,10 +1,10 @@
 # Scripts
 
-> For maintainers. Using T3 Code? See [docs/user](../user/).
+> For maintainers. Using Pulse Code? See [docs/user](../user/).
 
 ## First checkout
 
-T3 Code uses [Vite+](https://viteplus.dev/guide/). Install the global `vp` command, install
+Pulse Code uses [Vite+](https://viteplus.dev/guide/). Install the global `vp` command, install
 dependencies, then start the dev stack:
 
 ```bash
@@ -24,11 +24,11 @@ authenticated.
 - `vp run dev`: Starts contracts, server, and web in watch mode.
 - `vp run dev --share`: Also publishes the web port over HTTPS on this machine's tailnet. The
   startup pairing URL is built against the shared origin, and the mapping is removed on exit.
-  Shared runs default to Vite's bundled dev mode (`T3CODE_BUNDLED_DEV=1`): a remote browser pays a
+  Shared runs default to Vite's bundled dev mode (`PULSE_CODE_BUNDLED_DEV=1`): a remote browser pays a
   network round trip per import level in unbundled dev, which turns a cold module graph into
-  minutes of waterfall. Set `T3CODE_BUNDLED_DEV=0` to opt a shared run back out.
+  minutes of waterfall. Set `PULSE_CODE_BUNDLED_DEV=0` to opt a shared run back out.
 - `vp run dev --browser`: Auto-opens a browser. Off by default. The dev runner writes
-  `T3CODE_NO_BROWSER` itself from this flag, so setting `T3CODE_NO_BROWSER=0` in your environment has
+  `PULSE_CODE_NO_BROWSER` itself from this flag, so setting `PULSE_CODE_NO_BROWSER=0` in your environment has
   no effect; use `--browser`.
 - `vp run dev:server`: Starts just the server. It runs on Node (`node --watch src/bin.ts`), so
   without Bun present it selects `NodePtyAdapter` and `NodeHttpServer`.
@@ -41,7 +41,7 @@ authenticated.
 ### Dev state directories
 
 - Dev commands run from a linked **git worktree** default to that worktree's gitignored `.t3`, even
-  when `T3CODE_HOME` is set, storing state in `<worktree>/.t3/userdata`. Pass `--home-dir <path>` to
+  when `PULSE_CODE_HOME` is set, storing state in `<worktree>/.t3/userdata`. Pass `--home-dir <path>` to
   choose another isolated directory explicitly. Submodules are not worktrees and keep the normal
   precedence.
 - From the **main checkout**, dev commands implicitly use `~/.t3/dev`, keeping development state
@@ -62,7 +62,7 @@ authenticated.
 - `vp run test`: Runs workspace tests.
 - `vp run lint:mobile`: Mobile native static analysis (`scripts/mobile-native-static-check.ts`).
 - `node apps/server/scripts/t3-sqlite-state.ts <query|exec> --base-dir <path> ...`: Inspects or seeds
-  an isolated T3 SQLite database; writes create a private backup first.
+  an isolated Pulse Code SQLite database; writes create a private backup first.
 
 ## Desktop artifacts
 
@@ -91,9 +91,9 @@ authenticated.
   launch.
 - To keep staging files for debugging package contents, run: `vp run dist:desktop:dmg --keep-stage`
 - To allow code-signing/notarization when configured in CI/secrets, add: `--signed`.
-- Signed macOS builds also require `T3CODE_APPLE_TEAM_ID` and
-  `T3CODE_MACOS_PROVISIONING_PROFILE`. The passkey RP domain is derived from
-  `T3CODE_CLERK_PUBLISHABLE_KEY` unless `T3CODE_CLERK_PASSKEY_RP_DOMAINS` overrides it.
+- Signed macOS builds also require `PULSE_CODE_APPLE_TEAM_ID` and
+  `PULSE_CODE_MACOS_PROVISIONING_PROFILE`. The passkey RP domain is derived from
+  `PULSE_CODE_CLERK_PUBLISHABLE_KEY` unless `PULSE_CODE_CLERK_PASSKEY_RP_DOMAINS` overrides it.
 - Windows `--signed` uses Azure Trusted Signing and expects:
   `AZURE_TRUSTED_SIGNING_ENDPOINT`, `AZURE_TRUSTED_SIGNING_ACCOUNT_NAME`,
   `AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME`, and `AZURE_TRUSTED_SIGNING_PUBLISHER_NAME`.
@@ -112,12 +112,12 @@ Worktrees derive a preferred port offset from their path.
 
 - Default ports: server `13773`, web `5733`
 - Shifted ports: `base + offset`
-- Example: `T3CODE_DEV_INSTANCE=branch-a vp run dev:desktop`
+- Example: `PULSE_CODE_DEV_INSTANCE=branch-a vp run dev:desktop`
 
 Offset resolution, in order:
 
-1. `T3CODE_PORT_OFFSET`, which must be a non-negative integer. Negative values are rejected.
-2. `T3CODE_DEV_INSTANCE`. An all-digit value is used directly as the offset; any other non-empty
+1. `PULSE_CODE_PORT_OFFSET`, which must be a non-negative integer. Negative values are rejected.
+2. `PULSE_CODE_DEV_INSTANCE`. An all-digit value is used directly as the offset; any other non-empty
    value is hashed into one.
 3. The worktree path hash.
 

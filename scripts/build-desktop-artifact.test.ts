@@ -155,8 +155,8 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
   });
 
   it("switches desktop packaging product names to nightly for nightly builds", () => {
-    assert.equal(resolveDesktopProductName("0.0.17"), "T3 Code (Alpha)");
-    assert.equal(resolveDesktopProductName("0.0.17-nightly.20260413.42"), "T3 Code (Nightly)");
+    assert.equal(resolveDesktopProductName("0.0.17"), "Pulse Code (Alpha)");
+    assert.equal(resolveDesktopProductName("0.0.17-nightly.20260413.42"), "Pulse Code (Nightly)");
   });
 
   it("switches desktop packaging icons to the nightly artwork for nightly versions", () => {
@@ -466,7 +466,7 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
         "**/node_modules/.bin/**",
       ]);
       assert.deepStrictEqual(mac.dmg, {
-        title: "T3 Code (Alpha) 1.2.3 Installer",
+        title: "Pulse Code (Alpha) 1.2.3 Installer",
         background: "dmg/dmg-background-latest.png",
         window: { width: 540, height: 412 },
         contents: [
@@ -479,7 +479,10 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
       // Linux must register the renderer schemes so the generated .desktop
       // entry advertises MimeType=x-scheme-handler/t3code; for OAuth deep links.
       assert.deepStrictEqual((linux.linux as Record<string, unknown>).protocols, [
-        { name: "T3 Code", schemes: ["t3code", "t3code-dev"] },
+        {
+          name: "Pulse Code",
+          schemes: ["pulsecode", "pulsecode-dev", "t3code", "t3code-dev"],
+        },
       ]);
       for (const config of [mac, linux, win]) {
         assert.deepStrictEqual(config.electronLanguages, DESKTOP_ELECTRON_LANGUAGES);
@@ -883,6 +886,24 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
     });
   });
 
+  it("prefers Pulse Code macOS signing variables while accepting T3 Code aliases", () => {
+    const configuration = resolveMacPasskeySigningConfiguration({
+      PULSE_CODE_APPLE_TEAM_ID: "PULSE12345",
+      T3CODE_APPLE_TEAM_ID: "LEGACY1234",
+      PULSE_CODE_MACOS_PROVISIONING_PROFILE: "/tmp/pulse.provisionprofile",
+      T3CODE_MACOS_PROVISIONING_PROFILE: "/tmp/legacy.provisionprofile",
+      PULSE_CODE_CLERK_PASSKEY_RP_DOMAINS: "pulse.example.test",
+      T3CODE_CLERK_PASSKEY_RP_DOMAINS: "legacy.example.test",
+    });
+
+    assert.deepStrictEqual(configuration, {
+      appId: "com.t3tools.t3code",
+      teamId: "PULSE12345",
+      rpDomains: ["pulse.example.test"],
+      provisioningProfilePath: "/tmp/pulse.provisionprofile",
+    });
+  });
+
   it("normalizes explicit macOS passkey RP domains and renders required entitlements", () => {
     const configuration = resolveMacPasskeySigningConfiguration({
       T3CODE_APPLE_TEAM_ID: "ABC1234567",
@@ -919,7 +940,7 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
     assert.instanceOf(missingProfileError, MissingMacPasskeyProvisioningProfileError);
     assert.equal(
       missingProfileError.message,
-      "T3CODE_MACOS_PROVISIONING_PROFILE must point to an Associated Domains provisioning profile.",
+      "PULSE_CODE_MACOS_PROVISIONING_PROFILE must point to an Associated Domains provisioning profile.",
     );
 
     const unsafeDomain =
@@ -956,7 +977,10 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
     });
     assert.instanceOf(invalidPublishableKeyError, InvalidMacPasskeyPublishableKeyError);
     assert.ok(invalidPublishableKeyError.cause);
-    assert.equal(invalidPublishableKeyError.message, "T3CODE_CLERK_PUBLISHABLE_KEY is invalid.");
+    assert.equal(
+      invalidPublishableKeyError.message,
+      "PULSE_CODE_CLERK_PUBLISHABLE_KEY is invalid.",
+    );
     assert.notProperty(invalidPublishableKeyError, "publishableKey");
     assert.notInclude(invalidPublishableKeyError.message, "pk_test_%");
   });
@@ -995,7 +1019,10 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
       assert.equal(mac.entitlements, "/tmp/entitlements.mac.plist");
       assert.equal(mac.provisioningProfile, "/tmp/t3code.provisionprofile");
       assert.deepStrictEqual(mac.protocols, [
-        { name: "T3 Code", schemes: ["t3code", "t3code-dev"] },
+        {
+          name: "Pulse Code",
+          schemes: ["pulsecode", "pulsecode-dev", "t3code", "t3code-dev"],
+        },
       ]);
     }).pipe(Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env: {} })))),
   );

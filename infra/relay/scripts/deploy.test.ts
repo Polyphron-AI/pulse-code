@@ -100,6 +100,13 @@ describe("reconcileRootEnvPublicConfig", () => {
   it("adds the complete local client config", () => {
     expect(reconcileRootEnvPublicConfig("", config)).toBe(
       [
+        "PULSE_CODE_RELAY_URL=https://relay.example.test",
+        "PULSE_CODE_MOBILE_OTLP_TRACES_URL=https://api.axiom.co/v1/traces",
+        "PULSE_CODE_MOBILE_OTLP_TRACES_DATASET=t3-code-mobile-traces-dev",
+        "PULSE_CODE_MOBILE_OTLP_TRACES_TOKEN=xaat-public-ingest",
+        "PULSE_CODE_RELAY_CLIENT_OTLP_TRACES_URL=https://api.axiom.co/v1/traces",
+        "PULSE_CODE_RELAY_CLIENT_OTLP_TRACES_DATASET=t3-code-relay-client-traces-dev",
+        "PULSE_CODE_RELAY_CLIENT_OTLP_TRACES_TOKEN=xaat-relay-client-ingest",
         "T3CODE_RELAY_URL=https://relay.example.test",
         "T3CODE_MOBILE_OTLP_TRACES_URL=https://api.axiom.co/v1/traces",
         "T3CODE_MOBILE_OTLP_TRACES_DATASET=t3-code-mobile-traces-dev",
@@ -138,6 +145,13 @@ describe("reconcileRootEnvPublicConfig", () => {
         "T3CODE_RELAY_CLIENT_OTLP_TRACES_URL=https://api.axiom.co/v1/traces",
         "T3CODE_RELAY_CLIENT_OTLP_TRACES_DATASET=t3-code-relay-client-traces-dev",
         "T3CODE_RELAY_CLIENT_OTLP_TRACES_TOKEN=xaat-relay-client-ingest",
+        "PULSE_CODE_RELAY_URL=https://relay.example.test",
+        "PULSE_CODE_MOBILE_OTLP_TRACES_URL=https://api.axiom.co/v1/traces",
+        "PULSE_CODE_MOBILE_OTLP_TRACES_DATASET=t3-code-mobile-traces-dev",
+        "PULSE_CODE_MOBILE_OTLP_TRACES_TOKEN=xaat-public-ingest",
+        "PULSE_CODE_RELAY_CLIENT_OTLP_TRACES_URL=https://api.axiom.co/v1/traces",
+        "PULSE_CODE_RELAY_CLIENT_OTLP_TRACES_DATASET=t3-code-relay-client-traces-dev",
+        "PULSE_CODE_RELAY_CLIENT_OTLP_TRACES_TOKEN=xaat-relay-client-ingest",
         "",
       ].join("\n"),
     );
@@ -170,6 +184,9 @@ describe("serializeRelayClientTracingEnvironment", () => {
       }),
     ).toBe(
       [
+        "PULSE_CODE_RELAY_CLIENT_OTLP_TRACES_URL=https://api.axiom.co/v1/traces",
+        "PULSE_CODE_RELAY_CLIENT_OTLP_TRACES_DATASET=relay",
+        "PULSE_CODE_RELAY_CLIENT_OTLP_TRACES_TOKEN=client-token",
         "T3CODE_RELAY_CLIENT_OTLP_TRACES_URL=https://api.axiom.co/v1/traces",
         "T3CODE_RELAY_CLIENT_OTLP_TRACES_DATASET=relay",
         "T3CODE_RELAY_CLIENT_OTLP_TRACES_TOKEN=client-token",

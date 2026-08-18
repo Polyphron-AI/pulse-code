@@ -99,6 +99,7 @@ jobs:
     # one native build is shared between them.
     timeout-minutes: ${{ inputs.theme == 'all' && 300 || 60 }}
     env:
+      PULSE_CODE_SHOWCASE_ANDROID_ABI: x86_64
       T3_SHOWCASE_ANDROID_ABI: x86_64
     steps:
       - name: Checkout

@@ -129,6 +129,9 @@ describe("mobile connection storage", () => {
     expect(JSON.parse(savedValue ?? "")).toEqual({
       connections: [toStableSavedRemoteConnection(managedConnection)],
     });
+    expect(mocks.getStoredValue("pulsecode.connections")).toBe(
+      mocks.getStoredValue("t3code.connections"),
+    );
   });
 
   it("loads relay-managed connection metadata without a cached access token", async () => {
@@ -146,9 +149,9 @@ describe("mobile connection storage", () => {
     await expect(loadSavedConnections()).rejects.toMatchObject({
       _tag: "MobileSecureStorageError",
       operation: "read",
-      key: "t3code.connections",
+      key: "pulsecode.connections",
       cause,
-      message: "Mobile secure storage operation read failed for key t3code.connections.",
+      message: "Mobile secure storage operation read failed for key pulsecode.connections.",
     });
   });
 

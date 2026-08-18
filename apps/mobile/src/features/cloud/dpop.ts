@@ -86,7 +86,8 @@ export interface DpopProofKeyPair {
   readonly thumbprint: string;
 }
 
-const DPOP_PROOF_KEY_STORAGE_KEY = "t3code.cloud.dpop-proof-key";
+const DPOP_PROOF_KEY_STORAGE_KEY = "pulsecode.cloud.dpop-proof-key";
+const LEGACY_DPOP_PROOF_KEY_STORAGE_KEY = "t3code.cloud.dpop-proof-key";
 
 function base64UrlToBytes(value: string): Uint8Array {
   return Result.getOrThrow(Encoding.decodeBase64Url(value));
@@ -197,10 +198,17 @@ export function loadOrCreateDpopProofKeyPair(): Effect.Effect<
   Crypto.Crypto
 > {
   return Effect.gen(function* () {
-    const stored = yield* Effect.tryPromise({
-      try: () => SecureStore.getItemAsync(DPOP_PROOF_KEY_STORAGE_KEY),
+    const storedValues = yield* Effect.tryPromise({
+      try: async () => {
+        const canonical = await SecureStore.getItemAsync(DPOP_PROOF_KEY_STORAGE_KEY);
+        const legacy = canonical
+          ? null
+          : await SecureStore.getItemAsync(LEGACY_DPOP_PROOF_KEY_STORAGE_KEY);
+        return { canonical, legacy };
+      },
       catch: cloudDpopError("Could not read the DPoP proof key."),
     });
+    const stored = storedValues.canonical ?? storedValues.legacy;
     if (stored) {
       const storedPrivateJwk = yield* decodeDpopPrivateJwkJson(stored).pipe(
         Effect.mapError(cloudDpopError("Stored DPoP proof key is invalid.")),
@@ -219,6 +227,14 @@ export function loadOrCreateDpopProofKeyPair(): Effect.Effect<
         catch: cloudDpopError("Stored DPoP proof key is invalid."),
       });
       const thumbprint = yield* computeDpopJwkThumbprintEffect(restored.publicJwk);
+      yield* Effect.tryPromise({
+        try: () =>
+          Promise.all([
+            SecureStore.setItemAsync(DPOP_PROOF_KEY_STORAGE_KEY, stored),
+            SecureStore.setItemAsync(LEGACY_DPOP_PROOF_KEY_STORAGE_KEY, stored),
+          ]),
+        catch: cloudDpopError("Could not migrate the DPoP proof key."),
+      });
       return {
         ...restored,
         thumbprint,
@@ -229,7 +245,11 @@ export function loadOrCreateDpopProofKeyPair(): Effect.Effect<
       Effect.mapError(cloudDpopError("Could not encode the DPoP proof key.")),
     );
     yield* Effect.tryPromise({
-      try: () => SecureStore.setItemAsync(DPOP_PROOF_KEY_STORAGE_KEY, encodedPrivateJwk),
+      try: () =>
+        Promise.all([
+          SecureStore.setItemAsync(DPOP_PROOF_KEY_STORAGE_KEY, encodedPrivateJwk),
+          SecureStore.setItemAsync(LEGACY_DPOP_PROOF_KEY_STORAGE_KEY, encodedPrivateJwk),
+        ]),
       catch: cloudDpopError("Could not store the DPoP proof key."),
     });
     return generated;

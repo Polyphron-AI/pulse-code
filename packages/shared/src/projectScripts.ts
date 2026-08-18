@@ -21,13 +21,28 @@ export function projectScriptRuntimeEnv(
   input: ProjectScriptRuntimeEnvInput,
 ): Record<string, string> {
   const env: Record<string, string> = {
+    PULSE_CODE_PROJECT_ROOT: input.project.cwd,
     T3CODE_PROJECT_ROOT: input.project.cwd,
   };
   if (input.worktreePath) {
+    env.PULSE_CODE_WORKTREE_PATH = input.worktreePath;
     env.T3CODE_WORKTREE_PATH = input.worktreePath;
   }
   if (input.extraEnv) {
-    return { ...env, ...input.extraEnv };
+    const merged = { ...env, ...input.extraEnv };
+    const projectRoot =
+      input.extraEnv.PULSE_CODE_PROJECT_ROOT ?? input.extraEnv.T3CODE_PROJECT_ROOT;
+    const worktreePath =
+      input.extraEnv.PULSE_CODE_WORKTREE_PATH ?? input.extraEnv.T3CODE_WORKTREE_PATH;
+    if (projectRoot !== undefined) {
+      merged.PULSE_CODE_PROJECT_ROOT = projectRoot;
+      merged.T3CODE_PROJECT_ROOT = projectRoot;
+    }
+    if (worktreePath !== undefined) {
+      merged.PULSE_CODE_WORKTREE_PATH = worktreePath;
+      merged.T3CODE_WORKTREE_PATH = worktreePath;
+    }
+    return merged;
   }
   return env;
 }

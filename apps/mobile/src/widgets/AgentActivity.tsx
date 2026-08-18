@@ -147,11 +147,11 @@ export function AgentActivity(
   const summary = attentionSuffix || activeLabel;
 
   // Any registered scheme variant routes back to this app; taps are delivered
-  // to the widget's containing app, so the prod scheme is safe for all builds.
+  // to the widget's containing app, so the canonical prod scheme is safe for all builds.
   const deepLinkRow = attentionRow ?? row0;
   const deepLink =
     deepLinkRow && deepLinkRow.deepLink.startsWith("/") && !deepLinkRow.deepLink.startsWith("//")
-      ? `t3code://${deepLinkRow.deepLink.slice(1)}`
+      ? `pulsecode://${deepLinkRow.deepLink.slice(1)}`
       : null;
 
   // A scannable status glyph per phase — reads faster than colored words and
@@ -223,15 +223,10 @@ export function AgentActivity(
     </HStack>
   );
 
-  // The branded T3 mark. `assetName` resolves the template image set bundled in
-  // the widget extension's asset catalog. Image views only honor `resizable`
-  // directly (frame/foregroundStyle are dropped), so we size it via a container
-  // frame the resizable image fills and tint it through the container's
-  // foreground style, which the template image inherits. The 3:2 frame matches
-  // the glyph's aspect ratio so it never distorts.
+  // A compact Pulse initial keeps the brand legible in every widget size.
   const renderLogo = (height: number, color: string) => (
-    <HStack modifiers={[frame({ width: height * 1.5, height }), foregroundStyle(color)]}>
-      <Image assetName="T3Mark" modifiers={[resizable()]} />
+    <HStack modifiers={[frame({ width: height, height }), foregroundStyle(color)]}>
+      <Text modifiers={[font({ weight: "bold", size: height })]}>P</Text>
     </HStack>
   );
 

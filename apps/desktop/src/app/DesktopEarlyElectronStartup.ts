@@ -49,7 +49,7 @@ function resolveEarlyDesktopSettingsPath(input: {
   readonly homeDirectory: string;
   readonly joinPath: JoinPath;
 }): string {
-  const t3Home = Option.fromUndefinedOr(input.env.T3CODE_HOME);
+  const t3Home = Option.fromUndefinedOr(input.env.PULSE_CODE_HOME ?? input.env.T3CODE_HOME);
   const baseDir = resolveDesktopBaseDir({
     homeDirectory: input.homeDirectory,
     joinPath: input.joinPath,
@@ -81,6 +81,7 @@ export function resolveEarlyLinuxElectronOptions(
 ): EarlyLinuxElectronOptions {
   const preference = resolveEarlyLinuxPasswordStorePreference(input);
   return {
+    // Keep the historical WM class so taskbar/dock identity survives upgrades.
     linuxWmClass: isDevelopmentEnvironment(input.env) ? "t3code-dev" : "t3code",
     passwordStore: resolveLinuxPasswordStoreSwitch({
       preference,

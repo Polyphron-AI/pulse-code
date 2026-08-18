@@ -15,6 +15,7 @@ import {
 } from "@t3tools/contracts";
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http";
 import { sanitizeBranchFragment } from "@t3tools/shared/git";
+import { withLegacyConfigAlias } from "@t3tools/shared/configAliases";
 import {
   detectSourceControlProviderFromRemoteUrl,
   isSshRemoteUrl,
@@ -38,13 +39,26 @@ const DEFAULT_MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
 /** Bitbucket redirects a diff once; this leaves room without following a chain forever. */
 const MAX_REDIRECTS = 3;
 
+const pulseCodeBitbucketConfig = <A>(
+  legacyName: `T3CODE_${string}`,
+  makeConfig: (name: string) => Config.Config<A>,
+) =>
+  withLegacyConfigAlias(
+    makeConfig(legacyName.replace(/^T3CODE_/, "PULSE_CODE_")),
+    makeConfig(legacyName),
+  );
+
 const BitbucketApiEnvConfig = Config.all({
-  baseUrl: Config.string("T3CODE_BITBUCKET_API_BASE_URL").pipe(
+  baseUrl: pulseCodeBitbucketConfig("T3CODE_BITBUCKET_API_BASE_URL", Config.string).pipe(
     Config.withDefault(DEFAULT_API_BASE_URL),
   ),
-  accessToken: Config.string("T3CODE_BITBUCKET_ACCESS_TOKEN").pipe(Config.option),
-  email: Config.string("T3CODE_BITBUCKET_EMAIL").pipe(Config.option),
-  apiToken: Config.string("T3CODE_BITBUCKET_API_TOKEN").pipe(Config.option),
+  accessToken: pulseCodeBitbucketConfig("T3CODE_BITBUCKET_ACCESS_TOKEN", Config.string).pipe(
+    Config.option,
+  ),
+  email: pulseCodeBitbucketConfig("T3CODE_BITBUCKET_EMAIL", Config.string).pipe(Config.option),
+  apiToken: pulseCodeBitbucketConfig("T3CODE_BITBUCKET_API_TOKEN", Config.string).pipe(
+    Config.option,
+  ),
 });
 
 const BitbucketApiOperation = Schema.Literals([
@@ -562,7 +576,7 @@ function authFromConfig(
     account: Option.none(),
     host: Option.some("bitbucket.org"),
     detail: Option.some(
-      "Set T3CODE_BITBUCKET_EMAIL and T3CODE_BITBUCKET_API_TOKEN, or T3CODE_BITBUCKET_ACCESS_TOKEN.",
+      "Set PULSE_CODE_BITBUCKET_EMAIL and PULSE_CODE_BITBUCKET_API_TOKEN, or PULSE_CODE_BITBUCKET_ACCESS_TOKEN (legacy T3CODE_* aliases remain supported).",
     ),
   };
 }

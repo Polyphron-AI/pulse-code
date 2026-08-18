@@ -63,6 +63,38 @@ const makeSpawnerLayer = (commands: Array<string>) =>
   );
 
 describe("RelayClient", () => {
+  it.effect("accepts the legacy cloudflared override variable", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const baseDir = yield* fileSystem.makeTempDirectoryScoped({
+        prefix: "pulse-cloudflared-alias-test-",
+      });
+      const manager = yield* makeCloudflaredRelayClient({ baseDir });
+      const error = yield* manager.install.pipe(
+        Effect.provideService(
+          ConfigProvider.ConfigProvider,
+          ConfigProvider.fromEnv({
+            env: { PATH: "", T3CODE_CLOUDFLARED_PATH: `${baseDir}/missing-cloudflared` },
+          }),
+        ),
+        Effect.flip,
+      );
+
+      expect(error).toMatchObject({ reason: "override_missing" });
+      expect(error.message).toContain("PULSE_CODE_CLOUDFLARED_PATH");
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        Layer.mergeAll(
+          NodeServices.layer,
+          makeHttpClientLayer(new Uint8Array()),
+          makeSpawnerLayer([]),
+          hostRuntimeLayer(),
+        ),
+      ),
+    ),
+  );
+
   it.effect("resolves explicit overrides before managed and PATH executables", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;

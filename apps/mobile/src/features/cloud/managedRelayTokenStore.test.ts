@@ -29,7 +29,7 @@ it.effect("round-trips and clears persisted managed relay access tokens", () =>
     const entries = [
       {
         accountId: "user-1",
-        clientId: "t3-mobile",
+        clientId: "pulse-mobile",
         relayUrl: "https://relay.example.test",
         thumbprint: "thumbprint",
         scopes: ["environment:connect"],
@@ -40,6 +40,9 @@ it.effect("round-trips and clears persisted managed relay access tokens", () =>
 
     yield* managedRelayAccessTokenStore.save(entries);
     expect(yield* managedRelayAccessTokenStore.load).toEqual(entries);
+    expect(secureStore.get("pulsecode.cloud.relay-access-tokens")).toBe(
+      secureStore.get("t3code.cloud.relay-access-tokens"),
+    );
 
     yield* managedRelayAccessTokenStore.clear;
     expect(yield* managedRelayAccessTokenStore.load).toEqual([]);
@@ -77,7 +80,7 @@ it.effect("logs structured storage failures before falling back to an empty cach
     expect(context.cause).toBeInstanceOf(ManagedRelayTokenStoreError);
     expect(context.cause).toMatchObject({
       operation: "read",
-      storageKey: "t3code.cloud.relay-access-tokens",
+      storageKey: "pulsecode.cloud.relay-access-tokens",
       cause,
     });
     expect(context.cause.message).not.toContain(cause.message);
