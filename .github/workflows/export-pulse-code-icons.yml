@@ -39,6 +39,13 @@ jobs:
             --width 1024 \
             --height 1024 \
             --scale 1
+          if "$tool" assets/prod/app-icon.icon \
+            --export-preview macOS Default 824 824 1 -45 \
+            "$RUNNER_TEMP/pulse-code-macos-preview-probe.png"; then
+            echo "Icon Composer supports native pre-Tahoe preview export."
+          else
+            echo "Icon Composer does not support native pre-Tahoe preview export."
+          fi
           "$tool" assets/prod/app-icon.icon \
             --export-image \
             --output-file "$RUNNER_TEMP/pulse-code-macos-probe.png" \
@@ -52,7 +59,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: pulse-code-icon-probe
-          path: ${{ runner.temp }}/pulse-code-*-probe.png
+          path: ${{ runner.temp }}/pulse-code*-probe.png
           if-no-files-found: error
           retention-days: 1
 
