@@ -38,14 +38,21 @@ jobs:
             --rendition Default \
             --width 1024 \
             --height 1024 \
-            --scale 1 \
-            --design-generation 26
+            --scale 1
+          "$tool" assets/prod/app-icon.icon \
+            --export-image \
+            --output-file "$RUNNER_TEMP/pulse-code-macos-probe.png" \
+            --platform macOS \
+            --rendition Default \
+            --width 1024 \
+            --height 1024 \
+            --scale 1
 
       - name: Upload probe rendition
         uses: actions/upload-artifact@v7
         with:
           name: pulse-code-icon-probe
-          path: ${{ runner.temp }}/pulse-code-probe.png
+          path: ${{ runner.temp }}/pulse-code-*-probe.png
           if-no-files-found: error
           retention-days: 1
 
