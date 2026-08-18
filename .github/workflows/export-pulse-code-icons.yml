@@ -1,0 +1,44 @@
+name: Export Pulse Code icons
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    name: Export native icon assets
+    runs-on: macos-26
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version-file: package.json
+          cache: true
+          run-install: |
+            args:
+              - --filter=@t3tools/scripts...
+
+      - name: Export Icon Composer renditions
+        run: vp run icons:export
+
+      - name: Verify generated renditions
+        run: vp run icons:check
+
+      - name: Capture generated assets
+        run: |
+          git diff --binary -- assets apps/web/public > pulse-code-icons.patch
+          test -s pulse-code-icons.patch
+
+      - name: Upload generated icon patch
+        uses: actions/upload-artifact@v7
+        with:
+          name: pulse-code-icons
+          path: pulse-code-icons.patch
+          if-no-files-found: error
+          retention-days: 7
