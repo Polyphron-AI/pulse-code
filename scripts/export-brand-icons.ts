@@ -64,7 +64,8 @@ interface IconComposerTool {
   readonly path: string;
   readonly version: string;
   readonly bundleVersion: string;
-  readonly supportsDesignGeneration: boolean;
+  readonly supportsGeneration26: boolean;
+  readonly supportsDesignGenerationSelection: boolean;
 }
 
 interface CommandResult {
@@ -141,9 +142,9 @@ export class IconExportToolResolutionError extends Schema.TaggedErrorClass<IconE
       case "configured-invalid":
         return `ICON_COMPOSER_TOOL does not point to Icon Composer's export-capable ictool: ${this.toolPath}`;
       case "configured-outdated":
-        return `ICON_COMPOSER_TOOL points to Icon Composer ${this.version}, but version 2 or newer is required for design generation ${this.designGeneration}.`;
+        return `ICON_COMPOSER_TOOL points to Icon Composer ${this.version}, but version 1.2 or newer is required for design generation ${this.designGeneration}.`;
       case "not-found":
-        return `Could not find an Icon Composer 2.x exporter compatible with design generation ${this.designGeneration}. Install a compatible Icon Composer/Xcode or set ICON_COMPOSER_TOOL to Icon Composer.app/Contents/Executables/ictool.`;
+        return `Could not find an Icon Composer 1.2+ exporter compatible with design generation ${this.designGeneration}. Install a compatible Icon Composer/Xcode or set ICON_COMPOSER_TOOL to Icon Composer.app/Contents/Executables/ictool.`;
     }
   }
 }
@@ -246,14 +247,6 @@ const ICON_VARIANTS = [
     },
   },
 ] as const satisfies ReadonlyArray<IconVariant>;
-
-const MACOS_EXPORT_CODEX_PROMPT = [
-  "Use [@Computer](plugin://computer-use@openai-bundled) and the Icon Composer app to export the three macOS app icons in this repository.",
-  "For each project below, use Platform: macOS pre-Tahoe, Appearance: Default, Size: 1024pt, and Scale: 1×, then save the PNG to the exact destination:",
-  ...ICON_VARIANTS.map((variant) => `- ${variant.source} -> ${variant.outputs.macos}`),
-  "Do not resize, composite, or otherwise post-process the exported PNGs.",
-  "Verify every result is 1024×1024 and has the classic macOS safe area: an 824×824 opaque body inset 100px on every side, with only Icon Composer's native shadow extending beyond it.",
-];
 
 const RepositoryRoot = Effect.service(Path.Path).pipe(
   Effect.flatMap((path) => path.fromFileUrl(new URL("..", import.meta.url))),
@@ -398,11 +391,16 @@ const probeIconComposerTool = Effect.fn("iconExport.probeIconComposerTool")(func
 
   const bundleVersion = version.value["bundle-version"];
   const shortVersion = version.value["short-bundle-version"];
+  const [major = 0, minor = 0] = shortVersion
+    .split(".")
+    .slice(0, 2)
+    .map((part) => Number.parseInt(part, 10));
   return Option.some({
     path: candidate,
     version: `${shortVersion} (${bundleVersion})`,
     bundleVersion,
-    supportsDesignGeneration: Number.parseInt(shortVersion, 10) >= 2,
+    supportsGeneration26: major > 1 || (major === 1 && minor >= 2),
+    supportsDesignGenerationSelection: major >= 2,
   });
 });
 
@@ -419,7 +417,7 @@ const resolveIconComposerTool = Effect.fn("iconExport.resolveIconComposerTool")(
         toolPath: configuredTool,
       });
     }
-    if (!tool.value.supportsDesignGeneration) {
+    if (!tool.value.supportsGeneration26) {
       return yield* new IconExportToolResolutionError({
         reason: "configured-outdated",
         designGeneration: DESIGN_GENERATION,
@@ -462,7 +460,7 @@ const resolveIconComposerTool = Effect.fn("iconExport.resolveIconComposerTool")(
   const compatibleTools = probed
     .filter(Option.isSome)
     .map((tool) => tool.value)
-    .filter((tool) => tool.supportsDesignGeneration)
+    .filter((tool) => tool.supportsGeneration26)
     .sort((left, right) =>
       right.bundleVersion.localeCompare(left.bundleVersion, undefined, { numeric: true }),
     );
@@ -475,45 +473,12 @@ const resolveIconComposerTool = Effect.fn("iconExport.resolveIconComposerTool")(
   });
 });
 
-const renderIcon = Effect.fn("iconExport.renderIcon")(function* (
-  toolPath: string,
+const readVerifiedPng = Effect.fn("iconExport.readVerifiedPng")(function* (
   sourcePath: string,
   outputPath: string,
-  platform: IconPlatform,
-  size: number,
+  expectedSize: number,
 ) {
   const fs = yield* FileSystem.FileSystem;
-  const args = [
-    sourcePath,
-    "--export-image",
-    "--output-file",
-    outputPath,
-    "--platform",
-    platform,
-    "--rendition",
-    "Default",
-    "--width",
-    String(size),
-    "--height",
-    String(size),
-    "--scale",
-    "1",
-    "--design-generation",
-    String(DESIGN_GENERATION),
-  ];
-  const result = yield* runCommand(toolPath, args);
-  if (result.exitCode !== 0) {
-    return yield* new IconExportCommandFailedError({
-      command: toolPath,
-      argumentCount: args.length,
-      exitCode: result.exitCode,
-      sourcePath,
-      size,
-      ...(result.stdout.trim() ? { stdout: result.stdout.trim() } : {}),
-      ...(result.stderr.trim() ? { stderr: result.stderr.trim() } : {}),
-    });
-  }
-
   const contents = yield* fs.readFile(outputPath).pipe(
     Effect.mapError(
       (cause) =>
@@ -531,15 +496,15 @@ const renderIcon = Effect.fn("iconExport.renderIcon")(function* (
       new IconExportRenditionError({
         sourcePath,
         outputPath,
-        expectedSize: size,
+        expectedSize,
         cause,
       }),
   });
-  if (dimensions.width !== size || dimensions.height !== size) {
+  if (dimensions.width !== expectedSize || dimensions.height !== expectedSize) {
     return yield* new IconExportRenditionError({
       sourcePath,
       outputPath,
-      expectedSize: size,
+      expectedSize,
       actualWidth: dimensions.width,
       actualHeight: dimensions.height,
     });
@@ -547,8 +512,123 @@ const renderIcon = Effect.fn("iconExport.renderIcon")(function* (
   return buffer;
 });
 
+const renderIcon = Effect.fn("iconExport.renderIcon")(function* (
+  tool: IconComposerTool,
+  sourcePath: string,
+  outputPath: string,
+  platform: IconPlatform,
+  size: number,
+) {
+  const args = [
+    sourcePath,
+    "--export-image",
+    "--output-file",
+    outputPath,
+    "--platform",
+    platform,
+    "--rendition",
+    "Default",
+    "--width",
+    String(size),
+    "--height",
+    String(size),
+    "--scale",
+    "1",
+    ...(tool.supportsDesignGenerationSelection
+      ? ["--design-generation", String(DESIGN_GENERATION)]
+      : []),
+  ];
+  const result = yield* runCommand(tool.path, args);
+  if (result.exitCode !== 0) {
+    return yield* new IconExportCommandFailedError({
+      command: tool.path,
+      argumentCount: args.length,
+      exitCode: result.exitCode,
+      sourcePath,
+      size,
+      ...(result.stdout.trim() ? { stdout: result.stdout.trim() } : {}),
+      ...(result.stderr.trim() ? { stderr: result.stderr.trim() } : {}),
+    });
+  }
+
+  return yield* readVerifiedPng(sourcePath, outputPath, size);
+});
+
+const renderMacOsPreTahoeIcon = Effect.fn("iconExport.renderMacOsPreTahoeIcon")(function* (
+  tool: IconComposerTool,
+  repositoryRoot: string,
+  temporaryDirectory: string,
+  variant: IconVariant,
+  sourcePath: string,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const nativeShellPath = path.join(repositoryRoot, variant.outputs.macos);
+  const nativeShellExists = yield* fs.exists(nativeShellPath).pipe(
+    Effect.mapError(
+      (cause) =>
+        new IconExportFileSystemError({
+          operation: "check-path",
+          path: nativeShellPath,
+          cause,
+        }),
+    ),
+  );
+  if (!nativeShellExists) {
+    return yield* new IconExportSourceMissingError({ sourcePath: variant.outputs.macos });
+  }
+
+  const bodyPath = path.join(temporaryDirectory, `${variant.label}-macos-pre-tahoe-body.png`);
+  const previewArgs = [
+    sourcePath,
+    "--export-preview",
+    "macOS",
+    "Default",
+    "824",
+    "824",
+    "1",
+    "-45",
+    bodyPath,
+  ];
+  const previewResult = yield* runCommand(tool.path, previewArgs);
+  if (previewResult.exitCode !== 0) {
+    return yield* new IconExportCommandFailedError({
+      command: tool.path,
+      argumentCount: previewArgs.length,
+      exitCode: previewResult.exitCode,
+      sourcePath,
+      size: 824,
+      ...(previewResult.stdout.trim() ? { stdout: previewResult.stdout.trim() } : {}),
+      ...(previewResult.stderr.trim() ? { stderr: previewResult.stderr.trim() } : {}),
+    });
+  }
+  yield* readVerifiedPng(sourcePath, bodyPath, 824);
+
+  const outputPath = path.join(temporaryDirectory, `${variant.label}-macos-pre-tahoe-1024.png`);
+  const compositorPath = path.join(
+    repositoryRoot,
+    "scripts",
+    "lib",
+    "compose-macos-pre-tahoe-icon.swift",
+  );
+  const compositorArgs = [compositorPath, nativeShellPath, bodyPath, outputPath];
+  const compositorResult = yield* runCommand("swift", compositorArgs);
+  if (compositorResult.exitCode !== 0) {
+    return yield* new IconExportCommandFailedError({
+      command: "swift",
+      argumentCount: compositorArgs.length,
+      exitCode: compositorResult.exitCode,
+      sourcePath,
+      size: 1024,
+      ...(compositorResult.stdout.trim() ? { stdout: compositorResult.stdout.trim() } : {}),
+      ...(compositorResult.stderr.trim() ? { stderr: compositorResult.stderr.trim() } : {}),
+    });
+  }
+  return yield* readVerifiedPng(sourcePath, outputPath, 1024);
+});
+
 const renderVariant = Effect.fn("iconExport.renderVariant")(function* (
-  toolPath: string,
+  tool: IconComposerTool,
   repositoryRoot: string,
   temporaryDirectory: string,
   variant: IconVariant,
@@ -580,12 +660,19 @@ const renderVariant = Effect.fn("iconExport.renderVariant")(function* (
     if (cached) return cached;
 
     const outputPath = path.join(temporaryDirectory, `${variant.label}-${platform}-${size}.png`);
-    const contents = yield* renderIcon(toolPath, sourcePath, outputPath, platform, size);
+    const contents = yield* renderIcon(tool, sourcePath, outputPath, platform, size);
     renditionCache.set(cacheKey, contents);
     return contents;
   });
 
   const ios = yield* render("iOS", 1024);
+  const macos = yield* renderMacOsPreTahoeIcon(
+    tool,
+    repositoryRoot,
+    temporaryDirectory,
+    variant,
+    sourcePath,
+  );
   const icoRenditions = yield* Effect.forEach(
     WINDOWS_ICON_SIZES,
     (size) => render("iOS", size).pipe(Effect.map((contents) => ({ size, contents }))),
@@ -598,6 +685,7 @@ const renderVariant = Effect.fn("iconExport.renderVariant")(function* (
 
   return new Map<string, Buffer>([
     [variant.outputs.ios, ios],
+    [variant.outputs.macos, macos],
     [variant.outputs.universal, ios],
     [variant.outputs.appleTouch, yield* render("iOS", 180)],
     [variant.outputs.favicon16, yield* render("iOS", 16)],
@@ -606,24 +694,6 @@ const renderVariant = Effect.fn("iconExport.renderVariant")(function* (
     [variant.outputs.windowsIco, ico],
   ]);
 });
-
-const logManualMacOsExportInstructions = Effect.fn("iconExport.logManualMacOsExportInstructions")(
-  function* () {
-    yield* Console.warn(
-      [
-        "macOS icons require Icon Composer's GUI-only pre-Tahoe preset and were not changed.",
-        "Export each source with Platform: macOS pre-Tahoe, Appearance: Default, Size: 1024pt, Scale: 1×:",
-        ...ICON_VARIANTS.map((variant) => `- ${variant.source} -> ${variant.outputs.macos}`),
-        "See assets/README.md for the complete workflow.",
-        "",
-        "Copy/paste this prompt into Codex to perform the native exports:",
-        "---",
-        ...MACOS_EXPORT_CODEX_PROMPT,
-        "---",
-      ].join("\n"),
-    );
-  },
-);
 
 const writeAtomically = Effect.fn("iconExport.writeAtomically")(function* (
   repositoryRoot: string,
@@ -741,7 +811,7 @@ export const exportBrandIcons = Effect.fn("exportBrandIcons")(function* (checkOn
   for (const variant of ICON_VARIANTS) {
     yield* Console.log(`Rendering ${variant.label} from ${variant.source}...`);
     const variantAssets = yield* renderVariant(
-      tool.path,
+      tool,
       repositoryRoot,
       temporaryDirectory,
       variant,
@@ -774,7 +844,6 @@ export const exportBrandIcons = Effect.fn("exportBrandIcons")(function* (checkOn
       });
     }
     yield* Console.log(`All ${generated.size} generated icon assets are current.`);
-    yield* logManualMacOsExportInstructions();
     return;
   }
 
@@ -784,7 +853,6 @@ export const exportBrandIcons = Effect.fn("exportBrandIcons")(function* (checkOn
     { concurrency: 1, discard: true },
   );
   yield* Console.log(`Updated ${generated.size} generated icon assets.`);
-  yield* logManualMacOsExportInstructions();
 });
 
 export const exportBrandIconsCommand = Command.make(

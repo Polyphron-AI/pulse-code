@@ -27,44 +27,11 @@ jobs:
       - name: Install Icon Composer
         run: brew install --cask icon-composer
 
-      - name: Probe Icon Composer generation support
-        run: |
-          tool="/Applications/Icon Composer.app/Contents/Executables/ictool"
-          "$tool" --version
-          "$tool" assets/prod/app-icon.icon \
-            --export-image \
-            --output-file "$RUNNER_TEMP/pulse-code-probe.png" \
-            --platform iOS \
-            --rendition Default \
-            --width 1024 \
-            --height 1024 \
-            --scale 1
-          if "$tool" assets/prod/app-icon.icon \
-            --export-preview macOS Default 824 824 1 -45 \
-            "$RUNNER_TEMP/pulse-code-macos-preview-probe.png"; then
-            echo "Icon Composer supports native pre-Tahoe preview export."
-          else
-            echo "Icon Composer does not support native pre-Tahoe preview export."
-          fi
-          "$tool" assets/prod/app-icon.icon \
-            --export-preview macOS Default 1024 1024 0.8046875 -45 \
-            "$RUNNER_TEMP/pulse-code-macos-safe-area-probe.png"
-          "$tool" assets/prod/app-icon.icon \
-            --export-image \
-            --output-file "$RUNNER_TEMP/pulse-code-macos-probe.png" \
-            --platform macOS \
-            --rendition Default \
-            --width 1024 \
-            --height 1024 \
-            --scale 1
+      - name: Typecheck exporter
+        run: vp run --filter @t3tools/scripts typecheck
 
-      - name: Upload probe rendition
-        uses: actions/upload-artifact@v7
-        with:
-          name: pulse-code-icon-probe
-          path: ${{ runner.temp }}/pulse-code*-probe.png
-          if-no-files-found: error
-          retention-days: 1
+      - name: Check formatting
+        run: vp fmt --check
 
       - name: Export Icon Composer renditions
         env:
