@@ -31,7 +31,19 @@ jobs:
         run: vp run --filter @t3tools/scripts typecheck
 
       - name: Format exporter
-        run: vp fmt scripts/export-brand-icons.ts
+        run: vp fmt
+
+      - name: Bootstrap native macOS shells
+        run: |
+          swift scripts/lib/compose-macos-pre-tahoe-icon.swift \
+            --extract-shell assets/dev/blueprint-macos-1024.png \
+            assets/dev/blueprint-macos-shell-1024.png
+          swift scripts/lib/compose-macos-pre-tahoe-icon.swift \
+            --extract-shell assets/nightly/nightly-macos-1024.png \
+            assets/nightly/nightly-macos-shell-1024.png
+          swift scripts/lib/compose-macos-pre-tahoe-icon.swift \
+            --extract-shell assets/prod/black-macos-1024.png \
+            assets/prod/black-macos-shell-1024.png
 
       - name: Export Icon Composer renditions
         env:

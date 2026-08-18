@@ -23,6 +23,60 @@ private func loadImage(_ path: String) -> CGImage {
   return image
 }
 
+private func makeContext() -> CGContext {
+  guard
+    let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
+    let context = CGContext(
+      data: nil,
+      width: canvasSize,
+      height: canvasSize,
+      bitsPerComponent: 8,
+      bytesPerRow: canvasSize * 4,
+      space: colorSpace,
+      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+    )
+  else {
+    fail("Could not create the 1024x1024 bitmap context.")
+  }
+  context.translateBy(x: 0, y: CGFloat(canvasSize))
+  context.scaleBy(x: 1, y: -1)
+  return context
+}
+
+private func writeImage(_ image: CGImage, to path: String) {
+  let outputUrl = URL(fileURLWithPath: path) as CFURL
+  guard let destination = CGImageDestinationCreateWithURL(
+    outputUrl,
+    UTType.png.identifier as CFString,
+    1,
+    nil
+  ) else {
+    fail("Could not create PNG destination: \(path)")
+  }
+  CGImageDestinationAddImage(destination, image, nil)
+  guard CGImageDestinationFinalize(destination) else {
+    fail("Could not write PNG: \(path)")
+  }
+}
+
+if CommandLine.arguments.count == 4, CommandLine.arguments[1] == "--extract-shell" {
+  let sourcePath = CommandLine.arguments[2]
+  let outputPath = CommandLine.arguments[3]
+  let source = loadImage(sourcePath)
+  guard source.width == canvasSize, source.height == canvasSize else {
+    fail("Native shell source must be 1024x1024; got \(source.width)x\(source.height).")
+  }
+  let context = makeContext()
+  context.setBlendMode(.copy)
+  context.draw(source, in: CGRect(x: 0, y: 0, width: canvasSize, height: canvasSize))
+  context.clear(CGRect(x: bodyInset, y: bodyInset, width: bodySize, height: bodySize))
+  guard let output = context.makeImage() else {
+    fail("Could not create the extracted macOS native shell.")
+  }
+  writeImage(output, to: outputPath)
+  exit(0)
+}
+
 guard CommandLine.arguments.count == 4 else {
   fail("Usage: compose-macos-pre-tahoe-icon.swift <native-shell.png> <native-body.png> <output.png>")
 }
@@ -40,23 +94,7 @@ guard body.width == bodySize, body.height == bodySize else {
   fail("Native body must be 824x824; got \(body.width)x\(body.height).")
 }
 
-guard
-  let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
-  let context = CGContext(
-    data: nil,
-    width: canvasSize,
-    height: canvasSize,
-    bitsPerComponent: 8,
-    bytesPerRow: canvasSize * 4,
-    space: colorSpace,
-    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-  )
-else {
-  fail("Could not create the 1024x1024 bitmap context.")
-}
-
-context.translateBy(x: 0, y: CGFloat(canvasSize))
-context.scaleBy(x: 1, y: -1)
+let context = makeContext()
 context.setBlendMode(.copy)
 context.draw(shell, in: CGRect(x: 0, y: 0, width: canvasSize, height: canvasSize))
 context.draw(
@@ -67,17 +105,4 @@ context.draw(
 guard let output = context.makeImage() else {
   fail("Could not create the composed macOS image.")
 }
-
-let outputUrl = URL(fileURLWithPath: outputPath) as CFURL
-guard let destination = CGImageDestinationCreateWithURL(
-  outputUrl,
-  UTType.png.identifier as CFString,
-  1,
-  nil
-) else {
-  fail("Could not create PNG destination: \(outputPath)")
-}
-CGImageDestinationAddImage(destination, output, nil)
-guard CGImageDestinationFinalize(destination) else {
-  fail("Could not write PNG: \(outputPath)")
-}
+writeImage(output, to: outputPath)

@@ -46,6 +46,7 @@ type IconPlatform = "iOS";
 interface VariantOutputs {
   readonly ios: string;
   readonly macos: string;
+  readonly macosShell: string;
   readonly universal: string;
   readonly appleTouch: string;
   readonly favicon16: string;
@@ -210,6 +211,7 @@ const ICON_VARIANTS = [
     outputs: {
       ios: BRAND_ASSET_PATHS.developmentIosIconPng,
       macos: BRAND_ASSET_PATHS.developmentDesktopIconPng,
+      macosShell: BRAND_ASSET_PATHS.developmentMacIconShellPng,
       universal: BRAND_ASSET_PATHS.developmentUniversalIconPng,
       appleTouch: BRAND_ASSET_PATHS.developmentWebAppleTouchIconPng,
       favicon16: BRAND_ASSET_PATHS.developmentWebFavicon16Png,
@@ -224,6 +226,7 @@ const ICON_VARIANTS = [
     outputs: {
       ios: BRAND_ASSET_PATHS.nightlyIosIconPng,
       macos: BRAND_ASSET_PATHS.nightlyMacIconPng,
+      macosShell: BRAND_ASSET_PATHS.nightlyMacIconShellPng,
       universal: BRAND_ASSET_PATHS.nightlyLinuxIconPng,
       appleTouch: BRAND_ASSET_PATHS.nightlyWebAppleTouchIconPng,
       favicon16: BRAND_ASSET_PATHS.nightlyWebFavicon16Png,
@@ -238,6 +241,7 @@ const ICON_VARIANTS = [
     outputs: {
       ios: BRAND_ASSET_PATHS.productionIosIconPng,
       macos: BRAND_ASSET_PATHS.productionMacIconPng,
+      macosShell: BRAND_ASSET_PATHS.productionMacIconShellPng,
       universal: BRAND_ASSET_PATHS.productionLinuxIconPng,
       appleTouch: BRAND_ASSET_PATHS.productionWebAppleTouchIconPng,
       favicon16: BRAND_ASSET_PATHS.productionWebFavicon16Png,
@@ -563,7 +567,7 @@ const renderMacOsPreTahoeIcon = Effect.fn("iconExport.renderMacOsPreTahoeIcon")(
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const nativeShellPath = path.join(repositoryRoot, variant.outputs.macos);
+  const nativeShellPath = path.join(repositoryRoot, variant.outputs.macosShell);
   const nativeShellExists = yield* fs.exists(nativeShellPath).pipe(
     Effect.mapError(
       (cause) =>
@@ -575,7 +579,7 @@ const renderMacOsPreTahoeIcon = Effect.fn("iconExport.renderMacOsPreTahoeIcon")(
     ),
   );
   if (!nativeShellExists) {
-    return yield* new IconExportSourceMissingError({ sourcePath: variant.outputs.macos });
+    return yield* new IconExportSourceMissingError({ sourcePath: variant.outputs.macosShell });
   }
 
   const bodyPath = path.join(temporaryDirectory, `${variant.label}-macos-pre-tahoe-body.png`);
