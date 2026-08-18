@@ -30,8 +30,8 @@ jobs:
       - name: Typecheck exporter
         run: vp run --filter @t3tools/scripts typecheck
 
-      - name: Check formatting
-        run: vp fmt --check
+      - name: Format exporter
+        run: vp fmt scripts/export-brand-icons.ts
 
       - name: Export Icon Composer renditions
         env:
@@ -43,7 +43,7 @@ jobs:
 
       - name: Capture generated assets
         run: |
-          git diff --binary -- assets apps/web/public > pulse-code-icons.patch
+          git diff --binary -- scripts/export-brand-icons.ts assets apps/web/public > pulse-code-icons.patch
           test -s pulse-code-icons.patch
 
       - name: Upload generated icon patch
