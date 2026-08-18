@@ -24,7 +24,34 @@ jobs:
             args:
               - --filter=@t3tools/scripts...
 
+      - name: Install Icon Composer
+        run: brew install --cask icon-composer
+
+      - name: Probe Icon Composer generation support
+        run: |
+          tool="/Applications/Icon Composer.app/Contents/Executables/ictool"
+          "$tool" --version
+          "$tool" assets/prod/app-icon.icon \
+            --export-image \
+            --output-file "$RUNNER_TEMP/pulse-code-probe.png" \
+            --platform iOS \
+            --rendition Default \
+            --width 1024 \
+            --height 1024 \
+            --scale 1 \
+            --design-generation 26
+
+      - name: Upload probe rendition
+        uses: actions/upload-artifact@v7
+        with:
+          name: pulse-code-icon-probe
+          path: ${{ runner.temp }}/pulse-code-probe.png
+          if-no-files-found: error
+          retention-days: 1
+
       - name: Export Icon Composer renditions
+        env:
+          ICON_COMPOSER_TOOL: /Applications/Icon Composer.app/Contents/Executables/ictool
         run: vp run icons:export
 
       - name: Verify generated renditions
