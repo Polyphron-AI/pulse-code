@@ -55,6 +55,10 @@ jobs:
 
       - name: Capture generated assets
         run: |
+          git add -N -- \
+            assets/dev/blueprint-macos-shell-1024.png \
+            assets/nightly/nightly-macos-shell-1024.png \
+            assets/prod/black-macos-shell-1024.png
           git diff --binary -- scripts/export-brand-icons.ts assets apps/web/public > pulse-code-icons.patch
           test -s pulse-code-icons.patch
 
