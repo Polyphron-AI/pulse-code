@@ -814,12 +814,7 @@ export const exportBrandIcons = Effect.fn("exportBrandIcons")(function* (checkOn
   const generated = new Map<string, Buffer>();
   for (const variant of ICON_VARIANTS) {
     yield* Console.log(`Rendering ${variant.label} from ${variant.source}...`);
-    const variantAssets = yield* renderVariant(
-      tool,
-      repositoryRoot,
-      temporaryDirectory,
-      variant,
-    );
+    const variantAssets = yield* renderVariant(tool, repositoryRoot, temporaryDirectory, variant);
     for (const [relativePath, contents] of variantAssets) {
       generated.set(relativePath, contents);
     }

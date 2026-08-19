@@ -30,20 +30,8 @@ jobs:
       - name: Typecheck exporter
         run: vp run --filter @t3tools/scripts typecheck
 
-      - name: Format exporter
-        run: vp fmt
-
-      - name: Bootstrap native macOS shells
-        run: |
-          swift scripts/lib/compose-macos-pre-tahoe-icon.swift \
-            --extract-shell assets/dev/blueprint-macos-1024.png \
-            assets/dev/blueprint-macos-shell-1024.png
-          swift scripts/lib/compose-macos-pre-tahoe-icon.swift \
-            --extract-shell assets/nightly/nightly-macos-1024.png \
-            assets/nightly/nightly-macos-shell-1024.png
-          swift scripts/lib/compose-macos-pre-tahoe-icon.swift \
-            --extract-shell assets/prod/black-macos-1024.png \
-            assets/prod/black-macos-shell-1024.png
+      - name: Check exporter formatting
+        run: vp fmt --check scripts/export-brand-icons.ts
 
       - name: Export Icon Composer renditions
         env:
@@ -54,15 +42,17 @@ jobs:
         run: vp run icons:check
 
       - name: Capture generated assets
+        id: capture
         run: |
-          git add -N -- \
-            assets/dev/blueprint-macos-shell-1024.png \
-            assets/nightly/nightly-macos-shell-1024.png \
-            assets/prod/black-macos-shell-1024.png
-          git diff --binary -- scripts/export-brand-icons.ts assets apps/web/public > pulse-code-icons.patch
-          test -s pulse-code-icons.patch
+          git diff --binary -- assets apps/web/public > pulse-code-icons.patch
+          if test -s pulse-code-icons.patch; then
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Upload generated icon patch
+        if: steps.capture.outputs.has_changes == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: pulse-code-icons
