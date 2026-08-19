@@ -38,8 +38,6 @@ private func makeContext() -> CGContext {
   else {
     fail("Could not create the 1024x1024 bitmap context.")
   }
-  context.translateBy(x: 0, y: CGFloat(canvasSize))
-  context.scaleBy(x: 1, y: -1)
   return context
 }
 
