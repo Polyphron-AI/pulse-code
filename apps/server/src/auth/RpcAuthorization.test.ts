@@ -48,6 +48,24 @@ describe("RPC authorization scopes", () => {
     );
   });
 
+  it("separates integration reads from lifecycle and confirmed writes", () => {
+    expect(requiredScopeForRpcMethod(WS_METHODS.integrationsListConnections)).toBe(
+      AuthOrchestrationReadScope,
+    );
+    expect(requiredScopeForRpcMethod(WS_METHODS.integrationsIssueContext)).toBe(
+      AuthOrchestrationReadScope,
+    );
+    for (const method of [
+      WS_METHODS.integrationsDisconnect,
+      WS_METHODS.integrationsSetProjectMapping,
+      WS_METHODS.integrationsRemoveProjectMapping,
+      WS_METHODS.integrationsIssuePreviewStatus,
+      WS_METHODS.integrationsIssueConfirmStatus,
+    ]) {
+      expect(requiredScopeForRpcMethod(method)).toBe(AuthOrchestrationOperateScope);
+    }
+  });
+
   it("rejects unknown RPC method names", () => {
     for (const method of ["server.notRegistered", "toString", "constructor"]) {
       expect(() => requiredScopeForRpcMethod(method)).toThrow(

@@ -50,6 +50,7 @@ import {
   AssetWorkspaceContextResolutionError,
   RpcClientId,
   EnvironmentAuthorizationError,
+  IsoDateTime,
   ThreadId,
   type TerminalAttachStreamEvent,
   type TerminalError,
@@ -110,6 +111,9 @@ import * as UsageService from "./usage/UsageService.ts";
 import * as TraceDiagnostics from "./diagnostics/TraceDiagnostics.ts";
 import * as PullRequestService from "./pullRequest/PullRequestService.ts";
 import * as IssuesService from "./issues/IssuesService.ts";
+import { makeIntegrationService } from "./integrations/IntegrationService.ts";
+import { makeIntegrationContextService } from "./integrations/IntegrationContextService.ts";
+import { makePulseIssuesIntegrationAdapter } from "./integrations/IntegrationAdapter.ts";
 import * as SourceControlDiscovery from "./sourceControl/SourceControlDiscovery.ts";
 import * as SourceControlRepositoryService from "./sourceControl/SourceControlRepositoryService.ts";
 import * as AzureDevOpsCli from "./sourceControl/AzureDevOpsCli.ts";
@@ -414,6 +418,18 @@ const makeWsRpcLayer = (
         yield* SourceControlRepositoryService.SourceControlRepositoryService;
       const pullRequests = yield* PullRequestService.PullRequestService;
       const issues = yield* IssuesService.IssuesService;
+      const environmentId = yield* serverEnvironment.getEnvironmentId;
+      const integrations = makeIntegrationService([
+        makePulseIssuesIntegrationAdapter({ environmentId, issues }),
+      ]);
+      const integrationContext = makeIntegrationContextService({
+        integrations,
+        issues,
+        clock: DateTime.now.pipe(
+          Effect.map((current) => IsoDateTime.make(DateTime.formatIso(current))),
+        ),
+        randomId: crypto.randomUUIDv4.pipe(Effect.orDie),
+      });
       const bootstrapCredentials = yield* PairingGrantStore.PairingGrantStore;
       const sessions = yield* SessionStore.SessionStore;
       const processDiagnostics = yield* ProcessDiagnostics.ProcessDiagnostics;
@@ -1809,6 +1825,44 @@ const makeWsRpcLayer = (
           observeRpcEffect(WS_METHODS.issuesRemoveThreadLink, issues.removeThreadLink(input), {
             "rpc.aggregate": "issues",
           }),
+        [WS_METHODS.integrationsListConnections]: (_input) =>
+          observeRpcEffect(WS_METHODS.integrationsListConnections, integrations.listConnections(), {
+            "rpc.aggregate": "integrations",
+          }),
+        [WS_METHODS.integrationsDisconnect]: (input) =>
+          observeRpcEffect(WS_METHODS.integrationsDisconnect, integrations.disconnect(input), {
+            "rpc.aggregate": "integrations",
+          }),
+        [WS_METHODS.integrationsSetProjectMapping]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.integrationsSetProjectMapping,
+            integrations.setProjectMapping(input),
+            { "rpc.aggregate": "integrations" },
+          ),
+        [WS_METHODS.integrationsRemoveProjectMapping]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.integrationsRemoveProjectMapping,
+            integrations.removeProjectMapping(input),
+            { "rpc.aggregate": "integrations" },
+          ),
+        [WS_METHODS.integrationsIssueContext]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.integrationsIssueContext,
+            integrationContext.readIssueContext(input),
+            { "rpc.aggregate": "integrations" },
+          ),
+        [WS_METHODS.integrationsIssuePreviewStatus]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.integrationsIssuePreviewStatus,
+            integrationContext.previewIssueStatusAction(input),
+            { "rpc.aggregate": "integrations" },
+          ),
+        [WS_METHODS.integrationsIssueConfirmStatus]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.integrationsIssueConfirmStatus,
+            integrationContext.confirmIssueStatusAction(input),
+            { "rpc.aggregate": "integrations" },
+          ),
         [WS_METHODS.sourceControlLookupRepository]: (input) =>
           observeRpcEffect(
             WS_METHODS.sourceControlLookupRepository,

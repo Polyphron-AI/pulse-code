@@ -228,6 +228,24 @@ export const SETTINGS_SEARCH_ITEMS = [
     targetId: "browser",
   },
   {
+    id: "pulse-issues-connection",
+    title: "Pulse Issues connection",
+    to: "/settings/integrations",
+    targetId: "pulse-issues",
+  },
+  {
+    id: "pulse-issues-capabilities",
+    title: "Pulse Issues capabilities",
+    to: "/settings/integrations",
+    targetId: "pulse-issues",
+  },
+  {
+    id: "pulse-project-mapping",
+    title: "Pulse project mapping",
+    to: "/settings/integrations",
+    targetId: "pulse-issues",
+  },
+  {
     id: "source-control",
     title: "Source control",
     to: "/settings/source-control",

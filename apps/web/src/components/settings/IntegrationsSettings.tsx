@@ -19,15 +19,32 @@ import {
   PREVIEW_ZOOM_LEVELS,
   type PreviewAppearancePreference,
   type PreviewViewportSetting,
+  type EnvironmentId,
+  type ExecutionEnvironmentCapabilities,
+  type ProjectId,
+  type PulseProjectId,
 } from "@t3tools/contracts";
+import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { PREVIEW_VIEWPORT_PRESETS } from "@t3tools/shared/previewViewport";
-import { InfoIcon } from "lucide-react";
-import type { ReactNode } from "react";
+import {
+  CheckCircle2Icon,
+  CircleAlertIcon,
+  ExternalLinkIcon,
+  InfoIcon,
+  Link2Icon,
+  LoaderCircleIcon,
+  RefreshCwIcon,
+  UnplugIcon,
+} from "lucide-react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 
 import { ScreenRotationIcon } from "~/browser/ScreenRotationIcon";
 import { isElectron } from "../../env";
 
 import { Button } from "../ui/button";
+import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
+import { Badge } from "../ui/badge";
+import { Input } from "../ui/input";
 import { NumberField, NumberFieldGroup, NumberFieldInput } from "../ui/number-field";
 import {
   Select,
@@ -45,6 +62,11 @@ import {
   usePrimarySettings,
   useUpdatePrimarySettings,
 } from "~/hooks/useSettings";
+import { useEnvironments } from "~/state/environments";
+import { useProjects, useServerConfigs } from "~/state/entities";
+import { issueEnvironment } from "~/state/issues";
+import { useAtomCommand } from "~/state/use-atom-command";
+import { useEnvironmentQuery } from "~/state/query";
 
 import {
   SettingResetButton,
@@ -453,6 +475,470 @@ function DesktopOnlyBrowserDefaults({ children }: { readonly children: ReactNode
   );
 }
 
+export type PulseIssuesEnvironmentSupport =
+  | "provider-lifecycle"
+  | "native-issues"
+  | "loading"
+  | "unsupported";
+
+export function pulseIssuesEnvironmentSupport(
+  capabilities: Pick<ExecutionEnvironmentCapabilities, "integrations" | "issues"> | null,
+): PulseIssuesEnvironmentSupport {
+  if (capabilities === null) return "loading";
+  if (capabilities.issues !== true) return "unsupported";
+  return capabilities.integrations === true ? "provider-lifecycle" : "native-issues";
+}
+
+export const PULSE_ISSUES_CAPABILITY_LABELS = [
+  "Read Issues and Reports",
+  "Update Issues",
+  "Map workspaces",
+] as const;
+
+export const pulseIssuesConnectionActionLabel = (credentialConfigured: boolean) =>
+  credentialConfigured ? "Reauthorize" : "Connect";
+
+export const pulseIssuesEnvironmentCanRun = (support: PulseIssuesEnvironmentSupport) =>
+  support === "provider-lifecycle" || support === "native-issues";
+
+type IssueMutationFailure = {
+  readonly message: string;
+  readonly requiredOrigin?: string;
+};
+
+function readIssueMutationFailure(result: {
+  readonly cause: Parameters<typeof squashAtomCommandFailure>[0]["cause"];
+}): IssueMutationFailure {
+  const failure = squashAtomCommandFailure(result);
+  if (failure && typeof failure === "object") {
+    const message =
+      "detail" in failure && typeof failure.detail === "string"
+        ? failure.detail
+        : failure instanceof Error
+          ? failure.message
+          : "The Pulse request failed.";
+    const requiredOrigin =
+      "requiredOrigin" in failure && typeof failure.requiredOrigin === "string"
+        ? failure.requiredOrigin
+        : undefined;
+    return { message, ...(requiredOrigin ? { requiredOrigin } : {}) };
+  }
+  return { message: "The Pulse request failed." };
+}
+
+export function issueConnectionGuidance(error: string | null): string | null {
+  if (!error) return null;
+  const normalized = error.toLocaleLowerCase();
+  if (normalized.includes("origin")) {
+    return "Allow this Pulse Code origin in the Pulse project, then reconnect.";
+  }
+  if (normalized.includes("token") || normalized.includes("auth")) {
+    return "Create or replace the personal access token in Pulse, then reconnect.";
+  }
+  if (normalized.includes("permission") || normalized.includes("forbidden")) {
+    return "Use a Pulse account that can read projects and update Issues.";
+  }
+  if (normalized.includes("project")) {
+    return "Create or unarchive a project in Pulse before mapping this workspace.";
+  }
+  return "Check that Pulse is reachable from this environment, then retry.";
+}
+
+export function PulseIssuesIntegration() {
+  const { environments } = useEnvironments();
+  const serverConfigs = useServerConfigs();
+  const projects = useProjects();
+  const environmentOptions = useMemo(
+    () =>
+      environments.map((environment) => {
+        const capabilities =
+          serverConfigs.get(environment.environmentId)?.environment.capabilities ?? null;
+        return {
+          environment,
+          support: pulseIssuesEnvironmentSupport(capabilities),
+        };
+      }),
+    [environments, serverConfigs],
+  );
+  const [selectedEnvironmentId, setSelectedEnvironmentId] = useState<EnvironmentId | null>(null);
+  const selectedOption =
+    environmentOptions.find(
+      ({ environment }) => environment.environmentId === selectedEnvironmentId,
+    ) ??
+    environmentOptions.find(({ support }) => pulseIssuesEnvironmentCanRun(support)) ??
+    environmentOptions[0] ??
+    null;
+  const environmentId = selectedOption?.environment.environmentId ?? null;
+  const selectedSupportsIssues = selectedOption
+    ? pulseIssuesEnvironmentCanRun(selectedOption.support)
+    : false;
+  const supportedEnvironmentCount = environmentOptions.filter(({ support }) =>
+    pulseIssuesEnvironmentCanRun(support),
+  ).length;
+  const connection = useEnvironmentQuery(
+    environmentId && selectedSupportsIssues
+      ? issueEnvironment.connection({ environmentId, input: {} })
+      : null,
+  );
+  const localProjects = useMemo(
+    () => projects.filter((project) => project.environmentId === environmentId),
+    [environmentId, projects],
+  );
+  const [endpoint, setEndpoint] = useState("");
+  const [token, setToken] = useState("");
+  const [pending, setPending] = useState<string | null>(null);
+  const [mutationFailure, setMutationFailure] = useState<IssueMutationFailure | null>(null);
+  const updateConnection = useAtomCommand(issueEnvironment.updateConnection, {
+    reportFailure: false,
+  });
+  const disconnect = useAtomCommand(issueEnvironment.disconnect, { reportFailure: false });
+  const setMapping = useAtomCommand(issueEnvironment.setProjectMapping, {
+    reportFailure: false,
+  });
+  const removeMapping = useAtomCommand(issueEnvironment.removeProjectMapping, {
+    reportFailure: false,
+  });
+
+  useEffect(() => {
+    setEndpoint(connection.data?.endpoint ?? "");
+  }, [connection.data?.endpoint, environmentId]);
+  useEffect(() => {
+    setToken("");
+    setMutationFailure(null);
+  }, [environmentId]);
+
+  const runConnectionAction = async (action: "connect" | "disconnect") => {
+    if (!environmentId || !selectedSupportsIssues || pending) return;
+    setPending(action);
+    setMutationFailure(null);
+    const submittedToken = token;
+    if (action === "connect") setToken("");
+    const result =
+      action === "connect"
+        ? await updateConnection({
+            environmentId,
+            input: { endpoint: endpoint.trim(), token: submittedToken },
+          })
+        : await disconnect({ environmentId, input: {} });
+    setPending(null);
+    if (result._tag === "Failure") {
+      setMutationFailure(readIssueMutationFailure(result));
+      return;
+    }
+    connection.refresh();
+  };
+
+  const updateProjectMapping = async (projectId: ProjectId, pulseProjectId: string | null) => {
+    if (!environmentId || !selectedSupportsIssues || pending) return;
+    const mappingKey = `mapping:${projectId}`;
+    setPending(mappingKey);
+    setMutationFailure(null);
+    const result = pulseProjectId
+      ? await setMapping({
+          environmentId,
+          input: { projectId, pulseProjectId: pulseProjectId as PulseProjectId },
+        })
+      : await removeMapping({ environmentId, input: { projectId } });
+    setPending(null);
+    if (result._tag === "Failure") {
+      setMutationFailure(readIssueMutationFailure(result));
+      return;
+    }
+    connection.refresh();
+  };
+
+  const snapshot = connection.data;
+  const connected = snapshot?.status === "connected";
+  const guidance = issueConnectionGuidance(mutationFailure?.message ?? snapshot?.error ?? null);
+  const selectedEnvironment = selectedOption?.environment ?? null;
+
+  return (
+    <SettingsSection
+      id="pulse-issues"
+      title="Pulse Issues"
+      icon={<Link2Icon className="size-4.5 text-orange-500" />}
+      headerAction={
+        selectedOption && !selectedSupportsIssues ? (
+          <Badge variant="outline">
+            <UnplugIcon />
+            {selectedOption.support === "loading" ? "Checking server" : "Unsupported"}
+          </Badge>
+        ) : snapshot ? (
+          <Badge
+            variant={connected ? "success" : snapshot.status === "error" ? "error" : "outline"}
+          >
+            {connected ? <CheckCircle2Icon /> : <UnplugIcon />}
+            {connected ? "Connected" : "Not connected"}
+          </Badge>
+        ) : null
+      }
+    >
+      <SettingsRow
+        {...searchableSetting("pulse-issues-connection")}
+        description="Connect Pulse once per environment. Issues stay inside Pulse Code; Pulse remains the source of truth for reports and triage."
+      >
+        <div className="mt-3 space-y-3 border-t border-border/50 pt-3 pb-2">
+          {environmentOptions.length > 0 ? (
+            <div className="space-y-1.5">
+              <label className="block text-xs font-medium text-muted-foreground">Environment</label>
+              <Select
+                value={environmentId ?? undefined}
+                onValueChange={(value) => setSelectedEnvironmentId(value as EnvironmentId)}
+              >
+                <SelectTrigger className="w-full sm:max-w-80" aria-label="Pulse environment">
+                  <SelectValue>{selectedEnvironment?.label ?? "Choose environment"}</SelectValue>
+                </SelectTrigger>
+                <SelectPopup alignItemWithTrigger={false} className="min-w-72">
+                  {environmentOptions.map(({ environment, support }) => (
+                    <SelectItem key={environment.environmentId} value={environment.environmentId}>
+                      <span className="flex w-full items-center justify-between gap-4">
+                        <span>{environment.label}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {pulseIssuesEnvironmentCanRun(support)
+                            ? support === "provider-lifecycle"
+                              ? "Provider lifecycle"
+                              : "Native Issues"
+                            : support === "loading"
+                              ? "Checking"
+                              : "Update required"}
+                        </span>
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectPopup>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {supportedEnvironmentCount} of {environmentOptions.length} environments support
+                Pulse Issues. Unsupported environments receive no Issues requests.
+              </p>
+            </div>
+          ) : null}
+
+          {environmentOptions.length === 0 ? (
+            <Alert variant="info">
+              <InfoIcon />
+              <AlertTitle>Connect a Pulse Code environment first</AlertTitle>
+              <AlertDescription>
+                Add a local or remote environment, then return here to connect Pulse Issues.
+              </AlertDescription>
+            </Alert>
+          ) : !selectedSupportsIssues ? (
+            <Alert variant="info">
+              <InfoIcon />
+              <AlertTitle>
+                {selectedOption?.support === "loading"
+                  ? "Checking this environment"
+                  : `Pulse Issues is unavailable on ${selectedEnvironment?.label ?? "this environment"}`}
+              </AlertTitle>
+              <AlertDescription>
+                {selectedOption?.support === "loading"
+                  ? "Wait for the server descriptor before trying to connect."
+                  : "Update that Pulse Code server, or choose a capable environment above."}
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <>
+              <label className="block space-y-1.5 text-xs font-medium text-muted-foreground">
+                Pulse URL
+                <Input
+                  nativeInput
+                  value={endpoint}
+                  onChange={(event) => setEndpoint(event.currentTarget.value)}
+                  placeholder="https://pulse.example.com"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                />
+              </label>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                <label className="min-w-0 flex-1 space-y-1.5 text-xs font-medium text-muted-foreground">
+                  Personal access token
+                  <Input
+                    nativeInput
+                    type="password"
+                    value={token}
+                    onChange={(event) => setToken(event.currentTarget.value)}
+                    placeholder={
+                      snapshot?.tokenConfigured ? "Stored securely — enter to replace" : "pat_…"
+                    }
+                    autoComplete="new-password"
+                  />
+                </label>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    onClick={() => void runConnectionAction("connect")}
+                    disabled={!endpoint.trim() || !token.trim() || pending !== null}
+                  >
+                    {pending === "connect" ? (
+                      <LoaderCircleIcon className="animate-spin" />
+                    ) : connected ? (
+                      <RefreshCwIcon />
+                    ) : (
+                      <Link2Icon />
+                    )}
+                    {pulseIssuesConnectionActionLabel(snapshot?.tokenConfigured === true)}
+                  </Button>
+                  {snapshot?.tokenConfigured ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void runConnectionAction("disconnect")}
+                      disabled={pending !== null}
+                    >
+                      <UnplugIcon />
+                      Disconnect
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                The token is submitted once to {selectedEnvironment?.label} and cleared from this
+                client immediately. Pulse Code only returns whether a credential is configured.
+              </p>
+              {snapshot?.lastCheckedAt ? (
+                <p className="text-xs text-muted-foreground">
+                  Last checked {new Date(snapshot.lastCheckedAt).toLocaleString()} on{" "}
+                  {selectedEnvironment?.label}.
+                </p>
+              ) : null}
+            </>
+          )}
+          {mutationFailure || snapshot?.error ? (
+            <Alert variant="error" controlAlignment="first-line">
+              <CircleAlertIcon />
+              <AlertTitle>Pulse could not connect</AlertTitle>
+              <AlertDescription>
+                <span>{mutationFailure?.message ?? snapshot?.error}</span>
+                {guidance ? <span>{guidance}</span> : null}
+                {mutationFailure?.requiredOrigin ? (
+                  <code className="w-fit rounded bg-background/70 px-1.5 py-0.5 text-xs">
+                    Required origin: {mutationFailure.requiredOrigin}
+                  </code>
+                ) : null}
+              </AlertDescription>
+            </Alert>
+          ) : null}
+        </div>
+      </SettingsRow>
+
+      {selectedSupportsIssues ? (
+        <SettingsRow
+          {...searchableSetting("pulse-issues-capabilities")}
+          description="What Pulse Code can do through this provider on the selected environment."
+        >
+          <div
+            className="mt-3 space-y-2 border-t border-border/50 pt-3 pb-2"
+            aria-label="Pulse Issues capabilities"
+          >
+            <div className="flex flex-wrap gap-1.5">
+              {PULSE_ISSUES_CAPABILITY_LABELS.map((label) => (
+                <Badge key={label} variant="outline">
+                  {label}
+                </Badge>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {selectedOption?.support === "provider-lifecycle"
+                ? "This server advertises the shared provider lifecycle and native Issues APIs."
+                : "This server uses the backwards-compatible native Issues lifecycle."}
+            </p>
+          </div>
+        </SettingsRow>
+      ) : null}
+
+      {connected ? (
+        <SettingsRow
+          {...searchableSetting("pulse-project-mapping")}
+          description="Map each Pulse Code workspace to the Pulse project that should own its Reports and Issues."
+        >
+          <div className="mt-3 space-y-2 border-t border-border/50 pt-3 pb-2">
+            {snapshot.projects.length === 0 ? (
+              <Alert variant="warning">
+                <CircleAlertIcon />
+                <AlertTitle>No Pulse projects are available</AlertTitle>
+                <AlertDescription>
+                  Create a project in Pulse, then reconnect to discover it here.
+                </AlertDescription>
+              </Alert>
+            ) : localProjects.length === 0 ? (
+              <p className="py-2 text-sm text-muted-foreground">
+                This environment has no Pulse Code projects to map yet.
+              </p>
+            ) : (
+              localProjects.map((project) => {
+                const mapping = snapshot.mappings.find((entry) => entry.projectId === project.id);
+                const pulseProject = mapping
+                  ? snapshot.projects.find((entry) => entry.id === mapping.pulseProjectId)
+                  : null;
+                const mappingPending = pending === `mapping:${project.id}`;
+                return (
+                  <div
+                    key={project.id}
+                    className="grid gap-2 rounded-lg border border-border/50 bg-muted/15 px-3 py-2.5 sm:grid-cols-[minmax(0,1fr)_minmax(12rem,0.8fr)] sm:items-center"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">{project.title}</p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {project.workspaceRoot}
+                      </p>
+                    </div>
+                    <Select
+                      value={mapping?.pulseProjectId ?? null}
+                      onValueChange={(value) => void updateProjectMapping(project.id, value)}
+                      disabled={pending !== null}
+                    >
+                      <SelectTrigger
+                        className="w-full"
+                        aria-label={`Pulse project for ${project.title}`}
+                      >
+                        <SelectValue>
+                          <span className="flex min-w-0 items-center gap-2">
+                            {mappingPending ? (
+                              <LoaderCircleIcon className="size-3.5 animate-spin" />
+                            ) : null}
+                            <span className="truncate">{pulseProject?.name ?? "Not mapped"}</span>
+                          </span>
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectPopup align="end" alignItemWithTrigger={false} className="min-w-64">
+                        <SelectItem value={null}>Not mapped</SelectItem>
+                        {snapshot.projects.map((candidate) => (
+                          <SelectItem key={candidate.id} value={candidate.id}>
+                            <span className="flex w-full items-center justify-between gap-4">
+                              <span>{candidate.name}</span>
+                              <span className="text-xs text-muted-foreground">
+                                {candidate.slug}
+                              </span>
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectPopup>
+                    </Select>
+                  </div>
+                );
+              })
+            )}
+            {snapshot.endpoint ? (
+              <Button
+                render={
+                  <a href={snapshot.endpoint} target="_blank" rel="noreferrer">
+                    Open Pulse administration
+                  </a>
+                }
+                size="xs"
+                variant="ghost-muted"
+              >
+                <ExternalLinkIcon />
+                Advanced project and origin settings live in Pulse
+              </Button>
+            ) : null}
+          </div>
+        </SettingsRow>
+      ) : null}
+    </SettingsSection>
+  );
+}
+
 export function IntegrationsSettingsPanel() {
   // Client-local preview defaults are editable only where the preview exists.
   const previewDefaultsDisabled = !isElectron;
@@ -467,6 +953,7 @@ export function IntegrationsSettingsPanel() {
 
   return (
     <SettingsPageContainer>
+      <PulseIssuesIntegration />
       <SettingsSection id="browser" title="Browser">
         {/* Server-authoritative, so it stays editable on every client and sits
             outside the block covering the desktop-only defaults. */}

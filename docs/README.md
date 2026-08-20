@@ -8,6 +8,7 @@
 - [Organizing threads](./user/thread-sidebar.md)
 - [Review usage](./user/usage.md)
 - [Work with Issues](./user/issues.md)
+- [Connect Pulse integrations](./user/integrations.md)
 - [Customize a project icon](./user/project-settings.md)
 - [Mobile appearance](./user/mobile-appearance.md)
 - [Remote access](./user/remote-access.md)
@@ -36,6 +37,9 @@ policy in [CONTRIBUTING.md](../CONTRIBUTING.md); agent rules in [AGENTS.md](../A
 - [Resource telemetry](./internals/resource-telemetry.md)
 - [Environment auth](./internals/environment-auth.md)
 - [Native Issues integration](./internals/issues-integration.md)
+- [Integrations platform](./internals/integrations-platform.md)
+- [Integrations compatibility matrix](./internals/integrations-compatibility-matrix.md)
+- [Pulse integrations decision map](./internals/pulse-integrations-decision.html)
 - [Pulse Connect](./internals/t3-connect.md)
 - [CI gates](./internals/ci.md)
 

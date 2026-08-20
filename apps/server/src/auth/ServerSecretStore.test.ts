@@ -219,7 +219,11 @@ it.layer(NodeServices.layer)("ServerSecretStore.layer", (it) => {
       yield* secretStore.set("session-signing-key", Uint8Array.from([1, 2, 3]));
 
       assert.isTrue(
-        chmodCalls.some((call) => call.mode === 0o700 && call.path.endsWith("/secrets")),
+        chmodCalls.some(
+          (call) =>
+            call.mode === 0o700 &&
+            call.path.split(String.fromCharCode(92)).join("/").endsWith("/secrets"),
+        ),
       );
       assert.isAtLeast(chmodCalls.filter((call) => call.mode === 0o600).length, 2);
     }).pipe(Effect.provide(NodeServices.layer)),
@@ -250,6 +254,25 @@ it.layer(NodeServices.layer)("ServerSecretStore.layer", (it) => {
       assert.include(error.message, "Failed to persist secret session-signing-key.");
       assert.instanceOf(error.cause, PlatformError.PlatformError);
       assert.equal((error.cause as PlatformError.PlatformError).reason._tag, "PermissionDenied");
+    }).pipe(Effect.provide(makeRenameFailureSecretStoreLayer())),
+  );
+
+  it.effect("keeps stored secret bytes out of expected error serialization", () =>
+    Effect.gen(function* () {
+      const secretStore = yield* ServerSecretStore.ServerSecretStore;
+      const secretText = "oauth-refresh-token-secret-sentinel";
+      const secretBytes = new TextEncoder().encode(secretText);
+
+      const error = yield* Effect.flip(secretStore.set("oauth-token", secretBytes));
+      // @effect-diagnostics-next-line preferSchemaOverJson:off - This regression checks the public serialized error shape itself.
+      const serialized = JSON.stringify(error);
+
+      assert.instanceOf(error, ServerSecretStore.SecretStorePersistError);
+      assert.notProperty(error, "value");
+      assert.notProperty(error, "bytes");
+      assert.isFalse(Object.values(error).some((value) => value === secretBytes));
+      assert.notInclude(error.message, secretText);
+      assert.notInclude(serialized, secretText);
     }).pipe(Effect.provide(makeRenameFailureSecretStoreLayer())),
   );
 

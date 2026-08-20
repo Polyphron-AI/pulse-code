@@ -125,6 +125,21 @@ import {
   IssueUpdateInput,
 } from "./issues.ts";
 import {
+  IntegrationAuditReceipt,
+  IntegrationConnectionId,
+  IntegrationConnectionSnapshot,
+  IntegrationOperationError,
+  IntegrationProviderProjectId,
+} from "./integrations.ts";
+import {
+  IntegrationIssueContext,
+  IntegrationIssueContextReadInput,
+  IntegrationIssueStatusActionPreview,
+  IntegrationIssueStatusConfirmInput,
+  IntegrationIssueStatusPreviewInput,
+} from "./integrationContext.ts";
+import { ProjectId } from "./baseSchemas.ts";
+import {
   RelayClientInstallFailedError,
   RelayClientInstallProgressEventSchema,
   RelayClientStatusSchema,
@@ -348,6 +363,15 @@ export const WS_METHODS = {
   issuesGetForThread: "issues.getForThread",
   issuesSetThreadLink: "issues.setThreadLink",
   issuesRemoveThreadLink: "issues.removeThreadLink",
+
+  // Provider-neutral integration lifecycle and bounded Pulse Issue context.
+  integrationsListConnections: "integrations.listConnections",
+  integrationsDisconnect: "integrations.disconnect",
+  integrationsSetProjectMapping: "integrations.setProjectMapping",
+  integrationsRemoveProjectMapping: "integrations.removeProjectMapping",
+  integrationsIssueContext: "integrations.issueContext",
+  integrationsIssuePreviewStatus: "integrations.issuePreviewStatus",
+  integrationsIssueConfirmStatus: "integrations.issueConfirmStatus",
 
   // Source control methods
   sourceControlLookupRepository: "sourceControl.lookupRepository",
@@ -761,6 +785,69 @@ export const WsIssuesRemoveThreadLinkRpc = Rpc.make(WS_METHODS.issuesRemoveThrea
   success: IssueThreadLinkResult,
   error: IssueRpcError,
 });
+
+const IntegrationRpcError = Schema.Union([
+  IntegrationOperationError,
+  EnvironmentAuthorizationError,
+]);
+
+export const WsIntegrationsListConnectionsRpc = Rpc.make(WS_METHODS.integrationsListConnections, {
+  payload: Schema.Struct({}),
+  success: Schema.Array(IntegrationConnectionSnapshot),
+  error: IntegrationRpcError,
+});
+
+export const WsIntegrationsDisconnectRpc = Rpc.make(WS_METHODS.integrationsDisconnect, {
+  payload: Schema.Struct({ connectionId: IntegrationConnectionId }),
+  success: IntegrationConnectionSnapshot,
+  error: IntegrationRpcError,
+});
+
+export const WsIntegrationsSetProjectMappingRpc = Rpc.make(
+  WS_METHODS.integrationsSetProjectMapping,
+  {
+    payload: Schema.Struct({
+      connectionId: IntegrationConnectionId,
+      projectId: ProjectId,
+      providerProjectId: IntegrationProviderProjectId,
+    }),
+    success: IntegrationConnectionSnapshot,
+    error: IntegrationRpcError,
+  },
+);
+
+export const WsIntegrationsRemoveProjectMappingRpc = Rpc.make(
+  WS_METHODS.integrationsRemoveProjectMapping,
+  {
+    payload: Schema.Struct({ connectionId: IntegrationConnectionId, projectId: ProjectId }),
+    success: IntegrationConnectionSnapshot,
+    error: IntegrationRpcError,
+  },
+);
+
+export const WsIntegrationsIssueContextRpc = Rpc.make(WS_METHODS.integrationsIssueContext, {
+  payload: IntegrationIssueContextReadInput,
+  success: IntegrationIssueContext,
+  error: IntegrationRpcError,
+});
+
+export const WsIntegrationsIssuePreviewStatusRpc = Rpc.make(
+  WS_METHODS.integrationsIssuePreviewStatus,
+  {
+    payload: IntegrationIssueStatusPreviewInput,
+    success: IntegrationIssueStatusActionPreview,
+    error: IntegrationRpcError,
+  },
+);
+
+export const WsIntegrationsIssueConfirmStatusRpc = Rpc.make(
+  WS_METHODS.integrationsIssueConfirmStatus,
+  {
+    payload: IntegrationIssueStatusConfirmInput,
+    success: IntegrationAuditReceipt,
+    error: IntegrationRpcError,
+  },
+);
 
 export const WsSourceControlLookupRepositoryRpc = Rpc.make(
   WS_METHODS.sourceControlLookupRepository,
@@ -1210,6 +1297,13 @@ export const WsRpcGroup = RpcGroup.make(
   WsIssuesGetForThreadRpc,
   WsIssuesSetThreadLinkRpc,
   WsIssuesRemoveThreadLinkRpc,
+  WsIntegrationsListConnectionsRpc,
+  WsIntegrationsDisconnectRpc,
+  WsIntegrationsSetProjectMappingRpc,
+  WsIntegrationsRemoveProjectMappingRpc,
+  WsIntegrationsIssueContextRpc,
+  WsIntegrationsIssuePreviewStatusRpc,
+  WsIntegrationsIssueConfirmStatusRpc,
   WsSourceControlLookupRepositoryRpc,
   WsSourceControlCloneRepositoryRpc,
   WsSourceControlPublishRepositoryRpc,

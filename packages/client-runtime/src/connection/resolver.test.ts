@@ -292,9 +292,9 @@ describe("ConnectionResolver", () => {
       });
       const broker = yield* ConnectionResolver.ConnectionResolver.pipe(Effect.provide(brokerLayer));
 
-      expect(
-        (yield* broker.prepare(catalogEntry(target, Option.some(profile)))).socketUrl,
-      ).toContain("wsTicket=ticket");
+      const prepared = yield* broker.prepare(catalogEntry(target, Option.some(profile)));
+      expect(prepared).toMatchObject({ environmentId: ENVIRONMENT_ID, target });
+      expect(prepared.socketUrl).toContain("wsTicket=ticket");
       expect(yield* Ref.get(bearerInputs)).toEqual(["secret-bearer"]);
     }),
   );
@@ -349,7 +349,9 @@ describe("ConnectionResolver", () => {
       });
       const broker = yield* ConnectionResolver.ConnectionResolver.pipe(Effect.provide(brokerLayer));
 
-      expect((yield* broker.prepare(catalogEntry(target))).socketUrl).toContain("wsTicket=dpop");
+      const prepared = yield* broker.prepare(catalogEntry(target));
+      expect(prepared).toMatchObject({ environmentId: ENVIRONMENT_ID, target });
+      expect(prepared.socketUrl).toContain("wsTicket=dpop");
       expect(yield* Ref.get(relayInputs)).toEqual([
         {
           clerkToken: "clerk-session",
@@ -431,9 +433,9 @@ describe("ConnectionResolver", () => {
       });
       const broker = yield* ConnectionResolver.ConnectionResolver.pipe(Effect.provide(brokerLayer));
 
-      expect(
-        (yield* broker.prepare(catalogEntry(target, Option.some(profile)))).socketUrl,
-      ).toContain("wsTicket=bearer");
+      const prepared = yield* broker.prepare(catalogEntry(target, Option.some(profile)));
+      expect(prepared).toMatchObject({ environmentId: ENVIRONMENT_ID, target });
+      expect(prepared.socketUrl).toContain("wsTicket=bearer");
       expect(yield* Ref.get(preparedTargets)).toEqual([SSH_TARGET]);
     }),
   );

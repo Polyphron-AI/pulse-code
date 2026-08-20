@@ -1,4 +1,5 @@
 import {
+  type CSSProperties,
   type ReactNode,
   type RefObject,
   useEffect,
@@ -85,14 +86,20 @@ export function PreviewPanelShell(props: {
         isInline
           ? props.maximized
             ? "flex-1 border-l border-border"
-            : "shrink-0 border-l border-border"
+            : "w-full shrink-0 border-l border-border md:w-[var(--preview-panel-width)]"
           : "w-full",
       )}
-      style={isInline && !props.maximized ? { width: `${width}px` } : undefined}
+      style={
+        isInline && !props.maximized
+          ? ({ "--preview-panel-width": `${width}px` } as CSSProperties)
+          : undefined
+      }
       data-preview-panel-mode={props.mode}
       data-preview-panel-maximized={props.maximized ? "true" : "false"}
     >
-      {isInline && !props.maximized ? <RightPanelResizeHandle handlers={handlers} /> : null}
+      {isInline && !props.maximized ? (
+        <RightPanelResizeHandle className="hidden md:block" handlers={handlers} />
+      ) : null}
       {useDragRegion ? <div className="electron-drag-region h-0 w-full" aria-hidden /> : null}
       {props.children}
     </div>
