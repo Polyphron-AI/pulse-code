@@ -1,0 +1,25 @@
+{
+  "blocked_by": ["P-2026-08-19-integrations-foundation/T1"],
+  "commits": [],
+  "created_at": "2026-08-19T15:11:48Z",
+  "files_touched": [
+    "packages/client-runtime/package.json",
+    "packages/client-runtime/src/state/integrations.test.ts",
+    "packages/client-runtime/src/state/integrations.ts"
+  ],
+  "host_refs": {},
+  "id": "P-2026-08-19-integrations-foundation/T5",
+  "kind": "feature",
+  "local_id": "T5",
+  "owner": null,
+  "plan_id": "P-2026-08-19-integrations-foundation",
+  "roadmap_items": ["R-2026-08-19-integration-foundation"],
+  "schema": "product-ops.task/v1",
+  "status": "completed",
+  "subject": "Add capability-gated shared client runtime state",
+  "updated_at": "2026-08-20T06:28:30Z",
+  "verification_receipts": [
+    "Focused client integration runtime suite: 1 file, 5 tests passed",
+    "client-runtime typecheck passed; only one pre-existing Effect style suggestion remains"
+  ]
+}

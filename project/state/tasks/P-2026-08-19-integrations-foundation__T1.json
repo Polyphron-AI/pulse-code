@@ -1,0 +1,26 @@
+{
+  "blocked_by": [],
+  "commits": [],
+  "created_at": "2026-08-19T15:11:47Z",
+  "files_touched": [
+    "packages/contracts/src/environment.ts",
+    "packages/contracts/src/index.ts",
+    "packages/contracts/src/integrations.test.ts",
+    "packages/contracts/src/integrations.ts"
+  ],
+  "host_refs": {},
+  "id": "P-2026-08-19-integrations-foundation/T1",
+  "kind": "feature",
+  "local_id": "T1",
+  "owner": null,
+  "plan_id": "P-2026-08-19-integrations-foundation",
+  "roadmap_items": ["R-2026-08-19-integration-foundation"],
+  "schema": "product-ops.task/v1",
+  "status": "completed",
+  "subject": "Define additive integration lifecycle contracts",
+  "updated_at": "2026-08-20T06:28:30Z",
+  "verification_receipts": [
+    "vp run --filter @t3tools/contracts typecheck: passed",
+    "vp test run packages/contracts/src/integrations.test.ts packages/contracts/src/environment.test.ts: 2 files, 13 tests passed"
+  ]
+}

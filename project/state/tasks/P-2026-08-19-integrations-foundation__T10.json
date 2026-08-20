@@ -1,0 +1,30 @@
+{
+  "blocked_by": [
+    "P-2026-08-19-integrations-foundation/T6",
+    "P-2026-08-19-integrations-foundation/T7",
+    "P-2026-08-19-integrations-foundation/T8",
+    "P-2026-08-19-integrations-foundation/T9"
+  ],
+  "commits": [],
+  "created_at": "2026-08-19T15:11:48Z",
+  "files_touched": [
+    "docs/README.md",
+    "docs/internals/integrations-platform.md",
+    "docs/user/integrations.md",
+    "project/state/shards/roadmap.yaml"
+  ],
+  "host_refs": {},
+  "id": "P-2026-08-19-integrations-foundation/T10",
+  "kind": "verification",
+  "local_id": "T10",
+  "owner": null,
+  "plan_id": "P-2026-08-19-integrations-foundation",
+  "roadmap_items": ["R-2026-08-19-integration-compatibility-safety"],
+  "schema": "product-ops.task/v1",
+  "status": "completed",
+  "subject": "Verify the walking skeleton and publish shipped behavior",
+  "updated_at": "2026-08-20T06:39:07Z",
+  "verification_receipts": [
+    "T10 technical walking-skeleton review passed under Node 24: contracts, server, client-runtime, web, and mobile typechecks passed; all T1–T9/T11/T12 receipts are linked from the internal guide; documentation format, cross-reference targets, workspace render, and git diff --check passed. Roadmap test_results receipts were added without marking any item shipped. Manual decision: Pulse Issues reference is committed and the foundation/context/compatibility worktree is verified, but OAuth/general release remains on hold for explicit security, ownership, tokenizer, demand, and external-credential gaps; no later provider is claimed implemented."
+  ]
+}

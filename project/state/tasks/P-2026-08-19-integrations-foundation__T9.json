@@ -1,0 +1,29 @@
+{
+  "blocked_by": ["P-2026-08-19-integrations-foundation/T4"],
+  "commits": [],
+  "created_at": "2026-08-19T15:11:48Z",
+  "files_touched": [
+    "apps/server/src/git/GitHubPullRequestCli.ts",
+    "apps/server/src/pullRequest/GitHubPullRequestCli.ts",
+    "docs/internals/github-work-adapter-spike.md",
+    "project/decisions.md",
+    "project/known-gaps.md",
+    "project/plans/P-2026-08-19-integrations-foundation.md",
+    "project/state/shards/gaps.yaml",
+    "project/surfaced-gaps.md"
+  ],
+  "host_refs": {},
+  "id": "P-2026-08-19-integrations-foundation/T9",
+  "kind": "verification",
+  "local_id": "T9",
+  "owner": null,
+  "plan_id": "P-2026-08-19-integrations-foundation",
+  "roadmap_items": ["R-2026-08-19-github-work-graph"],
+  "schema": "product-ops.task/v1",
+  "status": "completed",
+  "subject": "Run second-adapter discovery against GitHub work items",
+  "updated_at": "2026-08-20T06:28:30Z",
+  "verification_receipts": [
+    "T9 discovery complete: existing GitHub CLI/provider/GraphQL-budget/host-cooldown suites passed under Node 24 (5 files/128 tests). Recommendation: reshape, then a bounded read-only repository Issues proof; no GitHub production code changed."
+  ]
+}

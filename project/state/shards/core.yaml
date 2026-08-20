@@ -1,0 +1,8 @@
+meta:
+  project: "Pulse Code"
+  snapshot: 2026-08-19
+  status: draft
+product:
+  purpose: "A minimal, remote-ready, multi-surface GUI for coding agents."
+  integration_outcome: "Connect once per appropriate scope and use authorized external work context safely across clients."
+  authority: "prd/README.md"

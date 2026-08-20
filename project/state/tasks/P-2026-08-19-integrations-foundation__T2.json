@@ -1,0 +1,24 @@
+{
+  "blocked_by": [],
+  "commits": [],
+  "created_at": "2026-08-19T15:11:47Z",
+  "files_touched": [
+    "apps/server/src/auth/ServerSecretStore.test.ts",
+    "docs/internals/integrations-secret-review.md"
+  ],
+  "host_refs": {},
+  "id": "P-2026-08-19-integrations-foundation/T2",
+  "kind": "verification",
+  "local_id": "T2",
+  "owner": null,
+  "plan_id": "P-2026-08-19-integrations-foundation",
+  "roadmap_items": ["R-2026-08-19-integration-compatibility-safety"],
+  "schema": "product-ops.task/v1",
+  "status": "completed",
+  "subject": "Verify secret-store and OAuth threat boundaries",
+  "updated_at": "2026-08-20T06:28:30Z",
+  "verification_receipts": [
+    "vp run --filter t3 typecheck: passed; unrelated existing Effect suggestions remain in Issues/orchestration/pull-request files",
+    "vp test run apps/server/src/auth/ServerSecretStore.test.ts: 1 file, 8 tests passed"
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "blocked_by": [
+    "P-2026-08-19-integrations-foundation/T1",
+    "P-2026-08-19-integrations-foundation/T3"
+  ],
+  "commits": [],
+  "created_at": "2026-08-19T15:11:48Z",
+  "files_touched": [
+    "apps/server/src/integrations/IntegrationAdapter.ts",
+    "apps/server/src/integrations/IntegrationService.test.ts",
+    "apps/server/src/integrations/IntegrationService.ts",
+    "apps/server/src/issues/IssuesService.ts",
+    "apps/server/src/issues/PulseIssuesClient.ts",
+    "project/decisions.md",
+    "project/known-gaps.md",
+    "project/state/shards/gaps.yaml",
+    "project/surfaced-gaps.md",
+    "tool-flow/integration-platform.md"
+  ],
+  "host_refs": {},
+  "id": "P-2026-08-19-integrations-foundation/T4",
+  "kind": "feature",
+  "local_id": "T4",
+  "owner": null,
+  "plan_id": "P-2026-08-19-integrations-foundation",
+  "roadmap_items": ["R-2026-08-19-pulse-issues-reference"],
+  "schema": "product-ops.task/v1",
+  "status": "completed",
+  "subject": "Wrap the landed Pulse Issues lifecycle as the reference adapter",
+  "updated_at": "2026-08-20T06:28:30Z",
+  "verification_receipts": [
+    "Precondition verified: native Issues suite 10 files, 36 tests passed under Node 24; mobile typecheck and 23-file format check passed",
+    "Prerequisite landed independently at ac8d94397: native Pulse Issues; 10 focused files/36 tests, web typecheck, mobile typecheck, and pre-commit format pass.",
+    "T4 verified under Node 24: 6 focused files/38 tests passed (shared contracts, adapter, additive store, native Issues service/client/store); server typecheck and git diff --check passed."
+  ]
+}

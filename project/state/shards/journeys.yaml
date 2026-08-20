@@ -1,0 +1,7 @@
+journeys:
+  - id: connect-and-map
+    source: workflows/connect-and-map-integration.md
+    state: specified
+  - id: use-context-and-act
+    source: workflows/use-integration-context.md
+    state: specified

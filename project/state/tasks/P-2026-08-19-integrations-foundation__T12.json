@@ -1,0 +1,25 @@
+{
+  "blocked_by": ["P-2026-08-19-integrations-foundation/T11"],
+  "commits": [],
+  "created_at": "2026-08-20T05:59:43Z",
+  "files_touched": [
+    "apps/mobile/src/state/integrations.test.ts",
+    "apps/mobile/src/state/integrations.ts",
+    "packages/client-runtime/src/state/integrations.test.ts",
+    "packages/client-runtime/src/state/integrations.ts"
+  ],
+  "host_refs": {},
+  "id": "P-2026-08-19-integrations-foundation/T12",
+  "kind": "feature",
+  "local_id": "T12",
+  "owner": null,
+  "plan_id": "P-2026-08-19-integrations-foundation",
+  "roadmap_items": ["R-2026-08-19-integration-foundation"],
+  "schema": "product-ops.task/v1",
+  "status": "completed",
+  "subject": "Bind integration client and mobile state to the typed RPC bridge",
+  "updated_at": "2026-08-20T06:28:30Z",
+  "verification_receipts": [
+    "T12 verified under Node 24: client-runtime and mobile typechecks passed; 2 focused files/7 tests passed; four implementation files passed formatter/lint and the synchronized code/docs passed git diff --check. The default runtime uses seven typed environment RPCs, gates legacy servers, serializes mutations per environment, refreshes owning state, aggregates partial failures, and carries no provider credential input."
+  ]
+}

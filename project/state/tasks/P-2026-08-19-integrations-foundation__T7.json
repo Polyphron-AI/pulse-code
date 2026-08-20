@@ -1,0 +1,30 @@
+{
+  "blocked_by": [
+    "P-2026-08-19-integrations-foundation/T4",
+    "P-2026-08-19-integrations-foundation/T5"
+  ],
+  "commits": [],
+  "created_at": "2026-08-19T15:11:48Z",
+  "files_touched": [
+    "apps/server/src/integrations/IntegrationContextService.test.ts",
+    "apps/server/src/integrations/IntegrationContextService.ts",
+    "packages/contracts/src/index.ts",
+    "packages/contracts/src/integrationContext.test.ts",
+    "packages/contracts/src/integrationContext.ts",
+    "workflows/use-integration-context.md"
+  ],
+  "host_refs": {},
+  "id": "P-2026-08-19-integrations-foundation/T7",
+  "kind": "feature",
+  "local_id": "T7",
+  "owner": null,
+  "plan_id": "P-2026-08-19-integrations-foundation",
+  "roadmap_items": ["R-2026-08-19-agent-context-actions"],
+  "schema": "product-ops.task/v1",
+  "status": "completed",
+  "subject": "Prove bounded agent context and one action preview",
+  "updated_at": "2026-08-20T06:28:30Z",
+  "verification_receipts": [
+    "T7 verified under Node 24: 9 focused files/54 tests passed across bounded context/action contracts, client runtime, reference adapter, additive store, context service, and native Issues boundaries; server/contracts typechecks and git diff --check passed."
+  ]
+}

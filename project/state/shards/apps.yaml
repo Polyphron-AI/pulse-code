@@ -1,0 +1,19 @@
+apps:
+  - id: server
+    path: apps/server
+    integration_role: "Owns credentials, mappings, provider adapters, validation, and audit receipts."
+  - id: web
+    path: apps/web
+    integration_role: "Manages connections and renders native resource/context surfaces."
+  - id: desktop
+    path: apps/desktop
+    integration_role: "Wraps web and may host the owning Pulse Code Server."
+  - id: mobile
+    path: apps/mobile
+    integration_role: "Consumes capable resource/health views without receiving provider secrets."
+  - id: contracts
+    path: packages/contracts
+    integration_role: "Owns additive typed transport and capability schemas."
+  - id: client-runtime
+    path: packages/client-runtime
+    integration_role: "Shares capability-gated queries and commands across web and mobile."

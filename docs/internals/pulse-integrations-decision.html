@@ -1,0 +1,592 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Mermaid decision map for the Pulse Code rename, persistent Pulse integration, compatibility contract, and release gate."
+    />
+    <title>Pulse Code × Pulse — integration decision</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #0c1f2e;
+        --muted: #506575;
+        --paper: #eef3f6;
+        --panel: #f9fbfc;
+        --line: #c8d5dc;
+        --pulse: #00639b;
+        --violet: #7565c7;
+        --pass: #197661;
+        --pass-soft: #daf1e9;
+        --hold: #ad651c;
+        --hold-soft: #f8ead8;
+        --shadow: 0 24px 70px rgb(12 31 46 / 12%);
+        font-family:
+          "Segoe UI Variable Text",
+          "Aptos",
+          "Segoe UI",
+          system-ui,
+          -apple-system,
+          sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        background: var(--paper);
+      }
+
+      body {
+        min-width: 320px;
+        margin: 0;
+        color: var(--ink);
+        background:
+          linear-gradient(90deg, rgb(0 99 155 / 5%) 1px, transparent 1px) 0 0 / 32px 32px,
+          linear-gradient(rgb(0 99 155 / 5%) 1px, transparent 1px) 0 0 / 32px 32px,
+          var(--paper);
+      }
+
+      a {
+        color: var(--pulse);
+        text-underline-offset: 0.18em;
+      }
+
+      a:focus-visible,
+      summary:focus-visible {
+        outline: 3px solid rgb(117 101 199 / 45%);
+        outline-offset: 4px;
+        border-radius: 4px;
+      }
+
+      main {
+        width: min(1480px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 46px 0 64px;
+      }
+
+      .masthead {
+        display: grid;
+        grid-template-columns: minmax(0, 1.35fr) minmax(260px, 0.65fr);
+        gap: 32px;
+        align-items: end;
+        margin-bottom: 26px;
+      }
+
+      .eyebrow,
+      .status-label,
+      .legend-label,
+      .footer-meta {
+        font-family: "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
+        font-size: 0.73rem;
+        font-weight: 700;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+      }
+
+      .eyebrow {
+        margin: 0 0 12px;
+        color: var(--pulse);
+      }
+
+      h1 {
+        max-width: 920px;
+        margin: 0;
+        font-family: "Bahnschrift SemiCondensed", "Arial Narrow", "Segoe UI", sans-serif;
+        font-size: clamp(2.7rem, 7vw, 6.7rem);
+        font-stretch: condensed;
+        font-weight: 650;
+        letter-spacing: -0.055em;
+        line-height: 0.88;
+      }
+
+      .thesis {
+        max-width: 620px;
+        margin: 24px 0 0;
+        color: var(--muted);
+        font-size: clamp(1rem, 1.8vw, 1.24rem);
+        line-height: 1.6;
+      }
+
+      .status-rail {
+        display: grid;
+        gap: 10px;
+        align-self: stretch;
+      }
+
+      .status {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 14px;
+        align-items: center;
+        min-height: 78px;
+        padding: 15px 18px;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: rgb(249 251 252 / 82%);
+        box-shadow: 0 10px 32px rgb(12 31 46 / 6%);
+      }
+
+      .status-mark {
+        display: grid;
+        width: 47px;
+        height: 47px;
+        place-items: center;
+        border-radius: 50%;
+        color: white;
+        font-family: "Cascadia Mono", Consolas, monospace;
+        font-weight: 800;
+      }
+
+      .status.pass .status-mark {
+        background: var(--pass);
+      }
+
+      .status.hold .status-mark {
+        background: var(--hold);
+      }
+
+      .status-label {
+        display: block;
+        margin-bottom: 3px;
+        color: var(--muted);
+      }
+
+      .status strong {
+        font-size: 1rem;
+        line-height: 1.25;
+      }
+
+      .board {
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 24px;
+        background: rgb(249 251 252 / 94%);
+        box-shadow: var(--shadow);
+      }
+
+      .board-header {
+        display: flex;
+        gap: 18px;
+        align-items: center;
+        justify-content: space-between;
+        padding: 16px 22px;
+        border-bottom: 1px solid var(--line);
+        background: #e4edf2;
+      }
+
+      .board-header p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.88rem;
+      }
+
+      .legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 14px;
+        align-items: center;
+      }
+
+      .legend-item {
+        display: inline-flex;
+        gap: 7px;
+        align-items: center;
+        color: var(--muted);
+        font-size: 0.76rem;
+      }
+
+      .swatch {
+        width: 11px;
+        height: 11px;
+        border-radius: 3px;
+      }
+
+      .swatch.blue {
+        background: var(--pulse);
+      }
+
+      .swatch.violet {
+        background: var(--violet);
+      }
+
+      .swatch.green {
+        background: var(--pass);
+      }
+
+      .swatch.amber {
+        background: var(--hold);
+      }
+
+      .diagram-shell {
+        overflow-x: auto;
+        padding: clamp(18px, 4vw, 52px);
+      }
+
+      .mermaid {
+        min-width: 1040px;
+        text-align: center;
+      }
+
+      .mermaid svg {
+        width: 100%;
+        max-width: none !important;
+        height: auto;
+        filter: drop-shadow(0 10px 16px rgb(12 31 46 / 7%));
+      }
+
+      .decision-note {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        border-top: 1px solid var(--line);
+      }
+
+      .note {
+        min-height: 168px;
+        padding: 22px;
+      }
+
+      .note + .note {
+        border-left: 1px solid var(--line);
+      }
+
+      .note h2 {
+        margin: 0 0 10px;
+        font-family: "Bahnschrift SemiCondensed", "Arial Narrow", sans-serif;
+        font-size: 1.3rem;
+        letter-spacing: -0.02em;
+      }
+
+      .note p {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.55;
+      }
+
+      .note code {
+        color: var(--ink);
+        font-family: "Cascadia Mono", Consolas, monospace;
+        font-size: 0.83em;
+      }
+
+      details {
+        margin-top: 18px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: rgb(249 251 252 / 88%);
+      }
+
+      summary {
+        cursor: pointer;
+        padding: 14px 17px;
+        color: var(--muted);
+        font-weight: 650;
+      }
+
+      pre {
+        overflow-x: auto;
+        margin: 0;
+        padding: 0 17px 17px;
+        color: #dce8ee;
+        background: var(--ink);
+        font-family: "Cascadia Mono", Consolas, monospace;
+        font-size: 0.77rem;
+        line-height: 1.55;
+        white-space: pre;
+      }
+
+      footer {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px 24px;
+        align-items: center;
+        justify-content: space-between;
+        padding-top: 22px;
+        color: var(--muted);
+        font-size: 0.85rem;
+      }
+
+      footer nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 14px;
+      }
+
+      @media (max-width: 900px) {
+        main {
+          width: min(100% - 20px, 1480px);
+          padding-top: 28px;
+        }
+
+        .masthead {
+          grid-template-columns: 1fr;
+        }
+
+        .status-rail {
+          grid-template-columns: 1fr 1fr;
+        }
+
+        .decision-note {
+          grid-template-columns: 1fr;
+        }
+
+        .note + .note {
+          border-top: 1px solid var(--line);
+          border-left: 0;
+        }
+
+        .board-header {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+      }
+
+      @media (max-width: 580px) {
+        h1 {
+          font-size: clamp(2.55rem, 18vw, 4.5rem);
+        }
+
+        .status-rail {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (prefers-reduced-motion: no-preference) {
+        .masthead,
+        .board {
+          animation: settle 560ms cubic-bezier(0.2, 0.72, 0.2, 1) both;
+        }
+
+        .board {
+          animation-delay: 90ms;
+        }
+
+        @keyframes settle {
+          from {
+            opacity: 0;
+            transform: translateY(12px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+      }
+
+      @media print {
+        body {
+          background: white;
+        }
+
+        main {
+          width: 100%;
+          padding: 0;
+        }
+
+        .board {
+          box-shadow: none;
+        }
+
+        details,
+        footer nav {
+          display: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header class="masthead">
+        <div>
+          <p class="eyebrow">Decision record · 20 August 2026</p>
+          <h1>Rename the product. Keep its identity.</h1>
+          <p class="thesis">
+            Pulse Code gets a durable, server-owned link to Pulse without turning a visible rename
+            into a new mobile app—or treating a technically verified bridge as an OAuth release.
+          </p>
+        </div>
+
+        <aside class="status-rail" aria-label="Decision status">
+          <div class="status pass">
+            <span class="status-mark" aria-hidden="true">✓</span>
+            <div>
+              <span class="status-label">Technical gate</span>
+              <strong>Walking skeleton passed</strong>
+            </div>
+          </div>
+          <div class="status hold">
+            <span class="status-mark" aria-hidden="true">Ⅱ</span>
+            <div>
+              <span class="status-label">Release gate</span>
+              <strong>OAuth and general release held</strong>
+            </div>
+          </div>
+        </aside>
+      </header>
+
+      <section class="board" aria-labelledby="map-title">
+        <div class="board-header">
+          <p id="map-title">One decision, four constraints, two outcomes</p>
+          <div class="legend" aria-label="Diagram legend">
+            <span class="legend-label">Legend</span>
+            <span class="legend-item"><span class="swatch blue"></span>Intent</span>
+            <span class="legend-item"><span class="swatch violet"></span>Compatibility</span>
+            <span class="legend-item"><span class="swatch green"></span>Pass</span>
+            <span class="legend-item"><span class="swatch amber"></span>Hold</span>
+          </div>
+        </div>
+
+        <div class="diagram-shell" aria-label="Pulse integrations decision diagram">
+          <pre class="mermaid">
+flowchart LR
+  GOAL["PULSE CODE ↔ PULSE<br/>One durable connection for Issues, Reports, projects and context"]:::intent
+
+  subgraph RULES["NON-NEGOTIABLES"]
+    direction TB
+    AUTH["Sign in once<br/>per owning server"]:::rule
+    SECRET["Credentials remain<br/>server-owned"]:::rule
+    COMPAT["Full backwards<br/>compatibility"]:::compat
+    DOMAIN["Provider domains<br/>stay independent"]:::rule
+  end
+
+  subgraph BUILD["IMPLEMENTED WALKING SKELETON"]
+    direction TB
+    STORE["Persist secret reference,<br/>health and project mappings"]:::built
+    RPC["7 typed, authorized<br/>integration RPCs"]:::built
+    CLIENT["Capability-gated web,<br/>desktop and mobile state"]:::built
+    ACTION["Bounded Issue context +<br/>preview → confirm → receipt"]:::built
+  end
+
+  HINGE{"RELEASE<br/>DECISION"}:::hinge
+
+  subgraph PASS["TECHNICAL PASS"]
+    direction TB
+    VERIFIED["Contracts, server, clients<br/>and compatibility verified"]:::pass
+    RETAIN["Rename display surfaces;<br/>retain stable identity"]:::pass
+    IDS["Keep t3-code slug, t3code links,<br/>bundle/package IDs, catalog + RPC aliases"]:::compat
+  end
+
+  subgraph HOLD["RELEASE HOLD"]
+    direction TB
+    OAUTH["Do not claim global SSO<br/>or OAuth readiness"]:::hold
+    GATES["Close secret-store, ownership,<br/>revocation and external-credential gates"]:::hold
+    LATER["Tokenizer and later providers<br/>remain discovery—not shipped"]:::hold
+  end
+
+  GOAL --> AUTH
+  GOAL --> SECRET
+  GOAL --> COMPAT
+  GOAL --> DOMAIN
+
+  AUTH --> STORE
+  SECRET --> STORE
+  SECRET --> RPC
+  COMPAT --> CLIENT
+  DOMAIN --> ACTION
+
+  STORE --> HINGE
+  RPC --> HINGE
+  CLIENT --> HINGE
+  ACTION --> HINGE
+
+  HINGE -->|"PASS"| VERIFIED
+  VERIFIED --> RETAIN
+  RETAIN --> IDS
+
+  HINGE -->|"HOLD"| OAUTH
+  OAUTH --> GATES
+  GATES --> LATER
+
+  classDef intent fill:#00639b,color:#ffffff,stroke:#004b76,stroke-width:2px;
+  classDef rule fill:#e4edf2,color:#0c1f2e,stroke:#8da4b2,stroke-width:1.5px;
+  classDef compat fill:#eeeafd,color:#302b68,stroke:#7565c7,stroke-width:2px;
+  classDef built fill:#edf5f8,color:#0c1f2e,stroke:#00639b,stroke-width:1.5px;
+  classDef hinge fill:#0c1f2e,color:#ffffff,stroke:#0c1f2e,stroke-width:3px;
+  classDef pass fill:#daf1e9,color:#0a4f40,stroke:#197661,stroke-width:2px;
+  classDef hold fill:#f8ead8,color:#6f3b0e,stroke:#ad651c,stroke-width:2px;
+          </pre>
+        </div>
+
+        <div class="decision-note">
+          <article class="note">
+            <h2>What changed</h2>
+            <p>
+              Product-facing names become Pulse Code. The integration gains typed server, client,
+              mobile, context, action, and compatibility paths.
+            </p>
+          </article>
+          <article class="note">
+            <h2>What stayed stable</h2>
+            <p>
+              Installed-app identity, <code>t3code</code> links, package scope, storage aliases,
+              native <code>issues.*</code> RPCs, and persisted Issue/thread IDs.
+            </p>
+          </article>
+          <article class="note">
+            <h2>What remains gated</h2>
+            <p>
+              Global SSO, OAuth release, shared-server ownership, revocation guarantees, externally
+              managed credentials, tokenizer definition, and later providers.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <details>
+        <summary>Show the Mermaid source</summary>
+        <pre><code>flowchart LR
+  GOAL["PULSE CODE ↔ PULSE&lt;br/&gt;One durable connection for Issues, Reports, projects and context"]
+  GOAL --&gt; RULES["Sign in once · server-owned credentials · backwards compatibility"]
+  RULES --&gt; BUILD["Persistent state · typed RPC · capability gates · confirmed actions"]
+  BUILD --&gt; HINGE{"RELEASE DECISION"}
+  HINGE --&gt;|"PASS"| PASS["Technical walking skeleton verified"]
+  PASS --&gt; RETAIN["Rename display surfaces; retain stable identity"]
+  HINGE --&gt;|"HOLD"| HOLD["OAuth and general release held"]
+  HOLD --&gt; GATES["Close security, ownership and revocation gates"]</code></pre>
+      </details>
+
+      <footer>
+        <span class="footer-meta">Pulse integrations · decision artifact</span>
+        <nav aria-label="Related documents">
+          <a href="./integrations-platform.md">Architecture</a>
+          <a href="./integrations-compatibility-matrix.md">Compatibility matrix</a>
+          <a href="./integrations-secret-review.md">Secret review</a>
+          <a href="../../project/decisions.md">Decision register</a>
+        </nav>
+      </footer>
+    </main>
+
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+
+      mermaid.initialize({
+        startOnLoad: true,
+        securityLevel: "loose",
+        theme: "base",
+        flowchart: {
+          curve: "basis",
+          htmlLabels: true,
+          nodeSpacing: 28,
+          rankSpacing: 52,
+          padding: 14,
+          useMaxWidth: false,
+        },
+        themeVariables: {
+          fontFamily: '"Segoe UI Variable Text", "Segoe UI", sans-serif',
+          fontSize: "15px",
+          primaryColor: "#edf5f8",
+          primaryTextColor: "#0c1f2e",
+          primaryBorderColor: "#00639b",
+          lineColor: "#6d8391",
+          clusterBkg: "#f4f8fa",
+          clusterBorder: "#c8d5dc",
+          edgeLabelBackground: "#f9fbfc",
+          tertiaryColor: "#eeeafd",
+        },
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,76 @@
+{
+  "prd": {
+    "note": "Initial Pulse integrations requirement set; proposed, not yet approved.",
+    "rows": [
+      {
+        "id": "10-pulse-integrations#problem-and-outcome",
+        "health": "draft",
+        "covers": "Connect-once access to authorized work context across Pulse Code clients and environments.",
+        "action": "Confirm outcome language and connection ownership assumptions.",
+        "authority": "prd/10-pulse-integrations.md §Problem and outcome",
+        "live": "User request plus existing settings/source-control architecture.",
+        "register": "CR-2026-08-19-pulse-integrations-foundation"
+      },
+      {
+        "id": "10-pulse-integrations#scope-and-provider-boundary",
+        "health": "draft",
+        "covers": "Provider capability groups, prioritization criteria, and the system-of-record boundary.",
+        "action": "Define tokenizer and collect provider-demand evidence before promoting candidates.",
+        "authority": "prd/10-pulse-integrations.md §Scope and provider boundary",
+        "live": "Pulse Issues in-flight work and existing multi-host source-control adapters.",
+        "register": "G-2026-08-19-tokenizer-definition; G-2026-08-19-provider-demand-baseline"
+      },
+      {
+        "id": "10-pulse-integrations#experience-contract",
+        "health": "draft",
+        "covers": "Connect, reauthorize, map, health, native context, action preview, and disconnect UX.",
+        "action": "Resolve user-owned versus environment-admin-owned connection scenarios.",
+        "authority": "prd/10-pulse-integrations.md §Experience contract",
+        "live": "/settings/integrations exists; Pulse Issues connection UI is in flight.",
+        "register": "G-2026-08-19-shared-server-connection-ownership"
+      },
+      {
+        "id": "10-pulse-integrations#platform-contract",
+        "health": "draft",
+        "covers": "Server ownership, durable records, thin adapters, bounded reads, optional capabilities, and receipts.",
+        "action": "Execute T1 and use a second-adapter spike to test the abstraction.",
+        "authority": "prd/10-pulse-integrations.md §Platform contract",
+        "live": "Typed RPC/capability patterns exist; shared integration contracts are planned.",
+        "register": "P-2026-08-19-integrations-foundation/T1"
+      },
+      {
+        "id": "10-pulse-integrations#security-privacy-and-compatibility",
+        "health": "at risk",
+        "covers": "Credential isolation, least privilege, OAuth/webhook protection, remote clients, and mixed versions.",
+        "action": "Complete T2 secret-store/OAuth review before storing refresh tokens.",
+        "authority": "prd/10-pulse-integrations.md §Security, privacy, and compatibility",
+        "live": "Current server secret store and Issues PAT boundary are evidence; OAuth guarantees are unverified.",
+        "register": "G-2026-08-19-secret-store-guarantees; P-2026-08-19-integrations-foundation/T2"
+      },
+      {
+        "id": "10-pulse-integrations#success-metrics-and-rollout",
+        "health": "needs baseline",
+        "covers": "Connect/fix/recovery/compatibility metrics and adapter-by-adapter rollout gates.",
+        "action": "Measure the reference adapter before setting numeric targets.",
+        "authority": "prd/10-pulse-integrations.md §Success metrics and rollout",
+        "live": "Metric names exist; baselines and targets remain explicit nulls in the roadmap.",
+        "register": "R-2026-08-19-pulse-issues-reference"
+      },
+      {
+        "id": "20-acceptance-criteria/integration-foundation#integration-foundation-acceptance-criteria",
+        "health": "draft",
+        "covers": "Testable connection, context/action, multi-surface, remote, safety, migration, and second-adapter proof.",
+        "action": "Review and approve before implementation begins.",
+        "authority": "prd/20-acceptance-criteria/integration-foundation.md §Integration foundation acceptance criteria",
+        "live": "Mapped to the ten-task implementation DAG; no implementation receipts yet.",
+        "register": "CR-2026-08-19-pulse-integrations-foundation; P-2026-08-19-integrations-foundation"
+      }
+    ]
+  },
+  "roadmap": {
+    "note": "Four shaped Now outcomes, four concept-stage Next candidates, and three Later discoveries; capacity is an assumption pending confirmation."
+  },
+  "tasks": {
+    "note": "Ten durable starting tasks; T1 contracts and T2 secret review form the first parallel frontier."
+  }
+}

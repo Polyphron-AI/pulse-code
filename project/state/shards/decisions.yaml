@@ -1,0 +1,13 @@
+decisions:
+  - { id: D-2026-08-19-server-owned-integrations, status: proposed, source: project/decisions.md }
+  - { id: D-2026-08-19-thin-provider-adapters, status: proposed, source: project/decisions.md }
+  - {
+      id: D-2026-08-19-pulse-issues-reference-adapter,
+      status: proposed,
+      source: project/decisions.md,
+    }
+  - {
+      id: D-2026-08-19-additive-capability-compatibility,
+      status: proposed,
+      source: project/decisions.md,
+    }

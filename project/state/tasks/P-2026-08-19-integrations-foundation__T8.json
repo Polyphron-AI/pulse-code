@@ -1,0 +1,29 @@
+{
+  "blocked_by": ["P-2026-08-19-integrations-foundation/T12"],
+  "commits": [],
+  "created_at": "2026-08-19T15:11:48Z",
+  "files_touched": [
+    "apps/mobile/src/connection/storage.test.ts",
+    "apps/mobile/src/features/issues/IssuesScreen.test.tsx",
+    "apps/mobile/src/state/integrations.test.ts",
+    "apps/mobile/src/state/issues.test.ts",
+    "apps/server/src/environment/ServerEnvironment.test.ts",
+    "docs/internals/integrations-compatibility-matrix.md",
+    "packages/client-runtime/src/connection/resolver.test.ts",
+    "packages/contracts/src/integrations.test.ts"
+  ],
+  "host_refs": {},
+  "id": "P-2026-08-19-integrations-foundation/T8",
+  "kind": "verification",
+  "local_id": "T8",
+  "owner": null,
+  "plan_id": "P-2026-08-19-integrations-foundation",
+  "roadmap_items": ["R-2026-08-19-integration-compatibility-safety"],
+  "schema": "product-ops.task/v1",
+  "status": "completed",
+  "subject": "Lock mobile, remote, and mixed-version compatibility",
+  "updated_at": "2026-08-20T06:32:30Z",
+  "verification_receipts": [
+    "T8 verified under Node 24: 9 focused files/45 tests passed; contracts, client-runtime, and mobile typechecks passed; generated development/preview/production Expo configs retained the t3-code slug, legacy t3code schemes, and com.t3tools.t3code bundle/package IDs; formatter and git diff --check passed. The matrix locks additive capability skew, credential-free mobile state, owning-environment identity across primary/bearer/relay/SSH paths, catalog aliases, native Issues RPC aliases, and persisted Issue/thread IDs."
+  ]
+}

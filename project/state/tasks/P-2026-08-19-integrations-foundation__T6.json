@@ -1,0 +1,29 @@
+{
+  "blocked_by": [
+    "P-2026-08-19-integrations-foundation/T3",
+    "P-2026-08-19-integrations-foundation/T5"
+  ],
+  "commits": [],
+  "created_at": "2026-08-19T15:11:48Z",
+  "files_touched": [
+    "apps/web/src/components/settings/IntegrationsSettings.test.tsx",
+    "apps/web/src/components/settings/IntegrationsSettings.tsx",
+    "apps/web/src/components/settings/settingsSearch.ts"
+  ],
+  "host_refs": {},
+  "id": "P-2026-08-19-integrations-foundation/T6",
+  "kind": "feature",
+  "local_id": "T6",
+  "owner": null,
+  "plan_id": "P-2026-08-19-integrations-foundation",
+  "roadmap_items": ["R-2026-08-19-integration-foundation"],
+  "schema": "product-ops.task/v1",
+  "status": "completed",
+  "subject": "Present one provider lifecycle in Settings",
+  "updated_at": "2026-08-20T06:28:30Z",
+  "verification_receipts": [
+    "@t3tools/web typecheck passed",
+    "Focused Integrations Settings suite: 1 file, 9 tests passed",
+    "Shared preview verified 1280x800 and 390x844 layouts with zero horizontal overflow"
+  ]
+}

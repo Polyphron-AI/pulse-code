@@ -1,0 +1,407 @@
+meta:
+  horizon_preset: quarter
+  capacity_note: "Planning assumption: one maintainer with agent support; confirm before execution."
+  reserve_floor: 25
+  reserve_rationale: "One of four Now slots is reserved for compatibility and credential-safety work because integration failures affect every client and remote mode."
+  snapshot: 2026-08-19
+
+themes:
+  - id: T1
+    title: "Connected work loop"
+    problem: "Maintainers lose context and time moving between coding threads, tickets, bugs, projects, and evidence systems."
+  - id: T2
+    title: "Trust across environments"
+    problem: "Persistent credentials and provider actions are unsafe or brittle when connection ownership, revocation, and version skew are inconsistent."
+  - id: T3
+    title: "Provider reach without platform sprawl"
+    problem: "One-off integrations duplicate infrastructure while universal models erase the provider semantics users depend on."
+
+items:
+  - id: R-2026-08-19-integration-foundation
+    title: "Durable integration connection foundation"
+    theme: T1
+    horizon: now
+    stage: shaped
+    kind: feature
+    outcome: "Minimize repeat authorization and mapping work for returning users while keeping credentials server-owned."
+    need: "When I reconnect to a provider from any Pulse Code client, I want my valid authorization and project mappings to remain usable, so I can continue work without rebuilding context."
+    directions:
+      - "Introduce shared connection, mapping, capability, health, error, and receipt contracts around existing domain adapters."
+      - "Keep every provider fully independent and standardize only the Settings presentation."
+    failure_mode: "The shared contract over-normalizes provider behavior or forces a risky migration of the in-flight Issues data model."
+    appetite: "one implementation cycle"
+    approach: "Add provider-neutral lifecycle primitives and wrap the reference adapter before considering persistence consolidation."
+    rabbit_holes:
+      - "central identity or credential service across Pulse Code environments"
+      - "universal resource/status schema"
+    no_gos:
+      - "no client-visible credentials"
+      - "no destructive Issues table rename in the first slice"
+      - "no provider marketplace"
+    dod:
+      - "Typed connection snapshots, capabilities, mappings, stable errors, and audit receipt shapes exist."
+      - "The owning server is the only provider API and secret-store boundary."
+      - "Pulse Issues can adopt the lifecycle contract without changing shipped client behavior or persisted IDs."
+    evidence:
+      - {
+          type: user_evidence,
+          note: "The user asked for sign-in-once access between Pulse Code and Pulse, including tickets, bugs, projects, workspaces, and tokenizer context.",
+        }
+      - {
+          type: plans_estimates,
+          note: "The 2026-08-19 task graph scopes the walking skeleton into bounded contract, server, runtime, and UI tasks.",
+        }
+      - {
+          type: test_results,
+          note: "2026-08-20 T1–T7/T11/T12 receipts verify typed contracts, server-owned persistence and adapter lifecycle, Settings, bounded context/action, authenticated RPC, and client/mobile bindings; final contracts/server/client-runtime/web/mobile typechecks pass.",
+        }
+    rice: { reach: H, impact: H, effort: M }
+    prd_refs:
+      - 10-pulse-integrations#platform-contract
+      - 10-pulse-integrations#experience-contract
+      - 20-acceptance-criteria/integration-foundation#integration-foundation-acceptance-criteria
+    blocked_by: []
+    metric: { name: "returning connection success", baseline: null, target: null }
+    status: active
+    history:
+      - "2026-08-19 created in now from the Pulse integrations PRD."
+      - "2026-08-20 walking skeleton verified in the worktree; remains active and unreleased while implementation is uncommitted and OAuth/security/ownership gates remain open."
+
+  - id: R-2026-08-19-pulse-issues-reference
+    title: "Harden Pulse Issues as the reference adapter"
+    theme: T1
+    horizon: now
+    stage: shaped
+    kind: feature
+    outcome: "Minimize time from opening a Pulse Issue or Report to starting or resuming a correctly linked fix."
+    need: "When a Pulse bug or ticket needs engineering work, I want native bounded evidence and a durable fix-thread link, so I can act without recreating the report in Pulse Code."
+    directions:
+      - "Complete and verify the current native Pulse Issues adapter, then wrap its lifecycle in shared primitives."
+      - "Keep Pulse Issues standalone until a second adapter proves which primitives are truly shared."
+    failure_mode: "Platform extraction destabilizes the large in-flight Issues feature or treats unmerged contracts as settled."
+    appetite: "one focused stabilization cycle"
+    approach: "Land and verify native Issues independently, preserve its domain contracts, then extract only demonstrated lifecycle seams."
+    rabbit_holes:
+      - "rewriting Issues UI during platform extraction"
+      - "eagerly loading full Report evidence"
+    no_gos:
+      - "no embedded Pulse dashboard"
+      - "no credential or evidence payload copied into agent prompts"
+      - "no coupled merge with the foundation if Issues is not independently green"
+    dod:
+      - "Connection, mapping, list/detail, evidence, triage, capture, and fix-thread paths have focused tests."
+      - "Web/desktop/mobile and mixed-capability behavior match the native Issues contract."
+      - "Reference-adapter seams and provider-specific semantics are documented."
+    evidence:
+      - {
+          type: anecdotal,
+          note: "Repository inspection found a full uncommitted native Issues contract, server adapter, settings flow, routes, mobile surface, and architecture guide.",
+        }
+      - {
+          type: plans_estimates,
+          note: "Existing docs define bounded evidence, mapping, optimistic versions, capability skew, and remote failure isolation.",
+        }
+      - {
+          type: test_results,
+          note: "Native Issues landed independently at ac8d94397 after 10 files/36 tests plus web/mobile typechecks; T4 then passed 6 files/38 adapter/store/domain tests.",
+        }
+    rice: { reach: M, impact: H, effort: M }
+    prd_refs:
+      - 10-pulse-integrations#scope-and-provider-boundary
+      - 10-pulse-integrations#success-metrics-and-rollout
+      - 20-acceptance-criteria/integration-foundation#integration-foundation-acceptance-criteria
+    blocked_by:
+      - R-2026-08-19-integration-foundation
+    metric: { name: "issue context-to-fix start time", baseline: null, target: null }
+    status: active
+    history:
+      - "2026-08-19 created in now; implementation evidence is in flight and not treated as shipped."
+      - "2026-08-20 reference adapter landed and its shared lifecycle wrapper verified; roadmap remains active pending release and metric evidence."
+
+  - id: R-2026-08-19-agent-context-actions
+    title: "Agent-readable context and deliberate actions"
+    theme: T1
+    horizon: now
+    stage: shaped
+    kind: feature
+    outcome: "Minimize manual copying of external work into coding threads without increasing unauthorized provider writes."
+    need: "When I ask an agent to investigate or fix external work, I want it to receive mapped, fresh, bounded context and preview any write, so I can move quickly without surrendering control."
+    directions:
+      - "Expose typed context resources and action-preview/execute RPCs through domain-specific tools."
+      - "Keep integrations user-facing only and ask users to paste selected context into threads."
+    failure_mode: "Convenient context silently becomes ambient credential access or unbounded prompt material."
+    appetite: "one walking-skeleton cycle after the reference adapter is stable"
+    approach: "Start with Issue context plus one reversible action preview and receipt; expand by capability."
+    rabbit_holes:
+      - "generic autonomous workflow engine"
+      - "policy language before one confirmed action path exists"
+    no_gos:
+      - "no secrets in tool output, prompts, checkpoints, or thread exports"
+      - "no agent mutation without an explicit preview in the first release"
+      - "no bulk actions"
+    dod:
+      - "Context includes provider, environment, mapping, stable identity, source, freshness, and summary/detail status."
+      - "One agent-proposed mutation produces preview, confirmation, typed receipt, refresh, and conflict recovery."
+      - "Unsupported/older environments never receive unknown calls."
+    evidence:
+      - {
+          type: user_evidence,
+          note: "The user explicitly asked that the assistant see appropriate tickets, bugs, projects, workspaces, and tokenizer context.",
+        }
+      - {
+          type: plans_estimates,
+          note: "The workflow and tool-flow artifacts define the bounded read and confirmation path.",
+        }
+      - {
+          type: test_results,
+          note: "T7/T11/T12 verify bounded Issue summary/detail context, session-scoped status previews, explicit confirmation receipts, typed RPC transport, and scoped client refresh.",
+        }
+    rice: { reach: H, impact: H, effort: M }
+    prd_refs:
+      - 10-pulse-integrations#experience-contract
+      - 10-pulse-integrations#security-privacy-and-compatibility
+      - 20-acceptance-criteria/integration-foundation#integration-foundation-acceptance-criteria
+    blocked_by:
+      - R-2026-08-19-integration-foundation
+      - R-2026-08-19-pulse-issues-reference
+    metric: { name: "manual context transfers per fix thread", baseline: null, target: null }
+    status: active
+    history:
+      - "2026-08-19 created in now with explicit-confirmation writes."
+      - "2026-08-20 bounded Issue context and one confirmed status action are technically verified; automatic agent-tool exposure and additional domains remain outside this slice."
+
+  - id: R-2026-08-19-integration-compatibility-safety
+    title: "Compatibility and credential-safety gate"
+    theme: T2
+    horizon: now
+    stage: shaped
+    kind: protective
+    outcome: "Minimize credential exposure and mixed-version connection failures across every client and remote mode."
+    need: "When I upgrade one Pulse Code client or server, I want existing pairing, mobile connections, credentials, and provider workflows to keep working, so an integration release cannot strand my environment."
+    directions:
+      - "Add an additive capability-skew matrix, secret redaction checks, and migration compatibility fixtures."
+      - "Version an entirely separate integration transport and require coordinated client/server upgrades."
+    failure_mode: "Happy-path provider tests pass while mobile, relay/tunnel, old servers, or legacy Pulse/T3 identities break."
+    appetite: "one protective slot in every integration implementation cycle"
+    approach: "Make compatibility and secret non-disclosure receipts part of each adapter's release gate."
+    rabbit_holes:
+      - "repository-wide compatibility framework unrelated to integrations"
+      - "centralized auth service"
+    no_gos:
+      - "no removal of legacy aliases, package IDs, pairing shapes, or stored identifiers"
+      - "no release gate based only on web/local testing"
+    dod:
+      - "Old-client/new-server and new-client/old-server capability tests pass."
+      - "Local, direct-remote, relay, tunnel, and mobile paths never receive provider credentials."
+      - "Disconnect, revocation, rollback, and migration fixtures prove reversible behavior."
+    evidence:
+      - {
+          type: user_evidence,
+          note: "The user made full backwards compatibility an explicit condition of the Pulse Code rename and integration goal.",
+        }
+      - {
+          type: anecdotal,
+          note: "AGENTS.md identifies multi-surface and remote-ready omissions as a recurring defect class.",
+        }
+      - {
+          type: test_results,
+          note: "T8 passed 9 files/45 tests, contracts/client-runtime/mobile typechecks, and generated all Expo variants while preserving legacy schemes, catalog aliases, bundle/package IDs, environment identity, native RPC aliases, and persisted resource IDs.",
+        }
+    rice: { reach: H, impact: H, effort: M }
+    prd_refs:
+      - 10-pulse-integrations#security-privacy-and-compatibility
+      - 20-acceptance-criteria/integration-foundation#integration-foundation-acceptance-criteria
+    blocked_by:
+      - R-2026-08-19-integration-foundation
+    metric: { name: "integration compatibility regressions", baseline: 0, target: 0 }
+    status: active
+    history:
+      - "2026-08-19 created in now as the reserved protective outcome."
+      - "2026-08-20 compatibility matrix verified with zero detected regressions; item remains active until the integration work is committed/released and post-release metric evidence exists."
+
+  - id: R-2026-08-19-github-work-graph
+    title: "GitHub work graph beyond pull requests"
+    theme: T3
+    horizon: next
+    stage: concept
+    kind: feature
+    outcome: "Minimize switching between repository, pull request, issue, project, and coding-thread context."
+    need: "When work is tracked next to code on GitHub, I want one mapped graph of issue, project, pull request, and repository context, so the fix stays traceable end to end."
+    directions:
+      - "Extend existing source-host infrastructure with GitHub issue/project capabilities."
+      - "Add a separate GitHub work adapter that only joins the existing pull-request domain by typed references."
+    failure_mode: "GitHub-specific scope leaks into the shared connection layer or duplicates existing CLI authentication poorly."
+    evidence:
+      - {
+          type: anecdotal,
+          note: "The repository already ships multi-host source control and a native /pull-requests workspace.",
+        }
+    rice: { reach: H, impact: M, effort: M }
+    prd_refs:
+      - 10-pulse-integrations#scope-and-provider-boundary
+    blocked_by:
+      - R-2026-08-19-integration-foundation
+    metric: { name: "GitHub issue-to-fix traceability", baseline: null, target: null }
+    status: active
+    history:
+      - "2026-08-19 created in next; discovery must reconcile OAuth with existing host CLI auth."
+
+  - id: R-2026-08-19-linear-adapter
+    title: "Linear work adapter discovery"
+    theme: T3
+    horizon: next
+    stage: concept
+    kind: feature
+    outcome: "Minimize manual transfer of focused product and engineering work into Pulse Code threads."
+    need: "When my team plans engineering work in Linear, I want mapped issues and projects available in the coding loop, so status and implementation context stay connected."
+    directions:
+      - "Build a native Linear adapter on the shared connection and work capabilities."
+      - "Use a generic MCP/tool connection for agent-only reads while keeping the Pulse Code UI provider-neutral."
+    failure_mode: "A polished adapter is built without measured demand or exposes workflow semantics the shared UI cannot represent honestly."
+    evidence:
+      - {
+          type: crafted_pitch,
+          note: "Linear is a strong second-adapter candidate because it tests OAuth and ticket/project semantics without reusing the Pulse API.",
+        }
+    rice: { reach: M, impact: M, effort: M }
+    prd_refs:
+      - 10-pulse-integrations#scope-and-provider-boundary
+    blocked_by:
+      - R-2026-08-19-integration-foundation
+    metric: { name: "Linear context transfers per fix thread", baseline: null, target: null }
+    status: active
+    history:
+      - "2026-08-19 created in next; promotion requires provider-demand evidence."
+
+  - id: R-2026-08-19-sentry-evidence
+    title: "Sentry evidence-to-fix discovery"
+    theme: T3
+    horizon: next
+    stage: concept
+    kind: feature
+    outcome: "Minimize time spent reconstructing production error evidence before an agent can investigate."
+    need: "When a production error needs a fix, I want bounded trace, release, and environment context linked to the coding thread, so investigation starts from evidence rather than a copied alert."
+    directions:
+      - "Add a native read-first evidence adapter with links to issues and releases."
+      - "Start from provider deep links and an explicit user-selected evidence import."
+    failure_mode: "High-volume traces overwhelm WebSockets, prompts, provider budgets, or privacy boundaries."
+    evidence:
+      - {
+          type: crafted_pitch,
+          note: "The in-flight Pulse Report design already establishes lazy bounded evidence patterns that a second evidence provider can test.",
+        }
+    rice: { reach: M, impact: H, effort: M }
+    prd_refs:
+      - 10-pulse-integrations#platform-contract
+    blocked_by:
+      - R-2026-08-19-integration-foundation
+      - R-2026-08-19-agent-context-actions
+    metric: { name: "error-open to investigation-ready time", baseline: null, target: null }
+    status: active
+    history:
+      - "2026-08-19 created in next as a read-first evidence candidate."
+
+  - id: R-2026-08-19-usage-tokenizer-context
+    title: "Usage and tokenizer context discovery"
+    theme: T1
+    horizon: next
+    stage: concept
+    kind: feature
+    outcome: "Minimize uncertainty about token/usage constraints while directing an agent."
+    need: "When a coding session approaches a provider or project usage constraint, I want relevant usage/tokenizer context visible with the work, so I can adjust before the session fails or becomes wasteful."
+    directions:
+      - "Add read-only normalized usage summaries to the existing Usage and thread surfaces."
+      - "Expose a provider-specific tokenizer resource through agent context only."
+    failure_mode: "The roadmap solves the wrong object because 'tokenizer' has not been defined."
+    evidence:
+      - {
+          type: user_evidence,
+          note: "The user named tokenizer visibility as part of the desired Pulse/Pulse Code connection.",
+        }
+    rice: { reach: M, impact: M, effort: M }
+    prd_refs:
+      - 10-pulse-integrations#scope-and-provider-boundary
+    blocked_by:
+      - R-2026-08-19-integration-foundation
+    metric: { name: "sessions with actionable usage context", baseline: null, target: null }
+    status: active
+    history:
+      - "2026-08-19 created in next; definition gap must close before shaping."
+
+  - id: R-2026-08-19-atlassian-enterprise
+    title: "Atlassian enterprise work discovery"
+    theme: T3
+    horizon: later
+    stage: concept
+    kind: feature
+    outcome: "Minimize enterprise ticket-to-code context loss without weakening provider-specific permissions."
+    need: "When an enterprise team owns work in Jira or Atlassian projects, I want mapped, permission-correct work context in Pulse Code, so agents can participate without shadow copies."
+    directions:
+      - "Native Jira adapter after the shared platform is proven."
+      - "Atlassian-managed connector or MCP path for read-first access."
+    failure_mode: "Enterprise auth and workflow configuration exceed the maintenance appetite."
+    evidence:
+      - {
+          type: self_conviction,
+          note: "Captured as a common enterprise category; no Pulse Code demand baseline yet.",
+        }
+    rice: { reach: M, impact: M, effort: H }
+    prd_refs:
+      - 10-pulse-integrations#scope-and-provider-boundary
+    blocked_by:
+      - R-2026-08-19-integration-foundation
+    status: active
+    history:
+      - "2026-08-19 captured in later pending demand and auth discovery."
+
+  - id: R-2026-08-19-collaboration-notifications
+    title: "Slack/Teams collaboration actions discovery"
+    theme: T3
+    horizon: later
+    stage: concept
+    kind: feature
+    outcome: "Minimize missed handoffs between coding work and team communication."
+    need: "When a fix changes status or needs a decision, I want a deliberate update linked to the coding thread, so collaborators can act without a context-free notification."
+    directions:
+      - "Provider adapter for explicit notifications and action links."
+      - "Outbound webhooks configured per project with no inbound message ingestion."
+    failure_mode: "Pulse Code becomes a noisy notification hub or ingests private conversations without a bounded workflow."
+    evidence:
+      - {
+          type: self_conviction,
+          note: "Captured as a plausible handoff category; no measured demand or workflow evidence yet.",
+        }
+    rice: { reach: M, impact: L, effort: M }
+    prd_refs:
+      - 10-pulse-integrations#scope-and-provider-boundary
+    blocked_by:
+      - R-2026-08-19-agent-context-actions
+    status: active
+    history:
+      - "2026-08-19 captured in later as explicit-action-only discovery."
+
+  - id: R-2026-08-19-docs-deploy-context
+    title: "Documentation and deployment context discovery"
+    theme: T3
+    horizon: later
+    stage: concept
+    kind: feature
+    outcome: "Minimize time spent finding current design context and deployment state during implementation."
+    need: "When a task depends on product documentation or a live deployment, I want the mapped source and current status available to the thread, so implementation and verification use the right context."
+    directions:
+      - "Separate read-first docs and deployment adapters using shared connection primitives."
+      - "Use provider MCP/tools for agent access and keep only typed links in Pulse Code."
+    failure_mode: "A broad connector category produces shallow, high-maintenance adapters with no native workflow."
+    evidence:
+      - {
+          type: self_conviction,
+          note: "Captured as a category for later discovery; no provider or workflow is selected.",
+        }
+    rice: { reach: M, impact: M, effort: H }
+    prd_refs:
+      - 10-pulse-integrations#scope-and-provider-boundary
+    blocked_by:
+      - R-2026-08-19-integration-foundation
+    status: active
+    history:
+      - "2026-08-19 captured in later; split by validated workflow before promotion."

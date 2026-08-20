@@ -1,0 +1,43 @@
+gaps:
+  - {
+      id: G-2026-08-19-tokenizer-definition,
+      severity: medium,
+      status: open,
+      source: project/known-gaps.md,
+    }
+  - {
+      id: G-2026-08-19-shared-server-connection-ownership,
+      severity: medium,
+      status: open,
+      source: project/known-gaps.md,
+    }
+  - {
+      id: G-2026-08-19-secret-store-guarantees,
+      severity: high,
+      status: open,
+      source: project/known-gaps.md,
+    }
+  - {
+      id: G-2026-08-19-reference-adapter-unmerged,
+      severity: high,
+      status: resolved,
+      source: project/known-gaps.md,
+    }
+  - {
+      id: G-2026-08-19-provider-demand-baseline,
+      severity: medium,
+      status: open,
+      source: project/known-gaps.md,
+    }
+  - {
+      id: G-2026-08-20-integration-transport-bridge-unassigned,
+      severity: medium,
+      status: resolved,
+      source: project/known-gaps.md,
+    }
+  - {
+      id: G-2026-08-20-externally-managed-credential-mode,
+      severity: medium,
+      status: open,
+      source: project/known-gaps.md,
+    }
