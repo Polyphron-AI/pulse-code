@@ -34,6 +34,8 @@ import { ThreadRouteScreen } from "./features/threads/ThreadRouteScreen";
 import { ConnectionsRouteScreen } from "./features/connection/ConnectionsRouteScreen";
 import { ConnectionsNewRouteScreen } from "./features/connection/ConnectionsNewRouteScreen";
 import { HomeRouteScreen } from "./features/home/HomeRouteScreen";
+import { IssueDetailRouteScreen } from "./features/issues/IssueDetailRouteScreen";
+import { IssuesRouteScreen } from "./features/issues/IssuesRouteScreen";
 import { AddProjectDestinationRoute } from "./features/projects/AddProjectDestinationRoute";
 import { AddProjectLocalRoute } from "./features/projects/AddProjectLocalRoute";
 import { AddProjectRepositoryRoute } from "./features/projects/AddProjectRepositoryRoute";
@@ -458,6 +460,22 @@ export const RootStack = createNativeStackNavigator({
         contentStyle: { backgroundColor: "transparent" },
         headerBackVisible: false,
         ...getCompactBrandHeaderOptions(),
+      },
+    }),
+    Issues: createNativeStackScreen({
+      screen: IssuesRouteScreen,
+      linking: "issues",
+      options: {
+        ...GLASS_HEADER_OPTIONS,
+        title: "Issues",
+      },
+    }),
+    IssueDetail: createNativeStackScreen({
+      screen: IssueDetailRouteScreen,
+      linking: "issues/:environmentId/:projectId/:issueId",
+      options: {
+        ...GLASS_HEADER_OPTIONS,
+        title: "Issue",
       },
     }),
     Thread: createNativeStackScreen({

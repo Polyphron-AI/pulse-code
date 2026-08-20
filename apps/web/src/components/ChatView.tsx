@@ -3,6 +3,7 @@ import {
   DEFAULT_MODEL,
   defaultInstanceIdForDriver,
   type EnvironmentId,
+  type IssueId,
   type MessageId,
   type ModelSelection,
   type ProjectScript,
@@ -150,6 +151,8 @@ import { isThreadOwnPullRequest } from "./pullRequest/pullRequestDetail.logic";
 import { PullRequestDetailPanel } from "./pullRequest/PullRequestDetailPanel";
 import { PullRequestDetailGhost } from "./pullRequest/PullRequestGhosts";
 import { PullRequestsUnavailableState } from "./pullRequest/PullRequestsUnavailableState";
+import { IssueDetailPanel } from "./issues/IssueDetailPanel";
+import { ThreadIssueContext } from "./issues/ThreadIssueContext";
 import { RightPanelTabs, type PullRequestTabStatus } from "./RightPanelTabs";
 import { AgentsPanel } from "./AgentsPanel";
 import {
@@ -225,6 +228,7 @@ import { environmentCatalog } from "../connection/catalog";
 import { selectThreadTerminalUiState, useTerminalUiStateStore } from "../terminalUiStateStore";
 import { useKnownTerminalSessions, useThreadRunningTerminalIds } from "../state/terminalSessions";
 import { projectEnvironment } from "../state/projects";
+import { issueEnvironment } from "../state/issues";
 import { useEnvironmentQuery } from "../state/query";
 import {
   primaryServerAvailableEditorsAtom,
@@ -1218,6 +1222,9 @@ function ChatViewContent(props: ChatViewProps) {
   const writeTerminal = useAtomCommand(terminalEnvironment.write, "terminal write");
   const closeTerminalMutation = useAtomCommand(terminalEnvironment.close, "terminal close");
   const createThread = useAtomCommand(threadEnvironment.create, { reportFailure: false });
+  const setIssueThreadLink = useAtomCommand(issueEnvironment.setThreadLink, {
+    reportFailure: false,
+  });
   const deleteThread = useAtomCommand(threadEnvironment.delete, { reportFailure: false });
   const updateThreadMetadata = useAtomCommand(threadEnvironment.updateMetadata, {
     reportFailure: false,
@@ -2023,6 +2030,7 @@ function ChatViewContent(props: ChatViewProps) {
     : (primaryEnvironment?.serverConfig ?? null);
   const pullRequestsCapabilityKnown = serverConfig !== null;
   const supportsPullRequests = serverConfig?.environment.capabilities.pullRequests === true;
+  const supportsIssues = serverConfig?.environment.capabilities.issues === true;
   const versionMismatch = resolveServerConfigVersionMismatch(serverConfig);
   const versionMismatchDismissKey =
     versionMismatch && activeThread
@@ -3299,6 +3307,10 @@ function ChatViewContent(props: ChatViewProps) {
     if (!activeThreadRef) return;
     useRightPanelStore.getState().open(activeThreadRef, "agents");
   }, [activeThreadRef]);
+  const openIssuesWorkspace = useCallback(() => {
+    if (!supportsIssues || !activeProject) return;
+    void navigate({ to: "/issues", search: { projectId: activeProject.id, limit: 50 } });
+  }, [activeProject, navigate, supportsIssues]);
   const openFileSurface = useCallback(
     (relativePath: string) => {
       if (!activeThreadRef || !activeProject) return;
@@ -4914,6 +4926,8 @@ function ChatViewContent(props: ChatViewProps) {
     },
   ) => {
     e?.preventDefault();
+    const pendingIssueContext =
+      useComposerDraftStore.getState().getComposerDraft(composerDraftTarget)?.issueContext ?? null;
     const notifyDirectAnnotationAttached = () => {
       if (!directAnnotation) return;
       toastManager.add(
@@ -5316,6 +5330,26 @@ function ChatViewContent(props: ChatViewProps) {
         failure = startResult;
       } else {
         turnStartSucceeded = true;
+        if (isLocalDraftThread && pendingIssueContext) {
+          const linkResult = await setIssueThreadLink({
+            environmentId: pendingIssueContext.environmentId,
+            input: {
+              projectId: pendingIssueContext.projectId,
+              issueId: pendingIssueContext.issueId,
+              threadId: threadIdForSend,
+            },
+          });
+          if (linkResult._tag === "Success") {
+            useComposerDraftStore.getState().setIssueContext(composerDraftTarget, null);
+          } else if (!isAtomCommandInterrupted(linkResult)) {
+            toastManager.add({
+              type: "warning",
+              title: "Thread started, but the Issue link needs retrying",
+              description:
+                "The Issue context is still attached locally. Send again or link this thread from the Issue panel.",
+            });
+          }
+        }
         acknowledgeActiveThreadWoke();
       }
     }
@@ -6091,6 +6125,8 @@ function ChatViewContent(props: ChatViewProps) {
           tabId={activeRightPanelSurface.resourceId}
           configuredUrls={configuredPreviewUrls}
           visible
+          {...(activeProject ? { projectId: activeProject.id } : {})}
+          issuesAvailable={supportsIssues}
           onSendAnnotation={(annotation, image) => {
             void onSend(undefined, { annotation, image });
           }}
@@ -6163,6 +6199,17 @@ function ChatViewContent(props: ChatViewProps) {
         chromeVariant="collapse"
         composerDraftTarget={composerDraftTarget}
         onStateChange={handlePullRequestTabStatusChange}
+      />
+    ) : activeRightPanelSurface?.kind === "issue" ? (
+      <IssueDetailPanel
+        key={`${activeRightPanelSurface.environmentId}:${activeRightPanelSurface.issueId}`}
+        environmentId={activeRightPanelSurface.environmentId as EnvironmentId}
+        reference={{
+          projectId: activeRightPanelSurface.projectId as ProjectId,
+          issueId: activeRightPanelSurface.issueId as IssueId,
+        }}
+        currentThreadRef={activeThreadRef}
+        {...(activeProject ? { currentProjectId: activeProject.id } : {})}
       />
     ) : activeRightPanelSurface?.kind === "agents" ? (
       <AgentsPanel
@@ -6375,6 +6422,12 @@ function ChatViewContent(props: ChatViewProps) {
                 className="w-full ps-[calc(env(safe-area-inset-left)+0.75rem)] pe-[calc(env(safe-area-inset-right)+0.75rem)] sm:ps-[calc(env(safe-area-inset-left)+1.25rem)] sm:pe-[calc(env(safe-area-inset-right)+1.25rem)]"
               >
                 <div className="pointer-events-auto relative z-10">
+                  <ThreadIssueContext
+                    target={composerDraftTarget}
+                    threadRef={routeThreadRef}
+                    serverThread={isServerThread}
+                    issuesAvailable={supportsIssues}
+                  />
                   {isDraftHeroState ? (
                     <div className="absolute inset-x-0 bottom-full z-0">
                       <div
@@ -6639,12 +6692,14 @@ function ChatViewContent(props: ChatViewProps) {
           onAddDiff={addDiffSurface}
           onAddFiles={addFilesSurface}
           onAddPullRequest={addPullRequestSurface}
+          onAddIssue={openIssuesWorkspace}
           onAddAgents={addAgentsSurface}
           browserAvailable={isPreviewSupportedInRuntime()}
           terminalAvailable={activeProject !== null}
           diffAvailable={isServerThread && isGitRepo}
           filesAvailable={activeProject !== null}
           pullRequestAvailable={pullRequestSurfaceAvailable}
+          issueAvailable={supportsIssues && activeProject !== null}
           agentsAvailable
           pullRequestStatuses={pullRequestTabStatuses}
           liveAgentCount={agentPanelModel.liveCount}
@@ -6678,12 +6733,14 @@ function ChatViewContent(props: ChatViewProps) {
             onAddDiff={addDiffSurface}
             onAddFiles={addFilesSurface}
             onAddPullRequest={addPullRequestSurface}
+            onAddIssue={openIssuesWorkspace}
             onAddAgents={addAgentsSurface}
             browserAvailable={isPreviewSupportedInRuntime()}
             terminalAvailable={activeProject !== null}
             diffAvailable={isServerThread && isGitRepo}
             filesAvailable={activeProject !== null}
             pullRequestAvailable={pullRequestSurfaceAvailable}
+            issueAvailable={supportsIssues && activeProject !== null}
             agentsAvailable
             pullRequestStatuses={pullRequestTabStatuses}
             liveAgentCount={agentPanelModel.liveCount}

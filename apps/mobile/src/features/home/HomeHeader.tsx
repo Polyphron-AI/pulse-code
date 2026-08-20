@@ -49,6 +49,7 @@ export function HomeHeader(props: {
   readonly onProjectSortOrderChange: (sortOrder: HomeProjectSortOrder) => void;
   readonly onThreadSortOrderChange: (sortOrder: SidebarThreadSortOrder) => void;
   readonly onOpenEnvironments: () => void;
+  readonly onOpenIssues: () => void;
   readonly onOpenSettings: () => void;
   readonly onStartNewTask: () => void;
 }) {
@@ -253,6 +254,14 @@ function AndroidHomeHeader(props: HomeHeaderProps) {
                 />
               </Pressable>
             </ControlPillMenu>
+            <Pressable
+              accessibilityLabel="Open Issues"
+              accessibilityRole="button"
+              onPress={props.onOpenIssues}
+              className="size-11 items-center justify-center rounded-full bg-subtle"
+            >
+              <SymbolView name="circle.dotted" size={18} tintColor="#f97316" type="monochrome" />
+            </Pressable>
             {/* Built identically to the filter button so the two circles
                 match exactly (ControlPill sizes via Tailwind classes and
                 resolves to a different box). */}
@@ -329,6 +338,14 @@ function IosHomeHeader(props: HomeHeaderProps) {
           unstable_headerRightItems:
             Platform.OS === "ios"
               ? () => [
+                  withNativeGlassHeaderItem({
+                    accessibilityLabel: "Open Issues",
+                    icon: { name: "circle.dotted", type: "sfSymbol" } as const,
+                    identifier: "home-issues",
+                    label: "",
+                    onPress: props.onOpenIssues,
+                    type: "button",
+                  }),
                   withNativeGlassHeaderItem({
                     accessibilityLabel: "Open settings",
                     icon: { name: "ellipsis", type: "sfSymbol" } as const,

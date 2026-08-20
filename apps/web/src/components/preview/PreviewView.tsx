@@ -4,8 +4,10 @@ import { scopedThreadKey } from "@t3tools/client-runtime/environment";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import {
   FILL_PREVIEW_VIEWPORT,
+  type IssueCaptureMedia,
   type PreviewAnnotationPayload,
   type PreviewViewportSetting,
+  type ProjectId,
   type ScopedThreadRef,
 } from "@t3tools/contracts";
 import { normalizePreviewUrl } from "@t3tools/shared/preview";
@@ -28,7 +30,9 @@ import {
 } from "~/previewStateStore";
 import { resolveDiscoveredServerUrl } from "~/browser/browserTargetResolver";
 import { useEnvironmentHttpBaseUrl } from "~/state/environments";
+import { issueEnvironment } from "~/state/issues";
 import { previewEnvironment } from "~/state/preview";
+import { useEnvironmentQuery } from "~/state/query";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { selectThreadPreviewMiniPlayer, usePreviewMiniPlayerStore } from "~/previewMiniPlayerStore";
 import { useRightPanelStore } from "~/rightPanelStore";
@@ -54,6 +58,7 @@ import { useLoadingProgress } from "./useLoadingProgress";
 import { usePreviewSession } from "./usePreviewSession";
 import { ZoomIndicator } from "./ZoomIndicator";
 import { AgentBrowserCursor } from "./AgentBrowserCursor";
+import { IssueCaptureDialog } from "~/components/issues/IssueCaptureDialog";
 import {
   findActiveBrowserRecordingRuntimeTabId,
   startBrowserRecording,
@@ -67,6 +72,8 @@ interface Props {
   tabId?: string | null;
   configuredUrls?: ReadonlyArray<string> | undefined;
   visible: boolean;
+  projectId?: ProjectId;
+  issuesAvailable?: boolean;
   onSendAnnotation?: (
     annotation: PreviewAnnotationPayload,
     image: ComposerImageAttachment | null,
@@ -74,6 +81,27 @@ interface Props {
 }
 
 const localApi = typeof window === "undefined" ? null : ensureLocalApi();
+
+function previewArtifactMedia(
+  artifact: { readonly path: string; readonly mimeType: string },
+  kind: "screenshot" | "video",
+): IssueCaptureMedia {
+  return {
+    source: "preview-artifact",
+    kind,
+    fileName:
+      artifact.path.split(/[\\/]/).at(-1) || (kind === "video" ? "preview.webm" : "preview.png"),
+    mimeType: artifact.mimeType,
+    artifactPath: artifact.path,
+  };
+}
+
+function replaceIssueMedia(
+  media: readonly IssueCaptureMedia[],
+  next: IssueCaptureMedia,
+): readonly IssueCaptureMedia[] {
+  return [...media.filter((candidate) => candidate.kind !== next.kind), next].slice(-3);
+}
 
 /**
  * Single-tab preview surface: chrome row on top, one webview below, empty
@@ -84,10 +112,16 @@ export function PreviewView({
   tabId: requestedTabId,
   configuredUrls,
   visible,
+  projectId,
+  issuesAvailable = false,
   onSendAnnotation,
 }: Props) {
   const [focusUrlNonce, setFocusUrlNonce] = useState<number | undefined>(undefined);
   const [pickActive, setPickActive] = useState(false);
+  const [issueCaptureOpen, setIssueCaptureOpen] = useState(false);
+  const [latestIssueAnnotation, setLatestIssueAnnotation] =
+    useState<PreviewAnnotationPayload | null>(null);
+  const [latestIssueMedia, setLatestIssueMedia] = useState<readonly IssueCaptureMedia[]>([]);
   const activeRecordingTabIds = useActiveBrowserRecordingTabIds();
   const pickActiveRef = useRef(false);
   const isMountedRef = useRef(true);
@@ -106,6 +140,11 @@ export function PreviewView({
   const addPreviewAnnotation = useComposerDraftStore((store) => store.addPreviewAnnotation);
   const addImage = useComposerDraftStore((store) => store.addImage);
   const environmentHttpBaseUrl = useEnvironmentHttpBaseUrl(threadRef.environmentId);
+  const issuesConnection = useEnvironmentQuery(
+    issuesAvailable
+      ? issueEnvironment.connection({ environmentId: threadRef.environmentId, input: {} })
+      : null,
+  );
   const environmentHostname = environmentHttpBaseUrl
     ? new URL(environmentHttpBaseUrl).hostname
     : null;
@@ -151,6 +190,22 @@ export function PreviewView({
 
   const navUrl = navStatus._tag === "Success" ? navStatus.url : null;
   const navTitle = navStatus._tag === "Success" ? navStatus.title : null;
+  const issueMapping =
+    projectId && issuesConnection.data
+      ? (issuesConnection.data.mappings.find((mapping) => mapping.projectId === projectId) ?? null)
+      : null;
+  const fileIssueDisabledReason =
+    recordingRuntimeTabId !== null
+      ? "Stop the recording before filing an Issue."
+      : !navUrl
+        ? "Open a loaded HTTP or HTTPS page first."
+        : issuesConnection.isPending
+          ? "Checking the Pulse connection…"
+          : issuesConnection.data?.status !== "connected"
+            ? "Connect Pulse in Settings → Integrations."
+            : !issueMapping
+              ? "Map this workspace in Settings → Integrations."
+              : null;
   const latestHistoryUrl = recentHistoryEntries[0]?.url;
   const threadKey = scopedThreadKey(threadRef);
   useEffect(() => {
@@ -310,6 +365,9 @@ export function PreviewView({
         void stopBrowserRecording(recordingRuntimeTabId).then(
           (artifact) => {
             if (!artifact) return;
+            setLatestIssueMedia((current) =>
+              replaceIssueMedia(current, previewArtifactMedia(artifact, "video")),
+            );
             let pathCopied = false;
             let toastId: ReturnType<typeof toastManager.add>;
 
@@ -410,6 +468,9 @@ export function PreviewView({
       }
       void bridge.captureScreenshot(runtimeTabId).then(
         (artifact) => {
+          setLatestIssueMedia((current) =>
+            replaceIssueMedia(current, previewArtifactMedia(artifact, "screenshot")),
+          );
           const revealAction = {
             children: revealInFileExplorerLabel(navigator.platform),
             onClick: () => void bridge.revealArtifact(artifact.path),
@@ -561,6 +622,18 @@ export function PreviewView({
         const result = await previewBridge.pickElement(runtimeTabId);
         if (!result) return;
         const { annotation, submission } = result;
+        setLatestIssueAnnotation(annotation);
+        if (annotation.screenshot) {
+          setLatestIssueMedia((current) =>
+            replaceIssueMedia(current, {
+              source: "data-url",
+              kind: "screenshot",
+              fileName: `annotation-${annotation.id}.png`,
+              mimeType: "image/png",
+              dataUrl: annotation.screenshot!.dataUrl,
+            }),
+          );
+        }
         addPreviewAnnotation(threadRef, annotation);
         let screenshotFile: File | null = null;
         try {
@@ -674,6 +747,9 @@ export function PreviewView({
         onCapture={previewBridge && tabId ? handleCapture : undefined}
         captureDisabled={!desktopOverlay || isUnreachable}
         recording={recordingRuntimeTabId !== null}
+        onFileIssue={issuesAvailable && projectId ? () => setIssueCaptureOpen(true) : undefined}
+        fileIssueDisabled={fileIssueDisabledReason !== null}
+        fileIssueDisabledReason={fileIssueDisabledReason ?? undefined}
         onPictureInPicture={previewBridge && tabId ? handlePictureInPicture : undefined}
         pictureInPicture={miniPlayer?.tabId === tabId}
         pictureInPictureDisabled={!desktopOverlay?.hasWebContents || isUnreachable}
@@ -747,6 +823,29 @@ export function PreviewView({
           </div>
         ) : null}
       </div>
+      {issueCaptureOpen && projectId && navUrl ? (
+        <IssueCaptureDialog
+          key={`${threadRef.environmentId}:${projectId}:${navUrl}:${latestIssueAnnotation?.id ?? "page"}`}
+          open
+          onOpenChange={setIssueCaptureOpen}
+          environmentId={threadRef.environmentId}
+          projectId={projectId}
+          pageUrl={navUrl}
+          pageTitle={navTitle}
+          annotation={latestIssueAnnotation}
+          initialMedia={latestIssueMedia}
+          onCreated={(result) => {
+            useRightPanelStore.getState().openIssue(threadRef, {
+              environmentId: threadRef.environmentId,
+              projectId,
+              pulseProjectId: result.issue.pulseProjectId,
+              issueId: result.issue.id,
+            });
+            setLatestIssueAnnotation(null);
+            setLatestIssueMedia([]);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

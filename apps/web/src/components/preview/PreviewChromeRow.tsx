@@ -2,6 +2,7 @@ import {
   ArrowLeft,
   ArrowRight,
   Camera,
+  CircleDot,
   ExternalLink,
   MousePointerClick,
   PictureInPicture2,
@@ -40,6 +41,9 @@ interface Props {
   onCapture?: ((record: boolean) => void) | undefined;
   captureDisabled?: boolean | undefined;
   recording?: boolean | undefined;
+  onFileIssue?: (() => void) | undefined;
+  fileIssueDisabled?: boolean | undefined;
+  fileIssueDisabledReason?: string | undefined;
   onPictureInPicture?: (() => void) | undefined;
   pictureInPicture?: boolean | undefined;
   pictureInPictureDisabled?: boolean | undefined;
@@ -79,6 +83,9 @@ export function PreviewChromeRow({
   onCapture,
   captureDisabled,
   recording,
+  onFileIssue,
+  fileIssueDisabled,
+  fileIssueDisabledReason,
   onPictureInPicture,
   pictureInPicture,
   pictureInPictureDisabled,
@@ -254,6 +261,29 @@ export function PreviewChromeRow({
                 : pickActive
                   ? "Cancel annotation (Esc)"
                   : "Annotate elements, regions, and drawings"}
+            </TooltipPopup>
+          </Tooltip>
+        ) : null}
+        {onFileIssue ? (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  onClick={onFileIssue}
+                  aria-label="File issue"
+                  type="button"
+                  disabled={fileIssueDisabled}
+                />
+              }
+            >
+              <CircleDot className="text-orange-500" />
+            </TooltipTrigger>
+            <TooltipPopup>
+              {fileIssueDisabled && fileIssueDisabledReason
+                ? fileIssueDisabledReason
+                : "File issue in Pulse"}
             </TooltipPopup>
           </Tooltip>
         ) : null}

@@ -94,6 +94,37 @@ import {
   PullRequestUpdateInput,
 } from "./pullRequest.ts";
 import {
+  Issue,
+  IssueActivityInput,
+  IssueActivityResult,
+  IssueAssigneeListInput,
+  IssueAssigneeListResult,
+  IssueCaptureInput,
+  IssueCaptureResult,
+  IssueConnectionGetInput,
+  IssueConnectionSnapshot,
+  IssueConnectionUpdateInput,
+  IssueCreateFromReportInput,
+  IssueDetailResult,
+  IssueForThreadGetInput,
+  IssueListInput,
+  IssueListResult,
+  IssueOperationError,
+  IssueProjectMappingRemoveInput,
+  IssueProjectMappingSetInput,
+  IssueRef,
+  IssueReport,
+  IssueReportRef,
+  IssueReportsInput,
+  IssueReportsResult,
+  IssueReportUpdateInput,
+  IssueThreadLinkGetInput,
+  IssueThreadLinkRemoveInput,
+  IssueThreadLinkResult,
+  IssueThreadLinkSetInput,
+  IssueUpdateInput,
+} from "./issues.ts";
+import {
   RelayClientInstallFailedError,
   RelayClientInstallProgressEventSchema,
   RelayClientStatusSchema,
@@ -296,6 +327,27 @@ export const WS_METHODS = {
   pullRequestsInvalidate: "pullRequests.invalidate",
   pullRequestsReviewerCandidates: "pullRequests.reviewerCandidates",
   pullRequestsRequestReviewers: "pullRequests.requestReviewers",
+
+  // Native Pulse Issues methods
+  issuesGetConnection: "issues.getConnection",
+  issuesUpdateConnection: "issues.updateConnection",
+  issuesDisconnect: "issues.disconnect",
+  issuesSetProjectMapping: "issues.setProjectMapping",
+  issuesRemoveProjectMapping: "issues.removeProjectMapping",
+  issuesList: "issues.list",
+  issuesDetail: "issues.detail",
+  issuesReports: "issues.reports",
+  issuesReportDetail: "issues.reportDetail",
+  issuesActivity: "issues.activity",
+  issuesAssignees: "issues.assignees",
+  issuesUpdate: "issues.update",
+  issuesUpdateReport: "issues.updateReport",
+  issuesCreateFromReport: "issues.createFromReport",
+  issuesCapture: "issues.capture",
+  issuesGetThreadLink: "issues.getThreadLink",
+  issuesGetForThread: "issues.getForThread",
+  issuesSetThreadLink: "issues.setThreadLink",
+  issuesRemoveThreadLink: "issues.removeThreadLink",
 
   // Source control methods
   sourceControlLookupRepository: "sourceControl.lookupRepository",
@@ -592,6 +644,122 @@ export const WsPullRequestsRequestReviewersRpc = Rpc.make(WS_METHODS.pullRequest
   payload: PullRequestReviewerRequestInput,
   success: Schema.Void,
   error: PullRequestRpcError,
+});
+
+const IssueRpcError = Schema.Union([IssueOperationError, EnvironmentAuthorizationError]);
+
+export const WsIssuesGetConnectionRpc = Rpc.make(WS_METHODS.issuesGetConnection, {
+  payload: IssueConnectionGetInput,
+  success: IssueConnectionSnapshot,
+  error: IssueRpcError,
+});
+
+export const WsIssuesUpdateConnectionRpc = Rpc.make(WS_METHODS.issuesUpdateConnection, {
+  payload: IssueConnectionUpdateInput,
+  success: IssueConnectionSnapshot,
+  error: IssueRpcError,
+});
+
+export const WsIssuesDisconnectRpc = Rpc.make(WS_METHODS.issuesDisconnect, {
+  payload: Schema.Struct({}),
+  success: IssueConnectionSnapshot,
+  error: IssueRpcError,
+});
+
+export const WsIssuesSetProjectMappingRpc = Rpc.make(WS_METHODS.issuesSetProjectMapping, {
+  payload: IssueProjectMappingSetInput,
+  success: IssueConnectionSnapshot,
+  error: IssueRpcError,
+});
+
+export const WsIssuesRemoveProjectMappingRpc = Rpc.make(WS_METHODS.issuesRemoveProjectMapping, {
+  payload: IssueProjectMappingRemoveInput,
+  success: IssueConnectionSnapshot,
+  error: IssueRpcError,
+});
+
+export const WsIssuesListRpc = Rpc.make(WS_METHODS.issuesList, {
+  payload: IssueListInput,
+  success: IssueListResult,
+  error: IssueRpcError,
+});
+
+export const WsIssuesDetailRpc = Rpc.make(WS_METHODS.issuesDetail, {
+  payload: IssueRef,
+  success: IssueDetailResult,
+  error: IssueRpcError,
+});
+
+export const WsIssuesReportsRpc = Rpc.make(WS_METHODS.issuesReports, {
+  payload: IssueReportsInput,
+  success: IssueReportsResult,
+  error: IssueRpcError,
+});
+
+export const WsIssuesReportDetailRpc = Rpc.make(WS_METHODS.issuesReportDetail, {
+  payload: IssueReportRef,
+  success: IssueReport,
+  error: IssueRpcError,
+});
+
+export const WsIssuesActivityRpc = Rpc.make(WS_METHODS.issuesActivity, {
+  payload: IssueActivityInput,
+  success: IssueActivityResult,
+  error: IssueRpcError,
+});
+
+export const WsIssuesAssigneesRpc = Rpc.make(WS_METHODS.issuesAssignees, {
+  payload: IssueAssigneeListInput,
+  success: IssueAssigneeListResult,
+  error: IssueRpcError,
+});
+
+export const WsIssuesUpdateRpc = Rpc.make(WS_METHODS.issuesUpdate, {
+  payload: IssueUpdateInput,
+  success: Issue,
+  error: IssueRpcError,
+});
+
+export const WsIssuesUpdateReportRpc = Rpc.make(WS_METHODS.issuesUpdateReport, {
+  payload: IssueReportUpdateInput,
+  success: IssueReport,
+  error: IssueRpcError,
+});
+
+export const WsIssuesCreateFromReportRpc = Rpc.make(WS_METHODS.issuesCreateFromReport, {
+  payload: IssueCreateFromReportInput,
+  success: Issue,
+  error: IssueRpcError,
+});
+
+export const WsIssuesCaptureRpc = Rpc.make(WS_METHODS.issuesCapture, {
+  payload: IssueCaptureInput,
+  success: IssueCaptureResult,
+  error: IssueRpcError,
+});
+
+export const WsIssuesGetThreadLinkRpc = Rpc.make(WS_METHODS.issuesGetThreadLink, {
+  payload: IssueThreadLinkGetInput,
+  success: IssueThreadLinkResult,
+  error: IssueRpcError,
+});
+
+export const WsIssuesGetForThreadRpc = Rpc.make(WS_METHODS.issuesGetForThread, {
+  payload: IssueForThreadGetInput,
+  success: IssueThreadLinkResult,
+  error: IssueRpcError,
+});
+
+export const WsIssuesSetThreadLinkRpc = Rpc.make(WS_METHODS.issuesSetThreadLink, {
+  payload: IssueThreadLinkSetInput,
+  success: IssueThreadLinkResult,
+  error: IssueRpcError,
+});
+
+export const WsIssuesRemoveThreadLinkRpc = Rpc.make(WS_METHODS.issuesRemoveThreadLink, {
+  payload: IssueThreadLinkRemoveInput,
+  success: IssueThreadLinkResult,
+  error: IssueRpcError,
 });
 
 export const WsSourceControlLookupRepositoryRpc = Rpc.make(
@@ -1023,6 +1191,25 @@ export const WsRpcGroup = RpcGroup.make(
   WsPullRequestsInvalidateRpc,
   WsPullRequestsReviewerCandidatesRpc,
   WsPullRequestsRequestReviewersRpc,
+  WsIssuesGetConnectionRpc,
+  WsIssuesUpdateConnectionRpc,
+  WsIssuesDisconnectRpc,
+  WsIssuesSetProjectMappingRpc,
+  WsIssuesRemoveProjectMappingRpc,
+  WsIssuesListRpc,
+  WsIssuesDetailRpc,
+  WsIssuesReportsRpc,
+  WsIssuesReportDetailRpc,
+  WsIssuesActivityRpc,
+  WsIssuesAssigneesRpc,
+  WsIssuesUpdateRpc,
+  WsIssuesUpdateReportRpc,
+  WsIssuesCreateFromReportRpc,
+  WsIssuesCaptureRpc,
+  WsIssuesGetThreadLinkRpc,
+  WsIssuesGetForThreadRpc,
+  WsIssuesSetThreadLinkRpc,
+  WsIssuesRemoveThreadLinkRpc,
   WsSourceControlLookupRepositoryRpc,
   WsSourceControlCloneRepositoryRpc,
   WsSourceControlPublishRepositoryRpc,

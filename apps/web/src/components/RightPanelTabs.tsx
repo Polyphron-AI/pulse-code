@@ -2,6 +2,7 @@ import type { ContextMenuItem, PreviewSessionSnapshot, PullRequestState } from "
 import { getTerminalLabel } from "@t3tools/shared/terminalLabels";
 import {
   Bot,
+  CircleDot,
   FileDiff,
   Files,
   GitPullRequest,
@@ -64,12 +65,14 @@ interface RightPanelTabsProps {
   onAddDiff: () => void;
   onAddFiles: () => void;
   onAddPullRequest: () => void;
+  onAddIssue: () => void;
   onAddAgents: () => void;
   browserAvailable: boolean;
   terminalAvailable: boolean;
   diffAvailable: boolean;
   filesAvailable: boolean;
   pullRequestAvailable: boolean;
+  issueAvailable: boolean;
   agentsAvailable: boolean;
   pullRequestStatuses?: Readonly<Record<string, PullRequestTabStatus>>;
   /** Running + waiting subagents; badges the Agents card in the empty state. */
@@ -91,6 +94,7 @@ const SURFACE_DISABLED_REASONS = {
   files: "Files are only available when a project is open.",
   diff: "Diff is only available for server threads in Git repositories.",
   pullRequest: "This thread's branch has no pull request yet.",
+  issue: "Issues require a mapped Pulse project.",
   agents: "Agents are only available from a thread.",
 } as const;
 
@@ -113,6 +117,7 @@ const SURFACE_UNAVAILABLE_HINTS = {
   files: "Available when a project is open.",
   diff: "Available for Git repositories.",
   pullRequest: "No pull request on this branch yet.",
+  issue: "Connect and map Pulse in Integrations.",
   agents: "Available from a thread.",
 } as const;
 
@@ -159,12 +164,14 @@ function RightPanelEmptyState(props: {
   onAddDiff: () => void;
   onAddFiles: () => void;
   onAddPullRequest: () => void;
+  onAddIssue: () => void;
   onAddAgents: () => void;
   browserAvailable: boolean;
   terminalAvailable: boolean;
   diffAvailable: boolean;
   filesAvailable: boolean;
   pullRequestAvailable: boolean;
+  issueAvailable: boolean;
   agentsAvailable: boolean;
   liveAgentCount: number;
 }) {
@@ -220,6 +227,16 @@ function RightPanelEmptyState(props: {
       available: props.pullRequestAvailable,
       disabledReason: SURFACE_UNAVAILABLE_HINTS.pullRequest,
       onClick: props.onAddPullRequest,
+      badgeCount: 0,
+    },
+    {
+      label: "Issues",
+      description: "Open this workspace's Pulse Issues.",
+      icon: CircleDot,
+      shortcut: "I",
+      available: props.issueAvailable,
+      disabledReason: SURFACE_UNAVAILABLE_HINTS.issue,
+      onClick: props.onAddIssue,
       badgeCount: 0,
     },
     {
@@ -424,6 +441,8 @@ function surfaceTitle(
       );
     case "pull-request":
       return `#${surface.number}`;
+    case "issue":
+      return surface.issueId;
     case "agents":
       return "Agents";
     case "preview": {
@@ -509,6 +528,8 @@ function SurfaceIcon({
                 : "text-muted-foreground";
       return <GitPullRequest className={cn("size-3 shrink-0", toneClassName)} />;
     }
+    case "issue":
+      return <CircleDot className="size-3 shrink-0 text-orange-500" />;
     case "agents":
       return <Bot className="size-3 shrink-0" />;
   }
@@ -736,6 +757,14 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
                     Pull request
                   </SurfaceMenuItem>
                   <SurfaceMenuItem
+                    available={props.issueAvailable}
+                    disabledReason={SURFACE_DISABLED_REASONS.issue}
+                    onClick={props.onAddIssue}
+                  >
+                    <CircleDot />
+                    Issues
+                  </SurfaceMenuItem>
+                  <SurfaceMenuItem
                     available={props.agentsAvailable}
                     disabledReason={SURFACE_DISABLED_REASONS.agents}
                     onClick={props.onAddAgents}
@@ -758,12 +787,14 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
             onAddDiff={props.onAddDiff}
             onAddFiles={props.onAddFiles}
             onAddPullRequest={props.onAddPullRequest}
+            onAddIssue={props.onAddIssue}
             onAddAgents={props.onAddAgents}
             browserAvailable={props.browserAvailable}
             terminalAvailable={props.terminalAvailable}
             diffAvailable={props.diffAvailable}
             filesAvailable={props.filesAvailable}
             pullRequestAvailable={props.pullRequestAvailable}
+            issueAvailable={props.issueAvailable}
             agentsAvailable={props.agentsAvailable}
             liveAgentCount={props.liveAgentCount}
           />

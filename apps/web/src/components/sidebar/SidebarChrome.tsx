@@ -1,15 +1,17 @@
 import {
   ArrowLeftIcon,
   ChartNoAxesColumnIcon,
+  CircleDotIcon,
   GitPullRequestIcon,
   SettingsIcon,
 } from "lucide-react";
-import { memo, useCallback } from "react";
+import { memo, useCallback, useMemo } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 
 import { useEnvironmentIdentificationMode } from "../../hooks/useSettings";
 import { cn } from "../../lib/utils";
 import { useEnvironments } from "../../state/environments";
+import { useIssueConnections, useIssueList } from "../../state/issues";
 import {
   resolveEnvironmentIdentificationPillLabel,
   resolveSidebarStageBackdropVariant,
@@ -116,9 +118,11 @@ export const SidebarChromeFooter = memo(function SidebarChromeFooter() {
     select: (location) =>
       location.pathname === "/usage"
         ? "usage"
-        : location.pathname === "/pull-requests"
-          ? "pull-requests"
-          : null,
+        : location.pathname === "/issues"
+          ? "issues"
+          : location.pathname === "/pull-requests"
+            ? "pull-requests"
+            : null,
   });
   const { environments } = useEnvironments();
   // The page reads every connected server, so one of them offering pull requests is enough for
@@ -126,6 +130,37 @@ export const SidebarChromeFooter = memo(function SidebarChromeFooter() {
   const pullRequestsSupported = environments.some(
     (environment) => environment.serverConfig?.environment.capabilities.pullRequests === true,
   );
+  const issuesSupported = environments.some(
+    (environment) => environment.serverConfig?.environment.capabilities.issues === true,
+  );
+  const issueEnvironmentIds = useMemo(
+    () =>
+      environments.flatMap((environment) =>
+        environment.serverConfig?.environment.capabilities.issues === true
+          ? [environment.environmentId]
+          : [],
+      ),
+    [environments],
+  );
+  const issueConnections = useIssueConnections(issueEnvironmentIds);
+  const triageTargets = useMemo(
+    () =>
+      issueConnections.values.flatMap(([target, snapshot]) =>
+        snapshot.status === "connected"
+          ? snapshot.mappings.map((mapping) => ({
+              environmentId: target.environmentId,
+              input: {
+                projectId: mapping.projectId,
+                status: "triage" as const,
+                limit: 1,
+                offset: 0,
+              },
+            }))
+          : [],
+      ),
+    [issueConnections.values],
+  );
+  const triageIssues = useIssueList(triageTargets);
   const closeMobileSidebar = useCallback(() => {
     if (isMobile) {
       setOpenMobile(false);
@@ -134,6 +169,10 @@ export const SidebarChromeFooter = memo(function SidebarChromeFooter() {
   const handlePullRequestsClick = useCallback(() => {
     closeMobileSidebar();
     void navigate({ to: "/pull-requests", search: { involvement: "all", state: "open" } });
+  }, [closeMobileSidebar, navigate]);
+  const handleIssuesClick = useCallback(() => {
+    closeMobileSidebar();
+    void navigate({ to: "/issues", search: { limit: 50 } });
   }, [closeMobileSidebar, navigate]);
   const handleSettingsClick = useCallback(() => {
     closeMobileSidebar();
@@ -197,6 +236,32 @@ export const SidebarChromeFooter = memo(function SidebarChromeFooter() {
                     }
                   />
                   <TooltipPopup side="top">Pull Requests</TooltipPopup>
+                </Tooltip>
+              </SidebarMenuItem>
+            ) : null}
+            {issuesSupported ? (
+              <SidebarMenuItem className="shrink-0">
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <SidebarMenuButton
+                        aria-label="Issues"
+                        onClick={handleIssuesClick}
+                        size="icon"
+                      >
+                        <CircleDotIcon className="text-orange-500" />
+                        {triageIssues.total > 0 ? (
+                          <Badge
+                            className="absolute -top-1 -right-1 h-4 min-w-4 rounded-full px-1 text-[9px]"
+                            variant="warning"
+                          >
+                            {triageIssues.total > 99 ? "99+" : triageIssues.total}
+                          </Badge>
+                        ) : null}
+                      </SidebarMenuButton>
+                    }
+                  />
+                  <TooltipPopup side="top">Issues</TooltipPopup>
                 </Tooltip>
               </SidebarMenuItem>
             ) : null}

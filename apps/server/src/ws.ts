@@ -109,6 +109,7 @@ import * as ResourceTelemetry from "./resourceTelemetry/ResourceTelemetry.ts";
 import * as UsageService from "./usage/UsageService.ts";
 import * as TraceDiagnostics from "./diagnostics/TraceDiagnostics.ts";
 import * as PullRequestService from "./pullRequest/PullRequestService.ts";
+import * as IssuesService from "./issues/IssuesService.ts";
 import * as SourceControlDiscovery from "./sourceControl/SourceControlDiscovery.ts";
 import * as SourceControlRepositoryService from "./sourceControl/SourceControlRepositoryService.ts";
 import * as AzureDevOpsCli from "./sourceControl/AzureDevOpsCli.ts";
@@ -412,6 +413,7 @@ const makeWsRpcLayer = (
       const sourceControlRepositories =
         yield* SourceControlRepositoryService.SourceControlRepositoryService;
       const pullRequests = yield* PullRequestService.PullRequestService;
+      const issues = yield* IssuesService.IssuesService;
       const bootstrapCredentials = yield* PairingGrantStore.PairingGrantStore;
       const sessions = yield* SessionStore.SessionStore;
       const processDiagnostics = yield* ProcessDiagnostics.ProcessDiagnostics;
@@ -1729,6 +1731,84 @@ const makeWsRpcLayer = (
             pullRequests.requestReviewers(input),
             { "rpc.aggregate": "pull-requests" },
           ),
+        [WS_METHODS.issuesGetConnection]: (_input) =>
+          observeRpcEffect(WS_METHODS.issuesGetConnection, issues.getConnection(), {
+            "rpc.aggregate": "issues",
+          }),
+        [WS_METHODS.issuesUpdateConnection]: (input) =>
+          observeRpcEffect(WS_METHODS.issuesUpdateConnection, issues.updateConnection(input), {
+            "rpc.aggregate": "issues",
+          }),
+        [WS_METHODS.issuesDisconnect]: (_input) =>
+          observeRpcEffect(WS_METHODS.issuesDisconnect, issues.disconnect(), {
+            "rpc.aggregate": "issues",
+          }),
+        [WS_METHODS.issuesSetProjectMapping]: (input) =>
+          observeRpcEffect(WS_METHODS.issuesSetProjectMapping, issues.setProjectMapping(input), {
+            "rpc.aggregate": "issues",
+          }),
+        [WS_METHODS.issuesRemoveProjectMapping]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.issuesRemoveProjectMapping,
+            issues.removeProjectMapping(input),
+            { "rpc.aggregate": "issues" },
+          ),
+        [WS_METHODS.issuesList]: (input) =>
+          observeRpcEffect(WS_METHODS.issuesList, issues.list(input), {
+            "rpc.aggregate": "issues",
+          }),
+        [WS_METHODS.issuesDetail]: (input) =>
+          observeRpcEffect(WS_METHODS.issuesDetail, issues.detail(input), {
+            "rpc.aggregate": "issues",
+          }),
+        [WS_METHODS.issuesReports]: (input) =>
+          observeRpcEffect(WS_METHODS.issuesReports, issues.reports(input), {
+            "rpc.aggregate": "issues",
+          }),
+        [WS_METHODS.issuesReportDetail]: (input) =>
+          observeRpcEffect(WS_METHODS.issuesReportDetail, issues.reportDetail(input), {
+            "rpc.aggregate": "issues",
+          }),
+        [WS_METHODS.issuesActivity]: (input) =>
+          observeRpcEffect(WS_METHODS.issuesActivity, issues.activity(input), {
+            "rpc.aggregate": "issues",
+          }),
+        [WS_METHODS.issuesAssignees]: (input) =>
+          observeRpcEffect(WS_METHODS.issuesAssignees, issues.assignees(input), {
+            "rpc.aggregate": "issues",
+          }),
+        [WS_METHODS.issuesUpdate]: (input) =>
+          observeRpcEffect(WS_METHODS.issuesUpdate, issues.update(input), {
+            "rpc.aggregate": "issues",
+          }),
+        [WS_METHODS.issuesUpdateReport]: (input) =>
+          observeRpcEffect(WS_METHODS.issuesUpdateReport, issues.updateReport(input), {
+            "rpc.aggregate": "issues",
+          }),
+        [WS_METHODS.issuesCreateFromReport]: (input) =>
+          observeRpcEffect(WS_METHODS.issuesCreateFromReport, issues.createFromReport(input), {
+            "rpc.aggregate": "issues",
+          }),
+        [WS_METHODS.issuesCapture]: (input) =>
+          observeRpcEffect(WS_METHODS.issuesCapture, issues.capture(input), {
+            "rpc.aggregate": "issues",
+          }),
+        [WS_METHODS.issuesGetThreadLink]: (input) =>
+          observeRpcEffect(WS_METHODS.issuesGetThreadLink, issues.getThreadLink(input), {
+            "rpc.aggregate": "issues",
+          }),
+        [WS_METHODS.issuesGetForThread]: (input) =>
+          observeRpcEffect(WS_METHODS.issuesGetForThread, issues.getForThread(input), {
+            "rpc.aggregate": "issues",
+          }),
+        [WS_METHODS.issuesSetThreadLink]: (input) =>
+          observeRpcEffect(WS_METHODS.issuesSetThreadLink, issues.setThreadLink(input), {
+            "rpc.aggregate": "issues",
+          }),
+        [WS_METHODS.issuesRemoveThreadLink]: (input) =>
+          observeRpcEffect(WS_METHODS.issuesRemoveThreadLink, issues.removeThreadLink(input), {
+            "rpc.aggregate": "issues",
+          }),
         [WS_METHODS.sourceControlLookupRepository]: (input) =>
           observeRpcEffect(
             WS_METHODS.sourceControlLookupRepository,
@@ -2303,6 +2383,7 @@ export const websocketRpcRouteLayer = Layer.unwrap(
     const previewAutomationBroker = yield* PreviewAutomationBroker.PreviewAutomationBroker;
     const serverSelfUpdate = yield* ServerSelfUpdate.ServerSelfUpdate;
     const pullRequests = yield* PullRequestService.PullRequestService;
+    const issues = yield* IssuesService.IssuesService;
     return HttpRouter.add(
       "GET",
       "/ws",
@@ -2329,6 +2410,7 @@ export const websocketRpcRouteLayer = Layer.unwrap(
               // One server-lifetime service means clients share the same PR caches, and a WS
               // mutation invalidates the HTTP diff cache that every client reads from.
               Layer.provide(Layer.succeed(PullRequestService.PullRequestService, pullRequests)),
+              Layer.provide(Layer.succeed(IssuesService.IssuesService, issues)),
               Layer.provide(
                 SourceControlDiscovery.layer.pipe(
                   Layer.provide(

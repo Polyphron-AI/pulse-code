@@ -3,6 +3,7 @@ import { type EnvironmentId, ThreadId } from "@t3tools/contracts";
 import { beforeEach, describe, expect, it } from "vite-plus/test";
 
 import {
+  issueSurfaceId,
   migratePersistedRightPanelState,
   pullRequestSurfaceId,
   selectActiveRightPanel,
@@ -171,6 +172,67 @@ describe("rightPanelStore", () => {
       migratePersistedRightPanelState({
         byThreadKey: {
           "env-1:pull-requests-panel": panelState,
+          "env-1:thread-A": panelState,
+        },
+      }),
+    ).toEqual({ byThreadKey: { "env-1:thread-A": panelState } });
+  });
+
+  it("restores valid Issue references and drops malformed ones", () => {
+    const target = {
+      environmentId: "env-1",
+      projectId: "project-a",
+      pulseProjectId: "pulse-project-a",
+      issueId: "ticket-42",
+    };
+    const id = issueSurfaceId(target);
+    expect(
+      migratePersistedRightPanelState({
+        byThreadKey: {
+          "env-1:thread-A": {
+            isOpen: true,
+            activeSurfaceId: id,
+            surfaces: [
+              { id: "issue:stale", kind: "issue", ...target },
+              {
+                id: "issue:malformed",
+                kind: "issue",
+                environmentId: "env-1",
+                projectId: "project-a",
+                pulseProjectId: "",
+                issueId: "ticket-43",
+              },
+            ],
+          },
+        },
+      }),
+    ).toEqual({
+      byThreadKey: {
+        "env-1:thread-A": {
+          isOpen: true,
+          activeSurfaceId: id,
+          surfaces: [{ id, kind: "issue", ...target }],
+        },
+      },
+    });
+  });
+
+  it("drops the Issues list's shared panel so a restart opens the page fresh", () => {
+    const target = {
+      environmentId: "env-1",
+      projectId: "project-a",
+      pulseProjectId: "pulse-project-a",
+      issueId: "ticket-42",
+    };
+    const panelState = {
+      isOpen: true,
+      activeSurfaceId: issueSurfaceId(target),
+      surfaces: [{ id: issueSurfaceId(target), kind: "issue" as const, ...target }],
+    };
+    expect(
+      migratePersistedRightPanelState({
+        byThreadKey: {
+          "issues-panel:issues-panel": panelState,
           "env-1:thread-A": panelState,
         },
       }),
@@ -436,6 +498,46 @@ describe("rightPanelStore", () => {
     expect(state.surfaces.map((surface) => surface.id)).toEqual([
       pullRequestSurfaceId(local),
       pullRequestSurfaceId(remote),
+    ]);
+  });
+
+  it("tracks several Issues as peer tabs and activates an existing Issue in place", () => {
+    const first = {
+      environmentId: "env-1",
+      projectId: "project-a",
+      pulseProjectId: "pulse-project-a",
+      issueId: "ticket-42",
+    };
+    const second = { ...first, issueId: "ticket-43" };
+
+    useRightPanelStore.getState().openIssue(refA, first);
+    useRightPanelStore.getState().openIssue(refA, second);
+    useRightPanelStore.getState().openIssue(refA, first);
+
+    const state = selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA);
+    expect(state.surfaces.map((surface) => surface.id)).toEqual([
+      issueSurfaceId(first),
+      issueSurfaceId(second),
+    ]);
+    expect(state.activeSurfaceId).toBe(issueSurfaceId(first));
+  });
+
+  it("keeps the same Pulse Issue from two servers as two tabs", () => {
+    const local = {
+      environmentId: "local",
+      projectId: "project-a",
+      pulseProjectId: "pulse-project-a",
+      issueId: "ticket-42",
+    };
+    const remote = { ...local, environmentId: "remote" };
+
+    useRightPanelStore.getState().openIssue(refA, local);
+    useRightPanelStore.getState().openIssue(refA, remote);
+
+    const state = selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA);
+    expect(state.surfaces.map((surface) => surface.id)).toEqual([
+      issueSurfaceId(local),
+      issueSurfaceId(remote),
     ]);
   });
 

@@ -21,6 +21,7 @@ export const RIGHT_PANEL_KINDS = [
   "preview",
   "terminal",
   "pull-request",
+  "issue",
   "agents",
 ] as const;
 export type RightPanelKind = (typeof RIGHT_PANEL_KINDS)[number];
@@ -62,19 +63,33 @@ export type RightPanelSurface =
       repository: string;
       number: number;
     }
+  | {
+      /** A Pulse Issue opened as a peer referenced tab beside a thread or the Issues list. */
+      id: `issue:${string}`;
+      kind: "issue";
+      environmentId: string;
+      /** Pulse Code's local workspace/project id used to route RPC calls. */
+      projectId: string;
+      pulseProjectId: string;
+      issueId: string;
+    }
   | { id: "agents"; kind: "agents" };
 
 const RIGHT_PANEL_STORAGE_KEY = "t3code:right-panel-state:v2";
 // v9 removed the "plan" surface kind (plans render inline in the transcript).
 // v10 keys pull-request surfaces by reference instead of a singleton tab.
 // v11 stops persisting the pull-request list's shared panel, so a restart opens the page fresh.
-const RIGHT_PANEL_STORAGE_VERSION = 11;
+// v12 adds reference-keyed Issue surfaces and keeps the Issues list's shared panel session-only.
+const RIGHT_PANEL_STORAGE_VERSION = 12;
 
 /**
  * The pull-request list's shared panel (see PULL_REQUESTS_PANEL_ID in the route) is session
  * state: reopening the app should show the list, not last session's tabs and detail fetches.
  */
 const isPullRequestsPanelKey = (threadKey: string) => threadKey.endsWith(":pull-requests-panel");
+const isIssuesPanelKey = (threadKey: string) => threadKey.endsWith(":issues-panel");
+const isSharedWorkspacePanelKey = (threadKey: string) =>
+  isPullRequestsPanelKey(threadKey) || isIssuesPanelKey(threadKey);
 
 export interface ThreadRightPanelState {
   isOpen: boolean;
@@ -86,13 +101,22 @@ interface RightPanelStoreState {
   byThreadKey: Record<string, ThreadRightPanelState>;
   open: (
     ref: ScopedThreadRef,
-    kind: Exclude<RightPanelKind, "file" | "terminal" | "pull-request">,
+    kind: Exclude<RightPanelKind, "file" | "terminal" | "pull-request" | "issue">,
   ) => void;
   openBrowser: (ref: ScopedThreadRef, tabId: string | null) => void;
   openFile: (ref: ScopedThreadRef, relativePath: string, line?: number) => void;
   openPullRequest: (
     ref: ScopedThreadRef,
     target: { environmentId?: string; projectId: string; repository: string; number: number },
+  ) => void;
+  openIssue: (
+    ref: ScopedThreadRef,
+    target: {
+      environmentId: string;
+      projectId: string;
+      pulseProjectId: string;
+      issueId: string;
+    },
   ) => void;
   openTerminal: (ref: ScopedThreadRef, terminalId: string) => void;
   splitTerminal: (
@@ -115,7 +139,7 @@ interface RightPanelStoreState {
   toggleVisibility: (ref: ScopedThreadRef) => void;
   toggle: (
     ref: ScopedThreadRef,
-    kind: Exclude<RightPanelKind, "file" | "terminal" | "pull-request">,
+    kind: Exclude<RightPanelKind, "file" | "terminal" | "pull-request" | "issue">,
   ) => void;
   removeThread: (ref: ScopedThreadRef) => void;
 }
@@ -127,7 +151,7 @@ const EMPTY_THREAD_STATE: ThreadRightPanelState = {
 };
 
 const singletonSurface = (
-  kind: Exclude<RightPanelKind, "file" | "preview" | "terminal" | "pull-request">,
+  kind: Exclude<RightPanelKind, "file" | "preview" | "terminal" | "pull-request" | "issue">,
 ): RightPanelSurface => {
   switch (kind) {
     case "diff":
@@ -195,6 +219,32 @@ export function pullRequestSurface(target: {
   };
 }
 
+export type IssueSurface = Extract<RightPanelSurface, { kind: "issue" }>;
+
+export function issueSurfaceId(target: {
+  environmentId: string;
+  pulseProjectId: string;
+  issueId: string;
+}): IssueSurface["id"] {
+  return `issue:${encodeURIComponent(target.environmentId)}:${encodeURIComponent(target.pulseProjectId)}:${encodeURIComponent(target.issueId)}`;
+}
+
+export function issueSurface(target: {
+  environmentId: string;
+  projectId: string;
+  pulseProjectId: string;
+  issueId: string;
+}): IssueSurface {
+  return {
+    id: issueSurfaceId(target),
+    kind: "issue",
+    environmentId: target.environmentId,
+    projectId: target.projectId,
+    pulseProjectId: target.pulseProjectId,
+    issueId: target.issueId,
+  };
+}
+
 /**
  * A pull-request tab's status map with one entry set. Keyed by the surface the panel is showing
  * rather than by a key rebuilt from the status, so the tab is found again whether or not that
@@ -257,7 +307,7 @@ export function migratePersistedRightPanelState(persistedState: unknown): {
     typeof persistedState.byThreadKey === "object"
       ? Object.fromEntries(
           Object.entries(persistedState.byThreadKey as Record<string, ThreadRightPanelState>)
-            .filter(([threadKey]) => !isPullRequestsPanelKey(threadKey))
+            .filter(([threadKey]) => !isSharedWorkspacePanelKey(threadKey))
             .map(([threadKey, threadState]) => {
               const validThreadState =
                 threadState && typeof threadState === "object" ? threadState : null;
@@ -296,6 +346,29 @@ export function migratePersistedRightPanelState(persistedState: unknown): {
                         pullRequestSurface({
                           ...rest,
                           ...(typeof environmentId === "string" ? { environmentId } : {}),
+                        }),
+                      ];
+                    }
+                    if ((surface as { kind?: string }).kind === "issue") {
+                      const candidate = surface as Partial<IssueSurface>;
+                      if (
+                        typeof candidate.environmentId !== "string" ||
+                        candidate.environmentId.trim() === "" ||
+                        typeof candidate.projectId !== "string" ||
+                        candidate.projectId.trim() === "" ||
+                        typeof candidate.pulseProjectId !== "string" ||
+                        candidate.pulseProjectId.trim() === "" ||
+                        typeof candidate.issueId !== "string" ||
+                        candidate.issueId.trim() === ""
+                      ) {
+                        return [];
+                      }
+                      return [
+                        issueSurface({
+                          environmentId: candidate.environmentId,
+                          projectId: candidate.projectId,
+                          pulseProjectId: candidate.pulseProjectId,
+                          issueId: candidate.issueId,
                         }),
                       ];
                     }
@@ -388,6 +461,12 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
         set((state) => ({
           byThreadKey: updateThread(state.byThreadKey, scopedThreadKey(ref), (current) => {
             return upsertSurface(current, pullRequestSurface(target));
+          }),
+        })),
+      openIssue: (ref, target) =>
+        set((state) => ({
+          byThreadKey: updateThread(state.byThreadKey, scopedThreadKey(ref), (current) => {
+            return upsertSurface(current, issueSurface(target));
           }),
         })),
       openFile: (ref, relativePath, line) =>
@@ -661,7 +740,7 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
       partialize: (state) => ({
         byThreadKey: Object.fromEntries(
           Object.entries(state.byThreadKey).filter(
-            ([threadKey]) => !isPullRequestsPanelKey(threadKey),
+            ([threadKey]) => !isSharedWorkspacePanelKey(threadKey),
           ),
         ),
       }),

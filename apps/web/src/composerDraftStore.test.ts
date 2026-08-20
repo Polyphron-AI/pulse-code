@@ -8,7 +8,9 @@ import * as Schema from "effect/Schema";
 import {
   defaultInstanceIdForDriver,
   EnvironmentId,
+  IssueId,
   ProjectId,
+  PulseProjectId,
   ProviderDriverKind,
   ProviderInstanceId,
   ThreadId,
@@ -66,6 +68,7 @@ import {
   markPromotedDraftThreads,
   markPromotedDraftThreadsByRef,
   type ComposerImageAttachment,
+  composerDraftHasUserContent,
   useComposerDraftStore,
   DraftId,
 } from "./composerDraftStore";
@@ -170,6 +173,42 @@ function draftFor(threadId: ThreadId, environmentId: EnvironmentId = LEGACY_TEST
 function draftByKey(key: string) {
   return useComposerDraftStore.getState().draftsByThreadKey[key] ?? undefined;
 }
+
+describe("composerDraftStore Issue context", () => {
+  beforeEach(resetComposerDraftStore);
+
+  it("keeps a pending Issue link through composer clearing until linking succeeds", () => {
+    const draftId = DraftId.make("draft-issue-fix");
+    const threadId = ThreadId.make("thread-issue-fix");
+    const projectId = ProjectId.make("project-a");
+    useComposerDraftStore
+      .getState()
+      .setProjectDraftThreadId(scopeProjectRef(TEST_ENVIRONMENT_ID, projectId), draftId, {
+        threadId,
+      });
+    useComposerDraftStore.getState().setIssueContext(draftId, {
+      environmentId: TEST_ENVIRONMENT_ID,
+      projectId,
+      pulseProjectId: PulseProjectId.make("pulse-project-a"),
+      issueId: IssueId.make("ticket-42"),
+      ref: "ISS-42",
+      title: "Checkout total is stale",
+      status: "triage",
+      severity: "high",
+    });
+
+    expect(
+      composerDraftHasUserContent(useComposerDraftStore.getState().getComposerDraft(draftId)),
+    ).toBe(true);
+    useComposerDraftStore.getState().clearComposerContent(draftId);
+    expect(useComposerDraftStore.getState().getComposerDraft(draftId)?.issueContext?.issueId).toBe(
+      "ticket-42",
+    );
+
+    useComposerDraftStore.getState().setIssueContext(draftId, null);
+    expect(useComposerDraftStore.getState().getComposerDraft(draftId)).toBeNull();
+  });
+});
 
 describe("composerDraftStore addImages", () => {
   const threadId = ThreadId.make("thread-dedupe");
