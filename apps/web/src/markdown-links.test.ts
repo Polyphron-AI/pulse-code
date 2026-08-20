@@ -1,11 +1,20 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  extractMarkdownLinkHrefs,
   resolveInlineCodeFileLinkMeta,
   resolveMarkdownFileLinkMeta,
   resolveMarkdownFileLinkTarget,
   rewriteMarkdownFileUriHref,
 } from "./markdown-links";
+
+describe("extractMarkdownLinkHrefs", () => {
+  it("extracts angle-bracketed Windows file links whose paths contain spaces", () => {
+    const href = "<F:/Dev Ops/T3/Pulse Code/docs/internals/integrations-platform.md>";
+
+    expect(extractMarkdownLinkHrefs(`- [Platform architecture](${href})`)).toEqual([href]);
+  });
+});
 
 describe("rewriteMarkdownFileUriHref", () => {
   it("rewrites file uri hrefs into direct path hrefs", () => {
@@ -122,6 +131,17 @@ describe("resolveMarkdownFileLinkTarget", () => {
         "</D:/Programme/t3code/apps/web/src/components/ChatMarkdown.tsx:1>",
       ),
     ).toBe("D:/Programme/t3code/apps/web/src/components/ChatMarkdown.tsx:1");
+  });
+
+  it("canonicalizes raw and encoded Windows paths containing spaces", () => {
+    const target = "F:/Dev Ops/T3/Pulse Code/docs/internals/integrations-platform.md";
+
+    expect(resolveMarkdownFileLinkTarget(`<${target}>`)).toBe(target);
+    expect(
+      resolveMarkdownFileLinkTarget(
+        "F:/Dev%20Ops/T3/Pulse%20Code/docs/internals/integrations-platform.md",
+      ),
+    ).toBe(target);
   });
 
   it("does not treat app routes as file links", () => {

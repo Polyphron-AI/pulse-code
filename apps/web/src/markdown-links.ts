@@ -1,6 +1,8 @@
 import { formatWorkspaceRelativePath } from "./filePathDisplay";
 import { resolvePathLinkTarget, splitPathAndPosition } from "./terminal-links";
 
+const MARKDOWN_LINK_HREF_PATTERN =
+  /\[[^\]]*]\(\s*(<[^>\r\n]+>|[^)\s]+)(?:\s+["'][^"']*["'])?\s*\)/g;
 const WINDOWS_DRIVE_PATH_PATTERN = /^[A-Za-z]:[\\/]/;
 const WINDOWS_UNC_PATH_PATTERN = /^\\\\/;
 const EXTERNAL_SCHEME_PATTERN = /^([A-Za-z][A-Za-z0-9+.-]*):(.*)$/;
@@ -62,6 +64,16 @@ function unwrapMarkdownLinkDestination(value: string): string {
 
 export function normalizeMarkdownLinkDestination(value: string): string {
   return unwrapMarkdownLinkDestination(value.trim());
+}
+
+export function extractMarkdownLinkHrefs(text: string): string[] {
+  const hrefs: string[] = [];
+  for (const match of text.matchAll(MARKDOWN_LINK_HREF_PATTERN)) {
+    const href = match[1]?.trim();
+    if (!href) continue;
+    hrefs.push(href);
+  }
+  return hrefs;
 }
 
 function stripSearchAndHash(value: string): { path: string; hash: string } {
