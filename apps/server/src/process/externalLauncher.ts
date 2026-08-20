@@ -12,6 +12,7 @@ import {
   ExternalLauncherBrowserSpawnError,
   ExternalLauncherCommandNotFoundError,
   ExternalLauncherEditorSpawnError,
+  ExternalLauncherInvalidBrowserTargetError,
   ExternalLauncherUnknownEditorError,
   ExternalLauncherUnsupportedEditorError,
   type EditorId,
@@ -41,6 +42,7 @@ export {
   ExternalLauncherBrowserSpawnError,
   ExternalLauncherCommandNotFoundError,
   ExternalLauncherEditorSpawnError,
+  ExternalLauncherInvalidBrowserTargetError,
   ExternalLauncherUnknownEditorError,
   ExternalLauncherUnsupportedEditorError,
   isExternalLauncherError,
@@ -204,6 +206,15 @@ function shouldUseWindowsBrowserFromWsl(
     env.SSH_TTY === undefined &&
     env.container === undefined
   );
+}
+
+function isSafeBrowserTarget(target: string): boolean {
+  try {
+    const url = new URL(target);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
 }
 
 function resolveWindowsBrowserLaunch(target: string, command: string): ProcessLaunch {
@@ -402,6 +413,10 @@ const launchAndUnref = Effect.fn("externalLauncher.launchAndUnref")(function* (
 const launchBrowser = Effect.fn("externalLauncher.launchBrowser")(function* (
   target: string,
 ): Effect.fn.Return<void, ExternalLauncherError, ChildProcessSpawner.ChildProcessSpawner> {
+  if (!isSafeBrowserTarget(target)) {
+    return yield* new ExternalLauncherInvalidBrowserTargetError({ target });
+  }
+
   const launch = yield* resolveBrowserLaunch(target);
   return yield* launchAndUnref(
     launch,
