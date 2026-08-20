@@ -157,6 +157,17 @@ export class ExternalLauncherCommandNotFoundError extends Schema.TaggedErrorClas
   }
 }
 
+export class ExternalLauncherInvalidBrowserTargetError extends Schema.TaggedErrorClass<ExternalLauncherInvalidBrowserTargetError>()(
+  "ExternalLauncherInvalidBrowserTargetError",
+  {
+    target: Schema.String,
+  },
+) {
+  override get message(): string {
+    return `Invalid browser target: ${this.target}. Only HTTP(S) URLs can be opened.`;
+  }
+}
+
 const ExternalLauncherSpawnFields = {
   command: Schema.String,
   args: Schema.Array(Schema.String),
@@ -192,6 +203,7 @@ export const ExternalLauncherError = Schema.Union([
   ExternalLauncherUnknownEditorError,
   ExternalLauncherUnsupportedEditorError,
   ExternalLauncherCommandNotFoundError,
+  ExternalLauncherInvalidBrowserTargetError,
   ExternalLauncherBrowserSpawnError,
   ExternalLauncherEditorSpawnError,
 ]);

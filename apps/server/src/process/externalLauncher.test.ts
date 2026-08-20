@@ -94,6 +94,27 @@ it.effect("launches the default browser through the platform command", () => {
   );
 });
 
+it.effect("rejects a bare browser target before Windows can shell-open it", () => {
+  let didSpawn = false;
+  return Effect.gen(function* () {
+    const launcher = yield* ExternalLauncher.ExternalLauncher;
+    const error = yield* launcher.launchBrowser("oxfmt").pipe(Effect.flip);
+
+    assert.instanceOf(error, ExternalLauncher.ExternalLauncherInvalidBrowserTargetError);
+    assert.equal(error.target, "oxfmt");
+    assert.equal(didSpawn, false);
+  }).pipe(
+    Effect.provide(
+      testLayer({
+        platform: "win32",
+        onSpawn: () => {
+          didSpawn = true;
+        },
+      }),
+    ),
+  );
+});
+
 it.effect("launches an installed editor with platform-safe arguments", () =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
