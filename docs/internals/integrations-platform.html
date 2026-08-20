@@ -1,0 +1,412 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Desktop architecture view of the Pulse Code server-owned integrations platform."
+    />
+    <title>Architecture — Pulse integrations</title>
+    <link rel="stylesheet" href="./pulse-integrations-site.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <a class="brand" href="./pulse-integrations-decision.html">
+          <span class="brand-mark" aria-hidden="true">P×P</span>
+          Pulse integrations
+        </a>
+        <nav class="site-nav" aria-label="Pulse integrations pages">
+          <a href="./pulse-integrations-decision.html">Decision map</a>
+          <a href="./integrations-platform.html" aria-current="page">Architecture</a>
+          <a href="./integrations-compatibility-matrix.html">Compatibility</a>
+          <a href="./integrations-secret-review.html">Secret review</a>
+          <a href="./pulse-integrations-decisions.html">Decision register</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="page">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Architecture · verified, unreleased</p>
+          <h1>One owning server. Many capable clients.</h1>
+          <p class="lede">
+            Pulse Code stores the Pulse credential once per environment, calls the provider from
+            that server, and gives web, desktop, mobile, and agents only the normalized context they
+            are authorized to use.
+          </p>
+        </div>
+        <aside class="hero-aside" aria-label="Architecture status">
+          <div class="signal pass">
+            <span class="meta">Walking skeleton</span>
+            <strong>Implemented and verified in the current worktree</strong>
+          </div>
+          <div class="signal hold">
+            <span class="meta">Release posture</span>
+            <strong>OAuth held; personal access token remains the reference path</strong>
+          </div>
+        </aside>
+      </header>
+
+      <div class="workspace">
+        <nav class="toc" aria-label="On this page">
+          <span class="nav-label">On this page</span>
+          <a href="#model">System model</a>
+          <a href="#layers">Architecture layers</a>
+          <a href="#transport">Typed transport</a>
+          <a href="#receipts">Verification</a>
+          <a href="#release">Release gates</a>
+        </nav>
+
+        <div class="content">
+          <section class="section" id="model">
+            <div class="section-head">
+              <div>
+                <p class="section-kicker">System model</p>
+                <h2>“Sign in once” is environment-owned</h2>
+              </div>
+              <p>
+                It is a durable server connection, not a shared browser cookie or a global account
+                link.
+              </p>
+            </div>
+
+            <div class="diagram-frame" aria-label="Pulse integrations architecture diagram">
+              <pre class="mermaid">
+flowchart LR
+  USER["USER<br/>Submit endpoint + PAT once"]:::intent
+  SERVER["OWNING PULSE CODE SERVER<br/>Environment-scoped authority"]:::owner
+  STORE["ServerSecretStore<br/>Credential bytes"]:::secret
+  STATE["Integration records<br/>Secret reference + mapping"]:::state
+  PULSE["PULSE<br/>Issues · Reports · Projects"]:::provider
+  RPC["7 TYPED RPC METHODS<br/>Credential-free snapshots"]:::transport
+  WEB["Web / desktop"]:::client
+  MOBILE["Mobile"]:::client
+  AGENT["Bounded agent context"]:::client
+
+  USER -->|"authenticated environment connection"| SERVER
+  SERVER --> STORE
+  SERVER --> STATE
+  SERVER -->|"provider API"| PULSE
+  SERVER --> RPC
+  RPC --> WEB & MOBILE & AGENT
+
+  classDef intent fill:#00639b,color:#fff,stroke:#004b76,stroke-width:2px;
+  classDef owner fill:#0c1f2e,color:#fff,stroke:#0c1f2e,stroke-width:3px;
+  classDef secret fill:#f8ead8,color:#6f3b0e,stroke:#ad651c,stroke-width:2px;
+  classDef state fill:#eeeafd,color:#302b68,stroke:#7565c7,stroke-width:2px;
+  classDef provider fill:#daf1e9,color:#0a4f40,stroke:#197661,stroke-width:2px;
+  classDef transport fill:#edf5f8,color:#0c1f2e,stroke:#00639b,stroke-width:2px;
+  classDef client fill:#fff,color:#0c1f2e,stroke:#9eb1bc,stroke-width:1.5px;
+              </pre>
+            </div>
+
+            <div class="metric-grid" style="margin-top: 14px">
+              <div class="metric">
+                <strong>1×</strong>
+                <span>Setup per independent Pulse Code server environment</span>
+              </div>
+              <div class="metric">
+                <strong>7</strong>
+                <span>Additive, typed <code>integrations.*</code> methods</span>
+              </div>
+              <div class="metric">
+                <strong>0</strong>
+                <span>Provider credentials in shared RPC inputs or outputs</span>
+              </div>
+              <div class="metric">
+                <strong>3+</strong>
+                <span>Client surfaces can read the same permitted connection</span>
+              </div>
+            </div>
+
+            <div class="callout" style="margin-top: 14px">
+              <strong>Boundary:</strong> a second independent Pulse Code server must be configured
+              separately. User-owned versus environment-admin-owned connections on shared servers
+              remains an explicit product decision.
+            </div>
+          </section>
+
+          <section class="section" id="layers">
+            <div class="section-head">
+              <div>
+                <p class="section-kicker">Ownership map</p>
+                <h2>Six layers, one narrow shared seam</h2>
+              </div>
+              <p>
+                The shared layer owns lifecycle behavior. Provider resource semantics stay in their
+                native domains.
+              </p>
+            </div>
+
+            <div class="table-frame">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Layer</th>
+                    <th>Owning code</th>
+                    <th>Responsibility</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><strong>Domain contracts</strong></td>
+                    <td>
+                      <code>packages/contracts/src/integrations.ts</code><br /><code
+                        >integrationContext.ts</code
+                      >
+                    </td>
+                    <td>
+                      Credential-free snapshots, mappings, health, provenance, preview,
+                      confirmation, receipts, and stable errors.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><strong>Native reference domain</strong></td>
+                    <td><code>apps/server/src/issues/</code></td>
+                    <td>
+                      Pulse connection setup, Issue/Report/project semantics, evidence bounds, and
+                      durable fix-thread links.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><strong>Shared lifecycle</strong></td>
+                    <td><code>apps/server/src/integrations/</code></td>
+                    <td>
+                      Additive connection, mapping, and link records plus provider-neutral lifecycle
+                      operations.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><strong>Authenticated transport</strong></td>
+                    <td>
+                      <code>packages/contracts/src/rpc.ts</code><br /><code
+                        >apps/server/src/ws.ts</code
+                      >
+                    </td>
+                    <td>Seven typed methods constructed around the owning server adapter.</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Client runtime</strong></td>
+                    <td><code>packages/client-runtime/src/state/integrations.ts</code></td>
+                    <td>
+                      Capability gate, environment ownership, partial failures, serialized
+                      mutations, and scoped refresh.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><strong>Product surfaces</strong></td>
+                    <td>Settings, Issues workspace, mobile Issues/state</td>
+                    <td>
+                      Connection and mapping UI plus bounded resource access appropriate to each
+                      client.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="section" id="transport">
+            <div class="section-head">
+              <div>
+                <p class="section-kicker">Contract surface</p>
+                <h2>Typed transport, deliberate mutation</h2>
+              </div>
+              <p>
+                Read methods require orchestration read scope. Lifecycle mutation, preview, and
+                confirmation require operate scope.
+              </p>
+            </div>
+
+            <div class="card-grid">
+              <article class="card violet">
+                <span class="status-pill neutral">Lifecycle</span>
+                <h3 style="margin-top: 12px">Connections and mappings</h3>
+                <p>
+                  <code>listConnections</code>, <code>disconnect</code>,
+                  <code>setProjectMapping</code>, and <code>removeProjectMapping</code>.
+                </p>
+              </article>
+              <article class="card pass">
+                <span class="status-pill pass">Bounded action</span>
+                <h3 style="margin-top: 12px">Issue context and status</h3>
+                <p>
+                  <code>issueContext</code>, <code>issuePreviewStatus</code>, and
+                  <code>issueConfirmStatus</code>.
+                </p>
+              </article>
+            </div>
+
+            <ul class="bullet-list" style="margin-top: 18px">
+              <li>
+                Pending previews are session-scoped, expire, and bind the expected Issue version.
+              </li>
+              <li>
+                Reconnect invalidates pending previews; confirmation returns a typed audit receipt.
+              </li>
+              <li>
+                Confirmation refreshes only the owning environment’s connection and Issue context.
+              </li>
+              <li>
+                Native <code>issues.*</code> RPCs remain unchanged beside the additive methods.
+              </li>
+            </ul>
+          </section>
+
+          <section class="section" id="receipts">
+            <div class="section-head">
+              <div>
+                <p class="section-kicker">Verification receipts</p>
+                <h2>Walking skeleton evidence</h2>
+              </div>
+              <p>
+                Final Node 24 typechecks pass contracts, server, client runtime, web, and mobile.
+              </p>
+            </div>
+
+            <div class="table-frame">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Work</th>
+                    <th>Receipt</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Contracts</td>
+                    <td>T1 · contracts typecheck · 2 files / 13 tests</td>
+                  </tr>
+                  <tr>
+                    <td>Secret boundary</td>
+                    <td>T2 · server typecheck · 1 file / 8 secret-store tests</td>
+                  </tr>
+                  <tr>
+                    <td>Persistence</td>
+                    <td>T3 · server typecheck · 1 file / 4 additive-store tests</td>
+                  </tr>
+                  <tr>
+                    <td>Reference adapter</td>
+                    <td>T4 · native Issues committed independently · 6 files / 38 focused tests</td>
+                  </tr>
+                  <tr>
+                    <td>Shared runtime + Settings</td>
+                    <td>
+                      T5–T6 · client and web typechecks · 14 focused tests · desktop and mobile
+                      preview
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Context + transport</td>
+                    <td>
+                      T7, T11, T12 · contracts/server/client/mobile checks · 102 focused tests
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Compatibility</td>
+                    <td>T8 · 9 files / 45 tests · package checks · all three Expo variants</td>
+                  </tr>
+                  <tr>
+                    <td>Second adapter discovery</td>
+                    <td>
+                      T9 · 5 GitHub suites / 128 tests · reshape recommended, no production adapter
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Final gate</td>
+                    <td>T10 · five package typechecks pass</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="section" id="release">
+            <div class="section-head">
+              <div>
+                <p class="section-kicker">Release decision</p>
+                <h2>Technical pass. OAuth hold.</h2>
+              </div>
+              <span class="status-pill hold">Roadmap remains active</span>
+            </div>
+
+            <div class="gate-grid">
+              <article class="gate pass">
+                <span class="status-pill pass">Verified</span>
+                <h3 style="margin-top: 12px">Foundation and native reference</h3>
+                <p>
+                  The server-owned lifecycle, typed transport, bounded context/action path, and
+                  native Pulse Issues proof are verified.
+                </p>
+              </article>
+              <article class="gate hold">
+                <span class="status-pill hold">Open gates</span>
+                <h3 style="margin-top: 12px">Durable authorization release</h3>
+                <p>
+                  Host isolation, redirect replay, diagnostics, backups, revocation, and
+                  shared-server ownership remain unresolved.
+                </p>
+              </article>
+              <article class="gate hold">
+                <span class="status-pill hold">Definition needed</span>
+                <h3 style="margin-top: 12px">Tokenizer</h3>
+                <p>
+                  Define what “tokenizer” means for this roadmap and name its authoritative source
+                  before implementation claims.
+                </p>
+              </article>
+              <article class="gate hold">
+                <span class="status-pill hold">Discovery</span>
+                <h3 style="margin-top: 12px">Later providers</h3>
+                <p>
+                  Externally managed credentials and measured provider demand must precede a bounded
+                  GitHub work adapter.
+                </p>
+              </article>
+            </div>
+
+            <p class="callout hold" style="margin: 18px 0 0">
+              <strong>Do not overclaim:</strong> the foundation is not yet committed or released,
+              OAuth connect/reauthorize is not approved, and no later provider is implemented.
+            </p>
+          </section>
+        </div>
+      </div>
+
+      <footer class="page-footer">
+        <span class="meta">Source · integrations-platform.md · 20 August 2026</span>
+        <nav aria-label="Source and related documents">
+          <a href="./integrations-platform.md">Markdown source</a>
+          <a href="./integrations-secret-review.html">Next: secret review</a>
+        </nav>
+      </footer>
+    </main>
+
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+
+      mermaid.initialize({
+        startOnLoad: true,
+        securityLevel: "loose",
+        theme: "base",
+        flowchart: {
+          curve: "linear",
+          htmlLabels: true,
+          nodeSpacing: 32,
+          rankSpacing: 54,
+          padding: 14,
+          useMaxWidth: false,
+        },
+        themeVariables: {
+          fontFamily: '"Segoe UI Variable Text", "Segoe UI", sans-serif',
+          fontSize: "16px",
+          lineColor: "#6d8391",
+          edgeLabelBackground: "#f9fbfc",
+        },
+      });
+    </script>
+  </body>
+</html>

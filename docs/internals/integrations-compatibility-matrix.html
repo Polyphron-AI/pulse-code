@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Desktop compatibility matrix for the Pulse Code integrations bridge and product rename."
+    />
+    <title>Compatibility matrix — Pulse integrations</title>
+    <link rel="stylesheet" href="./pulse-integrations-site.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <a class="brand" href="./pulse-integrations-decision.html"
+          ><span class="brand-mark" aria-hidden="true">P×P</span>Pulse integrations</a
+        >
+        <nav class="site-nav" aria-label="Pulse integrations pages">
+          <a href="./pulse-integrations-decision.html">Decision map</a>
+          <a href="./integrations-platform.html">Architecture</a>
+          <a href="./integrations-compatibility-matrix.html" aria-current="page">Compatibility</a>
+          <a href="./integrations-secret-review.html">Secret review</a>
+          <a href="./pulse-integrations-decisions.html">Decision register</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="page">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Compatibility contract · verified</p>
+          <h1>Rename the surface. Keep the identity.</h1>
+          <p class="lede">
+            Pulse Code can become the product-facing name while old servers, old clients, mobile
+            installs, deep links, package identities, storage aliases, and persisted Issue records
+            continue to work.
+          </p>
+        </div>
+        <aside class="hero-aside" aria-label="Compatibility status">
+          <div class="signal pass">
+            <span class="meta">Decision</span>
+            <strong>PASS — additive integration bridge</strong>
+          </div>
+          <div class="signal violet">
+            <span class="meta">Non-negotiable</span>
+            <strong>Stable mobile and persisted identifiers</strong>
+          </div>
+        </aside>
+      </header>
+
+      <div class="workspace">
+        <nav class="toc" aria-label="On this page">
+          <span class="nav-label">On this page</span>
+          <a href="#skew">Version skew</a>
+          <a href="#paths">Connection paths</a>
+          <a href="#mobile">Mobile identity</a>
+          <a href="#resources">Persisted identity</a>
+          <a href="#receipt">Verification</a>
+        </nav>
+
+        <div class="content">
+          <section class="section" id="skew">
+            <div class="section-head">
+              <div>
+                <p class="section-kicker">Version and capability skew</p>
+                <h2>Capability is additive, never assumed</h2>
+              </div>
+              <p>
+                Unsupported environments stay usable and visible; the integration atom simply does
+                not mount.
+              </p>
+            </div>
+            <div class="table-frame">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Client / server</th>
+                    <th>Expected behavior</th>
+                    <th>Verification</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><strong>New client / old server</strong></td>
+                    <td>
+                      Missing <code>capabilities.integrations</code> is unsupported. No integration
+                      query mounts and no integration RPC is sent; native Issues and unrelated RPCs
+                      continue.
+                    </td>
+                    <td>
+                      <code>integrations.test.ts</code><br /><code>state/integrations.test.ts</code>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><strong>New client / new server</strong></td>
+                    <td>
+                      The additive capability enables seven typed methods. Responses contain
+                      redacted lifecycle/context data, previews, and receipts only.
+                    </td>
+                    <td>Contracts, authorization, server-environment, and client-runtime suites</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Old client / new server</strong></td>
+                    <td>
+                      Older descriptor fixtures ignore the unknown capability. Existing
+                      <code>issues.*</code> method names and handlers remain registered unchanged.
+                    </td>
+                    <td>Contracts and Issues fixtures; <code>apps/server/src/ws.ts</code></td>
+                  </tr>
+                  <tr>
+                    <td><strong>Mixed environments</strong></td>
+                    <td>
+                      Capable environments stay visible when another is unsupported or offline.
+                      Every result and unavailable entry retains its environment ID.
+                    </td>
+                    <td>Client-runtime and mobile integration-state tests</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="callout pass" style="margin: 16px 0 0">
+              <strong>Compatibility rule:</strong> new clients query integrations only after the
+              server advertises the capability.
+            </p>
+          </section>
+
+          <section class="section" id="paths">
+            <div class="section-head">
+              <div>
+                <p class="section-kicker">Connection path ownership</p>
+                <h2>Every route resolves to one environment</h2>
+              </div>
+              <p>
+                The same <code>EnvironmentRegistry</code> and <code>EnvironmentSupervisor</code> own
+                integration routing as every other environment RPC.
+              </p>
+            </div>
+            <div class="route-grid">
+              <article class="route">
+                <span class="status-pill neutral">Local</span>
+                <h3 style="margin-top: 12px">Primary</h3>
+                <p>Reaches its own server session and preserves the primary environment ID.</p>
+              </article>
+              <article class="route">
+                <span class="status-pill neutral">Remote</span>
+                <h3 style="margin-top: 12px">Direct bearer</h3>
+                <p>
+                  Persists a bearer target, authorizes against the expected environment, and returns
+                  that same ID.
+                </p>
+              </article>
+              <article class="route">
+                <span class="status-pill neutral">Relay</span>
+                <h3 style="margin-top: 12px">Managed tunnel</h3>
+                <p>
+                  Relay bootstrap and DPoP authorization are scoped to the requested environment.
+                </p>
+              </article>
+              <article class="route">
+                <span class="status-pill neutral">SSH</span>
+                <h3 style="margin-top: 12px">Tunnel target</h3>
+                <p>
+                  Opens the gateway before remote authorization and retains the tunnel target ID.
+                </p>
+              </article>
+            </div>
+            <p class="section-copy" style="margin-bottom: 0; margin-top: 18px">
+              The integration atom keys reads and serialized writes by environment ID. The
+              authenticated server session then constructs the adapter around that server’s native
+              Issues service, preventing silent fall-through to another environment.
+            </p>
+          </section>
+
+          <section class="section" id="mobile">
+            <div class="section-head">
+              <div>
+                <p class="section-kicker">Mobile and rename compatibility</p>
+                <h2>New names are additive</h2>
+              </div>
+              <p>
+                Installed-app identity and legacy deep links remain stable across all generated Expo
+                variants.
+              </p>
+            </div>
+            <div class="table-frame">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Variant</th>
+                    <th>Display name</th>
+                    <th>URL schemes</th>
+                    <th>iOS bundle ID</th>
+                    <th>Android package</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><strong>Development</strong></td>
+                    <td>Pulse Code Dev</td>
+                    <td><code>pulsecode-dev</code><br /><code>t3code-dev</code></td>
+                    <td><code>com.t3tools.t3code.dev</code></td>
+                    <td><code>com.t3tools.t3code.dev</code></td>
+                  </tr>
+                  <tr>
+                    <td><strong>Preview</strong></td>
+                    <td>Pulse Code Preview</td>
+                    <td><code>pulsecode-preview</code><br /><code>t3code-preview</code></td>
+                    <td><code>com.t3tools.t3code.preview</code></td>
+                    <td><code>com.t3tools.t3code.preview</code></td>
+                  </tr>
+                  <tr>
+                    <td><strong>Production</strong></td>
+                    <td>Pulse Code</td>
+                    <td><code>pulsecode</code><br /><code>t3code</code></td>
+                    <td><code>com.t3tools.t3code</code></td>
+                    <td><code>com.t3tools.t3code</code></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="definition-grid" style="margin-top: 14px">
+              <dl class="definition">
+                <dt>Expo slug</dt>
+                <dd><code>t3-code</code></dd>
+              </dl>
+              <dl class="definition">
+                <dt>Current catalog</dt>
+                <dd><code>pulsecode.connection-catalog.v1</code></dd>
+              </dl>
+              <dl class="definition">
+                <dt>Rollback aliases</dt>
+                <dd>
+                  <code>t3code.connection-catalog.v1</code><br /><code>t3code.connections</code>
+                </dd>
+              </dl>
+            </div>
+          </section>
+
+          <section class="section" id="resources">
+            <div class="section-head">
+              <div>
+                <p class="section-kicker">Persisted resource and package identities</p>
+                <h2>History does not get rewritten</h2>
+              </div>
+              <p>
+                The adapter projects native records through the integration seam without changing
+                identifiers.
+              </p>
+            </div>
+            <ul class="bullet-list">
+              <li>
+                Native <code>IssueId</code>, <code>ThreadId</code>, project mappings, and
+                Issue/thread links remain in existing tables and contracts.
+              </li>
+              <li>
+                Disconnect removes the current endpoint and mappings while preserving historical
+                Issue/thread links.
+              </li>
+              <li>
+                Native <code>issues.*</code> RPCs remain compatibility aliases beside additive
+                <code>integrations.*</code> methods.
+              </li>
+              <li>
+                Existing package scopes, the <code>t3</code> CLI/package identity, Expo project
+                identity, and persisted T3 configuration aliases stay stable.
+              </li>
+              <li>
+                Mobile receives connection health, mappings, provenance, and capability state—but
+                never provider token, refresh token, client secret, or authorization value.
+              </li>
+            </ul>
+          </section>
+
+          <section class="section" id="receipt">
+            <div class="section-head">
+              <div>
+                <p class="section-kicker">Verification receipt</p>
+                <h2>Compatibility pass recorded</h2>
+              </div>
+              <span class="status-pill pass">T8 verified</span>
+            </div>
+            <div class="metric-grid">
+              <div class="metric">
+                <strong>39</strong><span>Node 24 focused tests across 8 files</span>
+              </div>
+              <div class="metric">
+                <strong>3</strong><span>Generated Expo configurations asserted</span>
+              </div>
+              <div class="metric">
+                <strong>0</strong><span>Detected regressions in identifiers</span>
+              </div>
+              <div class="metric">
+                <strong>1</strong><span>Separate OAuth decision still open</span>
+              </div>
+            </div>
+            <p class="callout hold" style="margin: 16px 0 0">
+              <strong>Scope note:</strong> this compatibility pass does not approve OAuth
+              connect/reauthorize. Secret-store, shared ownership, tokenizer definition, provider
+              demand, and external credential mode remain separate gaps.
+            </p>
+          </section>
+        </div>
+      </div>
+
+      <footer class="page-footer">
+        <span class="meta">Source · integrations-compatibility-matrix.md · 20 August 2026</span>
+        <nav aria-label="Source and related documents">
+          <a href="./integrations-compatibility-matrix.md">Markdown source</a
+          ><a href="./integrations-secret-review.html">Next: secret review</a>
+        </nav>
+      </footer>
+    </main>
+  </body>
+</html>

@@ -40,6 +40,10 @@ policy in [CONTRIBUTING.md](../CONTRIBUTING.md); agent rules in [AGENTS.md](../A
 - [Integrations platform](./internals/integrations-platform.md)
 - [Integrations compatibility matrix](./internals/integrations-compatibility-matrix.md)
 - [Pulse integrations decision map](./internals/pulse-integrations-decision.html)
+- [Pulse integrations architecture](./internals/integrations-platform.html)
+- [Pulse integrations compatibility view](./internals/integrations-compatibility-matrix.html)
+- [Pulse integrations secret review](./internals/integrations-secret-review.html)
+- [Pulse integrations decision register](./internals/pulse-integrations-decisions.html)
 - [Pulse Connect](./internals/t3-connect.md)
 - [CI gates](./internals/ci.md)
 

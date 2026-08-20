@@ -8,6 +8,7 @@
       content="Mermaid decision map for the Pulse Code rename, persistent Pulse integration, compatibility contract, and release gate."
     />
     <title>Pulse Code × Pulse — integration decision</title>
+    <link rel="stylesheet" href="./pulse-integrations-site.css" />
     <style>
       :root {
         color-scheme: light;
@@ -63,17 +64,17 @@
       }
 
       main {
-        width: min(1480px, calc(100% - 32px));
+        width: min(1760px, calc(100% - 48px));
         margin: 0 auto;
-        padding: 46px 0 64px;
+        padding: 28px 0 48px;
       }
 
       .masthead {
         display: grid;
-        grid-template-columns: minmax(0, 1.35fr) minmax(260px, 0.65fr);
-        gap: 32px;
-        align-items: end;
-        margin-bottom: 26px;
+        grid-template-columns: minmax(0, 1.42fr) minmax(340px, 0.58fr);
+        gap: clamp(28px, 4vw, 72px);
+        align-items: center;
+        margin-bottom: 18px;
       }
 
       .eyebrow,
@@ -93,10 +94,10 @@
       }
 
       h1 {
-        max-width: 920px;
+        max-width: 1040px;
         margin: 0;
         font-family: "Bahnschrift SemiCondensed", "Arial Narrow", "Segoe UI", sans-serif;
-        font-size: clamp(2.7rem, 7vw, 6.7rem);
+        font-size: clamp(3.4rem, 5.6vw, 5.9rem);
         font-stretch: condensed;
         font-weight: 650;
         letter-spacing: -0.055em;
@@ -104,11 +105,11 @@
       }
 
       .thesis {
-        max-width: 620px;
-        margin: 24px 0 0;
+        max-width: 820px;
+        margin: 16px 0 0;
         color: var(--muted);
-        font-size: clamp(1rem, 1.8vw, 1.24rem);
-        line-height: 1.6;
+        font-size: clamp(0.98rem, 1.3vw, 1.16rem);
+        line-height: 1.48;
       }
 
       .status-rail {
@@ -122,8 +123,8 @@
         grid-template-columns: auto 1fr;
         gap: 14px;
         align-items: center;
-        min-height: 78px;
-        padding: 15px 18px;
+        min-height: 70px;
+        padding: 12px 16px;
         border: 1px solid var(--line);
         border-radius: 16px;
         background: rgb(249 251 252 / 82%);
@@ -132,8 +133,8 @@
 
       .status-mark {
         display: grid;
-        width: 47px;
-        height: 47px;
+        width: 42px;
+        height: 42px;
         place-items: center;
         border-radius: 50%;
         color: white;
@@ -163,7 +164,7 @@
       .board {
         overflow: hidden;
         border: 1px solid var(--line);
-        border-radius: 24px;
+        border-radius: 20px;
         background: rgb(249 251 252 / 94%);
         box-shadow: var(--shadow);
       }
@@ -173,7 +174,7 @@
         gap: 18px;
         align-items: center;
         justify-content: space-between;
-        padding: 16px 22px;
+        padding: 12px 18px;
         border-bottom: 1px solid var(--line);
         background: #e4edf2;
       }
@@ -221,36 +222,53 @@
         background: var(--hold);
       }
 
+      .board-body {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 330px;
+        min-height: 500px;
+      }
+
       .diagram-shell {
+        display: flex;
         overflow-x: auto;
-        padding: clamp(18px, 4vw, 52px);
+        align-items: center;
+        min-width: 0;
+        padding: clamp(18px, 2.4vw, 34px);
       }
 
       .mermaid {
-        min-width: 1040px;
+        width: 100%;
+        height: 500px;
+        min-width: 960px;
+        max-width: 1400px;
+        margin: 0 auto;
         text-align: center;
       }
 
       .mermaid svg {
         width: 100%;
         max-width: none !important;
-        height: auto;
+        height: 100%;
         filter: drop-shadow(0 10px 16px rgb(12 31 46 / 7%));
       }
 
       .decision-note {
         display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        border-top: 1px solid var(--line);
+        grid-template-rows: repeat(3, 1fr);
+        border-left: 1px solid var(--line);
+        background: #f4f8fa;
       }
 
       .note {
-        min-height: 168px;
-        padding: 22px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        min-height: 0;
+        padding: 22px 24px;
       }
 
       .note + .note {
-        border-left: 1px solid var(--line);
+        border-top: 1px solid var(--line);
       }
 
       .note h2 {
@@ -313,6 +331,33 @@
         display: flex;
         flex-wrap: wrap;
         gap: 14px;
+      }
+
+      @media (max-width: 1180px) {
+        main {
+          width: min(100% - 32px, 1480px);
+        }
+
+        .board-body {
+          display: block;
+          min-height: 0;
+        }
+
+        .decision-note {
+          grid-template-columns: repeat(3, 1fr);
+          grid-template-rows: none;
+          border-top: 1px solid var(--line);
+          border-left: 0;
+        }
+
+        .note {
+          min-height: 150px;
+        }
+
+        .note + .note {
+          border-top: 0;
+          border-left: 1px solid var(--line);
+        }
       }
 
       @media (max-width: 900px) {
@@ -398,6 +443,20 @@
     </style>
   </head>
   <body>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <a class="brand" href="./pulse-integrations-decision.html"
+          ><span class="brand-mark" aria-hidden="true">P×P</span>Pulse integrations</a
+        >
+        <nav class="site-nav" aria-label="Pulse integrations pages">
+          <a href="./pulse-integrations-decision.html" aria-current="page">Decision map</a>
+          <a href="./integrations-platform.html">Architecture</a>
+          <a href="./integrations-compatibility-matrix.html">Compatibility</a>
+          <a href="./integrations-secret-review.html">Secret review</a>
+          <a href="./pulse-integrations-decisions.html">Decision register</a>
+        </nav>
+      </div>
+    </header>
     <main>
       <header class="masthead">
         <div>
@@ -439,66 +498,29 @@
           </div>
         </div>
 
-        <div class="diagram-shell" aria-label="Pulse integrations decision diagram">
-          <pre class="mermaid">
+        <div class="board-body">
+          <div class="diagram-shell" aria-label="Pulse integrations decision diagram">
+            <pre class="mermaid">
 flowchart LR
-  GOAL["PULSE CODE ↔ PULSE<br/>One durable connection for Issues, Reports, projects and context"]:::intent
-
-  subgraph RULES["NON-NEGOTIABLES"]
-    direction TB
-    AUTH["Sign in once<br/>per owning server"]:::rule
-    SECRET["Credentials remain<br/>server-owned"]:::rule
-    COMPAT["Full backwards<br/>compatibility"]:::compat
-    DOMAIN["Provider domains<br/>stay independent"]:::rule
-  end
-
-  subgraph BUILD["IMPLEMENTED WALKING SKELETON"]
-    direction TB
-    STORE["Persist secret reference,<br/>health and project mappings"]:::built
-    RPC["7 typed, authorized<br/>integration RPCs"]:::built
-    CLIENT["Capability-gated web,<br/>desktop and mobile state"]:::built
-    ACTION["Bounded Issue context +<br/>preview → confirm → receipt"]:::built
-  end
-
+  GOAL["PULSE CODE ↔ PULSE<br/>Durable access to work and context"]:::intent
+  AUTH["Persist sign-in<br/>per owning server"]:::rule
+  SECRET["Keep credentials<br/>server-owned"]:::rule
+  COMPAT["Retain app IDs, aliases<br/>and stored records"]:::compat
+  DOMAIN["Keep provider domains<br/>independent"]:::rule
+  VERIFIED["WALKING SKELETON VERIFIED<br/>Persistent state · 7 typed RPCs · capable clients<br/>bounded context · confirmed action receipts"]:::built
   HINGE{"RELEASE<br/>DECISION"}:::hinge
+  PASS["TECHNICAL PASS<br/>Rename product surfaces<br/>and retain stable identity"]:::pass
+  HOLD["RELEASE HOLD<br/>Do not claim global SSO<br/>or OAuth readiness"]:::hold
+  SHIP["Keep roadmap active<br/>until committed and released"]:::pass
+  GATES["Close security, ownership,<br/>revocation and credential-mode gates"]:::hold
 
-  subgraph PASS["TECHNICAL PASS"]
-    direction TB
-    VERIFIED["Contracts, server, clients<br/>and compatibility verified"]:::pass
-    RETAIN["Rename display surfaces;<br/>retain stable identity"]:::pass
-    IDS["Keep t3-code slug, t3code links,<br/>bundle/package IDs, catalog + RPC aliases"]:::compat
-  end
-
-  subgraph HOLD["RELEASE HOLD"]
-    direction TB
-    OAUTH["Do not claim global SSO<br/>or OAuth readiness"]:::hold
-    GATES["Close secret-store, ownership,<br/>revocation and external-credential gates"]:::hold
-    LATER["Tokenizer and later providers<br/>remain discovery—not shipped"]:::hold
-  end
-
-  GOAL --> AUTH
-  GOAL --> SECRET
-  GOAL --> COMPAT
-  GOAL --> DOMAIN
-
-  AUTH --> STORE
-  SECRET --> STORE
-  SECRET --> RPC
-  COMPAT --> CLIENT
-  DOMAIN --> ACTION
-
-  STORE --> HINGE
-  RPC --> HINGE
-  CLIENT --> HINGE
-  ACTION --> HINGE
-
-  HINGE -->|"PASS"| VERIFIED
-  VERIFIED --> RETAIN
-  RETAIN --> IDS
-
-  HINGE -->|"HOLD"| OAUTH
-  OAUTH --> GATES
-  GATES --> LATER
+  GOAL --> AUTH & SECRET & COMPAT & DOMAIN
+  AUTH & SECRET & COMPAT & DOMAIN --> VERIFIED
+  VERIFIED --> HINGE
+  HINGE -->|"PASS"| PASS
+  HINGE -->|"HOLD"| HOLD
+  PASS --> SHIP
+  HOLD --> GATES
 
   classDef intent fill:#00639b,color:#ffffff,stroke:#004b76,stroke-width:2px;
   classDef rule fill:#e4edf2,color:#0c1f2e,stroke:#8da4b2,stroke-width:1.5px;
@@ -507,54 +529,54 @@ flowchart LR
   classDef hinge fill:#0c1f2e,color:#ffffff,stroke:#0c1f2e,stroke-width:3px;
   classDef pass fill:#daf1e9,color:#0a4f40,stroke:#197661,stroke-width:2px;
   classDef hold fill:#f8ead8,color:#6f3b0e,stroke:#ad651c,stroke-width:2px;
-          </pre>
-        </div>
+            </pre>
+          </div>
 
-        <div class="decision-note">
-          <article class="note">
-            <h2>What changed</h2>
-            <p>
-              Product-facing names become Pulse Code. The integration gains typed server, client,
-              mobile, context, action, and compatibility paths.
-            </p>
-          </article>
-          <article class="note">
-            <h2>What stayed stable</h2>
-            <p>
-              Installed-app identity, <code>t3code</code> links, package scope, storage aliases,
-              native <code>issues.*</code> RPCs, and persisted Issue/thread IDs.
-            </p>
-          </article>
-          <article class="note">
-            <h2>What remains gated</h2>
-            <p>
-              Global SSO, OAuth release, shared-server ownership, revocation guarantees, externally
-              managed credentials, tokenizer definition, and later providers.
-            </p>
-          </article>
+          <div class="decision-note">
+            <article class="note">
+              <h2>What changed</h2>
+              <p>
+                Product-facing names become Pulse Code. The integration gains typed server, client,
+                mobile, context, action, and compatibility paths.
+              </p>
+            </article>
+            <article class="note">
+              <h2>What stayed stable</h2>
+              <p>
+                Installed-app identity, <code>t3code</code> links, package scope, storage aliases,
+                native <code>issues.*</code> RPCs, and persisted Issue/thread IDs.
+              </p>
+            </article>
+            <article class="note">
+              <h2>What remains gated</h2>
+              <p>
+                Global SSO, OAuth release, shared-server ownership, revocation guarantees,
+                externally managed credentials, tokenizer definition, and later providers.
+              </p>
+            </article>
+          </div>
         </div>
       </section>
 
       <details>
         <summary>Show the Mermaid source</summary>
         <pre><code>flowchart LR
-  GOAL["PULSE CODE ↔ PULSE&lt;br/&gt;One durable connection for Issues, Reports, projects and context"]
-  GOAL --&gt; RULES["Sign in once · server-owned credentials · backwards compatibility"]
-  RULES --&gt; BUILD["Persistent state · typed RPC · capability gates · confirmed actions"]
-  BUILD --&gt; HINGE{"RELEASE DECISION"}
-  HINGE --&gt;|"PASS"| PASS["Technical walking skeleton verified"]
-  PASS --&gt; RETAIN["Rename display surfaces; retain stable identity"]
-  HINGE --&gt;|"HOLD"| HOLD["OAuth and general release held"]
-  HOLD --&gt; GATES["Close security, ownership and revocation gates"]</code></pre>
+  GOAL["PULSE CODE ↔ PULSE"] --&gt; AUTH &amp; SECRET &amp; COMPAT &amp; DOMAIN
+  AUTH &amp; SECRET &amp; COMPAT &amp; DOMAIN --&gt; VERIFIED["WALKING SKELETON VERIFIED"]
+  VERIFIED --&gt; HINGE{"RELEASE DECISION"}
+  HINGE --&gt;|"PASS"| PASS["Rename product surfaces; retain stable identity"]
+  HINGE --&gt;|"HOLD"| HOLD["Do not claim global SSO or OAuth readiness"]
+  PASS --&gt; SHIP["Keep roadmap active until committed and released"]
+  HOLD --&gt; GATES["Close security, ownership, revocation and credential-mode gates"]</code></pre>
       </details>
 
       <footer>
         <span class="footer-meta">Pulse integrations · decision artifact</span>
         <nav aria-label="Related documents">
-          <a href="./integrations-platform.md">Architecture</a>
-          <a href="./integrations-compatibility-matrix.md">Compatibility matrix</a>
-          <a href="./integrations-secret-review.md">Secret review</a>
-          <a href="../../project/decisions.md">Decision register</a>
+          <a href="./integrations-platform.html">Architecture</a>
+          <a href="./integrations-compatibility-matrix.html">Compatibility matrix</a>
+          <a href="./integrations-secret-review.html">Secret review</a>
+          <a href="./pulse-integrations-decisions.html">Decision register</a>
         </nav>
       </footer>
     </main>
@@ -567,16 +589,16 @@ flowchart LR
         securityLevel: "loose",
         theme: "base",
         flowchart: {
-          curve: "basis",
+          curve: "linear",
           htmlLabels: true,
-          nodeSpacing: 28,
-          rankSpacing: 52,
-          padding: 14,
+          nodeSpacing: 32,
+          rankSpacing: 58,
+          padding: 16,
           useMaxWidth: false,
         },
         themeVariables: {
           fontFamily: '"Segoe UI Variable Text", "Segoe UI", sans-serif',
-          fontSize: "15px",
+          fontSize: "16px",
           primaryColor: "#edf5f8",
           primaryTextColor: "#0c1f2e",
           primaryBorderColor: "#00639b",
