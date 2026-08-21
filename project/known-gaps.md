@@ -30,6 +30,18 @@
 - **Artifacts:** `prd/11-product-line-and-distribution-boundary.md`,
   `prd/20-acceptance-criteria/desktop-product-line-boundary.md`, ProductOps workspace renderer.
 
+### G-2026-08-21-windows-wsl-node-pty-prebuild — medium
+
+- **Summary:** The verified Windows x64 installer was built without a Linux `pty.node` prebuild for
+  its packaged WSL backend.
+- **Impact:** The normal Windows backend and side-by-side identity candidate are usable, but a user
+  cannot start the packaged WSL backend from this artifact.
+- **Proposed resolution:** Supply the matching x64 Linux node-pty prebuild through `--wsl-prebuild`
+  or `PULSE_CODE_DESKTOP_WSL_PREBUILD`, rebuild, and run a focused packaged WSL startup check before
+  presenting the Windows candidate as feature-complete for WSL teams.
+- **Artifacts:** `scripts/build-desktop-artifact.ts`,
+  `apps/desktop/src/wsl/DesktopWslEnvironment.ts`, `release/Pulse-Code-0.0.33-x64.exe`.
+
 ### G-2026-08-19-tokenizer-definition — medium
 
 - **Summary:** “Tokenizer” is not defined well enough to choose a product surface or provider

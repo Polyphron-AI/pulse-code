@@ -12,6 +12,12 @@ gaps:
       source: project/known-gaps.md,
     }
   - {
+      id: G-2026-08-21-windows-wsl-node-pty-prebuild,
+      severity: medium,
+      status: open,
+      source: project/known-gaps.md,
+    }
+  - {
       id: G-2026-08-19-tokenizer-definition,
       severity: medium,
       status: open,
