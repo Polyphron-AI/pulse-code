@@ -5,6 +5,12 @@ This file is the session gap-watch inbox. Durable integration gaps live in
 
 ## Open
 
+- **2026-08-21 · G-2026-08-21-windows-secret-acl-inspector · high:** INT-SEC-01 now exposes a
+  bounded, fail-closed host-protection report, but Windows remains OAuth-ineligible until the
+  packaged server can inspect effective ACL grants and identify untrusted principals. A successful
+  `chmod` call is intentionally not accepted as evidence; PAT auth and server startup remain
+  available while this release gate is open.
+
 - **2026-08-21 · G-2026-08-21-workspace-endpoints-yaml-parser · high:** The ProductOps workspace
   renderer cannot parse `project/state/shards/endpoints.yaml` (`line 2: unbalanced flow
 collection`), so the unified workspace cannot be regenerated after synchronizing the OAuth
@@ -27,4 +33,4 @@ collection`), so the unified workspace cannot be regenerated after synchronizing
 
 ---
 
-**Created:** 2026-08-19 . **Last opened:** 2026-08-20 . **Last edited:** 2026-08-20 . **Status:** active . **Owner:** Product
+**Created:** 2026-08-19 . **Last opened:** 2026-08-21 . **Last edited:** 2026-08-21 . **Status:** active . **Owner:** Product

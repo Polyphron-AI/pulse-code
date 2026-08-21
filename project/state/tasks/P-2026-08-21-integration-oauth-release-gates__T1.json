@@ -1,6 +1,6 @@
 {
   "blocked_by": [],
-  "commits": [],
+  "commits": ["9385d1848"],
   "created_at": "2026-08-21T07:07:34Z",
   "files_touched": [
     "apps/server/src/auth/SecretStoreHostProtection.test.ts",
@@ -16,8 +16,12 @@
   "plan_id": "P-2026-08-21-integration-oauth-release-gates",
   "roadmap_items": ["R-2026-08-19-integration-compatibility-safety"],
   "schema": "product-ops.task/v1",
-  "status": "pending",
+  "status": "in_progress",
   "subject": "Prove host protection and Windows ACL readiness",
-  "updated_at": "2026-08-21T07:07:34Z",
-  "verification_receipts": []
+  "updated_at": "2026-08-21T07:19:11Z",
+  "verification_receipts": [
+    "Focused host-protection and secret-store tests: 13 passed",
+    "Server typecheck: passed with pre-existing suggestions only",
+    "git diff --check: passed"
+  ]
 }
