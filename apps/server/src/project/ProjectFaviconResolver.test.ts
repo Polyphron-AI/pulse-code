@@ -73,7 +73,7 @@ it.layer(TestLayer)("ProjectFaviconResolverLive", (it) => {
         const resolved = yield* resolver.resolvePath(cwd);
 
         expect(resolved).not.toBeNull();
-        expect(resolved).toContain("brand/mark.svg");
+        expect(resolved).toContain((yield* Path.Path).join("brand", "mark.svg"));
       }),
     );
 
@@ -87,7 +87,22 @@ it.layer(TestLayer)("ProjectFaviconResolverLive", (it) => {
         const resolved = yield* resolver.resolvePath(cwd, "brand/custom.svg");
 
         expect(resolved).not.toBeNull();
-        expect(resolved).toContain("brand/custom.svg");
+        expect(resolved).toContain((yield* Path.Path).join("brand", "custom.svg"));
+      }),
+    );
+
+    it.effect("uses a saved project favicon outside the workspace", () =>
+      Effect.gen(function* () {
+        const path = yield* Path.Path;
+        const resolver = yield* ProjectFaviconResolver.ProjectFaviconResolver;
+        const cwd = yield* makeTempDir;
+        const pictures = yield* makeTempDir;
+        yield* writeTextFile(pictures, "custom.png", "image");
+        const externalPath = path.join(pictures, "custom.png");
+
+        const resolved = yield* resolver.resolvePath(cwd, externalPath);
+
+        expect(resolved).toBe(externalPath);
       }),
     );
 
@@ -156,7 +171,7 @@ it.layer(TestLayer)("ProjectFaviconResolverLive", (it) => {
         const resolved = yield* resolver.resolvePath(cwd);
 
         expect(resolved).not.toBeNull();
-        expect(resolved).toContain("public/brand/logo.svg");
+        expect(resolved).toContain((yield* Path.Path).join("public", "brand", "logo.svg"));
       }),
     );
 
@@ -181,7 +196,7 @@ it.layer(TestLayer)("ProjectFaviconResolverLive", (it) => {
         const resolved = yield* resolver.resolvePath(cwd);
 
         expect(resolved).not.toBeNull();
-        expect(resolved).toContain("public/brand/logo.svg");
+        expect(resolved).toContain((yield* Path.Path).join("public", "brand", "logo.svg"));
       }),
     );
 
@@ -199,7 +214,7 @@ it.layer(TestLayer)("ProjectFaviconResolverLive", (it) => {
         const resolved = yield* resolver.resolvePath(cwd);
 
         expect(resolved).not.toBeNull();
-        expect(resolved).toContain("public/brand/logo.svg");
+        expect(resolved).toContain((yield* Path.Path).join("public", "brand", "logo.svg"));
       }),
     );
 
@@ -217,7 +232,7 @@ it.layer(TestLayer)("ProjectFaviconResolverLive", (it) => {
         const resolved = yield* resolver.resolvePath(cwd);
 
         expect(resolved).not.toBeNull();
-        expect(resolved).toContain("public/brand/logo.svg");
+        expect(resolved).toContain((yield* Path.Path).join("public", "brand", "logo.svg"));
       }),
     );
 
@@ -235,7 +250,7 @@ it.layer(TestLayer)("ProjectFaviconResolverLive", (it) => {
         const resolved = yield* resolver.resolvePath(cwd);
 
         expect(resolved).not.toBeNull();
-        expect(resolved).toContain("public/brand/logo.svg");
+        expect(resolved).toContain((yield* Path.Path).join("public", "brand", "logo.svg"));
       }),
     );
 
@@ -383,7 +398,7 @@ it.layer(TestLayer)("ProjectFaviconResolverLive", (it) => {
         const resolved = yield* resolver.resolvePath(cwd);
 
         expect(resolved).not.toBeNull();
-        expect(resolved).toContain("public/brand/logo.svg");
+        expect(resolved).toContain((yield* Path.Path).join("public", "brand", "logo.svg"));
       }),
     );
   });
