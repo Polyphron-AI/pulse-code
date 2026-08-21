@@ -5,6 +5,12 @@ This file is the session gap-watch inbox. Durable integration gaps live in
 
 ## Open
 
+- **2026-08-21 · G-2026-08-21-workspace-endpoints-yaml-parser · high:** The ProductOps workspace
+  renderer cannot parse `project/state/shards/endpoints.yaml` (`line 2: unbalanced flow
+collection`), so the unified workspace cannot be regenerated after synchronizing the OAuth
+  release-gate plan. Resolve the shard syntax or renderer subset compatibility, then rerun
+  `workspace_render.py --check` and `--out`; do not hand-edit `project/workspace.html`.
+
 - **2026-08-20 · G-2026-08-20-externally-managed-credential-mode · medium:** T9 found that GitHub's
   existing server-owned `gh` profile is neither an absent credential nor a `ServerSecretStore`
   secret. Define ownership/mode and disconnect semantics before building the GitHub work adapter.
