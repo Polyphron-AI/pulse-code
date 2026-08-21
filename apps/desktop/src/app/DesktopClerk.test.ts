@@ -23,7 +23,6 @@ vi.mock("@clerk/electron/storage", () => ({
 }));
 
 import * as Exit from "effect/Exit";
-import * as FileSystem from "effect/FileSystem";
 import * as ElectronApp from "../electron/ElectronApp.ts";
 import * as ElectronWindow from "../electron/ElectronWindow.ts";
 import * as DesktopClerk from "./DesktopClerk.ts";
@@ -31,13 +30,10 @@ import * as DesktopEnvironment from "./DesktopEnvironment.ts";
 
 const makeDesktopClerkLayer = (isDevelopment = true, events: string[] = []) => {
   const environment = DesktopEnvironment.DesktopEnvironment.of({
-    stateDir: "/tmp/t3-state",
+    stateDir: "/tmp/pulse-state",
     isDevelopment,
     appDataDirectory: "/tmp/app-data",
     userDataDirName: isDevelopment ? "pulsecode-dev" : "pulsecode",
-    legacyUserDataDirNames: isDevelopment
-      ? ["t3code-dev", "T3 Code (Dev)"]
-      : ["t3code", "T3 Code (Alpha)"],
     path: { join: (...parts: ReadonlyArray<string>) => parts.join("/") },
   } as unknown as DesktopEnvironment.DesktopEnvironment["Service"]);
 
@@ -53,7 +49,6 @@ const makeDesktopClerkLayer = (isDevelopment = true, events: string[] = []) => {
       Layer.mergeAll(
         Layer.succeed(DesktopEnvironment.DesktopEnvironment, environment),
         Layer.succeed(ElectronApp.ElectronApp, electronApp),
-        FileSystem.layerNoop({ exists: () => Effect.succeed(false) }),
       ),
     ),
   );
@@ -105,6 +100,7 @@ describe("DesktopClerk", () => {
         "setPath:userData:/tmp/app-data/pulsecode-dev",
         "createClerkBridge",
       ]);
+      assert.isFalse(events.join("|").includes("t3code"));
       storageMock.mockClear();
       createClerkBridgeMock.mockClear();
     });
@@ -121,12 +117,12 @@ describe("DesktopClerk", () => {
       const error = yield* Effect.scoped(Layer.build(makeDesktopClerkLayer())).pipe(Effect.flip);
 
       assert.instanceOf(error, DesktopClerk.DesktopClerkBridgeInitializationError);
-      assert.equal(error.stateDir, "/tmp/t3-state");
+      assert.equal(error.stateDir, "/tmp/pulse-state");
       assert.equal(error.isDevelopment, true);
       assert.strictEqual(error.cause, cause);
       assert.equal(
         error.message,
-        'Failed to initialize the desktop Clerk bridge for state directory "/tmp/t3-state" (development: true).',
+        'Failed to initialize the desktop Clerk bridge for state directory "/tmp/pulse-state" (development: true).',
       );
     });
   });
@@ -147,12 +143,12 @@ describe("DesktopClerk", () => {
       if (exit._tag === "Failure") {
         const error = Cause.squash(exit.cause);
         assert.instanceOf(error, DesktopClerk.DesktopClerkBridgeCleanupError);
-        assert.equal(error.stateDir, "/tmp/t3-state");
+        assert.equal(error.stateDir, "/tmp/pulse-state");
         assert.equal(error.isDevelopment, false);
         assert.strictEqual(error.cause, cause);
         assert.equal(
           error.message,
-          'Failed to clean up the desktop Clerk bridge for state directory "/tmp/t3-state" (development: false).',
+          'Failed to clean up the desktop Clerk bridge for state directory "/tmp/pulse-state" (development: false).',
         );
       }
     });
@@ -185,7 +181,8 @@ describe("DesktopClerk", () => {
       assert.isTrue(Exit.isSuccess(exit));
       assert.equal(quit.mock.calls.length, 0);
       assert.deepEqual(registeredEvents, ["second-instance"]);
-      assert.deepEqual(registeredSchemes, ["t3code-dev"]);
+      assert.deepEqual(registeredSchemes, ["pulsecode-dev"]);
+      assert.isFalse(registeredSchemes.some((scheme) => scheme.startsWith("t3code")));
     }).pipe(
       Effect.provide(makeDesktopClerkLayer()),
       Effect.provideService(ElectronApp.ElectronApp, electronApp),
@@ -229,8 +226,8 @@ describe("DesktopClerk", () => {
     storageMock.mockReturnValue(storageAdapter);
     createClerkBridgeMock.mockReturnValue(bridge);
 
-    assert.equal(DesktopClerk.createDesktopClerkBridge("/tmp/t3-state", isDevelopment), bridge);
-    assert.deepEqual(storageMock.mock.calls, [[{ path: "/tmp/t3-state" }]]);
+    assert.equal(DesktopClerk.createDesktopClerkBridge("/tmp/pulse-state", isDevelopment), bridge);
+    assert.deepEqual(storageMock.mock.calls, [[{ path: "/tmp/pulse-state" }]]);
     assert.deepEqual(createClerkBridgeMock.mock.calls, [
       [
         {

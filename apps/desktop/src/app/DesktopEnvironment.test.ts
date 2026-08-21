@@ -45,7 +45,7 @@ describe("DesktopEnvironment", () => {
       const environment = yield* makeEnvironment(
         {},
         {
-          T3CODE_HOME: " /tmp/t3 ",
+          PULSE_CODE_HOME: " /tmp/pulse ",
           T3CODE_COMMIT_HASH: " 0123456789abcdef ",
           T3CODE_PORT: "4949",
           VITE_DEV_SERVER_URL: "http://localhost:5173",
@@ -57,28 +57,28 @@ describe("DesktopEnvironment", () => {
 
       assert.equal(environment.isDevelopment, true);
       assertPathEqual(environment.appDataDirectory, "/Users/alice/Library/Application Support");
-      assertPathEqual(environment.baseDir, "/tmp/t3");
-      assertPathEqual(environment.stateDir, "/tmp/t3/userdata");
-      assertPathEqual(environment.desktopSettingsPath, "/tmp/t3/userdata/desktop-settings.json");
-      assertPathEqual(environment.clientSettingsPath, "/tmp/t3/userdata/client-settings.json");
+      assertPathEqual(environment.baseDir, "/tmp/pulse");
+      assertPathEqual(environment.stateDir, "/tmp/pulse/userdata");
+      assertPathEqual(environment.desktopSettingsPath, "/tmp/pulse/userdata/desktop-settings.json");
+      assertPathEqual(environment.clientSettingsPath, "/tmp/pulse/userdata/client-settings.json");
       assertPathEqual(
         environment.savedEnvironmentRegistryPath,
-        "/tmp/t3/userdata/saved-environments.json",
+        "/tmp/pulse/userdata/saved-environments.json",
       );
-      assertPathEqual(environment.serverSettingsPath, "/tmp/t3/userdata/settings.json");
-      assertPathEqual(environment.logDir, "/tmp/t3/userdata/logs");
-      assertPathEqual(environment.browserArtifactsDir, "/tmp/t3/userdata/browser-artifacts");
+      assertPathEqual(environment.serverSettingsPath, "/tmp/pulse/userdata/settings.json");
+      assertPathEqual(environment.logDir, "/tmp/pulse/userdata/logs");
+      assertPathEqual(environment.browserArtifactsDir, "/tmp/pulse/userdata/browser-artifacts");
       assertPathEqual(environment.rootDir, "/repo");
       assertPathEqual(environment.appRoot, "/repo");
       assertPathEqual(environment.serverRoot, "/repo");
       assertPathEqual(environment.backendEntryPath, "/repo/apps/server/dist/bin.mjs");
       assertPathEqual(environment.backendCwd, "/repo");
-      assert.equal(environment.appUserModelId, "com.t3tools.t3code.dev");
-      assert.equal(environment.linuxWmClass, "t3code-dev");
+      assert.equal(environment.appUserModelId, "ai.polyphron.pulsecode.dev");
+      assert.equal(environment.linuxDesktopEntryName, "pulsecode-dev.desktop");
+      assert.equal(environment.linuxWmClass, "pulsecode-dev");
       assert.equal(environment.branding.baseName, "Pulse Code");
       assert.equal(environment.displayName, "Pulse Code (Dev)");
       assert.equal(environment.userDataDirName, "pulsecode-dev");
-      assert.deepEqual(environment.legacyUserDataDirNames, ["t3code-dev", "T3 Code (Dev)"]);
       assert.deepEqual(
         Option.map(environment.devServerUrl, (url) => url.href),
         Option.some("http://localhost:5173/"),
@@ -94,7 +94,7 @@ describe("DesktopEnvironment", () => {
     }),
   );
 
-  it.effect("prefers Pulse Code environment names while accepting T3 Code aliases", () =>
+  it.effect("uses Pulse Code overrides instead of simultaneous T3 Code aliases", () =>
     Effect.gen(function* () {
       const environment = yield* makeEnvironment(
         {},
@@ -111,20 +111,31 @@ describe("DesktopEnvironment", () => {
     }),
   );
 
-  it.effect("stores production state under userdata in an explicit home", () =>
+  it.effect("ignores T3 Code home and desktop identity aliases", () =>
     Effect.gen(function* () {
       const environment = yield* makeEnvironment(
         {},
         {
           T3CODE_HOME: "/tmp/t3",
+          T3CODE_DESKTOP_APP_USER_MODEL_ID: "com.example.legacy",
         },
       );
 
       assert.equal(environment.isDevelopment, false);
-      assertPathEqual(environment.stateDir, "/tmp/t3/userdata");
-      assertPathEqual(environment.logDir, "/tmp/t3/userdata/logs");
-      assertPathEqual(environment.browserArtifactsDir, "/tmp/t3/userdata/browser-artifacts");
-      assertPathEqual(environment.serverSettingsPath, "/tmp/t3/userdata/settings.json");
+      assertPathEqual(environment.baseDir, "/Users/alice/.pulsecode");
+      assertPathEqual(environment.stateDir, "/Users/alice/.pulsecode/userdata");
+      assertPathEqual(environment.logDir, "/Users/alice/.pulsecode/userdata/logs");
+      assertPathEqual(
+        environment.browserArtifactsDir,
+        "/Users/alice/.pulsecode/userdata/browser-artifacts",
+      );
+      assertPathEqual(
+        environment.serverSettingsPath,
+        "/Users/alice/.pulsecode/userdata/settings.json",
+      );
+      assert.equal(environment.appUserModelId, "ai.polyphron.pulsecode");
+      assert.equal(environment.linuxDesktopEntryName, "pulsecode.desktop");
+      assert.equal(environment.linuxWmClass, "pulsecode");
     }),
   );
 
@@ -154,8 +165,8 @@ describe("DesktopEnvironment", () => {
       );
       const production = yield* makeEnvironment();
 
-      assertPathEqual(development.stateDir, "/Users/alice/.t3/dev");
-      assertPathEqual(production.stateDir, "/Users/alice/.t3/userdata");
+      assertPathEqual(development.stateDir, "/Users/alice/.pulsecode/dev");
+      assertPathEqual(production.stateDir, "/Users/alice/.pulsecode/userdata");
     }),
   );
 
@@ -164,12 +175,12 @@ describe("DesktopEnvironment", () => {
       const environment = yield* makeEnvironment(
         {},
         {
-          T3CODE_DESKTOP_APP_USER_MODEL_ID: " com.t3tools.t3code.dev.local ",
+          PULSE_CODE_DESKTOP_APP_USER_MODEL_ID: " ai.polyphron.pulsecode.dev.local ",
           VITE_DEV_SERVER_URL: "http://localhost:5173",
         },
       );
 
-      assert.equal(environment.appUserModelId, "com.t3tools.t3code.dev.local");
+      assert.equal(environment.appUserModelId, "ai.polyphron.pulsecode.dev.local");
     }),
   );
 

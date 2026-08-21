@@ -2,6 +2,7 @@ import { assert, describe, it } from "vite-plus/test";
 
 import {
   makeDevelopmentLauncherScript,
+  resolveDesktopLauncherIdentity,
   resolveElectronBinaryPath,
   resolveMacLauncherIconPaths,
   resolveMacLauncherPaths,
@@ -10,6 +11,22 @@ import {
 const normalizePath = (value) => value.replaceAll("\\", "/");
 
 describe("electron development launcher", () => {
+  it("uses an isolated Pulse identity in production and development", () => {
+    assert.deepEqual(resolveDesktopLauncherIdentity({ development: false }), {
+      displayName: "Pulse Code (Alpha)",
+      bundleId: "ai.polyphron.pulsecode",
+      protocolSchemes: ["pulsecode"],
+    });
+    assert.deepEqual(
+      resolveDesktopLauncherIdentity({ development: true, bundleIdSuffix: "worktree2" }),
+      {
+        displayName: "Pulse Code (Dev)",
+        bundleId: "ai.polyphron.pulsecode.dev.worktree2",
+        protocolSchemes: ["pulsecode-dev"],
+      },
+    );
+  });
+
   it("uses captured values only as fallbacks for a live runner environment", () => {
     const script = makeDevelopmentLauncherScript({
       electronBinaryPath: "/repo/node_modules/electron/Electron",
@@ -19,6 +36,7 @@ describe("electron development launcher", () => {
         VITE_DEV_SERVER_URL: "http://127.0.0.1:8526",
         T3CODE_PORT: "16566",
         T3CODE_HOME: "/tmp/t3",
+        T3CODE_DESKTOP_APP_USER_MODEL_ID: "com.t3tools.t3code",
       },
     });
 
@@ -32,6 +50,14 @@ describe("electron development launcher", () => {
       "if [ -z \"${PULSE_CODE_PORT:-}\" ]; then export PULSE_CODE_PORT='16566'; fi",
     );
     assert.include(script, "if [ -z \"${T3CODE_PORT:-}\" ]; then export T3CODE_PORT='16566'; fi");
+    assert.include(script, "unset T3CODE_HOME T3CODE_DESKTOP_APP_USER_MODEL_ID");
+    assert.notInclude(script, "export PULSE_CODE_HOME='/tmp/t3'");
+    assert.notInclude(script, "export T3CODE_HOME=");
+    assert.notInclude(script, "export T3CODE_DESKTOP_APP_USER_MODEL_ID=");
+    assert.include(
+      script,
+      `if [ -z "\${PULSE_CODE_DESKTOP_APP_USER_MODEL_ID:-}" ]; then export PULSE_CODE_DESKTOP_APP_USER_MODEL_ID='${resolveDesktopLauncherIdentity().bundleId}'; fi`,
+    );
     assert.include(
       script,
       "exec '/repo/node_modules/electron/Electron' --pulse-code-dev-root='/repo/apps/desktop' '/repo/apps/desktop/dist-electron/main.cjs' \"$@\"",

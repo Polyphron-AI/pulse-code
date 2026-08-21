@@ -7,6 +7,41 @@ provider implementation remain open roadmap gates rather than locked decisions.
 
 ## Locked
 
+### D-2026-08-21-upstream-t3-fidelity
+
+- **Decision:** Official T3 source, features, CI, desktop packaging, releases, and updates remain
+  owned by the official T3 main repository. Pulse does not build or publish a modified T3 product.
+- **Why:** T3 must remain true to its upstream product instead of becoming a second profile compiled
+  from Pulse source.
+- **Status:** locked on 2026-08-21; last opened 2026-08-21; last edited 2026-08-21.
+
+### D-2026-08-21-selective-pulse-downstream
+
+- **Decision:** Pulse owns an independent repository history and release train, may selectively pull
+  released T3 features through explicit reviewed upstream-intake pull requests, and may add
+  Pulse-only features without preserving feature parity or a shared commit.
+- **Why:** Selective downstream evolution lets Pulse serve its team roadmap without changing or
+  misrepresenting official T3.
+- **Status:** locked on 2026-08-21; last opened 2026-08-21; last edited 2026-08-21.
+
+### D-2026-08-21-desktop-identity-isolation
+
+- **Decision:** Pulse desktop is a permanent, independently installable Windows, macOS, and Linux
+  product with distinct application identity, installation paths, state, protocols, shortcuts,
+  signing, updater, and artifacts. It must run beside official T3 and start fresh; any future T3
+  import is explicit, selective, copy-only, and non-destructive.
+- **Why:** Team-wide Pulse adoption must not replace, activate, mutate, or uninstall a developer's
+  official T3 installation.
+- **Status:** locked on 2026-08-21; last opened 2026-08-21; last edited 2026-08-21.
+
+### D-2026-08-21-shared-web-mobile-initially
+
+- **Decision:** Web and mobile remain shared clients initially; the independent product identity
+  boundary applies only to packaged desktop applications.
+- **Why:** This preserves the existing multi-surface client investment while allowing capability-
+  gated Pulse-only desktop and server features.
+- **Status:** locked on 2026-08-21; last opened 2026-08-21; last edited 2026-08-21.
+
 ### D-2026-08-19-server-owned-integrations
 
 - **Decision:** The owning Pulse Code Server stores credentials and calls provider APIs; clients and

@@ -1,0 +1,37 @@
+{
+  "blocked_by": [],
+  "commits": [],
+  "created_at": "2026-08-21T11:49:23Z",
+  "files_touched": [
+    "apps/desktop/src/app/DesktopConfig.ts",
+    "apps/desktop/src/app/DesktopConnectionCatalogStore.test.ts",
+    "apps/desktop/src/app/DesktopEarlyElectronStartup.test.ts",
+    "apps/desktop/src/app/DesktopEarlyElectronStartup.ts",
+    "apps/desktop/src/app/DesktopEnvironment.test.ts",
+    "apps/desktop/src/app/DesktopEnvironment.ts",
+    "apps/desktop/src/app/DesktopObservability.test.ts",
+    "apps/desktop/src/app/DesktopStatePaths.ts",
+    "apps/desktop/src/backend/DesktopBackendConfiguration.test.ts",
+    "apps/desktop/src/backend/DesktopServerExposure.test.ts",
+    "apps/desktop/src/settings/DesktopAppSettings.test.ts",
+    "apps/desktop/src/settings/DesktopClientSettings.diagnostics.test.ts",
+    "apps/desktop/src/settings/DesktopClientSettings.test.ts",
+    "apps/desktop/src/settings/DesktopSavedEnvironments.test.ts",
+    "apps/desktop/src/updates/DesktopUpdates.test.ts",
+    "apps/desktop/src/wsl/DesktopWslServerTree.test.ts"
+  ],
+  "host_refs": {},
+  "id": "P-2026-08-21-pulse-desktop-product-separation/T1",
+  "kind": "protective",
+  "local_id": "T1",
+  "owner": null,
+  "plan_id": "P-2026-08-21-pulse-desktop-product-separation",
+  "roadmap_items": ["R-2026-08-21-desktop-product-separation"],
+  "schema": "product-ops.task/v1",
+  "status": "completed",
+  "subject": "Isolate Pulse runtime identity and state roots",
+  "updated_at": "2026-08-21T12:12:58Z",
+  "verification_receipts": [
+    "Focused runtime/early-startup tests: 2 files, 14 tests passed; all 16 scoped files format/diff checks passed; temporary-state fixtures migrated to PULSE_CODE_HOME; coordinator reviewed diff and final legacy scan."
+  ]
+}

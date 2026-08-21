@@ -1,13 +1,17 @@
 decisions:
-  - { id: D-2026-08-19-server-owned-integrations, status: proposed, source: project/decisions.md }
-  - { id: D-2026-08-19-thin-provider-adapters, status: proposed, source: project/decisions.md }
+  - { id: D-2026-08-21-upstream-t3-fidelity, status: locked, source: project/decisions.md }
+  - { id: D-2026-08-21-selective-pulse-downstream, status: locked, source: project/decisions.md }
+  - { id: D-2026-08-21-desktop-identity-isolation, status: locked, source: project/decisions.md }
+  - { id: D-2026-08-21-shared-web-mobile-initially, status: locked, source: project/decisions.md }
+  - { id: D-2026-08-19-server-owned-integrations, status: locked, source: project/decisions.md }
+  - { id: D-2026-08-19-thin-provider-adapters, status: locked, source: project/decisions.md }
   - {
       id: D-2026-08-19-pulse-issues-reference-adapter,
-      status: proposed,
+      status: locked,
       source: project/decisions.md,
     }
   - {
       id: D-2026-08-19-additive-capability-compatibility,
-      status: proposed,
+      status: locked,
       source: project/decisions.md,
     }

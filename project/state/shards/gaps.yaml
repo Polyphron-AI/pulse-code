@@ -1,5 +1,17 @@
 gaps:
   - {
+      id: G-2026-08-21-desktop-boundary-presentation-metadata,
+      severity: high,
+      status: open,
+      source: project/known-gaps.md,
+    }
+  - {
+      id: G-2026-08-21-desktop-identity-not-isolated,
+      severity: high,
+      status: open,
+      source: project/known-gaps.md,
+    }
+  - {
       id: G-2026-08-19-tokenizer-definition,
       severity: medium,
       status: open,

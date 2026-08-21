@@ -1,0 +1,22 @@
+{
+  "blocked_by": [],
+  "commits": [],
+  "created_at": "2026-08-21T11:49:23Z",
+  "files_touched": ["scripts/build-desktop-artifact.test.ts", "scripts/build-desktop-artifact.ts"],
+  "host_refs": {},
+  "id": "P-2026-08-21-pulse-desktop-product-separation/T4",
+  "kind": "protective",
+  "local_id": "T4",
+  "owner": null,
+  "plan_id": "P-2026-08-21-pulse-desktop-product-separation",
+  "roadmap_items": ["R-2026-08-21-desktop-product-separation"],
+  "schema": "product-ops.task/v1",
+  "status": "completed",
+  "subject": "Give every packaged desktop target Pulse-only identity",
+  "updated_at": "2026-08-21T12:45:43Z",
+  "verification_receipts": [
+    "Corrected post-build verifier to the shared pulsecode.exe constant; focused regression passed; rebuilt Windows x64 NSIS successfully; packaged payload validated 69 files and 35 sidecar natives; archive contains pulsecode.exe and no t3code.exe primary; SHA-256 A87DB57EB9754BE61B4DE6298A19CC04FBFF337810261881AC2DC7FDDF313513.",
+    "First integrated Windows build reached NSIS payload validation and exposed a stale verifier path derived from the display product name; corrected to the shared pulsecode.exe identity constant before rebuild.",
+    "Identity-specific artifact-builder tests: 8 passed; targeted format and diff checks passed; coordinator reviewed assigned diff. Broader file suite 45/47 with two unchanged Windows fake-EXE spawn UNKNOWN environment failures."
+  ]
+}

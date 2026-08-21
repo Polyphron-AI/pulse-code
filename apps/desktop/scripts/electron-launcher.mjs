@@ -15,11 +15,28 @@ const repoRoot = NodePath.resolve(desktopDir, "..", "..");
 const devBundleIdSuffix = NodePath.basename(repoRoot)
   .toLowerCase()
   .replaceAll(/[^a-z0-9]+/g, "");
-export const APP_DISPLAY_NAME = isDevelopment ? "Pulse Code (Dev)" : "Pulse Code (Alpha)";
-export const APP_BUNDLE_ID = isDevelopment
-  ? `com.t3tools.t3code.dev.${devBundleIdSuffix || "local"}`
-  : "com.t3tools.t3code";
-const APP_PROTOCOL_SCHEMES = isDevelopment ? ["t3code-dev"] : ["t3code"];
+
+export function resolveDesktopLauncherIdentity({
+  development = isDevelopment,
+  bundleIdSuffix = devBundleIdSuffix,
+} = {}) {
+  return development
+    ? {
+        displayName: "Pulse Code (Dev)",
+        bundleId: `ai.polyphron.pulsecode.dev.${bundleIdSuffix || "local"}`,
+        protocolSchemes: ["pulsecode-dev"],
+      }
+    : {
+        displayName: "Pulse Code (Alpha)",
+        bundleId: "ai.polyphron.pulsecode",
+        protocolSchemes: ["pulsecode"],
+      };
+}
+
+const launcherIdentity = resolveDesktopLauncherIdentity();
+export const APP_DISPLAY_NAME = launcherIdentity.displayName;
+export const APP_BUNDLE_ID = launcherIdentity.bundleId;
+export const APP_PROTOCOL_SCHEMES = launcherIdentity.protocolSchemes;
 const LAUNCHER_VERSION = 15;
 const developmentMacIconPngPath = NodePath.join(
   repoRoot,
@@ -110,8 +127,7 @@ export function makeDevelopmentLauncherScript({
     ["VITE_DEV_SERVER_URL", environment.VITE_DEV_SERVER_URL],
     ["PULSE_CODE_PORT", environment.PULSE_CODE_PORT ?? environment.T3CODE_PORT],
     ["T3CODE_PORT", environment.PULSE_CODE_PORT ?? environment.T3CODE_PORT],
-    ["PULSE_CODE_HOME", environment.PULSE_CODE_HOME ?? environment.T3CODE_HOME],
-    ["T3CODE_HOME", environment.PULSE_CODE_HOME ?? environment.T3CODE_HOME],
+    ["PULSE_CODE_HOME", environment.PULSE_CODE_HOME],
     [
       "PULSE_CODE_COMMIT_HASH",
       environment.PULSE_CODE_COMMIT_HASH ?? environment.T3CODE_COMMIT_HASH,
@@ -134,10 +150,10 @@ export function makeDevelopmentLauncherScript({
       environment.PULSE_CODE_OTLP_EXPORT_INTERVAL_MS ?? environment.T3CODE_OTLP_EXPORT_INTERVAL_MS,
     ],
     ["PULSE_CODE_DESKTOP_APP_USER_MODEL_ID", APP_BUNDLE_ID],
-    ["T3CODE_DESKTOP_APP_USER_MODEL_ID", APP_BUNDLE_ID],
   ].filter((entry) => typeof entry[1] === "string" && entry[1].trim().length > 0);
   return [
     "#!/bin/sh",
+    "unset T3CODE_HOME T3CODE_DESKTOP_APP_USER_MODEL_ID",
     ...envEntries.map(
       ([name, value]) =>
         `if [ -z "\${${name}:-}" ]; then export ${name}=${shellSingleQuote(value)}; fi`,

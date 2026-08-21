@@ -2,6 +2,34 @@
 
 ## Open
 
+### G-2026-08-21-desktop-identity-not-isolated — high
+
+- **Summary:** Pulse-only desktop identifiers, state roots, protocols, updater coordinates, and
+  package values are implemented, and an unsigned Windows x64 candidate passes package inspection.
+  Installed lifecycle evidence is not complete on Windows, macOS, or Linux.
+- **Impact:** The Windows candidate is ready for the next local side-by-side installation test, but
+  Pulse cannot yet be declared ready for signed team-wide distribution across all desktop platforms.
+- **Proposed resolution:** Install the Windows candidate beside official T3 and prove simultaneous
+  launch, fresh state, protocol/shortcut ownership, update isolation, and uninstall isolation. Build
+  signed macOS and Linux candidates and run the equivalent per-platform lifecycle proofs.
+- **Artifacts:** `prd/11-product-line-and-distribution-boundary.md`,
+  `prd/20-acceptance-criteria/desktop-product-line-boundary.md`, `apps/desktop/src/app/`,
+  `apps/desktop/src/electron/ElectronProtocol.ts`, `scripts/build-desktop-artifact.ts`, and local
+  candidate `release/Pulse-Code-0.0.33-x64.exe` (SHA-256 `A87DB57...F313513`).
+
+### G-2026-08-21-desktop-boundary-presentation-metadata — high
+
+- **Summary:** The ProductOps workspace renderer cannot present the new desktop-boundary PRD and
+  acceptance sections because their presentation registry lacks `health`, `covers`, `action`,
+  `authority`, `live`, and `register` fields.
+- **Impact:** The canonical Markdown PRD is valid and implementation can proceed, but the unified
+  generated workspace cannot expose or audit these sections yet.
+- **Proposed resolution:** Add renderer-compatible presentation metadata for the new PRD sections or
+  define an approved renderer default, then rerun `workspace_render.py --check`; do not hand-edit the
+  generated workspace.
+- **Artifacts:** `prd/11-product-line-and-distribution-boundary.md`,
+  `prd/20-acceptance-criteria/desktop-product-line-boundary.md`, ProductOps workspace renderer.
+
 ### G-2026-08-19-tokenizer-definition — medium
 
 - **Summary:** “Tokenizer” is not defined well enough to choose a product surface or provider
@@ -83,4 +111,4 @@
 
 ---
 
-**Created:** 2026-08-19 . **Last opened:** 2026-08-20 . **Last edited:** 2026-08-20 . **Status:** active . **Owner:** Product
+**Created:** 2026-08-19 . **Last opened:** 2026-08-21 . **Last edited:** 2026-08-21 . **Status:** active . **Owner:** Product

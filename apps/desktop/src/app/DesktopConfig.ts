@@ -61,9 +61,9 @@ export const DesktopConfig = Config.all({
   appDataDirectory: trimmedString("APPDATA"),
   xdgConfigHome: trimmedString("XDG_CONFIG_HOME"),
   xdgDataHome: trimmedString("XDG_DATA_HOME"),
-  t3Home: pulseCodeOptionalTrimmedString("T3CODE_HOME"),
+  t3Home: trimmedString("PULSE_CODE_HOME"),
   devServerUrl: Config.url("VITE_DEV_SERVER_URL").pipe(Config.option),
-  appUserModelIdOverride: pulseCodeOptionalTrimmedString("T3CODE_DESKTOP_APP_USER_MODEL_ID"),
+  appUserModelIdOverride: trimmedString("PULSE_CODE_DESKTOP_APP_USER_MODEL_ID"),
   devRemoteT3ServerEntryPath: pulseCodeOptionalTrimmedString(
     "T3CODE_DEV_REMOTE_T3_SERVER_ENTRY_PATH",
   ),

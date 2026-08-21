@@ -19,35 +19,24 @@ This starts the Pulse Code server on your machine and opens the local web app. U
 
 ## Desktop App
 
-Download the latest release from
-[GitHub Releases](https://github.com/Polyphron-AI/pulse-code/releases), or install from a package
-registry.
+Pulse Code desktop is an independently installable downstream product. It uses its own application
+identity and state, so you can install and open it alongside official T3 Code. Installing Pulse does
+not update, replace, or modify the official T3 installation.
 
-Windows:
+Download the Pulse installer from the assets attached to
+[Pulse Code GitHub Releases](https://github.com/Polyphron-AI/pulse-code/releases). For the current
+Windows candidate, download and run the `Pulse-Code-*-x64.exe` installer manually.
 
-```bash
-winget install T3Tools.T3Code
-```
+Do not use the existing `T3Tools.T3Code` Winget package, `t3-code` Homebrew cask, or `t3code-*` AUR
+packages to install Pulse. Those identifiers install official or legacy T3 desktop packages.
 
-macOS:
+Start Pulse as a fresh installation. It does not automatically read, move, or delete T3 desktop
+data. A future import tool may offer an explicit, selective copy into Pulse, but import is optional
+and will not alter the source T3 installation.
 
-```bash
-brew install --cask t3-code
-```
-
-Arch Linux:
-
-Stable:
-
-```bash
-yay -S t3code-bin
-```
-
-Nightly:
-
-```bash
-yay -S t3code-nightly-bin
-```
+The Windows candidate is suitable for local installation evidence. Signed, team-wide macOS and
+Linux releases remain unavailable until each platform has passed packaging, signing, launch, and
+side-by-side verification.
 
 ## Providers
 

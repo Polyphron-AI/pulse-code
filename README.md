@@ -35,35 +35,17 @@ Tip: Use `npx t3@latest --help` for the full CLI reference.
 
 ### Desktop app
 
-Install the latest version of the desktop app from [GitHub Releases](https://github.com/Polyphron-AI/pulse-code/releases), or from your favorite package registry:
+Install Pulse Code from the assets attached to [Pulse Code GitHub Releases](https://github.com/Polyphron-AI/pulse-code/releases).
+The Pulse desktop app has its own application identity and data directory, so it can be installed
+and opened alongside official T3 Code without replacing or modifying T3.
 
-#### Windows (`winget`)
+Start with a fresh Pulse installation. Pulse does not automatically read, move, or delete T3 data.
+An optional import tool may be added later as an explicit, selective, copy-only action.
 
-```bash
-winget install T3Tools.T3Code
-```
-
-#### macOS (Homebrew)
-
-```bash
-brew install --cask t3-code
-```
-
-#### Arch Linux (AUR)
-
-Stable:
-
-```bash
-yay -S t3code-bin
-```
-
-Nightly:
-
-```bash
-yay -S t3code-nightly-bin
-```
-
-The AUR packaging is maintained in this repository under [`packaging/aur`](./packaging/aur).
+The current install candidate is the manually downloaded Windows installer. The existing Winget,
+Homebrew, and AUR identifiers belong to official or legacy T3 installations and do not install this
+independent Pulse desktop product. Signed team releases for macOS and Linux remain gated on
+per-platform packaging and side-by-side evidence.
 
 ## Some notes
 

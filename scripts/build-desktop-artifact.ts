@@ -52,7 +52,10 @@ import { Command, Flag } from "effect/unstable/cli";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
 const LINUX_ICON_SIZES = [16, 22, 24, 32, 48, 64, 128, 256, 512] as const;
-const DESKTOP_APP_ID = "com.t3tools.t3code";
+export const DESKTOP_APP_ID = "ai.polyphron.pulsecode";
+export const DESKTOP_EXECUTABLE_NAME = "pulsecode";
+export const WINDOWS_DESKTOP_EXECUTABLE_FILE_NAME = `${DESKTOP_EXECUTABLE_NAME}.exe`;
+export const DESKTOP_PROTOCOL_SCHEMES = ["pulsecode", "pulsecode-dev"] as const;
 const APPLE_TEAM_ID_PATTERN = /^[A-Z0-9]{10}$/u;
 
 const BuildPlatform = Schema.Literals(["mac", "linux", "win"]);
@@ -1986,9 +1989,7 @@ export const resolveGitHubPublishConfig = Effect.fn("resolveGitHubPublishConfig"
   updateChannel: "latest" | "nightly",
 ) {
   const env = yield* Config.all({
-    updateRepository: pulseCodeBuildConfig("T3CODE_DESKTOP_UPDATE_REPOSITORY", Config.string).pipe(
-      Config.option,
-    ),
+    updateRepository: Config.string("PULSE_CODE_DESKTOP_UPDATE_REPOSITORY").pipe(Config.option),
     githubRepository: Config.string("GITHUB_REPOSITORY").pipe(Config.option),
   });
   const rawRepo = (
@@ -2110,7 +2111,7 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       protocols: [
         {
           name: "Pulse Code",
-          schemes: ["pulsecode", "pulsecode-dev", "t3code", "t3code-dev"],
+          schemes: [...DESKTOP_PROTOCOL_SCHEMES],
         },
       ],
       ...(macPasskeySigning
@@ -2148,21 +2149,21 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
   if (platform === "linux") {
     buildConfig.linux = {
       target: [target],
-      executableName: "t3code",
+      executableName: DESKTOP_EXECUTABLE_NAME,
       icon: "icons",
       category: "Development",
       // electron-builder turns these into MimeType=x-scheme-handler/<scheme>;
       // in the .desktop entry (Exec already gets %U), so browsers can hand
-      // Pulse and legacy T3 OAuth callbacks to the app.
+      // Pulse OAuth callbacks to the app.
       protocols: [
         {
           name: "Pulse Code",
-          schemes: ["pulsecode", "pulsecode-dev", "t3code", "t3code-dev"],
+          schemes: [...DESKTOP_PROTOCOL_SCHEMES],
         },
       ],
       desktop: {
         entry: {
-          StartupWMClass: "t3code",
+          StartupWMClass: DESKTOP_EXECUTABLE_NAME,
         },
       },
     };
@@ -2176,6 +2177,8 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
     buildConfig.nsis = { differentialPackage: true };
     const winConfig: Record<string, unknown> = {
       target: [target],
+      executableName: DESKTOP_EXECUTABLE_NAME,
+      protocols: [{ name: "Pulse Code", schemes: [...DESKTOP_PROTOCOL_SCHEMES] }],
       icon: "icon.ico",
       // Resource editing applies the product metadata and icon independently
       // of code signing. Disabling it for local unsigned builds leaves the
@@ -2933,7 +2936,7 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
       ? path.join(stageAppDir, WINDOWS_SERVER_RESOURCE_SOURCE_DIR, WINDOWS_SERVER_ASAR_RESOURCE)
       : undefined;
   const stagePackageJson: StagePackageJson = {
-    name: "t3code",
+    name: DESKTOP_EXECUTABLE_NAME,
     version: appVersion,
     buildVersion: appVersion,
     t3codeCommitHash: commitHash,
@@ -3103,7 +3106,7 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
   if (options.platform === "win") {
     yield* validateWindowsPackagedPayload({
       stageDistDir,
-      appExecutableName: `${resolveDesktopProductName(appVersion)}.exe`,
+      appExecutableName: WINDOWS_DESKTOP_EXECUTABLE_FILE_NAME,
       targetArch: options.arch,
       verbose: options.verbose,
     });

@@ -1,0 +1,31 @@
+{
+  "blocked_by": [
+    "P-2026-08-21-pulse-desktop-product-separation/T1",
+    "P-2026-08-21-pulse-desktop-product-separation/T2",
+    "P-2026-08-21-pulse-desktop-product-separation/T3",
+    "P-2026-08-21-pulse-desktop-product-separation/T4",
+    "P-2026-08-21-pulse-desktop-product-separation/T5",
+    "P-2026-08-21-pulse-desktop-product-separation/T6"
+  ],
+  "commits": [],
+  "created_at": "2026-08-21T11:49:23Z",
+  "files_touched": [
+    "prd/change-requests/CR-2026-08-21-desktop-product-line-boundary.md",
+    "project/known-gaps.md",
+    "project/state.json",
+    "project/state/shards/gaps.yaml",
+    "project/state/shards/roadmap.yaml"
+  ],
+  "host_refs": {},
+  "id": "P-2026-08-21-pulse-desktop-product-separation/T7",
+  "kind": "verification",
+  "local_id": "T7",
+  "owner": "coordinator",
+  "plan_id": "P-2026-08-21-pulse-desktop-product-separation",
+  "roadmap_items": ["R-2026-08-21-desktop-product-separation"],
+  "schema": "product-ops.task/v1",
+  "status": "in_progress",
+  "subject": "Verify the install candidate and close the product boundary",
+  "updated_at": "2026-08-21T12:24:52Z",
+  "verification_receipts": []
+}

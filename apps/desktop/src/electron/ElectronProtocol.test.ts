@@ -3,15 +3,22 @@ import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import { beforeEach, vi } from "vite-plus/test";
 
-const { handleMock, netFetchMock, unhandleMock } = vi.hoisted(() => ({
-  handleMock: vi.fn(),
-  netFetchMock: vi.fn(),
-  unhandleMock: vi.fn(),
-}));
+const { handleMock, netFetchMock, registerSchemesAsPrivilegedMock, unhandleMock } = vi.hoisted(
+  () => ({
+    handleMock: vi.fn(),
+    netFetchMock: vi.fn(),
+    registerSchemesAsPrivilegedMock: vi.fn(),
+    unhandleMock: vi.fn(),
+  }),
+);
 
 vi.mock("electron", () => ({
   net: { fetch: netFetchMock },
-  protocol: { handle: handleMock, unhandle: unhandleMock },
+  protocol: {
+    handle: handleMock,
+    registerSchemesAsPrivileged: registerSchemesAsPrivilegedMock,
+    unhandle: unhandleMock,
+  },
 }));
 
 import * as ElectronProtocol from "./ElectronProtocol.ts";
@@ -20,7 +27,28 @@ describe("ElectronProtocol", () => {
   beforeEach(() => {
     handleMock.mockReset();
     netFetchMock.mockReset();
+    registerSchemesAsPrivilegedMock.mockReset();
     unhandleMock.mockReset();
+  });
+
+  it("registers only Pulse schemes as privileged", () => {
+    ElectronProtocol.registerDesktopSchemePrivilegesSync();
+
+    const registrations = registerSchemesAsPrivilegedMock.mock.calls[0]?.[0] as ReadonlyArray<{
+      readonly scheme: string;
+    }>;
+    assert.deepEqual(
+      registrations.map(({ scheme }) => scheme),
+      ["pulsecode", "pulsecode-dev"],
+    );
+    assert.notInclude(
+      registrations.map(({ scheme }) => scheme),
+      "t3code",
+    );
+    assert.notInclude(
+      registrations.map(({ scheme }) => scheme),
+      "t3code-dev",
+    );
   });
 
   it.effect("proxies the stable renderer origin to the current app server", () =>
@@ -35,7 +63,7 @@ describe("ElectronProtocol", () => {
         Effect.gen(function* () {
           const protocol = yield* ElectronProtocol.ElectronProtocol;
           yield* protocol.registerDesktopProtocol({
-            scheme: "t3code-dev",
+            scheme: "pulsecode-dev",
             targetOrigin: new URL("http://127.0.0.1:3773/"),
             backendOrigin: new URL("http://127.0.0.1:3774/"),
             clerkFrontendApiHostname: "clerk.t3.codes",
@@ -44,11 +72,11 @@ describe("ElectronProtocol", () => {
 
           const response = yield* Effect.promise(() =>
             handler!(
-              new Request("t3code-dev://app/api/health?verbose=1", {
+              new Request("pulsecode-dev://app/api/health?verbose=1", {
                 headers: {
                   accept: "application/json",
-                  origin: "t3code-dev://app",
-                  referer: "t3code-dev://app/",
+                  origin: "pulsecode-dev://app",
+                  referer: "pulsecode-dev://app/",
                   "sec-fetch-site": "same-origin",
                 },
               }),
@@ -65,18 +93,18 @@ describe("ElectronProtocol", () => {
           );
           assert.include(
             response.headers.get("content-security-policy") ?? "",
-            "img-src 'self' t3code-dev: blob: data: http: https:",
+            "img-src 'self' pulsecode-dev: blob: data: http: https:",
           );
           assert.include(
             response.headers.get("content-security-policy") ?? "",
-            "font-src 'self' t3code-dev: data:",
+            "font-src 'self' pulsecode-dev: data:",
           );
         }),
       );
 
       assert.deepEqual(
         handleMock.mock.calls.map((call) => call[0]),
-        ["t3code-dev"],
+        ["pulsecode-dev"],
       );
       assert.equal(netFetchMock.mock.calls[0]?.[0], "http://127.0.0.1:3773/api/health?verbose=1");
       const forwardedHeaders = new Headers(netFetchMock.mock.calls[0]?.[1]?.headers);
@@ -84,11 +112,11 @@ describe("ElectronProtocol", () => {
       assert.isNull(forwardedHeaders.get("origin"));
       assert.isNull(forwardedHeaders.get("referer"));
       assert.isNull(forwardedHeaders.get("sec-fetch-site"));
-      assert.deepEqual(unhandleMock.mock.calls, [["t3code-dev"]]);
+      assert.deepEqual(unhandleMock.mock.calls, [["pulsecode-dev"]]);
     }).pipe(Effect.provide(ElectronProtocol.layer)),
   );
 
-  it.effect("serves canonical Pulse Code and legacy Pulse Code schemes together", () =>
+  it.effect("registers and releases only the requested Pulse scheme", () =>
     Effect.gen(function* () {
       handleMock.mockImplementation(() => undefined);
       const protocol = yield* ElectronProtocol.ElectronProtocol;
@@ -96,7 +124,6 @@ describe("ElectronProtocol", () => {
       yield* Effect.scoped(
         protocol.registerDesktopProtocol({
           scheme: "pulsecode",
-          aliasSchemes: ["t3code"],
           targetOrigin: new URL("http://127.0.0.1:3773/"),
           backendOrigin: new URL("http://127.0.0.1:3773/"),
           clerkFrontendApiHostname: undefined,
@@ -105,9 +132,11 @@ describe("ElectronProtocol", () => {
 
       assert.deepEqual(
         handleMock.mock.calls.map((call) => call[0]),
-        ["pulsecode", "t3code"],
+        ["pulsecode"],
       );
-      assert.deepEqual(unhandleMock.mock.calls, [["pulsecode"], ["t3code"]]);
+      assert.deepEqual(unhandleMock.mock.calls, [["pulsecode"]]);
+      assert.notInclude(handleMock.mock.calls.flat(), "t3code");
+      assert.notInclude(unhandleMock.mock.calls.flat(), "t3code");
     }).pipe(Effect.provide(ElectronProtocol.layer)),
   );
 
@@ -122,12 +151,12 @@ describe("ElectronProtocol", () => {
         Effect.gen(function* () {
           const protocol = yield* ElectronProtocol.ElectronProtocol;
           yield* protocol.registerDesktopProtocol({
-            scheme: "t3code",
+            scheme: "pulsecode",
             targetOrigin: new URL("http://127.0.0.1:3773/"),
             backendOrigin: new URL("http://127.0.0.1:3773/"),
             clerkFrontendApiHostname: undefined,
           });
-          return yield* Effect.promise(() => handler!(new Request("t3code://other/")));
+          return yield* Effect.promise(() => handler!(new Request("pulsecode://other/")));
         }),
       );
 
@@ -150,12 +179,12 @@ describe("ElectronProtocol", () => {
         Effect.gen(function* () {
           const protocol = yield* ElectronProtocol.ElectronProtocol;
           yield* protocol.registerDesktopProtocol({
-            scheme: "t3code-dev",
+            scheme: "pulsecode-dev",
             targetOrigin: new URL("http://127.0.0.1:5733/"),
             backendOrigin: new URL("http://127.0.0.1:3773/"),
             clerkFrontendApiHostname: undefined,
           });
-          return yield* Effect.promise(() => handler!(new Request("t3code-dev://app/")));
+          return yield* Effect.promise(() => handler!(new Request("pulsecode-dev://app/")));
         }),
       );
 
@@ -174,7 +203,7 @@ describe("ElectronProtocol", () => {
       const protocol = yield* ElectronProtocol.ElectronProtocol;
       const error = yield* Effect.scoped(
         protocol.registerDesktopProtocol({
-          scheme: "t3code-dev",
+          scheme: "pulsecode-dev",
           targetOrigin: new URL("http://127.0.0.1:3773/"),
           backendOrigin: new URL("http://127.0.0.1:3774/"),
           clerkFrontendApiHostname: undefined,
@@ -182,9 +211,9 @@ describe("ElectronProtocol", () => {
       ).pipe(Effect.flip);
 
       assert.instanceOf(error, ElectronProtocol.ElectronProtocolRegistrationError);
-      assert.equal(error.scheme, "t3code-dev");
+      assert.equal(error.scheme, "pulsecode-dev");
       assert.strictEqual(error.cause, cause);
-      assert.equal(error.message, 'Failed to register Electron protocol scheme "t3code-dev".');
+      assert.equal(error.message, 'Failed to register Electron protocol scheme "pulsecode-dev".');
     }).pipe(Effect.provide(ElectronProtocol.layer)),
   );
 
@@ -199,7 +228,7 @@ describe("ElectronProtocol", () => {
       const exit = yield* Effect.exit(
         Effect.scoped(
           protocol.registerDesktopProtocol({
-            scheme: "t3code",
+            scheme: "pulsecode",
             targetOrigin: new URL("http://127.0.0.1:3773/"),
             backendOrigin: new URL("http://127.0.0.1:3773/"),
             clerkFrontendApiHostname: undefined,
@@ -211,16 +240,16 @@ describe("ElectronProtocol", () => {
       if (exit._tag === "Failure") {
         const error = Cause.squash(exit.cause);
         assert.instanceOf(error, ElectronProtocol.ElectronProtocolUnregistrationError);
-        assert.equal(error.scheme, "t3code");
+        assert.equal(error.scheme, "pulsecode");
         assert.strictEqual(error.cause, cause);
-        assert.equal(error.message, 'Failed to unregister Electron protocol scheme "t3code".');
+        assert.equal(error.message, 'Failed to unregister Electron protocol scheme "pulsecode".');
       }
     }).pipe(Effect.provide(ElectronProtocol.layer)),
   );
 
   it("keeps executable sources host-restricted while allowing runtime network resources", () => {
     const policy = ElectronProtocol.makeDesktopContentSecurityPolicy({
-      scheme: "t3code",
+      scheme: "pulsecode",
       targetOrigin: new URL("http://127.0.0.1:3773/"),
       backendOrigin: new URL("http://127.0.0.1:3773/"),
       clerkFrontendApiHostname: "clerk.t3.codes",
@@ -242,12 +271,12 @@ describe("ElectronProtocol", () => {
     assert.deepEqual(directives["connect-src"], ["'self'", "http:", "https:", "ws:", "wss:"]);
     assert.deepEqual(directives["img-src"], [
       "'self'",
-      "t3code:",
+      "pulsecode:",
       "blob:",
       "data:",
       "http:",
       "https:",
     ]);
-    assert.deepEqual(directives["font-src"], ["'self'", "t3code:", "data:"]);
+    assert.deepEqual(directives["font-src"], ["'self'", "pulsecode:", "data:"]);
   });
 });

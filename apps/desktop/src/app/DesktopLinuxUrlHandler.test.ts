@@ -23,9 +23,9 @@ const makeEnvironment = (overrides: Record<string, unknown> = {}) =>
     isPackaged: true,
     isDevelopment: false,
     displayName: "Pulse Code (Alpha)",
-    linuxWmClass: "t3code",
+    linuxWmClass: "pulsecode",
     linuxApplicationsDir: "/home/alice/.local/share/applications",
-    appImagePath: Option.some("/home/alice/Applications/T3-Code.AppImage"),
+    appImagePath: Option.some("/home/alice/Applications/Pulse-Code.AppImage"),
     path: { join: (...parts: ReadonlyArray<string>) => parts.join("/") },
     ...overrides,
   } as unknown as DesktopEnvironment.DesktopEnvironment["Service"]);
@@ -106,8 +106,8 @@ describe("DesktopLinuxUrlHandler", () => {
   it("renders a scheme-handler desktop entry with freedesktop Exec quoting", () => {
     const entry = DesktopLinuxUrlHandler.renderUrlHandlerDesktopEntry({
       displayName: "Pulse Code (Nightly)",
-      execTarget: '/home/al ice/Apps/T3 "100%" $HOME\\x.AppImage',
-      schemes: ["pulsecode", "t3code"],
+      execTarget: '/home/al ice/Apps/Pulse "100%" $HOME\\x.AppImage',
+      schemes: ["pulsecode"],
     });
 
     assert.include(entry, "[Desktop Entry]");
@@ -117,37 +117,38 @@ describe("DesktopLinuxUrlHandler", () => {
     // backslashes plus the sign.
     assert.include(
       entry,
-      'Exec="/home/al ice/Apps/T3 \\\\"100%%\\\\" \\\\$HOME\\\\\\\\x.AppImage" %U',
+      'Exec="/home/al ice/Apps/Pulse \\\\"100%%\\\\" \\\\$HOME\\\\\\\\x.AppImage" %U',
     );
     assert.include(entry, "NoDisplay=true");
     assert.notInclude(entry, "StartupWMClass=");
-    assert.include(entry, "MimeType=x-scheme-handler/pulsecode;x-scheme-handler/t3code;");
+    assert.include(entry, "MimeType=x-scheme-handler/pulsecode;");
+    assert.notInclude(entry, "t3code");
   });
 
   it("carries structured context on registration errors", () => {
     const writeError = new DesktopLinuxUrlHandler.DesktopLinuxUrlHandlerRegistrationError({
       step: "write-desktop-entry",
-      scheme: "t3code",
-      desktopEntryPath: "/home/alice/.local/share/applications/t3code-url-handler.desktop",
+      scheme: "pulsecode",
+      desktopEntryPath: "/home/alice/.local/share/applications/pulsecode-url-handler.desktop",
       cause: new Error("boom"),
     });
     assert.equal(
       writeError.message,
-      "Failed to register the t3code:// URL handler (step: write-desktop-entry).",
+      "Failed to register the pulsecode:// URL handler (step: write-desktop-entry).",
     );
     assert.equal(
       writeError.desktopEntryPath,
-      "/home/alice/.local/share/applications/t3code-url-handler.desktop",
+      "/home/alice/.local/share/applications/pulsecode-url-handler.desktop",
     );
 
     const exitError = new DesktopLinuxUrlHandler.DesktopLinuxUrlHandlerRegistrationError({
       step: "set-default-handler",
-      scheme: "t3code",
+      scheme: "pulsecode",
       exitCode: 4,
     });
     assert.equal(
       exitError.message,
-      "Failed to register the t3code:// URL handler (step: set-default-handler, xdg-mime exit code 4).",
+      "Failed to register the pulsecode:// URL handler (step: set-default-handler, xdg-mime exit code 4).",
     );
   });
 
@@ -165,22 +166,37 @@ describe("DesktopLinuxUrlHandler", () => {
       );
       assert.include(
         recorded.files[0]?.content,
-        'Exec="/home/alice/Applications/T3-Code.AppImage" %U',
+        'Exec="/home/alice/Applications/Pulse-Code.AppImage" %U',
       );
-      assert.include(
-        recorded.files[0]?.content,
-        "MimeType=x-scheme-handler/pulsecode;x-scheme-handler/t3code;",
-      );
+      assert.include(recorded.files[0]?.content, "MimeType=x-scheme-handler/pulsecode;");
       assert.deepEqual(recorded.commands, [
         {
           command: "xdg-mime",
           args: ["default", "pulsecode-url-handler.desktop", "x-scheme-handler/pulsecode"],
         },
+      ]);
+      assert.notInclude(recorded.files[0]?.content, "t3code");
+      assert.notInclude(
+        recorded.commands.flatMap(({ args }) => args),
+        "x-scheme-handler/t3code",
+      );
+    });
+  });
+
+  it.effect("claims only the Pulse development scheme for development packages", () => {
+    const recorded = emptyRecording();
+
+    return Effect.gen(function* () {
+      yield* runRegister(recorded, { environment: { isDevelopment: true } });
+
+      assert.include(recorded.files[0]?.content, "MimeType=x-scheme-handler/pulsecode-dev;");
+      assert.deepEqual(recorded.commands, [
         {
           command: "xdg-mime",
-          args: ["default", "pulsecode-url-handler.desktop", "x-scheme-handler/t3code"],
+          args: ["default", "pulsecode-url-handler.desktop", "x-scheme-handler/pulsecode-dev"],
         },
       ]);
+      assert.notInclude(recorded.files[0]?.content, "t3code-dev");
     });
   });
 
@@ -225,7 +241,7 @@ describe("DesktopLinuxUrlHandler", () => {
           module: "FileSystem",
           method: "writeFileString",
           description: "read-only filesystem",
-          pathOrDescriptor: "/home/alice/.local/share/applications/t3code-url-handler.desktop",
+          pathOrDescriptor: "/home/alice/.local/share/applications/pulsecode-url-handler.desktop",
         }),
       });
 

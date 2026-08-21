@@ -17,6 +17,10 @@ import {
   createStageWorkspaceConfig,
   createStagePatchedDependencies,
   createBuildConfig,
+  DESKTOP_APP_ID,
+  DESKTOP_EXECUTABLE_NAME,
+  DESKTOP_PROTOCOL_SCHEMES,
+  WINDOWS_DESKTOP_EXECUTABLE_FILE_NAME,
   DESKTOP_ELECTRON_LANGUAGES,
   DESKTOP_FILE_EXCLUSIONS,
   DESKTOP_EXTRA_RESOURCES,
@@ -135,7 +139,7 @@ const makeWindowsPayloadFixture = Effect.fn("test.makeWindowsPayloadFixture")(fu
     path.join(resourcesDir, "resource-monitor/t3-resource-monitor.exe"),
     "monitor",
   );
-  const appExecutableName = "t3code.exe";
+  const appExecutableName = WINDOWS_DESKTOP_EXECUTABLE_FILE_NAME;
   yield* fs.writeFileString(path.join(packagedAppDir, appExecutableName), "electron");
   yield* fs.writeFileString(path.join(packagedAppDir, "chrome_crashpad_handler.exe"), "crashpad");
 
@@ -178,13 +182,14 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
     assert.equal(resolveDesktopWebAssetBrand("0.0.17-nightly.20260413.42"), "nightly");
   });
 
-  it.effect("resolves GitHub desktop publish config from Effect config", () =>
+  it.effect("resolves GitHub desktop publish config only from Pulse release coordinates", () =>
     Effect.gen(function* () {
       const latestConfig = yield* resolveGitHubPublishConfig("latest").pipe(
         Effect.provide(
           ConfigProvider.layer(
             ConfigProvider.fromEnv({
               env: {
+                PULSE_CODE_DESKTOP_UPDATE_REPOSITORY: "Polyphron-AI/pulse-code",
                 T3CODE_DESKTOP_UPDATE_REPOSITORY: "pingdotgg/t3code",
               },
             }),
@@ -196,7 +201,18 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
           ConfigProvider.layer(
             ConfigProvider.fromEnv({
               env: {
-                GITHUB_REPOSITORY: "pingdotgg/t3code",
+                GITHUB_REPOSITORY: "Polyphron-AI/pulse-code",
+              },
+            }),
+          ),
+        ),
+      );
+      const legacyConfig = yield* resolveGitHubPublishConfig("latest").pipe(
+        Effect.provide(
+          ConfigProvider.layer(
+            ConfigProvider.fromEnv({
+              env: {
+                T3CODE_DESKTOP_UPDATE_REPOSITORY: "pingdotgg/t3code",
               },
             }),
           ),
@@ -205,17 +221,18 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
 
       assert.deepStrictEqual(latestConfig, {
         provider: "github",
-        owner: "pingdotgg",
-        repo: "t3code",
+        owner: "Polyphron-AI",
+        repo: "pulse-code",
         releaseType: "release",
       });
       assert.deepStrictEqual(nightlyConfig, {
         provider: "github",
-        owner: "pingdotgg",
-        repo: "t3code",
+        owner: "Polyphron-AI",
+        repo: "pulse-code",
         releaseType: "prerelease",
         channel: "nightly",
       });
+      assert.equal(legacyConfig, undefined);
     }),
   );
 
@@ -438,6 +455,38 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
         undefined,
       );
 
+      const expectedProtocols = [
+        {
+          name: "Pulse Code",
+          schemes: [...DESKTOP_PROTOCOL_SCHEMES],
+        },
+      ];
+      assert.equal(DESKTOP_APP_ID, "ai.polyphron.pulsecode");
+      assert.equal(DESKTOP_EXECUTABLE_NAME, "pulsecode");
+      assert.equal(WINDOWS_DESKTOP_EXECUTABLE_FILE_NAME, "pulsecode.exe");
+      assert.deepStrictEqual(DESKTOP_PROTOCOL_SCHEMES, ["pulsecode", "pulsecode-dev"]);
+      for (const config of [mac, linux, win]) {
+        assert.equal(config.appId, DESKTOP_APP_ID);
+        assert.equal(config.productName, resolveDesktopProductName("1.2.3"));
+        assert.equal(config.artifactName, "Pulse-Code-${version}-${arch}.${ext}");
+      }
+
+      const macConfig = mac.mac as Record<string, unknown>;
+      const linuxConfig = linux.linux as Record<string, unknown>;
+      const winConfig = win.win as Record<string, unknown>;
+      assert.deepStrictEqual(macConfig.protocols, expectedProtocols);
+      assert.equal(linuxConfig.executableName, DESKTOP_EXECUTABLE_NAME);
+      assert.equal(
+        (linuxConfig.desktop as { entry: { StartupWMClass: string } }).entry.StartupWMClass,
+        DESKTOP_EXECUTABLE_NAME,
+      );
+      assert.deepStrictEqual(linuxConfig.protocols, expectedProtocols);
+      assert.equal(winConfig.executableName, DESKTOP_EXECUTABLE_NAME);
+      assert.deepStrictEqual(winConfig.protocols, expectedProtocols);
+      const osIdentity = JSON.stringify([macConfig, linuxConfig, winConfig]);
+      assert.notInclude(osIdentity, "t3code");
+      assert.notInclude(osIdentity, "com.t3tools");
+
       // All platforms keep app.asar fully packed; Windows ships the server
       // tree as the hand-packed server.asar sidecar in extraResources instead
       // of unpacking thousands of loose files at install time.
@@ -476,14 +525,6 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
         iconSize: 80,
         iconTextSize: 12,
       });
-      // Linux must register the renderer schemes so the generated .desktop
-      // entry advertises MimeType=x-scheme-handler/t3code; for OAuth deep links.
-      assert.deepStrictEqual((linux.linux as Record<string, unknown>).protocols, [
-        {
-          name: "Pulse Code",
-          schemes: ["pulsecode", "pulsecode-dev", "t3code", "t3code-dev"],
-        },
-      ]);
       for (const config of [mac, linux, win]) {
         assert.deepStrictEqual(config.electronLanguages, DESKTOP_ELECTRON_LANGUAGES);
         assert.deepStrictEqual(config.files, DESKTOP_FILE_EXCLUSIONS);
@@ -879,7 +920,7 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
     });
 
     assert.deepStrictEqual(configuration, {
-      appId: "com.t3tools.t3code",
+      appId: "ai.polyphron.pulsecode",
       teamId: "ABC1234567",
       rpDomains: ["example.clerk.accounts.dev"],
       provisioningProfilePath: "/tmp/t3code.provisionprofile",
@@ -897,7 +938,7 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
     });
 
     assert.deepStrictEqual(configuration, {
-      appId: "com.t3tools.t3code",
+      appId: "ai.polyphron.pulsecode",
       teamId: "PULSE12345",
       rpDomains: ["pulse.example.test"],
       provisioningProfilePath: "/tmp/pulse.provisionprofile",
@@ -917,7 +958,7 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
       "clerk.example.com",
       "example.clerk.accounts.dev",
     ]);
-    assert.include(entitlements, "<string>ABC1234567.com.t3tools.t3code</string>");
+    assert.include(entitlements, "<string>ABC1234567.ai.polyphron.pulsecode</string>");
     assert.include(entitlements, "<string>webcredentials:clerk.example.com</string>");
     assert.include(entitlements, "<string>webcredentials:example.clerk.accounts.dev</string>");
     assert.include(entitlements, "<key>com.apple.security.cs.allow-jit</key>");
@@ -1007,24 +1048,26 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
     assert.notInclude(error.message, secret);
   });
 
-  it.effect("adds passkey entitlements and both renderer protocols to signed macOS builds", () =>
-    Effect.gen(function* () {
-      const config = yield* createBuildConfig("mac", "dmg", "1.2.3", true, false, undefined, {
-        entitlementsPath: "/tmp/entitlements.mac.plist",
-        provisioningProfilePath: "/tmp/t3code.provisionprofile",
-      });
+  it.effect(
+    "adds passkey entitlements and only Pulse renderer protocols to signed macOS builds",
+    () =>
+      Effect.gen(function* () {
+        const config = yield* createBuildConfig("mac", "dmg", "1.2.3", true, false, undefined, {
+          entitlementsPath: "/tmp/entitlements.mac.plist",
+          provisioningProfilePath: "/tmp/t3code.provisionprofile",
+        });
 
-      const mac = config.mac as Record<string, unknown>;
-      assert.equal(config.appId, "com.t3tools.t3code");
-      assert.equal(mac.entitlements, "/tmp/entitlements.mac.plist");
-      assert.equal(mac.provisioningProfile, "/tmp/t3code.provisionprofile");
-      assert.deepStrictEqual(mac.protocols, [
-        {
-          name: "Pulse Code",
-          schemes: ["pulsecode", "pulsecode-dev", "t3code", "t3code-dev"],
-        },
-      ]);
-    }).pipe(Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env: {} })))),
+        const mac = config.mac as Record<string, unknown>;
+        assert.equal(config.appId, "ai.polyphron.pulsecode");
+        assert.equal(mac.entitlements, "/tmp/entitlements.mac.plist");
+        assert.equal(mac.provisioningProfile, "/tmp/t3code.provisionprofile");
+        assert.deepStrictEqual(mac.protocols, [
+          {
+            name: "Pulse Code",
+            schemes: ["pulsecode", "pulsecode-dev"],
+          },
+        ]);
+      }).pipe(Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env: {} })))),
   );
 
   it.effect("uses the nightly DMG background for nightly macOS builds", () =>
@@ -1059,6 +1102,7 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
       );
 
       const win = config.win as Record<string, unknown>;
+      assert.equal(win.executableName, DESKTOP_EXECUTABLE_NAME);
       assert.equal(win.icon, "icon.ico");
       assert.equal(win.signAndEditExecutable, true);
       assert.notProperty(win, "azureSignOptions");

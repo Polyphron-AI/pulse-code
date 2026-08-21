@@ -1,6 +1,6 @@
 meta:
   project: "Pulse Code"
-  snapshot: 2026-08-19
+  snapshot: 2026-08-21
   status: draft
 product:
   purpose: "A minimal, remote-ready, multi-surface GUI for coding agents."

@@ -3,7 +3,7 @@ meta:
   capacity_note: "Planning assumption: one maintainer with agent support; confirm before execution."
   reserve_floor: 25
   reserve_rationale: "One of four Now slots is reserved for compatibility and credential-safety work because integration failures affect every client and remote mode."
-  snapshot: 2026-08-19
+  snapshot: 2026-08-21
 
 themes:
   - id: T1
@@ -15,8 +15,59 @@ themes:
   - id: T3
     title: "Provider reach without platform sprawl"
     problem: "One-off integrations duplicate infrastructure while universal models erase the provider semantics users depend on."
-
 items:
+  - id: R-2026-08-21-desktop-product-separation
+    title: "Separate Pulse and T3 desktop products"
+    theme: T2
+    horizon: now
+    stage: shaped
+    kind: protective
+    outcome: "Allow every team member to install and run Pulse beside official T3 without identity, state, protocol, updater, or uninstall collisions."
+    need: "When I install Pulse on a machine that already has T3, I want both products to remain independent and usable, so adopting Pulse does not replace or mutate my T3 environment."
+    directions:
+      - "Assign Pulse-only desktop identity and state on Windows, macOS, and Linux, with focused package and lifecycle proofs."
+      - "Keep web and mobile shared initially and retain source-level compatibility only where it cannot claim T3 desktop ownership."
+    failure_mode: "A visible rename ships while the package still uses T3 application IDs, state roots, protocols, shortcuts, or updater ownership."
+    appetite: "one focused desktop separation cycle"
+    approach: "Remove desktop takeover behavior at runtime and packaging boundaries, then build and inspect the Windows installer before installation."
+    rabbit_holes:
+      - "separate web or mobile product distributions"
+      - "automatic T3 state migration"
+      - "building T3 artifacts from Pulse CI"
+    no_gos:
+      - "no write to official T3 binaries, state, shortcuts, protocols, or update channels"
+      - "no shared production desktop application ID"
+      - "no team-wide release claim without Windows, macOS, and Linux evidence"
+    dod:
+      - "Pulse owns distinct desktop IDs, paths, state, protocols, shortcuts, signing/updater coordinates, and artifact names."
+      - "Pulse and official T3 can install, launch, update, and uninstall independently."
+      - "Pulse starts fresh; any future T3 import is explicit, selective, copy-only, and non-destructive."
+      - "Focused configuration tests pass across all desktop targets and a Windows install candidate passes package inspection."
+    evidence:
+      - {
+          type: user_evidence,
+          note: "The user requires side-by-side T3 and Pulse installations for the whole team, with T3 remaining true to upstream and Pulse evolving selectively.",
+        }
+      - {
+          type: repository_evidence,
+          note: "Desktop runtime, launcher, protocol handlers, and cross-platform builder now use ai.polyphron.pulsecode, ~/.pulsecode, pulsecode schemes, and Pulse-only package identities.",
+        }
+      - {
+          type: verification_evidence,
+          note: "Focused identity tests passed 51 assertions across runtime/protocol/launcher/builder scopes; desktop typecheck passed; the unsigned Windows x64 NSIS candidate passed packaged-payload validation with 69 files and 35 sidecar natives (SHA-256 A87DB57EB9754BE61B4DE6298A19CC04FBFF337810261881AC2DC7FDDF313513).",
+        }
+    rice: { reach: H, impact: H, effort: M }
+    prd_refs:
+      - 11-product-line-and-distribution-boundary#desktop-boundary
+      - 11-product-line-and-distribution-boundary#release-gate
+      - 20-acceptance-criteria/desktop-product-line-boundary#desktop-installs-side-by-side
+    blocked_by: []
+    metric: { name: "desktop identity collision regressions", baseline: 1, target: 0 }
+    status: active
+    history:
+      - "2026-08-21 created in now from the locked downstream product and desktop identity boundary."
+      - "2026-08-21 Pulse-only desktop identity implemented; Windows installer candidate built and inspected. Lifecycle installation evidence and macOS/Linux release evidence remain open."
+
   - id: R-2026-08-19-integration-foundation
     title: "Durable integration connection foundation"
     theme: T1
@@ -188,7 +239,7 @@ items:
       - "repository-wide compatibility framework unrelated to integrations"
       - "centralized auth service"
     no_gos:
-      - "no removal of legacy aliases, package IDs, pairing shapes, or stored identifiers"
+      - "no removal of shared web/mobile aliases, package IDs, pairing shapes, or stored identifiers; the locked desktop product boundary is explicitly separate"
       - "no release gate based only on web/local testing"
     dod:
       - "Old-client/new-server and new-client/old-server capability tests pass."

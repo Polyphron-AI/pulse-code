@@ -168,14 +168,14 @@ mobile SSO redirect allowlist:
 ```text
 pulsecode-dev://app/
 pulsecode://app/
-t3code-dev://app/
-t3code://app/
 ```
 
 Local desktop development emits `pulsecode-dev://app`, while packaged builds emit
-`pulsecode://app`. The `t3code*` entries remain required for installed legacy builds and previously
-created callbacks. Add both matching origins to each Clerk instance's Backend API `allowed_origins`
-array as well. `@clerk/electron` owns the native request adapter, encrypted Clerk token persistence,
+`pulsecode://app`. Pulse desktop registers only these Pulse schemes and does not claim official T3
+desktop callbacks. If the same Clerk instance also serves official T3, its independently maintained
+T3 allowlist entries may remain; they are not part of the Pulse desktop package. Add the matching
+Pulse origins to each Clerk instance's Backend API `allowed_origins` array as well.
+`@clerk/electron` owns the native request adapter, encrypted Clerk token persistence,
 external-browser OAuth transport, and callback delivery for initial sign-in and linked-account flows.
 
 There is currently no Dashboard UI for `allowed_origins`. Preserve any existing entries and update
@@ -185,7 +185,7 @@ the instance through the Backend API:
 curl -X PATCH https://api.clerk.com/v1/instance \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $CLERK_SECRET_KEY" \
-  -d '{"allowed_origins":["pulsecode://app","t3code://app"]}'
+  -d '{"allowed_origins":["pulsecode://app"]}'
 ```
 
 Never put `CLERK_SECRET_KEY` in the desktop app, a client-facing environment file, or a build
@@ -193,16 +193,16 @@ artifact.
 
 ## Desktop Passkeys
 
-The production macOS bundle ID is `com.t3tools.t3code`. To enable native passkeys:
+The production Pulse macOS bundle ID is `ai.polyphron.pulsecode`. To enable native passkeys:
 
-1. Create an explicit macOS App ID for `com.t3tools.t3code` in the Apple Developer portal and enable
+1. Create an explicit macOS App ID for `ai.polyphron.pulsecode` in the Apple Developer portal and enable
    **Associated Domains**.
 2. Create a compatible macOS provisioning profile for that App ID and the certificate used to sign
    the distributed app.
 3. In Clerk's Native API settings, add an iOS app with the same Apple Team ID and bundle ID. This is
    also the configuration point for Electron/macOS passkeys.
 4. Confirm Clerk serves `https://<frontend-api>/.well-known/apple-app-site-association` and that
-   `webcredentials.apps` contains `<TEAM_ID>.com.t3tools.t3code`.
+   `webcredentials.apps` contains `<TEAM_ID>.ai.polyphron.pulsecode`.
 5. Set the local or CI signing configuration described below.
 
 For a local signed build, add these values to `.env.local` or export them before invoking the
@@ -210,7 +210,7 @@ desktop artifact command:
 
 ```dotenv
 PULSE_CODE_APPLE_TEAM_ID=ABC1234567
-PULSE_CODE_MACOS_PROVISIONING_PROFILE=/absolute/path/to/t3code.provisionprofile
+PULSE_CODE_MACOS_PROVISIONING_PROFILE=/absolute/path/to/pulsecode.provisionprofile
 # Optional: comma-separated override when Clerk's RP ID differs from the Frontend API hostname.
 PULSE_CODE_CLERK_PASSKEY_RP_DOMAINS=example.clerk.accounts.dev,clerk.example.com
 ```
@@ -237,6 +237,9 @@ PULSE_CODE_PORT=13773 \
 
 After changing Associated Domains, bump the build version before rebuilding; macOS may otherwise
 reuse stale Shared Web Credentials metadata for the same app/version pair.
+
+Before publishing a signed team release, verify the installed Pulse bundle launches beside official
+T3, retains the Pulse bundle ID and URL-scheme ownership, and writes only to Pulse-owned state.
 
 Verify the installed bundle before testing:
 

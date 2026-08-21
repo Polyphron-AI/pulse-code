@@ -1,6 +1,6 @@
 {
   "schema": "product-ops.state/v1",
-  "last_cr_id": "CR-2026-08-19-pulse-integrations-foundation",
-  "note": "CR-2026-08-19-pulse-integrations-foundation approved on 2026-08-21; four foundation decisions locked while OAuth/general release gates remain open.",
+  "last_cr_id": "CR-2026-08-21-desktop-product-line-boundary",
+  "note": "CR-2026-08-21-desktop-product-line-boundary records the approved product direction; a human-initiated commit and approval tag are still required to advance the canonical baseline.",
   "updated_at": "2026-08-21"
 }
