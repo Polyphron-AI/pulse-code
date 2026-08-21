@@ -1,6 +1,6 @@
 ---
 id: CR-2026-08-19-pulse-integrations-foundation
-status: proposed
+status: approved
 impact: schema
 author: Codex
 created_at: 2026-08-19
@@ -48,9 +48,9 @@ approved.
 
 ## Sign-off required
 
-- [ ] Product owner
-- [ ] Client contact
-- [ ] Engineering lead
+- [x] Product owner
+- [x] Client contact
+- [x] Engineering lead
 
 ## Linked gaps
 
@@ -82,7 +82,10 @@ exists yet.
 ## History
 
 - 2026-08-19 proposed (Codex)
+- 2026-08-21 approved — user authorized the recommended approval checkpoint; foundation commit
+  `89ea16641` and T1–T12 verification receipts accepted with OAuth/general release gates retained.
+- 2026-08-21 tracker filing deferred pending explicit external tracker-write authorization.
 
 ---
 
-**Created:** 2026-08-19 . **Last opened:** 2026-08-19 . **Last edited:** 2026-08-19 . **Status:** proposed . **Owner:** Product
+**Created:** 2026-08-19 . **Last opened:** 2026-08-21 . **Last edited:** 2026-08-21 . **Status:** approved . **Owner:** Product

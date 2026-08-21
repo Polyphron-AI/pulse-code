@@ -1,6 +1,6 @@
 {
   "schema": "product-ops.state/v1",
   "last_cr_id": "CR-2026-08-19-pulse-integrations-foundation",
-  "note": "Initial Pulse integrations PRD and roadmap are proposed; no approval baseline tag exists yet.",
-  "updated_at": "2026-08-19"
+  "note": "CR-2026-08-19-pulse-integrations-foundation approved on 2026-08-21; four foundation decisions locked while OAuth/general release gates remain open.",
+  "updated_at": "2026-08-21"
 }

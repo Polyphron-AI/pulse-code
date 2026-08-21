@@ -2,10 +2,11 @@
 
 ## Delivery status
 
-The Pulse integration walking skeleton is implemented and verified in the current worktree. Native
-Pulse Issues is independently committed at <code>ac8d94397</code>. The provider-neutral foundation,
-typed transport, bounded context/action path, and compatibility work are not yet committed or
-released, so roadmap items remain active rather than shipped.
+The Pulse integration walking skeleton is implemented, committed, and verified. Native Pulse Issues
+is independently committed at <code>ac8d94397</code>; the provider-neutral foundation, typed
+transport, bounded context/action path, and compatibility work are committed at
+<code>89ea16641</code>. The foundation PRD was approved on 2026-08-21, but OAuth/general release is
+still held, so release-gate roadmap items remain active rather than shipped.
 
 The final Node 24 release-gate recheck passes contracts, server, client-runtime, web, and mobile
 typechecks. OAuth connect/reauthorize is still held by the security and ownership gaps listed below;
@@ -106,13 +107,14 @@ and real metrics are available.
 
 | Now outcome                                  | Review result                                                                                                         |
 | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| Durable integration connection foundation    | Verified in the worktree; not committed or released                                                                   |
+| Durable integration connection foundation    | Committed at <code>89ea16641</code>, verified, and PRD-approved; not generally released                               |
 | Pulse Issues reference adapter               | Independently committed and verified                                                                                  |
 | Agent-readable context and deliberate action | Bounded Issue context and one confirmed status action verified; no claim of automatic agent-tool exposure             |
 | Compatibility and credential safety          | Capability skew, remote/mobile paths, aliases, package IDs, and persisted IDs verified with zero detected regressions |
 
-**Manual decision:** pass the technical walking skeleton; hold OAuth/general release and keep every
-roadmap item active. No later provider is represented as implemented.
+**Manual decision:** approve the integration foundation and lock its four architecture decisions;
+hold OAuth/general release and keep release-gate roadmap items active. No later provider is
+represented as implemented.
 
 Open gates:
 
@@ -128,4 +130,4 @@ credential-ownership seam before a bounded read-only repository Issues proof.
 
 ---
 
-**Created:** 2026-08-20 . **Last edited:** 2026-08-20 . **Status:** verified, unreleased . **Owner:** Engineering
+**Created:** 2026-08-20 . **Last edited:** 2026-08-21 . **Status:** approved, unreleased . **Owner:** Engineering

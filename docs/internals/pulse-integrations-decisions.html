@@ -29,20 +29,21 @@
     <main class="page">
       <header class="hero">
         <div>
-          <p class="eyebrow">Product decisions · draft</p>
-          <h1>What we believe, what we proved, what we have not locked.</h1>
+          <p class="eyebrow">Product decisions · approved</p>
+          <h1>What we decided, what we proved, what remains gated.</h1>
           <p class="lede">
-            This register keeps the integration roadmap honest: accepted evidence is visible, open
-            approval is explicit, and a draft decision is never silently promoted to policy.
+            This register keeps the integration roadmap honest: foundation decisions are now
+            explicit policy, while OAuth release, shared ownership, and later-provider work remain
+            separate gates.
           </p>
         </div>
         <aside class="hero-aside" aria-label="Decision register status">
           <div class="signal violet">
-            <span class="meta">Register status</span><strong>Draft · approval pending</strong>
+            <span class="meta">Register status</span><strong>Stable · foundation approved</strong>
           </div>
           <div class="signal hold">
             <span class="meta">Locked decisions</span
-            ><strong>None yet — PRD approval must promote them explicitly</strong>
+            ><strong>Four · approved 21 August 2026</strong>
           </div>
         </aside>
       </header>
@@ -51,8 +52,8 @@
         <nav class="toc" aria-label="On this page">
           <span class="nav-label">On this page</span>
           <a href="#summary">Summary</a>
-          <a href="#proposed">Proposed</a>
-          <a href="#locked">Locked</a>
+          <a href="#proposed">Locked decisions</a>
+          <a href="#locked">Open gates</a>
           <a href="#approval">Approval path</a>
         </nav>
 
@@ -61,40 +62,40 @@
             <div class="section-head">
               <div>
                 <p class="section-kicker">Register summary</p>
-                <h2>Four decisions are in motion</h2>
+                <h2>Four foundation decisions are locked</h2>
               </div>
               <p>
-                Reference proof is complete for the native adapter; formal PRD approval remains the
-                promotion gate.
+                Reference proof and compatibility evidence are accepted; unresolved release gates
+                remain visible without weakening foundation policy.
               </p>
             </div>
             <div class="metric-grid">
-              <div class="metric"><strong>4</strong><span>Proposed decisions</span></div>
+              <div class="metric"><strong>0</strong><span>Proposed foundation decisions</span></div>
               <div class="metric">
                 <strong>1</strong><span>Reference-adapter proof complete</span>
               </div>
               <div class="metric"><strong>1</strong><span>Compatibility pass verified</span></div>
-              <div class="metric"><strong>0</strong><span>Locked decisions</span></div>
+              <div class="metric"><strong>4</strong><span>Locked decisions</span></div>
             </div>
             <p class="callout hold" style="margin: 16px 0 0">
-              <strong>Promotion rule:</strong> approval of the initial PRD should promote accepted
-              decisions explicitly rather than silently treating this draft as locked.
+              <strong>Approval receipt:</strong> CR-2026-08-19-pulse-integrations-foundation was
+              approved on 21 August 2026 with OAuth/general release gates retained.
             </p>
           </section>
 
           <section class="section" id="proposed">
             <div class="section-head">
               <div>
-                <p class="section-kicker">Proposed</p>
-                <h2>Decisions awaiting explicit approval</h2>
+                <p class="section-kicker">Locked</p>
+                <h2>Approved foundation decisions</h2>
               </div>
-              <span class="status-pill proposed">4 proposed</span>
+              <span class="status-pill pass">4 locked</span>
             </div>
 
             <article class="decision-card">
               <div>
                 <div class="decision-id">D-2026-08-19-server-owned-integrations</div>
-                <span class="status-pill proposed" style="margin-top: 12px">Proposed</span>
+                <span class="status-pill pass" style="margin-top: 12px">Locked</span>
               </div>
               <div class="decision-body">
                 <h3>The owning server is the provider API client</h3>
@@ -109,8 +110,8 @@
                   mobile, and agents.
                 </p>
                 <p>
-                  <strong>Status:</strong> Pending
-                  <code>CR-2026-08-19-pulse-integrations-foundation</code> approval.
+                  <strong>Status:</strong> Locked by approval of
+                  <code>CR-2026-08-19-pulse-integrations-foundation</code> on 21 August 2026.
                 </p>
               </div>
             </article>
@@ -118,7 +119,7 @@
             <article class="decision-card">
               <div>
                 <div class="decision-id">D-2026-08-19-thin-provider-adapters</div>
-                <span class="status-pill proposed" style="margin-top: 12px">Proposed</span>
+                <span class="status-pill pass" style="margin-top: 12px">Locked</span>
               </div>
               <div class="decision-body">
                 <h3>Normalize the seam; preserve provider semantics</h3>
@@ -132,9 +133,9 @@
                   the shared layer unstable.
                 </p>
                 <p>
-                  <strong>Status:</strong> Pulse reference proof and GitHub discovery support the
-                  seam; a read-only second-adapter proof remains pending on external credentials and
-                  shared-server ownership.
+                  <strong>Status:</strong> The shared lifecycle seam is locked. External
+                  credentials, shared-server ownership, and a second-adapter proof remain
+                  later-provider gates.
                 </p>
               </div>
             </article>
@@ -142,7 +143,7 @@
             <article class="decision-card">
               <div>
                 <div class="decision-id">D-2026-08-19-pulse-issues-reference-adapter</div>
-                <span class="status-pill pass" style="margin-top: 12px">Proof complete</span>
+                <span class="status-pill pass" style="margin-top: 12px">Locked</span>
               </div>
               <div class="decision-body">
                 <h3>Use native Pulse Issues as the reference adapter</h3>
@@ -157,8 +158,8 @@
                   through the shared seam.
                 </p>
                 <p>
-                  <strong>Status:</strong> Reference-adapter proof complete; the second-adapter
-                  implementation proof remains pending.
+                  <strong>Status:</strong> Locked with commit <code>ac8d94397</code> as the
+                  reference proof; no second-adapter implementation is implied.
                 </p>
               </div>
             </article>
@@ -166,7 +167,7 @@
             <article class="decision-card">
               <div>
                 <div class="decision-id">D-2026-08-19-additive-capability-compatibility</div>
-                <span class="status-pill pass" style="margin-top: 12px">Verified</span>
+                <span class="status-pill pass" style="margin-top: 12px">Locked</span>
               </div>
               <div class="decision-body">
                 <h3>Make integration contracts optional and additive</h3>
@@ -179,8 +180,8 @@
                   Pulse/T3 identifiers must continue to work during staged rollout.
                 </p>
                 <p>
-                  <strong>Status:</strong> Verified by T8 compatibility fixtures and the
-                  compatibility matrix; formal PRD approval remains pending.
+                  <strong>Status:</strong> Locked by PRD approval and verified by T8 compatibility
+                  fixtures and the compatibility matrix.
                 </p>
               </div>
             </article>
@@ -189,15 +190,15 @@
           <section class="section" id="locked">
             <div class="section-head">
               <div>
-                <p class="section-kicker">Locked</p>
-                <h2>Nothing is locked yet</h2>
+                <p class="section-kicker">Open gates</p>
+                <h2>Approval is not OAuth release</h2>
               </div>
-              <span class="status-pill neutral">0 decisions</span>
+              <span class="status-pill hold">Release held</span>
             </div>
             <div class="callout hold">
-              <strong>Intentional blank:</strong> leaving this section empty is a control, not an
-              omission. The initial PRD approval must state which proposed decisions become product
-              policy and which remain experiments or roadmap hypotheses.
+              <strong>Still open:</strong> host isolation, redirect replay, backup/diagnostic
+              disclosure, provider revocation, shared-server ownership, externally managed
+              credentials, tokenizer definition, and measured later-provider demand.
             </div>
           </section>
 
@@ -252,7 +253,7 @@
       </div>
 
       <footer class="page-footer">
-        <span class="meta">Source · project/decisions.md · last edited 20 August 2026</span>
+        <span class="meta">Source · project/decisions.md · last edited 21 August 2026</span>
         <nav aria-label="Source and related documents">
           <a href="../../project/decisions.md">Markdown source</a
           ><a href="./pulse-integrations-decision.html">Back to decision map</a>
