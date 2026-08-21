@@ -1,6 +1,6 @@
 {
   "blocked_by": [],
-  "commits": [],
+  "commits": ["2cb03b490"],
   "created_at": "2026-08-21T07:07:34Z",
   "files_touched": [
     "apps/server/src/integrations/OAuthAttemptStore.test.ts",
@@ -14,8 +14,12 @@
   "plan_id": "P-2026-08-21-integration-oauth-release-gates",
   "roadmap_items": ["R-2026-08-19-integration-compatibility-safety"],
   "schema": "product-ops.task/v1",
-  "status": "pending",
+  "status": "completed",
   "subject": "Add an atomic, session-bound OAuth attempt store",
-  "updated_at": "2026-08-21T07:07:34Z",
-  "verification_receipts": []
+  "updated_at": "2026-08-21T07:14:31Z",
+  "verification_receipts": [
+    "Focused OAuthAttemptStore test: 5 passed",
+    "Server typecheck: passed with pre-existing suggestions only",
+    "git diff --check: passed"
+  ]
 }
