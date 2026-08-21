@@ -93,7 +93,7 @@ web/mobile clients, then leave a verified Windows installer ready for the next e
 ### T1: Isolate Pulse runtime identity and state roots
 
 - kind: protective
-- status: pending
+- status: completed
 - roadmap_item: R-2026-08-21-desktop-product-separation
 - estimate: 120 minutes
 - blocked_by: []
@@ -117,7 +117,7 @@ web/mobile clients, then leave a verified Windows installer ready for the next e
 ### T2: Remove automatic T3 user-data and protocol takeover
 
 - kind: protective
-- status: pending
+- status: completed
 - roadmap_item: R-2026-08-21-desktop-product-separation
 - estimate: 90 minutes
 - blocked_by: [T1, T3]
@@ -139,7 +139,7 @@ web/mobile clients, then leave a verified Windows installer ready for the next e
 ### T3: Restrict renderer and Linux handlers to Pulse protocols
 
 - kind: protective
-- status: pending
+- status: completed
 - roadmap_item: R-2026-08-21-desktop-product-separation
 - estimate: 90 minutes
 - blocked_by: []
@@ -160,7 +160,7 @@ web/mobile clients, then leave a verified Windows installer ready for the next e
 ### T4: Give every packaged desktop target Pulse-only identity
 
 - kind: protective
-- status: pending
+- status: completed
 - roadmap_item: R-2026-08-21-desktop-product-separation
 - estimate: 120 minutes
 - blocked_by: []
@@ -182,7 +182,7 @@ web/mobile clients, then leave a verified Windows installer ready for the next e
 ### T5: Align the desktop launcher with Pulse package identity
 
 - kind: protective
-- status: pending
+- status: completed
 - roadmap_item: R-2026-08-21-desktop-product-separation
 - estimate: 60 minutes
 - blocked_by: [T4]
@@ -203,7 +203,7 @@ web/mobile clients, then leave a verified Windows installer ready for the next e
 ### T6: Publish the desktop-only compatibility boundary
 
 - kind: documentation
-- status: pending
+- status: completed
 - roadmap_item: R-2026-08-21-desktop-product-separation
 - estimate: 90 minutes
 - blocked_by: [T1, T3, T4]
@@ -225,7 +225,7 @@ web/mobile clients, then leave a verified Windows installer ready for the next e
 ### T7: Verify the install candidate and close the product boundary
 
 - kind: verification
-- status: pending
+- status: completed
 - roadmap_item: R-2026-08-21-desktop-product-separation
 - estimate: 120 minutes
 - blocked_by: [T1, T2, T3, T4, T5, T6]
@@ -236,13 +236,13 @@ web/mobile clients, then leave a verified Windows installer ready for the next e
   - All focused runtime, protocol, launcher, and builder suites plus desktop typecheck pass.
   - An unsigned `release/Pulse-Code-0.0.33-x64.exe` is rebuilt from the integrated tree.
   - Package inspection proves Pulse app ID, executable, protocols, install identity, updater target, and fresh state; desktop smoke passes without installing.
-  - The desktop identity gap is resolved only for the proven Windows candidate and platform-neutral config; macOS/Linux runtime evidence remains explicit.
+  - The desktop identity gap is narrowed to installed lifecycle evidence for Windows and signed/runtime evidence for macOS/Linux.
   - PRD change control records the verified implementation, then all scoped changes are committed and pushed to `origin/main`.
 - dispatch_model: sonnet
 - render_verify_required: false
 - writes_shared_state: true
 - exclusive_resources: [desktop-windows-release-build]
-- shard_writes: ["gaps.yaml: G-2026-08-21-desktop-identity-not-isolated -> resolved", "roadmap.yaml: append verification receipt"]
+- shard_writes: ["gaps.yaml: G-2026-08-21-desktop-identity-not-isolated -> narrowed open evidence", "roadmap.yaml: append verification receipt"]
 
 ## Dispatch plan
 
@@ -291,9 +291,10 @@ web/mobile clients, then leave a verified Windows installer ready for the next e
 - archive_path: project/plans/archive/P-2026-08-21-pulse-desktop-product-separation.md
 ```
 
-No endpoint, template, static, or user-visible web/mobile view is changed, so browser render
-verification is not applicable. The Windows package is built and inspected but not installed.
+No endpoint, template, static, or web/mobile runtime view is changed, so browser render verification
+is not applicable. Documentation is text-only. The Windows package is built and inspected but not
+installed.
 
 ---
 
-**Created:** 2026-08-21 . **Last opened:** 2026-08-21 . **Last edited:** 2026-08-21 . **Status:** active . **Owner:** Engineering
+**Created:** 2026-08-21 . **Last opened:** 2026-08-21 . **Last edited:** 2026-08-21 . **Status:** completed . **Owner:** Engineering

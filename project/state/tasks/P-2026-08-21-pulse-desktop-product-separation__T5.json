@@ -1,6 +1,6 @@
 {
   "blocked_by": ["P-2026-08-21-pulse-desktop-product-separation/T4"],
-  "commits": [],
+  "commits": ["448ead486"],
   "created_at": "2026-08-21T11:49:23Z",
   "files_touched": [
     "apps/desktop/scripts/electron-launcher.mjs",
@@ -16,7 +16,7 @@
   "schema": "product-ops.task/v1",
   "status": "completed",
   "subject": "Align the desktop launcher with Pulse package identity",
-  "updated_at": "2026-08-21T12:13:05Z",
+  "updated_at": "2026-08-21T12:46:57Z",
   "verification_receipts": [
     "Focused launcher tests: 1 file, 5 tests passed; targeted format/diff checks passed; coordinator reviewed assigned diff."
   ]

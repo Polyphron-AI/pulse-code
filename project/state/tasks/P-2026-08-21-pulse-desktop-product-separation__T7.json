@@ -7,7 +7,7 @@
     "P-2026-08-21-pulse-desktop-product-separation/T5",
     "P-2026-08-21-pulse-desktop-product-separation/T6"
   ],
-  "commits": [],
+  "commits": ["448ead486"],
   "created_at": "2026-08-21T11:49:23Z",
   "files_touched": [
     "prd/change-requests/CR-2026-08-21-desktop-product-line-boundary.md",
@@ -20,12 +20,14 @@
   "id": "P-2026-08-21-pulse-desktop-product-separation/T7",
   "kind": "verification",
   "local_id": "T7",
-  "owner": "coordinator",
+  "owner": null,
   "plan_id": "P-2026-08-21-pulse-desktop-product-separation",
   "roadmap_items": ["R-2026-08-21-desktop-product-separation"],
   "schema": "product-ops.task/v1",
-  "status": "in_progress",
+  "status": "completed",
   "subject": "Verify the install candidate and close the product boundary",
-  "updated_at": "2026-08-21T12:24:52Z",
-  "verification_receipts": []
+  "updated_at": "2026-08-21T12:46:57Z",
+  "verification_receipts": [
+    "Integrated verification: 44 desktop tests plus 7 builder identity tests passed; desktop typecheck passed; production collision scan clean; web/mobile shared surfaces unchanged; Windows x64 NSIS build and archive inspection passed. Implementation commit 448ead486. Workspace renderer gap surfaced separately."
+  ]
 }

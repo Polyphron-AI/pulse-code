@@ -1,6 +1,6 @@
 ---
 id: CR-2026-08-21-desktop-product-line-boundary
-status: proposed
+status: approved
 impact: locked-reopen
 author: Codex
 created_at: 2026-08-21
@@ -9,6 +9,8 @@ files_touched:
   - prd/11-product-line-and-distribution-boundary.md
   - prd/20-acceptance-criteria/desktop-product-line-boundary.md
 baseline_sha: c297b4ad7a48d2f345153cf5092d686fab3bff22
+implementation_sha: 448ead486
+approval_tag: prd-approved-2026-08-21-desktop-boundary
 related_crs: []
 ---
 
@@ -65,7 +67,7 @@ initially.
 
 - [x] Product owner
 - [x] Client contact
-- [ ] Baseline seal after the human-initiated commit
+- [x] Baseline seal after the human-initiated commit
 
 ## Linked gaps
 
@@ -106,7 +108,9 @@ The complete proposed content is carried in the two new files and the updated PR
   human-initiated commit required by change control.
 - 2026-08-21 Pulse-only desktop identity implemented and the unsigned Windows x64 candidate passed
   focused tests, typecheck, package validation, archive inspection, and hashing.
+- 2026-08-21 implementation committed as `448ead486`; approval seal prepared as
+  `prd-approved-2026-08-21-desktop-boundary`.
 
 ---
 
-**Created:** 2026-08-21 . **Last opened:** 2026-08-21 . **Last edited:** 2026-08-21 . **Status:** proposed . **Owner:** Product
+**Created:** 2026-08-21 . **Last opened:** 2026-08-21 . **Last edited:** 2026-08-21 . **Status:** approved . **Owner:** Product
