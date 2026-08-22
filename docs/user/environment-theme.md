@@ -90,3 +90,7 @@ A theme with no usable colors is not listed on that client.
 Write each file atomically — write a temporary file beside it and rename — so Pulse Code never reads
 a half-written theme. An unreadable or invalid file is simply not published; the machine's other
 themes are unaffected.
+
+## Adjust contrast
+
+On web or desktop, open **Settings ? Appearance ? Contrast** to soften or strengthen text, icons, and borders while keeping the selected theme. The default is 100%. This preference belongs to the client and also applies to environment-published themes.

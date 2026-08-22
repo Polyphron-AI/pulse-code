@@ -35,6 +35,7 @@ import {
 } from "../components/ui/toast";
 import { resolveAndPersistPreferredEditor } from "../editorPreferences";
 import { applyAppearanceFontVariables } from "~/appearanceFonts";
+import { applyAppearanceContrast } from "~/appearanceContrast";
 import { useClientSettings } from "../hooks/useSettings";
 import {
   deriveLogicalProjectKeyFromSettings,
@@ -166,6 +167,7 @@ function RootRouteView() {
       <AnchoredToastProvider>
         <DocumentTitleSync />
         <EnvironmentThemeSync />
+        <ContrastAppearanceSync />
         <GlassAppearanceSync />
         <FontAppearanceSync />
         <FirstRunGate
@@ -201,6 +203,16 @@ function EnvironmentThemeSync() {
   // Ordered after the palette sync so a first-run client adopting the
   // environment's own theme finds it already in the library.
   useDefaultThemeAdoption();
+  return null;
+}
+
+function ContrastAppearanceSync() {
+  const appearanceContrast = useClientSettings((settings) => settings.appearanceContrast);
+
+  useEffect(() => {
+    applyAppearanceContrast(document.documentElement, appearanceContrast);
+  }, [appearanceContrast]);
+
   return null;
 }
 

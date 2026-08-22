@@ -17,6 +17,7 @@ const clientSettings: ClientSettings = {
   voiceShortcut: "ctrl+windows",
   voiceGlobalShortcutEnabled: true,
   voiceHoverEnabled: true,
+  appearanceContrast: 100,
   browserDefaultViewport: { _tag: "preset", width: 1024, height: 600, presetId: "nest-hub" },
   browserDefaultZoomFactor: 1.25,
   browserDefaultAppearance: "dark",
