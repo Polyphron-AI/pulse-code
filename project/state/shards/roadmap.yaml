@@ -311,6 +311,53 @@ items:
     history:
       - 2026-08-21 created in now after design approval and an explicit build request.
 
+  - id: R-2026-08-22-desktop-update-rollback
+    title: Desktop in-app update with safe rollback
+    theme: T2
+    horizon: now
+    stage: building
+    kind: protective
+    outcome: Let a desktop user recover from a bad update by reinstalling a previous version from inside the app, reachable as long as the app launches.
+    need: When an update breaks my workflow, I want to pick an earlier version and restart into it without hunting for old installers, even if the update broke the main window.
+    directions:
+      - Pin the updater feed to a chosen GitHub release and reuse the existing download-confirm-install path for downgrades.
+      - Keep rollback reachable from the native application menu, owned by the main process, independent of renderer and backend health.
+      - A follow-up slice may add pre-update database snapshots with restore for downgrades across schema changes.
+    failure_mode: A downgrade lands on a version that predates the Pulse install identity or cannot read current data, or the rollback UI itself lives only in the surface a bad update breaks.
+    appetite: one focused desktop cycle
+    approach: Feed pinning with allow-downgrade and full downloads, a compile-time minimum-version floor, same-channel filtering, and automatic pin reset on any normal check, channel switch, or error.
+    rabbit_holes:
+      - differential downgrade downloads
+      - a second installer mechanism beside electron-updater
+      - mobile or CLI-server rollback (stores and npx t3@<version> already own those)
+    no_gos:
+      - no version below the data-safety floor, ever
+      - no cross-channel versions in the rollback list
+      - no silent install; the app keeps running until the user confirms
+    dod:
+      - A desktop user can pick a previous same-channel version in Settings → About, confirm, and restart into it with projects, threads, and settings intact.
+      - Roll Back to Previous Version and Install Downloaded Update work from the native Help menu with the renderer or backend unavailable.
+      - Rollback never offers a version below the minimum-version floor, and a fresh check, channel switch, or failed check restores the normal update feed.
+      - Focused desktop and web tests plus contracts, desktop, and web typechecks pass.
+      - docs/user/updating.md explains rollback and both places to find it.
+    evidence:
+      - type: user_evidence
+        note: The maintainer asked on 2026-08-22 for a self-contained update popup plus rollback to previous versions, reachable as long as Pulse Code launches, and directed the build with Proceed.
+      - type: repository_evidence
+        note: Forward self-update, channels, and the About-panel update flow already existed; rollback, the 0.0.34 floor, the Settings rollback row, and the Help-menu safe-mode items are implemented in the working tree with 67 focused tests passing.
+    rice: { reach: H, impact: H, effort: M }
+    prd_refs:
+      - 15-desktop-update-rollback#rollback-choice
+      - 15-desktop-update-rollback#crash-proof-path
+      - 15-desktop-update-rollback#data-safety-floor
+      - 15-desktop-update-rollback#channel-integrity
+    blocked_by: []
+    metric:
+      { name: bad desktop updates recoverable without leaving the app, baseline: 0, target: 100 }
+    status: active
+    history:
+      - 2026-08-22 created in now after the maintainer directed the build; Phase 1 (rollback machinery, floor, Settings row, Help-menu safe mode, user docs) is implemented and verified in the working tree. Pre-update snapshot/restore remains an unshaped follow-up slice.
+
   - id: R-2026-08-19-github-work-graph
     title: "GitHub work graph beyond pull requests"
     theme: T3
