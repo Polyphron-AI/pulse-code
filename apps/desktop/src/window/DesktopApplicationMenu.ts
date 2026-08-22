@@ -103,6 +103,92 @@ const handleCheckForUpdatesMenuClick = Effect.gen(function* () {
   yield* checkForUpdatesFromMenu;
 }).pipe(Effect.withSpan("desktop.menu.handleCheckForUpdatesClick"));
 
+/*
+  Rollback stays reachable from the native menu even when a bad update
+  leaves the renderer or backend unable to serve the Settings UI — the
+  main process is the part most likely to survive a broken release.
+*/
+const handleRollbackMenuClick = Effect.gen(function* () {
+  const updates = yield* DesktopUpdates.DesktopUpdates;
+  const electronDialog = yield* ElectronDialog.ElectronDialog;
+  const disabledReason = yield* updates.disabledReason;
+  if (Option.isSome(disabledReason)) {
+    yield* electronDialog.showMessageBox({
+      type: "info",
+      title: "Rollback unavailable",
+      message: "Rolling back is not available right now.",
+      detail: disabledReason.value,
+      buttons: ["OK"],
+    });
+    return;
+  }
+
+  const list = yield* updates.listVersions;
+  const target = list.versions[0];
+  if (!target) {
+    yield* electronDialog.showMessageBox({
+      type: "info",
+      title: "No previous version",
+      message: "There is no previous version available to roll back to.",
+      ...(list.message === null ? {} : { detail: list.message }),
+      buttons: ["OK"],
+    });
+    return;
+  }
+
+  const confirmation = yield* electronDialog.showMessageBox({
+    type: "question",
+    title: "Roll back Pulse Code",
+    message: `Download version ${target.version} and prepare to roll back?`,
+    detail:
+      "Pulse Code keeps running until you install the downloaded version from Help → Install Downloaded Update or Settings → About.",
+    buttons: ["Download", "Cancel"],
+    cancelId: 1,
+  });
+  if (confirmation.response !== 0) {
+    return;
+  }
+
+  const result = yield* updates.rollback(target.version);
+  if (!result.accepted) {
+    yield* electronDialog.showMessageBox({
+      type: "warning",
+      title: "Rollback failed",
+      message: `Could not start rolling back to version ${target.version}.`,
+      detail: result.state.message ?? "Another update action may be in progress.",
+      buttons: ["OK"],
+    });
+  }
+}).pipe(Effect.withSpan("desktop.menu.rollback"));
+
+const handleInstallDownloadedUpdateMenuClick = Effect.gen(function* () {
+  const updates = yield* DesktopUpdates.DesktopUpdates;
+  const electronDialog = yield* ElectronDialog.ElectronDialog;
+  const state = yield* updates.getState;
+  if (state.status !== "downloaded" || state.downloadedVersion === null) {
+    yield* electronDialog.showMessageBox({
+      type: "info",
+      title: "No downloaded update",
+      message: "There is no downloaded version waiting to be installed.",
+      buttons: ["OK"],
+    });
+    return;
+  }
+
+  const confirmation = yield* electronDialog.showMessageBox({
+    type: "question",
+    title: "Install and restart",
+    message: `Install version ${state.downloadedVersion} and restart Pulse Code?`,
+    detail: "Any running tasks will be interrupted.",
+    buttons: ["Install and Restart", "Cancel"],
+    cancelId: 1,
+  });
+  if (confirmation.response !== 0) {
+    return;
+  }
+  yield* updates.install;
+}).pipe(Effect.withSpan("desktop.menu.installDownloadedUpdate"));
+
 export const make = Effect.gen(function* () {
   const electronApp = yield* ElectronApp.ElectronApp;
   const electronMenu = yield* ElectronMenu.ElectronMenu;
@@ -217,6 +303,18 @@ export const make = Effect.gen(function* () {
           {
             label: "Check for Updates...",
             click: checkForUpdatesClick,
+          },
+          {
+            label: "Roll Back to Previous Version...",
+            click: () => {
+              runMenuEffect("rollback-previous-version", handleRollbackMenuClick);
+            },
+          },
+          {
+            label: "Install Downloaded Update...",
+            click: () => {
+              runMenuEffect("install-downloaded-update", handleInstallDownloadedUpdateMenuClick);
+            },
           },
         ],
       },

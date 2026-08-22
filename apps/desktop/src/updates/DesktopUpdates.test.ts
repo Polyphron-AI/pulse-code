@@ -12,6 +12,7 @@ import * as Option from "effect/Option";
 import * as References from "effect/References";
 import * as Ref from "effect/Ref";
 import * as TestClock from "effect/testing/TestClock";
+import { HttpClient, HttpClientResponse } from "effect/unstable/http";
 
 import * as DesktopBackendPool from "../backend/DesktopBackendPool.ts";
 import * as DesktopConfig from "../app/DesktopConfig.ts";
@@ -170,8 +171,21 @@ function makeHarness(options: UpdatesHarnessOptions = {}) {
       } satisfies DesktopAppSettings.DesktopAppSettings["Service"])
     : DesktopAppSettings.layer;
 
+  const httpClientLayer = Layer.succeed(
+    HttpClient.HttpClient,
+    HttpClient.make((request) =>
+      Effect.succeed(
+        HttpClientResponse.fromWeb(
+          request,
+          new Response("[]", { status: 200, headers: { "content-type": "application/json" } }),
+        ),
+      ),
+    ),
+  );
+
   const layer = DesktopUpdates.layer.pipe(
     Layer.provideMerge(updaterLayer),
+    Layer.provideMerge(httpClientLayer),
     Layer.provideMerge(windowLayer),
     Layer.provideMerge(backendLayer),
     Layer.provideMerge(DesktopState.layer),

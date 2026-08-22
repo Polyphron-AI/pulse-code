@@ -55,6 +55,7 @@ function downloadedState(overrides: Partial<DesktopUpdateState> = {}): DesktopUp
     message: null,
     errorContext: null,
     canRetry: true,
+    rollbackVersion: null,
     ...overrides,
   };
 }

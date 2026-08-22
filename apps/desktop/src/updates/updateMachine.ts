@@ -36,7 +36,31 @@ export function createInitialDesktopUpdateState(
     message: null,
     errorContext: null,
     canRetry: false,
+    rollbackVersion: null,
   };
+}
+
+export function reduceDesktopUpdateStateOnRollbackStart(
+  state: DesktopUpdateState,
+  version: string,
+): DesktopUpdateState {
+  return {
+    ...state,
+    rollbackVersion: version,
+    availableVersion: null,
+    downloadedVersion: null,
+    releaseNotes: [],
+    downloadPercent: null,
+    message: null,
+    errorContext: null,
+    canRetry: false,
+  };
+}
+
+export function reduceDesktopUpdateStateOnRollbackReset(
+  state: DesktopUpdateState,
+): DesktopUpdateState {
+  return state.rollbackVersion === null ? state : { ...state, rollbackVersion: null };
 }
 
 export function reduceDesktopUpdateStateOnCheckStart(
@@ -106,6 +130,7 @@ export function reduceDesktopUpdateStateOnNoUpdate(
     message: null,
     errorContext: null,
     canRetry: false,
+    rollbackVersion: null,
   };
 }
 

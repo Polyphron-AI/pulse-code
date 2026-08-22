@@ -3,6 +3,7 @@ import {
   DesktopUpdateChannelSchema,
   DesktopUpdateCheckResultSchema,
   DesktopUpdateStateSchema,
+  DesktopUpdateVersionListResultSchema,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
@@ -48,6 +49,26 @@ export const installUpdate = DesktopIpc.makeIpcMethod({
   handler: Effect.fn("desktop.ipc.updates.install")(function* () {
     const updates = yield* DesktopUpdates.DesktopUpdates;
     return yield* updates.install;
+  }),
+});
+
+export const listUpdateVersions = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.UPDATE_LIST_VERSIONS_CHANNEL,
+  payload: Schema.Void,
+  result: DesktopUpdateVersionListResultSchema,
+  handler: Effect.fn("desktop.ipc.updates.listVersions")(function* () {
+    const updates = yield* DesktopUpdates.DesktopUpdates;
+    return yield* updates.listVersions;
+  }),
+});
+
+export const rollbackToVersion = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.UPDATE_ROLLBACK_CHANNEL,
+  payload: Schema.String,
+  result: DesktopUpdateActionResultSchema,
+  handler: Effect.fn("desktop.ipc.updates.rollback")(function* (version) {
+    const updates = yield* DesktopUpdates.DesktopUpdates;
+    return yield* updates.rollback(version);
   }),
 });
 

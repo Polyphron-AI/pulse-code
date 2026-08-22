@@ -6,6 +6,8 @@ import { useAtomValue } from "@effect/atom-react";
 import {
   type BackgroundActivityProfile,
   type DesktopUpdateChannel,
+  type DesktopUpdateState,
+  type DesktopUpdateVersion,
   ProviderDriverKind,
   type ScopedThreadRef,
   type SidebarProjectGroupingMode,
@@ -41,6 +43,7 @@ import * as Schema from "effect/Schema";
 import { APP_VERSION, HOSTED_APP_CHANNEL, HOSTED_APP_CHANNEL_LABEL } from "../../branding";
 import {
   canCheckForUpdate,
+  getDesktopRollbackConfirmationMessage,
   getDesktopUpdateButtonTooltip,
   getDesktopUpdateInstallConfirmationMessage,
   isDesktopUpdateButtonDisabled,
@@ -360,7 +363,9 @@ function AboutVersionSection() {
     actionLabel[action] ?? statusLabel[updateState?.status ?? ""] ?? "Check for Updates";
   const description =
     action === "download" || action === "install"
-      ? "Update available."
+      ? updateState?.rollbackVersion
+        ? `Rollback to ${updateState.rollbackVersion} ready.`
+        : "Update available."
       : "Current version of the application.";
 
   return (
@@ -446,7 +451,135 @@ function AboutVersionSection() {
           }
         />
       ) : null}
+      {hasDesktopBridge ? <AboutRollbackSection updateState={updateState} /> : null}
     </>
+  );
+}
+
+function AboutRollbackSection({ updateState }: { updateState: DesktopUpdateState | null }) {
+  const [versions, setVersions] = useState<ReadonlyArray<DesktopUpdateVersion> | null>(null);
+  const [versionsMessage, setVersionsMessage] = useState<string | null>(null);
+  const [selectedVersion, setSelectedVersion] = useState<string | null>(null);
+  const [isRollbackPending, setIsRollbackPending] = useState(false);
+
+  const bridge = typeof window !== "undefined" ? window.desktopBridge : undefined;
+  const supportsRollback =
+    typeof bridge?.listUpdateVersions === "function" &&
+    typeof bridge.rollbackToVersion === "function";
+
+  useEffect(() => {
+    if (!supportsRollback || !bridge) return;
+    let cancelled = false;
+    bridge
+      .listUpdateVersions()
+      .then((result) => {
+        if (cancelled) return;
+        setVersions(result.versions);
+        setVersionsMessage(result.message);
+        setSelectedVersion(result.versions[0]?.version ?? null);
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        setVersions([]);
+        setVersionsMessage(
+          error instanceof Error ? error.message : "Could not load previous versions.",
+        );
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [bridge, supportsRollback]);
+
+  const handleRollback = useCallback(async () => {
+    if (!bridge || !selectedVersion || isRollbackPending) return;
+    setIsRollbackPending(true);
+    try {
+      const confirmed = await ensureLocalApi().dialogs.confirm(
+        getDesktopRollbackConfirmationMessage(selectedVersion),
+      );
+      if (!confirmed) return;
+      const result = await bridge.rollbackToVersion(selectedVersion);
+      if (!result.accepted) {
+        toastManager.add(
+          stackedThreadToast({
+            type: "error",
+            title: "Could not start rollback",
+            description:
+              result.state.message ??
+              `Version ${selectedVersion} is not available to roll back to.`,
+          }),
+        );
+      }
+    } catch (error) {
+      toastManager.add(
+        stackedThreadToast({
+          type: "error",
+          title: "Could not start rollback",
+          description: error instanceof Error ? error.message : "Rollback failed.",
+        }),
+      );
+    } finally {
+      setIsRollbackPending(false);
+    }
+  }, [bridge, isRollbackPending, selectedVersion]);
+
+  if (!supportsRollback || !updateState?.enabled) {
+    return null;
+  }
+
+  const updateBusy =
+    updateState.status === "checking" ||
+    updateState.status === "downloading" ||
+    updateState.status === "downloaded";
+  const description = updateState.rollbackVersion
+    ? `Rolling back to ${updateState.rollbackVersion}.`
+    : (versionsMessage ??
+      "Reinstall a previous version if an update introduced a problem. Your projects and threads are kept.");
+
+  return (
+    <SettingsRow
+      {...searchableSetting("roll-back")}
+      description={description}
+      control={
+        <div className="flex items-center gap-2">
+          <Select
+            value={selectedVersion ?? ""}
+            onValueChange={(value) => {
+              setSelectedVersion(value);
+            }}
+          >
+            <SelectTrigger
+              className="w-full sm:w-40"
+              aria-label="Previous version"
+              disabled={versions === null || versions.length === 0 || updateBusy}
+            >
+              <SelectValue>
+                {versions === null
+                  ? "Loading…"
+                  : (selectedVersion ?? (versions.length === 0 ? "No versions" : "Select version"))}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectPopup align="end" alignItemWithTrigger={false}>
+              {(versions ?? []).map((version) => (
+                <SelectItem hideIndicator key={version.version} value={version.version}>
+                  {version.version}
+                </SelectItem>
+              ))}
+            </SelectPopup>
+          </Select>
+          <Button
+            size="xs"
+            variant="outline"
+            disabled={!selectedVersion || updateBusy || isRollbackPending}
+            onClick={() => {
+              void handleRollback();
+            }}
+          >
+            Roll back
+          </Button>
+        </div>
+      }
+    />
   );
 }
 

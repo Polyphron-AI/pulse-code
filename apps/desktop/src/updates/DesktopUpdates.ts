@@ -5,6 +5,7 @@ import {
   type DesktopUpdateChannel,
   type DesktopUpdateCheckResult,
   type DesktopUpdateState,
+  type DesktopUpdateVersionListResult,
 } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
@@ -17,6 +18,8 @@ import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 
 import * as DesktopBackendPool from "../backend/DesktopBackendPool.ts";
 import * as DesktopConfig from "../app/DesktopConfig.ts";
@@ -29,6 +32,7 @@ import * as IpcChannels from "../ipc/channels.ts";
 import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
 import { normalizeDesktopUpdateReleaseNotes } from "./releaseNotes.ts";
 import { resolveDefaultDesktopUpdateChannel } from "./updateChannels.ts";
+import { isRollbackVersionAllowed, selectRollbackVersions } from "./versionRollback.ts";
 import {
   createInitialDesktopUpdateState,
   reduceDesktopUpdateStateOnCheckFailure,
@@ -39,6 +43,8 @@ import {
   reduceDesktopUpdateStateOnDownloadStart,
   reduceDesktopUpdateStateOnInstallFailure,
   reduceDesktopUpdateStateOnNoUpdate,
+  reduceDesktopUpdateStateOnRollbackReset,
+  reduceDesktopUpdateStateOnRollbackStart,
   reduceDesktopUpdateStateOnUpdateAvailable,
 } from "./updateMachine.ts";
 
@@ -59,6 +65,17 @@ const UpdateInfo = Schema.Struct({
 const DownloadProgressInfo = Schema.Struct({
   percent: Schema.Number,
 });
+
+const GitHubReleaseList = Schema.Array(
+  Schema.Struct({
+    tag_name: Schema.String,
+    published_at: Schema.optional(Schema.NullOr(Schema.String)),
+    draft: Schema.Boolean,
+  }),
+);
+const decodeGitHubReleaseList = Schema.decodeUnknownEffect(GitHubReleaseList);
+
+const GITHUB_RELEASE_LIST_TIMEOUT = "15 seconds";
 const decodeAppUpdateYmlConfig = Schema.decodeUnknownEffect(AppUpdateYmlConfig);
 const decodeUpdateInfo = Schema.decodeUnknownEffect(UpdateInfo);
 const decodeDownloadProgressInfo = Schema.decodeUnknownEffect(DownloadProgressInfo);
@@ -137,6 +154,17 @@ export class DesktopUpdateUnexpectedActionError extends Schema.TaggedErrorClass<
   }
 }
 
+export class DesktopUpdateVersionListError extends Schema.TaggedErrorClass<DesktopUpdateVersionListError>()(
+  "DesktopUpdateVersionListError",
+  {
+    cause: Schema.Defect(),
+  },
+) {
+  override get message(): string {
+    return "Could not load previous versions from GitHub releases.";
+  }
+}
+
 export type DesktopUpdateConfigureError = never;
 
 export const DesktopUpdateSetChannelError = Schema.Union([
@@ -159,6 +187,8 @@ export class DesktopUpdates extends Context.Service<
     readonly check: (reason: string) => Effect.Effect<DesktopUpdateCheckResult>;
     readonly download: Effect.Effect<DesktopUpdateActionResult>;
     readonly install: Effect.Effect<DesktopUpdateActionResult>;
+    readonly listVersions: Effect.Effect<DesktopUpdateVersionListResult>;
+    readonly rollback: (version: string) => Effect.Effect<DesktopUpdateActionResult>;
   }
 >()("@t3tools/desktop/updates/DesktopUpdates") {}
 
@@ -253,6 +283,7 @@ export const make = Effect.gen(function* () {
   const environment = yield* DesktopEnvironment.DesktopEnvironment;
   const fileSystem = yield* FileSystem.FileSystem;
   const desktopSettings = yield* DesktopAppSettings.DesktopAppSettings;
+  const httpClient = yield* HttpClient.HttpClient;
 
   const appUpdateYmlConfigRef = yield* Ref.make<Option.Option<AppUpdateYmlConfig>>(Option.none());
   const updateCheckInFlightRef = yield* Ref.make(false);
@@ -346,6 +377,50 @@ export const make = Effect.gen(function* () {
 
   const shouldEnableAutoUpdates = resolveDisabledReason.pipe(Effect.map(Option.isNone));
 
+  const resolveGitHubRepository = Ref.get(appUpdateYmlConfigRef).pipe(
+    Effect.map(
+      Option.flatMap((appUpdateYmlConfig) => {
+        const owner = appUpdateYmlConfig.owner;
+        const repo = appUpdateYmlConfig.repo;
+        return appUpdateYmlConfig.provider === "github" && owner && repo
+          ? Option.some({ owner, repo })
+          : Option.none<{ owner: string; repo: string }>();
+      }),
+    ),
+  );
+
+  const restoreConfiguredFeed = Effect.gen(function* () {
+    if (config.mockUpdates) {
+      yield* electronUpdater.setFeedURL({
+        provider: "generic",
+        url: `http://localhost:${config.mockUpdateServerPort}`,
+      } as ElectronUpdater.ElectronUpdaterFeedUrl);
+      return;
+    }
+    const repository = yield* resolveGitHubRepository;
+    if (Option.isSome(repository)) {
+      yield* electronUpdater.setFeedURL({
+        provider: "github",
+        owner: repository.value.owner,
+        repo: repository.value.repo,
+      } as ElectronUpdater.ElectronUpdaterFeedUrl);
+    }
+  });
+
+  // Undoes a rollback's pinned feed and downgrade flags so subsequent
+  // checks go back to the channel's normal release feed.
+  const resetRollbackPin = Effect.gen(function* () {
+    const state = yield* Ref.get(updateStateRef);
+    if (state.rollbackVersion === null) return;
+    yield* restoreConfiguredFeed;
+    yield* applyAutoUpdaterChannel(state.channel);
+    yield* electronUpdater.setDisableDifferentialDownload(
+      isArm64HostRunningIntelBuild(environment.runtimeInfo),
+    );
+    yield* updateState(reduceDesktopUpdateStateOnRollbackReset);
+    yield* logUpdaterInfo("rollback pin cleared", { version: state.rollbackVersion });
+  }).pipe(Effect.withSpan("desktop.updates.resetRollbackPin"));
+
   const checkForUpdates = Effect.fn("desktop.updates.checkForUpdates")(function* (reason: string) {
     yield* Effect.annotateCurrentSpan({ reason });
     if (yield* Ref.get(desktopState.quitting)) return false;
@@ -357,6 +432,15 @@ export const make = Effect.gen(function* () {
       yield* logUpdaterInfo("skipping update check while update is active", {
         reason,
         status: state.status,
+      });
+      return false;
+    }
+    // A pinned rollback owns the feed; background pollers must not
+    // race it back onto the channel's latest release.
+    if (state.rollbackVersion !== null && reason !== "rollback") {
+      yield* logUpdaterInfo("skipping update check while a rollback is active", {
+        reason,
+        rollbackVersion: state.rollbackVersion,
       });
       return false;
     }
@@ -562,6 +646,39 @@ export const make = Effect.gen(function* () {
       Effect.flatMap(
         Effect.fn("desktop.updates.applyUpdateAvailable")(function* (info) {
           const state = yield* Ref.get(updateStateRef);
+          if (state.rollbackVersion !== null) {
+            if (info.version !== state.rollbackVersion) {
+              yield* logUpdaterWarning("ignoring update that does not match rollback pin", {
+                version: info.version,
+                rollbackVersion: state.rollbackVersion,
+              });
+              yield* resetRollbackPin;
+              const checkedAt = yield* currentIsoTimestamp;
+              yield* updateState((current) =>
+                reduceDesktopUpdateStateOnNoUpdate(current, checkedAt),
+              );
+              return;
+            }
+            const checkedAt = yield* currentIsoTimestamp;
+            const releaseNotes = normalizeDesktopUpdateReleaseNotes(
+              info.releaseNotes,
+              info.version,
+            );
+            yield* setState(
+              reduceDesktopUpdateStateOnUpdateAvailable(
+                state,
+                info.version,
+                checkedAt,
+                releaseNotes,
+              ),
+            );
+            yield* Ref.set(lastLoggedDownloadMilestoneRef, -1);
+            yield* logUpdaterInfo("rollback version available, starting download", {
+              version: info.version,
+            });
+            yield* downloadAvailableUpdate;
+            return;
+          }
           if (resolveDefaultDesktopUpdateChannel(info.version) !== state.channel) {
             yield* logUpdaterInfo("ignoring update that does not match selected channel", {
               version: info.version,
@@ -599,6 +716,7 @@ export const make = Effect.gen(function* () {
   });
 
   const handleUpdateNotAvailable = Effect.gen(function* () {
+    yield* resetRollbackPin;
     const checkedAt = yield* currentIsoTimestamp;
     const state = yield* Ref.get(updateStateRef);
     yield* setState(reduceDesktopUpdateStateOnNoUpdate(state, checkedAt));
@@ -703,6 +821,85 @@ export const make = Effect.gen(function* () {
     );
   });
 
+  const listVersions: Effect.Effect<DesktopUpdateVersionListResult> = Effect.gen(function* () {
+    const repository = yield* resolveGitHubRepository;
+    if (Option.isNone(repository)) {
+      return {
+        versions: [],
+        message: "Previous versions are only available for builds with a GitHub release feed.",
+      };
+    }
+    const url = `https://api.github.com/repos/${repository.value.owner}/${repository.value.repo}/releases?per_page=30`;
+    const releases = yield* httpClient.get(url).pipe(
+      Effect.flatMap(HttpClientResponse.filterStatusOk),
+      Effect.flatMap((response) => response.json),
+      Effect.flatMap((payload) => decodeGitHubReleaseList(payload)),
+      Effect.timeout(GITHUB_RELEASE_LIST_TIMEOUT),
+    );
+    const state = yield* Ref.get(updateStateRef);
+    const versions = selectRollbackVersions({
+      releases: releases.map((release) => ({
+        version: release.tag_name.replace(/^v/, ""),
+        publishedAt: release.published_at ?? null,
+        draft: release.draft,
+      })),
+      currentVersion: environment.appVersion,
+      channel: state.channel,
+    });
+    return { versions, message: null };
+  }).pipe(
+    Effect.catchCause((cause) => {
+      const error = new DesktopUpdateVersionListError({ cause });
+      return logUpdaterWarning(error.message, { errorTag: error._tag }).pipe(
+        Effect.as({ versions: [], message: error.message }),
+      );
+    }),
+    Effect.withSpan("desktop.updates.listVersions"),
+  );
+
+  const startRollback = Effect.fn("desktop.updates.startRollback")(function* (version: string) {
+    yield* Effect.annotateCurrentSpan({ version });
+    const state = yield* Ref.get(updateStateRef);
+    const activeAction = yield* activeUpdateAction;
+    const repository = yield* resolveGitHubRepository;
+    if (
+      !(yield* Ref.get(updaterConfiguredRef)) ||
+      Option.isSome(activeAction) ||
+      state.status === "downloading" ||
+      state.status === "downloaded" ||
+      Option.isNone(repository) ||
+      !isRollbackVersionAllowed({
+        version,
+        currentVersion: environment.appVersion,
+        channel: state.channel,
+      })
+    ) {
+      yield* logUpdaterWarning("rollback request rejected", {
+        version,
+        status: state.status,
+        channel: state.channel,
+      });
+      return { accepted: false, completed: false };
+    }
+
+    yield* setState(reduceDesktopUpdateStateOnRollbackStart(state, version));
+    yield* electronUpdater.setFeedURL({
+      provider: "generic",
+      url: `https://github.com/${repository.value.owner}/${repository.value.repo}/releases/download/v${version}`,
+    } as ElectronUpdater.ElectronUpdaterFeedUrl);
+    yield* electronUpdater.setAllowDowngrade(true);
+    // Blockmaps against an older full package are unreliable; take the
+    // full download for rollbacks.
+    yield* electronUpdater.setDisableDifferentialDownload(true);
+    yield* logUpdaterInfo("starting rollback", { version });
+    yield* checkForUpdates("rollback");
+    const nextState = yield* Ref.get(updateStateRef);
+    if (nextState.status === "error") {
+      yield* resetRollbackPin;
+    }
+    return { accepted: true, completed: false };
+  });
+
   return DesktopUpdates.of({
     getState: Ref.get(updateStateRef),
     emitState,
@@ -785,6 +982,7 @@ export const make = Effect.gen(function* () {
       if (nextChannel === state.channel) {
         return state;
       }
+      yield* resetRollbackPin;
 
       yield* desktopSettings
         .setUpdateChannel(nextChannel)
@@ -817,6 +1015,7 @@ export const make = Effect.gen(function* () {
           state: yield* Ref.get(updateStateRef),
         };
       }
+      yield* resetRollbackPin;
       const checked = yield* checkForUpdates(reason);
       return {
         checked,
@@ -846,6 +1045,16 @@ export const make = Effect.gen(function* () {
         state: yield* Ref.get(updateStateRef),
       };
     }).pipe(Effect.withSpan("desktop.updates.install")),
+    listVersions,
+    rollback: (version: string) =>
+      Effect.gen(function* () {
+        const result = yield* startRollback(version);
+        return {
+          accepted: result.accepted,
+          completed: result.completed,
+          state: yield* Ref.get(updateStateRef),
+        };
+      }).pipe(Effect.withSpan("desktop.updates.rollback")),
   });
 });
 

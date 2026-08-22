@@ -208,6 +208,9 @@ export interface DesktopUpdateState {
   message: string | null;
   errorContext: "check" | "download" | "install" | null;
   canRetry: boolean;
+  // Set while an explicit rollback to this version is in flight; the
+  // available/downloaded versions then describe the downgrade target.
+  rollbackVersion: string | null;
 }
 
 export interface DesktopUpdateReleaseNote {
@@ -236,6 +239,27 @@ export const DesktopUpdateStateSchema = Schema.Struct({
   message: Schema.NullOr(Schema.String),
   errorContext: Schema.NullOr(Schema.Literals(["check", "download", "install"])),
   canRetry: Schema.Boolean,
+  rollbackVersion: Schema.NullOr(Schema.String),
+});
+
+export interface DesktopUpdateVersion {
+  version: string;
+  publishedAt: string | null;
+}
+
+export const DesktopUpdateVersionSchema = Schema.Struct({
+  version: Schema.String,
+  publishedAt: Schema.NullOr(Schema.String),
+});
+
+export interface DesktopUpdateVersionListResult {
+  versions: ReadonlyArray<DesktopUpdateVersion>;
+  message: string | null;
+}
+
+export const DesktopUpdateVersionListResultSchema = Schema.Struct({
+  versions: Schema.Array(DesktopUpdateVersionSchema),
+  message: Schema.NullOr(Schema.String),
 });
 
 export interface DesktopUpdateActionResult {
@@ -1118,6 +1142,8 @@ export interface DesktopBridge {
   checkForUpdate: () => Promise<DesktopUpdateCheckResult>;
   downloadUpdate: () => Promise<DesktopUpdateActionResult>;
   installUpdate: () => Promise<DesktopUpdateActionResult>;
+  listUpdateVersions: () => Promise<DesktopUpdateVersionListResult>;
+  rollbackToVersion: (version: string) => Promise<DesktopUpdateActionResult>;
   onUpdateState: (listener: (state: DesktopUpdateState) => void) => () => void;
   /**
    * Desktop-only preview surface. Present iff the renderer is hosted by the

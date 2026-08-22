@@ -95,10 +95,19 @@ export function getDesktopUpdateButtonTooltip(state: DesktopUpdateState): string
 }
 
 export function getDesktopUpdateInstallConfirmationMessage(
-  state: Pick<DesktopUpdateState, "availableVersion" | "downloadedVersion">,
+  state: Pick<DesktopUpdateState, "availableVersion" | "downloadedVersion"> & {
+    rollbackVersion?: string | null;
+  },
 ): string {
   const version = state.downloadedVersion ?? state.availableVersion;
+  if (state.rollbackVersion) {
+    return `Roll back to version ${state.rollbackVersion} and restart Pulse Code?\n\nAny running tasks will be interrupted. Make sure you're ready before continuing.`;
+  }
   return `Install update${version ? ` ${version}` : ""} and restart Pulse Code?\n\nAny running tasks will be interrupted. Make sure you're ready before continuing.`;
+}
+
+export function getDesktopRollbackConfirmationMessage(version: string): string {
+  return `Download version ${version} and prepare to roll back?\n\nPulse Code keeps running until you confirm the install. Rolling back can help when a new release introduced a problem.`;
 }
 
 export function getDesktopUpdateActionError(result: DesktopUpdateActionResult): string | null {

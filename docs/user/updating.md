@@ -70,6 +70,26 @@ If a step fails:
 3. For a command-line server, relaunch it with `npx t3@<client-version>`, replacing
    `<client-version>` with the client version shown in the warning.
 
+## Rolling Back the Desktop App
+
+If a desktop update introduces a problem, you can reinstall a previous version without leaving the
+app. Your projects, threads, and settings are kept.
+
+There are two ways to start a rollback:
+
+- **Settings** → **About** → **Roll back**: pick a previous version from the list and select
+  **Roll back**.
+- **Help** → **Roll Back to Previous Version...** in the app menu: offers the most recent previous
+  version. This works even when the main window cannot load, so a broken update never locks you out.
+
+Pulse Code downloads the chosen version in the background and keeps running until you confirm the
+install. When the download is ready, install it from the same update prompt as a normal update, or
+from **Help** → **Install Downloaded Update...**. The app restarts on the selected version.
+
+Rollback only offers versions from your current update channel, and only versions recent enough to
+be compatible with your current data. Checking for updates again, or switching channels, cancels a
+pending rollback.
+
 ## The Mobile App
 
 The mobile app keeps itself current on its own. When it finds a new version, it downloads it in the
