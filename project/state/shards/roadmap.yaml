@@ -270,6 +270,47 @@ items:
       - "2026-08-19 created in now as the reserved protective outcome."
       - "2026-08-20 compatibility matrix verified with zero detected regressions; item remains active until the integration work is committed/released and post-release metric evidence exists."
 
+  - id: R-2026-08-21-mobile-file-link-actions
+    title: Reliable mobile file-link actions
+    theme: T1
+    horizon: now
+    stage: building
+    kind: feature
+    outcome: Let mobile users choose between an in-app preview and an installed app for workspace files linked from chat.
+    need: When chat links a project artifact, I want to preview it or open it with another mobile app.
+    directions:
+      - Offer Preview in Pulse Code and Open with for mobile chat workspace-file links.
+      - Reuse signed workspace-file assets and stream only to the mobile cache.
+    failure_mode: The choice depends on unreliable preview navigation, leaks a host path, or works only locally.
+    appetite: one focused mobile cycle
+    approach: Keep preview as one action; download a capability URL and invoke expo-sharing for the other.
+    rabbit_holes:
+      - persistent downloads or offline queues
+      - new server transport
+    no_gos:
+      - no asset request outside the current workspace
+      - no change to web, desktop, or direct Files-tab navigation
+    dod:
+      - A mobile chat file link offers both actions.
+      - Open with streams through the prepared environment and invokes the native chooser.
+      - Focused tests and mobile typecheck pass.
+      - docs/user explains the interaction.
+    evidence:
+      - type: user_evidence
+        note: The user reported unreliable mobile hyperlink previews and approved this two-action design on 2026-08-21.
+      - type: repository_evidence
+        note: Signed workspace-file assets, expo-file-system, and expo-sharing already exist.
+    rice: { reach: M, impact: M, effort: S }
+    prd_refs:
+      - 13-mobile-file-link-actions#choice
+      - 13-mobile-file-link-actions#open-with
+      - 13-mobile-file-link-actions#failure
+    blocked_by: []
+    metric: { name: mobile linked files with a usable open action, baseline: null, target: 100 }
+    status: active
+    history:
+      - 2026-08-21 created in now after design approval and an explicit build request.
+
   - id: R-2026-08-19-github-work-graph
     title: "GitHub work graph beyond pull requests"
     theme: T3

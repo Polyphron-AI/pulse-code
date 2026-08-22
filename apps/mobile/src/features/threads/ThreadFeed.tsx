@@ -1,6 +1,7 @@
 import * as Haptics from "expo-haptics";
 import { KeyboardAwareLegendList } from "@legendapp/list/keyboard";
 import { type LegendListRef } from "@legendapp/list/react-native";
+import { resolveAssetUrl } from "@t3tools/client-runtime/state/assets";
 import type { EnvironmentId, MessageId, ThreadId, TurnId } from "@t3tools/contracts";
 import { CHAT_LIST_ANCHOR_OFFSET, resolveChatListAnchoredEndSpace } from "@t3tools/shared/chatList";
 import { formatElapsed } from "@t3tools/shared/orchestrationTiming";
@@ -26,7 +27,9 @@ import {
   type PartialMarkdownTheme,
 } from "react-native-nitro-markdown";
 import {
+  ActionSheetIOS,
   ActivityIndicator,
+  Alert,
   Image,
   Platform,
   type LayoutChangeEvent,
@@ -101,8 +104,15 @@ import {
   WORK_GROUP_TOGGLE_HEIGHT,
 } from "./thread-work-log";
 import { useMarkdownCodeHighlight } from "./markdownCodeHighlightState";
-import { useAssetUrl } from "../../state/assets";
-import { resolveWorkspaceRelativeFilePath } from "../files/filePath";
+import { assetEnvironment, useAssetUrl } from "../../state/assets";
+import { useAtomQueryRunner } from "../../state/use-atom-query-runner";
+import { usePreparedConnection } from "../../state/session";
+import {
+  basename,
+  resolveWorkspaceFilePath,
+  resolveWorkspaceRelativeFilePath,
+} from "../files/filePath";
+import { openWorkspaceFileWith } from "../files/openWorkspaceFileWith";
 
 const WIDE_MARKDOWN_BLOCK_OPTIONS = {
   includeOrderedLists: Platform.OS === "android",
@@ -1301,6 +1311,12 @@ function ThreadFeedPlaceholder(props: {
 
 export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
   const navigation = useNavigation();
+  const preparedConnection = usePreparedConnection(props.environmentId);
+  const createAssetUrl = useAtomQueryRunner(assetEnvironment.createUrl, {
+    label: "open linked workspace file",
+    reportFailure: false,
+    reportDefect: false,
+  });
   const copyFeedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const foldSettleFrameRef = useRef<number | null>(null);
   const foldSettleSecondFrameRef = useRef<number | null>(null);
@@ -1397,12 +1413,65 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
         );
         if (relativePath) {
           void Haptics.selectionAsync();
-          navigation.navigate("ThreadFile", {
-            environmentId: String(props.environmentId),
-            threadId: String(props.threadId),
-            path: relativePath.split("/").filter((segment) => segment.length > 0),
-            ...(presentation.line ? { line: String(presentation.line) } : {}),
-          });
+          const preview = () => {
+            navigation.navigate("ThreadFile", {
+              environmentId: String(props.environmentId),
+              threadId: String(props.threadId),
+              path: relativePath.split("/").filter((segment) => segment.length > 0),
+              ...(presentation.line ? { line: String(presentation.line) } : {}),
+            });
+          };
+          const openWith = () => {
+            if (!props.workspaceRoot || preparedConnection._tag === "None") {
+              Alert.alert("Could not open file", "Reconnect to the environment and try again.");
+              return;
+            }
+            const absolutePath = resolveWorkspaceFilePath(props.workspaceRoot, relativePath);
+            void openWorkspaceFileWith({
+              key: JSON.stringify([props.environmentId, props.threadId, absolutePath]),
+              path: absolutePath,
+              resolveAssetUrl: async () => {
+                const result = await createAssetUrl({
+                  environmentId: props.environmentId,
+                  input: {
+                    resource: {
+                      _tag: "workspace-file",
+                      threadId: props.threadId,
+                      path: absolutePath,
+                    },
+                  },
+                });
+                return result._tag === "Success"
+                  ? resolveAssetUrl(preparedConnection.value.httpBaseUrl, result.value.relativeUrl)
+                  : null;
+              },
+            }).catch(() => {
+              Alert.alert(
+                "Could not open file",
+                "The file could not be downloaded or opened. Check the environment connection and available apps, then try again.",
+              );
+            });
+          };
+
+          if (Platform.OS === "ios") {
+            ActionSheetIOS.showActionSheetWithOptions(
+              {
+                title: basename(relativePath),
+                options: ["Preview in Pulse Code", "Open with…", "Cancel"],
+                cancelButtonIndex: 2,
+              },
+              (buttonIndex) => {
+                if (buttonIndex === 0) preview();
+                if (buttonIndex === 1) openWith();
+              },
+            );
+          } else {
+            Alert.alert(basename(relativePath), "Choose how to open this file.", [
+              { text: "Preview in Pulse Code", onPress: preview },
+              { text: "Open with…", onPress: openWith },
+              { text: "Cancel", style: "cancel" },
+            ]);
+          }
         }
         return;
       }
@@ -1411,7 +1480,14 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
         void tryOpenExternalUrl(presentation.href, "markdown-link");
       }
     },
-    [props.environmentId, props.threadId, props.workspaceRoot, navigation],
+    [
+      createAssetUrl,
+      navigation,
+      preparedConnection,
+      props.environmentId,
+      props.threadId,
+      props.workspaceRoot,
+    ],
   );
   const markdownStyles = useMarkdownStyles(onMarkdownLinkPress);
   const reviewCommentColors = useReviewCommentColors();
