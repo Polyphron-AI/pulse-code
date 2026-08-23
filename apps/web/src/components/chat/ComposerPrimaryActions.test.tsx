@@ -65,7 +65,11 @@ function renderStandaloneStop() {
   );
 }
 
-function renderRunningActions(showSendWhileRunning: boolean, hasSendableContent: boolean) {
+function renderRunningActions(
+  showSendWhileRunning: boolean,
+  hasSendableContent: boolean,
+  busyBehavior: "queue" | "steer" = "queue",
+) {
   return renderToStaticMarkup(
     createElement(ComposerPrimaryActions, {
       compact: true,
@@ -80,6 +84,7 @@ function renderRunningActions(showSendWhileRunning: boolean, hasSendableContent:
       isPreparingWorktree: false,
       hasSendableContent,
       showSendWhileRunning,
+      busyBehavior,
       onPreviousPendingQuestion: () => {},
       onInterrupt: () => {},
       onImplementPlanInNewThread: () => {},
@@ -242,22 +247,30 @@ describe("ComposerPrimaryActions", () => {
     const markup = renderRunningActions(false, true);
 
     expect(markup).toContain('aria-label="Stop generation"');
-    expect(markup).not.toContain('aria-label="Send message"');
+    expect(markup).not.toContain('aria-label="Queue message"');
   });
 
-  it("renders send alongside stop while running when Enter-to-send is unavailable", () => {
+  it("labels a running-turn send as queue by default", () => {
     const markup = renderRunningActions(true, true);
 
     expect(markup).toContain('aria-label="Stop generation"');
-    expect(markup).toContain('aria-label="Send message"');
+    expect(markup).toContain('aria-label="Queue message"');
     expect(markup).toContain('type="submit"');
     expect(markup).toContain("size-9 sm:size-8");
+  });
+
+  it("labels a running-turn send as steer when configured", () => {
+    const markup = renderRunningActions(true, true, "steer");
+
+    expect(markup).toContain('aria-label="Stop generation"');
+    expect(markup).toContain('aria-label="Steer current turn"');
+    expect(markup).not.toContain('aria-label="Queue message"');
   });
 
   it("keeps stop as the only action while running with an empty composer", () => {
     const markup = renderRunningActions(true, false);
 
     expect(markup).toContain('aria-label="Stop generation"');
-    expect(markup).not.toContain('aria-label="Send message"');
+    expect(markup).not.toContain('aria-label="Queue message"');
   });
 });

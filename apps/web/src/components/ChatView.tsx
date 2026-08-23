@@ -5322,6 +5322,7 @@ function ChatViewContent(props: ChatViewProps) {
           titleSeed: title,
           runtimeMode,
           interactionMode,
+          busyBehavior: settings.composerBusyBehavior,
           ...(bootstrap ? { bootstrap } : {}),
           createdAt: messageCreatedAt,
         },

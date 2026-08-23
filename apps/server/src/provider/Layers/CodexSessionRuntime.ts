@@ -4,6 +4,7 @@ import {
   EventId,
   ProviderDriverKind,
   ProviderItemId,
+  type ComposerBusyBehavior,
   type ProviderInstanceId,
   type ProviderApprovalDecision,
   type ProviderEvent,
@@ -40,6 +41,7 @@ import { codexSessionAppServerArgs } from "./codexLaunchArgs.ts";
 import { expandHomePath } from "../../pathExpansion.ts";
 import { buildCodexDeveloperInstructions } from "../CodexDeveloperInstructions.ts";
 const decodeV2TurnStartResponse = Schema.decodeUnknownEffect(EffectCodexSchema.V2TurnStartResponse);
+const decodeV2TurnSteerResponse = Schema.decodeUnknownEffect(EffectCodexSchema.V2TurnSteerResponse);
 
 const PROVIDER = ProviderDriverKind.make("codex");
 
@@ -119,6 +121,7 @@ export interface CodexSessionRuntimeSendTurnInput {
   readonly serviceTier?: CodexServiceTier | undefined;
   readonly effort?: EffectCodexSchema.V2TurnStartParams__ReasoningEffort | undefined;
   readonly interactionMode?: ProviderInteractionMode;
+  readonly busyBehavior?: ComposerBusyBehavior;
 }
 
 export interface CodexThreadTurnSnapshot {
@@ -1832,17 +1835,39 @@ export const makeCodexSessionRuntime = (
             // has even if the setting changed after the session started.
             browserToolsAvailable: hasConfiguredMcpServer(options.appServerArgs),
           });
-          const rawResponse = yield* client.raw.request("turn/start", params);
-          const response = yield* decodeV2TurnStartResponse(rawResponse).pipe(
-            Effect.mapError((error) =>
-              CodexErrors.CodexAppServerProtocolParseError.fromSchemaError(
-                "decode-response-payload",
-                error,
-                { method: "turn/start" },
+          const sessionBeforeSend = yield* Ref.get(sessionRef);
+          const activeTurnId = sessionBeforeSend.activeTurnId;
+          const shouldSteer = input.busyBehavior === "steer" && activeTurnId !== undefined;
+          let turnId: TurnId;
+          if (shouldSteer) {
+            const rawResponse = yield* client.raw.request("turn/steer", {
+              threadId: providerThreadId,
+              expectedTurnId: activeTurnId,
+              input: params.input,
+            });
+            const response = yield* decodeV2TurnSteerResponse(rawResponse).pipe(
+              Effect.mapError((error) =>
+                CodexErrors.CodexAppServerProtocolParseError.fromSchemaError(
+                  "decode-response-payload",
+                  error,
+                  { method: "turn/steer" },
+                ),
               ),
-            ),
-          );
-          const turnId = TurnId.make(response.turn.id);
+            );
+            turnId = TurnId.make(response.turnId);
+          } else {
+            const rawResponse = yield* client.raw.request("turn/start", params);
+            const response = yield* decodeV2TurnStartResponse(rawResponse).pipe(
+              Effect.mapError((error) =>
+                CodexErrors.CodexAppServerProtocolParseError.fromSchemaError(
+                  "decode-response-payload",
+                  error,
+                  { method: "turn/start" },
+                ),
+              ),
+            );
+            turnId = TurnId.make(response.turn.id);
+          }
           yield* updateSession(sessionRef, (session) => ({
             status: "running",
             // Codex accepts follow-ups while the current turn is still

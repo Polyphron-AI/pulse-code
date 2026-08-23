@@ -33,6 +33,20 @@ describe("ClientSettings word wrap", () => {
   });
 });
 
+describe("ClientSettings composer busy behavior", () => {
+  it("queues by default and accepts an explicit steer preference", () => {
+    expect(decodeClientSettings({}).composerBusyBehavior).toBe("queue");
+    expect(decodeClientSettingsPatch({ composerBusyBehavior: "steer" }).composerBusyBehavior).toBe(
+      "steer",
+    );
+  });
+
+  it("rejects unsupported busy behavior values", () => {
+    expect(() => decodeClientSettings({ composerBusyBehavior: "send" })).toThrow();
+    expect(() => decodeClientSettingsPatch({ composerBusyBehavior: "send" })).toThrow();
+  });
+});
+
 describe("ClientSettings glass opacity", () => {
   it("defaults to a readable translucent surface", () => {
     expect(decodeClientSettings({}).glassOpacity).toBe(80);

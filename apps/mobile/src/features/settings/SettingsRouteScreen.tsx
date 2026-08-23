@@ -535,10 +535,37 @@ function GeneralSettingsSection() {
   const autoSettleOnMerge =
     !AsyncResult.isSuccess(preferencesResult) ||
     preferencesResult.value.autoSettleOnMerge !== false;
+  const composerBusyBehavior = AsyncResult.isSuccess(preferencesResult)
+    ? (preferencesResult.value.composerBusyBehavior ?? "queue")
+    : "queue";
+
+  const chooseComposerBusyBehavior = () => {
+    Alert.alert(
+      "Messages while working",
+      "Queue starts a follow-up turn. Steer adjusts the turn already in progress.",
+      [
+        {
+          text: "Queue",
+          onPress: () => savePreferences({ composerBusyBehavior: "queue" }),
+        },
+        {
+          text: "Steer",
+          onPress: () => savePreferences({ composerBusyBehavior: "steer" }),
+        },
+        { text: "Cancel", style: "cancel" },
+      ],
+    );
+  };
 
   return (
     <SettingsSection title="General">
       <SettingsRow icon="folder" label="Project Grouping" target="SettingsProjectGrouping" />
+      <SettingsRow
+        icon="text.bubble"
+        label="Messages while working"
+        value={composerBusyBehavior === "steer" ? "Steer" : "Queue"}
+        onPress={chooseComposerBusyBehavior}
+      />
       <SettingsSwitchRow
         icon="arrow.triangle.branch"
         label="Auto-settle merged threads"

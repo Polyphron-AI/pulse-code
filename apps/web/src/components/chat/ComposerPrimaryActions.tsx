@@ -1,3 +1,4 @@
+import type { ComposerBusyBehavior } from "@t3tools/contracts";
 import { memo, type PointerEventHandler } from "react";
 import { ChevronDownIcon, ChevronLeftIcon } from "lucide-react";
 import { useEnvironmentIdentificationMode } from "~/hooks/useSettings";
@@ -28,9 +29,9 @@ interface ComposerPrimaryActionsProps {
   isPreparingWorktree: boolean;
   hasSendableContent: boolean;
   preserveComposerFocusOnPointerDown?: boolean;
-  /** Enter-to-send is disabled on mobile viewports, where stop would otherwise
-   * be the only primary action and a running turn could not be steered. */
+  /** Whether a running turn keeps a submit action beside Stop. */
   showSendWhileRunning?: boolean;
+  busyBehavior?: ComposerBusyBehavior;
   onPreviousPendingQuestion: () => void;
   onInterrupt: () => void;
   onImplementPlanInNewThread: () => void;
@@ -72,6 +73,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
   hasSendableContent,
   preserveComposerFocusOnPointerDown = false,
   showSendWhileRunning = false,
+  busyBehavior = "queue",
   onPreviousPendingQuestion,
   onInterrupt,
   onImplementPlanInNewThread,
@@ -246,7 +248,11 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
                 ? "Preparing worktree"
                 : isSendBusy
                   ? "Sending"
-                  : "Send message"
+                  : isRunning
+                    ? busyBehavior === "steer"
+                      ? "Steer current turn"
+                      : "Queue message"
+                    : "Send message"
       }
     >
       {stageBackdropVariant ? (

@@ -14,6 +14,7 @@ import {
 } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import * as Crypto from "effect/Crypto";
+import * as Deferred from "effect/Deferred";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -22,6 +23,7 @@ import * as Path from "effect/Path";
 import * as Queue from "effect/Queue";
 import * as Ref from "effect/Ref";
 import * as Scope from "effect/Scope";
+import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import type { OpencodeClient, Part, PermissionRequest, QuestionRequest } from "@opencode-ai/sdk/v2";
 import { getModelSelectionStringOptionValue } from "@t3tools/shared/model";
@@ -235,6 +237,8 @@ interface OpenCodeSessionContext {
   readonly completedAssistantPartIds: Set<string>;
   readonly turns: Array<OpenCodeTurnSnapshot>;
   activeTurnId: TurnId | undefined;
+  activeTurnCompletion: Deferred.Deferred<void> | undefined;
+  readonly queueTurnSemaphore: Semaphore.Semaphore;
   activeAgent: string | undefined;
   activeVariant: string | undefined;
   /**
@@ -562,6 +566,11 @@ const stopOpenCodeContext = Effect.fn("stopOpenCodeContext")(function* (
   if (yield* Ref.getAndSet(context.stopped, true)) {
     return false;
   }
+  const activeTurnCompletion = context.activeTurnCompletion;
+  context.activeTurnCompletion = undefined;
+  if (activeTurnCompletion) {
+    yield* Deferred.succeed(activeTurnCompletion, undefined);
+  }
 
   // Best-effort remote abort. The scope close below tears down the local
   // handles (event-pump fiber, server-exit fiber, event-subscribe fetch),
@@ -693,6 +702,11 @@ export function makeOpenCodeAdapter(
       // `Ref.get` would let both racers slip past and emit duplicates.
       if (yield* Ref.getAndSet(context.stopped, true)) {
         return;
+      }
+      const activeTurnCompletion = context.activeTurnCompletion;
+      context.activeTurnCompletion = undefined;
+      if (activeTurnCompletion) {
+        yield* Deferred.succeed(activeTurnCompletion, undefined);
       }
       const turnId = context.activeTurnId;
       sessions.delete(context.session.threadId);
@@ -1074,7 +1088,9 @@ export function makeOpenCodeAdapter(
           }
 
           if (event.properties.status.type === "idle" && turnId) {
+            const activeTurnCompletion = context.activeTurnCompletion;
             context.activeTurnId = undefined;
+            context.activeTurnCompletion = undefined;
             yield* updateProviderSession(context, { status: "ready" }, { clearActiveTurnId: true });
             yield* emit({
               ...(yield* buildEventBase({
@@ -1087,6 +1103,9 @@ export function makeOpenCodeAdapter(
                 state: "completed",
               },
             });
+            if (activeTurnCompletion) {
+              yield* Deferred.succeed(activeTurnCompletion, undefined);
+            }
           }
           break;
         }
@@ -1094,7 +1113,9 @@ export function makeOpenCodeAdapter(
         case "session.error": {
           const message = sessionErrorMessage(event.properties.error);
           const activeTurnId = context.activeTurnId;
+          const activeTurnCompletion = context.activeTurnCompletion;
           context.activeTurnId = undefined;
+          context.activeTurnCompletion = undefined;
           yield* updateProviderSession(
             context,
             {
@@ -1129,6 +1150,9 @@ export function makeOpenCodeAdapter(
               detail: event.properties.error,
             },
           });
+          if (activeTurnCompletion) {
+            yield* Deferred.succeed(activeTurnCompletion, undefined);
+          }
           break;
         }
 
@@ -1400,6 +1424,8 @@ export function makeOpenCodeAdapter(
           completedAssistantPartIds: new Set(),
           turns: [],
           activeTurnId: undefined,
+          activeTurnCompletion: undefined,
+          queueTurnSemaphore: yield* Semaphore.make(1),
           activeAgent: undefined,
           activeVariant: undefined,
           stopped: yield* Ref.make(false),
@@ -1427,12 +1453,27 @@ export function makeOpenCodeAdapter(
       },
     );
 
-    const sendTurn: OpenCodeAdapterShape["sendTurn"] = Effect.fn("sendTurn")(function* (input) {
+    const sendNow: OpenCodeAdapterShape["sendTurn"] = Effect.fn("sendNow")(function* (input) {
       const context = yield* ensureSessionContext(sessions, input.threadId);
+      if (input.busyBehavior !== "steer") {
+        while (context.activeTurnId !== undefined) {
+          const activeTurnCompletion = context.activeTurnCompletion;
+          if (!activeTurnCompletion) {
+            break;
+          }
+          yield* Deferred.await(activeTurnCompletion);
+        }
+      }
+      if (yield* Ref.get(context.stopped)) {
+        return yield* new ProviderAdapterSessionClosedError({
+          provider: PROVIDER,
+          threadId: input.threadId,
+        });
+      }
       // A sendTurn while a turn is active is a steer: OpenCode queues the
       // prompt into the busy session and the work continues as one turn, so
       // the active turn id is reused instead of opening a new turn.
-      const steeringTurnId = context.activeTurnId;
+      const steeringTurnId = input.busyBehavior === "steer" ? context.activeTurnId : undefined;
       const turnId = steeringTurnId ?? TurnId.make(`opencode-turn-${yield* randomUUIDv4}`);
       const modelSelection =
         input.modelSelection ??
@@ -1475,6 +1516,9 @@ export function makeOpenCodeAdapter(
       const agent = getModelSelectionStringOptionValue(modelSelection, "agent");
       const variant = getModelSelectionStringOptionValue(modelSelection, "variant");
 
+      if (steeringTurnId === undefined) {
+        context.activeTurnCompletion = yield* Deferred.make<void>();
+      }
       context.activeTurnId = turnId;
       context.activeAgent = agent ?? (input.interactionMode === "plan" ? "plan" : undefined);
       context.activeVariant = variant;
@@ -1518,7 +1562,9 @@ export function makeOpenCodeAdapter(
           steeringTurnId !== undefined
             ? Effect.void
             : Effect.gen(function* () {
+                const activeTurnCompletion = context.activeTurnCompletion;
                 context.activeTurnId = undefined;
+                context.activeTurnCompletion = undefined;
                 context.activeAgent = undefined;
                 context.activeVariant = undefined;
                 yield* updateProviderSession(
@@ -1540,6 +1586,9 @@ export function makeOpenCodeAdapter(
                     reason: requestError.detail,
                   },
                 });
+                if (activeTurnCompletion) {
+                  yield* Deferred.succeed(activeTurnCompletion, undefined);
+                }
               }),
         ),
       );
@@ -1554,6 +1603,15 @@ export function makeOpenCodeAdapter(
           : {}),
       };
     });
+
+    const sendTurn: OpenCodeAdapterShape["sendTurn"] = (input) =>
+      Effect.gen(function* () {
+        if (input.busyBehavior === "steer") {
+          return yield* sendNow(input);
+        }
+        const context = yield* ensureSessionContext(sessions, input.threadId);
+        return yield* context.queueTurnSemaphore.withPermit(sendNow(input));
+      });
 
     const interruptTurn: OpenCodeAdapterShape["interruptTurn"] = Effect.fn("interruptTurn")(
       function* (threadId, turnId) {

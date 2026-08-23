@@ -224,6 +224,7 @@ it.effect("decodes thread.turn.start defaults for provider and runtime mode", ()
     assert.strictEqual(parsed.modelSelection, undefined);
     assert.strictEqual(parsed.runtimeMode, DEFAULT_RUNTIME_MODE);
     assert.strictEqual(parsed.interactionMode, DEFAULT_PROVIDER_INTERACTION_MODE);
+    assert.strictEqual(parsed.busyBehavior, undefined);
   }),
 );
 
@@ -249,6 +250,29 @@ it.effect("preserves explicit provider and runtime mode in thread.turn.start", (
     assert.strictEqual(parsed.modelSelection?.instanceId, "codex");
     assert.strictEqual(parsed.runtimeMode, "full-access");
     assert.strictEqual(parsed.interactionMode, DEFAULT_PROVIDER_INTERACTION_MODE);
+    assert.strictEqual(parsed.busyBehavior, undefined);
+  }),
+);
+
+it.effect("preserves explicit steer behavior in thread.turn.start", () =>
+  Effect.gen(function* () {
+    const parsed = yield* decodeThreadTurnStartCommand({
+      type: "thread.turn.start",
+      commandId: "cmd-turn-steer",
+      threadId: "thread-1",
+      message: {
+        messageId: "msg-steer",
+        role: "user",
+        text: "change direction",
+        attachments: [],
+      },
+      runtimeMode: "full-access",
+      interactionMode: "default",
+      busyBehavior: "steer",
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+
+    assert.strictEqual(parsed.busyBehavior, "steer");
   }),
 );
 

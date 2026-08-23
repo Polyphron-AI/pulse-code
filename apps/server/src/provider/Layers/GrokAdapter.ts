@@ -116,6 +116,7 @@ interface GrokSessionContext {
    * >0 means a turn is actively running, so a new sendTurn is a steer that
    * continues it, and only the last remaining prompt settles the turn. */
   promptsInFlight: number;
+  readonly queueTurnSemaphore: Semaphore.Semaphore;
   currentModelId: string | undefined;
   stopped: boolean;
 }
@@ -777,6 +778,7 @@ export function makeGrokAdapter(grokSettings: GrokSettings, options?: GrokAdapte
             activeTurnId: undefined,
             interruptedTurnIds: new Set(),
             promptsInFlight: 0,
+            queueTurnSemaphore: yield* Semaphore.make(1),
             currentModelId: boundModelId,
             stopped: false,
           };
@@ -915,7 +917,7 @@ export function makeGrokAdapter(grokSettings: GrokSettings, options?: GrokAdapte
         }).pipe(Effect.scoped),
       );
 
-    const sendTurn: GrokAdapterShape["sendTurn"] = (input) =>
+    const sendTurnNow: GrokAdapterShape["sendTurn"] = (input) =>
       Effect.gen(function* () {
         const prepared = yield* withThreadLock(
           input.threadId,
@@ -1276,6 +1278,15 @@ export function makeGrokAdapter(grokSettings: GrokSettings, options?: GrokAdapte
             }).pipe(Effect.catch(() => Effect.void)),
           ),
         );
+      });
+
+    const sendTurn: GrokAdapterShape["sendTurn"] = (input) =>
+      Effect.gen(function* () {
+        const ctx = yield* requireSession(input.threadId);
+        if (input.busyBehavior === "steer" && ctx.promptsInFlight > 0) {
+          return yield* sendTurnNow(input);
+        }
+        return yield* ctx.queueTurnSemaphore.withPermit(sendTurnNow(input));
       });
 
     const interruptTurn: GrokAdapterShape["interruptTurn"] = (threadId, turnId) =>

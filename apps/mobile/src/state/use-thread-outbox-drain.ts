@@ -231,6 +231,7 @@ export function useThreadOutboxDrain(): void {
           modelSelection: settings.modelSelection,
           runtimeMode: settings.runtimeMode,
           interactionMode: settings.interactionMode,
+          busyBehavior: queuedMessage.busyBehavior ?? "queue",
           createdAt: queuedMessage.createdAt,
         },
       });
@@ -315,6 +316,7 @@ export function useThreadOutboxDrain(): void {
         shellStatus,
         environmentConnected: environment?.connectionState === "connected",
         threadBusy: thread?.session?.status === "running" || thread?.session?.status === "starting",
+        busyBehavior: nextQueuedMessage.busyBehavior,
       });
       if (deliveryAction === "wait") {
         continue;

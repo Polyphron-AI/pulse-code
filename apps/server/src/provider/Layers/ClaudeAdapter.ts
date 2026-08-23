@@ -70,6 +70,7 @@ import * as Path from "effect/Path";
 import * as Queue from "effect/Queue";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
+import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
@@ -273,6 +274,8 @@ interface ClaudeSessionContext {
   /** Task ids that have started and not yet reached a terminal state. */
   readonly liveTaskIds: Set<string>;
   turnState: ClaudeTurnState | undefined;
+  turnCompletion: Deferred.Deferred<void> | undefined;
+  readonly queueTurnSemaphore: Semaphore.Semaphore;
   lastKnownContextWindow: number | undefined;
   lastKnownTokenUsage: ThreadTokenUsageSnapshot | undefined;
   lastKnownTotalProcessedTokens: number | undefined;
@@ -2377,7 +2380,9 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     });
 
     const updatedAt = yield* nowIso;
+    const turnCompletion = context.turnCompletion;
     context.turnState = undefined;
+    context.turnCompletion = undefined;
     context.session = {
       ...context.session,
       status: "ready",
@@ -2386,6 +2391,9 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
       ...(status === "failed" && errorMessage ? { lastError: errorMessage } : {}),
     };
     yield* updateResumeCursor(context);
+    if (turnCompletion) {
+      yield* Deferred.succeed(turnCompletion, undefined);
+    }
   });
 
   const handleStreamEvent = Effect.fn("handleStreamEvent")(function* (
@@ -3637,6 +3645,11 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     if (context.stopped) return;
 
     context.stopped = true;
+    const turnCompletion = context.turnCompletion;
+    context.turnCompletion = undefined;
+    if (turnCompletion) {
+      yield* Deferred.succeed(turnCompletion, undefined);
+    }
 
     for (const [requestId, pending] of context.pendingApprovals) {
       yield* Deferred.succeed(pending.decision, "cancel");
@@ -4269,6 +4282,8 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         workflowMemberFingerprints,
         liveTaskIds,
         turnState: undefined,
+        turnCompletion: undefined,
+        queueTurnSemaphore: yield* Semaphore.make(1),
         lastKnownContextWindow: initialContextWindow,
         lastKnownTokenUsage: undefined,
         lastKnownTotalProcessedTokens: undefined,
@@ -4353,12 +4368,27 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     },
   );
 
-  const sendTurn: ClaudeAdapterShape["sendTurn"] = Effect.fn("sendTurn")(function* (input) {
+  const sendTurnNow: ClaudeAdapterShape["sendTurn"] = Effect.fn("sendTurnNow")(function* (input) {
     const context = yield* requireSession(input.threadId);
     const modelSelection =
       input.modelSelection !== undefined && input.modelSelection.instanceId === boundInstanceId
         ? input.modelSelection
         : undefined;
+    if (input.busyBehavior !== "steer") {
+      while (context.turnState && context.turnState.synthetic !== true) {
+        const turnCompletion = context.turnCompletion;
+        if (!turnCompletion) {
+          break;
+        }
+        yield* Deferred.await(turnCompletion);
+      }
+    }
+    if (context.stopped || context.session.status === "closed") {
+      return yield* new ProviderAdapterSessionClosedError({
+        provider: PROVIDER,
+        threadId: input.threadId,
+      });
+    }
 
     // A sendTurn while a real turn is running is a steer: the message is
     // queued into the live SDK agent loop and the work continues as the same
@@ -4366,7 +4396,9 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     // background agent responses between user prompts) are auto-closed
     // instead, so they don't block the user's next turn.
     const steeringTurnState =
-      context.turnState && context.turnState.synthetic !== true ? context.turnState : null;
+      input.busyBehavior === "steer" && context.turnState && context.turnState.synthetic !== true
+        ? context.turnState
+        : null;
     if (context.turnState && steeringTurnState === null) {
       yield* completeTurn(context, "completed");
     }
@@ -4422,6 +4454,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
       };
 
       const updatedAt = yield* nowIso;
+      context.turnCompletion = yield* Deferred.make<void>();
       context.turnState = turnState;
       context.session = {
         ...context.session,
@@ -4462,6 +4495,15 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         : {}),
     };
   });
+
+  const sendTurn: ClaudeAdapterShape["sendTurn"] = (input) =>
+    Effect.gen(function* () {
+      if (input.busyBehavior === "steer") {
+        return yield* sendTurnNow(input);
+      }
+      const context = yield* requireSession(input.threadId);
+      return yield* context.queueTurnSemaphore.withPermit(sendTurnNow(input));
+    });
 
   const interruptTurn: ClaudeAdapterShape["interruptTurn"] = Effect.fn("interruptTurn")(
     function* (threadId, _turnId) {

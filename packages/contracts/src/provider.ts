@@ -10,6 +10,7 @@ import {
 } from "./baseSchemas.ts";
 import {
   ChatAttachment,
+  ComposerBusyBehavior,
   ModelSelection,
   PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
   PROVIDER_SEND_TURN_MAX_INPUT_CHARS,
@@ -75,6 +76,7 @@ export const ProviderSendTurnInput = Schema.Struct({
   ),
   modelSelection: Schema.optional(ModelSelection),
   interactionMode: Schema.optional(ProviderInteractionMode),
+  busyBehavior: Schema.optional(ComposerBusyBehavior),
 });
 export type ProviderSendTurnInput = typeof ProviderSendTurnInput.Type;
 

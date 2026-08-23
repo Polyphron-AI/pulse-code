@@ -413,6 +413,7 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
   hasSendableContent: boolean;
   preserveComposerFocusOnPointerDown?: boolean;
   showSendWhileRunning?: boolean;
+  busyBehavior: UnifiedSettings["composerBusyBehavior"];
   onPreviousPendingQuestion: () => void;
   onInterrupt: () => void;
   onImplementPlanInNewThread: () => void;
@@ -442,6 +443,7 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
         hasSendableContent={props.hasSendableContent}
         preserveComposerFocusOnPointerDown={props.preserveComposerFocusOnPointerDown ?? false}
         showSendWhileRunning={props.showSendWhileRunning ?? false}
+        busyBehavior={props.busyBehavior}
         onPreviousPendingQuestion={props.onPreviousPendingQuestion}
         onInterrupt={props.onInterrupt}
         onImplementPlanInNewThread={props.onImplementPlanInNewThread}
@@ -3217,6 +3219,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   activeThreadModelDisplayName={activeThreadModelDisplayName}
                   pendingAction={pendingPrimaryAction}
                   isRunning={phase === "running"}
+                  busyBehavior={settings.composerBusyBehavior}
                   showPlanFollowUpPrompt={pendingUserInputs.length === 0 && showPlanFollowUpPrompt}
                   promptHasText={prompt.trim().length > 0}
                   isSendBusy={isSendBusy}
@@ -3230,7 +3233,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   isPreparingWorktree={isPreparingWorktree}
                   hasSendableContent={composerSendState.hasSendableContent}
                   preserveComposerFocusOnPointerDown={isMobileViewport}
-                  showSendWhileRunning={isMobileViewport}
+                  showSendWhileRunning
                   onPreviousPendingQuestion={onPreviousActivePendingUserInputQuestion}
                   onInterrupt={handleInterruptPrimaryAction}
                   onImplementPlanInNewThread={handleImplementPlanInNewThreadPrimaryAction}

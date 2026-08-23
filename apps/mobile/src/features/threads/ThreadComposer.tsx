@@ -1,3 +1,4 @@
+import { useAtomValue } from "@effect/atom-react";
 import type {
   EnvironmentId,
   MessageId,
@@ -33,10 +34,12 @@ import Animated, {
   FadeOutDown,
   LinearTransition,
 } from "react-native-reanimated";
+import { AsyncResult } from "effect/unstable/reactivity";
 import { useThemeColor } from "../../lib/useThemeColor";
 import { themeColorWithAlpha } from "../../lib/mobileTheme";
 import { armAgentAwarenessLiveActivityForLocalWork } from "../agent-awareness/remoteRegistration";
 import { scopedThreadKey } from "../../lib/scopedEntities";
+import { mobilePreferencesAtom } from "../../state/preferences";
 
 import { AppText as Text } from "../../components/AppText";
 import { ComposerAttachmentStrip } from "../../components/ComposerAttachmentStrip";
@@ -330,9 +333,18 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
   const showStopAction =
     props.selectedThread.session?.status === "running" ||
     props.selectedThread.session?.status === "starting";
+  const preferences = useAtomValue(mobilePreferencesAtom);
+  const composerBusyBehavior = AsyncResult.isSuccess(preferences)
+    ? (preferences.value.composerBusyBehavior ?? "queue")
+    : "queue";
 
-  const sendLabel =
-    props.connectionState !== "connected" || props.queueCount > 0 ? "Queue" : "Send";
+  const sendLabel = showStopAction
+    ? composerBusyBehavior === "steer"
+      ? "Steer"
+      : "Queue"
+    : props.connectionState !== "connected" || props.queueCount > 0
+      ? "Queue"
+      : "Send";
   const currentModelSelection = props.selectedThread.modelSelection;
   const currentRuntimeMode = props.selectedThread.runtimeMode;
   const connectionStatus = composerConnectionStatus({

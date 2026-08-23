@@ -1680,6 +1680,7 @@ describe("ProviderCommandReactor", () => {
         },
         interactionMode: "plan",
         runtimeMode: "approval-required",
+        busyBehavior: "steer",
         createdAt: now,
       }),
     );
@@ -1688,6 +1689,7 @@ describe("ProviderCommandReactor", () => {
     expect(harness.sendTurn.mock.calls[0]?.[0]).toMatchObject({
       threadId: ThreadId.make("thread-1"),
       interactionMode: "plan",
+      busyBehavior: "steer",
     });
   });
 

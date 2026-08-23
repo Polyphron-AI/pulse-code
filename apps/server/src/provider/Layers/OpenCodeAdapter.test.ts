@@ -753,6 +753,7 @@ it.layer(OpenCodeAdapterTestLayer)("OpenCodeAdapterLive", (it) => {
       // active turn id is reused instead of opening a new turn.
       const steeredTurn = yield* adapter.sendTurn({
         threadId,
+        busyBehavior: "steer",
         input: "actually run 15",
         modelSelection: {
           instanceId: ProviderInstanceId.make("opencode"),
@@ -792,6 +793,7 @@ it.layer(OpenCodeAdapterTestLayer)("OpenCodeAdapterLive", (it) => {
       const error = yield* adapter
         .sendTurn({
           threadId,
+          busyBehavior: "steer",
           input: "actually run 15",
           modelSelection: {
             instanceId: ProviderInstanceId.make("opencode"),

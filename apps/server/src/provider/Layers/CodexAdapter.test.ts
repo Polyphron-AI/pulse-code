@@ -356,6 +356,7 @@ sessionErrorLayer("CodexAdapterLive session errors", (it) => {
         input: "hello",
         model: "gpt-5.3-codex",
         effort: "high",
+        busyBehavior: "queue",
         serviceTier: "priority",
       });
     }),
@@ -466,6 +467,7 @@ sessionErrorLayer("CodexAdapterLive session errors", (it) => {
               { id: "serviceTier", value: "flex" },
             ],
           ),
+          busyBehavior: "steer",
           attachments: [],
         }),
       );
@@ -474,6 +476,7 @@ sessionErrorLayer("CodexAdapterLive session errors", (it) => {
         input: "hello",
         model: "gpt-5.3-codex",
         effort: "high",
+        busyBehavior: "steer",
         serviceTier: "flex",
       });
     }).pipe(Effect.provide(customLayer));

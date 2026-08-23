@@ -1074,6 +1074,7 @@ describe("ClaudeAdapterLive", () => {
       const steeredTurn = yield* adapter.sendTurn({
         threadId: session.threadId,
         input: "actually run 15",
+        busyBehavior: "steer",
         attachments: [],
       });
       assert.equal(String(steeredTurn.turnId), String(turn.turnId));
@@ -1108,6 +1109,61 @@ describe("ClaudeAdapterLive", () => {
       assert.equal(String(turnStartedEvents[0]?.turnId), String(turn.turnId));
       assert.equal(turnCompletedEvents.length, 1);
       assert.equal(String(turnCompletedEvents[0]?.turnId), String(turn.turnId));
+    }).pipe(
+      Effect.provideService(Random.Random, makeDeterministicRandomService()),
+      Effect.provide(harness.layer),
+    );
+  });
+
+  it.effect("queues a busy-session message as a separate turn", () => {
+    const harness = makeHarness();
+    return Effect.gen(function* () {
+      const adapter = yield* ClaudeAdapter;
+      const session = yield* adapter.startSession({
+        threadId: THREAD_ID,
+        provider: ProviderDriverKind.make("claudeAgent"),
+        runtimeMode: "full-access",
+      });
+
+      const firstTurn = yield* adapter.sendTurn({
+        threadId: session.threadId,
+        input: "finish the first task",
+        attachments: [],
+      });
+      const queuedTurnFiber = yield* adapter
+        .sendTurn({
+          threadId: session.threadId,
+          input: "start a separate follow-up",
+          busyBehavior: "queue",
+          attachments: [],
+        })
+        .pipe(Effect.forkChild);
+
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        yield* Effect.yieldNow;
+      }
+      assert.isUndefined(queuedTurnFiber.pollUnsafe());
+
+      harness.query.emit({
+        type: "result",
+        subtype: "success",
+        is_error: false,
+        errors: [],
+        session_id: "sdk-session-queue-first",
+        uuid: "result-queue-first",
+      } as unknown as SDKMessage);
+
+      const queuedTurn = yield* Fiber.join(queuedTurnFiber);
+      assert.notEqual(String(queuedTurn.turnId), String(firstTurn.turnId));
+
+      harness.query.emit({
+        type: "result",
+        subtype: "success",
+        is_error: false,
+        errors: [],
+        session_id: "sdk-session-queue-second",
+        uuid: "result-queue-second",
+      } as unknown as SDKMessage);
     }).pipe(
       Effect.provideService(Random.Random, makeDeterministicRandomService()),
       Effect.provide(harness.layer),

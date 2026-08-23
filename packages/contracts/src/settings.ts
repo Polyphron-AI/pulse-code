@@ -9,7 +9,11 @@ import {
   DEFAULT_TEXT_GENERATION_REASONING_EFFORT,
   ProviderOptionSelections,
 } from "./model.ts";
-import { ModelSelection } from "./orchestration.ts";
+import {
+  ComposerBusyBehavior,
+  DEFAULT_COMPOSER_BUSY_BEHAVIOR,
+  ModelSelection,
+} from "./orchestration.ts";
 import {
   DEFAULT_PREVIEW_APPEARANCE,
   DEFAULT_PREVIEW_ZOOM_FACTOR,
@@ -152,6 +156,9 @@ export const ClientSettingsSchema = Schema.Struct({
   confirmQuit: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   confirmThreadArchive: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   confirmThreadDelete: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  composerBusyBehavior: ComposerBusyBehavior.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_COMPOSER_BUSY_BEHAVIOR)),
+  ),
   dismissedProviderUpdateNotificationKeys: Schema.Array(TrimmedNonEmptyString).pipe(
     Schema.withDecodingDefault(Effect.succeed([])),
   ),
@@ -814,6 +821,7 @@ export const ClientSettingsPatch = Schema.Struct({
   confirmQuit: Schema.optionalKey(Schema.Boolean),
   confirmThreadArchive: Schema.optionalKey(Schema.Boolean),
   confirmThreadDelete: Schema.optionalKey(Schema.Boolean),
+  composerBusyBehavior: Schema.optionalKey(ComposerBusyBehavior),
   diffIgnoreWhitespace: Schema.optionalKey(Schema.Boolean),
   environmentIdentificationMode: Schema.optionalKey(EnvironmentIdentificationMode),
   glassOpacity: Schema.optionalKey(GlassOpacity),
