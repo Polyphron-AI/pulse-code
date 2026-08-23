@@ -80,7 +80,21 @@ it.layer(NodeServices.layer)("providerStatusCache", (it) => {
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const tempDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-provider-cache-" });
-      const codexProvider = makeProvider(CODEX_DRIVER);
+      const codexProvider = makeProvider(CODEX_DRIVER, {
+        planUsage: {
+          planLabel: "Plus",
+          windows: [
+            {
+              id: "codex-300m",
+              label: "5h",
+              usedPercent: 43,
+              resetsAt: "2027-01-15T08:00:00.000Z",
+              windowMinutes: 300,
+            },
+          ],
+          capturedAt: "2026-08-23T12:00:00.000Z",
+        },
+      });
       const claudeProvider = makeProvider(CLAUDE_AGENT_DRIVER, {
         status: "warning",
         auth: { status: "unknown" },
@@ -133,6 +147,11 @@ it.layer(NodeServices.layer)("providerStatusCache", (it) => {
         },
       ],
       message: "Cached message",
+      planUsage: {
+        planLabel: "Plus",
+        windows: [{ id: "codex-300m", label: "5h", usedPercent: 43, windowMinutes: 300 }],
+        capturedAt: "2026-08-23T12:00:00.000Z",
+      },
       skills: [
         {
           name: "github:gh-fix-ci",
@@ -177,6 +196,7 @@ it.layer(NodeServices.layer)("providerStatusCache", (it) => {
         checkedAt: cachedCodex.checkedAt,
         slashCommands: cachedCodex.slashCommands,
         skills: cachedCodex.skills,
+        planUsage: cachedCodex.planUsage!,
         message: cachedCodex.message,
       },
     );

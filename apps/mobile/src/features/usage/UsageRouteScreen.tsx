@@ -1,4 +1,5 @@
 import { useNavigation } from "@react-navigation/native";
+import type { ServerProvider } from "@t3tools/contracts";
 import type { DailyTotals, MergedUsage } from "@t3tools/shared/usageMerge";
 import {
   enumerateDays,
@@ -17,7 +18,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AndroidScreenHeader } from "../../components/AndroidScreenHeader";
 import { AppText as Text } from "../../components/AppText";
+import { ProviderIcon } from "../../components/ProviderIcon";
+import { relativeTime } from "../../lib/time";
 import { NativeStackScreenOptions } from "../../native/StackHeader";
+import { useServerConfigs } from "../../state/entities";
 import { useUsage, type EnvironmentUsageStatus } from "../../state/usage";
 import { SettingsSection } from "../settings/components/SettingsSection";
 import { UsageDailyChart } from "./UsageDailyChart";
@@ -115,6 +119,8 @@ export function UsageRouteScreen() {
           onSelect={selectWindow}
         />
 
+        <PlanUsageSection environments={environments} />
+
         <UsageCoverageNotice environments={environments} merged={merged} isPartial={isPartial} />
 
         {isPending ? (
@@ -145,6 +151,134 @@ export function UsageRouteScreen() {
         )}
       </ScrollView>
     </View>
+  );
+}
+
+const DRIVER_FALLBACK_LABEL: Record<string, string> = {
+  claudeAgent: "Claude Code",
+  codex: "Codex",
+};
+
+/** "2h 10m", "45m", "3d 4h" — for plan window reset countdowns. */
+function formatCountdown(deltaMs: number): string {
+  const totalMinutes = Math.ceil(deltaMs / 60_000);
+  if (totalMinutes < 60) return `${Math.max(totalMinutes, 1)}m`;
+  const totalHours = Math.floor(totalMinutes / 60);
+  if (totalHours < 24) {
+    const minutes = totalMinutes % 60;
+    return minutes === 0 ? `${totalHours}h` : `${totalHours}h ${minutes}m`;
+  }
+  const days = Math.floor(totalHours / 24);
+  const hours = totalHours % 24;
+  return hours === 0 ? `${days}d` : `${days}d ${hours}h`;
+}
+
+/**
+ * Subscription plan rate-limit windows, reported live by Codex and Claude
+ * sessions. Timestamps render once per pass — no ticking timers, a pull to
+ * refresh or re-focus recomputes them.
+ */
+function PlanUsageSection(props: { readonly environments: readonly EnvironmentUsageStatus[] }) {
+  const serverConfigs = useServerConfigs();
+
+  const entries: {
+    readonly key: string;
+    readonly label: string;
+    readonly driver: string;
+    readonly planUsage: NonNullable<ServerProvider["planUsage"]>;
+  }[] = [];
+  const multipleEnvironments = serverConfigs.size > 1;
+  for (const [environmentId, config] of serverConfigs) {
+    for (const provider of config.providers) {
+      if (provider.planUsage === undefined || provider.planUsage.windows.length === 0) continue;
+      const providerLabel =
+        provider.displayName ?? DRIVER_FALLBACK_LABEL[provider.driver] ?? provider.instanceId;
+      const environmentLabel = props.environments.find(
+        (environment) => environment.environmentId === environmentId,
+      )?.label;
+      entries.push({
+        key: `${environmentId}:${provider.instanceId}`,
+        label:
+          multipleEnvironments && environmentLabel !== undefined
+            ? `${providerLabel} · ${environmentLabel}`
+            : providerLabel,
+        driver: provider.driver,
+        planUsage: provider.planUsage,
+      });
+    }
+  }
+  if (entries.length === 0) return null;
+
+  // One clock read per render keeps every countdown and staleness note
+  // consistent within the pass.
+  const now = Date.now();
+
+  return (
+    <SettingsSection title="Plan usage" card>
+      {entries.map((entry, index) => {
+        const capturedMs = Date.parse(entry.planUsage.capturedAt);
+        return (
+          <View
+            key={entry.key}
+            className={index === 0 ? "gap-3 p-4" : "gap-3 border-t border-border-subtle p-4"}
+          >
+            <View className="flex-row items-center justify-between gap-3">
+              <View className="min-w-0 flex-row items-center gap-2">
+                <ProviderIcon provider={entry.driver} size={16} />
+                <Text className="text-base text-foreground" numberOfLines={1}>
+                  {entry.label}
+                </Text>
+                {entry.planUsage.planLabel !== undefined ? (
+                  <View className="rounded-full bg-subtle px-2 py-0.5">
+                    <Text className="text-xs text-foreground-muted">
+                      {entry.planUsage.planLabel}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+              {Number.isNaN(capturedMs) ? null : (
+                <Text className="text-xs text-foreground-tertiary">
+                  updated {relativeTime(entry.planUsage.capturedAt)} ago
+                </Text>
+              )}
+            </View>
+            {entry.planUsage.windows.map((window) => {
+              const used = Math.min(Math.max(window.usedPercent, 0), 100);
+              const resetsMs =
+                window.resetsAt === undefined ? Number.NaN : Date.parse(window.resetsAt);
+              const resetsIn =
+                Number.isNaN(resetsMs) || resetsMs <= now ? null : formatCountdown(resetsMs - now);
+              return (
+                <View key={window.id} className="gap-1">
+                  <View className="flex-row items-baseline justify-between gap-3">
+                    <Text className="text-sm text-foreground-muted">{window.label}</Text>
+                    <Text className="text-sm tabular-nums text-foreground">
+                      {Math.round(used)}%
+                    </Text>
+                  </View>
+                  <View
+                    className="h-1 flex-row overflow-hidden rounded-full bg-subtle"
+                    accessible
+                    accessibilityRole="progressbar"
+                    accessibilityLabel={`${window.label} plan usage`}
+                    accessibilityValue={{ min: 0, max: 100, now: Math.round(used) }}
+                  >
+                    <View
+                      className="h-full rounded-full bg-foreground"
+                      style={{ flex: used / 100 }}
+                    />
+                    <View style={{ flex: 1 - used / 100 }} />
+                  </View>
+                  {resetsIn === null ? null : (
+                    <Text className="text-xs text-foreground-tertiary">resets in {resetsIn}</Text>
+                  )}
+                </View>
+              );
+            })}
+          </View>
+        );
+      })}
+    </SettingsSection>
   );
 }
 

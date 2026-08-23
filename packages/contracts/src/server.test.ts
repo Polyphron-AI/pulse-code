@@ -45,6 +45,40 @@ describe("ServerProvider", () => {
     expect(parsed.skills).toEqual([]);
     expect(parsed.versionAdvisory).toBeUndefined();
     expect(parsed.updateState).toBeUndefined();
+    expect(parsed.planUsage).toBeUndefined();
+  });
+
+  it("decodes optional plan usage without changing older snapshots", () => {
+    const parsed = decodeServerProvider({
+      ...baseProviderSnapshot,
+      planUsage: {
+        planLabel: "Plus",
+        windows: [
+          {
+            id: "codex-300m",
+            label: "5h",
+            usedPercent: 43,
+            resetsAt: "2027-01-15T08:00:00.000Z",
+            windowMinutes: 300,
+          },
+        ],
+        capturedAt: "2026-08-23T12:00:00.000Z",
+      },
+    });
+
+    expect(parsed.planUsage).toEqual({
+      planLabel: "Plus",
+      windows: [
+        {
+          id: "codex-300m",
+          label: "5h",
+          usedPercent: 43,
+          resetsAt: "2027-01-15T08:00:00.000Z",
+          windowMinutes: 300,
+        },
+      ],
+      capturedAt: "2026-08-23T12:00:00.000Z",
+    });
   });
 
   it("defaults one-click update support when decoding older advisory snapshots", () => {

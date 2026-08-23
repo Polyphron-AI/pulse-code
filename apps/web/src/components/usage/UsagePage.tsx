@@ -1,4 +1,5 @@
-import type { UsageProviderKind } from "@t3tools/contracts";
+import { useAtomValue } from "@effect/atom-react";
+import type { EnvironmentId, ServerProvider, UsageProviderKind } from "@t3tools/contracts";
 import { CheckIcon, RefreshCwIcon, XIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 
@@ -19,6 +20,9 @@ import {
   formatUsd,
   makeWindow,
 } from "@t3tools/shared/usageFormat";
+import { EMPTY_SERVER_PROVIDERS, serverEnvironment } from "../../state/server";
+import { useEnvironments } from "../../state/environments";
+import { formatElapsedDurationLabel } from "../../timestampFormat";
 import { ScrollArea } from "../ui/scroll-area";
 import { Button } from "../ui/button";
 import { SidebarInset } from "../ui/sidebar";
@@ -169,6 +173,8 @@ export function UsagePage() {
                 </Button>
               </div>
             </div>
+
+            <PlanUsageSection />
 
             {settling ? (
               <>
@@ -440,6 +446,151 @@ export function UsagePage() {
       </div>
     </SidebarInset>
   );
+}
+
+/**
+ * Subscription plan rate-limit windows, straight from the provider snapshot.
+ * Independent of the transcript scan, so it renders even while usage settles.
+ * Only Codex and Claude ever report plan usage; the section (and each
+ * environment block) disappears entirely when nothing carries it.
+ */
+function PlanUsageSection() {
+  const { environments } = useEnvironments();
+  return (
+    <>
+      {environments.map((environment) => (
+        <EnvironmentPlanUsage
+          key={environment.environmentId}
+          environmentId={environment.environmentId}
+          environmentLabel={environment.label}
+          showEnvironmentLabel={environments.length > 1}
+        />
+      ))}
+    </>
+  );
+}
+
+function EnvironmentPlanUsage({
+  environmentId,
+  environmentLabel,
+  showEnvironmentLabel,
+}: {
+  readonly environmentId: EnvironmentId;
+  readonly environmentLabel: string;
+  readonly showEnvironmentLabel: boolean;
+}) {
+  const providers =
+    useAtomValue(serverEnvironment.providersValueAtom(environmentId)) ?? EMPTY_SERVER_PROVIDERS;
+  const withPlanUsage = providers.filter(
+    (
+      provider,
+    ): provider is ServerProvider & { planUsage: NonNullable<ServerProvider["planUsage"]> } =>
+      provider.planUsage !== undefined && provider.planUsage.windows.length > 0,
+  );
+  if (withPlanUsage.length === 0) return null;
+
+  // One timestamp per render; no ticking. The page's refresh already re-renders.
+  const now = Date.now();
+
+  return (
+    <section className="flex flex-col gap-3">
+      <h2 className="text-sm font-medium text-foreground">
+        Plan usage
+        {showEnvironmentLabel ? (
+          <span className="font-normal text-muted-foreground"> · {environmentLabel}</span>
+        ) : null}
+      </h2>
+      <div className="flex flex-col gap-4">
+        {withPlanUsage.map((provider) => {
+          const usageProvider: UsageProviderKind | undefined =
+            provider.driver === "claudeAgent"
+              ? "claude"
+              : provider.driver === "codex"
+                ? "codex"
+                : undefined;
+          const presentation =
+            usageProvider === undefined ? undefined : PROVIDER_PRESENTATION[usageProvider];
+          const updatedLabel = formatElapsedDurationLabel(provider.planUsage.capturedAt, now);
+          return (
+            <div key={provider.instanceId} className="flex flex-col gap-1.5">
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="flex items-center gap-2 text-sm text-foreground">
+                  {usageProvider !== undefined ? (
+                    <ProviderMark provider={usageProvider} className="size-4" />
+                  ) : null}
+                  {provider.displayName ?? presentation?.label ?? provider.driver}
+                  {provider.planUsage.planLabel ? (
+                    <span className="text-xs text-muted-foreground">
+                      {provider.planUsage.planLabel}
+                    </span>
+                  ) : null}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {updatedLabel === "just now" ? "updated just now" : `updated ${updatedLabel} ago`}
+                </span>
+              </div>
+              <div className="grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
+                {provider.planUsage.windows.map((window) => (
+                  <PlanUsageWindow key={window.id} window={window} now={now} />
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function PlanUsageWindow({
+  window,
+  now,
+}: {
+  readonly window: NonNullable<ServerProvider["planUsage"]>["windows"][number];
+  readonly now: number;
+}) {
+  const percent = Math.min(100, Math.max(0, window.usedPercent));
+  const resetLabel =
+    window.resetsAt !== undefined ? formatResetCountdown(window.resetsAt, now) : null;
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-baseline justify-between gap-3 text-xs">
+        <span className="text-muted-foreground">{window.label}</span>
+        <span className="text-foreground tabular-nums">
+          {Math.round(percent)}% used
+          {resetLabel !== null ? (
+            <span className="text-muted-foreground"> · resets in {resetLabel}</span>
+          ) : null}
+        </span>
+      </div>
+      <div
+        className="h-1 w-full overflow-hidden rounded-full bg-muted"
+        role="progressbar"
+        aria-label={`${window.label} plan usage`}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(percent)}
+      >
+        <div
+          className={cn("h-full rounded-full", percent >= 90 ? "bg-destructive" : "bg-foreground")}
+          style={{ width: `${percent.toFixed(1)}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+/** "2h 10m" until an ISO instant, or null once it has passed. */
+function formatResetCountdown(resetsAt: string, now: number): string | null {
+  const target = Date.parse(resetsAt);
+  if (Number.isNaN(target) || target <= now) return null;
+  const totalMinutes = Math.ceil((target - now) / 60_000);
+  const days = Math.floor(totalMinutes / (60 * 24));
+  const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
+  const minutes = totalMinutes % 60;
+  if (days > 0) return hours > 0 ? `${days}d ${hours}h` : `${days}d`;
+  if (hours > 0) return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+  return `${minutes}m`;
 }
 
 /** Brand mark for the harness a row belongs to. */

@@ -10,6 +10,7 @@ import type {
   ProviderInstanceId,
   ProviderDriverKind,
   ServerProvider,
+  ServerProviderPlanUsage,
   ServerProviderUpdateState,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
@@ -67,6 +68,17 @@ export interface ProviderRegistryShape {
     readonly instanceId: ProviderInstanceId;
     readonly action: ProviderMaintenanceActionKind;
     readonly state: ServerProviderUpdateState | null;
+  }) => Effect.Effect<ReadonlyArray<ServerProvider>>;
+
+  /**
+   * Project the latest plan-usage snapshot onto one configured instance.
+   * Fed by the plan-usage tracker as provider rate-limit notifications
+   * arrive; the value rides `ServerProvider.planUsage` on every subsequent
+   * snapshot for that instance.
+   */
+  readonly setProviderPlanUsage: (input: {
+    readonly instanceId: ProviderInstanceId;
+    readonly planUsage: ServerProviderPlanUsage;
   }) => Effect.Effect<ReadonlyArray<ServerProvider>>;
 
   /**
