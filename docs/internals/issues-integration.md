@@ -138,6 +138,92 @@ Raw Report evidence is not copied into composer prompts or thread metadata. The 
 only the compact Issue reference, title, status, and severity and queries the native Issue panel when
 the user asks for evidence.
 
+## Agent surface
+
+Clients reach Issues over typed WebSocket RPC. Agents reach the same data over MCP, through the
+`pulse_*` toolkit registered on the server's `/mcp` transport alongside the `preview_*` tools.
+The two paths share `IssuesService`, so they share the connection, the mappings, the optimistic
+version rules, and the failure vocabulary described above. The Pulse PAT stays in the server secret
+store either way; it is never placed in an agent's environment, arguments, or tool results.
+
+```text
+provider subprocess (Codex, Claude, Cursor, ...)
+        │ MCP over HTTP, bearer credential minted per provider session
+        ▼
+McpHttpServer
+  ├─ preview toolkit   gated by the `preview` capability
+  └─ pulse toolkit     gated by the `pulse` capability
+        └─ PulseAgentGateway
+              ├─ IssuesService            (the same service the RPC layer calls)
+              └─ ProjectionSnapshotQuery  (which project owns this thread)
+```
+
+Source: `apps/server/src/mcp/toolkits/pulse/` — `tools.ts` (schemas and annotations),
+`handlers.ts` (capability gate, project scoping, delegation), `gateway.ts` (the single seam to the
+rest of the server).
+
+### Capabilities
+
+A session's MCP credential carries a set of capabilities, not a boolean. `ProviderService` derives
+that set per provider session from server settings: `enableAgentBrowserAccess` grants `preview`,
+`enableAgentPulseAccess` grants `pulse`. The two are independent — turning off browser access must
+not silently withdraw Pulse access, which is exactly what a single shared gate used to do. An empty
+set mints no credential at all and attaches no `t3-code` MCP server, rather than advertising tools
+that every call then refuses.
+
+Registration is unconditional because `McpHttpServer.layer` is built once for the whole server,
+while the settings it would depend on are re-read per session. Enforcement therefore lives in
+`requirePulseCapability`, which every handler calls first. It fails with an `IssueOperationError`
+whose reason is `permission`, so an agent that lost the capability reads the refusal in the same
+vocabulary as a disconnected Pulse.
+
+### Project scoping
+
+`projectId` is optional on every tool. Omitted, it resolves to the Pulse Code project owning the
+thread the agent is running in, looked up through `ProjectionSnapshotQuery.getThreadShellById`.
+That is the answer the agent wants in nearly every case and the one it cannot determine for itself.
+It stays overridable because a thread in one project routinely reads work filed against another.
+
+Two deliberate exceptions:
+
+- `pulse_issues_list` passes `projectId` through untouched, including when absent, so a search spans
+  every mapping. Narrowing it to the thread's project would hide the cross-project search the agent
+  asked for.
+- `pulse_thread_issue`, `pulse_thread_issue_link`, and `pulse_thread_issue_unlink` always use the
+  invocation's own `threadId`. An agent cannot name a thread to link, so it cannot attach work to a
+  conversation it is not in.
+
+A thread with no project fails with reason `unmapped-project` and tells the agent to pass `projectId`
+or call `pulse_projects`, rather than guessing a mapping.
+
+### Reads and writes
+
+Eight read tools (`pulse_projects`, `pulse_issues_list`, `pulse_issue_get`, `pulse_issue_activity`,
+`pulse_issue_assignees`, `pulse_reports_list`, `pulse_report_get`, `pulse_thread_issue`) are annotated
+readonly and idempotent.
+
+Six write tools (`pulse_issue_update`, `pulse_report_update`, `pulse_issue_create_from_report`,
+`pulse_report_capture`, `pulse_thread_issue_link`, `pulse_thread_issue_unlink`) are annotated
+destructive and open-world, which puts the harness's per-tool approval prompt between an agent's
+intent and a change landing in the user's tracker. That prompt is the confirmation step the
+integration contract requires. The toolkit deliberately does not grow a second, agent-driven
+preview/confirm pair: the client-side preview/confirm path exists because a _person_ clicks confirm,
+and an agent confirming its own proposal confirms nothing.
+
+Issue and report updates still require `expectedVersion`, so the optimistic-version rules above apply
+identically to agent writes — a stale agent loses to a concurrent human edit rather than overwriting
+it.
+
+### Evidence capture
+
+`pulse_report_capture` takes the full capture input, including up to three media attachments. Media
+may be an inline `data-url` or a `preview-artifact` reference — the local path returned by
+`preview_recording_stop`. The reference form is why the two toolkits are worth having in one
+transport: an agent can reproduce a bug in the collaborative browser, stop the recording, and file
+the recording in Pulse without a multi-megabyte payload ever passing through the model. The evidence
+and media-size constraints documented above are enforced by the same contracts, not re-implemented
+here.
+
 ## UI boundary
 
 Do not mount the Pulse dashboard, feedback widget, or a webview inside Pulse Code. Extend the native

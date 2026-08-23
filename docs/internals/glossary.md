@@ -139,6 +139,14 @@ The agent interaction style for a thread. In [the contracts][1], the values are 
 
 Controls how assistant text reaches the thread timeline. In [the contracts][1], `streaming` updates incrementally and `buffered` accumulates text. Buffered delivery is not held until the turn completes: it spills once accumulated text would exceed 24,000 characters, and flushes at approval and user-input boundaries. See [ProviderRuntimeIngestion.ts][5].
 
+#### Toolkit
+
+A named group of MCP tools the server exposes to agents over its `/mcp` transport. Two ship today: `preview_*` drives the collaborative browser, and `pulse_*` reads and acts on connected Pulse work. See [the preview toolkit][27], [the pulse toolkit][28], and [issues-integration.md][30].
+
+#### MCP capability
+
+An entry in the set carried by a session's MCP credential, deciding which toolkits that session may call. The values are `preview` and `pulse`, each granted by its own server setting, so a session can hold one without the other. A session with none is issued no credential at all. See [McpInvocationContext.ts][29].
+
 #### Snapshot
 
 A point-in-time view of state. The word is used in multiple layers, including orchestration, provider, and checkpointing. See [ProjectionSnapshotQuery.ts][10], [ProviderAdapter.ts][15], and [CheckpointStore.ts][19].
@@ -208,3 +216,7 @@ The file patch and changed-file summary for one turn. It is usually computed in 
 [24]: ./overview.md
 [25]: ../../packages/client-runtime/src/state/subagentRuntime.ts
 [26]: ../../packages/shared/src/agentAwareness.ts
+[27]: ../../apps/server/src/mcp/toolkits/preview/tools.ts
+[28]: ../../apps/server/src/mcp/toolkits/pulse/tools.ts
+[29]: ../../apps/server/src/mcp/McpInvocationContext.ts
+[30]: ./issues-integration.md

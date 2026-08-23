@@ -629,6 +629,20 @@ export const ServerSettings = Schema.Struct({
    * between a desktop window and a phone attached to the same server.
    */
   enableAgentBrowserAccess: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  /**
+   * Whether agents may read and act on connected Pulse work through the
+   * `pulse_*` tools. Gated separately from browser access because the two
+   * grant different things: one drives a local browser, the other reaches a
+   * remote work tracker the user connected in Settings -> Integrations.
+   *
+   * Turning this off drops the `pulse` capability from the MCP credential, so
+   * every `pulse_*` call is refused even though the credential itself may
+   * still exist for the preview toolkit. The user's own Issues views are
+   * unaffected -- this gates agent access only. Mutating tools additionally
+   * require the user to confirm each action, so this is a coarse "may the
+   * agent see Pulse at all" switch rather than the only guard on writes.
+   */
+  enableAgentPulseAccess: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   backgroundActivity: BackgroundActivitySettings,
   // Legacy flat fields retained for old settings files and old clients. New
   // consumers should resolve `backgroundActivity` instead.
@@ -801,6 +815,7 @@ export const ServerSettingsPatch = Schema.Struct({
   enableLegacyTokenStreaming: Schema.optionalKey(Schema.Boolean),
   enableProviderUpdateChecks: Schema.optionalKey(Schema.Boolean),
   enableAgentBrowserAccess: Schema.optionalKey(Schema.Boolean),
+  enableAgentPulseAccess: Schema.optionalKey(Schema.Boolean),
   backgroundActivity: Schema.optionalKey(
     Schema.Struct({
       schemaVersion: Schema.optionalKey(Schema.Literal(1)),

@@ -174,6 +174,7 @@ import {
 import { cn, randomHex } from "~/lib/utils";
 import { COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS } from "~/workspaceTitlebar";
 import { stackedThreadToast, toastManager } from "./ui/toast";
+import { recordThreadFilePaths } from "../threadFilePathIndex";
 import { decodeProjectScriptKeybindingRule } from "~/lib/projectScriptKeybindings";
 import { type NewProjectScriptInput } from "./ProjectScriptsControl";
 import {
@@ -2594,6 +2595,16 @@ function ChatViewContent(props: ChatViewProps) {
   ] = useDraftHeroLayoutTransition(isDraftHeroState);
   const { turnDiffSummaries, inferredCheckpointTurnCountByTurnId } =
     useTurnDiffSummaries(activeThread);
+  // Checkpoint paths are the thread's own record of which files it touched, and
+  // they are what lets a chip that carries only a filename resolve without a
+  // search. Recorded here rather than in the timeline so virtualized-away turns
+  // still count.
+  useEffect(() => {
+    recordThreadFilePaths(
+      routeThreadKey,
+      turnDiffSummaries.flatMap((summary) => summary.files.map((file) => file.path)),
+    );
+  }, [routeThreadKey, turnDiffSummaries]);
   const turnDiffSummaryByAssistantMessageId = useMemo(() => {
     const byMessageId = new Map<MessageId, TurnDiffSummary>();
     for (const summary of turnDiffSummaries) {

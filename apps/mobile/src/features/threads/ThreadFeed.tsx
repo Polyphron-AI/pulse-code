@@ -105,6 +105,14 @@ import {
 } from "./thread-work-log";
 import { useMarkdownCodeHighlight } from "./markdownCodeHighlightState";
 import { assetEnvironment, useAssetUrl } from "../../state/assets";
+import { projectEnvironment } from "../../state/projects";
+import {
+  claimWorkspaceBasenameLookup,
+  describeUnresolvedBasename,
+  isBasenameOnlyReference,
+  resolveWorkspaceBasename,
+  WORKSPACE_BASENAME_LOOKUP_LIMIT,
+} from "@t3tools/shared/workspaceFileReference";
 import { useAtomQueryRunner } from "../../state/use-atom-query-runner";
 import { usePreparedConnection } from "../../state/session";
 import {
@@ -1317,6 +1325,11 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
     reportFailure: false,
     reportDefect: false,
   });
+  const searchProjectEntries = useAtomQueryRunner(projectEnvironment.searchEntries, {
+    label: "locate linked workspace file",
+    reportFailure: false,
+    reportDefect: false,
+  });
   const copyFeedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const foldSettleFrameRef = useRef<number | null>(null);
   const foldSettleSecondFrameRef = useRef<number | null>(null);
@@ -1403,81 +1416,68 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
 
   const iconSubtleColor = useThemeColor("--color-icon-subtle");
   const userBubbleColor = useThemeColor("--color-user-bubble");
-  const onMarkdownLinkPress = useCallback(
-    (href: string) => {
-      const presentation = resolveMarkdownLinkPresentation(href);
-      if (presentation.kind === "file") {
-        const relativePath = resolveWorkspaceRelativeFilePath(
-          props.workspaceRoot,
-          presentation.path,
-        );
-        if (relativePath) {
-          void Haptics.selectionAsync();
-          const preview = () => {
-            navigation.navigate("ThreadFile", {
-              environmentId: String(props.environmentId),
-              threadId: String(props.threadId),
-              path: relativePath.split("/").filter((segment) => segment.length > 0),
-              ...(presentation.line ? { line: String(presentation.line) } : {}),
-            });
-          };
-          const openWith = () => {
-            if (!props.workspaceRoot || preparedConnection._tag === "None") {
-              Alert.alert("Could not open file", "Reconnect to the environment and try again.");
-              return;
-            }
-            const absolutePath = resolveWorkspaceFilePath(props.workspaceRoot, relativePath);
-            void openWorkspaceFileWith({
-              key: JSON.stringify([props.environmentId, props.threadId, absolutePath]),
-              path: absolutePath,
-              resolveAssetUrl: async () => {
-                const result = await createAssetUrl({
-                  environmentId: props.environmentId,
-                  input: {
-                    resource: {
-                      _tag: "workspace-file",
-                      threadId: props.threadId,
-                      path: absolutePath,
-                    },
-                  },
-                });
-                return result._tag === "Success"
-                  ? resolveAssetUrl(preparedConnection.value.httpBaseUrl, result.value.relativeUrl)
-                  : null;
-              },
-            }).catch(() => {
-              Alert.alert(
-                "Could not open file",
-                "The file could not be downloaded or opened. Check the environment connection and available apps, then try again.",
-              );
-            });
-          };
-
-          if (Platform.OS === "ios") {
-            ActionSheetIOS.showActionSheetWithOptions(
-              {
-                title: basename(relativePath),
-                options: ["Preview in Pulse Code", "Open with…", "Cancel"],
-                cancelButtonIndex: 2,
-              },
-              (buttonIndex) => {
-                if (buttonIndex === 0) preview();
-                if (buttonIndex === 1) openWith();
-              },
-            );
-          } else {
-            Alert.alert(basename(relativePath), "Choose how to open this file.", [
-              { text: "Preview in Pulse Code", onPress: preview },
-              { text: "Open with…", onPress: openWith },
-              { text: "Cancel", style: "cancel" },
-            ]);
-          }
+  // Split out of the link handler so a filename-only reference can be resolved
+  // to a real path before the sheet appears.
+  const openWorkspaceFileActions = useCallback(
+    (relativePath: string, line: number | undefined) => {
+      const preview = () => {
+        navigation.navigate("ThreadFile", {
+          environmentId: String(props.environmentId),
+          threadId: String(props.threadId),
+          path: relativePath.split("/").filter((segment) => segment.length > 0),
+          ...(line ? { line: String(line) } : {}),
+        });
+      };
+      const openWith = () => {
+        if (!props.workspaceRoot || preparedConnection._tag === "None") {
+          Alert.alert("Could not open file", "Reconnect to the environment and try again.");
+          return;
         }
-        return;
-      }
+        const absolutePath = resolveWorkspaceFilePath(props.workspaceRoot, relativePath);
+        void openWorkspaceFileWith({
+          key: JSON.stringify([props.environmentId, props.threadId, absolutePath]),
+          path: absolutePath,
+          resolveAssetUrl: async () => {
+            const result = await createAssetUrl({
+              environmentId: props.environmentId,
+              input: {
+                resource: {
+                  _tag: "workspace-file",
+                  threadId: props.threadId,
+                  path: absolutePath,
+                },
+              },
+            });
+            return result._tag === "Success"
+              ? resolveAssetUrl(preparedConnection.value.httpBaseUrl, result.value.relativeUrl)
+              : null;
+          },
+        }).catch(() => {
+          Alert.alert(
+            "Could not open file",
+            "The file could not be downloaded or opened. Check the environment connection and available apps, then try again.",
+          );
+        });
+      };
 
-      if (presentation.href) {
-        void tryOpenExternalUrl(presentation.href, "markdown-link");
+      if (Platform.OS === "ios") {
+        ActionSheetIOS.showActionSheetWithOptions(
+          {
+            title: basename(relativePath),
+            options: ["Preview in Pulse Code", "Open with…", "Cancel"],
+            cancelButtonIndex: 2,
+          },
+          (buttonIndex) => {
+            if (buttonIndex === 0) preview();
+            if (buttonIndex === 1) openWith();
+          },
+        );
+      } else {
+        Alert.alert(basename(relativePath), "Choose how to open this file.", [
+          { text: "Preview in Pulse Code", onPress: preview },
+          { text: "Open with…", onPress: openWith },
+          { text: "Cancel", style: "cancel" },
+        ]);
       }
     },
     [
@@ -1488,6 +1488,61 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
       props.threadId,
       props.workspaceRoot,
     ],
+  );
+  // A message that names a file without its folder ("HostPowerMonitor.ts:69")
+  // does not say where the file lives; joined to the workspace root it points
+  // somewhere it almost never is. Ask the workspace index, and report what
+  // happened instead of opening a viewer on a path we know is a guess.
+  const onMarkdownLinkPress = useCallback(
+    (href: string) => {
+      const presentation = resolveMarkdownLinkPresentation(href);
+      if (presentation.kind === "file") {
+        const relativePath = resolveWorkspaceRelativeFilePath(
+          props.workspaceRoot,
+          presentation.path,
+        );
+        const workspaceRoot = props.workspaceRoot;
+        if (relativePath) {
+          void Haptics.selectionAsync();
+          if (!workspaceRoot || !isBasenameOnlyReference(relativePath)) {
+            openWorkspaceFileActions(relativePath, presentation.line);
+            return;
+          }
+          const isLatestLookup = claimWorkspaceBasenameLookup();
+          void (async () => {
+            const result = await searchProjectEntries({
+              environmentId: props.environmentId,
+              input: {
+                cwd: workspaceRoot,
+                query: relativePath,
+                limit: WORKSPACE_BASENAME_LOOKUP_LIMIT,
+                kind: "file",
+              },
+            });
+            if (!isLatestLookup()) return;
+            if (result._tag !== "Success") {
+              Alert.alert(
+                `Could not locate ${relativePath}`,
+                "Searching this project's files failed. Check the environment connection and try again.",
+              );
+              return;
+            }
+            const resolution = resolveWorkspaceBasename(relativePath, result.value.entries);
+            if (resolution._tag === "resolved") {
+              openWorkspaceFileActions(resolution.path, presentation.line);
+              return;
+            }
+            Alert.alert(`Could not locate ${relativePath}`, describeUnresolvedBasename(resolution));
+          })();
+        }
+        return;
+      }
+
+      if (presentation.href) {
+        void tryOpenExternalUrl(presentation.href, "markdown-link");
+      }
+    },
+    [openWorkspaceFileActions, props.environmentId, props.workspaceRoot, searchProjectEntries],
   );
   const markdownStyles = useMarkdownStyles(onMarkdownLinkPress);
   const reviewCommentColors = useReviewCommentColors();

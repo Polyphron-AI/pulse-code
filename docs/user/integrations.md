@@ -40,6 +40,45 @@ On servers that advertise the integration capability, Issue status changes use t
 version. The shared action path creates an exact preview, requires confirmation, and returns a
 receipt; reconnecting invalidates an unconfirmed preview.
 
+## Let agents use Pulse
+
+Once Pulse is connected and your projects are mapped, the agents you run in Pulse Code can read and
+act on that work directly, in any thread, on any client. Ask an agent "what's this ticket about?" or
+"file what you just reproduced as a bug" and it has the tools to answer without you copying anything
+across.
+
+Agents can:
+
+- List the connected Pulse projects and see which one the current thread belongs to.
+- Search Issues across every mapped project, and read one Issue in full with its activity trail.
+- Read the Reports attached to an Issue, including the captured evidence.
+- Look up who can be assigned work in a project.
+- Update an Issue's status, severity, assignee, title, description, or labels.
+- Update a Report, or mark it a duplicate.
+- Promote a Report into a tracked Issue.
+- File a new Report with evidence — including a recording the agent just made in the collaborative
+  browser, attached without leaving the thread.
+- Link the current thread to an Issue, or unlink it.
+
+When an agent omits the project, it works against the project that owns the current thread. If that
+thread has no mapped project, the agent is told to name one rather than guessing.
+
+Anything that changes your Pulse data asks for your approval first, the same way any other tool that
+touches the outside world does. Reads do not. Issue and Report edits use the current version, so an
+agent working from a stale read is refused rather than allowed to overwrite an edit someone else made
+in the meantime.
+
+The access token stays on the server. Agents never see it, and neither do web, desktop, or mobile
+clients.
+
+### Turning it off
+
+**Settings → Integrations → Agent Pulse access** controls this. Turn it off and agents lose the Pulse
+tools entirely — they are not offered and cannot be called — while you keep the Issues workspace and
+everything else on this page. The setting belongs to the server, so it applies to every client
+connected to that environment, and it is separate from the agent browser access setting: changing one
+does not change the other.
+
 ## Reauthorize or disconnect
 
 - Choose **Reauthorize** to replace an expired, revoked, or under-scoped token.
@@ -61,4 +100,4 @@ context are not part of this verified slice.
 
 ---
 
-**Created:** 2026-08-20 . **Last edited:** 2026-08-20
+**Created:** 2026-08-20 . **Last edited:** 2026-08-23

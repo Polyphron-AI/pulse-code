@@ -377,6 +377,44 @@ function BrowserAppearanceSetting({ disabled }: { readonly disabled: boolean }) 
   );
 }
 
+function AgentPulseAccessSetting() {
+  const settings = usePrimarySettings();
+  const updateSettings = useUpdatePrimarySettings();
+
+  return (
+    <SettingsRow
+      {...searchableSetting("agent-pulse-access")}
+      description="Let agents read and act on connected Pulse work through the pulse_* tools. When off, those tools are withheld from agent sessions; your own Issues views are unaffected. Actions that change Pulse still need your approval each time."
+      status={
+        settings.enableAgentPulseAccess
+          ? undefined
+          : "Applies to sessions started from now on; a running agent keeps the tools it was given."
+      }
+      resetAction={
+        settings.enableAgentPulseAccess !== DEFAULT_UNIFIED_SETTINGS.enableAgentPulseAccess ? (
+          <SettingResetButton
+            label="agent Pulse access"
+            onClick={() =>
+              updateSettings({
+                enableAgentPulseAccess: DEFAULT_UNIFIED_SETTINGS.enableAgentPulseAccess,
+              })
+            }
+          />
+        ) : null
+      }
+      control={
+        <Switch
+          checked={settings.enableAgentPulseAccess}
+          onCheckedChange={(checked) =>
+            updateSettings({ enableAgentPulseAccess: Boolean(checked) })
+          }
+          aria-label="Allow agent Pulse access"
+        />
+      }
+    />
+  );
+}
+
 function AgentBrowserAccessSetting() {
   const settings = usePrimarySettings();
   const updateSettings = useUpdatePrimarySettings();
@@ -935,6 +973,9 @@ export function PulseIssuesIntegration() {
           </div>
         </SettingsRow>
       ) : null}
+      {/* Server-authoritative and useful even before a connection exists, so it
+          renders regardless of connection state, unlike the mapping rows. */}
+      <AgentPulseAccessSetting />
     </SettingsSection>
   );
 }

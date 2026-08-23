@@ -16,6 +16,7 @@ import {
   syncDocumentWindowControlsOverlayClass,
 } from "./lib/windowControlsOverlay";
 import { AppRoot } from "./AppRoot";
+import { registerServiceWorker } from "./pwa/registerServiceWorker";
 import { clerkAppearance } from "./components/clerk/clerkAppearance";
 
 // Electron loads the app from a file-backed shell, so hash history avoids path resolution issues.
@@ -53,3 +54,5 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
     )}
   </React.StrictMode>,
 );
+
+registerServiceWorker();

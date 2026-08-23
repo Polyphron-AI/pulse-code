@@ -13,6 +13,7 @@ import pkg from "./package.json" with { type: "json" };
 import { DEV_PROXIED_PATH_PREFIXES } from "@t3tools/shared/devProxy";
 
 import { loadRepoEnv } from "../../scripts/lib/public-config";
+import { resolveManifestStageLabel, serializeWebAppManifest } from "./src/pwa/webAppManifest";
 
 const repoEnv = loadRepoEnv();
 const pulseCodeEnv = (suffix: string) =>
@@ -144,6 +145,39 @@ function devCompressionPlugin(): Plugin {
   };
 }
 
+const WEB_APP_MANIFEST_PATH = "/manifest.webmanifest";
+
+// The manifest is generated rather than kept in public/ so an installed app is
+// named for the channel that installed it. Dev and preview get it from a
+// middleware; the build emits it as a normal asset.
+function webAppManifestPlugin(manifest: string): Plugin {
+  const serve = (): Connect.NextHandleFunction => (req, res, next) => {
+    if ((req.url ?? "").split("?")[0] !== WEB_APP_MANIFEST_PATH) {
+      next();
+      return;
+    }
+    res.setHeader("Content-Type", "application/manifest+json");
+    res.end(manifest);
+  };
+
+  return {
+    name: "t3code:web-app-manifest",
+    configureServer(server) {
+      server.middlewares.use(serve());
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use(serve());
+    },
+    generateBundle() {
+      this.emitFile({
+        type: "asset",
+        fileName: WEB_APP_MANIFEST_PATH.slice(1),
+        source: manifest,
+      });
+    },
+  };
+}
+
 // Vite rejects requests whose Host header isn't localhost, which blocks sharing
 // a dev server over Tailscale/LAN. Tailnet names are safe to allow wholesale:
 // the DNS is controlled by tailscale, so they can't be rebound by an attacker.
@@ -154,11 +188,20 @@ const configuredAllowedHosts = (pulseCodeEnv("DEV_ALLOWED_HOSTS") ?? "")
   .filter((entry) => entry.length > 0);
 const allowedHosts = [".ts.net", ...configuredAllowedHosts];
 
-export default defineConfig(() => {
+export default defineConfig(({ command }) => {
+  const webAppManifest = serializeWebAppManifest({
+    baseName: "Pulse Code",
+    stageLabel: resolveManifestStageLabel({
+      hostedAppChannel: configuredHostedAppChannel,
+      isDev: command === "serve",
+    }),
+  });
+
   return {
     assetsInclude: ["**/*.wasm"],
     plugins: [
       devCompressionPlugin(),
+      webAppManifestPlugin(webAppManifest),
       tanstackRouter(),
       react(),
       babel({

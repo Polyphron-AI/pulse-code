@@ -7,7 +7,19 @@
       content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content"
     />
     <meta name="theme-color" content="#0a0a0a" />
+    <meta
+      name="description"
+      content="A minimal GUI for coding agents. Drive Codex, Claude Code, Cursor, Grok, and OpenCode from any device."
+    />
+    <!-- iOS reads these instead of the manifest to decide it can launch standalone.
+         The status bar stays "default" until the mobile layout pads for the notch;
+         "black-translucent" puts content under it. -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Pulse Code" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <script>

@@ -1959,12 +1959,21 @@ validation.layer("ProviderServiceLive validation", (it) => {
   );
 });
 
-describe("agent browser access", () => {
+describe("agent MCP access", () => {
   const revokedThreads: Array<ThreadId> = [];
 
-  const startSessionWith = (enableAgentBrowserAccess: boolean, threadId: ThreadId) =>
+  const startSessionWith = (
+    access: {
+      readonly enableAgentBrowserAccess: boolean;
+      readonly enableAgentPulseAccess: boolean;
+    },
+    threadId: ThreadId,
+  ) =>
     Effect.gen(function* () {
-      const issued: Array<ThreadId> = [];
+      const issued: Array<{
+        readonly threadId: ThreadId;
+        readonly capabilities: ReadonlyArray<string>;
+      }> = [];
       const codex = makeFakeCodexAdapter();
       const providerAdapterLayer = Layer.succeed(
         ProviderAdapterRegistry.ProviderAdapterRegistry,
@@ -1979,14 +1988,17 @@ describe("agent browser access", () => {
       const providerLayer = makeProviderServiceLive({
         issueMcpCredential: (request) =>
           Effect.sync(() => {
-            issued.push(request.threadId);
+            issued.push({
+              threadId: request.threadId,
+              capabilities: [...request.capabilities].sort(),
+            });
             return undefined;
           }),
         revokeMcpCredential: (revoked) => Effect.sync(() => void revokedThreads.push(revoked)),
       }).pipe(
         Layer.provide(providerAdapterLayer),
         Layer.provide(directoryLayer),
-        Layer.provide(ServerSettings.ServerSettingsService.layerTest({ enableAgentBrowserAccess })),
+        Layer.provide(ServerSettings.ServerSettingsService.layerTest(access)),
         Layer.provide(serverConfigTestLayer),
         Layer.provide(AnalyticsService.layerTest),
         Layer.provide(
@@ -2013,20 +2025,26 @@ describe("agent browser access", () => {
   // Credential issuance is the observable that matters: it is the only place a
   // credential is minted, and `/mcp` accepts nothing else, so withholding it is
   // what actually denies every provider and external MCP client.
-  it.effect("requests no MCP credential when agent browser access is off", () =>
+  it.effect("requests no MCP credential when every agent capability is off", () =>
     Effect.gen(function* () {
-      const issued = yield* startSessionWith(false, asThreadId("thread-browser-off"));
+      const issued = yield* startSessionWith(
+        { enableAgentBrowserAccess: false, enableAgentPulseAccess: false },
+        asThreadId("thread-mcp-off"),
+      );
 
       assert.deepEqual(issued, []);
     }).pipe(Effect.provide(NodeServices.layer)),
   );
 
-  it.effect("revokes an already-issued credential when access is off", () =>
+  it.effect("revokes an already-issued credential when every capability is off", () =>
     Effect.gen(function* () {
-      const threadId = asThreadId("thread-browser-revoke");
+      const threadId = asThreadId("thread-mcp-revoke");
       revokedThreads.length = 0;
 
-      yield* startSessionWith(false, threadId);
+      yield* startSessionWith(
+        { enableAgentBrowserAccess: false, enableAgentPulseAccess: false },
+        threadId,
+      );
 
       // Clearing the in-memory map is not enough: a token issued before the
       // toggle flipped stays valid against `/mcp` for its whole liveness
@@ -2035,13 +2053,44 @@ describe("agent browser access", () => {
     }).pipe(Effect.provide(NodeServices.layer)),
   );
 
-  it.effect("requests an MCP credential when agent browser access is on", () =>
+  it.effect("requests a credential carrying only the capabilities that are on", () =>
     Effect.gen(function* () {
-      const threadId = asThreadId("thread-browser-on");
+      const threadId = asThreadId("thread-mcp-on");
 
-      const issued = yield* startSessionWith(true, threadId);
+      const issued = yield* startSessionWith(
+        { enableAgentBrowserAccess: true, enableAgentPulseAccess: true },
+        threadId,
+      );
 
-      assert.deepEqual(issued, [threadId]);
+      assert.deepEqual(issued, [{ threadId, capabilities: ["preview", "pulse"] }]);
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  // The two toggles gate different things -- a local browser and a remote work
+  // tracker -- so turning one off must not cost the agent the other.
+  it.effect("still issues a Pulse-only credential when browser access is off", () =>
+    Effect.gen(function* () {
+      const threadId = asThreadId("thread-pulse-only");
+
+      const issued = yield* startSessionWith(
+        { enableAgentBrowserAccess: false, enableAgentPulseAccess: true },
+        threadId,
+      );
+
+      assert.deepEqual(issued, [{ threadId, capabilities: ["pulse"] }]);
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("still issues a preview-only credential when Pulse access is off", () =>
+    Effect.gen(function* () {
+      const threadId = asThreadId("thread-preview-only");
+
+      const issued = yield* startSessionWith(
+        { enableAgentBrowserAccess: true, enableAgentPulseAccess: false },
+        threadId,
+      );
+
+      assert.deepEqual(issued, [{ threadId, capabilities: ["preview"] }]);
     }).pipe(Effect.provide(NodeServices.layer)),
   );
 });

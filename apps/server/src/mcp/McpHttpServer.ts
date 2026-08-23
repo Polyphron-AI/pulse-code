@@ -22,6 +22,9 @@ import {
   PreviewSnapshotToolkit,
   PreviewStandardToolkit,
 } from "./toolkits/preview/tools.ts";
+import * as PulseAgentGateway from "./toolkits/pulse/gateway.ts";
+import { PulseToolkitHandlersLive } from "./toolkits/pulse/handlers.ts";
+import { PulseToolkit } from "./toolkits/pulse/tools.ts";
 
 const unauthorized = HttpServerResponse.jsonUnsafe(
   {
@@ -216,6 +219,18 @@ export const PreviewToolkitRegistrationLive = Layer.mergeAll(
   PreviewSnapshotRegistrationLive,
 );
 
+/**
+ * The `pulse_*` toolkit is registered unconditionally alongside the preview
+ * tools; whether a given session may actually call it is decided per request
+ * by the `pulse` capability on its credential. Registration cannot be
+ * conditional here because this layer is built once for the whole server,
+ * while the setting it would depend on is re-read per provider session.
+ */
+export const PulseToolkitRegistrationLive = McpServer.toolkit(PulseToolkit).pipe(
+  Layer.provide(PulseToolkitHandlersLive),
+  Layer.provide(PulseAgentGateway.layer),
+);
+
 const McpTransportLive = McpServer.layerHttp({
   name: "Pulse Code",
   version: packageJson.version,
@@ -223,4 +238,7 @@ const McpTransportLive = McpServer.layerHttp({
   protocols: [McpProtocol.v2025_06_18],
 }).pipe(Layer.provide(McpAuthMiddlewareLive));
 
-export const layer = PreviewToolkitRegistrationLive.pipe(Layer.provideMerge(McpTransportLive));
+export const layer = Layer.mergeAll(
+  PreviewToolkitRegistrationLive,
+  PulseToolkitRegistrationLive,
+).pipe(Layer.provideMerge(McpTransportLive));

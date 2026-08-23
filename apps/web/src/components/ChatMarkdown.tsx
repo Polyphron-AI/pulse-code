@@ -95,10 +95,13 @@ import { useAtomQueryRunner } from "../state/use-atom-query-runner";
 import { projectEnvironment } from "../state/projects";
 import {
   claimWorkspaceBasenameLookup,
-  needsWorkspaceBasenameLookup,
-  pickWorkspaceBasenameMatch,
+  describeUnresolvedBasename,
+  isBasenameOnlyReference,
+  resolveWorkspaceBasename,
   WORKSPACE_BASENAME_LOOKUP_LIMIT,
-} from "../workspaceBasenameLookup";
+} from "@t3tools/shared/workspaceFileReference";
+import { scopedThreadKey } from "@t3tools/client-runtime/environment";
+import { resolveThreadFileBasename } from "../threadFilePathIndex";
 import { useOpenChangeRequestLink } from "~/lib/openPullRequestLink";
 import { writeTextToClipboard } from "../hooks/useCopyToClipboard";
 import { isPreviewSupportedInRuntime } from "../previewStateStore";
@@ -1466,8 +1469,10 @@ function ChatMarkdown({
     },
     [createAssetUrl, openPreview, preparedConnection, threadRef],
   );
-  // A bare filename resolves to the workspace root, which is rarely where the
-  // file is, so ask the index before opening.
+  // A bare filename is a query, not a location: joined to the workspace root it
+  // points somewhere the file almost never is. Resolve it against the thread's
+  // own paths, then the workspace index, and say what happened when neither
+  // settles it — a tab that can only render a read error is worse than a toast.
   const openFileInPanel = useCallback(
     (workspaceRelativePath: string, line: number | undefined) => {
       if (!threadRef) return;
@@ -1476,8 +1481,16 @@ function ChatMarkdown({
       const isLatestLookup = claimWorkspaceBasenameLookup();
       const openAt = (path: string) =>
         useRightPanelStore.getState().openFile(threadRef, path, line);
-      if (!cwd || !needsWorkspaceBasenameLookup(workspaceRelativePath)) {
+      if (!cwd || !isBasenameOnlyReference(workspaceRelativePath)) {
         openAt(workspaceRelativePath);
+        return;
+      }
+      const fromThread = resolveThreadFileBasename(
+        scopedThreadKey(threadRef),
+        workspaceRelativePath,
+      );
+      if (fromThread._tag === "resolved") {
+        openAt(fromThread.path);
         return;
       }
       void (async () => {
@@ -1490,12 +1503,34 @@ function ChatMarkdown({
             kind: "file",
           },
         });
-        const match =
-          result._tag === "Success"
-            ? pickWorkspaceBasenameMatch(workspaceRelativePath, result.value.entries)
-            : null;
         if (!isLatestLookup()) return;
-        openAt(match ?? workspaceRelativePath);
+        if (result._tag !== "Success") {
+          if (isAtomCommandInterrupted(result)) return;
+          const error = squashAtomCommandFailure(result);
+          toastManager.add(
+            stackedThreadToast({
+              type: "error",
+              title: `Could not locate ${workspaceRelativePath}`,
+              description:
+                error instanceof Error ? error.message : "Searching this project's files failed.",
+            }),
+          );
+          return;
+        }
+        const resolution = resolveWorkspaceBasename(workspaceRelativePath, result.value.entries);
+        if (resolution._tag === "resolved") {
+          openAt(resolution.path);
+          return;
+        }
+        toastManager.add(
+          stackedThreadToast({
+            type: "error",
+            title: `Could not locate ${workspaceRelativePath}`,
+            description: describeUnresolvedBasename(
+              fromThread._tag === "ambiguous" ? fromThread : resolution,
+            ),
+          }),
+        );
       })();
     },
     [cwd, searchProjectEntries, threadRef],

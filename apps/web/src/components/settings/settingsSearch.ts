@@ -203,6 +203,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     to: "/settings/providers",
   },
   {
+    id: "agent-pulse-access",
+    title: "Agent Pulse access",
+    to: "/settings/integrations",
+    targetId: "pulse-issues",
+  },
+  {
     id: "agent-browser-access",
     title: "Agent browser access",
     to: "/settings/integrations",

@@ -14,6 +14,13 @@ import * as McpProviderSession from "./McpProviderSession.ts";
 export interface McpCredentialRequest {
   readonly threadId: ThreadId;
   readonly providerInstanceId: ProviderInstanceId;
+  /**
+   * Toolkits this credential may reach. Each is gated by its own server
+   * setting, so a session can hold `preview` without `pulse` or the reverse;
+   * an empty set never reaches here because the caller withholds the
+   * credential entirely in that case.
+   */
+  readonly capabilities: ReadonlySet<McpInvocationContext.McpCapability>;
 }
 
 export interface McpIssuedCredential {
@@ -128,7 +135,7 @@ const makeWithOptions = Effect.fn("McpSessionRegistry.make")(function* (
         threadId: ThreadId.make(request.threadId),
         providerSessionId,
         providerInstanceId: ProviderInstanceId.make(request.providerInstanceId),
-        capabilities: new Set(["preview"]),
+        capabilities: new Set(request.capabilities),
         issuedAt,
       };
       yield* SynchronizedRef.update(state, ({ records }) => {
