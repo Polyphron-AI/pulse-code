@@ -632,7 +632,9 @@ items:
     blocked_by:
       - R-2026-08-23-pulseflow-integration
     metric:
-      { name: "Pulseflow surface opens without leaving thread context", baseline: 0, target: 100 }
+      name: "Pulseflow surface opens without leaving thread context"
+      baseline: 0
+      target: 100
     status: active
     history:
       - "2026-08-23 reserved disabled web affordances; activation remains blocked on the Pulseflow integration contract."
