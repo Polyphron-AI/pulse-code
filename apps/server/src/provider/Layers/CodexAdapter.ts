@@ -8,6 +8,7 @@
  * @module CodexAdapterLive
  */
 import {
+  DEFAULT_COMPOSER_BUSY_BEHAVIOR,
   type CanonicalItemType,
   type CanonicalRequestType,
   type CodexSettings,
@@ -1828,6 +1829,7 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
             }
           : {}),
         ...(serviceTier ? { serviceTier } : {}),
+        busyBehavior: input.busyBehavior ?? DEFAULT_COMPOSER_BUSY_BEHAVIOR,
         ...(input.interactionMode !== undefined ? { interactionMode: input.interactionMode } : {}),
         ...(codexAttachments.length > 0 ? { attachments: codexAttachments } : {}),
       })

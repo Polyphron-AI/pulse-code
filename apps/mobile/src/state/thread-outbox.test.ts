@@ -487,7 +487,7 @@ describe("thread outbox", () => {
     ).toBe("send");
   });
 
-  it("sends existing-thread messages whenever connected so queued messages can steer", () => {
+  it("waits for queue mode but sends steer mode while a thread is busy", () => {
     expect(
       resolveThreadOutboxDeliveryAction({
         isCreation: false,
@@ -495,6 +495,17 @@ describe("thread outbox", () => {
         shellStatus: "live",
         environmentConnected: true,
         threadBusy: true,
+        busyBehavior: "queue",
+      }),
+    ).toBe("wait");
+    expect(
+      resolveThreadOutboxDeliveryAction({
+        isCreation: false,
+        threadExists: true,
+        shellStatus: "live",
+        environmentConnected: true,
+        threadBusy: true,
+        busyBehavior: "steer",
       }),
     ).toBe("send");
     expect(
@@ -504,6 +515,7 @@ describe("thread outbox", () => {
         shellStatus: "live",
         environmentConnected: false,
         threadBusy: true,
+        busyBehavior: "steer",
       }),
     ).toBe("wait");
   });

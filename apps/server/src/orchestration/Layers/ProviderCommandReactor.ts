@@ -1,5 +1,7 @@
 import {
   type ChatAttachment,
+  type ComposerBusyBehavior,
+  DEFAULT_COMPOSER_BUSY_BEHAVIOR,
   CommandId,
   EventId,
   type ModelSelection,
@@ -728,6 +730,7 @@ const make = Effect.gen(function* () {
     readonly modelSelection?: ModelSelection;
     readonly interactionMode?: "default" | "plan";
     readonly sessionMode?: "fresh";
+    readonly busyBehavior: ComposerBusyBehavior;
     readonly createdAt: string;
   }) {
     const thread = yield* resolveThread(input.threadId);
@@ -789,6 +792,7 @@ const make = Effect.gen(function* () {
       ...(normalizedAttachments.length > 0 ? { attachments: normalizedAttachments } : {}),
       ...(modelForTurn !== undefined ? { modelSelection: modelForTurn } : {}),
       ...(input.interactionMode !== undefined ? { interactionMode: input.interactionMode } : {}),
+      busyBehavior: input.busyBehavior,
     };
   });
 
@@ -1169,6 +1173,7 @@ const make = Effect.gen(function* () {
         ? { modelSelection: event.payload.modelSelection }
         : {}),
       interactionMode: event.payload.interactionMode,
+      busyBehavior: event.payload.busyBehavior ?? DEFAULT_COMPOSER_BUSY_BEHAVIOR,
       createdAt: event.payload.createdAt,
       ...(event.payload.sessionMode !== undefined
         ? { sessionMode: event.payload.sessionMode }

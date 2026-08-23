@@ -137,6 +137,7 @@ interface CursorSessionContext {
    * >0 means a turn is actively running, so a new sendTurn is a steer that
    * continues it, and only the last remaining prompt settles the turn. */
   promptsInFlight: number;
+  readonly queueTurnSemaphore: Semaphore.Semaphore;
   stopped: boolean;
 }
 
@@ -779,6 +780,7 @@ export function makeCursorAdapter(
             lastPlanFingerprint: undefined,
             activeTurnId: undefined,
             promptsInFlight: 0,
+            queueTurnSemaphore: yield* Semaphore.make(1),
             stopped: false,
           };
 
@@ -913,7 +915,7 @@ export function makeCursorAdapter(
         }).pipe(Effect.scoped),
       );
 
-    const sendTurn: CursorAdapterShape["sendTurn"] = (input) =>
+    const sendTurnNow: CursorAdapterShape["sendTurn"] = (input) =>
       Effect.gen(function* () {
         const ctx = yield* requireSession(input.threadId);
         // A sendTurn while a prompt is in flight is a steer: the agent folds
@@ -1062,6 +1064,17 @@ export function makeCursorAdapter(
             }),
           ),
         );
+      });
+
+    const sendTurn: CursorAdapterShape["sendTurn"] = (input) =>
+      Effect.gen(function* () {
+        const ctx = yield* requireSession(input.threadId);
+        if (input.busyBehavior === "steer" && ctx.promptsInFlight > 0) {
+          return yield* sendTurnNow(input);
+        }
+        // A fresh turn owns the gate until its ACP prompt settles. Queue
+        // requests wait here; explicit steers bypass it and join the live turn.
+        return yield* ctx.queueTurnSemaphore.withPermit(sendTurnNow(input));
       });
 
     const interruptTurn: CursorAdapterShape["interruptTurn"] = (threadId) =>

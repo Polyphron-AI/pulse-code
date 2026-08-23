@@ -88,6 +88,9 @@ export const ProviderRequestKind = Schema.Literals(["command", "file-read", "fil
 export type ProviderRequestKind = typeof ProviderRequestKind.Type;
 export const AssistantDeliveryMode = Schema.Literals(["buffered", "streaming"]);
 export type AssistantDeliveryMode = typeof AssistantDeliveryMode.Type;
+export const ComposerBusyBehavior = Schema.Literals(["queue", "steer"]);
+export type ComposerBusyBehavior = typeof ComposerBusyBehavior.Type;
+export const DEFAULT_COMPOSER_BUSY_BEHAVIOR: ComposerBusyBehavior = "queue";
 export const ProviderApprovalDecision = Schema.Literals([
   "accept",
   "acceptForSession",
@@ -821,6 +824,7 @@ export const ThreadTurnStartCommand = Schema.Struct({
   interactionMode: ProviderInteractionMode.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_PROVIDER_INTERACTION_MODE)),
   ),
+  busyBehavior: Schema.optional(ComposerBusyBehavior),
   bootstrap: Schema.optional(ThreadTurnStartBootstrap),
   sourceProposedPlan: Schema.optional(SourceProposedPlanReference),
   // "fresh" asks the provider adapter to start a brand-new provider session
@@ -844,6 +848,7 @@ const ClientThreadTurnStartCommand = Schema.Struct({
   titleSeed: Schema.optional(TrimmedNonEmptyString),
   runtimeMode: RuntimeMode,
   interactionMode: ProviderInteractionMode,
+  busyBehavior: Schema.optional(ComposerBusyBehavior),
   bootstrap: Schema.optional(ThreadTurnStartBootstrap),
   sourceProposedPlan: Schema.optional(SourceProposedPlanReference),
   createdAt: IsoDateTime,
@@ -1269,6 +1274,7 @@ export const ThreadTurnStartRequestedPayload = Schema.Struct({
   interactionMode: ProviderInteractionMode.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_PROVIDER_INTERACTION_MODE)),
   ),
+  busyBehavior: Schema.optional(ComposerBusyBehavior),
   sourceProposedPlan: Schema.optional(SourceProposedPlanReference),
   // Mirrors ThreadTurnStartCommand.sessionMode; adapters read it to decide
   // whether to resume the existing provider session or start a fresh one.

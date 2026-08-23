@@ -1,4 +1,5 @@
 import {
+  DEFAULT_COMPOSER_BUSY_BEHAVIOR,
   DEFAULT_SCHEDULE_HANDOFF_PATH_TEMPLATE,
   DEFAULT_SCHEDULE_MAX_RUN_MINUTES,
   DEFAULT_SCHEDULE_MAX_TURN_MINUTES,
@@ -1088,6 +1089,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           ...(command.titleSeed !== undefined ? { titleSeed: command.titleSeed } : {}),
           runtimeMode: targetThread.runtimeMode,
           interactionMode: targetThread.interactionMode,
+          busyBehavior: command.busyBehavior ?? DEFAULT_COMPOSER_BUSY_BEHAVIOR,
           ...(sourceProposedPlan !== undefined ? { sourceProposedPlan } : {}),
           ...(command.sessionMode !== undefined ? { sessionMode: command.sessionMode } : {}),
           createdAt: command.createdAt,

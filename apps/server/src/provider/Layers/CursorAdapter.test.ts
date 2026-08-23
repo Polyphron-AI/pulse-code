@@ -305,6 +305,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
       // continues the same turn.
       const steeredTurn = yield* adapter.sendTurn({
         threadId,
+        busyBehavior: "steer",
         input: "actually run 15",
         attachments: [],
       });
@@ -321,6 +322,65 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
       assert.equal(String(turnStartedEvents[0]?.turnId), String(firstTurn.turnId));
       assert.equal(turnCompletedEvents.length, 1);
       assert.equal(String(turnCompletedEvents[0]?.turnId), String(firstTurn.turnId));
+
+      yield* adapter.stopSession(threadId);
+    }),
+  );
+
+  it.effect("queues a busy-session message as a separate turn", () =>
+    Effect.gen(function* () {
+      const adapter = yield* CursorAdapter;
+      const settings = yield* ServerSettingsService;
+      const threadId = ThreadId.make("cursor-queue-thread");
+      const wrapperPath = yield* Effect.promise(() =>
+        makeMockAgentWrapper({ T3_ACP_PROMPT_DELAY_MS: "750" }),
+      );
+      yield* settings.updateSettings({ providers: { cursor: { binaryPath: wrapperPath } } });
+
+      yield* adapter.startSession({
+        threadId,
+        provider: ProviderDriverKind.make("cursor"),
+        cwd: process.cwd(),
+        runtimeMode: "full-access",
+        modelSelection: { instanceId: ProviderInstanceId.make("cursor"), model: "default" },
+      });
+
+      const firstTurnFiber = yield* adapter
+        .sendTurn({
+          threadId,
+          input: "finish the first task",
+          attachments: [],
+        })
+        .pipe(Effect.forkChild);
+
+      yield* Effect.gen(function* () {
+        for (let attempt = 0; attempt < 200; attempt += 1) {
+          const sessions = yield* adapter.listSessions();
+          const session = sessions.find((entry) => entry.threadId === threadId);
+          if (session?.activeTurnId !== undefined) {
+            return;
+          }
+          yield* TestClock.adjust("10 millis");
+        }
+        throw new Error("Timed out waiting for the first prompt to be in flight.");
+      });
+
+      const queuedTurnFiber = yield* adapter
+        .sendTurn({
+          threadId,
+          input: "start a separate follow-up",
+          busyBehavior: "queue",
+          attachments: [],
+        })
+        .pipe(Effect.forkChild);
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        yield* Effect.yieldNow;
+      }
+      assert.isUndefined(queuedTurnFiber.pollUnsafe());
+
+      const firstTurn = yield* Fiber.join(firstTurnFiber);
+      const queuedTurn = yield* Fiber.join(queuedTurnFiber);
+      assert.notEqual(String(queuedTurn.turnId), String(firstTurn.turnId));
 
       yield* adapter.stopSession(threadId);
     }),
