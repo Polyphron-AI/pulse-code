@@ -64,6 +64,276 @@
         "authority": "prd/20-acceptance-criteria/integration-foundation.md §Integration foundation acceptance criteria",
         "live": "Mapped to the ten-task implementation DAG; no implementation receipts yet.",
         "register": "CR-2026-08-19-pulse-integrations-foundation; P-2026-08-19-integrations-foundation"
+      },
+      {
+        "id": "11-product-line-and-distribution-boundary#purpose",
+        "health": "approved",
+        "covers": "Separates official T3 authority from the downstream Pulse desktop product.",
+        "action": "Keep release and implementation changes inside the locked product boundary.",
+        "authority": "prd/11-product-line-and-distribution-boundary.md §Purpose",
+        "live": "Pulse desktop identity work and focused package receipts are recorded in the roadmap.",
+        "register": "R-2026-08-21-desktop-product-separation"
+      },
+      {
+        "id": "11-product-line-and-distribution-boundary#product-relationship",
+        "health": "approved",
+        "covers": "Defines upstream intake, downstream ownership, and Pulse-only divergence.",
+        "action": "Continue explicit reviewable upstream intake without claiming parity.",
+        "authority": "prd/11-product-line-and-distribution-boundary.md §Product relationship",
+        "live": "The repository has separate origin and upstream remotes; Pulse artifacts are downstream-owned.",
+        "register": "R-2026-08-21-desktop-product-separation"
+      },
+      {
+        "id": "11-product-line-and-distribution-boundary#desktop-boundary",
+        "health": "active",
+        "covers": "Requires isolated desktop identity, state, protocols, packaging, and update ownership.",
+        "action": "Finish platform lifecycle proof before team-wide release.",
+        "authority": "prd/11-product-line-and-distribution-boundary.md §Desktop boundary",
+        "live": "Pulse-specific IDs, paths, schemes, and package identities are implemented with focused tests.",
+        "register": "R-2026-08-21-desktop-product-separation"
+      },
+      {
+        "id": "11-product-line-and-distribution-boundary#first-run-and-import-policy",
+        "health": "approved",
+        "covers": "Requires fresh Pulse state and explicit nondestructive future import.",
+        "action": "Keep automatic T3 discovery or migration out of first run.",
+        "authority": "prd/11-product-line-and-distribution-boundary.md §First-run and import policy",
+        "live": "Pulse owns a separate desktop state root; no import workflow is claimed.",
+        "register": "R-2026-08-21-desktop-product-separation"
+      },
+      {
+        "id": "11-product-line-and-distribution-boundary#shared-clients-initially",
+        "health": "approved",
+        "covers": "Keeps web and mobile shared and capability-aware initially.",
+        "action": "Preserve shared clients until a separate locked product decision exists.",
+        "authority": "prd/11-product-line-and-distribution-boundary.md §Shared clients initially",
+        "live": "Web remains shared with desktop and mobile uses the common capability model.",
+        "register": "R-2026-08-21-desktop-product-separation"
+      },
+      {
+        "id": "11-product-line-and-distribution-boundary#in-scope",
+        "health": "active",
+        "covers": "Bounds the work to permanent Pulse desktop distribution and side-by-side operation.",
+        "action": "Complete remaining install and lifecycle evidence on every desktop platform.",
+        "authority": "prd/11-product-line-and-distribution-boundary.md §In scope",
+        "live": "Identity implementation and Windows candidate inspection are recorded; full platform proof remains open.",
+        "register": "R-2026-08-21-desktop-product-separation"
+      },
+      {
+        "id": "11-product-line-and-distribution-boundary#out-of-scope",
+        "health": "approved",
+        "covers": "Excludes T3 publishing, automatic sync or migration, and separate web/mobile identities.",
+        "action": "Reject changes that cross these boundaries without a new decision.",
+        "authority": "prd/11-product-line-and-distribution-boundary.md §Out of scope",
+        "live": "No live implementation is claimed for excluded work.",
+        "register": "R-2026-08-21-desktop-product-separation"
+      },
+      {
+        "id": "11-product-line-and-distribution-boundary#release-gate",
+        "health": "at risk",
+        "covers": "Requires package inspection and side-by-side proof on Windows, macOS, and Linux.",
+        "action": "Collect macOS, Linux, and complete lifecycle receipts before release.",
+        "authority": "prd/11-product-line-and-distribution-boundary.md §Release gate",
+        "live": "Windows package inspection exists; the roadmap explicitly leaves cross-platform release evidence open.",
+        "register": "R-2026-08-21-desktop-product-separation"
+      },
+      {
+        "id": "11-product-line-and-distribution-boundary#cross-references",
+        "health": "approved",
+        "covers": "Connects the requirement to acceptance, decisions, gaps, and upstream authority.",
+        "action": "Keep linked authorities synchronized when the boundary changes.",
+        "authority": "prd/11-product-line-and-distribution-boundary.md §Cross-references",
+        "live": "Acceptance criteria, decisions, gaps, and upstream remote are present.",
+        "register": "R-2026-08-21-desktop-product-separation"
+      },
+      {
+        "id": "11-product-line-and-distribution-boundary#open-questions",
+        "health": "needs decision",
+        "covers": "Tracks import categories and permanent per-platform identities still to settle.",
+        "action": "Close identity questions before release and import questions before shaping import.",
+        "authority": "prd/11-product-line-and-distribution-boundary.md §Open questions",
+        "live": "Some Pulse identities are implemented; import remains unimplemented and unshaped.",
+        "register": "R-2026-08-21-desktop-product-separation"
+      },
+      {
+        "id": "13-mobile-file-link-actions#problem",
+        "health": "approved",
+        "covers": "Defines unreliable mobile file-link activation and the missing native fallback.",
+        "action": "Retain visible fallback behavior for recognized workspace-file links.",
+        "authority": "prd/13-mobile-file-link-actions.md §Problem",
+        "live": "Mobile file-link actions were approved and implemented with focused evidence.",
+        "register": "R-2026-08-21-mobile-file-link-actions"
+      },
+      {
+        "id": "13-mobile-file-link-actions#scope",
+        "health": "implemented",
+        "covers": "Provides Preview and remote-safe Open with actions plus honest failure handling.",
+        "action": "Monitor the shipped behavior and preserve unchanged web/desktop paths.",
+        "authority": "prd/13-mobile-file-link-actions.md §Scope",
+        "live": "Focused mobile behavior and signed asset routing are implemented and verified.",
+        "register": "R-2026-08-21-mobile-file-link-actions"
+      },
+      {
+        "id": "13-mobile-file-link-actions#non-goals",
+        "health": "approved",
+        "covers": "Excludes progress, persistent downloads, offline queues, new endpoints, and provider changes.",
+        "action": "Keep durable-download follow-up work separately scoped.",
+        "authority": "prd/13-mobile-file-link-actions.md §Non-goals",
+        "live": "Durability was split into PRD 14 instead of expanding this slice.",
+        "register": "R-2026-08-21-mobile-file-link-actions"
+      },
+      {
+        "id": "13-mobile-file-link-actions#constraints",
+        "health": "implemented",
+        "covers": "Requires signed routes across connection modes, workspace containment, and temporary cache storage.",
+        "action": "Retain focused remote and containment coverage.",
+        "authority": "prd/13-mobile-file-link-actions.md §Constraints",
+        "live": "The existing signed asset route and mobile cache path implement the boundary.",
+        "register": "R-2026-08-21-mobile-file-link-actions"
+      },
+      {
+        "id": "15-desktop-update-rollback#problem",
+        "health": "accepted",
+        "covers": "Defines forward update as a one-way door when renderer or server health fails.",
+        "action": "Keep rollback reachable independently of renderer and backend health.",
+        "authority": "prd/15-desktop-update-rollback.md §Problem",
+        "live": "Rollback and Help-menu safe mode are implemented with focused tests.",
+        "register": "R-2026-08-22-desktop-update-rollback"
+      },
+      {
+        "id": "15-desktop-update-rollback#scope",
+        "health": "implemented",
+        "covers": "Specifies version choice, crash-proof access, safety floor, channel integrity, and deliberate install.",
+        "action": "Collect release-candidate proof and keep floor/channel fixtures green.",
+        "authority": "prd/15-desktop-update-rollback.md §Scope",
+        "live": "The working tree implementation and 67 focused tests are recorded in the roadmap.",
+        "register": "R-2026-08-22-desktop-update-rollback"
+      },
+      {
+        "id": "15-desktop-update-rollback#non-goals",
+        "health": "accepted",
+        "covers": "Excludes database snapshot restore, mobile/CLI rollback, and a second updater mechanism.",
+        "action": "Shape snapshot/restore separately if schema compatibility demands it.",
+        "authority": "prd/15-desktop-update-rollback.md §Non-goals",
+        "live": "Phase 1 reuses electron-updater and does not claim snapshot restore.",
+        "register": "R-2026-08-22-desktop-update-rollback"
+      },
+      {
+        "id": "15-desktop-update-rollback#constraints",
+        "health": "implemented",
+        "covers": "Requires electron-updater reuse, GitHub release source, and a compile-time minimum version.",
+        "action": "Raise the floor deliberately with incompatible data or identity changes.",
+        "authority": "prd/15-desktop-update-rollback.md §Constraints",
+        "live": "Feed pinning, rollback floor, and reset behavior are implemented and tested.",
+        "register": "R-2026-08-22-desktop-update-rollback"
+      },
+      {
+        "id": "20-acceptance-criteria/desktop-product-line-boundary#upstream-t3-remains-authoritative",
+        "health": "approved",
+        "covers": "Official T3 artifacts remain upstream-owned.",
+        "action": "Keep Pulse CI from publishing modified T3 artifacts.",
+        "authority": "prd/20-acceptance-criteria/desktop-product-line-boundary.md §upstream-t3-remains-authoritative",
+        "live": "Origin/upstream repository separation is configured.",
+        "register": "R-2026-08-21-desktop-product-separation"
+      },
+      {
+        "id": "20-acceptance-criteria/desktop-product-line-boundary#pulse-selectively-adopts-upstream",
+        "health": "approved",
+        "covers": "Upstream intake is explicit and reviewable.",
+        "action": "Retain selective pull-request-based intake.",
+        "authority": "prd/20-acceptance-criteria/desktop-product-line-boundary.md §pulse-selectively-adopts-upstream",
+        "live": "A configured upstream remote supports explicit reviewable intake.",
+        "register": "R-2026-08-21-desktop-product-separation"
+      },
+      {
+        "id": "20-acceptance-criteria/desktop-product-line-boundary#pulse-may-diverge",
+        "health": "approved",
+        "covers": "Pulse-only features and cadence may diverge without changing T3.",
+        "action": "Keep divergence within Pulse-owned releases and identities.",
+        "authority": "prd/20-acceptance-criteria/desktop-product-line-boundary.md §pulse-may-diverge",
+        "live": "Pulse-specific product and integration work exists downstream.",
+        "register": "R-2026-08-21-desktop-product-separation"
+      },
+      {
+        "id": "20-acceptance-criteria/desktop-product-line-boundary#desktop-installs-side-by-side",
+        "health": "active",
+        "covers": "Pulse and T3 install without identity or path collisions.",
+        "action": "Finish side-by-side install proof on every desktop platform.",
+        "authority": "prd/20-acceptance-criteria/desktop-product-line-boundary.md §desktop-installs-side-by-side",
+        "live": "Pulse package identity is implemented; complete cross-platform proof remains open.",
+        "register": "R-2026-08-21-desktop-product-separation"
+      },
+      {
+        "id": "20-acceptance-criteria/desktop-product-line-boundary#desktop-runs-concurrently",
+        "health": "active",
+        "covers": "Both desktop products can execute simultaneously with separate locks and state.",
+        "action": "Collect concurrent launch receipts on Windows, macOS, and Linux.",
+        "authority": "prd/20-acceptance-criteria/desktop-product-line-boundary.md §desktop-runs-concurrently",
+        "live": "Distinct application identifiers and state roots are implemented.",
+        "register": "R-2026-08-21-desktop-product-separation"
+      },
+      {
+        "id": "20-acceptance-criteria/desktop-product-line-boundary#lifecycle-actions-are-isolated",
+        "health": "active",
+        "covers": "Install, update, and uninstall actions cannot mutate the other product.",
+        "action": "Complete packaged lifecycle tests before release.",
+        "authority": "prd/20-acceptance-criteria/desktop-product-line-boundary.md §lifecycle-actions-are-isolated",
+        "live": "Pulse updater and package coordinates are distinct; full lifecycle evidence remains open.",
+        "register": "R-2026-08-21-desktop-product-separation"
+      },
+      {
+        "id": "20-acceptance-criteria/desktop-product-line-boundary#pulse-starts-fresh",
+        "health": "implemented",
+        "covers": "Pulse starts from Pulse-owned state without automatic T3 migration.",
+        "action": "Retain the fresh-state default.",
+        "authority": "prd/20-acceptance-criteria/desktop-product-line-boundary.md §pulse-starts-fresh",
+        "live": "Pulse uses its own state root and does not claim automatic import.",
+        "register": "R-2026-08-21-desktop-product-separation"
+      },
+      {
+        "id": "20-acceptance-criteria/desktop-product-line-boundary#import-is-explicit-and-nondestructive",
+        "health": "planned",
+        "covers": "Any future import must preview, copy selectively, and leave T3 unchanged.",
+        "action": "Shape and approve import separately before implementation.",
+        "authority": "prd/20-acceptance-criteria/desktop-product-line-boundary.md §import-is-explicit-and-nondestructive",
+        "live": "No import implementation is claimed.",
+        "register": "R-2026-08-21-desktop-product-separation"
+      },
+      {
+        "id": "20-acceptance-criteria/desktop-product-line-boundary#web-and-mobile-remain-shared",
+        "health": "implemented",
+        "covers": "Web and mobile retain shared product identities and capability-aware behavior.",
+        "action": "Require a new locked decision before separating either client.",
+        "authority": "prd/20-acceptance-criteria/desktop-product-line-boundary.md §web-and-mobile-remain-shared",
+        "live": "Shared web and mobile clients remain in the repository.",
+        "register": "R-2026-08-21-desktop-product-separation"
+      },
+      {
+        "id": "20-acceptance-criteria/desktop-product-line-boundary#release-proof-covers-every-desktop-platform",
+        "health": "at risk",
+        "covers": "Release proof must cover package identity and lifecycle on all desktop platforms.",
+        "action": "Add macOS, Linux, and complete Windows lifecycle receipts before team rollout.",
+        "authority": "prd/20-acceptance-criteria/desktop-product-line-boundary.md §release-proof-covers-every-desktop-platform",
+        "live": "Windows candidate inspection exists; the roadmap does not claim all-platform completion.",
+        "register": "R-2026-08-21-desktop-product-separation"
+      },
+      {
+        "id": "20-acceptance-criteria/desktop-product-line-boundary#cross-references",
+        "health": "approved",
+        "covers": "Links acceptance to the parent requirement, decisions, gaps, and roadmap.",
+        "action": "Keep referenced authorities aligned with boundary changes.",
+        "authority": "prd/20-acceptance-criteria/desktop-product-line-boundary.md §Cross-references",
+        "live": "Parent PRD, decisions, gaps, and roadmap records exist.",
+        "register": "R-2026-08-21-desktop-product-separation"
+      },
+      {
+        "id": "20-acceptance-criteria/desktop-product-line-boundary#open-questions",
+        "health": "needs decision",
+        "covers": "Tracks remaining import and permanent identity choices.",
+        "action": "Resolve release identities before release and import categories before import shaping.",
+        "authority": "prd/20-acceptance-criteria/desktop-product-line-boundary.md §Open questions",
+        "live": "Implementation answers part of the identity question; import remains undecided.",
+        "register": "R-2026-08-21-desktop-product-separation"
       }
     ]
   },
