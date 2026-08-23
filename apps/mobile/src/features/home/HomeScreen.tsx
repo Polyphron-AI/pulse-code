@@ -72,6 +72,13 @@ import {
   type HomeProjectSortOrder,
 } from "./homeThreadList";
 import { SwipeableScrollGateProvider, useSwipeableScrollGate } from "./thread-swipe-actions";
+import {
+  AgentScopeBackRow,
+  AgentScopeIndex,
+  AgentScopeSegmented,
+  threadAgentInstanceId,
+  type useAgentScope,
+} from "./agent-scope";
 
 /* ─── Types ──────────────────────────────────────────────────────────── */
 
@@ -87,6 +94,7 @@ interface HomeScreenProps {
   readonly searchQuery: string;
   readonly selectedEnvironmentId: EnvironmentId | null;
   readonly selectedProjectKey: string | null;
+  readonly agentScope: ReturnType<typeof useAgentScope>;
   readonly projectSortOrder: HomeProjectSortOrder;
   readonly threadSortOrder: SidebarThreadSortOrder;
   readonly projectGroupingMode: SidebarProjectGroupingMode;
@@ -348,26 +356,43 @@ export function HomeScreen(props: HomeScreenProps) {
           ),
     [props.projects, selectedProjectRefKeys],
   );
-  const scopedThreads = useMemo(
-    () =>
+  const scopedThreads = useMemo(() => {
+    const projectScoped =
       selectedProjectRefKeys === null
         ? props.threads
         : props.threads.filter((thread) =>
             selectedProjectRefKeys.has(scopedProjectKey(thread.environmentId, thread.projectId)),
+          );
+    if (props.agentScope.selectedAgentInstanceId === null) {
+      return projectScoped;
+    }
+    return projectScoped.filter(
+      (thread) => threadAgentInstanceId(thread) === props.agentScope.selectedAgentInstanceId,
+    );
+  }, [props.agentScope.selectedAgentInstanceId, props.threads, selectedProjectRefKeys]);
+  // Pending tasks have no agent thread yet, so an agent scope hides them all.
+  const scopedPendingTasks = useMemo(() => {
+    if (props.agentScope.selectedAgentInstanceId !== null) {
+      return [];
+    }
+    return selectedProjectRefKeys === null
+      ? props.pendingTasks
+      : props.pendingTasks.filter((pendingTask) =>
+          selectedProjectRefKeys.has(
+            scopedProjectKey(pendingTask.message.environmentId, pendingTask.creation.projectId),
           ),
-    [props.threads, selectedProjectRefKeys],
-  );
-  const scopedPendingTasks = useMemo(
-    () =>
-      selectedProjectRefKeys === null
-        ? props.pendingTasks
-        : props.pendingTasks.filter((pendingTask) =>
-            selectedProjectRefKeys.has(
-              scopedProjectKey(pendingTask.message.environmentId, pendingTask.creation.projectId),
-            ),
-          ),
-    [props.pendingTasks, selectedProjectRefKeys],
-  );
+        );
+  }, [props.agentScope.selectedAgentInstanceId, props.pendingTasks, selectedProjectRefKeys]);
+
+  // Index counts ignore the project scope: the Agents tab replaces it.
+  const threadCountByAgentInstanceId = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const thread of props.threads) {
+      const instanceId = threadAgentInstanceId(thread);
+      counts.set(instanceId, (counts.get(instanceId) ?? 0) + 1);
+    }
+    return counts;
+  }, [props.threads]);
 
   const projectGroups = useMemo(
     () =>
@@ -1081,10 +1106,28 @@ export function HomeScreen(props: HomeScreenProps) {
     );
   }
 
-  const listHeader = Platform.OS === "ios" ? null : <HomeTopContentSpacer />;
+  // Project scoping lives in the native filter menu; the agent scope is the
+  // segmented control, which has to be inline because a native header cannot
+  // hold one.
+  const agentScopeHeader =
+    props.agentScope.entries.length > 0 ? (
+      <>
+        <AgentScopeSegmented tab={props.agentScope.tab} onTabChange={props.agentScope.setTab} />
+        {props.agentScope.selectedAgent !== null ? (
+          <AgentScopeBackRow
+            agent={props.agentScope.selectedAgent}
+            onBack={() => props.agentScope.selectAgent(null)}
+          />
+        ) : null}
+      </>
+    ) : null;
+  const listHeader = (
+    <>
+      {Platform.OS === "ios" ? null : <HomeTopContentSpacer />}
+      {agentScopeHeader}
+    </>
+  );
 
-  // Project scoping lives in the header filter menu (no inline chip row on
-  // mobile — the menu is the one filter surface).
   const v2ListHeader = listHeader;
 
   const listEmpty = !hasResults ? (
@@ -1119,6 +1162,23 @@ export function HomeScreen(props: HomeScreenProps) {
     ) : (
       listEmpty
     );
+
+  // Agents tab, top level: the instance index stands in for the thread list.
+  // Searching still wins, so a query never lands on a screen with no results.
+  if (props.agentScope.showsAgentIndex && !hasSearchQuery) {
+    return (
+      <View className="flex-1 bg-screen">
+        {Platform.OS === "ios" ? null : <HomeTopContentSpacer />}
+        {agentScopeHeader}
+        <AgentScopeIndex
+          entries={props.agentScope.entries}
+          threadCountByInstanceId={threadCountByAgentInstanceId}
+          onSelect={props.agentScope.selectAgent}
+          contentPaddingBottom={insets.bottom + iosBottomToolbarClearance + 24}
+        />
+      </View>
+    );
+  }
 
   if (threadListV2Enabled) {
     return (

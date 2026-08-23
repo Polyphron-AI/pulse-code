@@ -384,6 +384,7 @@ describe("ProviderCommandReactor", () => {
             return engine.streamDomainEvents;
           },
           latestSequence: engine.latestSequence,
+          currentReadModel: engine.currentReadModel,
         } satisfies OrchestrationEngineService["Service"];
       }),
     ).pipe(Layer.provide(orchestrationLayer));

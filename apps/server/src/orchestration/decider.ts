@@ -1,8 +1,17 @@
 import {
+  DEFAULT_SCHEDULE_HANDOFF_PATH_TEMPLATE,
+  DEFAULT_SCHEDULE_MAX_RUN_MINUTES,
+  DEFAULT_SCHEDULE_MAX_TURN_MINUTES,
   EventId,
+  SCHEDULE_AUTO_PAUSE_FAILURE_STREAK,
+  SCHEDULE_LIMIT_MINUTES_MAX,
+  SCHEDULE_LIMIT_MINUTES_MIN,
   type OrchestrationCommand,
   type OrchestrationEvent,
   type OrchestrationReadModel,
+  type OrchestrationSchedule,
+  type ProjectId,
+  type ScheduleScope,
 } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Crypto from "effect/Crypto";
@@ -13,8 +22,10 @@ import { OrchestrationCommandInvariantError } from "./Errors.ts";
 import {
   listThreadsByProjectId,
   requireActiveProjectWorkspaceRootAbsent,
+  requireActiveSchedule,
   requireProject,
   requireProjectAbsent,
+  requireScheduleAbsent,
   requireThread,
   requireThreadArchived,
   requireThreadAbsent,
@@ -140,6 +151,85 @@ function threadHasQueuedTurnStart(
     latestUserMessageAtMs > latestTurnAtMs &&
     Math.abs(queuedAgeMs) <= QUEUED_TURN_START_GRACE_MS
   );
+}
+
+/**
+ * Schedule field invariants live in the decider (not just the schemas):
+ * branded bounds do not survive internally constructed command literals, and
+ * timezone validity is not expressible as a pure schema check.
+ */
+function scheduleFieldViolation(command: {
+  readonly type: OrchestrationCommand["type"];
+  readonly timezone?: string | undefined;
+  readonly hourLocal?: number | undefined;
+  readonly minuteLocal?: number | undefined;
+  readonly maxRunMinutes?: number | undefined;
+  readonly maxTurnMinutes?: number | undefined;
+  readonly scope?: ScheduleScope | undefined;
+}): string | null {
+  if (command.timezone !== undefined && !isValidTimezone(command.timezone)) {
+    return `timezone '${command.timezone}' is not a valid IANA time zone`;
+  }
+  if (
+    command.hourLocal !== undefined &&
+    !(Number.isInteger(command.hourLocal) && command.hourLocal >= 0 && command.hourLocal <= 23)
+  ) {
+    return `hourLocal ${command.hourLocal} must be an integer between 0 and 23`;
+  }
+  if (
+    command.minuteLocal !== undefined &&
+    !(
+      Number.isInteger(command.minuteLocal) &&
+      command.minuteLocal >= 0 &&
+      command.minuteLocal <= 59
+    )
+  ) {
+    return `minuteLocal ${command.minuteLocal} must be an integer between 0 and 59`;
+  }
+  for (const [field, value] of [
+    ["maxRunMinutes", command.maxRunMinutes],
+    ["maxTurnMinutes", command.maxTurnMinutes],
+  ] as const) {
+    if (
+      value !== undefined &&
+      !(
+        Number.isInteger(value) &&
+        value >= SCHEDULE_LIMIT_MINUTES_MIN &&
+        value <= SCHEDULE_LIMIT_MINUTES_MAX
+      )
+    ) {
+      return `${field} ${value} must be an integer between ${SCHEDULE_LIMIT_MINUTES_MIN} and ${SCHEDULE_LIMIT_MINUTES_MAX} minutes`;
+    }
+  }
+  if (
+    command.scope !== undefined &&
+    command.scope._tag === "environment" &&
+    command.scope.projectIds !== "all" &&
+    command.scope.projectIds.length === 0
+  ) {
+    return "environment scope must target 'all' or at least one project";
+  }
+  return null;
+}
+
+function isValidTimezone(timezone: string): boolean {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: timezone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Every explicit project a scope targets ("all" resolves at fire time). */
+function scheduleScopeProjectIds(scope: ScheduleScope) {
+  if (scope._tag === "project") return [scope.projectId];
+  return scope.projectIds === "all" ? [] : scope.projectIds;
+}
+
+function scheduleTargetsProject(schedule: OrchestrationSchedule, projectId: ProjectId): boolean {
+  if (schedule.scope._tag === "project") return schedule.scope.projectId === projectId;
+  return schedule.scope.projectIds === "all" || schedule.scope.projectIds.includes(projectId);
 }
 
 function withEventBase(
@@ -377,6 +467,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           interactionMode: command.interactionMode,
           branch: command.branch,
           worktreePath: command.worktreePath,
+          ...(command.origin !== undefined ? { origin: command.origin } : {}),
           createdAt: command.createdAt,
           updatedAt: command.createdAt,
         },
@@ -992,6 +1083,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           runtimeMode: targetThread.runtimeMode,
           interactionMode: targetThread.interactionMode,
           ...(sourceProposedPlan !== undefined ? { sourceProposedPlan } : {}),
+          ...(command.sessionMode !== undefined ? { sessionMode: command.sessionMode } : {}),
           createdAt: command.createdAt,
         },
       };
@@ -1400,6 +1492,323 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         },
       };
       return [unsettledEvent, activityAppendedEvent];
+    }
+
+    case "project.schedule.create": {
+      yield* requireScheduleAbsent({
+        readModel,
+        command,
+        scheduleId: command.scheduleId,
+      });
+      const violation = scheduleFieldViolation(command);
+      if (violation !== null) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: violation,
+        });
+      }
+      // Every explicitly targeted project must exist; "all" resolves live.
+      for (const projectId of scheduleScopeProjectIds(command.scope)) {
+        yield* requireProject({ readModel, command, projectId });
+      }
+      return {
+        ...(yield* withEventBase({
+          aggregateKind: "schedule",
+          aggregateId: command.scheduleId,
+          occurredAt: command.createdAt,
+          commandId: command.commandId,
+        })),
+        type: "project.schedule.created",
+        payload: {
+          scheduleId: command.scheduleId,
+          scope: command.scope,
+          hourLocal: command.hourLocal,
+          minuteLocal: command.minuteLocal,
+          timezone: command.timezone,
+          prompt: command.prompt,
+          ...(command.workflowScriptRef !== undefined
+            ? { workflowScriptRef: command.workflowScriptRef }
+            : {}),
+          ...(command.modelSelection !== undefined
+            ? { modelSelection: command.modelSelection }
+            : {}),
+          ...(command.skipIfDirty !== undefined ? { skipIfDirty: command.skipIfDirty } : {}),
+          handoffPathTemplate:
+            command.handoffPathTemplate ?? DEFAULT_SCHEDULE_HANDOFF_PATH_TEMPLATE,
+          maxRunMinutes: command.maxRunMinutes ?? DEFAULT_SCHEDULE_MAX_RUN_MINUTES,
+          maxTurnMinutes: command.maxTurnMinutes ?? DEFAULT_SCHEDULE_MAX_TURN_MINUTES,
+          createdAt: command.createdAt,
+          updatedAt: command.createdAt,
+        },
+      };
+    }
+
+    case "project.schedule.update": {
+      yield* requireActiveSchedule({
+        readModel,
+        command,
+        scheduleId: command.scheduleId,
+      });
+      const violation = scheduleFieldViolation(command);
+      if (violation !== null) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: violation,
+        });
+      }
+      if (command.scope !== undefined) {
+        for (const projectId of scheduleScopeProjectIds(command.scope)) {
+          yield* requireProject({ readModel, command, projectId });
+        }
+      }
+      const occurredAt = yield* nowIso;
+      return {
+        ...(yield* withEventBase({
+          aggregateKind: "schedule",
+          aggregateId: command.scheduleId,
+          occurredAt,
+          commandId: command.commandId,
+        })),
+        type: "project.schedule.updated",
+        payload: {
+          scheduleId: command.scheduleId,
+          ...(command.scope !== undefined ? { scope: command.scope } : {}),
+          ...(command.hourLocal !== undefined ? { hourLocal: command.hourLocal } : {}),
+          ...(command.minuteLocal !== undefined ? { minuteLocal: command.minuteLocal } : {}),
+          ...(command.timezone !== undefined ? { timezone: command.timezone } : {}),
+          ...(command.prompt !== undefined ? { prompt: command.prompt } : {}),
+          ...(command.workflowScriptRef !== undefined
+            ? { workflowScriptRef: command.workflowScriptRef }
+            : {}),
+          ...(command.modelSelection !== undefined
+            ? { modelSelection: command.modelSelection }
+            : {}),
+          ...(command.skipIfDirty !== undefined ? { skipIfDirty: command.skipIfDirty } : {}),
+          ...(command.handoffPathTemplate !== undefined
+            ? { handoffPathTemplate: command.handoffPathTemplate }
+            : {}),
+          ...(command.maxRunMinutes !== undefined ? { maxRunMinutes: command.maxRunMinutes } : {}),
+          ...(command.maxTurnMinutes !== undefined
+            ? { maxTurnMinutes: command.maxTurnMinutes }
+            : {}),
+          updatedAt: occurredAt,
+        },
+      };
+    }
+
+    case "project.schedule.pause": {
+      const schedule = yield* requireActiveSchedule({
+        readModel,
+        command,
+        scheduleId: command.scheduleId,
+      });
+      if (schedule.pausedAt !== null) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: `Schedule '${command.scheduleId}' is already paused.`,
+        });
+      }
+      const occurredAt = yield* nowIso;
+      return {
+        ...(yield* withEventBase({
+          aggregateKind: "schedule",
+          aggregateId: command.scheduleId,
+          occurredAt,
+          commandId: command.commandId,
+        })),
+        type: "project.schedule.paused",
+        payload: {
+          scheduleId: command.scheduleId,
+          pausedAt: occurredAt,
+          updatedAt: occurredAt,
+        },
+      };
+    }
+
+    case "project.schedule.resume": {
+      const schedule = yield* requireActiveSchedule({
+        readModel,
+        command,
+        scheduleId: command.scheduleId,
+      });
+      if (schedule.pausedAt === null) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: `Schedule '${command.scheduleId}' is not paused and cannot be resumed.`,
+        });
+      }
+      const occurredAt = yield* nowIso;
+      return {
+        ...(yield* withEventBase({
+          aggregateKind: "schedule",
+          aggregateId: command.scheduleId,
+          occurredAt,
+          commandId: command.commandId,
+        })),
+        type: "project.schedule.resumed",
+        payload: {
+          scheduleId: command.scheduleId,
+          updatedAt: occurredAt,
+        },
+      };
+    }
+
+    case "project.schedule.delete": {
+      // Delete soft-deletes only the schedule row; its threads live on as
+      // ordinary threads.
+      yield* requireActiveSchedule({
+        readModel,
+        command,
+        scheduleId: command.scheduleId,
+      });
+      const occurredAt = yield* nowIso;
+      return {
+        ...(yield* withEventBase({
+          aggregateKind: "schedule",
+          aggregateId: command.scheduleId,
+          occurredAt,
+          commandId: command.commandId,
+        })),
+        type: "project.schedule.deleted",
+        payload: {
+          scheduleId: command.scheduleId,
+          deletedAt: occurredAt,
+        },
+      };
+    }
+
+    case "schedule.occurrence.start": {
+      const schedule = yield* requireActiveSchedule({
+        readModel,
+        command,
+        scheduleId: command.scheduleId,
+      });
+      if (schedule.pausedAt !== null) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: `Schedule '${command.scheduleId}' is paused and cannot start an occurrence.`,
+        });
+      }
+      if (!scheduleTargetsProject(schedule, command.projectId)) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: `Schedule '${command.scheduleId}' does not target project '${command.projectId}'.`,
+        });
+      }
+      // Exactly-once per project per day: restarts, double ticks, and
+      // catch-up sweeps all rebuild the same deterministic key, and a key
+      // that matches the recorded last one already fired.
+      const projectState = schedule.projectStates.find(
+        (state) => state.projectId === command.projectId,
+      );
+      if (projectState?.lastOccurrenceKey === command.occurrenceKey) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: `Occurrence '${command.occurrenceKey}' already started for schedule '${command.scheduleId}'.`,
+        });
+      }
+      return {
+        ...(yield* withEventBase({
+          aggregateKind: "schedule",
+          aggregateId: command.scheduleId,
+          occurredAt: command.startedAt,
+          commandId: command.commandId,
+        })),
+        type: "schedule.occurrence.started",
+        payload: {
+          scheduleId: command.scheduleId,
+          occurrenceKey: command.occurrenceKey,
+          projectId: command.projectId,
+          threadId: command.threadId,
+          startedAt: command.startedAt,
+        },
+      };
+    }
+
+    case "schedule.occurrence.complete":
+    case "schedule.occurrence.fail": {
+      const schedule = yield* requireActiveSchedule({
+        readModel,
+        command,
+        scheduleId: command.scheduleId,
+      });
+      // Only the in-flight occurrence may transition: the key must match the
+      // recorded start and still be running, so stale watchdogs and double
+      // completions are rejected.
+      const projectState = schedule.projectStates.find(
+        (state) => state.projectId === command.projectId,
+      );
+      if (
+        projectState?.lastOccurrenceKey !== command.occurrenceKey ||
+        projectState.lastOccurrenceStatus !== "running"
+      ) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: `Occurrence '${command.occurrenceKey}' is not running for schedule '${command.scheduleId}'.`,
+        });
+      }
+      if (command.type === "schedule.occurrence.complete") {
+        return {
+          ...(yield* withEventBase({
+            aggregateKind: "schedule",
+            aggregateId: command.scheduleId,
+            occurredAt: command.completedAt,
+            commandId: command.commandId,
+          })),
+          type: "schedule.occurrence.completed",
+          payload: {
+            scheduleId: command.scheduleId,
+            occurrenceKey: command.occurrenceKey,
+            projectId: command.projectId,
+            completedAt: command.completedAt,
+          },
+        };
+      }
+      const failedEvent: PlannedOrchestrationEvent = {
+        ...(yield* withEventBase({
+          aggregateKind: "schedule",
+          aggregateId: command.scheduleId,
+          occurredAt: command.failedAt,
+          commandId: command.commandId,
+        })),
+        type: "schedule.occurrence.failed",
+        payload: {
+          scheduleId: command.scheduleId,
+          occurrenceKey: command.occurrenceKey,
+          projectId: command.projectId,
+          reason: command.reason,
+          ...(command.message !== undefined ? { message: command.message } : {}),
+          failedAt: command.failedAt,
+        },
+      };
+      // Auto-pause after a failure streak: a schedule failing every morning
+      // burns a subscription window forever with nobody watching. "dirty"
+      // skips never count — a busy tree is not a broken schedule. The pause
+      // is the same persisted paused event the pause command emits, so
+      // resume and the read model need no new machinery.
+      const nextStreak =
+        command.reason === "dirty"
+          ? projectState.consecutiveFailures
+          : projectState.consecutiveFailures + 1;
+      if (nextStreak >= SCHEDULE_AUTO_PAUSE_FAILURE_STREAK && schedule.pausedAt === null) {
+        const pausedEvent: PlannedOrchestrationEvent = {
+          ...(yield* withEventBase({
+            aggregateKind: "schedule",
+            aggregateId: command.scheduleId,
+            occurredAt: command.failedAt,
+            commandId: command.commandId,
+          })),
+          type: "project.schedule.paused",
+          payload: {
+            scheduleId: command.scheduleId,
+            pausedAt: command.failedAt,
+            updatedAt: command.failedAt,
+            autoPausedReason: `paused after ${SCHEDULE_AUTO_PAUSE_FAILURE_STREAK} failures: ${command.reason}`,
+          },
+        };
+        return [failedEvent, pausedEvent];
+      }
+      return failedEvent;
     }
 
     default: {

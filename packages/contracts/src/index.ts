@@ -22,6 +22,7 @@ export * from "./pullRequest.ts";
 export * from "./issues.ts";
 export * from "./integrations.ts";
 export * from "./integrationContext.ts";
+export * from "./schedule.ts";
 export * from "./orchestration.ts";
 export * from "./t3ProjectFile.ts";
 export * from "./editor.ts";

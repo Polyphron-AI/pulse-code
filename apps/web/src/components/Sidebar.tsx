@@ -37,6 +37,8 @@ import {
   AlarmClockOffIcon,
   CheckIcon,
   ChevronDownIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
   CircleAlertIcon,
   CircleCheckIcon,
   CircleDashedIcon,
@@ -571,6 +573,10 @@ interface SidebarDraftRowData {
 // interrupted "new thread" stays one click away. Self-contained (own store
 // subscription + closing divider) so per-keystroke composer updates
 // re-render only this block, never the whole sidebar. Vanishes at count 0.
+// Under an agent scope drafts are hidden: a draft has no agent thread yet, so
+// an empty key set filters them all out.
+const NO_PROJECT_KEYS: ReadonlySet<string> = new Set();
+
 const SidebarDraftBlock = memo(function SidebarDraftBlock(props: {
   projectDisplayNameByKey: ReadonlyMap<string, string>;
   projectCwdByKey: ReadonlyMap<string, string>;
@@ -1909,9 +1915,14 @@ export default function Sidebar() {
 
   const changeRequestSnapshotByKey = useAtomValue(threadChangeRequestSnapshotsAtom);
 
-  // Project scope: one menu above the list. Scoping filters the list without
-  // making the header width depend on the number or length of project names.
+  // The list has two scopes, picked by the segmented control above it.
+  // "projects" is the classic view: project groups, narrowed by the project
+  // menu. "agents" swaps the list for one row per agent instance, and picking
+  // one drills into just that agent's threads. The tab only exists while at
+  // least one agent instance is configured.
+  const [scopeTab, setScopeTab] = useState<"projects" | "agents">("projects");
   const [projectScopeKey, setProjectScopeKey] = useState<string | null>(null);
+  const [selectedAgentInstanceId, setSelectedAgentInstanceId] = useState<string | null>(null);
   const scopedProjectGroup = useMemo(
     () =>
       projectScopeKey === null
@@ -1919,6 +1930,34 @@ export default function Sidebar() {
         : (projectGroups.find((project) => project.projectKey === projectScopeKey) ?? null),
     [projectGroups, projectScopeKey],
   );
+  const agentScopeEntries = useMemo(
+    () =>
+      [...providerEntryByInstanceId.values()].filter(
+        (entry) => entry.enabled && entry.driverKind === "hermes",
+      ),
+    [providerEntryByInstanceId],
+  );
+  const scopedAgentEntry = useMemo(
+    () =>
+      selectedAgentInstanceId === null
+        ? null
+        : (agentScopeEntries.find((entry) => entry.instanceId === selectedAgentInstanceId) ?? null),
+    [agentScopeEntries, selectedAgentInstanceId],
+  );
+  // Row counts for the agent index. Resolves the same way the thread filter
+  // does: the live session's instance wins, the draft selection is the
+  // fallback.
+  const threadCountByAgentInstanceId = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const thread of threads) {
+      if (thread.archivedAt !== null) {
+        continue;
+      }
+      const instanceId = thread.session?.providerInstanceId ?? thread.modelSelection.instanceId;
+      counts.set(instanceId, (counts.get(instanceId) ?? 0) + 1);
+    }
+    return counts;
+  }, [threads]);
   const scopedProjectKeys = useMemo(
     () =>
       scopedProjectGroup === null
@@ -1935,6 +1974,18 @@ export default function Sidebar() {
       setProjectScopeKey(null);
     }
   }, [projectScopeKey, scopedProjectGroup]);
+  // An instance that is removed or disabled must not strand the list on a
+  // scope the user can no longer see or leave.
+  useEffect(() => {
+    if (selectedAgentInstanceId !== null && scopedAgentEntry === null) {
+      setSelectedAgentInstanceId(null);
+    }
+  }, [scopedAgentEntry, selectedAgentInstanceId]);
+  useEffect(() => {
+    if (agentScopeEntries.length === 0) {
+      setScopeTab("projects");
+    }
+  }, [agentScopeEntries.length]);
   // Count-only subscription: the parent needs "are there draft rows" for the
   // empty state, while SidebarDraftBlock owns the per-keystroke content
   // subscription. Selecting a number keeps typing in a draft composer from
@@ -1942,6 +1993,7 @@ export default function Sidebar() {
   // (every non-promoted session with content); it can overcount by one for
   // an open never-left draft, which only softens the empty state.
   const routeDraftIdForRows = routeTarget?.kind === "draft" ? routeTarget.draftId : null;
+  const draftScopedProjectKeys = scopedAgentEntry !== null ? NO_PROJECT_KEYS : scopedProjectKeys;
   const visibleDraftSessionCount = useComposerDraftStore((store) => {
     let count = 0;
     for (const [draftKey, session] of Object.entries(store.draftThreadsByThreadKey)) {
@@ -1952,8 +2004,8 @@ export default function Sidebar() {
         continue;
       }
       if (
-        scopedProjectKeys !== null &&
-        !scopedProjectKeys.has(`${session.environmentId}:${session.projectId}`)
+        draftScopedProjectKeys !== null &&
+        !draftScopedProjectKeys.has(`${session.environmentId}:${session.projectId}`)
       ) {
         continue;
       }
@@ -1965,7 +2017,7 @@ export default function Sidebar() {
   // hidden now, and bulk actions must never count or touch invisible rows.
   useEffect(() => {
     clearSelection();
-  }, [clearSelection, projectScopeKey]);
+  }, [clearSelection, projectScopeKey, scopeTab, selectedAgentInstanceId]);
 
   const handleProjectSettings = useCallback(
     (event: ReactMouseEvent<HTMLButtonElement>, projectGroup: SidebarProjectSnapshot) => {
@@ -2003,12 +2055,21 @@ export default function Sidebar() {
     // memo exactly at the next wake boundary.
     void snoozeWakeTick;
     const preciseNow = new Date().toISOString();
-    const visible = threads.filter(
-      (thread) =>
-        thread.archivedAt === null &&
-        (scopedProjectKeys === null ||
-          scopedProjectKeys.has(`${thread.environmentId}:${thread.projectId}`)),
-    );
+    const visible = threads.filter((thread) => {
+      if (thread.archivedAt !== null) {
+        return false;
+      }
+      if (scopedAgentEntry !== null) {
+        return (
+          (thread.session?.providerInstanceId ?? thread.modelSelection.instanceId) ===
+          scopedAgentEntry.instanceId
+        );
+      }
+      return (
+        scopedProjectKeys === null ||
+        scopedProjectKeys.has(`${thread.environmentId}:${thread.projectId}`)
+      );
+    });
     const pinned: EnvironmentThreadShell[] = [];
     const active: EnvironmentThreadShell[] = [];
     const snoozed: EnvironmentThreadShell[] = [];
@@ -2087,6 +2148,7 @@ export default function Sidebar() {
     autoSettleOnMerge,
     changeRequestSnapshotByKey,
     nowMinute,
+    scopedAgentEntry,
     scopedProjectKeys,
     serverConfigs,
     snoozeWakeTick,
@@ -3456,7 +3518,32 @@ export default function Sidebar() {
                 </Tooltip>
               </div>
             </div>
-            {projectGroups.length > 0 ? (
+            {agentScopeEntries.length > 0 ? (
+              <div
+                role="tablist"
+                aria-label="Thread list scope"
+                className="flex items-center gap-0.5 rounded-lg border border-sidebar-border bg-sidebar-row-hover/40 p-0.5"
+              >
+                {(["projects", "agents"] as const).map((tab) => (
+                  <button
+                    key={tab}
+                    type="button"
+                    role="tab"
+                    aria-selected={scopeTab === tab}
+                    onClick={() => setScopeTab(tab)}
+                    className={cn(
+                      "h-6 flex-1 rounded-md text-xs font-medium capitalize transition-colors",
+                      scopeTab === tab
+                        ? "bg-sidebar-row-hover text-sidebar-foreground"
+                        : "text-sidebar-muted-foreground hover:text-sidebar-foreground",
+                    )}
+                  >
+                    {tab}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            {scopeTab === "projects" && projectGroups.length > 0 ? (
               <div className="flex items-center gap-1">
                 <Menu open={projectScopeMenuOpen} onOpenChange={setProjectScopeMenuOpen}>
                   <MenuTrigger
@@ -3614,7 +3701,57 @@ export default function Sidebar() {
               </p>
             )
           ) : null}
-          {!isSearchingThreads ? (
+          {/* Agents tab, top level: one row per instance instead of threads.
+              Picking a row drills in and the list below becomes that agent's
+              threads, with the back row as the way out. */}
+          {!isSearchingThreads && scopeTab === "agents" && scopedAgentEntry === null ? (
+            <ul className="flex flex-col gap-px" aria-label="Agents">
+              {agentScopeEntries.map((entry) => (
+                <li key={entry.instanceId}>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedAgentInstanceId(entry.instanceId)}
+                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-start transition-colors hover:bg-sidebar-row-hover"
+                  >
+                    <ProviderInstanceIcon
+                      driverKind={entry.driverKind}
+                      displayName={entry.displayName}
+                      accentColor={entry.accentColor}
+                      className="size-5 shrink-0"
+                      iconClassName="size-5"
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium text-sidebar-foreground">
+                        {entry.displayName}
+                      </span>
+                      <span className="block truncate text-[11px] text-sidebar-muted-foreground">
+                        {threadCountByAgentInstanceId.get(entry.instanceId) ?? 0} threads
+                      </span>
+                    </span>
+                    <ChevronRightIcon className="size-4 shrink-0 text-icon-muted" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {!isSearchingThreads && scopedAgentEntry !== null ? (
+            <button
+              type="button"
+              onClick={() => setSelectedAgentInstanceId(null)}
+              className="mb-1 flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-start text-xs font-medium text-sidebar-muted-foreground transition-colors hover:bg-sidebar-row-hover hover:text-sidebar-foreground"
+            >
+              <ChevronLeftIcon className="size-3.5 shrink-0" />
+              <ProviderInstanceIcon
+                driverKind={scopedAgentEntry.driverKind}
+                displayName={scopedAgentEntry.displayName}
+                accentColor={scopedAgentEntry.accentColor}
+                className="size-4 shrink-0"
+                iconClassName="size-4"
+              />
+              <span className="min-w-0 truncate">{scopedAgentEntry.displayName}</span>
+            </button>
+          ) : null}
+          {!isSearchingThreads && !(scopeTab === "agents" && scopedAgentEntry === null) ? (
             <TooltipProvider
               key="sidebar-thread-tooltips-150"
               delay={150}
@@ -3738,7 +3875,7 @@ export default function Sidebar() {
                       projectDisplayNameByKey={projectDisplayNameByKey}
                       projectCwdByKey={projectCwdByKey}
                       projectFaviconPathByKey={projectFaviconPathByKey}
-                      scopedProjectKeys={scopedProjectKeys}
+                      scopedProjectKeys={draftScopedProjectKeys}
                       routeDraftId={routeDraftIdForRows}
                       onNavigateToDraft={navigateToDraft}
                     />,
@@ -3877,6 +4014,7 @@ export default function Sidebar() {
             </TooltipProvider>
           ) : null}
           {!isSearchingThreads &&
+          !(scopeTab === "agents" && scopedAgentEntry === null) &&
           visibleDraftSessionCount === 0 &&
           pinnedThreads.length +
             activeThreads.length +
@@ -3898,6 +4036,8 @@ export default function Sidebar() {
                 </>
               ) : scopedProjectGroup ? (
                 `No threads in ${scopedProjectGroup.displayName} yet`
+              ) : scopedAgentEntry ? (
+                `No ${scopedAgentEntry.displayName} threads yet`
               ) : (
                 "No threads yet"
               )}

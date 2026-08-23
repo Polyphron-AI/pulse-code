@@ -40,6 +40,7 @@ export interface ProjectThreadAwarenessInput {
     | "updatedAt"
     | "hasPendingApprovals"
     | "hasPendingUserInput"
+    | "backgroundLiveness"
   >;
 }
 
@@ -90,6 +91,15 @@ function resolveThreadAwarenessPhase(
     return "starting";
   }
   if (thread.session?.status === "running" || thread.latestTurn?.state === "running") {
+    return "running";
+  }
+  // Subagents and workflows outlive the turn that spawned them, so a settled
+  // turn is not a finished thread. Reading "completed" here is the lock-screen
+  // version of the bug the Agents surface fixes: the fleet is still working and
+  // the phone says it is done. Watch loops ("monitoring") are deliberately not
+  // covered — they never end on their own, and an immortal Live Activity is
+  // worse than no signal.
+  if (thread.backgroundLiveness === "working") {
     return "running";
   }
   if (thread.latestTurn?.state === "completed") {
@@ -144,6 +154,9 @@ function detailForPhase(
   }
   if (phase === "completed") {
     return "Review the completed task.";
+  }
+  if (phase === "running" && thread.backgroundLiveness === "working") {
+    return "Subagents are still working.";
   }
   if (phase === "running" && thread.session?.providerName) {
     return `${thread.session.providerName} is active.`;

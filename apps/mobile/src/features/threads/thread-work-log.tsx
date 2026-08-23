@@ -2,13 +2,29 @@ import * as Haptics from "expo-haptics";
 import { type AppSymbolName, SymbolView } from "../../components/AppSymbol";
 import { LayoutAnimation, Pressable, ScrollView, View } from "react-native";
 
+import {
+  deriveAgentSpawnRowModel,
+  type RuntimeSubagent,
+} from "@t3tools/client-runtime/state/subagentRuntime";
+
 import { AppText as Text } from "../../components/AppText";
-import { scaledTypographyLineHeight } from "../../lib/appearancePreferences";
+import { useAgentFleetContext } from "../agents/AgentFleetContext";
 import { cn } from "../../lib/cn";
 import type { ThreadFeedActivity } from "../../lib/threadActivity";
-import { MOBILE_TYPOGRAPHY } from "../../lib/typography";
 import { useThemeColor } from "../../lib/useThemeColor";
+import {
+  fleetCardMemberCount,
+  fleetCardSlotCount,
+  MAX_FLEET_CARD_CHIPS,
+  visibleWorkLogActivities,
+} from "./thread-work-log-metrics";
 import Animated, { FadeIn } from "react-native-reanimated";
+
+export {
+  collapsedWorkLogHeight,
+  visibleWorkLogActivities,
+  WORK_GROUP_TOGGLE_HEIGHT,
+} from "./thread-work-log-metrics";
 
 const WORK_LOG_LAYOUT_ANIMATION = {
   duration: 180,
@@ -80,43 +96,250 @@ function isFreshRow(createdAt: string): boolean {
   return Number.isFinite(timestamp) && Date.now() - timestamp < FRESH_ROW_WINDOW_MS;
 }
 
-// Tool-like activities with a neutral status carry no signal worth a row.
-export function visibleWorkLogActivities(
-  activities: ReadonlyArray<ThreadFeedActivity>,
-): ReadonlyArray<ThreadFeedActivity> {
-  return activities.filter((activity) => !(activity.toolLike && activity.status === "neutral"));
+const AGENT_STATUS_LABELS: Record<RuntimeSubagent["status"], string> = {
+  pending: "starting",
+  running: "working",
+  waiting: "needs input",
+  idle: "idle",
+  completed: "done",
+  failed: "failed",
+  cancelled: "cancelled",
+  interrupted: "interrupted",
+};
+
+function agentDotClass(status: RuntimeSubagent["status"]): string {
+  switch (status) {
+    case "waiting":
+      return "bg-amber-500";
+    case "pending":
+    case "running":
+      return "bg-sky-500";
+    case "failed":
+      return "bg-rose-500";
+    case "completed":
+      return "bg-emerald-500";
+    default:
+      return "bg-neutral-400";
+  }
 }
 
-// Pre-measurement heights for the feed's getFixedItemSize. Collapsed work-log
-// rows are single-line (numberOfLines={1}) inside a min-height that stays
-// taller than the text at every supported base font size (text-xs reaches
-// 23px at the 22pt maximum, under the 32px min-h-8), so row height is
-// deterministic. The "work log" label has no such clamp — its height follows
-// the scaled text-2xs line height. Values mirror the classNames below — keep
-// them in sync; a mismatch only costs a one-time correction on measure.
-const WORK_ROW_HEIGHT = 32; // min-h-8
-const WORK_ROW_GAP = 1; // gap-px
-const WORK_LOG_HEADER_PADDING = 2; // pb-0.5 under the "work log" label
-const WORK_LOG_BOTTOM_MARGIN = 4; // mb-1
+// State first, spawn order second — the same rule the Agents screen sorts by.
+// With room for two or three chips, the agent that needs you must be one of
+// them, not the one that happened to spawn first.
+const AGENT_SLOT_RANK: Record<RuntimeSubagent["status"], number> = {
+  waiting: 0,
+  running: 1,
+  pending: 1,
+  idle: 2,
+  failed: 3,
+  interrupted: 4,
+  cancelled: 4,
+  completed: 5,
+};
 
-export const WORK_GROUP_TOGGLE_HEIGHT = 36; // min-h-8 (32) + mb-1 (4)
+function orderFleetSlots(agents: ReadonlyArray<RuntimeSubagent>): ReadonlyArray<RuntimeSubagent> {
+  return agents
+    .map((agent, index) => ({ agent, index }))
+    .sort(
+      (left, right) =>
+        AGENT_SLOT_RANK[left.agent.status] - AGENT_SLOT_RANK[right.agent.status] ||
+        left.index - right.index,
+    )
+    .map((entry) => entry.agent);
+}
 
-export function collapsedWorkLogHeight(
-  activities: ReadonlyArray<ThreadFeedActivity>,
-  baseFontSize: number,
-): number {
-  const rows = visibleWorkLogActivities(activities);
-  if (rows.length === 0) {
-    return 0;
-  }
-  const onlyToolRows = rows.every((row) => row.toolLike);
-  const headerHeight =
-    scaledTypographyLineHeight(MOBILE_TYPOGRAPHY.caption, baseFontSize) + WORK_LOG_HEADER_PADDING;
+/** One agent inside the card. Single line, same min-h-8 as every work row. */
+function AgentFleetChip(props: {
+  readonly agent: RuntimeSubagent;
+  readonly iconSubtleColor: import("react-native").ColorValue;
+  readonly onPress: () => void;
+}) {
+  const pressedBackground = useThemeColor("--color-subtle");
+  const { agent } = props;
+  const statusLabel = AGENT_STATUS_LABELS[agent.status];
+  const detail = compactActivityDetail(agent.progress ?? agent.lastToolName);
+
   return (
-    WORK_LOG_BOTTOM_MARGIN +
-    (onlyToolRows ? 0 : headerHeight) +
-    rows.length * WORK_ROW_HEIGHT +
-    (rows.length - 1) * WORK_ROW_GAP
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${agent.title}, ${statusLabel}`}
+      accessibilityHint="Double tap to see what this agent has done."
+      hitSlop={2}
+      onPress={() => {
+        void Haptics.selectionAsync();
+        props.onPress();
+      }}
+      style={({ pressed }) => ({
+        backgroundColor: pressed ? pressedBackground : "transparent",
+      })}
+      className="rounded-md px-0.5"
+    >
+      <View className="min-h-8 flex-row items-center gap-1.5">
+        <View className="h-[18px] w-3 shrink-0 items-center justify-center">
+          <View className={cn("h-1.5 w-1.5 rounded-full", agentDotClass(agent.status))} />
+        </View>
+
+        <Text className="min-w-0 flex-1 text-xs text-foreground" numberOfLines={1}>
+          <Text className="text-foreground">{agent.title}</Text>
+          {detail ? <Text className="text-foreground-muted opacity-60"> · {detail}</Text> : null}
+        </Text>
+
+        <View className="shrink-0 flex-row items-center gap-1">
+          <Text className="font-t3-medium text-3xs tabular-nums text-foreground-muted opacity-70">
+            {statusLabel}
+          </Text>
+          <View className="h-4 w-4 items-center justify-center">
+            <SymbolView
+              name={{ ios: "chevron.right", android: "chevron_right" }}
+              size={11}
+              tintColor={props.iconSubtleColor}
+              type="monochrome"
+            />
+          </View>
+        </View>
+      </View>
+    </Pressable>
+  );
+}
+
+/**
+ * Inline fleet card: the parent thread's window into a spawn batch, naming the
+ * agents instead of only counting them. Header text and tone come from the
+ * shared spawn-row model, so this card and the desktop CTA row can never
+ * disagree about whether the fleet is still live.
+ *
+ * Slot count comes from the spawn group, never from the live model, so the
+ * card's height always matches what the feed pre-measured; a slot the fold has
+ * not caught up to renders as "starting…" rather than collapsing the card.
+ * Every dot is static: a continuously repainting card pegs the GPU on
+ * high-refresh phones.
+ */
+function AgentFleetCard(props: {
+  readonly activity: ThreadFeedActivity;
+  readonly iconSubtleColor: import("react-native").ColorValue;
+}) {
+  const { agentPanelModel, onOpenAgent, onOpenAgents } = useAgentFleetContext();
+  const pressedBackground = useThemeColor("--color-subtle");
+  const spawn = props.activity.agentSpawn;
+  if (!spawn) {
+    return null;
+  }
+
+  const row = deriveAgentSpawnRowModel(agentPanelModel, spawn);
+  const label = row.workflowName ? `${row.lead} · ${row.workflowName}` : row.lead;
+  const slots = fleetCardSlotCount(spawn);
+  const truncated = fleetCardMemberCount(spawn) > MAX_FLEET_CARD_CHIPS;
+  const chipSlots = truncated ? slots - 1 : slots;
+  const chips = orderFleetSlots(row.agents).slice(0, chipSlots);
+  const hiddenCount = Math.max(row.agentCount - chips.length, 0);
+
+  return (
+    <View className="rounded-lg border border-border bg-card px-1 py-1">
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${label}, ${row.status}`}
+        accessibilityHint="Double tap to open the agents for this thread."
+        hitSlop={2}
+        onPress={() => {
+          void Haptics.selectionAsync();
+          onOpenAgents();
+        }}
+        style={({ pressed }) => ({
+          backgroundColor: pressed ? pressedBackground : "transparent",
+        })}
+        className="rounded-md px-0.5"
+      >
+        <View className="min-h-8 flex-row items-center gap-1.5">
+          <View className="h-[18px] w-3 shrink-0 items-center justify-center">
+            <View
+              className={cn(
+                "h-1.5 w-1.5 rounded-full",
+                row.tone === "live"
+                  ? "bg-sky-500"
+                  : row.tone === "failed"
+                    ? "bg-rose-500"
+                    : "bg-emerald-500",
+              )}
+            />
+          </View>
+
+          <Text className="min-w-0 flex-1 text-xs text-foreground" numberOfLines={1}>
+            <Text className="font-t3-medium text-foreground">{row.lead}</Text>
+            {row.workflowName ? (
+              <Text className="text-foreground-muted opacity-60"> · {row.workflowName}</Text>
+            ) : null}
+          </Text>
+
+          <View className="shrink-0 flex-row items-center gap-1">
+            <Text className="font-t3-medium text-3xs tabular-nums text-foreground-muted opacity-70">
+              {row.status}
+            </Text>
+            <View className="h-4 w-4 items-center justify-center">
+              <SymbolView
+                name={{ ios: "chevron.right", android: "chevron_right" }}
+                size={11}
+                tintColor={props.iconSubtleColor}
+                type="monochrome"
+              />
+            </View>
+          </View>
+        </View>
+      </Pressable>
+
+      <View className="gap-px">
+        {chips.map((agent) => (
+          <AgentFleetChip
+            key={agent.id}
+            agent={agent}
+            iconSubtleColor={props.iconSubtleColor}
+            onPress={() => onOpenAgent(agent.id)}
+          />
+        ))}
+
+        {Array.from({ length: Math.max(chipSlots - chips.length, 0) }, (_, index) => (
+          <View key={`pending-${index}`} className="min-h-8 flex-row items-center gap-1.5 px-0.5">
+            <View className="h-[18px] w-3 shrink-0 items-center justify-center">
+              <View className="h-1.5 w-1.5 rounded-full bg-neutral-400" />
+            </View>
+            <Text className="min-w-0 flex-1 text-xs text-foreground-muted opacity-50">
+              starting…
+            </Text>
+          </View>
+        ))}
+
+        {truncated ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`${hiddenCount} more agents`}
+            accessibilityHint="Double tap to open the agents for this thread."
+            hitSlop={2}
+            onPress={() => {
+              void Haptics.selectionAsync();
+              onOpenAgents();
+            }}
+            style={({ pressed }) => ({
+              backgroundColor: pressed ? pressedBackground : "transparent",
+            })}
+            className="rounded-md px-0.5"
+          >
+            <View className="min-h-8 flex-row items-center gap-1.5">
+              <View className="h-[18px] w-3 shrink-0" />
+              <Text className="min-w-0 flex-1 font-t3-medium text-2xs text-foreground-muted opacity-70">
+                +{hiddenCount} more
+              </Text>
+              <View className="h-4 w-4 items-center justify-center">
+                <SymbolView
+                  name={{ ios: "chevron.right", android: "chevron_right" }}
+                  size={11}
+                  tintColor={props.iconSubtleColor}
+                  type="monochrome"
+                />
+              </View>
+            </View>
+          </Pressable>
+        ) : null}
+      </View>
+    </View>
   );
 }
 
@@ -155,6 +378,17 @@ export function ThreadWorkLog(props: {
           const fullDetail = expanded ? row.getFullDetail() : null;
           const displayText = row.detail ? `${row.summary} ${row.detail}` : row.summary;
           const iconIsDestructive = row.icon === "alert" || row.icon === "warning";
+
+          if (row.agentSpawn) {
+            return (
+              <Animated.View
+                key={row.id}
+                {...(isFreshRow(row.createdAt) ? { entering: FadeIn.duration(200) } : {})}
+              >
+                <AgentFleetCard activity={row} iconSubtleColor={props.iconSubtleColor} />
+              </Animated.View>
+            );
+          }
 
           return (
             <Animated.View

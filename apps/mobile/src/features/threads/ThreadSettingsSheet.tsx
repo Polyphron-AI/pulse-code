@@ -189,7 +189,7 @@ function ProviderHeader(props: {
 function DisclosureRow(props: {
   readonly label: string;
   readonly value: string | undefined;
-  readonly onPress: () => void;
+  readonly onPress: (() => void) | undefined;
   readonly isLast?: boolean;
 }) {
   const iconSubtle = useThemeColor("--color-icon-subtle");
@@ -256,7 +256,7 @@ function ChoiceRow(props: {
 function SwitchRow(props: {
   readonly label: string;
   readonly value: boolean;
-  readonly onValueChange: (value: boolean) => void;
+  readonly onValueChange: ((value: boolean) => void) | undefined;
   readonly isLast?: boolean;
 }) {
   return (
@@ -269,6 +269,7 @@ function SwitchRow(props: {
       <Text className="text-sm font-t3-medium text-foreground">{props.label}</Text>
       <ThemedSwitch
         accessibilityLabel={props.label}
+        disabled={props.onValueChange === undefined}
         onValueChange={props.onValueChange}
         value={props.value}
       />
@@ -670,10 +671,12 @@ function ThreadSettingsOptionsItem(props: {
         layout={THREAD_SETTINGS_OPTIONS_LAYOUT_TRANSITION}
       >
         {session.displayedDescriptors.map((descriptor) => {
+          const readOnly = descriptor.readOnly === true;
           if (descriptor.type === "select") {
             return (
               <Animated.View
                 key={descriptor.id}
+                className={readOnly ? "opacity-[0.45]" : undefined}
                 entering={
                   props.animationsReady ? THREAD_SETTINGS_OPTION_ENTER_TRANSITION : undefined
                 }
@@ -683,7 +686,11 @@ function ThreadSettingsOptionsItem(props: {
                 <DisclosureRow
                   label={descriptor.label}
                   value={getProviderOptionCurrentLabel(descriptor)}
-                  onPress={() => props.onOpenSubmenu({ kind: "descriptor", id: descriptor.id })}
+                  onPress={
+                    readOnly
+                      ? undefined
+                      : () => props.onOpenSubmenu({ kind: "descriptor", id: descriptor.id })
+                  }
                 />
               </Animated.View>
             );
@@ -691,6 +698,7 @@ function ThreadSettingsOptionsItem(props: {
           return (
             <Animated.View
               key={descriptor.id}
+              className={readOnly ? "opacity-[0.45]" : undefined}
               entering={props.animationsReady ? THREAD_SETTINGS_OPTION_ENTER_TRANSITION : undefined}
               exiting={props.animationsReady ? THREAD_SETTINGS_OPTION_EXIT_TRANSITION : undefined}
               layout={THREAD_SETTINGS_OPTIONS_LAYOUT_TRANSITION}
@@ -698,7 +706,9 @@ function ThreadSettingsOptionsItem(props: {
               <SwitchRow
                 label={descriptor.label}
                 value={descriptor.currentValue ?? false}
-                onValueChange={(value) => session.applyOptionChange(descriptor.id, value)}
+                onValueChange={
+                  readOnly ? undefined : (value) => session.applyOptionChange(descriptor.id, value)
+                }
               />
             </Animated.View>
           );

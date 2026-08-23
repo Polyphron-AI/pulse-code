@@ -69,6 +69,9 @@ import {
   useAdaptiveWorkspacePaneRole,
   useRegisterWorkspaceInspector,
 } from "../layout/AdaptiveWorkspaceLayout";
+import { AgentFleetProvider } from "../agents/AgentFleetContext";
+import { agentRosterSummaryLabel, deriveAgentRoster } from "../agents/agentRoster";
+import { isAgentSessionLive, useThreadAgentPanelModel } from "../agents/threadAgentModel";
 import { withNativeGlassHeaderItem } from "../layout/native-glass-header-items";
 import { ThreadFileNavigatorPane } from "../files/thread-file-navigator-pane";
 import {
@@ -608,6 +611,53 @@ function ThreadRouteContent(
       terminalMenuSessions,
     ],
   );
+  // Live subagent state for this thread: the SAME fold desktop uses, over
+  // activities already on the device. Powers the inline fleet row, the header
+  // entry, and the Agents screen without new wire traffic.
+  const agentPanelModel = useThreadAgentPanelModel(
+    selectedThreadDetail?.activities,
+    isAgentSessionLive(selectedThreadDetail?.session ?? null),
+  );
+  const agentRosterSummary = useMemo(
+    () => agentRosterSummaryLabel(deriveAgentRoster(agentPanelModel)),
+    [agentPanelModel],
+  );
+  const handleOpenAgents = useCallback(() => {
+    if (environmentIdRaw === null || threadId === null) {
+      return;
+    }
+    navigation.navigate("ThreadAgents", { environmentId: environmentIdRaw, threadId });
+  }, [environmentIdRaw, navigation, threadId]);
+  const handleOpenAgent = useCallback(
+    (agentId: string) => {
+      if (environmentIdRaw === null || threadId === null) {
+        return;
+      }
+      navigation.navigate("ThreadAgent", { environmentId: environmentIdRaw, threadId, agentId });
+    },
+    [environmentIdRaw, navigation, threadId],
+  );
+  const agentsHeaderItems = useMemo<NativeHeaderItems>(
+    () =>
+      agentPanelModel.hasAgents
+        ? [
+            withNativeGlassHeaderItem({
+              // Native header items carry no badge, so the count rides the
+              // label: "Agents · 2 working" is the whole status at a glance.
+              accessibilityLabel: agentRosterSummary ? `Agents, ${agentRosterSummary}` : "Agents",
+              icon: { name: "sparkles", type: "sfSymbol" as const },
+              identifier: "thread-right-agents",
+              label: agentRosterSummary ? `Agents · ${agentRosterSummary}` : "Agents",
+              onPress: handleOpenAgents,
+              sharesBackground: true,
+              type: "button" as const,
+              variant: "plain" as const,
+            }),
+          ]
+        : [],
+    [agentPanelModel.hasAgents, agentRosterSummary, handleOpenAgents],
+  );
+
   const threadGitControlProps = {
     environmentId: environmentIdRaw ?? "",
     threadId: threadId ?? "",
@@ -703,6 +753,13 @@ function ThreadRouteContent(
         onPress: () => handleOpenTerminal(null),
       });
     }
+    if (agentPanelModel.hasAgents) {
+      actions.push({
+        accessibilityLabel: agentRosterSummary ? `Agents, ${agentRosterSummary}` : "Agents",
+        icon: "sparkles",
+        onPress: handleOpenAgents,
+      });
+    }
     actions.push({
       accessibilityLabel: "Open git controls",
       icon: "point.topleft.down.curvedto.point.bottomright.up",
@@ -717,7 +774,10 @@ function ThreadRouteContent(
     }
     return actions;
   }, [
+    agentPanelModel.hasAgents,
+    agentRosterSummary,
     fileInspector.supported,
+    handleOpenAgents,
     handleOpenFilesInspector,
     handleOpenTerminal,
     handleOpenGitInspector,
@@ -766,48 +826,54 @@ function ThreadRouteContent(
       <GitActionProgressOverlay progress={gitActionProgress} onDismiss={dismissGitActionResult} />
 
       <View className="flex-1 bg-screen">
-        <ThreadDetailScreen
-          selectedThread={selectedThreadWithDraftSettings ?? selectedThread}
-          contentPresentation={contentPresentation}
-          screenTone={connectionTone(routeConnectionState)}
-          connectionError={routeConnectionError}
-          environmentLabel={selectedEnvironmentConnection?.environmentLabel ?? null}
-          selectedThreadFeed={composer.selectedThreadFeed}
-          activeWorkStartedAt={composer.activeWorkStartedAt}
-          activePendingApproval={requests.activePendingApproval}
-          respondingApprovalId={requests.respondingApprovalId}
-          activePendingUserInput={requests.activePendingUserInput}
-          activePendingUserInputDrafts={requests.activePendingUserInputDrafts}
-          activePendingUserInputAnswers={requests.activePendingUserInputAnswers}
-          respondingUserInputId={requests.respondingUserInputId}
-          draftMessage={composer.draftMessage}
-          draftAttachments={composer.draftAttachments}
-          connectionStateLabel={routeConnectionState}
-          threadSyncStatus={selectedThreadDetailState.status}
-          loadEarlier={loadEarlierTurns}
-          environmentId={selectedThread.environmentId}
-          projectWorkspaceRoot={selectedThreadProject?.workspaceRoot ?? null}
-          threadCwd={selectedThreadCwd}
-          selectedThreadQueueCount={composer.selectedThreadQueueCount}
-          layoutVariant={layout.variant}
-          usesAutomaticContentInsets={usesNativeHeaderGlass}
-          onOpenConnectionEditor={handleOpenConnectionEditor}
-          onChangeDraftMessage={composer.onChangeDraftMessage}
-          onPickDraftImages={composer.onPickDraftImages}
-          onNativePasteImages={composer.onNativePasteImages}
-          onRemoveDraftImage={composer.onRemoveDraftImage}
-          serverConfig={serverConfig}
-          onStopThread={handleStopThread}
-          onSendMessage={composer.onSendMessage}
-          onReconnectEnvironment={handleReconnectEnvironment}
-          onUpdateThreadModelSelection={composer.onUpdateModelSelection}
-          onUpdateThreadRuntimeMode={composer.onUpdateRuntimeMode}
-          onUpdateThreadInteractionMode={composer.onUpdateInteractionMode}
-          onRespondToApproval={requests.onRespondToApproval}
-          onSelectUserInputOption={requests.onSelectUserInputOption}
-          onChangeUserInputCustomAnswer={requests.onChangeUserInputCustomAnswer}
-          onSubmitUserInput={requests.onSubmitUserInput}
-        />
+        <AgentFleetProvider
+          agentPanelModel={agentPanelModel}
+          onOpenAgents={handleOpenAgents}
+          onOpenAgent={handleOpenAgent}
+        >
+          <ThreadDetailScreen
+            selectedThread={selectedThreadWithDraftSettings ?? selectedThread}
+            contentPresentation={contentPresentation}
+            screenTone={connectionTone(routeConnectionState)}
+            connectionError={routeConnectionError}
+            environmentLabel={selectedEnvironmentConnection?.environmentLabel ?? null}
+            selectedThreadFeed={composer.selectedThreadFeed}
+            activeWorkStartedAt={composer.activeWorkStartedAt}
+            activePendingApproval={requests.activePendingApproval}
+            respondingApprovalId={requests.respondingApprovalId}
+            activePendingUserInput={requests.activePendingUserInput}
+            activePendingUserInputDrafts={requests.activePendingUserInputDrafts}
+            activePendingUserInputAnswers={requests.activePendingUserInputAnswers}
+            respondingUserInputId={requests.respondingUserInputId}
+            draftMessage={composer.draftMessage}
+            draftAttachments={composer.draftAttachments}
+            connectionStateLabel={routeConnectionState}
+            threadSyncStatus={selectedThreadDetailState.status}
+            loadEarlier={loadEarlierTurns}
+            environmentId={selectedThread.environmentId}
+            projectWorkspaceRoot={selectedThreadProject?.workspaceRoot ?? null}
+            threadCwd={selectedThreadCwd}
+            selectedThreadQueueCount={composer.selectedThreadQueueCount}
+            layoutVariant={layout.variant}
+            usesAutomaticContentInsets={usesNativeHeaderGlass}
+            onOpenConnectionEditor={handleOpenConnectionEditor}
+            onChangeDraftMessage={composer.onChangeDraftMessage}
+            onPickDraftImages={composer.onPickDraftImages}
+            onNativePasteImages={composer.onNativePasteImages}
+            onRemoveDraftImage={composer.onRemoveDraftImage}
+            serverConfig={serverConfig}
+            onStopThread={handleStopThread}
+            onSendMessage={composer.onSendMessage}
+            onReconnectEnvironment={handleReconnectEnvironment}
+            onUpdateThreadModelSelection={composer.onUpdateModelSelection}
+            onUpdateThreadRuntimeMode={composer.onUpdateRuntimeMode}
+            onUpdateThreadInteractionMode={composer.onUpdateInteractionMode}
+            onRespondToApproval={requests.onRespondToApproval}
+            onSelectUserInputOption={requests.onSelectUserInputOption}
+            onChangeUserInputCustomAnswer={requests.onChangeUserInputCustomAnswer}
+            onSubmitUserInput={requests.onSubmitUserInput}
+          />
+        </AgentFleetProvider>
       </View>
     </>
   );
@@ -845,7 +911,10 @@ function ThreadRouteContent(
           // reserved for future breadcrumbs/status).
           unstable_headerRightItems:
             Platform.OS === "ios"
-              ? () => (layout.usesSplitView ? threadCenterHeaderItems : compactRightHeaderItems)
+              ? () => [
+                  ...agentsHeaderItems,
+                  ...(layout.usesSplitView ? threadCenterHeaderItems : compactRightHeaderItems),
+                ]
               : undefined,
           unstable_headerSubtitle: usesNativeHeaderGlass ? headerSubtitle : undefined,
         }}

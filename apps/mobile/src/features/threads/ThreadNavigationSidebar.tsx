@@ -45,6 +45,13 @@ import {
   THREAD_SORT_OPTIONS,
   useHomeListOptions,
 } from "../home/home-list-options";
+import {
+  AgentScopeBackRow,
+  AgentScopeList,
+  AgentScopeSegmented,
+  threadAgentInstanceId,
+  useAgentScope,
+} from "../home/agent-scope";
 import { buildHomeListFilterMenu } from "../home/home-list-filter-menu";
 import {
   buildHomeListLayout,
@@ -160,6 +167,9 @@ interface ThreadNavigationSidebarProps {
  * UISearchController search field — the same chrome a UISplitViewController
  * column gets. Other platforms keep the custom header chrome.
  */
+/** Stable empty list so the agent index does not rerender the list rows. */
+const EMPTY_SIDEBAR_ITEMS: never[] = [];
+
 export function ThreadNavigationSidebar(props: ThreadNavigationSidebarProps) {
   if (Platform.OS !== "ios") {
     return <ThreadNavigationSidebarPane {...props} nativeChrome={false} />;
@@ -268,6 +278,7 @@ function ThreadNavigationSidebarPane(
     () => new Set(threadSearch.matches.map(threadSearchMatchKey)),
     [threadSearch.matches],
   );
+  const serverConfigs = useAtomValue(environmentServerConfigsAtom);
   const [selectedProjectKey, setSelectedProjectKey] = useState<string | null>(null);
   const projectScopes = useMemo(
     () =>
@@ -316,6 +327,13 @@ function ThreadNavigationSidebarPane(
       setSelectedProjectKey(null);
     }
   }, [projectFilterOptions, selectedProjectKey]);
+  // Agent scope: the segmented control swaps the list between projects and
+  // Hermes-style agent instances.
+  const agentScope = useAgentScope({
+    serverConfigs,
+    selectedEnvironmentId: options.selectedEnvironmentId,
+  });
+  const selectedAgentInstanceId = agentScope.selectedAgentInstanceId;
   const selectedProjectRefs = useMemo(
     () =>
       selectedProjectScope === null
@@ -336,26 +354,33 @@ function ThreadNavigationSidebarPane(
           ),
     [projects, selectedProjectRefs],
   );
-  const scopedThreads = useMemo(
-    () =>
+  const scopedThreads = useMemo(() => {
+    const projectScoped =
       selectedProjectRefs === null
         ? threads
         : threads.filter((thread) =>
             selectedProjectRefs.has(scopedProjectKey(thread.environmentId, thread.projectId)),
+          );
+    if (selectedAgentInstanceId === null) {
+      return projectScoped;
+    }
+    return projectScoped.filter(
+      (thread) => threadAgentInstanceId(thread) === selectedAgentInstanceId,
+    );
+  }, [selectedAgentInstanceId, selectedProjectRefs, threads]);
+  const scopedPendingTasks = useMemo(() => {
+    // Pending tasks have no agent thread yet, so an agent scope hides them all.
+    if (selectedAgentInstanceId !== null) {
+      return [];
+    }
+    return selectedProjectRefs === null
+      ? pendingTasks
+      : pendingTasks.filter((pendingTask) =>
+          selectedProjectRefs.has(
+            scopedProjectKey(pendingTask.message.environmentId, pendingTask.creation.projectId),
           ),
-    [selectedProjectRefs, threads],
-  );
-  const scopedPendingTasks = useMemo(
-    () =>
-      selectedProjectRefs === null
-        ? pendingTasks
-        : pendingTasks.filter((pendingTask) =>
-            selectedProjectRefs.has(
-              scopedProjectKey(pendingTask.message.environmentId, pendingTask.creation.projectId),
-            ),
-          ),
-    [pendingTasks, selectedProjectRefs],
-  );
+        );
+  }, [pendingTasks, selectedAgentInstanceId, selectedProjectRefs]);
   const groups = useMemo(
     () =>
       buildHomeThreadGroups({
@@ -476,7 +501,6 @@ function ThreadNavigationSidebarPane(
   }, [threadListV2Enabled]);
   // Threads on servers without the settlement capability never classify as
   // settled (the user could neither un-settle nor pin them).
-  const serverConfigs = useAtomValue(environmentServerConfigsAtom);
   const settlementEnvironmentIds = useMemo(() => {
     const supported = new Set<EnvironmentId>();
     for (const [environmentId, config] of serverConfigs) {
@@ -1153,7 +1177,9 @@ function ThreadNavigationSidebarPane(
   // v2 ignores the sort/group options, so only the environment filter can
   // light the "customized" state while the beta is on.
   const filterCustomized = threadListV2Enabled
-    ? options.selectedEnvironmentId !== null || selectedProjectKey !== null
+    ? options.selectedEnvironmentId !== null ||
+      selectedProjectKey !== null ||
+      selectedAgentInstanceId !== null
     : hasCustomHomeListOptions({ ...options, selectedProjectKey });
   const filterIcon = filterCustomized
     ? "line.3.horizontal.decrease.circle.fill"
@@ -1193,6 +1219,38 @@ function ThreadNavigationSidebarPane(
       }),
     [filterIcon, filterMenu, props.onOpenSettings],
   );
+  const threadCountByAgentInstanceId = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const thread of threads) {
+      if (thread.archivedAt !== null) continue;
+      const instanceId = threadAgentInstanceId(thread);
+      counts.set(instanceId, (counts.get(instanceId) ?? 0) + 1);
+    }
+    return counts;
+  }, [threads]);
+  // Search wins over the agent index: a query should always show its matches.
+  const showsAgentIndex = agentScope.showsAgentIndex && props.searchQuery.trim().length === 0;
+  const agentScopeHeader =
+    agentScope.entries.length === 0 ? null : (
+      <View>
+        <AgentScopeSegmented tab={agentScope.tab} onTabChange={agentScope.setTab} />
+        {agentScope.selectedAgent !== null ? (
+          <AgentScopeBackRow
+            agent={agentScope.selectedAgent}
+            onBack={() => agentScope.selectAgent(null)}
+          />
+        ) : null}
+        {showsAgentIndex ? (
+          <AgentScopeList
+            entries={agentScope.entries}
+            threadCountByInstanceId={threadCountByAgentInstanceId}
+            onSelect={agentScope.selectAgent}
+          />
+        ) : null}
+      </View>
+    );
+  const sidebarListData = showsAgentIndex ? EMPTY_SIDEBAR_ITEMS : listItems;
+
   // Snoozed threads need no special case: the shelf header is a list row
   // even while collapsed.
   const listEmpty = (
@@ -1205,7 +1263,9 @@ function ThreadNavigationSidebarPane(
             : "No matching threads"
           : selectedProjectScope !== null
             ? `No threads in ${selectedProjectScope.title}`
-            : "No threads yet"}
+            : agentScope.selectedAgent !== null
+              ? `No ${agentScope.selectedAgent.label} threads yet`
+              : "No threads yet"}
     </Text>
   );
 
@@ -1246,7 +1306,7 @@ function ThreadNavigationSidebarPane(
           <SwipeableScrollGateProvider enabled={swipeEnabled}>
             <GestureDetector gesture={sidebarScrollGesture}>
               <LegendList
-                data={listItems}
+                data={sidebarListData}
                 drawDistance={500}
                 estimatedItemSize={64}
                 extraData={listExtraData}
@@ -1272,7 +1332,8 @@ function ThreadNavigationSidebarPane(
                 scrollEventThrottle={16}
                 showsVerticalScrollIndicator={false}
                 style={styles.threadList}
-                ListEmptyComponent={listEmpty}
+                ListHeaderComponent={agentScopeHeader}
+                ListEmptyComponent={showsAgentIndex ? null : listEmpty}
               />
             </GestureDetector>
           </SwipeableScrollGateProvider>
@@ -1296,7 +1357,7 @@ function ThreadNavigationSidebarPane(
         <SwipeableScrollGateProvider enabled={swipeEnabled}>
           <GestureDetector gesture={sidebarScrollGesture}>
             <LegendList
-              data={listItems}
+              data={sidebarListData}
               drawDistance={500}
               estimatedItemSize={64}
               extraData={listExtraData}
@@ -1318,7 +1379,8 @@ function ThreadNavigationSidebarPane(
               scrollEventThrottle={16}
               showsVerticalScrollIndicator={false}
               style={styles.threadList}
-              ListEmptyComponent={listEmpty}
+              ListHeaderComponent={agentScopeHeader}
+              ListEmptyComponent={showsAgentIndex ? null : listEmpty}
             />
           </GestureDetector>
         </SwipeableScrollGateProvider>

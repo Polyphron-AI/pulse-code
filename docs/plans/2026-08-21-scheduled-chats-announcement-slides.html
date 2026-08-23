@@ -1,0 +1,732 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Scheduled Chats — Pulse Code Feature Deck</title>
+    <style>
+      :root {
+        --bg: #0d0f12;
+        --panel: #14171c;
+        --panel-2: #1a1e25;
+        --text: #e8eaed;
+        --muted: #9aa3ad;
+        --accent: #5eead4;
+        --accent-dim: rgba(94, 234, 212, 0.12);
+        --warn: #fbbf24;
+        --warn-dim: rgba(251, 191, 36, 0.1);
+        --border: #262b33;
+        --mono: "SF Mono", "Cascadia Code", Consolas, monospace;
+      }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        height: 100%;
+        background: var(--bg);
+        color: var(--text);
+        font-family: -apple-system, "Segoe UI", Inter, Roboto, sans-serif;
+        overflow: hidden;
+      }
+      .slide {
+        position: absolute;
+        inset: 0;
+        display: none;
+        flex-direction: column;
+        justify-content: center;
+        padding: 6vh 9vw;
+        gap: 1.9rem;
+      }
+      .slide.active {
+        display: flex;
+      }
+      .kicker {
+        font-family: var(--mono);
+        font-size: 0.85rem;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--accent);
+      }
+      .kicker.internal {
+        color: var(--warn);
+      }
+      h1 {
+        font-size: clamp(2.4rem, 5.5vw, 4.2rem);
+        font-weight: 700;
+        line-height: 1.08;
+        letter-spacing: -0.02em;
+      }
+      h2 {
+        font-size: clamp(1.7rem, 3.6vw, 2.6rem);
+        font-weight: 700;
+        line-height: 1.15;
+        letter-spacing: -0.015em;
+      }
+      .lede {
+        font-size: clamp(1rem, 1.7vw, 1.28rem);
+        color: var(--muted);
+        line-height: 1.55;
+        max-width: 52ch;
+      }
+      .lede strong {
+        color: var(--text);
+        font-weight: 600;
+      }
+      code {
+        font-family: var(--mono);
+        font-size: 0.88em;
+        color: var(--accent);
+        background: var(--accent-dim);
+        padding: 0.08em 0.35em;
+        border-radius: 5px;
+      }
+      .cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 1rem;
+      }
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 1.3rem 1.4rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+      }
+      .card h3 {
+        font-size: 1.02rem;
+        font-weight: 650;
+      }
+      .card p {
+        font-size: 0.92rem;
+        color: var(--muted);
+        line-height: 1.5;
+      }
+      .card .icon {
+        font-size: 1.35rem;
+      }
+      .loop {
+        display: flex;
+        align-items: stretch;
+        gap: 0.9rem;
+        flex-wrap: wrap;
+      }
+      .loop .step {
+        flex: 1 1 170px;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 1.1rem 1.2rem;
+      }
+      .loop .step .n {
+        font-family: var(--mono);
+        color: var(--accent);
+        font-size: 0.8rem;
+        background: var(--accent-dim);
+        border-radius: 999px;
+        padding: 0.15rem 0.6rem;
+        display: inline-block;
+        margin-bottom: 0.55rem;
+      }
+      .loop .step h3 {
+        font-size: 0.98rem;
+        margin-bottom: 0.3rem;
+      }
+      .loop .step p {
+        font-size: 0.86rem;
+        color: var(--muted);
+        line-height: 1.45;
+      }
+      .file,
+      .flow {
+        background: var(--panel-2);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        font-family: var(--mono);
+        font-size: 0.86rem;
+        line-height: 1.7;
+        padding: 1.1rem 1.3rem;
+        color: var(--muted);
+        max-width: 640px;
+      }
+      .file .name {
+        color: var(--accent);
+        margin-bottom: 0.5rem;
+        display: block;
+      }
+      .file .h {
+        color: var(--text);
+      }
+      .flow .arrow {
+        color: var(--accent);
+      }
+      .badge {
+        display: inline-block;
+        font-family: var(--mono);
+        font-size: 0.72rem;
+        color: var(--accent);
+        background: var(--accent-dim);
+        border-radius: 6px;
+        padding: 0.12rem 0.5rem;
+        vertical-align: middle;
+      }
+      ul.plain {
+        list-style: none;
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        max-width: 70ch;
+      }
+      ul.plain li {
+        display: flex;
+        gap: 0.8rem;
+        font-size: 1rem;
+        line-height: 1.5;
+        color: var(--muted);
+      }
+      ul.plain li::before {
+        content: "—";
+        color: var(--accent);
+        flex-shrink: 0;
+      }
+      ul.plain li strong {
+        color: var(--text);
+      }
+      ol.build {
+        list-style: none;
+        counter-reset: b;
+        display: flex;
+        flex-direction: column;
+        gap: 0.7rem;
+        max-width: 68ch;
+      }
+      ol.build li {
+        counter-increment: b;
+        display: flex;
+        gap: 0.9rem;
+        font-size: 1rem;
+        line-height: 1.5;
+        color: var(--muted);
+      }
+      ol.build li::before {
+        content: counter(b);
+        font-family: var(--mono);
+        color: var(--accent);
+        background: var(--accent-dim);
+        border-radius: 999px;
+        min-width: 1.7rem;
+        height: 1.7rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.85rem;
+        flex-shrink: 0;
+      }
+      ol.build li strong {
+        color: var(--text);
+      }
+      .split {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1.2rem;
+      }
+      .split .col {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 1.3rem 1.4rem;
+      }
+      .split .col h3 {
+        font-size: 1rem;
+        margin-bottom: 0.7rem;
+      }
+      .split .col.no h3 {
+        color: var(--warn);
+      }
+      .split .col ul {
+        list-style: none;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+      }
+      .split .col li {
+        font-size: 0.92rem;
+        color: var(--muted);
+        line-height: 1.45;
+        padding-left: 1.1rem;
+        position: relative;
+      }
+      .split .col.yes li::before {
+        content: "✓";
+        color: var(--accent);
+        position: absolute;
+        left: 0;
+      }
+      .split .col.no li::before {
+        content: "✕";
+        color: var(--warn);
+        position: absolute;
+        left: 0;
+      }
+      .callout {
+        background: var(--warn-dim);
+        border: 1px solid rgba(251, 191, 36, 0.3);
+        border-radius: 10px;
+        padding: 0.9rem 1.2rem;
+        font-size: 0.95rem;
+        color: var(--muted);
+        line-height: 1.5;
+        max-width: 70ch;
+      }
+      .callout strong {
+        color: var(--warn);
+      }
+      .footer {
+        position: fixed;
+        bottom: 1.3rem;
+        left: 0;
+        right: 0;
+        display: flex;
+        justify-content: space-between;
+        padding: 0 2rem;
+        font-family: var(--mono);
+        font-size: 0.78rem;
+        color: var(--muted);
+        z-index: 10;
+      }
+      .dots {
+        display: flex;
+        gap: 0.4rem;
+        align-items: center;
+        flex-wrap: wrap;
+        max-width: 40vw;
+      }
+      .dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--border);
+        cursor: pointer;
+      }
+      .dot.on {
+        background: var(--accent);
+      }
+      @media (max-width: 800px) {
+        .split {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- 1 · Title -->
+    <section class="slide active">
+      <div class="kicker">Pulse Code · Feature Announcement</div>
+      <h1>Scheduled Chats</h1>
+      <p class="lede">
+        Your agents work all day. Now they can <strong>start the day without you.</strong> A daily
+        check-in that runs on your schedule, on your machine, with your subscription.
+      </p>
+    </section>
+
+    <!-- 2 · The problem -->
+    <section class="slide">
+      <div class="kicker">Why</div>
+      <h2>Every morning starts the same way</h2>
+      <p class="lede">
+        You open Pulse Code and spend the first twenty minutes reconstructing yesterday: what
+        shipped, what stalled, what you promised yourself you'd do first.
+      </p>
+      <p class="lede">
+        That reconstruction is exactly the kind of work an agent is good at —
+        <strong>if it could run before you sit down.</strong>
+      </p>
+    </section>
+
+    <!-- 3 · What it is -->
+    <section class="slide">
+      <div class="kicker">What</div>
+      <h2>One chat a day, on a schedule you set</h2>
+      <div class="cards">
+        <div class="card">
+          <span class="icon">⏰</span>
+          <h3>Pick a time</h3>
+          <p>
+            A daily check-in per project — or one schedule across all your repos. 6:00 AM, your
+            timezone, set once.
+          </p>
+        </div>
+        <div class="card">
+          <span class="icon">💬</span>
+          <h3>Write the prompt</h3>
+          <p>
+            You decide what the check-in does: summarize yesterday, flag open review threads, draft
+            today's plan.
+          </p>
+        </div>
+        <div class="card">
+          <span class="icon">📄</span>
+          <h3>Get a handoff file</h3>
+          <p>
+            The run ends with a concise handoff written into your project — the briefing for your
+            day, and the agent's memory for tomorrow.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4 · The loop -->
+    <section class="slide">
+      <div class="kicker">How it works</div>
+      <h2>A loop that compounds</h2>
+      <div class="loop">
+        <div class="step">
+          <span class="n">1</span>
+          <h3>Reads yesterday</h3>
+          <p>The scheduled run opens with yesterday's handoff file, so it never starts cold.</p>
+        </div>
+        <div class="step">
+          <span class="n">2</span>
+          <h3>Does the check-in</h3>
+          <p>Your prompt, your provider, your project — a normal agent turn, just unattended.</p>
+        </div>
+        <div class="step">
+          <span class="n">3</span>
+          <h3>Writes today</h3>
+          <p>
+            The summary lands in <code>handoff/2026-08-21.md</code>. Plain markdown, in your repo,
+            yours.
+          </p>
+        </div>
+        <div class="step">
+          <span class="n">4</span>
+          <h3>You wake up briefed</h3>
+          <p>Read it on your phone before you're at the desk. Tomorrow's run reads it again.</p>
+        </div>
+      </div>
+      <p class="lede">
+        No hidden memory store. The agent learns your patterns the same way you would —
+        <strong>by reading its own notes.</strong>
+      </p>
+    </section>
+
+    <!-- 5 · Handoff file example -->
+    <section class="slide">
+      <div class="kicker">The deliverable</div>
+      <h2>The handoff file</h2>
+      <div class="file">
+        <span class="name">handoff/2026-08-21.md</span>
+        <span class="h"># Daily handoff — Thu Aug 21</span><br />
+        <span class="h">## Yesterday</span><br />
+        - Shipped OAuth host-protection gate (3 commits)<br />
+        - Desktop separation PR still waiting on review<br />
+        <span class="h">## Today</span><br />
+        - Windows ACL gap blocks release — start here<br />
+        - Two flaky mobile tests, likely the same root cause<br />
+        <span class="h">## Watch</span><br />
+        - npm publish token expires Friday
+      </div>
+      <p class="lede">Small, honest, and in your project — grep it, diff it, commit it.</p>
+    </section>
+
+    <!-- 6 · Trust -->
+    <section class="slide">
+      <div class="kicker">Trust</div>
+      <h2>Unattended, never unaccountable</h2>
+      <ul class="plain">
+        <li>
+          <strong>Every run is a normal thread.</strong> Full transcript, full diff, full checkpoint
+          — review the morning run exactly like any other chat.
+          <span class="badge">scheduled</span> badge included.
+        </li>
+        <li>
+          <strong>It ran once, or it tells you why not.</strong> Exactly-once per day, even across
+          restarts. A failed run says so — no lying green checkmarks.
+        </li>
+        <li>
+          <strong>Missed mornings catch up.</strong> Laptop was asleep at 6 AM? The run fires when
+          your server is back, and never doubles up.
+        </li>
+        <li><strong>Pause anytime.</strong> One toggle. Your history stays.</li>
+      </ul>
+    </section>
+
+    <!-- 7 · Every surface -->
+    <section class="slide">
+      <div class="kicker">Everywhere</div>
+      <h2>Set it at the desk, read it from bed</h2>
+      <div class="cards">
+        <div class="card">
+          <span class="icon">🖥️</span>
+          <h3>Desktop &amp; web</h3>
+          <p>
+            Schedule editor in project settings, a Scheduled section in your thread list, last-run
+            and next-run at a glance.
+          </p>
+        </div>
+        <div class="card">
+          <span class="icon">📱</span>
+          <h3>Mobile</h3>
+          <p>
+            The morning summary is made for the phone. Open the app, read the handoff, walk in with
+            a plan.
+          </p>
+        </div>
+        <div class="card">
+          <span class="icon">🌐</span>
+          <h3>Remote-ready</h3>
+          <p>
+            Runs on your server, so it works identically over local network, Tailscale, or Pulse
+            Connect. Best with the background service.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 8 · Positioning -->
+    <section class="slide">
+      <div class="kicker">What it is — and isn't</div>
+      <h2>A check-in, not a workflow engine</h2>
+      <div class="split">
+        <div class="col yes">
+          <h3>In the box</h3>
+          <ul>
+            <li>One daily run per schedule — time + timezone</li>
+            <li>Your prompt, or a project workflow script</li>
+            <li>Handoff file written on completion</li>
+            <li>Pause, resume, delete — history stays</li>
+            <li>Failure surfaced honestly in the UI</li>
+          </ul>
+        </div>
+        <div class="col no">
+          <h3>Deliberately out</h3>
+          <ul>
+            <li>Cron expressions and trigger graphs</li>
+            <li>Chained or event-triggered automations</li>
+            <li>Unreviewed codebase mutation overnight</li>
+            <li>Notification fan-out (later, and outbound-only)</li>
+            <li>A generic autonomous workflow engine</li>
+          </ul>
+        </div>
+      </div>
+      <p class="lede">
+        Same Pulse Code promise as always:
+        <strong>open source, your machine, your subscription</strong> — now with a standing
+        appointment.
+      </p>
+    </section>
+
+    <!-- 9 · Architecture: source of truth -->
+    <section class="slide">
+      <div class="kicker internal">Under the hood</div>
+      <h2>The cron worker is dumb.<br />Orchestration holds the truth.</h2>
+      <p class="lede">
+        Schedules and every occurrence are <strong>event-sourced domain state</strong> — the timer
+        never owns anything. A sweep asks the read model "what's due?" and dispatches ordinary
+        commands through the same decider as every user action.
+      </p>
+      <div class="flow">
+        ScheduleReactor (30s sweep) <span class="arrow">→</span> "due since lastOccurrenceKey?"
+        <span class="arrow">→</span> dispatch <code>thread.turn.start</code> +
+        <code>bootstrap.createThread</code><br />
+        decider (pure) <span class="arrow">→</span> <code>schedule.occurrence.started</code>
+        <span class="arrow">→</span> normal turn <span class="arrow">→</span> settled
+        <span class="arrow">→</span> handoff write <span class="arrow">→</span>
+        <code>schedule.occurrence.completed</code>
+      </div>
+    </section>
+
+    <!-- 10 · Architecture: exactly-once -->
+    <section class="slide">
+      <div class="kicker internal">Under the hood</div>
+      <h2>Exactly-once lives in the decider</h2>
+      <ul class="plain">
+        <li>
+          <strong>Deterministic command id</strong> —
+          <code>scheduled:&lt;scheduleId&gt;:&lt;2026-08-21&gt;</code> flows through the existing
+          command-receipt idempotency. A restart, double tick, or catch-up sweep cannot double-fire
+          a day.
+        </li>
+        <li>
+          <strong>The decider rejects replays</strong> — an occurrence whose key matches
+          <code>lastOccurrenceKey</code> never becomes an event. The timer is not trusted; the pure
+          function is.
+        </li>
+        <li>
+          <strong>Catch-up is the design, not the edge case</strong> — the sweep computes
+          <em>everything due since</em> the last occurrence, so sleep, restarts, and
+          background-service updates resolve on wake.
+        </li>
+        <li>
+          <strong>Effect Clock throughout</strong> — TestClock drives the tests; no sleeps, no
+          polling, no receipts (the live receipt bus is a no-op — completion uses the settled-turn
+          path).
+        </li>
+      </ul>
+    </section>
+
+    <!-- 11 · Architecture: contracts -->
+    <section class="slide">
+      <div class="kicker internal">Under the hood</div>
+      <h2>Typed end to end</h2>
+      <ul class="plain">
+        <li>
+          <strong>Contracts first</strong> — <code>ScheduleId</code> brand,
+          <code>project.schedule.create/update/pause/resume/delete</code> commands,
+          <code>schedule.occurrence.*</code> events in <code>packages/contracts</code>. Server, web,
+          desktop, and mobile all follow the schema.
+        </li>
+        <li>
+          <strong>Threads gain an origin</strong> — <code>origin: user | schedule:&lt;id&gt;</code>,
+          so every client and every future feature can distinguish scheduled work without a side
+          channel.
+        </li>
+        <li>
+          <strong>Prompt source is future-proofed</strong> — v1 accepts raw prompt text, but the
+          contract carries <code>workflowScriptRef</code> from day one, pointing at the existing
+          project workflow scripts.
+        </li>
+        <li>
+          <strong>One new reactor</strong> — registered alongside Checkpoint and ThreadDeletion
+          reactors, shaped like <code>ProviderSessionReaper</code> but unparked: a parked scheduler
+          defeats the point.
+        </li>
+      </ul>
+    </section>
+
+    <!-- 12 · Orchestration future -->
+    <section class="slide">
+      <div class="kicker internal">Looking ahead</div>
+      <h2>Future orchestration sees this for free</h2>
+      <p class="lede">
+        Because occurrences land on the same event log as everything else, later orchestration plans
+        need <strong>zero changes to the scheduler</strong> to build on it:
+      </p>
+      <ul class="plain">
+        <li>
+          A future workflow engine subscribes to <code>schedule.occurrence.*</code> like any other
+          domain events.
+        </li>
+        <li>
+          The read model already answers "what ran, when, did it finish" for any client or
+          integration.
+        </li>
+        <li>
+          Thread <code>origin</code> attribution extends the integrations operate-scope model if
+          external actors ever trigger runs.
+        </li>
+        <li>
+          A "morning run finished" push later hangs off the awareness relay — outbound-only, default
+          silent, per the collaboration-notifications constraints.
+        </li>
+      </ul>
+    </section>
+
+    <!-- 13 · Honest constraints -->
+    <section class="slide">
+      <div class="kicker internal">Constraints</div>
+      <h2>What we say out loud</h2>
+      <ul class="plain">
+        <li>
+          <strong>Runs need a running server.</strong> The Linux background service is the natural
+          host; desktop-only users get catch-up-on-launch — stated plainly in user docs, not buried.
+        </li>
+        <li>
+          <strong>No new credential surface.</strong> Unattended runs use the provider credentials
+          the server already holds; the Windows secret-ACL gate and externally-managed-credential
+          gap apply unchanged.
+        </li>
+        <li>
+          <strong>No retries.</strong> A failed run surfaces the failure; tomorrow reads the last
+          successful handoff. Simple and honest beats clever and opaque.
+        </li>
+        <li>
+          <strong>Two scopes.</strong> A project schedule runs one daily check-in; an environment
+          schedule fans out one thread per selected repo — e.g. a nightly sweep deciding
+          commit-and-push vs open-a-PR, every run individually reviewable.
+        </li>
+      </ul>
+      <div class="callout">
+        <strong>Process:</strong> not on the roadmap yet — needs a PRD change request, a T1
+        "Connected work loop" slot tradeoff in roadmap.yaml, and this design doc blessed before
+        build.
+      </div>
+    </section>
+
+    <!-- 14 · Build order -->
+    <section class="slide">
+      <div class="kicker internal">Shipping it</div>
+      <h2>Build order</h2>
+      <ol class="build">
+        <li>
+          <strong>Contracts + decider + projector</strong> — schedules, occurrences, thread origin,
+          with focused decider tests.
+        </li>
+        <li>
+          <strong>ScheduleReactor</strong> — sweep, catch-up, idempotent dispatch; TestClock-driven
+          tests.
+        </li>
+        <li>
+          <strong>Handoff writer</strong> — settled-turn subscription, atomic file write, occurrence
+          completion.
+        </li>
+        <li>
+          <strong>Web + desktop UI</strong> — settings editor, thread-list section, command palette
+          entry.
+        </li>
+        <li><strong>Mobile</strong> — Scheduled section and handoff reading view.</li>
+        <li>
+          <strong>Docs</strong> — user page in shipped-product voice, glossary entries for schedule,
+          occurrence, handoff file.
+        </li>
+      </ol>
+    </section>
+
+    <!-- 15 · Close -->
+    <section class="slide">
+      <div class="kicker">Scheduled Chats</div>
+      <h1>Wake up briefed.</h1>
+      <p class="lede">
+        Rolling out to desktop, web, and mobile. Set your first check-in in
+        <strong>Project Settings → Scheduled Chats.</strong>
+      </p>
+    </section>
+
+    <div class="footer">
+      <span>Pulse Code · Scheduled Chats</span>
+      <span class="dots" id="dots"></span>
+      <span>← → to navigate</span>
+    </div>
+
+    <script>
+      const slides = [...document.querySelectorAll(".slide")];
+      const dotsEl = document.getElementById("dots");
+      slides.forEach((_, i) => {
+        const d = document.createElement("span");
+        d.className = "dot" + (i === 0 ? " on" : "");
+        d.onclick = () => show(i);
+        dotsEl.appendChild(d);
+      });
+      const dots = [...dotsEl.children];
+      let cur = 0;
+      function show(i) {
+        cur = Math.max(0, Math.min(slides.length - 1, i));
+        slides.forEach((s, j) => s.classList.toggle("active", j === cur));
+        dots.forEach((d, j) => d.classList.toggle("on", j === cur));
+      }
+      addEventListener("keydown", (e) => {
+        if (e.key === "ArrowRight" || e.key === " " || e.key === "PageDown") show(cur + 1);
+        if (e.key === "ArrowLeft" || e.key === "PageUp") show(cur - 1);
+        if (e.key === "Home") show(0);
+        if (e.key === "End") show(slides.length - 1);
+      });
+      addEventListener("click", (e) => {
+        if (!e.target.closest(".dot")) show(cur + 1);
+      });
+    </script>
+  </body>
+</html>

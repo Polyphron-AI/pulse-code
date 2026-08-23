@@ -112,6 +112,22 @@ describe("descriptor helpers", () => {
     ]);
   });
 
+  it("never emits selections for read-only descriptors", () => {
+    expect(
+      buildProviderOptionSelectionsFromDescriptors([
+        {
+          id: "contextCompression",
+          label: "Context",
+          type: "select",
+          readOnly: true,
+          options: [{ id: "50", label: "Compress at 50%", isDefault: true }],
+          currentValue: "50",
+        },
+        { id: "fastMode", label: "Fast Mode", type: "boolean", currentValue: true },
+      ]),
+    ).toEqual([{ id: "fastMode", value: true }]);
+  });
+
   it("stores option selection arrays in model selections", () => {
     expect(
       createModelSelection(ProviderInstanceId.make("codex"), "gpt-5.4", [

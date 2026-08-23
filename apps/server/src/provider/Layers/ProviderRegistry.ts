@@ -27,6 +27,7 @@ import {
   ProviderDriverKind,
   type ProviderInstanceId,
   type ServerProvider,
+  type ServerProviderPlanUsage,
   type ServerProviderUpdateState,
 } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
@@ -292,6 +293,21 @@ export const ProviderRegistryLive = Layer.effect(
     const maintenanceActionStatesRef = yield* Ref.make<
       ReadonlyMap<ProviderInstanceId, { readonly update?: ServerProviderUpdateState | undefined }>
     >(new Map());
+    // Last-known plan usage per instance, seeded from the on-disk snapshot
+    // cache so a restart keeps showing the previous (timestamped) reading
+    // until the next provider notification. Probe snapshots never carry
+    // plan usage, so this map re-applies it on every upsert.
+    const planUsageByInstanceRef = yield* Ref.make<
+      ReadonlyMap<ProviderInstanceId, ServerProviderPlanUsage>
+    >(
+      new Map(
+        cachedProviders.flatMap((provider) =>
+          provider.planUsage !== undefined
+            ? [[snapshotInstanceKey(provider), provider.planUsage] as const]
+            : [],
+        ),
+      ),
+    );
 
     // Live-source registry — the dynamic counterpart to the boot-time
     // `bootSources`. Keyed by `instanceId`; the stored `ProviderInstance`
@@ -344,6 +360,26 @@ export const ProviderRegistryLive = Layer.effect(
       };
     });
 
+    const applyProviderPlanUsage = Effect.fn("applyProviderPlanUsage")(function* (
+      provider: ServerProvider,
+    ) {
+      const planUsageByInstance = yield* Ref.get(planUsageByInstanceRef);
+      const planUsage = planUsageByInstance.get(provider.instanceId);
+      // No tracked value: keep whatever the snapshot already carries (cache
+      // hydration) rather than stripping it — stale-with-timestamp beats
+      // blank until the next provider notification arrives.
+      if (!planUsage) {
+        return provider;
+      }
+      return {
+        ...provider,
+        planUsage,
+      };
+    });
+
+    const applyVolatileProviderState = (provider: ServerProvider) =>
+      applyProviderUpdateState(provider).pipe(Effect.flatMap(applyProviderPlanUsage));
+
     const upsertProviders = Effect.fn("upsertProviders")(function* (
       nextProviders: ReadonlyArray<ServerProvider>,
       options?: {
@@ -354,7 +390,7 @@ export const ProviderRegistryLive = Layer.effect(
     ) {
       const nextProvidersWithUpdateState = yield* Effect.forEach(
         nextProviders,
-        applyProviderUpdateState,
+        applyVolatileProviderState,
         {
           concurrency: "unbounded",
         },
@@ -448,6 +484,28 @@ export const ProviderRegistryLive = Layer.effect(
         });
       },
     );
+
+    const setProviderPlanUsage = Effect.fn("setProviderPlanUsage")(function* (input: {
+      readonly instanceId: ProviderInstanceId;
+      readonly planUsage: ServerProviderPlanUsage;
+    }) {
+      yield* Ref.update(planUsageByInstanceRef, (previous) => {
+        const next = new Map(previous);
+        next.set(input.instanceId, input.planUsage);
+        return next;
+      });
+
+      const existingProviders = yield* Ref.get(providersRef);
+      const matchingProvider = existingProviders.find(
+        (candidate) => candidate.instanceId === input.instanceId,
+      );
+      if (!matchingProvider) {
+        return existingProviders;
+      }
+      // Persist so a restart hydrates the last-known reading from the
+      // snapshot cache (see `planUsageByInstanceRef` seeding above).
+      return yield* upsertProviders([matchingProvider]);
+    });
 
     const refreshOneSource = Effect.fn("refreshOneSource")(function* (
       providerSource: ProviderSnapshotSource,
@@ -627,6 +685,15 @@ export const ProviderRegistryLive = Layer.effect(
           }
           return next;
         });
+        yield* Ref.update(planUsageByInstanceRef, (previous) => {
+          const next = new Map(previous);
+          for (const instanceId of previous.keys()) {
+            if (!knownInstanceIds.has(instanceId)) {
+              next.delete(instanceId);
+            }
+          }
+          return next;
+        });
       }),
     );
     const syncLiveSourcesAndContinue = syncLiveSources.pipe(
@@ -712,6 +779,7 @@ export const ProviderRegistryLive = Layer.effect(
         refreshInstance(instanceId).pipe(Effect.catchCause(recoverRefreshFailure)),
       getProviderMaintenanceCapabilitiesForInstance,
       setProviderMaintenanceActionState,
+      setProviderPlanUsage,
       get streamChanges() {
         return Stream.fromPubSub(changesPubSub);
       },

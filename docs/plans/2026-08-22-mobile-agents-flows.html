@@ -1,0 +1,2039 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pulse Code — Mobile agent visibility: flow options</title>
+    <style>
+      :root {
+        --screen: #0a0a0a;
+        --card: #171717;
+        --card-alt: #1c1c1c;
+        --sheet: #0e0e0e;
+        --fg: #f5f5f5;
+        --fg2: #a3a3a3;
+        --fg3: #8e8e93;
+        --fg4: #636366;
+        --border: rgba(255, 255, 255, 0.08);
+        --border-soft: rgba(255, 255, 255, 0.06);
+        --subtle: rgba(255, 255, 255, 0.04);
+        --subtle-strong: rgba(255, 255, 255, 0.08);
+        --bubble: #0a84ff;
+        --header: rgba(10, 10, 10, 0.97);
+        --sky: #0ea5e9;
+        --amber: #f59e0b;
+        --emerald: #10b981;
+        --rose: #f43f5e;
+        --neutral: #a3a3a3;
+        --page: #08080a;
+        --sys: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+        --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+      }
+      * {
+        box-sizing: border-box;
+        -webkit-tap-highlight-color: transparent;
+      }
+      body {
+        margin: 0;
+        background: var(--page);
+        color: var(--fg);
+        font-family: var(--sys);
+      }
+
+      /* ---------- page chrome ---------- */
+      .page {
+        max-width: 1240px;
+        margin: 0 auto;
+        padding: 40px 24px 96px;
+      }
+      .page > h1 {
+        font-size: 26px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        margin: 0 0 8px;
+      }
+      .lede {
+        color: var(--fg2);
+        font-size: 14px;
+        line-height: 1.6;
+        max-width: 78ch;
+        margin: 0 0 6px;
+      }
+      .lede code {
+        font-family: var(--mono);
+        font-size: 12px;
+        background: var(--subtle);
+        padding: 1px 5px;
+        border-radius: 4px;
+      }
+
+      .tabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin: 28px 0 4px;
+        border-bottom: 1px solid var(--border);
+        padding-bottom: 14px;
+      }
+      .tab {
+        appearance: none;
+        border: 1px solid var(--border);
+        background: var(--card);
+        color: var(--fg2);
+        font: inherit;
+        font-size: 13px;
+        padding: 8px 13px;
+        border-radius: 999px;
+        cursor: pointer;
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      .tab:hover {
+        background: var(--card-alt);
+        color: var(--fg);
+      }
+      .tab.on {
+        background: var(--fg);
+        color: #0a0a0a;
+        border-color: var(--fg);
+        font-weight: 600;
+      }
+      .tab .n {
+        font-variant-numeric: tabular-nums;
+        opacity: 0.5;
+        font-size: 11px;
+      }
+      .tab.on .n {
+        opacity: 0.45;
+      }
+
+      .flow-head {
+        margin: 30px 0 22px;
+      }
+      .flow-head h2 {
+        font-size: 19px;
+        margin: 0 0 8px;
+        letter-spacing: -0.01em;
+      }
+      .flow-head p {
+        margin: 0;
+        color: var(--fg2);
+        font-size: 13.5px;
+        line-height: 1.6;
+        max-width: 82ch;
+      }
+      .flow-head .q {
+        color: var(--fg);
+        font-weight: 600;
+      }
+
+      .row {
+        display: flex;
+        gap: 22px;
+        align-items: flex-start;
+        flex-wrap: wrap;
+      }
+      .col {
+        width: 344px;
+        flex: 0 0 auto;
+      }
+
+      .vhead {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 0 0 10px;
+        padding-left: 2px;
+      }
+      .vhead .k {
+        width: 20px;
+        height: 20px;
+        border-radius: 6px;
+        background: var(--subtle-strong);
+        color: var(--fg);
+        font-size: 11px;
+        font-weight: 700;
+        display: grid;
+        place-items: center;
+      }
+      .vhead .t {
+        font-size: 14px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+      }
+      .badge {
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        padding: 3px 6px;
+        border-radius: 5px;
+        background: rgba(16, 185, 129, 0.14);
+        color: #6ee7b7;
+      }
+      .badge.new {
+        background: rgba(14, 165, 233, 0.14);
+        color: #7dd3fc;
+      }
+      .note {
+        margin: 12px 2px 0;
+        font-size: 12.5px;
+        line-height: 1.65;
+        color: var(--fg2);
+      }
+      .note b {
+        color: var(--fg);
+        font-weight: 600;
+      }
+      .cost {
+        margin: 8px 2px 0;
+        font-size: 11.5px;
+        color: var(--fg4);
+        font-family: var(--mono);
+      }
+
+      .hint {
+        margin: 16px 0 0;
+        font-size: 12px;
+        color: var(--fg4);
+      }
+
+      /* ---------- phone ---------- */
+      .phone {
+        width: 344px;
+        height: 706px;
+        border-radius: 44px;
+        padding: 9px;
+        background: #000;
+        box-shadow:
+          0 0 0 1px rgba(255, 255, 255, 0.08),
+          0 26px 60px -20px rgba(0, 0, 0, 0.9);
+        position: relative;
+      }
+      .vp {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        border-radius: 36px;
+        overflow: hidden;
+        background: var(--screen);
+      }
+      .screen {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        background: var(--screen);
+        transform: translateX(100%);
+        transition: transform 0.26s cubic-bezier(0.32, 0.72, 0, 1);
+      }
+      .screen[data-root] {
+        transform: translateX(0);
+      }
+      .screen.on {
+        transform: translateX(0);
+        z-index: 2;
+      }
+      .screen.under {
+        transform: translateX(0);
+        z-index: 1;
+      }
+
+      .statusbar {
+        height: 34px;
+        flex: 0 0 auto;
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        padding: 0 22px 3px;
+        font-size: 11.5px;
+        font-weight: 600;
+        color: var(--fg);
+      }
+      .statusbar .r {
+        display: flex;
+        gap: 5px;
+        align-items: center;
+        opacity: 0.85;
+      }
+
+      .nav {
+        flex: 0 0 auto;
+        background: var(--header);
+        border-bottom: 1px solid var(--border-soft);
+        padding: 4px 10px 8px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-height: 44px;
+      }
+      .nav .back {
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        color: var(--bubble);
+        font-size: 15px;
+        cursor: pointer;
+        flex: 0 0 auto;
+      }
+      .nav .titles {
+        flex: 1 1 auto;
+        min-width: 0;
+        text-align: center;
+      }
+      .nav .titles.left {
+        text-align: left;
+        padding-left: 2px;
+      }
+      .nav .t {
+        font-size: 14.5px;
+        font-weight: 600;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .nav .s {
+        font-size: 11px;
+        color: var(--fg3);
+        margin-top: 1px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .nav .acts {
+        display: flex;
+        gap: 4px;
+        flex: 0 0 auto;
+      }
+      .navbtn {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        height: 30px;
+        padding: 0 9px;
+        border-radius: 9px;
+        background: var(--subtle);
+        border: 1px solid var(--border-soft);
+        font-size: 11.5px;
+        color: var(--fg);
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .navbtn:active {
+        background: var(--subtle-strong);
+      }
+      .navbtn.icon {
+        padding: 0;
+        width: 30px;
+        justify-content: center;
+      }
+
+      .body {
+        flex: 1 1 auto;
+        overflow-y: auto;
+        overflow-x: hidden;
+        padding: 12px 12px 8px;
+      }
+      .body::-webkit-scrollbar {
+        width: 0;
+      }
+
+      .composer {
+        flex: 0 0 auto;
+        padding: 8px 12px 22px;
+        background: var(--screen);
+        border-top: 1px solid var(--border-soft);
+      }
+      .cbox {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: #141414;
+        border: 1px solid var(--border);
+        border-radius: 20px;
+        padding: 9px 12px;
+        font-size: 13px;
+        color: var(--fg3);
+      }
+      .cbox .send {
+        margin-left: auto;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: var(--subtle-strong);
+        display: grid;
+        place-items: center;
+        font-size: 11px;
+        color: var(--fg3);
+      }
+
+      /* chat content */
+      .ub {
+        max-width: 80%;
+        margin: 0 0 12px auto;
+        background: var(--bubble);
+        color: #fff;
+        font-size: 14px;
+        line-height: 1.45;
+        padding: 8px 13px;
+        border-radius: 18px;
+      }
+      .ab {
+        font-size: 14px;
+        line-height: 1.55;
+        color: #e5e5e5;
+        margin: 0 0 12px;
+      }
+      .ab.small {
+        font-size: 13px;
+        color: var(--fg2);
+      }
+
+      /* work log */
+      .wl {
+        margin: 0 0 12px;
+      }
+      .wrow {
+        min-height: 32px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 2px;
+        margin-bottom: 1px;
+        font-size: 12px;
+        color: var(--fg3);
+      }
+      .wrow .g {
+        width: 13px;
+        flex: 0 0 auto;
+        display: grid;
+        place-items: center;
+        opacity: 0.6;
+        font-size: 10px;
+      }
+      .wrow .x {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .wrow .x b {
+        color: var(--fg2);
+        font-weight: 500;
+      }
+      .wtoggle {
+        height: 36px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 0 2px;
+        font-size: 12px;
+        color: var(--fg4);
+        cursor: pointer;
+      }
+      .wtoggle:active {
+        color: var(--fg2);
+      }
+
+      /* fleet row */
+      .fleet {
+        min-height: 32px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 8px;
+        margin: 2px 0 3px;
+        border-radius: 9px;
+        background: var(--subtle);
+        border: 1px solid var(--border-soft);
+        cursor: pointer;
+      }
+      .fleet:active {
+        background: var(--subtle-strong);
+      }
+      .fleet .lab {
+        font-size: 12px;
+        color: var(--fg2);
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        flex: 1 1 auto;
+      }
+      .fleet .lab b {
+        color: var(--fg);
+        font-weight: 600;
+      }
+      .fleet .chev {
+        color: var(--fg4);
+        font-size: 11px;
+        flex: 0 0 auto;
+      }
+
+      .dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        flex: 0 0 auto;
+      }
+      .dot.working {
+        background: var(--sky);
+      }
+      .dot.needs {
+        background: var(--amber);
+      }
+      .dot.done {
+        background: var(--emerald);
+      }
+      .dot.fail {
+        background: var(--rose);
+      }
+      .dot.idle {
+        background: var(--neutral);
+      }
+
+      /* fleet card (variant C) */
+      .fcard {
+        border: 1px solid var(--border);
+        background: var(--card);
+        border-radius: 14px;
+        padding: 10px 11px;
+        margin: 2px 0 12px;
+      }
+      .fcard .top {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 9px;
+      }
+      .fcard .top .h {
+        font-size: 12.5px;
+        font-weight: 600;
+      }
+      .fcard .top .m {
+        font-size: 11px;
+        color: var(--fg3);
+        margin-left: auto;
+      }
+      .chip {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        padding: 5px 2px;
+        font-size: 12px;
+        color: var(--fg2);
+        cursor: pointer;
+      }
+      .chip:active {
+        opacity: 0.6;
+      }
+      .chip .st {
+        margin-left: auto;
+        font-size: 10.5px;
+        color: var(--fg4);
+      }
+      .fcard .all {
+        margin-top: 8px;
+        padding-top: 8px;
+        border-top: 1px solid var(--border-soft);
+        font-size: 11.5px;
+        color: var(--bubble);
+        cursor: pointer;
+      }
+
+      /* sticky banner (variant B) */
+      .sticky {
+        flex: 0 0 auto;
+        margin: 0 10px 6px;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding: 9px 11px;
+        border-radius: 13px;
+        background: rgba(23, 23, 23, 0.94);
+        border: 1px solid var(--border);
+        cursor: pointer;
+        box-shadow: 0 8px 22px -12px rgba(0, 0, 0, 0.9);
+      }
+      .sticky .l {
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+      .sticky .l .a {
+        font-size: 12.5px;
+        font-weight: 600;
+      }
+      .sticky .l .b {
+        font-size: 11px;
+        color: var(--fg3);
+        margin-top: 1px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .prog {
+        height: 3px;
+        border-radius: 2px;
+        background: var(--subtle-strong);
+        margin-top: 6px;
+        overflow: hidden;
+      }
+      .prog > i {
+        display: block;
+        height: 100%;
+        background: var(--sky);
+        border-radius: 2px;
+      }
+
+      /* roster */
+      .sec {
+        padding: 0 2px 16px;
+      }
+      .sec .lbl {
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--fg3);
+        opacity: 0.75;
+        padding: 0 4px 6px;
+      }
+      .list {
+        border: 1px solid var(--border);
+        background: var(--card);
+        border-radius: 14px;
+        overflow: hidden;
+      }
+      .sep {
+        height: 1px;
+        background: var(--border);
+        margin-left: 12px;
+      }
+      .arow {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 11px;
+        cursor: pointer;
+      }
+      .arow:active {
+        background: var(--subtle);
+      }
+      .arow .mid {
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+      .arow .mid .t {
+        font-size: 13.5px;
+        font-weight: 500;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .arow .mid .s {
+        font-size: 12px;
+        color: var(--fg3);
+        opacity: 0.8;
+        margin-top: 2px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .arow .rt {
+        flex: 0 0 auto;
+        text-align: right;
+      }
+      .arow .rt .a {
+        font-size: 11.5px;
+        color: var(--fg3);
+      }
+      .arow .rt .b {
+        font-size: 10.5px;
+        color: var(--fg4);
+        font-variant-numeric: tabular-nums;
+        margin-top: 2px;
+      }
+      .arow .chev {
+        color: var(--fg4);
+        font-size: 11px;
+        flex: 0 0 auto;
+      }
+      .more {
+        border-top: 1px solid var(--border);
+        padding: 10px 12px;
+        font-size: 12px;
+        color: var(--fg3);
+        cursor: pointer;
+      }
+      .more:active {
+        color: var(--fg);
+      }
+      .collapsed {
+        display: none;
+      }
+      .open > .collapsed,
+      .open .collapsed {
+        display: block;
+      }
+      .open .more-show {
+        display: none;
+      }
+      .more-hide {
+        display: none;
+      }
+      .open .more-hide {
+        display: block;
+      }
+
+      /* tree (roster B) */
+      .tree {
+        padding: 0 2px 16px;
+      }
+      .tnode {
+        border-left: 1px solid var(--border);
+        margin-left: 9px;
+        padding-left: 12px;
+      }
+      .twf {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 4px;
+        font-size: 13px;
+        font-weight: 600;
+      }
+      .twf .m {
+        margin-left: auto;
+        font-size: 11px;
+        font-weight: 400;
+        color: var(--fg3);
+      }
+      .tph {
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--fg4);
+        padding: 9px 4px 3px;
+      }
+
+      /* lanes (roster C) */
+      .lane {
+        padding: 9px 4px;
+        cursor: pointer;
+      }
+      .lane .h {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12.5px;
+      }
+      .lane .h .m {
+        margin-left: auto;
+        font-size: 10.5px;
+        color: var(--fg4);
+      }
+      .track {
+        height: 6px;
+        border-radius: 3px;
+        background: var(--subtle);
+        margin-top: 7px;
+        position: relative;
+        overflow: hidden;
+      }
+      .track > i {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        border-radius: 3px;
+      }
+      .axis {
+        display: flex;
+        justify-content: space-between;
+        font-size: 10px;
+        color: var(--fg4);
+        padding: 2px 4px 10px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      /* transcript */
+      .trow {
+        padding: 9px 11px;
+      }
+      .trow .h {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+      }
+      .trow .h .s {
+        flex: 1 1 auto;
+        min-width: 0;
+        font-size: 12.5px;
+        font-weight: 500;
+      }
+      .trow .h .s.life {
+        color: var(--fg3);
+      }
+      .trow .h .ts {
+        flex: 0 0 auto;
+        font-size: 10.5px;
+        color: var(--fg4);
+        opacity: 0.7;
+        font-variant-numeric: tabular-nums;
+      }
+      .trow .d {
+        margin-top: 4px;
+        font-family: var(--mono);
+        font-size: 11px;
+        line-height: 1.5;
+        color: var(--fg3);
+        opacity: 0.85;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      .result {
+        border: 1px solid var(--border);
+        background: var(--card);
+        border-radius: 14px;
+        padding: 10px 11px;
+        margin-bottom: 11px;
+      }
+      .result .k {
+        font-size: 10.5px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--fg3);
+        opacity: 0.7;
+        margin-bottom: 4px;
+      }
+      .result .v {
+        font-size: 12.5px;
+        line-height: 1.5;
+        color: #e5e5e5;
+      }
+
+      .now {
+        border: 1px solid rgba(14, 165, 233, 0.28);
+        background: rgba(14, 165, 233, 0.06);
+        border-radius: 14px;
+        padding: 10px 11px;
+        margin-bottom: 12px;
+      }
+      .now .k {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        font-size: 10.5px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: #7dd3fc;
+        margin-bottom: 6px;
+      }
+      .now .v {
+        font-size: 13px;
+        line-height: 1.45;
+      }
+      .now .sub {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--fg3);
+        margin-top: 5px;
+      }
+
+      /* approvals */
+      .ask {
+        border: 1px solid rgba(245, 158, 11, 0.32);
+        background: rgba(245, 158, 11, 0.06);
+        border-radius: 14px;
+        padding: 11px;
+        margin: 2px 0 12px;
+      }
+      .ask .who {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        font-size: 11px;
+        font-weight: 600;
+        color: #fcd34d;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 7px;
+      }
+      .ask .what {
+        font-size: 13px;
+        line-height: 1.45;
+      }
+      .cmd {
+        font-family: var(--mono);
+        font-size: 11.5px;
+        background: rgba(0, 0, 0, 0.35);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 7px 9px;
+        margin-top: 8px;
+        color: #e5e5e5;
+      }
+      .btns {
+        display: flex;
+        gap: 7px;
+        margin-top: 10px;
+      }
+      .btn {
+        flex: 1 1 auto;
+        text-align: center;
+        padding: 9px 10px;
+        border-radius: 10px;
+        font-size: 12.5px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .btn.pri {
+        background: var(--fg);
+        color: #0a0a0a;
+      }
+      .btn.sec {
+        background: var(--subtle);
+        border: 1px solid var(--border);
+        color: var(--fg);
+      }
+      .btn.link {
+        background: transparent;
+        color: var(--bubble);
+        font-weight: 500;
+        flex: 0 0 auto;
+        padding: 9px 4px;
+      }
+      .btn:active {
+        opacity: 0.7;
+      }
+      .nudge {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 11px;
+        margin: 2px 0 12px;
+        border-radius: 11px;
+        background: rgba(245, 158, 11, 0.09);
+        border: 1px solid rgba(245, 158, 11, 0.24);
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .nudge .c {
+        margin-left: auto;
+        font-size: 11px;
+        color: var(--fg3);
+      }
+
+      /* sheet */
+      .scrim {
+        position: absolute;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.5);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.22s ease;
+        z-index: 4;
+      }
+      .sheet {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 5;
+        background: var(--sheet);
+        border-top: 1px solid var(--border);
+        border-radius: 20px 20px 0 0;
+        padding: 8px 12px 26px;
+        transform: translateY(100%);
+        transition: transform 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+        max-height: 74%;
+        overflow-y: auto;
+      }
+      .sheet::-webkit-scrollbar {
+        width: 0;
+      }
+      .grab {
+        width: 36px;
+        height: 4px;
+        border-radius: 2px;
+        background: var(--subtle-strong);
+        margin: 2px auto 10px;
+      }
+      .sheet .sh {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 2px 10px;
+      }
+      .sheet .sh .t {
+        font-size: 14px;
+        font-weight: 600;
+      }
+      .sheet .sh .m {
+        margin-left: auto;
+        font-size: 11.5px;
+        color: var(--fg3);
+      }
+      .vp.open > .scrim {
+        opacity: 1;
+        pointer-events: auto;
+      }
+      .vp.open > .sheet {
+        transform: translateY(0);
+      }
+
+      /* lock screen */
+      .lock {
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(170deg, #101318, #05070a 60%);
+        display: flex;
+        flex-direction: column;
+        padding: 0 14px 22px;
+      }
+      .lock .clock {
+        text-align: center;
+        padding: 44px 0 22px;
+      }
+      .lock .clock .h {
+        font-size: 64px;
+        font-weight: 200;
+        letter-spacing: -0.03em;
+        line-height: 1;
+      }
+      .lock .clock .d {
+        font-size: 13px;
+        color: var(--fg2);
+        margin-top: 6px;
+      }
+      .la {
+        margin-top: auto;
+        background: rgba(28, 28, 30, 0.86);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 20px;
+        padding: 12px 13px;
+      }
+      .la .r1 {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 11px;
+        color: var(--fg3);
+      }
+      .la .r1 .app {
+        font-weight: 600;
+        color: var(--fg2);
+      }
+      .la .r1 .t {
+        margin-left: auto;
+        font-variant-numeric: tabular-nums;
+      }
+      .la .r2 {
+        font-size: 14.5px;
+        font-weight: 600;
+        margin-top: 7px;
+      }
+      .la .r3 {
+        font-size: 12.5px;
+        color: var(--fg2);
+        margin-top: 3px;
+      }
+      .la .r4 {
+        display: flex;
+        gap: 6px;
+        margin-top: 10px;
+      }
+      .pill {
+        font-size: 10.5px;
+        padding: 4px 8px;
+        border-radius: 999px;
+        background: var(--subtle-strong);
+        color: var(--fg2);
+        display: flex;
+        align-items: center;
+        gap: 5px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <h1>Mobile agent visibility — flow options</h1>
+      <p class="lede">
+        Six interactions, three flows each. Every phone is live: tap rows, expand sections, approve
+        things, go back. All eighteen show the <em>same</em> scenario so they compare fairly — a
+        thread that spawned three subagents: one working, one asking permission, one done.
+      </p>
+      <p class="lede">
+        <span class="badge">as built</span> marks the flow that already exists on this branch (free
+        to keep). <span class="badge new">new work</span> marks a flow that needs code not yet
+        written.
+      </p>
+
+      <div class="tabs" id="tabs"></div>
+      <div id="stage"></div>
+      <p class="hint">
+        Prototype only — no data, no network. Colors, type scale, and row heights come from
+        <code>apps/mobile/global.css</code>.
+      </p>
+    </div>
+
+    <script>
+      /* ============================== shared scenario ============================== */
+      const T = { started: "14:02:11", a: "14:02:19", b: "14:03:04", c: "14:03:41", d: "14:04:12" };
+
+      const A1 = {
+        id: "a1",
+        t: "Research auth middleware",
+        dot: "working",
+        st: "working",
+        ph: "Research",
+        sub: "Reading apps/server/src/http/router.ts",
+        model: "sonnet · medium",
+        tok: "12.4k",
+        pct: 62,
+      };
+      const A2 = {
+        id: "a2",
+        t: "Patch upload route",
+        dot: "needs",
+        st: "needs input",
+        ph: "Implement",
+        sub: "Wants to run npm i limiter",
+        model: "opus · high",
+        tok: "31.8k",
+        pct: 38,
+      };
+      const A3 = {
+        id: "a3",
+        t: "Write tests",
+        dot: "done",
+        st: "completed",
+        ph: "Verify",
+        sub: "Added 4 tests to rateLimit.test.ts",
+        model: "sonnet · medium",
+        tok: "8.1k",
+        pct: 100,
+      };
+      const DONE_EXTRA = [
+        {
+          id: "a4",
+          t: "Lint sweep",
+          dot: "done",
+          st: "completed",
+          ph: "Verify",
+          sub: "No findings",
+          model: "haiku",
+          tok: "1.9k",
+          pct: 100,
+        },
+        {
+          id: "a5",
+          t: "Update docs",
+          dot: "done",
+          st: "completed",
+          ph: "Verify",
+          sub: "docs/user/limits.md",
+          model: "sonnet",
+          tok: "4.2k",
+          pct: 100,
+        },
+        {
+          id: "a6",
+          t: "Bench the limiter",
+          dot: "done",
+          st: "completed",
+          ph: "Verify",
+          sub: "p99 +0.4ms",
+          model: "sonnet",
+          tok: "6.7k",
+          pct: 100,
+        },
+        {
+          id: "a7",
+          t: "Changelog entry",
+          dot: "fail",
+          st: "failed",
+          ph: "Verify",
+          sub: "No CHANGELOG.md in repo",
+          model: "haiku",
+          tok: "0.8k",
+          pct: 100,
+        },
+      ];
+
+      /* ============================== primitives ============================== */
+      const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+      const dot = (k) => '<span class="dot ' + k + '"></span>';
+      const chev = '<span class="chev">›</span>';
+
+      const statusbar = () => `
+  <div class="statusbar"><span>9:41</span>
+    <span class="r"><span>▮▮▮</span><span>◗</span><span>100%</span></span>
+  </div>`;
+
+      const nav = ({ title, sub, back, acts = "", left = false }) => `
+  <div class="nav">
+    ${back ? '<div class="back" data-back>‹ <span style="font-size:13.5px">Back</span></div>' : ""}
+    <div class="titles ${left ? "left" : ""}">
+      <div class="t">${esc(title)}</div>${sub ? `<div class="s">${esc(sub)}</div>` : ""}
+    </div>
+    <div class="acts">${acts}</div>
+  </div>`;
+
+      const composer = (ph = "Reply to the agent…") => `
+  <div class="composer"><div class="cbox"><span>+</span><span>${esc(ph)}</span><span class="send">↑</span></div></div>`;
+
+      const screen = (name, inner, root = false) =>
+        `<div class="screen${root ? " on" : ""}" data-screen="${name}" ${root ? "data-root" : ""}>${statusbar()}${inner}</div>`;
+
+      const phone = (screens, modal = "") =>
+        `<div class="phone"><div class="vp">${screens}${modal}</div></div>`;
+
+      const ub = (t) => `<div class="ub">${esc(t)}</div>`;
+      const ab = (t, sm) => `<div class="ab${sm ? " small" : ""}">${t}</div>`;
+
+      const wrow = (g, x) =>
+        `<div class="wrow"><span class="g">${g}</span><span class="x">${x}</span></div>`;
+      const workLog = (rows, hidden) => `
+  <div class="wl">
+    ${hidden ? `<div class="wtoggle">⌄ + ${hidden} previous</div>` : ""}
+    ${rows.join("")}
+  </div>`;
+
+      const fleetRow = ({ label, status, dotk = "working", goto = "agents", opens = false }) => `
+  <div class="fleet" ${opens ? "data-open" : goto ? `data-goto="${goto}"` : ""}>
+    ${dot(dotk)}<span class="lab"><b>${esc(label)}</b> · ${esc(status)}</span>${chev}
+  </div>`;
+
+      const arow = (a, { goto = "agent", showTok = true } = {}) => `
+  <div class="arow" data-goto="${goto}">
+    ${dot(a.dot)}
+    <div class="mid"><div class="t">${esc(a.t)}</div><div class="s">${esc(a.sub)}</div></div>
+    <div class="rt"><div class="a">${esc(a.st)}</div>${showTok ? `<div class="b">${esc(a.tok)}</div>` : ""}</div>
+    ${chev}
+  </div>`;
+
+      const list = (items) =>
+        `<div class="list">${items.filter(Boolean).join('<div class="sep"></div>')}</div>`;
+
+      const section = ({ label, count, rows, extra = [], panel }) => {
+        if (!extra.length) {
+          return `<div class="sec"><div class="lbl">${esc(label)} · ${count}</div>${list(rows)}</div>`;
+        }
+        return `
+  <div class="sec" data-panel="${panel}">
+    <div class="lbl">${esc(label)} · ${count}</div>
+    <div class="list">
+      ${rows.join('<div class="sep"></div>')}
+      <div class="collapsed">${extra.map((r) => '<div class="sep"></div>' + r).join("")}</div>
+      <div class="more more-show" data-toggle="${panel}">… ${extra.length} more</div>
+      <div class="more more-hide" data-toggle="${panel}">Show fewer</div>
+    </div>
+  </div>`;
+      };
+
+      const trow = (s, ts, d, life) => `
+  <div class="trow"><div class="h"><span class="s ${life ? "life" : ""}">${esc(s)}</span><span class="ts">${ts}</span></div>
+  ${d ? `<div class="d">${esc(d)}</div>` : ""}</div>`;
+
+      const TRANSCRIPT = [
+        trow("Task started · Research auth middleware", T.started, null, true),
+        trow("Read apps/server/src/http/rateLimit.ts", T.a, "lines 1–120 of 342"),
+        trow(
+          'Grep "rateLimit" — 14 files',
+          T.b,
+          "apps/server/src/http/router.ts:88\napps/server/src/http/rateLimit.ts:12\n+ 12 more",
+        ),
+        trow("Reading the existing limiter shape", T.c, null),
+        trow("Read apps/server/src/http/router.ts", T.d, "lines 60–140 of 512"),
+      ];
+
+      /* ============================== reusable screens ============================== */
+      const CHAT_TOP = `
+  ${ub("Add rate limiting to /api/upload")}
+  ${ab("Spinning up a small fleet: one reads the current middleware, one patches the route, one writes tests.")}`;
+      const CHAT_TAIL = ab("I'll fold each result back in as it lands.", true);
+
+      const agentsScreen = (name = "agents") =>
+        screen(
+          name,
+          `
+  ${nav({ title: "Agents", sub: "1 needs input", back: true })}
+  <div class="body">
+    ${section({ label: "Needs input", count: 1, rows: [arow(A2)] })}
+    ${section({ label: "Working", count: 1, rows: [arow(A1)] })}
+    ${section({
+      label: "Completed",
+      count: 5,
+      rows: [arow(A3), arow(DONE_EXTRA[0])],
+      extra: DONE_EXTRA.slice(1).map((a) => arow(a)),
+      panel: "done",
+    })}
+  </div>`,
+        );
+
+      const agentScreen = (name = "agent") =>
+        screen(
+          name,
+          `
+  ${nav({ title: "Research auth middleware", sub: "working · sonnet · medium · 12.4k", back: true })}
+  <div class="body">${list(TRANSCRIPT)}</div>`,
+        );
+
+      /* ============================== flow 1 — discovery ============================== */
+      const FLOW1 = {
+        n: "1",
+        title: "Discovery — how you find out a fleet is running",
+        q: "You're reading the thread. Three subagents just spawned. What do you see?",
+        variants: [
+          {
+            k: "A",
+            t: "Collapsed fleet row",
+            tag: "as built",
+            note: "<b>One 32px line inside the work log</b>, pinned where the spawn happened and exempt from the “+N previous” collapse so it can never hide. Static dot — no repainting animation. Tap opens the roster.",
+            cost: "cost: 0 — shipped",
+            build: () =>
+              phone(
+                screen(
+                  "root",
+                  `
+          ${nav({
+            title: "Add rate limiting",
+            sub: "pulse-code · main",
+            back: true,
+            acts: '<div class="navbtn">✦ Agents · 1 needs input</div>',
+          })}
+          <div class="body">
+            ${CHAT_TOP}
+            ${workLog(
+              [
+                wrow("⎿", "<b>Read</b> apps/server/src/http/router.ts"),
+                wrow("⎿", "<b>Edit</b> apps/server/src/http/rateLimit.ts"),
+              ],
+              4,
+            )}
+            ${fleetRow({ label: "Kicked off 3 subagents", status: "Research · 2 working" })}
+            ${CHAT_TAIL}
+          </div>
+          ${composer()}`,
+                  true,
+                ) +
+                  agentsScreen() +
+                  agentScreen(),
+              ),
+          },
+
+          {
+            k: "B",
+            t: "Sticky fleet bar",
+            tag: "new work",
+            note: "The fleet lives <b>above the composer</b>, not in the feed — it survives scrolling, so you can read back through the conversation and still see who's alive. Costs a pinned strip of vertical space and a second place agent state renders.",
+            cost: "new: pinned container + scroll-independent liveness",
+            build: () =>
+              phone(
+                screen(
+                  "root",
+                  `
+          ${nav({ title: "Add rate limiting", sub: "pulse-code · main", back: true })}
+          <div class="body">
+            ${CHAT_TOP}
+            ${workLog(
+              [
+                wrow("⎿", "<b>Read</b> apps/server/src/http/router.ts"),
+                wrow("⎿", "<b>Edit</b> apps/server/src/http/rateLimit.ts"),
+              ],
+              4,
+            )}
+            ${CHAT_TAIL}
+            ${ab("Two are still going; one wants to install a dependency.", true)}
+          </div>
+          <div class="sticky" data-goto="agents">
+            ${dot("needs")}
+            <div class="l"><div class="a">3 subagents · 1 needs input</div>
+              <div class="b">Research · Implement · Verify</div>
+              <div class="prog"><i style="width:56%"></i></div></div>
+            ${chev}
+          </div>
+          ${composer()}`,
+                  true,
+                ) +
+                  agentsScreen() +
+                  agentScreen(),
+              ),
+          },
+
+          {
+            k: "C",
+            t: "Inline fleet card",
+            tag: "chosen · shipped",
+            note: "The feed shows <b>the individuals</b>, not just a count — up to three named chips with their own dots, so the common case (3 agents) needs no navigation at all. The card is taller than a work row, so its height is derived from the spawn group the feed already measures; a fourth agent turns the last slot into “+N more” rather than growing the row.",
+            cost: "cost: 0 — shipped",
+            build: () =>
+              phone(
+                screen(
+                  "root",
+                  `
+          ${nav({ title: "Add rate limiting", sub: "pulse-code · main", back: true })}
+          <div class="body">
+            ${CHAT_TOP}
+            <div class="fcard">
+              <div class="top">${dot("needs")}<span class="h">Review changes</span><span class="m">3 agents</span></div>
+              <div class="chip" data-goto="agent">${dot(A1.dot)}<span>${esc(A1.t)}</span><span class="st">working</span></div>
+              <div class="chip" data-goto="agent">${dot(A2.dot)}<span>${esc(A2.t)}</span><span class="st">needs input</span></div>
+              <div class="chip" data-goto="agent">${dot(A3.dot)}<span>${esc(A3.t)}</span><span class="st">done</span></div>
+              <div class="all" data-goto="agents">Open Agents ›</div>
+            </div>
+            ${CHAT_TAIL}
+          </div>
+          ${composer()}`,
+                  true,
+                ) +
+                  agentsScreen() +
+                  agentScreen(),
+              ),
+          },
+        ],
+      };
+
+      /* ============================== flow 2 — entry ============================== */
+      const FLOW2 = {
+        n: "2",
+        title: "Entry — getting from the thread to the fleet",
+        q: "You want the full picture. How do you get there, and what happens to the chat?",
+        variants: [
+          {
+            k: "A",
+            t: "Header button + push",
+            tag: "as built",
+            note: "A header entry carrying the summary in its <b>label</b> (native header items can't hold a badge), so “1 needs input” is readable without opening anything. Pushes a full screen. Reachable from anywhere in the thread, including after scrolling past the spawn.",
+            cost: "cost: 0 — shipped",
+            build: () =>
+              phone(
+                screen(
+                  "root",
+                  `
+          ${nav({
+            title: "Add rate limiting",
+            sub: "pulse-code · main",
+            back: true,
+            acts: '<div class="navbtn" data-goto="agents">✦ Agents · 1 needs input</div>',
+          })}
+          <div class="body">
+            ${CHAT_TOP}
+            ${fleetRow({ label: "Kicked off 3 subagents", status: "Research · 2 working" })}
+            ${CHAT_TAIL}
+          </div>
+          ${composer()}`,
+                  true,
+                ) +
+                  agentsScreen() +
+                  agentScreen(),
+              ),
+          },
+
+          {
+            k: "B",
+            t: "Row-only, clean header",
+            tag: "new work",
+            note: "No header chrome at all — the <b>fleet row is the only door</b>. The header stays uncluttered on a 390pt screen where git controls already compete for space. Downside: scroll away from the spawn point and the door is gone.",
+            cost: "new: drop the header entry; needs a scroll-to-fleet affordance",
+            build: () =>
+              phone(
+                screen(
+                  "root",
+                  `
+          ${nav({
+            title: "Add rate limiting",
+            sub: "pulse-code · main",
+            back: true,
+            acts: '<div class="navbtn icon">⑂</div>',
+          })}
+          <div class="body">
+            ${CHAT_TOP}
+            ${fleetRow({ label: "Kicked off 3 subagents", status: "Research · 1 needs input", dotk: "needs" })}
+            ${CHAT_TAIL}
+            ${ab("Tests are green. Waiting on the dependency decision before I continue.", true)}
+          </div>
+          ${composer()}`,
+                  true,
+                ) +
+                  agentsScreen() +
+                  agentScreen(),
+              ),
+          },
+
+          {
+            k: "C",
+            t: "Half-sheet peek",
+            tag: "new work",
+            note: "The roster rises <b>over</b> the conversation instead of replacing it — the chat stays visible behind, and dismissing is a swipe, not a back-nav. Best for “glance and get out”; drilling into one agent still pushes a screen.",
+            cost: "new: sheet route + nested navigation out of a sheet",
+            build: () =>
+              phone(
+                screen(
+                  "root",
+                  `
+          ${nav({
+            title: "Add rate limiting",
+            sub: "pulse-code · main",
+            back: true,
+            acts: '<div class="navbtn" data-open>✦ 3</div>',
+          })}
+          <div class="body">
+            ${CHAT_TOP}
+            ${fleetRow({ label: "Kicked off 3 subagents", status: "Research · 2 working", opens: true })}
+            ${CHAT_TAIL}
+            ${ab("Tap ✦ 3 in the header, or the fleet row.", true)}
+          </div>
+          ${composer()}`,
+                  true,
+                ) + agentScreen(),
+                `<div class="scrim" data-close></div>
+         <div class="sheet">
+           <div class="grab"></div>
+           <div class="sh"><span class="t">Agents</span><span class="m">1 needs input</span></div>
+           ${list([arow(A2), arow(A1), arow(A3)])}
+           <div class="btns"><div class="btn sec" data-close>Done</div></div>
+         </div>`,
+              ),
+          },
+        ],
+      };
+
+      /* ============================== flow 3 — roster ============================== */
+      const FLOW3 = {
+        n: "3",
+        title: "Roster — how the fleet is organised",
+        q: "Seven agents, one of them stuck. What ordering answers “who needs me” fastest?",
+        variants: [
+          {
+            k: "A",
+            t: "State first",
+            tag: "as built",
+            note: "<b>Needs input → Working → Completed.</b> Live sections are never truncated; settled ones preview four with “… N more”, so a finished fleet of thirty can't push the one blocked agent off screen. Spawn order is preserved inside a section so rows don't shuffle under your thumb.",
+            cost: "cost: 0 — shipped",
+            build: () =>
+              phone(
+                screen(
+                  "root",
+                  `
+        ${nav({ title: "Agents", sub: "1 needs input", back: true })}
+        <div class="body">
+          ${section({ label: "Needs input", count: 1, rows: [arow(A2)] })}
+          ${section({ label: "Working", count: 1, rows: [arow(A1)] })}
+          ${section({
+            label: "Completed",
+            count: 5,
+            rows: [arow(A3), arow(DONE_EXTRA[0])],
+            extra: DONE_EXTRA.slice(1).map((a) => arow(a)),
+            panel: "done",
+          })}
+        </div>`,
+                  true,
+                ) + agentScreen(),
+              ),
+          },
+
+          {
+            k: "B",
+            t: "Workflow tree",
+            tag: "new work",
+            note: "Mirrors the desktop panel: <b>workflow → phase → agents</b>, spawn order intact. Wins when the shape of the run is the question (“did Verify start yet?”). Loses when one agent is blocked — you have to scan the whole tree to find it.",
+            cost: "new: tree renderer + indent-aware row measurement",
+            build: () =>
+              phone(
+                screen(
+                  "root",
+                  `
+        ${nav({ title: "Agents", sub: "Review changes · 7 agents", back: true })}
+        <div class="body">
+          <div class="tree">
+            <div class="twf">${dot("working")}<span>Review changes</span><span class="m">phase 3 of 3</span></div>
+            <div class="tnode">
+              <div class="tph">Research</div>
+              ${list([arow(A1, { showTok: false })])}
+              <div class="tph">Implement</div>
+              ${list([arow(A2, { showTok: false })])}
+              <div class="tph">Verify</div>
+              ${list([
+                arow(A3, { showTok: false }),
+                arow(DONE_EXTRA[0], { showTok: false }),
+                arow(DONE_EXTRA[1], { showTok: false }),
+                arow(DONE_EXTRA[2], { showTok: false }),
+                arow(DONE_EXTRA[3], { showTok: false }),
+              ])}
+            </div>
+          </div>
+        </div>`,
+                  true,
+                ) + agentScreen(),
+              ),
+          },
+
+          {
+            k: "C",
+            t: "Progress lanes",
+            tag: "new work",
+            note: "One lane per agent on a shared time axis — <b>how long each has been running</b> becomes visible, which is the thing neither other layout shows. Reads well for a wide fleet; the bars are estimates, and a lying progress bar is worse than none.",
+            cost: "new: duration model + an honest progress signal (we don't have one)",
+            build: () =>
+              phone(
+                screen(
+                  "root",
+                  `
+        ${nav({ title: "Agents", sub: "7 agents · 4m 12s", back: true })}
+        <div class="body">
+          <div class="axis"><span>14:02</span><span>14:04</span><span>14:06</span></div>
+          ${[A1, A2, A3]
+            .concat(DONE_EXTRA)
+            .map(
+              (a, i) => `
+            <div class="lane" data-goto="agent">
+              <div class="h">${dot(a.dot)}<span>${esc(a.t)}</span><span class="m">${esc(a.st)}</span></div>
+              <div class="track"><i style="left:${i * 6}%; width:${Math.max(18, a.pct - i * 4)}%; background:${
+                a.dot === "done"
+                  ? "var(--emerald)"
+                  : a.dot === "needs"
+                    ? "var(--amber)"
+                    : a.dot === "fail"
+                      ? "var(--rose)"
+                      : "var(--sky)"
+              }"></i></div>
+            </div>`,
+            )
+            .join('<div class="sep" style="margin-left:0"></div>')}
+        </div>`,
+                  true,
+                ) + agentScreen(),
+              ),
+          },
+        ],
+      };
+
+      /* ============================== flow 4 — drill-in ============================== */
+      const FLOW4 = {
+        n: "4",
+        title: "Drill-in — one agent's work",
+        q: "You opened an agent. What's the first thing on screen?",
+        variants: [
+          {
+            k: "A",
+            t: "Flat transcript",
+            tag: "as built",
+            note: "Exactly the rows the thread feed suppresses to stay quiet, <b>nothing collapsed further</b> — this screen exists to answer “what is it actually doing”, so hiding things here defeats it. Result or error card on top when there is one.",
+            cost: "cost: 0 — shipped",
+            build: () =>
+              phone(
+                screen(
+                  "root",
+                  `
+        ${nav({ title: "Research auth middleware", sub: "working · sonnet · medium · 12.4k", back: true })}
+        <div class="body">${list(TRANSCRIPT)}</div>`,
+                  true,
+                ),
+              ),
+          },
+
+          {
+            k: "B",
+            t: "Now → outcome → steps",
+            tag: "chosen · shipped",
+            note: "The order you picked: <b>what it is doing now</b> at the very top, then what came of it, then the steps that got there. NOW is absent for a settled agent — a block claiming a finished agent is busy is the lying spinner — so the outcome takes the top slot instead. Steps collapse to the newest three; nothing is ever summarized away.",
+            cost: "cost: 0 — shipped",
+            build: () =>
+              phone(
+                screen(
+                  "root",
+                  `
+        ${nav({ title: "Research auth middleware", sub: "working · sonnet · medium · 12.4k", back: true })}
+        <div class="body">
+          <div class="now"><div class="k">${dot("working")} Now</div>
+            <div class="v">Reading the existing limiter shape</div>
+            <div class="sub">Implement · reader</div></div>
+          <div class="sec" data-panel="steps" style="padding-bottom:0">
+            <div class="lbl">Steps</div>
+            <div class="list">
+              <div class="more more-show" data-toggle="steps">+2 earlier steps</div>
+              <div class="more more-hide" data-toggle="steps">all 5 steps</div>
+              <div class="collapsed">${TRANSCRIPT.slice(0, 2)
+                .map((r) => r + '<div class="sep"></div>')
+                .join("")}</div>
+              ${TRANSCRIPT.slice(2).join('<div class="sep"></div>')}
+            </div>
+          </div>
+          ${fleetRow({ label: "Same screen, once it settles", status: "no NOW block", dotk: "done", goto: "settled" })}
+        </div>`,
+                  true,
+                ) +
+                  screen(
+                    "settled",
+                    `
+        ${nav({ title: "Write tests", sub: "completed · sonnet · 8.1k", back: true })}
+        <div class="body">
+          <div class="result"><div class="k">Outcome</div>
+            <div class="v">Added 4 tests to <span style="font-family:var(--mono);font-size:11.5px">rateLimit.test.ts</span> covering burst, refill, per-key isolation, and the 429 body. All green.</div></div>
+          <div class="sec" style="padding-bottom:0"><div class="lbl">Steps</div>${list(TRANSCRIPT)}</div>
+        </div>`,
+                  ),
+              ),
+          },
+
+          {
+            k: "C",
+            t: "Now / history split",
+            tag: "new work",
+            note: "A pinned <b>“doing right now”</b> block that updates in place, with finished steps below it. The live line stops scrolling away, which is the usual complaint about long transcripts. Two rendering paths to keep honest, and the block is dead weight once the agent settles.",
+            cost: "new: pinned live block + settled-state fallback",
+            build: () =>
+              phone(
+                screen(
+                  "root",
+                  `
+        ${nav({ title: "Research auth middleware", sub: "working · 4m 12s · 12.4k", back: true })}
+        <div class="body">
+          <div class="now"><div class="k">${dot("working")} Now</div>
+            <div class="v">Reading the existing limiter shape</div>
+            <div class="sub">apps/server/src/http/router.ts · lines 60–140</div></div>
+          <div class="sec" style="padding-bottom:0"><div class="lbl">Earlier · 4</div>
+            ${list(TRANSCRIPT.slice(0, 4).reverse())}</div>
+        </div>`,
+                  true,
+                ),
+              ),
+          },
+        ],
+      };
+
+      /* ============================== flow 5 — needs input ============================== */
+      const FLOW5 = {
+        n: "5",
+        title: "Needs input — a subagent asks permission",
+        q: "An agent two levels down wants to run a command. Where does the question land?",
+        variants: [
+          {
+            k: "A",
+            t: "In the composer",
+            tag: "as built",
+            note: "The request arrives <b>where you already answer things</b>, attributed to the agent that asked. No new surface, and it works from a notification tap. Downside: two agents asking at once queue behind each other.",
+            cost: "cost: 0 — shipped",
+            build: () =>
+              phone(
+                screen(
+                  "root",
+                  `
+          ${nav({
+            title: "Add rate limiting",
+            sub: "pulse-code · main",
+            back: true,
+            acts: '<div class="navbtn" data-goto="agents">✦ 1 needs input</div>',
+          })}
+          <div class="body">
+            ${CHAT_TOP}
+            ${fleetRow({ label: "Kicked off 3 subagents", status: "Implement · 1 needs input", dotk: "needs" })}
+            <div class="ask" data-swap-slot="ask">
+              <div class="swap-a">
+                <div class="who">${dot("needs")} Patch upload route asks</div>
+                <div class="what">Install a dependency to implement the limiter?</div>
+                <div class="cmd">npm i limiter</div>
+                <div class="btns">
+                  <div class="btn pri" data-swap="ask">Allow</div>
+                  <div class="btn sec" data-swap="ask">Deny</div>
+                  <div class="btn link" data-goto="agent">Open</div>
+                </div>
+              </div>
+              <div class="swap-b" style="display:none">
+                <div class="who">${dot("working")} Patch upload route</div>
+                <div class="what">Allowed — agent resumed.</div>
+              </div>
+            </div>
+          </div>
+          ${composer()}`,
+                  true,
+                ) +
+                  agentsScreen() +
+                  agentScreen(),
+              ),
+          },
+
+          {
+            k: "B",
+            t: "On the agent's row",
+            tag: "new work",
+            note: "The chat gets a <b>one-line nudge</b>; the decision lives on the row of the agent that asked. Scales to several simultaneous asks and keeps the conversation readable — at the cost of one extra tap, every time.",
+            cost: "new: inline approval control inside roster rows",
+            build: () =>
+              phone(
+                screen(
+                  "root",
+                  `
+          ${nav({ title: "Add rate limiting", sub: "pulse-code · main", back: true })}
+          <div class="body">
+            ${CHAT_TOP}
+            ${fleetRow({ label: "Kicked off 3 subagents", status: "Implement · 1 needs input", dotk: "needs" })}
+            <div class="nudge" data-goto="agents">${dot("needs")}<span>1 agent needs your input</span><span class="c">Review ›</span></div>
+            ${CHAT_TAIL}
+          </div>
+          ${composer()}`,
+                  true,
+                ) +
+                  screen(
+                    "agents",
+                    `
+          ${nav({ title: "Agents", sub: "1 needs input", back: true })}
+          <div class="body">
+            <div class="sec"><div class="lbl">Needs input · 1</div>
+              <div class="list">
+                <div class="arow" data-goto="agent">${dot(A2.dot)}
+                  <div class="mid"><div class="t">${esc(A2.t)}</div><div class="s">Wants to run a command</div></div>
+                  ${chev}</div>
+                <div class="sep"></div>
+                <div data-swap-slot="ask2" style="padding:10px 11px">
+                  <div class="swap-a">
+                    <div class="cmd" style="margin-top:0">npm i limiter</div>
+                    <div class="btns"><div class="btn pri" data-swap="ask2">Allow</div><div class="btn sec" data-swap="ask2">Deny</div></div>
+                  </div>
+                  <div class="swap-b" style="display:none;font-size:12px;color:var(--fg3)">Allowed — agent resumed.</div>
+                </div>
+              </div>
+            </div>
+            ${section({ label: "Working", count: 1, rows: [arow(A1)] })}
+            ${section({
+              label: "Completed",
+              count: 5,
+              rows: [arow(A3), arow(DONE_EXTRA[0])],
+              extra: DONE_EXTRA.slice(1).map((a) => arow(a)),
+              panel: "done",
+            })}
+          </div>`,
+                  ) +
+                  agentScreen(),
+              ),
+          },
+
+          {
+            k: "C",
+            t: "Interruptive sheet",
+            tag: "new work",
+            note: "The ask <b>takes the screen</b> the moment it arrives. Nothing gets missed and the fleet stalls for the shortest possible time — but it interrupts whatever you were reading, and a chatty provider turns this into a modal treadmill.",
+            cost: "new: modal approval route + queueing for concurrent asks",
+            build: () =>
+              phone(
+                screen(
+                  "root",
+                  `
+          ${nav({ title: "Add rate limiting", sub: "pulse-code · main", back: true })}
+          <div class="body">
+            ${CHAT_TOP}
+            ${fleetRow({ label: "Kicked off 3 subagents", status: "Implement · 1 needs input", dotk: "needs" })}
+            ${CHAT_TAIL}
+            <div class="btns"><div class="btn sec" data-open>Replay the interruption</div></div>
+          </div>
+          ${composer()}`,
+                  true,
+                ) +
+                  agentsScreen() +
+                  agentScreen(),
+                `<div class="scrim" data-close></div>
+         <div class="sheet">
+           <div class="grab"></div>
+           <div class="sh">${dot("needs")}<span class="t">Patch upload route</span><span class="m">waiting 0:06</span></div>
+           <div style="padding:2px 2px 0">
+             <div style="font-size:13.5px;line-height:1.5">Install a dependency to implement the limiter?</div>
+             <div class="cmd">npm i limiter</div>
+             <div style="font-size:11.5px;color:var(--fg3);margin-top:9px">Spawned by <b style="color:var(--fg2)">Review changes</b> · Implement phase</div>
+             <div class="btns"><div class="btn pri" data-close>Allow</div><div class="btn sec" data-close>Deny</div></div>
+             <div class="btns"><div class="btn sec" data-goto="agent">See what it's done so far</div></div>
+           </div>
+         </div>`,
+              ),
+          },
+        ],
+      };
+
+      /* ============================== flow 6 — lock screen ============================== */
+      const FLOW6 = {
+        n: "6",
+        title: "Lock screen — the fleet outlives the turn",
+        q: "The turn settled but three agents are still going. What does the phone say?",
+        variants: [
+          {
+            k: "A",
+            t: "Liveness-aware Live Activity",
+            tag: "as built",
+            note: "The awareness ladder now reads <b>backgroundLiveness</b>, so a settled turn with live subagents stays <em>running</em> instead of claiming the agent finished. Watch loops (“monitoring”) are deliberately excluded — an immortal Live Activity is worse than no signal.",
+            cost: "cost: 0 — shipped (iOS)",
+            build: () =>
+              phone(
+                screen(
+                  "root",
+                  `
+        <div class="lock">
+          <div class="clock"><div class="h">9:41</div><div class="d">Friday, 22 August</div></div>
+          <div class="la">
+            <div class="r1">${dot("working")}<span class="app">Pulse Code</span><span class="t">now</span></div>
+            <div class="r2">Add rate limiting</div>
+            <div class="r3">Subagents are still working.</div>
+            <div class="r4"><span class="pill">${dot("working")} 2 working</span><span class="pill">${dot("done")} 1 done</span></div>
+          </div>
+        </div>`,
+                  true,
+                ),
+              ),
+          },
+
+          {
+            k: "B",
+            t: "Actionable per-agent",
+            tag: "new work",
+            note: "The Live Activity carries the <b>roster summary and the blocking ask</b>, not just the thread phase — you can unblock the fleet without unlocking. Needs the awareness payload to grow a fleet breakdown, and every count change is a push.",
+            cost: "new: fleet counts + actions in the awareness payload",
+            build: () =>
+              phone(
+                screen(
+                  "root",
+                  `
+        <div class="lock">
+          <div class="clock"><div class="h">9:41</div><div class="d">Friday, 22 August</div></div>
+          <div class="la">
+            <div class="r1">${dot("needs")}<span class="app">Pulse Code</span><span class="t">now</span></div>
+            <div class="r2">1 agent needs your input</div>
+            <div class="r3">Patch upload route · npm i limiter</div>
+            <div class="r4"><span class="pill">Allow</span><span class="pill">Deny</span><span class="pill">Open</span></div>
+          </div>
+        </div>`,
+                  true,
+                ),
+              ),
+          },
+
+          {
+            k: "C",
+            t: "Quiet until blocked",
+            tag: "new work",
+            note: "No live signal while the fleet is merely <b>working</b> — it only speaks when something needs you or everything is done. Fewest interruptions, and cheap; you lose the ambient “still going” reassurance the Live Activity exists for.",
+            cost: "new: suppression rule in the phase ladder",
+            build: () =>
+              phone(
+                screen(
+                  "root",
+                  `
+        <div class="lock">
+          <div class="clock"><div class="h">9:41</div><div class="d">Friday, 22 August</div></div>
+          <div class="la" style="opacity:.55">
+            <div class="r1">${dot("idle")}<span class="app">Pulse Code</span><span class="t">4m ago</span></div>
+            <div class="r2">Working quietly</div>
+            <div class="r3">You'll hear from us when an agent needs you.</div>
+          </div>
+        </div>`,
+                  true,
+                ),
+              ),
+          },
+        ],
+      };
+
+      /* ============================== render ============================== */
+      const FLOWS = [FLOW1, FLOW2, FLOW3, FLOW4, FLOW5, FLOW6];
+      const tabs = document.getElementById("tabs");
+      const stage = document.getElementById("stage");
+
+      FLOWS.forEach((f, i) => {
+        const b = document.createElement("button");
+        b.className = "tab" + (i === 0 ? " on" : "");
+        b.innerHTML = '<span class="n">' + f.n + "</span>" + esc(f.title.split(" — ")[0]);
+        b.onclick = () => {
+          Array.from(tabs.children).forEach((c) => c.classList.remove("on"));
+          b.classList.add("on");
+          render(f);
+        };
+        tabs.append(b);
+      });
+
+      function render(f) {
+        stage.innerHTML = `
+    <div class="flow-head">
+      <h2>${esc(f.title)}</h2>
+      <p><span class="q">${esc(f.q)}</span></p>
+    </div>
+    <div class="row">
+      ${f.variants
+        .map(
+          (v) => `
+        <div class="col">
+          <div class="vhead"><span class="k">${v.k}</span><span class="t">${esc(v.t)}</span>
+            <span class="badge ${v.tag === "as built" ? "" : "new"}">${v.tag}</span></div>
+          ${v.build()}
+          <p class="note">${v.note}</p>
+          <p class="cost">${esc(v.cost)}</p>
+        </div>`,
+        )
+        .join("")}
+    </div>`;
+      }
+      render(FLOWS[0]);
+
+      /* ============================== interaction ============================== */
+      document.addEventListener("click", (e) => {
+        const phoneEl = e.target.closest(".phone");
+        if (!phoneEl) return;
+        const vp = phoneEl.querySelector(".vp");
+
+        const goto = e.target.closest("[data-goto]");
+        if (goto && goto.dataset.goto) {
+          const next = vp.querySelector('.screen[data-screen="' + goto.dataset.goto + '"]');
+          if (next) {
+            const cur = vp.querySelector(".screen.on");
+            if (cur && cur !== next) {
+              cur.classList.remove("on");
+              cur.classList.add("under");
+            }
+            next.classList.remove("under");
+            next.classList.add("on");
+            vp.classList.remove("open");
+            return;
+          }
+        }
+
+        if (e.target.closest("[data-back]")) {
+          const cur = vp.querySelector(".screen.on");
+          const stack = Array.from(vp.querySelectorAll(".screen.under"));
+          const under = stack[stack.length - 1];
+          if (cur && under) {
+            cur.classList.remove("on");
+            under.classList.remove("under");
+            under.classList.add("on");
+          }
+          return;
+        }
+
+        const toggle = e.target.closest("[data-toggle]");
+        if (toggle) {
+          const panel = vp.querySelector('[data-panel="' + toggle.dataset.toggle + '"]');
+          if (panel) panel.classList.toggle("open");
+          return;
+        }
+
+        const swap = e.target.closest("[data-swap]");
+        if (swap) {
+          const slot = vp.querySelector('[data-swap-slot="' + swap.dataset.swap + '"]');
+          if (slot) {
+            slot.querySelector(".swap-a").style.display = "none";
+            slot.querySelector(".swap-b").style.display = "block";
+          }
+          return;
+        }
+
+        if (e.target.closest("[data-open]")) {
+          vp.classList.add("open");
+          return;
+        }
+        if (e.target.closest("[data-close]")) {
+          vp.classList.remove("open");
+        }
+      });
+    </script>
+  </body>
+</html>

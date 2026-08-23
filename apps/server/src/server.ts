@@ -62,8 +62,13 @@ import { ProviderRuntimeIngestionLive } from "./orchestration/Layers/ProviderRun
 import { ProviderCommandReactorLive } from "./orchestration/Layers/ProviderCommandReactor.ts";
 import { CheckpointReactorLive } from "./orchestration/Layers/CheckpointReactor.ts";
 import { ThreadDeletionReactorLive } from "./orchestration/Layers/ThreadDeletionReactor.ts";
+import { ScheduleReactorLive } from "./orchestration/Layers/ScheduleReactor.ts";
+import { ScheduleAuthProbeLive } from "./orchestration/Layers/ScheduleAuthProbe.ts";
+import { ScheduleProviderInstancesLive } from "./orchestration/Layers/ScheduleProviderInstances.ts";
+import { ScheduleWorkingTreeProbeLive } from "./orchestration/Layers/ScheduleWorkingTreeProbe.ts";
 import * as AgentAwarenessRelay from "./relay/AgentAwarenessRelay.ts";
 import { hasCloudPublicConfig } from "./cloud/publicConfig.ts";
+import { ProviderPlanUsageTrackerLive } from "./provider/Layers/ProviderPlanUsageTracker.ts";
 import { ProviderRegistryLive } from "./provider/Layers/ProviderRegistry.ts";
 import * as ServerSettings from "./serverSettings.ts";
 import * as ProjectFaviconResolver from "./project/ProjectFaviconResolver.ts";
@@ -248,7 +253,12 @@ const ReactorLayerLive = Layer.empty.pipe(
   Layer.provideMerge(ProviderCommandReactorLive),
   Layer.provideMerge(CheckpointReactorLive),
   Layer.provideMerge(ThreadDeletionReactorLive),
+  Layer.provideMerge(ScheduleReactorLive),
+  Layer.provideMerge(ScheduleAuthProbeLive),
+  Layer.provideMerge(ScheduleWorkingTreeProbeLive),
+  Layer.provideMerge(ScheduleProviderInstancesLive),
   Layer.provideMerge(AgentAwarenessRelay.layer.pipe(Layer.provide(ServerSecretStore.layer))),
+  Layer.provideMerge(ProviderPlanUsageTrackerLive),
   Layer.provideMerge(RuntimeReceiptBusLive),
 );
 

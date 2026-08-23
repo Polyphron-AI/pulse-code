@@ -27,6 +27,14 @@ import {
   ThreadApprovalResponseRequestedPayload as ContractsThreadApprovalResponseRequestedPayloadSchema,
   ThreadCheckpointRevertRequestedPayload as ContractsThreadCheckpointRevertRequestedPayloadSchema,
   ThreadSessionStopRequestedPayload as ContractsThreadSessionStopRequestedPayloadSchema,
+  ProjectScheduleCreatedPayload as ContractsProjectScheduleCreatedPayloadSchema,
+  ProjectScheduleUpdatedPayload as ContractsProjectScheduleUpdatedPayloadSchema,
+  ProjectSchedulePausedPayload as ContractsProjectSchedulePausedPayloadSchema,
+  ProjectScheduleResumedPayload as ContractsProjectScheduleResumedPayloadSchema,
+  ProjectScheduleDeletedPayload as ContractsProjectScheduleDeletedPayloadSchema,
+  ScheduleOccurrenceStartedPayload as ContractsScheduleOccurrenceStartedPayloadSchema,
+  ScheduleOccurrenceCompletedPayload as ContractsScheduleOccurrenceCompletedPayloadSchema,
+  ScheduleOccurrenceFailedPayload as ContractsScheduleOccurrenceFailedPayloadSchema,
 } from "@t3tools/contracts";
 
 // Server-internal alias surface, backed by contract schemas as the source of truth.
@@ -64,3 +72,12 @@ export const ThreadApprovalResponseRequestedPayload =
 export const ThreadCheckpointRevertRequestedPayload =
   ContractsThreadCheckpointRevertRequestedPayloadSchema;
 export const ThreadSessionStopRequestedPayload = ContractsThreadSessionStopRequestedPayloadSchema;
+
+export const ProjectScheduleCreatedPayload = ContractsProjectScheduleCreatedPayloadSchema;
+export const ProjectScheduleUpdatedPayload = ContractsProjectScheduleUpdatedPayloadSchema;
+export const ProjectSchedulePausedPayload = ContractsProjectSchedulePausedPayloadSchema;
+export const ProjectScheduleResumedPayload = ContractsProjectScheduleResumedPayloadSchema;
+export const ProjectScheduleDeletedPayload = ContractsProjectScheduleDeletedPayloadSchema;
+export const ScheduleOccurrenceStartedPayload = ContractsScheduleOccurrenceStartedPayloadSchema;
+export const ScheduleOccurrenceCompletedPayload = ContractsScheduleOccurrenceCompletedPayloadSchema;
+export const ScheduleOccurrenceFailedPayload = ContractsScheduleOccurrenceFailedPayloadSchema;

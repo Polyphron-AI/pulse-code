@@ -2,8 +2,10 @@ import type {
   OrchestrationCommand,
   OrchestrationProject,
   OrchestrationReadModel,
+  OrchestrationSchedule,
   OrchestrationThread,
   ProjectId,
+  ScheduleId,
   ThreadId,
 } from "@t3tools/contracts";
 import { normalizeProjectPathForComparison } from "@t3tools/shared/path";
@@ -163,6 +165,47 @@ export function requireThreadAbsent(input: {
     invariantError(
       input.command.type,
       `Thread '${input.threadId}' already exists and cannot be created twice.`,
+    ),
+  );
+}
+
+export function findScheduleById(
+  readModel: OrchestrationReadModel,
+  scheduleId: ScheduleId,
+): OrchestrationSchedule | undefined {
+  return (readModel.schedules ?? []).find((schedule) => schedule.id === scheduleId);
+}
+
+/** The schedule must exist and not be soft-deleted. */
+export function requireActiveSchedule(input: {
+  readonly readModel: OrchestrationReadModel;
+  readonly command: OrchestrationCommand;
+  readonly scheduleId: ScheduleId;
+}): Effect.Effect<OrchestrationSchedule, OrchestrationCommandInvariantError> {
+  const schedule = findScheduleById(input.readModel, input.scheduleId);
+  if (schedule && schedule.deletedAt === null) {
+    return Effect.succeed(schedule);
+  }
+  return Effect.fail(
+    invariantError(
+      input.command.type,
+      `Schedule '${input.scheduleId}' does not exist for command '${input.command.type}'.`,
+    ),
+  );
+}
+
+export function requireScheduleAbsent(input: {
+  readonly readModel: OrchestrationReadModel;
+  readonly command: OrchestrationCommand;
+  readonly scheduleId: ScheduleId;
+}): Effect.Effect<void, OrchestrationCommandInvariantError> {
+  if (!findScheduleById(input.readModel, input.scheduleId)) {
+    return Effect.void;
+  }
+  return Effect.fail(
+    invariantError(
+      input.command.type,
+      `Schedule '${input.scheduleId}' already exists and cannot be created twice.`,
     ),
   );
 }

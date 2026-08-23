@@ -20,6 +20,8 @@ import { ArchivedThreadsRouteScreen } from "./features/archive/ArchivedThreadsRo
 import { useAgentNotificationNavigation } from "./features/agent-awareness/notificationNavigation";
 import { ConnectOnboardingRouteScreen } from "./features/cloud/ConnectOnboardingRouteScreen";
 import { useConnectOnboardingNavigation } from "./features/cloud/connectOnboardingNavigation";
+import { ThreadAgentActivityRouteScreen } from "./features/agents/ThreadAgentActivityRouteScreen";
+import { ThreadAgentsRouteScreen } from "./features/agents/ThreadAgentsRouteScreen";
 import { ThreadFilesTreeScreen, ThreadFileScreen } from "./features/files/ThreadFilesRouteScreen";
 import { AdaptiveWorkspaceLayout } from "./features/layout/AdaptiveWorkspaceLayout";
 import { HardwareKeyboardCommandProvider } from "./features/keyboard/HardwareKeyboardCommandProvider";
@@ -505,6 +507,19 @@ export const RootStack = createNativeStackNavigator({
         sheetAllowedDetents: Platform.OS === "android" ? undefined : [0.55, 0.92],
         sheetGrabberVisible: Platform.OS !== "android",
       },
+    }),
+    ThreadAgents: createNativeStackScreen({
+      screen: ThreadAgentsRouteScreen,
+      linking: `${THREAD_LINKING_PREFIX}/agents`,
+      options: {
+        ...GLASS_HEADER_OPTIONS,
+        title: "Agents",
+      },
+    }),
+    ThreadAgent: createNativeStackScreen({
+      screen: ThreadAgentActivityRouteScreen,
+      linking: `${THREAD_LINKING_PREFIX}/agents/:agentId`,
+      options: SOLID_HEADER_OPTIONS,
     }),
     ThreadFiles: createNativeStackScreen({
       screen: ThreadFilesTreeScreen,

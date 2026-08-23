@@ -1,0 +1,949 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pulse Code — Issue → Thread entry points</title>
+    <style>
+      :root {
+        --bg: #0b0c0e;
+        --panel: #131519;
+        --panel2: #191c21;
+        --border: #262a31;
+        --text: #e6e8eb;
+        --muted: #8b919b;
+        --accent: #4f7cff;
+        --green: #2fd07e;
+        --amber: #e8b93e;
+        --red: #ef6a6a;
+        --chip: #1f242c;
+        font-family: -apple-system, "Segoe UI", Roboto, Inter, sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        background: var(--bg);
+        color: var(--text);
+        padding: 32px 24px 80px;
+        line-height: 1.45;
+      }
+      h1 {
+        font-size: 20px;
+        margin-bottom: 4px;
+      }
+      .sub {
+        color: var(--muted);
+        font-size: 13px;
+        margin-bottom: 24px;
+      }
+      .tabs {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 24px;
+      }
+      .tab {
+        padding: 8px 18px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--panel);
+        color: var(--muted);
+        cursor: pointer;
+        font-size: 13px;
+      }
+      .tab.active {
+        color: var(--text);
+        border-color: var(--accent);
+        background: #151a26;
+      }
+      .surface {
+        display: none;
+      }
+      .surface.active {
+        display: block;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+        gap: 28px;
+      }
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+      }
+      .card h3 {
+        font-size: 13px;
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .card h3 .badge {
+        font-size: 10px;
+        padding: 2px 8px;
+        border-radius: 20px;
+        background: var(--chip);
+        color: var(--muted);
+        font-weight: 400;
+      }
+      .badge.rec {
+        background: #15301f;
+        color: var(--green);
+      }
+      .card .note {
+        padding: 10px 16px;
+        font-size: 12px;
+        color: var(--muted);
+        border-top: 1px solid var(--border);
+      }
+      .stage {
+        padding: 20px;
+        min-height: 280px;
+        position: relative;
+      }
+
+      /* --- shared mock widgets --- */
+      .composer {
+        background: var(--panel2);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 14px;
+      }
+      .composer .input {
+        color: var(--muted);
+        font-size: 14px;
+        min-height: 40px;
+      }
+      .composer .input .typed {
+        color: var(--text);
+      }
+      .caret {
+        display: inline-block;
+        width: 1px;
+        height: 15px;
+        background: var(--accent);
+        vertical-align: -2px;
+        animation: blink 1s step-end infinite;
+      }
+      @keyframes blink {
+        50% {
+          opacity: 0;
+        }
+      }
+      .composer .bar {
+        display: flex;
+        gap: 10px;
+        margin-top: 12px;
+        align-items: center;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .pill {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 4px 10px;
+        cursor: pointer;
+        background: var(--panel);
+      }
+      .pill:hover {
+        border-color: var(--accent);
+        color: var(--text);
+      }
+      .send {
+        margin-left: auto;
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        background: var(--accent);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+      }
+
+      .popover {
+        position: absolute;
+        background: #101318;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+        min-width: 340px;
+        z-index: 5;
+        display: none;
+        overflow: hidden;
+      }
+      .popover.open {
+        display: block;
+      }
+      .popover .hd {
+        padding: 8px 12px;
+        font-size: 11px;
+        color: var(--muted);
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        justify-content: space-between;
+      }
+      .row {
+        padding: 10px 12px;
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        cursor: pointer;
+        font-size: 13px;
+      }
+      .row:hover,
+      .row.sel {
+        background: #1a2130;
+      }
+      .row .id {
+        font-family: ui-monospace, monospace;
+        color: var(--accent);
+        font-size: 12px;
+        flex-shrink: 0;
+      }
+      .row .t {
+        flex: 1;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .row .st {
+        font-size: 10px;
+        padding: 2px 7px;
+        border-radius: 10px;
+        flex-shrink: 0;
+      }
+      .st.ticket {
+        background: #152a3a;
+        color: #5ab0ff;
+      }
+      .st.inbox {
+        background: #332a12;
+        color: var(--amber);
+      }
+      .st.crit {
+        background: #361619;
+        color: var(--red);
+      }
+      .chips {
+        display: flex;
+        gap: 6px;
+        margin-bottom: 10px;
+        flex-wrap: wrap;
+      }
+      .chip {
+        background: var(--chip);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 5px 10px;
+        font-size: 12px;
+        display: flex;
+        gap: 6px;
+        align-items: center;
+      }
+      .chip .x {
+        color: var(--muted);
+        cursor: pointer;
+      }
+      .chip.issue {
+        border-color: #2a4a7a;
+        background: #12203a;
+      }
+      .kbd {
+        font-family: ui-monospace, monospace;
+        background: var(--chip);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 1px 5px;
+        font-size: 11px;
+      }
+      .btn {
+        border: 1px solid var(--border);
+        background: var(--panel2);
+        color: var(--text);
+        border-radius: 8px;
+        padding: 6px 14px;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .btn.primary {
+        background: var(--accent);
+        border-color: var(--accent);
+      }
+      .btn.ghost {
+        background: transparent;
+        color: var(--muted);
+      }
+      .btn:hover {
+        filter: brightness(1.15);
+      }
+      .toast {
+        position: fixed;
+        bottom: 24px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: #15301f;
+        color: var(--green);
+        border: 1px solid #1f5c39;
+        padding: 10px 18px;
+        border-radius: 10px;
+        font-size: 13px;
+        display: none;
+        z-index: 99;
+      }
+      .toast.show {
+        display: block;
+        animation: pop 0.18s ease;
+      }
+      @keyframes pop {
+        from {
+          opacity: 0;
+          transform: translate(-50%, 8px);
+        }
+        to {
+          opacity: 1;
+          transform: translate(-50%, 0);
+        }
+      }
+
+      /* inbox table */
+      .tbl {
+        font-size: 12.5px;
+        width: 100%;
+      }
+      .tbl .trow {
+        display: flex;
+        gap: 12px;
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--border);
+        align-items: center;
+        cursor: pointer;
+        position: relative;
+      }
+      .tbl .trow:hover {
+        background: #171b22;
+      }
+      .tbl .hdr {
+        color: var(--muted);
+        font-size: 10.5px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        cursor: default;
+      }
+      .tbl .hdr:hover {
+        background: none;
+      }
+      .hoveracts {
+        display: none;
+        gap: 6px;
+        position: absolute;
+        right: 10px;
+      }
+      .trow:hover .hoveracts {
+        display: flex;
+      }
+
+      /* mobile frame */
+      .phone {
+        width: 320px;
+        height: 560px;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 28px;
+        margin: 0 auto;
+        overflow: hidden;
+        position: relative;
+        display: flex;
+        flex-direction: column;
+      }
+      .phone .top {
+        padding: 14px 16px 10px;
+        font-size: 13px;
+        font-weight: 600;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .phone .body {
+        flex: 1;
+        overflow: auto;
+        padding: 12px;
+      }
+      .sheet {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: #14171c;
+        border-top: 1px solid var(--border);
+        border-radius: 18px 18px 0 0;
+        transform: translateY(105%);
+        transition: transform 0.25s ease;
+        z-index: 6;
+        box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.6);
+      }
+      .sheet.open {
+        transform: translateY(0);
+      }
+      .sheet .grab {
+        width: 36px;
+        height: 4px;
+        background: var(--border);
+        border-radius: 4px;
+        margin: 10px auto 4px;
+      }
+      .sheet .row {
+        padding: 13px 18px;
+        font-size: 14px;
+      }
+      .mrow {
+        padding: 12px 10px;
+        border-bottom: 1px solid var(--border);
+        font-size: 13px;
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        cursor: pointer;
+        user-select: none;
+      }
+      .mrow:active {
+        background: #1a2130;
+      }
+      .mcomposer {
+        border-top: 1px solid var(--border);
+        padding: 10px;
+        background: var(--panel2);
+      }
+      .mcomposer .field {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 10px;
+        font-size: 13px;
+        color: var(--muted);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .plusbtn {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        border: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        flex-shrink: 0;
+        color: var(--muted);
+      }
+      .dim {
+        position: absolute;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.45);
+        display: none;
+        z-index: 5;
+      }
+      .dim.on {
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Issue → Thread entry points</h1>
+    <div class="sub">
+      Interactive mockups of candidate entry points for pulling a Pulse issue (or untriaged inbox
+      report) into a thread. Everything is clickable. Data mirrors the Techtraders case:
+      <span class="kbd">#5249a549</span> is an UNTICKETED inbox report.
+    </div>
+
+    <div class="tabs">
+      <div class="tab active" onclick="tab('desktop', this)">🖥 Desktop / Web</div>
+      <div class="tab" onclick="tab('mobile', this)">📱 Mobile</div>
+    </div>
+
+    <!-- ================= DESKTOP ================= -->
+    <div class="surface active" id="desktop">
+      <div class="grid">
+        <!-- A: # mention -->
+        <div class="card">
+          <h3>
+            A · Composer <span class="kbd">#</span>-mention
+            <span class="badge rec">recommended</span>
+          </h3>
+          <div class="stage" id="stA">
+            <div class="chips" id="chipsA"></div>
+            <div class="composer">
+              <div class="input" onclick="openA()">
+                <span class="typed">Fix the order sync issue </span
+                ><span class="typed" style="color: var(--accent)">#</span
+                ><span class="caret"></span>
+                <span style="color: var(--muted)"> ← click to trigger the mention popover</span>
+              </div>
+              <div class="bar">
+                <span class="pill">Claude Opus 5</span><span class="pill">High · 1M</span>
+                <div class="send">↑</div>
+              </div>
+            </div>
+            <div class="popover" id="popA" style="bottom: 110px; left: 20px">
+              <div class="hd">
+                <span>Issues · Techtraders</span><span>↑↓ navigate · ⏎ attach</span>
+              </div>
+              <div
+                class="row sel"
+                onclick="attachA('#5249a549', 'Orders syncing disconnect', 'inbox')"
+              >
+                <span class="id">#5249a549</span
+                ><span class="t"
+                  >There seems to be a disconnect between orders that are syncing…</span
+                >
+                <span class="st inbox">inbox · received</span>
+              </div>
+              <div
+                class="row"
+                onclick="attachA('#88fe2c10', 'Checkout 500 on empty cart', 'ticket')"
+              >
+                <span class="id">#88fe2c10</span
+                ><span class="t">Checkout returns 500 on empty cart</span
+                ><span class="st ticket">todo</span>
+              </div>
+              <div class="row" onclick="attachA('#c31d9b77', 'Price rounding drift', 'ticket')">
+                <span class="id">#c31d9b77</span
+                ><span class="t">Price rounding drift on bulk import</span
+                ><span class="st crit">critical</span>
+              </div>
+            </div>
+          </div>
+          <div class="note">
+            Typing <b>#</b> in the composer autocompletes across tickets <i>and</i> inbox reports
+            for the mapped project. Attaching an inbox report auto-promotes it to a ticket on send,
+            then links the thread. Zero navigation.
+          </div>
+        </div>
+
+        <!-- B: attach picker -->
+        <div class="card">
+          <h3>B · Composer attach button <span class="badge">low discovery cost</span></h3>
+          <div class="stage" id="stB">
+            <div class="chips" id="chipsB"></div>
+            <div class="composer">
+              <div class="input">
+                <span style="color: var(--muted)">Ask for follow-up changes or attach images</span>
+              </div>
+              <div class="bar">
+                <span class="pill" onclick="togglePop('popB')">⊕ Attach ▾</span>
+                <span class="pill">Claude Opus 5</span>
+                <div class="send">↑</div>
+              </div>
+            </div>
+            <div class="popover" id="popB" style="bottom: 64px; left: 20px; min-width: 220px">
+              <div
+                class="row"
+                onclick="
+                  togglePop('popB');
+                  togglePop('popB2');
+                "
+              >
+                🐞 &nbsp;Issue from Pulse…
+              </div>
+              <div class="row">🖼 &nbsp;Image</div>
+              <div class="row">📄 &nbsp;File</div>
+            </div>
+            <div class="popover" id="popB2" style="bottom: 64px; left: 120px">
+              <div class="hd"><span>Search issues…</span><span>2 tickets · 1 inbox</span></div>
+              <div
+                class="row"
+                onclick="
+                  attach('chipsB', '#5249a549', 'Orders syncing disconnect');
+                  closeAll();
+                  toast('Report will be promoted to a ticket & linked on send');
+                "
+              >
+                <span class="id">#5249a549</span><span class="t">Orders syncing disconnect…</span
+                ><span class="st inbox">inbox</span>
+              </div>
+              <div
+                class="row"
+                onclick="
+                  attach('chipsB', '#88fe2c10', 'Checkout 500 on empty cart');
+                  closeAll();
+                "
+              >
+                <span class="id">#88fe2c10</span><span class="t">Checkout 500 on empty cart</span
+                ><span class="st ticket">todo</span>
+              </div>
+            </div>
+          </div>
+          <div class="note">
+            Explicit “Attach → Issue from Pulse” in the composer bar. Same picker as A, but
+            discoverable without knowing the <b>#</b> shortcut. Pairs with the existing image/file
+            attach affordance.
+          </div>
+        </div>
+
+        <!-- C: inbox row hover actions -->
+        <div class="card">
+          <h3>C · Issues inbox → “Promote &amp; fix” <span class="badge">issue-first</span></h3>
+          <div class="stage">
+            <div class="tbl">
+              <div class="trow hdr">
+                <span style="width: 80px">ID</span><span style="flex: 1">Title</span
+                ><span style="width: 90px">Status</span>
+              </div>
+              <div class="trow">
+                <span class="id" style="width: 80px">#5249a549</span>
+                <span class="t" style="flex: 1"
+                  >There seems to be a disconnect between orders that are syncing…</span
+                >
+                <span class="st inbox" style="width: 90px; text-align: center">received</span>
+                <div class="hoveracts">
+                  <button
+                    class="btn primary"
+                    onclick="
+                      toast('Promoted to ticket → new thread draft opened with issue context')
+                    "
+                  >
+                    ⚡ Promote &amp; fix
+                  </button>
+                  <button class="btn" onclick="toast('Promoted to ticket (no thread)')">
+                    Promote
+                  </button>
+                </div>
+              </div>
+              <div class="trow">
+                <span class="id" style="width: 80px">#88fe2c10</span>
+                <span class="t" style="flex: 1">Checkout returns 500 on empty cart</span>
+                <span class="st ticket" style="width: 90px; text-align: center">todo</span>
+                <div class="hoveracts">
+                  <button
+                    class="btn primary"
+                    onclick="toast('New thread draft opened, issue linked')"
+                  >
+                    ⚡ Start fix
+                  </button>
+                  <button class="btn">Open</button>
+                </div>
+              </div>
+            </div>
+            <div style="margin-top: 14px; font-size: 12px; color: var(--muted)">
+              Hover a row to reveal actions. Inbox reports get <b>Promote &amp; fix</b> (one click:
+              report → ticket → linked thread). Tickets get the existing <b>Start fix</b>.
+            </div>
+          </div>
+          <div class="note">
+            Extends the existing <code>/issues</code> route with an <b>Inbox</b> section (new: list
+            <code>/api/bugs</code>) so untriaged reports are finally visible, and collapses promote
+            + start-fix into one action.
+          </div>
+        </div>
+
+        <!-- D: command palette -->
+        <div class="card">
+          <h3>D · Command palette <span class="badge">keyboard path</span></h3>
+          <div class="stage">
+            <div class="composer" style="cursor: pointer" onclick="togglePop('popD')">
+              <div class="input">
+                <span class="kbd">⌘K</span>
+                <span style="color: var(--muted)">— click to open palette</span>
+              </div>
+            </div>
+            <div
+              class="popover open"
+              id="popD"
+              style="top: 90px; left: 20px; right: 20px; min-width: unset; position: absolute"
+            >
+              <div class="hd"><span>&gt; fix 5249</span></div>
+              <div class="row" onclick="toast('Report promoted → thread draft with issue context')">
+                🐞 <span class="t"><b>Fix issue</b> #5249a549 — Orders syncing disconnect</span
+                ><span class="st inbox">inbox</span>
+              </div>
+              <div class="row" onclick="toast('Issue linked to current thread')">
+                🔗 <span class="t"><b>Link issue to current thread</b> #5249a549</span>
+              </div>
+              <div class="row">
+                📥 <span class="t"><b>Open Issues inbox</b> · Techtraders (1 untriaged)</span>
+              </div>
+            </div>
+          </div>
+          <div class="note">
+            Palette verbs: <b>Fix issue…</b>, <b>Link issue to current thread…</b>,
+            <b>Open Issues inbox</b>. Cheap to add once the picker/query layer from A–B exists.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= MOBILE ================= -->
+    <div class="surface" id="mobile">
+      <div class="grid">
+        <!-- M1: composer + sheet -->
+        <div class="card">
+          <h3>M1 · New thread · “+” → issue sheet <span class="badge rec">recommended</span></h3>
+          <div class="stage" style="display: flex; justify-content: center">
+            <div class="phone">
+              <div class="top">
+                django-techtraders-site
+                <span style="color: var(--muted); font-weight: 400">main</span>
+              </div>
+              <div
+                class="body"
+                style="
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  color: var(--muted);
+                  font-size: 13px;
+                  text-align: center;
+                "
+              >
+                What should we build in<br />django-techtraders-site?
+              </div>
+              <div class="mcomposer">
+                <div class="chips" id="chipsM1" style="margin-bottom: 8px"></div>
+                <div class="field">
+                  <div class="plusbtn" onclick="openSheet('sheetM1', 'dimM1')">＋</div>
+                  Ask for changes…
+                </div>
+              </div>
+              <div class="dim" id="dimM1" onclick="closeSheet('sheetM1', 'dimM1')"></div>
+              <div class="sheet" id="sheetM1">
+                <div class="grab"></div>
+                <div
+                  class="row"
+                  onclick="
+                    closeSheet('sheetM1', 'dimM1');
+                    openSheet('sheetM1b', 'dimM1');
+                  "
+                >
+                  🐞 &nbsp;Attach issue from Pulse
+                </div>
+                <div class="row">🖼 &nbsp;Photo library</div>
+                <div class="row">📷 &nbsp;Camera</div>
+                <div class="row" style="padding-bottom: 22px">📄 &nbsp;File</div>
+              </div>
+              <div class="sheet" id="sheetM1b">
+                <div class="grab"></div>
+                <div class="hd" style="padding: 6px 18px; font-size: 11px; color: var(--muted)">
+                  Techtraders · 2 tickets · 1 inbox
+                </div>
+                <div
+                  class="row"
+                  onclick="
+                    attach('chipsM1', '#5249a549', 'Orders syncing…');
+                    closeSheet('sheetM1b', 'dimM1');
+                    toast('Will promote & link on send');
+                  "
+                >
+                  <span class="id">#5249a549</span><span class="t">Orders syncing disconnect…</span
+                  ><span class="st inbox">inbox</span>
+                </div>
+                <div
+                  class="row"
+                  style="padding-bottom: 22px"
+                  onclick="
+                    attach('chipsM1', '#88fe2c10', 'Checkout 500');
+                    closeSheet('sheetM1b', 'dimM1');
+                  "
+                >
+                  <span class="id">#88fe2c10</span><span class="t">Checkout 500 on empty cart</span
+                  ><span class="st ticket">todo</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="note">
+            The “+” attach sheet (already the mobile pattern for images) gains
+            <b>Attach issue from Pulse</b>. Selected issue renders as a chip above the field; send
+            promotes (if inbox) and links.
+          </div>
+        </div>
+
+        <!-- M2: issues list, tap row -->
+        <div class="card">
+          <h3>M2 · Issues tab → tap → action sheet <span class="badge">issue-first</span></h3>
+          <div class="stage" style="display: flex; justify-content: center">
+            <div class="phone">
+              <div class="top">
+                Issues · Techtraders
+                <span style="font-size: 11px; color: var(--amber)">1 untriaged</span>
+              </div>
+              <div class="body">
+                <div
+                  style="
+                    font-size: 10.5px;
+                    color: var(--muted);
+                    text-transform: uppercase;
+                    letter-spacing: 0.5px;
+                    margin: 2px 0 4px;
+                  "
+                >
+                  Inbox
+                </div>
+                <div class="mrow" onclick="openSheet('sheetM2', 'dimM2')">
+                  <span class="id">#5249a549</span
+                  ><span
+                    class="t"
+                    style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap"
+                    >Orders syncing disconnect…</span
+                  ><span class="st inbox">received</span>
+                </div>
+                <div
+                  style="
+                    font-size: 10.5px;
+                    color: var(--muted);
+                    text-transform: uppercase;
+                    letter-spacing: 0.5px;
+                    margin: 14px 0 4px;
+                  "
+                >
+                  Tickets
+                </div>
+                <div class="mrow" onclick="openSheet('sheetM2t', 'dimM2')">
+                  <span class="id">#88fe2c10</span
+                  ><span class="t" style="flex: 1">Checkout 500 on empty cart</span
+                  ><span class="st ticket">todo</span>
+                </div>
+                <div class="mrow">
+                  <span class="id">#c31d9b77</span
+                  ><span class="t" style="flex: 1">Price rounding drift</span
+                  ><span class="st crit">critical</span>
+                </div>
+              </div>
+              <div
+                class="dim"
+                id="dimM2"
+                onclick="
+                  closeSheet('sheetM2', 'dimM2');
+                  closeSheet('sheetM2t', 'dimM2');
+                "
+              ></div>
+              <div class="sheet" id="sheetM2">
+                <div class="grab"></div>
+                <div style="padding: 4px 18px 8px; font-size: 12px; color: var(--muted)">
+                  #5249a549 · inbox report
+                </div>
+                <div
+                  class="row"
+                  onclick="
+                    closeSheet('sheetM2', 'dimM2');
+                    toast('Promoted → thread draft opened with issue context');
+                  "
+                >
+                  ⚡ &nbsp;<b>Promote &amp; fix in new thread</b>
+                </div>
+                <div
+                  class="row"
+                  onclick="
+                    closeSheet('sheetM2', 'dimM2');
+                    toast('Promoted to ticket');
+                  "
+                >
+                  🎫 &nbsp;Promote to ticket
+                </div>
+                <div class="row" style="padding-bottom: 22px">👁 &nbsp;View report details</div>
+              </div>
+              <div class="sheet" id="sheetM2t">
+                <div class="grab"></div>
+                <div style="padding: 4px 18px 8px; font-size: 12px; color: var(--muted)">
+                  #88fe2c10 · ticket
+                </div>
+                <div
+                  class="row"
+                  onclick="
+                    closeSheet('sheetM2t', 'dimM2');
+                    toast('Thread draft opened, issue linked');
+                  "
+                >
+                  ⚡ &nbsp;<b>Start fix in new thread</b>
+                </div>
+                <div
+                  class="row"
+                  onclick="
+                    closeSheet('sheetM2t', 'dimM2');
+                    toast('Linked to most recent thread');
+                  "
+                >
+                  🔗 &nbsp;Link to existing thread…
+                </div>
+                <div class="row" style="padding-bottom: 22px">👁 &nbsp;View issue</div>
+              </div>
+            </div>
+          </div>
+          <div class="note">
+            A mobile Issues tab with an <b>Inbox</b> section. Tapping a row opens an action sheet —
+            inbox reports lead with <b>Promote &amp; fix</b>, tickets with <b>Start fix</b>. Mirrors
+            desktop option C.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+      function tab(id, el) {
+        document.querySelectorAll(".surface").forEach((s) => s.classList.remove("active"));
+        document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
+        document.getElementById(id).classList.add("active");
+        el.classList.add("active");
+      }
+      function togglePop(id) {
+        const p = document.getElementById(id);
+        const was = p.classList.contains("open");
+        closeAll();
+        if (!was) p.classList.add("open");
+      }
+      function closeAll() {
+        document.querySelectorAll(".popover").forEach((p) => {
+          if (p.id !== "popD") p.classList.remove("open");
+        });
+      }
+      function openA() {
+        togglePop("popA");
+      }
+      function attach(chipsId, ref, title) {
+        const c = document.getElementById(chipsId);
+        c.innerHTML = `<span class="chip issue">🐞 <b>${ref}</b> ${title} <span class="x" onclick="this.parentElement.remove()">✕</span></span>`;
+      }
+      function attachA(ref, title, kind) {
+        attach("chipsA", ref, title);
+        closeAll();
+        toast(
+          kind === "inbox"
+            ? "Inbox report attached — will be promoted to a ticket & linked on send"
+            : "Ticket attached — thread will be linked on send",
+        );
+      }
+      function openSheet(s, d) {
+        document.getElementById(s).classList.add("open");
+        document.getElementById(d).classList.add("on");
+      }
+      function closeSheet(s, d) {
+        document.getElementById(s).classList.remove("open");
+        document.getElementById(d).classList.remove("on");
+      }
+      let tt;
+      function toast(msg) {
+        const t = document.getElementById("toast");
+        t.textContent = msg;
+        t.classList.add("show");
+        clearTimeout(tt);
+        tt = setTimeout(() => t.classList.remove("show"), 2600);
+      }
+      document.addEventListener("click", (e) => {
+        if (
+          !e.target.closest(".popover") &&
+          !e.target.closest(".input") &&
+          !e.target.closest(".pill")
+        )
+          closeAll();
+      });
+    </script>
+  </body>
+</html>

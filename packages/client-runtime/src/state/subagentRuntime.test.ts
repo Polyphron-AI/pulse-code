@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vite-plus/test";
 import { classifyTaskAgentKind, type OrchestrationThreadActivity } from "@t3tools/contracts";
 import {
+  createAgentSpawnGrouper,
   deriveAgentPanelModel,
+  deriveAgentSpawnRowModel,
   foldSubagentActivities,
   formatSubagentModelLabel,
   formatSubagentTokenCount,
@@ -875,5 +877,181 @@ describe("nested agents vs subagent shells", () => {
       }),
     ]);
     expect(agents.map((agent) => agent.id)).toEqual(["nested-1"]);
+  });
+});
+
+describe("createAgentSpawnGrouper", () => {
+  it("folds every member of a workflow run into one group", () => {
+    const grouper = createAgentSpawnGrouper();
+    const keys = ["wf-1", "wf-1:wf:0", "wf-1:wf:1"].map(
+      (taskId) =>
+        grouper.groupFor({ taskId, turnId: "turn-a", isWorkflowCoordinator: taskId === "wf-1" })
+          .key,
+    );
+    expect(new Set(keys).size).toBe(1);
+    expect(keys[0]).toBe("wf:wf-1");
+  });
+
+  it("reports the coordinator id as the group's workflowId", () => {
+    const grouper = createAgentSpawnGrouper();
+    expect(grouper.groupFor({ taskId: "wf-1:wf:3", turnId: "turn-a" }).workflowId).toBe("wf-1");
+    expect(grouper.groupFor({ taskId: "direct-1", turnId: "turn-a" }).workflowId).toBeNull();
+  });
+
+  it("batches direct spawns per turn, and separates different turns", () => {
+    const grouper = createAgentSpawnGrouper();
+    const a = grouper.groupFor({ taskId: "d1", turnId: "turn-a" });
+    const b = grouper.groupFor({ taskId: "d2", turnId: "turn-a" });
+    const c = grouper.groupFor({ taskId: "d3", turnId: "turn-b" });
+    expect(a.key).toBe(b.key);
+    expect(c.key).not.toBe(a.key);
+  });
+
+  it("keeps a taskId in its first group even when later rows carry a new turn", () => {
+    // Claude background subagents settle between turns: the completion row
+    // arrives under a fresh synthetic turn and must not open a second fleet.
+    const grouper = createAgentSpawnGrouper();
+    const spawn = grouper.groupFor({ taskId: "bg-1", turnId: "turn-a" });
+    const settle = grouper.groupFor({ taskId: "bg-1", turnId: "turn-z" });
+    expect(settle.key).toBe(spawn.key);
+  });
+
+  it("never merges turn-less spawns into one immortal group", () => {
+    const grouper = createAgentSpawnGrouper();
+    const a = grouper.groupFor({ taskId: "d1", turnId: null });
+    const b = grouper.groupFor({ taskId: "d2", turnId: null });
+    expect(a.key).not.toBe(b.key);
+  });
+});
+
+describe("deriveAgentSpawnRowModel", () => {
+  const directModel = (rows: ReadonlyArray<OrchestrationThreadActivity>) =>
+    deriveAgentPanelModel({ agents: fold(rows) });
+
+  it("counts working and waiting agents as one live fleet", () => {
+    const model = directModel([
+      activity("task.started", { taskId: "d1", title: "One" }),
+      activity("task.started", { taskId: "d2", title: "Two" }),
+      activity("task.updated", { taskId: "d2", status: "waiting" }),
+      activity("task.started", { taskId: "d3", title: "Three" }),
+      activity("task.completed", { taskId: "d3", status: "completed" }),
+    ]);
+    const row = deriveAgentSpawnRowModel(model, {
+      workflowId: null,
+      agentTaskIds: ["d1", "d2", "d3"],
+    });
+    expect(row.agentCount).toBe(3);
+    expect(row.live).toBe(true);
+    expect(row.workingCount).toBe(2);
+    expect(row.tone).toBe("live");
+    expect(row.lead).toBe("Kicked off 3 subagents");
+    expect(row.status).toBe("2 working");
+  });
+
+  it("reads done once every direct spawn settles", () => {
+    const model = directModel([
+      activity("task.started", { taskId: "d1", title: "One" }),
+      activity("task.completed", { taskId: "d1", status: "completed" }),
+    ]);
+    const row = deriveAgentSpawnRowModel(model, { workflowId: null, agentTaskIds: ["d1"] });
+    expect(row.live).toBe(false);
+    expect(row.tone).toBe("done");
+    expect(row.lead).toBe("Ran 1 subagent");
+    expect(row.status).toBe("completed");
+  });
+
+  it("surfaces failures over the completed count", () => {
+    const model = directModel([
+      activity("task.started", { taskId: "d1", title: "One" }),
+      activity("task.completed", { taskId: "d1", status: "failed" }),
+      activity("task.started", { taskId: "d2", title: "Two" }),
+      activity("task.completed", { taskId: "d2", status: "completed" }),
+    ]);
+    const row = deriveAgentSpawnRowModel(model, { workflowId: null, agentTaskIds: ["d1", "d2"] });
+    expect(row.tone).toBe("failed");
+    expect(row.status).toBe("1 failed");
+  });
+
+  it("stays live while a workflow coordinator runs, even with no live member", () => {
+    // Dynamic spawns leave gaps where every known member has settled but the
+    // run is still going. Reading "completed" there is the bug this guards.
+    const model = directModel([
+      activity("task.started", { taskId: "wf-1", taskType: "local_workflow", title: "Research" }),
+      activity("task.progress", {
+        taskId: "wf-1:wf:0",
+        parentAgentId: "wf-1",
+        status: "completed",
+      }),
+      activity("task.completed", { taskId: "wf-1:wf:0", status: "completed" }),
+    ]);
+    const row = deriveAgentSpawnRowModel(model, {
+      workflowId: "wf-1",
+      agentTaskIds: ["wf-1", "wf-1:wf:0"],
+    });
+    expect(row.live).toBe(true);
+    expect(row.workingCount).toBe(0);
+    expect(row.status).toBe("working");
+  });
+
+  it("names the running phase in a workflow's status", () => {
+    const model = directModel([
+      activity("task.started", {
+        taskId: "wf-2",
+        taskType: "local_workflow",
+        workflowName: "audit",
+        phases: [
+          { index: 0, title: "Find" },
+          { index: 1, title: "Verify" },
+        ],
+      }),
+      activity("task.progress", {
+        taskId: "wf-2:wf:0",
+        parentAgentId: "wf-2",
+        status: "completed",
+        phaseIndex: 0,
+      }),
+      activity("task.completed", { taskId: "wf-2:wf:0", status: "completed" }),
+      activity("task.progress", {
+        taskId: "wf-2:wf:1",
+        parentAgentId: "wf-2",
+        status: "running",
+        phaseIndex: 1,
+      }),
+    ]);
+    const row = deriveAgentSpawnRowModel(model, {
+      workflowId: "wf-2",
+      agentTaskIds: ["wf-2", "wf-2:wf:0", "wf-2:wf:1"],
+    });
+    expect(row.workflowName).toBe("audit");
+    expect(row.status).toBe("Verify · 1 working");
+  });
+
+  it("never reads zero subagents before the fold catches up", () => {
+    const row = deriveAgentSpawnRowModel(deriveAgentPanelModel({ agents: [] }), {
+      workflowId: null,
+      agentTaskIds: ["d1", "d2"],
+    });
+    expect(row.agentCount).toBe(2);
+    expect(row.live).toBe(true);
+    expect(row.lead).toBe("Kicked off 2 subagents");
+    expect(row.status).toBe("starting");
+  });
+
+  it("sums member tokens without double counting the coordinator", () => {
+    const model = directModel([
+      activity("task.started", { taskId: "wf-3", taskType: "local_workflow" }),
+      activity("task.progress", {
+        taskId: "wf-3:wf:0",
+        parentAgentId: "wf-3",
+        status: "running",
+        typedUsage: { totalTokens: 1000 },
+      }),
+      activity("task.progress", { taskId: "wf-3", typedUsage: { totalTokens: 9999 } }),
+    ]);
+    const row = deriveAgentSpawnRowModel(model, {
+      workflowId: "wf-3",
+      agentTaskIds: ["wf-3", "wf-3:wf:0"],
+    });
+    expect(row.totalTokens).toBe(1000);
   });
 });

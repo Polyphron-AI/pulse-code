@@ -11,8 +11,13 @@ Pulse Issues work as its reference adapter.
   and rollout.
 - [Product-line and distribution boundary](11-product-line-and-distribution-boundary.md) — upstream
   fidelity, downstream selectivity, desktop identity isolation, and shared-client scope.
+- [Scheduled Chats](12-scheduled-chats.md) — proposed: unattended daily check-in
+  loop with handoff-file memory, two scopes, and server-enforced trust rails.
 - [Mobile file-link actions](13-mobile-file-link-actions.md) — reliable preview or
   native Open with handling for workspace-file hyperlinks in mobile chat.
+- [Durable document links](14-document-link-durability.md) — proposed: document
+  links that stay openable days later by re-resolving and re-streaming, presented
+  for a phone on a tunnelled connection.
 - [Integration foundation acceptance criteria](20-acceptance-criteria/integration-foundation.md) —
   testable first-release contract.
 - [Desktop product-line boundary acceptance criteria](20-acceptance-criteria/desktop-product-line-boundary.md)
@@ -29,4 +34,4 @@ Pulse Issues work as its reference adapter.
 
 ---
 
-**Created:** 2026-08-19 . **Last opened:** 2026-08-21 . **Last edited:** 2026-08-21 . **Status:** draft . **Owner:** Product . **Layer:** stable
+**Created:** 2026-08-19 . **Last opened:** 2026-08-22 . **Last edited:** 2026-08-22 . **Status:** draft . **Owner:** Product . **Layer:** stable

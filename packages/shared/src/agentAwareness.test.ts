@@ -29,6 +29,7 @@ function thread(
   | "updatedAt"
   | "hasPendingApprovals"
   | "hasPendingUserInput"
+  | "backgroundLiveness"
 > {
   return {
     id: "thread-1" as ThreadId,
@@ -176,5 +177,53 @@ describe("projectThreadAwareness", () => {
       headline: "Agent failed",
       detail: "Provider process exited.",
     });
+  });
+});
+
+describe("background liveness", () => {
+  const completedTurn = {
+    turnId: "turn-1" as TurnId,
+    state: "completed" as const,
+    requestedAt: NOW,
+    startedAt: NOW,
+    completedAt: NOW,
+    assistantMessageId: null,
+  };
+
+  it("keeps a thread working while its subagents run past the turn", () => {
+    const state = projectThreadAwareness({
+      environmentId: "env-1" as EnvironmentId,
+      project,
+      thread: thread({ latestTurn: completedTurn, backgroundLiveness: "working" }),
+    });
+    expect(state?.phase).toBe("running");
+    expect(state?.detail).toBe("Subagents are still working.");
+  });
+
+  it("still reports completion once the background work drains", () => {
+    const state = projectThreadAwareness({
+      environmentId: "env-1" as EnvironmentId,
+      project,
+      thread: thread({ latestTurn: completedTurn, backgroundLiveness: null }),
+    });
+    expect(state?.phase).toBe("completed");
+  });
+
+  it("leaves watch loops alone so a Live Activity cannot live forever", () => {
+    const state = projectThreadAwareness({
+      environmentId: "env-1" as EnvironmentId,
+      project,
+      thread: thread({ latestTurn: completedTurn, backgroundLiveness: "monitoring" }),
+    });
+    expect(state?.phase).toBe("completed");
+  });
+
+  it("never outranks an agent that is blocked on the user", () => {
+    const state = projectThreadAwareness({
+      environmentId: "env-1" as EnvironmentId,
+      project,
+      thread: thread({ hasPendingApprovals: true, backgroundLiveness: "working" }),
+    });
+    expect(state?.phase).toBe("waiting_for_approval");
   });
 });

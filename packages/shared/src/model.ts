@@ -203,6 +203,10 @@ export function buildProviderOptionSelectionsFromDescriptors(
   const nextSelections: Array<ProviderOptionSelection> = [];
 
   for (const descriptor of descriptors) {
+    // Read-only descriptors are display-only provider state, never a selection.
+    if (descriptor.readOnly === true) {
+      continue;
+    }
     const value = getProviderOptionCurrentValue(descriptor);
     if (typeof value === "string" || typeof value === "boolean") {
       nextSelections.push({ id: descriptor.id, value });

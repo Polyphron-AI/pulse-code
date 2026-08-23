@@ -910,6 +910,238 @@ export function isTimelineBypassActivity(activity: OrchestrationThreadActivity):
   return (activity.payload as Record<string, unknown>).timelineBypass === true;
 }
 
+function activityPayload(activity: OrchestrationThreadActivity): Record<string, unknown> | null {
+  return typeof activity.payload === "object" && activity.payload !== null
+    ? (activity.payload as Record<string, unknown>)
+    : null;
+}
+
+/**
+ * Agent (non-background) task.started rows seed spawn rows: they carry the
+ * true spawn turn, which is the batch key. Background subagent completions
+ * arrive under later synthetic turns and must not start new batches.
+ */
+export function isAgentSpawnSeedActivity(activity: OrchestrationThreadActivity): boolean {
+  const payload = activityPayload(activity);
+  if (!payload || typeof payload.taskId !== "string") {
+    return false;
+  }
+  return !isBackgroundTaskActivity(payload);
+}
+
+/**
+ * Quiet-timeline classification: true when a row belongs to the Agents
+ * surface rather than the parent's work log. Every client shares this so the
+ * two can never disagree — mobile's fork kept terminal rows because it had
+ * no Agents surface, which made a running subagent invisible until it
+ * finished.
+ *
+ * - timelineBypass rows (Codex children, workflow members) are internal;
+ * - tool rows attributed to an owning agent (payload.agentId) are re-homed;
+ * - agent lifecycle rows stay visible so they can anchor a spawn row, while
+ *   an agent's own background work (agentId + "background") is internal;
+ * - task.updated is fold input only (status patches are not narrative).
+ *
+ * Unattributed rows always stay: over-hiding loses the only terminal signal.
+ */
+export function isAgentInternalTimelineActivity(activity: OrchestrationThreadActivity): boolean {
+  const payload = activityPayload(activity);
+  if (!payload) {
+    return false;
+  }
+  const isTaskRow =
+    activity.kind === "task.started" ||
+    activity.kind === "task.progress" ||
+    activity.kind === "task.updated" ||
+    activity.kind === "task.completed";
+  if (isTaskRow) {
+    const ownedByAgent = typeof payload.agentId === "string" && payload.agentId.trim().length > 0;
+    if (ownedByAgent || payload.timelineBypass === true) {
+      const isAgentTaskRow =
+        activity.kind !== "task.updated" &&
+        typeof payload.taskId === "string" &&
+        !isBackgroundTaskActivity(payload);
+      return !isAgentTaskRow;
+    }
+    return false;
+  }
+  if (payload.timelineBypass === true) {
+    return true;
+  }
+  // Non-task rows (attributed tool activity) owned by an agent are internal.
+  return typeof payload.agentId === "string" && payload.agentId.trim().length > 0;
+}
+
+export interface AgentSpawnGroupInput {
+  readonly taskId: string;
+  readonly turnId?: string | null;
+  /** Set when the row's own task is a workflow coordinator. */
+  readonly isWorkflowCoordinator?: boolean;
+  /** Already-known coordinator id, when the caller resolved one. */
+  readonly workflowId?: string | null;
+}
+
+export interface AgentSpawnGroup {
+  readonly key: string;
+  /** Coordinator taskId for workflow groups, null for direct-spawn batches. */
+  readonly workflowId: string | null;
+}
+
+function agentSpawnGroupKey(input: AgentSpawnGroupInput): string {
+  const workflowSlot = input.taskId.indexOf(":wf:");
+  if (workflowSlot !== -1) {
+    return `wf:${input.taskId.slice(0, workflowSlot)}`;
+  }
+  if (input.workflowId) {
+    return `wf:${input.workflowId}`;
+  }
+  if (input.isWorkflowCoordinator) {
+    return `wf:${input.taskId}`;
+  }
+  // No turn id means no batch signal at all: fall back to one group per task.
+  // Unrelated turn-less spawns (separate fleets whose rows lost their turn)
+  // must not collapse into one immortal group accumulating every agent the
+  // thread ever ran. Adapters stamp spawn turns (Codex spawnTurnId; Claude
+  // rows ride real turns), so this path is defensive.
+  return input.turnId ? `direct:${input.turnId}` : `direct:task:${input.taskId}`;
+}
+
+/**
+ * Spawn-group assignment for subagent lifecycle rows: a workflow run (or one
+ * turn's batch of direct spawns) is ONE narrative event in the chat, no
+ * matter how many agents it holds or how their rows interleave.
+ *
+ * Membership is decided once, at the FIRST row seen for a taskId. Claude
+ * background subagents settle between turns, so their completion rows carry
+ * fresh synthetic turn ids (or none); keying each row by its own turn
+ * splintered one batch into a stream of duplicate spawn rows.
+ */
+export function createAgentSpawnGrouper(): {
+  readonly groupFor: (input: AgentSpawnGroupInput) => AgentSpawnGroup;
+} {
+  const groupByTaskId = new Map<string, AgentSpawnGroup>();
+  return {
+    groupFor: (input) => {
+      const remembered = groupByTaskId.get(input.taskId);
+      if (remembered) {
+        return remembered;
+      }
+      const key = agentSpawnGroupKey(input);
+      const group: AgentSpawnGroup = {
+        key,
+        workflowId: key.startsWith("wf:") ? key.slice(3) : null,
+      };
+      groupByTaskId.set(input.taskId, group);
+      return group;
+    },
+  };
+}
+
+export interface AgentSpawnRowInput {
+  /** Workflow coordinator taskId, or null for a per-turn direct-spawn batch. */
+  readonly workflowId: string | null;
+  readonly agentTaskIds: ReadonlyArray<string>;
+}
+
+export interface AgentSpawnRowModel {
+  readonly agentCount: number;
+  /** In-flight: drives the dot colour and the "Open Agents" affordance. */
+  readonly live: boolean;
+  /** Waiting agents count as working: one steady in-flight presentation. */
+  readonly workingCount: number;
+  readonly failedCount: number;
+  readonly totalTokens: number;
+  readonly workflowName: string | null;
+  readonly tone: "live" | "failed" | "done";
+  /** "Kicked off 3 subagents" / "Ran 3 subagents". */
+  readonly lead: string;
+  /** "Research · 2 working" / "3 working" / "1 failed" / "completed". */
+  readonly status: string;
+  /** Members backing the row, for surfaces that drill in. */
+  readonly agents: ReadonlyArray<RuntimeSubagent>;
+}
+
+/**
+ * The one place that turns a spawn group into row text and status. Web's
+ * inline CTA row and mobile's fleet row both render this, so a fleet can
+ * never read "completed" on one client and "2 working" on another.
+ */
+export function deriveAgentSpawnRowModel(
+  model: AgentPanelModel,
+  spawn: AgentSpawnRowInput,
+): AgentSpawnRowModel {
+  const memberIds = new Set(spawn.agentTaskIds);
+  const workflowGroup = spawn.workflowId
+    ? model.workflows.find((group) => group.workflow.id === spawn.workflowId)
+    : undefined;
+  const agents = workflowGroup
+    ? [...workflowGroup.phases.flatMap((phase) => phase.members), ...workflowGroup.unphasedMembers]
+    : model.directAgents.filter((agent) => memberIds.has(agent.id));
+  // The seed rows are the floor: an agent whose activities have not folded
+  // yet still counts, so the row never says "0 subagents".
+  const agentCount = Math.max(
+    agents.length,
+    Math.max(memberIds.size - (spawn.workflowId ? 1 : 0), 0),
+  );
+
+  const running = agents.filter(
+    (agent) => agent.status === "running" || agent.status === "pending",
+  ).length;
+  const waiting = agents.filter((agent) => agent.status === "waiting").length;
+  const failedCount = agents.filter((agent) => agent.status === "failed").length;
+  // The coordinator's own status is authoritative for workflows: dynamic
+  // spawns mean the member list can be momentarily all-settled while the run
+  // is still mid-flight (the "completed" lie from live testing). A workflow
+  // is live until the coordinator itself reaches a terminal state.
+  const coordinatorStatus = workflowGroup?.workflow.status;
+  const coordinatorSettled =
+    coordinatorStatus !== undefined &&
+    coordinatorStatus !== "pending" &&
+    coordinatorStatus !== "running" &&
+    coordinatorStatus !== "waiting" &&
+    coordinatorStatus !== "idle";
+  const workingCount = running + waiting;
+  // A seed row the fold has not caught up to is an agent that just launched,
+  // so it keeps the row live. Without this a fresh fleet reads "Ran 2
+  // subagents · completed" for the one frame before its first status lands.
+  const unresolvedCount = agentCount - agents.length;
+  const live =
+    workflowGroup !== undefined ? !coordinatorSettled : workingCount + unresolvedCount > 0;
+  // Same rule as the panel footer: providers may aggregate member usage into
+  // the coordinator, so count the coordinator only when no members exist.
+  const totalTokens = agents.reduce(
+    (sum, agent) => sum + (agent.usage?.totalTokens ?? 0),
+    spawn.workflowId && agents.length === 0 ? (workflowGroup?.workflow.usage?.totalTokens ?? 0) : 0,
+  );
+
+  const livePhase = workflowGroup?.phases.find((phase) => phase.state === "running");
+  const plural = agentCount === 1 ? "" : "s";
+  return {
+    agentCount,
+    live,
+    workingCount,
+    failedCount,
+    totalTokens,
+    workflowName: workflowGroup?.workflow.workflowName ?? workflowGroup?.workflow.title ?? null,
+    tone: live ? "live" : failedCount > 0 ? "failed" : "done",
+    lead: live
+      ? `Kicked off ${agentCount} subagent${plural}`
+      : `Ran ${agentCount} subagent${plural}`,
+    status: live
+      ? livePhase
+        ? `${livePhase.title} · ${livePhase.activeCount} working`
+        : workingCount > 0
+          ? `${workingCount} working`
+          : unresolvedCount > 0
+            ? "starting"
+            : "working"
+      : failedCount > 0
+        ? `${failedCount} failed`
+        : "completed",
+    agents,
+  };
+}
+
 /**
  * Compact model chip text: strips vendor prefixes/date-or-context suffixes
  * ("claude-sonnet-5[1m]" → "sonnet-5[1m]", "claude-opus-4-20250514" →

@@ -11,6 +11,7 @@
 - [Connect Pulse integrations](./user/integrations.md)
 - [Customize a project icon](./user/project-settings.md)
 - [Mobile appearance](./user/mobile-appearance.md)
+- [Watching subagents on mobile](./user/mobile-agents.md)
 - [Remote access](./user/remote-access.md)
 - [Keeping app and server in sync](./user/updating.md)
 - [Source control integrations](./user/source-control.md)

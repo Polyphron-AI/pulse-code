@@ -629,7 +629,7 @@ describe("buildThreadFeed", () => {
 });
 
 describe("quiet timeline: nested agents", () => {
-  it("keeps a nested agent's terminal row but hides its background work", () => {
+  it("turns a nested agent's row into a fleet row and hides its background work", () => {
     const thread = makeThread({
       id: ThreadId.make("thread-nested"),
       projectId: ProjectId.make("project-1"),
@@ -643,8 +643,8 @@ describe("quiet timeline: nested agents", () => {
           createdAt: "2026-04-01T00:00:02.000Z",
           payload: { taskId: "sh-1", agentId: "owner", agentKind: "background" },
         }),
-        // A nested AGENT's completion: mobile has no Agents sheet, so this
-        // terminal row is the only signal it ever finished.
+        // A nested AGENT's row: it anchors the fleet row that opens the
+        // Agents screen, which is where its own work is readable.
         makeActivity({
           id: EventId.make("nested-done"),
           kind: "task.completed",
@@ -661,5 +661,185 @@ describe("quiet timeline: nested agents", () => {
     );
     expect(ids).toContain("nested-done");
     expect(ids).not.toContain("shell-done");
+    const nested = feed
+      .flatMap((entry) => (entry.type === "activity-group" ? entry.activities : []))
+      .find((row) => row.id === "nested-done");
+    expect(nested?.agentSpawn).toMatchObject({ agentTaskIds: ["n-1"] });
+  });
+});
+
+describe("agent fleet rows", () => {
+  /** Post-ingestion shape: the server stamps agentKind on every task payload. */
+  const agentActivity = (input: {
+    readonly id: string;
+    readonly kind: OrchestrationThreadActivity["kind"];
+    readonly createdAt: string;
+    readonly payload: Record<string, unknown>;
+    readonly turnId?: string;
+  }) =>
+    makeActivity({
+      id: EventId.make(input.id),
+      kind: input.kind,
+      summary: "Task",
+      createdAt: input.createdAt,
+      payload: { agentKind: "agent", ...input.payload },
+      turnId: input.turnId ? TurnId.make(input.turnId) : null,
+    });
+
+  const feedOf = (activities: ReadonlyArray<OrchestrationThreadActivity>) =>
+    buildThreadFeed(
+      makeThread({
+        id: ThreadId.make("thread-fleet"),
+        projectId: ProjectId.make("project-1"),
+        title: "Fleet",
+        activities,
+      }),
+    ).flatMap((entry) => (entry.type === "activity-group" ? entry.activities : []));
+
+  const fleetRows = (activities: ReadonlyArray<OrchestrationThreadActivity>) =>
+    feedOf(activities).filter((row) => row.agentSpawn !== undefined);
+
+  it("collapses a whole workflow run into one fleet row pinned at its spawn", () => {
+    const rows = fleetRows([
+      agentActivity({
+        id: "wf-start",
+        kind: "task.started",
+        createdAt: "2026-04-01T00:00:01.000Z",
+        payload: { taskId: "wf-1", taskType: "local_workflow", workflowName: "audit" },
+      }),
+      agentActivity({
+        id: "member-0",
+        kind: "task.progress",
+        createdAt: "2026-04-01T00:00:02.000Z",
+        payload: { taskId: "wf-1:wf:0", parentAgentId: "wf-1" },
+      }),
+      agentActivity({
+        id: "member-1",
+        kind: "task.progress",
+        createdAt: "2026-04-01T00:00:03.000Z",
+        payload: { taskId: "wf-1:wf:1", parentAgentId: "wf-1" },
+      }),
+    ]);
+    expect(rows).toHaveLength(1);
+    // Pinned at the spawn point: the row must not drift to the newest tick.
+    expect(rows[0]!.id).toBe("wf-start");
+    expect(rows[0]!.createdAt).toBe("2026-04-01T00:00:01.000Z");
+    expect(rows[0]!.agentSpawn).toEqual({
+      workflowId: "wf-1",
+      agentTaskIds: ["wf-1", "wf-1:wf:0", "wf-1:wf:1"],
+    });
+  });
+
+  it("batches one turn's direct spawns and keeps separate turns apart", () => {
+    const rows = fleetRows([
+      agentActivity({
+        id: "d1",
+        kind: "task.started",
+        createdAt: "2026-04-01T00:00:01.000Z",
+        payload: { taskId: "task-1" },
+        turnId: "turn-a",
+      }),
+      agentActivity({
+        id: "d2",
+        kind: "task.started",
+        createdAt: "2026-04-01T00:00:02.000Z",
+        payload: { taskId: "task-2" },
+        turnId: "turn-a",
+      }),
+      agentActivity({
+        id: "d3",
+        kind: "task.started",
+        createdAt: "2026-04-01T00:00:03.000Z",
+        payload: { taskId: "task-3" },
+        turnId: "turn-b",
+      }),
+    ]);
+    expect(rows.map((row) => row.id)).toEqual(["d1", "d3"]);
+    expect(rows[0]!.agentSpawn?.agentTaskIds).toEqual(["task-1", "task-2"]);
+    expect(rows[1]!.agentSpawn?.agentTaskIds).toEqual(["task-3"]);
+  });
+
+  it("keeps a background subagent's completion under the fleet row that owns it", () => {
+    // A background task settling between turns must join its spawn batch, not
+    // open a second fleet under the synthetic turn it arrived on.
+    const rows = fleetRows([
+      agentActivity({
+        id: "spawn",
+        kind: "task.started",
+        createdAt: "2026-04-01T00:00:01.000Z",
+        payload: { taskId: "bg-1" },
+        turnId: "turn-a",
+      }),
+      agentActivity({
+        id: "settle",
+        kind: "task.completed",
+        createdAt: "2026-04-01T00:00:05.000Z",
+        payload: { taskId: "bg-1", status: "completed" },
+        turnId: "turn-synthetic",
+      }),
+    ]);
+    expect(rows.map((row) => row.id)).toEqual(["spawn"]);
+  });
+
+  it("leaves top-level background tasks as ordinary work rows", () => {
+    const activities = [
+      agentActivity({
+        id: "shell",
+        kind: "task.completed",
+        createdAt: "2026-04-01T00:00:01.000Z",
+        payload: { taskId: "sh-1", taskType: "local_bash", agentKind: "background" },
+      }),
+    ];
+    expect(fleetRows(activities)).toHaveLength(0);
+    expect(feedOf(activities).map((row) => row.id)).toContain("shell");
+  });
+
+  it("keeps a fleet row visible past the neutral filter and the work toggle", () => {
+    const row = (
+      id: string,
+      createdAt: string,
+      extra: Partial<ThreadFeedActivity> = {},
+    ): ThreadFeedActivity => ({
+      id,
+      createdAt,
+      turnId: null,
+      summary: `Tool ${id}`,
+      detail: null,
+      canExpand: false,
+      getFullDetail: () => null,
+      getCopyText: () => id,
+      icon: "command",
+      toolLike: true,
+      status: "success",
+      ...extra,
+    });
+    const feed: ThreadFeedEntry[] = [
+      {
+        type: "activity-group",
+        id: "work-group-1",
+        createdAt: "2026-04-01T00:00:01.000Z",
+        turnId: null,
+        activities: [
+          // An in-flight fleet reads as a neutral tool row; dropping it is
+          // exactly how subagents went invisible on mobile.
+          row("fleet", "2026-04-01T00:00:01.000Z", {
+            status: "neutral",
+            agentSpawn: { workflowId: "wf-1", agentTaskIds: ["wf-1"] },
+          }),
+          row("tool-1", "2026-04-01T00:00:02.000Z"),
+          row("tool-2", "2026-04-01T00:00:03.000Z"),
+          row("tool-3", "2026-04-01T00:00:04.000Z"),
+        ],
+      },
+    ];
+
+    const collapsed = deriveThreadFeedPresentation(feed, null, new Set());
+    expect(collapsed.map((entry) => entry.id)).toEqual([
+      "fleet",
+      "tool-3",
+      "work-toggle:work-group-1",
+    ]);
+    // The fleet row is pinned, so it never counts toward the hidden tail.
+    expect(collapsed.at(-1)).toMatchObject({ hiddenCount: 2 });
   });
 });

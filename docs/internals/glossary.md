@@ -8,6 +8,7 @@ This is a living glossary for Pulse Code. It explains what common terms mean in 
 
 - [Project and workspace](#project-and-workspace)
 - [Thread timeline](#thread-timeline)
+- [Subagents](#subagents)
 - [Orchestration](#orchestration)
 - [Provider runtime](#provider-runtime)
 - [Checkpointing](#checkpointing)
@@ -41,6 +42,32 @@ A single user-to-assistant work cycle inside a thread. It starts with user input
 #### Activity
 
 A user-visible log item attached to a thread. In [the contracts][1], activities cover important non-message events like approvals, tool actions, and failures. They are projected into thread state in [projector.ts][4].
+
+### Subagents
+
+#### Subagent
+
+An agent an agent spawned. Ingestion stamps every activity a subagent produces with the owning `agentId` and an `agentKind` of `agent` or `background`, so clients can tell a real subagent from a shell command or watch loop without guessing. See [ProviderRuntimeIngestion.ts][5] and [subagentRuntime.ts][25].
+
+#### Agent panel model
+
+The single client-side fold from thread activities to live subagent state: `foldSubagentActivities` then `deriveAgentPanelModel` in [subagentRuntime.ts][25]. Web's Agents panel, mobile's Agents screen, web's fleet row, and mobile's inline fleet card all read this one model, so no surface can disagree about who is running. It derives from activities already on the device — surfacing agents costs no extra wire traffic.
+
+#### Quiet timeline
+
+The rule that a thread's work log carries the parent's narrative plus one row per spawn batch, and nothing an agent does internally. Classification is shared (`isAgentInternalTimelineActivity`), so a row that is internal on one client is internal on all of them. The corollary matters: a surface that hides rows owes the user somewhere to read them, which is what the Agents surface is for.
+
+#### Spawn group
+
+One workflow run, or one turn's batch of direct spawns, treated as a single narrative event. `createAgentSpawnGrouper` in [subagentRuntime.ts][25] owns the key rule and decides membership at the first row seen for a `taskId` — background subagents settle under later synthetic turns, and keying each row by its own turn splinters one batch into a stream of duplicates.
+
+#### Fleet row
+
+The one-line row a spawn group renders as in the chat feed: `deriveAgentSpawnRowModel` turns the group into lead text, status, and tone, and both clients render it. It is pinned to the spawn point rather than the newest progress tick, and stays visible past the work-log collapse — an invisible running fleet is the bug this row exists to fix.
+
+#### Agent awareness
+
+The server-side projection of a thread into a lock-screen state (`starting`, `running`, `waiting_for_approval`, `waiting_for_input`, `completed`, `failed`, `stale`) in [agentAwareness.ts][26], published to iOS Live Activities through the relay. Background liveness feeds the ladder: a settled turn whose subagents are still running reads as `running`, not `completed`.
 
 ### Orchestration
 
@@ -94,7 +121,7 @@ The live backend agent implementation and its event stream. The main service is 
 
 #### Provider
 
-The backend agent runtime that actually performs work. Five drivers ship built in: Codex, Claude, Cursor, Grok, and OpenCode. See [ProviderService.ts][14], [ProviderAdapter.ts][15], and [CodexAdapter.ts][17] as a representative adapter.
+The backend agent runtime that actually performs work. Six drivers ship built in: Codex, Claude, Cursor, Grok, Hermes, and OpenCode. See [ProviderService.ts][14], [ProviderAdapter.ts][15], and [CodexAdapter.ts][17] as a representative adapter.
 
 #### Session
 
@@ -179,3 +206,5 @@ The file patch and changed-file summary for one turn. It is usually computed in 
 [22]: ../../apps/server/src/checkpointing/Utils.ts
 [23]: ../../apps/server/src/checkpointing/Diffs.ts
 [24]: ./overview.md
+[25]: ../../packages/client-runtime/src/state/subagentRuntime.ts
+[26]: ../../packages/shared/src/agentAwareness.ts

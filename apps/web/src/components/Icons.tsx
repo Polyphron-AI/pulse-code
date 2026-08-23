@@ -211,6 +211,17 @@ export const GrokIcon: Icon = ({ className, ...props }) => (
   </svg>
 );
 
+export const HermesIcon: Icon = (props) => (
+  <svg {...props} viewBox="0 0 24 24" fill="currentColor">
+    {/* Stylized winged-H mark for Hermes Agent */}
+    <rect x="4" y="3" width="3" height="18" rx="1" />
+    <rect x="17" y="3" width="3" height="18" rx="1" />
+    <rect x="7" y="10.5" width="10" height="3" />
+    <path d="M4 3 L1 6.5 L4 7.5 Z" />
+    <path d="M20 3 L23 6.5 L20 7.5 Z" />
+  </svg>
+);
+
 export const TraeIcon: Icon = (props) => (
   <svg {...props} viewBox="0 0 24 24" fill="currentColor">
     {/* Back rectangle: left strip + bottom strip drawn separately — empty bottom-left corner is the gap between them */}

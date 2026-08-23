@@ -7,6 +7,12 @@ import type {
   TurnId,
   UserInputQuestion,
 } from "@t3tools/contracts";
+import {
+  createAgentSpawnGrouper,
+  isAgentInternalTimelineActivity,
+  isAgentSpawnSeedActivity,
+  isBackgroundTaskActivity,
+} from "@t3tools/client-runtime/state/subagentRuntime";
 import { formatDuration } from "@t3tools/shared/orchestrationTiming";
 
 import * as Arr from "effect/Array";
@@ -54,6 +60,16 @@ export interface ThreadFeedActivity {
     | "zap";
   readonly toolLike: boolean;
   readonly status: "success" | "failure" | "neutral" | null;
+  /**
+   * Present on agent-spawn rows: one row per workflow run or per-turn batch
+   * of direct spawns, rendered as a live fleet row that opens the thread's
+   * Agents screen. Live status is derived at render time from the agent panel
+   * model, so the row keeps ticking without new feed entries.
+   */
+  readonly agentSpawn?: {
+    readonly workflowId: string | null;
+    readonly agentTaskIds: ReadonlyArray<string>;
+  };
 }
 
 const MAX_VISIBLE_WORK_LOG_ENTRIES = 1;
@@ -82,6 +98,13 @@ interface DerivedWorkLogEntry extends WorkLogEntry {
   collapseKey?: string;
   /** Grouping key for subagent lifecycle rows (one row per agent). */
   taskId?: string;
+  isWorkflowCoordinator?: boolean;
+  /** Shell/monitor/plan tasks: ordinary work-log rows, never fleet rows. */
+  isBackgroundTask?: boolean;
+  agentSpawn?: {
+    readonly workflowId: string | null;
+    readonly agentTaskIds: ReadonlyArray<string>;
+  };
 }
 
 type RawThreadFeedEntry =
@@ -255,63 +278,11 @@ function resolvePendingUserInputAnswer(
   return selectedOptionLabels[0] ?? null;
 }
 
-/** Codex children settle via task.updated (idle/failed/interrupted), never
- * task.completed — these rows are mobile's only terminal signal for them. */
-const MOBILE_TERMINAL_UPDATE_STATUSES: ReadonlySet<string> = new Set([
-  "idle",
-  "completed",
-  "failed",
-  "cancelled",
-  "interrupted",
-]);
-
-function isTerminalBypassUpdate(activity: OrchestrationThreadActivity): boolean {
-  if (activity.kind !== "task.updated") {
-    return false;
-  }
-  const payload =
-    activity.payload && typeof activity.payload === "object"
-      ? (activity.payload as Record<string, unknown>)
-      : null;
-  return (
-    payload?.timelineBypass === true &&
-    typeof payload.status === "string" &&
-    MOBILE_TERMINAL_UPDATE_STATUSES.has(payload.status)
-  );
-}
-
 /**
- * Quiet-timeline guarantee (mirrors web's session-logic): agent-internal
- * activity lives in the Agents sheet, not the work log. Terminal rows are
- * kept — with no Agents surface on mobile they are the terminal signal
- * (a surface that hides rows must keep its own terminal signal). That means
- * task.completed (Claude) AND terminal bypassed task.updated (Codex, whose
- * children never emit task.completed — review finding).
+ * Quiet-timeline guarantee (same rules as web, from the shared classifier):
+ * the feed carries the parent's narrative plus one fleet row per spawn batch;
+ * everything an agent does internally lives on the thread's Agents screen.
  */
-function isAgentInternalActivity(activity: OrchestrationThreadActivity): boolean {
-  const payload =
-    activity.payload && typeof activity.payload === "object"
-      ? (activity.payload as Record<string, unknown>)
-      : null;
-  if (!payload) {
-    return false;
-  }
-  const isTerminalTaskRow = activity.kind === "task.completed" || isTerminalBypassUpdate(activity);
-  if (payload.timelineBypass === true && !isTerminalTaskRow) {
-    return true;
-  }
-  // agentId marks ownership, not "hide me": a NESTED AGENT's terminal row is
-  // the only signal mobile gets (no Agents sheet), so it stays. Only an
-  // agent's own background work (stamped "background") is internal — same
-  // rule as web (review finding: hiding on agentId alone dropped nested
-  // completions with no replacement UI).
-  const ownedByAgent = typeof payload.agentId === "string" && payload.agentId.trim().length > 0;
-  if (!ownedByAgent) {
-    return false;
-  }
-  return !(isTerminalTaskRow && payload.agentKind === "agent");
-}
-
 function deriveWorkLogEntries(
   activities: ReadonlyArray<OrchestrationThreadActivity>,
 ): DerivedWorkLogEntry[] {
@@ -319,14 +290,16 @@ function deriveWorkLogEntries(
   const entries: DerivedWorkLogEntry[] = [];
   for (const activity of ordered) {
     if (activity.kind === "tool.started") continue;
-    if (activity.kind === "task.started") continue;
-    // Terminal bypassed updates pass: Codex children's only terminal signal.
-    if (activity.kind === "task.updated" && !isTerminalBypassUpdate(activity)) continue;
+    // Agent task.started rows are fleet-row seeds: they carry the true spawn
+    // turn, which is the batch key (completions of background subagents
+    // arrive under later synthetic turns and must not start new batches).
+    if (activity.kind === "task.started" && !isAgentSpawnSeedActivity(activity)) continue;
+    if (activity.kind === "task.updated") continue;
     if (activity.kind === "tool.progress") continue;
     if (activity.kind === "context-window.updated") continue;
     if (activity.summary === "Checkpoint captured") continue;
     if (isPlanBoundaryToolActivity(activity)) continue;
-    if (isAgentInternalActivity(activity)) continue;
+    if (isAgentInternalTimelineActivity(activity)) continue;
     entries.push(toDerivedWorkLogEntry(activity));
   }
   return collapseDerivedWorkLogEntries(entries);
@@ -352,13 +325,10 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
   const commandPreview = extractToolCommand(payload);
   const changedFiles = extractChangedFiles(payload);
   const title = extractToolTitle(payload);
-  // task.updated included: terminal bypassed updates (Codex children's only
-  // terminal signal) must carry task identity so they collapse per child
-  // instead of stacking anonymous "Task idle" rows.
   const isTaskActivity =
+    activity.kind === "task.started" ||
     activity.kind === "task.progress" ||
-    activity.kind === "task.completed" ||
-    activity.kind === "task.updated";
+    activity.kind === "task.completed";
   const taskSummary =
     isTaskActivity && typeof payload?.summary === "string" && payload.summary.length > 0
       ? payload.summary
@@ -433,6 +403,16 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
   if (toolLifecycleStatus) {
     entry.toolLifecycleStatus = toolLifecycleStatus;
   }
+  if (
+    isTaskActivity &&
+    (payload?.taskType === "local_workflow" ||
+      (typeof payload?.workflowName === "string" && payload.workflowName.length > 0))
+  ) {
+    entry.isWorkflowCoordinator = true;
+  }
+  if (isTaskActivity && payload && isBackgroundTaskActivity(payload)) {
+    entry.isBackgroundTask = true;
+  }
   const collapseKey = deriveToolLifecycleCollapseKey(entry);
   if (collapseKey) {
     entry.collapseKey = collapseKey;
@@ -444,23 +424,54 @@ function collapseDerivedWorkLogEntries(
   entries: ReadonlyArray<DerivedWorkLogEntry>,
 ): DerivedWorkLogEntry[] {
   const collapsed: DerivedWorkLogEntry[] = [];
-  // Subagent rows collapse by identity, not adjacency (quiet-timeline
-  // guarantee; mirrors web's session-logic).
-  const taskRowIndex = new Map<string, number>();
+  // Subagent rows collapse by spawn group, not adjacency: a workflow run (or
+  // a turn's batch of direct spawns) is ONE narrative event in the feed — a
+  // fleet row that opens the Agents screen — no matter how many agents it
+  // contains or how their progress rows interleave (quiet-timeline
+  // guarantee). Grouping is shared with web so both clients agree on what
+  // "one fleet" means.
+  const spawnRowIndex = new Map<string, number>();
+  const grouper = createAgentSpawnGrouper();
   for (const entry of entries) {
     const isTaskRow =
       entry.taskId !== undefined &&
-      (entry.activityKind === "task.progress" ||
-        entry.activityKind === "task.completed" ||
-        entry.activityKind === "task.updated");
+      !entry.isBackgroundTask &&
+      (entry.activityKind === "task.started" ||
+        entry.activityKind === "task.progress" ||
+        entry.activityKind === "task.completed");
     if (isTaskRow && entry.taskId !== undefined) {
-      const existingIndex = taskRowIndex.get(entry.taskId);
+      const group = grouper.groupFor({
+        taskId: entry.taskId,
+        turnId: entry.turnId ?? null,
+        isWorkflowCoordinator: entry.isWorkflowCoordinator === true,
+      });
+      const existingIndex = spawnRowIndex.get(group.key);
       if (existingIndex !== undefined) {
-        collapsed[existingIndex] = mergeDerivedWorkLogEntries(collapsed[existingIndex]!, entry);
+        const existing = collapsed[existingIndex]!;
+        const agentTaskIds = existing.agentSpawn?.agentTaskIds.includes(entry.taskId)
+          ? existing.agentSpawn.agentTaskIds
+          : [...(existing.agentSpawn?.agentTaskIds ?? []), entry.taskId];
+        collapsed[existingIndex] = {
+          ...mergeDerivedWorkLogEntries(existing, entry),
+          // The fleet row keeps the group's ANCHOR identity, not the last
+          // agent's: id/createdAt/turnId stay pinned to the spawn point so
+          // the row renders where the run launched instead of drifting to the
+          // newest progress tick, and the stable id keeps LegendList's row
+          // recycling and pre-measured heights sane.
+          id: existing.id,
+          createdAt: existing.createdAt,
+          turnId: existing.turnId,
+          ...(existing.taskId !== undefined ? { taskId: existing.taskId } : {}),
+          label: existing.label,
+          agentSpawn: { workflowId: group.workflowId, agentTaskIds },
+        };
         continue;
       }
-      taskRowIndex.set(entry.taskId, collapsed.length);
-      collapsed.push(entry);
+      spawnRowIndex.set(group.key, collapsed.length);
+      collapsed.push({
+        ...entry,
+        agentSpawn: { workflowId: group.workflowId, agentTaskIds: [entry.taskId] },
+      });
       continue;
     }
     const previous = collapsed.at(-1);
@@ -1302,7 +1313,11 @@ function appendPresentedFeedEntry(
   }
 
   const activities = entry.activities.filter(
-    (activity) => !(activity.toolLike && activity.status === "neutral"),
+    // Fleet rows survive the neutral-tool filter: an in-flight fleet reads as
+    // a neutral tool row, and dropping it is exactly how subagents went
+    // invisible on mobile.
+    (activity) =>
+      activity.agentSpawn !== undefined || !(activity.toolLike && activity.status === "neutral"),
   );
   if (activities.length === 0) {
     return;
@@ -1317,8 +1332,20 @@ function appendPresentedFeedEntry(
 
   const groupId = entry.id;
   const expanded = expandedWorkGroupIds.has(groupId);
-  const hiddenCount = activities.length - MAX_VISIBLE_WORK_LOG_ENTRIES;
-  const visibleActivities = expanded ? activities : activities.slice(-MAX_VISIBLE_WORK_LOG_ENTRIES);
+  // Fleet rows are pinned: a running fleet must never hide behind
+  // "+N previous", so it is excluded from the hidden count and always shown
+  // alongside the tail of ordinary work.
+  const spawnActivities = activities.filter((activity) => activity.agentSpawn !== undefined);
+  const plainActivities = activities.filter((activity) => activity.agentSpawn === undefined);
+  const hiddenCount = Math.max(plainActivities.length - MAX_VISIBLE_WORK_LOG_ENTRIES, 0);
+  const visiblePlain =
+    expanded || hiddenCount === 0
+      ? plainActivities
+      : plainActivities.slice(-MAX_VISIBLE_WORK_LOG_ENTRIES);
+  const visibleActivities =
+    spawnActivities.length === 0
+      ? visiblePlain
+      : Arr.sortWith([...spawnActivities, ...visiblePlain], (a) => a.createdAt, Order.String);
 
   for (const activity of visibleActivities) {
     result.push({
@@ -1329,6 +1356,9 @@ function appendPresentedFeedEntry(
       activities: [activity],
     });
   }
+  if (hiddenCount === 0) {
+    return;
+  }
   result.push({
     type: "work-toggle",
     id: `work-toggle:${groupId}`,
@@ -1337,7 +1367,7 @@ function appendPresentedFeedEntry(
     groupId,
     hiddenCount,
     expanded,
-    onlyToolActivities: activities.every((activity) => activity.toolLike),
+    onlyToolActivities: plainActivities.every((activity) => activity.toolLike),
   });
 }
 
@@ -1566,6 +1596,7 @@ export function buildThreadFeed(
               icon: workEntryIcon(entry),
               toolLike: workLogEntryIsToolLike(entry),
               status: workEntryStatus(entry),
+              ...(entry.agentSpawn ? { agentSpawn: entry.agentSpawn } : {}),
             },
           };
         }),

@@ -1,9 +1,9 @@
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as SchemaIssue from "effect/SchemaIssue";
-import * as SchemaTransformation from "effect/SchemaTransformation";
 import * as Struct from "effect/Struct";
-import { ProviderOptionSelections } from "./model.ts";
+import { ModelSelection } from "./model.ts";
+export { ModelSelection } from "./model.ts";
 import { RepositoryIdentity, ThreadEnvMode } from "./environment.ts";
 import {
   ApprovalRequestId,
@@ -22,6 +22,27 @@ import {
   TurnId,
 } from "./baseSchemas.ts";
 import { ProviderInstanceId } from "./providerInstance.ts";
+import { ScheduleId } from "./baseSchemas.ts";
+import {
+  OrchestrationSchedule,
+  ProjectScheduleCreateCommand,
+  ProjectScheduleCreatedPayload,
+  ProjectScheduleDeleteCommand,
+  ProjectScheduleDeletedPayload,
+  ProjectSchedulePauseCommand,
+  ProjectSchedulePausedPayload,
+  ProjectScheduleResumeCommand,
+  ProjectScheduleResumedPayload,
+  ProjectScheduleUpdateCommand,
+  ProjectScheduleUpdatedPayload,
+  ScheduleOccurrenceCompleteCommand,
+  ScheduleOccurrenceCompletedPayload,
+  ScheduleOccurrenceFailCommand,
+  ScheduleOccurrenceFailedPayload,
+  ScheduleOccurrenceStartCommand,
+  ScheduleOccurrenceStartedPayload,
+  ThreadOrigin,
+} from "./schedule.ts";
 
 export const ORCHESTRATION_WS_METHODS = {
   dispatchCommand: "orchestration.dispatchCommand",
@@ -47,74 +68,6 @@ export const ProviderSandboxMode = Schema.Literals([
   "danger-full-access",
 ]);
 export type ProviderSandboxMode = typeof ProviderSandboxMode.Type;
-
-/**
- * `ModelSelection` — selection of a model on a configured provider instance.
- *
- * The routing key is `instanceId` (a user-defined slug identifying one
- * configured provider instance). Drivers, credentials, working-directory
- * bindings, and any other per-instance state are recovered from the
- * runtime registry via the instance id.
- *
- * Wire legacy: persisted selections produced before the driver/instance
- * split carried a `provider: <driver-id>` field instead. The schema absorbs
- * that shape via a pre-decoding transform — `{provider, model}` is promoted
- * to `{instanceId: defaultInstanceIdForDriver(provider), model}`. No
- * post-decode compatibility code lives in the runtime; the transform is the
- * only compat surface.
- */
-const ModelSelectionWire = Schema.Struct({
-  instanceId: ProviderInstanceId,
-  model: TrimmedNonEmptyString,
-  options: Schema.optionalKey(ProviderOptionSelections),
-});
-
-// Source shape for persisted legacy payloads. Fields are typed as
-// `Schema.Unknown` so malformed drafts still make it into the transform and
-// fail validation through the target schema (with proper error messages)
-// rather than at the source-struct layer where the error is less actionable.
-const ModelSelectionSource = Schema.Struct({
-  provider: Schema.optional(Schema.Unknown),
-  instanceId: Schema.optional(Schema.Unknown),
-  model: Schema.Unknown,
-  options: Schema.optional(Schema.Unknown),
-});
-
-export const ModelSelection = ModelSelectionSource.pipe(
-  Schema.decodeTo(
-    ModelSelectionWire,
-    SchemaTransformation.transformOrFail({
-      decode: (raw) => {
-        // Resolve the routing key: prefer an explicit `instanceId`; fall
-        // back to promoting the legacy `provider` slug (the canonical
-        // `defaultInstanceIdForDriver` mapping) so persisted rollout-era
-        // payloads decode without data loss. The target schema brands the
-        // string as `ProviderInstanceId`.
-        const instanceIdSource =
-          raw.instanceId !== undefined
-            ? raw.instanceId
-            : typeof raw.provider === "string"
-              ? raw.provider
-              : undefined;
-        const base: Record<string, unknown> = {
-          instanceId: instanceIdSource,
-          model: raw.model,
-        };
-        if (raw.options !== undefined) base.options = raw.options;
-        return Effect.succeed(base as typeof ModelSelectionWire.Encoded);
-      },
-      encode: (value) => {
-        const base: Record<string, unknown> = {
-          model: value.model,
-          instanceId: value.instanceId,
-        };
-        if (value.options !== undefined) base.options = value.options;
-        return Effect.succeed(base as typeof ModelSelectionSource.Encoded);
-      },
-    }),
-  ),
-);
-export type ModelSelection = typeof ModelSelection.Type;
 
 export const RuntimeMode = Schema.Literals([
   "approval-required",
@@ -411,6 +364,9 @@ export const OrchestrationThread = Schema.Struct({
   pinOrderKey: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
   // Pending-only state. Optional so older servers remain compatible.
   titleRegeneration: Schema.optional(Schema.NullOr(ThreadTitleRegeneration)),
+  // Who started the thread: "user" or "schedule:<scheduleId>". Optional so
+  // payloads from pre-schedule servers still decode; absent means "user".
+  origin: Schema.optional(ThreadOrigin),
   deletedAt: Schema.NullOr(IsoDateTime),
   messages: Schema.Array(OrchestrationMessage),
   proposedPlans: Schema.Array(OrchestrationProposedPlan).pipe(
@@ -426,6 +382,9 @@ export const OrchestrationReadModel = Schema.Struct({
   snapshotSequence: NonNegativeInt,
   projects: Schema.Array(OrchestrationProject),
   threads: Schema.Array(OrchestrationThread),
+  // Optional so snapshots from pre-schedule servers still decode; absent
+  // means no schedules.
+  schedules: Schema.optional(Schema.Array(OrchestrationSchedule)),
   updatedAt: IsoDateTime,
 });
 export type OrchestrationReadModel = typeof OrchestrationReadModel.Type;
@@ -469,6 +428,8 @@ export const OrchestrationThreadShell = Schema.Struct({
   pinnedAt: Schema.optional(Schema.NullOr(IsoDateTime)),
   pinOrderKey: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
   titleRegeneration: Schema.optional(Schema.NullOr(ThreadTitleRegeneration)),
+  // Who started the thread; optional for pre-schedule interop, absent = "user".
+  origin: Schema.optional(ThreadOrigin),
   session: Schema.NullOr(OrchestrationSession),
   latestUserMessageAt: Schema.NullOr(IsoDateTime),
   hasPendingApprovals: Schema.Boolean,
@@ -677,6 +638,8 @@ const ThreadCreateCommand = Schema.Struct({
   ),
   branch: Schema.NullOr(TrimmedNonEmptyString),
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
+  // Absent means "user".
+  origin: Schema.optional(ThreadOrigin),
   createdAt: IsoDateTime,
 });
 
@@ -804,6 +767,9 @@ const ThreadTurnStartBootstrapCreateThread = Schema.Struct({
   interactionMode: ProviderInteractionMode,
   branch: Schema.NullOr(TrimmedNonEmptyString),
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
+  // Absent means "user". Scheduled fires bootstrap their persistent thread
+  // with `schedule:<scheduleId>` so every consumer can tell scheduled work.
+  origin: Schema.optional(ThreadOrigin),
   createdAt: IsoDateTime,
 });
 
@@ -840,6 +806,10 @@ export const ThreadTurnStartCommand = Schema.Struct({
   ),
   bootstrap: Schema.optional(ThreadTurnStartBootstrap),
   sourceProposedPlan: Schema.optional(SourceProposedPlanReference),
+  // "fresh" asks the provider adapter to start a brand-new provider session
+  // for this turn instead of resuming the thread's existing one. Used by
+  // scheduled chats; absent means the default resume behavior.
+  sessionMode: Schema.optional(Schema.Literal("fresh")),
   createdAt: IsoDateTime,
 });
 
@@ -933,6 +903,11 @@ const DispatchableClientOrchestrationCommand = Schema.Union([
   ThreadUserInputRespondCommand,
   ThreadCheckpointRevertCommand,
   ThreadSessionStopCommand,
+  ProjectScheduleCreateCommand,
+  ProjectScheduleUpdateCommand,
+  ProjectSchedulePauseCommand,
+  ProjectScheduleResumeCommand,
+  ProjectScheduleDeleteCommand,
 ]);
 export type DispatchableClientOrchestrationCommand =
   typeof DispatchableClientOrchestrationCommand.Type;
@@ -961,6 +936,11 @@ export const ClientOrchestrationCommand = Schema.Union([
   ThreadUserInputRespondCommand,
   ThreadCheckpointRevertCommand,
   ThreadSessionStopCommand,
+  ProjectScheduleCreateCommand,
+  ProjectScheduleUpdateCommand,
+  ProjectSchedulePauseCommand,
+  ProjectScheduleResumeCommand,
+  ProjectScheduleDeleteCommand,
 ]);
 export type ClientOrchestrationCommand = typeof ClientOrchestrationCommand.Type;
 
@@ -1046,6 +1026,10 @@ const InternalOrchestrationCommand = Schema.Union([
   ThreadActivityAppendCommand,
   ThreadRevertCompleteCommand,
   ThreadTitleRegenerationCompleteCommand,
+  // Occurrence lifecycle is server-only: the ScheduleReactor dispatches these.
+  ScheduleOccurrenceStartCommand,
+  ScheduleOccurrenceCompleteCommand,
+  ScheduleOccurrenceFailCommand,
 ]);
 export type InternalOrchestrationCommand = typeof InternalOrchestrationCommand.Type;
 
@@ -1085,10 +1069,18 @@ export const OrchestrationEventType = Schema.Literals([
   "thread.proposed-plan-upserted",
   "thread.turn-diff-completed",
   "thread.activity-appended",
+  "project.schedule.created",
+  "project.schedule.updated",
+  "project.schedule.paused",
+  "project.schedule.resumed",
+  "project.schedule.deleted",
+  "schedule.occurrence.started",
+  "schedule.occurrence.completed",
+  "schedule.occurrence.failed",
 ]);
 export type OrchestrationEventType = typeof OrchestrationEventType.Type;
 
-export const OrchestrationAggregateKind = Schema.Literals(["project", "thread"]);
+export const OrchestrationAggregateKind = Schema.Literals(["project", "thread", "schedule"]);
 export type OrchestrationAggregateKind = typeof OrchestrationAggregateKind.Type;
 export const OrchestrationActorKind = Schema.Literals(["client", "server", "provider"]);
 
@@ -1133,6 +1125,8 @@ export const ThreadCreatedPayload = Schema.Struct({
   ),
   branch: Schema.NullOr(TrimmedNonEmptyString),
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
+  // Optional so persisted pre-schedule events still decode; absent = "user".
+  origin: Schema.optional(ThreadOrigin),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
 });
@@ -1254,6 +1248,9 @@ export const ThreadTurnStartRequestedPayload = Schema.Struct({
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_PROVIDER_INTERACTION_MODE)),
   ),
   sourceProposedPlan: Schema.optional(SourceProposedPlanReference),
+  // Mirrors ThreadTurnStartCommand.sessionMode; adapters read it to decide
+  // whether to resume the existing provider session or start a fresh one.
+  sessionMode: Schema.optional(Schema.Literal("fresh")),
   createdAt: IsoDateTime,
 });
 
@@ -1332,7 +1329,7 @@ const EventBaseFields = {
   sequence: NonNegativeInt,
   eventId: EventId,
   aggregateKind: OrchestrationAggregateKind,
-  aggregateId: Schema.Union([ProjectId, ThreadId]),
+  aggregateId: Schema.Union([ProjectId, ThreadId, ScheduleId]),
   occurredAt: IsoDateTime,
   commandId: Schema.NullOr(CommandId),
   causationEventId: Schema.NullOr(EventId),
@@ -1485,6 +1482,46 @@ export const OrchestrationEvent = Schema.Union([
     ...EventBaseFields,
     type: Schema.Literal("thread.activity-appended"),
     payload: ThreadActivityAppendedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("project.schedule.created"),
+    payload: ProjectScheduleCreatedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("project.schedule.updated"),
+    payload: ProjectScheduleUpdatedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("project.schedule.paused"),
+    payload: ProjectSchedulePausedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("project.schedule.resumed"),
+    payload: ProjectScheduleResumedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("project.schedule.deleted"),
+    payload: ProjectScheduleDeletedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("schedule.occurrence.started"),
+    payload: ScheduleOccurrenceStartedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("schedule.occurrence.completed"),
+    payload: ScheduleOccurrenceCompletedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("schedule.occurrence.failed"),
+    payload: ScheduleOccurrenceFailedPayload,
   }),
 ]);
 export type OrchestrationEvent = typeof OrchestrationEvent.Type;

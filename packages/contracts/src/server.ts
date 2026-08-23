@@ -158,6 +158,34 @@ export const ServerProviderUpdateState = Schema.Struct({
 });
 export type ServerProviderUpdateState = typeof ServerProviderUpdateState.Type;
 
+/**
+ * One rolling rate-limit window of a provider subscription plan (e.g. the
+ * 5-hour or weekly window), normalized across drivers. `id` is the stable
+ * merge key — sparse updates (Claude reports one window per event) replace
+ * the window with the matching id and leave the others in place.
+ */
+export const ServerProviderPlanUsageWindow = Schema.Struct({
+  id: TrimmedNonEmptyString,
+  label: TrimmedNonEmptyString,
+  // Share of the window consumed, 0-100.
+  usedPercent: Schema.Number,
+  resetsAt: Schema.optional(IsoDateTime),
+  windowMinutes: Schema.optional(Schema.Number),
+});
+export type ServerProviderPlanUsageWindow = typeof ServerProviderPlanUsageWindow.Type;
+
+/**
+ * Last-known subscription plan utilization for a provider instance, fed by
+ * the provider's own rate-limit notifications during live sessions. Absent
+ * until the provider reports one (API-key auth never does).
+ */
+export const ServerProviderPlanUsage = Schema.Struct({
+  planLabel: Schema.optional(TrimmedNonEmptyString),
+  windows: Schema.Array(ServerProviderPlanUsageWindow),
+  capturedAt: IsoDateTime,
+});
+export type ServerProviderPlanUsage = typeof ServerProviderPlanUsage.Type;
+
 export const ServerProvider = Schema.Struct({
   // Routing key for the configured instance this snapshot represents. This
   // is the only stable identity consumers may use for provider routing.
@@ -194,6 +222,9 @@ export const ServerProvider = Schema.Struct({
   skills: Schema.Array(ServerProviderSkill).pipe(Schema.withDecodingDefault(Effect.succeed([]))),
   versionAdvisory: Schema.optionalKey(ServerProviderVersionAdvisory),
   updateState: Schema.optionalKey(ServerProviderUpdateState),
+  // Optional for back-compat: only drivers that surface plan rate-limit
+  // notifications (codex, claude) ever populate it.
+  planUsage: Schema.optionalKey(ServerProviderPlanUsage),
 });
 export type ServerProvider = typeof ServerProvider.Type;
 

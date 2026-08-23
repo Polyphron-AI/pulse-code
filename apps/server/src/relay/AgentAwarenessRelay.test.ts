@@ -28,6 +28,7 @@ import * as Queue from "effect/Queue";
 import * as Stream from "effect/Stream";
 import * as Tracer from "effect/Tracer";
 
+import { createEmptyReadModel } from "../orchestration/projector.ts";
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import {
@@ -475,6 +476,7 @@ describe.sequential("signRelayAgentActivityPublishProof", () => {
           dispatch: () => Effect.succeed({ sequence: 1 }),
           streamDomainEvents: Stream.fromQueue(events),
           latestSequence: Effect.succeed(0),
+          currentReadModel: Effect.sync(() => createEmptyReadModel("1970-01-01T00:00:00.000Z")),
         } satisfies OrchestrationEngineShape;
 
         const snapshotQuery = {
@@ -667,6 +669,7 @@ describe.sequential("signRelayAgentActivityPublishProof", () => {
             dispatch: () => Effect.succeed({ sequence: 1 }),
             streamDomainEvents: Stream.fromQueue(events),
             latestSequence: Effect.succeed(0),
+            currentReadModel: Effect.sync(() => createEmptyReadModel("1970-01-01T00:00:00.000Z")),
           } satisfies OrchestrationEngineShape),
           Layer.succeed(ProjectionSnapshotQuery, {
             getShellSnapshot: () =>
