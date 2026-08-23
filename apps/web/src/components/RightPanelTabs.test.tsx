@@ -53,12 +53,16 @@ function overlay(icon: DesktopPreviewFavicon | null) {
   };
 }
 
-function renderTabs(first: DesktopPreviewFavicon | null, second?: DesktopPreviewFavicon) {
+function renderTabs(
+  first: DesktopPreviewFavicon | null,
+  second?: DesktopPreviewFavicon,
+  launcher = false,
+) {
   return renderToStaticMarkup(
     <RightPanelTabs
       mode="inline"
-      surfaces={second ? [previewSurface, secondSurface] : [previewSurface]}
-      activeSurfaceId={previewSurface.id}
+      surfaces={launcher ? [] : second ? [previewSurface, secondSurface] : [previewSurface]}
+      activeSurfaceId={launcher ? null : previewSurface.id}
       pendingSurfaceIds={new Set()}
       previewSessions={sessions}
       desktopByTabId={{
@@ -76,6 +80,7 @@ function renderTabs(first: DesktopPreviewFavicon | null, second?: DesktopPreview
       onAddTerminal={() => undefined}
       onAddPullRequest={() => undefined}
       onAddIssue={() => undefined}
+      onAddPulseflow={() => undefined}
       onAddDiff={() => undefined}
       onAddFiles={() => undefined}
       onAddAgents={() => undefined}
@@ -85,7 +90,8 @@ function renderTabs(first: DesktopPreviewFavicon | null, second?: DesktopPreview
       diffAvailable={false}
       filesAvailable={false}
       pullRequestAvailable={false}
-      issueAvailable={false}
+      issueAvailable={launcher}
+      pulseflowAvailable={false}
       agentsAvailable={false}
     >
       <div>content</div>
@@ -113,5 +119,15 @@ describe("RightPanelTabs preview favicon", () => {
   it("hides a capture while the server session still describes another origin", () => {
     const html = renderTabs(favicon("data:image/png;base64,AAAA", "https://example.com/"));
     expect(html).not.toContain("data:image/png;base64,AAAA");
+  });
+});
+
+describe("RightPanelTabs surface launcher", () => {
+  it("offers directory-matched Issues and explains the Pulseflow integration gate", () => {
+    const html = renderTabs(null, undefined, true);
+
+    expect(html).toContain("Match this directory to Pulse bugs and tickets.");
+    expect(html).toContain("Pulseflow");
+    expect(html).toContain("Requires the Pulseflow integration.");
   });
 });

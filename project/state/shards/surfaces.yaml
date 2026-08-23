@@ -1,12 +1,12 @@
 surfaces:
-  - {
-      id: settings-integrations,
-      path: /settings/integrations,
-      state: existing,
-      source: sitemap/integrations.md,
-    }
+  - id: settings-integrations
+    path: /settings/integrations
+    state: existing
+    source: sitemap/integrations.md
   - { id: pull-requests, path: /pull-requests, state: existing, source: sitemap/integrations.md }
   - { id: issues, path: /issues, state: building, source: sitemap/integrations.md }
+  - { id: thread-issues, path: null, state: building, source: sitemap/integrations.md }
+  - { id: pulseflow, path: null, state: planned, source: sitemap/integrations.md }
   - { id: project, path: "/projects/$projectKey", state: existing, source: sitemap/integrations.md }
   - { id: thread-context, path: null, state: building, source: sitemap/integrations.md }
   - { id: mobile-issues, path: null, state: building, source: sitemap/integrations.md }

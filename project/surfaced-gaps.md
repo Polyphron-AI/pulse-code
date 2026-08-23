@@ -52,6 +52,10 @@ collection`), so the unified workspace cannot be regenerated after synchronizing
 
 ## Consumed
 
+- **2026-08-23:** `G-2026-08-21-workspace-endpoints-yaml-parser` was resolved by normalizing the
+  ProductOps-owned endpoint, roadmap, and surface shards to its supported YAML subset. The unified
+  workspace now passes renderer input checks and freshness verification.
+
 - **2026-08-20:** `G-2026-08-20-integration-transport-bridge-unassigned` was resolved by T11's typed
   server bridge and T12's client/mobile runtime binding. Mixed-version verification continues in T8.
 

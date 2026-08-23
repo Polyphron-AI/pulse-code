@@ -314,6 +314,17 @@ describe("rightPanelStore", () => {
     });
   });
 
+  it("opens the Issues list as a singleton surface beside the thread", () => {
+    useRightPanelStore.getState().open(refA, "issues");
+    useRightPanelStore.getState().open(refA, "issues");
+
+    expect(selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA)).toEqual({
+      isOpen: true,
+      activeSurfaceId: "issues",
+      surfaces: [{ id: "issues", kind: "issues" }],
+    });
+  });
+
   it("replaces the standalone explorer with peer file surfaces", () => {
     useRightPanelStore.getState().open(refA, "files");
     useRightPanelStore.getState().openFile(refA, "src/index.ts");

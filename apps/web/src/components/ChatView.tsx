@@ -153,6 +153,7 @@ import { PullRequestDetailGhost } from "./pullRequest/PullRequestGhosts";
 import { PullRequestsUnavailableState } from "./pullRequest/PullRequestsUnavailableState";
 import { IssueDetailPanel } from "./issues/IssueDetailPanel";
 import { ThreadIssueContext } from "./issues/ThreadIssueContext";
+import { ThreadIssuesPanel } from "./issues/ThreadIssuesPanel";
 import { RightPanelTabs, type PullRequestTabStatus } from "./RightPanelTabs";
 import { AgentsPanel } from "./AgentsPanel";
 import {
@@ -229,7 +230,7 @@ import { environmentCatalog } from "../connection/catalog";
 import { selectThreadTerminalUiState, useTerminalUiStateStore } from "../terminalUiStateStore";
 import { useKnownTerminalSessions, useThreadRunningTerminalIds } from "../state/terminalSessions";
 import { projectEnvironment } from "../state/projects";
-import { issueEnvironment } from "../state/issues";
+import { type EnvironmentIssueEntry, issueEnvironment } from "../state/issues";
 import { useEnvironmentQuery } from "../state/query";
 import {
   primaryServerAvailableEditorsAtom,
@@ -3318,10 +3319,22 @@ function ChatViewContent(props: ChatViewProps) {
     if (!activeThreadRef) return;
     useRightPanelStore.getState().open(activeThreadRef, "agents");
   }, [activeThreadRef]);
-  const openIssuesWorkspace = useCallback(() => {
-    if (!supportsIssues || !activeProject) return;
-    void navigate({ to: "/issues", search: { projectId: activeProject.id, limit: 50 } });
-  }, [activeProject, navigate, supportsIssues]);
+  const addIssuesSurface = useCallback(() => {
+    if (!supportsIssues || !activeThreadRef || !activeProject) return;
+    useRightPanelStore.getState().open(activeThreadRef, "issues");
+  }, [activeProject, activeThreadRef, supportsIssues]);
+  const openIssueFromDirectory = useCallback(
+    (entry: EnvironmentIssueEntry) => {
+      if (!activeThreadRef) return;
+      useRightPanelStore.getState().openIssue(activeThreadRef, {
+        environmentId: entry.environmentId,
+        projectId: entry.projectId,
+        pulseProjectId: entry.issue.pulseProjectId,
+        issueId: entry.issue.id,
+      });
+    },
+    [activeThreadRef],
+  );
   const openFileSurface = useCallback(
     (relativePath: string) => {
       if (!activeThreadRef || !activeProject) return;
@@ -6211,6 +6224,14 @@ function ChatViewContent(props: ChatViewProps) {
         composerDraftTarget={composerDraftTarget}
         onStateChange={handlePullRequestTabStatusChange}
       />
+    ) : activeRightPanelSurface?.kind === "issues" && activeProject ? (
+      <ThreadIssuesPanel
+        environmentId={activeProject.environmentId}
+        projectId={activeProject.id}
+        projectTitle={activeProject.title}
+        workspaceRoot={activeProject.workspaceRoot}
+        onOpenIssue={openIssueFromDirectory}
+      />
     ) : activeRightPanelSurface?.kind === "issue" ? (
       <IssueDetailPanel
         key={`${activeRightPanelSurface.environmentId}:${activeRightPanelSurface.issueId}`}
@@ -6703,7 +6724,8 @@ function ChatViewContent(props: ChatViewProps) {
           onAddDiff={addDiffSurface}
           onAddFiles={addFilesSurface}
           onAddPullRequest={addPullRequestSurface}
-          onAddIssue={openIssuesWorkspace}
+          onAddIssue={addIssuesSurface}
+          onAddPulseflow={() => undefined}
           onAddAgents={addAgentsSurface}
           browserAvailable={isPreviewSupportedInRuntime()}
           terminalAvailable={activeProject !== null}
@@ -6711,6 +6733,7 @@ function ChatViewContent(props: ChatViewProps) {
           filesAvailable={activeProject !== null}
           pullRequestAvailable={pullRequestSurfaceAvailable}
           issueAvailable={supportsIssues && activeProject !== null}
+          pulseflowAvailable={false}
           agentsAvailable
           pullRequestStatuses={pullRequestTabStatuses}
           liveAgentCount={agentPanelModel.liveCount}
@@ -6744,7 +6767,8 @@ function ChatViewContent(props: ChatViewProps) {
             onAddDiff={addDiffSurface}
             onAddFiles={addFilesSurface}
             onAddPullRequest={addPullRequestSurface}
-            onAddIssue={openIssuesWorkspace}
+            onAddIssue={addIssuesSurface}
+            onAddPulseflow={() => undefined}
             onAddAgents={addAgentsSurface}
             browserAvailable={isPreviewSupportedInRuntime()}
             terminalAvailable={activeProject !== null}
@@ -6752,6 +6776,7 @@ function ChatViewContent(props: ChatViewProps) {
             filesAvailable={activeProject !== null}
             pullRequestAvailable={pullRequestSurfaceAvailable}
             issueAvailable={supportsIssues && activeProject !== null}
+            pulseflowAvailable={false}
             agentsAvailable
             pullRequestStatuses={pullRequestTabStatuses}
             liveAgentCount={agentPanelModel.liveCount}

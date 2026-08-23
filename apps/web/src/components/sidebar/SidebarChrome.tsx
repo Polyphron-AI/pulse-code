@@ -4,6 +4,7 @@ import {
   CircleDotIcon,
   GitPullRequestIcon,
   SettingsIcon,
+  WorkflowIcon,
 } from "lucide-react";
 import { memo, useCallback, useMemo } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
@@ -265,6 +266,26 @@ export const SidebarChromeFooter = memo(function SidebarChromeFooter() {
                 </Tooltip>
               </SidebarMenuItem>
             ) : null}
+            <SidebarMenuItem className="shrink-0">
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <SidebarMenuButton
+                      aria-label="Pulseflow"
+                      aria-disabled="true"
+                      className="cursor-not-allowed opacity-45"
+                      size="icon"
+                      tabIndex={-1}
+                    >
+                      <WorkflowIcon />
+                    </SidebarMenuButton>
+                  }
+                />
+                <TooltipPopup side="top">
+                  Pulseflow · Requires the Pulseflow integration
+                </TooltipPopup>
+              </Tooltip>
+            </SidebarMenuItem>
             <SidebarMenuItem className="shrink-0">
               <Tooltip>
                 <TooltipTrigger

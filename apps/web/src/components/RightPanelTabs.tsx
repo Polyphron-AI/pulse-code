@@ -9,6 +9,7 @@ import {
   Globe2,
   Plus,
   TerminalSquare,
+  Workflow,
   X,
 } from "lucide-react";
 import {
@@ -66,6 +67,7 @@ interface RightPanelTabsProps {
   onAddFiles: () => void;
   onAddPullRequest: () => void;
   onAddIssue: () => void;
+  onAddPulseflow: () => void;
   onAddAgents: () => void;
   browserAvailable: boolean;
   terminalAvailable: boolean;
@@ -73,6 +75,7 @@ interface RightPanelTabsProps {
   filesAvailable: boolean;
   pullRequestAvailable: boolean;
   issueAvailable: boolean;
+  pulseflowAvailable: boolean;
   agentsAvailable: boolean;
   pullRequestStatuses?: Readonly<Record<string, PullRequestTabStatus>>;
   /** Running + waiting subagents; badges the Agents card in the empty state. */
@@ -95,6 +98,7 @@ const SURFACE_DISABLED_REASONS = {
   diff: "Diff is only available for server threads in Git repositories.",
   pullRequest: "This thread's branch has no pull request yet.",
   issue: "Issues require a mapped Pulse project.",
+  pulseflow: "Pulseflow requires the Pulseflow integration.",
   agents: "Agents are only available from a thread.",
 } as const;
 
@@ -118,6 +122,7 @@ const SURFACE_UNAVAILABLE_HINTS = {
   diff: "Available for Git repositories.",
   pullRequest: "No pull request on this branch yet.",
   issue: "Connect and map Pulse in Integrations.",
+  pulseflow: "Requires the Pulseflow integration.",
   agents: "Available from a thread.",
 } as const;
 
@@ -165,6 +170,7 @@ function RightPanelEmptyState(props: {
   onAddFiles: () => void;
   onAddPullRequest: () => void;
   onAddIssue: () => void;
+  onAddPulseflow: () => void;
   onAddAgents: () => void;
   browserAvailable: boolean;
   terminalAvailable: boolean;
@@ -172,6 +178,7 @@ function RightPanelEmptyState(props: {
   filesAvailable: boolean;
   pullRequestAvailable: boolean;
   issueAvailable: boolean;
+  pulseflowAvailable: boolean;
   agentsAvailable: boolean;
   liveAgentCount: number;
 }) {
@@ -231,12 +238,22 @@ function RightPanelEmptyState(props: {
     },
     {
       label: "Issues",
-      description: "Open this workspace's Pulse Issues.",
+      description: "Match this directory to Pulse bugs and tickets.",
       icon: CircleDot,
       shortcut: "I",
       available: props.issueAvailable,
       disabledReason: SURFACE_UNAVAILABLE_HINTS.issue,
       onClick: props.onAddIssue,
+      badgeCount: 0,
+    },
+    {
+      label: "Pulseflow",
+      description: "Open this workspace's Pulseflow workflows.",
+      icon: Workflow,
+      shortcut: "W",
+      available: props.pulseflowAvailable,
+      disabledReason: SURFACE_UNAVAILABLE_HINTS.pulseflow,
+      onClick: props.onAddPulseflow,
       badgeCount: 0,
     },
     {
@@ -443,6 +460,8 @@ function surfaceTitle(
       return `#${surface.number}`;
     case "issue":
       return surface.issueId;
+    case "issues":
+      return "Issues";
     case "agents":
       return "Agents";
     case "preview": {
@@ -529,6 +548,8 @@ function SurfaceIcon({
       return <GitPullRequest className={cn("size-3 shrink-0", toneClassName)} />;
     }
     case "issue":
+      return <CircleDot className="size-3 shrink-0 text-orange-500" />;
+    case "issues":
       return <CircleDot className="size-3 shrink-0 text-orange-500" />;
     case "agents":
       return <Bot className="size-3 shrink-0" />;
@@ -765,6 +786,14 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
                     Issues
                   </SurfaceMenuItem>
                   <SurfaceMenuItem
+                    available={props.pulseflowAvailable}
+                    disabledReason={SURFACE_DISABLED_REASONS.pulseflow}
+                    onClick={props.onAddPulseflow}
+                  >
+                    <Workflow />
+                    Pulseflow
+                  </SurfaceMenuItem>
+                  <SurfaceMenuItem
                     available={props.agentsAvailable}
                     disabledReason={SURFACE_DISABLED_REASONS.agents}
                     onClick={props.onAddAgents}
@@ -788,6 +817,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
             onAddFiles={props.onAddFiles}
             onAddPullRequest={props.onAddPullRequest}
             onAddIssue={props.onAddIssue}
+            onAddPulseflow={props.onAddPulseflow}
             onAddAgents={props.onAddAgents}
             browserAvailable={props.browserAvailable}
             terminalAvailable={props.terminalAvailable}
@@ -795,6 +825,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
             filesAvailable={props.filesAvailable}
             pullRequestAvailable={props.pullRequestAvailable}
             issueAvailable={props.issueAvailable}
+            pulseflowAvailable={props.pulseflowAvailable}
             agentsAvailable={props.agentsAvailable}
             liveAgentCount={props.liveAgentCount}
           />

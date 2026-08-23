@@ -98,6 +98,10 @@ Pulse/T3 configuration aliases continue to work.
 OAuth sign-in, cross-server account synchronization, GitHub/Linear/Sentry adapters, and tokenizer
 context are not part of this verified slice.
 
+Pulseflow appears as an unavailable web sidebar and panel option while its integration remains on
+the roadmap. These entries do not send requests or claim a connection. They become actionable only
+after a future Pulseflow integration can map the current workspace and advertise support.
+
 ---
 
 **Created:** 2026-08-20 . **Last edited:** 2026-08-23

@@ -1,0 +1,49 @@
+{
+  "blocked_by": [],
+  "commits": [],
+  "created_at": "2026-08-23T20:32:59Z",
+  "execution_context": {
+    "branch": "feature/scheduled-chats-agent-activity",
+    "repository": "Pulse Code",
+    "worktree": "main"
+  },
+  "files_touched": [
+    "apps/web/src/components/ChatView.tsx",
+    "apps/web/src/components/RightPanelTabs.test.tsx",
+    "apps/web/src/components/RightPanelTabs.tsx",
+    "apps/web/src/components/issues/ThreadIssuesPanel.test.ts",
+    "apps/web/src/components/issues/ThreadIssuesPanel.tsx",
+    "apps/web/src/components/sidebar/SidebarChrome.tsx",
+    "apps/web/src/rightPanelStore.test.ts",
+    "apps/web/src/rightPanelStore.ts",
+    "apps/web/src/routes/_chat.issues.tsx",
+    "apps/web/src/routes/_chat.pull-requests.tsx",
+    "docs/user/integrations.md",
+    "docs/user/issues.md",
+    "project/.plugin-version",
+    "project/state/shards/endpoints.yaml",
+    "project/state/shards/roadmap.yaml",
+    "project/state/shards/surfaces.yaml",
+    "project/surfaced-gaps.md",
+    "project/workspace-overlay.json",
+    "project/workspace.html",
+    "sitemap/integrations.md"
+  ],
+  "host_refs": {},
+  "id": "B-2026-08-23-001",
+  "kind": "bugfix",
+  "local_id": null,
+  "owner": null,
+  "plan_id": null,
+  "roadmap_items": ["R-2026-08-23-pulseflow-surfaces"],
+  "schema": "product-ops.task/v1",
+  "status": "completed",
+  "subject": "Keep Issues in the right panel and reserve Pulseflow affordances",
+  "updated_at": "2026-08-23T20:47:10Z",
+  "verification_receipts": [
+    "@t3tools/web typecheck passed",
+    "Focused web surface tests: 4 files, 50 tests passed",
+    "ProductOps workspace renderer input check and freshness verification passed",
+    "Targeted changed-file web lint and formatting checks passed"
+  ]
+}

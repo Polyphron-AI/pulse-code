@@ -12,9 +12,12 @@ Pulse Code web / desktop
 ├── /issues                             in-flight route
 ├── /pull-requests                      existing route
 ├── /projects/$projectKey               existing route
+├── Pulseflow sidebar destination       roadmap placeholder; integration-gated
 └── thread / right panel                existing surface; no independent URL
     ├── referenced pull request         existing behavior
-    └── referenced Issue/context        in-flight behavior
+    ├── directory-matched Issues        existing behavior
+    ├── referenced Issue/context        in-flight behavior
+    └── Pulseflow workflow              roadmap placeholder; integration-gated
 
 Pulse Code mobile
 ├── Settings stack                      existing surface
@@ -33,12 +36,16 @@ Pulse Code mobile
 | Thread/right panel       | Existing + in flight             | compact resource reference, lazy detail, action preview               | secret display or unbounded evidence     |
 | Preview                  | Existing + in flight             | capture evidence and link it to mapped project work                   | provider control plane                   |
 | Mobile Issues            | In flight                        | list/detail/triage/resume across capable environments                 | long-lived secret entry in first release |
+| Pulseflow affordances    | Roadmap placeholder              | name the future mapped workflow entry points and dependency           | imply that Pulseflow is connected        |
 
 ## Navigation contract
 
 - Settings is the canonical entry point for connection management and recovery.
 - Resource workspaces appear only when at least one connected environment advertises the capability;
   unsupported environments remain visible in diagnostics rather than causing unknown RPC calls.
+- Pulseflow is the deliberate roadmap-placeholder exception: its web affordances stay disabled and
+  name the missing integration. They must not issue requests or activate until an environment
+  advertises a future Pulseflow capability.
 - Every native resource view includes an external source link.
 - Provider-specific advanced tasks deep-link out instead of introducing unplanned Pulse Code routes.
 - Adding a provider does not add a top-level route unless it introduces a distinct, validated user
@@ -71,4 +78,4 @@ These are components within existing navigation, not new URLs:
 
 ---
 
-**Created:** 2026-08-19 . **Last opened:** 2026-08-19 . **Last edited:** 2026-08-19 . **Status:** draft . **Owner:** Product
+**Created:** 2026-08-19 . **Last opened:** 2026-08-23 . **Last edited:** 2026-08-23 . **Status:** draft . **Owner:** Product

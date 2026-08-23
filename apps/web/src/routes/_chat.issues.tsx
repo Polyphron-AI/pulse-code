@@ -541,6 +541,7 @@ function IssuesRouteView() {
             onAddFiles={() => undefined}
             onAddPullRequest={() => undefined}
             onAddIssue={() => undefined}
+            onAddPulseflow={() => undefined}
             onAddAgents={() => undefined}
             browserAvailable={false}
             terminalAvailable={false}
@@ -548,6 +549,7 @@ function IssuesRouteView() {
             filesAvailable={false}
             pullRequestAvailable={false}
             issueAvailable={false}
+            pulseflowAvailable={false}
             agentsAvailable={false}
             liveAgentCount={0}
           >

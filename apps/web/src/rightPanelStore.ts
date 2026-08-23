@@ -21,6 +21,7 @@ export const RIGHT_PANEL_KINDS = [
   "preview",
   "terminal",
   "pull-request",
+  "issues",
   "issue",
   "agents",
 ] as const;
@@ -73,6 +74,7 @@ export type RightPanelSurface =
       pulseProjectId: string;
       issueId: string;
     }
+  | { id: "issues"; kind: "issues" }
   | { id: "agents"; kind: "agents" };
 
 const RIGHT_PANEL_STORAGE_KEY = "t3code:right-panel-state:v2";
@@ -80,7 +82,8 @@ const RIGHT_PANEL_STORAGE_KEY = "t3code:right-panel-state:v2";
 // v10 keys pull-request surfaces by reference instead of a singleton tab.
 // v11 stops persisting the pull-request list's shared panel, so a restart opens the page fresh.
 // v12 adds reference-keyed Issue surfaces and keeps the Issues list's shared panel session-only.
-const RIGHT_PANEL_STORAGE_VERSION = 12;
+// v13 adds the thread-scoped Issues list surface.
+const RIGHT_PANEL_STORAGE_VERSION = 13;
 
 /**
  * The pull-request list's shared panel (see PULL_REQUESTS_PANEL_ID in the route) is session
@@ -158,6 +161,8 @@ const singletonSurface = (
       return { id: "diff", kind };
     case "files":
       return { id: "files", kind };
+    case "issues":
+      return { id: "issues", kind };
     case "agents":
       return { id: "agents", kind };
   }

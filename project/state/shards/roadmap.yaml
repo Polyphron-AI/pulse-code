@@ -3,7 +3,7 @@ meta:
   capacity_note: "Planning assumption: one maintainer with agent support; confirm before execution."
   reserve_floor: 25
   reserve_rationale: "One of four Now slots is reserved for compatibility and credential-safety work because integration failures affect every client and remote mode."
-  snapshot: 2026-08-22
+  snapshot: 2026-08-23
 
 themes:
   - id: T1
@@ -44,18 +44,12 @@ items:
       - "Pulse starts fresh; any future T3 import is explicit, selective, copy-only, and non-destructive."
       - "Focused configuration tests pass across all desktop targets and a Windows install candidate passes package inspection."
     evidence:
-      - {
-          type: user_evidence,
-          note: "The user requires side-by-side T3 and Pulse installations for the whole team, with T3 remaining true to upstream and Pulse evolving selectively.",
-        }
-      - {
-          type: repository_evidence,
-          note: "Desktop runtime, launcher, protocol handlers, and cross-platform builder now use ai.polyphron.pulsecode, ~/.pulsecode, pulsecode schemes, and Pulse-only package identities.",
-        }
-      - {
-          type: verification_evidence,
-          note: "Focused identity tests passed 51 assertions across runtime/protocol/launcher/builder scopes; desktop typecheck passed; the unsigned Windows x64 NSIS candidate passed packaged-payload validation with 69 files and 35 sidecar natives (SHA-256 A87DB57EB9754BE61B4DE6298A19CC04FBFF337810261881AC2DC7FDDF313513).",
-        }
+      - type: user_evidence
+        note: "The user requires side-by-side T3 and Pulse installations for the whole team, with T3 remaining true to upstream and Pulse evolving selectively."
+      - type: repository_evidence
+        note: "Desktop runtime, launcher, protocol handlers, and cross-platform builder now use ai.polyphron.pulsecode, ~/.pulsecode, pulsecode schemes, and Pulse-only package identities."
+      - type: verification_evidence
+        note: "Focused identity tests passed 51 assertions across runtime/protocol/launcher/builder scopes; desktop typecheck passed; the unsigned Windows x64 NSIS candidate passed packaged-payload validation with 69 files and 35 sidecar natives (SHA-256 A87DB57EB9754BE61B4DE6298A19CC04FBFF337810261881AC2DC7FDDF313513)."
     rice: { reach: H, impact: H, effort: M }
     prd_refs:
       - 11-product-line-and-distribution-boundary#desktop-boundary
@@ -94,18 +88,12 @@ items:
       - "The owning server is the only provider API and secret-store boundary."
       - "Pulse Issues can adopt the lifecycle contract without changing shipped client behavior or persisted IDs."
     evidence:
-      - {
-          type: user_evidence,
-          note: "The user asked for sign-in-once access between Pulse Code and Pulse, including tickets, bugs, projects, workspaces, and tokenizer context.",
-        }
-      - {
-          type: plans_estimates,
-          note: "The 2026-08-19 task graph scopes the walking skeleton into bounded contract, server, runtime, and UI tasks.",
-        }
-      - {
-          type: test_results,
-          note: "2026-08-20 T1–T7/T11/T12 receipts verify typed contracts, server-owned persistence and adapter lifecycle, Settings, bounded context/action, authenticated RPC, and client/mobile bindings; final contracts/server/client-runtime/web/mobile typechecks pass.",
-        }
+      - type: user_evidence
+        note: "The user asked for sign-in-once access between Pulse Code and Pulse, including tickets, bugs, projects, workspaces, and tokenizer context."
+      - type: plans_estimates
+        note: "The 2026-08-19 task graph scopes the walking skeleton into bounded contract, server, runtime, and UI tasks."
+      - type: test_results
+        note: "2026-08-20 T1–T7/T11/T12 receipts verify typed contracts, server-owned persistence and adapter lifecycle, Settings, bounded context/action, authenticated RPC, and client/mobile bindings; final contracts/server/client-runtime/web/mobile typechecks pass."
     rice: { reach: H, impact: H, effort: M }
     prd_refs:
       - 10-pulse-integrations#platform-contract
@@ -144,18 +132,12 @@ items:
       - "Web/desktop/mobile and mixed-capability behavior match the native Issues contract."
       - "Reference-adapter seams and provider-specific semantics are documented."
     evidence:
-      - {
-          type: anecdotal,
-          note: "Repository inspection found a full uncommitted native Issues contract, server adapter, settings flow, routes, mobile surface, and architecture guide.",
-        }
-      - {
-          type: plans_estimates,
-          note: "Existing docs define bounded evidence, mapping, optimistic versions, capability skew, and remote failure isolation.",
-        }
-      - {
-          type: test_results,
-          note: "Native Issues landed independently at ac8d94397 after 10 files/36 tests plus web/mobile typechecks; T4 then passed 6 files/38 adapter/store/domain tests.",
-        }
+      - type: anecdotal
+        note: "Repository inspection found a full uncommitted native Issues contract, server adapter, settings flow, routes, mobile surface, and architecture guide."
+      - type: plans_estimates
+        note: "Existing docs define bounded evidence, mapping, optimistic versions, capability skew, and remote failure isolation."
+      - type: test_results
+        note: "Native Issues landed independently at ac8d94397 after 10 files/36 tests plus web/mobile typechecks; T4 then passed 6 files/38 adapter/store/domain tests."
     rice: { reach: M, impact: H, effort: M }
     prd_refs:
       - 10-pulse-integrations#scope-and-provider-boundary
@@ -195,18 +177,12 @@ items:
       - "One agent-proposed mutation produces preview, confirmation, typed receipt, refresh, and conflict recovery."
       - "Unsupported/older environments never receive unknown calls."
     evidence:
-      - {
-          type: user_evidence,
-          note: "The user explicitly asked that the assistant see appropriate tickets, bugs, projects, workspaces, and tokenizer context.",
-        }
-      - {
-          type: plans_estimates,
-          note: "The workflow and tool-flow artifacts define the bounded read and confirmation path.",
-        }
-      - {
-          type: test_results,
-          note: "T7/T11/T12 verify bounded Issue summary/detail context, session-scoped status previews, explicit confirmation receipts, typed RPC transport, and scoped client refresh.",
-        }
+      - type: user_evidence
+        note: "The user explicitly asked that the assistant see appropriate tickets, bugs, projects, workspaces, and tokenizer context."
+      - type: plans_estimates
+        note: "The workflow and tool-flow artifacts define the bounded read and confirmation path."
+      - type: test_results
+        note: "T7/T11/T12 verify bounded Issue summary/detail context, session-scoped status previews, explicit confirmation receipts, typed RPC transport, and scoped client refresh."
     rice: { reach: H, impact: H, effort: M }
     prd_refs:
       - 10-pulse-integrations#experience-contract
@@ -246,18 +222,12 @@ items:
       - "Local, direct-remote, relay, tunnel, and mobile paths never receive provider credentials."
       - "Disconnect, revocation, rollback, and migration fixtures prove reversible behavior."
     evidence:
-      - {
-          type: user_evidence,
-          note: "The user made full backwards compatibility an explicit condition of the Pulse Code rename and integration goal.",
-        }
-      - {
-          type: anecdotal,
-          note: "AGENTS.md identifies multi-surface and remote-ready omissions as a recurring defect class.",
-        }
-      - {
-          type: test_results,
-          note: "T8 passed 9 files/45 tests, contracts/client-runtime/mobile typechecks, and generated all Expo variants while preserving legacy schemes, catalog aliases, bundle/package IDs, environment identity, native RPC aliases, and persisted resource IDs.",
-        }
+      - type: user_evidence
+        note: "The user made full backwards compatibility an explicit condition of the Pulse Code rename and integration goal."
+      - type: anecdotal
+        note: "AGENTS.md identifies multi-surface and remote-ready omissions as a recurring defect class."
+      - type: test_results
+        note: "T8 passed 9 files/45 tests, contracts/client-runtime/mobile typechecks, and generated all Expo variants while preserving legacy schemes, catalog aliases, bundle/package IDs, environment identity, native RPC aliases, and persisted resource IDs."
     rice: { reach: H, impact: H, effort: M }
     prd_refs:
       - 10-pulse-integrations#security-privacy-and-compatibility
@@ -299,19 +269,13 @@ items:
       - "Per-provider scheduled-run support is a stated decision per adapter."
       - "docs/user page states the host-availability constraint plainly."
     evidence:
-      - {
-          type: user_evidence,
-          note: "The maintainer specified the daily check-in loop, handoff-file memory, persistent thread, fresh sessions, run/turn limits, and multi-repo scope in the 2026-08-21 design session.",
-        }
-      - {
-          type: plans_estimates,
-          note: "docs/plans/2026-08-21-scheduled-chats-design.md decides the domain model, scheduler mechanics, limits, scopes, and UI; PRD 12 and CR-2026-08-21-scheduled-chats carry the requirement.",
-        }
+      - type: user_evidence
+        note: "The maintainer specified the daily check-in loop, handoff-file memory, persistent thread, fresh sessions, run/turn limits, and multi-repo scope in the 2026-08-21 design session."
+      - type: plans_estimates
+        note: "docs/plans/2026-08-21-scheduled-chats-design.md decides the domain model, scheduler mechanics, limits, scopes, and UI; PRD 12 and CR-2026-08-21-scheduled-chats carry the requirement."
     rice: { reach: H, impact: H, effort: M }
     prd_refs:
-      - 12-scheduled-chats#daily-loop
-      - 12-scheduled-chats#trust-rails
-      - 12-scheduled-chats#surfaces
+      - 12-scheduled-chats#scope
     blocked_by: []
     metric: { name: "mornings started from a fresh handoff", baseline: null, target: null }
     status: active
@@ -350,9 +314,7 @@ items:
         note: Signed workspace-file assets, expo-file-system, and expo-sharing already exist.
     rice: { reach: M, impact: M, effort: S }
     prd_refs:
-      - 13-mobile-file-link-actions#choice
-      - 13-mobile-file-link-actions#open-with
-      - 13-mobile-file-link-actions#failure
+      - 13-mobile-file-link-actions#scope
     blocked_by: []
     metric: { name: mobile linked files with a usable open action, baseline: null, target: 100 }
     status: active
@@ -395,17 +357,12 @@ items:
         note: The capability gate rejects every non-browser-previewable type, mobile collapses all failures into one alert, and progress plus cancellation already exist on the download call mobile makes.
     rice: { reach: M, impact: L, effort: M }
     prd_refs:
-      - 14-document-link-durability#durable-reference
-      - 14-document-link-durability#any-document
-      - 14-document-link-durability#honest-state
-      - 14-document-link-durability#remote-aware-presentation
+      - 14-document-link-durability#scope
     blocked_by: []
     metric:
-      {
-        name: linked documents openable from mobile after the thread goes cold,
-        baseline: null,
-        target: 100,
-      }
+      name: linked documents openable from mobile after the thread goes cold
+      baseline: null
+      target: 100
     status: active
     history:
       - 2026-08-22 created in now as a continuation of R-2026-08-21-mobile-file-link-actions rather than a new slot claim; it reopens that item's persistent-download rabbit hole with a no-storage approach and awaits design approval before build.
@@ -446,13 +403,12 @@ items:
         note: Forward self-update, channels, and the About-panel update flow already existed; rollback, the 0.0.34 floor, the Settings rollback row, and the Help-menu safe-mode items are implemented in the working tree with 67 focused tests passing.
     rice: { reach: H, impact: H, effort: M }
     prd_refs:
-      - 15-desktop-update-rollback#rollback-choice
-      - 15-desktop-update-rollback#crash-proof-path
-      - 15-desktop-update-rollback#data-safety-floor
-      - 15-desktop-update-rollback#channel-integrity
+      - 15-desktop-update-rollback#scope
     blocked_by: []
     metric:
-      { name: bad desktop updates recoverable without leaving the app, baseline: 0, target: 100 }
+      name: bad desktop updates recoverable without leaving the app
+      baseline: 0
+      target: 100
     status: active
     history:
       - 2026-08-22 created in now after the maintainer directed the build; Phase 1 (rollback machinery, floor, Settings row, Help-menu safe mode, user docs) is implemented and verified in the working tree. Pre-update snapshot/restore remains an unshaped follow-up slice.
@@ -470,10 +426,8 @@ items:
       - "Add a separate GitHub work adapter that only joins the existing pull-request domain by typed references."
     failure_mode: "GitHub-specific scope leaks into the shared connection layer or duplicates existing CLI authentication poorly."
     evidence:
-      - {
-          type: anecdotal,
-          note: "The repository already ships multi-host source control and a native /pull-requests workspace.",
-        }
+      - type: anecdotal
+        note: "The repository already ships multi-host source control and a native /pull-requests workspace."
     rice: { reach: H, impact: M, effort: M }
     prd_refs:
       - 10-pulse-integrations#scope-and-provider-boundary
@@ -497,10 +451,8 @@ items:
       - "Use a generic MCP/tool connection for agent-only reads while keeping the Pulse Code UI provider-neutral."
     failure_mode: "A polished adapter is built without measured demand or exposes workflow semantics the shared UI cannot represent honestly."
     evidence:
-      - {
-          type: crafted_pitch,
-          note: "Linear is a strong second-adapter candidate because it tests OAuth and ticket/project semantics without reusing the Pulse API.",
-        }
+      - type: crafted_pitch
+        note: "Linear is a strong second-adapter candidate because it tests OAuth and ticket/project semantics without reusing the Pulse API."
     rice: { reach: M, impact: M, effort: M }
     prd_refs:
       - 10-pulse-integrations#scope-and-provider-boundary
@@ -524,10 +476,8 @@ items:
       - "Start from provider deep links and an explicit user-selected evidence import."
     failure_mode: "High-volume traces overwhelm WebSockets, prompts, provider budgets, or privacy boundaries."
     evidence:
-      - {
-          type: crafted_pitch,
-          note: "The in-flight Pulse Report design already establishes lazy bounded evidence patterns that a second evidence provider can test.",
-        }
+      - type: crafted_pitch
+        note: "The in-flight Pulse Report design already establishes lazy bounded evidence patterns that a second evidence provider can test."
     rice: { reach: M, impact: H, effort: M }
     prd_refs:
       - 10-pulse-integrations#platform-contract
@@ -552,10 +502,8 @@ items:
       - "Expose a provider-specific tokenizer resource through agent context only."
     failure_mode: "The roadmap solves the wrong object because 'tokenizer' has not been defined."
     evidence:
-      - {
-          type: user_evidence,
-          note: "The user named tokenizer visibility as part of the desired Pulse/Pulse Code connection.",
-        }
+      - type: user_evidence
+        note: "The user named tokenizer visibility as part of the desired Pulse/Pulse Code connection."
     rice: { reach: M, impact: M, effort: M }
     prd_refs:
       - 10-pulse-integrations#scope-and-provider-boundary
@@ -579,10 +527,8 @@ items:
       - "Atlassian-managed connector or MCP path for read-first access."
     failure_mode: "Enterprise auth and workflow configuration exceed the maintenance appetite."
     evidence:
-      - {
-          type: self_conviction,
-          note: "Captured as a common enterprise category; no Pulse Code demand baseline yet.",
-        }
+      - type: self_conviction
+        note: "Captured as a common enterprise category; no Pulse Code demand baseline yet."
     rice: { reach: M, impact: M, effort: H }
     prd_refs:
       - 10-pulse-integrations#scope-and-provider-boundary
@@ -605,10 +551,8 @@ items:
       - "Outbound webhooks configured per project with no inbound message ingestion."
     failure_mode: "Pulse Code becomes a noisy notification hub or ingests private conversations without a bounded workflow."
     evidence:
-      - {
-          type: self_conviction,
-          note: "Captured as a plausible handoff category; no measured demand or workflow evidence yet.",
-        }
+      - type: self_conviction
+        note: "Captured as a plausible handoff category; no measured demand or workflow evidence yet."
     rice: { reach: M, impact: L, effort: M }
     prd_refs:
       - 10-pulse-integrations#scope-and-provider-boundary
@@ -631,10 +575,8 @@ items:
       - "Use provider MCP/tools for agent access and keep only typed links in Pulse Code."
     failure_mode: "A broad connector category produces shallow, high-maintenance adapters with no native workflow."
     evidence:
-      - {
-          type: self_conviction,
-          note: "Captured as a category for later discovery; no provider or workflow is selected.",
-        }
+      - type: self_conviction
+        note: "Captured as a category for later discovery; no provider or workflow is selected."
     rice: { reach: M, impact: M, effort: H }
     prd_refs:
       - 10-pulse-integrations#scope-and-provider-boundary
@@ -643,3 +585,54 @@ items:
     status: active
     history:
       - "2026-08-19 captured in later; split by validated workflow before promotion."
+
+  - id: R-2026-08-23-pulseflow-integration
+    title: "Pulseflow integration contract"
+    theme: T1
+    horizon: later
+    stage: concept
+    kind: feature
+    outcome: "Make mapped Pulseflow workflows available to Pulse Code without duplicating Pulseflow's control plane."
+    need: "When a coding workspace participates in a Pulseflow workflow, I want Pulse Code to resolve that mapping and read its bounded workflow state, so the coding loop can stay connected to the source of truth."
+    directions:
+      - "Define a server-owned Pulseflow connection, project mapping, capability, and bounded workflow/run summary contract."
+      - "Deep-link to Pulseflow until a concrete native action is proven valuable inside Pulse Code."
+    failure_mode: "A branded placeholder grows into an embedded workflow designer before authentication, mapping, and ownership are defined."
+    evidence:
+      - type: user_evidence
+        note: "The user requested Pulseflow in the surface launcher and sidebar, explicitly gated on a future Pulseflow integration."
+    rice: { reach: M, impact: M, effort: M }
+    prd_refs:
+      - 10-pulse-integrations#scope-and-provider-boundary
+    blocked_by:
+      - R-2026-08-19-integration-foundation
+    metric: { name: "mapped Pulseflow workflow open success", baseline: null, target: null }
+    status: active
+    history:
+      - "2026-08-23 captured in later; auth, mapping, capabilities, and the native workflow boundary remain to be shaped."
+
+  - id: R-2026-08-23-pulseflow-surfaces
+    title: "Native Pulseflow surfaces"
+    theme: T1
+    horizon: later
+    stage: concept
+    kind: feature
+    outcome: "Open relevant Pulseflow workflow context from the sidebar or beside a coding thread."
+    need: "When a mapped Pulseflow workflow is relevant to my directory or thread, I want to open it from the same surface model as Issues, so I do not lose coding context."
+    directions:
+      - "Activate the reserved sidebar and right-panel affordances only when a connected environment advertises Pulseflow support."
+      - "Keep workflow authoring in Pulseflow unless a full-width native authoring job is separately validated."
+    failure_mode: "The UI claims Pulseflow is usable before a capable integration exists, or opens a full-screen workspace from a right-panel action."
+    evidence:
+      - type: repository_evidence
+        note: "The web client reserves unavailable Pulseflow entries whose copy names the integration dependency."
+    rice: { reach: M, impact: M, effort: S }
+    prd_refs:
+      - 10-pulse-integrations#experience-contract
+    blocked_by:
+      - R-2026-08-23-pulseflow-integration
+    metric:
+      { name: "Pulseflow surface opens without leaving thread context", baseline: 0, target: 100 }
+    status: active
+    history:
+      - "2026-08-23 reserved disabled web affordances; activation remains blocked on the Pulseflow integration contract."

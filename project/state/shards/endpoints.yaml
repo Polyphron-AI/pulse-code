@@ -1,16 +1,18 @@
 endpoints:
-  - {
-      id: settings-integrations-route,
-      state: complete,
-      source: apps/web/src/routes/settings.integrations.tsx,
-    }
-  - {
-      id: pull-requests-route,
-      state: complete,
-      source: apps/web/src/routes/_chat.pull-requests.tsx,
-    }
+  - id: settings-integrations-route
+    state: complete
+    source: apps/web/src/routes/settings.integrations.tsx
+  - id: pull-requests-route
+    state: complete
+    source: apps/web/src/routes/_chat.pull-requests.tsx
   - { id: pulse-issues-rpc, state: building, source: packages/contracts/src/issues.ts }
   - { id: issues-web-route, state: building, source: apps/web/src/routes/_chat.issues.tsx }
+  - {
+      id: thread-issues-panel,
+      state: building,
+      source: apps/web/src/components/issues/ThreadIssuesPanel.tsx,
+    }
   - { id: issues-mobile-surface, state: building, source: apps/mobile/src/features/issues/ }
   - { id: integration-provider-contract, state: planned, source: tool-flow/integration-platform.md }
   - { id: agent-action-preview, state: planned, source: workflows/use-integration-context.md }
+  - { id: pulseflow-integration, state: planned, source: project/state/shards/roadmap.yaml }

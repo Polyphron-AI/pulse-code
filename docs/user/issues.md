@@ -37,6 +37,11 @@ tabs open alongside files and pull requests. The detail view includes:
   breadcrumbs, page data, environment, and backend context; and
 - Issue activity and lifecycle changes.
 
+From a project thread, open the right panel and choose **Issues** to keep the conversation visible
+while browsing. This compact list uses the current directory's Pulse project mapping, shows the
+matching tickets and each ticket's linked bug-report count, and opens a selected ticket as a peer
+panel tab. The **Issues** button in the main sidebar still opens the full cross-environment workspace.
+
 Use the native controls to move an Issue through triage, assign or unassign it, edit labels, resolve
 it, reopen it, or mark it as won't fix. If another client changed the Issue first, Pulse Code loads
 the current version and asks you to apply your change again.
@@ -100,3 +105,7 @@ remain so continuity can be restored after reconnecting and remapping the enviro
 - **Issues unavailable on this server:** update Pulse Code Server and reconnect the client so it can
   advertise native Issues support.
 - **Issue changed elsewhere:** review the refreshed values and repeat the lifecycle change.
+
+---
+
+**Created:** 2026-08-20 . **Last opened:** 2026-08-23 . **Last edited:** 2026-08-23 . **Status:** stable . **Owner:** Product
