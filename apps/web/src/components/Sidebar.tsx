@@ -144,6 +144,7 @@ import {
 } from "./Sidebar.logic";
 import { resolveLocalCheckoutBranchMismatch } from "./BranchToolbar.logic";
 import {
+  ThreadScheduleIndicator,
   ThreadWorktreeIndicator,
   nextThreadChangeRequestSnapshot,
   prStatusIndicator,
@@ -1540,6 +1541,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
               ) : (
                 <span className="flex-1" />
               )}
+              <ThreadScheduleIndicator thread={thread} />
               {terminalStatusIcon}
               {prBadge}
               {diff ? (

@@ -33,6 +33,7 @@ import {
 import { useNavigate, useParams } from "@tanstack/react-router";
 import * as Option from "effect/Option";
 import {
+  AlarmClockIcon,
   ArrowLeftIcon,
   CornerLeftUpIcon,
   FileSearchIcon,
@@ -1575,6 +1576,17 @@ function OpenCommandPaletteDialog(props: {
     icon: <SettingsIcon className={ITEM_ICON_CLASS} />,
     run: async () => {
       await navigate({ to: "/settings" });
+    },
+  });
+
+  actionItems.push({
+    kind: "action",
+    value: "action:scheduled-chats",
+    searchTerms: ["scheduled", "schedule", "daily", "cron", "recurring", "standup", "automation"],
+    title: "Scheduled chats",
+    icon: <AlarmClockIcon className={ITEM_ICON_CLASS} />,
+    run: async () => {
+      await navigate({ to: "/settings/scheduled-chats" });
     },
   });
 

@@ -6,6 +6,7 @@
 - [Permission modes](./user/permission-modes.md)
 - [Keyboard shortcuts](./user/keybindings.md)
 - [Organizing threads](./user/thread-sidebar.md)
+- [Scheduled chats](./user/scheduled-chats.md)
 - [Review usage](./user/usage.md)
 - [Work with Issues](./user/issues.md)
 - [Connect Pulse integrations](./user/integrations.md)

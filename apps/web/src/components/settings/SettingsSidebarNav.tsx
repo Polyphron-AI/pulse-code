@@ -10,6 +10,7 @@ import {
 import {
   ArchiveIcon,
   ArrowLeftIcon,
+  AlarmClockIcon,
   BlocksIcon,
   BotIcon,
   GitBranchIcon,
@@ -52,6 +53,7 @@ const SETTINGS_SECTION_ICONS: Readonly<
   "/settings/providers": BotIcon,
   "/settings/integrations": BlocksIcon,
   "/settings/source-control": GitBranchIcon,
+  "/settings/scheduled-chats": AlarmClockIcon,
   "/settings/connections": Link2Icon,
   "/settings/archived": ArchiveIcon,
 };

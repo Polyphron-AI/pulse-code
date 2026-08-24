@@ -1473,6 +1473,20 @@ body {
   padding: 0;
 }
 
+/* The shell heights every full-height surface uses. `#root` pads itself by the
+   safe-area insets so chrome never lands under a notch or the home indicator,
+   which means a child asking for `100dvh` overflows by exactly that padding —
+   these tokens subtract it back out. Use the small variant where a growing
+   viewport (a retreating mobile URL bar) would otherwise push the bottom of the
+   surface off screen; in an installed PWA there is no URL bar, so the two
+   resolve to the same height. */
+:root {
+  --app-safe-area-top: max(env(safe-area-inset-top), 0px);
+  --app-safe-area-bottom: max(env(safe-area-inset-bottom), 0px);
+  --app-shell-height: calc(100dvh - var(--app-safe-area-top) - var(--app-safe-area-bottom));
+  --app-shell-height-small: calc(100svh - var(--app-safe-area-top) - var(--app-safe-area-bottom));
+}
+
 html,
 body {
   min-height: calc(100svh + env(safe-area-inset-top));
@@ -1492,7 +1506,8 @@ body {
   overflow-x: clip;
   overflow-y: hidden;
   overscroll-behavior-y: none;
-  padding-top: max(env(safe-area-inset-top), 0px);
+  padding-top: var(--app-safe-area-top);
+  padding-bottom: var(--app-safe-area-bottom);
   padding-right: var(--desktop-window-right-resize-inset);
 }
 

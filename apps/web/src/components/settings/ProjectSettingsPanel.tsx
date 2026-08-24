@@ -23,7 +23,7 @@ import type {
 import { resolveEnvModeLabel } from "../BranchToolbar.logic";
 import { createModelSelection } from "@t3tools/shared/model";
 import { DEFAULT_RESOLVED_KEYBINDINGS } from "@t3tools/shared/keybindings";
-import { useCanGoBack, useNavigate } from "@tanstack/react-router";
+import { Link, useCanGoBack, useNavigate } from "@tanstack/react-router";
 import * as Cause from "effect/Cause";
 import { ChevronDownIcon, CopyIcon, PlusIcon, SettingsIcon, Trash2Icon } from "lucide-react";
 import {
@@ -84,6 +84,11 @@ import {
 import { cn } from "../../lib/utils";
 import { COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS } from "../../workspaceTitlebar";
 import { Button } from "../ui/button";
+import {
+  projectScheduleCountKey,
+  type ProjectScheduleRef,
+} from "@t3tools/client-runtime/state/schedules";
+import { environmentSchedules } from "../../state/schedules";
 import { Input } from "../ui/input";
 import {
   Menu,
@@ -173,7 +178,7 @@ export function ProjectSettingsPage({ projectKey }: { projectKey: string }) {
   }, [navigateBackWithinApp]);
 
   return (
-    <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground isolate">
+    <SidebarInset className="h-(--app-shell-height) min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground isolate">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background text-foreground">
         {!isElectron && (
           <header
@@ -251,6 +256,34 @@ function ProjectSettingsBreadcrumb({ projectKey }: { projectKey: string }) {
         )}
       </WorkspaceBreadcrumbItem>
     </WorkspaceBreadcrumb>
+  );
+}
+
+/**
+ * Pointer to the one place schedules are edited. Project settings deliberately
+ * only counts and links: a second editor here would let two screens disagree
+ * about the same schedule.
+ */
+function ProjectScheduledChatsRow({ refs }: { refs: ReadonlyArray<ProjectScheduleRef> }) {
+  const key = useMemo(() => projectScheduleCountKey(refs), [refs]);
+  const count = useAtomValue(environmentSchedules.projectScheduleCountAtom(key));
+
+  return (
+    <SettingsRow
+      title="Scheduled chats"
+      description={
+        count === 0
+          ? "No scheduled chat runs in this project yet."
+          : count === 1
+            ? "One scheduled chat runs in this project every day."
+            : `${count} scheduled chats run in this project every day.`
+      }
+      control={
+        <Button size="xs" variant="outline" render={<Link to="/settings/scheduled-chats" />}>
+          {count === 0 ? "Schedule one" : "Manage"}
+        </Button>
+      }
+    />
   );
 }
 
@@ -337,6 +370,15 @@ function ProjectDetail({ group }: { group: SidebarProjectSnapshot }) {
       (member) => member.environmentId === group.environmentId && member.id === group.id,
     ) ?? group.memberProjects[0]!;
   const faviconPath = representative.faviconPath ?? null;
+
+  const scheduleRefs = useMemo<ReadonlyArray<ProjectScheduleRef>>(
+    () =>
+      group.memberProjects.map((member) => ({
+        environmentId: member.environmentId,
+        projectId: member.id,
+      })),
+    [group.memberProjects],
+  );
 
   const threadCountByMember = useMemo(() => {
     const counts = new Map<string, number>();
@@ -812,6 +854,7 @@ function ProjectDetail({ group }: { group: SidebarProjectSnapshot }) {
               </div>
             }
           />
+          <ProjectScheduledChatsRow refs={scheduleRefs} />
         </SettingsSection>
 
         <SettingsSection title="New threads">

@@ -19,6 +19,7 @@ import {
   resolveThreadPr,
   terminalStatusFromRunningIds,
   ThreadStatusLabel,
+  ThreadScheduleIndicator,
   ThreadWorktreeIndicator,
 } from "./ThreadStatusIndicators";
 import { ProjectFavicon } from "./ProjectFavicon";
@@ -765,6 +766,7 @@ export const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThr
             </Tooltip>
           )}
           <ThreadWorktreeIndicator thread={thread} />
+          <ThreadScheduleIndicator thread={thread} />
           {terminalStatus && (
             <Tooltip>
               <TooltipTrigger

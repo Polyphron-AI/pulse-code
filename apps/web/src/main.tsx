@@ -16,6 +16,7 @@ import {
   syncDocumentWindowControlsOverlayClass,
 } from "./lib/windowControlsOverlay";
 import { AppRoot } from "./AppRoot";
+import { captureInstallPrompt } from "./pwa/installPrompt";
 import { registerServiceWorker } from "./pwa/registerServiceWorker";
 import { clerkAppearance } from "./components/clerk/clerkAppearance";
 
@@ -55,4 +56,5 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   </React.StrictMode>,
 );
 
+captureInstallPrompt();
 registerServiceWorker();

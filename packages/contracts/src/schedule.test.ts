@@ -10,6 +10,7 @@ import {
   scheduleIdFromThreadOrigin,
   scheduleOccurrenceKey,
   scheduleSkipIfDirty,
+  scheduleTargetsProject,
   scheduleThreadOrigin,
 } from "./schedule.ts";
 import { ProjectId, ScheduleId } from "./baseSchemas.ts";
@@ -203,6 +204,23 @@ describe("ScheduleScope", () => {
 
   it("rejects unknown tags", () => {
     expect(() => decodeScope({ _tag: "global" })).toThrow();
+  });
+
+  it("reports which projects a scope touches", () => {
+    const p1 = ProjectId.make("p1");
+    const p2 = ProjectId.make("p2");
+    expect(scheduleTargetsProject({ scope: { _tag: "project", projectId: p1 } }, p1)).toBe(true);
+    expect(scheduleTargetsProject({ scope: { _tag: "project", projectId: p1 } }, p2)).toBe(false);
+    expect(scheduleTargetsProject({ scope: { _tag: "environment", projectIds: [p1] } }, p2)).toBe(
+      false,
+    );
+    expect(
+      scheduleTargetsProject({ scope: { _tag: "environment", projectIds: [p1, p2] } }, p2),
+    ).toBe(true);
+    // "all" is resolved per environment, so every project in it matches.
+    expect(scheduleTargetsProject({ scope: { _tag: "environment", projectIds: "all" } }, p2)).toBe(
+      true,
+    );
   });
 });
 

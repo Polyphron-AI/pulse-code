@@ -28,6 +28,7 @@ import {
   ProviderDriverKind,
   ProviderInstanceId,
   ResolvedKeybindingRule,
+  ScheduleId,
   ThreadId,
   WS_METHODS,
   WsRpcGroup,
@@ -787,6 +788,7 @@ const buildAppUnderTest = (options?: {
               snapshotSequence: 0,
               projects: [],
               threads: [],
+              schedules: [],
               updatedAt: "1970-01-01T00:00:00.000Z",
             }),
           getArchivedShellSnapshot: () =>
@@ -794,6 +796,7 @@ const buildAppUnderTest = (options?: {
               snapshotSequence: 0,
               projects: [],
               threads: [],
+              schedules: [],
               updatedAt: "1970-01-01T00:00:00.000Z",
             }),
           searchThreads: () => Effect.succeed({ matches: [] }),
@@ -6069,6 +6072,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
                   snapshotSequence: 1,
                   projects: [],
                   threads: [makeDefaultOrchestrationThreadShell()],
+                  schedules: [],
                   updatedAt: "2026-01-01T00:00:00.000Z",
                 };
               }),
@@ -6327,6 +6331,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
                 snapshotSequence: 100_000,
                 projects: [],
                 threads: [makeDefaultOrchestrationThreadShell({ id: snapshotThreadId })],
+                schedules: [],
                 updatedAt: now,
               }),
           },
@@ -6374,6 +6379,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
                 snapshotSequence: 5,
                 projects: [],
                 threads: [],
+                schedules: [],
                 updatedAt: "2026-01-01T00:00:00.000Z",
               }),
           },
@@ -6636,6 +6642,123 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       const [first] = Array.from(items);
       assert.equal(first?.kind, "thread-removed");
       assert.equal(first?.kind === "thread-removed" ? first.threadId : null, goneThreadId);
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
+  it.effect("subscribeShell projects a schedule event as a schedule upsert", () =>
+    Effect.gen(function* () {
+      const scheduleId = ScheduleId.make("schedule-shell-upsert");
+      const now = "2026-01-01T00:00:00.000Z";
+      const schedule = {
+        id: scheduleId,
+        scope: { _tag: "project" as const, projectId: defaultProjectId },
+        hourLocal: 9,
+        minuteLocal: 0,
+        timezone: "Europe/Amsterdam",
+        prompt: "Daily check-in",
+        workflowScriptRef: null,
+        modelSelection: null,
+        skipIfDirty: null,
+        autoPausedReason: null,
+        handoffPathTemplate: ".t3/handoffs/{date}.md",
+        maxRunMinutes: 30,
+        maxTurnMinutes: 10,
+        pausedAt: null,
+        projectStates: [],
+        createdAt: now,
+        updatedAt: now,
+        deletedAt: null,
+      };
+
+      const event: OrchestrationEvent = {
+        sequence: 1,
+        eventId: EventId.make("event-schedule-created"),
+        aggregateKind: "schedule",
+        aggregateId: scheduleId,
+        occurredAt: now,
+        commandId: null,
+        causationEventId: null,
+        correlationId: null,
+        metadata: {},
+        type: "project.schedule.created",
+        payload: { scheduleId },
+      } as unknown as OrchestrationEvent;
+
+      yield* buildAppUnderTest({
+        layers: {
+          orchestrationEngine: {
+            latestSequence: Effect.succeed(1),
+            readEvents: () => Stream.fromIterable([event]),
+            // Schedule shell items read the engine's committed read model
+            // rather than re-querying SQL, so the schedule has to be there.
+            currentReadModel: Effect.succeed({
+              ...makeDefaultOrchestrationReadModel(),
+              schedules: [schedule],
+            }),
+          },
+        },
+      });
+
+      const wsUrl = yield* getWsServerUrl("/ws");
+      const items = yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) =>
+          client[ORCHESTRATION_WS_METHODS.subscribeShell]({ afterSequence: 0 }).pipe(
+            Stream.take(1),
+            Stream.runCollect,
+          ),
+        ),
+      );
+
+      const [first] = Array.from(items);
+      assert.equal(first?.kind, "schedule-upserted");
+      assert.equal(first?.kind === "schedule-upserted" ? first.schedule.id : null, scheduleId);
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
+  it.effect("subscribeShell projects a deleted schedule as a schedule removal", () =>
+    Effect.gen(function* () {
+      const scheduleId = ScheduleId.make("schedule-shell-removed");
+      const now = "2026-01-01T00:00:00.000Z";
+
+      const event: OrchestrationEvent = {
+        sequence: 1,
+        eventId: EventId.make("event-schedule-deleted"),
+        aggregateKind: "schedule",
+        aggregateId: scheduleId,
+        occurredAt: now,
+        commandId: null,
+        causationEventId: null,
+        correlationId: null,
+        metadata: {},
+        type: "project.schedule.deleted",
+        payload: { scheduleId, deletedAt: now },
+      } as unknown as OrchestrationEvent;
+
+      yield* buildAppUnderTest({
+        layers: {
+          orchestrationEngine: {
+            latestSequence: Effect.succeed(1),
+            readEvents: () => Stream.fromIterable([event]),
+            // No live schedule with this id in the read model, which is what a
+            // deletion looks like once the fold has been committed.
+            currentReadModel: Effect.succeed(makeDefaultOrchestrationReadModel()),
+          },
+        },
+      });
+
+      const wsUrl = yield* getWsServerUrl("/ws");
+      const items = yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) =>
+          client[ORCHESTRATION_WS_METHODS.subscribeShell]({ afterSequence: 0 }).pipe(
+            Stream.take(1),
+            Stream.runCollect,
+          ),
+        ),
+      );
+
+      const [first] = Array.from(items);
+      assert.equal(first?.kind, "schedule-removed");
+      assert.equal(first?.kind === "schedule-removed" ? first.scheduleId : null, scheduleId);
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 

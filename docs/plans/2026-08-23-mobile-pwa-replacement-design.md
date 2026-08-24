@@ -1,6 +1,6 @@
 # Replacing the React Native app with an installable PWA — design
 
-Status: phase 1 landed, phases 2–5 proposed
+Status: phase 1 landed, phase 2 in progress, phases 3–5 proposed
 Date: 2026-08-23
 
 ## One-line pitch
@@ -87,7 +87,7 @@ Known gaps left open on purpose:
   `black-translucent`. Translucent is the app-like choice but puts content under
   the notch, so it waits for Phase 2's safe-area work.
 - No install affordance yet. Android fires `beforeinstallprompt`; iOS has no
-  equivalent and needs a "Share → Add to Home Screen" hint.
+  equivalent and needs a "Share → Add to Home Screen" hint. _Closed in Phase 2._
 
 ### Phase 2 — Phone-shaped `apps/web`
 
@@ -103,7 +103,20 @@ thread settings, against the web app's TanStack routes (`_chat.$environmentId.$t
 Work, in rough dependency order:
 
 1. Root shell: full-height layout, safe-area insets, `useIsStandalone` from
-   `src/pwa/displayMode.ts` for chrome that assumes no address bar.
+   `src/pwa/displayMode.ts` for chrome that assumes no address bar. **Landed.**
+   `#root` pads itself by the top _and_ bottom safe-area insets, and every
+   full-height surface now sizes from `--app-shell-height` (or
+   `--app-shell-height-small` where a retreating mobile URL bar would push the
+   bottom off screen) instead of raw `h-dvh`/`h-svh`. The raw units were
+   measuring the full viewport inside a container the insets had already
+   shortened, so on an iPhone the bottom of the composer sat below the fold by
+   exactly the notch height.
+   Install affordance also landed: `src/pwa/installPrompt.ts` defers
+   `beforeinstallprompt` and replays it from a gesture, and `InstallAppRow` in
+   Settings → General offers the button on Chromium, the "Share → Add to Home
+   Screen" hint on iOS/iPadOS, an installed-state readout in a running PWA, and
+   nothing at all in the desktop shell. The Settings search catalog gained a
+   `browserOnly` flag so the row is not findable where it does not render.
 2. Thread list and project home as a phone-first surface; sidebar becomes a
    drawer rather than a squeezed column.
 3. Chat view and composer: the largest single piece, and the one users judge the

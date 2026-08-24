@@ -1,6 +1,7 @@
 import {
   CommandId,
   ORCHESTRATION_WS_METHODS,
+  ScheduleId,
   type ClientOrchestrationCommand,
 } from "@t3tools/contracts";
 import * as Crypto from "effect/Crypto";
@@ -51,6 +52,14 @@ export type RespondToThreadApprovalInput = CommandInput<"thread.approval.respond
 export type RespondToThreadUserInputInput = CommandInput<"thread.user-input.respond">;
 export type RevertThreadCheckpointInput = CommandInput<"thread.checkpoint.revert">;
 export type StopThreadSessionInput = CommandInput<"thread.session.stop">;
+/** The editor's "new schedule" path has no id yet, so it may omit one. */
+export type CreateScheduleInput = Omit<CommandInput<"project.schedule.create">, "scheduleId"> & {
+  readonly scheduleId?: ScheduleId;
+};
+export type UpdateScheduleInput = CommandInput<"project.schedule.update">;
+export type PauseScheduleInput = CommandInput<"project.schedule.pause">;
+export type ResumeScheduleInput = CommandInput<"project.schedule.resume">;
+export type DeleteScheduleInput = CommandInput<"project.schedule.delete">;
 
 type DispatchTag = typeof ORCHESTRATION_WS_METHODS.dispatchCommand;
 type CommandEffect = Effect.Effect<
@@ -329,5 +338,62 @@ export const stopThreadSession: (input: StopThreadSessionInput) => CommandEffect
     type: "thread.session.stop",
     commandId: metadata.commandId,
     createdAt: metadata.createdAt,
+  });
+});
+
+export const createSchedule: (input: CreateScheduleInput) => CommandEffect = Effect.fn(
+  "EnvironmentCommands.createSchedule",
+)(function* (input) {
+  const metadata = yield* timestampedCommandMetadata(input);
+  const crypto = yield* Crypto.Crypto;
+  const scheduleId =
+    input.scheduleId ??
+    (yield* crypto.randomUUIDv4.pipe(Effect.orDie, Effect.map(ScheduleId.make)));
+  return yield* dispatch({
+    ...input,
+    scheduleId,
+    type: "project.schedule.create",
+    commandId: metadata.commandId,
+    createdAt: metadata.createdAt,
+  });
+});
+
+export const updateSchedule: (input: UpdateScheduleInput) => CommandEffect = Effect.fn(
+  "EnvironmentCommands.updateSchedule",
+)(function* (input) {
+  return yield* dispatch({
+    ...input,
+    type: "project.schedule.update",
+    commandId: yield* commandId(input),
+  });
+});
+
+export const pauseSchedule: (input: PauseScheduleInput) => CommandEffect = Effect.fn(
+  "EnvironmentCommands.pauseSchedule",
+)(function* (input) {
+  return yield* dispatch({
+    ...input,
+    type: "project.schedule.pause",
+    commandId: yield* commandId(input),
+  });
+});
+
+export const resumeSchedule: (input: ResumeScheduleInput) => CommandEffect = Effect.fn(
+  "EnvironmentCommands.resumeSchedule",
+)(function* (input) {
+  return yield* dispatch({
+    ...input,
+    type: "project.schedule.resume",
+    commandId: yield* commandId(input),
+  });
+});
+
+export const deleteSchedule: (input: DeleteScheduleInput) => CommandEffect = Effect.fn(
+  "EnvironmentCommands.deleteSchedule",
+)(function* (input) {
+  return yield* dispatch({
+    ...input,
+    type: "project.schedule.delete",
+    commandId: yield* commandId(input),
   });
 });

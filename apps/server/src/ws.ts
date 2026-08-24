@@ -51,6 +51,7 @@ import {
   RpcClientId,
   EnvironmentAuthorizationError,
   IsoDateTime,
+  type ScheduleId,
   ThreadId,
   type TerminalAttachStreamEvent,
   type TerminalError,
@@ -587,6 +588,15 @@ const makeWsRpcLayer = (
             );
           case "thread.unarchived":
             return threadUpsertOrRemove(event.payload.threadId, event.sequence);
+          case "project.schedule.created":
+          case "project.schedule.updated":
+          case "project.schedule.paused":
+          case "project.schedule.resumed":
+          case "project.schedule.deleted":
+          case "schedule.occurrence.started":
+          case "schedule.occurrence.completed":
+          case "schedule.occurrence.failed":
+            return scheduleUpsertOrRemove(event.payload.scheduleId, event.sequence);
           default:
             if (event.aggregateKind !== "thread") {
               return Effect.succeed(Option.none());
@@ -684,6 +694,28 @@ const makeWsRpcLayer = (
               }),
             ),
           ),
+        );
+
+      // Schedules are small and live wholly in the engine's read model (rebuilt
+      // from projection_schedules on boot), so the shell refetch reads memory
+      // instead of paying a SQL round trip per schedule event. The read model is
+      // committed before the domain event publishes, so a schedule missing here
+      // is genuinely deleted.
+      const scheduleUpsertOrRemove = (
+        scheduleId: ScheduleId,
+        sequence: number,
+      ): Effect.Effect<Option.Option<OrchestrationShellStreamEvent>, never, never> =>
+        orchestrationEngine.currentReadModel.pipe(
+          Effect.map((readModel) => {
+            const schedule = readModel.schedules?.find(
+              (candidate) => candidate.id === scheduleId && candidate.deletedAt === null,
+            );
+            return Option.some<OrchestrationShellStreamEvent>(
+              schedule === undefined
+                ? { kind: "schedule-removed" as const, sequence, scheduleId }
+                : { kind: "schedule-upserted" as const, sequence, schedule },
+            );
+          }),
         );
 
       // Turn a batch of domain events into shell stream items, coalescing by

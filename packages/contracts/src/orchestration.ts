@@ -462,6 +462,12 @@ export const OrchestrationShellSnapshot = Schema.Struct({
   snapshotSequence: NonNegativeInt,
   projects: Schema.Array(OrchestrationProjectShell),
   threads: Schema.Array(OrchestrationThreadShell),
+  // Live (non-deleted) schedules. Small and slow-moving, so the shell carries
+  // them whole rather than making Settings fetch a second list. Defaults to
+  // empty so snapshots from pre-schedule servers still decode.
+  schedules: Schema.Array(OrchestrationSchedule).pipe(
+    Schema.withDecodingDefault(Effect.succeed([])),
+  ),
   updatedAt: IsoDateTime,
 });
 export type OrchestrationShellSnapshot = typeof OrchestrationShellSnapshot.Type;
@@ -486,6 +492,16 @@ export const OrchestrationShellStreamEvent = Schema.Union([
     kind: Schema.Literal("thread-removed"),
     sequence: NonNegativeInt,
     threadId: ThreadId,
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("schedule-upserted"),
+    sequence: NonNegativeInt,
+    schedule: OrchestrationSchedule,
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("schedule-removed"),
+    sequence: NonNegativeInt,
+    scheduleId: ScheduleId,
   }),
 ]);
 export type OrchestrationShellStreamEvent = typeof OrchestrationShellStreamEvent.Type;

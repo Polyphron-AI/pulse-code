@@ -4,6 +4,7 @@ import type {
   EnvironmentThreadShell,
 } from "@t3tools/client-runtime/state/shell";
 import type { EnvironmentThreadSearchMatch } from "@t3tools/client-runtime/state/thread-search";
+import { scheduleIdFromThreadOrigin } from "@t3tools/contracts";
 import type { MenuAction } from "@react-native-menu/menu";
 import { SymbolView } from "../../components/AppSymbol";
 import { memo, useCallback, useMemo, type ComponentProps } from "react";
@@ -461,7 +462,17 @@ export const ThreadListRow = memo(function ThreadListRow(props: {
   const timestamp = relativeTime(
     thread.latestUserMessageAt ?? thread.updatedAt ?? thread.createdAt,
   );
-  const threadAccessibilityLabel = pr ? `${thread.title}, ${pr.accessibilityLabel}` : thread.title;
+  // Schedule-started threads read as ordinary threads otherwise, and a user
+  // who sees the same title reappear every morning deserves to know why.
+  const scheduled =
+    thread.origin !== undefined && scheduleIdFromThreadOrigin(thread.origin) !== null;
+  const threadAccessibilityLabel = [
+    thread.title,
+    scheduled ? "scheduled chat" : null,
+    pr ? pr.accessibilityLabel : null,
+  ]
+    .filter((part): part is string => Boolean(part))
+    .join(", ");
   const subtitleParts = [props.environmentLabel, thread.branch].filter((part): part is string =>
     Boolean(part),
   );
@@ -523,8 +534,16 @@ export const ThreadListRow = memo(function ThreadListRow(props: {
   ) : null;
 
   const subtitleRow =
-    subtitleParts.length > 0 || pr !== null ? (
+    subtitleParts.length > 0 || pr !== null || scheduled ? (
       <View className="mt-px flex-row items-center gap-1.5">
+        {scheduled ? (
+          <SymbolView
+            name="alarm"
+            size={compact ? 12 : 10}
+            tintColor={selected ? selectedForegroundColor : iconSubtleColor}
+            type="monochrome"
+          />
+        ) : null}
         {subtitleParts.length > 0 ? (
           <>
             <Text

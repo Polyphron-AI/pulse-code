@@ -543,6 +543,7 @@ function GeneralSettingsSection() {
         value={autoSettleOnMerge}
         onValueChange={(value) => savePreferences({ autoSettleOnMerge: value })}
       />
+      <SettingsRow icon="alarm" label="Scheduled Chats" target="SettingsScheduledChats" />
       <SettingsRow icon="chart.bar.xaxis" label="Usage" target="SettingsUsage" />
     </SettingsSection>
   );

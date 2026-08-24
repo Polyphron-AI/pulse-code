@@ -12,6 +12,7 @@ This is a living glossary for Pulse Code. It explains what common terms mean in 
 - [Orchestration](#orchestration)
 - [Provider runtime](#provider-runtime)
 - [Checkpointing](#checkpointing)
+- [Scheduled chats](#scheduled-chats)
 
 ## Concepts
 
@@ -175,6 +176,22 @@ The patch difference between two checkpoints. Query logic lives in [CheckpointDi
 
 The file patch and changed-file summary for one turn. It is usually computed in [CheckpointDiffQuery.ts][20], represented in [the contracts][1], and recorded into thread state by [projector.ts][4].
 
+### Scheduled chats
+
+Scheduled chats run one prompt per day against a project, carrying state forward in a file rather than in a session. Shapes and pure helpers live in [schedule.ts][29], the sweep and run lifecycle in [ScheduleReactor.ts][30], and the read model in [scheduleProjection.ts][31].
+
+#### Schedule
+
+The durable record of a daily chat: a scope, a local wall-clock time and time zone, the prompt, and the optional model, handoff, and limit overrides. Scope is `_tag`-discriminated in [schedule.ts][29] so a schedule targets either one project or an environment's projects. Commands are validated by [decider.ts][8]; update commands treat an absent field as "leave unchanged" and an explicit `null` as "clear", so editors must send a diff rather than a whole form.
+
+#### Occurrence
+
+One attempt to run a schedule on a given local date. The sweep in [ScheduleReactor.ts][30] enumerates missed dates from the last occurrence, so a host that was off catches up one occurrence per missed day rather than all at once. An occurrence records its outcome, and a run of consecutive failures auto-pauses the schedule.
+
+#### Handoff file
+
+The file a successful occurrence writes so the next one has context, since each run starts a fresh provider session. The path comes from the schedule's project-relative template, `handoff/{date}.md` by default, resolved in [schedule.ts][29]. [ScheduleReactor.ts][30] writes it atomically only after the turn settles cleanly, so an interrupted run leaves the previous handoff as the newest one.
+
 ## Practical Shortcuts
 
 - If you see `requested`, think "intent recorded".
@@ -182,6 +199,7 @@ The file patch and changed-file summary for one turn. It is usually computed in 
 - If you see `receipt`, think "async milestone signal, for tests".
 - If you see `checkpoint`, think "workspace snapshot for diff/restore".
 - If you see `quiesced`, think "all relevant follow-up work has gone idle".
+- If you see `handoff`, think "the file a scheduled run leaves for tomorrow".
 
 ## Related Docs
 
@@ -218,5 +236,8 @@ The file patch and changed-file summary for one turn. It is usually computed in 
 [26]: ../../packages/shared/src/agentAwareness.ts
 [27]: ../../apps/server/src/mcp/toolkits/preview/tools.ts
 [28]: ../../apps/server/src/mcp/toolkits/pulse/tools.ts
+[29]: ../../packages/contracts/src/schedule.ts
+[30]: ../../apps/server/src/orchestration/Layers/ScheduleReactor.ts
+[31]: ../../apps/server/src/orchestration/scheduleProjection.ts
 [29]: ../../apps/server/src/mcp/McpInvocationContext.ts
 [30]: ./issues-integration.md

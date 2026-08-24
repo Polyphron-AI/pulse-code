@@ -15,6 +15,7 @@ import {
   ProviderInteractionMode,
   RuntimeMode,
   ThreadId,
+  ThreadOrigin,
   TurnId,
 } from "@t3tools/contracts";
 import * as Option from "effect/Option";
@@ -45,6 +46,9 @@ export const ProjectionThread = Schema.Struct({
   pinOrderKey: Schema.optional(Schema.NullOr(Schema.String)),
   titleRegenerationRequestId: Schema.optional(Schema.NullOr(CommandId)),
   titleRegenerationStartedAt: Schema.optional(Schema.NullOr(IsoDateTime)),
+  // Immutable, written once at thread.created. Optional/NullOr because rows
+  // predating the column read back as NULL; readers default that to "user".
+  origin: Schema.optional(Schema.NullOr(ThreadOrigin)),
   latestUserMessageAt: Schema.NullOr(IsoDateTime),
   pendingApprovalCount: NonNegativeInt,
   pendingUserInputCount: NonNegativeInt,

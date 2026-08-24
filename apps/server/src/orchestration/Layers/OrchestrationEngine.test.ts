@@ -187,6 +187,7 @@ describe("OrchestrationEngine", () => {
               snapshotSequence: projectionSnapshot.snapshotSequence,
               projects: [],
               threads: [],
+              schedules: [],
               updatedAt: projectionSnapshot.updatedAt,
             }),
           getArchivedShellSnapshot: () =>
@@ -194,6 +195,7 @@ describe("OrchestrationEngine", () => {
               snapshotSequence: projectionSnapshot.snapshotSequence,
               projects: [],
               threads: [],
+              schedules: [],
               updatedAt: projectionSnapshot.updatedAt,
             }),
           getSnapshotSequence: () =>

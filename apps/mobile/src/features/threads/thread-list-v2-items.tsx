@@ -4,6 +4,7 @@ import type {
 } from "@t3tools/client-runtime/state/shell";
 import type { EnvironmentThreadSearchMatch } from "@t3tools/client-runtime/state/thread-search";
 import { canSnooze, resolveSnoozePresets } from "@t3tools/client-runtime/state/thread-settled";
+import { scheduleIdFromThreadOrigin } from "@t3tools/contracts";
 import type { MenuAction } from "@react-native-menu/menu";
 import { memo, useCallback, useEffect, useMemo, useState, type ComponentProps } from "react";
 import { Alert, Platform, Pressable, useWindowDimensions, View } from "react-native";
@@ -412,6 +413,9 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
   const pinTintColor = useThemeColor("--color-foreground-muted");
   const sidebarPane = props.pane === "sidebar";
   const selected = props.selected === true;
+  // Schedule-started threads reappear daily; the alarm glyph says why.
+  const scheduled =
+    props.thread.origin !== undefined && scheduleIdFromThreadOrigin(props.thread.origin) !== null;
 
   const status = resolveThreadListV2Status(thread);
   const statusLabel = STATUS_LABEL_BY_STATUS[status];
@@ -679,6 +683,9 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
         >
           {props.projectTitle ?? props.project?.title ?? ""}
         </Text>
+        {scheduled ? (
+          <SymbolView name="alarm" size={11} tintColor={pinTintColor} type="monochrome" />
+        ) : null}
         {pinnedRow ? (
           <SymbolView name="pin" size={11} tintColor={pinTintColor} type="monochrome" />
         ) : null}

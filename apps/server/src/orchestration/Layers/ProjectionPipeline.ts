@@ -17,6 +17,7 @@ import { toPersistenceSqlError, type ProjectionRepositoryError } from "../../per
 import { OrchestrationEventStore } from "../../persistence/Services/OrchestrationEventStore.ts";
 import { ProjectionPendingApprovalRepository } from "../../persistence/Services/ProjectionPendingApprovals.ts";
 import { ProjectionProjectRepository } from "../../persistence/Services/ProjectionProjects.ts";
+import { ProjectionScheduleRepository } from "../../persistence/Services/ProjectionSchedules.ts";
 import { ProjectionStateRepository } from "../../persistence/Services/ProjectionState.ts";
 import { ProjectionThreadActivityRepository } from "../../persistence/Services/ProjectionThreadActivities.ts";
 import { type ProjectionThreadActivity } from "../../persistence/Services/ProjectionThreadActivities.ts";
@@ -36,6 +37,7 @@ import {
 import { ProjectionThreadRepository } from "../../persistence/Services/ProjectionThreads.ts";
 import { ProjectionPendingApprovalRepositoryLive } from "../../persistence/Layers/ProjectionPendingApprovals.ts";
 import { ProjectionProjectRepositoryLive } from "../../persistence/Layers/ProjectionProjects.ts";
+import { ProjectionScheduleRepositoryLive } from "../../persistence/Layers/ProjectionSchedules.ts";
 import { ProjectionStateRepositoryLive } from "../../persistence/Layers/ProjectionState.ts";
 import { ProjectionThreadActivityRepositoryLive } from "../../persistence/Layers/ProjectionThreadActivities.ts";
 import { ProjectionThreadMessageRepositoryLive } from "../../persistence/Layers/ProjectionThreadMessages.ts";
@@ -44,6 +46,16 @@ import { ProjectionThreadSessionRepositoryLive } from "../../persistence/Layers/
 import { ProjectionTurnRepositoryLive } from "../../persistence/Layers/ProjectionTurns.ts";
 import { ProjectionThreadRepositoryLive } from "../../persistence/Layers/ProjectionThreads.ts";
 import { ServerConfig } from "../../config.ts";
+import {
+  applyScheduleDeleted,
+  applyScheduleOccurrenceCompleted,
+  applyScheduleOccurrenceFailed,
+  applyScheduleOccurrenceStarted,
+  applySchedulePaused,
+  applyScheduleResumed,
+  applyScheduleUpdated,
+  scheduleFromCreated,
+} from "../scheduleProjection.ts";
 import {
   OrchestrationProjectionPipeline,
   type OrchestrationProjectionPipelineShape,
@@ -57,6 +69,7 @@ import {
 
 export const ORCHESTRATION_PROJECTOR_NAMES = {
   projects: "projection.projects",
+  schedules: "projection.schedules",
   threads: "projection.threads",
   threadMessages: "projection.thread-messages",
   threadProposedPlans: "projection.thread-proposed-plans",
@@ -473,6 +486,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
     const eventStore = yield* OrchestrationEventStore;
     const projectionStateRepository = yield* ProjectionStateRepository;
     const projectionProjectRepository = yield* ProjectionProjectRepository;
+    const projectionScheduleRepository = yield* ProjectionScheduleRepository;
     const projectionThreadRepository = yield* ProjectionThreadRepository;
     const projectionThreadMessageRepository = yield* ProjectionThreadMessageRepository;
     const projectionThreadProposedPlanRepository = yield* ProjectionThreadProposedPlanRepository;
@@ -552,6 +566,77 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
       }
     });
 
+    /**
+     * Schedules are the only aggregate whose read-model row is also its own
+     * durable record: the sweep reads schedules from the rebuilt read model, so
+     * a schedule missing here stops firing after a restart.
+     */
+    const applySchedulesProjection: ProjectorDefinition["apply"] = Effect.fn(
+      "applySchedulesProjection",
+    )(function* (event, _attachmentSideEffects) {
+      switch (event.type) {
+        case "project.schedule.created":
+          yield* projectionScheduleRepository.upsert(scheduleFromCreated(event.payload));
+          return;
+
+        case "project.schedule.updated":
+        case "project.schedule.paused":
+        case "project.schedule.resumed":
+        case "project.schedule.deleted":
+        case "schedule.occurrence.started":
+        case "schedule.occurrence.completed":
+        case "schedule.occurrence.failed": {
+          const existingRow = yield* projectionScheduleRepository.getById({
+            scheduleId: event.payload.scheduleId,
+          });
+          if (Option.isNone(existingRow)) {
+            return;
+          }
+          const schedule = existingRow.value;
+          switch (event.type) {
+            case "project.schedule.updated":
+              yield* projectionScheduleRepository.upsert(
+                applyScheduleUpdated(schedule, event.payload),
+              );
+              return;
+            case "project.schedule.paused":
+              yield* projectionScheduleRepository.upsert(
+                applySchedulePaused(schedule, event.payload),
+              );
+              return;
+            case "project.schedule.resumed":
+              yield* projectionScheduleRepository.upsert(
+                applyScheduleResumed(schedule, event.payload),
+              );
+              return;
+            case "project.schedule.deleted":
+              yield* projectionScheduleRepository.upsert(
+                applyScheduleDeleted(schedule, event.payload),
+              );
+              return;
+            case "schedule.occurrence.started":
+              yield* projectionScheduleRepository.upsert(
+                applyScheduleOccurrenceStarted(schedule, event.payload),
+              );
+              return;
+            case "schedule.occurrence.completed":
+              yield* projectionScheduleRepository.upsert(
+                applyScheduleOccurrenceCompleted(schedule, event.payload),
+              );
+              return;
+            case "schedule.occurrence.failed":
+              yield* projectionScheduleRepository.upsert(
+                applyScheduleOccurrenceFailed(schedule, event.payload),
+              );
+              return;
+          }
+        }
+
+        default:
+          return;
+      }
+    });
+
     const refreshThreadShellSummary = Effect.fn("refreshThreadShellSummary")(function* (
       threadId: ThreadId,
     ) {
@@ -623,6 +708,8 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             pinOrderKey: null,
             titleRegenerationRequestId: null,
             titleRegenerationStartedAt: null,
+            // Immutable once set; every later upsert spreads the existing row.
+            origin: event.payload.origin ?? null,
             latestUserMessageAt: null,
             pendingApprovalCount: 0,
             pendingUserInputCount: 0,
@@ -1612,6 +1699,10 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
         apply: applyProjectsProjection,
       },
       {
+        name: ORCHESTRATION_PROJECTOR_NAMES.schedules,
+        apply: applySchedulesProjection,
+      },
+      {
         name: ORCHESTRATION_PROJECTOR_NAMES.threadMessages,
         apply: applyThreadMessagesProjection,
       },
@@ -1738,6 +1829,7 @@ export const OrchestrationProjectionPipelineLive = Layer.effect(
   makeOrchestrationProjectionPipeline(),
 ).pipe(
   Layer.provideMerge(ProjectionProjectRepositoryLive),
+  Layer.provideMerge(ProjectionScheduleRepositoryLive),
   Layer.provideMerge(ProjectionThreadRepositoryLive),
   Layer.provideMerge(ProjectionThreadMessageRepositoryLive),
   Layer.provideMerge(ProjectionThreadProposedPlanRepositoryLive),

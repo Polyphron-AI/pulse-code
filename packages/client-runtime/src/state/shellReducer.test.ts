@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { ProjectId, ProviderInstanceId, ThreadId } from "@t3tools/contracts";
+import { ProjectId, ProviderInstanceId, ScheduleId, ThreadId } from "@t3tools/contracts";
 import type { OrchestrationShellSnapshot, OrchestrationShellStreamEvent } from "@t3tools/contracts";
 
 import { applyShellStreamEvent } from "./shellReducer.ts";
@@ -9,6 +9,7 @@ const baseSnapshot: OrchestrationShellSnapshot = {
   snapshotSequence: 0,
   projects: [],
   threads: [],
+  schedules: [],
   updatedAt: "2026-04-01T00:00:00.000Z",
 };
 
@@ -43,6 +44,27 @@ const stubThread = {
   hasPendingUserInput: false,
   hasActionableProposedPlan: false,
   session: null,
+} as const;
+
+const stubSchedule = {
+  id: ScheduleId.make("schedule-1"),
+  scope: { _tag: "project" as const, projectId: ProjectId.make("project-1") },
+  hourLocal: 9,
+  minuteLocal: 0,
+  timezone: "Europe/Amsterdam",
+  prompt: "Daily check-in",
+  workflowScriptRef: null,
+  modelSelection: null,
+  skipIfDirty: null,
+  handoffPathTemplate: ".t3/handoffs/{date}.md",
+  maxRunMinutes: 30,
+  maxTurnMinutes: 10,
+  pausedAt: null,
+  autoPausedReason: null,
+  projectStates: [],
+  createdAt: "2026-04-01T00:00:00.000Z",
+  updatedAt: "2026-04-01T00:00:00.000Z",
+  deletedAt: null,
 } as const;
 
 describe("applyShellStreamEvent", () => {
@@ -174,6 +196,54 @@ describe("applyShellStreamEvent", () => {
 
       expect(next.threads).toHaveLength(0);
       expect(next.snapshotSequence).toBe(6);
+    });
+  });
+
+  describe("schedule-upserted", () => {
+    it("adds a new schedule", () => {
+      const next = applyShellStreamEvent(baseSnapshot, {
+        kind: "schedule-upserted",
+        sequence: 1,
+        schedule: stubSchedule,
+      });
+
+      expect(next.schedules).toHaveLength(1);
+      expect(next.schedules[0]?.id).toBe("schedule-1");
+      expect(next.snapshotSequence).toBe(1);
+    });
+
+    it("replaces an existing schedule in place", () => {
+      const snapshotWithSchedule: OrchestrationShellSnapshot = {
+        ...baseSnapshot,
+        schedules: [stubSchedule],
+      };
+
+      const next = applyShellStreamEvent(snapshotWithSchedule, {
+        kind: "schedule-upserted",
+        sequence: 2,
+        schedule: { ...stubSchedule, prompt: "Updated prompt" },
+      });
+
+      expect(next.schedules).toHaveLength(1);
+      expect(next.schedules[0]?.prompt).toBe("Updated prompt");
+    });
+  });
+
+  describe("schedule-removed", () => {
+    it("removes a schedule by id", () => {
+      const snapshotWithSchedule: OrchestrationShellSnapshot = {
+        ...baseSnapshot,
+        schedules: [stubSchedule],
+      };
+
+      const next = applyShellStreamEvent(snapshotWithSchedule, {
+        kind: "schedule-removed",
+        sequence: 7,
+        scheduleId: ScheduleId.make("schedule-1"),
+      });
+
+      expect(next.schedules).toHaveLength(0);
+      expect(next.snapshotSequence).toBe(7);
     });
   });
 

@@ -83,6 +83,10 @@
       "types": "./src/state/projects.ts",
       "default": "./src/state/projects.ts"
     },
+    "./state/schedules": {
+      "types": "./src/state/schedules.ts",
+      "default": "./src/state/schedules.ts"
+    },
     "./state/pull-requests": {
       "types": "./src/state/pullRequests.ts",
       "default": "./src/state/pullRequests.ts"

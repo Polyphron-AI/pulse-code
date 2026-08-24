@@ -168,6 +168,21 @@ export function scheduleSkipIfDirty(
   return schedule.skipIfDirty ?? schedule.scope._tag === "environment";
 }
 
+/**
+ * Whether an occurrence of this schedule would touch a project. An
+ * environment schedule targeting "all" matches every project in its
+ * environment, so callers must only ask about projects from that environment.
+ */
+export function scheduleTargetsProject(
+  schedule: Pick<OrchestrationSchedule, "scope">,
+  projectId: ProjectId,
+): boolean {
+  if (schedule.scope._tag === "project") {
+    return schedule.scope.projectId === projectId;
+  }
+  return schedule.scope.projectIds === "all" || schedule.scope.projectIds.includes(projectId);
+}
+
 export function scheduleIdFromThreadOrigin(origin: ThreadOrigin): ScheduleId | null {
   const rest = origin.startsWith("schedule:") ? origin.slice("schedule:".length) : "";
   return rest.length > 0 ? ScheduleId.make(rest) : null;

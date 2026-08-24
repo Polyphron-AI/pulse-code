@@ -60,6 +60,11 @@ import { SettingsAuthRouteScreen } from "./features/settings/SettingsAuthRouteSc
 import { SettingsEnvironmentsRouteScreen } from "./features/settings/SettingsEnvironmentsRouteScreen";
 import { SettingsLegalRouteScreen } from "./features/settings/SettingsLegalRouteScreen";
 import { SettingsProjectGroupingRouteScreen } from "./features/settings/SettingsProjectGroupingRouteScreen";
+import {
+  SettingsScheduledChatEditRouteScreen,
+  SettingsScheduledChatNewRouteScreen,
+} from "./features/settings/SettingsScheduledChatRouteScreen";
+import { SettingsScheduledChatsRouteScreen } from "./features/settings/SettingsScheduledChatsRouteScreen";
 import { UsageRouteScreen } from "./features/usage/UsageRouteScreen";
 import { SettingsRouteScreen } from "./features/settings/SettingsRouteScreen";
 import { ShowcaseCaptureCoordinator } from "./features/showcase/ShowcaseCaptureCoordinator";
@@ -186,6 +191,27 @@ const SettingsContentStack = createNativeStackNavigator({
       linking: "project-grouping",
       options: {
         title: "Project Grouping",
+      },
+    }),
+    SettingsScheduledChats: createNativeStackScreen({
+      screen: SettingsScheduledChatsRouteScreen,
+      linking: "scheduled-chats",
+      options: {
+        title: "Scheduled Chats",
+      },
+    }),
+    SettingsScheduledChatNew: createNativeStackScreen({
+      screen: SettingsScheduledChatNewRouteScreen,
+      linking: "scheduled-chats/:environmentId/new",
+      options: {
+        title: "New Scheduled Chat",
+      },
+    }),
+    SettingsScheduledChatEdit: createNativeStackScreen({
+      screen: SettingsScheduledChatEditRouteScreen,
+      linking: "scheduled-chats/:environmentId/:scheduleId",
+      options: {
+        title: "Scheduled Chat",
       },
     }),
     SettingsClientStorage: createNativeStackScreen({
