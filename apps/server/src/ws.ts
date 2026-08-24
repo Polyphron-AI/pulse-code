@@ -49,6 +49,7 @@ import {
   AssetWorkspaceContextNotFoundError,
   AssetWorkspaceContextResolutionError,
   RpcClientId,
+  ScheduleId,
   EnvironmentAuthorizationError,
   IsoDateTime,
   ThreadId,
@@ -93,6 +94,10 @@ import * as PortScanner from "./preview/PortScanner.ts";
 import * as WorkspaceEntries from "./workspace/WorkspaceEntries.ts";
 import * as WorkspaceFileSystem from "./workspace/WorkspaceFileSystem.ts";
 import { readWorkflowScript } from "./orchestration/workflowScriptQuery.ts";
+import {
+  attachActiveSchedules,
+  scheduleShellStreamEvent,
+} from "./orchestration/shellScheduleProjection.ts";
 import * as WorkspacePaths from "./workspace/WorkspacePaths.ts";
 import * as VcsStatusBroadcaster from "./vcs/VcsStatusBroadcaster.ts";
 import * as VcsProvisioningService from "./vcs/VcsProvisioningService.ts";
@@ -588,6 +593,19 @@ const makeWsRpcLayer = (
           case "thread.unarchived":
             return threadUpsertOrRemove(event.payload.threadId, event.sequence);
           default:
+            if (event.aggregateKind === "schedule") {
+              return orchestrationEngine.currentReadModel.pipe(
+                Effect.map((readModel) =>
+                  Option.some(
+                    scheduleShellStreamEvent(
+                      readModel,
+                      ScheduleId.make(event.aggregateId),
+                      event.sequence,
+                    ),
+                  ),
+                ),
+              );
+            }
             if (event.aggregateKind !== "thread") {
               return Effect.succeed(Option.none());
             }
@@ -1229,6 +1247,7 @@ const makeWsRpcLayer = (
               const bufferedLiveStream = coalesceShellLiveStream(Stream.fromQueue(liveBuffer));
 
               const loadSnapshot = projectionSnapshotQuery.getShellSnapshot().pipe(
+                Effect.zipWith(orchestrationEngine.currentReadModel, attachActiveSchedules),
                 Effect.tapError((cause) =>
                   Effect.logError("orchestration shell snapshot load failed", { cause }),
                 ),

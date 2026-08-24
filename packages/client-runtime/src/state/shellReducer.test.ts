@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { ProjectId, ProviderInstanceId, ThreadId } from "@t3tools/contracts";
+import { ProjectId, ProviderInstanceId, ScheduleId, ThreadId } from "@t3tools/contracts";
 import type { OrchestrationShellSnapshot, OrchestrationShellStreamEvent } from "@t3tools/contracts";
 
 import { applyShellStreamEvent } from "./shellReducer.ts";
@@ -43,6 +43,23 @@ const stubThread = {
   hasPendingUserInput: false,
   hasActionableProposedPlan: false,
   session: null,
+} as const;
+
+const stubSchedule = {
+  id: ScheduleId.make("schedule-1"),
+  scope: { _tag: "project" as const, projectId: ProjectId.make("project-1") },
+  hourLocal: 9,
+  minuteLocal: 30,
+  timezone: "Africa/Johannesburg",
+  prompt: "Run the daily maintenance checklist.",
+  handoffPathTemplate: "handoff/{date}.md",
+  maxRunMinutes: 15,
+  maxTurnMinutes: 10,
+  pausedAt: null,
+  projectStates: [],
+  createdAt: "2026-04-01T00:00:00.000Z",
+  updatedAt: "2026-04-01T00:00:00.000Z",
+  deletedAt: null,
 } as const;
 
 describe("applyShellStreamEvent", () => {
@@ -174,6 +191,31 @@ describe("applyShellStreamEvent", () => {
 
       expect(next.threads).toHaveLength(0);
       expect(next.snapshotSequence).toBe(6);
+    });
+  });
+
+  describe("schedule events", () => {
+    it("adds, updates, and removes a schedule", () => {
+      const added = applyShellStreamEvent(baseSnapshot, {
+        kind: "schedule-upserted",
+        sequence: 7,
+        schedule: stubSchedule,
+      });
+      const updated = applyShellStreamEvent(added, {
+        kind: "schedule-upserted",
+        sequence: 8,
+        schedule: { ...stubSchedule, pausedAt: "2026-04-01T01:00:00.000Z" },
+      });
+      const removed = applyShellStreamEvent(updated, {
+        kind: "schedule-removed",
+        sequence: 9,
+        scheduleId: stubSchedule.id,
+      });
+
+      expect(added.schedules).toEqual([stubSchedule]);
+      expect(updated.schedules?.[0]?.pausedAt).toBe("2026-04-01T01:00:00.000Z");
+      expect(removed.schedules).toEqual([]);
+      expect(removed.snapshotSequence).toBe(9);
     });
   });
 

@@ -6,6 +6,7 @@ export type SettingsPath =
   | "/settings/keybindings"
   | "/settings/providers"
   | "/settings/integrations"
+  | "/settings/scheduled-chats"
   | "/settings/source-control"
   | "/settings/connections"
   | "/settings/archived";
@@ -33,6 +34,7 @@ export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
   "/settings/source-control": "Source Control",
   "/settings/connections": "Connections",
   "/settings/archived": "Archive",
+  "/settings/scheduled-chats": "Scheduled Chats",
 };
 
 /**
@@ -145,6 +147,11 @@ export const SETTINGS_SEARCH_ITEMS = [
     id: "add-project-starts-in",
     title: "Add project starts in",
     to: "/settings/general",
+  },
+  {
+    id: "scheduled-chats",
+    title: "Scheduled chats",
+    to: "/settings/scheduled-chats",
   },
   {
     id: "archive-confirmation",

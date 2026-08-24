@@ -727,6 +727,7 @@ const make = Effect.gen(function* () {
     readonly attachments?: ReadonlyArray<ChatAttachment>;
     readonly modelSelection?: ModelSelection;
     readonly interactionMode?: "default" | "plan";
+    readonly sessionMode?: "fresh";
     readonly createdAt: string;
   }) {
     const thread = yield* resolveThread(input.threadId);
@@ -734,6 +735,16 @@ const make = Effect.gen(function* () {
       return yield* Effect.die(
         new Error(`Thread '${input.threadId}' was not found in read model.`),
       );
+    }
+    if (input.sessionMode === "fresh") {
+      const activeSession = yield* providerService
+        .listSessions()
+        .pipe(
+          Effect.map((sessions) => sessions.find((session) => session.threadId === input.threadId)),
+        );
+      if (activeSession !== undefined) {
+        yield* providerService.stopSession({ threadId: input.threadId });
+      }
     }
     yield* ensureSessionForThread(input.threadId, input.createdAt, {
       ...(input.modelSelection !== undefined ? { modelSelection: input.modelSelection } : {}),
@@ -1159,6 +1170,9 @@ const make = Effect.gen(function* () {
         : {}),
       interactionMode: event.payload.interactionMode,
       createdAt: event.payload.createdAt,
+      ...(event.payload.sessionMode !== undefined
+        ? { sessionMode: event.payload.sessionMode }
+        : {}),
     }).pipe(
       Effect.map(Option.some),
       Effect.catchCause((cause) => handleTurnStartFailure(cause).pipe(Effect.as(Option.none()))),

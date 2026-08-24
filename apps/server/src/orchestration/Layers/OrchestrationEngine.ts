@@ -2,6 +2,7 @@ import type {
   OrchestrationEvent,
   OrchestrationReadModel,
   ProjectId,
+  ScheduleId,
   ThreadId,
 } from "@t3tools/contracts";
 import { OrchestrationCommand } from "@t3tools/contracts";
@@ -59,8 +60,8 @@ interface CommandEnvelope {
 }
 
 function commandToAggregateRef(command: OrchestrationCommand): {
-  readonly aggregateKind: "project" | "thread";
-  readonly aggregateId: ProjectId | ThreadId;
+  readonly aggregateKind: "project" | "thread" | "schedule";
+  readonly aggregateId: ProjectId | ThreadId | ScheduleId;
 } {
   switch (command.type) {
     case "project.create":
@@ -69,6 +70,18 @@ function commandToAggregateRef(command: OrchestrationCommand): {
       return {
         aggregateKind: "project",
         aggregateId: command.projectId,
+      };
+    case "project.schedule.create":
+    case "project.schedule.update":
+    case "project.schedule.pause":
+    case "project.schedule.resume":
+    case "project.schedule.delete":
+    case "schedule.occurrence.start":
+    case "schedule.occurrence.complete":
+    case "schedule.occurrence.fail":
+      return {
+        aggregateKind: "schedule",
+        aggregateId: command.scheduleId,
       };
     default:
       return {
@@ -354,6 +367,7 @@ const makeOrchestrationEngine = Effect.gen(function* () {
     // consistent, committed value — reassignment of `commandReadModel` is
     // atomic on the single-threaded event loop.
     latestSequence: Effect.sync(() => commandReadModel.snapshotSequence),
+    currentReadModel: Effect.sync(() => commandReadModel),
   } satisfies OrchestrationEngineShape;
 });
 

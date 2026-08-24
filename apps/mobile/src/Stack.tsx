@@ -58,6 +58,7 @@ import { SettingsAuthRouteScreen } from "./features/settings/SettingsAuthRouteSc
 import { SettingsEnvironmentsRouteScreen } from "./features/settings/SettingsEnvironmentsRouteScreen";
 import { SettingsLegalRouteScreen } from "./features/settings/SettingsLegalRouteScreen";
 import { SettingsProjectGroupingRouteScreen } from "./features/settings/SettingsProjectGroupingRouteScreen";
+import { SettingsScheduledChatsRouteScreen } from "./features/settings/SettingsScheduledChatsRouteScreen";
 import { UsageRouteScreen } from "./features/usage/UsageRouteScreen";
 import { SettingsRouteScreen } from "./features/settings/SettingsRouteScreen";
 import { ShowcaseCaptureCoordinator } from "./features/showcase/ShowcaseCaptureCoordinator";
@@ -163,6 +164,13 @@ const SettingsContentStack = createNativeStackNavigator({
       linking: "environment-new",
       options: {
         title: "Add Environment",
+      },
+    }),
+    SettingsScheduledChats: createNativeStackScreen({
+      screen: SettingsScheduledChatsRouteScreen,
+      linking: "scheduled-chats",
+      options: {
+        title: "Scheduled chats",
       },
     }),
     SettingsArchive: createNativeStackScreen({

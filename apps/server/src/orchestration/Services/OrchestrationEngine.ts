@@ -10,7 +10,11 @@
  *
  * @module OrchestrationEngineService
  */
-import type { OrchestrationCommand, OrchestrationEvent } from "@t3tools/contracts";
+import type {
+  OrchestrationCommand,
+  OrchestrationEvent,
+  OrchestrationReadModel,
+} from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
 import type * as Stream from "effect/Stream";
@@ -63,6 +67,13 @@ export interface OrchestrationEngineShape {
    * choosing between an incremental replay and a fresh projected snapshot.
    */
   readonly latestSequence: Effect.Effect<number, never, never>;
+
+  /**
+   * The engine's authoritative in-memory command read model. Reactors (e.g.
+   * the schedule sweep) read it instead of re-projecting from tables so they
+   * see schedules and other state the projection tables do not persist.
+   */
+  readonly currentReadModel: Effect.Effect<OrchestrationReadModel, never, never>;
 }
 
 /**

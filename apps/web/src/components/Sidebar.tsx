@@ -34,6 +34,7 @@ import type { ScopedThreadRef, ThreadId } from "@t3tools/contracts";
 import type { TimestampFormat } from "@t3tools/contracts/settings";
 import {
   AlarmClockIcon,
+  CalendarClockIcon,
   AlarmClockOffIcon,
   CheckIcon,
   ChevronDownIcon,
@@ -1151,6 +1152,10 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
     </span>
   );
 
+  const scheduledMarker = thread.origin?.startsWith("schedule:") ? (
+    <CalendarClockIcon className="size-3.5 shrink-0 text-primary/70" aria-label="Scheduled chat" />
+  ) : null;
+
   // A real link so cmd/ctrl+click and middle-click open the host in the
   // browser. A plain click still opens Pulse Code's pull request view.
   const prBadge =
@@ -1227,6 +1232,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
               />
             </span>
             {title}
+            {scheduledMarker}
             {terminalStatusIcon}
             {isRegeneratingTitle ? (
               <span role="status" className="sr-only">
@@ -1516,6 +1522,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
             </div>
             <div className="mt-1 flex min-w-0">
               {title}
+              {scheduledMarker}
               {isRegeneratingTitle ? (
                 <span role="status" className="sr-only">
                   Regenerating title
@@ -1671,6 +1678,12 @@ const SidebarSearchResultRow = memo(function SidebarSearchResultRow(props: {
             fallbackIcon={MessageSquareIcon}
           />
           <span className="min-w-0 flex-1 truncate">{thread.title}</span>
+          {thread.origin?.startsWith("schedule:") ? (
+            <CalendarClockIcon
+              className="size-3.5 shrink-0 text-primary/70"
+              aria-label="Scheduled chat"
+            />
+          ) : null}
           <span className="shrink-0 text-xs text-muted-foreground/55 tabular-nums">
             {threadTimeLabel(thread)}
           </span>

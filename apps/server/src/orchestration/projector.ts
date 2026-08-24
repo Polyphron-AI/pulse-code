@@ -1,7 +1,14 @@
-import type { OrchestrationEvent, OrchestrationReadModel, ThreadId } from "@t3tools/contracts";
+import type {
+  OrchestrationEvent,
+  OrchestrationReadModel,
+  ScheduleId,
+  ScheduleProjectState,
+  ThreadId,
+} from "@t3tools/contracts";
 import {
   OrchestrationCheckpointSummary,
   OrchestrationMessage,
+  OrchestrationSchedule,
   OrchestrationSession,
   OrchestrationThread,
 } from "@t3tools/contracts";
@@ -33,6 +40,14 @@ import {
   ThreadRevertedPayload,
   ThreadSessionSetPayload,
   ThreadTurnDiffCompletedPayload,
+  ProjectScheduleCreatedPayload,
+  ProjectScheduleUpdatedPayload,
+  ProjectSchedulePausedPayload,
+  ProjectScheduleResumedPayload,
+  ProjectScheduleDeletedPayload,
+  ScheduleOccurrenceStartedPayload,
+  ScheduleOccurrenceCompletedPayload,
+  ScheduleOccurrenceFailedPayload,
 } from "./Schemas.ts";
 
 type ThreadPatch = Partial<Omit<OrchestrationThread, "id" | "projectId">>;
@@ -66,6 +81,48 @@ function settledTurnStateForSessionStatus(
     case "running":
       return null;
   }
+}
+
+function updateSchedule(
+  schedules: ReadonlyArray<OrchestrationSchedule> | undefined,
+  scheduleId: ScheduleId,
+  patch: Partial<Omit<OrchestrationSchedule, "id">>,
+): OrchestrationSchedule[] {
+  return (schedules ?? []).map((schedule) =>
+    schedule.id === scheduleId ? { ...schedule, ...patch } : schedule,
+  );
+}
+
+/**
+ * Upsert one project's occurrence state on its schedule. Each targeted
+ * project's state is independent, so environment fan-out never crosses wires.
+ */
+function updateScheduleProjectState(
+  schedules: ReadonlyArray<OrchestrationSchedule> | undefined,
+  scheduleId: ScheduleId,
+  projectId: ScheduleProjectState["projectId"],
+  patch: Partial<Omit<ScheduleProjectState, "projectId">>,
+): OrchestrationSchedule[] {
+  return (schedules ?? []).map((schedule) => {
+    if (schedule.id !== scheduleId) return schedule;
+    const existing = schedule.projectStates.find((state) => state.projectId === projectId);
+    const nextState: ScheduleProjectState = {
+      projectId,
+      threadId: existing?.threadId ?? null,
+      lastOccurrenceKey: existing?.lastOccurrenceKey ?? null,
+      lastOccurrenceStatus: existing?.lastOccurrenceStatus ?? null,
+      lastOccurrenceFailureReason: existing?.lastOccurrenceFailureReason ?? null,
+      lastOccurrenceAt: existing?.lastOccurrenceAt ?? null,
+      consecutiveFailures: existing?.consecutiveFailures ?? 0,
+      ...patch,
+    };
+    return {
+      ...schedule,
+      projectStates: existing
+        ? schedule.projectStates.map((state) => (state.projectId === projectId ? nextState : state))
+        : [...schedule.projectStates, nextState],
+    };
+  });
 }
 
 function updateThread(
@@ -190,6 +247,7 @@ export function createEmptyReadModel(nowIso: string): OrchestrationReadModel {
     snapshotSequence: 0,
     projects: [],
     threads: [],
+    schedules: [],
     updatedAt: nowIso,
   };
 }
@@ -297,6 +355,8 @@ export function projectEvent(
             interactionMode: payload.interactionMode,
             branch: payload.branch,
             worktreePath: payload.worktreePath,
+            // Absent on pre-schedule events; consumers read absent as "user".
+            ...(payload.origin !== undefined ? { origin: payload.origin } : {}),
             latestTurn: null,
             createdAt: payload.createdAt,
             updatedAt: payload.updatedAt,
@@ -796,6 +856,222 @@ export function projectEvent(
               activities,
               updatedAt: event.occurredAt,
             }),
+          };
+        }),
+      );
+
+    case "project.schedule.created":
+      return decodeForEvent(
+        ProjectScheduleCreatedPayload,
+        event.payload,
+        event.type,
+        "payload",
+      ).pipe(
+        Effect.map((payload) => {
+          const schedules = nextBase.schedules ?? [];
+          const existing = schedules.find((entry) => entry.id === payload.scheduleId);
+          const nextSchedule: OrchestrationSchedule = {
+            id: payload.scheduleId,
+            scope: payload.scope,
+            hourLocal: payload.hourLocal,
+            minuteLocal: payload.minuteLocal,
+            timezone: payload.timezone,
+            prompt: payload.prompt,
+            workflowScriptRef: payload.workflowScriptRef ?? null,
+            modelSelection: payload.modelSelection ?? null,
+            skipIfDirty: payload.skipIfDirty ?? null,
+            autoPausedReason: null,
+            handoffPathTemplate: payload.handoffPathTemplate,
+            maxRunMinutes: payload.maxRunMinutes,
+            maxTurnMinutes: payload.maxTurnMinutes,
+            pausedAt: null,
+            projectStates: [],
+            createdAt: payload.createdAt,
+            updatedAt: payload.updatedAt,
+            deletedAt: null,
+          };
+          return {
+            ...nextBase,
+            schedules: existing
+              ? schedules.map((entry) => (entry.id === payload.scheduleId ? nextSchedule : entry))
+              : [...schedules, nextSchedule],
+          };
+        }),
+      );
+
+    case "project.schedule.updated":
+      return decodeForEvent(
+        ProjectScheduleUpdatedPayload,
+        event.payload,
+        event.type,
+        "payload",
+      ).pipe(
+        Effect.map((payload) => ({
+          ...nextBase,
+          schedules: updateSchedule(nextBase.schedules, payload.scheduleId, {
+            ...(payload.scope !== undefined ? { scope: payload.scope } : {}),
+            ...(payload.hourLocal !== undefined ? { hourLocal: payload.hourLocal } : {}),
+            ...(payload.minuteLocal !== undefined ? { minuteLocal: payload.minuteLocal } : {}),
+            ...(payload.timezone !== undefined ? { timezone: payload.timezone } : {}),
+            ...(payload.prompt !== undefined ? { prompt: payload.prompt } : {}),
+            ...(payload.workflowScriptRef !== undefined
+              ? { workflowScriptRef: payload.workflowScriptRef }
+              : {}),
+            ...(payload.modelSelection !== undefined
+              ? { modelSelection: payload.modelSelection }
+              : {}),
+            ...(payload.skipIfDirty !== undefined ? { skipIfDirty: payload.skipIfDirty } : {}),
+            ...(payload.handoffPathTemplate !== undefined
+              ? { handoffPathTemplate: payload.handoffPathTemplate }
+              : {}),
+            ...(payload.maxRunMinutes !== undefined
+              ? { maxRunMinutes: payload.maxRunMinutes }
+              : {}),
+            ...(payload.maxTurnMinutes !== undefined
+              ? { maxTurnMinutes: payload.maxTurnMinutes }
+              : {}),
+            updatedAt: payload.updatedAt,
+          }),
+        })),
+      );
+
+    case "project.schedule.paused":
+      return decodeForEvent(
+        ProjectSchedulePausedPayload,
+        event.payload,
+        event.type,
+        "payload",
+      ).pipe(
+        Effect.map((payload) => ({
+          ...nextBase,
+          schedules: updateSchedule(nextBase.schedules, payload.scheduleId, {
+            pausedAt: payload.pausedAt,
+            autoPausedReason: payload.autoPausedReason ?? null,
+            updatedAt: payload.updatedAt,
+          }),
+        })),
+      );
+
+    case "project.schedule.resumed":
+      return decodeForEvent(
+        ProjectScheduleResumedPayload,
+        event.payload,
+        event.type,
+        "payload",
+      ).pipe(
+        Effect.map((payload) => ({
+          ...nextBase,
+          // Resume clears the pause, the auto-pause reason, and every
+          // project's failure streak — a resumed schedule starts clean.
+          schedules: (nextBase.schedules ?? []).map((schedule) =>
+            schedule.id === payload.scheduleId
+              ? {
+                  ...schedule,
+                  pausedAt: null,
+                  autoPausedReason: null,
+                  updatedAt: payload.updatedAt,
+                  projectStates: schedule.projectStates.map((state) => ({
+                    ...state,
+                    consecutiveFailures: 0,
+                  })),
+                }
+              : schedule,
+          ),
+        })),
+      );
+
+    case "project.schedule.deleted":
+      return decodeForEvent(
+        ProjectScheduleDeletedPayload,
+        event.payload,
+        event.type,
+        "payload",
+      ).pipe(
+        Effect.map((payload) => ({
+          ...nextBase,
+          // Soft-delete only the schedule row; its threads live on untouched.
+          schedules: updateSchedule(nextBase.schedules, payload.scheduleId, {
+            deletedAt: payload.deletedAt,
+            updatedAt: payload.deletedAt,
+          }),
+        })),
+      );
+
+    case "schedule.occurrence.started":
+      return decodeForEvent(
+        ScheduleOccurrenceStartedPayload,
+        event.payload,
+        event.type,
+        "payload",
+      ).pipe(
+        Effect.map((payload) => ({
+          ...nextBase,
+          schedules: updateScheduleProjectState(
+            nextBase.schedules,
+            payload.scheduleId,
+            payload.projectId,
+            {
+              threadId: payload.threadId,
+              lastOccurrenceKey: payload.occurrenceKey,
+              lastOccurrenceStatus: "running",
+              lastOccurrenceFailureReason: null,
+              lastOccurrenceAt: payload.startedAt,
+            },
+          ),
+        })),
+      );
+
+    case "schedule.occurrence.completed":
+      return decodeForEvent(
+        ScheduleOccurrenceCompletedPayload,
+        event.payload,
+        event.type,
+        "payload",
+      ).pipe(
+        Effect.map((payload) => ({
+          ...nextBase,
+          schedules: updateScheduleProjectState(
+            nextBase.schedules,
+            payload.scheduleId,
+            payload.projectId,
+            {
+              lastOccurrenceStatus: "completed",
+              lastOccurrenceFailureReason: null,
+              lastOccurrenceAt: payload.completedAt,
+              consecutiveFailures: 0,
+            },
+          ),
+        })),
+      );
+
+    case "schedule.occurrence.failed":
+      return decodeForEvent(
+        ScheduleOccurrenceFailedPayload,
+        event.payload,
+        event.type,
+        "payload",
+      ).pipe(
+        Effect.map((payload) => {
+          // "dirty" skips leave the streak alone: a busy working tree is not
+          // a broken schedule (see the auto-pause rule in the decider).
+          const priorStreak =
+            (nextBase.schedules ?? [])
+              .find((schedule) => schedule.id === payload.scheduleId)
+              ?.projectStates.find((state) => state.projectId === payload.projectId)
+              ?.consecutiveFailures ?? 0;
+          return {
+            ...nextBase,
+            schedules: updateScheduleProjectState(
+              nextBase.schedules,
+              payload.scheduleId,
+              payload.projectId,
+              {
+                lastOccurrenceStatus: "failed",
+                lastOccurrenceFailureReason: payload.reason,
+                lastOccurrenceAt: payload.failedAt,
+                consecutiveFailures: payload.reason === "dirty" ? priorStreak : priorStreak + 1,
+              },
+            ),
           };
         }),
       );
