@@ -9,6 +9,26 @@ import * as Effect from "effect/Effect";
 
 const repoRoot = NodePath.resolve(NodePath.dirname(NodeURL.fileURLToPath(import.meta.url)), "..");
 
+function toBashPath(path: string): string {
+  const normalizedPath = path.replaceAll("\\", "/");
+  if (process.platform !== "win32") {
+    return normalizedPath;
+  }
+
+  const drivePath = /^(?<drive>[A-Za-z]):\/(?<path>.*)$/.exec(normalizedPath)?.groups;
+  if (drivePath === undefined) {
+    return normalizedPath;
+  }
+
+  const bashRelease = NodeChildProcess.execFileSync("bash", ["-lc", "uname -r"], {
+    encoding: "utf8",
+  }).toLowerCase();
+  const prefix = bashRelease.includes("microsoft")
+    ? `/mnt/${drivePath.drive}`
+    : `/${drivePath.drive}`;
+  return `${prefix.toLowerCase()}/${drivePath.path}`;
+}
+
 const workspaceFiles = [
   "package.json",
   "pnpm-lock.yaml",
@@ -298,12 +318,8 @@ try {
   const mergedPreviewWindowsManifestPath = NodePath.resolve(tempRoot, "release-assets/preview.yml");
   const { arm64Path: winDebugArm64Path, x64Path: winDebugX64Path } =
     writeWindowsBuilderDebugFixtures(tempRoot);
-  NodeChildProcess.execFileSync(
-    "bash",
-    [
-      "-lc",
-      `
-        release_assets_dir=${JSON.stringify(NodePath.resolve(tempRoot, "release-assets"))}
+  const mergeWindowsScript = `
+        release_assets_dir=${JSON.stringify(toBashPath(NodePath.resolve(tempRoot, "release-assets")))}
         shopt -s nullglob
         found_windows_manifest=false
         for x64_manifest in "$release_assets_dir"/*-win-x64.yml; do
@@ -319,10 +335,22 @@ try {
           fi
 
           found_windows_manifest=true
-          ${JSON.stringify(process.execPath)} ${JSON.stringify(NodePath.resolve(repoRoot, "scripts/merge-update-manifests.ts"))} --platform win \
-            "$arm64_manifest" \
-            "$x64_manifest" \
-            "$output_manifest"
+          if command -v wslpath >/dev/null 2>&1; then
+            merge_script="$(wslpath -w ${JSON.stringify(toBashPath(NodePath.resolve(repoRoot, "scripts/merge-update-manifests.ts")))})"
+            arm64_argument="$(wslpath -w "$arm64_manifest")"
+            x64_argument="$(wslpath -w "$x64_manifest")"
+            output_argument="$(wslpath -w "$output_manifest")"
+          else
+            merge_script=${JSON.stringify(toBashPath(NodePath.resolve(repoRoot, "scripts/merge-update-manifests.ts")))}
+            arm64_argument="$arm64_manifest"
+            x64_argument="$x64_manifest"
+            output_argument="$output_manifest"
+          fi
+
+          ${JSON.stringify(toBashPath(process.execPath))} "$merge_script" --platform win \
+            "$arm64_argument" \
+            "$x64_argument" \
+            "$output_argument"
           rm -f "$arm64_manifest" "$x64_manifest"
         done
 
@@ -330,13 +358,12 @@ try {
           echo "No Windows updater manifests found to merge." >&2
           exit 1
         fi
-      `,
-    ],
-    {
-      cwd: repoRoot,
-      stdio: "inherit",
-    },
-  );
+  `;
+  NodeChildProcess.execFileSync("bash", [], {
+    cwd: repoRoot,
+    input: mergeWindowsScript,
+    stdio: ["pipe", "inherit", "inherit"],
+  });
 
   const mergedWindowsManifest = NodeFS.readFileSync(mergedWindowsManifestPath, "utf8");
   assertContains(
