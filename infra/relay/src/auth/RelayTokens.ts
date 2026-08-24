@@ -2,10 +2,8 @@ import {
   RelayDpopAccessTokenScope,
   RelayEnvironmentConnectScope,
   RelayEnvironmentStatusScope,
-  RelayMobileClientIds,
   RelayMobileRegistrationScope,
   RelayPublicClientId,
-  RelayWebClientIds,
   type RelayEnvironmentLinkChallengeRequest,
 } from "@t3tools/contracts/relay";
 import { encodeOAuthScope, parseAllowedOAuthScope } from "@t3tools/shared/oauthScope";
@@ -72,10 +70,12 @@ const webScopes = new Set<RelayDpopAccessTokenScope>([
 const allowedScopesByClientId: Record<
   RelayPublicClientId,
   ReadonlySet<RelayDpopAccessTokenScope>
-> = Object.fromEntries([
-  ...RelayMobileClientIds.map((clientId) => [clientId, mobileScopes] as const),
-  ...RelayWebClientIds.map((clientId) => [clientId, webScopes] as const),
-]) as Record<RelayPublicClientId, ReadonlySet<RelayDpopAccessTokenScope>>;
+> = {
+  "pulse-mobile": mobileScopes,
+  "pulse-web": webScopes,
+  "t3-mobile": mobileScopes,
+  "t3-web": webScopes,
+};
 
 function resolveDpopAccessTokenScopes(input: {
   readonly clientId: RelayPublicClientId;
