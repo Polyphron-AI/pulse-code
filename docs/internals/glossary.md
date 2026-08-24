@@ -46,6 +46,10 @@ A user-visible log item attached to a thread. In [the contracts][1], activities 
 
 Orchestration is the server-side domain layer that turns runtime activity into stable app state. The main entry point is [OrchestrationEngine.ts][7], with core logic in [decider.ts][8] and [projector.ts][4].
 
+#### Scheduled chat
+
+A server-owned daily instruction that creates a durable thread and runs it in a fresh provider session. Its scope can be one project or all projects. Schedule state, occurrence history, failure status, and pause state are projected from orchestration events; the host environment performs due work even when no client is connected. See the [schedule contract](../../packages/contracts/src/schedule.ts).
+
 #### Aggregate
 
 The domain object a command or event belongs to. In [the contracts][1], that is usually `project` or `thread`. See [decider.ts][8].

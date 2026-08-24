@@ -123,6 +123,7 @@ function LocalSettingsRouteScreen() {
             value={`${environmentCount}`}
             target="SettingsEnvironments"
           />
+          <SettingsRow icon="clock" label="Scheduled chats" target="SettingsScheduledChats" />
         </SettingsSection>
 
         <GeneralSettingsSection />
@@ -471,6 +472,7 @@ function ConfiguredSettingsRouteScreen() {
             value={`${environmentCount}`}
             target="SettingsEnvironments"
           />
+          <SettingsRow icon="clock" label="Scheduled chats" target="SettingsScheduledChats" />
           <SettingsSwitchRow
             icon="bell.badge"
             label="Device Notifications"

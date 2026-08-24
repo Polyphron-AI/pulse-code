@@ -10,6 +10,7 @@ import * as PlatformError from "effect/PlatformError";
 import * as Ref from "effect/Ref";
 import * as Stream from "effect/Stream";
 
+import { createEmptyReadModel } from "./orchestration/projector.ts";
 import * as ServerConfig from "./config.ts";
 import * as OrchestrationEngine from "./orchestration/Services/OrchestrationEngine.ts";
 import * as ProjectionSnapshotQuery from "./orchestration/Services/ProjectionSnapshotQuery.ts";
@@ -171,6 +172,7 @@ it.effect("resolveAutoBootstrapWelcomeTargets returns existing project and threa
           ),
         streamDomainEvents: Stream.empty,
         latestSequence: Effect.succeed(0),
+        currentReadModel: Effect.sync(() => createEmptyReadModel("1970-01-01T00:00:00.000Z")),
       } satisfies OrchestrationEngine.OrchestrationEngineService["Service"]),
       Effect.provide(NodeServices.layer),
     );
@@ -216,6 +218,7 @@ it.effect("resolveAutoBootstrapWelcomeTargets creates a project and thread when 
           ),
         streamDomainEvents: Stream.empty,
         latestSequence: Effect.succeed(0),
+        currentReadModel: Effect.sync(() => createEmptyReadModel("1970-01-01T00:00:00.000Z")),
       } satisfies OrchestrationEngine.OrchestrationEngineService["Service"]),
       Effect.provide(NodeServices.layer),
     );
@@ -267,6 +270,7 @@ it.effect("resolveAutoBootstrapWelcomeTargets preserves typed UUID generation fa
           ),
         streamDomainEvents: Stream.empty,
         latestSequence: Effect.succeed(0),
+        currentReadModel: Effect.sync(() => createEmptyReadModel("1970-01-01T00:00:00.000Z")),
       } satisfies OrchestrationEngine.OrchestrationEngineService["Service"]),
       Effect.provideService(Crypto.Crypto, {
         ...crypto,

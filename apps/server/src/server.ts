@@ -62,6 +62,10 @@ import { ProviderRuntimeIngestionLive } from "./orchestration/Layers/ProviderRun
 import { ProviderCommandReactorLive } from "./orchestration/Layers/ProviderCommandReactor.ts";
 import { CheckpointReactorLive } from "./orchestration/Layers/CheckpointReactor.ts";
 import { ThreadDeletionReactorLive } from "./orchestration/Layers/ThreadDeletionReactor.ts";
+import { ScheduleReactorLive } from "./orchestration/Layers/ScheduleReactor.ts";
+import { ScheduleAuthProbeLive } from "./orchestration/Layers/ScheduleAuthProbe.ts";
+import { ScheduleProviderInstancesLive } from "./orchestration/Layers/ScheduleProviderInstances.ts";
+import { ScheduleWorkingTreeProbeLive } from "./orchestration/Layers/ScheduleWorkingTreeProbe.ts";
 import * as AgentAwarenessRelay from "./relay/AgentAwarenessRelay.ts";
 import { hasCloudPublicConfig } from "./cloud/publicConfig.ts";
 import { ProviderRegistryLive } from "./provider/Layers/ProviderRegistry.ts";
@@ -248,6 +252,10 @@ const ReactorLayerLive = Layer.empty.pipe(
   Layer.provideMerge(ProviderCommandReactorLive),
   Layer.provideMerge(CheckpointReactorLive),
   Layer.provideMerge(ThreadDeletionReactorLive),
+  Layer.provideMerge(ScheduleReactorLive),
+  Layer.provideMerge(ScheduleAuthProbeLive),
+  Layer.provideMerge(ScheduleWorkingTreeProbeLive),
+  Layer.provideMerge(ScheduleProviderInstancesLive),
   Layer.provideMerge(AgentAwarenessRelay.layer.pipe(Layer.provide(ServerSecretStore.layer))),
   Layer.provideMerge(RuntimeReceiptBusLive),
 );

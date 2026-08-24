@@ -384,6 +384,7 @@ describe("ProviderCommandReactor", () => {
             return engine.streamDomainEvents;
           },
           latestSequence: engine.latestSequence,
+          currentReadModel: engine.currentReadModel,
         } satisfies OrchestrationEngineService["Service"];
       }),
     ).pipe(Layer.provide(orchestrationLayer));
@@ -1907,6 +1908,54 @@ describe("ProviderCommandReactor", () => {
     await waitFor(() => harness.sendTurn.mock.calls.length === 2);
     expect(harness.startSession.mock.calls.length).toBe(1);
     expect(harness.stopSession.mock.calls.length).toBe(0);
+  });
+
+  it("replaces the provider session when a turn explicitly requests a fresh session", async () => {
+    const harness = await createHarness();
+    const now = "2026-01-01T00:00:00.000Z";
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.make("cmd-turn-start-fresh-1"),
+        threadId: ThreadId.make("thread-1"),
+        message: {
+          messageId: asMessageId("user-message-fresh-1"),
+          role: "user",
+          text: "first",
+          attachments: [],
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        createdAt: now,
+      }),
+    );
+
+    await waitFor(() => harness.sendTurn.mock.calls.length === 1);
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.make("cmd-turn-start-fresh-2"),
+        threadId: ThreadId.make("thread-1"),
+        message: {
+          messageId: asMessageId("user-message-fresh-2"),
+          role: "user",
+          text: "second",
+          attachments: [],
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        sessionMode: "fresh",
+        createdAt: now,
+      }),
+    );
+
+    await waitFor(() => harness.sendTurn.mock.calls.length === 2);
+    expect(harness.stopSession).toHaveBeenCalledTimes(1);
+    expect(harness.stopSession).toHaveBeenCalledWith({ threadId: ThreadId.make("thread-1") });
+    expect(harness.startSession).toHaveBeenCalledTimes(2);
+    expect(harness.startSession.mock.calls[1]?.[1]).not.toHaveProperty("resumeCursor");
   });
 
   it("restarts an existing Codex thread on a compatible requested instance", async () => {

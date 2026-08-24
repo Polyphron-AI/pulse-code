@@ -3,6 +3,7 @@ import {
   EnvironmentId,
   ORCHESTRATION_WS_METHODS,
   ProjectId,
+  ScheduleId,
   ThreadId,
   type ClientOrchestrationCommand,
 } from "@t3tools/contracts";
@@ -22,6 +23,11 @@ import * as EnvironmentSupervisor from "../connection/supervisor.ts";
 import * as RpcSession from "../rpc/session.ts";
 import type { WsRpcProtocolClient } from "../rpc/protocol.ts";
 import {
+  createProjectSchedule,
+  deleteProjectSchedule,
+  pauseProjectSchedule,
+  resumeProjectSchedule,
+  updateProjectSchedule,
   archiveThread,
   createProject,
   settleThread,
@@ -168,6 +174,64 @@ describe("environment commands", () => {
           threadId: "thread-1",
           reason: "user",
         },
+      ]);
+    }).pipe(Effect.provide(TEST_CRYPTO_LAYER)),
+  );
+
+  it.effect("dispatches the schedule lifecycle commands", () =>
+    Effect.gen(function* () {
+      const dispatched: ClientOrchestrationCommand[] = [];
+      const supervisor = yield* makeSupervisor(dispatched);
+      const scheduleId = ScheduleId.make("schedule-1");
+
+      const provideSupervisor = <A, E, R>(
+        effect: Effect.Effect<A, E, EnvironmentSupervisor.EnvironmentSupervisor | R>,
+      ) => Effect.provideService(effect, EnvironmentSupervisor.EnvironmentSupervisor, supervisor);
+
+      yield* provideSupervisor(
+        createProjectSchedule({
+          commandId: CommandId.make("schedule-create"),
+          scheduleId,
+          scope: { _tag: "project", projectId: ProjectId.make("project-1") },
+          hourLocal: 9,
+          minuteLocal: 30,
+          timezone: "Africa/Johannesburg",
+          prompt: "Run the daily maintenance checklist.",
+          createdAt: "2026-06-06T00:00:00.000Z",
+        }),
+      );
+      yield* provideSupervisor(
+        updateProjectSchedule({
+          commandId: CommandId.make("schedule-update"),
+          scheduleId,
+          prompt: "Run the revised checklist.",
+        }),
+      );
+      yield* provideSupervisor(
+        pauseProjectSchedule({
+          commandId: CommandId.make("schedule-pause"),
+          scheduleId,
+        }),
+      );
+      yield* provideSupervisor(
+        resumeProjectSchedule({
+          commandId: CommandId.make("schedule-resume"),
+          scheduleId,
+        }),
+      );
+      yield* provideSupervisor(
+        deleteProjectSchedule({
+          commandId: CommandId.make("schedule-delete"),
+          scheduleId,
+        }),
+      );
+
+      expect(dispatched.map(({ type, commandId }) => ({ type, commandId }))).toEqual([
+        { type: "project.schedule.create", commandId: "schedule-create" },
+        { type: "project.schedule.update", commandId: "schedule-update" },
+        { type: "project.schedule.pause", commandId: "schedule-pause" },
+        { type: "project.schedule.resume", commandId: "schedule-resume" },
+        { type: "project.schedule.delete", commandId: "schedule-delete" },
       ]);
     }).pipe(Effect.provide(TEST_CRYPTO_LAYER)),
   );
