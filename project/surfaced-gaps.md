@@ -5,17 +5,6 @@ This file is the session gap-watch inbox. Durable integration gaps live in
 
 ## Open
 
-- **2026-08-22 · G-2026-08-22-inert-file-link-tap · high:** A workspace-file link in mobile chat can
-  be completely inert with no feedback. `ThreadFeed.tsx:1414` guards the whole interaction on
-  `resolveWorkspaceRelativeFilePath(props.workspaceRoot, presentation.path)` and falls through to a
-  bare `return` when it yields null, so no sheet, alert, haptic, or log occurs. Null happens when the
-  link is absolute and `workspaceRoot` is null, absolute and outside `workspaceRoot/`, or starts with
-  `~/` (`apps/mobile/src/features/files/filePath.ts:64`). `workspaceRoot` is the nullable thread cwd
-  (`ThreadDetailScreen.tsx:589` passes `props.threadCwd`), not the project workspace root, so a link
-  the agent wrote against the project root can be unresolvable. Present since `30034eced`
-  (2026-06-18); `d4ec0aaf3` added the action sheet inside the same guard and did not address it.
-  Observed by the maintainer on Android against a `pulse-go` thread.
-
 - **2026-08-22 · G-2026-08-22-document-asset-type-gate · high:** The Open with action shipped in
   `R-2026-08-21-mobile-file-link-actions` cannot serve most documents. `issueAssetUrl` gates every
   `workspace-file` resource through `isWorkspacePreviewEntryPath`, which allows only `.htm`,
@@ -55,6 +44,14 @@ collection`), so the unified workspace cannot be regenerated after synchronizing
 - **2026-08-23:** `G-2026-08-21-workspace-endpoints-yaml-parser` was resolved by normalizing the
   ProductOps-owned endpoint, roadmap, and surface shards to its supported YAML subset. The unified
   workspace now passes renderer input checks and freshness verification.
+
+- **2026-08-22:** `G-2026-08-22-inert-file-link-tap` is closed. A tapped workspace-file link whose
+  path the workspace could not address fell through `onMarkdownLinkPress` to a bare `return`, so the
+  link looked live and did nothing. Narrower than first recorded: `b2c0509c6` had already fixed the
+  filename-only case via a workspace index lookup, leaving only absolute-outside-root, absolute with
+  no thread cwd, and `~/`-prefixed paths. Fixed by `resolveWorkspaceLinkTarget` in
+  `apps/mobile/src/features/files/filePath.ts`, which names the reason, plus an alert with Copy path.
+  The first record of this gap cited a pre-`b2c0509c6` tree; treat that citation as superseded.
 
 - **2026-08-20:** `G-2026-08-20-integration-transport-bridge-unassigned` was resolved by T11's typed
   server bridge and T12's client/mobile runtime binding. Mixed-version verification continues in T8.

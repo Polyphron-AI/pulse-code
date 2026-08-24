@@ -87,6 +87,43 @@ export function resolveWorkspaceRelativeFilePath(
   return normalizeRelativePath(normalizedTarget.slice(normalizedRoot.length + 1));
 }
 
+/**
+ * Why a workspace-file link cannot be turned into a location. Each reason gets
+ * its own message at the tap site: a link that looks live and does nothing reads
+ * as a broken app, so the caller must always have something true to say.
+ */
+export type UnaddressableWorkspaceLinkReason =
+  | "no-workspace"
+  | "home-relative"
+  | "outside-workspace";
+
+export type WorkspaceLinkTarget =
+  | { readonly _tag: "workspace-path"; readonly relativePath: string }
+  | { readonly _tag: "unaddressable"; readonly reason: UnaddressableWorkspaceLinkReason };
+
+/**
+ * Classify a link destination against the thread's workspace. Wraps
+ * `resolveWorkspaceRelativeFilePath` so the tap handler can distinguish "we
+ * have no root yet" from "this path is somewhere else" without re-deriving the
+ * path rules.
+ */
+export function resolveWorkspaceLinkTarget(
+  workspaceRoot: string | null | undefined,
+  targetPath: string,
+): WorkspaceLinkTarget {
+  const relativePath = resolveWorkspaceRelativeFilePath(workspaceRoot, targetPath);
+  if (relativePath !== null) {
+    return { _tag: "workspace-path", relativePath };
+  }
+  if (targetPath.startsWith("~/") || targetPath.startsWith("~\\")) {
+    return { _tag: "unaddressable", reason: "home-relative" };
+  }
+  if (!workspaceRoot) {
+    return { _tag: "unaddressable", reason: "no-workspace" };
+  }
+  return { _tag: "unaddressable", reason: "outside-workspace" };
+}
+
 export function isBrowserPreviewFile(path: string): boolean {
   return isWorkspaceBrowserPreviewPath(path);
 }

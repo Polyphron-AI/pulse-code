@@ -4,6 +4,7 @@ import {
   isBrowserPreviewFile,
   isImagePreviewFile,
   isSvgImagePreviewFile,
+  resolveWorkspaceLinkTarget,
   resolveWorkspaceRelativeFilePath,
 } from "./filePath";
 
@@ -25,6 +26,58 @@ describe("resolveWorkspaceRelativeFilePath", () => {
     expect(resolveWorkspaceRelativeFilePath("/repo", "/other/main.ts")).toBeNull();
     expect(resolveWorkspaceRelativeFilePath("/repo", "../other/main.ts")).toBeNull();
     expect(resolveWorkspaceRelativeFilePath(null, "/repo/main.ts")).toBeNull();
+  });
+});
+
+describe("resolveWorkspaceLinkTarget", () => {
+  it("addresses paths the workspace can resolve", () => {
+    expect(resolveWorkspaceLinkTarget("/repo", "src/main.ts")).toEqual({
+      _tag: "workspace-path",
+      relativePath: "src/main.ts",
+    });
+    expect(resolveWorkspaceLinkTarget("/repo", "/repo/src/main.ts")).toEqual({
+      _tag: "workspace-path",
+      relativePath: "src/main.ts",
+    });
+    expect(resolveWorkspaceLinkTarget(null, "docs/readme.md")).toEqual({
+      _tag: "workspace-path",
+      relativePath: "docs/readme.md",
+    });
+  });
+
+  it("separates the reasons a link cannot be addressed", () => {
+    expect(resolveWorkspaceLinkTarget("/repo", "/other/main.ts")).toEqual({
+      _tag: "unaddressable",
+      reason: "outside-workspace",
+    });
+    expect(resolveWorkspaceLinkTarget("/repo", "../other/main.ts")).toEqual({
+      _tag: "unaddressable",
+      reason: "outside-workspace",
+    });
+    expect(resolveWorkspaceLinkTarget(null, "/repo/main.ts")).toEqual({
+      _tag: "unaddressable",
+      reason: "no-workspace",
+    });
+    expect(resolveWorkspaceLinkTarget("/repo", "~/notes/main.ts")).toEqual({
+      _tag: "unaddressable",
+      reason: "home-relative",
+    });
+    expect(resolveWorkspaceLinkTarget(String.raw`C:\repo`, String.raw`~\notes\main.ts`)).toEqual({
+      _tag: "unaddressable",
+      reason: "home-relative",
+    });
+  });
+
+  it("never reports a reason for a path it could address", () => {
+    // The tap handler branches on the tag alone, so an addressable path must
+    // never arrive carrying a reason and vice versa.
+    for (const [root, target] of [
+      ["/repo", "src/main.ts"],
+      ["/repo", "/repo/deep/nested/file.docx"],
+      [String.raw`C:\repo`, String.raw`c:\repo\src\main.ts`],
+    ] as const) {
+      expect(resolveWorkspaceLinkTarget(root, target)._tag).toBe("workspace-path");
+    }
   });
 });
 

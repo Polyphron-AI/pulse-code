@@ -16,18 +16,6 @@ A user reads a thread on their phone five days after the work happened, over
 Pulse Connect, Tailscale, or the managed relay, and taps the link to the report
 the agent produced. Three separate things stop that from working today.
 
-0. **The tap can do nothing at all.** The whole interaction is guarded on
-   `resolveWorkspaceRelativeFilePath` and falls through to a bare `return` when
-   that yields null (`apps/mobile/src/features/threads/ThreadFeed.tsx:1414`), so
-   the link is inert with no sheet, alert, haptic, or log. Null happens for a link
-   that is absolute with a null `workspaceRoot`, absolute outside
-   `workspaceRoot/`, or `~/`-prefixed (`apps/mobile/src/features/files/filePath.ts:64`),
-   and `workspaceRoot` is the nullable thread cwd rather than the project
-   workspace root (`ThreadDetailScreen.tsx:589`). This is the first failure a user
-   meets and it predates the other two — observed on Android, 2026-08-22,
-   `G-2026-08-22-inert-file-link-tap`. A tap must always produce a response: when
-   the path cannot be resolved against the workspace, say which path was seen and
-   keep **Copy path** available.
 1. **Most documents cannot be served at all.** `issueAssetUrl` gates every
    `workspace-file` resource through `isWorkspacePreviewEntryPath`
    (`apps/server/src/assets/AssetAccess.ts:212`), which allows only `.htm`,
@@ -45,6 +33,14 @@ the agent produced. Three separate things stop that from working today.
    Code" for files the built-in viewer cannot render, and the download starts with
    no size, no progress, and no way out — on a connection that may be a phone on
    cellular reaching a laptop through a tunnel.
+
+One nearby defect is already fixed and is not part of this work: a tap whose
+path the workspace could not address used to fall through to a bare `return`,
+and a filename-only reference used to be joined to the workspace root as if it
+were a location. `b2c0509c6` resolves bare names through the workspace index, and
+the remaining unaddressable cases now report a reason with a copyable path
+(`resolveWorkspaceLinkTarget`). Shipped ahead of this design;
+`G-2026-08-22-inert-file-link-tap` is closed.
 
 Two things that look like the problem are not. Mobile mints the capability at tap
 time, so no 5-day-old message carries an expired URL; and each open writes into a
@@ -208,10 +204,6 @@ or outside-root request is refused at mint time and never becomes a URL.
 
 ## Verification
 
-Mobile, first: a link whose path resolves to null still produces a visible
-response naming the unresolved path, and never a silent return; this covers a null
-workspace root, an absolute path outside the root, and a `~/` path.
-
 Server: download intent issues a URL for a `.docx`; dot-segment paths are refused;
 a download claim rejects a sibling path that the equivalent preview claim would
 allow; the response carries an attachment disposition and a revalidating cache
@@ -228,8 +220,6 @@ optional and requires explicit approval under repository policy.
 
 ## Build order
 
-0. Mobile: make the tap always respond. Smallest independent fix, ships ahead of
-   the contract work, and covers the defect the maintainer actually hit.
 1. Contracts: optional `intent` on the workspace-file resource, optional
    `byteSize` and `mediaType` on the result.
 2. Server: download claim variant, the any-file-minus-dot-segments rule, size and

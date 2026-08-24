@@ -118,7 +118,8 @@ import { usePreparedConnection } from "../../state/session";
 import {
   basename,
   resolveWorkspaceFilePath,
-  resolveWorkspaceRelativeFilePath,
+  resolveWorkspaceLinkTarget,
+  type UnaddressableWorkspaceLinkReason,
 } from "../files/filePath";
 import { openWorkspaceFileWith } from "../files/openWorkspaceFileWith";
 
@@ -425,6 +426,19 @@ function useReviewCommentColors(): ReviewCommentColors {
     [background, border, codeBackground, mutedBackground, mutedText, text],
   );
 }
+
+/**
+ * Why a tapped file link cannot be opened, in the user's terms. Kept beside the
+ * handler because these strings are the entire value of the branch: the tap used
+ * to do nothing at all, and a wrong-but-specific reason is worse than silence.
+ */
+const UNADDRESSABLE_WORKSPACE_LINK_MESSAGES: Readonly<
+  Record<UnaddressableWorkspaceLinkReason, string>
+> = {
+  "no-workspace": "This thread has no project folder yet, so this path cannot be resolved.",
+  "home-relative": "This path is relative to a home directory Pulse Code cannot resolve from here.",
+  "outside-workspace": "This path is outside the project folder, so it cannot be opened here.",
+};
 
 function useMarkdownStyles(onLinkPress: (href: string) => void): MarkdownStyleSets {
   const { appearance, themeAppearance } = useAppearancePreferences();
@@ -1497,44 +1511,57 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
     (href: string) => {
       const presentation = resolveMarkdownLinkPresentation(href);
       if (presentation.kind === "file") {
-        const relativePath = resolveWorkspaceRelativeFilePath(
-          props.workspaceRoot,
-          presentation.path,
-        );
+        const target = resolveWorkspaceLinkTarget(props.workspaceRoot, presentation.path);
         const workspaceRoot = props.workspaceRoot;
-        if (relativePath) {
-          void Haptics.selectionAsync();
-          if (!workspaceRoot || !isBasenameOnlyReference(relativePath)) {
-            openWorkspaceFileActions(relativePath, presentation.line);
+        void Haptics.selectionAsync();
+        // A link can name a path this workspace cannot address at all. Falling
+        // through silently left the link looking live while doing nothing, which
+        // reads as a broken app, so name the reason and keep the path copyable.
+        if (target._tag === "unaddressable") {
+          Alert.alert(
+            `Could not open ${basename(presentation.path)}`,
+            `${UNADDRESSABLE_WORKSPACE_LINK_MESSAGES[target.reason]}\n\n${presentation.path}`,
+            [
+              {
+                text: "Copy path",
+                onPress: () => copyTextWithHaptic(presentation.path, { target: "file path" }),
+              },
+              { text: "Cancel", style: "cancel" },
+            ],
+          );
+          return;
+        }
+        const { relativePath } = target;
+        if (!workspaceRoot || !isBasenameOnlyReference(relativePath)) {
+          openWorkspaceFileActions(relativePath, presentation.line);
+          return;
+        }
+        const isLatestLookup = claimWorkspaceBasenameLookup();
+        void (async () => {
+          const result = await searchProjectEntries({
+            environmentId: props.environmentId,
+            input: {
+              cwd: workspaceRoot,
+              query: relativePath,
+              limit: WORKSPACE_BASENAME_LOOKUP_LIMIT,
+              kind: "file",
+            },
+          });
+          if (!isLatestLookup()) return;
+          if (result._tag !== "Success") {
+            Alert.alert(
+              `Could not locate ${relativePath}`,
+              "Searching this project's files failed. Check the environment connection and try again.",
+            );
             return;
           }
-          const isLatestLookup = claimWorkspaceBasenameLookup();
-          void (async () => {
-            const result = await searchProjectEntries({
-              environmentId: props.environmentId,
-              input: {
-                cwd: workspaceRoot,
-                query: relativePath,
-                limit: WORKSPACE_BASENAME_LOOKUP_LIMIT,
-                kind: "file",
-              },
-            });
-            if (!isLatestLookup()) return;
-            if (result._tag !== "Success") {
-              Alert.alert(
-                `Could not locate ${relativePath}`,
-                "Searching this project's files failed. Check the environment connection and try again.",
-              );
-              return;
-            }
-            const resolution = resolveWorkspaceBasename(relativePath, result.value.entries);
-            if (resolution._tag === "resolved") {
-              openWorkspaceFileActions(resolution.path, presentation.line);
-              return;
-            }
-            Alert.alert(`Could not locate ${relativePath}`, describeUnresolvedBasename(resolution));
-          })();
-        }
+          const resolution = resolveWorkspaceBasename(relativePath, result.value.entries);
+          if (resolution._tag === "resolved") {
+            openWorkspaceFileActions(resolution.path, presentation.line);
+            return;
+          }
+          Alert.alert(`Could not locate ${relativePath}`, describeUnresolvedBasename(resolution));
+        })();
         return;
       }
 

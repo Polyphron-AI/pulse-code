@@ -8,7 +8,7 @@ files_touched:
   - prd/README.md
   - prd/14-document-link-durability.md
   - project/state/shards/roadmap.yaml
-baseline_sha: d4ec0aaf3
+baseline_sha: b40693c2b
 implementation_sha: null
 approval_tag: null
 related_crs:
