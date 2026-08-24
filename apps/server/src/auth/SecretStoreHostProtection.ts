@@ -1,3 +1,4 @@
+import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Schema from "effect/Schema";
@@ -52,26 +53,31 @@ export const assessSecretStoreHostProtection = (
 
 export const inspectSecretStoreHostProtection = (
   secretDirectory: string,
-): Effect.Effect<SecretStoreHostProtection, never, FileSystem.FileSystem> => {
-  if (process.platform === "win32") {
-    // chmod success is not ACL evidence. OAuth remains disabled until the
-    // Windows package supplies an effective ACL inspector.
-    return Effect.succeed(
-      assessSecretStoreHostProtection({
-        platform: "windows",
-        aclVerified: false,
-        grantsAccessToUntrustedPrincipal: false,
-      }),
-    );
-  }
-  if (process.platform !== "linux" && process.platform !== "darwin") {
-    return Effect.succeed(assessSecretStoreHostProtection({ platform: "unsupported" }));
-  }
-  return FileSystem.FileSystem.pipe(
-    Effect.flatMap((fileSystem) => fileSystem.stat(secretDirectory)),
-    Effect.map((info) =>
-      assessSecretStoreHostProtection({ platform: "posix", directoryMode: info.mode }),
-    ),
-    Effect.orElseSucceed(() => assessSecretStoreHostProtection({ platform: "inspection_failed" })),
+): Effect.Effect<SecretStoreHostProtection, never, FileSystem.FileSystem> =>
+  HostProcessPlatform.pipe(
+    Effect.flatMap((platform) => {
+      if (platform === "win32") {
+        // chmod success is not ACL evidence. OAuth remains disabled until the
+        // Windows package supplies an effective ACL inspector.
+        return Effect.succeed(
+          assessSecretStoreHostProtection({
+            platform: "windows",
+            aclVerified: false,
+            grantsAccessToUntrustedPrincipal: false,
+          }),
+        );
+      }
+      if (platform !== "linux" && platform !== "darwin") {
+        return Effect.succeed(assessSecretStoreHostProtection({ platform: "unsupported" }));
+      }
+      return FileSystem.FileSystem.pipe(
+        Effect.flatMap((fileSystem) => fileSystem.stat(secretDirectory)),
+        Effect.map((info) =>
+          assessSecretStoreHostProtection({ platform: "posix", directoryMode: info.mode }),
+        ),
+        Effect.orElseSucceed(() =>
+          assessSecretStoreHostProtection({ platform: "inspection_failed" }),
+        ),
+      );
+    }),
   );
-};

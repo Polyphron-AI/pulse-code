@@ -6,6 +6,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import { ChildProcessSpawner } from "effect/unstable/process";
@@ -66,6 +67,8 @@ import {
 } from "./build-desktop-artifact.ts";
 import { BRAND_ASSET_PATHS } from "./lib/brand-assets.ts";
 import { HostProcessArchitecture, HostProcessPlatform } from "@t3tools/shared/hostProcess";
+
+const encodeUnknownJson = Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown));
 
 function mockProcess(exitCode: number) {
   return ChildProcessSpawner.makeHandle({
@@ -483,7 +486,7 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
       assert.deepStrictEqual(linuxConfig.protocols, expectedProtocols);
       assert.equal(winConfig.executableName, DESKTOP_EXECUTABLE_NAME);
       assert.deepStrictEqual(winConfig.protocols, expectedProtocols);
-      const osIdentity = JSON.stringify([macConfig, linuxConfig, winConfig]);
+      const osIdentity = yield* encodeUnknownJson([macConfig, linuxConfig, winConfig]);
       assert.notInclude(osIdentity, "t3code");
       assert.notInclude(osIdentity, "com.t3tools");
 

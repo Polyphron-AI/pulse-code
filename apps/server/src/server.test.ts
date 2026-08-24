@@ -775,6 +775,7 @@ const buildAppUnderTest = (options?: {
           dispatch: () => Effect.succeed({ sequence: 0 }),
           streamDomainEvents: Stream.empty,
           latestSequence: Effect.succeed(0),
+          currentReadModel: Effect.succeed(makeDefaultOrchestrationReadModel()),
           ...options?.layers?.orchestrationEngine,
         }),
       ),

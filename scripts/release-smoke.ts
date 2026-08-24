@@ -1,4 +1,5 @@
 // @effect-diagnostics nodeBuiltinImport:off
+import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
 import * as NodeChildProcess from "node:child_process";
 import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
@@ -8,10 +9,11 @@ import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 
 const repoRoot = NodePath.resolve(NodePath.dirname(NodeURL.fileURLToPath(import.meta.url)), "..");
+const hostPlatform = Effect.runSync(HostProcessPlatform);
 
 function toBashPath(path: string): string {
   const normalizedPath = path.replaceAll("\\", "/");
-  if (process.platform !== "win32") {
+  if (hostPlatform !== "win32") {
     return normalizedPath;
   }
 
