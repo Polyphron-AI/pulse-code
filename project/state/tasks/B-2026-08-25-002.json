@@ -1,0 +1,30 @@
+{
+  "blocked_by": [],
+  "commits": [],
+  "created_at": "2026-08-25T11:15:02Z",
+  "execution_context": {
+    "branch": "develop",
+    "repository": "Pulse Code",
+    "worktree": "main"
+  },
+  "files_touched": [
+    "C:/Users/qblaa/.codex/plugins/cache/product-ops-skill/product-ops/3.38.1/skills/product-ops/scripts/minion.py",
+    "C:/Users/qblaa/.codex/plugins/cache/product-ops-skill/product-ops/3.38.1/skills/product-ops/scripts/minion_supervisor.py",
+    "C:/Users/qblaa/.codex/plugins/cache/product-ops-skill/product-ops/3.38.1/skills/product-ops/scripts/tests/test_minion_e2e.py",
+    "C:/Users/qblaa/.codex/plugins/cache/product-ops-skill/product-ops/3.38.1/skills/product-ops/scripts/tests/test_minion_rules.py"
+  ],
+  "host_refs": {},
+  "id": "B-2026-08-25-002",
+  "kind": "bugfix",
+  "local_id": null,
+  "owner": null,
+  "plan_id": null,
+  "roadmap_items": [],
+  "schema": "product-ops.task/v1",
+  "status": "done",
+  "subject": "Prevent Minion snapshot scans from traversing ignored dependency and vendored directories",
+  "updated_at": "2026-08-25T11:29:53Z",
+  "verification_receipts": [
+    "RED test_minion_rules.py RulePackTests.test_expand_uses_git_owned_and_unignored_files exit=1; GREEN same test exit=0; GREEN test_minion_e2e.py snapshot+restart tests exit=0; minion_service.py doctor status=healthy"
+  ]
+}
