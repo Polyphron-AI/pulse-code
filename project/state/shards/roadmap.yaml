@@ -282,6 +282,49 @@ items:
     history:
       - "2026-08-21 created in next from the scheduled-chats design session; promotion to now requires an explicit slot tradeoff against the active integration items."
 
+  - id: R-2026-08-24-omp-agent-provider
+    title: "OMP agent provider"
+    theme: T1
+    horizon: next
+    stage: shaped
+    kind: feature
+    outcome: "Let users choose OMP for a Pulse thread while Pulse keeps remote control, permissions, checkpoints, and history."
+    need: "When OMP is my coding harness, I want it to solve a Pulse thread like any other agent without leaving Pulse."
+    directions:
+      - "Run native omp acp through the existing ACP runtime, one process per active thread."
+      - "Keep OMP execution native and normalize ACP activity into Pulse events."
+      - "Enforce the Pulse approval mode with a temporary OMP config overlay."
+    failure_mode: "Pulse scrapes the OMP TUI, claims supervision OMP can bypass, or works only locally."
+    appetite: "three focused cycles after Scheduled Chats"
+    approach: "First-class native-ACP provider with capability negotiation and fixtures."
+    rabbit_holes:
+      - "rebuilding OMP Agent Hub or terminal UI"
+      - "generic arbitrary-ACP providers or automatic OMP updates"
+    no_gos:
+      - "no implementation before R-2026-08-21-scheduled-chats is complete"
+      - "no raw OMP history over WebSockets or mutation of OMP user/project config"
+      - "no silent provider, model, permission, or session fallback"
+    dod:
+      - "Provider health distinguishes missing, incompatible, unauthenticated, and model states."
+      - "OMP can run, resume, request permission, stop, recover, and use Pulse MCP."
+      - "Web/desktop expose setup and pickers; mobile operates a configured OMP instance remotely."
+      - "Scheduled OMP turns prove fresh sessions and shared timeout, failure, and checkpoint behavior."
+      - "Focused tests, targeted typechecks, and docs/user pass."
+    evidence:
+      - type: user_evidence
+        note: "The maintainer requested OMP research and directed planning after CRON on 2026-08-24."
+      - type: repository_evidence
+        note: "Pulse and OMP expose the required ACP lifecycle; the design authority records the detailed evidence."
+    rice: { reach: M, impact: H, effort: M }
+    prd_refs:
+      - 16-omp-agent-provider#scope
+    blocked_by:
+      - R-2026-08-21-scheduled-chats
+    metric: { name: "OMP threads controllable across Pulse clients", baseline: 0, target: 100 }
+    status: active
+    history:
+      - "2026-08-24 created as shaped Next, explicitly blocked on Scheduled Chats/CRON completion."
+
   - id: R-2026-08-21-mobile-file-link-actions
     title: Reliable mobile file-link actions
     theme: T1

@@ -18,6 +18,9 @@ Pulse Issues work as its reference adapter.
 - [Durable document links](14-document-link-durability.md) — proposed: document
   links that stay openable days later by re-resolving and re-streaming, presented
   for a phone on a tunnelled connection.
+- [OMP agent provider](16-omp-agent-provider.md) — proposed after Scheduled Chats:
+  run OMP as a first-class ACP-backed provider while Pulse Code owns the thread,
+  permissions UI, remote transport, and checkpoints.
 - [Integration foundation acceptance criteria](20-acceptance-criteria/integration-foundation.md) —
   testable first-release contract.
 - [Desktop product-line boundary acceptance criteria](20-acceptance-criteria/desktop-product-line-boundary.md)

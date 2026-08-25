@@ -18,6 +18,7 @@ status, and stop. The user re-invokes to continue. Never silently expand scope.
 | ------------------------ | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ |
 | scheduled-chats          | `docs/plans/2026-08-21-scheduled-chats-design.md`          | `prd/12-scheduled-chats.md` + `prd/change-requests/CR-2026-08-21-scheduled-chats.md`                   | `R-2026-08-21-scheduled-chats` in `project/state/shards/roadmap.yaml`          |
 | mobile-file-link-actions | `docs/plans/2026-08-21-mobile-file-link-actions-design.md` | `prd/13-mobile-file-link-actions.md` + `prd/change-requests/CR-2026-08-21-mobile-file-link-actions.md` | `R-2026-08-21-mobile-file-link-actions` in `project/state/shards/roadmap.yaml` |
+| omp-agent-provider       | `docs/plans/2026-08-24-omp-agent-provider-design.md`       | `prd/16-omp-agent-provider.md` + `prd/change-requests/CR-2026-08-24-omp-agent-provider.md`             | `R-2026-08-24-omp-agent-provider` in `project/state/shards/roadmap.yaml`       |
 
 For a goal not in the registry: ask the user for its design authority, or offer to
 bootstrap one (design doc in `docs/plans/`, CR in `prd/change-requests/`) before
