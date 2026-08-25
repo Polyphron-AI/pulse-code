@@ -64,6 +64,7 @@ import { CheckpointReactorLive } from "./orchestration/Layers/CheckpointReactor.
 import { ThreadDeletionReactorLive } from "./orchestration/Layers/ThreadDeletionReactor.ts";
 import { ScheduleReactorLive } from "./orchestration/Layers/ScheduleReactor.ts";
 import { ScheduleAuthProbeLive } from "./orchestration/Layers/ScheduleAuthProbe.ts";
+import { ScheduleHandoffGitLive } from "./orchestration/Layers/ScheduleHandoffGit.ts";
 import { ScheduleProviderInstancesLive } from "./orchestration/Layers/ScheduleProviderInstances.ts";
 import { ScheduleWorkingTreeProbeLive } from "./orchestration/Layers/ScheduleWorkingTreeProbe.ts";
 import * as AgentAwarenessRelay from "./relay/AgentAwarenessRelay.ts";
@@ -254,6 +255,7 @@ const ReactorLayerLive = Layer.empty.pipe(
   Layer.provideMerge(ThreadDeletionReactorLive),
   Layer.provideMerge(ScheduleReactorLive),
   Layer.provideMerge(ScheduleAuthProbeLive),
+  Layer.provideMerge(ScheduleHandoffGitLive),
   Layer.provideMerge(ScheduleWorkingTreeProbeLive),
   Layer.provideMerge(ScheduleProviderInstancesLive),
   Layer.provideMerge(AgentAwarenessRelay.layer.pipe(Layer.provide(ServerSecretStore.layer))),

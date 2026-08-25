@@ -28,6 +28,7 @@ import { writeFileStringAtomically } from "../../atomicWrite.ts";
 import { BackgroundPolicy } from "../../background/BackgroundPolicy.ts";
 import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
 import { ScheduleAuthProbe } from "../Services/ScheduleAuthProbe.ts";
+import { ScheduleHandoffGit } from "../Services/ScheduleHandoffGit.ts";
 import { ScheduleProviderInstances } from "../Services/ScheduleProviderInstances.ts";
 import { ScheduleReactor, type ScheduleReactorShape } from "../Services/ScheduleReactor.ts";
 import { ScheduleWorkingTreeProbe } from "../Services/ScheduleWorkingTreeProbe.ts";
@@ -181,6 +182,7 @@ const makeScheduleReactor = (options?: ScheduleReactorLiveOptions) =>
   Effect.gen(function* () {
     const engine = yield* OrchestrationEngineService;
     const authProbe = yield* ScheduleAuthProbe;
+    const handoffGit = yield* ScheduleHandoffGit;
     const workingTreeProbe = yield* ScheduleWorkingTreeProbe;
     const providerInstances = yield* ScheduleProviderInstances;
     const backgroundPolicy = yield* BackgroundPolicy;
@@ -341,10 +343,11 @@ const makeScheduleReactor = (options?: ScheduleReactorLiveOptions) =>
             dateLocal !== null &&
             !path.isAbsolute(schedule.handoffPathTemplate)
           ) {
-            const filePath = path.join(
-              project.workspaceRoot,
-              schedule.handoffPathTemplate.replaceAll("{date}", dateLocal),
+            const handoffRelativePath = schedule.handoffPathTemplate.replaceAll(
+              "{date}",
+              dateLocal,
             );
+            const filePath = path.join(project.workspaceRoot, handoffRelativePath);
             const written = yield* writeFileStringAtomically({ filePath, contents: content }).pipe(
               Effect.provideService(FileSystem.FileSystem, fs),
               Effect.provideService(Path.Path, path),
@@ -361,6 +364,36 @@ const makeScheduleReactor = (options?: ScheduleReactorLiveOptions) =>
             if (!written) {
               yield* failOccurrence("Failed to write the handoff file.");
               continue;
+            }
+            if (schedule.handoffGitPolicy != null) {
+              const gitResult = yield* handoffGit
+                .apply({
+                  workspaceRoot: project.workspaceRoot,
+                  handoffRelativePath,
+                  handoffPathTemplate: schedule.handoffPathTemplate,
+                  policy: schedule.handoffGitPolicy,
+                })
+                .pipe(
+                  Effect.as({ _tag: "ok" as const }),
+                  Effect.catch((error) =>
+                    Effect.logWarning("schedule.reactor.handoff-git-policy-failed", {
+                      scheduleId: schedule.id,
+                      occurrenceKey,
+                      filePath,
+                      policy: schedule.handoffGitPolicy,
+                      error,
+                    }).pipe(
+                      Effect.as({
+                        _tag: "error" as const,
+                        message: error.message,
+                      }),
+                    ),
+                  ),
+                );
+              if (gitResult._tag === "error") {
+                yield* failOccurrence(gitResult.message);
+                continue;
+              }
             }
           } else {
             // A clean turn with nothing to hand off still completes; the next

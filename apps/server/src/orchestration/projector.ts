@@ -114,6 +114,7 @@ function updateScheduleProjectState(
       lastOccurrenceKey: existing?.lastOccurrenceKey ?? null,
       lastOccurrenceStatus: existing?.lastOccurrenceStatus ?? null,
       lastOccurrenceFailureReason: existing?.lastOccurrenceFailureReason ?? null,
+      lastOccurrenceFailureMessage: existing?.lastOccurrenceFailureMessage ?? null,
       lastOccurrenceAt: existing?.lastOccurrenceAt ?? null,
       consecutiveFailures: existing?.consecutiveFailures ?? 0,
       skippedRunCount: existing?.skippedRunCount ?? 0,
@@ -1056,6 +1057,7 @@ export function projectEvent(
               lastOccurrenceKey: payload.occurrenceKey,
               lastOccurrenceStatus: "running",
               lastOccurrenceFailureReason: null,
+              lastOccurrenceFailureMessage: null,
               lastOccurrenceAt: payload.startedAt,
               ...(payload.trigger !== "manual"
                 ? { lastScheduledOccurrenceKey: payload.occurrenceKey }
@@ -1096,6 +1098,7 @@ export function projectEvent(
                       lastOccurrenceKey: payload.occurrenceKey,
                       lastOccurrenceStatus: "skipped" as const,
                       lastOccurrenceFailureReason: null,
+                      lastOccurrenceFailureMessage: null,
                       lastOccurrenceAt: payload.skippedAt,
                     }),
               },
@@ -1120,6 +1123,7 @@ export function projectEvent(
             {
               lastOccurrenceStatus: "completed",
               lastOccurrenceFailureReason: null,
+              lastOccurrenceFailureMessage: null,
               lastOccurrenceAt: payload.completedAt,
               consecutiveFailures: 0,
             },
@@ -1151,6 +1155,7 @@ export function projectEvent(
               {
                 lastOccurrenceStatus: "failed",
                 lastOccurrenceFailureReason: payload.reason,
+                lastOccurrenceFailureMessage: payload.message ?? null,
                 lastOccurrenceAt: payload.failedAt,
                 consecutiveFailures: payload.reason === "dirty" ? priorStreak : priorStreak + 1,
               },
