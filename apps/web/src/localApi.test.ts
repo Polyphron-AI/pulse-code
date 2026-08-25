@@ -76,6 +76,7 @@ describe("LocalApi", () => {
 
     expect(api).not.toHaveProperty("server");
     expect(api.shell).not.toHaveProperty("openInEditor");
+    expect(api.shell).not.toHaveProperty("revealPath");
   });
 
   it("uses the browser context-menu fallback without a desktop bridge", async () => {
@@ -118,11 +119,13 @@ describe("LocalApi", () => {
     const pickFolder = vi.fn().mockResolvedValue("/tmp/project");
     const getClientSettings = vi.fn().mockResolvedValue(DEFAULT_CLIENT_SETTINGS);
     const setClientSettings = vi.fn().mockResolvedValue(undefined);
+    const revealPath = vi.fn().mockResolvedValue(true);
     testWindow().desktopBridge = {
       showContextMenu,
       pickFolder,
       getClientSettings,
       setClientSettings,
+      revealPath,
     } as unknown as DesktopBridge;
 
     const { createLocalApi } = await import("./localApi");
@@ -135,11 +138,13 @@ describe("LocalApi", () => {
     await expect(api.dialogs.pickFolder({ initialPath: "/tmp" })).resolves.toBe("/tmp/project");
     await expect(api.persistence.getClientSettings()).resolves.toEqual(DEFAULT_CLIENT_SETTINGS);
     await api.persistence.setClientSettings(DEFAULT_CLIENT_SETTINGS);
+    await expect(api.shell.revealPath?.("/tmp/project/src/index.ts")).resolves.toBeUndefined();
 
     expect(showContextMenu).toHaveBeenCalledWith(items, undefined);
     expect(pickFolder).toHaveBeenCalledWith({ initialPath: "/tmp" });
     expect(getClientSettings).toHaveBeenCalledTimes(1);
     expect(setClientSettings).toHaveBeenCalledWith(DEFAULT_CLIENT_SETTINGS);
+    expect(revealPath).toHaveBeenCalledWith("/tmp/project/src/index.ts");
   });
 
   it("persists client settings in browser storage", async () => {

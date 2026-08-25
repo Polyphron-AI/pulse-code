@@ -7,12 +7,14 @@ import {
   SCHEDULE_AUTO_PAUSE_FAILURE_STREAK,
   SCHEDULE_LIMIT_MINUTES_MAX,
   SCHEDULE_LIMIT_MINUTES_MIN,
+  scheduleIntervalMinutes,
   type OrchestrationCommand,
   type OrchestrationEvent,
   type OrchestrationReadModel,
   type OrchestrationSchedule,
   type ProjectId,
   type ScheduleScope,
+  type ScheduleInterval,
 } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Crypto from "effect/Crypto";
@@ -167,7 +169,11 @@ function scheduleFieldViolation(command: {
   readonly maxRunMinutes?: number | undefined;
   readonly maxTurnMinutes?: number | undefined;
   readonly scope?: ScheduleScope | undefined;
+  readonly interval?: ScheduleInterval | null | undefined;
 }): string | null {
+  if (command.interval != null && scheduleIntervalMinutes(command.interval) === null) {
+    return "interval must resolve to a positive whole number of minutes";
+  }
   if (command.timezone !== undefined && !isValidTimezone(command.timezone)) {
     return `timezone '${command.timezone}' is not a valid IANA time zone`;
   }
@@ -1526,6 +1532,10 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           scope: command.scope,
           hourLocal: command.hourLocal,
           minuteLocal: command.minuteLocal,
+          ...(command.interval !== undefined ? { interval: command.interval } : {}),
+          ...(command.handoffGitPolicy !== undefined
+            ? { handoffGitPolicy: command.handoffGitPolicy }
+            : {}),
           timezone: command.timezone,
           prompt: command.prompt,
           ...(command.workflowScriptRef !== undefined
@@ -1577,6 +1587,10 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           ...(command.scope !== undefined ? { scope: command.scope } : {}),
           ...(command.hourLocal !== undefined ? { hourLocal: command.hourLocal } : {}),
           ...(command.minuteLocal !== undefined ? { minuteLocal: command.minuteLocal } : {}),
+          ...(command.interval !== undefined ? { interval: command.interval } : {}),
+          ...(command.handoffGitPolicy !== undefined
+            ? { handoffGitPolicy: command.handoffGitPolicy }
+            : {}),
           ...(command.timezone !== undefined ? { timezone: command.timezone } : {}),
           ...(command.prompt !== undefined ? { prompt: command.prompt } : {}),
           ...(command.workflowScriptRef !== undefined
@@ -1679,6 +1693,59 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       };
     }
 
+    case "project.schedule.run": {
+      const schedule = yield* requireActiveSchedule({
+        readModel,
+        command,
+        scheduleId: command.scheduleId,
+      });
+      if (schedule.pausedAt !== null) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: `Schedule '${command.scheduleId}' is paused and cannot run now.`,
+        });
+      }
+      const activeProjectIds = new Set(
+        readModel.projects
+          .filter((project) => project.deletedAt === null)
+          .map((project) => project.id),
+      );
+      const projectIds =
+        schedule.scope._tag === "project"
+          ? activeProjectIds.has(schedule.scope.projectId)
+            ? [schedule.scope.projectId]
+            : []
+          : schedule.scope.projectIds === "all"
+            ? [...activeProjectIds]
+            : schedule.scope.projectIds.filter((projectId) => activeProjectIds.has(projectId));
+      if (projectIds.length === 0) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: `Schedule '${command.scheduleId}' has no active target projects.`,
+        });
+      }
+      return yield* Effect.forEach(projectIds, (projectId) =>
+        Effect.gen(function* () {
+          const requestKey = `manual:${command.commandId}:${projectId}`;
+          return {
+            ...(yield* withEventBase({
+              aggregateKind: "schedule",
+              aggregateId: command.scheduleId,
+              occurredAt: command.createdAt,
+              commandId: command.commandId,
+            })),
+            type: "project.schedule.run-requested" as const,
+            payload: {
+              scheduleId: command.scheduleId,
+              projectId,
+              requestKey,
+              requestedAt: command.createdAt,
+            },
+          };
+        }),
+      );
+    }
+
     case "schedule.occurrence.start": {
       const schedule = yield* requireActiveSchedule({
         readModel,
@@ -1709,6 +1776,22 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           detail: `Occurrence '${command.occurrenceKey}' already started for schedule '${command.scheduleId}'.`,
         });
       }
+      const trigger = command.trigger ?? "scheduled";
+      if (
+        trigger === "scheduled" &&
+        projectState?.lastScheduledOccurrenceKey === command.occurrenceKey
+      ) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: `Scheduled occurrence '${command.occurrenceKey}' was already evaluated.`,
+        });
+      }
+      if (trigger === "manual" && projectState?.manualRunRequestKey !== command.occurrenceKey) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: `Manual run '${command.occurrenceKey}' is not pending.`,
+        });
+      }
       return {
         ...(yield* withEventBase({
           aggregateKind: "schedule",
@@ -1723,6 +1806,59 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           projectId: command.projectId,
           threadId: command.threadId,
           startedAt: command.startedAt,
+          trigger,
+        },
+      };
+    }
+
+    case "schedule.occurrence.skip": {
+      const schedule = yield* requireActiveSchedule({
+        readModel,
+        command,
+        scheduleId: command.scheduleId,
+      });
+      if (!scheduleTargetsProject(schedule, command.projectId)) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: `Schedule '${command.scheduleId}' does not target project '${command.projectId}'.`,
+        });
+      }
+      const projectState = schedule.projectStates.find(
+        (state) => state.projectId === command.projectId,
+      );
+      if (
+        command.trigger === "scheduled" &&
+        projectState?.lastScheduledOccurrenceKey === command.occurrenceKey
+      ) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: `Scheduled occurrence '${command.occurrenceKey}' was already evaluated.`,
+        });
+      }
+      if (
+        command.trigger === "manual" &&
+        projectState?.manualRunRequestKey !== command.occurrenceKey
+      ) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: `Manual run '${command.occurrenceKey}' is not pending.`,
+        });
+      }
+      return {
+        ...(yield* withEventBase({
+          aggregateKind: "schedule",
+          aggregateId: command.scheduleId,
+          occurredAt: command.skippedAt,
+          commandId: command.commandId,
+        })),
+        type: "schedule.occurrence.skipped",
+        payload: {
+          scheduleId: command.scheduleId,
+          occurrenceKey: command.occurrenceKey,
+          projectId: command.projectId,
+          reason: command.reason,
+          skippedAt: command.skippedAt,
+          trigger: command.trigger,
         },
       };
     }

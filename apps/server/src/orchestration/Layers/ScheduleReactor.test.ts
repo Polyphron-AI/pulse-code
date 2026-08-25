@@ -14,6 +14,7 @@ import {
   type OrchestrationEvent,
   type OrchestrationReadModel,
   type OrchestrationSession,
+  type ScheduleInterval,
   type ScheduleScope,
 } from "@t3tools/contracts";
 import { expect, it } from "@effect/vitest";
@@ -206,6 +207,7 @@ const makeTestBed = Effect.fn("makeTestBed")(function* (options?: {
     readonly hourLocal?: number;
     readonly minuteLocal?: number;
     readonly timezone?: string;
+    readonly interval?: ScheduleInterval;
     readonly modelSelection?: typeof modelSelection;
   }) =>
     dispatch({
@@ -216,6 +218,7 @@ const makeTestBed = Effect.fn("makeTestBed")(function* (options?: {
       hourLocal: input?.hourLocal ?? 9,
       minuteLocal: input?.minuteLocal ?? 0,
       timezone: input?.timezone ?? "UTC",
+      ...(input?.interval !== undefined ? { interval: input.interval } : {}),
       prompt: "Daily check-in: read the handoff and continue.",
       ...(input?.modelSelection !== undefined ? { modelSelection: input.modelSelection } : {}),
       createdAt: baseNow,
@@ -1077,6 +1080,81 @@ it.layer(NodeServices.layer)("ScheduleReactor", (it) => {
         keyFor("2026-10-31"),
         keyFor("2026-11-01"),
       ]);
+    }).pipe(Effect.provide(TestClock.layer())),
+  );
+
+  it.effect("fractional-compatible intervals fire on elapsed boundaries and skip overlap", () =>
+    Effect.gen(function* () {
+      const bed = yield* makeTestBed();
+      yield* bed.seedProject(projectA);
+      yield* bed.seedSchedule({ interval: { value: 0.08333333333333333, unit: "hours" } });
+
+      yield* at("2026-01-02T00:04:00.000Z");
+      yield* bed.reactor.sweepNow;
+      expect(ofType(bed.dispatched, "schedule.occurrence.start")).toHaveLength(0);
+
+      yield* at("2026-01-02T00:05:00.000Z");
+      yield* bed.reactor.sweepNow;
+      expect(ofType(bed.dispatched, "schedule.occurrence.start")).toHaveLength(1);
+
+      yield* at("2026-01-02T00:10:00.000Z");
+      yield* bed.reactor.sweepNow;
+      const skips = ofType(bed.dispatched, "schedule.occurrence.skip");
+      expect(skips).toHaveLength(1);
+      expect(skips[0]).toMatchObject({
+        projectId: projectA,
+        reason: "thread-running",
+        trigger: "scheduled",
+      });
+      const state = yield* bed.projectState(projectA);
+      expect(state).toMatchObject({
+        lastOccurrenceStatus: "running",
+        skippedRunCount: 1,
+        lastSkipReason: "thread-running",
+        lastSkippedAt: "2026-01-02T00:10:00.000Z",
+      });
+    }).pipe(Effect.provide(TestClock.layer())),
+  );
+
+  it.effect("Run now starts immediately and a second request skips a busy thread", () =>
+    Effect.gen(function* () {
+      const bed = yield* makeTestBed();
+      yield* bed.seedProject(projectA);
+      yield* bed.seedSchedule();
+
+      yield* bed.dispatch({
+        type: "project.schedule.run",
+        commandId: cmd("manual-run-1"),
+        scheduleId,
+        createdAt: "2026-01-02T00:01:00.000Z",
+      });
+      yield* at("2026-01-02T00:01:00.000Z");
+      yield* bed.reactor.sweepNow;
+      expect(ofType(bed.dispatched, "schedule.occurrence.start").at(-1)).toMatchObject({
+        trigger: "manual",
+      });
+
+      yield* bed.dispatch({
+        type: "project.schedule.run",
+        commandId: cmd("manual-run-2"),
+        scheduleId,
+        createdAt: "2026-01-02T00:02:00.000Z",
+      });
+      yield* at("2026-01-02T00:02:00.000Z");
+      yield* bed.reactor.sweepNow;
+
+      expect(ofType(bed.dispatched, "thread.turn.start")).toHaveLength(1);
+      expect(ofType(bed.dispatched, "schedule.occurrence.skip").at(-1)).toMatchObject({
+        occurrenceKey: `manual:manual-run-2:${projectA}`,
+        reason: "thread-running",
+        trigger: "manual",
+      });
+      const state = yield* bed.projectState(projectA);
+      expect(state).toMatchObject({
+        lastOccurrenceStatus: "running",
+        skippedRunCount: 1,
+        manualRunRequestKey: null,
+      });
     }).pipe(Effect.provide(TestClock.layer())),
   );
 });

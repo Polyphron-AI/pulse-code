@@ -31,6 +31,8 @@ import {
   ProjectScheduleDeletedPayload,
   ProjectSchedulePauseCommand,
   ProjectSchedulePausedPayload,
+  ProjectScheduleRunCommand,
+  ProjectScheduleRunRequestedPayload,
   ProjectScheduleResumeCommand,
   ProjectScheduleResumedPayload,
   ProjectScheduleUpdateCommand,
@@ -39,6 +41,8 @@ import {
   ScheduleOccurrenceCompletedPayload,
   ScheduleOccurrenceFailCommand,
   ScheduleOccurrenceFailedPayload,
+  ScheduleOccurrenceSkipCommand,
+  ScheduleOccurrenceSkippedPayload,
   ScheduleOccurrenceStartCommand,
   ScheduleOccurrenceStartedPayload,
   ThreadOrigin,
@@ -926,6 +930,7 @@ const DispatchableClientOrchestrationCommand = Schema.Union([
   ProjectSchedulePauseCommand,
   ProjectScheduleResumeCommand,
   ProjectScheduleDeleteCommand,
+  ProjectScheduleRunCommand,
 ]);
 export type DispatchableClientOrchestrationCommand =
   typeof DispatchableClientOrchestrationCommand.Type;
@@ -959,6 +964,7 @@ export const ClientOrchestrationCommand = Schema.Union([
   ProjectSchedulePauseCommand,
   ProjectScheduleResumeCommand,
   ProjectScheduleDeleteCommand,
+  ProjectScheduleRunCommand,
 ]);
 export type ClientOrchestrationCommand = typeof ClientOrchestrationCommand.Type;
 
@@ -1048,6 +1054,7 @@ const InternalOrchestrationCommand = Schema.Union([
   ScheduleOccurrenceStartCommand,
   ScheduleOccurrenceCompleteCommand,
   ScheduleOccurrenceFailCommand,
+  ScheduleOccurrenceSkipCommand,
 ]);
 export type InternalOrchestrationCommand = typeof InternalOrchestrationCommand.Type;
 
@@ -1092,9 +1099,11 @@ export const OrchestrationEventType = Schema.Literals([
   "project.schedule.paused",
   "project.schedule.resumed",
   "project.schedule.deleted",
+  "project.schedule.run-requested",
   "schedule.occurrence.started",
   "schedule.occurrence.completed",
   "schedule.occurrence.failed",
+  "schedule.occurrence.skipped",
 ]);
 export type OrchestrationEventType = typeof OrchestrationEventType.Type;
 
@@ -1529,6 +1538,11 @@ export const OrchestrationEvent = Schema.Union([
   }),
   Schema.Struct({
     ...EventBaseFields,
+    type: Schema.Literal("project.schedule.run-requested"),
+    payload: ProjectScheduleRunRequestedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
     type: Schema.Literal("schedule.occurrence.started"),
     payload: ScheduleOccurrenceStartedPayload,
   }),
@@ -1541,6 +1555,11 @@ export const OrchestrationEvent = Schema.Union([
     ...EventBaseFields,
     type: Schema.Literal("schedule.occurrence.failed"),
     payload: ScheduleOccurrenceFailedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("schedule.occurrence.skipped"),
+    payload: ScheduleOccurrenceSkippedPayload,
   }),
 ]);
 export type OrchestrationEvent = typeof OrchestrationEvent.Type;
