@@ -24,7 +24,7 @@ The first product should be a small inspectable department work queue:
 - per-task budgets, leases, retries, evidence, and receipts;
 - one authoritative state machine owned by Pulse.
 
-This exceeds the current [Scheduled Chats design](../../plans/2026-08-21-scheduled-chats-design.md), which explicitly excludes a generic autonomous workflow engine. It needs its own product goal and contracts rather than an accidental expansion of Scheduled Chats or the [OMP provider design](../../plans/2026-08-24-omp-agent-provider-design.md).
+This exceeds the current [Scheduled Chats design](../../plans/2026-08-21-scheduled-chats-design.md), which explicitly excludes a generic autonomous workflow engine. It needs its own product goal and contracts rather than an accidental expansion of Scheduled Chats or a future OMP provider integration.
 
 ## Arena result
 
@@ -71,7 +71,7 @@ MetaGPT formalizes artifact handoffs. Hermes users converge on workspaces, work 
 
 ### Human intervention must be durable state
 
-The Grok Bot brokerage case is the counterexample: approval cards expired, pending actions were forgotten, and work died. An approval needs an owner, reason, proposed effect, expiry policy, and resume path. Pulse’s mobile **Needs input / Working / Completed** presentation is a useful surface ([mobile agents](../../user/mobile-agents.md)); it needs a durable business object behind it.
+The Grok Bot brokerage case is the counterexample: approval cards expired, pending actions were forgotten, and work died. An approval needs an owner, reason, proposed effect, expiry policy, and resume path. Pulse should expose durable **Needs input / Working / Completed** states consistently across clients.
 
 ## Why AI-company attempts fail
 

@@ -750,6 +750,9 @@ export function ScheduledChatsSettingsPanel() {
                               {latest.lastOccurrenceFailureReason
                                 ? ` · ${latest.lastOccurrenceFailureReason}`
                                 : ""}
+                              {latest.lastOccurrenceFailureMessage
+                                ? ` · ${latest.lastOccurrenceFailureMessage}`
+                                : ""}
                             </p>
                           ) : (
                             <p className="mt-2 text-xs text-muted-foreground">No runs yet</p>

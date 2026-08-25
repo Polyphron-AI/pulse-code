@@ -14,6 +14,7 @@ import {
   type OrchestrationEvent,
   type OrchestrationReadModel,
   type OrchestrationSession,
+  type ScheduleHandoffGitPolicy,
   type ScheduleInterval,
   type ScheduleScope,
 } from "@t3tools/contracts";
@@ -38,6 +39,11 @@ import {
   type OrchestrationEngineShape,
 } from "../Services/OrchestrationEngine.ts";
 import { ScheduleAuthProbe, type ScheduleAuthProbeResult } from "../Services/ScheduleAuthProbe.ts";
+import {
+  ScheduleHandoffGit,
+  ScheduleHandoffGitError,
+  type ScheduleHandoffGitInput,
+} from "../Services/ScheduleHandoffGit.ts";
 import { ScheduleProviderInstances } from "../Services/ScheduleProviderInstances.ts";
 import { ScheduleReactor } from "../Services/ScheduleReactor.ts";
 import { ScheduleWorkingTreeProbe } from "../Services/ScheduleWorkingTreeProbe.ts";
@@ -93,6 +99,7 @@ const makeTestBed = Effect.fn("makeTestBed")(function* (options?: {
   readonly dirtyRoots?: ReadonlyArray<string>;
   /** Configured provider instance ids; defaults to the seed selections. */
   readonly configuredInstanceIds?: ReadonlyArray<ProviderInstanceId>;
+  readonly handoffGitFailure?: string;
 }) {
   const crypto = yield* Crypto.Crypto;
   const modelRef = yield* Ref.make(createEmptyReadModel(baseNow));
@@ -101,6 +108,7 @@ const makeTestBed = Effect.fn("makeTestBed")(function* (options?: {
   );
   const receipts = new Set<string>();
   const dispatched: Array<DispatchedCommand> = [];
+  const handoffGitCalls: Array<ScheduleHandoffGitInput> = [];
 
   const dispatch: OrchestrationEngineShape["dispatch"] = (command) =>
     Effect.gen(function* () {
@@ -148,6 +156,25 @@ const makeTestBed = Effect.fn("makeTestBed")(function* (options?: {
   const reactorLayer = makeScheduleReactorLive().pipe(
     Layer.provide(Layer.succeed(OrchestrationEngineService, engine)),
     Layer.provide(Layer.succeed(ScheduleAuthProbe, { probe: () => Ref.get(authRef) })),
+    Layer.provide(
+      Layer.succeed(ScheduleHandoffGit, {
+        apply: (input) =>
+          Effect.sync(() => {
+            handoffGitCalls.push(input);
+          }).pipe(
+            Effect.flatMap(() =>
+              options?.handoffGitFailure === undefined
+                ? Effect.void
+                : Effect.fail(
+                    new ScheduleHandoffGitError({
+                      workspaceRoot: input.workspaceRoot,
+                      detail: options.handoffGitFailure,
+                    }),
+                  ),
+            ),
+          ),
+      }),
+    ),
     Layer.provide(
       Layer.succeed(ScheduleWorkingTreeProbe, {
         isDirty: (workspaceRoot: string) => Effect.succeed(dirtyRoots.has(workspaceRoot)),
@@ -208,6 +235,7 @@ const makeTestBed = Effect.fn("makeTestBed")(function* (options?: {
     readonly minuteLocal?: number;
     readonly timezone?: string;
     readonly interval?: ScheduleInterval;
+    readonly handoffGitPolicy?: ScheduleHandoffGitPolicy;
     readonly modelSelection?: typeof modelSelection;
   }) =>
     dispatch({
@@ -219,6 +247,9 @@ const makeTestBed = Effect.fn("makeTestBed")(function* (options?: {
       minuteLocal: input?.minuteLocal ?? 0,
       timezone: input?.timezone ?? "UTC",
       ...(input?.interval !== undefined ? { interval: input.interval } : {}),
+      ...(input?.handoffGitPolicy !== undefined
+        ? { handoffGitPolicy: input.handoffGitPolicy }
+        : {}),
       prompt: "Daily check-in: read the handoff and continue.",
       ...(input?.modelSelection !== undefined ? { modelSelection: input.modelSelection } : {}),
       createdAt: baseNow,
@@ -293,6 +324,7 @@ const makeTestBed = Effect.fn("makeTestBed")(function* (options?: {
     reactor,
     dispatch,
     dispatched,
+    handoffGitCalls,
     readModel,
     projectState,
     seedProject,
@@ -601,7 +633,7 @@ it.layer(NodeServices.layer)("ScheduleReactor", (it) => {
         const root = yield* fs.makeTempDirectoryScoped({ prefix: "sched-handoff-" });
         const bed = yield* makeTestBed();
         yield* bed.seedProject(projectA, root);
-        yield* bed.seedSchedule();
+        yield* bed.seedSchedule({ handoffGitPolicy: "commit" });
 
         yield* at("2026-01-02T09:00:00.000Z");
         yield* bed.reactor.sweepNow;
@@ -631,6 +663,14 @@ it.layer(NodeServices.layer)("ScheduleReactor", (it) => {
 
         const contents = yield* fs.readFileString(path.join(root, "handoff", "2026-01-02.md"));
         expect(contents).toBe("Morning summary for Jan 2.");
+        expect(bed.handoffGitCalls).toEqual([
+          {
+            workspaceRoot: root,
+            handoffRelativePath: "handoff/2026-01-02.md",
+            handoffPathTemplate: "handoff/{date}.md",
+            policy: "commit",
+          },
+        ]);
       }),
     ).pipe(Effect.provide(TestClock.layer())),
   );
@@ -674,6 +714,42 @@ it.layer(NodeServices.layer)("ScheduleReactor", (it) => {
         expect(state).toMatchObject({
           lastOccurrenceStatus: "failed",
           lastOccurrenceFailureReason: "error",
+        });
+      }),
+    ).pipe(Effect.provide(TestClock.layer())),
+  );
+
+  it.effect("a handoff Git policy failure is visible on the failed occurrence", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const root = yield* fs.makeTempDirectoryScoped({ prefix: "sched-handoff-git-fail-" });
+        const bed = yield* makeTestBed({ handoffGitFailure: "Git hook rejected the commit." });
+        yield* bed.seedProject(projectA, root);
+        yield* bed.seedSchedule({ handoffGitPolicy: "commit" });
+
+        yield* at("2026-01-02T09:00:00.000Z");
+        yield* bed.reactor.sweepNow;
+        const running = yield* bed.projectState(projectA);
+        yield* bed.settleTurn({
+          threadId: running!.threadId!,
+          turnId: "turn-git-failure",
+          text: "Handoff written but not committed.",
+          startAt: "2026-01-02T09:00:30.000Z",
+          endAt: "2026-01-02T09:05:00.000Z",
+        });
+        yield* TestClock.adjust(Duration.minutes(6));
+        yield* bed.reactor.sweepNow;
+
+        expect(ofType(bed.dispatched, "schedule.occurrence.complete")).toHaveLength(0);
+        expect(ofType(bed.dispatched, "schedule.occurrence.fail").at(-1)?.message).toContain(
+          "Git hook rejected the commit.",
+        );
+        expect(yield* bed.projectState(projectA)).toMatchObject({
+          lastOccurrenceStatus: "failed",
+          lastOccurrenceFailureReason: "error",
+          lastOccurrenceFailureMessage:
+            "Scheduled handoff Git policy failed in '" + root + "': Git hook rejected the commit.",
         });
       }),
     ).pipe(Effect.provide(TestClock.layer())),

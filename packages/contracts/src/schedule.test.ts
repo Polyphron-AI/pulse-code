@@ -48,6 +48,7 @@ describe("OrchestrationSchedule", () => {
       handoffPathTemplate: "notes/{date}.md",
       maxRunMinutes: 120,
       maxTurnMinutes: 1,
+      handoffGitPolicy: "commit",
       workflowScriptRef: "scripts/daily.md",
       projectStates: [
         {
@@ -61,6 +62,7 @@ describe("OrchestrationSchedule", () => {
       ],
     });
     expect(decoded.maxRunMinutes).toBe(120);
+    expect(decoded.handoffGitPolicy).toBe("commit");
     expect(decoded.projectStates[0]?.lastOccurrenceFailureReason).toBe("timeout:turn");
   });
 
