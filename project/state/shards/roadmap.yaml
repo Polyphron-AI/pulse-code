@@ -3,7 +3,7 @@ meta:
   capacity_note: "Planning assumption: one maintainer with agent support; confirm before execution."
   reserve_floor: 25
   reserve_rationale: "One of four Now slots is reserved for compatibility and credential-safety work because integration failures affect every client and remote mode."
-  snapshot: 2026-08-21
+  snapshot: 2026-08-22
 
 themes:
   - id: T1
@@ -270,6 +270,54 @@ items:
       - "2026-08-19 created in now as the reserved protective outcome."
       - "2026-08-20 compatibility matrix verified with zero detected regressions; item remains active until the integration work is committed/released and post-release metric evidence exists."
 
+  - id: R-2026-08-21-scheduled-chats
+    title: "Scheduled Chats daily check-in loop"
+    theme: T1
+    horizon: next
+    stage: shaped
+    kind: feature
+    outcome: "Minimize the daily manual reconstruction of project state by running one bounded, reviewable agent check-in per schedule."
+    need: "When I start my day, I want a scheduled agent run to have already read yesterday's handoff and written today's briefing, so I begin working instead of reconstructing."
+    directions:
+      - "Event-sourced schedules with a dumb sweep reactor; occurrence = a turn in one persistent thread; fresh provider session per fire with the handoff file as the only carried context."
+      - "Project scope plus environment scope fanning out one turn per targeted repo."
+    failure_mode: "The daily check-in grows into a generic autonomous workflow engine, or unattended runs become silent, unbounded, or double-fired."
+    appetite: "one walking-skeleton cycle (contracts/decider/reactor) plus one UI cycle"
+    approach: "Decider-enforced exactly-once, server-enforced time leashes, pre-flight auth probe, and per-turn checkpoint diffs as the preview story; single editor in Settings, threads inline."
+    rabbit_holes:
+      - "cron expressions and event triggers"
+      - "run chaining and multi-step automations"
+      - "notification fan-out (belongs to collaboration-notifications)"
+    no_gos:
+      - "no unpreviewable mutation: every run keeps an ordinary reviewable checkpoint diff"
+      - "no canned mutation prompts shipped by Pulse Code"
+      - "no silent skips: every non-run is a visible failed occurrence with a reason"
+    dod:
+      - "Schedules, occurrences, and thread origin are typed contracts; exactly-once proven by decider tests across restart/double-tick/catch-up."
+      - "Time leashes interrupt through the normal turn-interrupt path; timeout writes no handoff."
+      - "Web/desktop editor at Settings → Scheduled Chats, mobile settings-stack editor, inline badged threads, pause/resume/delete everywhere shown."
+      - "Per-provider scheduled-run support is a stated decision per adapter."
+      - "docs/user page states the host-availability constraint plainly."
+    evidence:
+      - {
+          type: user_evidence,
+          note: "The maintainer specified the daily check-in loop, handoff-file memory, persistent thread, fresh sessions, run/turn limits, and multi-repo scope in the 2026-08-21 design session.",
+        }
+      - {
+          type: plans_estimates,
+          note: "docs/plans/2026-08-21-scheduled-chats-design.md decides the domain model, scheduler mechanics, limits, scopes, and UI; PRD 12 and CR-2026-08-21-scheduled-chats carry the requirement.",
+        }
+    rice: { reach: H, impact: H, effort: M }
+    prd_refs:
+      - 12-scheduled-chats#daily-loop
+      - 12-scheduled-chats#trust-rails
+      - 12-scheduled-chats#surfaces
+    blocked_by: []
+    metric: { name: "mornings started from a fresh handoff", baseline: null, target: null }
+    status: active
+    history:
+      - "2026-08-21 created in next from the scheduled-chats design session; promotion to now requires an explicit slot tradeoff against the active integration items."
+
   - id: R-2026-08-21-mobile-file-link-actions
     title: Reliable mobile file-link actions
     theme: T1
@@ -310,6 +358,57 @@ items:
     status: active
     history:
       - 2026-08-21 created in now after design approval and an explicit build request.
+
+  - id: R-2026-08-22-document-link-durability
+    title: Durable document links
+    theme: T1
+    horizon: now
+    stage: shaped
+    kind: feature
+    outcome: Let a user open a linked project document days later from a phone on a tunnelled connection, or learn precisely why they cannot.
+    need: When I open an old thread away from my machine, I want the documents it links to still open, and I want to know what the tap will cost before it starts.
+    directions:
+      - Treat a document link as a thread-plus-path reference that is re-resolved and re-streamed on every tap.
+      - Issue download capabilities for any regular workspace file, bounded to one exact non-dot path.
+      - Present name, size, progress, cancellation, and a distinct state for a document that is gone.
+    failure_mode: The link only works while the message is fresh, every failure reads the same, or a tunnelled phone starts a large transfer with no warning and no way out.
+    appetite: one focused capability and mobile cycle
+    approach: Add an optional download intent to the workspace-file asset, return size and media type from the mint, and make the mobile sheet type-aware with progress and cancel.
+    rabbit_holes:
+      - server-side artifact store, retention windows, or garbage collection
+      - serving a document as of a past turn from checkpoint refs
+      - hand-authoring and regenerating document icon art, which is gated on a macOS-only rasterization step
+    no_gos:
+      - no capability outside the thread workspace root, no dot-prefixed path segments, no sibling reach from a download claim
+      - no required contract change for existing asset callers
+      - no change to web, desktop, or Files-tab behavior
+    dod:
+      - A link to a non-previewable document opens through the native chooser on local, remote/relay, and tunnel connections.
+      - A document that is no longer in the project reports that distinctly from a disconnected environment or a missing app.
+      - Large transfers state their size before starting and can be cancelled.
+      - Focused server and mobile tests plus contracts, server, and mobile typechecks pass.
+      - docs/user records the behavior and docs/internals records asset intents.
+    evidence:
+      - type: user_evidence
+        note: The user asked on 2026-08-22 for document links that still open five days later, re-streaming the original, presented for a phone connected over a tunnel, and chose re-resolution over a durable artifact store.
+      - type: repository_evidence
+        note: The capability gate rejects every non-browser-previewable type, mobile collapses all failures into one alert, and progress plus cancellation already exist on the download call mobile makes.
+    rice: { reach: M, impact: L, effort: M }
+    prd_refs:
+      - 14-document-link-durability#durable-reference
+      - 14-document-link-durability#any-document
+      - 14-document-link-durability#honest-state
+      - 14-document-link-durability#remote-aware-presentation
+    blocked_by: []
+    metric:
+      {
+        name: linked documents openable from mobile after the thread goes cold,
+        baseline: null,
+        target: 100,
+      }
+    status: active
+    history:
+      - 2026-08-22 created in now as a continuation of R-2026-08-21-mobile-file-link-actions rather than a new slot claim; it reopens that item's persistent-download rabbit hole with a no-storage approach and awaits design approval before build.
 
   - id: R-2026-08-22-desktop-update-rollback
     title: Desktop in-app update with safe rollback
