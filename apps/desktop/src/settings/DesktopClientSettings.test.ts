@@ -17,6 +17,7 @@ const clientSettings: ClientSettings = {
   browserDefaultZoomFactor: 1.25,
   browserDefaultAppearance: "dark",
   browserAutoShowFloatingPreview: false,
+  composerBusyBehavior: "queue",
   confirmQuit: true,
   confirmThreadArchive: true,
   confirmThreadDelete: false,
