@@ -76,9 +76,11 @@ function commandToAggregateRef(command: OrchestrationCommand): {
     case "project.schedule.pause":
     case "project.schedule.resume":
     case "project.schedule.delete":
+    case "project.schedule.run":
     case "schedule.occurrence.start":
     case "schedule.occurrence.complete":
     case "schedule.occurrence.fail":
+    case "schedule.occurrence.skip":
       return {
         aggregateKind: "schedule",
         aggregateId: command.scheduleId,

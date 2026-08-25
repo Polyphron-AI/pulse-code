@@ -8,11 +8,13 @@ import {
   type DeleteProjectScheduleInput,
   type PauseProjectScheduleInput,
   type ResumeProjectScheduleInput,
+  type RunProjectScheduleInput,
   type UpdateProjectScheduleInput,
   createProjectSchedule,
   deleteProjectSchedule,
   pauseProjectSchedule,
   resumeProjectSchedule,
+  runProjectSchedule,
   updateProjectSchedule,
 } from "../operations/commands.ts";
 import {
@@ -78,6 +80,12 @@ export function createOrchestrationEnvironmentAtoms<R, E>(
     resumeSchedule: createEnvironmentCommand(runtime, {
       label: "environment-data:commands:schedule:resume",
       execute: (input: ResumeProjectScheduleInput) => resumeProjectSchedule(input),
+      scheduler: scheduleScheduler,
+      concurrency: scheduleConcurrency,
+    }),
+    runSchedule: createEnvironmentCommand(runtime, {
+      label: "environment-data:commands:schedule:run",
+      execute: (input: RunProjectScheduleInput) => runProjectSchedule(input),
       scheduler: scheduleScheduler,
       concurrency: scheduleConcurrency,
     }),

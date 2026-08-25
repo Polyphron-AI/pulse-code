@@ -5,6 +5,7 @@ import {
   MessageId,
   ThreadId,
   scheduleOccurrenceKey,
+  scheduleIntervalMinutes,
   scheduleSkipIfDirty,
   scheduleThreadOrigin,
   type ModelSelection,
@@ -58,6 +59,41 @@ const epochDayToIsoDate = (epochDay: number): string =>
 /** Extract the local date from an occurrence key (`scheduled:<sid>:<date>:<pid>`). */
 const occurrenceKeyLocalDate = (occurrenceKey: string): string | null =>
   /(\d{4}-\d{2}-\d{2})/.exec(occurrenceKey)?.[1] ?? null;
+
+const occurrenceKeyEpochMinute = (occurrenceKey: string | null): number | null => {
+  const marker = occurrenceKey?.lastIndexOf("@") ?? -1;
+  const value = marker < 0 ? Number.NaN : Number(occurrenceKey!.slice(marker + 1).split(":")[0]);
+  return Number.isSafeInteger(value) ? value : null;
+};
+
+const localSlot = (timezone: string, epochMinute: number) => {
+  const zone = Option.getOrNull(DateTime.zoneMakeNamed(timezone));
+  if (zone === null) return null;
+  const parts = DateTime.toParts(DateTime.setZone(DateTime.makeUnsafe(epochMinute * 60_000), zone));
+  const dateLocal = `${pad(parts.year, 4)}-${pad(parts.month, 2)}-${pad(parts.day, 2)}`;
+  return {
+    dateLocal,
+    slotLocal: `${dateLocal}T${pad(parts.hour, 2)}-${pad(parts.minute, 2)}@${epochMinute}`,
+  };
+};
+
+const dueIntervalSlot = (
+  schedule: OrchestrationSchedule,
+  lastKey: string | null,
+  nowMillis: number,
+) => {
+  if (schedule.interval == null) return null;
+  const intervalMinutes = scheduleIntervalMinutes(schedule.interval);
+  const createdMillis = Date.parse(schedule.intervalAnchorAt ?? schedule.createdAt);
+  if (intervalMinutes === null || Number.isNaN(createdMillis)) return null;
+  const anchorMinute = Math.floor(createdMillis / 60_000);
+  const nowMinute = Math.floor(nowMillis / 60_000);
+  const elapsed = nowMinute - anchorMinute;
+  if (elapsed < intervalMinutes) return null;
+  const dueMinute = anchorMinute + Math.floor(elapsed / intervalMinutes) * intervalMinutes;
+  if (dueMinute <= (occurrenceKeyEpochMinute(lastKey) ?? anchorMinute)) return null;
+  return localSlot(schedule.timezone, dueMinute);
+};
 
 export interface ComputeDueLocalDatesInput {
   readonly hourLocal: number;
@@ -171,6 +207,7 @@ const makeScheduleReactor = (options?: ScheduleReactorLiveOptions) =>
       readonly workspaceRoot: string;
       readonly handoffPathTemplate: string;
       readonly dateLocal: string;
+      readonly includeCurrentDate: boolean;
     }) =>
       Effect.gen(function* () {
         if (path.isAbsolute(input.handoffPathTemplate)) return null;
@@ -178,7 +215,8 @@ const makeScheduleReactor = (options?: ScheduleReactorLiveOptions) =>
         if (startEpochDay === null) return null;
         const templateHasDate = input.handoffPathTemplate.includes("{date}");
         const lookback = templateHasDate ? HANDOFF_LOOKBACK_DAYS : 1;
-        for (let offset = 1; offset <= lookback; offset += 1) {
+        const firstOffset = input.includeCurrentDate ? 0 : 1;
+        for (let offset = firstOffset; offset <= lookback; offset += 1) {
           const date = epochDayToIsoDate(startEpochDay - offset);
           const relative = input.handoffPathTemplate.replaceAll("{date}", date);
           const filePath = path.join(input.workspaceRoot, relative);
@@ -422,14 +460,15 @@ const makeScheduleReactor = (options?: ScheduleReactorLiveOptions) =>
       readonly dateLocal: string;
       readonly model: OrchestrationReadModel;
       readonly nowIso: string;
+      readonly occurrenceKey?: string;
+      readonly trigger?: "scheduled" | "manual";
     }) =>
       Effect.gen(function* () {
         const { schedule, projectId, dateLocal, model } = input;
-        const occurrenceKey = scheduleOccurrenceKey({
-          scheduleId: schedule.id,
-          dateLocal,
-          projectId,
-        });
+        const occurrenceKey =
+          input.occurrenceKey ??
+          scheduleOccurrenceKey({ scheduleId: schedule.id, dateLocal, projectId });
+        const trigger = input.trigger ?? "scheduled";
         const base = `scheduled:${schedule.id}:${occurrenceKey}`;
         const projectState = schedule.projectStates.find((state) => state.projectId === projectId);
         const existingThread =
@@ -438,6 +477,30 @@ const makeScheduleReactor = (options?: ScheduleReactorLiveOptions) =>
                 (thread) => thread.id === projectState.threadId && thread.deletedAt === null,
               ) ?? null)
             : null;
+
+        if (
+          projectState?.lastOccurrenceStatus === "running" ||
+          existingThread?.latestTurn?.state === "running" ||
+          existingThread?.session?.status === "running"
+        ) {
+          yield* engine.dispatch({
+            type: "schedule.occurrence.skip",
+            commandId: CommandId.make(`${base}:skip-thread-running`),
+            scheduleId: schedule.id,
+            occurrenceKey,
+            projectId,
+            reason: "thread-running",
+            skippedAt: input.nowIso,
+            trigger,
+          });
+          yield* Effect.logInfo("schedule.reactor.occurrence-skipped", {
+            scheduleId: schedule.id,
+            projectId,
+            occurrenceKey,
+            reason: "thread-running",
+          });
+          return;
+        }
 
         // Prefer the schedule's own model selection; otherwise borrow the
         // persistent thread's, falling back to the project's most recent
@@ -468,6 +531,7 @@ const makeScheduleReactor = (options?: ScheduleReactorLiveOptions) =>
             projectId,
             threadId,
             startedAt: input.nowIso,
+            trigger,
           });
           yield* engine.dispatch({
             type: "schedule.occurrence.fail",
@@ -555,6 +619,7 @@ const makeScheduleReactor = (options?: ScheduleReactorLiveOptions) =>
           projectId,
           threadId,
           startedAt: input.nowIso,
+          trigger,
         });
 
         const handoff =
@@ -564,6 +629,7 @@ const makeScheduleReactor = (options?: ScheduleReactorLiveOptions) =>
                 workspaceRoot: project.workspaceRoot,
                 handoffPathTemplate: schedule.handoffPathTemplate,
                 dateLocal,
+                includeCurrentDate: schedule.interval != null,
               });
         // Server-owned prefix: the agent that knows its leash budgets its own
         // work, and a fixed handoff shape is what lets day-15's run use
@@ -624,9 +690,66 @@ const makeScheduleReactor = (options?: ScheduleReactorLiveOptions) =>
         // occurrence past its budget.
         yield* enforceWatchdogs(schedule, nowMillis, nowIso);
         if (schedule.pausedAt !== null) continue;
+        const runningState = schedule.projectStates.find(
+          (state) => state.lastOccurrenceStatus === "running",
+        );
+        const pendingManual = schedule.projectStates.find(
+          (state) => state.manualRunRequestKey != null,
+        );
+        if (pendingManual?.manualRunRequestKey != null) {
+          if (runningState != null && runningState.projectId !== pendingManual.projectId) {
+            continue;
+          }
+          const slot = localSlot(schedule.timezone, Math.floor(nowMillis / 60_000));
+          yield* fireOccurrence({
+            schedule,
+            projectId: pendingManual.projectId,
+            dateLocal: slot?.dateLocal ?? DateTime.formatIsoDateUtc(nowUtc),
+            occurrenceKey: pendingManual.manualRunRequestKey,
+            trigger: "manual",
+            model,
+            nowIso,
+          }).pipe(
+            Effect.catch((error) =>
+              Effect.logWarning("schedule.reactor.manual-fire-failed", {
+                scheduleId: schedule.id,
+                projectId: pendingManual.projectId,
+                error,
+              }),
+            ),
+          );
+          continue;
+        }
         // One running occurrence per schedule keeps catch-up and environment
         // fan-out sequential instead of bursting provider sessions.
-        if (schedule.projectStates.some((state) => state.lastOccurrenceStatus === "running")) {
+        if (runningState != null) {
+          const cursor =
+            runningState.lastScheduledOccurrenceKey ?? runningState.lastOccurrenceKey ?? null;
+          const intervalSlot = dueIntervalSlot(schedule, cursor, nowMillis);
+          if (intervalSlot != null) {
+            const occurrenceKey = scheduleOccurrenceKey({
+              scheduleId: schedule.id,
+              dateLocal: intervalSlot.slotLocal,
+              projectId: runningState.projectId,
+            });
+            yield* fireOccurrence({
+              schedule,
+              projectId: runningState.projectId,
+              dateLocal: intervalSlot.dateLocal,
+              occurrenceKey,
+              model,
+              nowIso,
+            }).pipe(
+              Effect.catch((error) =>
+                Effect.logWarning("schedule.reactor.skip-overlap-failed", {
+                  scheduleId: schedule.id,
+                  projectId: runningState.projectId,
+                  occurrenceKey,
+                  error,
+                }),
+              ),
+            );
+          }
           continue;
         }
 
@@ -639,14 +762,22 @@ const makeScheduleReactor = (options?: ScheduleReactorLiveOptions) =>
             (state) => state.projectId === projectId,
           );
           if (projectState?.lastOccurrenceStatus === "running") continue;
-          const dueDates = computeDueLocalDates({
-            hourLocal: schedule.hourLocal,
-            minuteLocal: schedule.minuteLocal,
-            timezone: schedule.timezone,
-            createdAt: schedule.createdAt,
-            lastOccurrenceKey: projectState?.lastOccurrenceKey ?? null,
-            nowMillis,
-          });
+          const cursor =
+            projectState?.lastScheduledOccurrenceKey ?? projectState?.lastOccurrenceKey ?? null;
+          const intervalSlot = dueIntervalSlot(schedule, cursor, nowMillis);
+          const dueDates =
+            schedule.interval == null
+              ? computeDueLocalDates({
+                  hourLocal: schedule.hourLocal,
+                  minuteLocal: schedule.minuteLocal,
+                  timezone: schedule.timezone,
+                  createdAt: schedule.createdAt,
+                  lastOccurrenceKey: cursor,
+                  nowMillis,
+                })
+              : intervalSlot === null
+                ? []
+                : [intervalSlot.slotLocal];
           if (dueDates.length > 0) dueFires.push({ projectId, dueDates });
         }
         if (dueFires.length === 0) continue;
@@ -669,11 +800,21 @@ const makeScheduleReactor = (options?: ScheduleReactorLiveOptions) =>
         yield* Ref.set(lastFireStartRef, { scheduleId: schedule.id, atMillis: nowMillis });
 
         const nextFire = dueFires[0]!;
-        const dateLocal = nextFire.dueDates[0]!;
+        const slotLocal = nextFire.dueDates[0]!;
+        const dateLocal = occurrenceKeyLocalDate(slotLocal) ?? slotLocal;
         yield* fireOccurrence({
           schedule,
           projectId: nextFire.projectId,
           dateLocal,
+          ...(schedule.interval == null
+            ? {}
+            : {
+                occurrenceKey: scheduleOccurrenceKey({
+                  scheduleId: schedule.id,
+                  dateLocal: slotLocal,
+                  projectId: nextFire.projectId,
+                }),
+              }),
           model,
           nowIso,
         }).pipe(

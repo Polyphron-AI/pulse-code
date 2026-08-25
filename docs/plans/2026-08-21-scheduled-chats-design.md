@@ -4,6 +4,32 @@ Status: proposal (not on roadmap; requires a change request under `prd/change-re
 and a `roadmap.yaml` slot tradeoff before build)
 Date: 2026-08-21
 
+Revision: 2026-08-25. The shipped follow-up expands the trigger from daily-only
+to an elapsed interval expressed as a positive value plus minutes, hours, days,
+or weeks. Fractional values are accepted when they resolve to a whole number of
+minutes (for example, 1.5 hours becomes 90 minutes). It also adds an event-sourced
+Run now request and an event-sourced skipped occurrence when the schedule's
+persistent thread is already running. The read model retains the skipped count,
+time, and reason. This revision supersedes the daily-only trigger constraint
+below without adding cron expressions, event triggers, chaining, or a generic
+workflow engine. Existing daily-at-time schedules remain backward compatible.
+
+Revision: 2026-08-25, handoff Git policy. New schedules choose how server-owned
+handoff documents participate in Git:
+
+- **Ignore** adds the schedule's date-shaped handoff pattern to the targeted
+  project's root `.gitignore` and commits only that clean policy-file change.
+- **Commit** writes the handoff and creates a commit containing only that
+  generated file.
+
+The Git adapter refuses to include unrelated staged or working-tree changes. A
+dirty `.gitignore`, missing repository, hook failure, or concurrent branch move
+fails the occurrence visibly instead of weakening the selected policy. An
+environment-wide schedule applies the policy independently in every targeted
+project because handoffs contain project-specific continuity; there is no shared
+environment workspace. Schedules created before this field existed retain their
+unmanaged behavior until edited.
+
 ## One-line pitch
 
 A project can run one agent chat per day at a chosen time, from a fixed prompt, that

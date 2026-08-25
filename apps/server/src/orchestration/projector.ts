@@ -45,9 +45,11 @@ import {
   ProjectSchedulePausedPayload,
   ProjectScheduleResumedPayload,
   ProjectScheduleDeletedPayload,
+  ProjectScheduleRunRequestedPayload,
   ScheduleOccurrenceStartedPayload,
   ScheduleOccurrenceCompletedPayload,
   ScheduleOccurrenceFailedPayload,
+  ScheduleOccurrenceSkippedPayload,
 } from "./Schemas.ts";
 
 type ThreadPatch = Partial<Omit<OrchestrationThread, "id" | "projectId">>;
@@ -114,6 +116,12 @@ function updateScheduleProjectState(
       lastOccurrenceFailureReason: existing?.lastOccurrenceFailureReason ?? null,
       lastOccurrenceAt: existing?.lastOccurrenceAt ?? null,
       consecutiveFailures: existing?.consecutiveFailures ?? 0,
+      skippedRunCount: existing?.skippedRunCount ?? 0,
+      lastSkipReason: existing?.lastSkipReason ?? null,
+      lastSkippedAt: existing?.lastSkippedAt ?? null,
+      lastScheduledOccurrenceKey: existing?.lastScheduledOccurrenceKey ?? null,
+      manualRunRequestKey: existing?.manualRunRequestKey ?? null,
+      manualRunRequestedAt: existing?.manualRunRequestedAt ?? null,
       ...patch,
     };
     return {
@@ -875,6 +883,9 @@ export function projectEvent(
             scope: payload.scope,
             hourLocal: payload.hourLocal,
             minuteLocal: payload.minuteLocal,
+            interval: payload.interval ?? null,
+            intervalAnchorAt: payload.interval == null ? null : payload.createdAt,
+            handoffGitPolicy: payload.handoffGitPolicy ?? null,
             timezone: payload.timezone,
             prompt: payload.prompt,
             workflowScriptRef: payload.workflowScriptRef ?? null,
@@ -912,6 +923,15 @@ export function projectEvent(
             ...(payload.scope !== undefined ? { scope: payload.scope } : {}),
             ...(payload.hourLocal !== undefined ? { hourLocal: payload.hourLocal } : {}),
             ...(payload.minuteLocal !== undefined ? { minuteLocal: payload.minuteLocal } : {}),
+            ...(payload.interval !== undefined
+              ? {
+                  interval: payload.interval,
+                  intervalAnchorAt: payload.interval === null ? null : payload.updatedAt,
+                }
+              : {}),
+            ...(payload.handoffGitPolicy !== undefined
+              ? { handoffGitPolicy: payload.handoffGitPolicy }
+              : {}),
             ...(payload.timezone !== undefined ? { timezone: payload.timezone } : {}),
             ...(payload.prompt !== undefined ? { prompt: payload.prompt } : {}),
             ...(payload.workflowScriptRef !== undefined
@@ -997,6 +1017,27 @@ export function projectEvent(
         })),
       );
 
+    case "project.schedule.run-requested":
+      return decodeForEvent(
+        ProjectScheduleRunRequestedPayload,
+        event.payload,
+        event.type,
+        "payload",
+      ).pipe(
+        Effect.map((payload) => ({
+          ...nextBase,
+          schedules: updateScheduleProjectState(
+            nextBase.schedules,
+            payload.scheduleId,
+            payload.projectId,
+            {
+              manualRunRequestKey: payload.requestKey,
+              manualRunRequestedAt: payload.requestedAt,
+            },
+          ),
+        })),
+      );
+
     case "schedule.occurrence.started":
       return decodeForEvent(
         ScheduleOccurrenceStartedPayload,
@@ -1016,9 +1057,51 @@ export function projectEvent(
               lastOccurrenceStatus: "running",
               lastOccurrenceFailureReason: null,
               lastOccurrenceAt: payload.startedAt,
+              ...(payload.trigger !== "manual"
+                ? { lastScheduledOccurrenceKey: payload.occurrenceKey }
+                : { manualRunRequestKey: null, manualRunRequestedAt: null }),
             },
           ),
         })),
+      );
+
+    case "schedule.occurrence.skipped":
+      return decodeForEvent(
+        ScheduleOccurrenceSkippedPayload,
+        event.payload,
+        event.type,
+        "payload",
+      ).pipe(
+        Effect.map((payload) => {
+          const state = (nextBase.schedules ?? [])
+            .find((schedule) => schedule.id === payload.scheduleId)
+            ?.projectStates.find((entry) => entry.projectId === payload.projectId);
+          const preserveRunning = state?.lastOccurrenceStatus === "running";
+          return {
+            ...nextBase,
+            schedules: updateScheduleProjectState(
+              nextBase.schedules,
+              payload.scheduleId,
+              payload.projectId,
+              {
+                skippedRunCount: (state?.skippedRunCount ?? 0) + 1,
+                lastSkipReason: payload.reason,
+                lastSkippedAt: payload.skippedAt,
+                ...(payload.trigger === "scheduled"
+                  ? { lastScheduledOccurrenceKey: payload.occurrenceKey }
+                  : { manualRunRequestKey: null, manualRunRequestedAt: null }),
+                ...(preserveRunning
+                  ? {}
+                  : {
+                      lastOccurrenceKey: payload.occurrenceKey,
+                      lastOccurrenceStatus: "skipped" as const,
+                      lastOccurrenceFailureReason: null,
+                      lastOccurrenceAt: payload.skippedAt,
+                    }),
+              },
+            ),
+          };
+        }),
       );
 
     case "schedule.occurrence.completed":

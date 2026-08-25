@@ -8,6 +8,7 @@ import {
   ScheduleScope,
   ThreadOrigin,
   scheduleIdFromThreadOrigin,
+  scheduleIntervalMinutes,
   scheduleOccurrenceKey,
   scheduleSkipIfDirty,
   scheduleThreadOrigin,
@@ -233,6 +234,19 @@ describe("occurrence keys", () => {
       projectId: ProjectId.make("project-1"),
     });
     expect(key).toBe("scheduled:schedule-1:2026-01-01:project-1");
+  });
+});
+
+describe("schedule intervals", () => {
+  it("accepts fractional units that resolve to whole minutes", () => {
+    expect(scheduleIntervalMinutes({ value: 1.5, unit: "hours" })).toBe(90);
+    expect(scheduleIntervalMinutes({ value: 0.1, unit: "hours" })).toBe(6);
+    expect(scheduleIntervalMinutes({ value: 0.5, unit: "days" })).toBe(720);
+  });
+
+  it("rejects intervals that cannot resolve to whole minutes", () => {
+    expect(scheduleIntervalMinutes({ value: 1.1, unit: "minutes" })).toBeNull();
+    expect(scheduleIntervalMinutes({ value: 0, unit: "weeks" })).toBeNull();
   });
 });
 

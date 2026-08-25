@@ -32,9 +32,11 @@ import {
   ProjectSchedulePausedPayload as ContractsProjectSchedulePausedPayloadSchema,
   ProjectScheduleResumedPayload as ContractsProjectScheduleResumedPayloadSchema,
   ProjectScheduleDeletedPayload as ContractsProjectScheduleDeletedPayloadSchema,
+  ProjectScheduleRunRequestedPayload as ContractsProjectScheduleRunRequestedPayloadSchema,
   ScheduleOccurrenceStartedPayload as ContractsScheduleOccurrenceStartedPayloadSchema,
   ScheduleOccurrenceCompletedPayload as ContractsScheduleOccurrenceCompletedPayloadSchema,
   ScheduleOccurrenceFailedPayload as ContractsScheduleOccurrenceFailedPayloadSchema,
+  ScheduleOccurrenceSkippedPayload as ContractsScheduleOccurrenceSkippedPayloadSchema,
 } from "@t3tools/contracts";
 
 // Server-internal alias surface, backed by contract schemas as the source of truth.
@@ -78,6 +80,8 @@ export const ProjectScheduleUpdatedPayload = ContractsProjectScheduleUpdatedPayl
 export const ProjectSchedulePausedPayload = ContractsProjectSchedulePausedPayloadSchema;
 export const ProjectScheduleResumedPayload = ContractsProjectScheduleResumedPayloadSchema;
 export const ProjectScheduleDeletedPayload = ContractsProjectScheduleDeletedPayloadSchema;
+export const ProjectScheduleRunRequestedPayload = ContractsProjectScheduleRunRequestedPayloadSchema;
 export const ScheduleOccurrenceStartedPayload = ContractsScheduleOccurrenceStartedPayloadSchema;
 export const ScheduleOccurrenceCompletedPayload = ContractsScheduleOccurrenceCompletedPayloadSchema;
 export const ScheduleOccurrenceFailedPayload = ContractsScheduleOccurrenceFailedPayloadSchema;
+export const ScheduleOccurrenceSkippedPayload = ContractsScheduleOccurrenceSkippedPayloadSchema;

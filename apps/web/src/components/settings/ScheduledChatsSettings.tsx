@@ -2,9 +2,12 @@ import { useAtomValue } from "@effect/atom-react";
 import {
   ProjectId,
   ScheduleId,
+  scheduleIntervalMinutes,
   type EnvironmentId,
   type OrchestrationSchedule,
   type OrchestrationShellSnapshot,
+  type ScheduleHandoffGitPolicy,
+  type ScheduleIntervalUnit,
 } from "@t3tools/contracts";
 import { Atom } from "effect/unstable/reactivity";
 import {
@@ -42,16 +45,31 @@ const EMPTY_SCHEDULES: ReadonlyArray<OrchestrationSchedule> = [];
 interface ScheduleDraft {
   readonly allProjects: boolean;
   readonly projectId: ProjectId | null;
+  readonly intervalValue: string;
+  readonly intervalUnit: ScheduleIntervalUnit;
+  readonly preserveLegacyDaily: boolean;
+  readonly handoffGitPolicy: ScheduleHandoffGitPolicy;
   readonly time: string;
   readonly timezone: string;
   readonly prompt: string;
   readonly skipIfDirty: boolean;
 }
 
+const INTERVAL_DEFAULTS: Readonly<Record<ScheduleIntervalUnit, string>> = {
+  minutes: "15",
+  hours: "1",
+  days: "1",
+  weeks: "1",
+};
+
 function defaultDraft(projectId: ProjectId | null): ScheduleDraft {
   return {
     allProjects: false,
     projectId,
+    intervalValue: INTERVAL_DEFAULTS.days,
+    intervalUnit: "days",
+    preserveLegacyDaily: false,
+    handoffGitPolicy: "ignore",
     time: "09:00",
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
     prompt: "",
@@ -70,11 +88,45 @@ function draftFromSchedule(schedule: OrchestrationSchedule): ScheduleDraft {
   return {
     allProjects,
     projectId,
+    intervalValue: String(schedule.interval?.value ?? 1),
+    intervalUnit: schedule.interval?.unit ?? "days",
+    preserveLegacyDaily: schedule.interval == null,
+    handoffGitPolicy: schedule.handoffGitPolicy ?? "ignore",
     time: `${String(schedule.hourLocal).padStart(2, "0")}:${String(schedule.minuteLocal).padStart(2, "0")}`,
     timezone: schedule.timezone,
     prompt: schedule.prompt,
     skipIfDirty: schedule.skipIfDirty ?? allProjects,
   };
+}
+
+function intervalCompatibility(draft: ScheduleDraft) {
+  const value = Number(draft.intervalValue);
+  if (!Number.isFinite(value) || value <= 0) {
+    return { interval: null, message: "Enter a number greater than zero." };
+  }
+  const interval = { value, unit: draft.intervalUnit };
+  const minutes = scheduleIntervalMinutes(interval);
+  if (minutes === null) {
+    return {
+      interval: null,
+      message: "This interval must resolve to a whole number of minutes.",
+    };
+  }
+  return {
+    interval,
+    message: `Compatible · runs every ${minutes.toLocaleString()} minute${minutes === 1 ? "" : "s"}.`,
+  };
+}
+
+function intervalDisplay(value: string | number, unit: ScheduleIntervalUnit): string {
+  return `${value} ${Number(value) === 1 ? unit.slice(0, -1) : unit}`;
+}
+
+function scheduleTimingLabel(schedule: OrchestrationSchedule): string {
+  if (schedule.interval != null) {
+    return `Every ${intervalDisplay(schedule.interval.value, schedule.interval.unit)}`;
+  }
+  return `Daily at ${String(schedule.hourLocal).padStart(2, "0")}:${String(schedule.minuteLocal).padStart(2, "0")}`;
 }
 
 function validTimezone(timezone: string): boolean {
@@ -109,6 +161,9 @@ function statusFor(schedule: OrchestrationSchedule) {
   }
   if (schedule.projectStates.some((state) => state.lastOccurrenceStatus === "failed")) {
     return { label: "Last run failed", variant: "error" as const };
+  }
+  if (schedule.projectStates.some((state) => state.lastOccurrenceStatus === "skipped")) {
+    return { label: "Last run skipped", variant: "warning" as const };
   }
   return { label: "Active", variant: "success" as const };
 }
@@ -145,6 +200,7 @@ function ScheduleEditor({
   readonly onCancel: () => void;
   readonly onSave: () => void;
 }) {
+  const compatibility = intervalCompatibility(draft);
   return (
     <div className="rounded-xl border border-primary/20 bg-primary/[0.025] p-3 sm:p-4">
       <div className="mb-4 flex items-start justify-between gap-4">
@@ -156,7 +212,65 @@ function ScheduleEditor({
             Each occurrence starts a fresh agent session in a persistent chat.
           </p>
         </div>
-        <Badge variant="outline">Daily</Badge>
+        <Badge variant="outline">
+          {draft.preserveLegacyDaily
+            ? "Daily"
+            : `Every ${intervalDisplay(draft.intervalValue, draft.intervalUnit)}`}
+        </Badge>
+      </div>
+
+      <div className="mb-4 space-y-1.5">
+        <p className="text-xs font-medium text-muted-foreground">Repeat every</p>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Input
+            nativeInput
+            className="sm:w-28"
+            type="number"
+            min="0.01"
+            step="any"
+            inputMode="decimal"
+            value={draft.intervalValue}
+            aria-label="Schedule interval"
+            onChange={(event) =>
+              onChange({
+                ...draft,
+                intervalValue: event.currentTarget.value,
+                preserveLegacyDaily: false,
+              })
+            }
+          />
+          <div className="grid flex-1 grid-cols-4 gap-1 rounded-lg bg-muted/60 p-1">
+            {(["minutes", "hours", "days", "weeks"] as const).map((unit) => (
+              <Button
+                key={unit}
+                type="button"
+                size="sm"
+                variant={draft.intervalUnit === unit ? "secondary" : "ghost"}
+                onClick={() =>
+                  onChange({
+                    ...draft,
+                    intervalUnit: unit,
+                    intervalValue: INTERVAL_DEFAULTS[unit],
+                    preserveLegacyDaily: false,
+                  })
+                }
+              >
+                {unit[0]!.toUpperCase() + unit.slice(1)}
+              </Button>
+            ))}
+          </div>
+        </div>
+        <p
+          className={
+            compatibility.interval === null
+              ? "text-xs text-destructive"
+              : "text-xs text-muted-foreground"
+          }
+        >
+          {draft.preserveLegacyDaily
+            ? "Existing daily-at-time schedule remains unchanged until you edit this interval."
+            : compatibility.message}
+        </p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
@@ -208,15 +322,17 @@ function ScheduleEditor({
           </label>
         ) : null}
 
-        <label className="space-y-1.5 text-xs font-medium text-muted-foreground">
-          Local time
-          <Input
-            nativeInput
-            type="time"
-            value={draft.time}
-            onChange={(event) => onChange({ ...draft, time: event.currentTarget.value })}
-          />
-        </label>
+        {draft.preserveLegacyDaily ? (
+          <label className="space-y-1.5 text-xs font-medium text-muted-foreground">
+            Local time
+            <Input
+              nativeInput
+              type="time"
+              value={draft.time}
+              onChange={(event) => onChange({ ...draft, time: event.currentTarget.value })}
+            />
+          </label>
+        ) : null}
 
         <label className="space-y-1.5 text-xs font-medium text-muted-foreground">
           Time zone
@@ -239,6 +355,28 @@ function ScheduleEditor({
       </label>
 
       <div className="mt-4 flex items-center justify-between gap-4 rounded-lg border border-border/50 bg-background/60 px-3 py-2.5">
+        <div>
+          <p className="text-sm font-medium text-foreground">Handoff files</p>
+          <p className="text-xs text-muted-foreground">
+            Ignore generated docs in Git or commit each successful handoff.
+          </p>
+        </div>
+        <div className="flex rounded-lg bg-muted/60 p-1">
+          {(["ignore", "commit"] as const).map((policy) => (
+            <Button
+              key={policy}
+              type="button"
+              size="sm"
+              variant={draft.handoffGitPolicy === policy ? "secondary" : "ghost"}
+              onClick={() => onChange({ ...draft, handoffGitPolicy: policy })}
+            >
+              {policy === "ignore" ? "Add to .gitignore" : "Commit"}
+            </Button>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-2 flex items-center justify-between gap-4 rounded-lg border border-border/50 bg-background/60 px-3 py-2.5">
         <div>
           <p className="text-sm font-medium text-foreground">Skip dirty working trees</p>
           <p className="text-xs text-muted-foreground">
@@ -298,6 +436,7 @@ export function ScheduledChatsSettingsPanel() {
   const updateSchedule = useAtomCommand(orchestrationEnvironment.updateSchedule);
   const pauseSchedule = useAtomCommand(orchestrationEnvironment.pauseSchedule);
   const resumeSchedule = useAtomCommand(orchestrationEnvironment.resumeSchedule);
+  const runSchedule = useAtomCommand(orchestrationEnvironment.runSchedule);
   const deleteSchedule = useAtomCommand(orchestrationEnvironment.deleteSchedule);
 
   const projects = snapshot?.projects ?? EMPTY_PROJECTS;
@@ -346,6 +485,11 @@ export function ScheduledChatsSettingsPanel() {
 
   const save = async () => {
     if (environmentId === null) return;
+    const compatibility = intervalCompatibility(draft);
+    if (!draft.preserveLegacyDaily && compatibility.interval === null) {
+      setError(compatibility.message);
+      return;
+    }
     const [hourText, minuteText] = draft.time.split(":");
     const hourLocal = Number(hourText);
     const minuteLocal = Number(minuteText);
@@ -389,6 +533,8 @@ export function ScheduledChatsSettingsPanel() {
               scope,
               hourLocal,
               minuteLocal,
+              interval: compatibility.interval!,
+              handoffGitPolicy: draft.handoffGitPolicy,
               timezone,
               prompt,
               skipIfDirty: draft.skipIfDirty,
@@ -401,6 +547,8 @@ export function ScheduledChatsSettingsPanel() {
               scope,
               hourLocal,
               minuteLocal,
+              ...(draft.preserveLegacyDaily ? {} : { interval: compatibility.interval! }),
+              handoffGitPolicy: draft.handoffGitPolicy,
               timezone,
               prompt,
               skipIfDirty: draft.skipIfDirty,
@@ -411,6 +559,13 @@ export function ScheduledChatsSettingsPanel() {
       setEditorOpen(false);
       setEditing(null);
     }
+  };
+
+  const runNow = async (schedule: OrchestrationSchedule) => {
+    if (environmentId === null || schedule.pausedAt !== null) return;
+    setBusyId(schedule.id);
+    await runSchedule({ environmentId, input: { scheduleId: schedule.id } });
+    setBusyId(null);
   };
 
   const setPaused = async (schedule: OrchestrationSchedule, paused: boolean) => {
@@ -529,10 +684,10 @@ export function ScheduledChatsSettingsPanel() {
                 </span>
                 <span>
                   <span className="block text-sm font-medium text-foreground">
-                    Schedule the first daily chat
+                    Schedule the first recurring chat
                   </span>
                   <span className="mt-0.5 block text-xs text-muted-foreground">
-                    Choose projects, a local time, and the prompt to run.
+                    Choose projects, an interval, and the prompt to run.
                   </span>
                 </span>
               </button>
@@ -541,6 +696,15 @@ export function ScheduledChatsSettingsPanel() {
                 {schedules.map((schedule) => {
                   const status = statusFor(schedule);
                   const latest = latestOccurrence(schedule);
+                  const skippedRunCount = schedule.projectStates.reduce(
+                    (total, state) => total + (state.skippedRunCount ?? 0),
+                    0,
+                  );
+                  const lastSkippedAt = schedule.projectStates
+                    .map((state) => state.lastSkippedAt)
+                    .filter((value): value is string => value != null)
+                    .toSorted()
+                    .at(-1);
                   const busy = busyId === schedule.id;
                   const canEdit =
                     schedule.scope._tag === "project" || schedule.scope.projectIds === "all";
@@ -565,8 +729,12 @@ export function ScheduledChatsSettingsPanel() {
                             <Badge variant={status.variant}>{status.label}</Badge>
                           </div>
                           <p className="mt-1 text-xs font-medium text-muted-foreground">
-                            Daily at {String(schedule.hourLocal).padStart(2, "0")}:
-                            {String(schedule.minuteLocal).padStart(2, "0")} · {schedule.timezone}
+                            {scheduleTimingLabel(schedule)} · {schedule.timezone} ·{" "}
+                            {schedule.handoffGitPolicy === "commit"
+                              ? "handoffs committed"
+                              : schedule.handoffGitPolicy === "ignore"
+                                ? "handoffs ignored"
+                                : "handoffs unmanaged"}
                           </p>
                           <p className="mt-2 line-clamp-2 max-w-2xl text-[13px] leading-relaxed text-muted-foreground/85">
                             {schedule.prompt}
@@ -586,8 +754,27 @@ export function ScheduledChatsSettingsPanel() {
                           ) : (
                             <p className="mt-2 text-xs text-muted-foreground">No runs yet</p>
                           )}
+                          {skippedRunCount > 0 ? (
+                            <p className="mt-1 text-xs text-warning-foreground">
+                              Skipped {skippedRunCount} run{skippedRunCount === 1 ? "" : "s"}{" "}
+                              because the scheduled thread was already running
+                              {lastSkippedAt
+                                ? ` · latest ${new Date(lastSkippedAt).toLocaleString()}`
+                                : ""}
+                            </p>
+                          ) : null}
                         </div>
                         <div className="flex shrink-0 items-center gap-1">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            aria-label="Run schedule now"
+                            disabled={busy || schedule.pausedAt !== null}
+                            onClick={() => void runNow(schedule)}
+                          >
+                            <PlayIcon />
+                            Run now
+                          </Button>
                           <Button
                             size="icon-xs"
                             variant="ghost-muted"

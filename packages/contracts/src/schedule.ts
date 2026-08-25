@@ -29,6 +29,32 @@ export type ScheduleHourLocal = typeof ScheduleHourLocal.Type;
 export const ScheduleMinuteLocal = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 59 }));
 export type ScheduleMinuteLocal = typeof ScheduleMinuteLocal.Type;
 
+export const ScheduleIntervalUnit = Schema.Literals(["minutes", "hours", "days", "weeks"]);
+export type ScheduleIntervalUnit = typeof ScheduleIntervalUnit.Type;
+export const ScheduleHandoffGitPolicy = Schema.Literals(["ignore", "commit"]);
+export type ScheduleHandoffGitPolicy = typeof ScheduleHandoffGitPolicy.Type;
+export const ScheduleInterval = Schema.Struct({
+  value: Schema.Number.check(Schema.isGreaterThan(0)),
+  unit: ScheduleIntervalUnit,
+});
+export type ScheduleInterval = typeof ScheduleInterval.Type;
+
+const SCHEDULE_INTERVAL_UNIT_MINUTES: Readonly<Record<ScheduleIntervalUnit, number>> = {
+  minutes: 1,
+  hours: 60,
+  days: 1_440,
+  weeks: 10_080,
+};
+
+/** A compatible interval resolves exactly to whole minutes. */
+export function scheduleIntervalMinutes(interval: ScheduleInterval): number | null {
+  const minutes = interval.value * SCHEDULE_INTERVAL_UNIT_MINUTES[interval.unit];
+  const rounded = Math.round(minutes);
+  return Number.isSafeInteger(rounded) && rounded > 0 && Math.abs(minutes - rounded) < 1e-9
+    ? rounded
+    : null;
+}
+
 /** Wall-clock budget for a whole occurrence or a single turn within it. */
 export const ScheduleLimitMinutes = Schema.Int.check(
   Schema.isBetween({ minimum: SCHEDULE_LIMIT_MINUTES_MIN, maximum: SCHEDULE_LIMIT_MINUTES_MAX }),
@@ -72,8 +98,15 @@ export const ScheduleOccurrenceFailureReason = Schema.Literals([
 ]);
 export type ScheduleOccurrenceFailureReason = typeof ScheduleOccurrenceFailureReason.Type;
 
-export const ScheduleOccurrenceStatus = Schema.Literals(["running", "completed", "failed"]);
+export const ScheduleOccurrenceStatus = Schema.Literals([
+  "running",
+  "completed",
+  "failed",
+  "skipped",
+]);
 export type ScheduleOccurrenceStatus = typeof ScheduleOccurrenceStatus.Type;
+export const ScheduleOccurrenceSkipReason = Schema.Literal("thread-running");
+export type ScheduleOccurrenceSkipReason = typeof ScheduleOccurrenceSkipReason.Type;
 
 /**
  * Per-project schedule state. Project-scoped schedules have exactly one
@@ -96,6 +129,12 @@ export const ScheduleProjectState = Schema.Struct({
    * SCHEDULE_AUTO_PAUSE_FAILURE_STREAK the decider auto-pauses the schedule.
    */
   consecutiveFailures: Schema.Int.pipe(Schema.withDecodingDefault(Effect.succeed(0))),
+  skippedRunCount: Schema.Int.pipe(Schema.withDecodingDefault(Effect.succeed(0))),
+  lastSkipReason: Schema.optional(Schema.NullOr(ScheduleOccurrenceSkipReason)),
+  lastSkippedAt: Schema.optional(Schema.NullOr(IsoDateTime)),
+  lastScheduledOccurrenceKey: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
+  manualRunRequestKey: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
+  manualRunRequestedAt: Schema.optional(Schema.NullOr(IsoDateTime)),
 });
 export type ScheduleProjectState = typeof ScheduleProjectState.Type;
 
@@ -104,6 +143,12 @@ export const OrchestrationSchedule = Schema.Struct({
   scope: ScheduleScope,
   hourLocal: ScheduleHourLocal,
   minuteLocal: ScheduleMinuteLocal,
+  /** Absent on persisted v1 schedules, which remain daily-at-time schedules. */
+  interval: Schema.optional(Schema.NullOr(ScheduleInterval)),
+  /** Reset only when the interval itself is created or changed. */
+  intervalAnchorAt: Schema.optional(Schema.NullOr(IsoDateTime)),
+  /** Absent on schedules created before handoff Git management shipped. */
+  handoffGitPolicy: Schema.optional(Schema.NullOr(ScheduleHandoffGitPolicy)),
   /** IANA time zone name; validity is a decider invariant. */
   timezone: TrimmedNonEmptyString,
   prompt: TrimmedNonEmptyString,
@@ -195,6 +240,8 @@ export const ProjectScheduleCreateCommand = Schema.Struct({
   scope: ScheduleScope,
   hourLocal: ScheduleHourLocal,
   minuteLocal: ScheduleMinuteLocal,
+  interval: Schema.optional(ScheduleInterval),
+  handoffGitPolicy: Schema.optional(ScheduleHandoffGitPolicy),
   timezone: TrimmedNonEmptyString,
   prompt: TrimmedNonEmptyString,
   workflowScriptRef: Schema.optional(TrimmedNonEmptyString),
@@ -214,6 +261,8 @@ export const ProjectScheduleUpdateCommand = Schema.Struct({
   scope: Schema.optional(ScheduleScope),
   hourLocal: Schema.optional(ScheduleHourLocal),
   minuteLocal: Schema.optional(ScheduleMinuteLocal),
+  interval: Schema.optional(Schema.NullOr(ScheduleInterval)),
+  handoffGitPolicy: Schema.optional(Schema.NullOr(ScheduleHandoffGitPolicy)),
   timezone: Schema.optional(TrimmedNonEmptyString),
   prompt: Schema.optional(TrimmedNonEmptyString),
   // Absent = leave unchanged; null = clear the script reference.
@@ -249,6 +298,14 @@ export const ProjectScheduleDeleteCommand = Schema.Struct({
 });
 export type ProjectScheduleDeleteCommand = typeof ProjectScheduleDeleteCommand.Type;
 
+export const ProjectScheduleRunCommand = Schema.Struct({
+  type: Schema.Literal("project.schedule.run"),
+  commandId: CommandId,
+  scheduleId: ScheduleId,
+  createdAt: IsoDateTime,
+});
+export type ProjectScheduleRunCommand = typeof ProjectScheduleRunCommand.Type;
+
 // Occurrence commands are server-internal: the ScheduleReactor dispatches
 // them with a deterministic commandId (`scheduled:<scheduleId>:<occurrenceKey>`)
 // so command-receipt idempotency backs the decider's exactly-once check.
@@ -262,6 +319,7 @@ export const ScheduleOccurrenceStartCommand = Schema.Struct({
   /** The schedule's persistent thread for this project. */
   threadId: ThreadId,
   startedAt: IsoDateTime,
+  trigger: Schema.optional(Schema.Literals(["scheduled", "manual"])),
 });
 export type ScheduleOccurrenceStartCommand = typeof ScheduleOccurrenceStartCommand.Type;
 
@@ -287,6 +345,18 @@ export const ScheduleOccurrenceFailCommand = Schema.Struct({
 });
 export type ScheduleOccurrenceFailCommand = typeof ScheduleOccurrenceFailCommand.Type;
 
+export const ScheduleOccurrenceSkipCommand = Schema.Struct({
+  type: Schema.Literal("schedule.occurrence.skip"),
+  commandId: CommandId,
+  scheduleId: ScheduleId,
+  occurrenceKey: TrimmedNonEmptyString,
+  projectId: ProjectId,
+  reason: ScheduleOccurrenceSkipReason,
+  skippedAt: IsoDateTime,
+  trigger: Schema.Literals(["scheduled", "manual"]),
+});
+export type ScheduleOccurrenceSkipCommand = typeof ScheduleOccurrenceSkipCommand.Type;
+
 // --- Event payloads ---
 
 export const ProjectScheduleCreatedPayload = Schema.Struct({
@@ -294,6 +364,8 @@ export const ProjectScheduleCreatedPayload = Schema.Struct({
   scope: ScheduleScope,
   hourLocal: ScheduleHourLocal,
   minuteLocal: ScheduleMinuteLocal,
+  interval: Schema.optional(Schema.NullOr(ScheduleInterval)),
+  handoffGitPolicy: Schema.optional(Schema.NullOr(ScheduleHandoffGitPolicy)),
   timezone: TrimmedNonEmptyString,
   prompt: TrimmedNonEmptyString,
   workflowScriptRef: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
@@ -312,6 +384,8 @@ export const ProjectScheduleUpdatedPayload = Schema.Struct({
   scope: Schema.optional(ScheduleScope),
   hourLocal: Schema.optional(ScheduleHourLocal),
   minuteLocal: Schema.optional(ScheduleMinuteLocal),
+  interval: Schema.optional(Schema.NullOr(ScheduleInterval)),
+  handoffGitPolicy: Schema.optional(Schema.NullOr(ScheduleHandoffGitPolicy)),
   timezone: Schema.optional(TrimmedNonEmptyString),
   prompt: Schema.optional(TrimmedNonEmptyString),
   workflowScriptRef: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
@@ -351,12 +425,21 @@ export const ProjectScheduleDeletedPayload = Schema.Struct({
 });
 export type ProjectScheduleDeletedPayload = typeof ProjectScheduleDeletedPayload.Type;
 
+export const ProjectScheduleRunRequestedPayload = Schema.Struct({
+  scheduleId: ScheduleId,
+  projectId: ProjectId,
+  requestKey: TrimmedNonEmptyString,
+  requestedAt: IsoDateTime,
+});
+export type ProjectScheduleRunRequestedPayload = typeof ProjectScheduleRunRequestedPayload.Type;
+
 export const ScheduleOccurrenceStartedPayload = Schema.Struct({
   scheduleId: ScheduleId,
   occurrenceKey: TrimmedNonEmptyString,
   projectId: ProjectId,
   threadId: ThreadId,
   startedAt: IsoDateTime,
+  trigger: Schema.optional(Schema.Literals(["scheduled", "manual"])),
 });
 export type ScheduleOccurrenceStartedPayload = typeof ScheduleOccurrenceStartedPayload.Type;
 
@@ -377,3 +460,13 @@ export const ScheduleOccurrenceFailedPayload = Schema.Struct({
   failedAt: IsoDateTime,
 });
 export type ScheduleOccurrenceFailedPayload = typeof ScheduleOccurrenceFailedPayload.Type;
+
+export const ScheduleOccurrenceSkippedPayload = Schema.Struct({
+  scheduleId: ScheduleId,
+  occurrenceKey: TrimmedNonEmptyString,
+  projectId: ProjectId,
+  reason: ScheduleOccurrenceSkipReason,
+  skippedAt: IsoDateTime,
+  trigger: Schema.Literals(["scheduled", "manual"]),
+});
+export type ScheduleOccurrenceSkippedPayload = typeof ScheduleOccurrenceSkippedPayload.Type;
