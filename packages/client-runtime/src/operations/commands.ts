@@ -56,6 +56,7 @@ export type UpdateProjectScheduleInput = CommandInput<"project.schedule.update">
 export type PauseProjectScheduleInput = CommandInput<"project.schedule.pause">;
 export type ResumeProjectScheduleInput = CommandInput<"project.schedule.resume">;
 export type DeleteProjectScheduleInput = CommandInput<"project.schedule.delete">;
+export type RunProjectScheduleInput = CommandInput<"project.schedule.run">;
 
 type DispatchTag = typeof ORCHESTRATION_WS_METHODS.dispatchCommand;
 type CommandEffect = Effect.Effect<
@@ -384,3 +385,15 @@ export const deleteProjectSchedule: (input: DeleteProjectScheduleInput) => Comma
       commandId: yield* commandId(input),
     });
   });
+
+export const runProjectSchedule: (input: RunProjectScheduleInput) => CommandEffect = Effect.fn(
+  "EnvironmentCommands.runProjectSchedule",
+)(function* (input) {
+  const metadata = yield* timestampedCommandMetadata(input);
+  return yield* dispatch({
+    ...input,
+    type: "project.schedule.run",
+    commandId: metadata.commandId,
+    createdAt: metadata.createdAt,
+  });
+});
