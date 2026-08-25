@@ -45,6 +45,9 @@ and failure message.
 
 Use **Run now** to request an immediate occurrence without changing the next
 scheduled interval. You can also edit, pause, resume, or delete a schedule.
+After the first occurrence creates a chat, use **Open thread** to go directly to
+it. Schedules covering multiple projects show a separate project link for each
+chat that has been created.
 Pausing or deleting a schedule does not remove chats or files created by earlier
 occurrences.
 

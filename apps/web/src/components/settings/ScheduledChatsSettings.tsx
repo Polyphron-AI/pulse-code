@@ -1,4 +1,6 @@
 import { useAtomValue } from "@effect/atom-react";
+import { scopeThreadRef } from "@t3tools/client-runtime/environment";
+import { useNavigate } from "@tanstack/react-router";
 import {
   ProjectId,
   ScheduleId,
@@ -13,6 +15,7 @@ import { Atom } from "effect/unstable/reactivity";
 import {
   CalendarClockIcon,
   CircleAlertIcon,
+  MessageSquareIcon,
   PauseIcon,
   PencilIcon,
   PlayIcon,
@@ -27,6 +30,7 @@ import { useEnvironments, usePrimaryEnvironmentId } from "~/state/environments";
 import { orchestrationEnvironment } from "~/state/orchestration";
 import { environmentSnapshotAtom } from "~/state/shell";
 import { useAtomCommand } from "~/state/use-atom-command";
+import { buildThreadRouteParams } from "~/threadRoutes";
 
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
@@ -415,6 +419,7 @@ function ScheduleEditor({
 }
 
 export function ScheduledChatsSettingsPanel() {
+  const navigate = useNavigate();
   const { environments, isReady } = useEnvironments();
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const [selectedEnvironmentId, setSelectedEnvironmentId] = useState<EnvironmentId | null>(
@@ -708,6 +713,9 @@ export function ScheduledChatsSettingsPanel() {
                   const busy = busyId === schedule.id;
                   const canEdit =
                     schedule.scope._tag === "project" || schedule.scope.projectIds === "all";
+                  const threadStates = schedule.projectStates.filter(
+                    (state) => state.threadId !== null,
+                  );
                   return (
                     <article
                       key={schedule.id}
@@ -765,6 +773,35 @@ export function ScheduledChatsSettingsPanel() {
                                 ? ` · latest ${new Date(lastSkippedAt).toLocaleString()}`
                                 : ""}
                             </p>
+                          ) : null}
+                          {environmentId !== null && threadStates.length > 0 ? (
+                            <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
+                              {threadStates.map((state) => {
+                                const threadRef = scopeThreadRef(environmentId, state.threadId!);
+                                const label =
+                                  threadStates.length === 1
+                                    ? "Open thread"
+                                    : (projectTitles.get(state.projectId) ?? "Missing project");
+                                return (
+                                  <Button
+                                    key={state.projectId}
+                                    size="compact"
+                                    variant="link"
+                                    className="h-auto px-0 text-xs"
+                                    aria-label={`Open scheduled thread for ${projectTitles.get(state.projectId) ?? "missing project"}`}
+                                    onClick={() =>
+                                      void navigate({
+                                        to: "/$environmentId/$threadId",
+                                        params: buildThreadRouteParams(threadRef),
+                                      })
+                                    }
+                                  >
+                                    <MessageSquareIcon />
+                                    {label}
+                                  </Button>
+                                );
+                              })}
+                            </div>
                           ) : null}
                         </div>
                         <div className="flex shrink-0 items-center gap-1">

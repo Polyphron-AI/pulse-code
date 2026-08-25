@@ -328,10 +328,12 @@ function ScheduleCard(props: {
   readonly onPauseChange: () => void;
   readonly onEdit: () => void;
   readonly onDelete: () => void;
+  readonly onOpenThread: (threadId: string) => void;
 }) {
   const icon = useThemeColor("--color-icon-muted");
   const latest = latestScheduleOccurrence(props.schedule);
   const canEdit = mobileScheduleCanEdit(props.schedule);
+  const threadStates = props.schedule.projectStates.filter((state) => state.threadId !== null);
   const menuActions = useMemo<MenuAction[]>(
     () => [{ id: "delete", title: "Delete schedule", attributes: { destructive: true } }],
     [],
@@ -377,6 +379,24 @@ function ScheduleCard(props: {
             {mobileOccurrenceSummary(latest, relativeTime)}
           </Text>
         </View>
+
+        {threadStates.length > 0 ? (
+          <View className="flex-row flex-wrap gap-2">
+            {threadStates.map((state) => (
+              <ControlPill
+                key={state.projectId}
+                accessibilityLabel={`Open scheduled thread for ${props.projectTitles.get(state.projectId) ?? "missing project"}`}
+                label={
+                  threadStates.length === 1
+                    ? "Open thread"
+                    : (props.projectTitles.get(state.projectId) ?? "Missing project")
+                }
+                variant="pill"
+                onPress={() => props.onOpenThread(String(state.threadId))}
+              />
+            ))}
+          </View>
+        ) : null}
 
         <View className="flex-row items-center gap-2 pt-1">
           <ControlPill
@@ -728,6 +748,12 @@ export function SettingsScheduledChatsRouteScreen() {
               schedule={schedule}
               onDelete={() => remove(schedule)}
               onEdit={() => openEdit(schedule)}
+              onOpenThread={(threadId) =>
+                navigation.navigate("Thread", {
+                  environmentId: String(selectedEnvironmentId),
+                  threadId,
+                })
+              }
               onPauseChange={() => void setPaused(schedule)}
             />
           ))
