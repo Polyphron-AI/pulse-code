@@ -23,6 +23,7 @@ const PROJECT_STATE: ScheduleProjectState = {
   lastOccurrenceStatus: null,
   lastOccurrenceAt: null,
   consecutiveFailures: 0,
+  skippedRunCount: 0,
 };
 const SCHEDULE: OrchestrationSchedule = {
   id: ScheduleId.make("schedule-1"),
