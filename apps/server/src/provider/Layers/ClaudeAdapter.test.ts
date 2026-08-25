@@ -3922,6 +3922,7 @@ describe("ClaudeAdapterLive", () => {
         yield* adapter.sendTurn({
           threadId: session.threadId,
           input: "hello again",
+          busyBehavior: "steer",
           modelSelection,
           attachments: [],
         });
@@ -3958,6 +3959,7 @@ describe("ClaudeAdapterLive", () => {
       yield* adapter.sendTurn({
         threadId: session.threadId,
         input: "hello again",
+        busyBehavior: "steer",
         modelSelection: createModelSelection(
           ProviderInstanceId.make("claudeAgent"),
           "claude-opus-4-6",
