@@ -14,6 +14,7 @@ import {
   type OrchestrationEvent,
   type OrchestrationReadModel,
   type OrchestrationSession,
+  type ScheduleHandoffGitPolicy,
   type ScheduleInterval,
   type ScheduleScope,
 } from "@t3tools/contracts";
@@ -38,6 +39,10 @@ import {
   type OrchestrationEngineShape,
 } from "../Services/OrchestrationEngine.ts";
 import { ScheduleAuthProbe, type ScheduleAuthProbeResult } from "../Services/ScheduleAuthProbe.ts";
+import {
+  ScheduleHandoffGit,
+  type ScheduleHandoffGitInput,
+} from "../Services/ScheduleHandoffGit.ts";
 import { ScheduleProviderInstances } from "../Services/ScheduleProviderInstances.ts";
 import { ScheduleReactor } from "../Services/ScheduleReactor.ts";
 import { ScheduleWorkingTreeProbe } from "../Services/ScheduleWorkingTreeProbe.ts";
@@ -101,6 +106,7 @@ const makeTestBed = Effect.fn("makeTestBed")(function* (options?: {
   );
   const receipts = new Set<string>();
   const dispatched: Array<DispatchedCommand> = [];
+  const handoffGitCalls: Array<ScheduleHandoffGitInput> = [];
 
   const dispatch: OrchestrationEngineShape["dispatch"] = (command) =>
     Effect.gen(function* () {
@@ -148,6 +154,14 @@ const makeTestBed = Effect.fn("makeTestBed")(function* (options?: {
   const reactorLayer = makeScheduleReactorLive().pipe(
     Layer.provide(Layer.succeed(OrchestrationEngineService, engine)),
     Layer.provide(Layer.succeed(ScheduleAuthProbe, { probe: () => Ref.get(authRef) })),
+    Layer.provide(
+      Layer.succeed(ScheduleHandoffGit, {
+        apply: (input) =>
+          Effect.sync(() => {
+            handoffGitCalls.push(input);
+          }),
+      }),
+    ),
     Layer.provide(
       Layer.succeed(ScheduleWorkingTreeProbe, {
         isDirty: (workspaceRoot: string) => Effect.succeed(dirtyRoots.has(workspaceRoot)),
@@ -208,6 +222,7 @@ const makeTestBed = Effect.fn("makeTestBed")(function* (options?: {
     readonly minuteLocal?: number;
     readonly timezone?: string;
     readonly interval?: ScheduleInterval;
+    readonly handoffGitPolicy?: ScheduleHandoffGitPolicy;
     readonly modelSelection?: typeof modelSelection;
   }) =>
     dispatch({
@@ -219,6 +234,9 @@ const makeTestBed = Effect.fn("makeTestBed")(function* (options?: {
       minuteLocal: input?.minuteLocal ?? 0,
       timezone: input?.timezone ?? "UTC",
       ...(input?.interval !== undefined ? { interval: input.interval } : {}),
+      ...(input?.handoffGitPolicy !== undefined
+        ? { handoffGitPolicy: input.handoffGitPolicy }
+        : {}),
       prompt: "Daily check-in: read the handoff and continue.",
       ...(input?.modelSelection !== undefined ? { modelSelection: input.modelSelection } : {}),
       createdAt: baseNow,
@@ -293,6 +311,7 @@ const makeTestBed = Effect.fn("makeTestBed")(function* (options?: {
     reactor,
     dispatch,
     dispatched,
+    handoffGitCalls,
     readModel,
     projectState,
     seedProject,
@@ -601,7 +620,7 @@ it.layer(NodeServices.layer)("ScheduleReactor", (it) => {
         const root = yield* fs.makeTempDirectoryScoped({ prefix: "sched-handoff-" });
         const bed = yield* makeTestBed();
         yield* bed.seedProject(projectA, root);
-        yield* bed.seedSchedule();
+        yield* bed.seedSchedule({ handoffGitPolicy: "commit" });
 
         yield* at("2026-01-02T09:00:00.000Z");
         yield* bed.reactor.sweepNow;
@@ -631,6 +650,14 @@ it.layer(NodeServices.layer)("ScheduleReactor", (it) => {
 
         const contents = yield* fs.readFileString(path.join(root, "handoff", "2026-01-02.md"));
         expect(contents).toBe("Morning summary for Jan 2.");
+        expect(bed.handoffGitCalls).toEqual([
+          {
+            workspaceRoot: root,
+            handoffRelativePath: "handoff/2026-01-02.md",
+            handoffPathTemplate: "handoff/{date}.md",
+            policy: "commit",
+          },
+        ]);
       }),
     ).pipe(Effect.provide(TestClock.layer())),
   );

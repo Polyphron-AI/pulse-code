@@ -122,6 +122,7 @@ export const ScheduleProjectState = Schema.Struct({
   lastOccurrenceKey: Schema.NullOr(TrimmedNonEmptyString),
   lastOccurrenceStatus: Schema.NullOr(ScheduleOccurrenceStatus),
   lastOccurrenceFailureReason: Schema.optional(Schema.NullOr(ScheduleOccurrenceFailureReason)),
+  lastOccurrenceFailureMessage: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
   lastOccurrenceAt: Schema.NullOr(IsoDateTime),
   /**
    * Consecutive failed occurrences for this project ("dirty" skips excluded).
