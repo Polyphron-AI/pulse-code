@@ -41,6 +41,7 @@ import {
 import { ScheduleAuthProbe, type ScheduleAuthProbeResult } from "../Services/ScheduleAuthProbe.ts";
 import {
   ScheduleHandoffGit,
+  ScheduleHandoffGitError,
   type ScheduleHandoffGitInput,
 } from "../Services/ScheduleHandoffGit.ts";
 import { ScheduleProviderInstances } from "../Services/ScheduleProviderInstances.ts";
@@ -98,6 +99,7 @@ const makeTestBed = Effect.fn("makeTestBed")(function* (options?: {
   readonly dirtyRoots?: ReadonlyArray<string>;
   /** Configured provider instance ids; defaults to the seed selections. */
   readonly configuredInstanceIds?: ReadonlyArray<ProviderInstanceId>;
+  readonly handoffGitFailure?: string;
 }) {
   const crypto = yield* Crypto.Crypto;
   const modelRef = yield* Ref.make(createEmptyReadModel(baseNow));
@@ -159,7 +161,18 @@ const makeTestBed = Effect.fn("makeTestBed")(function* (options?: {
         apply: (input) =>
           Effect.sync(() => {
             handoffGitCalls.push(input);
-          }),
+          }).pipe(
+            Effect.flatMap(() =>
+              options?.handoffGitFailure === undefined
+                ? Effect.void
+                : Effect.fail(
+                    new ScheduleHandoffGitError({
+                      workspaceRoot: input.workspaceRoot,
+                      detail: options.handoffGitFailure,
+                    }),
+                  ),
+            ),
+          ),
       }),
     ),
     Layer.provide(
@@ -701,6 +714,42 @@ it.layer(NodeServices.layer)("ScheduleReactor", (it) => {
         expect(state).toMatchObject({
           lastOccurrenceStatus: "failed",
           lastOccurrenceFailureReason: "error",
+        });
+      }),
+    ).pipe(Effect.provide(TestClock.layer())),
+  );
+
+  it.effect("a handoff Git policy failure is visible on the failed occurrence", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const root = yield* fs.makeTempDirectoryScoped({ prefix: "sched-handoff-git-fail-" });
+        const bed = yield* makeTestBed({ handoffGitFailure: "Git hook rejected the commit." });
+        yield* bed.seedProject(projectA, root);
+        yield* bed.seedSchedule({ handoffGitPolicy: "commit" });
+
+        yield* at("2026-01-02T09:00:00.000Z");
+        yield* bed.reactor.sweepNow;
+        const running = yield* bed.projectState(projectA);
+        yield* bed.settleTurn({
+          threadId: running!.threadId!,
+          turnId: "turn-git-failure",
+          text: "Handoff written but not committed.",
+          startAt: "2026-01-02T09:00:30.000Z",
+          endAt: "2026-01-02T09:05:00.000Z",
+        });
+        yield* TestClock.adjust(Duration.minutes(6));
+        yield* bed.reactor.sweepNow;
+
+        expect(ofType(bed.dispatched, "schedule.occurrence.complete")).toHaveLength(0);
+        expect(ofType(bed.dispatched, "schedule.occurrence.fail").at(-1)?.message).toContain(
+          "Git hook rejected the commit.",
+        );
+        expect(yield* bed.projectState(projectA)).toMatchObject({
+          lastOccurrenceStatus: "failed",
+          lastOccurrenceFailureReason: "error",
+          lastOccurrenceFailureMessage:
+            "Scheduled handoff Git policy failed in '" + root + "': Git hook rejected the commit.",
         });
       }),
     ).pipe(Effect.provide(TestClock.layer())),

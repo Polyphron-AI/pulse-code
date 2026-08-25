@@ -12,6 +12,10 @@ contains:
 - A time zone used for run labels and handoff dates.
 - The instruction sent to the agent.
 - An option to skip projects with uncommitted changes.
+- A handoff Git policy:
+  - **Add to .gitignore** commits a date-shaped rule such as
+    `/handoff/????-??-??.md` to the project.
+  - **Commit** creates a handoff-only commit after each successful run.
 
 Choose a unit button and change its value to build intervals such as 15 minutes,
 1.5 hours, 2 days, or 3 weeks. The compatibility message confirms the normalized
@@ -24,6 +28,14 @@ Each occurrence creates a normal, durable chat and starts it in a fresh provider
 session using the project's default model. The prompt also directs the agent to
 use `handoff/YYYY-MM-DD.md` for lightweight continuity between runs. Sub-daily
 runs can read the most recent successful handoff from earlier on the same day.
+Pulse Code never includes unrelated staged or working-tree files in its handoff
+commits. If `.gitignore` already has uncommitted changes or Git rejects a
+commit, the occurrence fails with the detailed reason shown in Scheduled chats.
+
+For an **All projects** schedule, each targeted project keeps its own handoff at
+`<project-root>/handoff/YYYY-MM-DD.md`. The selected Git policy is applied
+independently in each project; there is no shared environment-level handoff
+directory.
 
 ## Status and controls
 

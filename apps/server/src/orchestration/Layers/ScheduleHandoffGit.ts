@@ -127,7 +127,7 @@ export const ScheduleHandoffGitLive = Layer.effect(
         yield* Effect.gen(function* () {
           yield* execute(
             repositoryRoot,
-            ["--literal-pathspecs", "add", "-A", "--", repositoryRelativePath],
+            ["--literal-pathspecs", "add", "-f", "-A", "--", repositoryRelativePath],
             "ScheduleHandoffGit.stagePath",
           );
           const changed = yield* git
