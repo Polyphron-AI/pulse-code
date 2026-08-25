@@ -44,7 +44,7 @@ Parallel research, document extraction, coding, review, testing, repository main
 
 **Worker-provider fit: 5/5. Control-plane fit: 2/5.**
 
-Pulse’s [OMP provider design](../../plans/2026-08-24-omp-agent-provider-design.md) has the correct boundary: OMP owns models, tools, skills, and internal subagents; Pulse owns projects, durable threads, transport, permissions, checkpoints, and multi-surface UI. Pulse should issue typed work orders and receive artifacts, activity, cost, and terminal receipts. OMP’s internal subagents are nested execution, not automatically first-class Pulse employees.
+A Pulse OMP integration should use a provider boundary: OMP owns models, tools, skills, and internal subagents; Pulse owns projects, durable threads, transport, permissions, checkpoints, and multi-surface UI. Pulse should issue typed work orders and receive artifacts, activity, cost, and terminal receipts. OMP’s internal subagents are nested execution, not automatically first-class Pulse employees.
 
 ## Evidence quality
 
