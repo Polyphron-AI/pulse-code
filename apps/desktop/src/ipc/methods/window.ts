@@ -275,6 +275,21 @@ export const openExternal = DesktopIpc.makeIpcMethod({
   }),
 });
 
+export const revealPath = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.REVEAL_PATH_CHANNEL,
+  payload: Schema.String,
+  result: Schema.Boolean,
+  handler: Effect.fn("desktop.ipc.window.revealPath")(function* (rawPath) {
+    const path = yield* Path.Path;
+    if (!path.isAbsolute(rawPath)) {
+      return false;
+    }
+
+    const shell = yield* ElectronShell.ElectronShell;
+    return yield* shell.revealPath(path.normalize(rawPath));
+  }),
+});
+
 export const probeRemoteEditors = DesktopIpc.makeIpcMethod({
   channel: IpcChannels.PROBE_REMOTE_EDITORS_CHANNEL,
   payload: Schema.Undefined,

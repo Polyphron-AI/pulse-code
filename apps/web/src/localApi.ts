@@ -8,6 +8,8 @@ import { resetRequestLatencyStateForTests } from "./rpc/requestLatencyState";
 let cachedApi: LocalApi | undefined;
 
 function createBrowserLocalApi(): LocalApi {
+  const revealPath = window.desktopBridge?.revealPath;
+
   return {
     dialogs: {
       pickFolder: async (options) => {
@@ -30,6 +32,16 @@ function createBrowserLocalApi(): LocalApi {
 
         window.open(url, "_blank", "noopener,noreferrer");
       },
+      ...(revealPath
+        ? {
+            revealPath: async (path: string) => {
+              const revealed = await revealPath(path);
+              if (!revealed) {
+                throw new Error("Unable to reveal file.");
+              }
+            },
+          }
+        : {}),
     },
     contextMenu: {
       show: async <T extends string>(

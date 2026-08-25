@@ -1123,6 +1123,11 @@ export interface DesktopBridge {
   ) => Promise<T | null>;
   openExternal: (url: string) => Promise<boolean>;
   /**
+   * Reveal a file on this desktop in the platform file manager. Optional so
+   * newer renderer bundles remain compatible with older desktop builds.
+   */
+  revealPath?: (path: string) => Promise<boolean>;
+  /**
    * Probe this desktop machine for installed remote-capable editor CLIs
    * (used for remote open-in-editor deep links). Optional: older desktop
    * builds lack it; callers fall back to VS Code only.
@@ -1247,6 +1252,8 @@ export interface LocalApi {
   };
   shell: {
     openExternal: (url: string) => Promise<void>;
+    /** Present only when the local host can reveal filesystem paths. */
+    revealPath?: (path: string) => Promise<void>;
   };
   contextMenu: {
     show: <T extends string>(

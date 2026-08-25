@@ -15,11 +15,18 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useComposerHandleContext } from "~/composerHandleContext";
 import { writeTextToClipboard } from "~/hooks/useCopyToClipboard";
 import { useTheme } from "~/hooks/useTheme";
+import { isElectron } from "~/env";
 import { cn } from "~/lib/utils";
 import { readLocalApi } from "~/localApi";
 import { T3_PIERRE_ICONS } from "~/pierre-icons";
+import { usePrimaryEnvironmentId } from "~/state/environments";
+import { resolvePathLinkTarget } from "~/terminal-links";
 
 import { createFileTreeDragMentionController } from "./fileTreeDragMention";
+import {
+  fileBrowserContextMenuItems,
+  shouldOfferFileManagerReveal,
+} from "./fileBrowserContextMenu";
 import { useProjectEntriesQuery } from "./projectFilesQueryState";
 
 interface FileBrowserPanelProps {
@@ -108,6 +115,7 @@ export default function FileBrowserPanel({
 }: FileBrowserPanelProps) {
   const { resolvedTheme } = useTheme();
   const composerRef = useComposerHandleContext();
+  const primaryEnvironmentId = usePrimaryEnvironmentId();
   const entriesQuery = useProjectEntriesQuery(environmentId, cwd);
   const entries = entriesQuery.data?.entries ?? [];
   const entryKinds = useMemo(
@@ -150,14 +158,38 @@ export default function FileBrowserPanel({
     const position = pointerIsFresh
       ? { x: pointer.x, y: pointer.y }
       : { x: anchorRect.left, y: anchorRect.bottom };
+    const canRevealPath = shouldOfferFileManagerReveal({
+      environmentId,
+      primaryEnvironmentId,
+      itemPath: item.path,
+      isDesktop: isElectron,
+    });
     try {
       const clicked = await api.contextMenu.show(
-        [
-          { id: "copy-mention", label: "Copy mention" },
-          { id: "add-to-chat", label: "Add to chat" },
-        ],
+        fileBrowserContextMenuItems({ canRevealPath, platform: navigator.platform }),
         position,
       );
+      if (clicked === "reveal-path") {
+        const revealPath = api.shell.revealPath;
+        if (!revealPath) {
+          toastManager.add({
+            type: "error",
+            title: "Restart Pulse Code to reveal files",
+            description: "The desktop shell must restart before this action is available.",
+          });
+          return;
+        }
+        try {
+          await revealPath(resolvePathLinkTarget(relativePath, cwd));
+        } catch (error) {
+          toastManager.add({
+            type: "error",
+            title: "Unable to reveal file",
+            description: error instanceof Error ? error.message : "An error occurred.",
+          });
+        }
+        return;
+      }
       if (clicked === "copy-mention") {
         try {
           await writeTextToClipboard(mention);
