@@ -11,6 +11,7 @@ This document covers the unified release workflow for stable and nightly desktop
   - push tag matching `v*.*.*` for stable releases
   - scheduled nightly check every three hours
   - manual `workflow_dispatch` for either channel
+  - manual `workflow_dispatch` with `installer_only=true` for desktop installer/update assets only
 - Runs quality gates first: lint, typecheck, test.
 - Reads the shared production Pulse Connect relay URL and Clerk client configuration before packaging clients.
 - Builds four artifacts in parallel for both channels:
@@ -32,6 +33,11 @@ This document covers the unified release workflow for stable and nightly desktop
   - nightly releases are aliased to the `nightly` hosted app channel
 - Signing is optional and auto-detected per platform from secrets.
 
+Installer-only dispatches run the release quality gates, build the desktop artifacts, and publish
+their GitHub Release plus updater metadata. They deliberately skip Pulse Connect configuration, npm,
+the hosted web app, AUR, release finalization, and Discord announcements. Use this mode when the
+release target is the downloadable local installer rather than the full production stack.
+
 ## Required release credentials
 
 Stable releases require these GitHub Actions secrets in addition to the platform and deployment
@@ -52,7 +58,8 @@ release channels.
 
 `.github/workflows/deploy-relay.yml` deploys Alchemy stage `prod` on every push to `main`. The
 release workflow reads the relay URL and Clerk client configuration from the existing `production`
-GitHub Actions environment before building desktop, CLI, or hosted web artifacts.
+GitHub Actions environment before building desktop, CLI, or hosted web artifacts. The explicit
+installer-only dispatch mode is the exception: it packages clients without Pulse Connect enabled.
 
 Required repository variables shared by relay deployments:
 

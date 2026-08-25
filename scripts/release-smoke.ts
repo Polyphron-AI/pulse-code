@@ -212,6 +212,26 @@ const tempRoot = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "t3-release-s
 try {
   copyWorkspaceManifestFixture(tempRoot);
 
+  const releaseWorkflow = NodeFS.readFileSync(
+    NodePath.resolve(repoRoot, ".github/workflows/release.yml"),
+    "utf8",
+  );
+  assertContains(
+    releaseWorkflow,
+    'installer_only:\n        description: "Publish desktop installer/update assets only"',
+    "Release workflow is missing the installer-only dispatch input.",
+  );
+  assertContains(
+    releaseWorkflow,
+    "needs.relay_public_config.result == 'success' || (github.event_name == 'workflow_dispatch' && inputs.installer_only)",
+    "Desktop builds do not allow the installer-only release path to skip relay configuration.",
+  );
+  assertContains(
+    releaseWorkflow,
+    "needs.publish_cli.result == 'success' || (github.event_name == 'workflow_dispatch' && inputs.installer_only)",
+    "GitHub releases do not allow installer-only publishing after the CLI job is skipped.",
+  );
+
   NodeChildProcess.execFileSync(
     process.execPath,
     [
