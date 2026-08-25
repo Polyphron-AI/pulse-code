@@ -78,3 +78,7 @@ On mobile, Photos includes videos when the connected server supports file upload
 Edits in the web or desktop file panel save automatically to the selected environment. Closing the file saves pending edits without resending an already-saved revision.
 
 If a thread cannot finish loading, Pulse Code displays a synchronization error and keeps any cached conversation visible. A temporary connection loss can still recover when the environment reconnects.
+
+## Reveal a file on your computer
+
+On web or desktop connected locally, open a chat file chip's menu and choose **Reveal in Finder**, **Reveal in File Explorer**, or **Reveal in Files**. The action selects the file where supported; Linux opens its containing folder. The menu uses the environment that owns the conversation or pull request. Remote connections and older environments without reveal support omit this action. Media preview and download remain available through their existing menus.

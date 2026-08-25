@@ -29,8 +29,19 @@ vi.mock("../state/entities", () => ({
   readThreadShell: () => null,
   useActiveEnvironmentId: () => EnvironmentId.make("env-windows"),
 }));
-vi.mock("../editorPreferences", () => ({ useOpenInPreferredEditor: () => vi.fn() }));
-vi.mock("~/lib/openPullRequestLink", () => ({ useOpenChangeRequestLink: () => vi.fn() }));
+vi.mock("../remoteOpen", () => ({
+  useRemoteOpenResolution: () => ({ state: { mode: "local-exec" }, isResolved: true }),
+}));
+vi.mock("../editorPreferences", () => ({
+  useOpenInPreferredEditor: () => vi.fn(),
+  usePreferredEditor: () => [null, vi.fn()],
+}));
+vi.mock("~/lib/openPullRequestLink", () => ({
+  findProjectForChangeRequest: () => undefined,
+  matchesLinkedPullRequestUrl: () => false,
+  parseChangeRequestUrl: () => null,
+  useOpenChangeRequestLink: () => vi.fn(),
+}));
 
 import ChatMarkdown from "./ChatMarkdown";
 import { FileMarkdownPreview } from "./files/FileMarkdownPreview";
