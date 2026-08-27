@@ -9,6 +9,8 @@ import {
   IssueReport,
   IssueThreadLinkResult,
   IssueUpdateInput,
+  ProjectReportListInput,
+  ProjectReportListResult,
 } from "./issues.ts";
 import { WS_METHODS } from "./rpc.ts";
 
@@ -18,6 +20,8 @@ const decodeIssueUpdate = Schema.decodeUnknownSync(IssueUpdateInput);
 const decodeIssueCapture = Schema.decodeUnknownSync(IssueCaptureInput);
 const decodeIssueReport = Schema.decodeUnknownSync(IssueReport);
 const decodeIssueThreadLink = Schema.decodeUnknownSync(IssueThreadLinkResult);
+const decodeProjectReportListInput = Schema.decodeUnknownSync(ProjectReportListInput);
+const decodeProjectReportListResult = Schema.decodeUnknownSync(ProjectReportListResult);
 const decodeEnvironmentDescriptor = Schema.decodeUnknownSync(ExecutionEnvironmentDescriptor);
 
 describe("native Issues contracts", () => {
@@ -179,5 +183,62 @@ describe("native Issues contracts", () => {
     expect(descriptor.capabilities.issues).toBeUndefined();
     expect(WS_METHODS.issuesCapture).toBe("issues.capture");
     expect(WS_METHODS.issuesRemoveThreadLink).toBe("issues.removeThreadLink");
+  });
+
+  it("advertises project report listing without breaking older connection snapshots", () => {
+    const older = decodeConnectionSnapshot({
+      status: "disconnected",
+      endpoint: null,
+      tokenConfigured: false,
+      projects: [],
+      mappings: [],
+      lastCheckedAt: null,
+      error: null,
+    });
+    const current = decodeConnectionSnapshot({
+      ...older,
+      capabilities: { listProjectReports: true },
+    });
+
+    expect(older.capabilities).toBeUndefined();
+    expect(current.capabilities?.listProjectReports).toBe(true);
+    expect(WS_METHODS.issuesListProjectReports).toBe("issues.listProjectReports");
+  });
+
+  it("bounds project report list inputs and provider-shaped results", () => {
+    const input = decodeProjectReportListInput({
+      projectId: "project-1",
+      limit: 100,
+      cursor: "next-page",
+    });
+    const result = decodeProjectReportListResult({
+      reports: [
+        {
+          id: "report-1",
+          issueId: null,
+          title: "Checkout button does nothing",
+          severity: "high",
+          status: "received",
+          kind: "bug",
+        },
+      ],
+      nextCursor: null,
+    });
+
+    expect(input.limit).toBe(100);
+    expect(result.reports[0]?.issueId).toBeNull();
+    expect(() => decodeProjectReportListInput({ projectId: "project-1", limit: 101 })).toThrow();
+    expect(() =>
+      decodeProjectReportListInput({ projectId: "project-1", cursor: "x".repeat(2_049) }),
+    ).toThrow();
+    expect(() =>
+      decodeProjectReportListResult({
+        reports: Array.from({ length: 101 }, () => result.reports[0]),
+        nextCursor: null,
+      }),
+    ).toThrow();
+    expect(() =>
+      decodeProjectReportListResult({ reports: [{ id: "report-1" }], nextCursor: null }),
+    ).toThrow();
   });
 });
