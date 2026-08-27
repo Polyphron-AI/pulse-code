@@ -81,6 +81,7 @@ export const RPC_REQUIRED_SCOPES = {
   [WS_METHODS.issuesList]: AuthOrchestrationReadScope,
   [WS_METHODS.issuesDetail]: AuthOrchestrationReadScope,
   [WS_METHODS.issuesReports]: AuthOrchestrationReadScope,
+  [WS_METHODS.issuesListProjectReports]: AuthOrchestrationReadScope,
   [WS_METHODS.issuesReportDetail]: AuthOrchestrationReadScope,
   [WS_METHODS.issuesActivity]: AuthOrchestrationReadScope,
   [WS_METHODS.issuesAssignees]: AuthOrchestrationReadScope,

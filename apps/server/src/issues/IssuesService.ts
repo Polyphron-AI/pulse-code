@@ -295,6 +295,7 @@ export const make = Effect.gen(function* () {
         mappings: mappings.map(publicMapping),
         lastCheckedAt,
         error,
+        capabilities: { listProjectReports: true },
       })),
     );
 

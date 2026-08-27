@@ -26,4 +26,13 @@ describe("ExecutionEnvironmentDescriptor", () => {
       }).capabilities.pullRequests,
     ).toBe(true);
   });
+
+  it("preserves an advertised project-action bridge capability", () => {
+    expect(
+      decodeDescriptor({
+        ...descriptor,
+        capabilities: { ...descriptor.capabilities, issuesProjectActions: true },
+      }).capabilities.issuesProjectActions,
+    ).toBe(true);
+  });
 });
