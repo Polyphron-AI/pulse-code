@@ -14,6 +14,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as TestClock from "effect/testing/TestClock";
 
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as ServerConfig from "../config.ts";
@@ -118,6 +119,7 @@ const makePulse = (
     listIssues: () => unused(),
     getIssue: () => unused(),
     listReports: () => unused(),
+    listProjectReports: () => unused(),
     getReport: () => unused(),
     listActivity: () => unused(),
     listAssignees: () => unused(),
@@ -155,6 +157,73 @@ const connectAndMap = Effect.gen(function* () {
 });
 
 describe("IssuesService", () => {
+  it.effect("lists mapped project Reports with a bounded cursor and lazy evidence", () => {
+    const calls: Array<{
+      readonly projectId: PulseProjectId;
+      readonly createdAfter?: string;
+      readonly limit: number;
+      readonly offset: number;
+    }> = [];
+    const layer = testLayer(
+      makePulse({
+        listProjectReports: (input) => {
+          calls.push({
+            projectId: input.pulseProjectId,
+            ...(input.createdAfter === undefined ? {} : { createdAfter: input.createdAfter }),
+            limit: input.limit,
+            offset: input.offset,
+          });
+          return Effect.succeed({
+            reports: [
+              {
+                id: reportId,
+                issueId,
+                title: report.title,
+                severity: report.severity,
+                status: report.status,
+                kind: report.kind,
+              },
+            ],
+            nextCursor: null,
+            total: 3,
+          });
+        },
+      }),
+    );
+
+    return Effect.gen(function* () {
+      yield* TestClock.setTime(Date.parse("2026-08-20T00:00:00.000Z"));
+      const service = yield* connectAndMap;
+      const first = yield* service.listProjectReports({ projectId: localProjectId, limit: 1 });
+      assert.equal(first.reports[0]?.id, reportId);
+      assert.equal(first.nextCursor, "1:2026-07-21T00:00:00.000Z");
+      const second = yield* service.listProjectReports({
+        projectId: localProjectId,
+        limit: 1,
+        cursor: first.nextCursor ?? undefined,
+      });
+      assert.equal(second.nextCursor, "2:2026-07-21T00:00:00.000Z");
+      assert.deepStrictEqual(
+        calls.map(({ projectId, createdAfter, limit, offset }) => ({
+          projectId,
+          createdAfter,
+          limit,
+          offset,
+        })),
+        [0, 1].map((offset) => ({
+          projectId: pulseProjectId,
+          createdAfter: "2026-07-21T00:00:00.000Z",
+          limit: 1,
+          offset,
+        })),
+      );
+      const invalid = yield* service
+        .listProjectReports({ projectId: localProjectId, cursor: "not-a-cursor" })
+        .pipe(Effect.flip);
+      assert.equal(invalid.reason, "invalid-input");
+    }).pipe(Effect.provide(layer), Effect.scoped);
+  });
+
   it.effect(
     "stores only the PAT in the secret store and supports remap, unmap, and disconnect",
     () => {

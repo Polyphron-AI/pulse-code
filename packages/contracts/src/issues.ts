@@ -54,6 +54,13 @@ const BoundedQuery = TrimmedNonEmptyString.check(Schema.isMaxLength(500));
 const BoundedUrl = TrimmedNonEmptyString.check(Schema.isMaxLength(2048));
 const BoundedIdentifier = TrimmedNonEmptyString.check(Schema.isMaxLength(256));
 const PageLimit = PositiveInt.check(Schema.isLessThanOrEqualTo(100));
+const PageCursor = TrimmedNonEmptyString.check(Schema.isMaxLength(2_048));
+
+/** Optional additions to the Issues surface. Missing fields mean an older server. */
+export const IssueCapabilities = Schema.Struct({
+  listProjectReports: Schema.optionalKey(Schema.Literal(true)),
+});
+export type IssueCapabilities = typeof IssueCapabilities.Type;
 
 export const PulseIssueProject = Schema.Struct({
   id: PulseProjectId,
@@ -83,6 +90,7 @@ export const IssueConnectionSnapshot = Schema.Struct({
   mappings: Schema.Array(IssueProjectMapping),
   lastCheckedAt: Schema.NullOr(IsoDateTime),
   error: Schema.NullOr(Schema.String),
+  capabilities: Schema.optionalKey(IssueCapabilities),
 });
 export type IssueConnectionSnapshot = typeof IssueConnectionSnapshot.Type;
 
@@ -219,6 +227,26 @@ export const IssueReportsResult = Schema.Struct({
   offset: NonNegativeInt,
 });
 export type IssueReportsResult = typeof IssueReportsResult.Type;
+
+/** A project-level report row. Evidence remains lazy and is fetched through reportDetail. */
+export const ProjectReportSummary = Schema.Struct({
+  ...IssueReportSummary.fields,
+  issueId: Schema.NullOr(IssueId),
+});
+export type ProjectReportSummary = typeof ProjectReportSummary.Type;
+
+export const ProjectReportListInput = Schema.Struct({
+  projectId: ProjectId,
+  limit: Schema.optional(PageLimit),
+  cursor: Schema.optional(PageCursor),
+});
+export type ProjectReportListInput = typeof ProjectReportListInput.Type;
+
+export const ProjectReportListResult = Schema.Struct({
+  reports: Schema.Array(ProjectReportSummary).check(Schema.isMaxLength(100)),
+  nextCursor: Schema.NullOr(PageCursor),
+});
+export type ProjectReportListResult = typeof ProjectReportListResult.Type;
 
 export const IssueReport = Schema.Struct({
   id: IssueReportId,

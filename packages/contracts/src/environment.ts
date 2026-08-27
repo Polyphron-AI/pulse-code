@@ -54,6 +54,8 @@ export const ExecutionEnvironmentCapabilities = Schema.Struct({
   /** Server exposes the native Pulse Issues connection, capture, triage, evidence, and
       thread-link APIs. Absent on older servers, so clients must not probe them. */
   issues: Schema.optionalKey(Schema.Boolean),
+  /** Server exposes the project-action/v1 bridge backed by its Issues connection and mappings. */
+  issuesProjectActions: Schema.optionalKey(Schema.Boolean),
   /** Server exposes the provider-neutral integration connection lifecycle. Domain capabilities
       remain separate and optional, so advertising this does not imply Issues or pull requests. */
   integrations: Schema.optionalKey(Schema.Boolean),

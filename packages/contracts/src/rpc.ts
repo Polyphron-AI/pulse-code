@@ -112,6 +112,8 @@ import {
   IssueOperationError,
   IssueProjectMappingRemoveInput,
   IssueProjectMappingSetInput,
+  ProjectReportListInput,
+  ProjectReportListResult,
   IssueRef,
   IssueReport,
   IssueReportRef,
@@ -352,6 +354,7 @@ export const WS_METHODS = {
   issuesList: "issues.list",
   issuesDetail: "issues.detail",
   issuesReports: "issues.reports",
+  issuesListProjectReports: "issues.listProjectReports",
   issuesReportDetail: "issues.reportDetail",
   issuesActivity: "issues.activity",
   issuesAssignees: "issues.assignees",
@@ -717,6 +720,12 @@ export const WsIssuesDetailRpc = Rpc.make(WS_METHODS.issuesDetail, {
 export const WsIssuesReportsRpc = Rpc.make(WS_METHODS.issuesReports, {
   payload: IssueReportsInput,
   success: IssueReportsResult,
+  error: IssueRpcError,
+});
+
+export const WsIssuesListProjectReportsRpc = Rpc.make(WS_METHODS.issuesListProjectReports, {
+  payload: ProjectReportListInput,
+  success: ProjectReportListResult,
   error: IssueRpcError,
 });
 
@@ -1286,6 +1295,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsIssuesListRpc,
   WsIssuesDetailRpc,
   WsIssuesReportsRpc,
+  WsIssuesListProjectReportsRpc,
   WsIssuesReportDetailRpc,
   WsIssuesActivityRpc,
   WsIssuesAssigneesRpc,

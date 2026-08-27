@@ -215,6 +215,15 @@ it.layer(NodeServices.layer)("bin cli parsing", (it) => {
     }),
   );
 
+  it.effect("exposes the project-action Issues bridge", () =>
+    Effect.gen(function* () {
+      const { output } = yield* captureStdout(runCli(["issues", "action", "--help"]));
+
+      assert.include(output, "project-action/v1");
+      assert.include(output, "--input");
+    }),
+  );
+
   it.effect("reports fresh headless connect state without requiring local configuration", () =>
     Effect.gen(function* () {
       const baseDir = NodeFS.mkdtempSync(

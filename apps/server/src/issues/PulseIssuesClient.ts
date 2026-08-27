@@ -11,6 +11,7 @@ import type {
   IssueReportsResult,
   IssueReportUpdateInput,
   IssueUpdateInput,
+  ProjectReportListResult,
   PulseIssueProject,
   PulseProjectId,
 } from "@t3tools/contracts";
@@ -434,6 +435,17 @@ export class PulseIssuesClient extends Context.Service<
         readonly offset: number;
       },
     ) => Effect.Effect<IssueReportsResult, PulseIssuesClientError>;
+    readonly listProjectReports: (
+      input: PulseIssuesCredentials & {
+        readonly pulseProjectId: PulseProjectId;
+        readonly createdAfter?: string;
+        readonly limit: number;
+        readonly offset: number;
+      },
+    ) => Effect.Effect<
+      ProjectReportListResult & { readonly total: number },
+      PulseIssuesClientError
+    >;
     readonly getReport: (
       input: PulseIssuesCredentials & { readonly reportId: IssueReportId },
     ) => Effect.Effect<IssueReport, PulseIssuesClientError>;
@@ -598,6 +610,57 @@ export const makeWithFetch = (fetch: PulseFetch): PulseIssuesClient["Service"] =
         total,
         limit: input.limit,
         offset: input.offset,
+      };
+    });
+
+  const listProjectReports: PulseIssuesClient["Service"]["listProjectReports"] = (input) =>
+    jsonEffect(async () => {
+      const body = await request(
+        "issues.listProjectReports",
+        input.endpoint,
+        queryPath("/api/bugs", {
+          projectId: input.pulseProjectId,
+          created_after: input.createdAfter,
+          limit: String(input.limit),
+          offset: String(input.offset),
+        }),
+        { method: "GET", headers: authHeaders(input.token) },
+      );
+      const object = asObject(body);
+      const bugs = asArray(object?.bugs);
+      const total = asNumber(object?.total);
+      if (!bugs || total === null) {
+        throw invalidResponse(
+          "issues.listProjectReports",
+          "Pulse returned a malformed project Report page.",
+        );
+      }
+      return {
+        reports: bugs.map((value) => {
+          const bug = requireBug("issues.listProjectReports", value);
+          if (bug.projectId !== input.pulseProjectId) {
+            throw invalidResponse(
+              "issues.listProjectReports",
+              "Pulse returned a Report outside the requested project.",
+            );
+          }
+          return {
+            id: bug.id as IssueReportId,
+            issueId:
+              bug.ticketId === undefined || bug.ticketId === null
+                ? null
+                : (bug.ticketId as IssueId),
+            title: bug.title,
+            severity: (bug.severity ??
+              "") as ProjectReportListResult["reports"][number]["severity"],
+            status: (bug.status ?? "") as ProjectReportListResult["reports"][number]["status"],
+            kind: bug.kind ?? "bug",
+            ...(bug.reporterEmail === undefined ? {} : { reporterEmail: bug.reporterEmail }),
+            createdAt: bug.createdAt,
+          };
+        }),
+        nextCursor: null,
+        total,
       };
     });
 
@@ -885,6 +948,7 @@ export const makeWithFetch = (fetch: PulseFetch): PulseIssuesClient["Service"] =
     listIssues,
     getIssue,
     listReports,
+    listProjectReports,
     getReport,
     listActivity,
     listAssignees,
