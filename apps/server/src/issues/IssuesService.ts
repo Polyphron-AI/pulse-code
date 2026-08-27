@@ -21,6 +21,8 @@ import type {
   IssueReportsInput,
   IssueReportsResult,
   IssueReportUpdateInput,
+  ProjectReportListInput,
+  ProjectReportListResult,
   IssueThreadLinkGetInput,
   IssueThreadLinkRemoveInput,
   IssueThreadLinkResult,
@@ -146,6 +148,9 @@ export class IssuesService extends Context.Service<
     readonly reports: (
       input: IssueReportsInput,
     ) => Effect.Effect<IssueReportsResult, IssueOperationError>;
+    readonly listProjectReports: (
+      input: ProjectReportListInput,
+    ) => Effect.Effect<ProjectReportListResult, IssueOperationError>;
     readonly reportDetail: (
       input: IssueReportRef,
     ) => Effect.Effect<IssueReport, IssueOperationError>;
@@ -516,6 +521,59 @@ export const make = Effect.gen(function* () {
         .pipe(Effect.mapError(fromClientError));
     });
 
+  const listProjectReports: IssuesService["Service"]["listProjectReports"] = (input) =>
+    Effect.gen(function* () {
+      const operation = "issues.listProjectReports";
+      const [active, mapped] = yield* Effect.all([
+        connection(operation),
+        mapping(operation, input.projectId),
+      ]);
+      const limit = input.limit ?? 50;
+      const cursor = yield* Effect.try({
+        try: () => {
+          if (input.cursor === undefined) return null;
+          const separator = input.cursor.indexOf(":");
+          const parsed = Number(input.cursor.slice(0, separator));
+          const createdAfter = input.cursor.slice(separator + 1);
+          if (
+            separator < 1 ||
+            !Number.isSafeInteger(parsed) ||
+            parsed < 0 ||
+            Option.isNone(DateTime.make(createdAfter))
+          ) {
+            throw new Error("invalid cursor");
+          }
+          return { offset: parsed, createdAfter };
+        },
+        catch: (cause) =>
+          issueError(operation, "invalid-input", "The Report cursor is invalid.", false, cause),
+      });
+      const createdAfter =
+        cursor?.createdAfter ??
+        (yield* DateTime.now.pipe(
+          Effect.map((now) =>
+            DateTime.formatIso(
+              DateTime.makeUnsafe(DateTime.toEpochMillis(now) - 30 * 24 * 60 * 60 * 1_000),
+            ),
+          ),
+        ));
+      const offset = cursor?.offset ?? 0;
+      const page = yield* pulse
+        .listProjectReports({
+          ...active,
+          pulseProjectId: mapped.pulseProjectId,
+          createdAfter,
+          limit,
+          offset,
+        })
+        .pipe(Effect.mapError(fromClientError));
+      const nextOffset = offset + page.reports.length;
+      return {
+        reports: page.reports,
+        nextCursor: nextOffset < page.total ? `${nextOffset}:${createdAfter}` : null,
+      };
+    });
+
   const reportDetail: IssuesService["Service"]["reportDetail"] = (input) =>
     Effect.gen(function* () {
       const [active, mapped] = yield* Effect.all([
@@ -803,6 +861,7 @@ export const make = Effect.gen(function* () {
     list,
     detail,
     reports,
+    listProjectReports,
     reportDetail,
     activity,
     assignees,

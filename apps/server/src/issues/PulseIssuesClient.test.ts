@@ -42,10 +42,68 @@ const ticket = (overrides: Readonly<Record<string, unknown>> = {}) => ({
   ...overrides,
 });
 
+const bug = (overrides: Readonly<Record<string, unknown>> = {}) => ({
+  id: "bug-1",
+  projectId: "project-1",
+  ticketId: "ticket-1",
+  title: "Checkout report",
+  severity: "high",
+  status: "received",
+  kind: "bug",
+  createdAt: "2026-08-19T00:00:00Z",
+  updatedAt: "2026-08-19T00:01:00Z",
+  ...overrides,
+});
+
 const requestUrl = (input: Parameters<typeof fetch>[0]): URL =>
   new URL(typeof input === "string" ? input : input instanceof URL ? input : input.url);
 
 describe("PulseIssuesClient", () => {
+  it.effect("lists one bounded project Report page without fetching evidence", () => {
+    const requests: URL[] = [];
+    const fetchFn = ((input: Parameters<typeof fetch>[0]) => {
+      const url = requestUrl(input);
+      requests.push(url);
+      return Promise.resolve(Response.json({ bugs: [bug()], total: 3 }));
+    }) as typeof fetch;
+
+    return Effect.gen(function* () {
+      const page = yield* makeWithFetch(fetchFn).listProjectReports({
+        ...credentials,
+        pulseProjectId: PulseProjectId.make("project-1"),
+        createdAfter: "2026-07-20T00:00:00.000Z",
+        limit: 1,
+        offset: 1,
+      });
+      assert.equal(page.reports[0]?.id, IssueReportId.make("bug-1"));
+      assert.equal(page.reports[0]?.issueId, IssueId.make("ticket-1"));
+      assert.equal(page.total, 3);
+      assert.equal(requests.length, 1);
+      assert.equal(requests[0]?.pathname, "/api/bugs");
+      assert.equal(requests[0]?.searchParams.get("projectId"), "project-1");
+      assert.equal(requests[0]?.searchParams.get("created_after"), "2026-07-20T00:00:00.000Z");
+      assert.equal(requests[0]?.searchParams.get("limit"), "1");
+      assert.equal(requests[0]?.searchParams.get("offset"), "1");
+    });
+  });
+
+  it.effect("rejects a project Report page that crosses the project boundary", () =>
+    makeWithFetch((() =>
+      Promise.resolve(
+        Response.json({ bugs: [bug({ projectId: "project-2" })], total: 1 }),
+      )) as unknown as typeof fetch)
+      .listProjectReports({
+        ...credentials,
+        pulseProjectId: PulseProjectId.make("project-1"),
+        limit: 50,
+        offset: 0,
+      })
+      .pipe(
+        Effect.flip,
+        Effect.map((error) => assert.equal(error.reason, "invalid-response")),
+      ),
+  );
+
   it.effect("discovers every project page and keeps ingest secrets server-side", () => {
     const requests: Array<{ readonly url: URL; readonly init?: RequestInit }> = [];
     const fetchFn = ((input: Parameters<typeof fetch>[0], init?: RequestInit) => {
