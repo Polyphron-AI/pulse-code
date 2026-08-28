@@ -1280,7 +1280,7 @@ function ChatViewContent(props: ChatViewProps) {
   const threadSyncPhase = routeKind === "server" ? (props.threadSyncPhase ?? null) : null;
   const threadDetailLoading = threadSyncPhase === "loading";
   const handleNewThread = useNewThreadHandler();
-  const { settleThread } = useThreadActions();
+  const { settleThread, pinThread, unpinThread } = useThreadActions();
   const routeThreadRef = useMemo(
     () => scopeThreadRef(environmentId, threadId),
     [environmentId, threadId],
@@ -4754,6 +4754,8 @@ function ChatViewContent(props: ChatViewProps) {
   const serverAutoSettlement = serverConfig?.environment.capabilities.threadAutoSettlement === true;
   const supportsSettlement = serverConfig?.environment.capabilities.threadSettlement === true;
   const supportsSnooze = serverConfig?.environment.capabilities.threadSnooze === true;
+  const supportsPinning = serverConfig?.environment.capabilities.threadPinning === true;
+  const activeThreadPinned = supportsPinning && activeThreadShell?.pinnedAt != null;
   const nowMinute = useNowMinute();
   const snoozeNow = new Date().toISOString();
   const activeThreadSnoozed =
@@ -5478,6 +5480,25 @@ function ChatViewContent(props: ChatViewProps) {
         return;
       }
 
+      if (command === "thread.pin") {
+        event.preventDefault();
+        event.stopPropagation();
+        if (!isServerThread || !activeThreadRef || !supportsPinning) return;
+        const pinned = activeThreadPinned;
+        void (pinned ? unpinThread(activeThreadRef) : pinThread(activeThreadRef)).then((result) => {
+          if (result._tag !== "Failure" || isAtomCommandInterrupted(result)) return;
+          const error = squashAtomCommandFailure(result);
+          toastManager.add(
+            stackedThreadToast({
+              type: "error",
+              title: pinned ? "Failed to unpin thread" : "Failed to pin thread",
+              description: error instanceof Error ? error.message : "An error occurred.",
+            }),
+          );
+        });
+        return;
+      }
+
       if (command === "terminal.toggle") {
         event.preventDefault();
         event.stopPropagation();
@@ -5594,6 +5615,7 @@ function ChatViewContent(props: ChatViewProps) {
     addTerminalSurface,
     canInterruptRunningThread,
     activeThreadRef,
+    activeThreadPinned,
     activeThreadSettled,
     terminalUiState.terminalOpen,
     terminalUiState.activeTerminalId,
@@ -5612,8 +5634,11 @@ function ChatViewContent(props: ChatViewProps) {
     previewPanelOpen,
     handleUnsettleActiveThread,
     isServerThread,
+    pinThread,
     settleThread,
+    supportsPinning,
     supportsSettlement,
+    unpinThread,
     toggleRightPanel,
     toggleRightPanelMaximized,
     toggleTerminalVisibility,
