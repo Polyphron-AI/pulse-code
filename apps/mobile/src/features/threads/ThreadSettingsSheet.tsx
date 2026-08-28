@@ -145,6 +145,11 @@ function ModelRow(props: {
       {props.option.isUnavailable ? (
         <Text className="text-xs text-foreground-muted">Unavailable</Text>
       ) : null}
+      {props.option.subtitle ? (
+        <Text className="min-w-0 shrink text-xs text-foreground-muted" numberOfLines={1}>
+          {props.option.subtitle}
+        </Text>
+      ) : null}
       <View className="flex-1" />
       {props.selected ? (
         <SymbolView

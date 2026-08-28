@@ -14,6 +14,10 @@ answer controls stay expanded. Moving focus away does not collapse the desktop c
 Turn off **Collapse composer on scroll** under **Settings → General** to keep the composer expanded.
 The mobile keyboard and composer keep their existing behavior.
 
+On mobile, the model picker shows each OpenCode model's upstream provider, such as Anthropic,
+GitHub Copilot, or OpenCode Zen, beneath its name. Search by that provider name to narrow the list
+when starting a thread or changing an existing thread's model.
+
 Choose how messages behave during an active turn under **Settings → General → Messages while
 working**:
 
