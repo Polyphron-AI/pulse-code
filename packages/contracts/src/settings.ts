@@ -217,6 +217,7 @@ export const ClientSettingsSchema = Schema.Struct({
   composerBusyBehavior: ComposerBusyBehavior.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_COMPOSER_BUSY_BEHAVIOR)),
   ),
+  confirmThreadUnpin: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   dismissedProviderUpdateNotificationKeys: Schema.Array(TrimmedNonEmptyString).pipe(
     Schema.withDecodingDefault(Effect.succeed([])),
   ),
@@ -1067,6 +1068,7 @@ export const ClientSettingsPatch = Schema.Struct({
   confirmThreadArchive: Schema.optionalKey(Schema.Boolean),
   confirmThreadDelete: Schema.optionalKey(Schema.Boolean),
   composerBusyBehavior: Schema.optionalKey(ComposerBusyBehavior),
+  confirmThreadUnpin: Schema.optionalKey(Schema.Boolean),
   diffIgnoreWhitespace: Schema.optionalKey(Schema.Boolean),
   environmentIdentificationMode: Schema.optionalKey(EnvironmentIdentificationMode),
   glassOpacity: Schema.optionalKey(GlassOpacity),

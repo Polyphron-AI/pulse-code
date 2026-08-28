@@ -28,6 +28,7 @@ const clientSettings: ClientSettings = {
   browserDefaultProfileId: "work",
   confirmThreadArchive: true,
   confirmThreadDelete: false,
+  confirmThreadUnpin: false,
   dismissedProviderUpdateNotificationKeys: [],
   diffIgnoreWhitespace: true,
   environmentIdentificationMode: "artwork",
