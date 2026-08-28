@@ -1,16 +1,19 @@
 import { useAtomValue } from "@effect/atom-react";
 import type { MenuAction } from "@react-native-menu/menu";
-import { useNavigation } from "@react-navigation/native";
+import { StackActions, useFocusEffect, useNavigation } from "@react-navigation/native";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import {
   EnvironmentId,
   ProjectId,
   ScheduleId,
+  type ModelSelection,
   type OrchestrationSchedule,
   type OrchestrationShellSnapshot,
+  type ProviderOptionSelection,
+  type ServerConfig,
 } from "@t3tools/contracts";
 import { Atom } from "effect/unstable/reactivity";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -31,15 +34,28 @@ import { relativeTime } from "../../lib/time";
 import { useThemeColor } from "../../lib/useThemeColor";
 import { uuidv4 } from "../../lib/uuid";
 import { NativeHeaderToolbar, NativeStackScreenOptions } from "../../native/StackHeader";
+import {
+  buildModelOptions,
+  groupByProvider,
+  resolveDefaultableModelSelection,
+  resolveSelectableModelSelection,
+} from "../../lib/modelOptions";
+import { resolveProviderOptionDescriptors } from "../../lib/providerOptions";
 import { useEnvironments } from "../../state/environments";
 import { orchestrationEnvironment } from "../../state/orchestration";
+import { serverEnvironment } from "../../state/server";
 import { environmentSnapshotAtom } from "../../state/shell";
 import { useAtomCommand } from "../../state/use-atom-command";
+import {
+  type ExistingThreadSettingsRouteSession,
+  useExistingThreadSettingsRoutePresentation,
+} from "../threads/ThreadSettingsSheet";
 import {
   latestScheduleOccurrence,
   mobileOccurrenceSummary,
   mobileScheduleCanEdit,
   mobileScheduleHeadline,
+  mobileScheduleModelLabel,
   mobileScheduleScopeLabel,
   mobileScheduleStatus,
 } from "./SettingsScheduledChatsRouteScreen.logic";
@@ -47,10 +63,14 @@ import {
 const EMPTY_SNAPSHOT_ATOM = Atom.make<OrchestrationShellSnapshot | null>(null).pipe(
   Atom.withLabel("mobile-scheduled-chats-empty-snapshot"),
 );
+const EMPTY_SERVER_CONFIG_ATOM = Atom.make<ServerConfig | null>(null).pipe(
+  Atom.withLabel("mobile-scheduled-chats-empty-server-config"),
+);
 
 interface ScheduleDraft {
   readonly allProjects: boolean;
   readonly projectId: ProjectId | null;
+  readonly modelSelection: ModelSelection | null;
   readonly time: string;
   readonly timezone: string;
   readonly prompt: string;
@@ -61,6 +81,7 @@ function defaultDraft(projectId: ProjectId | null): ScheduleDraft {
   return {
     allProjects: false,
     projectId,
+    modelSelection: null,
     time: "09:00",
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
     prompt: "",
@@ -79,6 +100,7 @@ function draftFromSchedule(schedule: OrchestrationSchedule): ScheduleDraft {
   return {
     allProjects,
     projectId,
+    modelSelection: schedule.modelSelection ?? null,
     time: `${String(schedule.hourLocal).padStart(2, "0")}:${String(schedule.minuteLocal).padStart(2, "0")}`,
     timezone: schedule.timezone,
     prompt: schedule.prompt,
@@ -173,6 +195,9 @@ function ScheduleEditor(props: {
   readonly editing: OrchestrationSchedule | null;
   readonly busy: boolean;
   readonly error: string | null;
+  readonly modelLabel: string;
+  readonly modelAvailable: boolean;
+  readonly onOpenAgentSettings: () => void;
   readonly onChange: (draft: ScheduleDraft) => void;
   readonly onCancel: () => void;
   readonly onSave: () => void;
@@ -270,6 +295,40 @@ function ScheduleEditor(props: {
         </View>
       </View>
 
+      <View className="gap-3 rounded-2xl bg-subtle px-4 py-3">
+        <View className="flex-row items-start justify-between gap-3">
+          <View className="min-w-0 flex-1">
+            <Text className="font-t3-bold text-foreground">Agent setup</Text>
+            <Text className="mt-0.5 text-xs leading-normal text-foreground-muted">
+              Model, reasoning, and context for every run.
+            </Text>
+          </View>
+          {props.draft.modelSelection !== null ? (
+            <ControlPill
+              accessibilityLabel="Use project default model"
+              label="Reset"
+              variant="pill"
+              onPress={() => props.onChange({ ...props.draft, modelSelection: null })}
+            />
+          ) : null}
+        </View>
+        <ControlPill
+          accessibilityLabel="Choose scheduled chat model, reasoning, and context"
+          disabled={!props.modelAvailable}
+          label={props.modelLabel}
+          variant="pill"
+          className="self-start"
+          onPress={props.onOpenAgentSettings}
+        />
+        <Text className="text-xs leading-normal text-foreground-muted">
+          {props.draft.modelSelection === null
+            ? props.draft.allProjects
+              ? "Each project uses its own default until you choose a shared override."
+              : "Uses the project's default until you choose an override."
+            : "Uses this model and its options instead of the project default."}
+        </Text>
+      </View>
+
       <View>
         <FieldLabel>Prompt</FieldLabel>
         <TextInput
@@ -298,7 +357,7 @@ function ScheduleEditor(props: {
       </View>
 
       <Text className="text-xs leading-normal text-foreground-muted">
-        Uses each project&apos;s default model. Handoffs go to handoff/&#123;date&#125;.md.
+        Handoffs go to handoff/&#123;date&#125;.md.
       </Text>
 
       {props.error ? (
@@ -329,6 +388,7 @@ function ScheduleCard(props: {
   readonly onEdit: () => void;
   readonly onDelete: () => void;
   readonly onOpenThread: (threadId: string) => void;
+  readonly serverConfig: ServerConfig | null;
 }) {
   const icon = useThemeColor("--color-icon-muted");
   const latest = latestScheduleOccurrence(props.schedule);
@@ -361,7 +421,8 @@ function ScheduleCard(props: {
             {mobileScheduleHeadline(props.schedule.prompt)}
           </Text>
           <Text className="mt-1 text-sm text-foreground-muted">
-            {mobileScheduleScopeLabel(props.schedule, props.projectTitles)}
+            {mobileScheduleScopeLabel(props.schedule, props.projectTitles)} ·{" "}
+            {mobileScheduleModelLabel(props.schedule, props.serverConfig)}
           </Text>
         </View>
 
@@ -440,6 +501,8 @@ function ScheduleCard(props: {
 
 export function SettingsScheduledChatsRouteScreen() {
   const navigation = useNavigation();
+  const settingsRoutePresentation = useExistingThreadSettingsRoutePresentation();
+  const settingsRoutePresentedRef = useRef(false);
   const insets = useSafeAreaInsets();
   const { environments } = useEnvironments();
   const [selectedEnvironmentId, setSelectedEnvironmentId] = useState<EnvironmentId | null>(null);
@@ -448,10 +511,16 @@ export function SettingsScheduledChatsRouteScreen() {
   const [draft, setDraft] = useState<ScheduleDraft>(() => defaultDraft(null));
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [agentSettingsOpen, setAgentSettingsOpen] = useState(false);
   const snapshot = useAtomValue(
     selectedEnvironmentId === null
       ? EMPTY_SNAPSHOT_ATOM
       : environmentSnapshotAtom(selectedEnvironmentId),
+  );
+  const serverConfig = useAtomValue(
+    selectedEnvironmentId === null
+      ? EMPTY_SERVER_CONFIG_ATOM
+      : serverEnvironment.configValueAtom(selectedEnvironmentId),
   );
   const createSchedule = useAtomCommand(orchestrationEnvironment.createSchedule, {
     reportFailure: false,
@@ -495,6 +564,83 @@ export function SettingsScheduledChatsRouteScreen() {
   );
   const selectedEnvironment = environments.find(
     (environment) => environment.environmentId === selectedEnvironmentId,
+  );
+  const selectedProject = projects.find((project) => project.id === draft.projectId) ?? null;
+  const explicitModelSelection = resolveSelectableModelSelection(
+    serverConfig,
+    draft.modelSelection,
+  );
+  const projectDefaultModelSelection = resolveDefaultableModelSelection(
+    serverConfig,
+    draft.allProjects ? null : (selectedProject?.defaultModelSelection ?? null),
+  );
+  const modelOptions = useMemo(
+    () => buildModelOptions(serverConfig, explicitModelSelection ?? projectDefaultModelSelection),
+    [explicitModelSelection, projectDefaultModelSelection, serverConfig],
+  );
+  const selectedModel =
+    explicitModelSelection ??
+    projectDefaultModelSelection ??
+    modelOptions.find((option) => option.isDefault)?.selection ??
+    modelOptions[0]?.selection ??
+    null;
+  const selectedModelOption =
+    modelOptions.find(
+      (option) =>
+        selectedModel !== null &&
+        option.selection.instanceId === selectedModel.instanceId &&
+        option.selection.model === selectedModel.model,
+    ) ?? null;
+  const providerGroups = useMemo(() => groupByProvider(modelOptions), [modelOptions]);
+  const providerOptionDescriptors = useMemo(
+    () =>
+      resolveProviderOptionDescriptors({
+        capabilities: selectedModelOption?.capabilities,
+        selections: selectedModel?.options,
+      }),
+    [selectedModel?.options, selectedModelOption?.capabilities],
+  );
+  const settingsOwnerId = `schedule:${selectedEnvironmentId ?? "none"}:${editing?.id ?? "new"}`;
+  const settingsRouteSession = useMemo<ExistingThreadSettingsRouteSession>(
+    () => ({
+      ownerId: settingsOwnerId,
+      title: "Agent settings",
+      providerGroups,
+      selectedModel,
+      onSelectModel: (option) =>
+        setDraft((current) => ({ ...current, modelSelection: option.selection })),
+      optionDescriptors: providerOptionDescriptors,
+      onUpdateOptionSelections: (options: ReadonlyArray<ProviderOptionSelection>) => {
+        if (selectedModel === null) return;
+        setDraft((current) => ({
+          ...current,
+          modelSelection: { ...selectedModel, options },
+        }));
+      },
+    }),
+    [providerGroups, providerOptionDescriptors, selectedModel, settingsOwnerId],
+  );
+  const openAgentSettings = useCallback(() => {
+    if (selectedModel === null) return;
+    settingsRoutePresentation.present(settingsRouteSession);
+    settingsRoutePresentedRef.current = true;
+    setAgentSettingsOpen(true);
+    navigation.dispatch(StackActions.push("ThreadSettingsSheet"));
+  }, [navigation, selectedModel, settingsRoutePresentation, settingsRouteSession]);
+
+  useEffect(() => {
+    if (agentSettingsOpen) {
+      settingsRoutePresentation.present(settingsRouteSession);
+    }
+  }, [agentSettingsOpen, settingsRoutePresentation, settingsRouteSession]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!settingsRoutePresentedRef.current) return;
+      settingsRoutePresentedRef.current = false;
+      setAgentSettingsOpen(false);
+      settingsRoutePresentation.clear(settingsOwnerId);
+    }, [settingsOwnerId, settingsRoutePresentation]),
   );
   const environmentActions = useMemo<MenuAction[]>(
     () =>
@@ -569,6 +715,7 @@ export function SettingsScheduledChatsRouteScreen() {
               minuteLocal,
               timezone,
               prompt,
+              ...(draft.modelSelection !== null ? { modelSelection: draft.modelSelection } : {}),
               skipIfDirty: draft.skipIfDirty,
             },
           })
@@ -581,6 +728,7 @@ export function SettingsScheduledChatsRouteScreen() {
               minuteLocal,
               timezone,
               prompt,
+              modelSelection: draft.modelSelection,
               skipIfDirty: draft.skipIfDirty,
             },
           });
@@ -706,6 +854,12 @@ export function SettingsScheduledChatsRouteScreen() {
             draft={draft}
             editing={editing}
             error={error}
+            modelAvailable={selectedModel !== null}
+            modelLabel={
+              draft.modelSelection === null && draft.allProjects
+                ? "Choose shared override"
+                : (selectedModelOption?.label ?? selectedModel?.model ?? "No model available")
+            }
             projects={projects}
             onCancel={() => {
               setEditorOpen(false);
@@ -713,6 +867,7 @@ export function SettingsScheduledChatsRouteScreen() {
               setError(null);
             }}
             onChange={setDraft}
+            onOpenAgentSettings={openAgentSettings}
             onSave={() => void save()}
           />
         ) : null}
@@ -746,6 +901,7 @@ export function SettingsScheduledChatsRouteScreen() {
               busy={busyId === schedule.id}
               projectTitles={projectTitles}
               schedule={schedule}
+              serverConfig={serverConfig}
               onDelete={() => remove(schedule)}
               onEdit={() => openEdit(schedule)}
               onOpenThread={(threadId) =>

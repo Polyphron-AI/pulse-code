@@ -535,11 +535,14 @@ const makeScheduleReactor = (options?: ScheduleReactorLiveOptions) =>
           return;
         }
 
-        // Prefer the schedule's own model selection; otherwise borrow the
-        // persistent thread's, falling back to the project's most recent
-        // thread. With neither we cannot create the thread and skip this fire.
+        const project = model.projects.find((entry) => entry.id === projectId);
+
+        // Prefer the schedule's own model selection, then the current project
+        // default. The persistent or most recent thread only provides a
+        // backwards-compatible fallback when the project has no default.
         const modelSelection: ModelSelection | null =
           schedule.modelSelection ??
+          project?.defaultModelSelection ??
           existingThread?.modelSelection ??
           model.threads
             .filter((thread) => thread.projectId === projectId && thread.deletedAt === null)
@@ -590,8 +593,6 @@ const makeScheduleReactor = (options?: ScheduleReactorLiveOptions) =>
             return;
           }
         }
-
-        const project = model.projects.find((entry) => entry.id === projectId);
 
         // Skip-if-dirty: an unattended run must never sweep up half-done work
         // a human left behind. Always a visible failure, never a silent skip.
@@ -688,9 +689,10 @@ const makeScheduleReactor = (options?: ScheduleReactorLiveOptions) =>
             text,
             attachments: [],
           },
-          // Only override the thread's model when the schedule carries its
-          // own selection; otherwise the turn keeps the thread's default.
-          ...(schedule.modelSelection != null ? { modelSelection: schedule.modelSelection } : {}),
+          // Resolve this for every occurrence so clearing an override follows
+          // the project's current default even when the persistent scheduled
+          // thread was created with an older selection.
+          ...(modelSelection != null ? { modelSelection } : {}),
           runtimeMode: existingThread?.runtimeMode ?? DEFAULT_RUNTIME_MODE,
           interactionMode: existingThread?.interactionMode ?? DEFAULT_PROVIDER_INTERACTION_MODE,
           sessionMode: "fresh",

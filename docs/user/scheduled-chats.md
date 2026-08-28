@@ -10,6 +10,7 @@ contains:
 - A project scope, or all projects in the environment.
 - An interval in minutes, hours, days, or weeks.
 - A time zone used for run labels and handoff dates.
+- An optional model override with that model's reasoning and context options.
 - The instruction sent to the agent.
 - An option to skip projects with uncommitted changes.
 - A handoff Git policy:
@@ -25,9 +26,12 @@ An interval starts when the schedule is saved and restarts when that interval
 is changed; editing other fields does not shift the cadence.
 
 Each occurrence creates a normal, durable chat and starts it in a fresh provider
-session using the project's default model. The prompt also directs the agent to
-use `handoff/YYYY-MM-DD.md` for lightweight continuity between runs. Sub-daily
-runs can read the most recent successful handoff from earlier on the same day.
+session. By default, a schedule follows each project's model. Choose a model in
+**Agent setup** to apply one model, reasoning level, and context setting to every
+run instead. Use **Use project default** to remove the override. The prompt also
+directs the agent to use `handoff/YYYY-MM-DD.md` for lightweight continuity
+between runs. Sub-daily runs can read the most recent successful handoff from
+earlier on the same day.
 Pulse Code never includes unrelated staged or working-tree files in its handoff
 commits. If `.gitignore` already has uncommitted changes or Git rejects a
 commit, the occurrence fails with the detailed reason shown in Scheduled chats.
@@ -36,6 +40,20 @@ For an **All projects** schedule, each targeted project keeps its own handoff at
 `<project-root>/handoff/YYYY-MM-DD.md`. The selected Git policy is applied
 independently in each project; there is no shared environment-level handoff
 directory.
+
+## Find scheduled chats from the sidebar
+
+Use the **Projects / Scheduled** control in the main sidebar to switch between
+normal project browsing and scheduled chats. **Projects** keeps the current
+**All projects** or single-project filter, including scheduled chats that belong
+to that project. **Scheduled** ignores the saved project filter and shows
+schedule-derived rows from all connected projects.
+
+The Scheduled badge counts active, unpaused schedules. A schedule is visible
+before its first run; its row says **Not initialized yet** until Pulse Code
+creates the durable chat. Select an initialized row to open its chat, or select
+an uninitialized row to manage the schedule in Settings. Returning to Projects
+restores the project filter you were using.
 
 ## Status and controls
 
@@ -55,7 +73,7 @@ Pulse Code automatically pauses a schedule after three consecutive failures.
 Fix the reported problem, then resume it from Settings. Common causes include:
 
 - The selected provider is signed out.
-- The project's default model is missing or unavailable.
+- The selected model or the project's default model is missing or unavailable.
 - The project was removed.
 - The working tree is dirty when **Skip dirty projects** is enabled.
 

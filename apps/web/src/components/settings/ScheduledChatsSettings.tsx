@@ -2,15 +2,21 @@ import { useAtomValue } from "@effect/atom-react";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { useNavigate } from "@tanstack/react-router";
 import {
+  DEFAULT_SERVER_SETTINGS,
   ProjectId,
   ScheduleId,
   scheduleIntervalMinutes,
   type EnvironmentId,
+  type ModelSelection,
   type OrchestrationSchedule,
   type OrchestrationShellSnapshot,
   type ScheduleHandoffGitPolicy,
   type ScheduleIntervalUnit,
+  type ServerConfig,
+  type ServerProvider,
 } from "@t3tools/contracts";
+import type { UnifiedSettings } from "@t3tools/contracts/settings";
+import { createModelSelection } from "@t3tools/shared/model";
 import { Atom } from "effect/unstable/reactivity";
 import {
   CalendarClockIcon,
@@ -26,12 +32,23 @@ import { useEffect, useMemo, useState } from "react";
 
 import { randomUUID } from "~/lib/utils";
 import { readLocalApi } from "~/localApi";
+import { useClientSettings } from "~/hooks/useSettings";
+import { getCustomModelOptionsByInstance } from "~/modelSelection";
+import {
+  applyProviderInstanceSettings,
+  deriveProviderInstanceEntries,
+  resolveDefaultProviderModelSelection,
+  sortProviderInstanceEntries,
+} from "~/providerInstances";
 import { useEnvironments, usePrimaryEnvironmentId } from "~/state/environments";
 import { orchestrationEnvironment } from "~/state/orchestration";
+import { serverEnvironment } from "~/state/server";
 import { environmentSnapshotAtom } from "~/state/shell";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { buildThreadRouteParams } from "~/threadRoutes";
 
+import { ProviderModelPicker } from "../chat/ProviderModelPicker";
+import { shouldRenderTraitsControls, TraitsPicker } from "../chat/TraitsPicker";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -43,8 +60,12 @@ import { SettingsPageContainer, SettingsSection } from "./settingsLayout";
 const EMPTY_SNAPSHOT_ATOM = Atom.make<OrchestrationShellSnapshot | null>(null).pipe(
   Atom.withLabel("scheduled-chats-empty-snapshot"),
 );
+const EMPTY_SERVER_CONFIG_ATOM = Atom.make<ServerConfig | null>(null).pipe(
+  Atom.withLabel("scheduled-chats-empty-server-config"),
+);
 const EMPTY_PROJECTS: OrchestrationShellSnapshot["projects"] = [];
 const EMPTY_SCHEDULES: ReadonlyArray<OrchestrationSchedule> = [];
+const EMPTY_PROVIDERS: ReadonlyArray<ServerProvider> = [];
 
 interface ScheduleDraft {
   readonly allProjects: boolean;
@@ -53,6 +74,7 @@ interface ScheduleDraft {
   readonly intervalUnit: ScheduleIntervalUnit;
   readonly preserveLegacyDaily: boolean;
   readonly handoffGitPolicy: ScheduleHandoffGitPolicy;
+  readonly modelSelection: ModelSelection | null;
   readonly time: string;
   readonly timezone: string;
   readonly prompt: string;
@@ -74,6 +96,7 @@ function defaultDraft(projectId: ProjectId | null): ScheduleDraft {
     intervalUnit: "days",
     preserveLegacyDaily: false,
     handoffGitPolicy: "ignore",
+    modelSelection: null,
     time: "09:00",
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
     prompt: "",
@@ -96,6 +119,7 @@ function draftFromSchedule(schedule: OrchestrationSchedule): ScheduleDraft {
     intervalUnit: schedule.interval?.unit ?? "days",
     preserveLegacyDaily: schedule.interval == null,
     handoffGitPolicy: schedule.handoffGitPolicy ?? "ignore",
+    modelSelection: schedule.modelSelection ?? null,
     time: `${String(schedule.hourLocal).padStart(2, "0")}:${String(schedule.minuteLocal).padStart(2, "0")}`,
     timezone: schedule.timezone,
     prompt: schedule.prompt,
@@ -131,6 +155,18 @@ function scheduleTimingLabel(schedule: OrchestrationSchedule): string {
     return `Every ${intervalDisplay(schedule.interval.value, schedule.interval.unit)}`;
   }
   return `Daily at ${String(schedule.hourLocal).padStart(2, "0")}:${String(schedule.minuteLocal).padStart(2, "0")}`;
+}
+
+function scheduleModelLabel(
+  schedule: OrchestrationSchedule,
+  providers: ReadonlyArray<ServerProvider>,
+): string {
+  const selection = schedule.modelSelection;
+  if (selection == null) return "Project default";
+  const model = providers
+    .find((provider) => provider.instanceId === selection.instanceId)
+    ?.models.find((candidate) => candidate.slug === selection.model);
+  return model?.shortName ?? model?.name ?? selection.model;
 }
 
 function validTimezone(timezone: string): boolean {
@@ -188,6 +224,8 @@ function latestOccurrence(schedule: OrchestrationSchedule) {
 function ScheduleEditor({
   draft,
   projects,
+  providers,
+  settings,
   editing,
   busy,
   error,
@@ -197,6 +235,8 @@ function ScheduleEditor({
 }: {
   readonly draft: ScheduleDraft;
   readonly projects: OrchestrationShellSnapshot["projects"];
+  readonly providers: ReadonlyArray<ServerProvider>;
+  readonly settings: UnifiedSettings;
   readonly editing: OrchestrationSchedule | null;
   readonly busy: boolean;
   readonly error: string | null;
@@ -205,6 +245,40 @@ function ScheduleEditor({
   readonly onSave: () => void;
 }) {
   const compatibility = intervalCompatibility(draft);
+  const selectedProject = projects.find((project) => project.id === draft.projectId) ?? null;
+  const inheritedModelSelection = resolveDefaultProviderModelSelection(
+    providers,
+    draft.allProjects ? null : selectedProject?.defaultModelSelection,
+  );
+  const modelSelection =
+    resolveDefaultProviderModelSelection(
+      providers,
+      draft.modelSelection ?? inheritedModelSelection,
+    ) ?? inheritedModelSelection;
+  const instanceEntries = useMemo(
+    () =>
+      sortProviderInstanceEntries(
+        applyProviderInstanceSettings(deriveProviderInstanceEntries(providers), settings),
+      ),
+    [providers, settings],
+  );
+  const modelOptionsByInstance = useMemo(
+    () => getCustomModelOptionsByInstance(settings, providers),
+    [providers, settings],
+  );
+  const activeEntry =
+    instanceEntries.find((entry) => entry.instanceId === modelSelection?.instanceId) ?? null;
+  const hasTraits =
+    activeEntry !== null &&
+    modelSelection !== null &&
+    shouldRenderTraitsControls({
+      provider: activeEntry.driverKind,
+      models: activeEntry.models,
+      model: modelSelection.model,
+      modelOptions: modelSelection.options,
+      prompt: draft.prompt,
+      allowPromptInjectedEffort: false,
+    });
   return (
     <div className="rounded-xl border border-primary/20 bg-primary/[0.025] p-3 sm:p-4">
       <div className="mb-4 flex items-start justify-between gap-4">
@@ -349,6 +423,101 @@ function ScheduleEditor({
         </label>
       </div>
 
+      <div className="mt-4 rounded-lg border border-border/50 bg-background/60 px-3 py-3">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-medium text-foreground">Agent setup</p>
+              {draft.modelSelection === null ? (
+                <Badge variant="secondary">Project default</Badge>
+              ) : null}
+            </div>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Choose how each scheduled chat starts. Reasoning and context options follow the
+              selected model.
+            </p>
+          </div>
+          {draft.modelSelection !== null ? (
+            <Button
+              type="button"
+              size="compact"
+              variant="ghost-muted"
+              onClick={() => onChange({ ...draft, modelSelection: null })}
+            >
+              Use project default
+            </Button>
+          ) : null}
+        </div>
+
+        {modelSelection !== null && activeEntry !== null ? (
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <label className="space-y-1.5 text-xs font-medium text-muted-foreground">
+              Model
+              <ProviderModelPicker
+                activeInstanceId={modelSelection.instanceId}
+                model={modelSelection.model}
+                lockedProvider={null}
+                instanceEntries={instanceEntries}
+                modelOptionsByInstance={modelOptionsByInstance}
+                triggerVariant="outline"
+                triggerClassName="w-full max-w-none text-foreground/90 hover:text-foreground"
+                triggerAriaLabel="Scheduled chat model"
+                onInstanceModelChange={(instanceId, model) =>
+                  onChange({
+                    ...draft,
+                    modelSelection: createModelSelection(instanceId, model),
+                  })
+                }
+              />
+            </label>
+
+            <div className="space-y-1.5 text-xs font-medium text-muted-foreground">
+              <p>Reasoning &amp; context</p>
+              {hasTraits ? (
+                <TraitsPicker
+                  provider={activeEntry.driverKind}
+                  instanceId={activeEntry.instanceId}
+                  models={activeEntry.models}
+                  model={modelSelection.model}
+                  prompt={draft.prompt}
+                  onPromptChange={(prompt) => onChange({ ...draft, prompt })}
+                  modelOptions={modelSelection.options}
+                  allowPromptInjectedEffort={false}
+                  triggerVariant="outline"
+                  triggerClassName="w-full max-w-none justify-between text-foreground/90 hover:text-foreground"
+                  onModelOptionsChange={(options) =>
+                    onChange({
+                      ...draft,
+                      modelSelection: createModelSelection(
+                        modelSelection.instanceId,
+                        modelSelection.model,
+                        options,
+                      ),
+                    })
+                  }
+                />
+              ) : (
+                <div className="flex h-8 items-center rounded-md border border-border/60 px-3 text-xs text-muted-foreground">
+                  Uses model defaults
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <p className="mt-3 rounded-md border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
+            Configure an available provider to choose a model, reasoning, and context.
+          </p>
+        )}
+
+        <p className="mt-3 text-xs text-muted-foreground">
+          {draft.modelSelection === null
+            ? draft.allProjects
+              ? "Each project uses its own default until you choose a shared override."
+              : "This schedule follows the project's default until you choose an override."
+            : "This schedule uses the selected model and options for every run."}
+        </p>
+      </div>
+
       <label className="mt-4 block space-y-1.5 text-xs font-medium text-muted-foreground">
         Prompt
         <Textarea
@@ -395,8 +564,7 @@ function ScheduleEditor({
       </div>
 
       <p className="mt-3 text-xs text-muted-foreground">
-        Uses each project&apos;s default model. Handoffs go to{" "}
-        <code className="rounded bg-muted px-1 py-0.5">handoff/{"{date}"}.md</code>.
+        Handoffs go to <code className="rounded bg-muted px-1 py-0.5">handoff/{"{date}"}.md</code>.
       </p>
 
       {error ? (
@@ -420,6 +588,7 @@ function ScheduleEditor({
 
 export function ScheduledChatsSettingsPanel() {
   const navigate = useNavigate();
+  const clientSettings = useClientSettings();
   const { environments, isReady } = useEnvironments();
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const [selectedEnvironmentId, setSelectedEnvironmentId] = useState<EnvironmentId | null>(
@@ -435,6 +604,19 @@ export function ScheduledChatsSettingsPanel() {
     environments.find((environment) => environment.environmentId === environmentId) ?? null;
   const snapshot = useAtomValue(
     environmentId === null ? EMPTY_SNAPSHOT_ATOM : environmentSnapshotAtom(environmentId),
+  );
+  const serverConfig = useAtomValue(
+    environmentId === null
+      ? EMPTY_SERVER_CONFIG_ATOM
+      : serverEnvironment.configValueAtom(environmentId),
+  );
+  const providers = serverConfig?.providers ?? EMPTY_PROVIDERS;
+  const settings = useMemo<UnifiedSettings>(
+    () => ({
+      ...clientSettings,
+      ...(serverConfig?.settings ?? DEFAULT_SERVER_SETTINGS),
+    }),
+    [clientSettings, serverConfig?.settings],
   );
 
   const createSchedule = useAtomCommand(orchestrationEnvironment.createSchedule);
@@ -542,6 +724,7 @@ export function ScheduledChatsSettingsPanel() {
               handoffGitPolicy: draft.handoffGitPolicy,
               timezone,
               prompt,
+              ...(draft.modelSelection !== null ? { modelSelection: draft.modelSelection } : {}),
               skipIfDirty: draft.skipIfDirty,
             },
           })
@@ -556,6 +739,7 @@ export function ScheduledChatsSettingsPanel() {
               handoffGitPolicy: draft.handoffGitPolicy,
               timezone,
               prompt,
+              modelSelection: draft.modelSelection,
               skipIfDirty: draft.skipIfDirty,
             },
           });
@@ -665,6 +849,8 @@ export function ScheduledChatsSettingsPanel() {
               <ScheduleEditor
                 draft={draft}
                 projects={projects}
+                providers={providers}
+                settings={settings}
                 editing={editing}
                 busy={busyId !== null}
                 error={error}
@@ -738,6 +924,7 @@ export function ScheduledChatsSettingsPanel() {
                           </div>
                           <p className="mt-1 text-xs font-medium text-muted-foreground">
                             {scheduleTimingLabel(schedule)} · {schedule.timezone} ·{" "}
+                            {scheduleModelLabel(schedule, providers)} ·{" "}
                             {schedule.handoffGitPolicy === "commit"
                               ? "handoffs committed"
                               : schedule.handoffGitPolicy === "ignore"

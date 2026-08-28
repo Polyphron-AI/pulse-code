@@ -1,5 +1,6 @@
 import {
   ProjectId,
+  ProviderInstanceId,
   ScheduleId,
   type OrchestrationSchedule,
   type ScheduleProjectState,
@@ -11,6 +12,7 @@ import {
   mobileOccurrenceSummary,
   mobileScheduleCanEdit,
   mobileScheduleHeadline,
+  mobileScheduleModelLabel,
   mobileScheduleScopeLabel,
   mobileScheduleStatus,
 } from "./SettingsScheduledChatsRouteScreen.logic";
@@ -81,6 +83,23 @@ describe("mobile scheduled chat presentation", () => {
       ),
     ).toBe("All projects");
     expect(mobileScheduleHeadline("Morning check\nDo the rest")).toBe("Morning check");
+    expect(mobileScheduleModelLabel(SCHEDULE, null)).toBe("Project default");
+    expect(
+      mobileScheduleModelLabel(
+        {
+          ...SCHEDULE,
+          modelSelection: {
+            instanceId: ProviderInstanceId.make("codex"),
+            model: "gpt-5.6-codex",
+            options: [
+              { id: "reasoningEffort", value: "high" },
+              { id: "contextWindow", value: "1m" },
+            ],
+          },
+        },
+        null,
+      ),
+    ).toBe("gpt-5.6-codex");
     expect(mobileScheduleCanEdit(SCHEDULE)).toBe(true);
     expect(
       mobileScheduleCanEdit({
