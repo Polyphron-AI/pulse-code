@@ -113,6 +113,7 @@ import { makeRoutesLayer } from "./server.ts";
 import { isThreadDetailEvent, resolveAvailableEditorsForConfig } from "./ws.ts";
 import * as CheckpointDiffQuery from "./checkpointing/CheckpointDiffQuery.ts";
 import * as GitManager from "./git/GitManager.ts";
+import * as EnvironmentTheme from "./environmentTheme.ts";
 import * as Keybindings from "./keybindings.ts";
 import * as UsageLimitSources from "./usage/UsageLimitSources.ts";
 import * as ExternalLauncher from "./process/externalLauncher.ts";
@@ -451,6 +452,7 @@ const buildAppUnderTest = (options?: {
   layers?: {
     keybindings?: Partial<Keybindings.Keybindings["Service"]>;
     usageLimitSources?: Partial<UsageLimitSources.UsageLimitSources["Service"]>;
+    environmentTheme?: Partial<EnvironmentTheme.EnvironmentThemeService["Service"]>;
     providerRegistry?: Partial<ProviderRegistry.ProviderRegistry["Service"]>;
     providerAuth?: Partial<ProviderAuthService["Service"]>;
     providerInstanceRegistry?: Partial<ProviderInstanceRegistry["Service"]>;
@@ -697,6 +699,11 @@ const buildAppUnderTest = (options?: {
         }).pipe(
           Layer.merge(
             Layer.mergeAll(
+              Layer.mock(EnvironmentTheme.EnvironmentThemeService)({
+                current: Effect.succeed([]),
+                streamChanges: Stream.empty,
+                ...options?.layers?.environmentTheme,
+              }),
               Layer.mock(ProviderInstanceRegistry)({
                 getInstance: () => Effect.succeed(undefined),
                 listInstances: Effect.succeed([]),

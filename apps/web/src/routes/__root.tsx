@@ -24,6 +24,8 @@ import { ProviderUpdateLaunchNotification } from "../components/ProviderUpdateLa
 import { SlowRpcRequestToastCoordinator } from "../components/SlowRpcRequestToastCoordinator";
 import { ThemeEditorHost } from "../components/settings/ThemeEditorHost";
 import { VoiceCaptureHost } from "../voice/VoiceCaptureHost";
+import { useDefaultThemeAdoption } from "../hooks/useDefaultTheme";
+import { useEnvironmentThemeSync } from "../hooks/useEnvironmentTheme";
 import { Button } from "../components/ui/button";
 import {
   AnchoredToastProvider,
@@ -163,6 +165,7 @@ function RootRouteView() {
     <ToastProvider>
       <AnchoredToastProvider>
         <DocumentTitleSync />
+        <EnvironmentThemeSync />
         <GlassAppearanceSync />
         <FontAppearanceSync />
         <FirstRunGate
@@ -190,6 +193,15 @@ function RootRouteView() {
       </AnchoredToastProvider>
     </ToastProvider>
   );
+}
+
+/** Follows the palette the primary environment's machine publishes, if any. */
+function EnvironmentThemeSync() {
+  useEnvironmentThemeSync();
+  // Ordered after the palette sync so a first-run client adopting the
+  // environment's own theme finds it already in the library.
+  useDefaultThemeAdoption();
+  return null;
 }
 
 function GlassAppearanceSync() {

@@ -113,6 +113,11 @@ export const ExecutionEnvironmentCapabilities = Schema.Struct({
   threadSnooze: Schema.optionalKey(Schema.Boolean),
   /** Server persists custom model rates and applies them to usage summaries. */
   usagePriceOverrides: Schema.optionalKey(Schema.Boolean),
+  /** Server streams themes an environment publishes. Absent on servers from
+      before environment themes shipped, which never emit the events -- so a
+      client reconnecting to one must drop published themes rather than keep
+      showing a set nothing will ever update. */
+  environmentThemes: Schema.optionalKey(Schema.Boolean),
   /** Server understands thread.pin / thread.unpin commands. Same
       version-skew contract as threadSettlement. */
   threadPinning: Schema.optionalKey(Schema.Boolean),
