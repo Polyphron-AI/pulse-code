@@ -105,6 +105,14 @@ describe("searchSettings", () => {
       targetId: "browser-profiles",
     });
   });
+
+  it("routes browser recording quality to integrations", () => {
+    expect(searchSettings("recording frame rate")[0]).toMatchObject({
+      id: "browser-recording-frame-rate",
+      to: "/settings/integrations",
+      targetId: "browser",
+    });
+  });
 });
 
 it.each(["usage providers", "CLIProxyAPI", "CLI proxy hub", "management key"])(
