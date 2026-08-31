@@ -6,7 +6,7 @@ Pulse should own the company’s durable work model. Agent frameworks should exe
 
 **Own the work. Plug in the workers.**
 
-This means Pulse owns departments, SOPs, work orders, approvals, artifacts, budgets, receipts, credential policy, and accepted completion. Pi/OMP, Hermes, Google ADK, the OpenAI Agents SDK, and Mastra contribute execution capabilities without becoming the authoritative business system.
+This means Pulse owns departments, SOPs, work orders, projects, approvals, artifacts, budgets, receipts, credential policy, and accepted completion. An Orca-style execution layer contributes isolated projects, worktrees, runs, gates, terminals, and remote supervision. Pi/OMP, Codex, Claude Code, Hermes, Google ADK, the OpenAI Agents SDK, and Mastra contribute worker capabilities without becoming the authoritative business system.
 
 **Pulse Vault** extends the control plane with agentic credential delegation: a worker can use an approved integration for a specific work attempt without receiving the underlying reusable secret.
 
@@ -25,7 +25,10 @@ This means Pulse owns departments, SOPs, work orders, approvals, artifacts, budg
 
 ### Execution runtimes
 
-- **Pi / OMP and Hermes:** the strongest immediate worker candidates for engineering and persistent operations.
+- **Orca-style execution adapter:** the strongest reference for local project orchestration, isolated worktrees, observable run state, diff review, and remote supervision. Pulse should adopt the boundary and behavior, not fork or embed the product.
+- **Pi / OMP:** the preferred engineering worker because its coding tools, model portability, subagents, and inspectable editing benchmarks fit bounded repository work.
+- **Codex and Claude Code:** first-class engineering workers behind the same lifecycle and capability contract as OMP.
+- **Hermes:** the strongest immediate worker candidate for persistent operations.
 - **Google ADK, OpenAI Agents SDK, and Mastra:** additional execution backends, not replacement control planes.
 
 The key boundary is simple: frameworks execute work; Pulse determines what that work means.
@@ -39,16 +42,46 @@ Departments · SOPs · queue · approvals · evidence
 Pulse control plane
 Typed commands · events · policies · budgets · artifacts · receipts
                          ↓
-                  Work-order dispatch
+             orchestration/v1 dispatch
                          ↓
-┌────────────┬────────────┬────────────┬──────────────────┐
-│ Pi / OMP   │ Hermes     │ Google ADK │ OpenAI / Mastra │
-│ coding and │ persistent │ remote     │ focused workers │
-│ specialists│ operations │ agent teams│ or SOP runs     │
-└────────────┴────────────┴────────────┴──────────────────┘
+Orca-style execution adapter
+Projects · isolated worktrees · runs · gates · diffs · remote status
+                         ↓
+┌────────────┬────────────┬────────────┬────────────┬──────────────────┐
+│ Pi / OMP   │ Codex      │ Claude Code│ Hermes     │ ADK / OpenAI /  │
+│ preferred  │ coding     │ coding     │ persistent │ Mastra workers  │
+│ engineering│ worker     │ worker     │ operations │ and SOP runs    │
+└────────────┴────────────┴────────────┴────────────┴──────────────────┘
 ```
 
 Pulse retains one durable, event-sourced state machine. A framework run is an execution attempt within that state machine, not a second source of truth. Pulse Vault sits at the execution boundary and resolves approved capabilities only when a work attempt needs them.
+
+### Orca and OMP are complementary
+
+They should not be evaluated as mutually exclusive frameworks.
+
+| Layer | Reference | Pulse use |
+| --- | --- | --- |
+| Durable business control plane | Pulse | Portfolio, departments, SOPs, schedules, policy, approvals, accepted completion |
+| Local execution and supervision | Orca architecture | Projects, worktrees, run lifecycle, gates, diff presentation, mobile status |
+| Engineering worker harness | OMP | Repository tools, model selection, temporary subagents, implementation and testing |
+| Alternative engineering workers | Codex and Claude Code | Same capability negotiation, events, gates, and receipts as OMP |
+| Code collaboration | GitHub App | Repositories, branches, pull requests, checks, diffs, reviews, guarded merge |
+| Credentials and agent access | Pulse Vault and Pulse MCP | Scoped grants, opaque handles, revocation, audit, portable tool access |
+
+Orca's visible adoption and broad platform-performance suite make it the stronger orchestration reference. OMP publishes the stronger coding-agent outcome evidence. Neither establishes a neutral head-to-head winner because they measure different layers.
+
+Pulse Code already contains many of the execution primitives this reference calls for: environment-local projects, provider adapters, typed WebSocket contracts, event-sourced commands and projections, queue-backed reactors, receipts, checkpoints, remote connections, and web, desktop, and mobile clients. The smallest implementation is to deepen these primitives behind `orchestration/v1`, not add a second workflow engine beside them.
+
+### GitHub and Pulse Issues
+
+Pulse Issues should be reworked into the Pulse GitHub integration without losing the distinction between product evidence and code collaboration.
+
+- Pulse bugs and tickets remain the product system of record.
+- GitHub owns repositories, branches, commits, pull requests, checks, file diffs, reviews, and merge state.
+- A work attempt links the originating Pulse ticket and evidence to its branch, commits, pull request, checks, review feedback, and verification receipt.
+- Review feedback is versioned onto the originating work attempt instead of opening an unrelated agent thread.
+- Merge and deployment stay guarded capabilities. Connecting GitHub does not imply permission to merge.
 
 ## 3. Workspace, Department, and SOP views
 
@@ -116,7 +149,7 @@ Pulse revokes the grant and persists a redacted receipt
 
 Departments should show available capabilities, policy, approval requirements, health, and recent credential receipts—not secret values. A work order should show which Vault grant was used, its scope and expiry, and the resulting evidence. Settings remains the place to connect, rotate, revoke, and diagnose integration credentials.
 
-## 5. Pi / OMP and Hermes
+## 5. OMP, Codex, Claude Code, and Hermes
 
 ### Pi / OMP: engineering worker
 
@@ -125,6 +158,14 @@ Best suited to bounded repository work, parallel research, implementation, testi
 OMP can own its temporary specialist graph. Pulse should own the work order, artifact requirements, checkpoint evidence, approvals, and accepted result.
 
 For credentialed engineering work, OMP receives an attempt-local Vault capability. Temporary specialists inherit only the subset explicitly allowed by the parent work attempt; they do not inherit ambient credentials by default.
+
+OMP is the preferred first adapter, not a privileged protocol. Its adapter must pass the same conformance suite as Codex and Claude Code: start, pause, resume, cancel, capability discovery, normalized events, checkpoint evidence, guarded action requests, and typed completion receipts.
+
+### Codex and Claude Code: peer engineering workers
+
+Codex and Claude Code should remain selectable when their advertised capabilities satisfy a work order. Pulse should not translate their native session formats into business state. Provider adapters normalize only meaningful lifecycle events, artifacts, verification, usage summaries, and approval requests.
+
+An independent desktop thread is not automatically a Pulse work attempt. Pulse can supervise a thread only when it created the attempt or the environment explicitly attached the thread through the common contract.
 
 ### Hermes: operations worker
 
@@ -197,11 +238,17 @@ Mastra’s suspend/resume points can request a Pulse approval or Vault grant, bu
 
 Pulse should define provider-neutral domain contracts such as:
 
+- `Workspace`
+- `Project`
 - `Department`
 - `WorkerTemplate`
+- `WorkerCapability`
 - `SopDefinition`
 - `WorkOrder`
 - `WorkAttempt`
+- `WorktreeRef`
+- `ExecutionGate`
+- `ExecutionEvent`
 - `Artifact`
 - `Approval`
 - `WorkReceipt`
@@ -211,10 +258,13 @@ Pulse should define provider-neutral domain contracts such as:
 
 Every runtime should sit behind a common `WorkExecutionBackend` capable of:
 
+- advertising its actual capabilities;
 - starting a typed attempt;
 - resuming after durable input or approval;
 - cancelling without ambiguity;
 - streaming normalized execution events;
+- reporting the isolated project, branch, and worktree it is changing;
+- linking GitHub branches, pull requests, checks, diffs, and review feedback;
 - requesting a named Vault capability without reading its backing secret; and
 - revoking all attempt-local grants on cancellation, failure, or completion.
 
@@ -222,13 +272,16 @@ Only meaningful activity should be projected to clients. Pulse should not broadc
 
 ## 11. Recommended sequence
 
-1. **Build the Pulse domain:** departments, SOPs, work orders, attempts, artifacts, approvals, and typed receipts.
+1. **Build the Pulse domain:** workspaces, projects, departments, SOPs, work orders, attempts, artifacts, approvals, and typed receipts.
 2. **Define the Pulse Vault contract:** credential records, capability policies, grants, leases, revocation, redacted receipts, and provider-neutral failure types. Keep secrets out of shared contracts.
 3. **Harden the credential backend:** preserve the current single-owner `ServerSecretStore` path, close its documented release gates, and add an encrypted or externally managed backend before supporting shared or untrusted hosts.
-4. **Integrate the existing worker strategy:** OMP for Engineering; Hermes for Research and Operations. Validate read-only Vault grants first, then bounded write actions with explicit approval.
-5. **Add an OpenAI worker backend:** use wrapped tools to validate the common execution and credential-capability contracts at low integration cost.
-6. **Pilot Mastra on one bounded durable SOP:** keep explicit ownership of state, approvals, and credential grants in Pulse.
-7. **Add Google ADK through an adapter or A2A:** target remote enterprise departments and external agent ecosystems while keeping authorization in Pulse Vault.
+4. **Deepen the Orca-style execution boundary already present in Pulse Code:** normalize project, worktree, run, gate, event, diff, and remote-supervision behavior behind `orchestration/v1`.
+5. **Integrate the engineering worker strategy:** OMP first, then Codex and Claude Code against the same conformance suite. Validate read-only Vault grants first, then bounded writes with explicit approval.
+6. **Add the GitHub App adapter:** project installation, repository policy, branch and pull-request projection, checks, inline diff review, versioned feedback, and guarded merge capability.
+7. **Integrate Hermes for Research and Operations:** scheduled attempts receive fresh Vault grants and cannot retain reusable credentials.
+8. **Add an OpenAI worker backend:** use wrapped tools to validate the common execution and credential-capability contracts at low integration cost.
+9. **Pilot Mastra on one bounded durable SOP:** keep explicit ownership of state, approvals, and credential grants in Pulse.
+10. **Add Google ADK through an adapter or A2A:** target remote enterprise departments and external agent ecosystems while keeping authorization in Pulse Vault.
 
 ### Vault rollout gates
 
@@ -242,7 +295,7 @@ Only meaningful activity should be projected to clients. Pulse should not broadc
 
 The winning design lets any framework disappear without taking the company’s work history with it.
 
-Pulse should therefore become the durable control plane and user-facing system of record. Pulse Vault should be the credential authority at its execution boundary. Pi/OMP, Hermes, Google ADK, OpenAI Agents SDK, and Mastra should remain replaceable execution engines selected per work order, department policy, credential capability, and operational need.
+Pulse should therefore become the durable control plane and user-facing system of record. Its execution boundary should follow Orca's project, worktree, run, gate, diff, and remote-supervision shape while remaining native to Pulse Code's existing event-sourced architecture. Pulse Vault should be the credential authority, GitHub should be the code-collaboration adapter, and OMP, Codex, Claude Code, Hermes, Google ADK, OpenAI Agents SDK, and Mastra should remain replaceable workers selected per work order, department policy, capability, credential grant, and operational need.
 
 ## Sources
 
@@ -252,6 +305,10 @@ Pulse should therefore become the durable control plane and user-facing system o
 - [Pulse workforce comparison and recommendation](comparison-and-pulse-code-recommendation.md)
 - [Pi and Oh My Pi research](02-pi-and-oh-my-pi.md)
 - [Hermes Agent research](03-hermes-agent.md)
+- [Orca](https://www.onorca.dev/)
+- [Orca source](https://github.com/stablyai/orca)
+- [Oh My Pi](https://omp.sh/)
+- [Oh My Pi source](https://github.com/can1357/oh-my-pi)
 - [Google Agent Development Kit](https://adk.dev/)
 - [OpenAI Agents SDK](https://openai.github.io/openai-agents-python/)
 - [OpenAI multi-agent orchestration](https://openai.github.io/openai-agents-python/multi_agent/)
