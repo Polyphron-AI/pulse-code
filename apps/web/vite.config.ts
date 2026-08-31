@@ -265,6 +265,12 @@ export default defineConfig(() => {
       outDir: "dist",
       emptyOutDir: true,
       sourcemap: buildSourcemap,
+      rollupOptions: {
+        input: {
+          main: "index.html",
+          mermaidRenderer: "mermaid-renderer.html",
+        },
+      },
     },
     test: {
       projects: [defineProject(unitTestProject)],

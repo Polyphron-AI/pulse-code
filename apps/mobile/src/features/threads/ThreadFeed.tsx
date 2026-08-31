@@ -2,6 +2,7 @@ import * as Haptics from "expo-haptics";
 import { KeyboardAwareLegendList } from "@legendapp/list/keyboard";
 import { type LegendListRef } from "@legendapp/list/react-native";
 import { resolveAssetUrl } from "@t3tools/client-runtime/state/assets";
+import { environmentEndpointUrl } from "@t3tools/client-runtime/environment";
 import type { EnvironmentId, MessageId, ThreadId, TurnId } from "@t3tools/contracts";
 import { CHAT_LIST_ANCHOR_OFFSET, resolveChatListAnchoredEndSpace } from "@t3tools/shared/chatList";
 import { formatElapsed } from "@t3tools/shared/orchestrationTiming";
@@ -54,12 +55,14 @@ import { scopedThreadKey } from "../../lib/scopedEntities";
 import { copyTextWithHaptic } from "../../lib/copyTextWithHaptic";
 import { tryOpenExternalUrl } from "../../lib/openExternalUrl";
 import { hasWideMarkdownBlock } from "../../lib/wideMarkdownBlocks";
+import { splitMermaidMarkdown } from "../../lib/mermaidMarkdown";
 import {
   hasNativeSelectableMarkdownText,
   SelectableMarkdownText,
   type NativeMarkdownTextStyle,
   type SelectableMarkdownSkill,
 } from "../../native/SelectableMarkdownText";
+import { MobileMermaidDiagram, MobileMermaidRendererProvider } from "./MobileMermaidDiagram";
 
 import { AppText as Text } from "../../components/AppText";
 import { CopyTextButton } from "../../components/CopyTextButton";
@@ -215,6 +218,7 @@ interface MarkdownStyleSets {
 }
 
 interface MarkdownStyleSet {
+  readonly themeMode: ReviewDiffTheme;
   readonly theme: PartialMarkdownTheme;
   readonly styles: NodeStyleOverrides;
   readonly renderers: CustomRenderers;
@@ -707,6 +711,7 @@ function useMarkdownStyles(onLinkPress: (href: string) => void): MarkdownStyleSe
 
     return {
       user: {
+        themeMode,
         theme: userTheme,
         styles: userStyles,
         renderers: createMarkdownRenderers(
@@ -740,6 +745,7 @@ function useMarkdownStyles(onLinkPress: (href: string) => void): MarkdownStyleSe
         },
       },
       assistant: {
+        themeMode,
         theme: assistantTheme,
         styles: assistantStyles,
         renderers: createMarkdownRenderers(
@@ -958,23 +964,13 @@ function renderFeedEntry(
         {...(enterAnimated ? { entering: FadeIn.duration(220) } : {})}
       >
         {message.text.trim().length > 0 ? (
-          hasNativeSelectableMarkdownText() ? (
-            <SelectableMarkdownText
-              markdown={message.text}
-              skills={props.skills}
-              textStyle={styles.nativeTextStyle}
-              onLinkPress={props.onMarkdownLinkPress}
-            />
-          ) : (
-            <Markdown
-              options={{ gfm: true }}
-              renderers={styles.renderers}
-              styles={styles.styles}
-              theme={styles.theme}
-            >
-              {message.text}
-            </Markdown>
-          )
+          <AssistantMarkdownContent
+            text={message.text}
+            settled={!assistantTurnStillInProgress && !message.streaming}
+            markdownStyles={styles}
+            skills={props.skills}
+            onLinkPress={props.onMarkdownLinkPress}
+          />
         ) : null}
         {attachments.map((attachment) => {
           return (
@@ -1115,6 +1111,59 @@ function UserMessageContent(props: {
           </Markdown>
         );
       })}
+    </View>
+  );
+}
+
+function AssistantMarkdownContent(props: {
+  readonly text: string;
+  readonly settled: boolean;
+  readonly markdownStyles: MarkdownStyleSet;
+  readonly skills?: ReadonlyArray<SelectableMarkdownSkill>;
+  readonly onLinkPress: (href: string) => void;
+}) {
+  const segments = props.settled
+    ? splitMermaidMarkdown(props.text)
+    : [{ kind: "markdown" as const, text: props.text }];
+  const renderMarkdown = (text: string, key: string) =>
+    hasNativeSelectableMarkdownText() ? (
+      <SelectableMarkdownText
+        key={key}
+        markdown={text}
+        skills={props.skills}
+        textStyle={props.markdownStyles.nativeTextStyle}
+        onLinkPress={props.onLinkPress}
+      />
+    ) : (
+      <Markdown
+        key={key}
+        options={{ gfm: true }}
+        renderers={props.markdownStyles.renderers}
+        styles={props.markdownStyles.styles}
+        theme={props.markdownStyles.theme}
+      >
+        {text}
+      </Markdown>
+    );
+
+  if (segments.every((segment) => segment.kind === "markdown"))
+    return renderMarkdown(props.text, "all");
+  return (
+    <View className="w-full">
+      {segments.map((segment, index) =>
+        segment.kind === "markdown" ? (
+          segment.text.trim() ? (
+            renderMarkdown(segment.text, `markdown-${index}`)
+          ) : null
+        ) : (
+          <MobileMermaidDiagram
+            key={`mermaid-${index}`}
+            source={segment.source}
+            theme={props.markdownStyles.themeMode}
+            fallback={renderMarkdown(segment.fence, `fallback-${index}`)}
+          />
+        ),
+      )}
     </View>
   );
 }
@@ -1907,6 +1956,7 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
       onToggleWorkRow,
       props.environmentId,
       props.skills,
+      preparedConnection,
     ],
   );
 
@@ -1922,8 +1972,13 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
     );
   }
 
+  const mermaidRendererUrl =
+    preparedConnection._tag === "Some"
+      ? environmentEndpointUrl(preparedConnection.value.httpBaseUrl, "/mermaid-renderer.html")
+      : null;
+
   return (
-    <>
+    <MobileMermaidRendererProvider rendererUrl={mermaidRendererUrl}>
       <View className="flex-1" onLayout={handleViewportLayout}>
         <View className="flex-1">
           <KeyboardAwareLegendList
@@ -2087,6 +2142,6 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
         swipeToCloseEnabled
         doubleTapToZoomEnabled
       />
-    </>
+    </MobileMermaidRendererProvider>
   );
 });

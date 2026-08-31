@@ -108,6 +108,7 @@ import {
   openUrlInPreview,
   BrowserPreviewUnavailableError,
 } from "../browser/openFileInPreview";
+import { MermaidDiagram } from "./MermaidDiagram";
 
 interface ChatMarkdownProps {
   text: string;
@@ -1736,6 +1737,14 @@ function ChatMarkdown({
 
         const language = extractFenceLanguage(codeBlock.className);
         const fenceTitle = extractFenceTitle(extractPreCodeMeta(node));
+        const sourceFallback = (
+          <SuspenseShikiCodeBlock
+            className={codeBlock.className}
+            code={codeBlock.code}
+            themeName={diffThemeName}
+            isStreaming={isStreaming}
+          />
+        );
         return (
           <MarkdownCodeBlock
             code={codeBlock.code}
@@ -1745,12 +1754,15 @@ function ChatMarkdown({
           >
             <RenderErrorBoundary fallback={<pre {...props}>{children}</pre>}>
               <Suspense fallback={<pre {...props}>{children}</pre>}>
-                <SuspenseShikiCodeBlock
-                  className={codeBlock.className}
-                  code={codeBlock.code}
-                  themeName={diffThemeName}
-                  isStreaming={isStreaming}
-                />
+                {language.toLowerCase() === "mermaid" && !isStreaming ? (
+                  <MermaidDiagram
+                    source={codeBlock.code}
+                    theme={resolvedTheme}
+                    fallback={sourceFallback}
+                  />
+                ) : (
+                  sourceFallback
+                )}
               </Suspense>
             </RenderErrorBoundary>
           </MarkdownCodeBlock>
