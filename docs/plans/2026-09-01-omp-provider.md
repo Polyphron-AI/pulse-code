@@ -8,7 +8,7 @@ Repository implementation is complete on the current feature branch and awaits n
 
 Add Oh My Pi as a first-party Pulse provider. Pulse launches `omp acp`, keeps sensitive per-instance environment values in the existing server secret store, and assigns each interactive instance its own OMP agent root with `PI_CODING_AGENT_DIR`.
 
-Orca remains an independent local orchestration application. It may launch the same native `omp` executable, but it cannot read Pulse secrets and does not act as a Pulse model provider.
+Orca remains an independent local orchestration application and does not act as a Pulse model provider. Pulse exposes no supported API, provider registration, or secret bridge from `ServerSecretStore` or Vault to Orca. OMP launched by Orca should use Orca's own environment and native OMP authentication or state.
 
 ## Completed implementation
 
@@ -42,6 +42,7 @@ Orca remains an independent local orchestration application. It may launch the s
 - Merges the selected provider instance environment over the Pulse server process environment. The selected instance wins for duplicate names, with case-insensitive replacement on Windows.
 - Stores sensitive environment values through `ServerSecretStore`; `settings.json` and settings clients receive only redacted placeholders after save.
 - Removes inherited OMP profile selectors and forces a Pulse-managed `PI_CODING_AGENT_DIR` for each instance.
+- Uses provider API keys in the Pulse instance's sensitive-environment editor as the supported onboarding path. Native OMP `/login` is not supported Pulse provider setup: it normally writes to the default OMP root, does not populate Pulse's forced per-instance root, and is not available through Pulse ACP terminal authentication.
 - Maps Pulse runtime modes to OMP startup policy:
   - `approval-required` to `always-ask`
   - `auto-accept-edits` to `write`
@@ -50,14 +51,15 @@ Orca remains an independent local orchestration application. It may launch the s
 
 `PI_CODING_AGENT_DIR` separates OMP's agent configuration, stored authentication, and sessions per Pulse instance. It does not block every native fallback. If the selected instance omits a provider key, interactive OMP can still resolve credentials from its native stored auth or from project, agent, config-root, or home `.env` files. Native OMP launched outside Pulse operates independently.
 
-Orca cannot read `ServerSecretStore` or a future Pulse Vault. OMP launched by Orca uses Orca's environment and native OMP state unless an operator configures a separate shared boundary explicitly. Pulse signing, link, pairing, bootstrap, relay, and internal service keys are not model-provider credentials.
+The absence of a supported Orca secret bridge is not process isolation. The current `ServerSecretStore` keeps raw secrets in filesystem-protected storage for one trusted OS-account boundary. A compromised or deliberately directed Orca or agent process under the same user could read the backing files. Untrusted orchestration requires a separate OS account or sandbox, or a stronger Vault backend. Pulse signing, link, pairing, bootstrap, relay, and internal service keys are not model-provider credentials.
 
 ### Isolated text generation
 
 - Uses a fresh per-call workspace, agent, session, home, config, data, cache, state, application-data, and temporary root.
 - Starts ACP with tools, extensions, skills, rules, LSP, titles, and normal session persistence disabled.
 - Advertises no terminal or filesystem capability, passes no MCP servers, cancels permission requests, and cancels or denies elicitation.
-- Removes Pulse-internal variables, OMP auth-broker variables, config-file overlays, alternate git roots, and other path escape variables.
+- Removes Pulse-internal variables, alternate Git roots, and other path escape variables.
+- Strips broker activation values (`OMP_AUTH_BROKER_URL` and `OMP_AUTH_BROKER_TOKEN`), external account-pool and snapshot-cache paths (`OMP_AUTH_BROKER_ACCOUNT_POOL_FILE` and `OMP_AUTH_BROKER_SNAPSHOT_CACHE`), and external `PI_CONFIG_DIR` and `PI_CONFIG_FILES` redirects. A scalar broker snapshot TTL may remain, but it cannot activate a broker or select broker state.
 - Applies the exact selected model and thinking option before prompting.
 - Supports bundled OMP models when the selected Pulse instance supplies their provider API key.
 - Intentionally does not import shared OMP OAuth sessions or custom `models.yml` definitions into the clean call root.

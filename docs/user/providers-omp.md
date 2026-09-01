@@ -91,9 +91,11 @@ Pulse assigns each interactive OMP instance a separate `PI_CODING_AGENT_DIR`. OM
 
 This boundary does not disable every native OMP credential source. When the selected instance does not provide a key, interactive OMP can still use its own stored authentication or `.env` fallback, including project, agent, config-root, or home files that OMP normally reads. A native OMP session launched outside Pulse also uses its own environment and state independently.
 
+Native OMP `/login` is not a supported Pulse onboarding path today. It normally writes authentication under OMP's default agent root, while Pulse forces a separate `PI_CODING_AGENT_DIR` for each instance. Pulse ACP also does not advertise terminal authentication. Native OAuth remains an independent native workflow and can affect a Pulse interactive instance only when an operator separately configures authentication in that instance's exact OMP state root. Pulse text generation does not import that OAuth state.
+
 For strict account separation, put the intended API key on every Pulse OMP instance and remove conflicting OMP `.env` or stored credentials from the directories that session can read. See [OMP settings and state roots](https://github.com/can1357/oh-my-pi/blob/main/docs/settings.md).
 
-ORCA is separate from Pulse. It cannot read `ServerSecretStore` or a future Pulse Vault. An OMP process launched by ORCA uses ORCA's environment and native OMP authentication or state unless you configure another boundary explicitly.
+ORCA is separate from Pulse. Pulse has no supported API, provider registration, or secret bridge that supplies `ServerSecretStore` or Vault credentials to ORCA. This is not process isolation: the current `ServerSecretStore` keeps raw secrets in filesystem-protected storage for one trusted OS-account boundary. A compromised or deliberately directed ORCA or agent process running as that same user could read the backing files. Run untrusted orchestration under a separate OS account or sandbox, or use a stronger Vault backend. OMP launched by ORCA should use ORCA's own environment and native OMP authentication or state.
 
 See the [official Orca repository](https://github.com/stablyai/orca) for Orca installation and native agent setup.
 
@@ -141,7 +143,8 @@ Pulse can use OMP for generated branch names, thread titles, commit messages, an
 
 - Each call gets fresh agent, session, home, config, data, cache, state, workspace, and temporary roots.
 - Tools, extensions, skills, rules, LSP, MCP servers, filesystem and terminal capabilities, permission requests, and elicitation are disabled or denied.
-- Pulse internal variables, OMP auth-broker variables, config-file redirects, and other path escape variables are removed.
+- Pulse internal variables, alternate Git roots, and other path escape variables are removed.
+- Broker activation values (`OMP_AUTH_BROKER_URL` and `OMP_AUTH_BROKER_TOKEN`), external account-pool and snapshot-cache paths (`OMP_AUTH_BROKER_ACCOUNT_POOL_FILE` and `OMP_AUTH_BROKER_SNAPSHOT_CACHE`), and external `PI_CONFIG_DIR` and `PI_CONFIG_FILES` redirects are stripped. A scalar broker snapshot TTL may remain, but it cannot activate a broker or select broker state.
 - `--no-session` disables normal conversation persistence. OMP may still make process-local session writes, but those writes are confined to the disposable call root rather than being absent.
 - Provider API keys can authorize models from OMP's bundled catalog.
 - Shared native OMP OAuth sessions and custom `models.yml` entries are intentionally not imported into the clean call root.

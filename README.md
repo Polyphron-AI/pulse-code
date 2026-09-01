@@ -20,7 +20,7 @@ We wanted something performant, remote-ready, and truly open. If we ever go the 
 > - Cursor: install [Cursor CLI](https://cursor.com/cli) and run `agent login`
 > - Grok Build: install [Grok Build CLI](https://x.ai/cli) and run `grok login`
 > - OpenCode: install [OpenCode](https://opencode.ai) and run `opencode auth login`
-> - Oh My Pi: install [OMP](https://github.com/can1357/oh-my-pi), then add a model-provider key or use OMP's native `/login`
+> - Oh My Pi: install [OMP](https://github.com/can1357/oh-my-pi), then add a model-provider API key as a sensitive environment variable on the Pulse OMP provider
 
 ### Try it out (install-free)
 

@@ -43,20 +43,25 @@ side-by-side verification.
 Pulse Code drives provider CLIs; it does not ship them. Install the CLI for each provider you want
 to use, then authenticate it.
 
-| Provider   | CLI                                                   | Default binary | Log in with                  |
-| ---------- | ----------------------------------------------------- | -------------- | ---------------------------- |
-| Codex      | [Codex CLI](https://developers.openai.com/codex/cli)  | `codex`        | `codex login`                |
-| Claude     | [Claude Code](https://claude.com/product/claude-code) | `claude`       | `claude auth login`          |
-| Cursor     | [Cursor CLI](https://cursor.com/cli)                  | `cursor-agent` | `agent login`                |
-| Grok Build | [Grok Build CLI](https://x.ai/cli)                    | `grok`         | `grok login`                 |
-| Oh My Pi   | [Oh My Pi](https://github.com/can1357/oh-my-pi)       | `omp`          | Provider API key or `/login` |
-| OpenCode   | [OpenCode](https://opencode.ai)                       | `opencode`     | `opencode auth login`        |
+| Provider   | CLI                                                   | Default binary | Authenticate with                   |
+| ---------- | ----------------------------------------------------- | -------------- | ----------------------------------- |
+| Codex      | [Codex CLI](https://developers.openai.com/codex/cli)  | `codex`        | `codex login`                       |
+| Claude     | [Claude Code](https://claude.com/product/claude-code) | `claude`       | `claude auth login`                 |
+| Cursor     | [Cursor CLI](https://cursor.com/cli)                  | `cursor-agent` | `agent login`                       |
+| Grok Build | [Grok Build CLI](https://x.ai/cli)                    | `grok`         | `grok login`                        |
+| Oh My Pi   | [Oh My Pi](https://github.com/can1357/oh-my-pi)       | `omp`          | Sensitive provider API key in Pulse |
+| OpenCode   | [OpenCode](https://opencode.ai)                       | `opencode`     | `opencode auth login`               |
 
 Cursor is the one to watch: install Cursor CLI, which provides the `cursor-agent` binary that
 Pulse Code looks for, but authenticate with `agent login`, not `cursor-agent login`.
 
-Run the login command on the machine running the Pulse Code server, not on the device you browse
-from.
+Run CLI login commands on the machine running the Pulse Code server, not on the device you browse
+from. For OMP, add a model-provider API key to the Pulse OMP instance's **Environment variables**
+section and mark it **Sensitive**. This is the supported Pulse onboarding path today.
+
+Native OMP `/login` is not a supported Pulse onboarding path. It normally authenticates OMP's
+default agent root, does not populate the per-instance `PI_CODING_AGENT_DIR` that Pulse forces for
+OMP, and is not available through Pulse ACP terminal authentication.
 
 ### Binary Discovery
 
@@ -69,8 +74,9 @@ started Pulse Code.
 
 Provider auth is required before you start a session with that provider, not before you start
 Pulse Code. You can install Pulse Code, open it, and add providers afterwards. A provider that is not
-authenticated shows its status in **Settings** and fails at session start with the login command
-to run.
+authenticated shows its status in **Settings** and fails at session start with provider-specific
+setup detail. OMP status validates the executable and model catalog, not the selected API key; the
+first model request is the credential check.
 
 For multi-account setups, see [Codex](./providers-codex.md) and [Claude](./providers-claude.md). For
 OMP installation, provider keys, model selectors, and state boundaries, see
