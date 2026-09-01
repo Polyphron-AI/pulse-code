@@ -13,7 +13,7 @@ import * as Schema from "effect/Schema";
 import * as TestClock from "effect/testing/TestClock";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 
-import { checkOmpProviderStatus } from "../Layers/OmpProvider.ts";
+import { checkOmpProviderStatus, OMP_MODEL_CATALOG_TIMEOUT_MS } from "../Layers/OmpProvider.ts";
 import { makeOmpAcpRuntime } from "./OmpAcpSupport.ts";
 
 interface MockInvocation {
@@ -120,6 +120,10 @@ function withFixture<A, E, R>(
 }
 
 describe("OMP process boundary", () => {
+  it("allows both built-in and extension model discovery within the production timeout", () => {
+    expect(OMP_MODEL_CATALOG_TIMEOUT_MS).toBe(35_000);
+  });
+
   it.effect("uses the documented ACP args, initialize capabilities, and agent auth", () =>
     withFixture((fixture) =>
       Effect.gen(function* () {
@@ -260,6 +264,7 @@ describe("OMP process boundary", () => {
                 T3_OMP_MODELS_HANG: "1",
               },
             },
+            { modelCatalogTimeoutMs: 250 },
           );
           const elapsedMillis = (yield* Clock.currentTimeMillis) - startedAt;
 
@@ -271,8 +276,9 @@ describe("OMP process boundary", () => {
           });
           expect(snapshot.message).toContain("timed out");
           expect(encodeUnknownJson(snapshot)).not.toContain(secret);
-          expect(elapsedMillis).toBeGreaterThanOrEqual(3_500);
-          expect(elapsedMillis).toBeLessThan(9_000);
+          expect(snapshot.message).toContain("250ms");
+          expect(elapsedMillis).toBeGreaterThanOrEqual(150);
+          expect(elapsedMillis).toBeLessThan(4_000);
 
           const invocations = readInvocations(fixture.argsLogPath);
           expect(invocations.map((invocation) => invocation.args)).toEqual([
@@ -281,6 +287,47 @@ describe("OMP process boundary", () => {
           ]);
           expect(invocations.some((invocation) => invocation.args[0] === "acp")).toBe(false);
           expect(processIsAlive(invocations[1]!.pid)).toBe(false);
+        }).pipe(TestClock.withLive, Effect.provide(NodeServices.layer)),
+      ),
+    5_000,
+  );
+
+  it.effect(
+    "accepts a valid catalog that arrives after the former four-second timeout",
+    () =>
+      withFixture((fixture) =>
+        Effect.gen(function* () {
+          const startedAt = yield* Clock.currentTimeMillis;
+          const snapshot = yield* checkOmpProviderStatus(
+            { enabled: true, binaryPath: fixture.wrapperPath },
+            {
+              cwd: fixture.directory,
+              agentDir: NodePath.join(fixture.directory, "agent"),
+              environment: {
+                T3_OMP_MODELS_DELAY_MS: "4200",
+                T3_OMP_MODELS_JSON: encodeUnknownJson({
+                  models: [
+                    {
+                      selector: "provider/delayed-model",
+                      name: "Delayed Model",
+                      reasoning: false,
+                      thinking: null,
+                    },
+                  ],
+                }),
+              },
+            },
+          );
+          const elapsedMillis = (yield* Clock.currentTimeMillis) - startedAt;
+
+          expect(snapshot).toMatchObject({
+            installed: true,
+            status: "ready",
+            version: "1.2.3",
+            models: [{ slug: "provider/delayed-model", name: "Delayed Model" }],
+          });
+          expect(elapsedMillis).toBeGreaterThanOrEqual(4_000);
+          expect(elapsedMillis).toBeLessThan(9_000);
         }).pipe(TestClock.withLive, Effect.provide(NodeServices.layer)),
       ),
     10_000,

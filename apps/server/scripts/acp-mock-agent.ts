@@ -75,23 +75,32 @@ if (environmentLogPath) {
 const isVersionCommand = cliArgs.length === 1 && cliArgs[0] === "--version";
 const isModelsCommand = cliArgs.length === 2 && cliArgs[0] === "models" && cliArgs[1] === "--json";
 const isCliCommand = isVersionCommand || isModelsCommand;
-
-if (isVersionCommand && process.env.T3_OMP_VERSION_HANG !== "1") {
-  process.stdout.write(process.env.T3_OMP_VERSION_OUTPUT ?? "Oh My Pi 1.2.3\n");
-  process.exitCode = Number(process.env.T3_OMP_VERSION_EXIT_CODE ?? "0");
-}
-
-if (isModelsCommand && process.env.T3_OMP_MODELS_HANG !== "1") {
-  process.stdout.write(process.env.T3_OMP_MODELS_JSON ?? '{"models":[]}');
-  if (process.env.T3_OMP_MODELS_STDERR) {
-    process.stderr.write(process.env.T3_OMP_MODELS_STDERR);
-  }
-  process.exitCode = Number(process.env.T3_OMP_MODELS_EXIT_CODE ?? "0");
-}
-
 const hangCliCommand =
   (isVersionCommand && process.env.T3_OMP_VERSION_HANG === "1") ||
   (isModelsCommand && process.env.T3_OMP_MODELS_HANG === "1");
+const modelsDelayMs = Number(process.env.T3_OMP_MODELS_DELAY_MS ?? "0");
+
+const cliProgram = Effect.gen(function* () {
+  if (hangCliCommand) {
+    return yield* Effect.never;
+  }
+  if (isModelsCommand && Number.isFinite(modelsDelayMs) && modelsDelayMs > 0) {
+    yield* Effect.sleep(modelsDelayMs);
+  }
+  yield* Effect.sync(() => {
+    if (isVersionCommand) {
+      process.stdout.write(process.env.T3_OMP_VERSION_OUTPUT ?? "Oh My Pi 1.2.3\n");
+      process.exitCode = Number(process.env.T3_OMP_VERSION_EXIT_CODE ?? "0");
+    }
+    if (isModelsCommand) {
+      process.stdout.write(process.env.T3_OMP_MODELS_JSON ?? '{"models":[]}');
+      if (process.env.T3_OMP_MODELS_STDERR) {
+        process.stderr.write(process.env.T3_OMP_MODELS_STDERR);
+      }
+      process.exitCode = Number(process.env.T3_OMP_MODELS_EXIT_CODE ?? "0");
+    }
+  });
+});
 
 let currentModeId = "ask";
 let currentModelId = "default";
@@ -1004,4 +1013,4 @@ const program = Effect.gen(function* () {
   Effect.provide(NodeServices.layer),
 );
 
-NodeRuntime.runMain(isCliCommand ? (hangCliCommand ? Effect.never : Effect.void) : program);
+NodeRuntime.runMain(isCliCommand ? cliProgram : program);
