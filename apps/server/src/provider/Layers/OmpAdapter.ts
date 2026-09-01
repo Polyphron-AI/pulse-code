@@ -126,6 +126,19 @@ type OmpTurnPipelineOutcome =
     }
   | { readonly _tag: "Cancelled" };
 
+const OMP_TURN_CANCELLED = { _tag: "Cancelled" } as const;
+
+/** Gives an already-settled turn cancellation priority over starting its pipeline. */
+export function raceOmpTurnPipelineAgainstCancellation<A, E, R>(
+  cancellation: Deferred.Deferred<void>,
+  pipeline: Effect.Effect<A, E, R>,
+): Effect.Effect<A | typeof OMP_TURN_CANCELLED, E, R> {
+  return Effect.raceFirst(
+    Deferred.await(cancellation).pipe(Effect.as(OMP_TURN_CANCELLED)),
+    pipeline,
+  );
+}
+
 function encodeJsonStringForDiagnostics(input: unknown): string | undefined {
   const result = encodeUnknownJsonStringExit(input);
   return Exit.isSuccess(result) ? result.value : undefined;
@@ -868,9 +881,6 @@ export function makeOmpAdapter(ompSettings: OmpSettings, options?: OmpAdapterLiv
           );
         return { _tag: "Prompted", prompt, result } satisfies OmpTurnPipelineOutcome;
       });
-      const cancelled = Deferred.await(claim.cancellation).pipe(
-        Effect.as({ _tag: "Cancelled" } satisfies OmpTurnPipelineOutcome),
-      );
       const finalize = (exit: Exit.Exit<OmpTurnPipelineOutcome, ProviderAdapterError>) =>
         context.requestLifecycleSemaphore.withPermit(
           Effect.gen(function* () {
@@ -910,7 +920,7 @@ export function makeOmpAdapter(ompSettings: OmpSettings, options?: OmpAdapterLiv
           }),
         );
 
-      return Effect.raceFirst(pipeline, cancelled).pipe(
+      return raceOmpTurnPipelineAgainstCancellation(claim.cancellation, pipeline).pipe(
         Effect.onExit(finalize),
         Effect.as({
           threadId: input.threadId,

@@ -27,7 +27,11 @@ import * as TestClock from "effect/testing/TestClock";
 
 import { ServerConfig } from "../../config.ts";
 import type { EventNdjsonLogger } from "./EventNdjsonLogger.ts";
-import { makeOmpAdapter, selectOmpPermissionOptionId } from "./OmpAdapter.ts";
+import {
+  makeOmpAdapter,
+  raceOmpTurnPipelineAgainstCancellation,
+  selectOmpPermissionOptionId,
+} from "./OmpAdapter.ts";
 
 interface Fixture {
   readonly directory: string;
@@ -207,6 +211,22 @@ function waitForEvent(
 }
 
 adapterTest("OMP adapter", (it) => {
+  it.effect("does not start a turn pipeline after cancellation wins admission", () =>
+    Effect.gen(function* () {
+      const cancellation = yield* Deferred.make<void>();
+      const pipelineStarted = yield* Ref.make(false);
+      yield* Deferred.succeed(cancellation, undefined);
+
+      const outcome = yield* raceOmpTurnPipelineAgainstCancellation(
+        cancellation,
+        Ref.set(pipelineStarted, true).pipe(Effect.as({ _tag: "Prompted" as const })),
+      );
+
+      assert.equal(outcome._tag, "Cancelled");
+      assert.isFalse(yield* Ref.get(pipelineStarted));
+    }),
+  );
+
   it.effect("starts, resumes, streams a turn, and cleans up its child", () =>
     Effect.scoped(
       Effect.gen(function* () {
