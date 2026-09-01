@@ -86,6 +86,7 @@ Pulse Vault should be the server-owned credential broker for the workforce. “S
 - A **credential grant** binds the approved capability to one work order or attempt, with an expiry, action scope, resource boundary, and budget.
 - A **credential lease** is the short-lived runtime mechanism. Prefer provider-issued ephemeral credentials or a server-side proxy. Inject a secret into an isolated worker only when the provider offers no safer delegation path.
 - A **credential receipt** records who requested access, which policy allowed it, what bounded action occurred, and whether the grant was revoked. It never records the secret value.
+- A **credential requirement** is a portable declaration that a worker or SOP needs a capability such as `github.pull-request.write` or `ssh.production.read`. It contains no account identifier or secret. Pulse resolves it against the destination project's Vault policy when the worker starts.
 
 ### Execution flow
 
@@ -107,7 +108,8 @@ Pulse revokes the grant and persists a redacted receipt
 
 - Never send reusable credentials over WebSocket contracts or return them to web, desktop, or mobile.
 - Never place credentials in prompts, chat history, framework checkpoints, traces, artifacts, logs, diagnostics, or git checkpoints.
-- Do not let a framework’s native credential store become the source of truth. It may hold an attempt-local lease only.
+- Never include credential records, grants, leases, or account bindings in an exported worker profile. Export only capability requirements.
+- Do not let a framework's native credential store become the source of truth. It may hold an attempt-local lease only.
 - Bind every grant to the owning environment. Remote, relay, tunnel, and multi-device clients authorize work; they do not receive the credential.
 - Default to least privilege, short expiry, explicit revocation, redacted failure details, and separate policy for read and write actions.
 - Keep the current `ServerSecretStore` description honest: it is filesystem-protected rather than universally encrypted at rest. Pulse Vault requires a stronger backend or isolated service account before use on shared or untrusted hosts.
@@ -133,6 +135,21 @@ Best suited to persistent profiles, recurring research, monitoring, scheduling, 
 Hermes can maintain worker-local execution context. Its Kanban model is a useful execution reference, but Pulse remains the authoritative business queue.
 
 Hermes is the strongest candidate for recurring credentialed operations, so scheduled runs need fresh grants rather than stored long-lived tokens in the worker profile.
+
+### Portable worker profiles
+
+Nous Research now supports exporting and importing Hermes profiles while stripping credentials. The exported package can carry skills, memory, persona, schedules, plugins, settings, and presentation preferences. Hermes distributions also exclude `.env` and `auth.json`, then declare the environment variables an installer must supply.
+
+Pulse should adopt the stronger version of this split:
+
+- A `WorkerTemplate` is portable across users, environments, and projects.
+- The template contains role, instructions, skills, tools, schedules, runtime preferences, and named credential requirements.
+- Pulse never exports Vault records, project bindings, account identifiers, grants, leases, or secret values with the template.
+- Importing a template produces an unresolved-capabilities review. Pulse Warden shows which requirements the destination project can satisfy and asks for approval when a capability crosses a project boundary.
+- Cloning a worker inside the same project may reuse the project's credential policy, but the new worker receives fresh attempt-local grants rather than copied credentials.
+- Removing a worker does not remove or revoke the shared project credential unless a human explicitly chooses that separate action.
+
+This makes workers shareable without turning agent packages into credential archives. It also keeps the Pulse project mapping as the place where a portable worker gains real authority.
 
 ## 6. Google ADK
 
@@ -206,6 +223,7 @@ Pulse should define provider-neutral domain contracts such as:
 - `Approval`
 - `WorkReceipt`
 - `CredentialPolicy`
+- `CredentialRequirement`
 - `CredentialGrant`
 - `CredentialReceipt`
 
@@ -224,11 +242,12 @@ Only meaningful activity should be projected to clients. Pulse should not broadc
 
 1. **Build the Pulse domain:** departments, SOPs, work orders, attempts, artifacts, approvals, and typed receipts.
 2. **Define the Pulse Vault contract:** credential records, capability policies, grants, leases, revocation, redacted receipts, and provider-neutral failure types. Keep secrets out of shared contracts.
-3. **Harden the credential backend:** preserve the current single-owner `ServerSecretStore` path, close its documented release gates, and add an encrypted or externally managed backend before supporting shared or untrusted hosts.
-4. **Integrate the existing worker strategy:** OMP for Engineering; Hermes for Research and Operations. Validate read-only Vault grants first, then bounded write actions with explicit approval.
-5. **Add an OpenAI worker backend:** use wrapped tools to validate the common execution and credential-capability contracts at low integration cost.
-6. **Pilot Mastra on one bounded durable SOP:** keep explicit ownership of state, approvals, and credential grants in Pulse.
-7. **Add Google ADK through an adapter or A2A:** target remote enterprise departments and external agent ecosystems while keeping authorization in Pulse Vault.
+3. **Define portable worker templates:** export skills, persona, schedules, plugins, and capability requirements while excluding all credential material and project bindings.
+4. **Harden the credential backend:** preserve the current single-owner `ServerSecretStore` path, close its documented release gates, and add an encrypted or externally managed backend before supporting shared or untrusted hosts.
+5. **Integrate the existing worker strategy:** OMP for Engineering; Hermes for Research and Operations. Validate read-only Vault grants first, then bounded write actions with explicit approval.
+6. **Add an OpenAI worker backend:** use wrapped tools to validate the common execution and credential-capability contracts at low integration cost.
+7. **Pilot Mastra on one bounded durable SOP:** keep explicit ownership of state, approvals, and credential grants in Pulse.
+8. **Add Google ADK through an adapter or A2A:** target remote enterprise departments and external agent ecosystems while keeping authorization in Pulse Vault.
 
 ### Vault rollout gates
 
@@ -252,6 +271,9 @@ Pulse should therefore become the durable control plane and user-facing system o
 - [Pulse workforce comparison and recommendation](comparison-and-pulse-code-recommendation.md)
 - [Pi and Oh My Pi research](02-pi-and-oh-my-pi.md)
 - [Hermes Agent research](03-hermes-agent.md)
+- [Nous Research announcement: portable Hermes profiles](https://x.com/NousResearch/status/2094515104670715940)
+- [Hermes profile distributions](https://github.com/NousResearch/hermes-agent/blob/main/website/docs/user-guide/profile-distributions.md)
+- [Hermes security model](https://github.com/NousResearch/hermes-agent/security)
 - [Google Agent Development Kit](https://adk.dev/)
 - [OpenAI Agents SDK](https://openai.github.io/openai-agents-python/)
 - [OpenAI multi-agent orchestration](https://openai.github.io/openai-agents-python/multi_agent/)
