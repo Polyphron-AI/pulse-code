@@ -48,6 +48,7 @@ const failSetConfigOption = process.env.T3_ACP_FAIL_SET_CONFIG_OPTION === "1";
 const exitOnSetConfigOption = process.env.T3_ACP_EXIT_ON_SET_CONFIG_OPTION === "1";
 const promptResponseText = process.env.T3_ACP_PROMPT_RESPONSE_TEXT;
 const promptDelayMs = Number(process.env.T3_ACP_PROMPT_DELAY_MS ?? "0");
+const postClientResponseDelayMs = Number(process.env.T3_ACP_POST_CLIENT_RESPONSE_DELAY_MS ?? "0");
 const permissionOptionIds = {
   allowOnce: process.env.T3_ACP_ALLOW_ONCE_OPTION_ID ?? "allow-once",
   allowAlways: process.env.T3_ACP_ALLOW_ALWAYS_OPTION_ID ?? "allow-always",
@@ -807,6 +808,9 @@ const program = Effect.gen(function* () {
             ),
           );
         }
+        if (Number.isFinite(postClientResponseDelayMs) && postClientResponseDelayMs > 0) {
+          yield* Effect.sleep(`${postClientResponseDelayMs} millis`);
+        }
 
         const cancelled =
           cancelledSessions.delete(requestedSessionId) ||
@@ -963,6 +967,9 @@ const program = Effect.gen(function* () {
               "utf8",
             ),
           );
+        }
+        if (Number.isFinite(postClientResponseDelayMs) && postClientResponseDelayMs > 0) {
+          yield* Effect.sleep(`${postClientResponseDelayMs} millis`);
         }
         const action =
           typeof response === "object" && response !== null && "action" in response

@@ -9,7 +9,6 @@ import {
   type ProviderOptionSelection,
   type ProviderRuntimeEvent,
   type ProviderSession,
-  type ProviderUserInputAnswers,
   RuntimeRequestId,
   type ThreadId,
   TurnId,
@@ -50,9 +49,12 @@ import {
   makeAcpRequestResolvedEvent,
   makeAcpToolCallEvent,
 } from "../acp/AcpCoreRuntimeEvents.ts";
-import { mapOmpAcpElicitationForm } from "../acp/OmpAcpElicitation.ts";
+import {
+  mapOmpAcpElicitationForm,
+  type OmpMappedElicitationForm,
+} from "../acp/OmpAcpElicitation.ts";
 import { makeAcpNativeLoggerFactory } from "../acp/AcpNativeLogging.ts";
-import { parsePermissionRequest } from "../acp/AcpRuntimeModel.ts";
+import { type AcpPermissionRequest, parsePermissionRequest } from "../acp/AcpRuntimeModel.ts";
 import type * as AcpSessionRuntime from "../acp/AcpSessionRuntime.ts";
 import { makeOmpAcpRuntime, resolveOmpAgentDir } from "../acp/OmpAcpSupport.ts";
 import type { OmpAdapterShape } from "../Services/OmpAdapter.ts";
@@ -76,17 +78,17 @@ export interface OmpAdapterLiveOptions {
 }
 
 interface PendingApproval {
-  readonly decision: Deferred.Deferred<ProviderApprovalDecision>;
+  readonly response: Deferred.Deferred<EffectAcpSchema.RequestPermissionResponse>;
   readonly request: EffectAcpSchema.RequestPermissionRequest;
+  readonly permissionRequest: AcpPermissionRequest;
+  readonly runtimeRequestId: RuntimeRequestId;
   readonly turnId: TurnId;
 }
 
-type PendingUserInputResolution =
-  | { readonly _tag: "answered"; readonly answers: ProviderUserInputAnswers }
-  | { readonly _tag: "cancelled" };
-
 interface PendingUserInput {
-  readonly resolution: Deferred.Deferred<PendingUserInputResolution>;
+  readonly response: Deferred.Deferred<EffectAcpSchema.ElicitationResponse>;
+  readonly mapped: OmpMappedElicitationForm;
+  readonly runtimeRequestId: RuntimeRequestId;
   readonly turnId: TurnId;
 }
 
@@ -139,7 +141,8 @@ function settlePendingApprovalsAsCancelled(
 ): Effect.Effect<void> {
   return Effect.forEach(
     pending,
-    (entry) => Deferred.succeed(entry.decision, "cancel").pipe(Effect.ignore),
+    (entry) =>
+      Deferred.succeed(entry.response, { outcome: { outcome: "cancelled" } }).pipe(Effect.ignore),
     { discard: true },
   );
 }
@@ -149,7 +152,8 @@ function settlePendingUserInputsAsCancelled(
 ): Effect.Effect<void> {
   return Effect.forEach(
     pending,
-    (entry) => Deferred.succeed(entry.resolution, { _tag: "cancelled" }).pipe(Effect.ignore),
+    (entry) =>
+      Deferred.succeed(entry.response, { action: { action: "cancel" } }).pipe(Effect.ignore),
     { discard: true },
   );
 }
@@ -303,11 +307,12 @@ export function makeOmpAdapter(ompSettings: OmpSettings, options?: OmpAdapterLiv
             const userInputs = takePending(context.pendingUserInputs);
             yield* settlePendingApprovalsAsCancelled(approvals);
             yield* settlePendingUserInputsAsCancelled(userInputs);
+            context.promptsInFlight = 0;
+            context.activeTurnId = undefined;
             return true;
           }),
         );
         if (!claimed) return;
-        yield* Effect.yieldNow;
         if (context.notificationFiber) yield* Fiber.interrupt(context.notificationFiber);
         yield* Scope.close(context.scope, Exit.void).pipe(Effect.ignore);
         sessions.delete(context.threadId);
@@ -443,7 +448,7 @@ export function makeOmpAdapter(ompSettings: OmpSettings, options?: OmpAdapterLiv
                 if (!mapped) return { action: { action: "cancel" as const } };
                 const requestId = ApprovalRequestId.make(yield* randomUUIDv4);
                 const runtimeRequestId = RuntimeRequestId.make(requestId);
-                const resolution = yield* Deferred.make<PendingUserInputResolution>();
+                const response = yield* Deferred.make<EffectAcpSchema.ElicitationResponse>();
                 const turnId = yield* live.requestLifecycleSemaphore.withPermit(
                   Effect.gen(function* () {
                     const activeTurnId = live.activeTurnId;
@@ -454,7 +459,12 @@ export function makeOmpAdapter(ompSettings: OmpSettings, options?: OmpAdapterLiv
                     ) {
                       return undefined;
                     }
-                    pendingUserInputs.set(requestId, { resolution, turnId: activeTurnId });
+                    pendingUserInputs.set(requestId, {
+                      response,
+                      mapped,
+                      runtimeRequestId,
+                      turnId: activeTurnId,
+                    });
                     yield* offerRuntimeEvent({
                       type: "user-input.requested",
                       ...(yield* makeEventStamp()),
@@ -473,33 +483,7 @@ export function makeOmpAdapter(ompSettings: OmpSettings, options?: OmpAdapterLiv
                   }),
                 );
                 if (!turnId) return { action: { action: "cancel" as const } };
-                const resolved = yield* Deferred.await(resolution);
-                const answers = resolved._tag === "answered" ? resolved.answers : {};
-                const resolutionPublished = yield* live.requestLifecycleSemaphore.withPermit(
-                  Effect.gen(function* () {
-                    if (
-                      live.stopped ||
-                      live.activeTurnId !== turnId ||
-                      live.interruptedTurnIds.has(turnId)
-                    ) {
-                      return false;
-                    }
-                    yield* offerRuntimeEvent({
-                      type: "user-input.resolved",
-                      ...(yield* makeEventStamp()),
-                      provider: PROVIDER,
-                      threadId: input.threadId,
-                      turnId,
-                      requestId: runtimeRequestId,
-                      payload: { answers },
-                    });
-                    return true;
-                  }),
-                );
-                if (!resolutionPublished) return { action: { action: "cancel" as const } };
-                return resolved._tag === "answered"
-                  ? mapped.resolve(resolved.answers)
-                  : { action: { action: "cancel" as const } };
+                return yield* Deferred.await(response);
               });
 
             yield* acp.handleRequestPermission((request) =>
@@ -513,7 +497,8 @@ export function makeOmpAdapter(ompSettings: OmpSettings, options?: OmpAdapterLiv
                   const permissionRequest = parsePermissionRequest(request);
                   const requestId = ApprovalRequestId.make(yield* randomUUIDv4);
                   const runtimeRequestId = RuntimeRequestId.make(requestId);
-                  const decision = yield* Deferred.make<ProviderApprovalDecision>();
+                  const response =
+                    yield* Deferred.make<EffectAcpSchema.RequestPermissionResponse>();
                   const turnId = yield* live.requestLifecycleSemaphore.withPermit(
                     Effect.gen(function* () {
                       const activeTurnId = live.activeTurnId;
@@ -524,7 +509,13 @@ export function makeOmpAdapter(ompSettings: OmpSettings, options?: OmpAdapterLiv
                       ) {
                         return undefined;
                       }
-                      pendingApprovals.set(requestId, { decision, request, turnId: activeTurnId });
+                      pendingApprovals.set(requestId, {
+                        response,
+                        request,
+                        permissionRequest,
+                        runtimeRequestId,
+                        turnId: activeTurnId,
+                      });
                       yield* offerRuntimeEvent(
                         makeAcpRequestOpenedEvent({
                           stamp: yield* makeEventStamp(),
@@ -547,40 +538,7 @@ export function makeOmpAdapter(ompSettings: OmpSettings, options?: OmpAdapterLiv
                     }),
                   );
                   if (!turnId) return { outcome: { outcome: "cancelled" as const } };
-                  const resolved = yield* Deferred.await(decision);
-                  const resolutionPublished = yield* live.requestLifecycleSemaphore.withPermit(
-                    Effect.gen(function* () {
-                      if (
-                        live.stopped ||
-                        live.activeTurnId !== turnId ||
-                        live.interruptedTurnIds.has(turnId)
-                      ) {
-                        return false;
-                      }
-                      yield* offerRuntimeEvent(
-                        makeAcpRequestResolvedEvent({
-                          stamp: yield* makeEventStamp(),
-                          provider: PROVIDER,
-                          threadId: input.threadId,
-                          turnId,
-                          requestId: runtimeRequestId,
-                          permissionRequest,
-                          decision: resolved,
-                        }),
-                      );
-                      return true;
-                    }),
-                  );
-                  if (!resolutionPublished) {
-                    return { outcome: { outcome: "cancelled" as const } };
-                  }
-                  if (resolved === "cancel") {
-                    return { outcome: { outcome: "cancelled" as const } };
-                  }
-                  const optionId = selectOmpPermissionOptionId(request, resolved);
-                  return optionId
-                    ? { outcome: { outcome: "selected" as const, optionId } }
-                    : { outcome: { outcome: "cancelled" as const } };
+                  return yield* Deferred.await(response);
                 }),
               ),
             );
@@ -852,29 +810,37 @@ export function makeOmpAdapter(ompSettings: OmpSettings, options?: OmpAdapterLiv
                 mapAcpToAdapterError(PROVIDER, input.threadId, "session/prompt", error),
               ),
             );
-          yield* context.acp.drainEvents;
-          if (context.interruptedTurnIds.has(turnId)) {
-            return { threadId: input.threadId, turnId, resumeCursor: context.session.resumeCursor };
-          }
-          const turn = context.turns.find((entry) => entry.id === turnId);
-          if (turn) turn.items.push({ prompt, result });
-          else context.turns.push({ id: turnId, items: [{ prompt, result }] });
-          if (context.promptsInFlight === 1) {
-            const { activeTurnId: _activeTurnId, ...readySession } = context.session;
-            context.activeTurnId = undefined;
-            context.session = { ...readySession, status: "ready", updatedAt: yield* nowIso };
-            yield* offerRuntimeEvent({
-              type: "turn.completed",
-              ...(yield* makeEventStamp()),
-              provider: PROVIDER,
-              threadId: input.threadId,
-              turnId,
-              payload: {
-                state: result.stopReason === "cancelled" ? "cancelled" : "completed",
-                stopReason: result.stopReason ?? null,
-              },
-            });
-          }
+          yield* context.requestLifecycleSemaphore.withPermit(
+            Effect.gen(function* () {
+              if (
+                context.stopped ||
+                context.activeTurnId !== turnId ||
+                context.interruptedTurnIds.has(turnId)
+              ) {
+                return;
+              }
+              yield* context.acp.drainEvents;
+              const turn = context.turns.find((entry) => entry.id === turnId);
+              if (turn) turn.items.push({ prompt, result });
+              else context.turns.push({ id: turnId, items: [{ prompt, result }] });
+              if (context.promptsInFlight === 1) {
+                const { activeTurnId: _activeTurnId, ...readySession } = context.session;
+                context.activeTurnId = undefined;
+                context.session = { ...readySession, status: "ready", updatedAt: yield* nowIso };
+                yield* offerRuntimeEvent({
+                  type: "turn.completed",
+                  ...(yield* makeEventStamp()),
+                  provider: PROVIDER,
+                  threadId: input.threadId,
+                  turnId,
+                  payload: {
+                    state: result.stopReason === "cancelled" ? "cancelled" : "completed",
+                    stopReason: result.stopReason ?? null,
+                  },
+                });
+              }
+            }),
+          );
           return { threadId: input.threadId, turnId, resumeCursor: context.session.resumeCursor };
         }).pipe(
           Effect.ensuring(
@@ -897,39 +863,37 @@ export function makeOmpAdapter(ompSettings: OmpSettings, options?: OmpAdapterLiv
     const interruptTurn: OmpAdapterShape["interruptTurn"] = (threadId, requestedTurnId) =>
       Effect.gen(function* () {
         const context = yield* requireSession(threadId);
-        const claimed = yield* context.requestLifecycleSemaphore.withPermit(
+        yield* context.requestLifecycleSemaphore.withPermit(
           Effect.gen(function* () {
             const activeTurnId = context.activeTurnId ?? context.session.activeTurnId;
-            if (requestedTurnId !== undefined && activeTurnId !== requestedTurnId) {
-              return undefined;
+            if (
+              context.stopped ||
+              !activeTurnId ||
+              context.interruptedTurnIds.has(activeTurnId) ||
+              (requestedTurnId !== undefined && activeTurnId !== requestedTurnId)
+            ) {
+              return;
             }
-            const interruptedTurnId = requestedTurnId ?? activeTurnId;
-            if (interruptedTurnId) context.interruptedTurnIds.add(interruptedTurnId);
+            context.interruptedTurnIds.add(activeTurnId);
             const approvals = takePending(context.pendingApprovals);
             const userInputs = takePending(context.pendingUserInputs);
             yield* settlePendingApprovalsAsCancelled(approvals);
             yield* settlePendingUserInputsAsCancelled(userInputs);
-            return { activeTurnId, interruptedTurnId };
+            yield* context.acp.cancel.pipe(Effect.timeout("2 seconds"), Effect.ignore);
+            context.promptsInFlight = 0;
+            context.activeTurnId = undefined;
+            const { activeTurnId: _activeTurnId, ...readySession } = context.session;
+            context.session = { ...readySession, status: "ready", updatedAt: yield* nowIso };
+            yield* offerRuntimeEvent({
+              type: "turn.completed",
+              ...(yield* makeEventStamp()),
+              provider: PROVIDER,
+              threadId,
+              turnId: activeTurnId,
+              payload: { state: "cancelled", stopReason: "cancelled" },
+            });
           }),
         );
-        if (!claimed) return;
-        const { activeTurnId, interruptedTurnId } = claimed;
-        yield* Effect.yieldNow;
-        yield* context.acp.cancel.pipe(Effect.ignore);
-        if (interruptedTurnId && activeTurnId === interruptedTurnId) {
-          context.promptsInFlight = 0;
-          context.activeTurnId = undefined;
-          const { activeTurnId: _activeTurnId, ...readySession } = context.session;
-          context.session = { ...readySession, status: "ready", updatedAt: yield* nowIso };
-          yield* offerRuntimeEvent({
-            type: "turn.completed",
-            ...(yield* makeEventStamp()),
-            provider: PROVIDER,
-            threadId,
-            turnId: interruptedTurnId,
-            payload: { state: "cancelled", stopReason: "cancelled" },
-          });
-        }
       });
 
     const respondToRequest: OmpAdapterShape["respondToRequest"] = (threadId, requestId, decision) =>
@@ -938,9 +902,38 @@ export function makeOmpAdapter(ompSettings: OmpSettings, options?: OmpAdapterLiv
         const accepted = yield* context.requestLifecycleSemaphore.withPermit(
           Effect.gen(function* () {
             const pending = context.pendingApprovals.get(requestId);
-            if (!pending) return undefined;
+            if (!pending) return false;
+            if (
+              context.stopped ||
+              context.activeTurnId !== pending.turnId ||
+              context.interruptedTurnIds.has(pending.turnId)
+            ) {
+              context.pendingApprovals.delete(requestId);
+              yield* Deferred.succeed(pending.response, {
+                outcome: { outcome: "cancelled" },
+              }).pipe(Effect.ignore);
+              return false;
+            }
+            const optionId =
+              decision === "cancel"
+                ? undefined
+                : selectOmpPermissionOptionId(pending.request, decision);
+            const response: EffectAcpSchema.RequestPermissionResponse = optionId
+              ? { outcome: { outcome: "selected", optionId } }
+              : { outcome: { outcome: "cancelled" } };
+            yield* offerRuntimeEvent(
+              makeAcpRequestResolvedEvent({
+                stamp: yield* makeEventStamp(),
+                provider: PROVIDER,
+                threadId,
+                turnId: pending.turnId,
+                requestId: pending.runtimeRequestId,
+                permissionRequest: pending.permissionRequest,
+                decision,
+              }),
+            );
             context.pendingApprovals.delete(requestId);
-            return yield* Deferred.succeed(pending.decision, decision);
+            return yield* Deferred.succeed(pending.response, response);
           }),
         );
         if (accepted !== true) {
@@ -962,9 +955,30 @@ export function makeOmpAdapter(ompSettings: OmpSettings, options?: OmpAdapterLiv
         const accepted = yield* context.requestLifecycleSemaphore.withPermit(
           Effect.gen(function* () {
             const pending = context.pendingUserInputs.get(requestId);
-            if (!pending) return undefined;
+            if (!pending) return false;
+            if (
+              context.stopped ||
+              context.activeTurnId !== pending.turnId ||
+              context.interruptedTurnIds.has(pending.turnId)
+            ) {
+              context.pendingUserInputs.delete(requestId);
+              yield* Deferred.succeed(pending.response, {
+                action: { action: "cancel" },
+              }).pipe(Effect.ignore);
+              return false;
+            }
+            const response = pending.mapped.resolve(answers);
+            yield* offerRuntimeEvent({
+              type: "user-input.resolved",
+              ...(yield* makeEventStamp()),
+              provider: PROVIDER,
+              threadId,
+              turnId: pending.turnId,
+              requestId: pending.runtimeRequestId,
+              payload: { answers },
+            });
             context.pendingUserInputs.delete(requestId);
-            return yield* Deferred.succeed(pending.resolution, { _tag: "answered", answers });
+            return yield* Deferred.succeed(pending.response, response);
           }),
         );
         if (accepted !== true) {

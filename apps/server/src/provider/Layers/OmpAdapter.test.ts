@@ -23,6 +23,7 @@ import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
+import * as TestClock from "effect/testing/TestClock";
 
 import { ServerConfig } from "../../config.ts";
 import type { EventNdjsonLogger } from "./EventNdjsonLogger.ts";
@@ -82,6 +83,24 @@ function readJsonLines(path: string): ReadonlyArray<Record<string, unknown>> {
     .split("\n")
     .filter(Boolean)
     .map((line) => JSON.parse(line) as Record<string, unknown>);
+}
+
+function waitForJsonLogEntry(
+  path: string,
+  predicate: (entry: Record<string, unknown>) => boolean,
+  timeoutMs = 2_000,
+): Effect.Effect<Record<string, unknown>> {
+  const poll = (remaining: number): Effect.Effect<Record<string, unknown>> =>
+    Effect.gen(function* () {
+      const entry = readJsonLines(path).find(predicate);
+      if (entry) return entry;
+      if (remaining <= 0) {
+        return yield* Effect.die(new Error(`Timed out waiting for a log entry in ${path}`));
+      }
+      yield* Effect.sleep("10 millis");
+      return yield* poll(remaining - 1);
+    });
+  return poll(Math.ceil(timeoutMs / 10)).pipe(TestClock.withLive);
 }
 
 function processIsAlive(pid: number): boolean {
@@ -268,6 +287,7 @@ adapterTest("OMP adapter", (it) => {
             T3_ACP_EMIT_TOOL_CALLS: "1",
             T3_ACP_ALLOW_ONCE_OPTION_ID: "omp-allow-this-time",
             T3_ACP_ALLOW_ALWAYS_OPTION_ID: "  opaque omp/session id  ",
+            T3_ACP_POST_CLIENT_RESPONSE_DELAY_MS: "500",
           });
           const threadId = ThreadId.make("omp-permission-flow");
           yield* adapter.startSession({
@@ -284,11 +304,20 @@ adapterTest("OMP adapter", (it) => {
             .pipe(Effect.forkChild);
           const requestEvent = yield* Fiber.join(requestEventFiber);
           assert.equal(requestEvent.type, "request.opened");
+          const resolvedEventFiber = yield* waitForEvent(
+            adapter.streamEvents,
+            (event) => event.type === "request.resolved",
+          );
           yield* adapter.respondToRequest(
             threadId,
             ApprovalRequestId.make(requestEvent.requestId!),
             "acceptForSession",
           );
+          const activeTurnId = (yield* adapter.listSessions())[0]?.activeTurnId;
+          assert.isDefined(activeTurnId);
+          yield* adapter.interruptTurn(threadId, activeTurnId);
+          const resolvedEvent = yield* Fiber.join(resolvedEventFiber);
+          assert.equal(resolvedEvent.type, "request.resolved");
           const duplicateError = yield* adapter
             .respondToRequest(
               threadId,
@@ -297,10 +326,11 @@ adapterTest("OMP adapter", (it) => {
             )
             .pipe(Effect.flip);
           assert.equal(duplicateError._tag, "ProviderAdapterRequestError");
-          yield* Fiber.join(turnFiber);
-          const response = readJsonLines(fixture.responseLogPath).find(
+          const response = yield* waitForJsonLogEntry(
+            fixture.responseLogPath,
             (entry) => entry.method === "session/request_permission",
           );
+          yield* Fiber.join(turnFiber);
           assert.deepStrictEqual(response?.response, {
             outcome: { outcome: "selected", optionId: "  opaque omp/session id  " },
           });
@@ -361,6 +391,7 @@ adapterTest("OMP adapter", (it) => {
         const fixture = yield* makeFixture;
         const adapter = yield* makeAdapter(fixture, {
           T3_ACP_OMP_ELICITATION: "legacy-plan",
+          T3_ACP_POST_CLIENT_RESPONSE_DELAY_MS: "500",
         });
         const threadId = ThreadId.make("omp-legacy-elicitation-flow");
         yield* adapter.startSession({
@@ -378,17 +409,27 @@ adapterTest("OMP adapter", (it) => {
         const requestEvent = yield* Fiber.join(requestEventFiber);
         assert.equal(requestEvent.type, "user-input.requested");
         const requestId = ApprovalRequestId.make(requestEvent.requestId!);
+        const resolvedEventFiber = yield* waitForEvent(
+          adapter.streamEvents,
+          (event) => event.type === "user-input.resolved",
+        );
         yield* adapter.respondToUserInput(threadId, requestId, {
           value: "Approve and execute",
         });
+        const activeTurnId = (yield* adapter.listSessions())[0]?.activeTurnId;
+        assert.isDefined(activeTurnId);
+        yield* adapter.interruptTurn(threadId, activeTurnId);
+        const resolvedEvent = yield* Fiber.join(resolvedEventFiber);
+        assert.equal(resolvedEvent.type, "user-input.resolved");
         const duplicateError = yield* adapter
           .respondToUserInput(threadId, requestId, { value: "Refine plan" })
           .pipe(Effect.flip);
         assert.equal(duplicateError._tag, "ProviderAdapterRequestError");
-        yield* Fiber.join(turnFiber);
-        const response = readJsonLines(fixture.responseLogPath).find(
+        const response = yield* waitForJsonLogEntry(
+          fixture.responseLogPath,
           (entry) => entry.method === "elicitation/create",
         );
+        yield* Fiber.join(turnFiber);
         assert.deepStrictEqual(response?.response, {
           action: "accept",
           content: { value: "Approve and execute" },
@@ -454,6 +495,10 @@ adapterTest("OMP adapter", (it) => {
           cwd: process.cwd(),
           runtimeMode: "approval-required",
         });
+        const observed = yield* Ref.make<ReadonlyArray<ProviderRuntimeEvent>>([]);
+        const eventsFiber = yield* Stream.runForEach(adapter.streamEvents, (event) =>
+          Ref.update(observed, (events) => [...events, event]),
+        ).pipe(Effect.forkChild);
         const requestEventFiber = yield* waitForEvent(
           adapter.streamEvents,
           (event) => event.type === "user-input.requested",
@@ -462,18 +507,15 @@ adapterTest("OMP adapter", (it) => {
           .sendTurn({ threadId, input: "make a plan" })
           .pipe(Effect.forkChild);
         const requestEvent = yield* Fiber.join(requestEventFiber);
-        const completedEventFiber = yield* waitForEvent(
-          adapter.streamEvents,
-          (event) => event.type === "turn.completed",
-        );
-        yield* adapter.interruptTurn(threadId, requestEvent.turnId);
-        const completedEvent = yield* Fiber.join(completedEventFiber);
+        const firstInterrupt = yield* adapter
+          .interruptTurn(threadId, requestEvent.turnId)
+          .pipe(Effect.forkChild);
+        const secondInterrupt = yield* adapter
+          .interruptTurn(threadId, requestEvent.turnId)
+          .pipe(Effect.forkChild);
+        yield* Fiber.join(firstInterrupt);
+        yield* Fiber.join(secondInterrupt);
         yield* Fiber.join(turnFiber);
-        assert.equal(completedEvent.type, "turn.completed");
-        assert.deepStrictEqual(completedEvent.payload, {
-          state: "cancelled",
-          stopReason: "cancelled",
-        });
         const lateResponseError = yield* adapter
           .respondToUserInput(threadId, ApprovalRequestId.make(requestEvent.requestId!), {
             value: "Approve and execute",
@@ -481,6 +523,68 @@ adapterTest("OMP adapter", (it) => {
           .pipe(Effect.flip);
         assert.equal(lateResponseError._tag, "ProviderAdapterRequestError");
         assert.equal((yield* adapter.listSessions())[0]?.status, "ready");
+        yield* adapter.stopSession(threadId);
+        yield* Effect.yieldNow;
+        yield* Fiber.interrupt(eventsFiber);
+        const events = yield* Ref.get(observed);
+        const terminalEvents = events.filter(
+          (event) => event.type === "turn.completed" && event.turnId === requestEvent.turnId,
+        );
+        assert.lengthOf(terminalEvents, 1);
+        assert.deepStrictEqual(terminalEvents[0]?.payload, {
+          state: "cancelled",
+          stopReason: "cancelled",
+        });
+        const terminalIndex = events.findIndex((event) => event === terminalEvents[0]);
+        const exitIndex = events.findIndex((event) => event.type === "session.exited");
+        assert.isAtLeast(terminalIndex, 0);
+        assert.isAbove(exitIndex, terminalIndex);
+      }),
+    ),
+  );
+
+  it.effect("does not publish a turn terminal event after stop wins", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const fixture = yield* makeFixture;
+        const adapter = yield* makeAdapter(fixture, { T3_ACP_OMP_ELICITATION: "plan" });
+        const threadId = ThreadId.make("omp-stop-before-interrupt");
+        yield* adapter.startSession({
+          threadId,
+          cwd: process.cwd(),
+          runtimeMode: "approval-required",
+        });
+        const observed = yield* Ref.make<ReadonlyArray<ProviderRuntimeEvent>>([]);
+        const eventsFiber = yield* Stream.runForEach(adapter.streamEvents, (event) =>
+          Ref.update(observed, (events) => [...events, event]),
+        ).pipe(Effect.forkChild);
+        const requestEventFiber = yield* waitForEvent(
+          adapter.streamEvents,
+          (event) => event.type === "user-input.requested",
+        );
+        const turnFiber = yield* adapter
+          .sendTurn({ threadId, input: "make a plan" })
+          .pipe(Effect.forkChild);
+        const requestEvent = yield* Fiber.join(requestEventFiber);
+        yield* adapter.stopSession(threadId);
+        const interruptError = yield* adapter
+          .interruptTurn(threadId, requestEvent.turnId)
+          .pipe(Effect.flip);
+        assert.equal(interruptError._tag, "ProviderAdapterSessionNotFoundError");
+        yield* Fiber.await(turnFiber).pipe(Effect.timeout("3 seconds"));
+        yield* Effect.yieldNow;
+        yield* Fiber.interrupt(eventsFiber);
+        const events = yield* Ref.get(observed);
+        const exitIndex = events.findIndex((event) => event.type === "session.exited");
+        assert.isAtLeast(exitIndex, 0);
+        assert.isFalse(events.some((event) => event.type === "turn.completed"));
+        assert.isFalse(
+          events
+            .slice(exitIndex + 1)
+            .some(
+              (event) => event.type === "turn.completed" || event.type === "user-input.resolved",
+            ),
+        );
       }),
     ),
   );
