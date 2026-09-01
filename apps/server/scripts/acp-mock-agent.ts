@@ -898,6 +898,7 @@ const program = Effect.gen(function* () {
       }
 
       if (ompElicitation) {
+        const isPlanElicitation = ompElicitation === "plan" || ompElicitation === "legacy-plan";
         const elicitation =
           ompElicitation === "url"
             ? ({
@@ -909,56 +910,71 @@ const program = Effect.gen(function* () {
               } satisfies AcpSchema.ElicitationRequest)
             : ({
                 mode: "form" as const,
-                message: ompElicitation === "plan" ? "Approve this plan?" : "Configure the task",
+                message: isPlanElicitation ? "Approve this plan?" : "Configure the task",
                 sessionId: requestedSessionId,
-                requestedSchema:
-                  ompElicitation === "plan"
-                    ? {
-                        type: "object" as const,
-                        properties: {
-                          value: {
-                            type: "string" as const,
-                            title: "Plan approval",
-                            enum: ["Approve and execute", "Refine plan"],
-                          },
+                requestedSchema: isPlanElicitation
+                  ? {
+                      type: "object" as const,
+                      properties: {
+                        value: {
+                          type: "string" as const,
+                          title: "Plan approval",
+                          enum: ["Approve and execute", "Refine plan"],
                         },
-                        required: ["value"],
-                      }
-                    : {
-                        type: "object" as const,
-                        properties: {
-                          q0: {
-                            type: "string" as const,
-                            title: "Target",
-                            oneOf: [
-                              { const: "web", title: "Web" },
-                              { const: "mobile", title: "Mobile" },
-                            ],
-                          },
-                          q0__other: { type: "string" as const, title: "Other target" },
-                          q1: {
-                            type: "array" as const,
-                            title: "Checks",
-                            items: { type: "string" as const, enum: ["tests", "lint"] },
-                          },
-                          notes: { type: "string" as const, title: "Notes" },
-                          enabled: { type: "boolean" as const, title: "Enabled" },
-                          retries: { type: "integer" as const, title: "Retries", minimum: 0 },
-                        },
-                        required: ["q0", "q1", "notes", "enabled", "retries"],
                       },
+                      required: ["value"],
+                    }
+                  : {
+                      type: "object" as const,
+                      properties: {
+                        q0: {
+                          type: "string" as const,
+                          title: "Target",
+                          oneOf: [
+                            { const: "web", title: "Web" },
+                            { const: "mobile", title: "Mobile" },
+                          ],
+                        },
+                        q0__other: { type: "string" as const, title: "Other target" },
+                        q1: {
+                          type: "array" as const,
+                          title: "Checks",
+                          items: { type: "string" as const, enum: ["tests", "lint"] },
+                        },
+                        notes: { type: "string" as const, title: "Notes" },
+                        enabled: { type: "boolean" as const, title: "Enabled" },
+                        retries: { type: "integer" as const, title: "Retries", minimum: 0 },
+                      },
+                      required: ["q0", "q1", "notes", "enabled", "retries"],
+                    },
               } satisfies AcpSchema.ElicitationRequest);
-        const response = yield* agent.client.elicit(elicitation);
+        const legacyWire = ompElicitation === "legacy-plan" && elicitation.mode === "form";
+        const response = legacyWire
+          ? yield* agent.client.extRequest("elicitation/create", elicitation)
+          : yield* agent.client.elicit(elicitation);
         if (clientResponseLogPath) {
           yield* Effect.sync(() =>
             NodeFS.appendFileSync(
               clientResponseLogPath,
-              `${encodeUnknownJson({ method: "session/elicitation", response })}\n`,
+              `${encodeUnknownJson({
+                method: legacyWire ? "elicitation/create" : "session/elicitation",
+                response,
+              })}\n`,
               "utf8",
             ),
           );
         }
-        return { stopReason: response.action.action === "cancel" ? "cancelled" : "end_turn" };
+        const action =
+          typeof response === "object" && response !== null && "action" in response
+            ? response.action
+            : undefined;
+        const cancelled =
+          action === "cancel" ||
+          (typeof action === "object" &&
+            action !== null &&
+            "action" in action &&
+            action.action === "cancel");
+        return { stopReason: cancelled ? "cancelled" : "end_turn" };
       }
 
       if (emitXAiAskUserQuestion) {

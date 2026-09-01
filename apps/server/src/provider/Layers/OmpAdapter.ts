@@ -31,7 +31,7 @@ import * as Stream from "effect/Stream";
 import * as SynchronizedRef from "effect/SynchronizedRef";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 import * as EffectAcpErrors from "effect-acp/errors";
-import type * as EffectAcpSchema from "effect-acp/schema";
+import * as EffectAcpSchema from "effect-acp/schema";
 
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
 import { ServerConfig } from "../../config.ts";
@@ -78,6 +78,7 @@ export interface OmpAdapterLiveOptions {
 interface PendingApproval {
   readonly decision: Deferred.Deferred<ProviderApprovalDecision>;
   readonly request: EffectAcpSchema.RequestPermissionRequest;
+  readonly turnId: TurnId;
 }
 
 type PendingUserInputResolution =
@@ -86,6 +87,7 @@ type PendingUserInputResolution =
 
 interface PendingUserInput {
   readonly resolution: Deferred.Deferred<PendingUserInputResolution>;
+  readonly turnId: TurnId;
 }
 
 interface OmpSessionContext {
@@ -103,6 +105,7 @@ interface OmpSessionContext {
   activeTurnId: TurnId | undefined;
   promptsInFlight: number;
   readonly queueTurnSemaphore: Semaphore.Semaphore;
+  readonly requestLifecycleSemaphore: Semaphore.Semaphore;
   stopped: boolean;
 }
 
@@ -121,37 +124,51 @@ export function selectOmpPermissionOptionId(
   request: EffectAcpSchema.RequestPermissionRequest,
   decision: Exclude<ProviderApprovalDecision, "cancel">,
 ): string | undefined {
-  const preferredKinds =
+  const expectedKind =
     decision === "acceptForSession"
-      ? (["allow_always", "allow_once"] as const)
+      ? "allow_always"
       : decision === "accept"
-        ? (["allow_once", "allow_always"] as const)
-        : (["reject_once", "reject_always"] as const);
-  for (const kind of preferredKinds) {
-    const optionId = request.options.find((option) => option.kind === kind)?.optionId.trim();
-    if (optionId) return optionId;
-  }
-  return undefined;
+        ? "allow_once"
+        : "reject_once";
+  const optionId = request.options.find((option) => option.kind === expectedKind)?.optionId;
+  return optionId?.trim() ? optionId : undefined;
 }
 
 function settlePendingApprovalsAsCancelled(
-  pending: Map<ApprovalRequestId, PendingApproval>,
+  pending: ReadonlyArray<PendingApproval>,
 ): Effect.Effect<void> {
   return Effect.forEach(
-    Array.from(pending.values()),
+    pending,
     (entry) => Deferred.succeed(entry.decision, "cancel").pipe(Effect.ignore),
     { discard: true },
-  ).pipe(Effect.tap(() => Effect.sync(() => pending.clear())));
+  );
 }
 
 function settlePendingUserInputsAsCancelled(
-  pending: Map<ApprovalRequestId, PendingUserInput>,
+  pending: ReadonlyArray<PendingUserInput>,
 ): Effect.Effect<void> {
   return Effect.forEach(
-    Array.from(pending.values()),
+    pending,
     (entry) => Deferred.succeed(entry.resolution, { _tag: "cancelled" }).pipe(Effect.ignore),
     { discard: true },
-  ).pipe(Effect.tap(() => Effect.sync(() => pending.clear())));
+  );
+}
+
+function takePending<K, V>(pending: Map<K, V>): ReadonlyArray<V> {
+  const entries = Array.from(pending.values());
+  pending.clear();
+  return entries;
+}
+
+function flattenOmpLegacyElicitationResponse(
+  response: EffectAcpSchema.ElicitationResponse,
+):
+  | { readonly action: "accept"; readonly content: Record<string, unknown> }
+  | { readonly action: "decline" | "cancel" } {
+  const action = response.action;
+  return action.action === "accept"
+    ? { action: "accept", content: action.content ?? {} }
+    : { action: action.action };
 }
 
 function validateOmpSelections(
@@ -278,10 +295,18 @@ export function makeOmpAdapter(ompSettings: OmpSettings, options?: OmpAdapterLiv
 
     const stopSessionInternal = (context: OmpSessionContext) =>
       Effect.gen(function* () {
-        if (context.stopped) return;
-        context.stopped = true;
-        yield* settlePendingApprovalsAsCancelled(context.pendingApprovals);
-        yield* settlePendingUserInputsAsCancelled(context.pendingUserInputs);
+        const claimed = yield* context.requestLifecycleSemaphore.withPermit(
+          Effect.gen(function* () {
+            if (context.stopped) return undefined;
+            context.stopped = true;
+            const approvals = takePending(context.pendingApprovals);
+            const userInputs = takePending(context.pendingUserInputs);
+            yield* settlePendingApprovalsAsCancelled(approvals);
+            yield* settlePendingUserInputsAsCancelled(userInputs);
+            return true;
+          }),
+        );
+        if (!claimed) return;
         yield* Effect.yieldNow;
         if (context.notificationFiber) yield* Fiber.interrupt(context.notificationFiber);
         yield* Scope.close(context.scope, Exit.void).pipe(Effect.ignore);
@@ -405,54 +430,154 @@ export function makeOmpAdapter(ompSettings: OmpSettings, options?: OmpAdapterLiv
           );
 
           const started = yield* Effect.gen(function* () {
+            const handleOmpFormElicitation = (
+              request: Extract<EffectAcpSchema.ElicitationRequest, { readonly mode: "form" }>,
+              method: "session/elicitation" | "elicitation/create",
+            ) =>
+              Effect.gen(function* () {
+                const live = context;
+                if (!live || request.sessionId !== live.acpSessionId) {
+                  return { action: { action: "cancel" as const } };
+                }
+                const mapped = mapOmpAcpElicitationForm(request);
+                if (!mapped) return { action: { action: "cancel" as const } };
+                const requestId = ApprovalRequestId.make(yield* randomUUIDv4);
+                const runtimeRequestId = RuntimeRequestId.make(requestId);
+                const resolution = yield* Deferred.make<PendingUserInputResolution>();
+                const turnId = yield* live.requestLifecycleSemaphore.withPermit(
+                  Effect.gen(function* () {
+                    const activeTurnId = live.activeTurnId;
+                    if (
+                      live.stopped ||
+                      !activeTurnId ||
+                      live.interruptedTurnIds.has(activeTurnId)
+                    ) {
+                      return undefined;
+                    }
+                    pendingUserInputs.set(requestId, { resolution, turnId: activeTurnId });
+                    yield* offerRuntimeEvent({
+                      type: "user-input.requested",
+                      ...(yield* makeEventStamp()),
+                      provider: PROVIDER,
+                      threadId: input.threadId,
+                      turnId: activeTurnId,
+                      requestId: runtimeRequestId,
+                      payload: { questions: mapped.questions },
+                      raw: {
+                        source: "acp.jsonrpc",
+                        method,
+                        payload: request,
+                      },
+                    });
+                    return activeTurnId;
+                  }),
+                );
+                if (!turnId) return { action: { action: "cancel" as const } };
+                const resolved = yield* Deferred.await(resolution);
+                const answers = resolved._tag === "answered" ? resolved.answers : {};
+                const resolutionPublished = yield* live.requestLifecycleSemaphore.withPermit(
+                  Effect.gen(function* () {
+                    if (
+                      live.stopped ||
+                      live.activeTurnId !== turnId ||
+                      live.interruptedTurnIds.has(turnId)
+                    ) {
+                      return false;
+                    }
+                    yield* offerRuntimeEvent({
+                      type: "user-input.resolved",
+                      ...(yield* makeEventStamp()),
+                      provider: PROVIDER,
+                      threadId: input.threadId,
+                      turnId,
+                      requestId: runtimeRequestId,
+                      payload: { answers },
+                    });
+                    return true;
+                  }),
+                );
+                if (!resolutionPublished) return { action: { action: "cancel" as const } };
+                return resolved._tag === "answered"
+                  ? mapped.resolve(resolved.answers)
+                  : { action: { action: "cancel" as const } };
+              });
+
             yield* acp.handleRequestPermission((request) =>
               mapCallbackFailure(
                 Effect.gen(function* () {
                   yield* logNative(input.threadId, "session/request_permission", request);
-                  if (!context || request.sessionId !== context.acpSessionId) {
+                  const live = context;
+                  if (!live || request.sessionId !== live.acpSessionId) {
                     return { outcome: { outcome: "cancelled" as const } };
                   }
                   const permissionRequest = parsePermissionRequest(request);
                   const requestId = ApprovalRequestId.make(yield* randomUUIDv4);
                   const runtimeRequestId = RuntimeRequestId.make(requestId);
                   const decision = yield* Deferred.make<ProviderApprovalDecision>();
-                  pendingApprovals.set(requestId, { decision, request });
-                  yield* offerRuntimeEvent(
-                    makeAcpRequestOpenedEvent({
-                      stamp: yield* makeEventStamp(),
-                      provider: PROVIDER,
-                      threadId: input.threadId,
-                      turnId: context?.activeTurnId,
-                      requestId: runtimeRequestId,
-                      permissionRequest,
-                      detail:
-                        permissionRequest.detail ??
-                        encodeJsonStringForDiagnostics(request)?.slice(0, 2_000) ??
-                        "[unserializable params]",
-                      args: request,
-                      source: "acp.jsonrpc",
-                      method: "session/request_permission",
-                      rawPayload: request,
+                  const turnId = yield* live.requestLifecycleSemaphore.withPermit(
+                    Effect.gen(function* () {
+                      const activeTurnId = live.activeTurnId;
+                      if (
+                        live.stopped ||
+                        !activeTurnId ||
+                        live.interruptedTurnIds.has(activeTurnId)
+                      ) {
+                        return undefined;
+                      }
+                      pendingApprovals.set(requestId, { decision, request, turnId: activeTurnId });
+                      yield* offerRuntimeEvent(
+                        makeAcpRequestOpenedEvent({
+                          stamp: yield* makeEventStamp(),
+                          provider: PROVIDER,
+                          threadId: input.threadId,
+                          turnId: activeTurnId,
+                          requestId: runtimeRequestId,
+                          permissionRequest,
+                          detail:
+                            permissionRequest.detail ??
+                            encodeJsonStringForDiagnostics(request)?.slice(0, 2_000) ??
+                            "[unserializable params]",
+                          args: request,
+                          source: "acp.jsonrpc",
+                          method: "session/request_permission",
+                          rawPayload: request,
+                        }),
+                      );
+                      return activeTurnId;
                     }),
                   );
+                  if (!turnId) return { outcome: { outcome: "cancelled" as const } };
                   const resolved = yield* Deferred.await(decision);
-                  const originalRequest = pendingApprovals.get(requestId)?.request ?? request;
-                  pendingApprovals.delete(requestId);
-                  yield* offerRuntimeEvent(
-                    makeAcpRequestResolvedEvent({
-                      stamp: yield* makeEventStamp(),
-                      provider: PROVIDER,
-                      threadId: input.threadId,
-                      turnId: context?.activeTurnId,
-                      requestId: runtimeRequestId,
-                      permissionRequest,
-                      decision: resolved,
+                  const resolutionPublished = yield* live.requestLifecycleSemaphore.withPermit(
+                    Effect.gen(function* () {
+                      if (
+                        live.stopped ||
+                        live.activeTurnId !== turnId ||
+                        live.interruptedTurnIds.has(turnId)
+                      ) {
+                        return false;
+                      }
+                      yield* offerRuntimeEvent(
+                        makeAcpRequestResolvedEvent({
+                          stamp: yield* makeEventStamp(),
+                          provider: PROVIDER,
+                          threadId: input.threadId,
+                          turnId,
+                          requestId: runtimeRequestId,
+                          permissionRequest,
+                          decision: resolved,
+                        }),
+                      );
+                      return true;
                     }),
                   );
+                  if (!resolutionPublished) {
+                    return { outcome: { outcome: "cancelled" as const } };
+                  }
                   if (resolved === "cancel") {
                     return { outcome: { outcome: "cancelled" as const } };
                   }
-                  const optionId = selectOmpPermissionOptionId(originalRequest, resolved);
+                  const optionId = selectOmpPermissionOptionId(request, resolved);
                   return optionId
                     ? { outcome: { outcome: "selected" as const, optionId } }
                     : { outcome: { outcome: "cancelled" as const } };
@@ -463,49 +588,26 @@ export function makeOmpAdapter(ompSettings: OmpSettings, options?: OmpAdapterLiv
               mapCallbackFailure(
                 Effect.gen(function* () {
                   yield* logNative(input.threadId, "session/elicitation", request);
-                  if (request.mode === "url") {
-                    return { action: { action: "decline" as const } };
-                  }
-                  if (!context || request.sessionId !== context.acpSessionId) {
-                    return { action: { action: "cancel" as const } };
-                  }
-                  const mapped = mapOmpAcpElicitationForm(request);
-                  if (!mapped) return { action: { action: "cancel" as const } };
-                  const requestId = ApprovalRequestId.make(yield* randomUUIDv4);
-                  const runtimeRequestId = RuntimeRequestId.make(requestId);
-                  const resolution = yield* Deferred.make<PendingUserInputResolution>();
-                  pendingUserInputs.set(requestId, { resolution });
-                  yield* offerRuntimeEvent({
-                    type: "user-input.requested",
-                    ...(yield* makeEventStamp()),
-                    provider: PROVIDER,
-                    threadId: input.threadId,
-                    turnId: context?.activeTurnId,
-                    requestId: runtimeRequestId,
-                    payload: { questions: mapped.questions },
-                    raw: {
-                      source: "acp.jsonrpc",
-                      method: "session/elicitation",
-                      payload: request,
-                    },
-                  });
-                  const resolved = yield* Deferred.await(resolution);
-                  pendingUserInputs.delete(requestId);
-                  const answers = resolved._tag === "answered" ? resolved.answers : {};
-                  yield* offerRuntimeEvent({
-                    type: "user-input.resolved",
-                    ...(yield* makeEventStamp()),
-                    provider: PROVIDER,
-                    threadId: input.threadId,
-                    turnId: context?.activeTurnId,
-                    requestId: runtimeRequestId,
-                    payload: { answers },
-                  });
-                  return resolved._tag === "answered"
-                    ? mapped.resolve(resolved.answers)
-                    : { action: { action: "cancel" as const } };
+                  return request.mode === "url"
+                    ? { action: { action: "decline" as const } }
+                    : yield* handleOmpFormElicitation(request, "session/elicitation");
                 }),
               ),
+            );
+            yield* acp.handleExtRequest(
+              "elicitation/create",
+              EffectAcpSchema.ElicitationRequest,
+              (request) =>
+                mapCallbackFailure(
+                  Effect.gen(function* () {
+                    yield* logNative(input.threadId, "elicitation/create", request);
+                    return flattenOmpLegacyElicitationResponse(
+                      request.mode === "url"
+                        ? { action: { action: "decline" as const } }
+                        : yield* handleOmpFormElicitation(request, "elicitation/create"),
+                    );
+                  }),
+                ),
             );
             return yield* acp.start();
           }).pipe(
@@ -542,6 +644,7 @@ export function makeOmpAdapter(ompSettings: OmpSettings, options?: OmpAdapterLiv
             activeTurnId: undefined,
             promptsInFlight: 0,
             queueTurnSemaphore: yield* Semaphore.make(1),
+            requestLifecycleSemaphore: yield* Semaphore.make(1),
             stopped: false,
           };
           yield* acp
@@ -794,12 +897,23 @@ export function makeOmpAdapter(ompSettings: OmpSettings, options?: OmpAdapterLiv
     const interruptTurn: OmpAdapterShape["interruptTurn"] = (threadId, requestedTurnId) =>
       Effect.gen(function* () {
         const context = yield* requireSession(threadId);
-        const activeTurnId = context.activeTurnId ?? context.session.activeTurnId;
-        if (requestedTurnId !== undefined && activeTurnId !== requestedTurnId) return;
-        const interruptedTurnId = requestedTurnId ?? activeTurnId;
-        if (interruptedTurnId) context.interruptedTurnIds.add(interruptedTurnId);
-        yield* settlePendingApprovalsAsCancelled(context.pendingApprovals);
-        yield* settlePendingUserInputsAsCancelled(context.pendingUserInputs);
+        const claimed = yield* context.requestLifecycleSemaphore.withPermit(
+          Effect.gen(function* () {
+            const activeTurnId = context.activeTurnId ?? context.session.activeTurnId;
+            if (requestedTurnId !== undefined && activeTurnId !== requestedTurnId) {
+              return undefined;
+            }
+            const interruptedTurnId = requestedTurnId ?? activeTurnId;
+            if (interruptedTurnId) context.interruptedTurnIds.add(interruptedTurnId);
+            const approvals = takePending(context.pendingApprovals);
+            const userInputs = takePending(context.pendingUserInputs);
+            yield* settlePendingApprovalsAsCancelled(approvals);
+            yield* settlePendingUserInputsAsCancelled(userInputs);
+            return { activeTurnId, interruptedTurnId };
+          }),
+        );
+        if (!claimed) return;
+        const { activeTurnId, interruptedTurnId } = claimed;
         yield* Effect.yieldNow;
         yield* context.acp.cancel.pipe(Effect.ignore);
         if (interruptedTurnId && activeTurnId === interruptedTurnId) {
@@ -821,15 +935,21 @@ export function makeOmpAdapter(ompSettings: OmpSettings, options?: OmpAdapterLiv
     const respondToRequest: OmpAdapterShape["respondToRequest"] = (threadId, requestId, decision) =>
       Effect.gen(function* () {
         const context = yield* requireSession(threadId);
-        const pending = context.pendingApprovals.get(requestId);
-        if (!pending) {
+        const accepted = yield* context.requestLifecycleSemaphore.withPermit(
+          Effect.gen(function* () {
+            const pending = context.pendingApprovals.get(requestId);
+            if (!pending) return undefined;
+            context.pendingApprovals.delete(requestId);
+            return yield* Deferred.succeed(pending.decision, decision);
+          }),
+        );
+        if (accepted !== true) {
           return yield* new ProviderAdapterRequestError({
             provider: PROVIDER,
             method: "session/request_permission",
             detail: `Unknown pending approval request: ${requestId}`,
           });
         }
-        yield* Deferred.succeed(pending.decision, decision);
       });
 
     const respondToUserInput: OmpAdapterShape["respondToUserInput"] = (
@@ -839,15 +959,21 @@ export function makeOmpAdapter(ompSettings: OmpSettings, options?: OmpAdapterLiv
     ) =>
       Effect.gen(function* () {
         const context = yield* requireSession(threadId);
-        const pending = context.pendingUserInputs.get(requestId);
-        if (!pending) {
+        const accepted = yield* context.requestLifecycleSemaphore.withPermit(
+          Effect.gen(function* () {
+            const pending = context.pendingUserInputs.get(requestId);
+            if (!pending) return undefined;
+            context.pendingUserInputs.delete(requestId);
+            return yield* Deferred.succeed(pending.resolution, { _tag: "answered", answers });
+          }),
+        );
+        if (accepted !== true) {
           return yield* new ProviderAdapterRequestError({
             provider: PROVIDER,
             method: "session/elicitation",
             detail: `Unknown pending user-input request: ${requestId}`,
           });
         }
-        yield* Deferred.succeed(pending.resolution, { _tag: "answered", answers });
       });
 
     const readThread: OmpAdapterShape["readThread"] = (threadId) =>

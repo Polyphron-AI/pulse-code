@@ -54,6 +54,12 @@ describe("mapOmpAcpElicitationForm", () => {
     expect(mapped?.resolve({ value: "approve and execute" })).toEqual({
       action: { action: "cancel" },
     });
+    expect(mapped?.resolve({ value: " Approve and execute " })).toEqual({
+      action: { action: "cancel" },
+    });
+    expect(mapped?.resolve({ value: ["Approve and execute"] })).toEqual({
+      action: { action: "cancel" },
+    });
     expect(mapped?.resolve({})).toEqual({ action: { action: "cancel" } });
   });
 
@@ -79,6 +85,9 @@ describe("mapOmpAcpElicitationForm", () => {
       action: { action: "accept", content: { q0: "web" } },
     });
     expect(mapped?.resolve({ q0: "Desktop app" })).toEqual({
+      action: { action: "accept", content: { q0__other: "Desktop app" } },
+    });
+    expect(mapped?.resolve({ q0: "  Desktop app  " })).toEqual({
       action: { action: "accept", content: { q0__other: "Desktop app" } },
     });
   });

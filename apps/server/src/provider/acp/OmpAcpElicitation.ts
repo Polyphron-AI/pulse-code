@@ -82,25 +82,14 @@ function makeQuestion(
   };
 }
 
-function answerValues(answer: unknown): ReadonlyArray<string> | undefined {
-  if (typeof answer === "string") {
-    const value = answer.trim();
-    return value ? [value] : [];
+function answerValues(answer: unknown, multiSelect: boolean): ReadonlyArray<string> | undefined {
+  if (!multiSelect) {
+    return typeof answer === "string" ? [answer] : undefined;
   }
-  if (!Array.isArray(answer)) {
+  if (!Array.isArray(answer) || answer.some((entry) => typeof entry !== "string")) {
     return undefined;
   }
-  const values: Array<string> = [];
-  for (const entry of answer) {
-    if (typeof entry !== "string") {
-      return undefined;
-    }
-    const value = entry.trim();
-    if (value) {
-      values.push(value);
-    }
-  }
-  return values;
+  return answer;
 }
 
 function resolveSelectedValue(
@@ -201,7 +190,7 @@ function resolveField(field: FormField, answer: unknown): ElicitationContent | u
     return value === undefined ? undefined : { [field.key]: value };
   }
 
-  const values = answerValues(answer);
+  const values = answerValues(answer, field.schema.type === "array");
   if (!values || values.length === 0) {
     return undefined;
   }
@@ -213,7 +202,9 @@ function resolveField(field: FormField, answer: unknown): ElicitationContent | u
   for (const value of values) {
     const selectedValue = resolveSelectedValue(value, options);
     if (selectedValue === undefined) {
-      custom.push(value);
+      const customValue = value.trim();
+      if (!customValue) return undefined;
+      custom.push(customValue);
     } else {
       selected.push(selectedValue);
     }
