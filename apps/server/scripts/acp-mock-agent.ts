@@ -13,6 +13,9 @@ import type * as AcpSchema from "effect-acp/schema";
 
 const requestLogPath = process.env.T3_ACP_REQUEST_LOG_PATH;
 const exitLogPath = process.env.T3_ACP_EXIT_LOG_PATH;
+const cliArgsLogPath = process.env.T3_OMP_CLI_ARGS_LOG_PATH;
+const environmentLogPath = process.env.T3_OMP_ENV_LOG_PATH;
+const failInitialize = process.env.T3_ACP_FAIL_INITIALIZE === "1";
 const emitToolCalls = process.env.T3_ACP_EMIT_TOOL_CALLS === "1";
 const emitInterleavedAssistantToolCalls =
   process.env.T3_ACP_EMIT_INTERLEAVED_ASSISTANT_TOOL_CALLS === "1";
@@ -46,6 +49,49 @@ const permissionOptionIds = {
   rejectOnce: process.env.T3_ACP_REJECT_ONCE_OPTION_ID ?? "reject-once",
 };
 const sessionId = "mock-session-1";
+
+const cliArgs = process.argv.slice(2);
+if (cliArgsLogPath) {
+  NodeFS.appendFileSync(
+    cliArgsLogPath,
+    `${JSON.stringify({ args: cliArgs, pid: process.pid })}\n`,
+    "utf8",
+  );
+}
+if (environmentLogPath) {
+  NodeFS.appendFileSync(
+    environmentLogPath,
+    `${JSON.stringify({
+      OMP_PROFILE: process.env.OMP_PROFILE,
+      PI_PROFILE: process.env.PI_PROFILE,
+      PI_CODING_AGENT_DIR: process.env.PI_CODING_AGENT_DIR,
+      OPENAI_API_KEY_PRESENT: typeof process.env.OPENAI_API_KEY === "string",
+      ORDINARY_VALUE: process.env.T3_OMP_ORDINARY_VALUE,
+    })}\n`,
+    "utf8",
+  );
+}
+
+const isVersionCommand = cliArgs.length === 1 && cliArgs[0] === "--version";
+const isModelsCommand = cliArgs.length === 2 && cliArgs[0] === "models" && cliArgs[1] === "--json";
+const isCliCommand = isVersionCommand || isModelsCommand;
+
+if (isVersionCommand && process.env.T3_OMP_VERSION_HANG !== "1") {
+  process.stdout.write(process.env.T3_OMP_VERSION_OUTPUT ?? "Oh My Pi 1.2.3\n");
+  process.exitCode = Number(process.env.T3_OMP_VERSION_EXIT_CODE ?? "0");
+}
+
+if (isModelsCommand && process.env.T3_OMP_MODELS_HANG !== "1") {
+  process.stdout.write(process.env.T3_OMP_MODELS_JSON ?? '{"models":[]}');
+  if (process.env.T3_OMP_MODELS_STDERR) {
+    process.stderr.write(process.env.T3_OMP_MODELS_STDERR);
+  }
+  process.exitCode = Number(process.env.T3_OMP_MODELS_EXIT_CODE ?? "0");
+}
+
+const hangCliCommand =
+  (isVersionCommand && process.env.T3_OMP_VERSION_HANG === "1") ||
+  (isModelsCommand && process.env.T3_OMP_MODELS_HANG === "1");
 
 let currentModeId = "ask";
 let currentModelId = "default";
@@ -297,7 +343,10 @@ const program = Effect.gen(function* () {
   const agent = yield* EffectAcpAgent.AcpAgent;
 
   yield* agent.handleInitialize((request) =>
-    Effect.sync(() => {
+    Effect.gen(function* () {
+      if (failInitialize) {
+        return yield* AcpError.AcpRequestError.internalError("Mock initialize failure");
+      }
       parameterizedModelPicker =
         request.clientCapabilities?._meta?.parameterizedModelPicker === true;
       return {
@@ -955,4 +1004,4 @@ const program = Effect.gen(function* () {
   Effect.provide(NodeServices.layer),
 );
 
-NodeRuntime.runMain(program);
+NodeRuntime.runMain(isCliCommand ? (hangCliCommand ? Effect.never : Effect.void) : program);

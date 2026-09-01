@@ -4,6 +4,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   buildOmpAcpRuntimeOptions,
   buildOmpAcpSpawnInput,
+  buildOmpProcessEnvironment,
   OMP_APPROVAL_MODE_BY_RUNTIME_MODE,
   resolveOmpAgentDir,
 } from "./OmpAcpSupport.ts";
@@ -40,9 +41,42 @@ describe("buildOmpAcpSpawnInput", () => {
       env: {
         PATH: "C:\\Windows\\System32",
         OPENAI_API_KEY: "selected-provider-key",
+        OMP_PROFILE: "",
+        PI_PROFILE: "",
         PI_CODING_AGENT_DIR: "C:\\pulse\\userdata\\providers\\omp\\omp_work",
       },
     });
+  });
+
+  it("removes ambient profiles case-insensitively and forces one instance agent dir", () => {
+    const environment = buildOmpProcessEnvironment(
+      {
+        PATH: "C:\\Windows\\System32",
+        OPENAI_API_KEY: "selected-provider-key",
+        OMP_PROFILE: "ambient-omp",
+        omp_profile: "ambient-omp-lowercase",
+        Pi_PrOfIlE: "ambient-pi-mixed-case",
+        pi_coding_agent_dir: "C:\\ambient-lowercase",
+        PI_CODING_AGENT_DIR: "C:\\ambient-uppercase",
+      },
+      "C:\\pulse\\userdata\\providers\\omp\\omp_work",
+    );
+
+    expect(environment.PATH).toBe("C:\\Windows\\System32");
+    expect(environment.OPENAI_API_KEY).toBe("selected-provider-key");
+    expect(environment.OMP_PROFILE).toBe("");
+    expect(environment.PI_PROFILE).toBe("");
+    expect(
+      Object.keys(environment).filter(
+        (key) =>
+          ["OMP_PROFILE", "PI_PROFILE"].includes(key.toUpperCase()) &&
+          !["OMP_PROFILE", "PI_PROFILE"].includes(key),
+      ),
+    ).toEqual([]);
+    expect(
+      Object.keys(environment).filter((key) => key.toUpperCase() === "PI_CODING_AGENT_DIR"),
+    ).toEqual(["PI_CODING_AGENT_DIR"]);
+    expect(environment.PI_CODING_AGENT_DIR).toBe("C:\\pulse\\userdata\\providers\\omp\\omp_work");
   });
 });
 

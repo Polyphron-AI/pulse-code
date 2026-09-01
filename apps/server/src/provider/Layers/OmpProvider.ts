@@ -1,18 +1,15 @@
 import type { ModelCapabilities, OmpSettings, ServerProviderModel } from "@t3tools/contracts";
 import { createModelCapabilities } from "@t3tools/shared/model";
-import { causeErrorTag } from "@t3tools/shared/observability";
 import { resolveSpawnCommand } from "@t3tools/shared/shell";
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
-import type * as EffectAcpErrors from "effect-acp/errors";
-import type * as EffectAcpSchema from "effect-acp/schema";
 
-import { buildOmpProcessEnvironment, makeOmpAcpRuntime } from "../acp/OmpAcpSupport.ts";
+import { buildOmpProcessEnvironment } from "../acp/OmpAcpSupport.ts";
 import {
   buildSelectOptionDescriptor,
   buildServerProvider,
@@ -34,7 +31,22 @@ const EMPTY_CAPABILITIES: ModelCapabilities = createModelCapabilities({
 });
 
 const VERSION_PROBE_TIMEOUT_MS = 4_000;
-const OMP_ACP_MODEL_DISCOVERY_TIMEOUT_MS = 15_000;
+const OMP_MODEL_CATALOG_TIMEOUT_MS = 4_000;
+const OMP_PROBE_FORCE_KILL_AFTER = "1 second";
+
+const NonEmptyString = Schema.String.check(Schema.isNonEmpty());
+const OmpCatalogModel = Schema.Struct({
+  selector: NonEmptyString,
+  name: NonEmptyString,
+  reasoning: Schema.Boolean,
+  thinking: Schema.NullOr(Schema.Array(NonEmptyString)),
+});
+const OmpModelCatalog = Schema.Struct({
+  models: Schema.Array(OmpCatalogModel),
+});
+const decodeOmpModelCatalog = Schema.decodeUnknownEffect(Schema.fromJsonString(OmpModelCatalog));
+
+type OmpCatalogModel = typeof OmpCatalogModel.Type;
 
 export interface OmpProviderProcessContext {
   readonly cwd: string;
@@ -42,130 +54,50 @@ export interface OmpProviderProcessContext {
   readonly environment: NodeJS.ProcessEnv;
 }
 
-interface OmpSessionSelectOption {
-  readonly value: string;
-  readonly name: string;
-  readonly description?: string;
-}
-
-function flattenOmpSelectOptions(
-  configOption: EffectAcpSchema.SessionConfigOption | undefined,
-): ReadonlyArray<OmpSessionSelectOption> {
-  if (!configOption || configOption.type !== "select") {
-    return [];
-  }
-  return configOption.options.flatMap((entry) => {
-    const options = "value" in entry ? [entry] : entry.options;
-    return options.flatMap((option) => {
-      if (option.value.trim().length === 0) {
-        return [];
-      }
-      const name = option.name.trim() || option.value;
-      const description = option.description?.trim();
-      return [
-        {
-          value: option.value,
-          name,
-          ...(description ? { description } : {}),
-        } satisfies OmpSessionSelectOption,
-      ];
-    });
-  });
-}
-
-export function buildOmpCapabilitiesFromConfigOptions(
-  configOptions: ReadonlyArray<EffectAcpSchema.SessionConfigOption> | null | undefined,
-): ModelCapabilities {
-  const thinkingOption = configOptions?.find(
-    (option) =>
-      option.type === "select" && option.id === "thinking" && option.category === "thought_level",
-  );
-  const choices = flattenOmpSelectOptions(thinkingOption);
-  if (!thinkingOption || choices.length === 0) {
+function buildOmpModelCapabilities(model: OmpCatalogModel): ModelCapabilities {
+  if (!model.reasoning) {
     return EMPTY_CAPABILITIES;
+  }
+
+  const options = [
+    { value: "off", label: "Off" },
+    { value: "auto", label: "Auto" },
+  ];
+  const seen = new Set(options.map((option) => option.value));
+  for (const effort of model.thinking ?? []) {
+    if (seen.has(effort)) {
+      continue;
+    }
+    seen.add(effort);
+    options.push({ value: effort, label: effort });
   }
 
   return createModelCapabilities({
     optionDescriptors: [
       buildSelectOptionDescriptor({
         id: "reasoning",
-        label: thinkingOption.name.trim() || "Thinking",
-        options: choices.map((choice) => ({
-          value: choice.value,
-          label: choice.name,
-          ...(choice.description ? { description: choice.description } : {}),
-          ...(thinkingOption.currentValue === choice.value ? { isDefault: true } : {}),
-        })),
+        label: "Thinking",
+        options,
       }),
     ],
   });
 }
 
-export function buildOmpModelsFromConfigOptions(
-  configOptions: ReadonlyArray<EffectAcpSchema.SessionConfigOption> | null | undefined,
+function buildOmpModelsFromCatalog(
+  catalog: typeof OmpModelCatalog.Type,
 ): ReadonlyArray<ServerProviderModel> {
-  const modelOption = configOptions?.find(
-    (option) => option.type === "select" && option.id === "model" && option.category === "model",
-  );
-  const capabilities = buildOmpCapabilitiesFromConfigOptions(configOptions);
-  const currentModelId = modelOption?.type === "select" ? modelOption.currentValue : undefined;
-  const seen = new Set<string>();
-  return flattenOmpSelectOptions(modelOption).flatMap((model) => {
-    if (seen.has(model.value)) {
-      return [];
-    }
-    seen.add(model.value);
-    return [
-      {
-        slug: model.value,
-        name: model.name,
-        isCustom: false,
-        // OMP's thinking options describe only the active model. The runtime probe fills the rest.
-        capabilities: model.value === currentModelId ? capabilities : EMPTY_CAPABILITIES,
-      } satisfies ServerProviderModel,
-    ];
-  });
+  return catalog.models.map((model) => ({
+    slug: model.selector,
+    name: model.name,
+    isCustom: false,
+    capabilities: buildOmpModelCapabilities(model),
+  }));
 }
 
-interface OmpModelDiscoveryRuntime {
-  readonly getConfigOptions: Effect.Effect<
-    ReadonlyArray<EffectAcpSchema.SessionConfigOption>,
-    EffectAcpErrors.AcpError
-  >;
-  readonly setModel: (model: string) => Effect.Effect<void, EffectAcpErrors.AcpError>;
-}
-
-export function discoverOmpModelsFromRuntime(
-  runtime: OmpModelDiscoveryRuntime,
-): Effect.Effect<ReadonlyArray<ServerProviderModel>, EffectAcpErrors.AcpError> {
-  return Effect.gen(function* () {
-    const initialConfigOptions = yield* runtime.getConfigOptions;
-    const initialModels = buildOmpModelsFromConfigOptions(initialConfigOptions);
-    const modelOption = initialConfigOptions.find(
-      (option) => option.type === "select" && option.id === "model" && option.category === "model",
-    );
-    const originalModelId = modelOption?.type === "select" ? modelOption.currentValue : undefined;
-
-    const discover = Effect.gen(function* () {
-      const discovered: Array<ServerProviderModel> = [];
-      for (const model of initialModels) {
-        const configOptions =
-          model.slug === originalModelId
-            ? initialConfigOptions
-            : yield* runtime.setModel(model.slug).pipe(Effect.andThen(runtime.getConfigOptions));
-        discovered.push({
-          ...model,
-          capabilities: buildOmpCapabilitiesFromConfigOptions(configOptions),
-        });
-      }
-      return discovered;
-    });
-
-    return yield* originalModelId
-      ? discover.pipe(Effect.ensuring(runtime.setModel(originalModelId).pipe(Effect.ignore)))
-      : discover;
-  });
-}
+export const parseOmpModelsJson = Effect.fn("parseOmpModelsJson")(function* (output: string) {
+  const catalog = yield* decodeOmpModelCatalog(output);
+  return buildOmpModelsFromCatalog(catalog);
+});
 
 export function buildOmpProviderSnapshot(input: {
   readonly checkedAt: string;
@@ -238,30 +170,15 @@ export function buildInitialOmpProviderSnapshot(
   });
 }
 
-export const discoverOmpModelsViaAcp = (
+const runOmpCommand = (
   ompSettings: OmpSettings,
   context: OmpProviderProcessContext,
+  args: ReadonlyArray<string>,
 ) =>
-  Effect.gen(function* () {
-    const childProcessSpawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    const acp = yield* makeOmpAcpRuntime({
-      ompSettings,
-      runtimeMode: "approval-required",
-      childProcessSpawner,
-      cwd: context.cwd,
-      agentDir: context.agentDir,
-      environment: context.environment,
-      clientInfo: { name: "pulse-code-provider-probe", version: "0.0.0" },
-    });
-    yield* acp.start();
-    return yield* discoverOmpModelsFromRuntime(acp);
-  }).pipe(Effect.scoped);
-
-const runOmpVersionCommand = (ompSettings: OmpSettings, context: OmpProviderProcessContext) =>
   Effect.gen(function* () {
     const command = ompSettings.binaryPath || "omp";
     const environment = buildOmpProcessEnvironment(context.environment, context.agentDir);
-    const spawnCommand = yield* resolveSpawnCommand(command, ["--version"], {
+    const spawnCommand = yield* resolveSpawnCommand(command, args, {
       env: environment,
     });
     return yield* spawnAndCollect(
@@ -269,6 +186,7 @@ const runOmpVersionCommand = (ompSettings: OmpSettings, context: OmpProviderProc
       ChildProcess.make(spawnCommand.command, spawnCommand.args, {
         cwd: context.cwd,
         env: environment,
+        forceKillAfter: OMP_PROBE_FORCE_KILL_AFTER,
         shell: spawnCommand.shell,
       }),
     );
@@ -298,7 +216,7 @@ export const checkOmpProviderStatus = Effect.fn("checkOmpProviderStatus")(functi
     });
   }
 
-  const versionResult = yield* runOmpVersionCommand(ompSettings, context).pipe(
+  const versionResult = yield* runOmpCommand(ompSettings, context, ["--version"]).pipe(
     Effect.timeoutOption(VERSION_PROBE_TIMEOUT_MS),
     Effect.result,
   );
@@ -346,41 +264,72 @@ export const checkOmpProviderStatus = Effect.fn("checkOmpProviderStatus")(functi
     });
   }
 
-  const discoveryExit = yield* discoverOmpModelsViaAcp(ompSettings, context).pipe(
-    Effect.timeoutOption(OMP_ACP_MODEL_DISCOVERY_TIMEOUT_MS),
-    Effect.exit,
+  const catalogResult = yield* runOmpCommand(ompSettings, context, ["models", "--json"]).pipe(
+    Effect.timeoutOption(OMP_MODEL_CATALOG_TIMEOUT_MS),
+    Effect.result,
   );
-  if (Exit.isFailure(discoveryExit)) {
-    yield* Effect.logWarning("Oh My Pi ACP model discovery failed", {
-      errorTag: causeErrorTag(discoveryExit.cause),
+  if (Result.isFailure(catalogResult)) {
+    yield* Effect.logWarning("Oh My Pi CLI model catalog command failed", {
+      errorTag: catalogResult.failure._tag,
     });
     return buildFailedOmpProviderSnapshot({
       checkedAt,
       ompSettings,
       installed: true,
       version,
-      message: "Oh My Pi CLI is installed but ACP startup failed. Check server logs for details.",
+      message: "Failed to execute `omp models --json`.",
     });
   }
 
-  if (Option.isNone(discoveryExit.value)) {
+  if (Option.isNone(catalogResult.success)) {
     return buildFailedOmpProviderSnapshot({
       checkedAt,
       ompSettings,
       installed: true,
       version,
-      message: `Oh My Pi ACP model discovery timed out after ${OMP_ACP_MODEL_DISCOVERY_TIMEOUT_MS}ms.`,
+      message: `Oh My Pi model catalog timed out after ${OMP_MODEL_CATALOG_TIMEOUT_MS}ms.`,
     });
   }
 
-  const models = discoveryExit.value.value;
+  const catalogOutput = catalogResult.success.value;
+  if (catalogOutput.code !== 0) {
+    yield* Effect.logWarning("Oh My Pi CLI model catalog exited with a non-zero status", {
+      exitCode: catalogOutput.code,
+      stdoutLength: catalogOutput.stdout.length,
+      stderrLength: catalogOutput.stderr.length,
+    });
+    return buildFailedOmpProviderSnapshot({
+      checkedAt,
+      ompSettings,
+      installed: true,
+      version,
+      message: "Oh My Pi CLI model catalog command failed.",
+    });
+  }
+
+  const parsedModels = yield* parseOmpModelsJson(catalogOutput.stdout).pipe(Effect.result);
+  if (Result.isFailure(parsedModels)) {
+    yield* Effect.logWarning("Oh My Pi CLI returned malformed model catalog JSON", {
+      errorTag: parsedModels.failure._tag,
+      stdoutLength: catalogOutput.stdout.length,
+    });
+    return buildFailedOmpProviderSnapshot({
+      checkedAt,
+      ompSettings,
+      installed: true,
+      version,
+      message: "Oh My Pi CLI returned malformed model catalog JSON.",
+    });
+  }
+
+  const models = parsedModels.success;
   if (models.length === 0) {
     return buildFailedOmpProviderSnapshot({
       checkedAt,
       ompSettings,
       installed: true,
       version,
-      message: "Oh My Pi ACP model discovery returned no models.",
+      message: "Oh My Pi CLI model catalog returned no models.",
     });
   }
 

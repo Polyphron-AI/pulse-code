@@ -2,147 +2,121 @@ import type { OmpSettings } from "@t3tools/contracts";
 import { createModelCapabilities } from "@t3tools/shared/model";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
-import type * as EffectAcpSchema from "effect-acp/schema";
+import * as Schema from "effect/Schema";
 
 import {
   buildFailedOmpProviderSnapshot,
   buildInitialOmpProviderSnapshot,
-  buildOmpModelsFromConfigOptions,
-  discoverOmpModelsFromRuntime,
+  parseOmpModelsJson,
 } from "./OmpProvider.ts";
 
 const enabledSettings: OmpSettings = {
   enabled: true,
   binaryPath: "omp",
 };
+const encodeUnknownJson = Schema.encodeUnknownSync(Schema.fromJsonString(Schema.Unknown));
 
-const ompConfigOptions = [
-  {
-    id: "model",
-    name: "Model",
-    category: "model",
-    type: "select",
-    currentValue: "anthropic/claude-opus-4-6",
-    options: [
-      {
-        value: "anthropic/claude-opus-4-6",
-        name: "Claude Opus 4.6",
-        description: "anthropic/claude-opus-4-6",
-      },
-      {
-        value: "openrouter/deepseek/deepseek-r1:free",
-        name: "DeepSeek R1 Free",
-        description: "openrouter/deepseek/deepseek-r1:free",
-      },
-    ],
-  },
-  {
-    id: "thinking",
-    name: "Thinking",
-    category: "thought_level",
-    type: "select",
-    currentValue: "xhigh",
-    options: [
-      { value: "off", name: "Off" },
-      { value: "auto", name: "Auto", description: "Auto-detect per prompt" },
-      { value: "minimal", name: "minimal" },
-      { value: "xhigh", name: "xhigh" },
-    ],
-  },
-] satisfies ReadonlyArray<EffectAcpSchema.SessionConfigOption>;
-
-describe("buildOmpModelsFromConfigOptions", () => {
-  it("preserves exact ACP model ids and maps OMP thinking levels", () => {
-    expect(buildOmpModelsFromConfigOptions(ompConfigOptions)).toEqual([
-      {
-        slug: "anthropic/claude-opus-4-6",
-        name: "Claude Opus 4.6",
-        isCustom: false,
-        capabilities: createModelCapabilities({
-          optionDescriptors: [
+describe("parseOmpModelsJson", () => {
+  it.effect("preserves selectors and maps reasoning metadata per model", () =>
+    Effect.gen(function* () {
+      const models = yield* parseOmpModelsJson(
+        encodeUnknownJson({
+          models: [
             {
-              id: "reasoning",
-              label: "Thinking",
-              type: "select",
-              currentValue: "xhigh",
-              options: [
-                { id: "off", label: "Off" },
-                { id: "auto", label: "Auto", description: "Auto-detect per prompt" },
-                { id: "minimal", label: "minimal" },
-                { id: "xhigh", label: "xhigh", isDefault: true },
-              ],
+              provider: "anthropic",
+              id: "claude-opus-4-6",
+              selector: "anthropic/claude-opus-4-6",
+              name: "Claude Opus 4.6",
+              contextWindow: 200_000,
+              maxTokens: 32_000,
+              reasoning: true,
+              thinking: ["minimal", "xhigh"],
+              input: ["text", "image"],
+              cost: {},
+            },
+            {
+              provider: "openrouter",
+              id: "deepseek/deepseek-r1:free",
+              selector: "openrouter/deepseek/deepseek-r1:free",
+              name: "DeepSeek R1 Free",
+              contextWindow: null,
+              maxTokens: null,
+              reasoning: false,
+              thinking: null,
+              input: ["text"],
+              cost: {},
+            },
+            {
+              provider: "example",
+              id: "reasoning-without-efforts",
+              selector: "Example/Reasoning:Exact",
+              name: "Reasoning Without Efforts",
+              contextWindow: null,
+              maxTokens: null,
+              reasoning: true,
+              thinking: null,
+              input: ["text"],
+              cost: {},
             },
           ],
         }),
-      },
-      {
-        slug: "openrouter/deepseek/deepseek-r1:free",
-        name: "DeepSeek R1 Free",
-        isCustom: false,
-        capabilities: createModelCapabilities({
-          optionDescriptors: [],
-        }),
-      },
-    ]);
-  });
+      );
 
-  it("does not publish fallback models when ACP reports none", () => {
-    expect(buildOmpModelsFromConfigOptions([])).toEqual([]);
-  });
-});
-
-describe("discoverOmpModelsFromRuntime", () => {
-  it.effect("discovers thinking choices per model and restores the original model", () =>
-    Effect.gen(function* () {
-      const modelA = "anthropic/claude-opus-4-6";
-      const modelB = "openrouter/deepseek/deepseek-r1:free";
-      let currentModel = modelA;
-      const modelChanges: Array<string> = [];
-      const configOptionsByModel: Readonly<
-        Record<string, ReadonlyArray<EffectAcpSchema.SessionConfigOption>>
-      > = {
-        [modelA]: ompConfigOptions,
-        [modelB]: ompConfigOptions.map((option) =>
-          option.id === "model"
-            ? { ...option, currentValue: modelB }
-            : option.id === "thinking"
-              ? {
-                  ...option,
-                  currentValue: "medium",
-                  options: [
-                    { value: "off", name: "Off" },
-                    { value: "low", name: "low" },
-                    { value: "medium", name: "medium" },
-                  ],
-                }
-              : option,
-        ),
-      };
-      const runtime = {
-        getConfigOptions: Effect.sync(() => configOptionsByModel[currentModel] ?? []),
-        setModel: (model: string) =>
-          Effect.sync(() => {
-            modelChanges.push(model);
-            currentModel = model;
+      expect(models).toEqual([
+        {
+          slug: "anthropic/claude-opus-4-6",
+          name: "Claude Opus 4.6",
+          isCustom: false,
+          capabilities: createModelCapabilities({
+            optionDescriptors: [
+              {
+                id: "reasoning",
+                label: "Thinking",
+                type: "select",
+                options: [
+                  { id: "off", label: "Off" },
+                  { id: "auto", label: "Auto" },
+                  { id: "minimal", label: "minimal" },
+                  { id: "xhigh", label: "xhigh" },
+                ],
+              },
+            ],
           }),
-      };
-
-      const models = yield* discoverOmpModelsFromRuntime(runtime);
-      const reasoningChoices = models.map((model) => {
-        const descriptor = model.capabilities?.optionDescriptors?.find(
-          (option) => option.id === "reasoning",
-        );
-        return descriptor?.type === "select"
-          ? descriptor.options.map((option) => option.id)
-          : undefined;
-      });
-
-      expect(reasoningChoices).toEqual([
-        ["off", "auto", "minimal", "xhigh"],
-        ["off", "low", "medium"],
+        },
+        {
+          slug: "openrouter/deepseek/deepseek-r1:free",
+          name: "DeepSeek R1 Free",
+          isCustom: false,
+          capabilities: createModelCapabilities({
+            optionDescriptors: [],
+          }),
+        },
+        {
+          slug: "Example/Reasoning:Exact",
+          name: "Reasoning Without Efforts",
+          isCustom: false,
+          capabilities: createModelCapabilities({
+            optionDescriptors: [
+              {
+                id: "reasoning",
+                label: "Thinking",
+                type: "select",
+                options: [
+                  { id: "off", label: "Off" },
+                  { id: "auto", label: "Auto" },
+                ],
+              },
+            ],
+          }),
+        },
       ]);
-      expect(modelChanges).toEqual([modelB, modelA]);
-      expect(currentModel).toBe(modelA);
+    }),
+  );
+
+  it.effect("rejects malformed catalogs and publishes no fallback models", () =>
+    Effect.gen(function* () {
+      expect(yield* parseOmpModelsJson('{"models":').pipe(Effect.flip)).toBeDefined();
+      expect(yield* parseOmpModelsJson('{"models":[]}')).toEqual([]);
     }),
   );
 });

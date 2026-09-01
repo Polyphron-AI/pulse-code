@@ -26,6 +26,7 @@ export const OMP_ACP_CLIENT_CAPABILITIES = {
 
 const OMP_AUTH_METHOD_ID = "agent";
 const OMP_AGENT_DIR_ENV = "PI_CODING_AGENT_DIR";
+const OMP_PROFILE_ENV_KEYS = new Set(["OMP_PROFILE", "PI_PROFILE"]);
 
 type OmpAcpRuntimeSettings = Pick<OmpSettings, "binaryPath">;
 
@@ -64,10 +65,18 @@ export function buildOmpProcessEnvironment(
   environment: NodeJS.ProcessEnv,
   agentDir: string,
 ): NodeJS.ProcessEnv {
-  return {
-    ...environment,
-    [OMP_AGENT_DIR_ENV]: agentDir,
-  };
+  const isolatedEnvironment: NodeJS.ProcessEnv = {};
+  for (const [key, value] of Object.entries(environment)) {
+    const normalizedKey = key.toUpperCase();
+    if (OMP_PROFILE_ENV_KEYS.has(normalizedKey) || normalizedKey === OMP_AGENT_DIR_ENV) {
+      continue;
+    }
+    isolatedEnvironment[key] = value;
+  }
+  isolatedEnvironment.OMP_PROFILE = "";
+  isolatedEnvironment.PI_PROFILE = "";
+  isolatedEnvironment[OMP_AGENT_DIR_ENV] = agentDir;
+  return isolatedEnvironment;
 }
 
 export function buildOmpAcpSpawnInput(input: OmpAcpSpawnOptions): AcpSessionRuntime.AcpSpawnInput {
