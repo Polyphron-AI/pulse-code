@@ -108,6 +108,7 @@ describe("OMP text generation process isolation", () => {
     expect(spawn.command).toBe("omp-test");
     expect(spawn.args).toEqual(OMP_TEXT_GENERATION_ACP_ARGS);
     expect(spawn.cwd).toBe(paths.cwd);
+    expect(spawn.environmentMode).toBe("exact");
     expect(spawn.forceKillAfter).toBe("2 seconds");
   });
 

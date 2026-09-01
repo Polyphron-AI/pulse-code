@@ -277,6 +277,7 @@ export function buildOmpAcpSpawnInput(input: OmpAcpSpawnOptions): AcpSessionRunt
       args: OMP_TEXT_GENERATION_ACP_ARGS,
       cwd: input.purpose.paths.cwd,
       env: buildOmpTextGenerationProcessEnvironment(input.environment, input.purpose.paths),
+      environmentMode: "exact",
       forceKillAfter: "2 seconds",
     };
   }

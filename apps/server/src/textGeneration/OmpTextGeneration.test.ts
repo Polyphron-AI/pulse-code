@@ -54,9 +54,13 @@ const MockEnvironmentSchema = Schema.Struct({
   OLDPWD: Schema.String,
   INIT_CWD: Schema.String,
   OPENAI_API_KEY_PRESENT: Schema.Boolean,
+  OPENAI_API_KEY_MATCHES_EXPECTED: Schema.Boolean,
+  OPENAI_API_KEY_NAMES: Schema.Array(Schema.String),
   HTTPS_PROXY: Schema.optional(Schema.String),
   NODE_EXTRA_CA_CERTS: Schema.optional(Schema.String),
   PATH_PRESENT: Schema.Boolean,
+  PATH_MATCHES_EXPECTED: Schema.Boolean,
+  PATH_KEY_NAMES: Schema.Array(Schema.String),
   PULSE_CODE_INTERNAL_AUTH_TOKEN_PRESENT: Schema.Boolean,
   T3_MCP_BEARER_TOKEN_PRESENT: Schema.Boolean,
   CLAUDE_CONFIG_DIR_PRESENT: Schema.Boolean,
@@ -145,6 +149,33 @@ const makeMockFixture = Effect.fn("OmpTextGenerationTest.makeMockFixture")(funct
 function withFixture<A, E, R>(use: (fixture: MockFixture) => Effect.Effect<A, E, R>) {
   return Effect.acquireUseRelease(makeMockFixture(), use, (fixture) =>
     Effect.sync(() => NodeFS.rmSync(fixture.directory, { recursive: true, force: true })),
+  );
+}
+
+function withProcessEnvironment<A, E, R>(
+  patch: Readonly<Record<string, string>>,
+  use: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R> {
+  return Effect.acquireUseRelease(
+    Effect.sync(() => {
+      const previous = new Map<string, string | undefined>();
+      for (const [key, value] of Object.entries(patch)) {
+        previous.set(key, process.env[key]);
+        process.env[key] = value;
+      }
+      return previous;
+    }),
+    () => use,
+    (previous) =>
+      Effect.sync(() => {
+        for (const [key, value] of previous) {
+          if (value === undefined) {
+            delete process.env[key];
+          } else {
+            process.env[key] = value;
+          }
+        }
+      }),
   );
 }
 
@@ -239,6 +270,51 @@ function threadTitleInput(message: string) {
 }
 
 describe("OmpTextGeneration", () => {
+  it.effect("does not re-inherit ambient auth or config state in the real ACP child", () =>
+    withFixture((fixture) =>
+      withProcessEnvironment(
+        {
+          PULSE_CODE_INTERNAL_AUTH_TOKEN: "ambient-pulse-secret",
+          OMP_AUTH_BROKER_TOKEN: "ambient-broker-secret",
+          PI_CONFIG_FILES: NodePath.join(fixture.directory, "ambient-omp-overlay.yml"),
+        },
+        Effect.gen(function* () {
+          const selectedPath = process.env.PATH ?? "";
+          const selectedProviderKey = "selected-provider-key";
+          const selectedProxy = "https://proxy.example.test";
+          const selectedCaPath = NodePath.join(fixture.directory, "selected-ca.pem");
+          const textGeneration = yield* makeTextGeneration(fixture, {
+            OPENAI_API_KEY: selectedProviderKey,
+            HTTPS_PROXY: selectedProxy,
+            NODE_EXTRA_CA_CERTS: selectedCaPath,
+            T3_OMP_EXPECTED_OPENAI_API_KEY: selectedProviderKey,
+            T3_OMP_EXPECTED_PATH: selectedPath,
+            T3_ACP_PROMPT_RESPONSE_TEXT: encodeUnknownJson({
+              title: "Keep ambient state out",
+            }),
+          });
+
+          expect(
+            yield* textGeneration.generateThreadTitle(
+              threadTitleInput("Do not inherit live Pulse or OMP auth state"),
+            ),
+          ).toEqual({ title: "Keep ambient state out" });
+
+          const [environment] = readLines(fixture.environmentLogPath, decodeMockEnvironment);
+          expect(environment?.PULSE_CODE_INTERNAL_AUTH_TOKEN_PRESENT).toBe(false);
+          expect(environment?.OMP_AUTH_BROKER_TOKEN_PRESENT).toBe(false);
+          expect(environment?.PI_CONFIG_FILES_PRESENT).toBe(false);
+          expect(environment?.OPENAI_API_KEY_MATCHES_EXPECTED).toBe(true);
+          expect(environment?.OPENAI_API_KEY_NAMES).toEqual(["OPENAI_API_KEY"]);
+          expect(environment?.HTTPS_PROXY).toBe(selectedProxy);
+          expect(environment?.NODE_EXTRA_CA_CERTS).toBe(selectedCaPath);
+          expect(environment?.PATH_MATCHES_EXPECTED).toBe(true);
+          expect(environment?.PATH_KEY_NAMES).toEqual(["PATH"]);
+        }),
+      ),
+    ).pipe(Effect.provide(NodeServices.layer)),
+  );
+
   it.effect("uses the hardened isolated process and exact ACP configuration order", () =>
     withFixture((fixture) =>
       Effect.gen(function* () {

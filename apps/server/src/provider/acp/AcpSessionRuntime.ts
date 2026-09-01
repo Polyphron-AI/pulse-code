@@ -50,11 +50,15 @@ export type AcpSessionRuntimeEvent = AcpParsedSessionEvent | AcpSessionEventStre
 const defaultSessionLoadTimeout = Duration.seconds(90);
 const defaultSessionLoadReplayIdleGap = Duration.seconds(2);
 
+export type AcpSpawnEnvironmentMode = "inherit" | "exact";
+
 export interface AcpSpawnInput {
   readonly command: string;
   readonly args: ReadonlyArray<string>;
   readonly cwd?: string;
   readonly env?: NodeJS.ProcessEnv;
+  /** Defaults to `inherit`; `exact` prevents command resolution and the child from reading host env. */
+  readonly environmentMode?: AcpSpawnEnvironmentMode;
   readonly forceKillAfter?: Duration.Input;
 }
 
@@ -85,6 +89,21 @@ export interface AcpSessionRequestLogEvent {
   readonly status: "started" | "succeeded" | "failed";
   readonly result?: unknown;
   readonly cause?: Cause.Cause<EffectAcpErrors.AcpError>;
+}
+
+function acpSpawnEnvironmentOptions(spawn: Pick<AcpSpawnInput, "env" | "environmentMode">):
+  | Record<never, never>
+  | {
+      readonly env: NodeJS.ProcessEnv;
+      readonly extendEnv: boolean;
+    } {
+  const extendEnv = spawn.environmentMode !== "exact";
+  return spawn.env === undefined && extendEnv
+    ? {}
+    : {
+        env: spawn.env ?? {},
+        extendEnv,
+      };
 }
 
 export interface AcpSessionRuntimeStartResult {
@@ -330,16 +349,17 @@ export const make = (
         ),
       );
 
+    const spawnEnvironmentOptions = acpSpawnEnvironmentOptions(options.spawn);
     const spawnCommand = yield* resolveSpawnCommand(
       options.spawn.command,
       options.spawn.args,
-      options.spawn.env ? { env: options.spawn.env, extendEnv: true } : {},
+      spawnEnvironmentOptions,
     );
     const child = yield* spawner
       .spawn(
         ChildProcess.make(spawnCommand.command, spawnCommand.args, {
           ...(options.spawn.cwd ? { cwd: options.spawn.cwd } : {}),
-          ...(options.spawn.env ? { env: options.spawn.env, extendEnv: true } : {}),
+          ...spawnEnvironmentOptions,
           ...(options.spawn.forceKillAfter !== undefined
             ? { forceKillAfter: options.spawn.forceKillAfter }
             : {}),
