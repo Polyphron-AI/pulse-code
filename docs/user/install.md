@@ -43,13 +43,14 @@ side-by-side verification.
 Pulse Code drives provider CLIs; it does not ship them. Install the CLI for each provider you want
 to use, then authenticate it.
 
-| Provider   | CLI                                                   | Default binary | Log in with           |
-| ---------- | ----------------------------------------------------- | -------------- | --------------------- |
-| Codex      | [Codex CLI](https://developers.openai.com/codex/cli)  | `codex`        | `codex login`         |
-| Claude     | [Claude Code](https://claude.com/product/claude-code) | `claude`       | `claude auth login`   |
-| Cursor     | [Cursor CLI](https://cursor.com/cli)                  | `cursor-agent` | `agent login`         |
-| Grok Build | [Grok Build CLI](https://x.ai/cli)                    | `grok`         | `grok login`          |
-| OpenCode   | [OpenCode](https://opencode.ai)                       | `opencode`     | `opencode auth login` |
+| Provider   | CLI                                                   | Default binary | Log in with                  |
+| ---------- | ----------------------------------------------------- | -------------- | ---------------------------- |
+| Codex      | [Codex CLI](https://developers.openai.com/codex/cli)  | `codex`        | `codex login`                |
+| Claude     | [Claude Code](https://claude.com/product/claude-code) | `claude`       | `claude auth login`          |
+| Cursor     | [Cursor CLI](https://cursor.com/cli)                  | `cursor-agent` | `agent login`                |
+| Grok Build | [Grok Build CLI](https://x.ai/cli)                    | `grok`         | `grok login`                 |
+| Oh My Pi   | [Oh My Pi](https://github.com/can1357/oh-my-pi)       | `omp`          | Provider API key or `/login` |
+| OpenCode   | [OpenCode](https://opencode.ai)                       | `opencode`     | `opencode auth login`        |
 
 Cursor is the one to watch: install Cursor CLI, which provides the `cursor-agent` binary that
 Pulse Code looks for, but authenticate with `agent login`, not `cursor-agent login`.
@@ -71,7 +72,9 @@ Pulse Code. You can install Pulse Code, open it, and add providers afterwards. A
 authenticated shows its status in **Settings** and fails at session start with the login command
 to run.
 
-For multi-account setups, see [Codex](./providers-codex.md) and [Claude](./providers-claude.md).
+For multi-account setups, see [Codex](./providers-codex.md) and [Claude](./providers-claude.md). For
+OMP installation, provider keys, model selectors, and state boundaries, see
+[Oh My Pi](./providers-omp.md).
 
 ## Next Steps
 
