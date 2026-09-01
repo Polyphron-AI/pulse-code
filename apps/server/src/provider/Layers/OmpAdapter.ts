@@ -35,6 +35,7 @@ import * as EffectAcpSchema from "effect-acp/schema";
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
 import { ServerConfig } from "../../config.ts";
 import {
+  type ProviderAdapterError,
   ProviderAdapterProcessError,
   ProviderAdapterRequestError,
   ProviderAdapterSessionNotFoundError,
@@ -105,11 +106,25 @@ interface OmpSessionContext {
   readonly interruptedTurnIds: Set<TurnId>;
   lastPlanFingerprint: string | undefined;
   activeTurnId: TurnId | undefined;
+  activeTurnCancellation: Deferred.Deferred<void> | undefined;
   promptsInFlight: number;
   readonly queueTurnSemaphore: Semaphore.Semaphore;
   readonly requestLifecycleSemaphore: Semaphore.Semaphore;
   stopped: boolean;
 }
+
+interface OmpTurnClaim {
+  readonly turnId: TurnId;
+  readonly cancellation: Deferred.Deferred<void>;
+}
+
+type OmpTurnPipelineOutcome =
+  | {
+      readonly _tag: "Prompted";
+      readonly prompt: ReadonlyArray<EffectAcpSchema.ContentBlock>;
+      readonly result: EffectAcpSchema.PromptResponse;
+    }
+  | { readonly _tag: "Cancelled" };
 
 function encodeJsonStringForDiagnostics(input: unknown): string | undefined {
   const result = encodeUnknownJsonStringExit(input);
@@ -305,10 +320,16 @@ export function makeOmpAdapter(ompSettings: OmpSettings, options?: OmpAdapterLiv
             context.stopped = true;
             const approvals = takePending(context.pendingApprovals);
             const userInputs = takePending(context.pendingUserInputs);
+            if (context.activeTurnCancellation) {
+              yield* Deferred.succeed(context.activeTurnCancellation, undefined).pipe(
+                Effect.ignore,
+              );
+            }
             yield* settlePendingApprovalsAsCancelled(approvals);
             yield* settlePendingUserInputsAsCancelled(userInputs);
             context.promptsInFlight = 0;
             context.activeTurnId = undefined;
+            context.activeTurnCancellation = undefined;
             return true;
           }),
         );
@@ -600,6 +621,7 @@ export function makeOmpAdapter(ompSettings: OmpSettings, options?: OmpAdapterLiv
             interruptedTurnIds: new Set(),
             lastPlanFingerprint: undefined,
             activeTurnId: undefined,
+            activeTurnCancellation: undefined,
             promptsInFlight: 0,
             queueTurnSemaphore: yield* Semaphore.make(1),
             requestLifecycleSemaphore: yield* Semaphore.make(1),
@@ -727,25 +749,41 @@ export function makeOmpAdapter(ompSettings: OmpSettings, options?: OmpAdapterLiv
         }).pipe(Effect.scoped),
       );
 
-    const sendTurnNow: OmpAdapterShape["sendTurn"] = (input) =>
-      Effect.gen(function* () {
-        const context = yield* requireSession(input.threadId);
-        const steeringTurnId = context.promptsInFlight > 0 ? context.activeTurnId : undefined;
-        const turnId = steeringTurnId ?? TurnId.make(yield* randomUUIDv4);
-        context.promptsInFlight += 1;
-        return yield* Effect.gen(function* () {
+    const claimTurn = (
+      context: OmpSessionContext,
+      input: Parameters<OmpAdapterShape["sendTurn"]>[0],
+      activeOnly: boolean,
+    ) =>
+      context.requestLifecycleSemaphore.withPermit(
+        Effect.gen(function* () {
+          if (context.stopped) {
+            return yield* new ProviderAdapterSessionNotFoundError({
+              provider: PROVIDER,
+              threadId: input.threadId,
+            });
+          }
+          if (
+            context.promptsInFlight > 0 &&
+            context.activeTurnId !== undefined &&
+            context.activeTurnCancellation !== undefined &&
+            !context.interruptedTurnIds.has(context.activeTurnId)
+          ) {
+            context.promptsInFlight += 1;
+            return {
+              turnId: context.activeTurnId,
+              cancellation: context.activeTurnCancellation,
+            } satisfies OmpTurnClaim;
+          }
+          if (activeOnly) return undefined;
+
+          const turnId = TurnId.make(yield* randomUUIDv4);
+          const cancellation = yield* Deferred.make<void>();
           const modelSelection =
             input.modelSelection?.instanceId === boundInstanceId ? input.modelSelection : undefined;
-          yield* context.acp
-            .setMode(input.interactionMode ?? "default")
-            .pipe(
-              Effect.mapError((error) =>
-                mapAcpToAdapterError(PROVIDER, input.threadId, "session/set_mode", error),
-              ),
-            );
-          yield* applyModelSelection(context, modelSelection);
           context.activeTurnId = turnId;
-          if (steeringTurnId === undefined) context.lastPlanFingerprint = undefined;
+          context.activeTurnCancellation = cancellation;
+          context.promptsInFlight = 1;
+          context.lastPlanFingerprint = undefined;
           context.session = {
             ...context.session,
             status: "running",
@@ -753,111 +791,154 @@ export function makeOmpAdapter(ompSettings: OmpSettings, options?: OmpAdapterLiv
             updatedAt: yield* nowIso,
             ...(modelSelection ? { model: modelSelection.model } : {}),
           };
-          if (steeringTurnId === undefined) {
+          yield* offerRuntimeEvent({
+            type: "turn.started",
+            ...(yield* makeEventStamp()),
+            provider: PROVIDER,
+            threadId: input.threadId,
+            turnId,
+            payload: context.session.model ? { model: context.session.model } : {},
+          });
+          return { turnId, cancellation } satisfies OmpTurnClaim;
+        }),
+      );
+
+    const runClaimedTurn = (
+      context: OmpSessionContext,
+      input: Parameters<OmpAdapterShape["sendTurn"]>[0],
+      claim: OmpTurnClaim,
+    ) => {
+      const pipeline = Effect.gen(function* () {
+        const modelSelection =
+          input.modelSelection?.instanceId === boundInstanceId ? input.modelSelection : undefined;
+        yield* context.acp
+          .setMode(input.interactionMode ?? "default")
+          .pipe(
+            Effect.mapError((error) =>
+              mapAcpToAdapterError(PROVIDER, input.threadId, "session/set_mode", error),
+            ),
+          );
+        yield* applyModelSelection(context, modelSelection);
+
+        const prompt: Array<EffectAcpSchema.ContentBlock> = [];
+        if (input.input?.trim()) prompt.push({ type: "text", text: input.input.trim() });
+        for (const attachment of input.attachments ?? []) {
+          const attachmentPath = resolveAttachmentPath({
+            attachmentsDir: serverConfig.attachmentsDir,
+            attachment,
+          });
+          if (!attachmentPath) {
+            return yield* new ProviderAdapterRequestError({
+              provider: PROVIDER,
+              method: "session/prompt",
+              detail: `Invalid attachment id '${attachment.id}'.`,
+            });
+          }
+          const bytes = yield* fileSystem.readFile(attachmentPath).pipe(
+            Effect.mapError(
+              (cause) =>
+                new ProviderAdapterRequestError({
+                  provider: PROVIDER,
+                  method: "session/prompt",
+                  detail: cause.message,
+                  cause,
+                }),
+            ),
+          );
+          prompt.push({
+            type: "image",
+            data: Buffer.from(bytes).toString("base64"),
+            mimeType: attachment.mimeType,
+          });
+        }
+        if (prompt.length === 0) {
+          return yield* new ProviderAdapterValidationError({
+            provider: PROVIDER,
+            operation: "sendTurn",
+            issue: "Turn requires non-empty text or attachments.",
+          });
+        }
+
+        const result = yield* context.acp
+          .prompt({ prompt })
+          .pipe(
+            Effect.mapError((error) =>
+              mapAcpToAdapterError(PROVIDER, input.threadId, "session/prompt", error),
+            ),
+          );
+        return { _tag: "Prompted", prompt, result } satisfies OmpTurnPipelineOutcome;
+      });
+      const cancelled = Deferred.await(claim.cancellation).pipe(
+        Effect.as({ _tag: "Cancelled" } satisfies OmpTurnPipelineOutcome),
+      );
+      const finalize = (exit: Exit.Exit<OmpTurnPipelineOutcome, ProviderAdapterError>) =>
+        context.requestLifecycleSemaphore.withPermit(
+          Effect.gen(function* () {
+            if (
+              context.activeTurnId !== claim.turnId ||
+              context.activeTurnCancellation !== claim.cancellation
+            ) {
+              return;
+            }
+            context.promptsInFlight = Math.max(0, context.promptsInFlight - 1);
+            const outcome = Exit.isSuccess(exit) ? exit.value : undefined;
+            if (outcome?._tag === "Prompted") {
+              yield* context.acp.drainEvents;
+              const turn = context.turns.find((entry) => entry.id === claim.turnId);
+              const item = { prompt: outcome.prompt, result: outcome.result };
+              if (turn) turn.items.push(item);
+              else context.turns.push({ id: claim.turnId, items: [item] });
+            }
+            if (context.promptsInFlight > 0) return;
+
+            const { activeTurnId: _activeTurnId, ...readySession } = context.session;
+            context.activeTurnId = undefined;
+            context.activeTurnCancellation = undefined;
+            context.session = { ...readySession, status: "ready", updatedAt: yield* nowIso };
+            if (outcome?._tag !== "Prompted") return;
             yield* offerRuntimeEvent({
-              type: "turn.started",
+              type: "turn.completed",
               ...(yield* makeEventStamp()),
               provider: PROVIDER,
               threadId: input.threadId,
-              turnId,
-              payload: context.session.model ? { model: context.session.model } : {},
+              turnId: claim.turnId,
+              payload: {
+                state: outcome.result.stopReason === "cancelled" ? "cancelled" : "completed",
+                stopReason: outcome.result.stopReason ?? null,
+              },
             });
-          }
-
-          const prompt: Array<EffectAcpSchema.ContentBlock> = [];
-          if (input.input?.trim()) prompt.push({ type: "text", text: input.input.trim() });
-          for (const attachment of input.attachments ?? []) {
-            const attachmentPath = resolveAttachmentPath({
-              attachmentsDir: serverConfig.attachmentsDir,
-              attachment,
-            });
-            if (!attachmentPath) {
-              return yield* new ProviderAdapterRequestError({
-                provider: PROVIDER,
-                method: "session/prompt",
-                detail: `Invalid attachment id '${attachment.id}'.`,
-              });
-            }
-            const bytes = yield* fileSystem.readFile(attachmentPath).pipe(
-              Effect.mapError(
-                (cause) =>
-                  new ProviderAdapterRequestError({
-                    provider: PROVIDER,
-                    method: "session/prompt",
-                    detail: cause.message,
-                    cause,
-                  }),
-              ),
-            );
-            prompt.push({
-              type: "image",
-              data: Buffer.from(bytes).toString("base64"),
-              mimeType: attachment.mimeType,
-            });
-          }
-          if (prompt.length === 0) {
-            return yield* new ProviderAdapterValidationError({
-              provider: PROVIDER,
-              operation: "sendTurn",
-              issue: "Turn requires non-empty text or attachments.",
-            });
-          }
-
-          const result = yield* context.acp
-            .prompt({ prompt })
-            .pipe(
-              Effect.mapError((error) =>
-                mapAcpToAdapterError(PROVIDER, input.threadId, "session/prompt", error),
-              ),
-            );
-          yield* context.requestLifecycleSemaphore.withPermit(
-            Effect.gen(function* () {
-              if (
-                context.stopped ||
-                context.activeTurnId !== turnId ||
-                context.interruptedTurnIds.has(turnId)
-              ) {
-                return;
-              }
-              yield* context.acp.drainEvents;
-              const turn = context.turns.find((entry) => entry.id === turnId);
-              if (turn) turn.items.push({ prompt, result });
-              else context.turns.push({ id: turnId, items: [{ prompt, result }] });
-              if (context.promptsInFlight === 1) {
-                const { activeTurnId: _activeTurnId, ...readySession } = context.session;
-                context.activeTurnId = undefined;
-                context.session = { ...readySession, status: "ready", updatedAt: yield* nowIso };
-                yield* offerRuntimeEvent({
-                  type: "turn.completed",
-                  ...(yield* makeEventStamp()),
-                  provider: PROVIDER,
-                  threadId: input.threadId,
-                  turnId,
-                  payload: {
-                    state: result.stopReason === "cancelled" ? "cancelled" : "completed",
-                    stopReason: result.stopReason ?? null,
-                  },
-                });
-              }
-            }),
-          );
-          return { threadId: input.threadId, turnId, resumeCursor: context.session.resumeCursor };
-        }).pipe(
-          Effect.ensuring(
-            Effect.sync(() => {
-              context.promptsInFlight = Math.max(0, context.promptsInFlight - 1);
-            }),
-          ),
+          }),
         );
-      });
+
+      return Effect.raceFirst(pipeline, cancelled).pipe(
+        Effect.onExit(finalize),
+        Effect.as({
+          threadId: input.threadId,
+          turnId: claim.turnId,
+          resumeCursor: context.session.resumeCursor,
+        }),
+      );
+    };
 
     const sendTurn: OmpAdapterShape["sendTurn"] = (input) =>
       Effect.gen(function* () {
         const context = yield* requireSession(input.threadId);
-        if (input.busyBehavior === "steer" && context.promptsInFlight > 0) {
-          return yield* sendTurnNow(input);
+        if (input.busyBehavior === "steer") {
+          const activeClaim = yield* claimTurn(context, input, true);
+          if (activeClaim) return yield* runClaimedTurn(context, input, activeClaim);
         }
-        return yield* context.queueTurnSemaphore.withPermit(sendTurnNow(input));
+        return yield* context.queueTurnSemaphore.withPermit(
+          Effect.gen(function* () {
+            const claim = yield* claimTurn(context, input, false);
+            if (!claim) {
+              return yield* new ProviderAdapterSessionNotFoundError({
+                provider: PROVIDER,
+                threadId: input.threadId,
+              });
+            }
+            return yield* runClaimedTurn(context, input, claim);
+          }),
+        );
       });
 
     const interruptTurn: OmpAdapterShape["interruptTurn"] = (threadId, requestedTurnId) =>
@@ -866,15 +947,18 @@ export function makeOmpAdapter(ompSettings: OmpSettings, options?: OmpAdapterLiv
         yield* context.requestLifecycleSemaphore.withPermit(
           Effect.gen(function* () {
             const activeTurnId = context.activeTurnId ?? context.session.activeTurnId;
+            const turnCancellation = context.activeTurnCancellation;
             if (
               context.stopped ||
               !activeTurnId ||
+              !turnCancellation ||
               context.interruptedTurnIds.has(activeTurnId) ||
               (requestedTurnId !== undefined && activeTurnId !== requestedTurnId)
             ) {
               return;
             }
             context.interruptedTurnIds.add(activeTurnId);
+            yield* Deferred.succeed(turnCancellation, undefined).pipe(Effect.ignore);
             const approvals = takePending(context.pendingApprovals);
             const userInputs = takePending(context.pendingUserInputs);
             yield* settlePendingApprovalsAsCancelled(approvals);
@@ -882,6 +966,7 @@ export function makeOmpAdapter(ompSettings: OmpSettings, options?: OmpAdapterLiv
             yield* context.acp.cancel.pipe(Effect.timeout("2 seconds"), Effect.ignore);
             context.promptsInFlight = 0;
             context.activeTurnId = undefined;
+            context.activeTurnCancellation = undefined;
             const { activeTurnId: _activeTurnId, ...readySession } = context.session;
             context.session = { ...readySession, status: "ready", updatedAt: yield* nowIso };
             yield* offerRuntimeEvent({

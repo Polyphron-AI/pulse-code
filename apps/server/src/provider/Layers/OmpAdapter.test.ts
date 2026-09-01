@@ -135,6 +135,40 @@ function makeBlockingNativeLogger(
   };
 }
 
+function makeNativeRequestLogger(
+  fixture: Fixture,
+  methodToObserve: string,
+  statusToObserve: "started" | "succeeded",
+  observed: Deferred.Deferred<void>,
+  release?: Deferred.Deferred<void>,
+): EventNdjsonLogger {
+  return {
+    filePath: NodePath.join(fixture.directory, "native.ndjson"),
+    write: (record) => {
+      const event =
+        typeof record === "object" && record !== null && "event" in record
+          ? record.event
+          : undefined;
+      const payload =
+        typeof event === "object" && event !== null && "payload" in event
+          ? event.payload
+          : undefined;
+      const method =
+        typeof payload === "object" && payload !== null && "method" in payload
+          ? payload.method
+          : undefined;
+      const status =
+        typeof payload === "object" && payload !== null && "status" in payload
+          ? payload.status
+          : undefined;
+      if (method !== methodToObserve || status !== statusToObserve) return Effect.void;
+      const signal = Deferred.succeed(observed, undefined).pipe(Effect.ignore);
+      return release ? signal.pipe(Effect.andThen(Deferred.await(release))) : signal;
+    },
+    close: () => Effect.void,
+  };
+}
+
 const testLayer = ServerConfig.layerTest(process.cwd(), {
   prefix: "t3-omp-adapter-test-",
 }).pipe(Layer.provideMerge(NodeServices.layer));
@@ -480,6 +514,129 @@ adapterTest("OMP adapter", (it) => {
         assert.isFalse(invocation?.pid ? processIsAlive(invocation.pid) : true);
         assert.notInclude(String(error), secret);
         assert.notInclude(NodeFS.readFileSync(fixture.requestLogPath, "utf8"), secret);
+      }),
+    ),
+  );
+
+  it.effect("cancels a queued steer before dispatch and gives the next turn a fresh signal", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const fixture = yield* makeFixture;
+        const steerConfigured = yield* Deferred.make<void>();
+        const adapter = yield* makeAdapter(
+          fixture,
+          { T3_ACP_OMP_ELICITATION: "plan" },
+          ProviderInstanceId.make("omp_work"),
+          makeNativeRequestLogger(
+            fixture,
+            "session/set_config_option",
+            "succeeded",
+            steerConfigured,
+          ),
+        );
+        const threadId = ThreadId.make("omp-interrupt-queued-steer");
+        yield* adapter.startSession({
+          threadId,
+          cwd: process.cwd(),
+          runtimeMode: "approval-required",
+        });
+
+        const firstInputFiber = yield* waitForEvent(
+          adapter.streamEvents,
+          (event) => event.type === "user-input.requested",
+        );
+        const firstTurnFiber = yield* adapter
+          .sendTurn({ threadId, input: "make a plan" })
+          .pipe(Effect.forkChild);
+        const firstInput = yield* Fiber.join(firstInputFiber);
+        const steerFiber = yield* adapter
+          .sendTurn({
+            threadId,
+            input: "steer this plan",
+            interactionMode: "plan",
+            busyBehavior: "steer",
+          })
+          .pipe(Effect.forkChild);
+        yield* Deferred.await(steerConfigured).pipe(Effect.timeout("2 seconds"));
+        yield* Effect.yieldNow;
+        assert.lengthOf(
+          readJsonLines(fixture.requestLogPath).filter(
+            (entry) => entry.method === "session/prompt",
+          ),
+          1,
+        );
+
+        yield* adapter.interruptTurn(threadId, firstInput.turnId);
+        yield* Fiber.join(firstTurnFiber).pipe(Effect.timeout("3 seconds"));
+        yield* Fiber.join(steerFiber).pipe(Effect.timeout("3 seconds"));
+        assert.lengthOf(
+          readJsonLines(fixture.requestLogPath).filter(
+            (entry) => entry.method === "session/prompt",
+          ),
+          1,
+        );
+
+        const nextInputFiber = yield* waitForEvent(
+          adapter.streamEvents,
+          (event) => event.type === "user-input.requested",
+        );
+        const nextTurnFiber = yield* adapter
+          .sendTurn({ threadId, input: "start a fresh turn", interactionMode: "default" })
+          .pipe(Effect.forkChild);
+        const nextInput = yield* Fiber.join(nextInputFiber).pipe(Effect.timeout("3 seconds"));
+        assert.notEqual(nextInput.turnId, firstInput.turnId);
+        yield* adapter.respondToUserInput(threadId, ApprovalRequestId.make(nextInput.requestId!), {
+          value: "Refine plan",
+        });
+        yield* Fiber.join(nextTurnFiber).pipe(Effect.timeout("3 seconds"));
+        assert.lengthOf(
+          readJsonLines(fixture.requestLogPath).filter(
+            (entry) => entry.method === "session/prompt",
+          ),
+          2,
+        );
+      }),
+    ),
+  );
+
+  it.effect("stops during pre-prompt configuration without dispatching a prompt", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const fixture = yield* makeFixture;
+        const configStarted = yield* Deferred.make<void>();
+        const releaseConfig = yield* Deferred.make<void>();
+        const adapter = yield* makeAdapter(
+          fixture,
+          {},
+          ProviderInstanceId.make("omp_work"),
+          makeNativeRequestLogger(
+            fixture,
+            "session/set_config_option",
+            "started",
+            configStarted,
+            releaseConfig,
+          ),
+        );
+        const threadId = ThreadId.make("omp-stop-during-config");
+        yield* adapter.startSession({
+          threadId,
+          cwd: process.cwd(),
+          runtimeMode: "approval-required",
+        });
+        const turnFiber = yield* adapter
+          .sendTurn({ threadId, input: "never dispatch", interactionMode: "plan" })
+          .pipe(Effect.forkChild);
+        yield* Deferred.await(configStarted).pipe(Effect.timeout("2 seconds"));
+        assert.isFalse(
+          readJsonLines(fixture.requestLogPath).some((entry) => entry.method === "session/prompt"),
+        );
+
+        yield* adapter.stopSession(threadId);
+        yield* Deferred.succeed(releaseConfig, undefined).pipe(Effect.ignore);
+        yield* Fiber.join(turnFiber).pipe(Effect.timeout("3 seconds"));
+        assert.isFalse(
+          readJsonLines(fixture.requestLogPath).some((entry) => entry.method === "session/prompt"),
+        );
       }),
     ),
   );
