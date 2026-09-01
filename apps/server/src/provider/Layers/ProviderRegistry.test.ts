@@ -1478,8 +1478,9 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
         Effect.gen(function* () {
           const firstMissing = `t3code_codex_first_`;
           const secondMissing = `t3code_codex_second_`;
+          const rebuiltMarker = "registry-rebuilt-marker";
           const spawnedCommands: Array<string> = [];
-          const secondProbeStarted = yield* Deferred.make<void>();
+          const secondProbeSettled = yield* Deferred.make<void>();
           const serverSettings = yield* makeMutableServerSettingsService(
             decodeServerSettings(
               deepMerge(encodedDefaultServerSettings, {
@@ -1518,9 +1519,9 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
                 const executable = (command as { readonly command: string }).command;
                 spawnedCommands.push(executable);
                 return executable === secondMissing
-                  ? Deferred.succeed(secondProbeStarted, undefined).pipe(
-                      Effect.andThen(spawner.spawn(command)),
-                    )
+                  ? spawner
+                      .spawn(command)
+                      .pipe(Effect.onExit(() => Deferred.succeed(secondProbeSettled, undefined)))
                   : spawner.spawn(command);
               }),
             ),
@@ -1565,20 +1566,43 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
             // background refresh on the rebuilt instance.
             yield* serverSettings.updateSettings({
               providers: {
-                codex: { enabled: true, binaryPath: secondMissing },
+                codex: {
+                  enabled: true,
+                  binaryPath: secondMissing,
+                  customModels: [rebuiltMarker],
+                },
               },
             });
 
-            // The spawner is the process-seam receipt for the rebuilt
-            // instance. Await it directly instead of racing a virtual-clock
-            // polling loop against the settings watcher.
-            yield* Deferred.await(secondProbeStarted);
-            const refreshed = yield* registry.getProviders;
+            // Wait until the rebuilt probe's spawn has settled, then wait for
+            // the aggregator to publish that probe's distinct result. The
+            // pending rebuilt snapshot can already contain the model marker,
+            // so `status: "error"` is part of the completion predicate.
+            yield* Deferred.await(secondProbeSettled);
+            let refreshed = yield* registry.getProviders;
+            for (
+              let attempts = 0;
+              attempts < 200 &&
+              !refreshed.some(
+                (provider) =>
+                  provider.instanceId === "codex" &&
+                  provider.status === "error" &&
+                  provider.models.some((model) => model.slug === rebuiltMarker),
+              );
+              attempts += 1
+            ) {
+              yield* Effect.sleep("10 millis").pipe(TestClock.withLive);
+              refreshed = yield* registry.getProviders;
+            }
 
             const reprobedCodex = refreshed.find((provider) => provider.instanceId === "codex");
             assert.deepStrictEqual(spawnedCommands, [firstMissing, "omp", secondMissing]);
             assert.strictEqual(reprobedCodex?.status, "error");
             assert.strictEqual(reprobedCodex?.installed, false);
+            assert.strictEqual(
+              reprobedCodex?.models.some((model) => model.slug === rebuiltMarker),
+              true,
+            );
           }).pipe(Effect.provide(runtimeServices));
         }),
       );
