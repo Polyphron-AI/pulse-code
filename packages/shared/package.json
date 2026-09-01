@@ -243,6 +243,10 @@
       "types": "./src/usageLimits.ts",
       "import": "./src/usageLimits.ts"
     },
+    "./desktopAppControl": {
+      "types": "./src/desktopAppControl.ts",
+      "import": "./src/desktopAppControl.ts"
+    },
     "./claudeCompaction": {
       "types": "./src/claudeCompaction.ts",
       "import": "./src/claudeCompaction.ts"
