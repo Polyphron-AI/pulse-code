@@ -331,6 +331,151 @@ adapterTest("OMP adapter", (it) => {
     ),
   );
 
+  it.effect("keeps the ready snapshot unchanged when configuration fails before turn start", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const fixture = yield* makeFixture;
+        const adapter = yield* makeAdapter(fixture, { T3_ACP_FAIL_SET_CONFIG_OPTION: "1" });
+        const threadId = ThreadId.make("omp-config-failure-before-start");
+        const instanceId = ProviderInstanceId.make("omp_work");
+        yield* adapter.startSession({
+          threadId,
+          cwd: process.cwd(),
+          runtimeMode: "approval-required",
+        });
+        const eventsFiber = yield* adapter.streamEvents.pipe(
+          Stream.takeUntil((event) => event.type === "session.exited"),
+          Stream.runCollect,
+          Effect.forkChild,
+        );
+        yield* Effect.yieldNow;
+
+        const error = yield* adapter
+          .sendTurn({
+            threadId,
+            input: "do not start",
+            modelSelection: { instanceId, model: "anthropic/claude" },
+          })
+          .pipe(Effect.flip);
+        assert.equal(error._tag, "ProviderAdapterRequestError");
+        const session = (yield* adapter.listSessions())[0];
+        assert.equal(session?.status, "ready");
+        assert.isUndefined(session?.activeTurnId);
+        assert.isUndefined(session?.model);
+        assert.isFalse(
+          readJsonLines(fixture.requestLogPath).some((entry) => entry.method === "session/prompt"),
+        );
+
+        yield* adapter.stopSession(threadId);
+        const events = Array.from(yield* Fiber.join(eventsFiber));
+        assert.isFalse(events.some((event) => event.type === "turn.started"));
+        assert.isFalse(events.some((event) => event.type === "turn.completed"));
+      }),
+    ),
+  );
+
+  it.effect("publishes one failed terminal event when a started prompt fails", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const fixture = yield* makeFixture;
+        const adapter = yield* makeAdapter(fixture, { T3_ACP_FAIL_PROMPT: "1" });
+        const threadId = ThreadId.make("omp-started-prompt-failure");
+        yield* adapter.startSession({
+          threadId,
+          cwd: process.cwd(),
+          runtimeMode: "approval-required",
+        });
+        const eventsFiber = yield* adapter.streamEvents.pipe(
+          Stream.takeUntil((event) => event.type === "session.exited"),
+          Stream.runCollect,
+          Effect.forkChild,
+        );
+        yield* Effect.yieldNow;
+
+        const error = yield* adapter
+          .sendTurn({ threadId, input: "fail after start" })
+          .pipe(Effect.flip);
+        assert.equal(error._tag, "ProviderAdapterRequestError");
+        assert.equal((yield* adapter.listSessions())[0]?.status, "ready");
+
+        yield* adapter.stopSession(threadId);
+        const events = Array.from(yield* Fiber.join(eventsFiber));
+        const started = events.filter((event) => event.type === "turn.started");
+        const completed = events.filter((event) => event.type === "turn.completed");
+        assert.lengthOf(started, 1);
+        assert.lengthOf(completed, 1);
+        assert.equal(completed[0]?.turnId, started[0]?.turnId);
+        assert.equal(completed[0]?.payload.state, "failed");
+        assert.include(completed[0]?.payload.errorMessage, "Mock prompt failure");
+      }),
+    ),
+  );
+
+  it.effect("updates the session model for a successful steer without restarting the turn", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const fixture = yield* makeFixture;
+        const adapter = yield* makeAdapter(fixture, { T3_ACP_OMP_ELICITATION: "plan" });
+        const threadId = ThreadId.make("omp-steer-model-snapshot");
+        const instanceId = ProviderInstanceId.make("omp_work");
+        yield* adapter.startSession({
+          threadId,
+          cwd: process.cwd(),
+          runtimeMode: "approval-required",
+          modelSelection: { instanceId, model: "openai/gpt-5" },
+        });
+        const eventsFiber = yield* adapter.streamEvents.pipe(
+          Stream.takeUntil((event) => event.type === "session.exited"),
+          Stream.runCollect,
+          Effect.forkChild,
+        );
+        yield* Effect.yieldNow;
+        const firstInputFiber = yield* waitForEvent(
+          adapter.streamEvents,
+          (event) => event.type === "user-input.requested",
+        );
+        const firstTurnFiber = yield* adapter
+          .sendTurn({ threadId, input: "start the turn" })
+          .pipe(Effect.forkChild);
+        const firstInput = yield* Fiber.join(firstInputFiber);
+
+        const steerInputFiber = yield* waitForEvent(
+          adapter.streamEvents,
+          (event) => event.type === "user-input.requested",
+        );
+        const steerFiber = yield* adapter
+          .sendTurn({
+            threadId,
+            input: "switch model",
+            busyBehavior: "steer",
+            modelSelection: { instanceId, model: "anthropic/claude" },
+          })
+          .pipe(Effect.forkChild);
+        yield* adapter.respondToUserInput(threadId, ApprovalRequestId.make(firstInput.requestId!), {
+          value: "Refine plan",
+        });
+        const steerInput = yield* Fiber.join(steerInputFiber).pipe(Effect.timeout("3 seconds"));
+        assert.equal(steerInput.turnId, firstInput.turnId);
+        yield* adapter.respondToUserInput(threadId, ApprovalRequestId.make(steerInput.requestId!), {
+          value: "Refine plan",
+        });
+        yield* Fiber.join(firstTurnFiber).pipe(Effect.timeout("3 seconds"));
+        yield* Fiber.join(steerFiber).pipe(Effect.timeout("3 seconds"));
+        const session = (yield* adapter.listSessions())[0];
+        assert.equal(session?.status, "ready");
+        assert.equal(session?.model, "anthropic/claude");
+
+        yield* adapter.stopSession(threadId);
+        const events = Array.from(yield* Fiber.join(eventsFiber));
+        const started = events.filter(
+          (event) => event.type === "turn.started" && event.turnId === firstInput.turnId,
+        );
+        assert.lengthOf(started, 1);
+        assert.deepStrictEqual(started[0]?.payload, { model: "openai/gpt-5" });
+      }),
+    ),
+  );
+
   it.effect(
     "always surfaces explicit permissions and returns the request's arbitrary option id",
     () =>

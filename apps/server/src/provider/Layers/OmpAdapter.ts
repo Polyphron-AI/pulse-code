@@ -13,6 +13,7 @@ import {
   type ThreadId,
   TurnId,
 } from "@t3tools/contracts";
+import * as Cause from "effect/Cause";
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
@@ -22,6 +23,7 @@ import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as Predicate from "effect/Predicate";
 import * as PubSub from "effect/PubSub";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
@@ -107,6 +109,7 @@ interface OmpSessionContext {
   lastPlanFingerprint: string | undefined;
   activeTurnId: TurnId | undefined;
   activeTurnCancellation: Deferred.Deferred<void> | undefined;
+  activeTurnFailureMessage: string | undefined;
   promptsInFlight: number;
   readonly queueTurnSemaphore: Semaphore.Semaphore;
   readonly requestLifecycleSemaphore: Semaphore.Semaphore;
@@ -137,6 +140,12 @@ export function raceOmpTurnPipelineAgainstCancellation<A, E, R>(
     Deferred.await(cancellation).pipe(Effect.as(OMP_TURN_CANCELLED)),
     pipeline,
   );
+}
+
+function ompTurnFailureMessage(cause: Cause.Cause<ProviderAdapterError>): string {
+  const failure = Cause.squash(cause);
+  const message = Predicate.isError(failure) ? failure.message : String(failure);
+  return message.trim() || "OMP turn failed.";
 }
 
 function encodeJsonStringForDiagnostics(input: unknown): string | undefined {
@@ -343,6 +352,7 @@ export function makeOmpAdapter(ompSettings: OmpSettings, options?: OmpAdapterLiv
             context.promptsInFlight = 0;
             context.activeTurnId = undefined;
             context.activeTurnCancellation = undefined;
+            context.activeTurnFailureMessage = undefined;
             return true;
           }),
         );
@@ -635,6 +645,7 @@ export function makeOmpAdapter(ompSettings: OmpSettings, options?: OmpAdapterLiv
             lastPlanFingerprint: undefined,
             activeTurnId: undefined,
             activeTurnCancellation: undefined,
+            activeTurnFailureMessage: undefined,
             promptsInFlight: 0,
             queueTurnSemaphore: yield* Semaphore.make(1),
             requestLifecycleSemaphore: yield* Semaphore.make(1),
@@ -791,27 +802,10 @@ export function makeOmpAdapter(ompSettings: OmpSettings, options?: OmpAdapterLiv
 
           const turnId = TurnId.make(yield* randomUUIDv4);
           const cancellation = yield* Deferred.make<void>();
-          const modelSelection =
-            input.modelSelection?.instanceId === boundInstanceId ? input.modelSelection : undefined;
           context.activeTurnId = turnId;
           context.activeTurnCancellation = cancellation;
+          context.activeTurnFailureMessage = undefined;
           context.promptsInFlight = 1;
-          context.lastPlanFingerprint = undefined;
-          context.session = {
-            ...context.session,
-            status: "running",
-            activeTurnId: turnId,
-            updatedAt: yield* nowIso,
-            ...(modelSelection ? { model: modelSelection.model } : {}),
-          };
-          yield* offerRuntimeEvent({
-            type: "turn.started",
-            ...(yield* makeEventStamp()),
-            provider: PROVIDER,
-            threadId: input.threadId,
-            turnId,
-            payload: context.session.model ? { model: context.session.model } : {},
-          });
           return { turnId, cancellation } satisfies OmpTurnClaim;
         }),
       );
@@ -832,6 +826,43 @@ export function makeOmpAdapter(ompSettings: OmpSettings, options?: OmpAdapterLiv
             ),
           );
         yield* applyModelSelection(context, modelSelection);
+        const published = yield* context.requestLifecycleSemaphore.withPermit(
+          Effect.gen(function* () {
+            if (
+              context.stopped ||
+              context.activeTurnId !== claim.turnId ||
+              context.activeTurnCancellation !== claim.cancellation ||
+              context.interruptedTurnIds.has(claim.turnId)
+            ) {
+              return false;
+            }
+            const alreadyStarted = context.session.activeTurnId === claim.turnId;
+            const nextSession: ProviderSession = {
+              ...context.session,
+              status: "running",
+              activeTurnId: claim.turnId,
+              updatedAt: yield* nowIso,
+              ...(modelSelection ? { model: modelSelection.model } : {}),
+            };
+            if (alreadyStarted) {
+              context.session = nextSession;
+              return true;
+            }
+            const stamp = yield* makeEventStamp();
+            context.session = nextSession;
+            context.lastPlanFingerprint = undefined;
+            yield* offerRuntimeEvent({
+              type: "turn.started",
+              ...stamp,
+              provider: PROVIDER,
+              threadId: input.threadId,
+              turnId: claim.turnId,
+              payload: context.session.model ? { model: context.session.model } : {},
+            });
+            return true;
+          }),
+        );
+        if (!published) return OMP_TURN_CANCELLED;
 
         const prompt: Array<EffectAcpSchema.ContentBlock> = [];
         if (input.input?.trim()) prompt.push({ type: "text", text: input.input.trim() });
@@ -892,6 +923,10 @@ export function makeOmpAdapter(ompSettings: OmpSettings, options?: OmpAdapterLiv
             }
             context.promptsInFlight = Math.max(0, context.promptsInFlight - 1);
             const outcome = Exit.isSuccess(exit) ? exit.value : undefined;
+            const turnStarted = context.session.activeTurnId === claim.turnId;
+            if (Exit.isFailure(exit) && turnStarted) {
+              context.activeTurnFailureMessage ??= ompTurnFailureMessage(exit.cause);
+            }
             if (outcome?._tag === "Prompted") {
               yield* context.acp.drainEvents;
               const turn = context.turns.find((entry) => entry.id === claim.turnId);
@@ -901,10 +936,24 @@ export function makeOmpAdapter(ompSettings: OmpSettings, options?: OmpAdapterLiv
             }
             if (context.promptsInFlight > 0) return;
 
-            const { activeTurnId: _activeTurnId, ...readySession } = context.session;
+            const failureMessage = context.activeTurnFailureMessage;
             context.activeTurnId = undefined;
             context.activeTurnCancellation = undefined;
+            context.activeTurnFailureMessage = undefined;
+            if (!turnStarted) return;
+            const { activeTurnId: _activeTurnId, ...readySession } = context.session;
             context.session = { ...readySession, status: "ready", updatedAt: yield* nowIso };
+            if (failureMessage) {
+              yield* offerRuntimeEvent({
+                type: "turn.completed",
+                ...(yield* makeEventStamp()),
+                provider: PROVIDER,
+                threadId: input.threadId,
+                turnId: claim.turnId,
+                payload: { state: "failed", errorMessage: failureMessage },
+              });
+              return;
+            }
             if (outcome?._tag !== "Prompted") return;
             yield* offerRuntimeEvent({
               type: "turn.completed",
@@ -967,6 +1016,7 @@ export function makeOmpAdapter(ompSettings: OmpSettings, options?: OmpAdapterLiv
             ) {
               return;
             }
+            const turnStarted = context.session.activeTurnId === activeTurnId;
             context.interruptedTurnIds.add(activeTurnId);
             yield* Deferred.succeed(turnCancellation, undefined).pipe(Effect.ignore);
             const approvals = takePending(context.pendingApprovals);
@@ -977,6 +1027,8 @@ export function makeOmpAdapter(ompSettings: OmpSettings, options?: OmpAdapterLiv
             context.promptsInFlight = 0;
             context.activeTurnId = undefined;
             context.activeTurnCancellation = undefined;
+            context.activeTurnFailureMessage = undefined;
+            if (!turnStarted) return;
             const { activeTurnId: _activeTurnId, ...readySession } = context.session;
             context.session = { ...readySession, status: "ready", updatedAt: yield* nowIso };
             yield* offerRuntimeEvent({
