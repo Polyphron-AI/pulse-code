@@ -66,13 +66,48 @@ if (cliArgsLogPath) {
   );
 }
 if (environmentLogPath) {
+  const sessionDir = process.env.PI_CODING_AGENT_SESSION_DIR;
+  const sessionMarkerPath = sessionDir ? `${sessionDir}/mock-session-marker` : undefined;
+  if (process.env.T3_OMP_WRITE_SESSION_MARKER === "1" && sessionDir && sessionMarkerPath) {
+    NodeFS.mkdirSync(sessionDir, { recursive: true });
+    NodeFS.writeFileSync(sessionMarkerPath, "current OMP ACP still writes session state", "utf8");
+  }
   NodeFS.appendFileSync(
     environmentLogPath,
     `${JSON.stringify({
+      cwd: process.cwd(),
       OMP_PROFILE: process.env.OMP_PROFILE,
       PI_PROFILE: process.env.PI_PROFILE,
+      PI_CODING_AGENT_PROFILE: process.env.PI_CODING_AGENT_PROFILE,
       PI_CODING_AGENT_DIR: process.env.PI_CODING_AGENT_DIR,
+      PI_CODING_AGENT_SESSION_DIR: process.env.PI_CODING_AGENT_SESSION_DIR,
+      HOME: process.env.HOME,
+      USERPROFILE: process.env.USERPROFILE,
+      XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME,
+      XDG_DATA_HOME: process.env.XDG_DATA_HOME,
+      XDG_CACHE_HOME: process.env.XDG_CACHE_HOME,
+      XDG_STATE_HOME: process.env.XDG_STATE_HOME,
+      APPDATA: process.env.APPDATA,
+      LOCALAPPDATA: process.env.LOCALAPPDATA,
+      TEMP: process.env.TEMP,
+      TMP: process.env.TMP,
+      TMPDIR: process.env.TMPDIR,
+      PWD: process.env.PWD,
+      OLDPWD: process.env.OLDPWD,
+      INIT_CWD: process.env.INIT_CWD,
       OPENAI_API_KEY_PRESENT: typeof process.env.OPENAI_API_KEY === "string",
+      HTTPS_PROXY: process.env.HTTPS_PROXY,
+      NODE_EXTRA_CA_CERTS: process.env.NODE_EXTRA_CA_CERTS,
+      PATH_PRESENT: typeof process.env.PATH === "string",
+      PULSE_CODE_INTERNAL_AUTH_TOKEN_PRESENT:
+        typeof process.env.PULSE_CODE_INTERNAL_AUTH_TOKEN === "string",
+      T3_MCP_BEARER_TOKEN_PRESENT: typeof process.env.T3_MCP_BEARER_TOKEN === "string",
+      CLAUDE_CONFIG_DIR_PRESENT: typeof process.env.CLAUDE_CONFIG_DIR === "string",
+      GIT_WORK_TREE_PRESENT: typeof process.env.GIT_WORK_TREE === "string",
+      OMP_LAUNCH_CWD_PRESENT: typeof process.env.OMP_LAUNCH_CWD === "string",
+      OMP_WORKTREE_DIR_PRESENT: typeof process.env.OMP_WORKTREE_DIR === "string",
+      sessionMarkerPath,
+      SESSION_MARKER_WRITTEN: sessionMarkerPath ? NodeFS.existsSync(sessionMarkerPath) : false,
       ORDINARY_VALUE: process.env.T3_OMP_ORDINARY_VALUE,
     })}\n`,
     "utf8",
@@ -109,7 +144,7 @@ const cliProgram = Effect.gen(function* () {
   });
 });
 
-let currentModeId = ompMode ? "default" : "ask";
+let currentModeId = ompMode ? (process.env.T3_ACP_OMP_INITIAL_MODE ?? "default") : "ask";
 let currentModelId = "default";
 let parameterizedModelPicker = false;
 let currentReasoning = "medium";
