@@ -9,6 +9,7 @@ import { HostProcessExecutablePath, HostProcessPlatform } from "@t3tools/shared/
 import { describe, expect, it } from "@effect/vitest";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as Schema from "effect/Schema";
 import * as TestClock from "effect/testing/TestClock";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
@@ -95,6 +96,50 @@ function readInvocations(path: string): ReadonlyArray<MockInvocation> {
     .split("\n")
     .filter(Boolean)
     .map((line) => decodeMockInvocation(line));
+}
+
+function invocationWasLogged(path: string, expectedArgs: ReadonlyArray<string>): boolean {
+  if (!NodeFS.existsSync(path)) {
+    return false;
+  }
+  try {
+    return readInvocations(path).some(
+      (invocation) =>
+        invocation.args.length === expectedArgs.length &&
+        invocation.args.every((arg, index) => arg === expectedArgs[index]),
+    );
+  } catch {
+    return false;
+  }
+}
+
+function waitForInvocation(
+  fixture: MockFixture,
+  expectedArgs: ReadonlyArray<string>,
+): Effect.Effect<void> {
+  return Effect.callback<void>((resume) => {
+    let completed = false;
+    const watcher = NodeFS.watch(fixture.directory, () => {
+      if (!completed && invocationWasLogged(fixture.argsLogPath, expectedArgs)) {
+        completed = true;
+        watcher.close();
+        resume(Effect.void);
+      }
+    });
+    watcher.once("error", (error) => {
+      if (!completed) {
+        completed = true;
+        watcher.close();
+        resume(Effect.die(error));
+      }
+    });
+    if (invocationWasLogged(fixture.argsLogPath, expectedArgs)) {
+      completed = true;
+      watcher.close();
+      resume(Effect.void);
+    }
+    return Effect.sync(() => watcher.close());
+  });
 }
 
 function processIsAlive(pid: number): boolean {
@@ -252,8 +297,7 @@ describe("OMP process boundary", () => {
       withFixture((fixture) =>
         Effect.gen(function* () {
           const secret = "omp-catalog-secret-value";
-          const startedAt = yield* Clock.currentTimeMillis;
-          const snapshot = yield* checkOmpProviderStatus(
+          const statusFiber = yield* checkOmpProviderStatus(
             { enabled: true, binaryPath: fixture.wrapperPath },
             {
               cwd: fixture.directory,
@@ -264,9 +308,12 @@ describe("OMP process boundary", () => {
                 T3_OMP_MODELS_HANG: "1",
               },
             },
-            { modelCatalogTimeoutMs: 250 },
-          );
-          const elapsedMillis = (yield* Clock.currentTimeMillis) - startedAt;
+          ).pipe(Effect.forkChild);
+
+          yield* waitForInvocation(fixture, ["models", "--json"]).pipe(TestClock.withLive);
+          yield* TestClock.adjust("35 seconds");
+          yield* TestClock.adjust("1 second");
+          const snapshot = yield* Fiber.join(statusFiber);
 
           expect(snapshot).toMatchObject({
             installed: true,
@@ -276,9 +323,7 @@ describe("OMP process boundary", () => {
           });
           expect(snapshot.message).toContain("timed out");
           expect(encodeUnknownJson(snapshot)).not.toContain(secret);
-          expect(snapshot.message).toContain("250ms");
-          expect(elapsedMillis).toBeGreaterThanOrEqual(150);
-          expect(elapsedMillis).toBeLessThan(4_000);
+          expect(snapshot.message).toContain("35000ms");
 
           const invocations = readInvocations(fixture.argsLogPath);
           expect(invocations.map((invocation) => invocation.args)).toEqual([
@@ -287,7 +332,7 @@ describe("OMP process boundary", () => {
           ]);
           expect(invocations.some((invocation) => invocation.args[0] === "acp")).toBe(false);
           expect(processIsAlive(invocations[1]!.pid)).toBe(false);
-        }).pipe(TestClock.withLive, Effect.provide(NodeServices.layer)),
+        }).pipe(Effect.provide(NodeServices.layer)),
       ),
     5_000,
   );

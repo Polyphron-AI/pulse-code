@@ -54,11 +54,6 @@ export interface OmpProviderProcessContext {
   readonly environment: NodeJS.ProcessEnv;
 }
 
-interface OmpProviderStatusInternalOptions {
-  /** Internal seam for focused timeout tests. Production callers omit this option. */
-  readonly modelCatalogTimeoutMs?: number;
-}
-
 function buildOmpModelCapabilities(model: OmpCatalogModel): ModelCapabilities {
   if (!model.reasoning) {
     return EMPTY_CAPABILITIES;
@@ -200,14 +195,11 @@ const runOmpCommand = (
 export const checkOmpProviderStatus = Effect.fn("checkOmpProviderStatus")(function* (
   ompSettings: OmpSettings,
   context: OmpProviderProcessContext,
-  internalOptions: OmpProviderStatusInternalOptions = {},
 ): Effect.fn.Return<
   ServerProviderDraft,
   never,
   ChildProcessSpawner.ChildProcessSpawner | Crypto.Crypto
 > {
-  const modelCatalogTimeoutMs =
-    internalOptions.modelCatalogTimeoutMs ?? OMP_MODEL_CATALOG_TIMEOUT_MS;
   const checkedAt = DateTime.formatIso(yield* DateTime.now);
   if (!ompSettings.enabled) {
     return buildOmpProviderSnapshot({
@@ -273,7 +265,7 @@ export const checkOmpProviderStatus = Effect.fn("checkOmpProviderStatus")(functi
   }
 
   const catalogResult = yield* runOmpCommand(ompSettings, context, ["models", "--json"]).pipe(
-    Effect.timeoutOption(modelCatalogTimeoutMs),
+    Effect.timeoutOption(OMP_MODEL_CATALOG_TIMEOUT_MS),
     Effect.result,
   );
   if (Result.isFailure(catalogResult)) {
@@ -295,7 +287,7 @@ export const checkOmpProviderStatus = Effect.fn("checkOmpProviderStatus")(functi
       ompSettings,
       installed: true,
       version,
-      message: `Oh My Pi model catalog timed out after ${modelCatalogTimeoutMs}ms.`,
+      message: `Oh My Pi model catalog timed out after ${OMP_MODEL_CATALOG_TIMEOUT_MS}ms.`,
     });
   }
 
