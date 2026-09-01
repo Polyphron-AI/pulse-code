@@ -16,6 +16,7 @@ const requestLogPath = process.env.T3_ACP_REQUEST_LOG_PATH;
 const exitLogPath = process.env.T3_ACP_EXIT_LOG_PATH;
 const cliArgsLogPath = process.env.T3_OMP_CLI_ARGS_LOG_PATH;
 const environmentLogPath = process.env.T3_OMP_ENV_LOG_PATH;
+const invocationExitLogPath = process.env.T3_OMP_INVOCATION_EXIT_LOG_PATH;
 const environmentHasKey = (name: string) =>
   Object.keys(process.env).some((key) => key.toUpperCase() === name);
 const failInitialize = process.env.T3_ACP_FAIL_INITIALIZE === "1";
@@ -67,6 +68,15 @@ if (cliArgsLogPath) {
     "utf8",
   );
 }
+if (invocationExitLogPath) {
+  process.once("exit", (code) => {
+    NodeFS.appendFileSync(
+      invocationExitLogPath,
+      `${JSON.stringify({ args: cliArgs, pid: process.pid, code })}\n`,
+      "utf8",
+    );
+  });
+}
 if (environmentLogPath) {
   const sessionDir = process.env.PI_CODING_AGENT_SESSION_DIR;
   const sessionMarkerPath = sessionDir ? `${sessionDir}/mock-session-marker` : undefined;
@@ -98,9 +108,16 @@ if (environmentLogPath) {
       OLDPWD: process.env.OLDPWD,
       INIT_CWD: process.env.INIT_CWD,
       OPENAI_API_KEY_PRESENT: typeof process.env.OPENAI_API_KEY === "string",
+      OPENAI_API_KEY_MATCHES_EXPECTED:
+        process.env.OPENAI_API_KEY === process.env.T3_OMP_EXPECTED_OPENAI_API_KEY,
+      OPENAI_API_KEY_NAMES: Object.keys(process.env).filter(
+        (key) => key.toUpperCase() === "OPENAI_API_KEY",
+      ),
       HTTPS_PROXY: process.env.HTTPS_PROXY,
       NODE_EXTRA_CA_CERTS: process.env.NODE_EXTRA_CA_CERTS,
       PATH_PRESENT: typeof process.env.PATH === "string",
+      PATH_MATCHES_EXPECTED: process.env.PATH === process.env.T3_OMP_EXPECTED_PATH,
+      PATH_KEY_NAMES: Object.keys(process.env).filter((key) => key.toUpperCase() === "PATH"),
       PULSE_CODE_INTERNAL_AUTH_TOKEN_PRESENT:
         typeof process.env.PULSE_CODE_INTERNAL_AUTH_TOKEN === "string",
       T3_MCP_BEARER_TOKEN_PRESENT: typeof process.env.T3_MCP_BEARER_TOKEN === "string",

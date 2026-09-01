@@ -1,5 +1,6 @@
 /** First-party provider driver for the Oh My Pi ACP runtime. */
 import { OmpSettings, ProviderDriverKind, type ServerProvider } from "@t3tools/contracts";
+import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -94,7 +95,8 @@ export const OmpDriver: ProviderDriver<OmpSettings, OmpDriverEnv> = {
       const serverConfig = yield* ServerConfig;
       const serverSettings = yield* ServerSettingsService;
       const eventLoggers = yield* ProviderEventLoggers;
-      const processEnv = { ...mergeProviderInstanceEnvironment(environment) };
+      const platform = yield* HostProcessPlatform;
+      const processEnv = { ...mergeProviderInstanceEnvironment(environment, platform) };
       const effectiveConfig = { ...config, enabled } satisfies OmpSettings;
       const agentDir = resolveOmpAgentDir(path, serverConfig.stateDir, instanceId);
       const textGenerationDir = resolveOmpTextGenerationDir(
@@ -128,16 +130,26 @@ export const OmpDriver: ProviderDriver<OmpSettings, OmpDriverEnv> = {
         environment: processEnv,
       });
 
-      const checkProvider = checkOmpProviderStatus(effectiveConfig, {
-        cwd: serverConfig.cwd,
-        agentDir,
-        environment: processEnv,
-      }).pipe(
-        Effect.map(stampIdentity),
+      const snapshotSettings = makeProviderSnapshotSettingsSource(effectiveConfig, serverSettings);
+      const checkProvider = snapshotSettings.getSettings.pipe(
+        Effect.flatMap((settings) =>
+          checkOmpProviderStatus(effectiveConfig, {
+            cwd: serverConfig.cwd,
+            agentDir,
+            environment: processEnv,
+          }).pipe(
+            Effect.map(stampIdentity),
+            Effect.flatMap((currentSnapshot) =>
+              enrichProviderSnapshotWithVersionAdvisory(currentSnapshot, maintenanceCapabilities, {
+                enableProviderUpdateChecks: settings.enableProviderUpdateChecks,
+              }),
+            ),
+            Effect.provideService(HttpClient.HttpClient, httpClient),
+          ),
+        ),
         Effect.provideService(Crypto.Crypto, crypto),
         Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
       );
-      const snapshotSettings = makeProviderSnapshotSettingsSource(effectiveConfig, serverSettings);
       const snapshot = yield* makeManagedServerProvider<ProviderSnapshotSettings<OmpSettings>>({
         maintenanceCapabilities,
         getSettings: snapshotSettings.getSettings,
@@ -146,13 +158,6 @@ export const OmpDriver: ProviderDriver<OmpSettings, OmpDriverEnv> = {
         initialSnapshot: (settings) =>
           buildInitialOmpProviderSnapshot(settings.provider).pipe(Effect.map(stampIdentity)),
         checkProvider,
-        enrichSnapshot: ({ settings, snapshot: currentSnapshot, publishSnapshot }) =>
-          enrichProviderSnapshotWithVersionAdvisory(currentSnapshot, maintenanceCapabilities, {
-            enableProviderUpdateChecks: settings.enableProviderUpdateChecks,
-          }).pipe(
-            Effect.provideService(HttpClient.HttpClient, httpClient),
-            Effect.flatMap((enrichedSnapshot) => publishSnapshot(enrichedSnapshot)),
-          ),
       }).pipe(
         Effect.mapError(
           (cause) =>

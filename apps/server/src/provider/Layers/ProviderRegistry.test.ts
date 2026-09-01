@@ -1,10 +1,12 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, it, assert } from "@effect/vitest";
 import * as DateTime from "effect/DateTime";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
 import * as PubSub from "effect/PubSub";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
@@ -995,8 +997,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
               attempt < 50 && cachedProvider?.checkedAt !== refreshedProvider.checkedAt;
               attempt += 1
             ) {
-              yield* TestClock.adjust("10 millis");
-              yield* Effect.yieldNow;
+              yield* Effect.sleep("10 millis").pipe(TestClock.withLive);
               cachedProvider = yield* readProviderStatusCache(filePath);
             }
 
@@ -1120,8 +1121,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
                 attempt < 50 && cachedProvider?.checkedAt !== authoritativeProvider.checkedAt;
                 attempt += 1
               ) {
-                yield* TestClock.adjust("10 millis");
-                yield* Effect.yieldNow;
+                yield* Effect.sleep("10 millis").pipe(TestClock.withLive);
                 cachedProvider = yield* readProviderStatusCache(filePath);
               }
 
@@ -1133,8 +1133,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
                 attempt < 50 && cachedProvider?.checkedAt !== failedProvider.checkedAt;
                 attempt += 1
               ) {
-                yield* TestClock.adjust("10 millis");
-                yield* Effect.yieldNow;
+                yield* Effect.sleep("10 millis").pipe(TestClock.withLive);
                 cachedProvider = yield* readProviderStatusCache(filePath);
               }
 
@@ -1480,6 +1479,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
           const firstMissing = `t3code_codex_first_`;
           const secondMissing = `t3code_codex_second_`;
           const spawnedCommands: Array<string> = [];
+          const secondProbeStarted = yield* Deferred.make<void>();
           const serverSettings = yield* makeMutableServerSettingsService(
             decodeServerSettings(
               deepMerge(encodedDefaultServerSettings, {
@@ -1515,8 +1515,13 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
             Layer.provideMerge(OpenCodeRuntime.OpenCodeRuntimeLive),
             Layer.updateService(ChildProcessSpawner.ChildProcessSpawner, (spawner) =>
               ChildProcessSpawner.make((command) => {
-                spawnedCommands.push((command as { readonly command: string }).command);
-                return spawner.spawn(command);
+                const executable = (command as { readonly command: string }).command;
+                spawnedCommands.push(executable);
+                return executable === secondMissing
+                  ? Deferred.succeed(secondProbeStarted, undefined).pipe(
+                      Effect.andThen(spawner.spawn(command)),
+                    )
+                  : spawner.spawn(command);
               }),
             ),
             Layer.provideMerge(NodeServices.layer),
@@ -1548,7 +1553,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
             );
             assert.strictEqual(initialCodex?.status, "error");
             assert.strictEqual(initialCodex?.installed, false);
-            assert.deepStrictEqual(spawnedCommands, [firstMissing]);
+            assert.deepStrictEqual(spawnedCommands, [firstMissing, "omp"]);
 
             // Drive a settings change. The Hydration layer's
             // `SettingsWatcherLive` consumes this via `streamChanges`,
@@ -1564,28 +1569,14 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
               },
             });
 
-            // Poll until the injected process boundary observes the new
-            // executable. This verifies the public settings-to-probe behavior
-            // without depending on timestamps assigned by TestClock.
-            const refreshed = yield* Effect.gen(function* () {
-              for (let attempts = 0; attempts < 60; attempts += 1) {
-                const providers = yield* registry.getProviders;
-                const codex = providers.find((provider) => provider.instanceId === "codex");
-                if (
-                  codex !== undefined &&
-                  codex.status === "error" &&
-                  spawnedCommands.includes(secondMissing)
-                ) {
-                  return providers;
-                }
-                yield* TestClock.adjust("50 millis");
-                yield* Effect.yieldNow;
-              }
-              return yield* registry.getProviders;
-            });
+            // The spawner is the process-seam receipt for the rebuilt
+            // instance. Await it directly instead of racing a virtual-clock
+            // polling loop against the settings watcher.
+            yield* Deferred.await(secondProbeStarted);
+            const refreshed = yield* registry.getProviders;
 
             const reprobedCodex = refreshed.find((provider) => provider.instanceId === "codex");
-            assert.deepStrictEqual(spawnedCommands, [firstMissing, secondMissing]);
+            assert.deepStrictEqual(spawnedCommands, [firstMissing, "omp", secondMissing]);
             assert.strictEqual(reprobedCodex?.status, "error");
             assert.strictEqual(reprobedCodex?.installed, false);
           }).pipe(Effect.provide(runtimeServices));
@@ -1741,6 +1732,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
                 "codex",
                 "cursor",
                 "grok",
+                "omp",
                 "opencode",
               ]);
               assert.strictEqual(cursorProvider?.enabled, false);
@@ -2118,6 +2110,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
         });
 
         return Effect.gen(function* () {
+          const path = yield* Path.Path;
           const status = yield* checkClaudeProviderStatus(
             {
               ...defaultClaudeSettings,
@@ -2128,7 +2121,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
           assert.strictEqual(status.status, "ready");
           assert.deepStrictEqual(
             recorded.commands.map((command) => command.env?.CLAUDE_CONFIG_DIR),
-            [claudeConfigDir],
+            [path.resolve(claudeConfigDir)],
           );
         }).pipe(Effect.provide(recorded.layer));
       });

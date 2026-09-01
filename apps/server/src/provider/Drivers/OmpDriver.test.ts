@@ -12,7 +12,6 @@ import {
   ProviderInstanceEnvironment,
   ProviderInstanceId,
   type ProviderInstanceConfigMap,
-  type ServerProvider,
   ThreadId,
 } from "@t3tools/contracts";
 import { HostProcessExecutablePath, HostProcessPlatform } from "@t3tools/shared/hostProcess";
@@ -40,6 +39,7 @@ import { OmpDriver } from "./OmpDriver.ts";
 
 interface MockFixture {
   readonly directory: string;
+  readonly platform: NodeJS.Platform;
   readonly wrapperPath: string;
   readonly projectA: string;
   readonly projectB: string;
@@ -50,11 +50,19 @@ interface MockInvocation {
   readonly pid: number;
 }
 
+interface MockTermination extends MockInvocation {
+  readonly code: number;
+}
+
 interface MockEnvironment {
   readonly cwd: string;
   readonly PI_CODING_AGENT_DIR?: string;
   readonly PI_CODING_AGENT_SESSION_DIR?: string;
   readonly OPENAI_API_KEY_PRESENT: boolean;
+  readonly OPENAI_API_KEY_MATCHES_EXPECTED: boolean;
+  readonly OPENAI_API_KEY_NAMES: ReadonlyArray<string>;
+  readonly PATH_MATCHES_EXPECTED: boolean;
+  readonly PATH_KEY_NAMES: ReadonlyArray<string>;
   readonly ORDINARY_VALUE?: string;
 }
 
@@ -92,7 +100,7 @@ const makeFixture = Effect.acquireRelease(
       const projectB = NodePath.join(directory, "project-b");
       NodeFS.mkdirSync(projectA);
       NodeFS.mkdirSync(projectB);
-      return { directory, wrapperPath, projectA, projectB } satisfies MockFixture;
+      return { directory, platform, wrapperPath, projectA, projectB } satisfies MockFixture;
     });
   }),
   (fixture) =>
@@ -105,21 +113,12 @@ function readJsonLines<A>(path: string): ReadonlyArray<A> {
   return content ? content.split("\n").map((line) => JSON.parse(line) as A) : [];
 }
 
-function processIsAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 function providerEnvironment(values: Readonly<Record<string, string>>) {
   return decodeEnvironment(
     Object.entries(values).map(([name, value]) => ({
       name,
       value,
-      sensitive: name.includes("KEY") || name.includes("TOKEN"),
+      sensitive: name.toUpperCase().includes("KEY") || name.toUpperCase().includes("TOKEN"),
     })),
   );
 }
@@ -129,10 +128,15 @@ function instanceEnvironment(
   label: "a" | "b",
   overrides: Readonly<Record<string, string>> = {},
 ) {
+  const pathKey = fixture.platform === "win32" ? "pAtH" : "PATH";
+  const openAiKey = fixture.platform === "win32" ? "oPeNaI_aPi_KeY" : "OPENAI_API_KEY";
+  const selectedPath = process.env.PATH ?? "";
+  const selectedOpenAiKey = `provider-key-${label}`;
   return providerEnvironment({
     T3_ACP_OMP_MODE: "1",
     T3_OMP_CLI_ARGS_LOG_PATH: NodePath.join(fixture.directory, `${label}-args.ndjson`),
     T3_OMP_ENV_LOG_PATH: NodePath.join(fixture.directory, `${label}-env.ndjson`),
+    T3_OMP_INVOCATION_EXIT_LOG_PATH: NodePath.join(fixture.directory, `${label}-exits.ndjson`),
     T3_OMP_MODELS_JSON: encodeUnknownJson({
       models: [
         {
@@ -145,24 +149,57 @@ function instanceEnvironment(
     }),
     T3_ACP_PROMPT_RESPONSE_TEXT: encodeUnknownJson({ title: `Title ${label.toUpperCase()}` }),
     T3_OMP_ORDINARY_VALUE: `selected-${label}`,
-    OPENAI_API_KEY: `provider-key-${label}`,
+    T3_OMP_EXPECTED_PATH: selectedPath,
+    T3_OMP_EXPECTED_OPENAI_API_KEY: selectedOpenAiKey,
+    [pathKey]: selectedPath,
+    [openAiKey]: selectedOpenAiKey,
     ...overrides,
   });
 }
 
-function waitForSnapshot(
-  getSnapshot: Effect.Effect<ServerProvider>,
-  predicate: (snapshot: ServerProvider) => boolean,
+function invocationMatches(left: MockInvocation, right: MockInvocation): boolean {
+  return (
+    left.pid === right.pid &&
+    left.args.length === right.args.length &&
+    left.args.every((arg, index) => arg === right.args[index])
+  );
+}
+
+function processExists(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function waitForVerifiedTerminations(
+  path: string,
+  expected: ReadonlyArray<MockInvocation>,
   remaining = 300,
-): Effect.Effect<ServerProvider> {
+): Effect.Effect<void> {
   return Effect.gen(function* () {
-    const snapshot = yield* getSnapshot;
-    if (predicate(snapshot)) return snapshot;
+    const terminations = readJsonLines<MockTermination>(path);
+    const pending = expected.filter((invocation) => {
+      const gracefulExitWasRecorded = terminations.some(
+        (termination) => termination.code === 0 && invocationMatches(termination, invocation),
+      );
+      return !gracefulExitWasRecorded && processExists(invocation.pid);
+    });
+    const allVerified = pending.length === 0;
+    if (allVerified) return;
     if (remaining <= 0) {
-      return yield* Effect.die(new Error(`Timed out waiting for OMP snapshot: ${snapshot.status}`));
+      return yield* Effect.die(
+        new Error(
+          `Timed out waiting for verified OMP exits: ${pending
+            .map((invocation) => `${invocation.pid}:${invocation.args.join(" ")}`)
+            .join(", ")}`,
+        ),
+      );
     }
     yield* Effect.sleep("10 millis").pipe(TestClock.withLive);
-    return yield* waitForSnapshot(getSnapshot, predicate, remaining - 1);
+    return yield* waitForVerifiedTerminations(path, expected, remaining - 1);
   });
 }
 
@@ -340,19 +377,10 @@ it.layer(testLayer)("OmpDriver", (it) => {
           );
           process.env.T3_OMP_ORDINARY_VALUE = "ambient-after-create";
 
-          yield* Effect.all([instanceA.snapshot.refresh, instanceB.snapshot.refresh], {
-            concurrency: "unbounded",
-          });
-          const [snapshotA, snapshotB] = yield* Effect.all([
-            waitForSnapshot(
-              instanceA.snapshot.getSnapshot,
-              (snapshot) => snapshot.status === "ready" && snapshot.versionAdvisory !== undefined,
-            ),
-            waitForSnapshot(
-              instanceB.snapshot.getSnapshot,
-              (snapshot) => snapshot.status === "ready" && snapshot.versionAdvisory !== undefined,
-            ),
-          ]);
+          const [snapshotA, snapshotB] = yield* Effect.all(
+            [instanceA.snapshot.refresh, instanceB.snapshot.refresh],
+            { concurrency: "unbounded" },
+          );
           expect(snapshotA).toMatchObject({
             instanceId: idA,
             driver: OMP_KIND,
@@ -364,6 +392,9 @@ it.layer(testLayer)("OmpDriver", (it) => {
             },
           });
           expect(snapshotB.instanceId).toBe(idB);
+          expect((yield* instanceA.snapshot.getSnapshot).versionAdvisory).toEqual(
+            snapshotA.versionAdvisory,
+          );
 
           const threadA = ThreadId.make("omp-driver-a");
           const threadB = ThreadId.make("omp-driver-b");
@@ -417,6 +448,7 @@ it.layer(testLayer)("OmpDriver", (it) => {
           ] as const) {
             const argsPath = NodePath.join(fixture.directory, `${label}-args.ndjson`);
             const envPath = NodePath.join(fixture.directory, `${label}-env.ndjson`);
+            const exitPath = NodePath.join(fixture.directory, `${label}-exits.ndjson`);
             const invocations = readJsonLines<MockInvocation>(argsPath);
             expect(invocations.some((entry) => entry.args.join(" ") === "--version")).toBe(true);
             expect(invocations.some((entry) => entry.args.join(" ") === "models --json")).toBe(
@@ -432,7 +464,7 @@ it.layer(testLayer)("OmpDriver", (it) => {
                 (entry) => entry.args.join("\0") === OMP_TEXT_GENERATION_ACP_ARGS.join("\0"),
               ),
             ).toBe(true);
-            expect(invocations.every((entry) => !processIsAlive(entry.pid))).toBe(true);
+            yield* waitForVerifiedTerminations(exitPath, invocations);
 
             const environments = readJsonLines<MockEnvironment>(envPath);
             const interactiveDir = NodePath.join(serverConfig.stateDir, "providers", "omp", id);
@@ -454,6 +486,12 @@ it.layer(testLayer)("OmpDriver", (it) => {
               environments.every((entry) => entry.ORDINARY_VALUE === `selected-${label}`),
             ).toBe(true);
             expect(environments.every((entry) => entry.OPENAI_API_KEY_PRESENT)).toBe(true);
+            expect(environments.every((entry) => entry.OPENAI_API_KEY_MATCHES_EXPECTED)).toBe(true);
+            expect(environments.every((entry) => entry.OPENAI_API_KEY_NAMES.length === 1)).toBe(
+              true,
+            );
+            expect(environments.every((entry) => entry.PATH_MATCHES_EXPECTED)).toBe(true);
+            expect(environments.every((entry) => entry.PATH_KEY_NAMES.length === 1)).toBe(true);
           }
         }),
       ),
@@ -488,16 +526,15 @@ it.layer(testLayer)("OmpDriver", (it) => {
           config: { enabled: true, binaryPath: fixture.wrapperPath },
         }).pipe(Effect.provideService(HttpClient.HttpClient, client));
 
-        yield* instance.snapshot.refresh;
-        const failed = yield* waitForSnapshot(
-          instance.snapshot.getSnapshot,
-          (snapshot) => snapshot.status === "error" && snapshot.versionAdvisory !== undefined,
-        );
+        const failed = yield* instance.snapshot.refresh;
         expect(failed.versionAdvisory).toMatchObject({
           currentVersion: "1.2.3",
           latestVersion: null,
           status: "unknown",
         });
+        expect((yield* instance.snapshot.getSnapshot).versionAdvisory).toEqual(
+          failed.versionAdvisory,
+        );
         expect(yield* Ref.get(calls)).toBe(0);
         expect(encodeUnknownJson(failed)).not.toContain(secret);
         expect(encodeUnknownJson(messages)).not.toContain(secret);
@@ -509,12 +546,8 @@ it.layer(testLayer)("OmpDriver", (it) => {
         ).not.toContain(secret);
 
         yield* settings.updateSettings({ enableProviderUpdateChecks: true });
-        yield* instance.snapshot.refresh.pipe(
+        const advised = yield* instance.snapshot.refresh.pipe(
           Effect.provideService(ProviderVersionCache, new Map()),
-        );
-        const advised = yield* waitForSnapshot(
-          instance.snapshot.getSnapshot,
-          (snapshot) => snapshot.versionAdvisory?.latestVersion === "1.2.4",
         );
         expect(advised.versionAdvisory).toMatchObject({
           currentVersion: "1.2.3",
@@ -522,6 +555,9 @@ it.layer(testLayer)("OmpDriver", (it) => {
           status: "behind_latest",
           updateCommand: `${fixture.wrapperPath} update`,
         });
+        expect((yield* instance.snapshot.getSnapshot).versionAdvisory).toEqual(
+          advised.versionAdvisory,
+        );
         expect(yield* Ref.get(calls)).toBeGreaterThan(0);
         expect(encodeUnknownJson(advised)).not.toContain(secret);
       }).pipe(Effect.provide(Logger.layer([logger], { mergeWithExisting: false }))),
