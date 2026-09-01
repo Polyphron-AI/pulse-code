@@ -16,6 +16,8 @@ const requestLogPath = process.env.T3_ACP_REQUEST_LOG_PATH;
 const exitLogPath = process.env.T3_ACP_EXIT_LOG_PATH;
 const cliArgsLogPath = process.env.T3_OMP_CLI_ARGS_LOG_PATH;
 const environmentLogPath = process.env.T3_OMP_ENV_LOG_PATH;
+const environmentHasKey = (name: string) =>
+  Object.keys(process.env).some((key) => key.toUpperCase() === name);
 const failInitialize = process.env.T3_ACP_FAIL_INITIALIZE === "1";
 const emitToolCalls = process.env.T3_ACP_EMIT_TOOL_CALLS === "1";
 const emitInterleavedAssistantToolCalls =
@@ -106,6 +108,14 @@ if (environmentLogPath) {
       GIT_WORK_TREE_PRESENT: typeof process.env.GIT_WORK_TREE === "string",
       OMP_LAUNCH_CWD_PRESENT: typeof process.env.OMP_LAUNCH_CWD === "string",
       OMP_WORKTREE_DIR_PRESENT: typeof process.env.OMP_WORKTREE_DIR === "string",
+      OMP_AUTH_BROKER_URL_PRESENT: environmentHasKey("OMP_AUTH_BROKER_URL"),
+      OMP_AUTH_BROKER_TOKEN_PRESENT: environmentHasKey("OMP_AUTH_BROKER_TOKEN"),
+      OMP_AUTH_BROKER_ACCOUNT_POOL_FILE_PRESENT: environmentHasKey(
+        "OMP_AUTH_BROKER_ACCOUNT_POOL_FILE",
+      ),
+      OMP_AUTH_BROKER_SNAPSHOT_CACHE_PRESENT: environmentHasKey("OMP_AUTH_BROKER_SNAPSHOT_CACHE"),
+      PI_CONFIG_FILES_PRESENT: environmentHasKey("PI_CONFIG_FILES"),
+      PI_CONFIG_DIR_PRESENT: environmentHasKey("PI_CONFIG_DIR"),
       sessionMarkerPath,
       SESSION_MARKER_WRITTEN: sessionMarkerPath ? NodeFS.existsSync(sessionMarkerPath) : false,
       ORDINARY_VALUE: process.env.T3_OMP_ORDINARY_VALUE,

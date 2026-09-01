@@ -63,6 +63,12 @@ const MockEnvironmentSchema = Schema.Struct({
   GIT_WORK_TREE_PRESENT: Schema.Boolean,
   OMP_LAUNCH_CWD_PRESENT: Schema.Boolean,
   OMP_WORKTREE_DIR_PRESENT: Schema.Boolean,
+  OMP_AUTH_BROKER_URL_PRESENT: Schema.Boolean,
+  OMP_AUTH_BROKER_TOKEN_PRESENT: Schema.Boolean,
+  OMP_AUTH_BROKER_ACCOUNT_POOL_FILE_PRESENT: Schema.Boolean,
+  OMP_AUTH_BROKER_SNAPSHOT_CACHE_PRESENT: Schema.Boolean,
+  PI_CONFIG_FILES_PRESENT: Schema.Boolean,
+  PI_CONFIG_DIR_PRESENT: Schema.Boolean,
   sessionMarkerPath: Schema.String,
   SESSION_MARKER_WRITTEN: Schema.Boolean,
 });
@@ -259,6 +265,12 @@ describe("OmpTextGeneration", () => {
           GIT_WORK_TREE: NodePath.join(fixture.directory, "ambient-repository"),
           omp_launch_cwd: NodePath.join(fixture.directory, "ambient-repository"),
           OMP_WORKTREE_DIR: NodePath.join(fixture.directory, "shared-omp-worktrees"),
+          oMp_AuTh_BrOkEr_Url: "https://broker.example.test",
+          OmP_aUtH_bRoKeR_tOkEn: "do-not-forward",
+          oMp_AuTh_BrOkEr_AcCoUnT_pOoL_fIlE: NodePath.join(fixture.directory, "account-pool.json"),
+          OmP_aUtH_bRoKeR_sNaPsHoT_cAcHe: NodePath.join(fixture.directory, "broker-snapshot.enc"),
+          Pi_CoNfIg_FiLeS: NodePath.join(fixture.directory, "omp-overlay.yml"),
+          pI_cOnFiG_dIr: "../../shared-omp-config",
           T3_ACP_OMP_INITIAL_MODE: "plan",
           T3_OMP_WRITE_SESSION_MARKER: "1",
           T3_ACP_PROMPT_RESPONSE_TEXT: encodeUnknownJson({
@@ -321,6 +333,12 @@ describe("OmpTextGeneration", () => {
         expect(environment.GIT_WORK_TREE_PRESENT).toBe(false);
         expect(environment.OMP_LAUNCH_CWD_PRESENT).toBe(false);
         expect(environment.OMP_WORKTREE_DIR_PRESENT).toBe(false);
+        expect(environment.OMP_AUTH_BROKER_URL_PRESENT).toBe(false);
+        expect(environment.OMP_AUTH_BROKER_TOKEN_PRESENT).toBe(false);
+        expect(environment.OMP_AUTH_BROKER_ACCOUNT_POOL_FILE_PRESENT).toBe(false);
+        expect(environment.OMP_AUTH_BROKER_SNAPSHOT_CACHE_PRESENT).toBe(false);
+        expect(environment.PI_CONFIG_FILES_PRESENT).toBe(false);
+        expect(environment.PI_CONFIG_DIR_PRESENT).toBe(false);
         expect(NodePath.normalize(environment.sessionMarkerPath)).toBe(
           NodePath.join(runRoot, "sessions", "mock-session-marker"),
         );

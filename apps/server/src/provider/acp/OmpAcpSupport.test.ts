@@ -139,6 +139,12 @@ describe("OMP text generation process isolation", () => {
         Git_Work_Tree: "/ambient/repository",
         omp_launch_cwd: "/ambient/repository",
         OMP_WORKTREE_DIR: "/shared/omp-worktrees",
+        oMp_AuTh_BrOkEr_Url: "https://broker.example.test",
+        OmP_aUtH_bRoKeR_tOkEn: "do-not-forward",
+        oMp_AuTh_BrOkEr_AcCoUnT_pOoL_fIlE: "/shared/account-pool.json",
+        OmP_aUtH_bRoKeR_sNaPsHoT_cAcHe: "/shared/broker-snapshot.enc",
+        Pi_CoNfIg_FiLeS: "/shared/omp-overlay.yml",
+        pI_cOnFiG_dIr: "../../shared-omp-config",
       },
       paths,
     );
@@ -201,6 +207,18 @@ describe("OMP text generation process isolation", () => {
     expect(environment).not.toHaveProperty("Git_Work_Tree");
     expect(environment).not.toHaveProperty("omp_launch_cwd");
     expect(environment).not.toHaveProperty("OMP_WORKTREE_DIR");
+    expect(
+      Object.keys(environment).filter((key) =>
+        [
+          "OMP_AUTH_BROKER_URL",
+          "OMP_AUTH_BROKER_TOKEN",
+          "OMP_AUTH_BROKER_ACCOUNT_POOL_FILE",
+          "OMP_AUTH_BROKER_SNAPSHOT_CACHE",
+          "PI_CONFIG_FILES",
+          "PI_CONFIG_DIR",
+        ].includes(key.toUpperCase()),
+      ),
+    ).toEqual([]);
   });
 
   it("forces empty MCP servers and advertises no filesystem, terminal, or forms", () => {
