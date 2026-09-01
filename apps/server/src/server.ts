@@ -407,8 +407,13 @@ const ProjectFaviconResolverLayerLive = ProjectFaviconResolver.layer.pipe(
   Layer.provide(T3ProjectFileLoader.layer),
 );
 
+const ServerEnvironmentLayerLive = ServerEnvironment.layer.pipe(
+  Layer.provide(ServerSecretStore.layer),
+);
+
 const AuthLayerLive = EnvironmentAuth.layer.pipe(
   Layer.provideMerge(PersistenceLayerLive),
+  Layer.provide(ServerEnvironmentLayerLive),
   Layer.provide(ServerSecretStore.layer),
 );
 
@@ -496,7 +501,7 @@ const RuntimeCoreDependenciesLive = ReactorLayerLive.pipe(
   Layer.provideMerge(WorkspaceLayerLive),
   Layer.provideMerge(Layer.mergeAll(NativeAppIconResolver.layer, ProjectFaviconResolverLayerLive)),
   Layer.provideMerge(RepositoryIdentityResolver.layer),
-  Layer.provideMerge(ServerEnvironment.layer),
+  Layer.provideMerge(ServerEnvironmentLayerLive),
   Layer.provideMerge(AuthLayerLive),
   Layer.provideMerge(ServerSecretStore.layer),
   Layer.provideMerge(
