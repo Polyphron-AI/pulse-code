@@ -80,6 +80,7 @@ export const PROVIDER_CLIENT_DEFINITIONS: readonly ProviderClientDefinition[] = 
     value: ProviderDriverKind.make("omp"),
     label: "Oh My Pi",
     icon: PiAgentIcon,
+    badgeLabel: "Early Access",
     settingsSchema: OmpSettings,
   },
 ];
