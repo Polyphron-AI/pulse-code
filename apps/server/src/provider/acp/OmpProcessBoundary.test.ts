@@ -268,6 +268,40 @@ describe("OMP process boundary", () => {
     ),
   );
 
+  it.effect(
+    "bounds scope cleanup when the OMP child ignores graceful termination",
+    () =>
+      withFixture((fixture) =>
+        Effect.gen(function* () {
+          const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+          const startedAt = yield* Clock.currentTimeMillis;
+          const pid = yield* Effect.scoped(
+            Effect.gen(function* () {
+              const runtime = yield* makeOmpAcpRuntime({
+                ompSettings: { binaryPath: fixture.wrapperPath },
+                runtimeMode: "approval-required",
+                childProcessSpawner: spawner,
+                cwd: fixture.directory,
+                agentDir: NodePath.join(fixture.directory, "agent"),
+                environment: {
+                  T3_ACP_IGNORE_TERMINATION: "1",
+                  T3_OMP_CLI_ARGS_LOG_PATH: fixture.argsLogPath,
+                },
+                clientInfo: { name: "pulse-code-test", version: "0.0.0" },
+              });
+              yield* runtime.start();
+              return readInvocations(fixture.argsLogPath)[0]!.pid;
+            }),
+          );
+          const elapsedMillis = (yield* Clock.currentTimeMillis) - startedAt;
+
+          expect(processIsAlive(pid)).toBe(false);
+          expect(elapsedMillis).toBeLessThan(5_000);
+        }).pipe(Effect.provide(NodeServices.layer)),
+      ),
+    10_000,
+  );
+
   it.effect("reports an OMP spawn failure without exposing credentials", () =>
     withFixture((fixture) =>
       Effect.gen(function* () {

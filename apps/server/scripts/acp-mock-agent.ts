@@ -3,6 +3,7 @@
 import * as NodeFS from "node:fs";
 
 import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
@@ -27,6 +28,10 @@ const emitForeignSessionUpdates = process.env.T3_ACP_EMIT_FOREIGN_SESSION_UPDATE
 const hangPromptForever = process.env.T3_ACP_HANG_PROMPT_FOREVER === "1";
 const hangFirstPromptForever = process.env.T3_ACP_HANG_FIRST_PROMPT_FOREVER === "1";
 const emitLateUpdateAfterCancel = process.env.T3_ACP_EMIT_LATE_UPDATE_AFTER_CANCEL === "1";
+const ompMode = process.env.T3_ACP_OMP_MODE === "1";
+const ompElicitation = process.env.T3_ACP_OMP_ELICITATION;
+const clientResponseLogPath = process.env.T3_ACP_CLIENT_RESPONSE_LOG_PATH;
+const ignoreTermination = process.env.T3_ACP_IGNORE_TERMINATION === "1";
 const omitXAiPromptCompleteStopReason =
   process.env.T3_ACP_OMIT_XAI_PROMPT_COMPLETE_STOP_REASON === "1";
 const failLoadSession = process.env.T3_ACP_FAIL_LOAD_SESSION === "1";
@@ -49,6 +54,7 @@ const permissionOptionIds = {
   rejectOnce: process.env.T3_ACP_REJECT_ONCE_OPTION_ID ?? "reject-once",
 };
 const sessionId = "mock-session-1";
+const encodeUnknownJson = Schema.encodeUnknownSync(Schema.fromJsonString(Schema.Unknown));
 
 const cliArgs = process.argv.slice(2);
 if (cliArgsLogPath) {
@@ -102,7 +108,7 @@ const cliProgram = Effect.gen(function* () {
   });
 });
 
-let currentModeId = "ask";
+let currentModeId = ompMode ? "default" : "ask";
 let currentModelId = "default";
 let parameterizedModelPicker = false;
 let currentReasoning = "medium";
@@ -134,21 +140,64 @@ function writeJsonRpcNotification(method: string, params: unknown): void {
   process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", method, params })}\n`);
 }
 
-process.once("SIGTERM", () => {
-  logExit("SIGTERM");
-  process.exit(0);
-});
+if (!ignoreTermination) {
+  process.once("SIGTERM", () => {
+    logExit("SIGTERM");
+    process.exit(0);
+  });
 
-process.once("SIGINT", () => {
-  logExit("SIGINT");
-  process.exit(0);
-});
+  process.once("SIGINT", () => {
+    logExit("SIGINT");
+    process.exit(0);
+  });
+}
 
 process.once("exit", (code) => {
   logExit(`exit:${code}`);
 });
 
 function configOptions(): ReadonlyArray<AcpSchema.SessionConfigOption> {
+  if (ompMode) {
+    return [
+      {
+        id: "mode",
+        name: "Mode",
+        category: "mode",
+        type: "select",
+        currentValue: currentModeId,
+        options: availableModes.map((mode) => ({
+          value: mode.id,
+          name: mode.name,
+          ...(mode.description ? { description: mode.description } : {}),
+        })),
+      },
+      {
+        id: "model",
+        name: "Model",
+        category: "model",
+        type: "select",
+        currentValue: currentModelId,
+        options: [
+          { value: "default", name: "Auto" },
+          { value: "openai/gpt-5", name: "GPT-5" },
+          { value: "anthropic/claude", name: "Claude" },
+        ],
+      },
+      {
+        id: "thinking",
+        name: "Thinking",
+        category: "thought_level",
+        type: "select",
+        currentValue: currentReasoning,
+        options: [
+          { value: "off", name: "Off" },
+          { value: "low", name: "Low" },
+          { value: "medium", name: "Medium" },
+          { value: "high", name: "High" },
+        ],
+      },
+    ];
+  }
   if (parameterizedModelPicker) {
     const baseOptions: Array<AcpSchema.SessionConfigOption> = [
       {
@@ -308,23 +357,28 @@ function availableModels(): ReadonlyArray<{
   }));
 }
 
-const availableModes: ReadonlyArray<AcpSchema.SessionMode> = [
-  {
-    id: "ask",
-    name: "Ask",
-    description: "Request permission before making any changes",
-  },
-  {
-    id: "architect",
-    name: "Architect",
-    description: "Design and plan software systems without implementation",
-  },
-  {
-    id: "code",
-    name: "Code",
-    description: "Write and modify code with full tool access",
-  },
-];
+const availableModes: ReadonlyArray<AcpSchema.SessionMode> = ompMode
+  ? [
+      { id: "default", name: "Default" },
+      { id: "plan", name: "Plan" },
+    ]
+  : [
+      {
+        id: "ask",
+        name: "Ask",
+        description: "Request permission before making any changes",
+      },
+      {
+        id: "architect",
+        name: "Architect",
+        description: "Design and plan software systems without implementation",
+      },
+      {
+        id: "code",
+        name: "Code",
+        description: "Write and modify code with full tool access",
+      },
+    ];
 
 function modeState(): AcpSchema.SessionModeState {
   return {
@@ -477,6 +531,9 @@ const program = Effect.gen(function* () {
         currentModelId = request.value;
       }
       if (request.configId === "reasoning" && typeof request.value === "string") {
+        currentReasoning = request.value;
+      }
+      if (request.configId === "thinking" && typeof request.value === "string") {
         currentReasoning = request.value;
       }
       if (request.configId === "context" && typeof request.value === "string") {
@@ -741,6 +798,15 @@ const program = Effect.gen(function* () {
             { optionId: permissionOptionIds.rejectOnce, name: "Reject", kind: "reject_once" },
           ],
         });
+        if (clientResponseLogPath) {
+          yield* Effect.sync(() =>
+            NodeFS.appendFileSync(
+              clientResponseLogPath,
+              `${encodeUnknownJson({ method: "session/request_permission", response: permission })}\n`,
+              "utf8",
+            ),
+          );
+        }
 
         const cancelled =
           cancelledSessions.delete(requestedSessionId) ||
@@ -829,6 +895,70 @@ const program = Effect.gen(function* () {
         });
 
         return { stopReason: "end_turn" };
+      }
+
+      if (ompElicitation) {
+        const elicitation =
+          ompElicitation === "url"
+            ? ({
+                mode: "url" as const,
+                elicitationId: "mock-elicitation-1",
+                url: "https://example.invalid/authorize",
+                message: "Open the authorization page",
+                sessionId: requestedSessionId,
+              } satisfies AcpSchema.ElicitationRequest)
+            : ({
+                mode: "form" as const,
+                message: ompElicitation === "plan" ? "Approve this plan?" : "Configure the task",
+                sessionId: requestedSessionId,
+                requestedSchema:
+                  ompElicitation === "plan"
+                    ? {
+                        type: "object" as const,
+                        properties: {
+                          value: {
+                            type: "string" as const,
+                            title: "Plan approval",
+                            enum: ["Approve and execute", "Refine plan"],
+                          },
+                        },
+                        required: ["value"],
+                      }
+                    : {
+                        type: "object" as const,
+                        properties: {
+                          q0: {
+                            type: "string" as const,
+                            title: "Target",
+                            oneOf: [
+                              { const: "web", title: "Web" },
+                              { const: "mobile", title: "Mobile" },
+                            ],
+                          },
+                          q0__other: { type: "string" as const, title: "Other target" },
+                          q1: {
+                            type: "array" as const,
+                            title: "Checks",
+                            items: { type: "string" as const, enum: ["tests", "lint"] },
+                          },
+                          notes: { type: "string" as const, title: "Notes" },
+                          enabled: { type: "boolean" as const, title: "Enabled" },
+                          retries: { type: "integer" as const, title: "Retries", minimum: 0 },
+                        },
+                        required: ["q0", "q1", "notes", "enabled", "retries"],
+                      },
+              } satisfies AcpSchema.ElicitationRequest);
+        const response = yield* agent.client.elicit(elicitation);
+        if (clientResponseLogPath) {
+          yield* Effect.sync(() =>
+            NodeFS.appendFileSync(
+              clientResponseLogPath,
+              `${encodeUnknownJson({ method: "session/elicitation", response })}\n`,
+              "utf8",
+            ),
+          );
+        }
+        return { stopReason: response.action.action === "cancel" ? "cancelled" : "end_turn" };
       }
 
       if (emitXAiAskUserQuestion) {

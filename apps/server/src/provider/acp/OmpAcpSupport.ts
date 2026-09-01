@@ -85,6 +85,7 @@ export function buildOmpAcpSpawnInput(input: OmpAcpSpawnOptions): AcpSessionRunt
     args: ["acp", "--approval-mode", OMP_APPROVAL_MODE_BY_RUNTIME_MODE[input.runtimeMode]],
     cwd: input.cwd,
     env: buildOmpProcessEnvironment(input.environment, input.agentDir),
+    forceKillAfter: "2 seconds",
   };
 }
 

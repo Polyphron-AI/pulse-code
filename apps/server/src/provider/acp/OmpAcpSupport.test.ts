@@ -45,6 +45,7 @@ describe("buildOmpAcpSpawnInput", () => {
         PI_PROFILE: "",
         PI_CODING_AGENT_DIR: "C:\\pulse\\userdata\\providers\\omp\\omp_work",
       },
+      forceKillAfter: "2 seconds",
     });
   });
 
