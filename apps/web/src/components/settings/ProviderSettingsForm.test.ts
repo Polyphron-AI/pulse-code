@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vite-plus/test";
 import { ProviderDriverKind } from "@t3tools/contracts";
 
+import { PROVIDER_ICON_BY_PROVIDER } from "../chat/providerIconUtils";
+import { PiAgentIcon } from "../Icons";
 import { DRIVER_OPTION_BY_VALUE } from "./providerDriverMeta";
 import {
   deriveProviderSettingsFields,
@@ -10,6 +12,16 @@ import {
 } from "./ProviderSettingsForm";
 
 describe("ProviderSettingsForm helpers", () => {
+  it("exposes Oh My Pi with its executable path setting", () => {
+    const ompKind = ProviderDriverKind.make("omp");
+    const omp = DRIVER_OPTION_BY_VALUE[ompKind];
+
+    expect(omp?.label).toBe("Oh My Pi");
+    expect(omp?.icon).toBe(PiAgentIcon);
+    expect(PROVIDER_ICON_BY_PROVIDER[ompKind]).toBe(PiAgentIcon);
+    expect(deriveProviderSettingsFields(omp!).map((field) => field.key)).toEqual(["binaryPath"]);
+  });
+
   it("derives visible provider config fields from the client definition schema", () => {
     const codex = DRIVER_OPTION_BY_VALUE[ProviderDriverKind.make("codex")];
 
