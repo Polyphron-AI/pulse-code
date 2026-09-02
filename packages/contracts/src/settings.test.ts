@@ -672,3 +672,12 @@ describe("ClientSettings browser link target", () => {
     expect(() => decodeClientSettingsPatch({ browserLinkTarget: "remote" })).toThrow();
   });
 });
+
+describe("ClientSettings proactive panels", () => {
+  it("is opt-in and accepts client-local updates", () => {
+    expect(decodeClientSettings({}).proactivePanelsEnabled).toBe(false);
+    expect(decodeClientSettingsPatch({ proactivePanelsEnabled: true }).proactivePanelsEnabled).toBe(
+      true,
+    );
+  });
+});

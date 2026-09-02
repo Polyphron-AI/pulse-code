@@ -43,6 +43,8 @@ Draft pull requests show a gray draft indicator in the sidebar on desktop, web, 
 - Open several reviews from the **Pull requests** page as tabs in the right panel
 - While working in a thread, open linked reviews in the same compact right-panel tabs without
   leaving the conversation
+- Enable **Settings → General → Proactive panels** to open a newly linked review automatically and
+  switch to the completed turn's diff when agent work finishes
 - Open the review directly in your browser with one click
 - Command-click (Control-click on Windows and Linux) a pull request number in the sidebar to open it in your browser instead of in Pulse Code
 - Check out a teammate's branch to review code locally
