@@ -46,6 +46,7 @@ import {
   FolderPlusIcon,
   GitBranchIcon,
   MessageSquareIcon,
+  NetworkIcon,
   PinIcon,
   PlusIcon,
   SearchIcon,
@@ -67,7 +68,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from "react";
-import { useParams, useRouter } from "@tanstack/react-router";
+import { useLocation, useParams, useRouter } from "@tanstack/react-router";
 
 import {
   isAtomCommandInterrupted,
@@ -106,7 +107,13 @@ import { useCopyToClipboard } from "../hooks/useCopyToClipboard";
 import { useLocalStorage } from "../hooks/useLocalStorage";
 import { useNowMinute } from "../hooks/useNowMinute";
 import { useEnvironments, usePrimaryEnvironmentId } from "../state/environments";
-import { useProjects, useThreadShells } from "../state/entities";
+import {
+  useAllEnvironmentShellsBootstrapped,
+  useProjects,
+  useScheduleCatalog,
+  useThreadShells,
+} from "../state/entities";
+import { environmentShellSummaryAtom } from "../state/shell";
 import { environmentServerConfigsAtom, primaryServerKeybindingsAtom } from "../state/server";
 import { vcsEnvironment } from "../state/vcs";
 import { threadEnvironment } from "../state/threads";
@@ -123,6 +130,8 @@ import { cn } from "~/lib/utils";
 import { buildThreadActionMenuItems } from "./threadActionMenu.logic";
 import {
   buildBulkTitleRegenerationContextMenuItem,
+  buildSidebarScheduleRows,
+  countActiveSidebarSchedules,
   formatWorkingDurationLabel,
   firstValidTimestampMs,
   hasUnseenCompletion,
@@ -134,13 +143,18 @@ import {
   resolveSettledTimestamp,
   resolveSidebarThreadStatus,
   searchSidebarThreadsByTitle,
+  searchSidebarScheduleRows,
+  shouldShowSidebarThread,
   shouldCreateNewThreadInCurrentProject,
   resolveWorkingStartedAt,
   sortLogicalProjectsForSidebar,
   sortPinnedThreadsForSidebar,
   sortSettledThreadsForSidebar,
   sortThreadsForSidebar,
+  type SidebarMode,
+  type SidebarScheduleRow,
 } from "./Sidebar.logic";
+import { summarizeWorkspaceThreads } from "./workspace/OrcaWorkspace.logic";
 import { resolveLocalCheckoutBranchMismatch } from "./BranchToolbar.logic";
 import {
   ThreadWorktreeIndicator,
@@ -1707,11 +1721,86 @@ const SidebarSearchResultRow = memo(function SidebarSearchResultRow(props: {
   );
 });
 
+const SidebarScheduleResultRow = memo(function SidebarScheduleResultRow(props: {
+  readonly row: SidebarScheduleRow;
+  readonly isActive: boolean;
+  readonly projectCwd: string | null;
+  readonly projectFaviconPath: string | null;
+  readonly environmentLabel: string | null;
+  readonly resultId?: string;
+  readonly isHighlighted?: boolean;
+  readonly onActivate: (row: SidebarScheduleRow) => void;
+}) {
+  const { row } = props;
+  const environmentSuffix = props.environmentLabel ? ` · ${props.environmentLabel}` : "";
+  return (
+    <li
+      id={props.resultId}
+      className={cn(
+        "list-none rounded-md [content-visibility:auto] [contain-intrinsic-size:auto_72px]",
+        props.isHighlighted && "ring-1 ring-sidebar-ring",
+      )}
+    >
+      <button
+        type="button"
+        data-testid="sidebar-schedule-row"
+        onClick={() => props.onActivate(row)}
+        className={cn(
+          "group/sidebar-schedule flex min-h-[4.5rem] w-full cursor-pointer flex-col gap-1 rounded-md px-2.5 py-2 text-left outline-none transition-colors",
+          props.isActive
+            ? "bg-sidebar-row-active text-sidebar-foreground"
+            : "text-sidebar-foreground hover:bg-sidebar-row-hover",
+        )}
+      >
+        <span className="flex min-w-0 items-center gap-2 text-[11px] text-sidebar-muted-foreground">
+          <ProjectFavicon
+            environmentId={row.environmentId}
+            cwd={props.projectCwd ?? ""}
+            faviconPath={props.projectFaviconPath}
+            className="size-4 shrink-0"
+            fallbackIcon={FolderIcon}
+          />
+          <span className="min-w-0 flex-1 truncate">
+            {row.projectLabel}
+            {environmentSuffix}
+          </span>
+          <span className="shrink-0 tabular-nums text-secondary-label">{row.timingLabel}</span>
+        </span>
+        <span className="flex min-w-0 items-center gap-1.5 text-sm font-medium text-foreground/90">
+          <CalendarClockIcon className="size-3.5 shrink-0 text-primary/70" aria-hidden />
+          <span className="truncate">{row.title}</span>
+        </span>
+        <span className="flex min-w-0 items-center gap-2 pl-5 text-[11px]">
+          <span
+            className={cn(
+              "truncate",
+              row.stateLabel === "Not initialized yet"
+                ? "text-primary/80"
+                : row.stateLabel === "Thread unavailable" || row.stateLabel === "Last run failed"
+                  ? "text-destructive"
+                  : "text-sidebar-muted-foreground",
+            )}
+          >
+            {row.stateLabel}
+          </span>
+          <span className="ml-auto shrink-0 text-secondary-label">
+            {row.paused ? row.statusLabel : row.statusLabel === "Active" ? "" : row.statusLabel}
+          </span>
+        </span>
+      </button>
+    </li>
+  );
+});
+
 export default function Sidebar() {
   const projects = useProjects();
   const projectOrder = useUiStateStore((store) => store.projectOrder);
   const threads = useThreadShells();
+  const scheduleCatalog = useScheduleCatalog();
+  const allEnvironmentShellsBootstrapped = useAllEnvironmentShellsBootstrapped();
+  const shellSummary = useAtomValue(environmentShellSummaryAtom);
   const router = useRouter();
+  const pathname = useLocation({ select: (location) => location.pathname });
   const { isMobile, setOpenMobile } = useSidebar();
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
   const autoSettleAfterDays = useClientSettings((s) => s.sidebarAutoSettleAfterDays);
@@ -1924,6 +2013,7 @@ export default function Sidebar() {
 
   // Project scope: one menu above the list. Scoping filters the list without
   // making the header width depend on the number or length of project names.
+  const [sidebarMode, setSidebarMode] = useState<SidebarMode>("projects");
   const [projectScopeKey, setProjectScopeKey] = useState<string | null>(null);
   const scopedProjectGroup = useMemo(
     () =>
@@ -1956,6 +2046,7 @@ export default function Sidebar() {
   // an open never-left draft, which only softens the empty state.
   const routeDraftIdForRows = routeTarget?.kind === "draft" ? routeTarget.draftId : null;
   const visibleDraftSessionCount = useComposerDraftStore((store) => {
+    if (sidebarMode === "scheduled") return 0;
     let count = 0;
     for (const [draftKey, session] of Object.entries(store.draftThreadsByThreadKey)) {
       if (session.promotedTo != null) {
@@ -1978,7 +2069,59 @@ export default function Sidebar() {
   // hidden now, and bulk actions must never count or touch invisible rows.
   useEffect(() => {
     clearSelection();
-  }, [clearSelection, projectScopeKey]);
+  }, [clearSelection, projectScopeKey, sidebarMode]);
+
+  const scheduledRows = useMemo(
+    () =>
+      buildSidebarScheduleRows({
+        schedules: scheduleCatalog.schedules,
+        projects: projects.map((project) => ({
+          ...project,
+          title:
+            projectDisplayNameByKey.get(`${project.environmentId}:${project.id}`) ?? project.title,
+        })),
+        threads,
+      }),
+    [projectDisplayNameByKey, projects, scheduleCatalog.schedules, threads],
+  );
+  const activeScheduleCount = useMemo(
+    () => countActiveSidebarSchedules(scheduleCatalog.schedules),
+    [scheduleCatalog.schedules],
+  );
+  const connectedEnvironmentIds = useMemo(
+    () =>
+      new Set(
+        environments
+          .filter((environment) => environment.connection.phase === "connected")
+          .map((environment) => environment.environmentId),
+      ),
+    [environments],
+  );
+  const workspaceSummary = useMemo(
+    () => summarizeWorkspaceThreads(threads, connectedEnvironmentIds),
+    [connectedEnvironmentIds, threads],
+  );
+  const isWorkspaceSummarySyncing =
+    !allEnvironmentShellsBootstrapped || shellSummary.hasSynchronizingShell;
+  const workspaceStatusLabel = isWorkspaceSummarySyncing
+    ? "syncing"
+    : workspaceSummary.attention > 0
+      ? `${workspaceSummary.attention} ${workspaceSummary.attention === 1 ? "needs" : "need"} you`
+      : workspaceSummary.working > 0
+        ? `${workspaceSummary.working} working`
+        : workspaceSummary.connected > 0
+          ? `${workspaceSummary.ready} ready`
+          : workspaceSummary.lastKnown > 0
+            ? `${workspaceSummary.lastKnown} last known`
+            : "no active work";
+  const isWorkspaceRoute = pathname === "/workspace";
+
+  const handleWorkspaceClick = useCallback(() => {
+    if (isMobile) setOpenMobile(false);
+    if (!isWorkspaceRoute) {
+      void router.navigate({ to: "/workspace" });
+    }
+  }, [isMobile, isWorkspaceRoute, router, setOpenMobile]);
 
   const handleProjectSettings = useCallback(
     (event: ReactMouseEvent<HTMLButtonElement>, projectGroup: SidebarProjectSnapshot) => {
@@ -2016,11 +2159,8 @@ export default function Sidebar() {
     // memo exactly at the next wake boundary.
     void snoozeWakeTick;
     const preciseNow = new Date().toISOString();
-    const visible = threads.filter(
-      (thread) =>
-        thread.archivedAt === null &&
-        (scopedProjectKeys === null ||
-          scopedProjectKeys.has(`${thread.environmentId}:${thread.projectId}`)),
+    const visible = threads.filter((thread) =>
+      shouldShowSidebarThread({ thread, mode: sidebarMode, scopedProjectKeys }),
     );
     const pinned: EnvironmentThreadShell[] = [];
     const active: EnvironmentThreadShell[] = [];
@@ -2102,6 +2242,7 @@ export default function Sidebar() {
     nowMinute,
     scopedProjectKeys,
     serverConfigs,
+    sidebarMode,
     snoozeWakeTick,
     threads,
   ]);
@@ -2118,9 +2259,18 @@ export default function Sidebar() {
     () => searchSidebarThreadsByTitle(searchableThreads, threadSearchQuery),
     [searchableThreads, threadSearchQuery],
   );
-  const threadSearchResultOrderKey = threadSearchResults
-    .map((thread) => scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)))
-    .join("\0");
+  const scheduleSearchResults = useMemo(
+    () => searchSidebarScheduleRows(scheduledRows, threadSearchQuery),
+    [scheduledRows, threadSearchQuery],
+  );
+  const searchResultCount =
+    sidebarMode === "scheduled" ? scheduleSearchResults.length : threadSearchResults.length;
+  const threadSearchResultOrderKey =
+    sidebarMode === "scheduled"
+      ? scheduleSearchResults.map((row) => row.key).join("\0")
+      : threadSearchResults
+          .map((thread) => scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)))
+          .join("\0");
 
   useEffect(() => {
     setActiveSearchResultIndex(0);
@@ -2129,9 +2279,11 @@ export default function Sidebar() {
   useEffect(() => {
     if (!isSearchingThreads) return;
     document
-      .getElementById(`sidebar-thread-search-result-${activeSearchResultIndex}`)
+      .getElementById(
+        `${sidebarMode === "scheduled" ? "sidebar-schedule-search-result" : "sidebar-thread-search-result"}-${activeSearchResultIndex}`,
+      )
       ?.scrollIntoView({ block: "nearest" });
-  }, [activeSearchResultIndex, isSearchingThreads, threadSearchResultOrderKey]);
+  }, [activeSearchResultIndex, isSearchingThreads, sidebarMode, threadSearchResultOrderKey]);
 
   // Arm a timeout for the earliest upcoming wake so the shelf empties the
   // moment a snooze expires instead of on the next minute tick. Sorted
@@ -2320,6 +2472,26 @@ export default function Sidebar() {
     [clearSelection, isMobile, router, setOpenMobile, setSelectionAnchor],
   );
 
+  const activateScheduledRow = useCallback(
+    (row: SidebarScheduleRow) => {
+      if (row.threadId !== null) {
+        const threadExists = threads.some(
+          (thread) =>
+            thread.environmentId === row.environmentId &&
+            thread.id === row.threadId &&
+            thread.archivedAt === null,
+        );
+        if (threadExists) {
+          navigateToThread(scopeThreadRef(row.environmentId, row.threadId));
+          return;
+        }
+      }
+      if (isMobile) setOpenMobile(false);
+      void router.navigate({ to: "/settings/scheduled-chats" });
+    },
+    [isMobile, navigateToThread, router, setOpenMobile, threads],
+  );
+
   const navigateToDraft = useCallback(
     (draftId: DraftId) => {
       // Unconditional: also drops a stale selection anchor left by
@@ -2339,12 +2511,27 @@ export default function Sidebar() {
     setThreadSearchQuery("");
     setActiveSearchResultIndex(0);
   }, []);
+  const changeSidebarMode = useCallback(
+    (mode: SidebarMode) => {
+      setSidebarMode(mode);
+      setProjectScopeMenuOpen(false);
+      clearThreadSearch();
+    },
+    [clearThreadSearch],
+  );
   const selectThreadSearchResult = useCallback(
     (thread: EnvironmentThreadShell) => {
       clearThreadSearch();
       navigateToThread(scopeThreadRef(thread.environmentId, thread.id));
     },
     [clearThreadSearch, navigateToThread],
+  );
+  const selectScheduleSearchResult = useCallback(
+    (row: SidebarScheduleRow) => {
+      clearThreadSearch();
+      activateScheduledRow(row);
+    },
+    [activateScheduledRow, clearThreadSearch],
   );
   const handleThreadSearchKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLInputElement>) => {
@@ -2357,30 +2544,37 @@ export default function Sidebar() {
         clearThreadSearch();
         return;
       }
-      if (threadSearchResults.length === 0) return;
+      if (searchResultCount === 0) return;
       if (event.key === "ArrowDown") {
         event.preventDefault();
-        setActiveSearchResultIndex((index) => (index + 1) % threadSearchResults.length);
+        setActiveSearchResultIndex((index) => (index + 1) % searchResultCount);
         return;
       }
       if (event.key === "ArrowUp") {
         event.preventDefault();
-        setActiveSearchResultIndex(
-          (index) => (index - 1 + threadSearchResults.length) % threadSearchResults.length,
-        );
+        setActiveSearchResultIndex((index) => (index - 1 + searchResultCount) % searchResultCount);
         return;
       }
       if (event.key === "Enter") {
         event.preventDefault();
-        const result = threadSearchResults[activeSearchResultIndex];
-        if (result) selectThreadSearchResult(result);
+        if (sidebarMode === "scheduled") {
+          const result = scheduleSearchResults[activeSearchResultIndex];
+          if (result) selectScheduleSearchResult(result);
+        } else {
+          const result = threadSearchResults[activeSearchResultIndex];
+          if (result) selectThreadSearchResult(result);
+        }
       }
     },
     [
       activeSearchResultIndex,
       clearThreadSearch,
       isSearchingThreads,
+      scheduleSearchResults,
+      searchResultCount,
+      selectScheduleSearchResult,
       selectThreadSearchResult,
+      sidebarMode,
       threadSearchResults,
     ],
   );
@@ -3378,6 +3572,37 @@ export default function Sidebar() {
           // Lifted above the stage backdrop, whose fade bleeds below the
           // header and would otherwise paint across the search row's outline.
           <SidebarGroup className="relative z-[1] gap-1 p-[var(--sidebar-content-inset)]">
+            <SidebarMenuButton
+              type="button"
+              size="sm"
+              isActive={isWorkspaceRoute}
+              aria-current={isWorkspaceRoute ? "page" : undefined}
+              aria-label={`Open ORCA workspace, ${workspaceStatusLabel}`}
+              className={cn(
+                "relative h-8 gap-2 rounded-md px-2 focus-visible:ring-offset-1 focus-visible:ring-offset-sidebar",
+                isWorkspaceRoute
+                  ? "bg-sidebar-row-active text-sidebar-foreground"
+                  : "text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground",
+              )}
+              onClick={handleWorkspaceClick}
+            >
+              <span
+                className="relative flex size-4 shrink-0 items-center justify-center"
+                aria-hidden
+              >
+                <NetworkIcon className="size-4" />
+              </span>
+              <span className="min-w-0 flex-1 truncate text-left text-sm font-medium">
+                ORCA workspace
+              </span>
+              <span className="shrink-0 text-[10px] tabular-nums text-sidebar-muted-foreground/80">
+                {workspaceStatusLabel}
+              </span>
+              <span
+                className="pointer-events-none absolute left-1/2 top-1/2 size-[max(100%,3rem)] -translate-1/2 pointer-fine:hidden"
+                aria-hidden
+              />
+            </SidebarMenuButton>
             <div className="flex items-center gap-1">
               <div className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground">
                 <SearchIcon className="size-4 shrink-0 text-sidebar-muted-foreground/80" />
@@ -3393,19 +3618,23 @@ export default function Sidebar() {
                   }}
                   onKeyDown={handleThreadSearchKeyDown}
                   placeholder="Search"
-                  aria-label="Search threads"
+                  aria-label={
+                    sidebarMode === "scheduled" ? "Search scheduled chats" : "Search threads"
+                  }
                   role="combobox"
                   aria-autocomplete="list"
-                  aria-expanded={isSearchingThreads && threadSearchResults.length > 0}
+                  aria-expanded={isSearchingThreads && searchResultCount > 0}
                   aria-controls={
-                    isSearchingThreads && threadSearchResults.length > 0
-                      ? "sidebar-thread-search-results"
-                      : undefined
+                    !isSearchingThreads || searchResultCount === 0
+                      ? undefined
+                      : sidebarMode === "scheduled"
+                        ? "sidebar-schedule-search-results"
+                        : "sidebar-thread-search-results"
                   }
                   aria-activedescendant={
-                    isSearchingThreads && threadSearchResults[activeSearchResultIndex]
-                      ? `sidebar-thread-search-result-${activeSearchResultIndex}`
-                      : undefined
+                    !isSearchingThreads || searchResultCount === 0
+                      ? undefined
+                      : `${sidebarMode === "scheduled" ? "sidebar-schedule-search-result" : "sidebar-thread-search-result"}-${activeSearchResultIndex}`
                   }
                   className="min-w-0 flex-1 [&_[data-slot=input]]:h-auto [&_[data-slot=input]]:p-0 [&_[data-slot=input]]:leading-normal [&_[data-slot=input]]:text-sm [&_[data-slot=input]]:font-medium [&_[data-slot=input]]:text-sidebar-foreground [&_[data-slot=input]]:placeholder:text-sidebar-muted-foreground"
                 />
@@ -3415,7 +3644,7 @@ export default function Sidebar() {
                     size="icon-micro"
                     variant="ghost"
                     className="shrink-0 text-sidebar-muted-foreground hover:bg-sidebar-control-surface hover:text-sidebar-foreground"
-                    aria-label="Clear thread search"
+                    aria-label="Clear search"
                     onClick={() => {
                       clearThreadSearch();
                       threadSearchInputRef.current?.focus();
@@ -3469,31 +3698,37 @@ export default function Sidebar() {
                 </Tooltip>
               </div>
             </div>
-            {projectGroups.length > 0 ? (
-              <div className="flex items-center gap-1">
-                <Menu open={projectScopeMenuOpen} onOpenChange={setProjectScopeMenuOpen}>
+            <div className="flex items-center gap-1">
+              <div
+                role="group"
+                aria-label="Sidebar view"
+                className="flex min-w-0 flex-1 rounded-lg border border-sidebar-border bg-sidebar-accent/20 p-0.5"
+              >
+                <Menu
+                  open={projectScopeMenuOpen}
+                  onOpenChange={(open) => {
+                    if (open) changeSidebarMode("projects");
+                    setProjectScopeMenuOpen(open);
+                  }}
+                >
                   <MenuTrigger
                     render={
                       <SidebarMenuButton
-                        aria-label="Filter threads by project"
-                        className="min-w-0 flex-1 ps-[calc(var(--sidebar-row-content-inset)-1px)] focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar"
+                        aria-label={`Projects: ${scopedProjectGroup?.displayName ?? "All projects"}`}
+                        aria-pressed={sidebarMode === "projects"}
+                        className={cn(
+                          "relative h-8 min-w-0 flex-1 justify-center gap-1.5 rounded-md px-2 text-xs font-medium focus-visible:ring-offset-1 focus-visible:ring-offset-sidebar",
+                          sidebarMode === "projects"
+                            ? "bg-sidebar-row-active text-sidebar-foreground shadow-xs after:absolute after:inset-x-7 after:-bottom-1 after:h-0.5 after:rounded-full after:bg-primary"
+                            : "text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground",
+                        )}
                       />
                     }
                   >
-                    {scopedProjectGroup ? (
-                      <ProjectFavicon
-                        environmentId={scopedProjectGroup.environmentId}
-                        cwd={scopedProjectGroup.workspaceRoot}
-                        faviconPath={scopedProjectGroup.faviconPath}
-                        className="size-4 shrink-0"
-                      />
-                    ) : (
-                      <FolderIcon className="size-4 shrink-0" />
-                    )}
-                    <span className="min-w-0 flex-1 truncate">
-                      {scopedProjectGroup?.displayName ?? "All projects"}
+                    <span className="min-w-0 truncate">
+                      {scopedProjectGroup?.displayName ?? "Projects"}
                     </span>
-                    <ChevronDownIcon className="-mr-px size-4 shrink-0" />
+                    <ChevronDownIcon className="size-3.5 shrink-0" />
                   </MenuTrigger>
                   <MenuPopup align="start" className="w-(--anchor-width)">
                     <MenuRadioGroup
@@ -3545,34 +3780,100 @@ export default function Sidebar() {
                     </MenuRadioGroup>
                   </MenuPopup>
                 </Menu>
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <SidebarMenuButton
-                        size="icon"
-                        className="relative shrink-0 focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar"
-                        onClick={openAddProjectCommandPalette}
-                        type="button"
-                        aria-label="New project"
-                      />
-                    }
+                <button
+                  type="button"
+                  aria-pressed={sidebarMode === "scheduled"}
+                  aria-label={`Scheduled chats, ${activeScheduleCount} active`}
+                  onClick={() => changeSidebarMode("scheduled")}
+                  className={cn(
+                    "relative flex h-8 min-w-0 flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-md px-2 text-xs font-medium outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:ring-offset-1 focus-visible:ring-offset-sidebar",
+                    sidebarMode === "scheduled"
+                      ? "bg-sidebar-row-active text-sidebar-foreground shadow-xs after:absolute after:inset-x-7 after:-bottom-1 after:h-0.5 after:rounded-full after:bg-primary"
+                      : "text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground",
+                  )}
+                >
+                  <span className="truncate">Scheduled</span>
+                  <span
+                    className={cn(
+                      "inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full px-1 font-mono text-[9px] font-semibold tabular-nums",
+                      sidebarMode === "scheduled"
+                        ? "bg-primary/15 text-primary"
+                        : "bg-sidebar-accent text-sidebar-muted-foreground",
+                    )}
                   >
-                    <FolderPlusIcon />
-                    <span
-                      className="pointer-events-none absolute left-1/2 top-1/2 size-[max(100%,3rem)] -translate-1/2 pointer-fine:hidden"
-                      aria-hidden="true"
-                    />
-                  </TooltipTrigger>
-                  <TooltipPopup side="right">New project</TooltipPopup>
-                </Tooltip>
+                    {activeScheduleCount}
+                  </span>
+                </button>
               </div>
-            ) : null}
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <SidebarMenuButton
+                      size="icon"
+                      className="relative shrink-0 focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar"
+                      onClick={openAddProjectCommandPalette}
+                      type="button"
+                      aria-label="New project"
+                    />
+                  }
+                >
+                  <FolderPlusIcon />
+                  <span
+                    className="pointer-events-none absolute left-1/2 top-1/2 size-[max(100%,3rem)] -translate-1/2 pointer-fine:hidden"
+                    aria-hidden="true"
+                  />
+                </TooltipTrigger>
+                <TooltipPopup side="right">New project</TooltipPopup>
+              </Tooltip>
+            </div>
           </SidebarGroup>
         }
       >
         <SidebarGroup className="ps-[calc(var(--sidebar-content-inset)+1px)] pe-[var(--sidebar-content-inset)] pb-1 pt-0">
           {isSearchingThreads ? (
-            threadSearchResults.length > 0 ? (
+            sidebarMode === "scheduled" ? (
+              scheduleSearchResults.length > 0 ? (
+                <ul
+                  id="sidebar-schedule-search-results"
+                  aria-label="Scheduled chat search results"
+                  className="flex flex-col gap-px"
+                >
+                  {scheduleSearchResults.map((row, index) => (
+                    <SidebarScheduleResultRow
+                      key={row.key}
+                      resultId={`sidebar-schedule-search-result-${index}`}
+                      isHighlighted={activeSearchResultIndex === index}
+                      row={row}
+                      isActive={
+                        row.threadId !== null &&
+                        routeThreadKey ===
+                          scopedThreadKey(scopeThreadRef(row.environmentId, row.threadId))
+                      }
+                      projectCwd={
+                        row.projectId === null
+                          ? null
+                          : (projectCwdByKey.get(`${row.environmentId}:${row.projectId}`) ?? null)
+                      }
+                      projectFaviconPath={
+                        row.projectId === null
+                          ? null
+                          : (projectFaviconPathByKey.get(`${row.environmentId}:${row.projectId}`) ??
+                            null)
+                      }
+                      environmentLabel={environmentLabelById.get(row.environmentId) ?? null}
+                      onActivate={selectScheduleSearchResult}
+                    />
+                  ))}
+                </ul>
+              ) : (
+                <p
+                  role="status"
+                  className="px-2 py-6 text-center text-xs text-sidebar-muted-foreground"
+                >
+                  No scheduled chats found
+                </p>
+              )
+            ) : threadSearchResults.length > 0 ? (
               <TooltipProvider
                 key="sidebar-thread-search-tooltips-150"
                 delay={150}
@@ -3627,7 +3928,41 @@ export default function Sidebar() {
               </p>
             )
           ) : null}
-          {!isSearchingThreads ? (
+          {!isSearchingThreads && sidebarMode === "scheduled" ? (
+            <>
+              <div className="mb-1 flex h-7 items-center border-y border-sidebar-border/50 px-2.5 text-[10px] font-medium uppercase tracking-wide text-sidebar-muted-foreground/70">
+                <span>Scheduled chats</span>
+                <span className="ml-auto normal-case tracking-normal">all projects</span>
+              </div>
+              <ul role="list" aria-label="Scheduled chats" className="flex flex-col gap-px">
+                {scheduledRows.map((row) => (
+                  <SidebarScheduleResultRow
+                    key={row.key}
+                    row={row}
+                    isActive={
+                      row.threadId !== null &&
+                      routeThreadKey ===
+                        scopedThreadKey(scopeThreadRef(row.environmentId, row.threadId))
+                    }
+                    projectCwd={
+                      row.projectId === null
+                        ? null
+                        : (projectCwdByKey.get(`${row.environmentId}:${row.projectId}`) ?? null)
+                    }
+                    projectFaviconPath={
+                      row.projectId === null
+                        ? null
+                        : (projectFaviconPathByKey.get(`${row.environmentId}:${row.projectId}`) ??
+                          null)
+                    }
+                    environmentLabel={environmentLabelById.get(row.environmentId) ?? null}
+                    onActivate={activateScheduledRow}
+                  />
+                ))}
+              </ul>
+            </>
+          ) : null}
+          {!isSearchingThreads && sidebarMode === "projects" ? (
             <TooltipProvider
               key="sidebar-thread-tooltips-150"
               delay={150}
@@ -3889,7 +4224,32 @@ export default function Sidebar() {
               </ul>
             </TooltipProvider>
           ) : null}
+          {!isSearchingThreads && sidebarMode === "scheduled" && scheduledRows.length === 0 ? (
+            <div className="flex flex-col items-center gap-2 px-2 py-6 text-center text-xs text-muted-foreground/60">
+              {!allEnvironmentShellsBootstrapped ? (
+                <span>Loading scheduled chats…</span>
+              ) : scheduleCatalog.environmentCount === 0 ? (
+                <span>No environments connected</span>
+              ) : scheduleCatalog.loadedEnvironmentCount > 0 &&
+                scheduleCatalog.supportedEnvironmentCount === 0 ? (
+                <span>Scheduled chats are unavailable on the connected server.</span>
+              ) : (
+                <>
+                  <span>No scheduled chats yet</span>
+                  <button
+                    type="button"
+                    onClick={() => void router.navigate({ to: "/settings/scheduled-chats" })}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-sidebar-border px-2.5 py-1 text-[11px] font-medium text-sidebar-muted-foreground transition-colors hover:bg-sidebar-row-hover hover:text-sidebar-foreground"
+                  >
+                    <CalendarClockIcon className="-mx-0.5 size-3" />
+                    Manage schedules
+                  </button>
+                </>
+              )}
+            </div>
+          ) : null}
           {!isSearchingThreads &&
+          sidebarMode === "projects" &&
           visibleDraftSessionCount === 0 &&
           pinnedThreads.length +
             activeThreads.length +

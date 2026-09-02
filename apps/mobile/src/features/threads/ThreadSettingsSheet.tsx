@@ -281,13 +281,14 @@ type ThreadSettingsSubmenuPage =
   | { readonly kind: "runtime" };
 
 type ThreadSettingsSessionProps = {
+  readonly title?: string;
   readonly providerGroups: ReadonlyArray<ProviderGroup>;
   readonly selectedModel: ModelSelection | null;
   readonly onSelectModel: (option: ModelOption) => void;
   readonly optionDescriptors: ReadonlyArray<ProviderOptionDescriptor>;
   readonly onUpdateOptionSelections: (selections: ReadonlyArray<ProviderOptionSelection>) => void;
-  readonly runtimeMode: RuntimeMode;
-  readonly onUpdateRuntimeMode: (mode: RuntimeMode) => void;
+  readonly runtimeMode?: RuntimeMode;
+  readonly onUpdateRuntimeMode?: (mode: RuntimeMode) => void;
 };
 
 export type ExistingThreadSettingsRouteSession = ThreadSettingsSessionProps & {
@@ -332,9 +333,10 @@ export function useExistingThreadSettingsRoutePresentation() {
 }
 
 type ThreadSettingsSessionValue = {
+  readonly title: string;
   readonly providerGroups: ReadonlyArray<ProviderGroup>;
-  readonly runtimeMode: RuntimeMode;
-  readonly onUpdateRuntimeMode: (mode: RuntimeMode) => void;
+  readonly runtimeMode: RuntimeMode | undefined;
+  readonly onUpdateRuntimeMode: ((mode: RuntimeMode) => void) | undefined;
   readonly displayedDescriptors: ReadonlyArray<ProviderOptionDescriptor>;
   readonly providerExpansionOverrides: ReadonlySet<string>;
   readonly hasLegacyModels: boolean;
@@ -450,6 +452,7 @@ function ThreadSettingsSessionProvider(
 
   const value = useMemo<ThreadSettingsSessionValue>(
     () => ({
+      title: props.title ?? "Thread settings",
       providerGroups: props.providerGroups,
       runtimeMode: props.runtimeMode,
       onUpdateRuntimeMode: props.onUpdateRuntimeMode,
@@ -484,6 +487,7 @@ function ThreadSettingsSessionProvider(
       props.onUpdateRuntimeMode,
       props.providerGroups,
       props.runtimeMode,
+      props.title,
       searchQuery,
       showLegacyToggle,
       toggleProvider,
@@ -669,7 +673,9 @@ function ThreadSettingsOptionsItem(props: {
         className="mx-4 overflow-hidden rounded-2xl bg-card"
         layout={THREAD_SETTINGS_OPTIONS_LAYOUT_TRANSITION}
       >
-        {session.displayedDescriptors.map((descriptor) => {
+        {session.displayedDescriptors.map((descriptor, index) => {
+          const isLast =
+            session.runtimeMode === undefined && index === session.displayedDescriptors.length - 1;
           if (descriptor.type === "select") {
             return (
               <Animated.View
@@ -681,6 +687,7 @@ function ThreadSettingsOptionsItem(props: {
                 layout={THREAD_SETTINGS_OPTIONS_LAYOUT_TRANSITION}
               >
                 <DisclosureRow
+                  isLast={isLast}
                   label={descriptor.label}
                   value={getProviderOptionCurrentLabel(descriptor)}
                   onPress={() => props.onOpenSubmenu({ kind: "descriptor", id: descriptor.id })}
@@ -696,6 +703,7 @@ function ThreadSettingsOptionsItem(props: {
               layout={THREAD_SETTINGS_OPTIONS_LAYOUT_TRANSITION}
             >
               <SwitchRow
+                isLast={isLast}
                 label={descriptor.label}
                 value={descriptor.currentValue ?? false}
                 onValueChange={(value) => session.applyOptionChange(descriptor.id, value)}
@@ -703,16 +711,18 @@ function ThreadSettingsOptionsItem(props: {
             </Animated.View>
           );
         })}
-        <Animated.View layout={THREAD_SETTINGS_OPTIONS_LAYOUT_TRANSITION}>
-          <DisclosureRow
-            isLast
-            label="Runtime"
-            value={
-              RUNTIME_MODE_CHOICES.find((choice) => choice.mode === session.runtimeMode)?.label
-            }
-            onPress={() => props.onOpenSubmenu({ kind: "runtime" })}
-          />
-        </Animated.View>
+        {session.runtimeMode !== undefined && session.onUpdateRuntimeMode !== undefined ? (
+          <Animated.View layout={THREAD_SETTINGS_OPTIONS_LAYOUT_TRANSITION}>
+            <DisclosureRow
+              isLast
+              label="Runtime"
+              value={
+                RUNTIME_MODE_CHOICES.find((choice) => choice.mode === session.runtimeMode)?.label
+              }
+              onPress={() => props.onOpenSubmenu({ kind: "runtime" })}
+            />
+          </Animated.View>
+        ) : null}
       </Animated.View>
 
       {Platform.OS !== "ios" && session.hasLegacyModels ? (
@@ -856,7 +866,7 @@ function ThreadSettingsChoiceContent(props: {
       : undefined;
 
   const submenuContent =
-    props.submenu.kind === "runtime"
+    props.submenu.kind === "runtime" && session.onUpdateRuntimeMode !== undefined
       ? {
           rows: RUNTIME_MODE_CHOICES.map((choice) => ({
             id: choice.mode,
@@ -865,7 +875,7 @@ function ThreadSettingsChoiceContent(props: {
             selected: choice.mode === session.runtimeMode,
             onPress: () => {
               void Haptics.selectionAsync();
-              session.onUpdateRuntimeMode(choice.mode);
+              session.onUpdateRuntimeMode?.(choice.mode);
               props.onSelected();
             },
           })),
@@ -994,13 +1004,13 @@ function ThreadSettingsModelsScreen() {
         <AndroidScreenHeader
           actions={[
             {
-              accessibilityLabel: session.pendingModel ? "Save thread settings" : "Done",
+              accessibilityLabel: session.pendingModel ? `Save ${session.title}` : "Done",
               icon: "checkmark",
               onPress: commitAndClose,
             },
           ]}
           onBack={presentation.onClose}
-          title="Thread settings"
+          title={session.title}
         />
       ) : null}
       <NativeStackScreenOptions
@@ -1026,6 +1036,7 @@ function ThreadSettingsModelsScreen() {
               ]
             : undefined,
           headerShown: Platform.OS !== "android",
+          title: session.title,
           headerSearchBarOptions:
             Platform.OS === "ios" && !usesNativeMailSearchToolbar
               ? {

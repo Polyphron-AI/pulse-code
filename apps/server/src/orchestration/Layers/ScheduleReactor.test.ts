@@ -201,7 +201,11 @@ const makeTestBed = Effect.fn("makeTestBed")(function* (options?: {
       ),
     );
 
-  const seedProject = (projectId: ProjectId, workspaceRoot?: string) =>
+  const seedProject = (
+    projectId: ProjectId,
+    workspaceRoot?: string,
+    defaultModelSelection?: typeof modelSelection,
+  ) =>
     Effect.gen(function* () {
       yield* dispatch({
         type: "project.create",
@@ -209,6 +213,7 @@ const makeTestBed = Effect.fn("makeTestBed")(function* (options?: {
         projectId,
         title: `Project ${projectId}`,
         workspaceRoot: workspaceRoot ?? `/tmp/${projectId}`,
+        ...(defaultModelSelection !== undefined ? { defaultModelSelection } : {}),
         createdAt: baseNow,
       });
       // A prior thread gives the reactor a model selection to borrow for the
@@ -921,6 +926,33 @@ it.layer(NodeServices.layer)("ScheduleReactor", (it) => {
       const turns = ofType(bed.dispatched, "thread.turn.start");
       expect(turns).toHaveLength(1);
       expect(turns[0]!.modelSelection).toMatchObject(scheduleSelection);
+    }).pipe(Effect.provide(TestClock.layer())),
+  );
+
+  it.effect("a project default wins over a scheduled thread's borrowed selection", () =>
+    Effect.gen(function* () {
+      const projectSelection = {
+        instanceId: ProviderInstanceId.make("claude"),
+        model: "claude-haiku-4-5",
+      };
+      const bed = yield* makeTestBed();
+      // The seed thread carries the codex selection, while the schedule has no
+      // override and must therefore follow the project's current default.
+      yield* bed.seedProject(projectA, undefined, projectSelection);
+      yield* bed.seedSchedule();
+
+      yield* at("2026-01-02T09:00:00.000Z");
+      yield* bed.reactor.sweepNow;
+
+      const creates = ofType(bed.dispatched, "thread.create").filter(
+        (command) => command.origin === scheduleThreadOrigin(scheduleId),
+      );
+      expect(creates).toHaveLength(1);
+      expect(creates[0]!.modelSelection).toMatchObject(projectSelection);
+
+      const turns = ofType(bed.dispatched, "thread.turn.start");
+      expect(turns).toHaveLength(1);
+      expect(turns[0]!.modelSelection).toMatchObject(projectSelection);
     }).pipe(Effect.provide(TestClock.layer())),
   );
 

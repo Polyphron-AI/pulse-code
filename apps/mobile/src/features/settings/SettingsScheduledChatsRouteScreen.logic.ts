@@ -1,4 +1,9 @@
-import type { OrchestrationSchedule, ProjectId, ScheduleProjectState } from "@t3tools/contracts";
+import type {
+  OrchestrationSchedule,
+  ProjectId,
+  ScheduleProjectState,
+  ServerConfig,
+} from "@t3tools/contracts";
 
 export type MobileScheduleStatus = "active" | "running" | "paused" | "auto-paused" | "failed";
 
@@ -36,6 +41,18 @@ export function mobileScheduleHeadline(prompt: string): string {
   const firstLine = prompt.split(/\r?\n/, 1)[0]?.replace(/\s+/g, " ").trim();
   if (!firstLine) return "Scheduled chat";
   return firstLine.length > 78 ? `${firstLine.slice(0, 75)}…` : firstLine;
+}
+
+export function mobileScheduleModelLabel(
+  schedule: OrchestrationSchedule,
+  config: ServerConfig | null,
+): string {
+  const selection = schedule.modelSelection;
+  if (selection == null) return "Project default";
+  const model = config?.providers
+    .find((provider) => provider.instanceId === selection.instanceId)
+    ?.models.find((candidate) => candidate.slug === selection.model);
+  return model?.shortName ?? model?.name ?? selection.model;
 }
 
 export function latestScheduleOccurrence(
