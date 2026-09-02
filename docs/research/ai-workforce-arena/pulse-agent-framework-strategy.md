@@ -290,6 +290,7 @@ The following work exists on this branch. It is not a claim that the branch has 
 - Preparing OMP work seeds a reviewable prompt with human UX, efficiency, and effectiveness lenses. It does not send automatically, alter the user's sticky provider default, switch a started non-OMP thread in place, or claim a durable parent-child relationship.
 - OMP draft preparation receives the Pulse server process environment plus the selected OMP instance's configured overrides. It does not export Codex, ChatGPT, Claude, or other provider login or subscription state into OMP; executable and model readiness are distinct from credential verification, so the first turn can still fail on missing, expired, or unintended ambient authentication.
 - This implemented workspace slice is responsive in the web and desktop shell; it does not yet add a native route or launch surface to `apps/mobile` and must not be described as native-mobile integration.
+- Maintainer release tracking reads the official OMP and Orca GitHub releases and verifies the linked `Polyphron-AI/oh-my-pi` and `Polyphron-AI/orca` forks. The official repositories remain the release authorities; the organization forks are review and porting targets rather than runtime dependencies.
 
 The broader workforce domain, Pulse Vault grants and leases, Orca-style execution contract, Orca adapter, and issue-to-attempt-to-pull-request record described above remain future work. Orca has no provider registration or secret bridge in this branch.
 
@@ -328,11 +329,13 @@ Pulse should therefore remain the durable control plane and user-facing system o
 - [Pulse workforce comparison and recommendation](comparison-and-pulse-code-recommendation.md)
 - [Pi and Oh My Pi research](02-pi-and-oh-my-pi.md)
 - [Oh My Pi source and installation](https://github.com/can1357/oh-my-pi)
+- [Polyphron-AI Oh My Pi fork](https://github.com/Polyphron-AI/oh-my-pi)
 - [Oh My Pi releases](https://github.com/can1357/oh-my-pi/releases)
 - [Oh My Pi provider and credential resolution](https://github.com/can1357/oh-my-pi/blob/main/docs/providers.md)
 - [Oh My Pi settings and state roots](https://github.com/can1357/oh-my-pi/blob/main/docs/settings.md)
 - [Oh My Pi approval modes](https://github.com/can1357/oh-my-pi/blob/main/docs/approval-mode.md)
 - [Orca source and README](https://github.com/stablyai/orca)
+- [Polyphron-AI Orca fork](https://github.com/Polyphron-AI/orca)
 - [Orca releases](https://github.com/stablyai/orca/releases)
 - [Orca CLI worktree model](https://github.com/stablyai/orca/blob/main/skill-guides/orca-cli.md)
 - [Hermes Agent research](03-hermes-agent.md)
