@@ -199,6 +199,7 @@ const CODEX_DRIVER_KIND = ProviderDriverKind.make("codex");
 const CLAUDE_DRIVER_KIND = ProviderDriverKind.make("claudeAgent");
 const CURSOR_DRIVER_KIND = ProviderDriverKind.make("cursor");
 const GROK_DRIVER_KIND = ProviderDriverKind.make("grok");
+const OMP_DRIVER_KIND = ProviderDriverKind.make("omp");
 const OPENCODE_DRIVER_KIND = ProviderDriverKind.make("opencode");
 
 export const DEFAULT_MODEL = "gpt-5.6-sol";
@@ -289,5 +290,6 @@ export const PROVIDER_DISPLAY_NAMES: Partial<Record<ProviderDriverKind, string>>
   [CLAUDE_DRIVER_KIND]: "Claude",
   [CURSOR_DRIVER_KIND]: "Cursor",
   [GROK_DRIVER_KIND]: "Grok",
+  [OMP_DRIVER_KIND]: "Oh My Pi",
   [OPENCODE_DRIVER_KIND]: "OpenCode",
 };

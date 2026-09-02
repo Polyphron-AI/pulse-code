@@ -6,7 +6,9 @@ Pulse should own the company’s durable work model. Agent frameworks should exe
 
 **Own the work. Plug in the workers.**
 
-This means Pulse owns departments, SOPs, work orders, approvals, artifacts, budgets, receipts, credential policy, and accepted completion. Pi/OMP, Hermes, Google ADK, the OpenAI Agents SDK, and Mastra contribute execution capabilities without becoming the authoritative business system.
+This means Pulse owns departments, SOPs, work orders, approvals, artifacts, budgets, receipts, credential policy, and accepted completion. OMP is the first-party engineering provider. Codex, Claude, Hermes, Google ADK, the OpenAI Agents SDK, and Mastra remain replaceable execution adapters rather than authoritative business systems.
+
+Orca is a complementary reference for local execution supervision. Its project, worktree, run, gate, diff, and remote-status patterns should inform Pulse's execution boundary. Orca is not a model provider, a Pulse secret consumer, or a second control plane.
 
 **Pulse Vault** extends the control plane with agentic credential delegation: a worker can use an approved integration for a specific work attempt without receiving the underlying reusable secret.
 
@@ -25,7 +27,10 @@ This means Pulse owns departments, SOPs, work orders, approvals, artifacts, budg
 
 ### Execution runtimes
 
-- **Pi / OMP and Hermes:** the strongest immediate worker candidates for engineering and persistent operations.
+- **OMP:** the first-party engineering harness and provider for repository work.
+- **Codex, Claude, and other coding CLIs:** peer engineering workers behind replaceable adapters.
+- **Hermes:** the strongest candidate for persistent research and operations.
+- **Orca architecture:** a reference for supervising local projects, worktrees, runs, gates, diffs, and remote execution status.
 - **Google ADK, OpenAI Agents SDK, and Mastra:** additional execution backends, not replacement control planes.
 
 The key boundary is simple: frameworks execute work; Pulse determines what that work means.
@@ -39,18 +44,40 @@ Departments · SOPs · queue · approvals · evidence
 Pulse control plane
 Typed commands · events · policies · budgets · artifacts · receipts
                          ↓
-                  Work-order dispatch
+Pulse-owned local execution boundary
+Projects · worktrees · runs · gates · diffs · remote status
                          ↓
-┌────────────┬────────────┬────────────┬──────────────────┐
-│ Pi / OMP   │ Hermes     │ Google ADK │ OpenAI / Mastra │
-│ coding and │ persistent │ remote     │ focused workers │
-│ specialists│ operations │ agent teams│ or SOP runs     │
-└────────────┴────────────┴────────────┴──────────────────┘
+┌─────────────┬──────────────┬────────────┬───────────────────┐
+│ OMP         │ Codex/Claude │ Hermes     │ ADK/OpenAI/Mastra │
+│ first-party │ peer coding  │ persistent │ remote or focused │
+│ provider    │ adapters     │ operations │ workers/SOP runs  │
+└─────────────┴──────────────┴────────────┴───────────────────┘
 ```
 
 Pulse retains one durable, event-sourced state machine. A framework run is an execution attempt within that state machine, not a second source of truth. Pulse Vault sits at the execution boundary and resolves approved capabilities only when a work attempt needs them.
 
-## 3. Workspace, Department, and SOP views
+## 3. Orca and OMP are complementary
+
+| Component                 | Role in the target architecture                                               |
+| ------------------------- | ----------------------------------------------------------------------------- |
+| Pulse                     | Durable business control plane and user-facing system of record               |
+| Orca architecture         | Reference for local projects, worktrees, runs, gates, diffs, and remote state |
+| OMP                       | First-party engineering harness and provider                                  |
+| Codex, Claude, and others | Replaceable peer engineering adapters                                         |
+| GitHub App                | Repository, branch, commit, pull request, check, review, and merge boundary   |
+| Pulse Vault               | Credential policy, scoped grants, revocation, and redacted receipts           |
+
+Pulse already has project, worktree, source-control, remote-environment, and provider primitives. It should deepen those primitives behind one common execution contract, using Orca as a design reference rather than adding a second durable engine.
+
+Orca is a separate application. Pulse has no supported API, provider registration, or secret bridge that supplies `ServerSecretStore` or Vault credentials to Orca. That boundary is not process isolation. The current `ServerSecretStore` keeps raw secrets in filesystem-protected storage for one trusted OS account; a compromised or deliberately directed Orca or agent process running as that user could read the backing files. Untrusted orchestration needs a separate OS account or sandbox, or a stronger Vault backend. OMP launched by Orca should use Orca's own environment and native OMP state or authentication. Pulse signing, linking, bootstrap, and relay keys are never OMP provider credentials.
+
+### GitHub and Pulse Issues
+
+Pulse Issues should remain the product record for a bug, task, acceptance criteria, and business evidence. GitHub should own repository facts: branches, commits, pull requests, checks, diffs, reviews, and merge state.
+
+A `WorkAttempt` should link one Pulse issue to its worktree and GitHub artifacts. Review feedback belongs to the attempt as versioned evidence. Merge remains gated on the Pulse acceptance policy and GitHub checks rather than being inferred from an agent's final message.
+
+## 4. Workspace, Department, and SOP views
 
 The workspace should expose Pulse concepts rather than framework internals.
 
@@ -75,7 +102,7 @@ A durable unit of accountability. It records the requested outcome, assigned dep
 
 A runtime’s subagents remain internal to a work attempt unless Pulse explicitly promotes them into durable workers or new work orders.
 
-## 4. Pulse Vault and agentic credential sharing
+## 5. Pulse Vault and agentic credential sharing
 
 Pulse Vault should be the server-owned credential broker for the workforce. “Sharing” means delegating narrowly defined use, not copying tokens into prompts, environment records, framework memory, or client state.
 
@@ -116,11 +143,11 @@ Pulse revokes the grant and persists a redacted receipt
 
 ### Workspace presentation
 
-Departments should show available capabilities, policy, approval requirements, health, and recent credential receipts—not secret values. A work order should show which Vault grant was used, its scope and expiry, and the resulting evidence. Settings remains the place to connect, rotate, revoke, and diagnose integration credentials.
+Departments should show available capabilities, policy, approval requirements, health, and recent credential receipts, not secret values. A work order should show which Vault grant was used, its scope and expiry, and the resulting evidence. Settings remains the place to connect, rotate, revoke, and diagnose integration credentials.
 
-## 5. Pi / OMP and Hermes
+## 6. OMP and Hermes
 
-### Pi / OMP: engineering worker
+### OMP: first-party engineering worker
 
 Best suited to bounded repository work, parallel research, implementation, testing, and review.
 
@@ -151,7 +178,7 @@ Pulse should adopt the stronger version of this split:
 
 This makes workers shareable without turning agent packages into credential archives. It also keeps the Pulse project mapping as the place where a portable worker gains real authority.
 
-## 6. Google ADK
+## 7. Google ADK
 
 **Best role in Pulse:** remote agent and workflow backend.
 
@@ -167,7 +194,7 @@ ADK tools should call Pulse-managed capability endpoints or receive short-lived 
 - **High implementation effort:** Pulse needs an adapter, lifecycle mapping, normalized events, and potentially an A2A boundary.
 - **High overlap risk:** ADK has its own graphs, sessions, and recovery model, so state ownership must be explicit.
 
-## 7. OpenAI Agents SDK
+## 8. OpenAI Agents SDK
 
 **Best role in Pulse:** lightweight, focused worker runtime.
 
@@ -183,7 +210,7 @@ OpenAI tools should be wrapped by Pulse-owned functions that redeem a Vault gran
 - **Low duplicate-state risk:** Pulse supplies the durable workflow and business state.
 - **Provider tilt:** the strongest experience remains OpenAI-first, so the Pulse contract must stay provider-neutral.
 
-## 8. Mastra
+## 9. Mastra
 
 **Best role in Pulse:** bounded, typed SOP workflow runner.
 
@@ -199,7 +226,7 @@ Mastra’s suspend/resume points can request a Pulse approval or Vault grant, bu
 - **Medium implementation effort:** it can be integrated as a library or isolated sidecar.
 - **Very high duplicate-state risk:** both Mastra and Pulse can persist workflows and approvals, so the integration must nominate Pulse as the sole business authority.
 
-## 9. Decision matrix
+## 10. Decision matrix
 
 | Decision lens          | Google ADK                            | OpenAI Agents SDK | Mastra            | Pulse requirement                     |
 | ---------------------- | ------------------------------------- | ----------------- | ----------------- | ------------------------------------- |
@@ -210,15 +237,21 @@ Mastra’s suspend/resume points can request a Pulse approval or Vault grant, bu
 | Strategic value        | A2A and cloud                         | Easy workers      | Fast SOP delivery | Composable workforce                  |
 | Credential integration | Remote identity + capability endpoint | Wrapped tools     | Step-level grants | Pulse Vault owns policy and leases    |
 
-## 10. Common execution contract
+## 11. Common execution contract
 
 Pulse should define provider-neutral domain contracts such as:
 
+- `Workspace`
+- `Project`
 - `Department`
 - `WorkerTemplate`
+- `WorkerCapability`
 - `SopDefinition`
 - `WorkOrder`
 - `WorkAttempt`
+- `Worktree`
+- `ExecutionGate`
+- `RemoteExecutionTarget`
 - `Artifact`
 - `Approval`
 - `WorkReceipt`
@@ -229,25 +262,50 @@ Pulse should define provider-neutral domain contracts such as:
 
 Every runtime should sit behind a common `WorkExecutionBackend` capable of:
 
+- attaching to a Pulse project and isolated worktree;
 - starting a typed attempt;
 - resuming after durable input or approval;
 - cancelling without ambiguity;
 - streaming normalized execution events;
+- publishing gate, diff, and remote execution status;
 - requesting a named Vault capability without reading its backing secret; and
 - revoking all attempt-local grants on cancellation, failure, or completion.
 
 Only meaningful activity should be projected to clients. Pulse should not broadcast every token or transient subagent event across web, desktop, and mobile.
 
-## 11. Recommended sequence
+## 12. Current implementation status
 
-1. **Build the Pulse domain:** departments, SOPs, work orders, attempts, artifacts, approvals, and typed receipts.
-2. **Define the Pulse Vault contract:** credential records, capability policies, grants, leases, revocation, redacted receipts, and provider-neutral failure types. Keep secrets out of shared contracts.
-3. **Define portable worker templates:** export skills, persona, schedules, plugins, and capability requirements while excluding all credential material and project bindings.
-4. **Harden the credential backend:** preserve the current single-owner `ServerSecretStore` path, close its documented release gates, and add an encrypted or externally managed backend before supporting shared or untrusted hosts.
-5. **Integrate the existing worker strategy:** OMP for Engineering; Hermes for Research and Operations. Validate read-only Vault grants first, then bounded write actions with explicit approval.
-6. **Add an OpenAI worker backend:** use wrapped tools to validate the common execution and credential-capability contracts at low integration cost.
-7. **Pilot Mastra on one bounded durable SOP:** keep explicit ownership of state, approvals, and credential grants in Pulse.
-8. **Add Google ADK through an adapter or A2A:** target remote enterprise departments and external agent ecosystems while keeping authorization in Pulse Vault.
+The following work exists on this branch. It is not a claim that the branch has been merged, pushed, or released:
+
+- OMP is registered as a first-party, multi-instance provider across contracts, settings, server runtime, and provider selection surfaces.
+- Interactive OMP sessions use ACP for new, load, resume, model and thinking selection, default and plan modes, permission requests, form elicitation, interruption, and stop.
+- Provider health runs the configured binary with `omp --version` and `omp models --json`. Pulse publishes only the exact selectors returned by OMP and does not invent fallback models.
+- The selected provider instance environment overrides the server process environment. Sensitive values use `ServerSecretStore`; `settings.json` and settings clients retain only redacted placeholders after saving.
+- Interactive OMP state is rooted under a Pulse-managed, per-instance `PI_CODING_AGENT_DIR`. Native OMP `.env` and local authentication fallback can still operate when the selected instance does not supply a credential.
+- Provider API keys in the Pulse instance's sensitive-environment editor are the supported onboarding path. Native OMP `/login` is not supported Pulse provider setup: it normally writes to its default root, does not populate Pulse's forced per-instance root, and is not available through Pulse ACP terminal authentication.
+- OMP text generation uses fresh per-call agent, session, home, config, data, cache, state, and temporary roots. It disables tools, MCP servers, permissions, and elicitation. It removes Pulse-internal and path-escape variables; strips `OMP_AUTH_BROKER_URL`, `OMP_AUTH_BROKER_TOKEN`, `OMP_AUTH_BROKER_ACCOUNT_POOL_FILE`, and `OMP_AUTH_BROKER_SNAPSHOT_CACHE`; and strips external `PI_CONFIG_DIR` and `PI_CONFIG_FILES` redirects. A scalar broker snapshot TTL may remain, but it cannot activate or select broker state. Text generation supports bundled models through provider API keys, but intentionally does not import shared OMP OAuth or custom model state. `--no-session` disables normal session persistence; any process writes are confined to the disposable run root rather than being literally absent.
+- Provider maintenance resolves the official `@oh-my-pi/pi-coding-agent` package and invokes the configured OMP binary with `omp update`.
+- The web and desktop shell includes a Pulse-native `/workspace` surface branded as the ORCA workspace. It projects existing thread shells into attention, working, ready, and OMP views without subscribing to every thread transcript or claiming that an external Orca runtime is connected. Initial synchronization and disconnected environments are identified explicitly; cached remote data is presented as last-known state rather than live state.
+- The sidebar and command palette open the ORCA workspace. The workspace can prepare a new OMP draft or a separate OMP draft that uses an existing thread only as a prompt reference, by selecting the target project, that environment's exact enabled OMP instance, and one model selector discovered from the instance. Preparation is disabled while the target environment is disconnected.
+- Preparing OMP work seeds a reviewable prompt with human UX, efficiency, and effectiveness lenses. It does not send automatically, alter the user's sticky provider default, switch a started non-OMP thread in place, or claim a durable parent-child relationship.
+- OMP draft preparation receives the Pulse server process environment plus the selected OMP instance's configured overrides. It does not export Codex, ChatGPT, Claude, or other provider login or subscription state into OMP; executable and model readiness are distinct from credential verification, so the first turn can still fail on missing, expired, or unintended ambient authentication.
+- This implemented workspace slice is responsive in the web and desktop shell; it does not yet add a native route or launch surface to `apps/mobile` and must not be described as native-mobile integration.
+- Maintainer release tracking reads the official OMP and Orca GitHub releases and verifies the linked `Polyphron-AI/oh-my-pi` and `Polyphron-AI/orca` forks. The official repositories remain the release authorities; the organization forks are review and porting targets rather than runtime dependencies.
+
+The broader workforce domain, Pulse Vault grants and leases, Orca-style execution contract, Orca adapter, and issue-to-attempt-to-pull-request record described above remain future work. Orca has no provider registration or secret bridge in this branch.
+
+## 13. Recommended sequence
+
+1. **Build the Pulse domain:** workspaces, projects, departments, SOPs, work orders, attempts, artifacts, approvals, and typed receipts.
+2. **Deepen the local execution boundary:** use Orca's project, worktree, run, gate, diff, and remote-status patterns to extend Pulse's existing primitives behind one contract.
+3. **Define the Pulse Vault contract:** credential records, capability policies, grants, leases, revocation, redacted receipts, and provider-neutral failure types. Keep secrets out of shared contracts.
+4. **Define portable worker templates:** export skills, persona, schedules, plugins, and capability requirements while excluding all credential material and project bindings.
+5. **Harden the credential backend:** preserve the current single-owner `ServerSecretStore` path, close its documented release gates, and add an encrypted or externally managed backend before supporting shared or untrusted hosts.
+6. **Stabilize OMP against the common contract:** use the first-party provider as the initial engineering conformance target, including gates and evidence.
+7. **Apply the same contract to peer coding workers:** keep Codex, Claude, and later engineering CLIs replaceable rather than granting OMP a privileged protocol.
+8. **Link Pulse Issues and GitHub:** bind each accepted attempt to its worktree, commits, pull request, checks, review evidence, and merge decision.
+9. **Add Hermes for Research and Operations:** validate read-only Vault grants first, then bounded scheduled writes with explicit approval.
+10. **Add focused workflow backends:** use OpenAI for a small worker, pilot Mastra on one bounded SOP, then add Google ADK or A2A for remote enterprise execution.
 
 ### Vault rollout gates
 
@@ -261,7 +319,7 @@ Only meaningful activity should be projected to clients. Pulse should not broadc
 
 The winning design lets any framework disappear without taking the company’s work history with it.
 
-Pulse should therefore become the durable control plane and user-facing system of record. Pulse Vault should be the credential authority at its execution boundary. Pi/OMP, Hermes, Google ADK, OpenAI Agents SDK, and Mastra should remain replaceable execution engines selected per work order, department policy, credential capability, and operational need.
+Pulse should therefore remain the durable control plane and user-facing system of record. Pulse Vault should be the credential authority at its execution boundary. OMP should be the first-party engineering provider, while Codex, Claude, Hermes, Google ADK, OpenAI Agents SDK, and Mastra remain replaceable adapters selected per work order, department policy, credential capability, and operational need. Orca should inform the local supervision boundary without becoming a model provider or secret consumer.
 
 ## Sources
 
@@ -270,6 +328,16 @@ Pulse should therefore become the durable control plane and user-facing system o
 - [Integration secret-store and OAuth threat review](../../internals/integrations-secret-review.md)
 - [Pulse workforce comparison and recommendation](comparison-and-pulse-code-recommendation.md)
 - [Pi and Oh My Pi research](02-pi-and-oh-my-pi.md)
+- [Oh My Pi source and installation](https://github.com/can1357/oh-my-pi)
+- [Polyphron-AI Oh My Pi fork](https://github.com/Polyphron-AI/oh-my-pi)
+- [Oh My Pi releases](https://github.com/can1357/oh-my-pi/releases)
+- [Oh My Pi provider and credential resolution](https://github.com/can1357/oh-my-pi/blob/main/docs/providers.md)
+- [Oh My Pi settings and state roots](https://github.com/can1357/oh-my-pi/blob/main/docs/settings.md)
+- [Oh My Pi approval modes](https://github.com/can1357/oh-my-pi/blob/main/docs/approval-mode.md)
+- [Orca source and README](https://github.com/stablyai/orca)
+- [Polyphron-AI Orca fork](https://github.com/Polyphron-AI/orca)
+- [Orca releases](https://github.com/stablyai/orca/releases)
+- [Orca CLI worktree model](https://github.com/stablyai/orca/blob/main/skill-guides/orca-cli.md)
 - [Hermes Agent research](03-hermes-agent.md)
 - [Nous Research announcement: portable Hermes profiles](https://x.com/NousResearch/status/2094515104670715940)
 - [Hermes profile distributions](https://github.com/NousResearch/hermes-agent/blob/main/website/docs/user-guide/profile-distributions.md)

@@ -29,6 +29,7 @@ import { readT3ProjectFileDefaultThreadEnvMode } from "../lib/t3ProjectFileDefau
 import { primaryServerSettingsAtom } from "../state/server";
 import { resolveThreadRouteTarget } from "../threadRoutes";
 import { legacyProjectCwdPreferenceKey, useUiStateStore } from "../uiStateStore";
+import { applyNewThreadComposerSeed, type NewThreadComposerSeed } from "./newThreadComposerSeed";
 import { useClientSettings } from "./useSettings";
 
 interface NewThreadWorkspaceOptions {
@@ -75,6 +76,11 @@ export function useNewThreadHandler() {
         startFromOrigin?: boolean;
         replace?: boolean;
         /**
+         * Exact model and prompt to install before draft navigation. This is
+         * intentionally per-draft and never updates sticky provider defaults.
+         */
+        composerSeed?: NewThreadComposerSeed;
+        /**
          * Move the viewed draft's typed content (prompt + images) into the
          * draft this request lands on. Set by the draft repo picker: the
          * user started writing in the wrong project and the text should
@@ -97,7 +103,15 @@ export function useNewThreadHandler() {
         setDraftThreadContext,
         setLogicalProjectDraftThreadId,
         setModelSelection,
+        setPrompt,
       } = useComposerDraftStore.getState();
+      const applyComposerSeed = (draftId: DraftId): boolean =>
+        options?.composerSeed === undefined ||
+        applyNewThreadComposerSeed({
+          store: { getComposerDraft, setModelSelection, setPrompt },
+          draftId,
+          seed: options.composerSeed,
+        });
       const currentRouteTarget = getCurrentRouteTarget();
       // A new thread carries the user's *working mode* from the thread being
       // viewed: model (including options like reasoning effort and context
@@ -298,6 +312,9 @@ export function useNewThreadHandler() {
             },
           );
           carryComposerContentTo(emptyStoredDraftThread.draftId);
+          if (!applyComposerSeed(emptyStoredDraftThread.draftId)) {
+            return null;
+          }
           const opened = {
             draftId: emptyStoredDraftThread.draftId,
             threadId: emptyStoredDraftThread.threadId,
@@ -345,6 +362,9 @@ export function useNewThreadHandler() {
           interactionMode: latestActiveDraftThread.interactionMode,
           ...pickExplicitWorkspaceOptions(options),
         });
+        if (!applyComposerSeed(currentRouteTarget.draftId)) {
+          return Promise.resolve(null);
+        }
         return Promise.resolve({
           draftId: currentRouteTarget.draftId,
           threadId: latestActiveDraftThread.threadId,
@@ -370,6 +390,11 @@ export function useNewThreadHandler() {
           racedDraft.draftId !== storedDraftThread?.draftId &&
           readThreadShell(scopeThreadRef(racedDraft.environmentId, racedDraft.threadId)) === null
         ) {
+          // A prepared handoff must not overwrite a draft another invocation
+          // registered while defaults were resolving. Let the winner stand.
+          if (options?.composerSeed !== undefined) {
+            return null;
+          }
           // Same remap the reuse paths above perform: point the draft at the
           // caller's project member and apply explicit workspace options if
           // the caller passed any. Without explicit options the winner's
@@ -418,6 +443,9 @@ export function useNewThreadHandler() {
           setModelSelection(draftId, carryModelSelection, { replaceOptions: true });
         }
         carryComposerContentTo(draftId);
+        if (!applyComposerSeed(draftId)) {
+          return null;
+        }
 
         await router.navigate({
           to: "/draft/$draftId",

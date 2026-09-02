@@ -37,3 +37,6 @@ node_modules/
 *.log
 .env*
 !.env.example
+
+# Pulse Code scheduled chats
+/handoff/????-??-??.md

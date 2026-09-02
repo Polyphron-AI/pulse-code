@@ -34,12 +34,14 @@ import { useNavigate, useParams } from "@tanstack/react-router";
 import * as Option from "effect/Option";
 import {
   ArrowLeftIcon,
+  BotIcon,
   CornerLeftUpIcon,
   FileSearchIcon,
   FolderIcon,
   FolderPlusIcon,
   LinkIcon,
   MessageSquareIcon,
+  NetworkIcon,
   PaletteIcon,
   SettingsIcon,
   SquarePenIcon,
@@ -1441,6 +1443,18 @@ function OpenCommandPaletteDialog(props: {
 
   const actionItems: Array<CommandPaletteActionItem | CommandPaletteSubmenuItem> = [];
 
+  actionItems.push({
+    kind: "action",
+    value: "action:orca-workspace",
+    searchTerms: ["orca", "workspace", "coordinate", "threads", "overview", "ledger"],
+    title: "Open ORCA workspace",
+    description: "Cross-project thread overview",
+    icon: <NetworkIcon className={ITEM_ICON_CLASS} />,
+    run: async () => {
+      await navigate({ to: "/workspace" });
+    },
+  });
+
   if (projects.length > 0) {
     const activeProjectTitle =
       projectPickerEntries.find((entry) => entry.isPreferred)?.group.displayName ??
@@ -1477,6 +1491,42 @@ function OpenCommandPaletteDialog(props: {
       icon: <SquarePenIcon className={ITEM_ICON_CLASS} />,
       addonIcon: <SquarePenIcon className={ADDON_ICON_CLASS} />,
       groups: [{ value: "projects", label: "Projects", items: projectThreadItems }],
+    });
+
+    const relatedThreadRef = activeThread
+      ? scopeThreadRef(activeThread.environmentId, activeThread.id)
+      : null;
+    actionItems.push({
+      kind: "action",
+      value: relatedThreadRef ? "action:prepare-related-omp-thread" : "action:prepare-omp-thread",
+      searchTerms: [
+        "omp",
+        "oh my pi",
+        "orca",
+        "worker",
+        "senior crew",
+        "new thread",
+        "related thread",
+      ],
+      title: relatedThreadRef ? "Prepare separate OMP thread" : "Prepare OMP thread…",
+      description: relatedThreadRef
+        ? `Use ${activeThread?.title ?? "the active thread"} as a prompt reference`
+        : "Choose a project, instance, and model",
+      icon: <BotIcon className={ITEM_ICON_CLASS} />,
+      run: async () => {
+        await navigate({
+          to: "/workspace",
+          search: {
+            prepare: true,
+            ...(relatedThreadRef
+              ? {
+                  sourceEnvironmentId: relatedThreadRef.environmentId,
+                  sourceThreadId: relatedThreadRef.threadId,
+                }
+              : {}),
+          },
+        });
+      },
     });
   }
 

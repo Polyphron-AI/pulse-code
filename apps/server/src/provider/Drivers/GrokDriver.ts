@@ -1,4 +1,5 @@
 import { GrokSettings, ProviderDriverKind, type ServerProvider } from "@t3tools/contracts";
+import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -89,7 +90,8 @@ export const GrokDriver: ProviderDriver<GrokSettings, GrokDriverEnv> = {
       const httpClient = yield* HttpClient.HttpClient;
       const serverSettings = yield* ServerSettingsService;
       const eventLoggers = yield* ProviderEventLoggers;
-      const processEnv = mergeProviderInstanceEnvironment(environment);
+      const platform = yield* HostProcessPlatform;
+      const processEnv = mergeProviderInstanceEnvironment(environment, platform);
       const continuationIdentity = defaultProviderContinuationIdentity({
         driverKind: DRIVER_KIND,
         instanceId,

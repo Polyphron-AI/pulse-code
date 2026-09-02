@@ -46,6 +46,7 @@ import {
   FolderPlusIcon,
   GitBranchIcon,
   MessageSquareIcon,
+  NetworkIcon,
   PinIcon,
   PlusIcon,
   SearchIcon,
@@ -67,7 +68,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from "react";
-import { useParams, useRouter } from "@tanstack/react-router";
+import { useLocation, useParams, useRouter } from "@tanstack/react-router";
 
 import {
   isAtomCommandInterrupted,
@@ -112,6 +113,7 @@ import {
   useScheduleCatalog,
   useThreadShells,
 } from "../state/entities";
+import { environmentShellSummaryAtom } from "../state/shell";
 import { environmentServerConfigsAtom, primaryServerKeybindingsAtom } from "../state/server";
 import { vcsEnvironment } from "../state/vcs";
 import { threadEnvironment } from "../state/threads";
@@ -152,6 +154,7 @@ import {
   type SidebarMode,
   type SidebarScheduleRow,
 } from "./Sidebar.logic";
+import { summarizeWorkspaceThreads } from "./workspace/OrcaWorkspace.logic";
 import { resolveLocalCheckoutBranchMismatch } from "./BranchToolbar.logic";
 import {
   ThreadWorktreeIndicator,
@@ -1795,7 +1798,9 @@ export default function Sidebar() {
   const threads = useThreadShells();
   const scheduleCatalog = useScheduleCatalog();
   const allEnvironmentShellsBootstrapped = useAllEnvironmentShellsBootstrapped();
+  const shellSummary = useAtomValue(environmentShellSummaryAtom);
   const router = useRouter();
+  const pathname = useLocation({ select: (location) => location.pathname });
   const { isMobile, setOpenMobile } = useSidebar();
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
   const autoSettleAfterDays = useClientSettings((s) => s.sidebarAutoSettleAfterDays);
@@ -2083,6 +2088,40 @@ export default function Sidebar() {
     () => countActiveSidebarSchedules(scheduleCatalog.schedules),
     [scheduleCatalog.schedules],
   );
+  const connectedEnvironmentIds = useMemo(
+    () =>
+      new Set(
+        environments
+          .filter((environment) => environment.connection.phase === "connected")
+          .map((environment) => environment.environmentId),
+      ),
+    [environments],
+  );
+  const workspaceSummary = useMemo(
+    () => summarizeWorkspaceThreads(threads, connectedEnvironmentIds),
+    [connectedEnvironmentIds, threads],
+  );
+  const isWorkspaceSummarySyncing =
+    !allEnvironmentShellsBootstrapped || shellSummary.hasSynchronizingShell;
+  const workspaceStatusLabel = isWorkspaceSummarySyncing
+    ? "syncing"
+    : workspaceSummary.attention > 0
+      ? `${workspaceSummary.attention} ${workspaceSummary.attention === 1 ? "needs" : "need"} you`
+      : workspaceSummary.working > 0
+        ? `${workspaceSummary.working} working`
+        : workspaceSummary.connected > 0
+          ? `${workspaceSummary.ready} ready`
+          : workspaceSummary.lastKnown > 0
+            ? `${workspaceSummary.lastKnown} last known`
+            : "no active work";
+  const isWorkspaceRoute = pathname === "/workspace";
+
+  const handleWorkspaceClick = useCallback(() => {
+    if (isMobile) setOpenMobile(false);
+    if (!isWorkspaceRoute) {
+      void router.navigate({ to: "/workspace" });
+    }
+  }, [isMobile, isWorkspaceRoute, router, setOpenMobile]);
 
   const handleProjectSettings = useCallback(
     (event: ReactMouseEvent<HTMLButtonElement>, projectGroup: SidebarProjectSnapshot) => {
@@ -3533,6 +3572,37 @@ export default function Sidebar() {
           // Lifted above the stage backdrop, whose fade bleeds below the
           // header and would otherwise paint across the search row's outline.
           <SidebarGroup className="relative z-[1] gap-1 p-[var(--sidebar-content-inset)]">
+            <SidebarMenuButton
+              type="button"
+              size="sm"
+              isActive={isWorkspaceRoute}
+              aria-current={isWorkspaceRoute ? "page" : undefined}
+              aria-label={`Open ORCA workspace, ${workspaceStatusLabel}`}
+              className={cn(
+                "relative h-8 gap-2 rounded-md px-2 focus-visible:ring-offset-1 focus-visible:ring-offset-sidebar",
+                isWorkspaceRoute
+                  ? "bg-sidebar-row-active text-sidebar-foreground"
+                  : "text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground",
+              )}
+              onClick={handleWorkspaceClick}
+            >
+              <span
+                className="relative flex size-4 shrink-0 items-center justify-center"
+                aria-hidden
+              >
+                <NetworkIcon className="size-4" />
+              </span>
+              <span className="min-w-0 flex-1 truncate text-left text-sm font-medium">
+                ORCA workspace
+              </span>
+              <span className="shrink-0 text-[10px] tabular-nums text-sidebar-muted-foreground/80">
+                {workspaceStatusLabel}
+              </span>
+              <span
+                className="pointer-events-none absolute left-1/2 top-1/2 size-[max(100%,3rem)] -translate-1/2 pointer-fine:hidden"
+                aria-hidden
+              />
+            </SidebarMenuButton>
             <div className="flex items-center gap-1">
               <div className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground">
                 <SearchIcon className="size-4 shrink-0 text-sidebar-muted-foreground/80" />
