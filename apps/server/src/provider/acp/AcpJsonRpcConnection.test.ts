@@ -5,12 +5,17 @@ import * as NodeURL from "node:url";
 import * as NodeFS from "node:fs";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { HostProcessEnvironment, HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import { SpawnExecutableResolution } from "@t3tools/shared/shell";
 import { it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Option from "effect/Option";
+import * as PlatformError from "effect/PlatformError";
 import * as TestClock from "effect/testing/TestClock";
 import * as Stream from "effect/Stream";
+import * as ChildProcess from "effect/unstable/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 import { describe, expect } from "vite-plus/test";
 
 import * as AcpSessionRuntime from "./AcpSessionRuntime.ts";
@@ -21,7 +26,114 @@ const mockAgentPath = NodePath.join(__dirname, "../../../scripts/acp-mock-agent.
 const mockAgentCommand = "node";
 const mockAgentArgs = [mockAgentPath];
 
+function makeCapturingFailingSpawner(
+  capture: (command: ChildProcess.StandardCommand) => void,
+): ChildProcessSpawner.ChildProcessSpawner["Service"] {
+  return ChildProcessSpawner.make((command) => {
+    if (command._tag !== "StandardCommand") {
+      return Effect.die(new Error("Expected a standard ACP child command"));
+    }
+    capture(command);
+    return Effect.fail(
+      PlatformError.systemError({
+        _tag: "NotFound",
+        module: "ChildProcess",
+        method: "spawn",
+        description: "captured ACP child command",
+      }),
+    );
+  });
+}
+
 describe("AcpSessionRuntime", () => {
+  it.effect("uses only the exact environment for command resolution and child spawn", () =>
+    Effect.gen(function* () {
+      const explicitEnvironment = { SELECTED_ONLY: "selected" };
+      let resolutionEnvironment: NodeJS.ProcessEnv | undefined;
+      let spawnedCommand: ChildProcess.StandardCommand | undefined;
+      const error = yield* AcpSessionRuntime.make({
+        spawn: {
+          command: "omp",
+          args: ["acp"],
+          env: explicitEnvironment,
+          environmentMode: "exact",
+        },
+        cwd: "C:\\isolated-workspace",
+        clientInfo: { name: "t3-test", version: "0.0.0" },
+        authMethodId: "test",
+      }).pipe(
+        Effect.provideService(
+          ChildProcessSpawner.ChildProcessSpawner,
+          makeCapturingFailingSpawner((command) => {
+            spawnedCommand = command;
+          }),
+        ),
+        Effect.provideService(HostProcessPlatform, "win32"),
+        Effect.provideService(HostProcessEnvironment, {
+          PATH: "C:\\ambient-only-bin",
+          PULSE_CODE_INTERNAL_AUTH_TOKEN: "ambient-only-secret",
+        }),
+        Effect.provideService(SpawnExecutableResolution, (_command, _platform, env) => {
+          resolutionEnvironment = env;
+          return "C:\\resolved\\omp.exe";
+        }),
+        Effect.scoped,
+        Effect.provide(NodeServices.layer),
+        Effect.flip,
+      );
+
+      expect(error._tag).toBe("AcpSpawnError");
+      expect(resolutionEnvironment).toEqual(explicitEnvironment);
+      expect(resolutionEnvironment).not.toHaveProperty("PATH");
+      expect(resolutionEnvironment).not.toHaveProperty("PULSE_CODE_INTERNAL_AUTH_TOKEN");
+      expect(spawnedCommand?.options.env).toEqual(explicitEnvironment);
+      expect(spawnedCommand?.options.extendEnv).toBe(false);
+    }),
+  );
+
+  it.effect("inherits the host environment when no environment mode is selected", () =>
+    Effect.gen(function* () {
+      const explicitEnvironment = { SELECTED_ONLY: "selected" };
+      const hostEnvironment = {
+        PATH: "C:\\ambient-bin",
+        AMBIENT_ONLY: "inherited",
+      };
+      let resolutionEnvironment: NodeJS.ProcessEnv | undefined;
+      let spawnedCommand: ChildProcess.StandardCommand | undefined;
+      const error = yield* AcpSessionRuntime.make({
+        spawn: {
+          command: "cursor-agent",
+          args: ["acp"],
+          env: explicitEnvironment,
+        },
+        cwd: "C:\\workspace",
+        clientInfo: { name: "t3-test", version: "0.0.0" },
+        authMethodId: "test",
+      }).pipe(
+        Effect.provideService(
+          ChildProcessSpawner.ChildProcessSpawner,
+          makeCapturingFailingSpawner((command) => {
+            spawnedCommand = command;
+          }),
+        ),
+        Effect.provideService(HostProcessPlatform, "win32"),
+        Effect.provideService(HostProcessEnvironment, hostEnvironment),
+        Effect.provideService(SpawnExecutableResolution, (_command, _platform, env) => {
+          resolutionEnvironment = env;
+          return "C:\\resolved\\cursor-agent.exe";
+        }),
+        Effect.scoped,
+        Effect.provide(NodeServices.layer),
+        Effect.flip,
+      );
+
+      expect(error._tag).toBe("AcpSpawnError");
+      expect(resolutionEnvironment).toEqual({ ...hostEnvironment, ...explicitEnvironment });
+      expect(spawnedCommand?.options.env).toEqual(explicitEnvironment);
+      expect(spawnedCommand?.options.extendEnv).toBe(true);
+    }),
+  );
+
   it.effect("merges custom initialize client capabilities into the ACP handshake", () => {
     const requestEvents: Array<AcpSessionRuntime.AcpSessionRequestLogEvent> = [];
     return Effect.gen(function* () {

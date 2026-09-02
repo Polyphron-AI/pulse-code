@@ -22,6 +22,7 @@ import {
   RuntimeItemId,
   RuntimeRequestId,
   RuntimeTaskId,
+  type RuntimeItemStatus,
   type RuntimeTaskUsage,
   ProviderApprovalDecision,
   ThreadId,
@@ -477,12 +478,21 @@ function mapItemLifecycle(
   }
 
   const detail = itemDetail(itemType, item);
+  const providerStatus: RuntimeItemStatus | undefined =
+    "status" in item &&
+    (item.status === "inProgress" ||
+      item.status === "completed" ||
+      item.status === "failed" ||
+      item.status === "declined")
+      ? item.status
+      : undefined;
   const status =
-    lifecycle === "item.started"
+    providerStatus ??
+    (lifecycle === "item.started"
       ? "inProgress"
       : lifecycle === "item.completed"
         ? "completed"
-        : undefined;
+        : undefined);
 
   return {
     ...runtimeEventBase(event, canonicalThreadId),

@@ -3,6 +3,7 @@
 import * as NodeFS from "node:fs";
 
 import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
@@ -13,6 +14,12 @@ import type * as AcpSchema from "effect-acp/schema";
 
 const requestLogPath = process.env.T3_ACP_REQUEST_LOG_PATH;
 const exitLogPath = process.env.T3_ACP_EXIT_LOG_PATH;
+const cliArgsLogPath = process.env.T3_OMP_CLI_ARGS_LOG_PATH;
+const environmentLogPath = process.env.T3_OMP_ENV_LOG_PATH;
+const invocationExitLogPath = process.env.T3_OMP_INVOCATION_EXIT_LOG_PATH;
+const environmentHasKey = (name: string) =>
+  Object.keys(process.env).some((key) => key.toUpperCase() === name);
+const failInitialize = process.env.T3_ACP_FAIL_INITIALIZE === "1";
 const emitToolCalls = process.env.T3_ACP_EMIT_TOOL_CALLS === "1";
 const emitInterleavedAssistantToolCalls =
   process.env.T3_ACP_EMIT_INTERLEAVED_ASSISTANT_TOOL_CALLS === "1";
@@ -24,6 +31,10 @@ const emitForeignSessionUpdates = process.env.T3_ACP_EMIT_FOREIGN_SESSION_UPDATE
 const hangPromptForever = process.env.T3_ACP_HANG_PROMPT_FOREVER === "1";
 const hangFirstPromptForever = process.env.T3_ACP_HANG_FIRST_PROMPT_FOREVER === "1";
 const emitLateUpdateAfterCancel = process.env.T3_ACP_EMIT_LATE_UPDATE_AFTER_CANCEL === "1";
+const ompMode = process.env.T3_ACP_OMP_MODE === "1";
+const ompElicitation = process.env.T3_ACP_OMP_ELICITATION;
+const clientResponseLogPath = process.env.T3_ACP_CLIENT_RESPONSE_LOG_PATH;
+const ignoreTermination = process.env.T3_ACP_IGNORE_TERMINATION === "1";
 const omitXAiPromptCompleteStopReason =
   process.env.T3_ACP_OMIT_XAI_PROMPT_COMPLETE_STOP_REASON === "1";
 const failLoadSession = process.env.T3_ACP_FAIL_LOAD_SESSION === "1";
@@ -40,14 +51,127 @@ const failSetConfigOption = process.env.T3_ACP_FAIL_SET_CONFIG_OPTION === "1";
 const exitOnSetConfigOption = process.env.T3_ACP_EXIT_ON_SET_CONFIG_OPTION === "1";
 const promptResponseText = process.env.T3_ACP_PROMPT_RESPONSE_TEXT;
 const promptDelayMs = Number(process.env.T3_ACP_PROMPT_DELAY_MS ?? "0");
+const postClientResponseDelayMs = Number(process.env.T3_ACP_POST_CLIENT_RESPONSE_DELAY_MS ?? "0");
 const permissionOptionIds = {
   allowOnce: process.env.T3_ACP_ALLOW_ONCE_OPTION_ID ?? "allow-once",
   allowAlways: process.env.T3_ACP_ALLOW_ALWAYS_OPTION_ID ?? "allow-always",
   rejectOnce: process.env.T3_ACP_REJECT_ONCE_OPTION_ID ?? "reject-once",
 };
 const sessionId = "mock-session-1";
+const encodeUnknownJson = Schema.encodeUnknownSync(Schema.fromJsonString(Schema.Unknown));
 
-let currentModeId = "ask";
+const cliArgs = process.argv.slice(2);
+if (cliArgsLogPath) {
+  NodeFS.appendFileSync(
+    cliArgsLogPath,
+    `${JSON.stringify({ args: cliArgs, pid: process.pid })}\n`,
+    "utf8",
+  );
+}
+if (invocationExitLogPath) {
+  process.once("exit", (code) => {
+    NodeFS.appendFileSync(
+      invocationExitLogPath,
+      `${JSON.stringify({ args: cliArgs, pid: process.pid, code })}\n`,
+      "utf8",
+    );
+  });
+}
+if (environmentLogPath) {
+  const sessionDir = process.env.PI_CODING_AGENT_SESSION_DIR;
+  const sessionMarkerPath = sessionDir ? `${sessionDir}/mock-session-marker` : undefined;
+  if (process.env.T3_OMP_WRITE_SESSION_MARKER === "1" && sessionDir && sessionMarkerPath) {
+    NodeFS.mkdirSync(sessionDir, { recursive: true });
+    NodeFS.writeFileSync(sessionMarkerPath, "current OMP ACP still writes session state", "utf8");
+  }
+  NodeFS.appendFileSync(
+    environmentLogPath,
+    `${JSON.stringify({
+      cwd: process.cwd(),
+      OMP_PROFILE: process.env.OMP_PROFILE,
+      PI_PROFILE: process.env.PI_PROFILE,
+      PI_CODING_AGENT_PROFILE: process.env.PI_CODING_AGENT_PROFILE,
+      PI_CODING_AGENT_DIR: process.env.PI_CODING_AGENT_DIR,
+      PI_CODING_AGENT_SESSION_DIR: process.env.PI_CODING_AGENT_SESSION_DIR,
+      HOME: process.env.HOME,
+      USERPROFILE: process.env.USERPROFILE,
+      XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME,
+      XDG_DATA_HOME: process.env.XDG_DATA_HOME,
+      XDG_CACHE_HOME: process.env.XDG_CACHE_HOME,
+      XDG_STATE_HOME: process.env.XDG_STATE_HOME,
+      APPDATA: process.env.APPDATA,
+      LOCALAPPDATA: process.env.LOCALAPPDATA,
+      TEMP: process.env.TEMP,
+      TMP: process.env.TMP,
+      TMPDIR: process.env.TMPDIR,
+      PWD: process.env.PWD,
+      OLDPWD: process.env.OLDPWD,
+      INIT_CWD: process.env.INIT_CWD,
+      OPENAI_API_KEY_PRESENT: typeof process.env.OPENAI_API_KEY === "string",
+      OPENAI_API_KEY_MATCHES_EXPECTED:
+        process.env.OPENAI_API_KEY === process.env.T3_OMP_EXPECTED_OPENAI_API_KEY,
+      OPENAI_API_KEY_NAMES: Object.keys(process.env).filter(
+        (key) => key.toUpperCase() === "OPENAI_API_KEY",
+      ),
+      HTTPS_PROXY: process.env.HTTPS_PROXY,
+      NODE_EXTRA_CA_CERTS: process.env.NODE_EXTRA_CA_CERTS,
+      PATH_PRESENT: typeof process.env.PATH === "string",
+      PATH_MATCHES_EXPECTED: process.env.PATH === process.env.T3_OMP_EXPECTED_PATH,
+      PATH_KEY_NAMES: Object.keys(process.env).filter((key) => key.toUpperCase() === "PATH"),
+      PULSE_CODE_INTERNAL_AUTH_TOKEN_PRESENT:
+        typeof process.env.PULSE_CODE_INTERNAL_AUTH_TOKEN === "string",
+      T3_MCP_BEARER_TOKEN_PRESENT: typeof process.env.T3_MCP_BEARER_TOKEN === "string",
+      CLAUDE_CONFIG_DIR_PRESENT: typeof process.env.CLAUDE_CONFIG_DIR === "string",
+      GIT_WORK_TREE_PRESENT: typeof process.env.GIT_WORK_TREE === "string",
+      OMP_LAUNCH_CWD_PRESENT: typeof process.env.OMP_LAUNCH_CWD === "string",
+      OMP_WORKTREE_DIR_PRESENT: typeof process.env.OMP_WORKTREE_DIR === "string",
+      OMP_AUTH_BROKER_URL_PRESENT: environmentHasKey("OMP_AUTH_BROKER_URL"),
+      OMP_AUTH_BROKER_TOKEN_PRESENT: environmentHasKey("OMP_AUTH_BROKER_TOKEN"),
+      OMP_AUTH_BROKER_ACCOUNT_POOL_FILE_PRESENT: environmentHasKey(
+        "OMP_AUTH_BROKER_ACCOUNT_POOL_FILE",
+      ),
+      OMP_AUTH_BROKER_SNAPSHOT_CACHE_PRESENT: environmentHasKey("OMP_AUTH_BROKER_SNAPSHOT_CACHE"),
+      PI_CONFIG_FILES_PRESENT: environmentHasKey("PI_CONFIG_FILES"),
+      PI_CONFIG_DIR_PRESENT: environmentHasKey("PI_CONFIG_DIR"),
+      sessionMarkerPath,
+      SESSION_MARKER_WRITTEN: sessionMarkerPath ? NodeFS.existsSync(sessionMarkerPath) : false,
+      ORDINARY_VALUE: process.env.T3_OMP_ORDINARY_VALUE,
+    })}\n`,
+    "utf8",
+  );
+}
+
+const isVersionCommand = cliArgs.length === 1 && cliArgs[0] === "--version";
+const isModelsCommand = cliArgs.length === 2 && cliArgs[0] === "models" && cliArgs[1] === "--json";
+const isCliCommand = isVersionCommand || isModelsCommand;
+const hangCliCommand =
+  (isVersionCommand && process.env.T3_OMP_VERSION_HANG === "1") ||
+  (isModelsCommand && process.env.T3_OMP_MODELS_HANG === "1");
+const modelsDelayMs = Number(process.env.T3_OMP_MODELS_DELAY_MS ?? "0");
+
+const cliProgram = Effect.gen(function* () {
+  if (hangCliCommand) {
+    return yield* Effect.never;
+  }
+  if (isModelsCommand && Number.isFinite(modelsDelayMs) && modelsDelayMs > 0) {
+    yield* Effect.sleep(modelsDelayMs);
+  }
+  yield* Effect.sync(() => {
+    if (isVersionCommand) {
+      process.stdout.write(process.env.T3_OMP_VERSION_OUTPUT ?? "Oh My Pi 1.2.3\n");
+      process.exitCode = Number(process.env.T3_OMP_VERSION_EXIT_CODE ?? "0");
+    }
+    if (isModelsCommand) {
+      process.stdout.write(process.env.T3_OMP_MODELS_JSON ?? '{"models":[]}');
+      if (process.env.T3_OMP_MODELS_STDERR) {
+        process.stderr.write(process.env.T3_OMP_MODELS_STDERR);
+      }
+      process.exitCode = Number(process.env.T3_OMP_MODELS_EXIT_CODE ?? "0");
+    }
+  });
+});
+
+let currentModeId = ompMode ? (process.env.T3_ACP_OMP_INITIAL_MODE ?? "default") : "ask";
 let currentModelId = "default";
 let parameterizedModelPicker = false;
 let currentReasoning = "medium";
@@ -79,21 +203,64 @@ function writeJsonRpcNotification(method: string, params: unknown): void {
   process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", method, params })}\n`);
 }
 
-process.once("SIGTERM", () => {
-  logExit("SIGTERM");
-  process.exit(0);
-});
+if (!ignoreTermination) {
+  process.once("SIGTERM", () => {
+    logExit("SIGTERM");
+    process.exit(0);
+  });
 
-process.once("SIGINT", () => {
-  logExit("SIGINT");
-  process.exit(0);
-});
+  process.once("SIGINT", () => {
+    logExit("SIGINT");
+    process.exit(0);
+  });
+}
 
 process.once("exit", (code) => {
   logExit(`exit:${code}`);
 });
 
 function configOptions(): ReadonlyArray<AcpSchema.SessionConfigOption> {
+  if (ompMode) {
+    return [
+      {
+        id: "mode",
+        name: "Mode",
+        category: "mode",
+        type: "select",
+        currentValue: currentModeId,
+        options: availableModes.map((mode) => ({
+          value: mode.id,
+          name: mode.name,
+          ...(mode.description ? { description: mode.description } : {}),
+        })),
+      },
+      {
+        id: "model",
+        name: "Model",
+        category: "model",
+        type: "select",
+        currentValue: currentModelId,
+        options: [
+          { value: "default", name: "Auto" },
+          { value: "openai/gpt-5", name: "GPT-5" },
+          { value: "anthropic/claude", name: "Claude" },
+        ],
+      },
+      {
+        id: "thinking",
+        name: "Thinking",
+        category: "thought_level",
+        type: "select",
+        currentValue: currentReasoning,
+        options: [
+          { value: "off", name: "Off" },
+          { value: "low", name: "Low" },
+          { value: "medium", name: "Medium" },
+          { value: "high", name: "High" },
+        ],
+      },
+    ];
+  }
   if (parameterizedModelPicker) {
     const baseOptions: Array<AcpSchema.SessionConfigOption> = [
       {
@@ -253,23 +420,28 @@ function availableModels(): ReadonlyArray<{
   }));
 }
 
-const availableModes: ReadonlyArray<AcpSchema.SessionMode> = [
-  {
-    id: "ask",
-    name: "Ask",
-    description: "Request permission before making any changes",
-  },
-  {
-    id: "architect",
-    name: "Architect",
-    description: "Design and plan software systems without implementation",
-  },
-  {
-    id: "code",
-    name: "Code",
-    description: "Write and modify code with full tool access",
-  },
-];
+const availableModes: ReadonlyArray<AcpSchema.SessionMode> = ompMode
+  ? [
+      { id: "default", name: "Default" },
+      { id: "plan", name: "Plan" },
+    ]
+  : [
+      {
+        id: "ask",
+        name: "Ask",
+        description: "Request permission before making any changes",
+      },
+      {
+        id: "architect",
+        name: "Architect",
+        description: "Design and plan software systems without implementation",
+      },
+      {
+        id: "code",
+        name: "Code",
+        description: "Write and modify code with full tool access",
+      },
+    ];
 
 function modeState(): AcpSchema.SessionModeState {
   return {
@@ -297,7 +469,10 @@ const program = Effect.gen(function* () {
   const agent = yield* EffectAcpAgent.AcpAgent;
 
   yield* agent.handleInitialize((request) =>
-    Effect.sync(() => {
+    Effect.gen(function* () {
+      if (failInitialize) {
+        return yield* AcpError.AcpRequestError.internalError("Mock initialize failure");
+      }
       parameterizedModelPicker =
         request.clientCapabilities?._meta?.parameterizedModelPicker === true;
       return {
@@ -419,6 +594,9 @@ const program = Effect.gen(function* () {
         currentModelId = request.value;
       }
       if (request.configId === "reasoning" && typeof request.value === "string") {
+        currentReasoning = request.value;
+      }
+      if (request.configId === "thinking" && typeof request.value === "string") {
         currentReasoning = request.value;
       }
       if (request.configId === "context" && typeof request.value === "string") {
@@ -683,6 +861,18 @@ const program = Effect.gen(function* () {
             { optionId: permissionOptionIds.rejectOnce, name: "Reject", kind: "reject_once" },
           ],
         });
+        if (clientResponseLogPath) {
+          yield* Effect.sync(() =>
+            NodeFS.appendFileSync(
+              clientResponseLogPath,
+              `${encodeUnknownJson({ method: "session/request_permission", response: permission })}\n`,
+              "utf8",
+            ),
+          );
+        }
+        if (Number.isFinite(postClientResponseDelayMs) && postClientResponseDelayMs > 0) {
+          yield* Effect.sleep(`${postClientResponseDelayMs} millis`);
+        }
 
         const cancelled =
           cancelledSessions.delete(requestedSessionId) ||
@@ -771,6 +961,89 @@ const program = Effect.gen(function* () {
         });
 
         return { stopReason: "end_turn" };
+      }
+
+      if (ompElicitation) {
+        const isPlanElicitation = ompElicitation === "plan" || ompElicitation === "legacy-plan";
+        const elicitation =
+          ompElicitation === "url"
+            ? ({
+                mode: "url" as const,
+                elicitationId: "mock-elicitation-1",
+                url: "https://example.invalid/authorize",
+                message: "Open the authorization page",
+                sessionId: requestedSessionId,
+              } satisfies AcpSchema.ElicitationRequest)
+            : ({
+                mode: "form" as const,
+                message: isPlanElicitation ? "Approve this plan?" : "Configure the task",
+                sessionId: requestedSessionId,
+                requestedSchema: isPlanElicitation
+                  ? {
+                      type: "object" as const,
+                      properties: {
+                        value: {
+                          type: "string" as const,
+                          title: "Plan approval",
+                          enum: ["Approve and execute", "Refine plan"],
+                        },
+                      },
+                      required: ["value"],
+                    }
+                  : {
+                      type: "object" as const,
+                      properties: {
+                        q0: {
+                          type: "string" as const,
+                          title: "Target",
+                          oneOf: [
+                            { const: "web", title: "Web" },
+                            { const: "mobile", title: "Mobile" },
+                          ],
+                        },
+                        q0__other: { type: "string" as const, title: "Other target" },
+                        q1: {
+                          type: "array" as const,
+                          title: "Checks",
+                          items: { type: "string" as const, enum: ["tests", "lint"] },
+                        },
+                        notes: { type: "string" as const, title: "Notes" },
+                        enabled: { type: "boolean" as const, title: "Enabled" },
+                        retries: { type: "integer" as const, title: "Retries", minimum: 0 },
+                      },
+                      required: ["q0", "q1", "notes", "enabled", "retries"],
+                    },
+              } satisfies AcpSchema.ElicitationRequest);
+        const legacyWire = ompElicitation === "legacy-plan" && elicitation.mode === "form";
+        const response = legacyWire
+          ? yield* agent.client.extRequest("elicitation/create", elicitation)
+          : yield* agent.client.elicit(elicitation);
+        if (clientResponseLogPath) {
+          yield* Effect.sync(() =>
+            NodeFS.appendFileSync(
+              clientResponseLogPath,
+              `${encodeUnknownJson({
+                method: legacyWire ? "elicitation/create" : "session/elicitation",
+                response,
+              })}\n`,
+              "utf8",
+            ),
+          );
+        }
+        if (Number.isFinite(postClientResponseDelayMs) && postClientResponseDelayMs > 0) {
+          yield* Effect.sleep(`${postClientResponseDelayMs} millis`);
+        }
+        const action =
+          typeof response === "object" && response !== null && "action" in response
+            ? response.action
+            : undefined;
+        const cancelled =
+          action === "cancel" ||
+          (typeof action === "object" &&
+            action !== null &&
+            "action" in action &&
+            action.action === "cancel");
+        return { stopReason: cancelled ? "cancelled" : "end_turn" };
       }
 
       if (emitXAiAskUserQuestion) {
@@ -955,4 +1228,4 @@ const program = Effect.gen(function* () {
   Effect.provide(NodeServices.layer),
 );
 
-NodeRuntime.runMain(program);
+NodeRuntime.runMain(isCliCommand ? cliProgram : program);

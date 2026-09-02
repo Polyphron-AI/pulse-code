@@ -1,20 +1,56 @@
 import { describe, expect, it } from "vite-plus/test";
 import * as Schema from "effect/Schema";
 
-import { ProviderInstanceId } from "./providerInstance.ts";
+import { PROVIDER_DISPLAY_NAMES } from "./model.ts";
+import { ProviderDriverKind, ProviderInstanceId } from "./providerInstance.ts";
 import {
   ClientSettingsSchema,
   ClientSettingsPatch,
   DEFAULT_SERVER_SETTINGS,
+  OmpSettings,
   ServerSettings,
   ServerSettingsPatch,
 } from "./settings.ts";
 
 const decodeClientSettings = Schema.decodeUnknownSync(ClientSettingsSchema);
 const decodeClientSettingsPatch = Schema.decodeUnknownSync(ClientSettingsPatch);
+const decodeOmpSettings = Schema.decodeUnknownSync(OmpSettings);
 const decodeServerSettings = Schema.decodeUnknownSync(ServerSettings);
 const decodeServerSettingsPatch = Schema.decodeUnknownSync(ServerSettingsPatch);
 const encodeServerSettings = Schema.encodeSync(ServerSettings);
+
+describe("OmpSettings", () => {
+  it("defaults to the native omp executable", () => {
+    expect(decodeOmpSettings({})).toEqual({
+      enabled: true,
+      binaryPath: "omp",
+    });
+    expect(DEFAULT_SERVER_SETTINGS.providers.omp).toEqual({
+      enabled: true,
+      binaryPath: "omp",
+    });
+  });
+
+  it("normalizes partial server patches", () => {
+    const patch = decodeServerSettingsPatch({
+      providers: {
+        omp: {
+          enabled: false,
+          binaryPath: "  C:\\Tools\\omp.exe  ",
+        },
+      },
+    });
+
+    expect(patch.providers?.omp).toEqual({
+      enabled: false,
+      binaryPath: "C:\\Tools\\omp.exe",
+    });
+  });
+
+  it("publishes the shared Oh My Pi display name", () => {
+    expect(PROVIDER_DISPLAY_NAMES[ProviderDriverKind.make("omp")]).toBe("Oh My Pi");
+  });
+});
 
 describe("ClientSettings word wrap", () => {
   it("defaults word wrap on", () => {

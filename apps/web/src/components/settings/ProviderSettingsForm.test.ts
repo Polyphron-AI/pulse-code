@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vite-plus/test";
 import { ProviderDriverKind } from "@t3tools/contracts";
 
-import { DRIVER_OPTION_BY_VALUE } from "./providerDriverMeta";
+import { PROVIDER_ICON_BY_PROVIDER } from "../chat/providerIconUtils";
+import { PiAgentIcon } from "../Icons";
+import { DRIVER_OPTION_BY_VALUE, DRIVER_OPTIONS, getDriverOption } from "./providerDriverMeta";
 import {
   deriveProviderSettingsFields,
   nextProviderConfigWithFieldValue,
@@ -10,6 +12,30 @@ import {
 } from "./ProviderSettingsForm";
 
 describe("ProviderSettingsForm helpers", () => {
+  it("exposes Oh My Pi metadata and its executable path setting", () => {
+    const ompKind = ProviderDriverKind.make("omp");
+    const omp = DRIVER_OPTION_BY_VALUE[ompKind];
+
+    expect(omp).toMatchObject({
+      label: "Oh My Pi",
+      icon: PiAgentIcon,
+      badgeLabel: "Early Access",
+    });
+    expect(DRIVER_OPTIONS.find((option) => option.value === ompKind)).toBe(omp);
+    expect(getDriverOption(ompKind)).toBe(omp);
+    expect(PROVIDER_ICON_BY_PROVIDER[ompKind]).toBe(PiAgentIcon);
+    expect(deriveProviderSettingsFields(omp!)).toEqual([
+      {
+        key: "binaryPath",
+        control: "text",
+        label: "Binary path",
+        description: "Path to the Oh My Pi binary used by this instance.",
+        placeholder: "omp",
+        clearWhenEmpty: "omit",
+      },
+    ]);
+  });
+
   it("derives visible provider config fields from the client definition schema", () => {
     const codex = DRIVER_OPTION_BY_VALUE[ProviderDriverKind.make("codex")];
 

@@ -7,7 +7,11 @@
     "repository": "Pulse Code",
     "worktree": "main"
   },
-  "files_touched": [],
+  "files_touched": [
+    "C:\\Users\\qblaa\\.codex\\plugins\\cache\\product-ops-skill\\product-ops\\3.38.1\\skills\\product-ops\\scripts\\minion_supervisor.py",
+    "C:\\Users\\qblaa\\.codex\\plugins\\cache\\product-ops-skill\\product-ops\\3.38.1\\skills\\product-ops\\scripts\\tests\\test_minion_service.py",
+    "C:\\Users\\qblaa\\.codex\\plugins\\cache\\product-ops-skill\\product-ops\\3.38.1\\skills\\product-ops\\scripts\\tests\\test_minion_supervisor.py"
+  ],
   "host_refs": {},
   "id": "B-2026-08-25-001",
   "kind": "bugfix",
@@ -16,8 +20,10 @@
   "plan_id": null,
   "roadmap_items": [],
   "schema": "product-ops.task/v1",
-  "status": "pending",
+  "status": "done",
   "subject": "Prevent Minion scans from traversing ignored repository trees",
-  "updated_at": "2026-08-25T11:12:57Z",
-  "verification_receipts": []
+  "updated_at": "2026-08-25T11:35:16Z",
+  "verification_receipts": [
+    "python -m unittest test_minion_supervisor test_minion_service: 31 passed"
+  ]
 }

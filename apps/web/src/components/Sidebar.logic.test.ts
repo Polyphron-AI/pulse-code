@@ -3,6 +3,8 @@ import {
   archiveSelectedThreadEntries,
   buildBulkTitleRegenerationContextMenuItem,
   buildMultiSelectThreadContextMenuItems,
+  buildSidebarScheduleRows,
+  countActiveSidebarSchedules,
   createThreadJumpHintVisibilityController,
   getSidebarThreadIdsToPrewarm,
   getVisibleSidebarThreadIds,
@@ -22,6 +24,8 @@ import {
   resolveThreadStatusPill,
   resolveWorkingStartedAt,
   searchSidebarThreadsByTitle,
+  searchSidebarScheduleRows,
+  shouldShowSidebarThread,
   formatWorkingDurationLabel,
   shouldNavigateAfterProjectRemoval,
   shouldClearThreadSelectionOnMouseDown,
@@ -42,7 +46,16 @@ import {
   ProjectId,
   ProviderInstanceId,
   ThreadId,
+  ScheduleId,
+  type OrchestrationSchedule,
+  type OrchestrationShellSnapshot,
 } from "@t3tools/contracts";
+import type {
+  EnvironmentProject,
+  EnvironmentThreadShell,
+} from "@t3tools/client-runtime/state/models";
+
+import { buildScheduleCatalogState } from "../state/schedules";
 
 import {
   DEFAULT_INTERACTION_MODE,
@@ -52,6 +65,162 @@ import {
 } from "../types";
 
 const localEnvironmentId = EnvironmentId.make("environment-local");
+
+function sidebarSchedule(overrides: Partial<OrchestrationSchedule> = {}): OrchestrationSchedule {
+  return {
+    id: ScheduleId.make("schedule-1"),
+    scope: { _tag: "project", projectId: ProjectId.make("project-1") },
+    hourLocal: 9,
+    minuteLocal: 0,
+    interval: null,
+    intervalAnchorAt: null,
+    timezone: "Africa/Johannesburg",
+    prompt: "Prepare the morning brief\nInclude open work.",
+    workflowScriptRef: null,
+    handoffPathTemplate: "handoff/{date}.md",
+    maxRunMinutes: 15,
+    maxTurnMinutes: 10,
+    pausedAt: null,
+    projectStates: [],
+    createdAt: "2026-08-26T06:00:00.000Z",
+    updatedAt: "2026-08-26T06:00:00.000Z",
+    deletedAt: null,
+    ...overrides,
+  } as OrchestrationSchedule;
+}
+
+describe("scheduled sidebar projection", () => {
+  const project = {
+    id: ProjectId.make("project-1"),
+    environmentId: localEnvironmentId,
+    title: "Pulse Code",
+  } as EnvironmentProject;
+
+  it("uses the project scope in Projects mode and ignores it in Scheduled mode", () => {
+    const ordinary = {
+      environmentId: localEnvironmentId,
+      projectId: ProjectId.make("project-2"),
+      archivedAt: null,
+      origin: "user",
+    } as EnvironmentThreadShell;
+    const scheduled = {
+      ...ordinary,
+      origin: "schedule:schedule-1",
+    } as EnvironmentThreadShell;
+    const scope = new Set([`${localEnvironmentId}:project-1`]);
+
+    expect(
+      shouldShowSidebarThread({ thread: ordinary, mode: "projects", scopedProjectKeys: scope }),
+    ).toBe(false);
+    expect(
+      shouldShowSidebarThread({ thread: scheduled, mode: "scheduled", scopedProjectKeys: scope }),
+    ).toBe(true);
+  });
+
+  it("counts only non-deleted, unpaused schedule definitions", () => {
+    expect(
+      countActiveSidebarSchedules([
+        sidebarSchedule(),
+        sidebarSchedule({ pausedAt: "2026-08-26T07:00:00.000Z" }),
+        sidebarSchedule({ deletedAt: "2026-08-26T08:00:00.000Z" }),
+      ]),
+    ).toBe(1);
+  });
+
+  it("keeps a schedule with no thread visible as Not initialized yet", () => {
+    const rows = buildSidebarScheduleRows({
+      schedules: [{ ...sidebarSchedule(), environmentId: localEnvironmentId }],
+      projects: [project],
+      threads: [],
+    });
+
+    expect(rows).toMatchObject([
+      {
+        projectLabel: "Pulse Code",
+        threadId: null,
+        title: "Prepare the morning brief",
+        stateLabel: "Not initialized yet",
+        statusLabel: "Active",
+      },
+    ]);
+  });
+
+  it("joins an initialized schedule to its durable thread and preserves missing projects", () => {
+    const threadId = ThreadId.make("thread-1");
+    const missingProjectId = ProjectId.make("missing-project");
+    const schedule = sidebarSchedule({
+      scope: { _tag: "project", projectId: missingProjectId },
+      projectStates: [
+        {
+          projectId: missingProjectId,
+          threadId,
+          lastOccurrenceKey: "scheduled:schedule-1:2026-08-26:missing-project",
+          lastOccurrenceStatus: "completed",
+          lastOccurrenceAt: "2026-08-26T07:00:00.000Z",
+          consecutiveFailures: 0,
+          skippedRunCount: 0,
+        },
+      ],
+    });
+    const thread = {
+      id: threadId,
+      environmentId: localEnvironmentId,
+      projectId: missingProjectId,
+      archivedAt: null,
+      origin: "schedule:schedule-1",
+      title: "Morning brief",
+    } as EnvironmentThreadShell;
+
+    expect(
+      buildSidebarScheduleRows({
+        schedules: [{ ...schedule, environmentId: localEnvironmentId }],
+        projects: [project],
+        threads: [thread],
+      }),
+    ).toMatchObject([
+      {
+        projectLabel: "Missing project",
+        threadId,
+        title: "Morning brief",
+        stateLabel: "Initialized",
+      },
+    ]);
+  });
+
+  it("filters schedule rows by title, project, and state", () => {
+    const rows = buildSidebarScheduleRows({
+      schedules: [{ ...sidebarSchedule(), environmentId: localEnvironmentId }],
+      projects: [project],
+      threads: [],
+    });
+
+    expect(searchSidebarScheduleRows(rows, "pulse")).toHaveLength(1);
+    expect(searchSidebarScheduleRows(rows, "not initialized")).toHaveLength(1);
+    expect(searchSidebarScheduleRows(rows, "weekly cleanup")).toHaveLength(0);
+  });
+
+  it("aggregates supported environment snapshots without treating older servers as supported", () => {
+    const remoteEnvironmentId = EnvironmentId.make("environment-remote");
+    const schedule = sidebarSchedule();
+    const state = buildScheduleCatalogState([
+      {
+        environmentId: localEnvironmentId,
+        snapshot: { schedules: [schedule] } as unknown as OrchestrationShellSnapshot,
+      },
+      {
+        environmentId: remoteEnvironmentId,
+        snapshot: {} as unknown as OrchestrationShellSnapshot,
+      },
+    ]);
+
+    expect(state).toMatchObject({
+      environmentCount: 2,
+      loadedEnvironmentCount: 2,
+      supportedEnvironmentCount: 1,
+    });
+    expect(state.schedules).toMatchObject([{ id: schedule.id, environmentId: localEnvironmentId }]);
+  });
+});
 
 describe("shouldNavigateAfterProjectRemoval", () => {
   const projectThreads = [{ environmentId: "environment-local", id: "thread-1" }];

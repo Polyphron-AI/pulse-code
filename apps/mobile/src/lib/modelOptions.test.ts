@@ -10,6 +10,30 @@ import {
 } from "./modelOptions";
 
 describe("mobile model options", () => {
+  it("uses the shared Oh My Pi label when the server omits a display name", () => {
+    const config = {
+      providers: [
+        {
+          instanceId: "omp",
+          driver: "omp",
+          enabled: true,
+          installed: true,
+          auth: { status: "authenticated" },
+          models: [
+            {
+              slug: "anthropic/claude-sonnet-4-6",
+              name: "Claude Sonnet 4.6",
+              isCustom: false,
+              capabilities: null,
+            },
+          ],
+        },
+      ],
+    } as unknown as ServerConfig;
+
+    expect(buildModelOptions(config, null)[0]?.providerLabel).toBe("Oh My Pi");
+  });
+
   it("groups models by provider and flags legacy entries", () => {
     const config = {
       providers: [

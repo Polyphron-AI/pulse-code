@@ -1,5 +1,15 @@
 import * as React from "react";
-import type { ContextMenuItem } from "@t3tools/contracts";
+import type {
+  ContextMenuItem,
+  EnvironmentId,
+  OrchestrationSchedule,
+  ProjectId,
+  ThreadId,
+} from "@t3tools/contracts";
+import type {
+  EnvironmentProject,
+  EnvironmentThreadShell,
+} from "@t3tools/client-runtime/state/models";
 import type { SidebarProjectSortOrder, SidebarThreadSortOrder } from "@t3tools/contracts/settings";
 import {
   getThreadSortTimestamp,
@@ -49,6 +59,201 @@ type LogicalSidebarProject = SidebarProject & {
 };
 
 export type ThreadTraversalDirection = "previous" | "next";
+
+export type SidebarMode = "projects" | "scheduled";
+
+export type EnvironmentSchedule = OrchestrationSchedule & {
+  readonly environmentId: EnvironmentId;
+};
+
+export interface SidebarScheduleRow {
+  readonly key: string;
+  readonly environmentId: EnvironmentId;
+  readonly scheduleId: OrchestrationSchedule["id"];
+  readonly projectId: ProjectId | null;
+  readonly threadId: ThreadId | null;
+  readonly title: string;
+  readonly projectLabel: string;
+  readonly timingLabel: string;
+  readonly stateLabel: string;
+  readonly statusLabel: string;
+  readonly paused: boolean;
+  readonly updatedAt: string;
+}
+
+export function isScheduledSidebarThread(thread: Pick<EnvironmentThreadShell, "origin">): boolean {
+  return thread.origin?.startsWith("schedule:") === true;
+}
+
+export function shouldShowSidebarThread(input: {
+  readonly thread: Pick<
+    EnvironmentThreadShell,
+    "environmentId" | "projectId" | "archivedAt" | "origin"
+  >;
+  readonly mode: SidebarMode;
+  readonly scopedProjectKeys: ReadonlySet<string> | null;
+}): boolean {
+  if (input.thread.archivedAt !== null) return false;
+  if (input.mode === "scheduled") return isScheduledSidebarThread(input.thread);
+  return (
+    input.scopedProjectKeys === null ||
+    input.scopedProjectKeys.has(`${input.thread.environmentId}:${input.thread.projectId}`)
+  );
+}
+
+export function countActiveSidebarSchedules(
+  schedules: ReadonlyArray<Pick<OrchestrationSchedule, "deletedAt" | "pausedAt">>,
+): number {
+  return schedules.filter((schedule) => schedule.deletedAt === null && schedule.pausedAt === null)
+    .length;
+}
+
+export function formatSidebarScheduleTiming(
+  schedule: Pick<OrchestrationSchedule, "hourLocal" | "minuteLocal" | "interval" | "timezone">,
+): string {
+  if (schedule.interval !== null && schedule.interval !== undefined) {
+    const { value, unit } = schedule.interval;
+    return `Every ${value} ${value === 1 ? unit.slice(0, -1) : unit}`;
+  }
+  const time = `${String(schedule.hourLocal).padStart(2, "0")}:${String(schedule.minuteLocal).padStart(2, "0")}`;
+  return `Daily ${time} ${schedule.timezone}`;
+}
+
+function scheduleStatusLabel(schedule: OrchestrationSchedule): string {
+  if (schedule.pausedAt !== null) {
+    return schedule.autoPausedReason ? "Auto-paused" : "Paused";
+  }
+  if (schedule.projectStates.some((state) => state.lastOccurrenceStatus === "running")) {
+    return "Running";
+  }
+  if (schedule.projectStates.some((state) => state.lastOccurrenceStatus === "failed")) {
+    return "Last run failed";
+  }
+  if (schedule.projectStates.some((state) => state.lastOccurrenceStatus === "skipped")) {
+    return "Last run skipped";
+  }
+  return "Active";
+}
+
+function scheduleTargetProjectIds(
+  schedule: OrchestrationSchedule,
+  environmentProjects: ReadonlyArray<EnvironmentProject>,
+): ReadonlyArray<ProjectId | null> {
+  const targetIds: Array<ProjectId> = [];
+  if (schedule.scope._tag === "project") {
+    targetIds.push(schedule.scope.projectId);
+  } else if (schedule.scope.projectIds === "all") {
+    targetIds.push(...environmentProjects.map((project) => project.id));
+  } else {
+    targetIds.push(...schedule.scope.projectIds);
+  }
+  targetIds.push(...schedule.projectStates.map((state) => state.projectId));
+  const unique = [...new Set(targetIds)];
+  return unique.length > 0 ? unique : [null];
+}
+
+function promptTitle(prompt: string): string {
+  return prompt.split(/\r?\n/, 1)[0]?.trim() || "Scheduled chat";
+}
+
+export function buildSidebarScheduleRows(input: {
+  readonly schedules: ReadonlyArray<EnvironmentSchedule>;
+  readonly projects: ReadonlyArray<EnvironmentProject>;
+  readonly threads: ReadonlyArray<EnvironmentThreadShell>;
+}): ReadonlyArray<SidebarScheduleRow> {
+  const projectByKey = new Map(
+    input.projects.map((project) => [`${project.environmentId}:${project.id}`, project] as const),
+  );
+  const threadByKey = new Map(
+    input.threads
+      .filter((thread) => thread.archivedAt === null)
+      .map((thread) => [`${thread.environmentId}:${thread.id}`, thread] as const),
+  );
+  const scheduleThreadByProject = new Map<string, EnvironmentThreadShell>();
+  for (const thread of input.threads) {
+    if (thread.archivedAt !== null || !isScheduledSidebarThread(thread)) continue;
+    const scheduleId = thread.origin?.slice("schedule:".length);
+    if (!scheduleId) continue;
+    scheduleThreadByProject.set(
+      `${thread.environmentId}:${scheduleId}:${thread.projectId}`,
+      thread,
+    );
+  }
+
+  const rows: SidebarScheduleRow[] = [];
+  for (const schedule of input.schedules) {
+    if (schedule.deletedAt !== null) continue;
+    const environmentProjects = input.projects.filter(
+      (project) => project.environmentId === schedule.environmentId,
+    );
+    const stateByProjectId = new Map(
+      schedule.projectStates.map((state) => [state.projectId, state] as const),
+    );
+    for (const projectId of scheduleTargetProjectIds(schedule, environmentProjects)) {
+      const state = projectId === null ? null : (stateByProjectId.get(projectId) ?? null);
+      const explicitThread =
+        state?.threadId == null
+          ? null
+          : (threadByKey.get(`${schedule.environmentId}:${state.threadId}`) ?? null);
+      const originThread =
+        projectId === null
+          ? null
+          : (scheduleThreadByProject.get(`${schedule.environmentId}:${schedule.id}:${projectId}`) ??
+            null);
+      const thread = explicitThread ?? originThread;
+      const threadId = thread?.id ?? state?.threadId ?? null;
+      const project =
+        projectId === null
+          ? null
+          : (projectByKey.get(`${schedule.environmentId}:${projectId}`) ?? null);
+      const stateLabel =
+        threadId === null
+          ? "Not initialized yet"
+          : thread === null
+            ? "Thread unavailable"
+            : state?.lastOccurrenceStatus === "running"
+              ? "Running"
+              : state?.lastOccurrenceStatus === "failed"
+                ? "Last run failed"
+                : state?.lastOccurrenceStatus === "skipped"
+                  ? "Last run skipped"
+                  : "Initialized";
+      rows.push({
+        key: `${schedule.environmentId}:${schedule.id}:${projectId ?? "all"}`,
+        environmentId: schedule.environmentId,
+        scheduleId: schedule.id,
+        projectId,
+        threadId,
+        title: thread?.title.trim() || promptTitle(schedule.prompt),
+        projectLabel: projectId === null ? "All projects" : (project?.title ?? "Missing project"),
+        timingLabel: formatSidebarScheduleTiming(schedule),
+        stateLabel,
+        statusLabel: scheduleStatusLabel(schedule),
+        paused: schedule.pausedAt !== null,
+        updatedAt: schedule.updatedAt,
+      });
+    }
+  }
+
+  return rows.toSorted(
+    (left, right) =>
+      Date.parse(right.updatedAt) - Date.parse(left.updatedAt) ||
+      left.projectLabel.localeCompare(right.projectLabel),
+  );
+}
+
+export function searchSidebarScheduleRows(
+  rows: ReadonlyArray<SidebarScheduleRow>,
+  query: string,
+): ReadonlyArray<SidebarScheduleRow> {
+  const normalized = query.trim().toLocaleLowerCase();
+  if (normalized.length === 0) return rows;
+  return rows.filter((row) =>
+    `${row.title}\n${row.projectLabel}\n${row.stateLabel}\n${row.statusLabel}`
+      .toLocaleLowerCase()
+      .includes(normalized),
+  );
+}
 
 export async function archiveSelectedThreadEntries<
   TEntry extends { readonly threadKey: string },

@@ -1,0 +1,25 @@
+{
+  "blocked_by": ["P-2026-08-26-sidebar-scheduled-chats/T1"],
+  "commits": [],
+  "created_at": "2026-08-26T14:36:19Z",
+  "execution_context": {
+    "branch": "develop",
+    "repository": "Pulse Code",
+    "worktree": "main"
+  },
+  "files_touched": ["apps/web/src/components/Sidebar.tsx", "docs/user/scheduled-chats.md"],
+  "host_refs": {},
+  "id": "P-2026-08-26-sidebar-scheduled-chats/T2",
+  "kind": "implementation",
+  "local_id": "T2",
+  "owner": null,
+  "plan_id": "P-2026-08-26-sidebar-scheduled-chats",
+  "roadmap_items": ["R-2026-08-21-scheduled-chats"],
+  "schema": "product-ops.task/v1",
+  "status": "blocked",
+  "subject": "Render, verify, and package the approved sidebar modes",
+  "updated_at": "2026-08-26T15:03:58Z",
+  "verification_receipts": [
+    "Focused verification passed: 109 tests, web typecheck, formatter, plan validation, prose lint. Approved static render remains the visual receipt. Live preview was not opened because the collaborative browser rejected the privileged pairing URL without explicit browser authorization. Windows x64 NSIS build passed; payload validation: 69 files and 35 native sidecars; SHA256 CFD8FF5CC40EC9D7FF2ECB94908CDA47A0C2D52DB8ED49B08AE2A6E0666D71B5."
+  ]
+}
