@@ -41,6 +41,25 @@ For an **All projects** schedule, each targeted project keeps its own handoff at
 independently in each project; there is no shared environment-level handoff
 directory.
 
+## Keep recurring instructions in a task file
+
+For project maintenance that changes over time, keep the detailed instructions
+in a committed Markdown file and use a short schedule prompt that points to it:
+
+```text
+Read tasks/my-recurring-task.md from the project root and follow it exactly.
+```
+
+Each occurrence reads the current file, so reviewed task changes apply to the
+next run without recreating the schedule. Pulse Code stores the prompt, not a
+copy of the referenced file. It does not import or validate a task-file format;
+the scheduled agent reads the file from the selected project's workspace.
+
+Use project scope unless every selected project contains the same relative task
+path. If a task should remain read-only, say so in the file, turn off **Skip
+dirty projects**, and choose **Add to .gitignore** for handoffs so the generated
+run summary does not leave the checkout dirty.
+
 ## Find scheduled chats from the sidebar
 
 Use the **Projects / Scheduled** control in the main sidebar to switch between

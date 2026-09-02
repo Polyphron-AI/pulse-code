@@ -40,6 +40,19 @@ GitHub forks do not publish copies of upstream GitHub Releases. Monitoring there
 official repositories directly. Fork synchronization is a separate, deliberate operation so an
 upstream source change cannot enter Pulse without review.
 
+## Pulse scheduled task
+
+Pulse Code Scheduled chats owns the cadence and run history. A committed Markdown task owns the
+monitoring instructions. The saved schedule prompt points to
+`tasks/upstream-release-monitoring.md`, so instruction changes remain reviewable and the next run
+uses the latest committed version.
+
+This is intentionally a prompt-to-file convention, not a new task-file parser. It uses the
+existing project-scoped scheduler, provider session, status UI, mobile controls, and handoff
+history. The task runs the release checker in read-only mode and reports one of `NO_CHANGE`,
+`REVIEW_REQUIRED`, or `MONITOR_ERROR`. It cannot advance a release cursor, sync a fork, or open a
+porting change.
+
 ## Boundaries
 
 - OMP is a first-party Pulse provider. A new OMP release should trigger provider discovery, ACP,
@@ -47,5 +60,5 @@ upstream source change cannot enter Pulse without review.
 - Orca is currently a design reference for the Pulse ORCA workspace. A new Orca release should
   trigger review of relevant workspace, worktree, run, gate, diff, remote-state, and OMP behavior.
 - Neither fork receives Pulse credentials. Pulse Connect keys are not provider credentials.
-- No scheduled workflow, issue creation, automatic merge, or automatic deployment is added in this
-  change.
+- No schedule is activated by this change. Cadence remains environment state controlled from
+  Scheduled chats. No issue creation, automatic merge, or automatic deployment is added.
