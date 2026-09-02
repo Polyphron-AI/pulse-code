@@ -2,7 +2,15 @@ import type { DesktopPreviewFavicon, PreviewSessionSnapshot } from "@t3tools/con
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 
-import { RightPanelTabs } from "./RightPanelTabs";
+import { RightPanelTabs, shouldOpenDefaultBrowserProfileFromMenuClick } from "./RightPanelTabs";
+
+describe("browser profile submenu", () => {
+  it("reserves touch clicks for opening the choices while mouse clicks use the default", () => {
+    expect(shouldOpenDefaultBrowserProfileFromMenuClick("touch")).toBe(false);
+    expect(shouldOpenDefaultBrowserProfileFromMenuClick("mouse")).toBe(true);
+    expect(shouldOpenDefaultBrowserProfileFromMenuClick(undefined)).toBe(true);
+  });
+});
 
 const previewSurface = {
   id: "browser:tab-1" as const,
@@ -73,6 +81,7 @@ function renderTabs(first: DesktopPreviewFavicon | null, second?: DesktopPreview
       onCloseAllSurfaces={() => undefined}
       onCopyFilePath={() => undefined}
       onAddBrowser={() => undefined}
+      onAddBrowserInProfile={() => undefined}
       onAddTerminal={() => undefined}
       onAddPullRequest={() => undefined}
       onAddIssue={() => undefined}

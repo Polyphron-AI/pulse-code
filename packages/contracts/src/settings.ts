@@ -17,6 +17,7 @@ import {
   ModelSelection,
   ProjectScript,
 } from "./orchestration.ts";
+import { BrowserProfile, BrowserProfileId, DEFAULT_BROWSER_PROFILE_ID } from "./browserProfile.ts";
 import {
   DEFAULT_PREVIEW_APPEARANCE,
   DEFAULT_PREVIEW_ZOOM_FACTOR,
@@ -190,6 +191,18 @@ export const ClientSettingsSchema = Schema.Struct({
   // back as the canonical string value.
   confirmQuit: QuitConfirmationModeSetting.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_QUIT_CONFIRMATION_MODE)),
+  ),
+  /**
+   * User-created browser profiles. The built-in Default and Incognito profiles
+   * are synthesized by `resolveBrowserProfiles`, not stored here, so they
+   * cannot be renamed away or deleted.
+   */
+  browserProfiles: Schema.Array(BrowserProfile).pipe(
+    Schema.withDecodingDefault(Effect.succeed([])),
+  ),
+  /** Profile new tabs open under. Falls back to Default if it no longer exists. */
+  browserDefaultProfileId: BrowserProfileId.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_BROWSER_PROFILE_ID)),
   ),
   confirmThreadArchive: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   confirmThreadDelete: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
@@ -1040,6 +1053,8 @@ export const ClientSettingsPatch = Schema.Struct({
   browserDefaultAppearance: Schema.optionalKey(PreviewAppearancePreference),
   browserAutoShowFloatingPreview: Schema.optionalKey(Schema.Boolean),
   confirmQuit: Schema.optionalKey(QuitConfirmationMode),
+  browserProfiles: Schema.optionalKey(Schema.Array(BrowserProfile)),
+  browserDefaultProfileId: Schema.optionalKey(BrowserProfileId),
   confirmThreadArchive: Schema.optionalKey(Schema.Boolean),
   confirmThreadDelete: Schema.optionalKey(Schema.Boolean),
   composerBusyBehavior: Schema.optionalKey(ComposerBusyBehavior),

@@ -23,6 +23,8 @@ const clientSettings: ClientSettings = {
   browserAutoShowFloatingPreview: false,
   composerBusyBehavior: "queue",
   confirmQuit: "hold",
+  browserProfiles: [{ id: "work", name: "Work", kind: "persistent" }],
+  browserDefaultProfileId: "work",
   confirmThreadArchive: true,
   confirmThreadDelete: false,
   dismissedProviderUpdateNotificationKeys: [],
