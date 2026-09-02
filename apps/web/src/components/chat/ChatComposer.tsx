@@ -127,9 +127,12 @@ import { ComposerPendingElementContexts } from "./ComposerPendingElementContexts
 import { ComposerPendingReviewComments } from "./ComposerPendingReviewComments";
 import { ComposerPreviewAnnotationCards } from "./ComposerPreviewAnnotationCards";
 import {
+  COMPOSER_FOOTER_COMPACT_BREAKPOINT_PX,
+  COMPOSER_FOOTER_WIDE_ACTIONS_COMPACT_BREAKPOINT_PX,
   shouldUseCompactComposerPrimaryActions,
   shouldUseCompactComposerFooter,
 } from "../composerFooterLayout";
+import { observeResponsiveBreakpointFade, usePanelAnimationSettings } from "../../panelAnimations";
 import { type ComposerPromptEditorHandle, ComposerPromptEditor } from "../ComposerPromptEditor";
 import { ProviderModelPicker } from "./ProviderModelPicker";
 import { type ComposerCommandItem, ComposerCommandMenu } from "./ComposerCommandMenu";
@@ -1246,6 +1249,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     props.onScrollCollapseChange?.(scrollCollapse.collapsed);
     return () => props.onScrollCollapseChange?.(false);
   }, [props.onScrollCollapseChange, scrollCollapse.collapsed]);
+  const { active: panelAnimationsActive, durationMs: panelAnimationDurationMs } =
+    usePanelAnimationSettings();
   const isComposerCollapsedMobile =
     isMobileViewport && !forceExpandedOnMobile && !isComposerFocused;
 
@@ -1255,6 +1260,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const composerEditorRef = useRef<ComposerPromptEditorHandle>(null);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const composerFormRef = useRef<HTMLFormElement>(null);
+  const composerFooterControlsRef = useRef<HTMLDivElement>(null);
   const composerSurfaceRef = useRef<HTMLDivElement>(null);
   const providerInputRejectedRef = useRef(false);
   const composerSelectLockRef = useRef(false);
@@ -1803,6 +1809,21 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     setIsComposerPrimaryActionsCompact(initialCompactness.primaryActionsCompact);
     setIsComposerFooterCompact(initialCompactness.footerCompact);
     if (typeof ResizeObserver === "undefined") return;
+    const footerControls = composerFooterControlsRef.current;
+    const stopFooterControlsFade = footerControls
+      ? observeResponsiveBreakpointFade({
+          target: footerControls,
+          container: composerForm,
+          active: panelAnimationsActive,
+          durationMs: panelAnimationDurationMs,
+          breakpoint: {
+            value: composerFooterHasWideActions
+              ? COMPOSER_FOOTER_WIDE_ACTIONS_COMPACT_BREAKPOINT_PX
+              : COMPOSER_FOOTER_COMPACT_BREAKPOINT_PX,
+            unit: "px",
+          },
+        })
+      : undefined;
 
     const observer = new ResizeObserver(() => {
       const nextCompactness = measureFooterCompactness();
@@ -1819,8 +1840,17 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     observer.observe(composerForm);
     return () => {
       observer.disconnect();
+      stopFooterControlsFade?.();
     };
-  }, [activeThreadId, composerFooterActionLayoutKey, composerFooterHasWideActions]);
+  }, [
+    activeThreadId,
+    composerFooterActionLayoutKey,
+    composerFooterHasWideActions,
+    isComposerApprovalState,
+    isComposerCollapsedMobile,
+    panelAnimationDurationMs,
+    panelAnimationsActive,
+  ]);
 
   // ------------------------------------------------------------------
   // Image persist effect
@@ -4016,6 +4046,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
             </div>
           ) : (
             <div
+              ref={composerFooterControlsRef}
               data-chat-composer-footer="true"
               data-chat-composer-footer-compact={isComposerFooterCompact ? "true" : "false"}
               className={cn(

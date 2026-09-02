@@ -7,6 +7,7 @@ import {
 import { Sheet, SheetPopup } from "./ui/sheet";
 
 export function RightPanelSheet(props: {
+  animationDurationMs: number;
   children: ReactNode;
   open: boolean;
   underFloatingPreview?: boolean;
@@ -22,6 +23,7 @@ export function RightPanelSheet(props: {
       }}
     >
       <SheetPopup
+        transitionDurationMs={props.animationDurationMs}
         side="right"
         showCloseButton={false}
         keepMounted

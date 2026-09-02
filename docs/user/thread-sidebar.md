@@ -36,6 +36,13 @@ signal shows a generic server. To override it, open **Settings → Connections**
 for that environment; **Automatic** goes back to what the server detected. The choice is stored on
 that server, so every device that connects to it sees the same icon.
 
+## Panel motion
+
+The main sidebar, right panel, and terminal drawer open and close immediately by default. Under
+**Settings → Appearance → Motion**, move the **Panel animations** slider above 0 ms to add motion.
+The duration can be set up to 400 ms. Clicking the preview replays all three panel transitions; at
+0 ms, it snaps between the same open and closed states.
+
 ## Environment artwork
 
 Dev and Nightly environments can identify themselves with artwork at the top of the sidebar and in
