@@ -258,6 +258,10 @@
     "./testing/symlinks": {
       "types": "./src/testing/symlinks.ts",
       "import": "./src/testing/symlinks.ts"
+    },
+    "./nodeSqliteClient": {
+      "types": "./src/nodeSqliteClient.ts",
+      "import": "./src/nodeSqliteClient.ts"
     }
   },
   "scripts": {
