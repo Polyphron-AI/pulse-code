@@ -1,3 +1,5 @@
+import type { ToolActivityIcon } from "@t3tools/contracts";
+import { toolActivityFaviconUrl } from "@t3tools/shared/favicon";
 import {
   type EnvironmentId,
   type MessageId,
@@ -1597,7 +1599,7 @@ function WorkGroupToggleTimelineRow({
         </span>
       ) : (
         <span className="font-medium text-foreground">
-          +{row.hiddenCount} previous {labelNoun}
+          {row.sourceSummary ?? `+${row.hiddenCount} previous ${labelNoun}`}
         </span>
       )}
     </button>
@@ -2138,6 +2140,46 @@ type WorkEntryIconName =
   | "x"
   | "zap";
 
+function ToolActivityIconView({
+  icon,
+  name,
+  className,
+}: {
+  icon: ToolActivityIcon | undefined;
+  name: WorkEntryIconName;
+  className: string;
+}) {
+  const { activeThreadEnvironmentId, resolvedTheme } = use(TimelineRowCtx);
+  const asset = useAssetUrlState(
+    activeThreadEnvironmentId,
+    icon?._tag === "native-app" ? { _tag: "native-app-icon", app: icon.app } : null,
+  );
+  const src =
+    icon?._tag === "website"
+      ? toolActivityFaviconUrl(icon, resolvedTheme, 32)
+      : icon?._tag === "themed-logo"
+        ? resolvedTheme === "dark"
+          ? (icon.logoUrlDark ?? icon.logoUrl)
+          : icon.logoUrl
+        : asset._tag === "Success"
+          ? asset.url
+          : null;
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  return src && src !== failedSrc ? (
+    <img
+      src={src}
+      alt=""
+      aria-hidden
+      referrerPolicy="no-referrer"
+      decoding="async"
+      className={cn(className, "rounded-sm object-contain")}
+      onError={() => setFailedSrc(src)}
+    />
+  ) : (
+    <WorkEntryIconSvg name={name} className={className} />
+  );
+}
+
 function WorkEntryIconSvg({ name, className }: { name: WorkEntryIconName; className: string }) {
   switch (name) {
     case "bot":
@@ -2258,6 +2300,8 @@ function workEntryIconName(workEntry: TimelineWorkEntry): WorkEntryIconName {
   ) {
     return "message-circle";
   }
+  if (workEntry.toolSurface === "browser") return "globe";
+  if (workEntry.toolSurface === "computer") return "terminal";
   if (workEntry.requestKind === "command") return "terminal";
   if (workEntry.requestKind === "file-read") return "eye";
   if (workEntry.requestKind === "file-change") return "square-pen";
@@ -2482,7 +2526,10 @@ const PlainWorkEntryRow = memo(function PlainWorkEntryRow(props: {
     >
       <div className="flex select-none items-center gap-1.5 transition-[opacity,translate] duration-200">
         <span className={iconWrapperClass}>
-          <WorkEntryIconSvg
+          <ToolActivityIconView
+            icon={
+              showWarningIndicator ? undefined : (workEntry.toolIcon ?? workEntry.toolSource?.icon)
+            }
             name={entryIconName}
             className="block size-3.5 shrink-0 stroke-[1.8] opacity-80"
           />

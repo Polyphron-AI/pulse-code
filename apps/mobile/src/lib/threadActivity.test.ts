@@ -819,3 +819,32 @@ describe("native and async question answers", () => {
     ).toEqual({ native: "An answer" });
   });
 });
+
+it("retains native tool icons in mobile feed rows", () => {
+  const toolIcon = { _tag: "native-app", app: { _tag: "app-id", appId: "com.example.Editor" } };
+  const toolSource = { key: "editor", name: "Editor", kind: "computer" };
+  const thread = makeThread({
+    id: ThreadId.make("icons"),
+    projectId: ProjectId.make("p"),
+    title: "Icons",
+    activities: [
+      makeActivity({
+        id: EventId.make("icon-event"),
+        kind: "tool.completed",
+        tone: "tool",
+        summary: "Edited file",
+        createdAt: "2026-04-01T00:00:00.000Z",
+        payload: {
+          itemType: "mcp_tool_call",
+          status: "completed",
+          toolSurface: "computer",
+          toolIcon,
+          toolSource,
+        },
+      }),
+    ],
+  });
+  const feed = buildThreadFeed(thread);
+  const rows = feed.flatMap((entry) => (entry.type === "activity-group" ? entry.activities : []));
+  expect(rows[0]).toMatchObject({ icon: "computer", toolIcon, toolSource });
+});

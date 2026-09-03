@@ -1,3 +1,9 @@
+import { useState } from "react";
+import { Image } from "expo-image";
+import type { EnvironmentId, ToolActivityIcon } from "@t3tools/contracts";
+import { toolActivityFaviconUrl } from "@t3tools/shared/favicon";
+import { useAssetUrl } from "../../state/assets";
+import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
 import * as Haptics from "expo-haptics";
 import { type AppSymbolName, SymbolView } from "../../components/AppSymbol";
 import { LayoutAnimation, Pressable, ScrollView, View } from "react-native";
@@ -45,6 +51,10 @@ function compactActivityDetail(detail: string | null): string | null {
 
 function workRowSymbolName(icon: ThreadFeedActivity["icon"]): AppSymbolName {
   switch (icon) {
+    case "browser":
+      return { ios: "globe", android: "public" };
+    case "computer":
+      return { ios: "desktopcomputer", android: "computer" };
     case "agent":
       return { ios: "sparkles", android: "auto_awesome" };
     case "alert":
@@ -120,7 +130,46 @@ export function collapsedWorkLogHeight(
   );
 }
 
+function ToolActivityIconView(props: {
+  environmentId: EnvironmentId;
+  icon: ToolActivityIcon | undefined;
+  fallback: AppSymbolName;
+  color: import("react-native").ColorValue;
+}) {
+  const { themeAppearance } = useAppearancePreferences();
+  const asset = useAssetUrl(
+    props.environmentId,
+    props.icon?._tag === "native-app" ? { _tag: "native-app-icon", app: props.icon.app } : null,
+  );
+  const src =
+    props.icon?._tag === "website"
+      ? toolActivityFaviconUrl(props.icon, themeAppearance, 32)
+      : props.icon?._tag === "themed-logo"
+        ? themeAppearance === "dark"
+          ? (props.icon.logoUrlDark ?? props.icon.logoUrl)
+          : props.icon.logoUrl
+        : asset;
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  return src && src !== failedSrc ? (
+    <Image
+      source={{ uri: src }}
+      style={{ width: 14, height: 14 }}
+      contentFit="contain"
+      onError={() => setFailedSrc(src)}
+    />
+  ) : (
+    <SymbolView
+      name={props.fallback}
+      size={13}
+      weight="medium"
+      tintColor={props.color}
+      type="monochrome"
+    />
+  );
+}
+
 export function ThreadWorkLog(props: {
+  readonly environmentId: EnvironmentId;
   readonly activities: ReadonlyArray<ThreadFeedActivity>;
   readonly copiedRowId: string | null;
   readonly expandedRows: Readonly<Record<string, boolean>>;
@@ -185,12 +234,11 @@ export function ThreadWorkLog(props: {
               >
                 <View className="min-h-8 flex-row items-center gap-1.5">
                   <View className="h-[18px] w-5 shrink-0 items-center justify-center">
-                    <SymbolView
-                      name={workRowSymbolName(row.icon)}
-                      size={13}
-                      weight="medium"
-                      tintColor={iconIsDestructive ? "#e11d48" : props.iconSubtleColor}
-                      type="monochrome"
+                    <ToolActivityIconView
+                      environmentId={props.environmentId}
+                      icon={iconIsDestructive ? undefined : (row.toolIcon ?? row.toolSource?.icon)}
+                      fallback={workRowSymbolName(row.icon)}
+                      color={iconIsDestructive ? "#e11d48" : props.iconSubtleColor}
                     />
                   </View>
 
@@ -279,6 +327,7 @@ export function ThreadWorkGroupToggle(props: {
   readonly hiddenCount: number;
   readonly iconSubtleColor: import("react-native").ColorValue;
   readonly onlyToolActivities: boolean;
+  readonly sourceSummary?: string;
   readonly onToggle: () => void;
 }) {
   const pressedBackground = useThemeColor("--color-subtle");
@@ -323,7 +372,9 @@ export function ThreadWorkGroupToggle(props: {
           />
         </View>
         <Text className="font-t3-medium text-xs text-foreground opacity-80">
-          {props.expanded ? expandedLabel : `+${props.hiddenCount} previous ${noun}`}
+          {props.expanded
+            ? expandedLabel
+            : (props.sourceSummary ?? `+${props.hiddenCount} previous ${noun}`)}
         </Text>
       </Pressable>
     </View>

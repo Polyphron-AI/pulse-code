@@ -1398,6 +1398,7 @@ function renderFeedEntry(
         hiddenCount={entry.hiddenCount}
         iconSubtleColor={iconSubtleColor}
         onlyToolActivities={entry.onlyToolActivities}
+        sourceSummary={entry.sourceSummary}
         onToggle={() => props.onToggleWorkGroup(entry.groupId)}
       />
     );
@@ -1587,6 +1588,7 @@ function renderFeedEntry(
 
   return (
     <ThreadWorkLog
+      environmentId={props.environmentId}
       activities={entry.activities}
       copiedRowId={props.copiedRowId}
       expandedRows={props.expandedWorkRows}

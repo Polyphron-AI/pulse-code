@@ -1954,3 +1954,30 @@ describe("rerun workflows", () => {
     expect(spawnRows.map((row) => row.turnId)).toEqual(["turn-1", "turn-2"]);
   });
 });
+
+it("retains tool icons and source through a terminal lifecycle update", () => {
+  const toolIcon = { _tag: "website", pageUrl: "https://example.com/docs" };
+  const toolSource = { key: "browser", name: "Browser", kind: "browser" };
+  const entries = deriveWorkLogEntries([
+    makeActivity({
+      id: "start-icon",
+      kind: "tool.started",
+      payload: {
+        itemType: "mcp_tool_call",
+        toolCallId: "icon-call",
+        status: "inProgress",
+        toolSurface: "browser",
+        toolIcon,
+        toolSource,
+      },
+    }),
+    makeActivity({
+      id: "finish-icon",
+      kind: "tool.completed",
+      createdAt: "2026-02-23T00:00:01.000Z",
+      payload: { itemType: "mcp_tool_call", toolCallId: "icon-call", status: "completed" },
+    }),
+  ]);
+  expect(entries).toHaveLength(1);
+  expect(entries[0]).toMatchObject({ toolSurface: "browser", toolIcon, toolSource });
+});

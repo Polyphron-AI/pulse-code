@@ -1,3 +1,4 @@
+import { extractToolActivityPresentation } from "@t3tools/client-runtime/work-log/tool-presentation";
 import {
   derivePendingRequests,
   requestKindFromRequestType,
@@ -81,6 +82,9 @@ export interface WorkLogEntry {
   changedFiles?: ReadonlyArray<string>;
   tone: "thinking" | "tool" | "info" | "error";
   toolTitle?: string;
+  toolSurface?: import("@t3tools/contracts").ToolActivitySurface;
+  toolIcon?: import("@t3tools/contracts").ToolActivityIcon;
+  toolSource?: import("@t3tools/contracts").ToolActivitySource;
   toolData?: unknown;
   itemType?: ToolLifecycleItemType;
   requestKind?: PendingApproval["requestKind"];
@@ -565,7 +569,16 @@ export function deriveWorkLogEntries(
 ): WorkLogEntry[] {
   const ordered = [...activities].toSorted(compareActivitiesByOrder);
   const entries: DerivedWorkLogEntry[] = [];
+  const toolPresentations = new Map<string, ReturnType<typeof extractToolActivityPresentation>>();
   for (const activity of ordered) {
+    const payload = asRecord(activity.payload);
+    const toolCallId = typeof payload?.toolCallId === "string" ? payload.toolCallId : undefined;
+    const presentationKey = toolCallId ? `${activity.turnId ?? ""}:${toolCallId}` : undefined;
+    const presentation = {
+      ...(presentationKey ? toolPresentations.get(presentationKey) : {}),
+      ...extractToolActivityPresentation(payload),
+    };
+    if (presentationKey) toolPresentations.set(presentationKey, presentation);
     if (activity.kind === "tool.started") continue;
     // Agent task.started rows are CTA seeds: they carry the true spawn turn,
     // which is the batch key (completions of background subagents arrive
@@ -578,7 +591,7 @@ export function deriveWorkLogEntries(
     if (activity.summary === "Checkpoint captured") continue;
     if (isPlanBoundaryToolActivity(activity)) continue;
     if (isAgentInternalActivity(activity)) continue;
-    entries.push(toDerivedWorkLogEntry(activity));
+    entries.push({ ...toDerivedWorkLogEntry(activity), ...presentation });
   }
   return collapseDerivedWorkLogEntries(entries).map((entry) => {
     const { activityKind, collapseKey: _collapseKey, ...rest } = entry;
@@ -625,6 +638,7 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
   const commandPreview = extractToolCommand(payload);
   const changedFiles = extractChangedFiles(payload);
   const title = extractToolTitle(payload);
+  const toolPresentation = extractToolActivityPresentation(payload);
   const isTaskActivity =
     activity.kind === "task.started" ||
     activity.kind === "task.progress" ||
@@ -679,6 +693,15 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
   }
   if (title) {
     entry.toolTitle = title;
+  }
+  if (toolPresentation.toolSurface) {
+    entry.toolSurface = toolPresentation.toolSurface;
+  }
+  if (toolPresentation.toolIcon) {
+    entry.toolIcon = toolPresentation.toolIcon;
+  }
+  if (toolPresentation.toolSource) {
+    entry.toolSource = toolPresentation.toolSource;
   }
   if (itemType === "mcp_tool_call") {
     const data = asRecord(payload?.data);
@@ -855,6 +878,9 @@ function mergeDerivedWorkLogEntries(
   const command = next.command ?? previous.command;
   const rawCommand = next.rawCommand ?? previous.rawCommand;
   const toolTitle = next.toolTitle ?? previous.toolTitle;
+  const toolSurface = next.toolSurface ?? previous.toolSurface;
+  const toolIcon = next.toolIcon ?? previous.toolIcon;
+  const toolSource = next.toolSource ?? previous.toolSource;
   const itemType = next.itemType ?? previous.itemType;
   const requestKind = next.requestKind ?? previous.requestKind;
   const collapseKey = next.collapseKey ?? previous.collapseKey;
@@ -869,6 +895,9 @@ function mergeDerivedWorkLogEntries(
     ...(rawCommand ? { rawCommand } : {}),
     ...(changedFiles.length > 0 ? { changedFiles } : {}),
     ...(toolTitle ? { toolTitle } : {}),
+    ...(toolSurface ? { toolSurface } : {}),
+    ...(toolIcon ? { toolIcon } : {}),
+    ...(toolSource ? { toolSource } : {}),
     ...(itemType ? { itemType } : {}),
     ...(requestKind ? { requestKind } : {}),
     ...(collapseKey ? { collapseKey } : {}),

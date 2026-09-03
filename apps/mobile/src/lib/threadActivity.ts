@@ -13,6 +13,10 @@ import type {
   UserInputQuestion,
 } from "@t3tools/contracts";
 import { formatDuration } from "@t3tools/shared/orchestrationTiming";
+import {
+  extractToolActivityPresentation,
+  summarizeToolSources,
+} from "@t3tools/client-runtime/work-log/tool-presentation";
 
 import * as Arr from "effect/Array";
 import * as Order from "effect/Order";
@@ -25,6 +29,8 @@ export interface PendingUserInputDraftAnswer {
 }
 
 export interface ThreadFeedActivity {
+  readonly toolIcon?: import("@t3tools/contracts").ToolActivityIcon;
+  readonly toolSource?: import("@t3tools/contracts").ToolActivitySource;
   readonly activityKind?: string;
   readonly id: string;
   readonly createdAt: string;
@@ -37,8 +43,10 @@ export interface ThreadFeedActivity {
   readonly icon:
     | "agent"
     | "alert"
+    | "browser"
     | "check"
     | "command"
+    | "computer"
     | "edit"
     | "eye"
     | "globe"
@@ -66,6 +74,9 @@ interface WorkLogEntry {
   changedFiles?: ReadonlyArray<string>;
   tone: "thinking" | "tool" | "info" | "error";
   toolTitle?: string;
+  toolSurface?: import("@t3tools/contracts").ToolActivitySurface;
+  toolIcon?: import("@t3tools/contracts").ToolActivityIcon;
+  toolSource?: import("@t3tools/contracts").ToolActivitySource;
   itemType?: ToolLifecycleItemType;
   requestKind?: PendingApproval["requestKind"];
   toolLifecycleStatus?: WorkLogToolLifecycleStatus;
@@ -117,6 +128,7 @@ export type ThreadFeedEntry =
       readonly hiddenCount: number;
       readonly expanded: boolean;
       readonly onlyToolActivities: boolean;
+      readonly sourceSummary?: string;
     }
   | {
       readonly type: "turn-fold";
@@ -259,7 +271,16 @@ function deriveWorkLogEntries(
 ): DerivedWorkLogEntry[] {
   const ordered = Arr.sort(activities, activityOrder);
   const entries: DerivedWorkLogEntry[] = [];
+  const toolPresentations = new Map<string, ReturnType<typeof extractToolActivityPresentation>>();
   for (const activity of ordered) {
+    const payload = asRecord(activity.payload);
+    const toolCallId = typeof payload?.toolCallId === "string" ? payload.toolCallId : undefined;
+    const presentationKey = toolCallId ? `${activity.turnId ?? ""}:${toolCallId}` : undefined;
+    const presentation = {
+      ...(presentationKey ? toolPresentations.get(presentationKey) : {}),
+      ...extractToolActivityPresentation(payload),
+    };
+    if (presentationKey) toolPresentations.set(presentationKey, presentation);
     if (activity.kind === "tool.started") continue;
     if (activity.kind === "task.started") continue;
     // Terminal bypassed updates pass: Codex children's only terminal signal.
@@ -269,7 +290,7 @@ function deriveWorkLogEntries(
     if (activity.summary === "Checkpoint captured") continue;
     if (isPlanBoundaryToolActivity(activity)) continue;
     if (isAgentInternalActivity(activity)) continue;
-    entries.push(toDerivedWorkLogEntry(activity));
+    entries.push({ ...toDerivedWorkLogEntry(activity), ...presentation });
   }
   return collapseDerivedWorkLogEntries(entries);
 }
@@ -294,6 +315,7 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
   const commandPreview = extractToolCommand(payload);
   const changedFiles = extractChangedFiles(payload);
   const title = extractToolTitle(payload);
+  const toolPresentation = extractToolActivityPresentation(payload);
   // task.updated included: terminal bypassed updates (Codex children's only
   // terminal signal) must carry task identity so they collapse per child
   // instead of stacking anonymous "Task idle" rows.
@@ -355,6 +377,15 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
   }
   if (title) {
     entry.toolTitle = title;
+  }
+  if (toolPresentation.toolSurface) {
+    entry.toolSurface = toolPresentation.toolSurface;
+  }
+  if (toolPresentation.toolIcon) {
+    entry.toolIcon = toolPresentation.toolIcon;
+  }
+  if (toolPresentation.toolSource) {
+    entry.toolSource = toolPresentation.toolSource;
   }
   if (itemType === "mcp_tool_call") {
     const data = asRecord(payload?.data);
@@ -440,6 +471,9 @@ function mergeDerivedWorkLogEntries(
   const command = next.command ?? previous.command;
   const rawCommand = next.rawCommand ?? previous.rawCommand;
   const toolTitle = next.toolTitle ?? previous.toolTitle;
+  const toolSurface = next.toolSurface ?? previous.toolSurface;
+  const toolIcon = next.toolIcon ?? previous.toolIcon;
+  const toolSource = next.toolSource ?? previous.toolSource;
   const itemType = next.itemType ?? previous.itemType;
   const requestKind = next.requestKind ?? previous.requestKind;
   const collapseKey = next.collapseKey ?? previous.collapseKey;
@@ -453,6 +487,9 @@ function mergeDerivedWorkLogEntries(
     ...(rawCommand ? { rawCommand } : {}),
     ...(changedFiles.length > 0 ? { changedFiles } : {}),
     ...(toolTitle ? { toolTitle } : {}),
+    ...(toolSurface ? { toolSurface } : {}),
+    ...(toolIcon ? { toolIcon } : {}),
+    ...(toolSource ? { toolSource } : {}),
     ...(itemType ? { itemType } : {}),
     ...(requestKind ? { requestKind } : {}),
     ...(collapseKey ? { collapseKey } : {}),
@@ -571,6 +608,7 @@ function workEntryIcon(entry: DerivedWorkLogEntry): ThreadFeedActivity["icon"] {
     return "message";
   }
   if (entry.activityKind === "runtime.warning") return "warning";
+  if (entry.toolSurface) return entry.toolSurface;
   if (entry.requestKind === "command") return "command";
   if (entry.requestKind === "file-read") return "eye";
   if (entry.requestKind === "file-change") return "edit";
@@ -1300,6 +1338,9 @@ function appendPresentedFeedEntry(
     hiddenCount,
     expanded,
     onlyToolActivities: activities.every((activity) => activity.toolLike),
+    ...(summarizeToolSources(activities)
+      ? { sourceSummary: summarizeToolSources(activities)! }
+      : {}),
   });
 }
 
@@ -1442,6 +1483,8 @@ export function buildThreadFeed(
             turnId: entry.turnId,
             activity: {
               activityKind: entry.activityKind,
+              ...(entry.toolIcon ? { toolIcon: entry.toolIcon } : {}),
+              ...(entry.toolSource ? { toolSource: entry.toolSource } : {}),
               id: entry.id,
               createdAt: entry.createdAt,
               turnId: entry.turnId,
