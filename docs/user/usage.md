@@ -11,7 +11,7 @@ scanned. Older connected environments still contribute their Codex and Claude to
 ## Cost history
 
 Use Past 24h for an hourly chart covering the rolling 24-hour period. The 7 days, 30 days, and
-90 days ranges use daily resolution. Refresh rescans the selected environments. Plan usage retains
+90 days ranges use daily resolution. Refresh requests updated model pricing and rescans the selected environments. Older or offline environments still refresh their usage summary when rate refresh is unavailable. Plan usage retains
 the provider's latest session-reported subscription meters, including how much is used and when
 windows reset. These readings can be a few minutes old between turns.
 

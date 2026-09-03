@@ -8,8 +8,10 @@ import { assert, describe, it } from "@effect/vitest";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { HostProcessEnvironment } from "@t3tools/shared/hostProcess";
 import { UsageDay, type UsageSummaryInput } from "@t3tools/contracts";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as TestClock from "effect/testing/TestClock";
 import { HttpClient, HttpClientResponse } from "effect/unstable/http";
 
 import * as ServerConfig from "../config.ts";
@@ -150,5 +152,46 @@ describe("UsageService", () => {
       const second = yield* service.readSummary(WINDOW);
       assert.strictEqual(totalOutputTokens(second), 12);
     }).pipe(Effect.scoped),
+  );
+  it.live("refetches a rate table inside its TTL only when the client asks", () =>
+    Effect.gen(function* () {
+      const { transcript, settings, home } = yield* setup;
+      yield* Effect.promise(() => NodeFSP.writeFile(transcript, claudeLine(1, 5)));
+
+      let ratesFetches = 0;
+      const service = yield* UsageService.make.pipe(
+        Effect.provide(
+          serviceLayers({
+            prefix: "usage-service-rates-refresh-test",
+            home,
+            settings,
+            ratesDocument: {
+              "claude-fable-5": { input_cost_per_token: 1e-5, output_cost_per_token: 5e-5 },
+            },
+            onRatesFetch: () => {
+              ratesFetches += 1;
+            },
+          }),
+        ),
+      );
+
+      const first = yield* service.readSummary(WINDOW);
+      assert.strictEqual(ratesFetches, 1);
+      assert.strictEqual(first.pricing.status, "fresh");
+
+      // Inside the daily TTL a plain rescan keeps the cached table.
+      yield* TestClock.adjust(Duration.minutes(2));
+      yield* service.readSummary(WINDOW);
+      assert.strictEqual(ratesFetches, 1);
+
+      // An explicit refresh fetches again so a newly listed model gets priced.
+      // A burst of refreshes shares that one fetch.
+      const [refreshed] = yield* Effect.all([service.refreshRates, service.refreshRates], {
+        concurrency: 2,
+      });
+      assert.strictEqual(ratesFetches, 2);
+      assert.strictEqual(refreshed.status, "fresh");
+      assert.strictEqual(refreshed.knownModels, 1);
+    }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
   );
 });
