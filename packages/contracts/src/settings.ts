@@ -2,9 +2,14 @@ import * as Effect from "effect/Effect";
 import * as Duration from "effect/Duration";
 import * as Schema from "effect/Schema";
 import * as SchemaTransformation from "effect/SchemaTransformation";
-import { ProjectId, TrimmedNonEmptyString, TrimmedString } from "./baseSchemas.ts";
+import {
+  ForwardCompatibleNullable,
+  ProjectId,
+  TrimmedNonEmptyString,
+  TrimmedString,
+} from "./baseSchemas.ts";
 import { UsageLimitSourceId } from "./usageLimitSourceId.ts";
-import { ThreadEnvMode } from "./environment.ts";
+import { EnvironmentMachineKind, ThreadEnvMode } from "./environment.ts";
 import {
   CustomModelSetting,
   DEFAULT_TEXT_GENERATION_MODEL,
@@ -880,6 +885,16 @@ export const ServerSettings = Schema.Struct({
   backgroundActivityProfile: BackgroundActivityProfile.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_BACKGROUND_ACTIVITY_PROFILE)),
   ),
+  /**
+   * The icon clients draw for this environment. Null means "use what the
+   * server detected" (`environment.platform.machine`), falling back to a
+   * generic server. Lives on the server, not the client, so every device
+   * sees the same machine. A kind picked on a newer server decodes as null
+   * here rather than failing the whole settings snapshot for an older client.
+   */
+  environmentIcon: ForwardCompatibleNullable(EnvironmentMachineKind).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null)),
+  ),
   defaultThreadEnvMode: ThreadEnvMode.pipe(
     Schema.withDecodingDefault(Effect.succeed("local" as const satisfies ThreadEnvMode)),
   ),
@@ -1130,6 +1145,7 @@ export const ServerSettingsPatch = Schema.Struct({
   automaticGitFetchInterval: Schema.optionalKey(Schema.DurationFromMillis),
   providerHealthRefreshInterval: Schema.optionalKey(Schema.DurationFromMillis),
   backgroundActivityProfile: Schema.optionalKey(BackgroundActivityProfile),
+  environmentIcon: Schema.optionalKey(Schema.NullOr(EnvironmentMachineKind)),
   defaultThreadEnvMode: Schema.optionalKey(ThreadEnvMode),
   newWorktreesStartFromOrigin: Schema.optionalKey(Schema.Boolean),
   addProjectBaseDirectory: Schema.optionalKey(TrimmedString),

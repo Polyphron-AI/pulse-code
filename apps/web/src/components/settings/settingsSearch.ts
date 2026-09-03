@@ -329,6 +329,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     to: "/settings/source-control",
   },
   {
+    id: "environment-icon",
+    title: "Environment icon",
+    to: "/settings/connections",
+    searchTerms: ["machine glyph sidebar mac mini studio laptop desktop server cloud vm"],
+  },
+  {
     id: "remote-environments",
     title: "Remote environments",
     to: "/settings/connections",
