@@ -47,6 +47,18 @@ export const ENVIRONMENT_RECONNECT_WARNING_GRACE_MS = 2_000;
 
 export const LastInvokedScriptByProjectSchema = Schema.Record(ProjectId, Schema.String);
 
+export function shouldRenderPreviewMiniPlayer(
+  miniPlayerTabId: string | null,
+  renderedRightPanelSurface: RightPanelSurface | null,
+): boolean {
+  return (
+    miniPlayerTabId !== null &&
+    !(
+      renderedRightPanelSurface?.kind === "preview" &&
+      renderedRightPanelSurface.resourceId === miniPlayerTabId
+    )
+  );
+}
 export function scheduleEnvironmentReconnectWarning(showWarning: () => void): () => void {
   const timeoutId = globalThis.setTimeout(showWarning, ENVIRONMENT_RECONNECT_WARNING_GRACE_MS);
   return () => globalThis.clearTimeout(timeoutId);

@@ -350,6 +350,7 @@ import {
   shouldRetargetThreadPullRequestPanel,
   shouldShowBranchMismatchBanner,
   shouldShowPlanFollowUpPrompt,
+  shouldRenderPreviewMiniPlayer,
   getStartedThreadModelChangeBlockReason,
   LAST_INVOKED_SCRIPT_BY_PROJECT_KEY,
   LastInvokedScriptByProjectSchema,
@@ -1761,6 +1762,10 @@ function ChatViewContent(props: ChatViewProps) {
   );
   const previewPanelOpen = activeRightPanelKind === "preview" && isPreviewSupportedInRuntime();
   const rightPanelOpen = rightPanelState.isOpen;
+  const previewMiniPlayerVisible = shouldRenderPreviewMiniPlayer(
+    activePreviewMiniPlayer?.tabId ?? null,
+    rightPanelOpen ? activeRightPanelSurface : null,
+  );
   const canMaximizeRightPanel = rightPanelOpen && !shouldUseRightPanelSheet;
   const rightPanelMaximized =
     canMaximizeRightPanel && maximizedRightPanelThreadKey === routeThreadKey;
@@ -1776,20 +1781,10 @@ function ChatViewContent(props: ChatViewProps) {
   useEffect(() => {
     if (!activeThreadRef || !activePreviewMiniPlayer) return;
     const miniTabStillExists = Boolean(activePreviewState.sessions[activePreviewMiniPlayer.tabId]);
-    const sameTabOpenInPanel =
-      previewPanelOpen &&
-      activeRightPanelSurface?.kind === "preview" &&
-      activeRightPanelSurface.resourceId === activePreviewMiniPlayer.tabId;
-    if (!miniTabStillExists || sameTabOpenInPanel) {
+    if (!miniTabStillExists) {
       usePreviewMiniPlayerStore.getState().close(activeThreadRef);
     }
-  }, [
-    activePreviewMiniPlayer,
-    activePreviewState.sessions,
-    activeRightPanelSurface,
-    activeThreadRef,
-    previewPanelOpen,
-  ]);
+  }, [activePreviewMiniPlayer, activePreviewState.sessions, activeThreadRef]);
 
   const existingOpenTerminalThreadKeys = useMemo(() => {
     const existingThreadKeys = new Set<string>([...serverThreadKeys, ...draftThreadKeys]);
@@ -7549,7 +7544,7 @@ function ChatViewContent(props: ChatViewProps) {
               </div>
             </div>
 
-            {activeThreadRef && activePreviewMiniPlayer ? (
+            {activeThreadRef && activePreviewMiniPlayer && previewMiniPlayerVisible ? (
               <ThreadPreviewMiniPlayer
                 key={`${activeThreadKey}:${activePreviewMiniPlayer.tabId}`}
                 threadRef={activeThreadRef}
@@ -7667,7 +7662,11 @@ function ChatViewContent(props: ChatViewProps) {
         </RightPanelTabs>
       ) : null}
       {shouldUseRightPanelSheet && rightPanelOpen && activeThreadRef ? (
-        <RightPanelSheet open onClose={closePreviewPanel}>
+        <RightPanelSheet
+          open
+          underFloatingPreview={previewMiniPlayerVisible}
+          onClose={closePreviewPanel}
+        >
           <RightPanelTabs
             mode="sheet"
             // Same effective inset as the closed-state titlebar controls

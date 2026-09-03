@@ -187,7 +187,7 @@ export const ClientSettingsSchema = Schema.Struct({
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_BROWSER_RECORDING_FRAME_RATE)),
   ),
   /**
-   * Whether an agent opening a preview pops the floating mini player into
+   * Whether an agent using a preview pops the floating mini player into
    * view. Only applies when the agent didn't ask either way — an explicit
    * `open`/`show` on `preview_open` still wins, since that is the agent
    * deliberately showing or hiding its work.
