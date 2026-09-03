@@ -607,3 +607,21 @@ describe("ServerSettings environment icon", () => {
     expect(encodeServerSettings(linuxSettings).environmentIcon).toBe("linux");
   });
 });
+
+describe("ClientSettings browser link target", () => {
+  it("keeps older settings on the system browser", () => {
+    expect(decodeClientSettings({}).browserLinkTarget).toBe("system");
+  });
+  it.each(["system", "app"])("round trips the %s preference and patch", (browserLinkTarget) => {
+    expect(
+      encodeClientSettings(decodeClientSettings({ browserLinkTarget })).browserLinkTarget,
+    ).toBe(browserLinkTarget);
+    expect(decodeClientSettingsPatch({ browserLinkTarget }).browserLinkTarget).toBe(
+      browserLinkTarget,
+    );
+  });
+  it("rejects unsupported targets", () => {
+    expect(() => decodeClientSettings({ browserLinkTarget: "remote" })).toThrow();
+    expect(() => decodeClientSettingsPatch({ browserLinkTarget: "remote" })).toThrow();
+  });
+});

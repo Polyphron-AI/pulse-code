@@ -18,3 +18,11 @@ Search applies to web, desktop, and mobile through client-runtime. Autosave appl
 - `e7deb2aaf`: inline assistant citations are absent as a contract and composer node. Its 49-file scope includes provider prompt expansion, persistence, terminal selection, web editing, and mobile display. Include cancellation follow-up `fe07ffe7c` when scheduling this batch; preserve Pulse citation-free drafts and attachment ownership.
 
 Token usage/pricing, environment metadata/themes, and image-dimension metadata were excluded because other agents own them. This audit does not claim full V40 compatibility.
+
+## Browser link preference
+
+Source `18062da94` is adapted across the additive client setting, desktop persistence, restore defaults, searchable browser settings, markdown, terminal links, PR body/editor/check/timeline links, and repository buttons. The default is `system`; `app` requires a desktop preview runtime and a scoped thread. Known project PRs retain review-panel navigation. Pulse media interception, reveal actions, remote environment ownership, recording controls, and PR layouts remain.
+
+The source has no native mobile UI change. Mobile decodes the added defaulted setting and keeps its native external-link path. No shell/browser instance was opened during validation. Focused tests cover hydration, explicit environment overrides, cancelled and failed opens, modifier behavior, schemas, settings restore/search, terminal defaults, and existing markdown/PR behavior. Web/mobile/desktop types pass; lint retains two existing PR array-index warnings.
+
+The next citation batch should include `e7deb2aaf`, `77e35c561`, and `fe07ffe7c`. The middle follow-up connects Cmd+Enter through citation comment editors; the final follow-up removes inserted citations when cancelled. Contracts serialize bounded rendered-text quotes and comments. Shared helpers validate/expand tokens; provider dispatch must validate expanded input length and title generation must strip token encoding. Web work includes editor nodes, selection, stashes, inline paste, timeline navigation, and terminal selection. Mobile scope is readable token rendering and title cleanup, not a native citation-authoring UI. Preserve Pulse draft and attachment ownership and integrate after current composer/native work-log batches.

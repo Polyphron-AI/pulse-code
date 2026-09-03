@@ -82,3 +82,11 @@ If a thread cannot finish loading, Pulse Code displays a synchronization error a
 ## Reveal a file on your computer
 
 On web or desktop connected locally, open a chat file chip's menu and choose **Reveal in Finder**, **Reveal in File Explorer**, or **Reveal in Files**. The action selects the file where supported; Linux opens its containing folder. The menu uses the environment that owns the conversation or pull request. Remote connections and older environments without reveal support omit this action. Media preview and download remain available through their existing menus.
+
+## Choose where web links open
+
+In desktop **Settings ? Integrations ? Browser**, set **Open links in** to your default browser or **Pulse Code**. Chat and terminal web links follow this preference. Links beside a thread in a pull request panel can use the same in-app browser; a standalone pull request page uses your default browser.
+
+Hold Command or Ctrl while clicking a chat link to open it in your default browser. Terminal links already use a modifier to activate, so they follow the saved preference. Links to a known pull request still open its review panel. Media previews keep their existing behavior.
+
+Your default browser is selected initially. Web clients without an integrated browser and mobile continue using their normal external link behavior. If an in-app open fails, Pulse Code tries your default browser; cancelling an in-app open does not open another browser.

@@ -7187,6 +7187,7 @@ function ChatViewContent(props: ChatViewProps) {
       <PullRequestDetailPanel
         key={`${activeRightPanelSurface.repository}#${activeRightPanelSurface.number}`}
         environmentId={activeThread.environmentId}
+        threadRef={activeThreadRef}
         reference={{
           projectId: activeRightPanelSurface.projectId as ProjectId,
           repository: activeRightPanelSurface.repository,
