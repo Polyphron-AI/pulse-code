@@ -31,6 +31,7 @@ const clientSettings: ClientSettings = {
   confirmThreadUnpin: false,
   dismissedProviderUpdateNotificationKeys: [],
   diffIgnoreWhitespace: true,
+  diffLayout: "stacked",
   environmentIdentificationMode: "artwork",
   favorites: [],
   fontFamilyCode: "",

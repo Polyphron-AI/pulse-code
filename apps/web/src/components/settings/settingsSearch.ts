@@ -160,6 +160,13 @@ export const SETTINGS_SEARCH_ITEMS = [
     id: "hide-whitespace-changes",
     title: "Hide whitespace changes",
     to: "/settings/general",
+    searchTerms: ["diff ignore spaces edits default"],
+  },
+  {
+    id: "diff-layout",
+    title: "Diff layout",
+    to: "/settings/general",
+    searchTerms: ["stacked split side by side unified inline view"],
   },
   {
     id: "provider-update-checks",
