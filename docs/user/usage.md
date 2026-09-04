@@ -15,6 +15,18 @@ Use Past 24h for an hourly chart covering the rolling 24-hour period. The 7 days
 the provider's latest session-reported subscription meters, including how much is used and when
 windows reset. These readings can be a few minutes old between turns.
 
+## Set custom model prices
+
+On web or desktop, open **Usage → Model prices** to add, edit, or remove a model's estimated
+price. Choose the environment whose history you want to price, then enter the exact model ID and
+USD rates per million input and output tokens. You can enter any model ID, including models
+without public pricing.
+
+Cache read and cache write rates are optional and use the input rate when blank. Enter `0` for
+tokens that are free. Saved prices replace automatic pricing for all of that environment's
+history and are shared with clients connected to it. Set prices on each environment that needs
+them. Removing a price restores automatic pricing.
+
 ## Subscription limits
 
 Open Limits to see remaining quota across accounts and environments. Accounts shared by multiple

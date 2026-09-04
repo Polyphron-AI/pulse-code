@@ -1,0 +1,154 @@
+// @effect-diagnostics nodeBuiltinImport:off - the suite seeds and grows real
+// transcript trees on disk, outside the service's Effect FileSystem.
+import * as NodeFSP from "node:fs/promises";
+import * as NodeOS from "node:os";
+import * as NodePath from "node:path";
+
+import { assert, describe, it } from "@effect/vitest";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { HostProcessEnvironment } from "@t3tools/shared/hostProcess";
+import { UsageDay, type UsageSummaryInput } from "@t3tools/contracts";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { HttpClient, HttpClientResponse } from "effect/unstable/http";
+
+import * as ServerConfig from "../config.ts";
+import * as ServerSettings from "../serverSettings.ts";
+import * as UsageService from "./UsageService.ts";
+
+function claudeLine(id: number, outputTokens: number, model = "claude-fable-5"): string {
+  return `${JSON.stringify({
+    type: "assistant",
+    timestamp: "2026-08-01T10:00:00Z",
+    requestId: `req_${id}`,
+    sessionId: "session-1",
+    message: {
+      id: `msg_${id}`,
+      model,
+      usage: { input_tokens: 10, output_tokens: outputTokens },
+    },
+  })}\n`;
+}
+
+const WINDOW: UsageSummaryInput = {
+  timeZone: "UTC",
+  sinceDay: UsageDay.make("2026-07-31"),
+  untilDay: UsageDay.make("2026-08-02"),
+};
+
+const setup = Effect.gen(function* () {
+  const home = yield* Effect.promise(() =>
+    NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "usage-service-test-")),
+  );
+  yield* Effect.addFinalizer(() =>
+    Effect.promise(() => NodeFSP.rm(home, { recursive: true, force: true })),
+  );
+  const transcriptDir = NodePath.join(home, "claude", "projects", "proj");
+  yield* Effect.promise(() => NodeFSP.mkdir(transcriptDir, { recursive: true }));
+  return {
+    home,
+    transcript: NodePath.join(transcriptDir, "session.jsonl"),
+    settings: {
+      providers: {
+        claudeAgent: { homePath: NodePath.join(home, "claude") },
+        codex: { homePath: NodePath.join(home, "codex") },
+      },
+    },
+  };
+});
+
+const serviceLayers = (input: {
+  readonly prefix: string;
+  readonly home: string;
+  readonly settings: Parameters<typeof ServerSettings.layerTest>[0];
+  readonly onRatesFetch?: () => void;
+  /** Defaults to an unparsable document so every scan retries the fetch. */
+  readonly ratesDocument?: unknown;
+}) =>
+  ServerConfig.layerTest(process.cwd(), { prefix: input.prefix }).pipe(
+    Layer.provideMerge(NodeServices.layer),
+    Layer.provideMerge(ServerSettings.layerTest(input.settings)),
+    Layer.provideMerge(
+      Layer.succeed(
+        HttpClient.HttpClient,
+        HttpClient.make((request) =>
+          Effect.sync(() => {
+            input.onRatesFetch?.();
+            // Unparsable rates: every scan retries the fetch, which makes the
+            // fetch count a boundary-level observation of how many scans ran.
+            return HttpClientResponse.fromWeb(request, Response.json(input.ratesDocument ?? {}));
+          }),
+        ),
+      ),
+    ),
+    Layer.provideMerge(
+      Layer.succeed(HostProcessEnvironment, { GROK_HOME: NodePath.join(input.home, "grok") }),
+    ),
+  );
+
+function totalOutputTokens(summary: { buckets: readonly { totals: { outputTokens: number } }[] }) {
+  return summary.buckets.reduce((sum, bucket) => sum + bucket.totals.outputTokens, 0);
+}
+
+describe("UsageService", () => {
+  it.live("reprices unchanged transcripts when custom prices are added, edited, or removed", () =>
+    Effect.gen(function* () {
+      const { transcript, settings, home } = yield* setup;
+      yield* Effect.promise(() => NodeFSP.writeFile(transcript, claudeLine(1, 5, "example-model")));
+
+      yield* Effect.gen(function* () {
+        const settingsService = yield* ServerSettings.ServerSettingsService;
+        const service = yield* UsageService.make;
+
+        const original = yield* service.readSummary(WINDOW);
+        assert.strictEqual(original.buckets[0]?.costUsd, 0);
+        assert.strictEqual(original.buckets[0]?.unpricedRecords, 1);
+
+        yield* settingsService.updateSettings({
+          usagePriceOverrides: {
+            "example-model": { inputCostPerMillionTokens: 2, outputCostPerMillionTokens: 8 },
+          },
+        });
+        const overridden = yield* service.readSummary(WINDOW);
+        assert.closeTo(overridden.buckets[0]?.costUsd ?? -1, 0.00006, 1e-12);
+        assert.strictEqual(overridden.buckets[0]?.costSource, "modelPriced");
+        assert.strictEqual(overridden.buckets[0]?.unpricedRecords, 0);
+        assert.deepStrictEqual(overridden.buckets[0]?.totals, original.buckets[0]?.totals);
+
+        yield* settingsService.updateSettings({
+          usagePriceOverrides: {
+            "example-model": { inputCostPerMillionTokens: 4, outputCostPerMillionTokens: 16 },
+          },
+        });
+        const edited = yield* service.readSummary(WINDOW);
+        assert.closeTo(edited.buckets[0]?.costUsd ?? -1, 0.00012, 1e-12);
+
+        yield* settingsService.updateSettings({ usagePriceOverrides: { "example-model": null } });
+        const restored = yield* service.readSummary(WINDOW);
+        assert.deepStrictEqual(restored.buckets, original.buckets);
+      }).pipe(
+        Effect.provide(
+          serviceLayers({ prefix: "usage-service-price-overrides-test", home, settings }),
+        ),
+      );
+    }).pipe(Effect.scoped),
+  );
+
+  it.live("counts appended usage on a rescan of a grown transcript", () =>
+    Effect.gen(function* () {
+      const { transcript, settings, home } = yield* setup;
+      yield* Effect.promise(() => NodeFSP.writeFile(transcript, claudeLine(1, 5)));
+
+      const service = yield* UsageService.make.pipe(
+        Effect.provide(serviceLayers({ prefix: "usage-service-grow-test", home, settings })),
+      );
+
+      const first = yield* service.readSummary(WINDOW);
+      assert.strictEqual(totalOutputTokens(first), 5);
+
+      yield* Effect.promise(() => NodeFSP.appendFile(transcript, claudeLine(2, 7)));
+      const second = yield* service.readSummary(WINDOW);
+      assert.strictEqual(totalOutputTokens(second), 12);
+    }).pipe(Effect.scoped),
+  );
+});

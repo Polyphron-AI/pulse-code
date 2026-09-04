@@ -32,6 +32,7 @@ import { COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS } from "../../workspaceTitlebar"
 import { UsageChartLegend, UsageProviderChart, type UsageChartMetric } from "./UsageProviderChart";
 import { PROVIDER_ORDER, PROVIDER_PRESENTATION } from "./usageProviders";
 
+import { UsagePriceOverrides } from "./UsagePriceOverrides";
 import { UsageLimitsSection } from "./UsageLimits";
 
 type UsageMetric = UsageChartMetric | "limits";
@@ -173,6 +174,11 @@ export function UsagePage() {
 
         <ScrollArea className="min-h-0 flex-1">
           <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-6 py-6">
+            {!showingLimits && (
+              <div className="flex justify-end">
+                <UsagePriceOverrides usage={environments} />
+              </div>
+            )}
             <div className="flex flex-wrap items-center justify-between gap-4">
               <p className="text-sm text-muted-foreground">
                 {showingLimits
