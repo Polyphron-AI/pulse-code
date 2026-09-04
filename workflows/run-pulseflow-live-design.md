@@ -20,13 +20,13 @@
 
 ## Happy path
 
-1. The client checks the selected environment's `preview.liveDesign` capability before displaying an enabled entry point.
+1. The client checks the selected environment's `preview.liveDesign` capability before enabling **Design**. The start menu offers only advertised actions: Create mock-up, Import current Preview, Open existing design, and Resume last session.
 2. Preview reuses the matching PulseFlow tab or opens its environment-port target.
 3. After navigation, the client and page complete the versioned, origin-checked, nonce-bound handshake.
 4. The server binds the live session to user, environment, thread, Preview tab, adapter origin, site, page, and document revision.
 5. Preview exposes its existing viewport, appearance, capture, annotation, refresh, and pop-out controls alongside honest agent and live-design status.
-6. The global bar offers Pick, Insert, Detect, DESIGN.md, text or supported voice Steer, and Exit. The user selects a stable PulseFlow node or valid insertion anchor rather than a CSS selector guess.
-7. The user chooses Freeform or one of eleven live disciplines, supplies text, voice, comments, strokes, or an annotated screenshot, and requests one through eight variants.
+6. The active strip offers Designing, Pick, Create, Iterate, Polish, Compare, Undo, Apply, and Finish. At narrow widths it keeps Designing, Pick, Actions, and Apply visible. The user chooses Browse, Pick, or Interact, then selects a stable PulseFlow node or valid insertion anchor rather than a CSS selector guess.
+7. A capability-driven toolbar appears near the selected target. The user chooses Iterate, Polish, a target-specific action, Freeform, or one of eleven live disciplines; supplies text, voice, comments, strokes, or an annotated screenshot; and requests one through eight variants.
 8. Eligible visible text supports Edit copy, Save, and Cancel. Saved edits enter a per-page dock whose Apply, discard, Keep fixing, and Rollback actions are relayed exactly once.
 9. The agent applies the selected Impeccable command. PulseFlow generates and validates three variants by default.
 10. Each valid variant appears progressively. Phases never regress, the original remains available, a partial failure does not remove valid siblings, and a mount failure retains Retry and Dismiss without becoming acceptable.

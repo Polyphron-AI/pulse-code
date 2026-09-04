@@ -631,6 +631,42 @@
         "authority": "prd/20-acceptance-criteria/pulseflow-live-design.md §AC-PCLD-16-live-registry-parity",
         "live": "The audited upstream registries are pinned in the proposal; no automated parity test exists.",
         "register": "G-2026-09-04-impeccable-windows-live-baseline"
+      },
+      {
+        "id": "20-acceptance-criteria/pulseflow-live-design#ac-pcld-17-design-entry-and-responsive-controls",
+        "health": "planned",
+        "covers": "Gates the permanent Design entry, capability-driven start actions, active toolbar, and narrow-width collapse without losing commands.",
+        "action": "Build the capability-state component fixture before connecting the real PulseFlow adapter.",
+        "authority": "docs/plans/2026-09-04-pulseflow-preview-design-controls-integration.md §Design entry point",
+        "live": "Pulse Code Preview has no PulseFlow Design entry or active design toolbar today.",
+        "register": "G-2026-09-04-pulseflow-adapter-unimplemented"
+      },
+      {
+        "id": "20-acceptance-criteria/pulseflow-live-design#ac-pcld-18-browse-pick-interact-arbitration",
+        "health": "planned",
+        "covers": "Gates pointer, keyboard, editable, modifier, Escape, stable-target, and host-chrome isolation behavior across the three input modes.",
+        "action": "Implement mode arbitration against the deterministic adapter fixture, then verify it against a real PulseFlow page.",
+        "authority": "docs/plans/2026-09-04-pulseflow-preview-design-controls-integration.md §Browse, Pick, and Interact modes",
+        "live": "Existing Preview interaction does not include PulseFlow target selection or input-mode arbitration.",
+        "register": "G-2026-09-04-pulseflow-adapter-unimplemented"
+      },
+      {
+        "id": "20-acceptance-criteria/pulseflow-live-design#ac-pcld-19-speculative-variant-isolation",
+        "health": "planned",
+        "covers": "Gates interactive variant preview, ephemeral revisions, comparison, tuning, steering, and exact acceptance without early document mutation.",
+        "action": "Add journal assertions and browser journeys when PulseFlow exposes ephemeral revision mounting.",
+        "authority": "docs/plans/2026-09-04-pulseflow-preview-design-controls-integration.md §Iterate",
+        "live": "PulseFlow variant mounting and the Pulse Code variant tray are unimplemented.",
+        "register": "G-2026-09-04-pulseflow-adapter-unimplemented"
+      },
+      {
+        "id": "20-acceptance-criteria/pulseflow-live-design#ac-pcld-20-transactional-undo-and-finish",
+        "health": "planned",
+        "covers": "Gates transaction-based Undo and Redo, conflict handling, unaccepted-work confirmation, live-state cleanup, and ordinary Preview continuity.",
+        "action": "Implement after PulseFlow publishes atomic transaction and undo receipts in the shared contract fixture.",
+        "authority": "docs/plans/2026-09-04-pulseflow-preview-design-controls-integration.md §Apply, Accept, Undo, and Finish",
+        "live": "Pulse Code has no PulseFlow transaction history or design-session finish path today.",
+        "register": "G-2026-09-04-pulseflow-adapter-unimplemented"
       }
     ]
   },

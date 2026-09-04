@@ -41,6 +41,8 @@ The missing work is a typed live-design capability, a PulseFlow page handshake, 
 7. Accept and Discard require the current session and exact variant. Pulse Code forwards the explicit action and displays PulseFlow's transaction or terminal receipt.
 8. Reload or reconnect restores the latest checkpoint and reconciles uncertain actions before enabling another mutation.
 
+The permanent Preview entry point is **Design**. **Create mock-up** belongs in its start menu alongside Import current Preview, Open existing design, and Resume last session. During an active session, Preview exposes `Designing | Pick | Create | Iterate | Polish | Compare | Undo | Apply | Finish`; narrow widths collapse secondary actions into **Actions**. Picked targets receive a capability-driven contextual toolbar. Browse, Pick, and Interact are explicit input modes so selecting a button and exercising that button cannot be confused.
+
 All 23 Impeccable commands and the root router remain discoverable through the existing skill picker. Pulse Code does not duplicate their descriptions or prompt logic. When the target advertises PulseFlow, the skill selects the PulseFlow document adapter. A generic compatible project may use the upstream source adapter only if that path is separately enabled.
 
 ## Hosted live surface parity
@@ -168,6 +170,7 @@ Estimated Pulse Code effort is **6 to 9 engineering-weeks** inside PulseFlow's b
 - Tool flow: [Preview live-design host](../tool-flow/pulseflow-live-design.md)
 - Existing Preview contracts: `packages/contracts/src/preview.ts`, `packages/contracts/src/previewAutomation.ts`
 - PulseFlow authority: `prd/21-design-intelligence.md` in the PulseFlow repository
+- Detailed implementation plan: [PulseFlow Preview design controls integration](../docs/plans/2026-09-04-pulseflow-preview-design-controls-integration.md)
 
 ## Open questions
 
