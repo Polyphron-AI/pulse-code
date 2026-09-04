@@ -1,0 +1,38 @@
+{
+  "blocked_by": [
+    "P-2026-09-04-calendar-scheduler-board/T4"
+  ],
+  "commits": [],
+  "created_at": "2026-09-04T05:39:18Z",
+  "execution_context": {
+    "branch": "docs/native-scheduling-plan-20260904",
+    "repository": "native-scheduling-plan-20260904",
+    "worktree": "native-scheduling-plan-20260904"
+  },
+  "files_touched": [
+    "apps/server/src/auth/RpcAuthorization.ts",
+    "apps/server/src/orchestration/Layers/ProjectionSnapshotQuery.test.ts",
+    "apps/server/src/orchestration/Layers/ProjectionSnapshotQuery.ts",
+    "apps/server/src/orchestration/scheduleRunHistory.test.ts",
+    "apps/server/src/orchestration/scheduleRunHistory.ts",
+    "apps/server/src/server.test.ts",
+    "apps/server/src/ws.ts",
+    "apps/server/src/ws/orchestrationRpc.test.ts",
+    "apps/server/src/ws/orchestrationRpc.ts"
+  ],
+  "host_refs": {},
+  "id": "P-2026-09-04-calendar-scheduler-board/T5",
+  "kind": "implementation",
+  "local_id": "T5",
+  "owner": null,
+  "plan_id": "P-2026-09-04-calendar-scheduler-board",
+  "roadmap_items": [
+    "R-2026-08-21-scheduled-chats"
+  ],
+  "schema": "product-ops.task/v1",
+  "secret_overrides": [],
+  "status": "pending",
+  "subject": "Project schedule-run pages from the event store",
+  "updated_at": "2026-09-04T05:43:09Z",
+  "verification_receipts": []
+}

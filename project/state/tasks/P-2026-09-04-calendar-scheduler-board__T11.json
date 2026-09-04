@@ -1,0 +1,38 @@
+{
+  "blocked_by": [
+    "P-2026-09-04-calendar-scheduler-board/T9",
+    "P-2026-09-04-calendar-scheduler-board/T10"
+  ],
+  "commits": [],
+  "created_at": "2026-09-04T05:39:19Z",
+  "execution_context": {
+    "branch": "docs/native-scheduling-plan-20260904",
+    "repository": "native-scheduling-plan-20260904",
+    "worktree": "native-scheduling-plan-20260904"
+  },
+  "files_touched": [
+    "apps/mobile/src/features/agent-awareness/notificationNavigation.test.ts",
+    "apps/mobile/src/features/agent-awareness/notificationNavigation.ts",
+    "apps/server/src/agentActivity/AgentActivityPublisher.test.ts",
+    "apps/server/src/agentActivity/AgentActivityPublisher.ts",
+    "apps/server/src/relay/AgentAwarenessRelay.test.ts",
+    "apps/server/src/relay/AgentAwarenessRelay.ts",
+    "packages/contracts/src/agentActivity.ts",
+    "packages/contracts/src/relay.ts"
+  ],
+  "host_refs": {},
+  "id": "P-2026-09-04-calendar-scheduler-board/T11",
+  "kind": "implementation",
+  "local_id": "T11",
+  "owner": null,
+  "plan_id": "P-2026-09-04-calendar-scheduler-board",
+  "roadmap_items": [
+    "R-2026-08-21-scheduled-chats"
+  ],
+  "schema": "product-ops.task/v1",
+  "secret_overrides": [],
+  "status": "pending",
+  "subject": "Publish bounded schedule-result notifications",
+  "updated_at": "2026-09-04T05:43:10Z",
+  "verification_receipts": []
+}

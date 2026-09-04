@@ -1,0 +1,37 @@
+{
+  "blocked_by": [
+    "P-2026-09-04-scheduled-followups/T1",
+    "P-2026-09-04-scheduled-followups/T3",
+    "P-2026-09-04-scheduled-followups/T4",
+    "P-2026-09-04-scheduled-followups/T6"
+  ],
+  "commits": [],
+  "created_at": "2026-09-04T05:39:15Z",
+  "execution_context": {
+    "branch": "docs/native-scheduling-plan-20260904",
+    "repository": "native-scheduling-plan-20260904",
+    "worktree": "native-scheduling-plan-20260904"
+  },
+  "files_touched": [
+    "apps/server/src/mcp/McpHttpServer.test.ts",
+    "apps/server/src/mcp/McpHttpServer.ts",
+    "apps/server/src/mcp/toolkits/schedule/handlers.ts",
+    "apps/server/src/mcp/toolkits/schedule/tools.test.ts",
+    "apps/server/src/mcp/toolkits/schedule/tools.ts"
+  ],
+  "host_refs": {},
+  "id": "P-2026-09-04-scheduled-followups/T7",
+  "kind": "implementation",
+  "local_id": "T7",
+  "owner": null,
+  "plan_id": "P-2026-09-04-scheduled-followups",
+  "roadmap_items": [
+    "R-2026-08-21-scheduled-chats"
+  ],
+  "schema": "product-ops.task/v1",
+  "secret_overrides": [],
+  "status": "pending",
+  "subject": "Register schedule proposal and mutation MCP tools",
+  "updated_at": "2026-09-04T05:43:05Z",
+  "verification_receipts": []
+}

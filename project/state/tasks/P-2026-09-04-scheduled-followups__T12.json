@@ -1,0 +1,36 @@
+{
+  "blocked_by": [
+    "P-2026-09-04-scheduled-followups/T5",
+    "P-2026-09-04-scheduled-followups/T6",
+    "P-2026-09-04-scheduled-followups/T7"
+  ],
+  "commits": [],
+  "created_at": "2026-09-04T05:39:16Z",
+  "execution_context": {
+    "branch": "docs/native-scheduling-plan-20260904",
+    "repository": "native-scheduling-plan-20260904",
+    "worktree": "native-scheduling-plan-20260904"
+  },
+  "files_touched": [
+    "apps/server/src/provider/Layers/ClaudeAdapter.test.ts",
+    "apps/server/src/provider/Layers/CodexAdapter.test.ts",
+    "apps/server/src/provider/Layers/CursorAdapter.test.ts",
+    "apps/server/src/provider/Layers/GrokAdapter.test.ts",
+    "apps/server/src/provider/Layers/OpenCodeAdapter.test.ts"
+  ],
+  "host_refs": {},
+  "id": "P-2026-09-04-scheduled-followups/T12",
+  "kind": "verification",
+  "local_id": "T12",
+  "owner": null,
+  "plan_id": "P-2026-09-04-scheduled-followups",
+  "roadmap_items": [
+    "R-2026-08-21-scheduled-chats"
+  ],
+  "schema": "product-ops.task/v1",
+  "secret_overrides": [],
+  "status": "pending",
+  "subject": "Verify provider resume and MCP behavior",
+  "updated_at": "2026-09-04T05:43:06Z",
+  "verification_receipts": []
+}

@@ -1,0 +1,36 @@
+{
+  "blocked_by": [
+    "P-2026-09-04-calendar-scheduler-board/T2",
+    "P-2026-09-04-calendar-scheduler-board/T3",
+    "P-2026-09-04-calendar-scheduler-board/T7"
+  ],
+  "commits": [],
+  "created_at": "2026-09-04T05:39:18Z",
+  "execution_context": {
+    "branch": "docs/native-scheduling-plan-20260904",
+    "repository": "native-scheduling-plan-20260904",
+    "worktree": "native-scheduling-plan-20260904"
+  },
+  "files_touched": [
+    "apps/mobile/src/features/settings/SettingsScheduledChatsRouteScreen.logic.ts",
+    "apps/mobile/src/features/settings/SettingsScheduledChatsRouteScreen.tsx",
+    "apps/mobile/src/features/threads/ScheduleDraftSheet.tsx",
+    "apps/web/src/components/chat/ScheduleDraftDialog.tsx",
+    "apps/web/src/components/settings/ScheduledChatsSettings.tsx"
+  ],
+  "host_refs": {},
+  "id": "P-2026-09-04-calendar-scheduler-board/T9",
+  "kind": "implementation",
+  "local_id": "T9",
+  "owner": null,
+  "plan_id": "P-2026-09-04-calendar-scheduler-board",
+  "roadmap_items": [
+    "R-2026-08-21-scheduled-chats"
+  ],
+  "schema": "product-ops.task/v1",
+  "secret_overrides": [],
+  "status": "pending",
+  "subject": "Extend web and mobile recurrence editors",
+  "updated_at": "2026-09-04T05:43:09Z",
+  "verification_receipts": []
+}

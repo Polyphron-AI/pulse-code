@@ -1,0 +1,31 @@
+{
+  "blocked_by": [],
+  "commits": [],
+  "created_at": "2026-09-04T05:39:14Z",
+  "execution_context": {
+    "branch": "docs/native-scheduling-plan-20260904",
+    "repository": "native-scheduling-plan-20260904",
+    "worktree": "native-scheduling-plan-20260904"
+  },
+  "files_touched": [
+    "apps/server/src/environment/ServerEnvironment.test.ts",
+    "apps/server/src/environment/ServerEnvironment.ts",
+    "packages/contracts/src/environment.test.ts",
+    "packages/contracts/src/environment.ts"
+  ],
+  "host_refs": {},
+  "id": "P-2026-09-04-scheduled-followups/T2",
+  "kind": "protective",
+  "local_id": "T2",
+  "owner": null,
+  "plan_id": "P-2026-09-04-scheduled-followups",
+  "roadmap_items": [
+    "R-2026-08-21-scheduled-chats"
+  ],
+  "schema": "product-ops.task/v1",
+  "secret_overrides": [],
+  "status": "pending",
+  "subject": "Advertise native scheduling capabilities",
+  "updated_at": "2026-09-04T05:43:04Z",
+  "verification_receipts": []
+}

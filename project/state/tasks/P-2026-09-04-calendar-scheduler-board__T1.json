@@ -1,0 +1,30 @@
+{
+  "blocked_by": [],
+  "commits": [],
+  "created_at": "2026-09-04T05:39:17Z",
+  "execution_context": {
+    "branch": "docs/native-scheduling-plan-20260904",
+    "repository": "native-scheduling-plan-20260904",
+    "worktree": "native-scheduling-plan-20260904"
+  },
+  "files_touched": [
+    "package.json",
+    "packages/contracts/package.json",
+    "packages/contracts/src/scheduleRecurrence.test.ts"
+  ],
+  "host_refs": {},
+  "id": "P-2026-09-04-calendar-scheduler-board/T1",
+  "kind": "protective",
+  "local_id": "T1",
+  "owner": null,
+  "plan_id": "P-2026-09-04-calendar-scheduler-board",
+  "roadmap_items": [
+    "R-2026-08-21-scheduled-chats"
+  ],
+  "schema": "product-ops.task/v1",
+  "secret_overrides": [],
+  "status": "pending",
+  "subject": "Select and verify the recurrence engine",
+  "updated_at": "2026-09-04T05:43:08Z",
+  "verification_receipts": []
+}

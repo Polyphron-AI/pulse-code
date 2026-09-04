@@ -1,0 +1,36 @@
+{
+  "blocked_by": [
+    "P-2026-09-04-scheduled-followups/T2",
+    "P-2026-09-04-scheduled-followups/T4",
+    "P-2026-09-04-scheduled-followups/T8"
+  ],
+  "commits": [],
+  "created_at": "2026-09-04T05:39:15Z",
+  "execution_context": {
+    "branch": "docs/native-scheduling-plan-20260904",
+    "repository": "native-scheduling-plan-20260904",
+    "worktree": "native-scheduling-plan-20260904"
+  },
+  "files_touched": [
+    "apps/web/src/components/ChatView.tsx",
+    "apps/web/src/components/chat/ChatComposer.tsx",
+    "apps/web/src/components/chat/ScheduleDraftDialog.tsx",
+    "apps/web/src/composer-logic.test.ts",
+    "apps/web/src/composer-logic.ts"
+  ],
+  "host_refs": {},
+  "id": "P-2026-09-04-scheduled-followups/T9",
+  "kind": "implementation",
+  "local_id": "T9",
+  "owner": null,
+  "plan_id": "P-2026-09-04-scheduled-followups",
+  "roadmap_items": [
+    "R-2026-08-21-scheduled-chats"
+  ],
+  "schema": "product-ops.task/v1",
+  "secret_overrides": [],
+  "status": "pending",
+  "subject": "Add `/schedule` and the review dialog on web",
+  "updated_at": "2026-09-04T05:43:05Z",
+  "verification_receipts": []
+}

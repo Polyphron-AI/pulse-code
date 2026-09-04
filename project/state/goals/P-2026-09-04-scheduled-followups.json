@@ -1,0 +1,645 @@
+{
+  "contract": {
+    "criteria": [
+      {
+        "id": "G1",
+        "satisfied_by": [
+          "T1",
+          "T10",
+          "T3",
+          "T8",
+          "T9"
+        ],
+        "text": "An unambiguous request for one exact future date creates a one-off schedule with the displayed absolute time and IANA timezone."
+      },
+      {
+        "id": "G2",
+        "satisfied_by": [
+          "T1",
+          "T3",
+          "T5"
+        ],
+        "text": "A schedule created from a thread returns to that same durable thread without changing its identity or origin."
+      },
+      {
+        "id": "G3",
+        "satisfied_by": [
+          "T10",
+          "T9"
+        ],
+        "text": "The user can invoke `/schedule` and the equivalent thread action on web, desktop, and mobile."
+      },
+      {
+        "id": "G4",
+        "satisfied_by": [
+          "T10",
+          "T8",
+          "T9"
+        ],
+        "text": "Pulse asks Once or Repeat only when cadence is absent or ambiguous."
+      },
+      {
+        "id": "G5",
+        "satisfied_by": [
+          "T12",
+          "T6",
+          "T7"
+        ],
+        "text": "Every provider can expose the Pulse schedule tools or report the unsupported capability without changing schedule truth."
+      },
+      {
+        "id": "G6",
+        "satisfied_by": [
+          "T1",
+          "T11",
+          "T3",
+          "T5"
+        ],
+        "text": "A one-off fires at most once, reaches Completed, survives restart/replay, and remains inspectable."
+      },
+      {
+        "id": "G7",
+        "satisfied_by": [
+          "T3",
+          "T5"
+        ],
+        "text": "Active-thread overlap and offline-host catch-up produce explicit deferred, started, skipped, or failed evidence rather than silence."
+      },
+      {
+        "id": "G8",
+        "satisfied_by": [
+          "T1",
+          "T13",
+          "T2",
+          "T3",
+          "T4"
+        ],
+        "text": "Old schedules and clients keep working, and an old server cannot misinterpret native trigger fields."
+      },
+      {
+        "id": "G9",
+        "satisfied_by": [
+          "T12",
+          "T13",
+          "T5"
+        ],
+        "text": "Existing run leashes, authentication probes, dirty-tree policy, checkpoint diffs, and remote server ownership remain enforced."
+      },
+      {
+        "id": "G10",
+        "satisfied_by": [
+          "T10",
+          "T11",
+          "T12",
+          "T13",
+          "T9"
+        ],
+        "text": "Focused automated and authorized real-client receipts cover the complete creation-to-completion journey across applicable surfaces."
+      }
+    ],
+    "goal_contract_version": 2,
+    "plan_id": "P-2026-09-04-scheduled-followups",
+    "schema": "product-ops.goal-contract/v2",
+    "scope_brief": null,
+    "tasks": [
+      {
+        "disposition": {
+          "criteria": [
+            "G1",
+            "G2",
+            "G6",
+            "G8"
+          ],
+          "kind": "mapped"
+        },
+        "id": "T1"
+      },
+      {
+        "disposition": {
+          "criteria": [
+            "G1",
+            "G10",
+            "G3",
+            "G4"
+          ],
+          "kind": "mapped"
+        },
+        "id": "T10"
+      },
+      {
+        "disposition": {
+          "criteria": [
+            "G10",
+            "G6"
+          ],
+          "kind": "mapped"
+        },
+        "id": "T11"
+      },
+      {
+        "disposition": {
+          "criteria": [
+            "G10",
+            "G5",
+            "G9"
+          ],
+          "kind": "mapped"
+        },
+        "id": "T12"
+      },
+      {
+        "disposition": {
+          "criteria": [
+            "G10",
+            "G8",
+            "G9"
+          ],
+          "kind": "mapped"
+        },
+        "id": "T13"
+      },
+      {
+        "disposition": {
+          "criteria": [
+            "G8"
+          ],
+          "kind": "mapped"
+        },
+        "id": "T2"
+      },
+      {
+        "disposition": {
+          "criteria": [
+            "G1",
+            "G2",
+            "G6",
+            "G7",
+            "G8"
+          ],
+          "kind": "mapped"
+        },
+        "id": "T3"
+      },
+      {
+        "disposition": {
+          "criteria": [
+            "G8"
+          ],
+          "kind": "mapped"
+        },
+        "id": "T4"
+      },
+      {
+        "disposition": {
+          "criteria": [
+            "G2",
+            "G6",
+            "G7",
+            "G9"
+          ],
+          "kind": "mapped"
+        },
+        "id": "T5"
+      },
+      {
+        "disposition": {
+          "criteria": [
+            "G5"
+          ],
+          "kind": "mapped"
+        },
+        "id": "T6"
+      },
+      {
+        "disposition": {
+          "criteria": [
+            "G5"
+          ],
+          "kind": "mapped"
+        },
+        "id": "T7"
+      },
+      {
+        "disposition": {
+          "criteria": [
+            "G1",
+            "G4"
+          ],
+          "kind": "mapped"
+        },
+        "id": "T8"
+      },
+      {
+        "disposition": {
+          "criteria": [
+            "G1",
+            "G10",
+            "G3",
+            "G4"
+          ],
+          "kind": "mapped"
+        },
+        "id": "T9"
+      }
+    ]
+  },
+  "contract_digest": "c6d02f2aae372a7dceae22956d6999dfb1a18a04792bfb287f997cdbf08dc9b0",
+  "contract_revision": 1,
+  "created_at": "2026-09-04T05:39:38Z",
+  "criteria": [
+    {
+      "criterion": "An unambiguous request for one exact future date creates a one-off schedule with the displayed absolute time and IANA timezone.",
+      "definition_digest": "48e46439dca295625cdbd9be177201a2431e303712a639f519c09a3d295796f0",
+      "id": "G1",
+      "receipts": [],
+      "satisfied_by": [
+        "T1",
+        "T10",
+        "T3",
+        "T8",
+        "T9"
+      ],
+      "status": "pending",
+      "updated_at": "2026-09-04T05:39:38Z"
+    },
+    {
+      "criterion": "A schedule created from a thread returns to that same durable thread without changing its identity or origin.",
+      "definition_digest": "bb07523babc676e0219f7fc7db1e914d6c997348d7087949c0981c3c090fe64a",
+      "id": "G2",
+      "receipts": [],
+      "satisfied_by": [
+        "T1",
+        "T3",
+        "T5"
+      ],
+      "status": "pending",
+      "updated_at": "2026-09-04T05:39:38Z"
+    },
+    {
+      "criterion": "The user can invoke `/schedule` and the equivalent thread action on web, desktop, and mobile.",
+      "definition_digest": "50fadb04f706eaf39296a9df732edf6d196daf55248a04721be17ef45e172e22",
+      "id": "G3",
+      "receipts": [],
+      "satisfied_by": [
+        "T10",
+        "T9"
+      ],
+      "status": "pending",
+      "updated_at": "2026-09-04T05:39:38Z"
+    },
+    {
+      "criterion": "Pulse asks Once or Repeat only when cadence is absent or ambiguous.",
+      "definition_digest": "0ad25f583184198ba1e1ffd8853870eefa30b2d801b595a91684594937c718e1",
+      "id": "G4",
+      "receipts": [],
+      "satisfied_by": [
+        "T10",
+        "T8",
+        "T9"
+      ],
+      "status": "pending",
+      "updated_at": "2026-09-04T05:39:38Z"
+    },
+    {
+      "criterion": "Every provider can expose the Pulse schedule tools or report the unsupported capability without changing schedule truth.",
+      "definition_digest": "e345d1c57020be490893fb9b35e0ed47448171ae3d1212fcde9738462b366202",
+      "id": "G5",
+      "receipts": [],
+      "satisfied_by": [
+        "T12",
+        "T6",
+        "T7"
+      ],
+      "status": "pending",
+      "updated_at": "2026-09-04T05:39:38Z"
+    },
+    {
+      "criterion": "A one-off fires at most once, reaches Completed, survives restart/replay, and remains inspectable.",
+      "definition_digest": "516a0252a7ef6b6045dd71874982fa65b0c7f3d86dc6ea3a24e2b54f2851c35d",
+      "id": "G6",
+      "receipts": [],
+      "satisfied_by": [
+        "T1",
+        "T11",
+        "T3",
+        "T5"
+      ],
+      "status": "pending",
+      "updated_at": "2026-09-04T05:39:38Z"
+    },
+    {
+      "criterion": "Active-thread overlap and offline-host catch-up produce explicit deferred, started, skipped, or failed evidence rather than silence.",
+      "definition_digest": "7b4abdaea0438dc1422dc47892ab49e1443c7ec286b5f6072c954759bb8c36f3",
+      "id": "G7",
+      "receipts": [],
+      "satisfied_by": [
+        "T3",
+        "T5"
+      ],
+      "status": "pending",
+      "updated_at": "2026-09-04T05:39:38Z"
+    },
+    {
+      "criterion": "Old schedules and clients keep working, and an old server cannot misinterpret native trigger fields.",
+      "definition_digest": "91bcafd11bc3f62184bdfe67fc67b36dece70cf435d4ed0d7553cc8358aa7a71",
+      "id": "G8",
+      "receipts": [],
+      "satisfied_by": [
+        "T1",
+        "T13",
+        "T2",
+        "T3",
+        "T4"
+      ],
+      "status": "pending",
+      "updated_at": "2026-09-04T05:39:38Z"
+    },
+    {
+      "criterion": "Existing run leashes, authentication probes, dirty-tree policy, checkpoint diffs, and remote server ownership remain enforced.",
+      "definition_digest": "edf52afd997b00a75dcdd5bc29eb5bf4ffce4f8076ff72decf40475c7a804942",
+      "id": "G9",
+      "receipts": [],
+      "satisfied_by": [
+        "T12",
+        "T13",
+        "T5"
+      ],
+      "status": "pending",
+      "updated_at": "2026-09-04T05:39:38Z"
+    },
+    {
+      "criterion": "Focused automated and authorized real-client receipts cover the complete creation-to-completion journey across applicable surfaces.",
+      "definition_digest": "60d6272cb49f5e5ba90ee5d2b24bbee91c1af984ea661e53d9696d8f6542e7b0",
+      "id": "G10",
+      "receipts": [],
+      "satisfied_by": [
+        "T10",
+        "T11",
+        "T12",
+        "T13",
+        "T9"
+      ],
+      "status": "pending",
+      "updated_at": "2026-09-04T05:39:38Z"
+    }
+  ],
+  "plan_id": "P-2026-09-04-scheduled-followups",
+  "plan_path": "project/plans/P-2026-09-04-scheduled-followups.md",
+  "revision_history": [
+    {
+      "applied_at": "2026-09-04T05:39:38Z",
+      "approval_ref": null,
+      "contract": {
+        "criteria": [
+          {
+            "id": "G1",
+            "satisfied_by": [
+              "T1",
+              "T10",
+              "T3",
+              "T8",
+              "T9"
+            ],
+            "text": "An unambiguous request for one exact future date creates a one-off schedule with the displayed absolute time and IANA timezone."
+          },
+          {
+            "id": "G2",
+            "satisfied_by": [
+              "T1",
+              "T3",
+              "T5"
+            ],
+            "text": "A schedule created from a thread returns to that same durable thread without changing its identity or origin."
+          },
+          {
+            "id": "G3",
+            "satisfied_by": [
+              "T10",
+              "T9"
+            ],
+            "text": "The user can invoke `/schedule` and the equivalent thread action on web, desktop, and mobile."
+          },
+          {
+            "id": "G4",
+            "satisfied_by": [
+              "T10",
+              "T8",
+              "T9"
+            ],
+            "text": "Pulse asks Once or Repeat only when cadence is absent or ambiguous."
+          },
+          {
+            "id": "G5",
+            "satisfied_by": [
+              "T12",
+              "T6",
+              "T7"
+            ],
+            "text": "Every provider can expose the Pulse schedule tools or report the unsupported capability without changing schedule truth."
+          },
+          {
+            "id": "G6",
+            "satisfied_by": [
+              "T1",
+              "T11",
+              "T3",
+              "T5"
+            ],
+            "text": "A one-off fires at most once, reaches Completed, survives restart/replay, and remains inspectable."
+          },
+          {
+            "id": "G7",
+            "satisfied_by": [
+              "T3",
+              "T5"
+            ],
+            "text": "Active-thread overlap and offline-host catch-up produce explicit deferred, started, skipped, or failed evidence rather than silence."
+          },
+          {
+            "id": "G8",
+            "satisfied_by": [
+              "T1",
+              "T13",
+              "T2",
+              "T3",
+              "T4"
+            ],
+            "text": "Old schedules and clients keep working, and an old server cannot misinterpret native trigger fields."
+          },
+          {
+            "id": "G9",
+            "satisfied_by": [
+              "T12",
+              "T13",
+              "T5"
+            ],
+            "text": "Existing run leashes, authentication probes, dirty-tree policy, checkpoint diffs, and remote server ownership remain enforced."
+          },
+          {
+            "id": "G10",
+            "satisfied_by": [
+              "T10",
+              "T11",
+              "T12",
+              "T13",
+              "T9"
+            ],
+            "text": "Focused automated and authorized real-client receipts cover the complete creation-to-completion journey across applicable surfaces."
+          }
+        ],
+        "goal_contract_version": 2,
+        "plan_id": "P-2026-09-04-scheduled-followups",
+        "schema": "product-ops.goal-contract/v2",
+        "scope_brief": null,
+        "tasks": [
+          {
+            "disposition": {
+              "criteria": [
+                "G1",
+                "G2",
+                "G6",
+                "G8"
+              ],
+              "kind": "mapped"
+            },
+            "id": "T1"
+          },
+          {
+            "disposition": {
+              "criteria": [
+                "G1",
+                "G10",
+                "G3",
+                "G4"
+              ],
+              "kind": "mapped"
+            },
+            "id": "T10"
+          },
+          {
+            "disposition": {
+              "criteria": [
+                "G10",
+                "G6"
+              ],
+              "kind": "mapped"
+            },
+            "id": "T11"
+          },
+          {
+            "disposition": {
+              "criteria": [
+                "G10",
+                "G5",
+                "G9"
+              ],
+              "kind": "mapped"
+            },
+            "id": "T12"
+          },
+          {
+            "disposition": {
+              "criteria": [
+                "G10",
+                "G8",
+                "G9"
+              ],
+              "kind": "mapped"
+            },
+            "id": "T13"
+          },
+          {
+            "disposition": {
+              "criteria": [
+                "G8"
+              ],
+              "kind": "mapped"
+            },
+            "id": "T2"
+          },
+          {
+            "disposition": {
+              "criteria": [
+                "G1",
+                "G2",
+                "G6",
+                "G7",
+                "G8"
+              ],
+              "kind": "mapped"
+            },
+            "id": "T3"
+          },
+          {
+            "disposition": {
+              "criteria": [
+                "G8"
+              ],
+              "kind": "mapped"
+            },
+            "id": "T4"
+          },
+          {
+            "disposition": {
+              "criteria": [
+                "G2",
+                "G6",
+                "G7",
+                "G9"
+              ],
+              "kind": "mapped"
+            },
+            "id": "T5"
+          },
+          {
+            "disposition": {
+              "criteria": [
+                "G5"
+              ],
+              "kind": "mapped"
+            },
+            "id": "T6"
+          },
+          {
+            "disposition": {
+              "criteria": [
+                "G5"
+              ],
+              "kind": "mapped"
+            },
+            "id": "T7"
+          },
+          {
+            "disposition": {
+              "criteria": [
+                "G1",
+                "G4"
+              ],
+              "kind": "mapped"
+            },
+            "id": "T8"
+          },
+          {
+            "disposition": {
+              "criteria": [
+                "G1",
+                "G10",
+                "G3",
+                "G4"
+              ],
+              "kind": "mapped"
+            },
+            "id": "T9"
+          }
+        ]
+      },
+      "contract_digest": "c6d02f2aae372a7dceae22956d6999dfb1a18a04792bfb287f997cdbf08dc9b0",
+      "reason": "initial prepare",
+      "revision": 1
+    }
+  ],
+  "schema": "product-ops.goal-dod/v2",
+  "scope_brief": null,
+  "tombstones": [],
+  "updated_at": "2026-09-04T05:39:38Z"
+}

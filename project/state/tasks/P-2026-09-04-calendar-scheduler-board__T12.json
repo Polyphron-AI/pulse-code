@@ -1,0 +1,38 @@
+{
+  "blocked_by": [
+    "P-2026-09-04-calendar-scheduler-board/T3",
+    "P-2026-09-04-calendar-scheduler-board/T5",
+    "P-2026-09-04-calendar-scheduler-board/T8",
+    "P-2026-09-04-calendar-scheduler-board/T9",
+    "P-2026-09-04-calendar-scheduler-board/T10",
+    "P-2026-09-04-calendar-scheduler-board/T11"
+  ],
+  "commits": [],
+  "created_at": "2026-09-04T05:39:19Z",
+  "execution_context": {
+    "branch": "docs/native-scheduling-plan-20260904",
+    "repository": "native-scheduling-plan-20260904",
+    "worktree": "native-scheduling-plan-20260904"
+  },
+  "files_touched": [
+    "docs/internals/scheduled-chats.md",
+    "docs/user/scheduled-chats.md",
+    "prd/12-scheduled-chats.md",
+    "project/state/shards/roadmap.yaml"
+  ],
+  "host_refs": {},
+  "id": "P-2026-09-04-calendar-scheduler-board/T12",
+  "kind": "verification",
+  "local_id": "T12",
+  "owner": null,
+  "plan_id": "P-2026-09-04-calendar-scheduler-board",
+  "roadmap_items": [
+    "R-2026-08-21-scheduled-chats"
+  ],
+  "schema": "product-ops.task/v1",
+  "secret_overrides": [],
+  "status": "pending",
+  "subject": "Run the calendar scheduler release gate",
+  "updated_at": "2026-09-04T05:43:10Z",
+  "verification_receipts": []
+}

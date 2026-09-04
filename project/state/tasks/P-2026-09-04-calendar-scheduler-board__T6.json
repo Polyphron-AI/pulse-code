@@ -1,0 +1,34 @@
+{
+  "blocked_by": [
+    "P-2026-09-04-calendar-scheduler-board/T4",
+    "P-2026-09-04-calendar-scheduler-board/T5"
+  ],
+  "commits": [],
+  "created_at": "2026-09-04T05:39:18Z",
+  "execution_context": {
+    "branch": "docs/native-scheduling-plan-20260904",
+    "repository": "native-scheduling-plan-20260904",
+    "worktree": "native-scheduling-plan-20260904"
+  },
+  "files_touched": [
+    "packages/client-runtime/src/operations/queries.test.ts",
+    "packages/client-runtime/src/operations/queries.ts",
+    "packages/client-runtime/src/state/orchestration.test.ts",
+    "packages/client-runtime/src/state/orchestration.ts"
+  ],
+  "host_refs": {},
+  "id": "P-2026-09-04-calendar-scheduler-board/T6",
+  "kind": "implementation",
+  "local_id": "T6",
+  "owner": null,
+  "plan_id": "P-2026-09-04-calendar-scheduler-board",
+  "roadmap_items": [
+    "R-2026-08-21-scheduled-chats"
+  ],
+  "schema": "product-ops.task/v1",
+  "secret_overrides": [],
+  "status": "pending",
+  "subject": "Add schedule-run queries to client runtime",
+  "updated_at": "2026-09-04T05:43:09Z",
+  "verification_receipts": []
+}

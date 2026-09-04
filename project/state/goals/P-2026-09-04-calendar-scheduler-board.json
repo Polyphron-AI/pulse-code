@@ -1,0 +1,639 @@
+{
+  "contract": {
+    "criteria": [
+      {
+        "id": "G1",
+        "satisfied_by": [
+          "T1",
+          "T2",
+          "T3",
+          "T9"
+        ],
+        "text": "Users can create daily, weekday, weekly, monthly, quarterly, annual, and supported custom calendar recurrence with exact timezone previews."
+      },
+      {
+        "id": "G2",
+        "satisfied_by": [
+          "T2",
+          "T3",
+          "T9"
+        ],
+        "text": "Existing elapsed intervals keep their prior semantics and do not convert without explicit user action."
+      },
+      {
+        "id": "G3",
+        "satisfied_by": [
+          "T12",
+          "T2",
+          "T3"
+        ],
+        "text": "Restart, DST, catch-up, and overlap produce exactly one visible disposition per due occurrence."
+      },
+      {
+        "id": "G4",
+        "satisfied_by": [
+          "T7",
+          "T8"
+        ],
+        "text": "The global web/desktop board shows schedules from connected environments across all lifecycle states and required filters."
+      },
+      {
+        "id": "G5",
+        "satisfied_by": [
+          "T10",
+          "T7"
+        ],
+        "text": "Mobile provides equivalent schedule discovery, status, history, and valid controls."
+      },
+      {
+        "id": "G6",
+        "satisfied_by": [
+          "T10",
+          "T4",
+          "T5",
+          "T6",
+          "T8"
+        ],
+        "text": "Full run history is immutable, paginated, authorized, and fetched on demand instead of riding shell subscriptions."
+      },
+      {
+        "id": "G7",
+        "satisfied_by": [
+          "T10",
+          "T6",
+          "T7",
+          "T8"
+        ],
+        "text": "Board controls use canonical orchestration commands and handle disconnected or mixed-version environments explicitly."
+      },
+      {
+        "id": "G8",
+        "satisfied_by": [
+          "T11"
+        ],
+        "text": "Completed and Needs attention runs can notify an opted-in user without leaking prompt, output, diff, or credential data."
+      },
+      {
+        "id": "G9",
+        "satisfied_by": [
+          "T10",
+          "T4",
+          "T5",
+          "T6",
+          "T7",
+          "T8"
+        ],
+        "text": "Schedule list and history performance remain bounded for remote and mobile clients."
+      },
+      {
+        "id": "G10",
+        "satisfied_by": [
+          "T10",
+          "T11",
+          "T12",
+          "T3",
+          "T5",
+          "T8",
+          "T9"
+        ],
+        "text": "Focused automated and authorized integrated receipts cover calendar correctness and the complete board journey."
+      }
+    ],
+    "goal_contract_version": 2,
+    "plan_id": "P-2026-09-04-calendar-scheduler-board",
+    "schema": "product-ops.goal-contract/v2",
+    "scope_brief": null,
+    "tasks": [
+      {
+        "disposition": {
+          "criteria": [
+            "G1"
+          ],
+          "kind": "mapped"
+        },
+        "id": "T1"
+      },
+      {
+        "disposition": {
+          "criteria": [
+            "G10",
+            "G5",
+            "G6",
+            "G7",
+            "G9"
+          ],
+          "kind": "mapped"
+        },
+        "id": "T10"
+      },
+      {
+        "disposition": {
+          "criteria": [
+            "G10",
+            "G8"
+          ],
+          "kind": "mapped"
+        },
+        "id": "T11"
+      },
+      {
+        "disposition": {
+          "criteria": [
+            "G10",
+            "G3"
+          ],
+          "kind": "mapped"
+        },
+        "id": "T12"
+      },
+      {
+        "disposition": {
+          "criteria": [
+            "G1",
+            "G2",
+            "G3"
+          ],
+          "kind": "mapped"
+        },
+        "id": "T2"
+      },
+      {
+        "disposition": {
+          "criteria": [
+            "G1",
+            "G10",
+            "G2",
+            "G3"
+          ],
+          "kind": "mapped"
+        },
+        "id": "T3"
+      },
+      {
+        "disposition": {
+          "criteria": [
+            "G6",
+            "G9"
+          ],
+          "kind": "mapped"
+        },
+        "id": "T4"
+      },
+      {
+        "disposition": {
+          "criteria": [
+            "G10",
+            "G6",
+            "G9"
+          ],
+          "kind": "mapped"
+        },
+        "id": "T5"
+      },
+      {
+        "disposition": {
+          "criteria": [
+            "G6",
+            "G7",
+            "G9"
+          ],
+          "kind": "mapped"
+        },
+        "id": "T6"
+      },
+      {
+        "disposition": {
+          "criteria": [
+            "G4",
+            "G5",
+            "G7",
+            "G9"
+          ],
+          "kind": "mapped"
+        },
+        "id": "T7"
+      },
+      {
+        "disposition": {
+          "criteria": [
+            "G10",
+            "G4",
+            "G6",
+            "G7",
+            "G9"
+          ],
+          "kind": "mapped"
+        },
+        "id": "T8"
+      },
+      {
+        "disposition": {
+          "criteria": [
+            "G1",
+            "G10",
+            "G2"
+          ],
+          "kind": "mapped"
+        },
+        "id": "T9"
+      }
+    ]
+  },
+  "contract_digest": "6e3bbd4e1ffac859d4479f174faa35f14bfb656c3672bb740c89ba377c77bac3",
+  "contract_revision": 1,
+  "created_at": "2026-09-04T05:39:39Z",
+  "criteria": [
+    {
+      "criterion": "Users can create daily, weekday, weekly, monthly, quarterly, annual, and supported custom calendar recurrence with exact timezone previews.",
+      "definition_digest": "3328ead3a43dd9d514a8c05b4f55001aa087af96f3f3209f2ffba5b6e93ffe4b",
+      "id": "G1",
+      "receipts": [],
+      "satisfied_by": [
+        "T1",
+        "T2",
+        "T3",
+        "T9"
+      ],
+      "status": "pending",
+      "updated_at": "2026-09-04T05:39:39Z"
+    },
+    {
+      "criterion": "Existing elapsed intervals keep their prior semantics and do not convert without explicit user action.",
+      "definition_digest": "484168bc3dfed8402382982b357a014b203f70f52923bda13cd280500672b228",
+      "id": "G2",
+      "receipts": [],
+      "satisfied_by": [
+        "T2",
+        "T3",
+        "T9"
+      ],
+      "status": "pending",
+      "updated_at": "2026-09-04T05:39:39Z"
+    },
+    {
+      "criterion": "Restart, DST, catch-up, and overlap produce exactly one visible disposition per due occurrence.",
+      "definition_digest": "a37c3485b83600947361f9781fc5d64b9fe5916a7d588a53180b9ac919d7c855",
+      "id": "G3",
+      "receipts": [],
+      "satisfied_by": [
+        "T12",
+        "T2",
+        "T3"
+      ],
+      "status": "pending",
+      "updated_at": "2026-09-04T05:39:39Z"
+    },
+    {
+      "criterion": "The global web/desktop board shows schedules from connected environments across all lifecycle states and required filters.",
+      "definition_digest": "2b6229e85f1d0718d87cd5bae547f8642a7e67e3d330a69aeaa7658ba7d6cd43",
+      "id": "G4",
+      "receipts": [],
+      "satisfied_by": [
+        "T7",
+        "T8"
+      ],
+      "status": "pending",
+      "updated_at": "2026-09-04T05:39:39Z"
+    },
+    {
+      "criterion": "Mobile provides equivalent schedule discovery, status, history, and valid controls.",
+      "definition_digest": "cd9125d02abe5064c6d605e79b7f4c55c5add7ec0701e53a1733c4a81f6969b0",
+      "id": "G5",
+      "receipts": [],
+      "satisfied_by": [
+        "T10",
+        "T7"
+      ],
+      "status": "pending",
+      "updated_at": "2026-09-04T05:39:39Z"
+    },
+    {
+      "criterion": "Full run history is immutable, paginated, authorized, and fetched on demand instead of riding shell subscriptions.",
+      "definition_digest": "adf0dc34abd2c4334f3b03a9c01e6e5f1e3d71237e43929c2c77fef56703fe86",
+      "id": "G6",
+      "receipts": [],
+      "satisfied_by": [
+        "T10",
+        "T4",
+        "T5",
+        "T6",
+        "T8"
+      ],
+      "status": "pending",
+      "updated_at": "2026-09-04T05:39:39Z"
+    },
+    {
+      "criterion": "Board controls use canonical orchestration commands and handle disconnected or mixed-version environments explicitly.",
+      "definition_digest": "98336e1869102900089cd6996fb567e1d35a4e59fe174ad17cffa8e92762057b",
+      "id": "G7",
+      "receipts": [],
+      "satisfied_by": [
+        "T10",
+        "T6",
+        "T7",
+        "T8"
+      ],
+      "status": "pending",
+      "updated_at": "2026-09-04T05:39:39Z"
+    },
+    {
+      "criterion": "Completed and Needs attention runs can notify an opted-in user without leaking prompt, output, diff, or credential data.",
+      "definition_digest": "24c1fa2dc232b1aa3bc910ccbc18c995f8ed0ce8b86d84079025cc40bc208990",
+      "id": "G8",
+      "receipts": [],
+      "satisfied_by": [
+        "T11"
+      ],
+      "status": "pending",
+      "updated_at": "2026-09-04T05:39:39Z"
+    },
+    {
+      "criterion": "Schedule list and history performance remain bounded for remote and mobile clients.",
+      "definition_digest": "6e82c8628daa17152c8881fa63923d9b19c3fc379efd78e15c5e676c73e58304",
+      "id": "G9",
+      "receipts": [],
+      "satisfied_by": [
+        "T10",
+        "T4",
+        "T5",
+        "T6",
+        "T7",
+        "T8"
+      ],
+      "status": "pending",
+      "updated_at": "2026-09-04T05:39:39Z"
+    },
+    {
+      "criterion": "Focused automated and authorized integrated receipts cover calendar correctness and the complete board journey.",
+      "definition_digest": "046b58f263886780418cd5cdf27afbbc0b20c34c9b1364f6d4e7a1ae45d1a549",
+      "id": "G10",
+      "receipts": [],
+      "satisfied_by": [
+        "T10",
+        "T11",
+        "T12",
+        "T3",
+        "T5",
+        "T8",
+        "T9"
+      ],
+      "status": "pending",
+      "updated_at": "2026-09-04T05:39:39Z"
+    }
+  ],
+  "plan_id": "P-2026-09-04-calendar-scheduler-board",
+  "plan_path": "project/plans/P-2026-09-04-calendar-scheduler-board.md",
+  "revision_history": [
+    {
+      "applied_at": "2026-09-04T05:39:39Z",
+      "approval_ref": null,
+      "contract": {
+        "criteria": [
+          {
+            "id": "G1",
+            "satisfied_by": [
+              "T1",
+              "T2",
+              "T3",
+              "T9"
+            ],
+            "text": "Users can create daily, weekday, weekly, monthly, quarterly, annual, and supported custom calendar recurrence with exact timezone previews."
+          },
+          {
+            "id": "G2",
+            "satisfied_by": [
+              "T2",
+              "T3",
+              "T9"
+            ],
+            "text": "Existing elapsed intervals keep their prior semantics and do not convert without explicit user action."
+          },
+          {
+            "id": "G3",
+            "satisfied_by": [
+              "T12",
+              "T2",
+              "T3"
+            ],
+            "text": "Restart, DST, catch-up, and overlap produce exactly one visible disposition per due occurrence."
+          },
+          {
+            "id": "G4",
+            "satisfied_by": [
+              "T7",
+              "T8"
+            ],
+            "text": "The global web/desktop board shows schedules from connected environments across all lifecycle states and required filters."
+          },
+          {
+            "id": "G5",
+            "satisfied_by": [
+              "T10",
+              "T7"
+            ],
+            "text": "Mobile provides equivalent schedule discovery, status, history, and valid controls."
+          },
+          {
+            "id": "G6",
+            "satisfied_by": [
+              "T10",
+              "T4",
+              "T5",
+              "T6",
+              "T8"
+            ],
+            "text": "Full run history is immutable, paginated, authorized, and fetched on demand instead of riding shell subscriptions."
+          },
+          {
+            "id": "G7",
+            "satisfied_by": [
+              "T10",
+              "T6",
+              "T7",
+              "T8"
+            ],
+            "text": "Board controls use canonical orchestration commands and handle disconnected or mixed-version environments explicitly."
+          },
+          {
+            "id": "G8",
+            "satisfied_by": [
+              "T11"
+            ],
+            "text": "Completed and Needs attention runs can notify an opted-in user without leaking prompt, output, diff, or credential data."
+          },
+          {
+            "id": "G9",
+            "satisfied_by": [
+              "T10",
+              "T4",
+              "T5",
+              "T6",
+              "T7",
+              "T8"
+            ],
+            "text": "Schedule list and history performance remain bounded for remote and mobile clients."
+          },
+          {
+            "id": "G10",
+            "satisfied_by": [
+              "T10",
+              "T11",
+              "T12",
+              "T3",
+              "T5",
+              "T8",
+              "T9"
+            ],
+            "text": "Focused automated and authorized integrated receipts cover calendar correctness and the complete board journey."
+          }
+        ],
+        "goal_contract_version": 2,
+        "plan_id": "P-2026-09-04-calendar-scheduler-board",
+        "schema": "product-ops.goal-contract/v2",
+        "scope_brief": null,
+        "tasks": [
+          {
+            "disposition": {
+              "criteria": [
+                "G1"
+              ],
+              "kind": "mapped"
+            },
+            "id": "T1"
+          },
+          {
+            "disposition": {
+              "criteria": [
+                "G10",
+                "G5",
+                "G6",
+                "G7",
+                "G9"
+              ],
+              "kind": "mapped"
+            },
+            "id": "T10"
+          },
+          {
+            "disposition": {
+              "criteria": [
+                "G10",
+                "G8"
+              ],
+              "kind": "mapped"
+            },
+            "id": "T11"
+          },
+          {
+            "disposition": {
+              "criteria": [
+                "G10",
+                "G3"
+              ],
+              "kind": "mapped"
+            },
+            "id": "T12"
+          },
+          {
+            "disposition": {
+              "criteria": [
+                "G1",
+                "G2",
+                "G3"
+              ],
+              "kind": "mapped"
+            },
+            "id": "T2"
+          },
+          {
+            "disposition": {
+              "criteria": [
+                "G1",
+                "G10",
+                "G2",
+                "G3"
+              ],
+              "kind": "mapped"
+            },
+            "id": "T3"
+          },
+          {
+            "disposition": {
+              "criteria": [
+                "G6",
+                "G9"
+              ],
+              "kind": "mapped"
+            },
+            "id": "T4"
+          },
+          {
+            "disposition": {
+              "criteria": [
+                "G10",
+                "G6",
+                "G9"
+              ],
+              "kind": "mapped"
+            },
+            "id": "T5"
+          },
+          {
+            "disposition": {
+              "criteria": [
+                "G6",
+                "G7",
+                "G9"
+              ],
+              "kind": "mapped"
+            },
+            "id": "T6"
+          },
+          {
+            "disposition": {
+              "criteria": [
+                "G4",
+                "G5",
+                "G7",
+                "G9"
+              ],
+              "kind": "mapped"
+            },
+            "id": "T7"
+          },
+          {
+            "disposition": {
+              "criteria": [
+                "G10",
+                "G4",
+                "G6",
+                "G7",
+                "G9"
+              ],
+              "kind": "mapped"
+            },
+            "id": "T8"
+          },
+          {
+            "disposition": {
+              "criteria": [
+                "G1",
+                "G10",
+                "G2"
+              ],
+              "kind": "mapped"
+            },
+            "id": "T9"
+          }
+        ]
+      },
+      "contract_digest": "6e3bbd4e1ffac859d4479f174faa35f14bfb656c3672bb740c89ba377c77bac3",
+      "reason": "initial prepare",
+      "revision": 1
+    }
+  ],
+  "schema": "product-ops.goal-dod/v2",
+  "scope_brief": null,
+  "tombstones": [],
+  "updated_at": "2026-09-04T05:39:39Z"
+}

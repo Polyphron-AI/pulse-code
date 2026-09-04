@@ -1,0 +1,33 @@
+{
+  "blocked_by": [
+    "P-2026-09-04-scheduled-followups/T1"
+  ],
+  "commits": [],
+  "created_at": "2026-09-04T05:39:15Z",
+  "execution_context": {
+    "branch": "docs/native-scheduling-plan-20260904",
+    "repository": "native-scheduling-plan-20260904",
+    "worktree": "native-scheduling-plan-20260904"
+  },
+  "files_touched": [
+    "apps/server/src/orchestration/decider.schedules.test.ts",
+    "apps/server/src/orchestration/decider.ts",
+    "apps/server/src/orchestration/projector.test.ts",
+    "apps/server/src/orchestration/projector.ts"
+  ],
+  "host_refs": {},
+  "id": "P-2026-09-04-scheduled-followups/T3",
+  "kind": "implementation",
+  "local_id": "T3",
+  "owner": null,
+  "plan_id": "P-2026-09-04-scheduled-followups",
+  "roadmap_items": [
+    "R-2026-08-21-scheduled-chats"
+  ],
+  "schema": "product-ops.task/v1",
+  "secret_overrides": [],
+  "status": "pending",
+  "subject": "Decide and project native one-off schedules",
+  "updated_at": "2026-09-04T05:43:04Z",
+  "verification_receipts": []
+}

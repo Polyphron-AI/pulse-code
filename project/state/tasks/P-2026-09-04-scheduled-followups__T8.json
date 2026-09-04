@@ -1,0 +1,29 @@
+{
+  "blocked_by": [],
+  "commits": [],
+  "created_at": "2026-09-04T05:39:15Z",
+  "execution_context": {
+    "branch": "docs/native-scheduling-plan-20260904",
+    "repository": "native-scheduling-plan-20260904",
+    "worktree": "native-scheduling-plan-20260904"
+  },
+  "files_touched": [
+    "packages/client-runtime/src/scheduling/scheduleDraft.test.ts",
+    "packages/client-runtime/src/scheduling/scheduleDraft.ts"
+  ],
+  "host_refs": {},
+  "id": "P-2026-09-04-scheduled-followups/T8",
+  "kind": "implementation",
+  "local_id": "T8",
+  "owner": null,
+  "plan_id": "P-2026-09-04-scheduled-followups",
+  "roadmap_items": [
+    "R-2026-08-21-scheduled-chats"
+  ],
+  "schema": "product-ops.task/v1",
+  "secret_overrides": [],
+  "status": "pending",
+  "subject": "Add a shared schedule draft normalizer",
+  "updated_at": "2026-09-04T05:43:05Z",
+  "verification_receipts": []
+}
