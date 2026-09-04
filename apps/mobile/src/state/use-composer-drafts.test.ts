@@ -120,6 +120,7 @@ import {
   undoComposerDraftMerge,
   undoComposerDraftMergeState,
   resetComposerDraftsLoadState,
+  waitForComposerDraftsLoaded,
 } from "./use-composer-drafts";
 
 const DRAFT: ComposerDraft = {
@@ -142,6 +143,38 @@ afterEach(() => {
 });
 
 describe("mobile composer drafts", () => {
+  it("hydrates file-backed image records without rewriting them as inline images", async () => {
+    const image = {
+      id: "image-reader",
+      type: "image",
+      name: "photo.png",
+      mimeType: "image/png",
+      sizeBytes: 3,
+      previewUri: "file:///documents/t3-composer-attachments/photo.png",
+      fileUri: "file:///documents/t3-composer-attachments/photo.png",
+    };
+    const document = {
+      schemaVersion: 1,
+      drafts: { "environment-1:thread-1": { text: "Saved image", attachments: [image] } },
+    };
+    composerDraftFileMocks.setDocument(document);
+    await waitForComposerDraftsLoaded();
+    await flushComposerDrafts();
+    expect(getComposerDraftSnapshot("environment-1:thread-1").attachments).toEqual([image]);
+    expect(JSON.parse(composerDraftFileMocks.getDocument())).toEqual(document);
+    expect(() =>
+      decodePersistedComposerDrafts({
+        schemaVersion: 1,
+        drafts: {
+          broken: {
+            text: "",
+            attachments: [{ ...image, fileUri: undefined, dataUrl: undefined }],
+          },
+        },
+      }),
+    ).toThrow();
+  });
+
   it.each(["read", "decode"] as const)(
     "preserves saved drafts and attachment files when the draft %s fails",
     async (failure) => {
@@ -308,45 +341,49 @@ describe("mobile composer drafts", () => {
     expect(composerAttachmentCleanupMocks.releaseUploads).not.toHaveBeenCalled();
   });
 
-  it("keeps a removed file until both playback and a share copy finish", async () => {
-    const outboxLoad = vi.spyOn(threadOutboxManager, "load").mockResolvedValue(true);
-    onTestFinished(() => outboxLoad.mockRestore());
-    const fileName = "33333333-3333-4333-8333-333333333333-recording.mp4";
-    const file = {
-      id: "file-preview",
-      type: "file" as const,
-      name: "recording.mp4",
-      mimeType: "video/mp4",
-      sizeBytes: 42,
-      fileUri: `file:///private/var/mobile/Containers/Data/Application/11111111-1111-4111-8111-111111111111/Documents/t3-composer-attachments/${fileName}`,
-    };
-    const currentFile = {
-      ...file,
-      fileUri: `file:///var/mobile/Containers/Data/Application/22222222-2222-4222-8222-222222222222/Documents/t3-composer-attachments/${fileName}`,
-    };
-    const releasePlayback = retainComposerAttachmentFileForPreview(file);
-    const releaseShareCopy = retainComposerAttachmentFileForPreview(currentFile);
-    onTestFinished(releasePlayback);
-    onTestFinished(releaseShareCopy);
+  it.each(["file", "image"] as const)(
+    "keeps a removed %s until both preview and a share copy finish",
+    async (type) => {
+      const outboxLoad = vi.spyOn(threadOutboxManager, "load").mockResolvedValue(true);
+      onTestFinished(() => outboxLoad.mockRestore());
+      const fileName = "33333333-3333-4333-8333-333333333333-recording.mp4";
+      const file = {
+        id: "file-preview",
+        type,
+        previewUri: "file:///preview",
+        name: "recording.mp4",
+        mimeType: "video/mp4",
+        sizeBytes: 42,
+        fileUri: `file:///private/var/mobile/Containers/Data/Application/11111111-1111-4111-8111-111111111111/Documents/t3-composer-attachments/${fileName}`,
+      };
+      const currentFile = {
+        ...file,
+        fileUri: `file:///var/mobile/Containers/Data/Application/22222222-2222-4222-8222-222222222222/Documents/t3-composer-attachments/${fileName}`,
+      };
+      const releasePlayback = retainComposerAttachmentFileForPreview(file);
+      const releaseShareCopy = retainComposerAttachmentFileForPreview(currentFile);
+      onTestFinished(releasePlayback);
+      onTestFinished(releaseShareCopy);
 
-    await releaseUnusedComposerAttachmentFiles([currentFile]);
-    expect(composerAttachmentCleanupMocks.remove).not.toHaveBeenCalled();
+      await releaseUnusedComposerAttachmentFiles([currentFile]);
+      expect(composerAttachmentCleanupMocks.remove).not.toHaveBeenCalled();
 
-    releasePlayback();
-    releasePlayback();
-    await releaseUnusedComposerAttachmentFiles([file]);
-    expect(composerAttachmentCleanupMocks.remove).not.toHaveBeenCalled();
+      releasePlayback();
+      releasePlayback();
+      await releaseUnusedComposerAttachmentFiles([file]);
+      expect(composerAttachmentCleanupMocks.remove).not.toHaveBeenCalled();
 
-    const deleted = Promise.withResolvers<void>();
-    composerAttachmentCleanupMocks.remove.mockImplementationOnce(async () => {
-      deleted.resolve();
-      return undefined;
-    });
-    releaseShareCopy();
-    await deleted.promise;
+      const deleted = Promise.withResolvers<void>();
+      composerAttachmentCleanupMocks.remove.mockImplementationOnce(async () => {
+        deleted.resolve();
+        return undefined;
+      });
+      releaseShareCopy();
+      await deleted.promise;
 
-    expect(composerAttachmentCleanupMocks.remove.mock.calls).toEqual([[currentFile.fileUri]]);
-  });
+      expect(composerAttachmentCleanupMocks.remove.mock.calls).toEqual([[currentFile.fileUri]]);
+    },
+  );
 
   it("preserves a preview opened while cleanup is checking the incoming inbox", async () => {
     const outboxLoad = vi.spyOn(threadOutboxManager, "load").mockResolvedValue(true);
