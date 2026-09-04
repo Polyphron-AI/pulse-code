@@ -1159,7 +1159,7 @@ export function PullRequestDetailPanel({
     !conflicting &&
     allowedMergeMethods.length > 1;
   // The pull request number carries this state in the overview and the right-panel tab mirrors
-  // it. Conflicts keep their own row below: an open pull request remains green there.
+  // it. Conflicts take the action slot while they need a person, but do not change the PR state.
   const statePresentation = detail
     ? resolvePullRequestState({ state: detail.state, isDraft: detail.isDraft })
     : null;

@@ -98,8 +98,9 @@ export interface ProviderChangeRequestSummary {
   readonly headBranch: string;
   readonly baseBranch: string;
   readonly state: PullRequestState;
-  readonly updatedAt: string;
+  /** Present when the host says an open pull request is still a draft. */
   readonly isDraft?: boolean;
+  readonly updatedAt: string;
   readonly closedAt?: string | null;
   readonly mergedAt?: string | null;
 }

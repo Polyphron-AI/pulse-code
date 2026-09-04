@@ -470,6 +470,7 @@ export class GitHubPullRequestCli extends Context.Service<
         readonly state: "open" | "closed" | "merged";
         readonly closedAt?: string | null;
         readonly mergedAt?: string | null;
+        readonly isDraft?: boolean;
         readonly updatedAt: string;
       },
       GitHubPullRequestCliError
@@ -1654,6 +1655,7 @@ export const make = Effect.gen(function* () {
                   state: summary.state ?? "open",
                   closedAt: summary.closedAt ?? null,
                   mergedAt: summary.mergedAt ?? null,
+                  ...(summary.isDraft === true ? { isDraft: true } : {}),
                   updatedAt: summary.updatedAt,
                 }),
           ),

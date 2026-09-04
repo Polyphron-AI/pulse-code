@@ -634,9 +634,10 @@ export const PullRequestSummary = Schema.Struct({
   title: TrimmedNonEmptyString,
   url: TrimmedNonEmptyString,
   state: PullRequestState,
+  /** Present when the host says the open pull request is still a draft. */
+  isDraft: Schema.optional(Schema.Boolean),
   headBranch: TrimmedNonEmptyString,
   baseBranch: TrimmedNonEmptyString,
-  isDraft: Schema.optional(Schema.Boolean),
   closedAt: Schema.optional(Schema.NullOr(IsoDateTime)),
   mergedAt: Schema.optional(Schema.NullOr(IsoDateTime)),
   updatedAt: IsoDateTime,

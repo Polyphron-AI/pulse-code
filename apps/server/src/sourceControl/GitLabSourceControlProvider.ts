@@ -28,6 +28,7 @@ function toChangeRequest(summary: GitLabCli.GitLabMergeRequestSummary): ChangeRe
     state: summary.state ?? "open",
     closedAt: summary.closedAt ?? null,
     mergedAt: summary.mergedAt ?? null,
+    ...(summary.isDraft === true ? { isDraft: true } : {}),
     updatedAt: summary.updatedAt ?? Option.none(),
     ...(summary.isCrossRepository !== undefined
       ? { isCrossRepository: summary.isCrossRepository }

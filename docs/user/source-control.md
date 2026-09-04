@@ -29,6 +29,8 @@ Pulse Code works with the platforms your team already uses:
 
 ### Manage Code Reviews Without Context Switching
 
+Draft pull requests show a gray draft indicator in the sidebar on desktop, web, and mobile. Pull request lists and reviews refresh after an agent turn finishes.
+
 **Create pull requests while you work**
 
 - Push a branch and create a pull request from the Git actions controls in the toolbar

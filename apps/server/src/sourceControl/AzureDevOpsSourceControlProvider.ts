@@ -63,6 +63,7 @@ function toChangeRequest(summary: {
   readonly state: "open" | "closed" | "merged";
   readonly closedAt?: string | null;
   readonly mergedAt?: string | null;
+  readonly isDraft?: boolean;
   readonly updatedAt: ChangeRequest["updatedAt"];
 }): ChangeRequest {
   return {
@@ -75,6 +76,7 @@ function toChangeRequest(summary: {
     state: summary.state,
     closedAt: summary.closedAt ?? null,
     mergedAt: summary.mergedAt ?? null,
+    ...(summary.isDraft === true ? { isDraft: true } : {}),
     updatedAt: summary.updatedAt,
     isCrossRepository: false,
   };
