@@ -3,7 +3,7 @@ meta:
   capacity_note: "Planning assumption: one maintainer with agent support; confirm before execution."
   reserve_floor: 25
   reserve_rationale: "One of four Now slots is reserved for compatibility and credential-safety work because integration failures affect every client and remote mode."
-  snapshot: 2026-08-22
+  snapshot: 2026-09-04
 
 themes:
   - id: T1
@@ -15,6 +15,9 @@ themes:
   - id: T3
     title: "Provider reach without platform sprawl"
     problem: "One-off integrations duplicate infrastructure while universal models erase the provider semantics users depend on."
+  - id: T4
+    title: "Live design in the coding loop"
+    problem: "Design iteration loses environment, thread, and agent context when it runs in a separate browser or mutates a second source of truth."
 items:
   - id: R-2026-08-21-desktop-product-separation
     title: "Separate Pulse and T3 desktop products"
@@ -643,3 +646,55 @@ items:
     status: active
     history:
       - "2026-08-19 captured in later; split by validated workflow before promotion."
+
+  - id: R-2026-09-04-pulseflow-live-design
+    title: "Host PulseFlow live design in Preview"
+    theme: T4
+    horizon: later
+    stage: shaped
+    kind: feature
+    outcome: "Minimize context switching by running PulseFlow's complete Impeccable picker and iteration loop inside the current thread Preview."
+    need: "When I shape a running interface with an agent, I want to pick, compare, tune, steer, accept, and recover in Pulse Code, so design intent and implementation context remain together."
+    directions:
+      - "Add an optional live-design capability to the existing Preview host and translate no document semantics in Pulse Code."
+      - "Keep standalone Impeccable for generic source projects and use a PulseFlow-owned document adapter for PulseFlow targets."
+    failure_mode: "A convincing toolbar ships while variants target the wrong tab, acceptance writes a second source of truth, existing Preview controls regress, or remote mode exposes a raw dev-server port."
+    appetite: "6 to 9 Pulse Code engineering-weeks within the cross-repository PulseFlow R9 train"
+    approach: "Prove a local deterministic fixture first, add the full interactive toolbar and skill path, verify private routing, then gate public remote use on an authenticated environment-side gateway."
+    rabbit_holes:
+      - "implementing Impeccable command semantics or model prompting inside Pulse Code"
+      - "copying PulseFlow document state into the thread or Preview broker"
+      - "pointer-heavy mobile authoring in the first release"
+      - "a generic remote browser gateway beyond the exact Preview target contract"
+    no_gos:
+      - "no DOM selector guess treated as PulseFlow document identity"
+      - "no implicit accept, blind retry, or duplicate mutation after an uncertain outcome"
+      - "no raw public dev-server port and no browser-local localhost rewrite"
+      - "no regression to viewport, screenshot, recording, annotation, refresh, pop-out, or automation controls"
+    dod:
+      - "All 23 Impeccable commands and the root router remain discoverable through the existing skill picker."
+      - "The pinned command, fourteen-surface, twelve-action, event, phase, and parameter-kind registries have explicit page or host mappings."
+      - "Pick, Insert, Detect, DESIGN.md Visual and Raw, prompts and Steer by text or supported voice, annotations, copy Save/Cancel/Apply/discard/repair/rollback, progressive variants, original, previous, dots, next, Tune, Accept, Discard, mount recovery, Stop, and reconnect work in Preview."
+      - "PulseFlow owns stable targets, variants, validation, transactions, receipts, and undo; Pulse Code owns browser and transport state only."
+      - "Local and directly reachable private environments pass focused host and capability-skew suites."
+      - "Public remote support ships only after the authenticated gateway security suite passes."
+      - "The real PulseFlow end-to-end picker, accept, undo, repeat, and discard journey passes with screenshot and recording evidence."
+    evidence:
+      - type: user_evidence
+        note: "The user asked on 2026-09-04 for complete Impeccable features, interactivity, Iterate, Polish, Maintain, and picker behavior in PulseFlow running inside Pulse Code's live dev server."
+      - type: repository_evidence
+        note: "Pulse Code already has thread-bound Preview tabs, environment-port resolution, viewport controls, screenshots, recordings, annotations, browser automation, and a skill picker."
+      - type: upstream_evidence
+        note: "Impeccable commit 4c5243fcd42d39c1fc281adcaf10be0913095f74 is Apache-2.0 and provides the 23-command metadata plus live interaction protocol; its Windows live test baseline remains red."
+    rice: { reach: H, impact: H, effort: H }
+    prd_refs:
+      - 16-pulseflow-live-design#experience-contract
+      - 16-pulseflow-live-design#host-capability-contract
+      - 20-acceptance-criteria/pulseflow-live-design#pulseflow-live-design-host-acceptance-criteria
+    blocked_by:
+      - R-2026-08-19-integration-foundation
+    metric:
+      { name: complete PulseFlow live-design journeys finished without leaving Preview, baseline: 0, target: 95 }
+    status: proposed
+    history:
+      - "2026-09-04 shaped in later from the cross-repository Impeccable and PulseFlow feasibility pass; promotion requires a working PulseFlow adapter fixture and explicit roadmap capacity."

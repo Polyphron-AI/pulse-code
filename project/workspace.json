@@ -1,0 +1,2657 @@
+{
+  "bible": {
+    "available": false,
+    "note": "No Content Bible source documents were found. Searched: content-bible, content_bible, brand/content-bible, docs/content-bible, CONTENT_BIBLE.md, content-bible.md.",
+    "request": "Link Content Bible documents by adding a recognized source path or supplying bible.items in project/workspace-overlay.json."
+  },
+  "prd": {
+    "available": true,
+    "note": "Initial Pulse integrations requirement set; proposed, not yet approved.",
+    "rows": [
+      {
+        "action": "Confirm outcome language and connection ownership assumptions.",
+        "area": "Problem and outcome",
+        "authority": "prd/10-pulse-integrations.md §Problem and outcome",
+        "covers": "Connect-once access to authorized work context across Pulse Code clients and environments.",
+        "health": "draft",
+        "id": "10-pulse-integrations#problem-and-outcome",
+        "later": [],
+        "live": "User request plus existing settings/source-control architecture.",
+        "next": [],
+        "now": [],
+        "register": "CR-2026-08-19-pulse-integrations-foundation",
+        "source": "prd/10-pulse-integrations.md §Problem and outcome",
+        "sub": "prd/10-pulse-integrations.md"
+      },
+      {
+        "action": "Define tokenizer and collect provider-demand evidence before promoting candidates.",
+        "area": "Scope and provider boundary",
+        "authority": "prd/10-pulse-integrations.md §Scope and provider boundary",
+        "covers": "Provider capability groups, prioritization criteria, and the system-of-record boundary.",
+        "health": "draft",
+        "id": "10-pulse-integrations#scope-and-provider-boundary",
+        "later": [],
+        "live": "Pulse Issues in-flight work and existing multi-host source-control adapters.",
+        "next": [],
+        "now": [],
+        "register": "G-2026-08-19-tokenizer-definition; G-2026-08-19-provider-demand-baseline",
+        "source": "prd/10-pulse-integrations.md §Scope and provider boundary",
+        "sub": "prd/10-pulse-integrations.md"
+      },
+      {
+        "action": "Resolve user-owned versus environment-admin-owned connection scenarios.",
+        "area": "Experience contract",
+        "authority": "prd/10-pulse-integrations.md §Experience contract",
+        "covers": "Connect, reauthorize, map, health, native context, action preview, and disconnect UX.",
+        "health": "draft",
+        "id": "10-pulse-integrations#experience-contract",
+        "later": [],
+        "live": "/settings/integrations exists; Pulse Issues connection UI is in flight.",
+        "next": [],
+        "now": [],
+        "register": "G-2026-08-19-shared-server-connection-ownership",
+        "source": "prd/10-pulse-integrations.md §Experience contract",
+        "sub": "prd/10-pulse-integrations.md"
+      },
+      {
+        "action": "Execute T1 and use a second-adapter spike to test the abstraction.",
+        "area": "Platform contract",
+        "authority": "prd/10-pulse-integrations.md §Platform contract",
+        "covers": "Server ownership, durable records, thin adapters, bounded reads, optional capabilities, and receipts.",
+        "health": "draft",
+        "id": "10-pulse-integrations#platform-contract",
+        "later": [],
+        "live": "Typed RPC/capability patterns exist; shared integration contracts are planned.",
+        "next": [],
+        "now": [],
+        "register": "P-2026-08-19-integrations-foundation/T1",
+        "source": "prd/10-pulse-integrations.md §Platform contract",
+        "sub": "prd/10-pulse-integrations.md"
+      },
+      {
+        "action": "Complete T2 secret-store/OAuth review before storing refresh tokens.",
+        "area": "Security, privacy, and compatibility",
+        "authority": "prd/10-pulse-integrations.md §Security, privacy, and compatibility",
+        "covers": "Credential isolation, least privilege, OAuth/webhook protection, remote clients, and mixed versions.",
+        "health": "at risk",
+        "id": "10-pulse-integrations#security-privacy-and-compatibility",
+        "later": [],
+        "live": "Current server secret store and Issues PAT boundary are evidence; OAuth guarantees are unverified.",
+        "next": [],
+        "now": [],
+        "register": "G-2026-08-19-secret-store-guarantees; P-2026-08-19-integrations-foundation/T2",
+        "source": "prd/10-pulse-integrations.md §Security, privacy, and compatibility",
+        "sub": "prd/10-pulse-integrations.md"
+      },
+      {
+        "action": "Measure the reference adapter before setting numeric targets.",
+        "area": "Success metrics and rollout",
+        "authority": "prd/10-pulse-integrations.md §Success metrics and rollout",
+        "covers": "Connect/fix/recovery/compatibility metrics and adapter-by-adapter rollout gates.",
+        "health": "needs baseline",
+        "id": "10-pulse-integrations#success-metrics-and-rollout",
+        "later": [],
+        "live": "Metric names exist; baselines and targets remain explicit nulls in the roadmap.",
+        "next": [],
+        "now": [],
+        "register": "R-2026-08-19-pulse-issues-reference",
+        "source": "prd/10-pulse-integrations.md §Success metrics and rollout",
+        "sub": "prd/10-pulse-integrations.md"
+      },
+      {
+        "action": "Keep release and implementation changes inside the locked product boundary.",
+        "area": "Purpose",
+        "authority": "prd/11-product-line-and-distribution-boundary.md §Purpose",
+        "covers": "Separates official T3 authority from the downstream Pulse desktop product.",
+        "health": "approved",
+        "id": "11-product-line-and-distribution-boundary#purpose",
+        "later": [],
+        "live": "Pulse desktop identity work and focused package receipts are recorded in the roadmap.",
+        "next": [],
+        "now": [],
+        "register": "R-2026-08-21-desktop-product-separation",
+        "source": "prd/11-product-line-and-distribution-boundary.md §Purpose",
+        "sub": "prd/11-product-line-and-distribution-boundary.md"
+      },
+      {
+        "action": "Continue explicit reviewable upstream intake without claiming parity.",
+        "area": "Product relationship",
+        "authority": "prd/11-product-line-and-distribution-boundary.md §Product relationship",
+        "covers": "Defines upstream intake, downstream ownership, and Pulse-only divergence.",
+        "health": "approved",
+        "id": "11-product-line-and-distribution-boundary#product-relationship",
+        "later": [],
+        "live": "The repository has separate origin and upstream remotes; Pulse artifacts are downstream-owned.",
+        "next": [],
+        "now": [],
+        "register": "R-2026-08-21-desktop-product-separation",
+        "source": "prd/11-product-line-and-distribution-boundary.md §Product relationship",
+        "sub": "prd/11-product-line-and-distribution-boundary.md"
+      },
+      {
+        "action": "Finish platform lifecycle proof before team-wide release.",
+        "area": "Desktop boundary",
+        "authority": "prd/11-product-line-and-distribution-boundary.md §Desktop boundary",
+        "covers": "Requires isolated desktop identity, state, protocols, packaging, and update ownership.",
+        "health": "active",
+        "id": "11-product-line-and-distribution-boundary#desktop-boundary",
+        "later": [],
+        "live": "Pulse-specific IDs, paths, schemes, and package identities are implemented with focused tests.",
+        "next": [],
+        "now": [],
+        "register": "R-2026-08-21-desktop-product-separation",
+        "source": "prd/11-product-line-and-distribution-boundary.md §Desktop boundary",
+        "sub": "prd/11-product-line-and-distribution-boundary.md"
+      },
+      {
+        "action": "Keep automatic T3 discovery or migration out of first run.",
+        "area": "First-run and import policy",
+        "authority": "prd/11-product-line-and-distribution-boundary.md §First-run and import policy",
+        "covers": "Requires fresh Pulse state and explicit nondestructive future import.",
+        "health": "approved",
+        "id": "11-product-line-and-distribution-boundary#first-run-and-import-policy",
+        "later": [],
+        "live": "Pulse owns a separate desktop state root; no import workflow is claimed.",
+        "next": [],
+        "now": [],
+        "register": "R-2026-08-21-desktop-product-separation",
+        "source": "prd/11-product-line-and-distribution-boundary.md §First-run and import policy",
+        "sub": "prd/11-product-line-and-distribution-boundary.md"
+      },
+      {
+        "action": "Preserve shared clients until a separate locked product decision exists.",
+        "area": "Shared clients initially",
+        "authority": "prd/11-product-line-and-distribution-boundary.md §Shared clients initially",
+        "covers": "Keeps web and mobile shared and capability-aware initially.",
+        "health": "approved",
+        "id": "11-product-line-and-distribution-boundary#shared-clients-initially",
+        "later": [],
+        "live": "Web remains shared with desktop and mobile uses the common capability model.",
+        "next": [],
+        "now": [],
+        "register": "R-2026-08-21-desktop-product-separation",
+        "source": "prd/11-product-line-and-distribution-boundary.md §Shared clients initially",
+        "sub": "prd/11-product-line-and-distribution-boundary.md"
+      },
+      {
+        "action": "Complete remaining install and lifecycle evidence on every desktop platform.",
+        "area": "In scope",
+        "authority": "prd/11-product-line-and-distribution-boundary.md §In scope",
+        "covers": "Bounds the work to permanent Pulse desktop distribution and side-by-side operation.",
+        "health": "active",
+        "id": "11-product-line-and-distribution-boundary#in-scope",
+        "later": [],
+        "live": "Identity implementation and Windows candidate inspection are recorded; full platform proof remains open.",
+        "next": [],
+        "now": [],
+        "register": "R-2026-08-21-desktop-product-separation",
+        "source": "prd/11-product-line-and-distribution-boundary.md §In scope",
+        "sub": "prd/11-product-line-and-distribution-boundary.md"
+      },
+      {
+        "action": "Reject changes that cross these boundaries without a new decision.",
+        "area": "Out of scope",
+        "authority": "prd/11-product-line-and-distribution-boundary.md §Out of scope",
+        "covers": "Excludes T3 publishing, automatic sync or migration, and separate web/mobile identities.",
+        "health": "approved",
+        "id": "11-product-line-and-distribution-boundary#out-of-scope",
+        "later": [],
+        "live": "No live implementation is claimed for excluded work.",
+        "next": [],
+        "now": [],
+        "register": "R-2026-08-21-desktop-product-separation",
+        "source": "prd/11-product-line-and-distribution-boundary.md §Out of scope",
+        "sub": "prd/11-product-line-and-distribution-boundary.md"
+      },
+      {
+        "action": "Collect macOS, Linux, and complete lifecycle receipts before release.",
+        "area": "Release gate",
+        "authority": "prd/11-product-line-and-distribution-boundary.md §Release gate",
+        "covers": "Requires package inspection and side-by-side proof on Windows, macOS, and Linux.",
+        "health": "at risk",
+        "id": "11-product-line-and-distribution-boundary#release-gate",
+        "later": [],
+        "live": "Windows package inspection exists; the roadmap explicitly leaves cross-platform release evidence open.",
+        "next": [],
+        "now": [],
+        "register": "R-2026-08-21-desktop-product-separation",
+        "source": "prd/11-product-line-and-distribution-boundary.md §Release gate",
+        "sub": "prd/11-product-line-and-distribution-boundary.md"
+      },
+      {
+        "action": "Keep linked authorities synchronized when the boundary changes.",
+        "area": "Cross-references",
+        "authority": "prd/11-product-line-and-distribution-boundary.md §Cross-references",
+        "covers": "Connects the requirement to acceptance, decisions, gaps, and upstream authority.",
+        "health": "approved",
+        "id": "11-product-line-and-distribution-boundary#cross-references",
+        "later": [],
+        "live": "Acceptance criteria, decisions, gaps, and upstream remote are present.",
+        "next": [],
+        "now": [],
+        "register": "R-2026-08-21-desktop-product-separation",
+        "source": "prd/11-product-line-and-distribution-boundary.md §Cross-references",
+        "sub": "prd/11-product-line-and-distribution-boundary.md"
+      },
+      {
+        "action": "Close identity questions before release and import questions before shaping import.",
+        "area": "Open questions",
+        "authority": "prd/11-product-line-and-distribution-boundary.md §Open questions",
+        "covers": "Tracks import categories and permanent per-platform identities still to settle.",
+        "health": "needs decision",
+        "id": "11-product-line-and-distribution-boundary#open-questions",
+        "later": [],
+        "live": "Some Pulse identities are implemented; import remains unimplemented and unshaped.",
+        "next": [],
+        "now": [],
+        "register": "R-2026-08-21-desktop-product-separation",
+        "source": "prd/11-product-line-and-distribution-boundary.md §Open questions",
+        "sub": "prd/11-product-line-and-distribution-boundary.md"
+      },
+      {
+        "action": "Approve the scheduled-chat change request before assigning implementation capacity.",
+        "area": "Problem",
+        "authority": "prd/12-scheduled-chats.md §Problem",
+        "covers": "Defines the gap between manual coding chats and a bounded unattended daily check-in.",
+        "health": "proposed",
+        "id": "12-scheduled-chats#problem",
+        "later": [],
+        "live": "No scheduling machinery is claimed; the roadmap keeps this work in Next.",
+        "next": [],
+        "now": [],
+        "register": "CR-2026-08-21-scheduled-chats",
+        "source": "prd/12-scheduled-chats.md §Problem",
+        "sub": "prd/12-scheduled-chats.md"
+      },
+      {
+        "action": "Resolve host availability and provider support before promotion to Now.",
+        "area": "Scope",
+        "authority": "prd/12-scheduled-chats.md §Scope",
+        "covers": "Persistent schedule threads, fresh provider sessions, handoff files, project and environment scopes, and trust rails.",
+        "health": "proposed",
+        "id": "12-scheduled-chats#scope",
+        "later": [],
+        "live": "The design and roadmap item exist; no implementation receipt exists.",
+        "next": [],
+        "now": [],
+        "register": "R-2026-08-21-scheduled-chats",
+        "source": "prd/12-scheduled-chats.md §Scope",
+        "sub": "prd/12-scheduled-chats.md"
+      },
+      {
+        "action": "Keep any collaboration notification work in its separate roadmap item.",
+        "area": "Non-goals",
+        "authority": "prd/12-scheduled-chats.md §Non-goals",
+        "covers": "Excludes a generic workflow engine, canned prompts, silent mutation, and broad notification work.",
+        "health": "proposed",
+        "id": "12-scheduled-chats#non-goals",
+        "later": [],
+        "live": "No excluded behavior is claimed.",
+        "next": [],
+        "now": [],
+        "register": "CR-2026-08-21-scheduled-chats",
+        "source": "prd/12-scheduled-chats.md §Non-goals",
+        "sub": "prd/12-scheduled-chats.md"
+      },
+      {
+        "action": "Prove host availability, idempotency, and interruption behavior before release shaping.",
+        "area": "Constraints",
+        "authority": "prd/12-scheduled-chats.md §Constraints",
+        "covers": "Requires exactly-once decisions, time leashes, explicit provider support, visible failure, and reviewable diffs.",
+        "health": "at risk",
+        "id": "12-scheduled-chats#constraints",
+        "later": [],
+        "live": "The host-availability limitation remains documented; deterministic execution is unimplemented.",
+        "next": [],
+        "now": [],
+        "register": "CR-2026-08-21-scheduled-chats",
+        "source": "prd/12-scheduled-chats.md §Constraints",
+        "sub": "prd/12-scheduled-chats.md"
+      },
+      {
+        "action": "Retain visible fallback behavior for recognized workspace-file links.",
+        "area": "Problem",
+        "authority": "prd/13-mobile-file-link-actions.md §Problem",
+        "covers": "Defines unreliable mobile file-link activation and the missing native fallback.",
+        "health": "approved",
+        "id": "13-mobile-file-link-actions#problem",
+        "later": [],
+        "live": "Mobile file-link actions were approved and implemented with focused evidence.",
+        "next": [],
+        "now": [],
+        "register": "R-2026-08-21-mobile-file-link-actions",
+        "source": "prd/13-mobile-file-link-actions.md §Problem",
+        "sub": "prd/13-mobile-file-link-actions.md"
+      },
+      {
+        "action": "Monitor the shipped behavior and preserve unchanged web/desktop paths.",
+        "area": "Scope",
+        "authority": "prd/13-mobile-file-link-actions.md §Scope",
+        "covers": "Provides Preview and remote-safe Open with actions plus honest failure handling.",
+        "health": "implemented",
+        "id": "13-mobile-file-link-actions#scope",
+        "later": [],
+        "live": "Focused mobile behavior and signed asset routing are implemented and verified.",
+        "next": [],
+        "now": [],
+        "register": "R-2026-08-21-mobile-file-link-actions",
+        "source": "prd/13-mobile-file-link-actions.md §Scope",
+        "sub": "prd/13-mobile-file-link-actions.md"
+      },
+      {
+        "action": "Keep durable-download follow-up work separately scoped.",
+        "area": "Non-goals",
+        "authority": "prd/13-mobile-file-link-actions.md §Non-goals",
+        "covers": "Excludes progress, persistent downloads, offline queues, new endpoints, and provider changes.",
+        "health": "approved",
+        "id": "13-mobile-file-link-actions#non-goals",
+        "later": [],
+        "live": "Durability was split into PRD 14 instead of expanding this slice.",
+        "next": [],
+        "now": [],
+        "register": "R-2026-08-21-mobile-file-link-actions",
+        "source": "prd/13-mobile-file-link-actions.md §Non-goals",
+        "sub": "prd/13-mobile-file-link-actions.md"
+      },
+      {
+        "action": "Retain focused remote and containment coverage.",
+        "area": "Constraints",
+        "authority": "prd/13-mobile-file-link-actions.md §Constraints",
+        "covers": "Requires signed routes across connection modes, workspace containment, and temporary cache storage.",
+        "health": "implemented",
+        "id": "13-mobile-file-link-actions#constraints",
+        "later": [],
+        "live": "The existing signed asset route and mobile cache path implement the boundary.",
+        "next": [],
+        "now": [],
+        "register": "R-2026-08-21-mobile-file-link-actions",
+        "source": "prd/13-mobile-file-link-actions.md §Constraints",
+        "sub": "prd/13-mobile-file-link-actions.md"
+      },
+      {
+        "action": "Keep rollback reachable independently of renderer and backend health.",
+        "area": "Problem",
+        "authority": "prd/15-desktop-update-rollback.md §Problem",
+        "covers": "Defines forward update as a one-way door when renderer or server health fails.",
+        "health": "accepted",
+        "id": "15-desktop-update-rollback#problem",
+        "later": [],
+        "live": "Rollback and Help-menu safe mode are implemented with focused tests.",
+        "next": [],
+        "now": [],
+        "register": "R-2026-08-22-desktop-update-rollback",
+        "source": "prd/15-desktop-update-rollback.md §Problem",
+        "sub": "prd/15-desktop-update-rollback.md"
+      },
+      {
+        "action": "Collect release-candidate proof and keep floor/channel fixtures green.",
+        "area": "Scope",
+        "authority": "prd/15-desktop-update-rollback.md §Scope",
+        "covers": "Specifies version choice, crash-proof access, safety floor, channel integrity, and deliberate install.",
+        "health": "implemented",
+        "id": "15-desktop-update-rollback#scope",
+        "later": [],
+        "live": "The working tree implementation and 67 focused tests are recorded in the roadmap.",
+        "next": [],
+        "now": [],
+        "register": "R-2026-08-22-desktop-update-rollback",
+        "source": "prd/15-desktop-update-rollback.md §Scope",
+        "sub": "prd/15-desktop-update-rollback.md"
+      },
+      {
+        "action": "Shape snapshot/restore separately if schema compatibility demands it.",
+        "area": "Non-goals",
+        "authority": "prd/15-desktop-update-rollback.md §Non-goals",
+        "covers": "Excludes database snapshot restore, mobile/CLI rollback, and a second updater mechanism.",
+        "health": "accepted",
+        "id": "15-desktop-update-rollback#non-goals",
+        "later": [],
+        "live": "Phase 1 reuses electron-updater and does not claim snapshot restore.",
+        "next": [],
+        "now": [],
+        "register": "R-2026-08-22-desktop-update-rollback",
+        "source": "prd/15-desktop-update-rollback.md §Non-goals",
+        "sub": "prd/15-desktop-update-rollback.md"
+      },
+      {
+        "action": "Raise the floor deliberately with incompatible data or identity changes.",
+        "area": "Constraints",
+        "authority": "prd/15-desktop-update-rollback.md §Constraints",
+        "covers": "Requires electron-updater reuse, GitHub release source, and a compile-time minimum version.",
+        "health": "implemented",
+        "id": "15-desktop-update-rollback#constraints",
+        "later": [],
+        "live": "Feed pinning, rollback floor, and reset behavior are implemented and tested.",
+        "next": [],
+        "now": [],
+        "register": "R-2026-08-22-desktop-update-rollback",
+        "source": "prd/15-desktop-update-rollback.md §Constraints",
+        "sub": "prd/15-desktop-update-rollback.md"
+      },
+      {
+        "action": "Approve the host boundary and cross-repository release train before implementation.",
+        "area": "Problem and outcome",
+        "authority": "prd/16-pulseflow-live-design.md §Problem and outcome",
+        "covers": "Runs PulseFlow's full Impeccable design loop in the current coding context without copying document ownership into Pulse Code.",
+        "health": "proposed",
+        "id": "16-pulseflow-live-design#problem-and-outcome",
+        "later": [],
+        "live": "Preview host primitives exist, but PulseFlow is specification-only and no integrated session exists.",
+        "next": [],
+        "now": [],
+        "register": "CR-2026-09-04-pulseflow-live-design",
+        "source": "prd/16-pulseflow-live-design.md §Problem and outcome",
+        "sub": "prd/16-pulseflow-live-design.md"
+      },
+      {
+        "action": "Preserve these behaviors in the local host proof and focused regression suite.",
+        "area": "Current leverage",
+        "authority": "prd/16-pulseflow-live-design.md §Current leverage",
+        "covers": "Inventories reusable Preview tabs, environment routing, capture, automation, and skill-picker primitives.",
+        "health": "active",
+        "id": "16-pulseflow-live-design#current-leverage",
+        "later": [],
+        "live": "The named Preview, broker, capture, and picker surfaces exist in the repository.",
+        "next": [],
+        "now": [],
+        "register": "R-2026-09-04-pulseflow-live-design",
+        "source": "prd/16-pulseflow-live-design.md §Current leverage",
+        "sub": "prd/16-pulseflow-live-design.md"
+      },
+      {
+        "action": "Keep model behavior and document mutation in PulseFlow and mobile authoring out of the first release.",
+        "area": "Scope",
+        "authority": "prd/16-pulseflow-live-design.md §Scope",
+        "covers": "Bounds host work to web and desktop Preview, typed tools, routing, reconnect, evidence, and capability skew.",
+        "health": "proposed",
+        "id": "16-pulseflow-live-design#scope",
+        "later": [],
+        "live": "No PulseFlow-specific host implementation is claimed.",
+        "next": [],
+        "now": [],
+        "register": "D-2026-09-04-pulseflow-preview-host",
+        "source": "prd/16-pulseflow-live-design.md §Scope",
+        "sub": "prd/16-pulseflow-live-design.md"
+      },
+      {
+        "action": "Build the deterministic local fixture and prove every named control before remote expansion.",
+        "area": "Experience contract",
+        "authority": "prd/16-pulseflow-live-design.md §Experience contract",
+        "covers": "Defines skill discovery, Preview binding, picker events, progressive variants, full iteration controls, accept, discard, and recovery.",
+        "health": "proposed",
+        "id": "16-pulseflow-live-design#experience-contract",
+        "later": [],
+        "live": "Existing Preview controls are live; live-design controls and adapter handshake are planned.",
+        "next": [],
+        "now": [],
+        "register": "AC-PCLD-04; AC-PCLD-05; AC-PCLD-06",
+        "source": "prd/16-pulseflow-live-design.md §Experience contract",
+        "sub": "prd/16-pulseflow-live-design.md"
+      },
+      {
+        "action": "Keep the cross-repository registry fixture release-blocking as upstream evolves.",
+        "area": "Hosted live surface parity",
+        "authority": "prd/16-pulseflow-live-design.md §Hosted live surface parity",
+        "covers": "Maps the complete pinned live chrome, copy workflow, controls, errors, protocol lifecycle, and isolation boundary between the Preview host and PulseFlow page.",
+        "health": "proposed",
+        "id": "16-pulseflow-live-design#hosted-live-surface-parity",
+        "later": [],
+        "live": "The underlying Preview host exists; the joint live-surface contract is unimplemented.",
+        "next": [],
+        "now": [],
+        "register": "AC-PCLD-04; AC-PCLD-15; AC-PCLD-16",
+        "source": "prd/16-pulseflow-live-design.md §Hosted live surface parity",
+        "sub": "prd/16-pulseflow-live-design.md"
+      },
+      {
+        "action": "Implement contracts and mixed-version fixtures before exposing client controls.",
+        "area": "Host capability contract",
+        "authority": "prd/16-pulseflow-live-design.md §Host capability contract",
+        "covers": "Defines an optional versioned capability, bound request identity, runtime validation, and narrow agent tools.",
+        "health": "proposed",
+        "id": "16-pulseflow-live-design#host-capability-contract",
+        "later": [],
+        "live": "The repository has additive capability patterns; this contract does not exist yet.",
+        "next": [],
+        "now": [],
+        "register": "D-2026-09-04-live-design-transport",
+        "source": "prd/16-pulseflow-live-design.md §Host capability contract",
+        "sub": "prd/16-pulseflow-live-design.md"
+      },
+      {
+        "action": "Obtain PulseFlow and Pulse Code owner sign-off before implementation.",
+        "area": "Ownership",
+        "authority": "prd/16-pulseflow-live-design.md §Ownership",
+        "covers": "Assigns browser and transport state to Pulse Code and picker, variant, and transaction authority to PulseFlow.",
+        "health": "needs decision",
+        "id": "16-pulseflow-live-design#ownership",
+        "later": [],
+        "live": "The proposed boundary is aligned across both repository change requests but remains unsigned.",
+        "next": [],
+        "now": [],
+        "register": "D-2026-09-04-pulseflow-preview-host",
+        "source": "prd/16-pulseflow-live-design.md §Ownership",
+        "sub": "prd/16-pulseflow-live-design.md"
+      },
+      {
+        "action": "Design and threat-model the authenticated public Preview gateway.",
+        "area": "Transport and trust",
+        "authority": "prd/16-pulseflow-live-design.md §Transport and trust",
+        "covers": "Defines direct, private-network, public gateway, web-host, mobile, origin, nonce, replay, and session constraints.",
+        "health": "at risk",
+        "id": "16-pulseflow-live-design#transport-and-trust",
+        "later": [],
+        "live": "Local and private target resolution exists; public remote resolution is explicitly blocked.",
+        "next": [],
+        "now": [],
+        "register": "G-2026-09-04-public-preview-gateway",
+        "source": "prd/16-pulseflow-live-design.md §Transport and trust",
+        "sub": "prd/16-pulseflow-live-design.md"
+      },
+      {
+        "action": "Attach mixed-version, redaction, reconnect, and uncertain-outcome receipts to the release review.",
+        "area": "Compatibility and failure behavior",
+        "authority": "prd/16-pulseflow-live-design.md §Compatibility and failure behavior",
+        "covers": "Keeps ordinary Preview available through capability skew, adapter mismatch, disconnect, denial, and bounded evidence failures.",
+        "health": "proposed",
+        "id": "16-pulseflow-live-design#compatibility-and-failure-behavior",
+        "later": [],
+        "live": "Existing optional-capability behavior is reusable; live-design failure handling is unimplemented.",
+        "next": [],
+        "now": [],
+        "register": "AC-PCLD-01; AC-PCLD-08; AC-PCLD-12",
+        "source": "prd/16-pulseflow-live-design.md §Compatibility and failure behavior",
+        "sub": "prd/16-pulseflow-live-design.md"
+      },
+      {
+        "action": "Start only after a real PulseFlow adapter fixture exists and roadmap capacity is assigned.",
+        "area": "Rollout and feasibility",
+        "authority": "prd/16-pulseflow-live-design.md §Rollout and feasibility",
+        "covers": "Sequences local proof, full interaction, agent and skill, private routing, gateway, and integrated release gates with a 6 to 9 engineering-week estimate.",
+        "health": "at risk",
+        "id": "16-pulseflow-live-design#rollout-and-feasibility",
+        "later": [],
+        "live": "The feasibility judgment is evidence-backed, but implementation and public transport gates remain open.",
+        "next": [],
+        "now": [],
+        "register": "R-2026-09-04-pulseflow-live-design; G-2026-09-04-pulseflow-adapter-unimplemented",
+        "source": "prd/16-pulseflow-live-design.md §Rollout and feasibility",
+        "sub": "prd/16-pulseflow-live-design.md"
+      },
+      {
+        "action": "Keep both repository change requests synchronized when the protocol changes.",
+        "area": "Cross-references",
+        "authority": "prd/16-pulseflow-live-design.md §Cross-references",
+        "covers": "Links the host PRD to acceptance, sitemap, workflow, tool flow, existing modules, and PulseFlow authority.",
+        "health": "reference",
+        "id": "16-pulseflow-live-design#cross-references",
+        "later": [],
+        "live": "All local links resolve; the PulseFlow reference is intentionally cross-repository.",
+        "next": [],
+        "now": [],
+        "register": "CR-2026-09-04-pulseflow-live-design",
+        "source": "prd/16-pulseflow-live-design.md §Cross-references",
+        "sub": "prd/16-pulseflow-live-design.md"
+      },
+      {
+        "action": "Resolve during the corresponding rollout slice without weakening the fixed security outcomes.",
+        "area": "Open questions",
+        "authority": "prd/16-pulseflow-live-design.md §Open questions",
+        "covers": "Tracks gateway shape, generic source acceptance, and first-release web scope.",
+        "health": "needs decision",
+        "id": "16-pulseflow-live-design#open-questions",
+        "later": [],
+        "live": "The questions do not block the local deterministic host proof.",
+        "next": [],
+        "now": [],
+        "register": "CR-2026-09-04-pulseflow-live-design",
+        "source": "prd/16-pulseflow-live-design.md §Open questions",
+        "sub": "prd/16-pulseflow-live-design.md"
+      },
+      {
+        "action": "Keep Pulse CI from publishing modified T3 artifacts.",
+        "area": "upstream-t3-remains-authoritative",
+        "authority": "prd/20-acceptance-criteria/desktop-product-line-boundary.md §upstream-t3-remains-authoritative",
+        "covers": "Official T3 artifacts remain upstream-owned.",
+        "health": "approved",
+        "id": "20-acceptance-criteria/desktop-product-line-boundary#upstream-t3-remains-authoritative",
+        "later": [],
+        "live": "Origin/upstream repository separation is configured.",
+        "next": [],
+        "now": [],
+        "register": "R-2026-08-21-desktop-product-separation",
+        "source": "prd/20-acceptance-criteria/desktop-product-line-boundary.md §upstream-t3-remains-authoritative",
+        "sub": "prd/20-acceptance-criteria/desktop-product-line-boundary.md"
+      },
+      {
+        "action": "Retain selective pull-request-based intake.",
+        "area": "pulse-selectively-adopts-upstream",
+        "authority": "prd/20-acceptance-criteria/desktop-product-line-boundary.md §pulse-selectively-adopts-upstream",
+        "covers": "Upstream intake is explicit and reviewable.",
+        "health": "approved",
+        "id": "20-acceptance-criteria/desktop-product-line-boundary#pulse-selectively-adopts-upstream",
+        "later": [],
+        "live": "A configured upstream remote supports explicit reviewable intake.",
+        "next": [],
+        "now": [],
+        "register": "R-2026-08-21-desktop-product-separation",
+        "source": "prd/20-acceptance-criteria/desktop-product-line-boundary.md §pulse-selectively-adopts-upstream",
+        "sub": "prd/20-acceptance-criteria/desktop-product-line-boundary.md"
+      },
+      {
+        "action": "Keep divergence within Pulse-owned releases and identities.",
+        "area": "pulse-may-diverge",
+        "authority": "prd/20-acceptance-criteria/desktop-product-line-boundary.md §pulse-may-diverge",
+        "covers": "Pulse-only features and cadence may diverge without changing T3.",
+        "health": "approved",
+        "id": "20-acceptance-criteria/desktop-product-line-boundary#pulse-may-diverge",
+        "later": [],
+        "live": "Pulse-specific product and integration work exists downstream.",
+        "next": [],
+        "now": [],
+        "register": "R-2026-08-21-desktop-product-separation",
+        "source": "prd/20-acceptance-criteria/desktop-product-line-boundary.md §pulse-may-diverge",
+        "sub": "prd/20-acceptance-criteria/desktop-product-line-boundary.md"
+      },
+      {
+        "action": "Finish side-by-side install proof on every desktop platform.",
+        "area": "desktop-installs-side-by-side",
+        "authority": "prd/20-acceptance-criteria/desktop-product-line-boundary.md §desktop-installs-side-by-side",
+        "covers": "Pulse and T3 install without identity or path collisions.",
+        "health": "active",
+        "id": "20-acceptance-criteria/desktop-product-line-boundary#desktop-installs-side-by-side",
+        "later": [],
+        "live": "Pulse package identity is implemented; complete cross-platform proof remains open.",
+        "next": [],
+        "now": [],
+        "register": "R-2026-08-21-desktop-product-separation",
+        "source": "prd/20-acceptance-criteria/desktop-product-line-boundary.md §desktop-installs-side-by-side",
+        "sub": "prd/20-acceptance-criteria/desktop-product-line-boundary.md"
+      },
+      {
+        "action": "Collect concurrent launch receipts on Windows, macOS, and Linux.",
+        "area": "desktop-runs-concurrently",
+        "authority": "prd/20-acceptance-criteria/desktop-product-line-boundary.md §desktop-runs-concurrently",
+        "covers": "Both desktop products can execute simultaneously with separate locks and state.",
+        "health": "active",
+        "id": "20-acceptance-criteria/desktop-product-line-boundary#desktop-runs-concurrently",
+        "later": [],
+        "live": "Distinct application identifiers and state roots are implemented.",
+        "next": [],
+        "now": [],
+        "register": "R-2026-08-21-desktop-product-separation",
+        "source": "prd/20-acceptance-criteria/desktop-product-line-boundary.md §desktop-runs-concurrently",
+        "sub": "prd/20-acceptance-criteria/desktop-product-line-boundary.md"
+      },
+      {
+        "action": "Complete packaged lifecycle tests before release.",
+        "area": "lifecycle-actions-are-isolated",
+        "authority": "prd/20-acceptance-criteria/desktop-product-line-boundary.md §lifecycle-actions-are-isolated",
+        "covers": "Install, update, and uninstall actions cannot mutate the other product.",
+        "health": "active",
+        "id": "20-acceptance-criteria/desktop-product-line-boundary#lifecycle-actions-are-isolated",
+        "later": [],
+        "live": "Pulse updater and package coordinates are distinct; full lifecycle evidence remains open.",
+        "next": [],
+        "now": [],
+        "register": "R-2026-08-21-desktop-product-separation",
+        "source": "prd/20-acceptance-criteria/desktop-product-line-boundary.md §lifecycle-actions-are-isolated",
+        "sub": "prd/20-acceptance-criteria/desktop-product-line-boundary.md"
+      },
+      {
+        "action": "Retain the fresh-state default.",
+        "area": "pulse-starts-fresh",
+        "authority": "prd/20-acceptance-criteria/desktop-product-line-boundary.md §pulse-starts-fresh",
+        "covers": "Pulse starts from Pulse-owned state without automatic T3 migration.",
+        "health": "implemented",
+        "id": "20-acceptance-criteria/desktop-product-line-boundary#pulse-starts-fresh",
+        "later": [],
+        "live": "Pulse uses its own state root and does not claim automatic import.",
+        "next": [],
+        "now": [],
+        "register": "R-2026-08-21-desktop-product-separation",
+        "source": "prd/20-acceptance-criteria/desktop-product-line-boundary.md §pulse-starts-fresh",
+        "sub": "prd/20-acceptance-criteria/desktop-product-line-boundary.md"
+      },
+      {
+        "action": "Shape and approve import separately before implementation.",
+        "area": "import-is-explicit-and-nondestructive",
+        "authority": "prd/20-acceptance-criteria/desktop-product-line-boundary.md §import-is-explicit-and-nondestructive",
+        "covers": "Any future import must preview, copy selectively, and leave T3 unchanged.",
+        "health": "planned",
+        "id": "20-acceptance-criteria/desktop-product-line-boundary#import-is-explicit-and-nondestructive",
+        "later": [],
+        "live": "No import implementation is claimed.",
+        "next": [],
+        "now": [],
+        "register": "R-2026-08-21-desktop-product-separation",
+        "source": "prd/20-acceptance-criteria/desktop-product-line-boundary.md §import-is-explicit-and-nondestructive",
+        "sub": "prd/20-acceptance-criteria/desktop-product-line-boundary.md"
+      },
+      {
+        "action": "Require a new locked decision before separating either client.",
+        "area": "web-and-mobile-remain-shared",
+        "authority": "prd/20-acceptance-criteria/desktop-product-line-boundary.md §web-and-mobile-remain-shared",
+        "covers": "Web and mobile retain shared product identities and capability-aware behavior.",
+        "health": "implemented",
+        "id": "20-acceptance-criteria/desktop-product-line-boundary#web-and-mobile-remain-shared",
+        "later": [],
+        "live": "Shared web and mobile clients remain in the repository.",
+        "next": [],
+        "now": [],
+        "register": "R-2026-08-21-desktop-product-separation",
+        "source": "prd/20-acceptance-criteria/desktop-product-line-boundary.md §web-and-mobile-remain-shared",
+        "sub": "prd/20-acceptance-criteria/desktop-product-line-boundary.md"
+      },
+      {
+        "action": "Add macOS, Linux, and complete Windows lifecycle receipts before team rollout.",
+        "area": "release-proof-covers-every-desktop-platform",
+        "authority": "prd/20-acceptance-criteria/desktop-product-line-boundary.md §release-proof-covers-every-desktop-platform",
+        "covers": "Release proof must cover package identity and lifecycle on all desktop platforms.",
+        "health": "at risk",
+        "id": "20-acceptance-criteria/desktop-product-line-boundary#release-proof-covers-every-desktop-platform",
+        "later": [],
+        "live": "Windows candidate inspection exists; the roadmap does not claim all-platform completion.",
+        "next": [],
+        "now": [],
+        "register": "R-2026-08-21-desktop-product-separation",
+        "source": "prd/20-acceptance-criteria/desktop-product-line-boundary.md §release-proof-covers-every-desktop-platform",
+        "sub": "prd/20-acceptance-criteria/desktop-product-line-boundary.md"
+      },
+      {
+        "action": "Keep referenced authorities aligned with boundary changes.",
+        "area": "Cross-references",
+        "authority": "prd/20-acceptance-criteria/desktop-product-line-boundary.md §Cross-references",
+        "covers": "Links acceptance to the parent requirement, decisions, gaps, and roadmap.",
+        "health": "approved",
+        "id": "20-acceptance-criteria/desktop-product-line-boundary#cross-references",
+        "later": [],
+        "live": "Parent PRD, decisions, gaps, and roadmap records exist.",
+        "next": [],
+        "now": [],
+        "register": "R-2026-08-21-desktop-product-separation",
+        "source": "prd/20-acceptance-criteria/desktop-product-line-boundary.md §Cross-references",
+        "sub": "prd/20-acceptance-criteria/desktop-product-line-boundary.md"
+      },
+      {
+        "action": "Resolve release identities before release and import categories before import shaping.",
+        "area": "Open questions",
+        "authority": "prd/20-acceptance-criteria/desktop-product-line-boundary.md §Open questions",
+        "covers": "Tracks remaining import and permanent identity choices.",
+        "health": "needs decision",
+        "id": "20-acceptance-criteria/desktop-product-line-boundary#open-questions",
+        "later": [],
+        "live": "Implementation answers part of the identity question; import remains undecided.",
+        "next": [],
+        "now": [],
+        "register": "R-2026-08-21-desktop-product-separation",
+        "source": "prd/20-acceptance-criteria/desktop-product-line-boundary.md §Open questions",
+        "sub": "prd/20-acceptance-criteria/desktop-product-line-boundary.md"
+      },
+      {
+        "action": "Review and approve before implementation begins.",
+        "area": "Integration foundation acceptance criteria",
+        "authority": "prd/20-acceptance-criteria/integration-foundation.md §Integration foundation acceptance criteria",
+        "covers": "Testable connection, context/action, multi-surface, remote, safety, migration, and second-adapter proof.",
+        "health": "draft",
+        "id": "20-acceptance-criteria/integration-foundation#integration-foundation-acceptance-criteria",
+        "later": [],
+        "live": "Mapped to the ten-task implementation DAG; no implementation receipts yet.",
+        "next": [],
+        "now": [],
+        "register": "CR-2026-08-19-pulse-integrations-foundation; P-2026-08-19-integrations-foundation",
+        "source": "prd/20-acceptance-criteria/integration-foundation.md §Integration foundation acceptance criteria",
+        "sub": "prd/20-acceptance-criteria/integration-foundation.md"
+      },
+      {
+        "action": "Add contracts and mixed-version fixtures.",
+        "area": "AC-PCLD-01-capability-skew",
+        "authority": "prd/20-acceptance-criteria/pulseflow-live-design.md §AC-PCLD-01-capability-skew",
+        "covers": "Older and newer clients and servers retain ordinary Preview and expose live design only when compatible.",
+        "health": "planned",
+        "id": "20-acceptance-criteria/pulseflow-live-design#ac-pcld-01-capability-skew",
+        "later": [],
+        "live": "No live-design capability exists yet.",
+        "next": [],
+        "now": [],
+        "register": "R-2026-09-04-pulseflow-live-design",
+        "source": "prd/20-acceptance-criteria/pulseflow-live-design.md §AC-PCLD-01-capability-skew",
+        "sub": "prd/20-acceptance-criteria/pulseflow-live-design.md"
+      },
+      {
+        "action": "Test valid, stale, replayed, foreign-origin, and oversized messages.",
+        "area": "AC-PCLD-02-adapter-handshake",
+        "authority": "prd/20-acceptance-criteria/pulseflow-live-design.md §AC-PCLD-02-adapter-handshake",
+        "covers": "Binds protocol, origin, nonce, environment, thread, tab, document, actor, permission, and operation identity.",
+        "health": "planned",
+        "id": "20-acceptance-criteria/pulseflow-live-design#ac-pcld-02-adapter-handshake",
+        "later": [],
+        "live": "The page adapter and handshake are unimplemented.",
+        "next": [],
+        "now": [],
+        "register": "D-2026-09-04-live-design-transport",
+        "source": "prd/20-acceptance-criteria/pulseflow-live-design.md §AC-PCLD-02-adapter-handshake",
+        "sub": "prd/20-acceptance-criteria/pulseflow-live-design.md"
+      },
+      {
+        "action": "Add multi-environment and multi-tab broker fixtures.",
+        "area": "AC-PCLD-03-tab-and-environment-binding",
+        "authority": "prd/20-acceptance-criteria/pulseflow-live-design.md §AC-PCLD-03-tab-and-environment-binding",
+        "covers": "Prevents cross-tab and cross-environment event delivery and invalidates stale bindings.",
+        "health": "planned",
+        "id": "20-acceptance-criteria/pulseflow-live-design#ac-pcld-03-tab-and-environment-binding",
+        "later": [],
+        "live": "Existing Preview tabs provide the host identity; live session binding is planned.",
+        "next": [],
+        "now": [],
+        "register": "D-2026-09-04-live-design-transport",
+        "source": "prd/20-acceptance-criteria/pulseflow-live-design.md §AC-PCLD-03-tab-and-environment-binding",
+        "sub": "prd/20-acceptance-criteria/pulseflow-live-design.md"
+      },
+      {
+        "action": "Run the keyboard and pointer journey against a deterministic PulseFlow fixture.",
+        "area": "AC-PCLD-04-complete-interactive-controls",
+        "authority": "prd/20-acceptance-criteria/pulseflow-live-design.md §AC-PCLD-04-complete-interactive-controls",
+        "covers": "Gates every picker, context, variant, tuning, steering, text, acceptance, discard, stop, progress, and recovery control.",
+        "health": "planned",
+        "id": "20-acceptance-criteria/pulseflow-live-design#ac-pcld-04-complete-interactive-controls",
+        "later": [],
+        "live": "The full interaction set is specified but unimplemented.",
+        "next": [],
+        "now": [],
+        "register": "R-2026-09-04-pulseflow-live-design",
+        "source": "prd/20-acceptance-criteria/pulseflow-live-design.md §AC-PCLD-04-complete-interactive-controls",
+        "sub": "prd/20-acceptance-criteria/pulseflow-live-design.md"
+      },
+      {
+        "action": "Keep the focused Preview regression suite release-blocking.",
+        "area": "AC-PCLD-05-preview-features-preserved",
+        "authority": "prd/20-acceptance-criteria/pulseflow-live-design.md §AC-PCLD-05-preview-features-preserved",
+        "covers": "Protects viewport, appearance, refresh, screenshot, recording, annotation, and pop-out behavior.",
+        "health": "planned",
+        "id": "20-acceptance-criteria/pulseflow-live-design#ac-pcld-05-preview-features-preserved",
+        "later": [],
+        "live": "The protected Preview behaviors exist today.",
+        "next": [],
+        "now": [],
+        "register": "R-2026-09-04-pulseflow-live-design",
+        "source": "prd/20-acceptance-criteria/pulseflow-live-design.md §AC-PCLD-05-preview-features-preserved",
+        "sub": "prd/20-acceptance-criteria/pulseflow-live-design.md"
+      },
+      {
+        "action": "Pin upstream metadata and add provider discovery and composer picker fixtures.",
+        "area": "AC-PCLD-06-skill-picker-parity",
+        "authority": "prd/20-acceptance-criteria/pulseflow-live-design.md §AC-PCLD-06-skill-picker-parity",
+        "covers": "Keeps the root Impeccable skill and all 23 commands discoverable without a partial local metadata copy.",
+        "health": "planned",
+        "id": "20-acceptance-criteria/pulseflow-live-design#ac-pcld-06-skill-picker-parity",
+        "later": [],
+        "live": "A composer skill picker exists; the pinned Impeccable integration is planned.",
+        "next": [],
+        "now": [],
+        "register": "G-2026-09-04-impeccable-windows-live-baseline",
+        "source": "prd/20-acceptance-criteria/pulseflow-live-design.md §AC-PCLD-06-skill-picker-parity",
+        "sub": "prd/20-acceptance-criteria/pulseflow-live-design.md"
+      },
+      {
+        "action": "Test double-click, reconnect, timeout, denial, and stale revision paths.",
+        "area": "AC-PCLD-07-explicit-accept",
+        "authority": "prd/20-acceptance-criteria/pulseflow-live-design.md §AC-PCLD-07-explicit-accept",
+        "covers": "Requires direct user acceptance, exact session and variant identity, idempotency, and authoritative PulseFlow receipts.",
+        "health": "planned",
+        "id": "20-acceptance-criteria/pulseflow-live-design#ac-pcld-07-explicit-accept",
+        "later": [],
+        "live": "No PulseFlow transaction path exists in Pulse Code.",
+        "next": [],
+        "now": [],
+        "register": "D-2026-09-04-pulseflow-preview-host",
+        "source": "prd/20-acceptance-criteria/pulseflow-live-design.md §AC-PCLD-07-explicit-accept",
+        "sub": "prd/20-acceptance-criteria/pulseflow-live-design.md"
+      },
+      {
+        "action": "Add boundary fault injection and idempotency reconciliation fixtures.",
+        "area": "AC-PCLD-08-uncertain-outcome-reconciliation",
+        "authority": "prd/20-acceptance-criteria/pulseflow-live-design.md §AC-PCLD-08-uncertain-outcome-reconciliation",
+        "covers": "Prevents duplicate Accept or Discard after transport uncertainty.",
+        "health": "planned",
+        "id": "20-acceptance-criteria/pulseflow-live-design#ac-pcld-08-uncertain-outcome-reconciliation",
+        "later": [],
+        "live": "The proposed broker owns this behavior; it is unimplemented.",
+        "next": [],
+        "now": [],
+        "register": "D-2026-09-04-live-design-transport",
+        "source": "prd/20-acceptance-criteria/pulseflow-live-design.md §AC-PCLD-08-uncertain-outcome-reconciliation",
+        "sub": "prd/20-acceptance-criteria/pulseflow-live-design.md"
+      },
+      {
+        "action": "Extend resolver fixtures and run real local and private host checks.",
+        "area": "AC-PCLD-09-local-and-private-routing",
+        "authority": "prd/20-acceptance-criteria/pulseflow-live-design.md §AC-PCLD-09-local-and-private-routing",
+        "covers": "Routes environment-port targets to the correct local or private environment without changing another session.",
+        "health": "planned",
+        "id": "20-acceptance-criteria/pulseflow-live-design#ac-pcld-09-local-and-private-routing",
+        "later": [],
+        "live": "The underlying environment-host substitution exists.",
+        "next": [],
+        "now": [],
+        "register": "R-2026-09-04-pulseflow-live-design",
+        "source": "prd/20-acceptance-criteria/pulseflow-live-design.md §AC-PCLD-09-local-and-private-routing",
+        "sub": "prd/20-acceptance-criteria/pulseflow-live-design.md"
+      },
+      {
+        "action": "Implement and security-review the gateway before public remote support.",
+        "area": "AC-PCLD-10-public-remote-gateway",
+        "authority": "prd/20-acceptance-criteria/pulseflow-live-design.md §AC-PCLD-10-public-remote-gateway",
+        "covers": "Requires an authenticated exact-target gateway for public or relay-only environments and rejects raw-port exposure.",
+        "health": "blocked",
+        "id": "20-acceptance-criteria/pulseflow-live-design#ac-pcld-10-public-remote-gateway",
+        "later": [],
+        "live": "The current resolver explicitly reports this gateway as missing.",
+        "next": [],
+        "now": [],
+        "register": "G-2026-09-04-public-preview-gateway",
+        "source": "prd/20-acceptance-criteria/pulseflow-live-design.md §AC-PCLD-10-public-remote-gateway",
+        "sub": "prd/20-acceptance-criteria/pulseflow-live-design.md"
+      },
+      {
+        "action": "Add the browser focus matrix and accessibility scan.",
+        "area": "AC-PCLD-11-focus-and-accessibility",
+        "authority": "prd/20-acceptance-criteria/pulseflow-live-design.md §AC-PCLD-11-focus-and-accessibility",
+        "covers": "Makes page and host focus deterministic across pointer, keyboard, screen reader, Escape, and 200 percent zoom.",
+        "health": "planned",
+        "id": "20-acceptance-criteria/pulseflow-live-design#ac-pcld-11-focus-and-accessibility",
+        "later": [],
+        "live": "Existing Preview focus behavior is the baseline; live controls are planned.",
+        "next": [],
+        "now": [],
+        "register": "R-2026-09-04-pulseflow-live-design",
+        "source": "prd/20-acceptance-criteria/pulseflow-live-design.md §AC-PCLD-11-focus-and-accessibility",
+        "sub": "prd/20-acceptance-criteria/pulseflow-live-design.md"
+      },
+      {
+        "action": "Add property-based contracts, secret canaries, and oversized payload fixtures.",
+        "area": "AC-PCLD-12-bounds-and-redaction",
+        "authority": "prd/20-acceptance-criteria/pulseflow-live-design.md §AC-PCLD-12-bounds-and-redaction",
+        "covers": "Applies schemas, limits, origin checks, and redaction before page data reaches state, logs, prompts, or receipts.",
+        "health": "planned",
+        "id": "20-acceptance-criteria/pulseflow-live-design#ac-pcld-12-bounds-and-redaction",
+        "later": [],
+        "live": "Existing evidence caps are reusable; the live-design boundary is unimplemented.",
+        "next": [],
+        "now": [],
+        "register": "D-2026-09-04-live-design-transport",
+        "source": "prd/20-acceptance-criteria/pulseflow-live-design.md §AC-PCLD-12-bounds-and-redaction",
+        "sub": "prd/20-acceptance-criteria/pulseflow-live-design.md"
+      },
+      {
+        "action": "Add capability-skew UI tests and avoid rendering inactive authoring controls.",
+        "area": "AC-PCLD-13-mobile-honesty",
+        "authority": "prd/20-acceptance-criteria/pulseflow-live-design.md §AC-PCLD-13-mobile-honesty",
+        "covers": "Limits mobile to read-only status and handoff when it lacks pointer and Preview host capability.",
+        "health": "planned",
+        "id": "20-acceptance-criteria/pulseflow-live-design#ac-pcld-13-mobile-honesty",
+        "later": [],
+        "live": "Mobile shares capability patterns but has no live-design status surface.",
+        "next": [],
+        "now": [],
+        "register": "R-2026-09-04-pulseflow-live-design",
+        "source": "prd/20-acceptance-criteria/pulseflow-live-design.md §AC-PCLD-13-mobile-honesty",
+        "sub": "prd/20-acceptance-criteria/pulseflow-live-design.md"
+      },
+      {
+        "action": "Run only after the PulseFlow adapter exists and the upstream Windows baseline is green or explicitly constrained.",
+        "area": "AC-PCLD-14-end-to-end-host-proof",
+        "authority": "prd/20-acceptance-criteria/pulseflow-live-design.md §AC-PCLD-14-end-to-end-host-proof",
+        "covers": "Gates the real nested target, progressive variants, tune or steer, accept, undo, repeat, discard, and clean teardown journey.",
+        "health": "blocked",
+        "id": "20-acceptance-criteria/pulseflow-live-design#ac-pcld-14-end-to-end-host-proof",
+        "later": [],
+        "live": "PulseFlow is specification-only, so no end-to-end product can run today.",
+        "next": [],
+        "now": [],
+        "register": "G-2026-09-04-pulseflow-adapter-unimplemented; G-2026-09-04-impeccable-windows-live-baseline",
+        "source": "prd/20-acceptance-criteria/pulseflow-live-design.md §AC-PCLD-14-end-to-end-host-proof",
+        "sub": "prd/20-acceptance-criteria/pulseflow-live-design.md"
+      },
+      {
+        "action": "Add browser and broker fault fixtures after the PulseFlow document adapter exists.",
+        "area": "AC-PCLD-15-copy-edit-apply-recovery",
+        "authority": "prd/20-acceptance-criteria/pulseflow-live-design.md §AC-PCLD-15-copy-edit-apply-recovery",
+        "covers": "Gates page-scoped copy Save, Cancel, Apply, discard, repair, rollback, idempotency, and authority boundaries.",
+        "health": "planned",
+        "id": "20-acceptance-criteria/pulseflow-live-design#ac-pcld-15-copy-edit-apply-recovery",
+        "later": [],
+        "live": "The host relay and PulseFlow copy transaction path are unimplemented.",
+        "next": [],
+        "now": [],
+        "register": "G-2026-09-04-pulseflow-adapter-unimplemented",
+        "source": "prd/20-acceptance-criteria/pulseflow-live-design.md §AC-PCLD-15-copy-edit-apply-recovery",
+        "sub": "prd/20-acceptance-criteria/pulseflow-live-design.md"
+      },
+      {
+        "action": "Implement the exact cross-repository registry snapshot test before dependency intake.",
+        "area": "AC-PCLD-16-live-registry-parity",
+        "authority": "prd/20-acceptance-criteria/pulseflow-live-design.md §AC-PCLD-16-live-registry-parity",
+        "covers": "Fails intake when a pinned command, UI surface, action, event, phase, or parameter kind lacks an explicit host mapping.",
+        "health": "planned",
+        "id": "20-acceptance-criteria/pulseflow-live-design#ac-pcld-16-live-registry-parity",
+        "later": [],
+        "live": "The audited upstream registries are pinned in the proposal; no automated parity test exists.",
+        "next": [],
+        "now": [],
+        "register": "G-2026-09-04-impeccable-windows-live-baseline",
+        "source": "prd/20-acceptance-criteria/pulseflow-live-design.md §AC-PCLD-16-live-registry-parity",
+        "sub": "prd/20-acceptance-criteria/pulseflow-live-design.md"
+      },
+      {
+        "action": "Choose the gateway mechanism during implementation review.",
+        "area": "Open questions",
+        "authority": "prd/20-acceptance-criteria/pulseflow-live-design.md §Open questions",
+        "covers": "Records that gateway shape remains an implementation choice while its required security outcome is fixed.",
+        "health": "reference",
+        "id": "20-acceptance-criteria/pulseflow-live-design#open-questions",
+        "later": [],
+        "live": "No unresolved acceptance outcome remains.",
+        "next": [],
+        "now": [],
+        "register": "CR-2026-09-04-pulseflow-live-design",
+        "source": "prd/20-acceptance-criteria/pulseflow-live-design.md §Open questions",
+        "sub": "prd/20-acceptance-criteria/pulseflow-live-design.md"
+      }
+    ]
+  },
+  "presentation": {
+    "approvedBaseline": "",
+    "authorityRule": "",
+    "comparisonWindow": "",
+    "projectName": "pulse-code",
+    "scoreboard": {
+      "building": "3",
+      "complete": "2",
+      "note": "counted from project/state/shards/endpoints.yaml",
+      "planned": "5",
+      "signoff": "0"
+    },
+    "snapshotDate": "2026-09-04",
+    "sourceRevision": "42be1473613f",
+    "summary": "",
+    "summaryDetail": ""
+  },
+  "roadmap": {
+    "available": false,
+    "note": "Four shaped Now outcomes, four concept-stage Next candidates, and three Later discoveries; capacity is an assumption pending confirmation."
+  },
+  "schema": "product-ops.workspace/v1",
+  "seo": {
+    "available": false,
+    "note": "No SEO source documents were found. Searched: seo, docs/seo, SEO.md, seo.md.",
+    "request": "Link SEO documents by adding a recognized source path or supplying seo.items in project/workspace-overlay.json."
+  },
+  "sitemap": {
+    "available": false,
+    "note": "project/state/shards/surfaces.yaml did not parse: C:\\Users\\qblaa\\.codex\\worktrees\\pulse-code\\pulseflow-live-integration\\project\\state\\shards\\surfaces.yaml:2: unbalanced flow collection",
+    "request": "Add project/state/shards/surfaces.yaml or supply sitemap.items in project/workspace-overlay.json."
+  },
+  "tasks": {
+    "available": true,
+    "items": [
+      {
+        "blockedBy": [],
+        "commits": [],
+        "filesTouched": [
+          "packages/contracts/src/environment.ts",
+          "packages/contracts/src/index.ts",
+          "packages/contracts/src/integrations.test.ts",
+          "packages/contracts/src/integrations.ts"
+        ],
+        "hostRefs": {},
+        "id": "P-2026-08-19-integrations-foundation/T1",
+        "kind": "feature",
+        "localId": "T1",
+        "owner": null,
+        "plan": "P-2026-08-19-integrations-foundation",
+        "roadmapRefs": [
+          "R-2026-08-19-integration-foundation"
+        ],
+        "status": "completed",
+        "subject": "Define additive integration lifecycle contracts",
+        "verificationReceipts": [
+          "vp run --filter @t3tools/contracts typecheck: passed",
+          "vp test run packages/contracts/src/integrations.test.ts packages/contracts/src/environment.test.ts: 2 files, 13 tests passed"
+        ]
+      },
+      {
+        "blockedBy": [],
+        "commits": [],
+        "filesTouched": [
+          "apps/server/src/auth/ServerSecretStore.test.ts",
+          "docs/internals/integrations-secret-review.md"
+        ],
+        "hostRefs": {},
+        "id": "P-2026-08-19-integrations-foundation/T2",
+        "kind": "verification",
+        "localId": "T2",
+        "owner": null,
+        "plan": "P-2026-08-19-integrations-foundation",
+        "roadmapRefs": [
+          "R-2026-08-19-integration-compatibility-safety"
+        ],
+        "status": "completed",
+        "subject": "Verify secret-store and OAuth threat boundaries",
+        "verificationReceipts": [
+          "vp run --filter t3 typecheck: passed; unrelated existing Effect suggestions remain in Issues/orchestration/pull-request files",
+          "vp test run apps/server/src/auth/ServerSecretStore.test.ts: 1 file, 8 tests passed"
+        ]
+      },
+      {
+        "blockedBy": [
+          "P-2026-08-19-integrations-foundation/T1",
+          "P-2026-08-19-integrations-foundation/T2"
+        ],
+        "commits": [],
+        "filesTouched": [
+          "apps/server/src/integrations/IntegrationStore.test.ts",
+          "apps/server/src/integrations/IntegrationStore.ts",
+          "apps/server/src/persistence/Migrations.ts",
+          "apps/server/src/persistence/Migrations/042_Integrations.ts"
+        ],
+        "hostRefs": {},
+        "id": "P-2026-08-19-integrations-foundation/T3",
+        "kind": "feature",
+        "localId": "T3",
+        "owner": null,
+        "plan": "P-2026-08-19-integrations-foundation",
+        "roadmapRefs": [
+          "R-2026-08-19-integration-foundation"
+        ],
+        "status": "completed",
+        "subject": "Add server-owned connection and mapping persistence",
+        "verificationReceipts": [
+          "Node 24 focused persistence suite: 1 file, 4 tests passed",
+          "t3 server typecheck passed; only pre-existing Effect style suggestions remain"
+        ]
+      },
+      {
+        "blockedBy": [
+          "P-2026-08-19-integrations-foundation/T1",
+          "P-2026-08-19-integrations-foundation/T3"
+        ],
+        "commits": [],
+        "filesTouched": [
+          "apps/server/src/integrations/IntegrationAdapter.ts",
+          "apps/server/src/integrations/IntegrationService.test.ts",
+          "apps/server/src/integrations/IntegrationService.ts",
+          "apps/server/src/issues/IssuesService.ts",
+          "apps/server/src/issues/PulseIssuesClient.ts",
+          "project/decisions.md",
+          "project/known-gaps.md",
+          "project/state/shards/gaps.yaml",
+          "project/surfaced-gaps.md",
+          "tool-flow/integration-platform.md"
+        ],
+        "hostRefs": {},
+        "id": "P-2026-08-19-integrations-foundation/T4",
+        "kind": "feature",
+        "localId": "T4",
+        "owner": null,
+        "plan": "P-2026-08-19-integrations-foundation",
+        "roadmapRefs": [
+          "R-2026-08-19-pulse-issues-reference"
+        ],
+        "status": "completed",
+        "subject": "Wrap the landed Pulse Issues lifecycle as the reference adapter",
+        "verificationReceipts": [
+          "Precondition verified: native Issues suite 10 files, 36 tests passed under Node 24; mobile typecheck and 23-file format check passed",
+          "Prerequisite landed independently at ac8d94397: native Pulse Issues; 10 focused files/36 tests, web typecheck, mobile typecheck, and pre-commit format pass.",
+          "T4 verified under Node 24: 6 focused files/38 tests passed (shared contracts, adapter, additive store, native Issues service/client/store); server typecheck and git diff --check passed."
+        ]
+      },
+      {
+        "blockedBy": [
+          "P-2026-08-19-integrations-foundation/T1"
+        ],
+        "commits": [],
+        "filesTouched": [
+          "packages/client-runtime/package.json",
+          "packages/client-runtime/src/state/integrations.test.ts",
+          "packages/client-runtime/src/state/integrations.ts"
+        ],
+        "hostRefs": {},
+        "id": "P-2026-08-19-integrations-foundation/T5",
+        "kind": "feature",
+        "localId": "T5",
+        "owner": null,
+        "plan": "P-2026-08-19-integrations-foundation",
+        "roadmapRefs": [
+          "R-2026-08-19-integration-foundation"
+        ],
+        "status": "completed",
+        "subject": "Add capability-gated shared client runtime state",
+        "verificationReceipts": [
+          "Focused client integration runtime suite: 1 file, 5 tests passed",
+          "client-runtime typecheck passed; only one pre-existing Effect style suggestion remains"
+        ]
+      },
+      {
+        "blockedBy": [
+          "P-2026-08-19-integrations-foundation/T3",
+          "P-2026-08-19-integrations-foundation/T5"
+        ],
+        "commits": [],
+        "filesTouched": [
+          "apps/web/src/components/settings/IntegrationsSettings.test.tsx",
+          "apps/web/src/components/settings/IntegrationsSettings.tsx",
+          "apps/web/src/components/settings/settingsSearch.ts"
+        ],
+        "hostRefs": {},
+        "id": "P-2026-08-19-integrations-foundation/T6",
+        "kind": "feature",
+        "localId": "T6",
+        "owner": null,
+        "plan": "P-2026-08-19-integrations-foundation",
+        "roadmapRefs": [
+          "R-2026-08-19-integration-foundation"
+        ],
+        "status": "completed",
+        "subject": "Present one provider lifecycle in Settings",
+        "verificationReceipts": [
+          "@t3tools/web typecheck passed",
+          "Focused Integrations Settings suite: 1 file, 9 tests passed",
+          "Shared preview verified 1280x800 and 390x844 layouts with zero horizontal overflow"
+        ]
+      },
+      {
+        "blockedBy": [
+          "P-2026-08-19-integrations-foundation/T4",
+          "P-2026-08-19-integrations-foundation/T5"
+        ],
+        "commits": [],
+        "filesTouched": [
+          "apps/server/src/integrations/IntegrationContextService.test.ts",
+          "apps/server/src/integrations/IntegrationContextService.ts",
+          "packages/contracts/src/index.ts",
+          "packages/contracts/src/integrationContext.test.ts",
+          "packages/contracts/src/integrationContext.ts",
+          "workflows/use-integration-context.md"
+        ],
+        "hostRefs": {},
+        "id": "P-2026-08-19-integrations-foundation/T7",
+        "kind": "feature",
+        "localId": "T7",
+        "owner": null,
+        "plan": "P-2026-08-19-integrations-foundation",
+        "roadmapRefs": [
+          "R-2026-08-19-agent-context-actions"
+        ],
+        "status": "completed",
+        "subject": "Prove bounded agent context and one action preview",
+        "verificationReceipts": [
+          "T7 verified under Node 24: 9 focused files/54 tests passed across bounded context/action contracts, client runtime, reference adapter, additive store, context service, and native Issues boundaries; server/contracts typechecks and git diff --check passed."
+        ]
+      },
+      {
+        "blockedBy": [
+          "P-2026-08-19-integrations-foundation/T4",
+          "P-2026-08-19-integrations-foundation/T5"
+        ],
+        "commits": [],
+        "filesTouched": [
+          "apps/server/src/auth/RpcAuthorization.test.ts",
+          "apps/server/src/auth/RpcAuthorization.ts",
+          "apps/server/src/environment/ServerEnvironment.test.ts",
+          "apps/server/src/environment/ServerEnvironment.ts",
+          "apps/server/src/server.ts",
+          "apps/server/src/ws.ts",
+          "packages/contracts/src/integrations.test.ts",
+          "packages/contracts/src/rpc.ts"
+        ],
+        "hostRefs": {},
+        "id": "P-2026-08-19-integrations-foundation/T11",
+        "kind": "feature",
+        "localId": "T11",
+        "owner": null,
+        "plan": "P-2026-08-19-integrations-foundation",
+        "roadmapRefs": [
+          "R-2026-08-19-integration-foundation"
+        ],
+        "status": "completed",
+        "subject": "Wire typed integration RPCs through the owning server",
+        "verificationReceipts": [
+          "T11 verified under Node 24: contracts typecheck passed; 6 focused files/41 tests passed across RPC schemas, auth scopes, environment capability, lifecycle, and bounded context/actions; 8-file format check and git diff --check passed. Full server typecheck has no T11-file errors but retains pre-existing strictness errors in uncommitted T4/T7 integration files."
+        ]
+      },
+      {
+        "blockedBy": [
+          "P-2026-08-19-integrations-foundation/T11"
+        ],
+        "commits": [],
+        "filesTouched": [
+          "apps/mobile/src/state/integrations.test.ts",
+          "apps/mobile/src/state/integrations.ts",
+          "packages/client-runtime/src/state/integrations.test.ts",
+          "packages/client-runtime/src/state/integrations.ts"
+        ],
+        "hostRefs": {},
+        "id": "P-2026-08-19-integrations-foundation/T12",
+        "kind": "feature",
+        "localId": "T12",
+        "owner": null,
+        "plan": "P-2026-08-19-integrations-foundation",
+        "roadmapRefs": [
+          "R-2026-08-19-integration-foundation"
+        ],
+        "status": "completed",
+        "subject": "Bind integration client and mobile state to the typed RPC bridge",
+        "verificationReceipts": [
+          "T12 verified under Node 24: client-runtime and mobile typechecks passed; 2 focused files/7 tests passed; four implementation files passed formatter/lint and the synchronized code/docs passed git diff --check. The default runtime uses seven typed environment RPCs, gates legacy servers, serializes mutations per environment, refreshes owning state, aggregates partial failures, and carries no provider credential input."
+        ]
+      },
+      {
+        "blockedBy": [
+          "P-2026-08-19-integrations-foundation/T12"
+        ],
+        "commits": [],
+        "filesTouched": [
+          "apps/mobile/src/connection/storage.test.ts",
+          "apps/mobile/src/features/issues/IssuesScreen.test.tsx",
+          "apps/mobile/src/state/integrations.test.ts",
+          "apps/mobile/src/state/issues.test.ts",
+          "apps/server/src/environment/ServerEnvironment.test.ts",
+          "docs/internals/integrations-compatibility-matrix.md",
+          "packages/client-runtime/src/connection/resolver.test.ts",
+          "packages/contracts/src/integrations.test.ts"
+        ],
+        "hostRefs": {},
+        "id": "P-2026-08-19-integrations-foundation/T8",
+        "kind": "verification",
+        "localId": "T8",
+        "owner": null,
+        "plan": "P-2026-08-19-integrations-foundation",
+        "roadmapRefs": [
+          "R-2026-08-19-integration-compatibility-safety"
+        ],
+        "status": "completed",
+        "subject": "Lock mobile, remote, and mixed-version compatibility",
+        "verificationReceipts": [
+          "T8 verified under Node 24: 9 focused files/45 tests passed; contracts, client-runtime, and mobile typechecks passed; generated development/preview/production Expo configs retained the t3-code slug, legacy t3code schemes, and com.t3tools.t3code bundle/package IDs; formatter and git diff --check passed. The matrix locks additive capability skew, credential-free mobile state, owning-environment identity across primary/bearer/relay/SSH paths, catalog aliases, native Issues RPC aliases, and persisted Issue/thread IDs."
+        ]
+      },
+      {
+        "blockedBy": [
+          "P-2026-08-19-integrations-foundation/T4"
+        ],
+        "commits": [],
+        "filesTouched": [
+          "apps/server/src/git/GitHubPullRequestCli.ts",
+          "apps/server/src/pullRequest/GitHubPullRequestCli.ts",
+          "docs/internals/github-work-adapter-spike.md",
+          "project/decisions.md",
+          "project/known-gaps.md",
+          "project/plans/P-2026-08-19-integrations-foundation.md",
+          "project/state/shards/gaps.yaml",
+          "project/surfaced-gaps.md"
+        ],
+        "hostRefs": {},
+        "id": "P-2026-08-19-integrations-foundation/T9",
+        "kind": "verification",
+        "localId": "T9",
+        "owner": null,
+        "plan": "P-2026-08-19-integrations-foundation",
+        "roadmapRefs": [
+          "R-2026-08-19-github-work-graph"
+        ],
+        "status": "completed",
+        "subject": "Run second-adapter discovery against GitHub work items",
+        "verificationReceipts": [
+          "T9 discovery complete: existing GitHub CLI/provider/GraphQL-budget/host-cooldown suites passed under Node 24 (5 files/128 tests). Recommendation: reshape, then a bounded read-only repository Issues proof; no GitHub production code changed."
+        ]
+      },
+      {
+        "blockedBy": [
+          "P-2026-08-19-integrations-foundation/T6",
+          "P-2026-08-19-integrations-foundation/T7",
+          "P-2026-08-19-integrations-foundation/T8",
+          "P-2026-08-19-integrations-foundation/T9"
+        ],
+        "commits": [],
+        "filesTouched": [
+          "docs/README.md",
+          "docs/internals/integrations-platform.md",
+          "docs/user/integrations.md",
+          "project/state/shards/roadmap.yaml"
+        ],
+        "hostRefs": {},
+        "id": "P-2026-08-19-integrations-foundation/T10",
+        "kind": "verification",
+        "localId": "T10",
+        "owner": null,
+        "plan": "P-2026-08-19-integrations-foundation",
+        "roadmapRefs": [
+          "R-2026-08-19-integration-compatibility-safety"
+        ],
+        "status": "completed",
+        "subject": "Verify the walking skeleton and publish shipped behavior",
+        "verificationReceipts": [
+          "T10 technical walking-skeleton review passed under Node 24: contracts, server, client-runtime, web, and mobile typechecks passed; all T1–T9/T11/T12 receipts are linked from the internal guide; documentation format, cross-reference targets, workspace render, and git diff --check passed. Roadmap test_results receipts were added without marking any item shipped. Manual decision: Pulse Issues reference is committed and the foundation/context/compatibility worktree is verified, but OAuth/general release remains on hold for explicit security, ownership, tokenizer, demand, and external-credential gaps; no later provider is claimed implemented."
+        ]
+      },
+      {
+        "blockedBy": [],
+        "commits": [
+          "9385d1848"
+        ],
+        "filesTouched": [
+          "apps/server/src/auth/SecretStoreHostProtection.test.ts",
+          "apps/server/src/auth/SecretStoreHostProtection.ts",
+          "apps/server/src/auth/ServerSecretStore.test.ts",
+          "apps/server/src/auth/ServerSecretStore.ts"
+        ],
+        "hostRefs": {},
+        "id": "P-2026-08-21-integration-oauth-release-gates/T1",
+        "kind": "protective",
+        "localId": "T1",
+        "owner": null,
+        "plan": "P-2026-08-21-integration-oauth-release-gates",
+        "roadmapRefs": [
+          "R-2026-08-19-integration-compatibility-safety"
+        ],
+        "status": "in_progress",
+        "subject": "Prove host protection and Windows ACL readiness",
+        "verificationReceipts": [
+          "Focused host-protection and secret-store tests: 13 passed",
+          "Server typecheck: passed with pre-existing suggestions only",
+          "git diff --check: passed"
+        ]
+      },
+      {
+        "blockedBy": [],
+        "commits": [
+          "2cb03b490"
+        ],
+        "filesTouched": [
+          "apps/server/src/integrations/OAuthAttemptStore.test.ts",
+          "apps/server/src/integrations/OAuthAttemptStore.ts"
+        ],
+        "hostRefs": {},
+        "id": "P-2026-08-21-integration-oauth-release-gates/T2",
+        "kind": "protective",
+        "localId": "T2",
+        "owner": null,
+        "plan": "P-2026-08-21-integration-oauth-release-gates",
+        "roadmapRefs": [
+          "R-2026-08-19-integration-compatibility-safety"
+        ],
+        "status": "completed",
+        "subject": "Add an atomic, session-bound OAuth attempt store",
+        "verificationReceipts": [
+          "Focused OAuthAttemptStore test: 5 passed",
+          "Server typecheck: passed with pre-existing suggestions only",
+          "git diff --check: passed"
+        ]
+      },
+      {
+        "blockedBy": [],
+        "commits": [],
+        "filesTouched": [
+          "docs/internals/integrations-secret-review.md",
+          "docs/internals/server-updates.md",
+          "docs/operations/server-backups.md"
+        ],
+        "hostRefs": {},
+        "id": "P-2026-08-21-integration-oauth-release-gates/T3",
+        "kind": "protective",
+        "localId": "T3",
+        "owner": null,
+        "plan": "P-2026-08-21-integration-oauth-release-gates",
+        "roadmapRefs": [
+          "R-2026-08-19-integration-compatibility-safety"
+        ],
+        "status": "pending",
+        "subject": "Lock backup and diagnostic exclusions",
+        "verificationReceipts": []
+      },
+      {
+        "blockedBy": [],
+        "commits": [],
+        "filesTouched": [
+          "apps/server/src/integrations/IntegrationAdapter.ts",
+          "apps/server/src/integrations/IntegrationService.test.ts",
+          "apps/server/src/integrations/IntegrationService.ts",
+          "packages/contracts/src/integrations.test.ts",
+          "packages/contracts/src/integrations.ts"
+        ],
+        "hostRefs": {},
+        "id": "P-2026-08-21-integration-oauth-release-gates/T4",
+        "kind": "protective",
+        "localId": "T4",
+        "owner": null,
+        "plan": "P-2026-08-21-integration-oauth-release-gates",
+        "roadmapRefs": [
+          "R-2026-08-19-integration-compatibility-safety"
+        ],
+        "status": "pending",
+        "subject": "Define and test provider disconnect revocation semantics",
+        "verificationReceipts": []
+      },
+      {
+        "blockedBy": [
+          "P-2026-08-21-integration-oauth-release-gates/T1",
+          "P-2026-08-21-integration-oauth-release-gates/T2",
+          "P-2026-08-21-integration-oauth-release-gates/T3",
+          "P-2026-08-21-integration-oauth-release-gates/T4"
+        ],
+        "commits": [],
+        "filesTouched": [
+          "docs/internals/integrations-platform.md",
+          "docs/internals/integrations-secret-review.html",
+          "docs/internals/integrations-secret-review.md",
+          "project/known-gaps.md",
+          "project/state/shards/roadmap.yaml"
+        ],
+        "hostRefs": {},
+        "id": "P-2026-08-21-integration-oauth-release-gates/T5",
+        "kind": "verification",
+        "localId": "T5",
+        "owner": null,
+        "plan": "P-2026-08-21-integration-oauth-release-gates",
+        "roadmapRefs": [
+          "R-2026-08-19-integration-compatibility-safety"
+        ],
+        "status": "pending",
+        "subject": "Run the OAuth release review and publish receipts",
+        "verificationReceipts": []
+      },
+      {
+        "blockedBy": [],
+        "commits": [],
+        "filesTouched": [
+          "apps/web/src/components/Sidebar.logic.test.ts",
+          "apps/web/src/components/Sidebar.logic.ts",
+          "apps/web/src/state/entities.ts",
+          "apps/web/src/state/schedules.ts"
+        ],
+        "hostRefs": {},
+        "id": "P-2026-08-26-sidebar-scheduled-chats/T1",
+        "kind": "implementation",
+        "localId": "T1",
+        "owner": null,
+        "plan": "P-2026-08-26-sidebar-scheduled-chats",
+        "roadmapRefs": [
+          "R-2026-08-21-scheduled-chats"
+        ],
+        "status": "done",
+        "subject": "Project schedule definitions into sidebar-ready state",
+        "verificationReceipts": [
+          "vp test run apps/web/src/components/Sidebar.logic.test.ts --exclude .worktrees/**: 109 passed; vp run --filter @t3tools/web typecheck: exit 0"
+        ]
+      },
+      {
+        "blockedBy": [
+          "P-2026-08-26-sidebar-scheduled-chats/T1"
+        ],
+        "commits": [],
+        "filesTouched": [
+          "apps/web/src/components/Sidebar.tsx",
+          "docs/user/scheduled-chats.md"
+        ],
+        "hostRefs": {},
+        "id": "P-2026-08-26-sidebar-scheduled-chats/T2",
+        "kind": "implementation",
+        "localId": "T2",
+        "owner": null,
+        "plan": "P-2026-08-26-sidebar-scheduled-chats",
+        "roadmapRefs": [
+          "R-2026-08-21-scheduled-chats"
+        ],
+        "status": "blocked",
+        "subject": "Render, verify, and package the approved sidebar modes",
+        "verificationReceipts": [
+          "Focused verification passed: 109 tests, web typecheck, formatter, plan validation, prose lint. Approved static render remains the visual receipt. Live preview was not opened because the collaborative browser rejected the privileged pairing URL without explicit browser authorization. Windows x64 NSIS build passed; payload validation: 69 files and 35 native sidecars; SHA256 CFD8FF5CC40EC9D7FF2ECB94908CDA47A0C2D52DB8ED49B08AE2A6E0666D71B5."
+        ]
+      },
+      {
+        "blockedBy": [],
+        "commits": [],
+        "filesTouched": [
+          "package.json",
+          "packages/contracts/package.json",
+          "packages/contracts/src/scheduleRecurrence.test.ts"
+        ],
+        "hostRefs": {},
+        "id": "P-2026-09-04-calendar-scheduler-board/T1",
+        "kind": "protective",
+        "localId": "T1",
+        "owner": null,
+        "plan": "P-2026-09-04-calendar-scheduler-board",
+        "roadmapRefs": [
+          "R-2026-08-21-scheduled-chats"
+        ],
+        "status": "pending",
+        "subject": "Select and verify the recurrence engine",
+        "verificationReceipts": []
+      },
+      {
+        "blockedBy": [
+          "P-2026-09-04-calendar-scheduler-board/T1"
+        ],
+        "commits": [],
+        "filesTouched": [
+          "packages/contracts/src/schedule.test.ts",
+          "packages/contracts/src/schedule.ts",
+          "packages/contracts/src/scheduleRecurrence.test.ts",
+          "packages/contracts/src/scheduleRecurrence.ts"
+        ],
+        "hostRefs": {},
+        "id": "P-2026-09-04-calendar-scheduler-board/T2",
+        "kind": "implementation",
+        "localId": "T2",
+        "owner": null,
+        "plan": "P-2026-09-04-calendar-scheduler-board",
+        "roadmapRefs": [
+          "R-2026-08-21-scheduled-chats"
+        ],
+        "status": "pending",
+        "subject": "Implement calendar recurrence contracts and helpers",
+        "verificationReceipts": []
+      },
+      {
+        "blockedBy": [
+          "P-2026-09-04-calendar-scheduler-board/T2"
+        ],
+        "commits": [],
+        "filesTouched": [
+          "apps/server/src/orchestration/Layers/ScheduleReactor.test.ts",
+          "apps/server/src/orchestration/Layers/ScheduleReactor.ts",
+          "apps/server/src/orchestration/decider.schedules.test.ts",
+          "apps/server/src/orchestration/decider.ts",
+          "apps/server/src/orchestration/projector.ts"
+        ],
+        "hostRefs": {},
+        "id": "P-2026-09-04-calendar-scheduler-board/T3",
+        "kind": "implementation",
+        "localId": "T3",
+        "owner": null,
+        "plan": "P-2026-09-04-calendar-scheduler-board",
+        "roadmapRefs": [
+          "R-2026-08-21-scheduled-chats"
+        ],
+        "status": "pending",
+        "subject": "Decide, project, and fire calendar occurrences",
+        "verificationReceipts": []
+      },
+      {
+        "blockedBy": [
+          "P-2026-09-04-calendar-scheduler-board/T2"
+        ],
+        "commits": [],
+        "filesTouched": [
+          "packages/contracts/src/orchestration.ts",
+          "packages/contracts/src/rpc.ts",
+          "packages/contracts/src/schedule.test.ts",
+          "packages/contracts/src/schedule.ts"
+        ],
+        "hostRefs": {},
+        "id": "P-2026-09-04-calendar-scheduler-board/T4",
+        "kind": "implementation",
+        "localId": "T4",
+        "owner": null,
+        "plan": "P-2026-09-04-calendar-scheduler-board",
+        "roadmapRefs": [
+          "R-2026-08-21-scheduled-chats"
+        ],
+        "status": "pending",
+        "subject": "Define paginated schedule-run history contracts",
+        "verificationReceipts": []
+      },
+      {
+        "blockedBy": [
+          "P-2026-09-04-calendar-scheduler-board/T4"
+        ],
+        "commits": [],
+        "filesTouched": [
+          "apps/server/src/auth/RpcAuthorization.ts",
+          "apps/server/src/orchestration/Layers/ProjectionSnapshotQuery.test.ts",
+          "apps/server/src/orchestration/Layers/ProjectionSnapshotQuery.ts",
+          "apps/server/src/orchestration/scheduleRunHistory.test.ts",
+          "apps/server/src/orchestration/scheduleRunHistory.ts",
+          "apps/server/src/server.test.ts",
+          "apps/server/src/ws.ts",
+          "apps/server/src/ws/orchestrationRpc.test.ts",
+          "apps/server/src/ws/orchestrationRpc.ts"
+        ],
+        "hostRefs": {},
+        "id": "P-2026-09-04-calendar-scheduler-board/T5",
+        "kind": "implementation",
+        "localId": "T5",
+        "owner": null,
+        "plan": "P-2026-09-04-calendar-scheduler-board",
+        "roadmapRefs": [
+          "R-2026-08-21-scheduled-chats"
+        ],
+        "status": "pending",
+        "subject": "Project schedule-run pages from the event store",
+        "verificationReceipts": []
+      },
+      {
+        "blockedBy": [
+          "P-2026-09-04-calendar-scheduler-board/T4",
+          "P-2026-09-04-calendar-scheduler-board/T5"
+        ],
+        "commits": [],
+        "filesTouched": [
+          "packages/client-runtime/src/operations/queries.test.ts",
+          "packages/client-runtime/src/operations/queries.ts",
+          "packages/client-runtime/src/state/orchestration.test.ts",
+          "packages/client-runtime/src/state/orchestration.ts"
+        ],
+        "hostRefs": {},
+        "id": "P-2026-09-04-calendar-scheduler-board/T6",
+        "kind": "implementation",
+        "localId": "T6",
+        "owner": null,
+        "plan": "P-2026-09-04-calendar-scheduler-board",
+        "roadmapRefs": [
+          "R-2026-08-21-scheduled-chats"
+        ],
+        "status": "pending",
+        "subject": "Add schedule-run queries to client runtime",
+        "verificationReceipts": []
+      },
+      {
+        "blockedBy": [
+          "P-2026-09-04-calendar-scheduler-board/T2",
+          "P-2026-09-04-calendar-scheduler-board/T6"
+        ],
+        "commits": [],
+        "filesTouched": [
+          "apps/web/src/components/schedules/scheduleBoardLogic.test.ts",
+          "apps/web/src/components/schedules/scheduleBoardLogic.ts",
+          "apps/web/src/state/schedules.test.ts",
+          "apps/web/src/state/schedules.ts"
+        ],
+        "hostRefs": {},
+        "id": "P-2026-09-04-calendar-scheduler-board/T7",
+        "kind": "implementation",
+        "localId": "T7",
+        "owner": null,
+        "plan": "P-2026-09-04-calendar-scheduler-board",
+        "roadmapRefs": [
+          "R-2026-08-21-scheduled-chats"
+        ],
+        "status": "pending",
+        "subject": "Build shared board rows, filters, and cadence labels",
+        "verificationReceipts": []
+      },
+      {
+        "blockedBy": [
+          "P-2026-09-04-calendar-scheduler-board/T3",
+          "P-2026-09-04-calendar-scheduler-board/T6",
+          "P-2026-09-04-calendar-scheduler-board/T7",
+          "P-2026-09-04-calendar-scheduler-board/T9"
+        ],
+        "commits": [],
+        "filesTouched": [
+          "apps/web/src/components/Sidebar.tsx",
+          "apps/web/src/components/schedules/ScheduleBoard.tsx",
+          "apps/web/src/components/schedules/ScheduleRunDrawer.tsx",
+          "apps/web/src/components/settings/ScheduledChatsSettings.tsx",
+          "apps/web/src/routes/_chat.schedules.tsx"
+        ],
+        "hostRefs": {},
+        "id": "P-2026-09-04-calendar-scheduler-board/T8",
+        "kind": "implementation",
+        "localId": "T8",
+        "owner": null,
+        "plan": "P-2026-09-04-calendar-scheduler-board",
+        "roadmapRefs": [
+          "R-2026-08-21-scheduled-chats"
+        ],
+        "status": "pending",
+        "subject": "Add the web scheduler board and run drawer",
+        "verificationReceipts": []
+      },
+      {
+        "blockedBy": [
+          "P-2026-09-04-calendar-scheduler-board/T2",
+          "P-2026-09-04-calendar-scheduler-board/T3",
+          "P-2026-09-04-calendar-scheduler-board/T7"
+        ],
+        "commits": [],
+        "filesTouched": [
+          "apps/mobile/src/features/settings/SettingsScheduledChatsRouteScreen.logic.ts",
+          "apps/mobile/src/features/settings/SettingsScheduledChatsRouteScreen.tsx",
+          "apps/mobile/src/features/threads/ScheduleDraftSheet.tsx",
+          "apps/web/src/components/chat/ScheduleDraftDialog.tsx",
+          "apps/web/src/components/settings/ScheduledChatsSettings.tsx"
+        ],
+        "hostRefs": {},
+        "id": "P-2026-09-04-calendar-scheduler-board/T9",
+        "kind": "implementation",
+        "localId": "T9",
+        "owner": null,
+        "plan": "P-2026-09-04-calendar-scheduler-board",
+        "roadmapRefs": [
+          "R-2026-08-21-scheduled-chats"
+        ],
+        "status": "pending",
+        "subject": "Extend web and mobile recurrence editors",
+        "verificationReceipts": []
+      },
+      {
+        "blockedBy": [
+          "P-2026-09-04-calendar-scheduler-board/T6",
+          "P-2026-09-04-calendar-scheduler-board/T7"
+        ],
+        "commits": [],
+        "filesTouched": [
+          "apps/mobile/src/Stack.tsx",
+          "apps/mobile/src/features/schedules/ScheduleBoardRouteScreen.logic.test.ts",
+          "apps/mobile/src/features/schedules/ScheduleBoardRouteScreen.logic.ts",
+          "apps/mobile/src/features/schedules/ScheduleBoardRouteScreen.tsx",
+          "apps/mobile/src/features/settings/SettingsRouteScreen.tsx"
+        ],
+        "hostRefs": {},
+        "id": "P-2026-09-04-calendar-scheduler-board/T10",
+        "kind": "implementation",
+        "localId": "T10",
+        "owner": null,
+        "plan": "P-2026-09-04-calendar-scheduler-board",
+        "roadmapRefs": [
+          "R-2026-08-21-scheduled-chats"
+        ],
+        "status": "pending",
+        "subject": "Add the mobile scheduler board and run history",
+        "verificationReceipts": []
+      },
+      {
+        "blockedBy": [
+          "P-2026-09-04-calendar-scheduler-board/T9",
+          "P-2026-09-04-calendar-scheduler-board/T10"
+        ],
+        "commits": [],
+        "filesTouched": [
+          "apps/mobile/src/features/agent-awareness/notificationNavigation.test.ts",
+          "apps/mobile/src/features/agent-awareness/notificationNavigation.ts",
+          "apps/server/src/agentActivity/AgentActivityPublisher.test.ts",
+          "apps/server/src/agentActivity/AgentActivityPublisher.ts",
+          "apps/server/src/relay/AgentAwarenessRelay.test.ts",
+          "apps/server/src/relay/AgentAwarenessRelay.ts",
+          "packages/contracts/src/agentActivity.ts",
+          "packages/contracts/src/relay.ts"
+        ],
+        "hostRefs": {},
+        "id": "P-2026-09-04-calendar-scheduler-board/T11",
+        "kind": "implementation",
+        "localId": "T11",
+        "owner": null,
+        "plan": "P-2026-09-04-calendar-scheduler-board",
+        "roadmapRefs": [
+          "R-2026-08-21-scheduled-chats"
+        ],
+        "status": "pending",
+        "subject": "Publish bounded schedule-result notifications",
+        "verificationReceipts": []
+      },
+      {
+        "blockedBy": [
+          "P-2026-09-04-calendar-scheduler-board/T3",
+          "P-2026-09-04-calendar-scheduler-board/T5",
+          "P-2026-09-04-calendar-scheduler-board/T8",
+          "P-2026-09-04-calendar-scheduler-board/T9",
+          "P-2026-09-04-calendar-scheduler-board/T10",
+          "P-2026-09-04-calendar-scheduler-board/T11"
+        ],
+        "commits": [],
+        "filesTouched": [
+          "docs/internals/scheduled-chats.md",
+          "docs/user/scheduled-chats.md",
+          "prd/12-scheduled-chats.md",
+          "project/state/shards/roadmap.yaml"
+        ],
+        "hostRefs": {},
+        "id": "P-2026-09-04-calendar-scheduler-board/T12",
+        "kind": "verification",
+        "localId": "T12",
+        "owner": null,
+        "plan": "P-2026-09-04-calendar-scheduler-board",
+        "roadmapRefs": [
+          "R-2026-08-21-scheduled-chats"
+        ],
+        "status": "pending",
+        "subject": "Run the calendar scheduler release gate",
+        "verificationReceipts": []
+      },
+      {
+        "blockedBy": [],
+        "commits": [],
+        "filesTouched": [
+          "packages/contracts/src/orchestration.ts",
+          "packages/contracts/src/schedule.test.ts",
+          "packages/contracts/src/schedule.ts"
+        ],
+        "hostRefs": {},
+        "id": "P-2026-09-04-scheduled-followups/T1",
+        "kind": "implementation",
+        "localId": "T1",
+        "owner": null,
+        "plan": "P-2026-09-04-scheduled-followups",
+        "roadmapRefs": [
+          "R-2026-08-21-scheduled-chats"
+        ],
+        "status": "pending",
+        "subject": "Add native schedule trigger and destination contracts",
+        "verificationReceipts": []
+      },
+      {
+        "blockedBy": [],
+        "commits": [],
+        "filesTouched": [
+          "apps/server/src/environment/ServerEnvironment.test.ts",
+          "apps/server/src/environment/ServerEnvironment.ts",
+          "packages/contracts/src/environment.test.ts",
+          "packages/contracts/src/environment.ts"
+        ],
+        "hostRefs": {},
+        "id": "P-2026-09-04-scheduled-followups/T2",
+        "kind": "protective",
+        "localId": "T2",
+        "owner": null,
+        "plan": "P-2026-09-04-scheduled-followups",
+        "roadmapRefs": [
+          "R-2026-08-21-scheduled-chats"
+        ],
+        "status": "pending",
+        "subject": "Advertise native scheduling capabilities",
+        "verificationReceipts": []
+      },
+      {
+        "blockedBy": [
+          "P-2026-09-04-scheduled-followups/T1"
+        ],
+        "commits": [],
+        "filesTouched": [
+          "apps/server/src/orchestration/decider.schedules.test.ts",
+          "apps/server/src/orchestration/decider.ts",
+          "apps/server/src/orchestration/projector.test.ts",
+          "apps/server/src/orchestration/projector.ts"
+        ],
+        "hostRefs": {},
+        "id": "P-2026-09-04-scheduled-followups/T3",
+        "kind": "implementation",
+        "localId": "T3",
+        "owner": null,
+        "plan": "P-2026-09-04-scheduled-followups",
+        "roadmapRefs": [
+          "R-2026-08-21-scheduled-chats"
+        ],
+        "status": "pending",
+        "subject": "Decide and project native one-off schedules",
+        "verificationReceipts": []
+      },
+      {
+        "blockedBy": [
+          "P-2026-09-04-scheduled-followups/T1",
+          "P-2026-09-04-scheduled-followups/T2",
+          "P-2026-09-04-scheduled-followups/T3"
+        ],
+        "commits": [],
+        "filesTouched": [
+          "packages/client-runtime/src/operations/commands.test.ts",
+          "packages/client-runtime/src/operations/commands.ts",
+          "packages/client-runtime/src/state/orchestration.ts"
+        ],
+        "hostRefs": {},
+        "id": "P-2026-09-04-scheduled-followups/T4",
+        "kind": "implementation",
+        "localId": "T4",
+        "owner": null,
+        "plan": "P-2026-09-04-scheduled-followups",
+        "roadmapRefs": [
+          "R-2026-08-21-scheduled-chats"
+        ],
+        "status": "pending",
+        "subject": "Expose native schedule commands through client runtime",
+        "verificationReceipts": []
+      },
+      {
+        "blockedBy": [
+          "P-2026-09-04-scheduled-followups/T1",
+          "P-2026-09-04-scheduled-followups/T3"
+        ],
+        "commits": [],
+        "filesTouched": [
+          "apps/server/src/orchestration/Layers/ScheduleReactor.test.ts",
+          "apps/server/src/orchestration/Layers/ScheduleReactor.ts"
+        ],
+        "hostRefs": {},
+        "id": "P-2026-09-04-scheduled-followups/T5",
+        "kind": "implementation",
+        "localId": "T5",
+        "owner": null,
+        "plan": "P-2026-09-04-scheduled-followups",
+        "roadmapRefs": [
+          "R-2026-08-21-scheduled-chats"
+        ],
+        "status": "pending",
+        "subject": "Fire and complete existing-thread one-offs",
+        "verificationReceipts": []
+      },
+      {
+        "blockedBy": [
+          "P-2026-09-04-scheduled-followups/T2"
+        ],
+        "commits": [],
+        "filesTouched": [
+          "apps/server/src/mcp/McpInvocationContext.test.ts",
+          "apps/server/src/mcp/McpInvocationContext.ts",
+          "apps/server/src/mcp/McpSessionRegistry.test.ts",
+          "apps/server/src/mcp/McpSessionRegistry.ts"
+        ],
+        "hostRefs": {},
+        "id": "P-2026-09-04-scheduled-followups/T6",
+        "kind": "protective",
+        "localId": "T6",
+        "owner": null,
+        "plan": "P-2026-09-04-scheduled-followups",
+        "roadmapRefs": [
+          "R-2026-08-21-scheduled-chats"
+        ],
+        "status": "pending",
+        "subject": "Grant a thread-scoped MCP schedule capability",
+        "verificationReceipts": []
+      },
+      {
+        "blockedBy": [
+          "P-2026-09-04-scheduled-followups/T1",
+          "P-2026-09-04-scheduled-followups/T3",
+          "P-2026-09-04-scheduled-followups/T4",
+          "P-2026-09-04-scheduled-followups/T6"
+        ],
+        "commits": [],
+        "filesTouched": [
+          "apps/server/src/mcp/McpHttpServer.test.ts",
+          "apps/server/src/mcp/McpHttpServer.ts",
+          "apps/server/src/mcp/toolkits/schedule/handlers.ts",
+          "apps/server/src/mcp/toolkits/schedule/tools.test.ts",
+          "apps/server/src/mcp/toolkits/schedule/tools.ts"
+        ],
+        "hostRefs": {},
+        "id": "P-2026-09-04-scheduled-followups/T7",
+        "kind": "implementation",
+        "localId": "T7",
+        "owner": null,
+        "plan": "P-2026-09-04-scheduled-followups",
+        "roadmapRefs": [
+          "R-2026-08-21-scheduled-chats"
+        ],
+        "status": "pending",
+        "subject": "Register schedule proposal and mutation MCP tools",
+        "verificationReceipts": []
+      },
+      {
+        "blockedBy": [],
+        "commits": [],
+        "filesTouched": [
+          "packages/client-runtime/src/scheduling/scheduleDraft.test.ts",
+          "packages/client-runtime/src/scheduling/scheduleDraft.ts"
+        ],
+        "hostRefs": {},
+        "id": "P-2026-09-04-scheduled-followups/T8",
+        "kind": "implementation",
+        "localId": "T8",
+        "owner": null,
+        "plan": "P-2026-09-04-scheduled-followups",
+        "roadmapRefs": [
+          "R-2026-08-21-scheduled-chats"
+        ],
+        "status": "pending",
+        "subject": "Add a shared schedule draft normalizer",
+        "verificationReceipts": []
+      },
+      {
+        "blockedBy": [
+          "P-2026-09-04-scheduled-followups/T2",
+          "P-2026-09-04-scheduled-followups/T4",
+          "P-2026-09-04-scheduled-followups/T8"
+        ],
+        "commits": [],
+        "filesTouched": [
+          "apps/web/src/components/ChatView.tsx",
+          "apps/web/src/components/chat/ChatComposer.tsx",
+          "apps/web/src/components/chat/ScheduleDraftDialog.tsx",
+          "apps/web/src/composer-logic.test.ts",
+          "apps/web/src/composer-logic.ts"
+        ],
+        "hostRefs": {},
+        "id": "P-2026-09-04-scheduled-followups/T9",
+        "kind": "implementation",
+        "localId": "T9",
+        "owner": null,
+        "plan": "P-2026-09-04-scheduled-followups",
+        "roadmapRefs": [
+          "R-2026-08-21-scheduled-chats"
+        ],
+        "status": "pending",
+        "subject": "Add `/schedule` and the review dialog on web",
+        "verificationReceipts": []
+      },
+      {
+        "blockedBy": [
+          "P-2026-09-04-scheduled-followups/T2",
+          "P-2026-09-04-scheduled-followups/T4",
+          "P-2026-09-04-scheduled-followups/T8"
+        ],
+        "commits": [],
+        "filesTouched": [
+          "apps/mobile/src/features/threads/ScheduleDraftSheet.tsx",
+          "apps/mobile/src/features/threads/ThreadComposer.tsx",
+          "apps/mobile/src/features/threads/ThreadSettingsSheet.tsx",
+          "apps/mobile/src/features/threads/scheduleDraftSheet.test.tsx"
+        ],
+        "hostRefs": {},
+        "id": "P-2026-09-04-scheduled-followups/T10",
+        "kind": "implementation",
+        "localId": "T10",
+        "owner": null,
+        "plan": "P-2026-09-04-scheduled-followups",
+        "roadmapRefs": [
+          "R-2026-08-21-scheduled-chats"
+        ],
+        "status": "pending",
+        "subject": "Add `/schedule` and the review sheet on mobile",
+        "verificationReceipts": []
+      },
+      {
+        "blockedBy": [
+          "P-2026-09-04-scheduled-followups/T4",
+          "P-2026-09-04-scheduled-followups/T5"
+        ],
+        "commits": [],
+        "filesTouched": [
+          "apps/mobile/src/features/settings/SettingsScheduledChatsRouteScreen.logic.test.ts",
+          "apps/mobile/src/features/settings/SettingsScheduledChatsRouteScreen.logic.ts",
+          "apps/mobile/src/features/settings/SettingsScheduledChatsRouteScreen.tsx",
+          "apps/web/src/components/settings/ScheduledChatsSettings.tsx"
+        ],
+        "hostRefs": {},
+        "id": "P-2026-09-04-scheduled-followups/T11",
+        "kind": "implementation",
+        "localId": "T11",
+        "owner": null,
+        "plan": "P-2026-09-04-scheduled-followups",
+        "roadmapRefs": [
+          "R-2026-08-21-scheduled-chats"
+        ],
+        "status": "pending",
+        "subject": "Show destinations and completed one-offs in schedule management",
+        "verificationReceipts": []
+      },
+      {
+        "blockedBy": [
+          "P-2026-09-04-scheduled-followups/T5",
+          "P-2026-09-04-scheduled-followups/T6",
+          "P-2026-09-04-scheduled-followups/T7"
+        ],
+        "commits": [],
+        "filesTouched": [
+          "apps/server/src/provider/Layers/ClaudeAdapter.test.ts",
+          "apps/server/src/provider/Layers/CodexAdapter.test.ts",
+          "apps/server/src/provider/Layers/CursorAdapter.test.ts",
+          "apps/server/src/provider/Layers/GrokAdapter.test.ts",
+          "apps/server/src/provider/Layers/OpenCodeAdapter.test.ts"
+        ],
+        "hostRefs": {},
+        "id": "P-2026-09-04-scheduled-followups/T12",
+        "kind": "verification",
+        "localId": "T12",
+        "owner": null,
+        "plan": "P-2026-09-04-scheduled-followups",
+        "roadmapRefs": [
+          "R-2026-08-21-scheduled-chats"
+        ],
+        "status": "pending",
+        "subject": "Verify provider resume and MCP behavior",
+        "verificationReceipts": []
+      },
+      {
+        "blockedBy": [
+          "P-2026-09-04-scheduled-followups/T5",
+          "P-2026-09-04-scheduled-followups/T7",
+          "P-2026-09-04-scheduled-followups/T9",
+          "P-2026-09-04-scheduled-followups/T10",
+          "P-2026-09-04-scheduled-followups/T11",
+          "P-2026-09-04-scheduled-followups/T12"
+        ],
+        "commits": [],
+        "filesTouched": [
+          "docs/internals/scheduled-chats.md",
+          "docs/user/scheduled-chats.md",
+          "prd/12-scheduled-chats.md",
+          "project/state/shards/roadmap.yaml"
+        ],
+        "hostRefs": {},
+        "id": "P-2026-09-04-scheduled-followups/T13",
+        "kind": "verification",
+        "localId": "T13",
+        "owner": null,
+        "plan": "P-2026-09-04-scheduled-followups",
+        "roadmapRefs": [
+          "R-2026-08-21-scheduled-chats"
+        ],
+        "status": "pending",
+        "subject": "Run the Phase 1 compatibility and documentation gate",
+        "verificationReceipts": []
+      },
+      {
+        "blockedBy": [],
+        "commits": [
+          "6d7331f55"
+        ],
+        "filesTouched": [
+          "apps/mobile/src/features/usage/UsageRouteScreen.tsx",
+          "apps/server/src/provider/Layers/ProviderPlanUsageTracker.ts",
+          "apps/server/src/provider/Layers/ProviderRegistry.ts",
+          "apps/server/src/provider/Services/ProviderRegistry.ts",
+          "apps/server/src/provider/planUsage.test.ts",
+          "apps/server/src/provider/planUsage.ts",
+          "apps/server/src/provider/providerMaintenanceRunner.test.ts",
+          "apps/server/src/provider/providerStatusCache.test.ts",
+          "apps/server/src/provider/providerStatusCache.ts",
+          "apps/server/src/provider/testUtils/providerRegistryMock.ts",
+          "apps/server/src/server.ts",
+          "apps/web/src/components/usage/UsagePage.tsx",
+          "docs/user/usage.md",
+          "packages/contracts/src/server.test.ts",
+          "packages/contracts/src/server.ts",
+          "project/state/shards/endpoints.yaml",
+          "project/surfaced-gaps.md",
+          "project/workspace-overlay.json",
+          "project/workspace.html"
+        ],
+        "hostRefs": {},
+        "id": "B-2026-08-23-002",
+        "kind": "bugfix",
+        "localId": null,
+        "owner": null,
+        "plan": null,
+        "roadmapRefs": [],
+        "status": "done",
+        "subject": "Ship provider plan usage on production main",
+        "verificationReceipts": [
+          "Changed TypeScript/TSX lint and formatting checks passed; git diff --check clean",
+          "Focused tests: 5 files, 39 tests passed",
+          "ProductOps workspace render is fresh and Minion check is clean",
+          "Typechecks: contracts, server, web, and mobile passed"
+        ]
+      },
+      {
+        "blockedBy": [],
+        "commits": [],
+        "filesTouched": [
+          "C:\\Users\\qblaa\\.codex\\plugins\\cache\\product-ops-skill\\product-ops\\3.38.1\\skills\\product-ops\\scripts\\minion_supervisor.py",
+          "C:\\Users\\qblaa\\.codex\\plugins\\cache\\product-ops-skill\\product-ops\\3.38.1\\skills\\product-ops\\scripts\\tests\\test_minion_service.py",
+          "C:\\Users\\qblaa\\.codex\\plugins\\cache\\product-ops-skill\\product-ops\\3.38.1\\skills\\product-ops\\scripts\\tests\\test_minion_supervisor.py"
+        ],
+        "hostRefs": {},
+        "id": "B-2026-08-25-001",
+        "kind": "bugfix",
+        "localId": null,
+        "owner": null,
+        "plan": null,
+        "roadmapRefs": [],
+        "status": "done",
+        "subject": "Prevent Minion scans from traversing ignored repository trees",
+        "verificationReceipts": [
+          "python -m unittest test_minion_supervisor test_minion_service: 31 passed"
+        ]
+      },
+      {
+        "blockedBy": [],
+        "commits": [],
+        "filesTouched": [
+          "C:/Users/qblaa/.codex/plugins/cache/product-ops-skill/product-ops/3.38.1/skills/product-ops/scripts/minion.py",
+          "C:/Users/qblaa/.codex/plugins/cache/product-ops-skill/product-ops/3.38.1/skills/product-ops/scripts/minion_supervisor.py",
+          "C:/Users/qblaa/.codex/plugins/cache/product-ops-skill/product-ops/3.38.1/skills/product-ops/scripts/tests/test_minion_e2e.py",
+          "C:/Users/qblaa/.codex/plugins/cache/product-ops-skill/product-ops/3.38.1/skills/product-ops/scripts/tests/test_minion_rules.py"
+        ],
+        "hostRefs": {},
+        "id": "B-2026-08-25-002",
+        "kind": "bugfix",
+        "localId": null,
+        "owner": null,
+        "plan": null,
+        "roadmapRefs": [],
+        "status": "done",
+        "subject": "Prevent Minion snapshot scans from traversing ignored dependency and vendored directories",
+        "verificationReceipts": [
+          "RED test_minion_rules.py RulePackTests.test_expand_uses_git_owned_and_unignored_files exit=1; GREEN same test exit=0; GREEN test_minion_e2e.py snapshot+restart tests exit=0; minion_service.py doctor status=healthy"
+        ]
+      },
+      {
+        "blockedBy": [],
+        "commits": [
+          "448ead486"
+        ],
+        "filesTouched": [
+          "apps/desktop/src/app/DesktopConfig.ts",
+          "apps/desktop/src/app/DesktopConnectionCatalogStore.test.ts",
+          "apps/desktop/src/app/DesktopEarlyElectronStartup.test.ts",
+          "apps/desktop/src/app/DesktopEarlyElectronStartup.ts",
+          "apps/desktop/src/app/DesktopEnvironment.test.ts",
+          "apps/desktop/src/app/DesktopEnvironment.ts",
+          "apps/desktop/src/app/DesktopObservability.test.ts",
+          "apps/desktop/src/app/DesktopStatePaths.ts",
+          "apps/desktop/src/backend/DesktopBackendConfiguration.test.ts",
+          "apps/desktop/src/backend/DesktopServerExposure.test.ts",
+          "apps/desktop/src/settings/DesktopAppSettings.test.ts",
+          "apps/desktop/src/settings/DesktopClientSettings.diagnostics.test.ts",
+          "apps/desktop/src/settings/DesktopClientSettings.test.ts",
+          "apps/desktop/src/settings/DesktopSavedEnvironments.test.ts",
+          "apps/desktop/src/updates/DesktopUpdates.test.ts",
+          "apps/desktop/src/wsl/DesktopWslServerTree.test.ts"
+        ],
+        "hostRefs": {},
+        "id": "P-2026-08-21-pulse-desktop-product-separation/T1",
+        "kind": "protective",
+        "localId": "T1",
+        "owner": null,
+        "plan": "P-2026-08-21-pulse-desktop-product-separation",
+        "roadmapRefs": [
+          "R-2026-08-21-desktop-product-separation"
+        ],
+        "status": "completed",
+        "subject": "Isolate Pulse runtime identity and state roots",
+        "verificationReceipts": [
+          "Focused runtime/early-startup tests: 2 files, 14 tests passed; all 16 scoped files format/diff checks passed; temporary-state fixtures migrated to PULSE_CODE_HOME; coordinator reviewed diff and final legacy scan."
+        ]
+      },
+      {
+        "blockedBy": [
+          "P-2026-08-21-pulse-desktop-product-separation/T1",
+          "P-2026-08-21-pulse-desktop-product-separation/T3"
+        ],
+        "commits": [
+          "448ead486"
+        ],
+        "filesTouched": [
+          "apps/desktop/src/app/DesktopApp.ts",
+          "apps/desktop/src/app/DesktopAppIdentity.test.ts",
+          "apps/desktop/src/app/DesktopAppIdentity.ts",
+          "apps/desktop/src/app/DesktopClerk.test.ts",
+          "apps/desktop/src/app/DesktopClerk.ts"
+        ],
+        "hostRefs": {},
+        "id": "P-2026-08-21-pulse-desktop-product-separation/T2",
+        "kind": "protective",
+        "localId": "T2",
+        "owner": null,
+        "plan": "P-2026-08-21-pulse-desktop-product-separation",
+        "roadmapRefs": [
+          "R-2026-08-21-desktop-product-separation"
+        ],
+        "status": "completed",
+        "subject": "Remove automatic T3 user-data and protocol takeover",
+        "verificationReceipts": [
+          "Focused identity/Clerk tests: 2 files, 10 tests passed; desktop typecheck passed with two pre-existing suggestion diagnostics; targeted format/diff checks passed; coordinator reviewed assigned diff."
+        ]
+      },
+      {
+        "blockedBy": [],
+        "commits": [
+          "448ead486"
+        ],
+        "filesTouched": [
+          "apps/desktop/src/app/DesktopLinuxUrlHandler.test.ts",
+          "apps/desktop/src/app/DesktopLinuxUrlHandler.ts",
+          "apps/desktop/src/electron/ElectronProtocol.test.ts",
+          "apps/desktop/src/electron/ElectronProtocol.ts"
+        ],
+        "hostRefs": {},
+        "id": "P-2026-08-21-pulse-desktop-product-separation/T3",
+        "kind": "protective",
+        "localId": "T3",
+        "owner": null,
+        "plan": "P-2026-08-21-pulse-desktop-product-separation",
+        "roadmapRefs": [
+          "R-2026-08-21-desktop-product-separation"
+        ],
+        "status": "completed",
+        "subject": "Restrict renderer and Linux handlers to Pulse protocols",
+        "verificationReceipts": [
+          "Focused protocol/Linux tests: 2 files, 15 tests passed; targeted format and diff checks passed; coordinator reviewed assigned diff."
+        ]
+      },
+      {
+        "blockedBy": [],
+        "commits": [
+          "448ead486"
+        ],
+        "filesTouched": [
+          "scripts/build-desktop-artifact.test.ts",
+          "scripts/build-desktop-artifact.ts"
+        ],
+        "hostRefs": {},
+        "id": "P-2026-08-21-pulse-desktop-product-separation/T4",
+        "kind": "protective",
+        "localId": "T4",
+        "owner": null,
+        "plan": "P-2026-08-21-pulse-desktop-product-separation",
+        "roadmapRefs": [
+          "R-2026-08-21-desktop-product-separation"
+        ],
+        "status": "completed",
+        "subject": "Give every packaged desktop target Pulse-only identity",
+        "verificationReceipts": [
+          "Corrected post-build verifier to the shared pulsecode.exe constant; focused regression passed; rebuilt Windows x64 NSIS successfully; packaged payload validated 69 files and 35 sidecar natives; archive contains pulsecode.exe and no t3code.exe primary; SHA-256 A87DB57EB9754BE61B4DE6298A19CC04FBFF337810261881AC2DC7FDDF313513.",
+          "First integrated Windows build reached NSIS payload validation and exposed a stale verifier path derived from the display product name; corrected to the shared pulsecode.exe identity constant before rebuild.",
+          "Identity-specific artifact-builder tests: 8 passed; targeted format and diff checks passed; coordinator reviewed assigned diff. Broader file suite 45/47 with two unchanged Windows fake-EXE spawn UNKNOWN environment failures."
+        ]
+      },
+      {
+        "blockedBy": [
+          "P-2026-08-21-pulse-desktop-product-separation/T4"
+        ],
+        "commits": [
+          "448ead486"
+        ],
+        "filesTouched": [
+          "apps/desktop/scripts/electron-launcher.mjs",
+          "apps/desktop/scripts/electron-launcher.test.mjs"
+        ],
+        "hostRefs": {},
+        "id": "P-2026-08-21-pulse-desktop-product-separation/T5",
+        "kind": "protective",
+        "localId": "T5",
+        "owner": null,
+        "plan": "P-2026-08-21-pulse-desktop-product-separation",
+        "roadmapRefs": [
+          "R-2026-08-21-desktop-product-separation"
+        ],
+        "status": "completed",
+        "subject": "Align the desktop launcher with Pulse package identity",
+        "verificationReceipts": [
+          "Focused launcher tests: 1 file, 5 tests passed; targeted format/diff checks passed; coordinator reviewed assigned diff."
+        ]
+      },
+      {
+        "blockedBy": [
+          "P-2026-08-21-pulse-desktop-product-separation/T1",
+          "P-2026-08-21-pulse-desktop-product-separation/T3",
+          "P-2026-08-21-pulse-desktop-product-separation/T4"
+        ],
+        "commits": [
+          "448ead486"
+        ],
+        "filesTouched": [
+          "README.md",
+          "docs/internals/pulse-code-compatibility.md",
+          "docs/internals/t3-connect.md",
+          "docs/user/install.md"
+        ],
+        "hostRefs": {},
+        "id": "P-2026-08-21-pulse-desktop-product-separation/T6",
+        "kind": "documentation",
+        "localId": "T6",
+        "owner": null,
+        "plan": "P-2026-08-21-pulse-desktop-product-separation",
+        "roadmapRefs": [
+          "R-2026-08-21-desktop-product-separation"
+        ],
+        "status": "completed",
+        "subject": "Publish the desktop-only compatibility boundary",
+        "verificationReceipts": [
+          "Four scoped docs pass targeted formatting/diff/fence checks and stale desktop identity/package-command scans; coordinator reviewed full diff. Signed macOS/Linux runtime evidence remains intentionally gated."
+        ]
+      },
+      {
+        "blockedBy": [
+          "P-2026-08-21-pulse-desktop-product-separation/T1",
+          "P-2026-08-21-pulse-desktop-product-separation/T2",
+          "P-2026-08-21-pulse-desktop-product-separation/T3",
+          "P-2026-08-21-pulse-desktop-product-separation/T4",
+          "P-2026-08-21-pulse-desktop-product-separation/T5",
+          "P-2026-08-21-pulse-desktop-product-separation/T6"
+        ],
+        "commits": [
+          "448ead486"
+        ],
+        "filesTouched": [
+          "prd/change-requests/CR-2026-08-21-desktop-product-line-boundary.md",
+          "project/known-gaps.md",
+          "project/state.json",
+          "project/state/shards/gaps.yaml",
+          "project/state/shards/roadmap.yaml"
+        ],
+        "hostRefs": {},
+        "id": "P-2026-08-21-pulse-desktop-product-separation/T7",
+        "kind": "verification",
+        "localId": "T7",
+        "owner": null,
+        "plan": "P-2026-08-21-pulse-desktop-product-separation",
+        "roadmapRefs": [
+          "R-2026-08-21-desktop-product-separation"
+        ],
+        "status": "completed",
+        "subject": "Verify the install candidate and close the product boundary",
+        "verificationReceipts": [
+          "Integrated verification: 44 desktop tests plus 7 builder identity tests passed; desktop typecheck passed; production collision scan clean; web/mobile shared surfaces unchanged; Windows x64 NSIS build and archive inspection passed. Implementation commit 448ead486. Workspace renderer gap surfaced separately."
+        ]
+      }
+    ],
+    "note": "Ten durable starting tasks; T1 contracts and T2 secret review form the first parallel frontier.",
+    "plans": [
+      {
+        "baselineSha": "",
+        "executor": "",
+        "id": "2026-08-18-pulse-code-backward-compatible-rebrand-design",
+        "path": "docs/plans/2026-08-18-pulse-code-backward-compatible-rebrand-design.md",
+        "title": "Pulse Code backward-compatible rebrand"
+      },
+      {
+        "baselineSha": "",
+        "executor": "",
+        "id": "2026-08-20-windows-browser-target-validation-design",
+        "path": "docs/plans/2026-08-20-windows-browser-target-validation-design.md",
+        "title": "Windows browser target validation"
+      },
+      {
+        "baselineSha": "",
+        "executor": "",
+        "id": "2026-08-21-mobile-file-link-actions-design",
+        "path": "docs/plans/2026-08-21-mobile-file-link-actions-design.md",
+        "title": "Mobile file-link actions — feature design"
+      },
+      {
+        "baselineSha": "",
+        "executor": "",
+        "id": "2026-08-21-scheduled-chats-design",
+        "path": "docs/plans/2026-08-21-scheduled-chats-design.md",
+        "title": "Scheduled Chats — feature design"
+      },
+      {
+        "baselineSha": "",
+        "executor": "",
+        "id": "2026-08-23-composer-queue-steer-design",
+        "path": "docs/plans/2026-08-23-composer-queue-steer-design.md",
+        "title": "Composer queue and steer design"
+      },
+      {
+        "baselineSha": "",
+        "executor": "",
+        "id": "2026-08-31-mermaid-diagram-rendering-design",
+        "path": "docs/plans/2026-08-31-mermaid-diagram-rendering-design.md",
+        "title": "Mermaid diagram rendering"
+      },
+      {
+        "baselineSha": "",
+        "executor": "",
+        "id": "2026-08-31-mermaid-diagram-rendering-implementation",
+        "path": "docs/plans/2026-08-31-mermaid-diagram-rendering-implementation.md",
+        "title": "Mermaid diagram rendering implementation plan"
+      },
+      {
+        "baselineSha": "",
+        "executor": "",
+        "id": "2026-09-01-omp-provider",
+        "path": "docs/plans/2026-09-01-omp-provider.md",
+        "title": "OMP provider implementation plan"
+      },
+      {
+        "baselineSha": "",
+        "executor": "",
+        "id": "2026-09-02-external-release-sources-design",
+        "path": "docs/plans/2026-09-02-external-release-sources-design.md",
+        "title": "External release source links"
+      },
+      {
+        "baselineSha": "",
+        "executor": "",
+        "id": "2026-09-04-native-scheduling-design",
+        "path": "docs/plans/2026-09-04-native-scheduling-design.md",
+        "title": "Native scheduling: product and technical design"
+      },
+      {
+        "baselineSha": "",
+        "executor": "",
+        "id": "2026-09-04-thread-model-switch-handoff-design",
+        "path": "docs/plans/2026-09-04-thread-model-switch-handoff-design.md",
+        "title": "Mid-thread model and provider switching design"
+      },
+      {
+        "baselineSha": "3fe2eb0989a25875a69977133f9e62946f7afc97",
+        "executor": "Codex",
+        "id": "P-2026-08-19-integrations-foundation",
+        "path": "project/plans/P-2026-08-19-integrations-foundation.md",
+        "title": "Pulse integrations foundation implementation plan"
+      },
+      {
+        "baselineSha": "c297b4ad7",
+        "executor": "Codex",
+        "id": "P-2026-08-21-integration-oauth-release-gates",
+        "path": "project/plans/P-2026-08-21-integration-oauth-release-gates.md",
+        "title": "Integration OAuth release-gate implementation plan"
+      },
+      {
+        "baselineSha": "f3c1dd240",
+        "executor": "self",
+        "id": "P-2026-08-26-sidebar-scheduled-chats",
+        "path": "project/plans/P-2026-08-26-sidebar-scheduled-chats.md",
+        "title": "Projects and Scheduled sidebar implementation plan"
+      },
+      {
+        "baselineSha": "38e061e5f",
+        "executor": "Codex",
+        "id": "P-2026-09-04-calendar-scheduler-board",
+        "path": "project/plans/P-2026-09-04-calendar-scheduler-board.md",
+        "title": "Calendar recurrence and scheduler board implementation plan"
+      },
+      {
+        "baselineSha": "38e061e5f",
+        "executor": "Codex",
+        "id": "P-2026-09-04-scheduled-followups",
+        "path": "project/plans/P-2026-09-04-scheduled-followups.md",
+        "title": "Native scheduled follow-ups implementation plan"
+      }
+    ]
+  }
+}

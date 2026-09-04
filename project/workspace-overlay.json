@@ -334,6 +334,303 @@
         "authority": "prd/20-acceptance-criteria/desktop-product-line-boundary.md §Open questions",
         "live": "Implementation answers part of the identity question; import remains undecided.",
         "register": "R-2026-08-21-desktop-product-separation"
+      },
+      {
+        "id": "12-scheduled-chats#problem",
+        "health": "proposed",
+        "covers": "Defines the gap between manual coding chats and a bounded unattended daily check-in.",
+        "action": "Approve the scheduled-chat change request before assigning implementation capacity.",
+        "authority": "prd/12-scheduled-chats.md §Problem",
+        "live": "No scheduling machinery is claimed; the roadmap keeps this work in Next.",
+        "register": "CR-2026-08-21-scheduled-chats"
+      },
+      {
+        "id": "12-scheduled-chats#scope",
+        "health": "proposed",
+        "covers": "Persistent schedule threads, fresh provider sessions, handoff files, project and environment scopes, and trust rails.",
+        "action": "Resolve host availability and provider support before promotion to Now.",
+        "authority": "prd/12-scheduled-chats.md §Scope",
+        "live": "The design and roadmap item exist; no implementation receipt exists.",
+        "register": "R-2026-08-21-scheduled-chats"
+      },
+      {
+        "id": "12-scheduled-chats#non-goals",
+        "health": "proposed",
+        "covers": "Excludes a generic workflow engine, canned prompts, silent mutation, and broad notification work.",
+        "action": "Keep any collaboration notification work in its separate roadmap item.",
+        "authority": "prd/12-scheduled-chats.md §Non-goals",
+        "live": "No excluded behavior is claimed.",
+        "register": "CR-2026-08-21-scheduled-chats"
+      },
+      {
+        "id": "12-scheduled-chats#constraints",
+        "health": "at risk",
+        "covers": "Requires exactly-once decisions, time leashes, explicit provider support, visible failure, and reviewable diffs.",
+        "action": "Prove host availability, idempotency, and interruption behavior before release shaping.",
+        "authority": "prd/12-scheduled-chats.md §Constraints",
+        "live": "The host-availability limitation remains documented; deterministic execution is unimplemented.",
+        "register": "CR-2026-08-21-scheduled-chats"
+      },
+      {
+        "id": "16-pulseflow-live-design#problem-and-outcome",
+        "health": "proposed",
+        "covers": "Runs PulseFlow's full Impeccable design loop in the current coding context without copying document ownership into Pulse Code.",
+        "action": "Approve the host boundary and cross-repository release train before implementation.",
+        "authority": "prd/16-pulseflow-live-design.md §Problem and outcome",
+        "live": "Preview host primitives exist, but PulseFlow is specification-only and no integrated session exists.",
+        "register": "CR-2026-09-04-pulseflow-live-design"
+      },
+      {
+        "id": "16-pulseflow-live-design#current-leverage",
+        "health": "active",
+        "covers": "Inventories reusable Preview tabs, environment routing, capture, automation, and skill-picker primitives.",
+        "action": "Preserve these behaviors in the local host proof and focused regression suite.",
+        "authority": "prd/16-pulseflow-live-design.md §Current leverage",
+        "live": "The named Preview, broker, capture, and picker surfaces exist in the repository.",
+        "register": "R-2026-09-04-pulseflow-live-design"
+      },
+      {
+        "id": "16-pulseflow-live-design#scope",
+        "health": "proposed",
+        "covers": "Bounds host work to web and desktop Preview, typed tools, routing, reconnect, evidence, and capability skew.",
+        "action": "Keep model behavior and document mutation in PulseFlow and mobile authoring out of the first release.",
+        "authority": "prd/16-pulseflow-live-design.md §Scope",
+        "live": "No PulseFlow-specific host implementation is claimed.",
+        "register": "D-2026-09-04-pulseflow-preview-host"
+      },
+      {
+        "id": "16-pulseflow-live-design#experience-contract",
+        "health": "proposed",
+        "covers": "Defines skill discovery, Preview binding, picker events, progressive variants, full iteration controls, accept, discard, and recovery.",
+        "action": "Build the deterministic local fixture and prove every named control before remote expansion.",
+        "authority": "prd/16-pulseflow-live-design.md §Experience contract",
+        "live": "Existing Preview controls are live; live-design controls and adapter handshake are planned.",
+        "register": "AC-PCLD-04; AC-PCLD-05; AC-PCLD-06"
+      },
+      {
+        "id": "16-pulseflow-live-design#host-capability-contract",
+        "health": "proposed",
+        "covers": "Defines an optional versioned capability, bound request identity, runtime validation, and narrow agent tools.",
+        "action": "Implement contracts and mixed-version fixtures before exposing client controls.",
+        "authority": "prd/16-pulseflow-live-design.md §Host capability contract",
+        "live": "The repository has additive capability patterns; this contract does not exist yet.",
+        "register": "D-2026-09-04-live-design-transport"
+      },
+      {
+        "id": "16-pulseflow-live-design#ownership",
+        "health": "needs decision",
+        "covers": "Assigns browser and transport state to Pulse Code and picker, variant, and transaction authority to PulseFlow.",
+        "action": "Obtain PulseFlow and Pulse Code owner sign-off before implementation.",
+        "authority": "prd/16-pulseflow-live-design.md §Ownership",
+        "live": "The proposed boundary is aligned across both repository change requests but remains unsigned.",
+        "register": "D-2026-09-04-pulseflow-preview-host"
+      },
+      {
+        "id": "16-pulseflow-live-design#transport-and-trust",
+        "health": "at risk",
+        "covers": "Defines direct, private-network, public gateway, web-host, mobile, origin, nonce, replay, and session constraints.",
+        "action": "Design and threat-model the authenticated public Preview gateway.",
+        "authority": "prd/16-pulseflow-live-design.md §Transport and trust",
+        "live": "Local and private target resolution exists; public remote resolution is explicitly blocked.",
+        "register": "G-2026-09-04-public-preview-gateway"
+      },
+      {
+        "id": "16-pulseflow-live-design#compatibility-and-failure-behavior",
+        "health": "proposed",
+        "covers": "Keeps ordinary Preview available through capability skew, adapter mismatch, disconnect, denial, and bounded evidence failures.",
+        "action": "Attach mixed-version, redaction, reconnect, and uncertain-outcome receipts to the release review.",
+        "authority": "prd/16-pulseflow-live-design.md §Compatibility and failure behavior",
+        "live": "Existing optional-capability behavior is reusable; live-design failure handling is unimplemented.",
+        "register": "AC-PCLD-01; AC-PCLD-08; AC-PCLD-12"
+      },
+      {
+        "id": "16-pulseflow-live-design#rollout-and-feasibility",
+        "health": "at risk",
+        "covers": "Sequences local proof, full interaction, agent and skill, private routing, gateway, and integrated release gates with a 6 to 9 engineering-week estimate.",
+        "action": "Start only after a real PulseFlow adapter fixture exists and roadmap capacity is assigned.",
+        "authority": "prd/16-pulseflow-live-design.md §Rollout and feasibility",
+        "live": "The feasibility judgment is evidence-backed, but implementation and public transport gates remain open.",
+        "register": "R-2026-09-04-pulseflow-live-design; G-2026-09-04-pulseflow-adapter-unimplemented"
+      },
+      {
+        "id": "16-pulseflow-live-design#cross-references",
+        "health": "reference",
+        "covers": "Links the host PRD to acceptance, sitemap, workflow, tool flow, existing modules, and PulseFlow authority.",
+        "action": "Keep both repository change requests synchronized when the protocol changes.",
+        "authority": "prd/16-pulseflow-live-design.md §Cross-references",
+        "live": "All local links resolve; the PulseFlow reference is intentionally cross-repository.",
+        "register": "CR-2026-09-04-pulseflow-live-design"
+      },
+      {
+        "id": "16-pulseflow-live-design#open-questions",
+        "health": "needs decision",
+        "covers": "Tracks gateway shape, generic source acceptance, and first-release web scope.",
+        "action": "Resolve during the corresponding rollout slice without weakening the fixed security outcomes.",
+        "authority": "prd/16-pulseflow-live-design.md §Open questions",
+        "live": "The questions do not block the local deterministic host proof.",
+        "register": "CR-2026-09-04-pulseflow-live-design"
+      },
+      {
+        "id": "20-acceptance-criteria/pulseflow-live-design#ac-pcld-01-capability-skew",
+        "health": "planned",
+        "covers": "Older and newer clients and servers retain ordinary Preview and expose live design only when compatible.",
+        "action": "Add contracts and mixed-version fixtures.",
+        "authority": "prd/20-acceptance-criteria/pulseflow-live-design.md §AC-PCLD-01-capability-skew",
+        "live": "No live-design capability exists yet.",
+        "register": "R-2026-09-04-pulseflow-live-design"
+      },
+      {
+        "id": "20-acceptance-criteria/pulseflow-live-design#ac-pcld-02-adapter-handshake",
+        "health": "planned",
+        "covers": "Binds protocol, origin, nonce, environment, thread, tab, document, actor, permission, and operation identity.",
+        "action": "Test valid, stale, replayed, foreign-origin, and oversized messages.",
+        "authority": "prd/20-acceptance-criteria/pulseflow-live-design.md §AC-PCLD-02-adapter-handshake",
+        "live": "The page adapter and handshake are unimplemented.",
+        "register": "D-2026-09-04-live-design-transport"
+      },
+      {
+        "id": "20-acceptance-criteria/pulseflow-live-design#ac-pcld-03-tab-and-environment-binding",
+        "health": "planned",
+        "covers": "Prevents cross-tab and cross-environment event delivery and invalidates stale bindings.",
+        "action": "Add multi-environment and multi-tab broker fixtures.",
+        "authority": "prd/20-acceptance-criteria/pulseflow-live-design.md §AC-PCLD-03-tab-and-environment-binding",
+        "live": "Existing Preview tabs provide the host identity; live session binding is planned.",
+        "register": "D-2026-09-04-live-design-transport"
+      },
+      {
+        "id": "20-acceptance-criteria/pulseflow-live-design#ac-pcld-04-complete-interactive-controls",
+        "health": "planned",
+        "covers": "Gates every picker, context, variant, tuning, steering, text, acceptance, discard, stop, progress, and recovery control.",
+        "action": "Run the keyboard and pointer journey against a deterministic PulseFlow fixture.",
+        "authority": "prd/20-acceptance-criteria/pulseflow-live-design.md §AC-PCLD-04-complete-interactive-controls",
+        "live": "The full interaction set is specified but unimplemented.",
+        "register": "R-2026-09-04-pulseflow-live-design"
+      },
+      {
+        "id": "20-acceptance-criteria/pulseflow-live-design#ac-pcld-05-preview-features-preserved",
+        "health": "planned",
+        "covers": "Protects viewport, appearance, refresh, screenshot, recording, annotation, and pop-out behavior.",
+        "action": "Keep the focused Preview regression suite release-blocking.",
+        "authority": "prd/20-acceptance-criteria/pulseflow-live-design.md §AC-PCLD-05-preview-features-preserved",
+        "live": "The protected Preview behaviors exist today.",
+        "register": "R-2026-09-04-pulseflow-live-design"
+      },
+      {
+        "id": "20-acceptance-criteria/pulseflow-live-design#ac-pcld-06-skill-picker-parity",
+        "health": "planned",
+        "covers": "Keeps the root Impeccable skill and all 23 commands discoverable without a partial local metadata copy.",
+        "action": "Pin upstream metadata and add provider discovery and composer picker fixtures.",
+        "authority": "prd/20-acceptance-criteria/pulseflow-live-design.md §AC-PCLD-06-skill-picker-parity",
+        "live": "A composer skill picker exists; the pinned Impeccable integration is planned.",
+        "register": "G-2026-09-04-impeccable-windows-live-baseline"
+      },
+      {
+        "id": "20-acceptance-criteria/pulseflow-live-design#ac-pcld-07-explicit-accept",
+        "health": "planned",
+        "covers": "Requires direct user acceptance, exact session and variant identity, idempotency, and authoritative PulseFlow receipts.",
+        "action": "Test double-click, reconnect, timeout, denial, and stale revision paths.",
+        "authority": "prd/20-acceptance-criteria/pulseflow-live-design.md §AC-PCLD-07-explicit-accept",
+        "live": "No PulseFlow transaction path exists in Pulse Code.",
+        "register": "D-2026-09-04-pulseflow-preview-host"
+      },
+      {
+        "id": "20-acceptance-criteria/pulseflow-live-design#ac-pcld-08-uncertain-outcome-reconciliation",
+        "health": "planned",
+        "covers": "Prevents duplicate Accept or Discard after transport uncertainty.",
+        "action": "Add boundary fault injection and idempotency reconciliation fixtures.",
+        "authority": "prd/20-acceptance-criteria/pulseflow-live-design.md §AC-PCLD-08-uncertain-outcome-reconciliation",
+        "live": "The proposed broker owns this behavior; it is unimplemented.",
+        "register": "D-2026-09-04-live-design-transport"
+      },
+      {
+        "id": "20-acceptance-criteria/pulseflow-live-design#ac-pcld-09-local-and-private-routing",
+        "health": "planned",
+        "covers": "Routes environment-port targets to the correct local or private environment without changing another session.",
+        "action": "Extend resolver fixtures and run real local and private host checks.",
+        "authority": "prd/20-acceptance-criteria/pulseflow-live-design.md §AC-PCLD-09-local-and-private-routing",
+        "live": "The underlying environment-host substitution exists.",
+        "register": "R-2026-09-04-pulseflow-live-design"
+      },
+      {
+        "id": "20-acceptance-criteria/pulseflow-live-design#ac-pcld-10-public-remote-gateway",
+        "health": "blocked",
+        "covers": "Requires an authenticated exact-target gateway for public or relay-only environments and rejects raw-port exposure.",
+        "action": "Implement and security-review the gateway before public remote support.",
+        "authority": "prd/20-acceptance-criteria/pulseflow-live-design.md §AC-PCLD-10-public-remote-gateway",
+        "live": "The current resolver explicitly reports this gateway as missing.",
+        "register": "G-2026-09-04-public-preview-gateway"
+      },
+      {
+        "id": "20-acceptance-criteria/pulseflow-live-design#ac-pcld-11-focus-and-accessibility",
+        "health": "planned",
+        "covers": "Makes page and host focus deterministic across pointer, keyboard, screen reader, Escape, and 200 percent zoom.",
+        "action": "Add the browser focus matrix and accessibility scan.",
+        "authority": "prd/20-acceptance-criteria/pulseflow-live-design.md §AC-PCLD-11-focus-and-accessibility",
+        "live": "Existing Preview focus behavior is the baseline; live controls are planned.",
+        "register": "R-2026-09-04-pulseflow-live-design"
+      },
+      {
+        "id": "20-acceptance-criteria/pulseflow-live-design#ac-pcld-12-bounds-and-redaction",
+        "health": "planned",
+        "covers": "Applies schemas, limits, origin checks, and redaction before page data reaches state, logs, prompts, or receipts.",
+        "action": "Add property-based contracts, secret canaries, and oversized payload fixtures.",
+        "authority": "prd/20-acceptance-criteria/pulseflow-live-design.md §AC-PCLD-12-bounds-and-redaction",
+        "live": "Existing evidence caps are reusable; the live-design boundary is unimplemented.",
+        "register": "D-2026-09-04-live-design-transport"
+      },
+      {
+        "id": "20-acceptance-criteria/pulseflow-live-design#ac-pcld-13-mobile-honesty",
+        "health": "planned",
+        "covers": "Limits mobile to read-only status and handoff when it lacks pointer and Preview host capability.",
+        "action": "Add capability-skew UI tests and avoid rendering inactive authoring controls.",
+        "authority": "prd/20-acceptance-criteria/pulseflow-live-design.md §AC-PCLD-13-mobile-honesty",
+        "live": "Mobile shares capability patterns but has no live-design status surface.",
+        "register": "R-2026-09-04-pulseflow-live-design"
+      },
+      {
+        "id": "20-acceptance-criteria/pulseflow-live-design#ac-pcld-14-end-to-end-host-proof",
+        "health": "blocked",
+        "covers": "Gates the real nested target, progressive variants, tune or steer, accept, undo, repeat, discard, and clean teardown journey.",
+        "action": "Run only after the PulseFlow adapter exists and the upstream Windows baseline is green or explicitly constrained.",
+        "authority": "prd/20-acceptance-criteria/pulseflow-live-design.md §AC-PCLD-14-end-to-end-host-proof",
+        "live": "PulseFlow is specification-only, so no end-to-end product can run today.",
+        "register": "G-2026-09-04-pulseflow-adapter-unimplemented; G-2026-09-04-impeccable-windows-live-baseline"
+      },
+      {
+        "id": "20-acceptance-criteria/pulseflow-live-design#open-questions",
+        "health": "reference",
+        "covers": "Records that gateway shape remains an implementation choice while its required security outcome is fixed.",
+        "action": "Choose the gateway mechanism during implementation review.",
+        "authority": "prd/20-acceptance-criteria/pulseflow-live-design.md §Open questions",
+        "live": "No unresolved acceptance outcome remains.",
+        "register": "CR-2026-09-04-pulseflow-live-design"
+      },
+      {
+        "id": "16-pulseflow-live-design#hosted-live-surface-parity",
+        "health": "proposed",
+        "covers": "Maps the complete pinned live chrome, copy workflow, controls, errors, protocol lifecycle, and isolation boundary between the Preview host and PulseFlow page.",
+        "action": "Keep the cross-repository registry fixture release-blocking as upstream evolves.",
+        "authority": "prd/16-pulseflow-live-design.md §Hosted live surface parity",
+        "live": "The underlying Preview host exists; the joint live-surface contract is unimplemented.",
+        "register": "AC-PCLD-04; AC-PCLD-15; AC-PCLD-16"
+      },
+      {
+        "id": "20-acceptance-criteria/pulseflow-live-design#ac-pcld-15-copy-edit-apply-recovery",
+        "health": "planned",
+        "covers": "Gates page-scoped copy Save, Cancel, Apply, discard, repair, rollback, idempotency, and authority boundaries.",
+        "action": "Add browser and broker fault fixtures after the PulseFlow document adapter exists.",
+        "authority": "prd/20-acceptance-criteria/pulseflow-live-design.md §AC-PCLD-15-copy-edit-apply-recovery",
+        "live": "The host relay and PulseFlow copy transaction path are unimplemented.",
+        "register": "G-2026-09-04-pulseflow-adapter-unimplemented"
+      },
+      {
+        "id": "20-acceptance-criteria/pulseflow-live-design#ac-pcld-16-live-registry-parity",
+        "health": "planned",
+        "covers": "Fails intake when a pinned command, UI surface, action, event, phase, or parameter kind lacks an explicit host mapping.",
+        "action": "Implement the exact cross-repository registry snapshot test before dependency intake.",
+        "authority": "prd/20-acceptance-criteria/pulseflow-live-design.md §AC-PCLD-16-live-registry-parity",
+        "live": "The audited upstream registries are pinned in the proposal; no automated parity test exists.",
+        "register": "G-2026-09-04-impeccable-windows-live-baseline"
       }
     ]
   },

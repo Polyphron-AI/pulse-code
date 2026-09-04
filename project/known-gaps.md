@@ -2,6 +2,45 @@
 
 ## Open
 
+### G-2026-09-04-pulseflow-adapter-unimplemented (high)
+
+- **Summary:** PulseFlow is currently a specification repository. The page handshake, stable node
+  identity, variant service, document adapter, transaction receipts, and chrome-free Preview route
+  required by this integration do not exist as running software.
+- **Impact:** Pulse Code can specify and later implement its host boundary, but it cannot run a real
+  PulseFlow live-design session until the PulseFlow R9 implementation reaches the host-proof gate.
+- **Proposed resolution:** Implement the PulseFlow `PulseFlowDocumentAdapter` and deterministic host
+  fixture first, then use that fixture for the Pulse Code local Preview slice before gateway work.
+- **Artifacts:** Pulse Code `prd/16-pulseflow-live-design.md`; PulseFlow
+  `prd/21-design-intelligence.md` and `prd/20-acceptance-criteria/AC-P-design-intelligence.md`.
+
+### G-2026-09-04-public-preview-gateway (high)
+
+- **Summary:** The existing Preview target resolver supports local and directly reachable private
+  environment hosts but explicitly rejects public environment addresses because an authenticated
+  Preview gateway is not implemented.
+- **Impact:** Local desktop feasibility is high, but a public hosted or relay-only PulseFlow dev
+  server cannot safely run inside Pulse Code Preview today.
+- **Proposed resolution:** Implement an environment-side gateway bound to user, environment, tab,
+  exact target, origin, expiry, and byte limits; complete SSRF, replay, backpressure, reconnect, and
+  redaction review before enabling it.
+- **Artifacts:** `apps/server/src/mcp/browserTargetResolver.ts`,
+  `prd/20-acceptance-criteria/pulseflow-live-design.md`, and
+  `tool-flow/pulseflow-live-design.md`.
+
+### G-2026-09-04-impeccable-windows-live-baseline (high)
+
+- **Summary:** At upstream Impeccable commit `4c5243fcd42d39c1fc281adcaf10be0913095f74`,
+  `bun run test:live` reports 900 tests with 862 passing, 35 failing, and 3 skipped on Windows.
+  Failures include Windows path assumptions and source-shape assertions.
+- **Impact:** The upstream CLI and protocol are suitable reuse candidates, but PulseFlow cannot claim
+  full maintained parity or a release-ready Windows picker while this pinned baseline is red.
+- **Proposed resolution:** Classify each failure as platform-only, fixture drift, or behavior defect;
+  patch or constrain the pinned compatibility layer; and require a green Windows matrix before the
+  integrated release gate.
+- **Artifacts:** upstream Impeccable `skill/scripts/command-metadata.json`, `live/`, and PulseFlow
+  `prd/21-design-intelligence.md`.
+
 ### G-2026-08-21-desktop-identity-not-isolated — high
 
 - **Summary:** Pulse-only desktop identifiers, state roots, protocols, updater coordinates, and
@@ -16,19 +55,6 @@
   `prd/20-acceptance-criteria/desktop-product-line-boundary.md`, `apps/desktop/src/app/`,
   `apps/desktop/src/electron/ElectronProtocol.ts`, `scripts/build-desktop-artifact.ts`, and local
   candidate `release/Pulse-Code-0.0.33-x64.exe` (SHA-256 `A87DB57...F313513`).
-
-### G-2026-08-21-desktop-boundary-presentation-metadata — high
-
-- **Summary:** The ProductOps workspace renderer cannot present the new desktop-boundary PRD and
-  acceptance sections because their presentation registry lacks `health`, `covers`, `action`,
-  `authority`, `live`, and `register` fields.
-- **Impact:** The canonical Markdown PRD is valid and implementation can proceed, but the unified
-  generated workspace cannot expose or audit these sections yet.
-- **Proposed resolution:** Add renderer-compatible presentation metadata for the new PRD sections or
-  define an approved renderer default, then rerun `workspace_render.py --check`; do not hand-edit the
-  generated workspace.
-- **Artifacts:** `prd/11-product-line-and-distribution-boundary.md`,
-  `prd/20-acceptance-criteria/desktop-product-line-boundary.md`, ProductOps workspace renderer.
 
 ### G-2026-08-21-windows-wsl-node-pty-prebuild — medium
 
@@ -100,6 +126,18 @@
 
 ## Resolved
 
+### G-2026-08-21-desktop-boundary-presentation-metadata (high)
+
+- **Resolution:** Added explicit `health`, `covers`, `action`, `authority`, `live`, and `register`
+  metadata for every currently derived PRD row, including the previously missing Scheduled Chats
+  rows and the new PulseFlow live-design rows, then regenerated the stable workspace viewer and JSON
+  authority.
+- **Outcome:** `workspace_render.py --check` reports no PRD presentation gap. Its remaining
+  `view-unavailable` notices are non-blocking absent-view disclosures for sitemap, roadmap, Content
+  Bible, and SEO.
+- **Artifacts:** `project/workspace-overlay.json`, `project/workspace.json`, and
+  `project/workspace.html`.
+
 ### G-2026-08-20-integration-transport-bridge-unassigned — medium
 
 - **Resolution:** T11 added seven typed integration RPC methods, authorization policy, authenticated
@@ -123,4 +161,4 @@
 
 ---
 
-**Created:** 2026-08-19 . **Last opened:** 2026-08-21 . **Last edited:** 2026-08-21 . **Status:** active . **Owner:** Product
+**Created:** 2026-08-19 . **Last opened:** 2026-09-04 . **Last edited:** 2026-09-04 . **Status:** active . **Owner:** Product

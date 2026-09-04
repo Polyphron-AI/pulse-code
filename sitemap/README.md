@@ -4,7 +4,8 @@ This directory records user-visible surfaces and navigation contracts. It descri
 native surfaces evidenced in the repository; proposed integration behavior is marked explicitly.
 
 - [Integration surfaces](integrations.md)
+- [PulseFlow live-design surfaces](pulseflow-live-design.md)
 
 ---
 
-**Created:** 2026-08-19 . **Last opened:** 2026-08-19 . **Last edited:** 2026-08-19 . **Status:** draft . **Owner:** Product
+**Created:** 2026-08-19 . **Last opened:** 2026-09-04 . **Last edited:** 2026-09-04 . **Status:** draft . **Owner:** Product

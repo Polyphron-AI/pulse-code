@@ -2,8 +2,27 @@
 
 ## Proposed
 
-None currently. OAuth release, shared-server ownership, externally managed credentials, and later
-provider implementation remain open roadmap gates rather than locked decisions.
+### D-2026-09-04-pulseflow-preview-host
+
+- **Decision:** Keep PulseFlow in its independent repository and host its live-design experience in
+  the existing thread-bound Pulse Code Preview. PulseFlow owns page identity, picker semantics,
+  variants, validation, document transactions, and undo; Pulse Code owns the browser, environment,
+  tab, capability negotiation, transport, capture, and receipt presentation.
+- **Why:** This preserves each product's source of truth while reusing Preview's proven browser and
+  environment controls. Copying PulseFlow into Pulse Code would create conflicting ownership and a
+  second document mutation path.
+- **Status:** proposed on 2026-09-04; product and engineering sign-off pending.
+
+### D-2026-09-04-live-design-transport
+
+- **Decision:** Add an optional, versioned live-design capability to the existing Preview broker.
+  Bind every session to the user, environment, thread, tab, exact origin, nonce, server epoch, and
+  expiry. Local and directly reachable private targets may use the current host path; public or
+  relay-only targets require an authenticated environment-side gateway and must never publish a raw
+  dev-server port.
+- **Why:** The additive contract preserves mixed-version clients and servers while preventing tab
+  confusion, replay, origin spoofing, and browser-local `localhost` mistakes.
+- **Status:** proposed on 2026-09-04; gateway design review and threat model pending.
 
 ## Locked
 
@@ -80,4 +99,4 @@ provider implementation remain open roadmap gates rather than locked decisions.
 
 ---
 
-**Created:** 2026-08-19 . **Last opened:** 2026-08-21 . **Last edited:** 2026-08-21 . **Status:** stable . **Owner:** Product
+**Created:** 2026-08-19 . **Last opened:** 2026-09-04 . **Last edited:** 2026-09-04 . **Status:** active . **Owner:** Product

@@ -20,3 +20,12 @@ endpoints:
   - id: agent-action-preview
     state: planned
     source: workflows/use-integration-context.md
+  - id: preview-live-design-contract
+    state: planned
+    source: prd/16-pulseflow-live-design.md
+  - id: preview-live-design-broker
+    state: planned
+    source: tool-flow/pulseflow-live-design.md
+  - id: preview-public-gateway
+    state: planned
+    source: prd/20-acceptance-criteria/pulseflow-live-design.md

@@ -1,4 +1,6 @@
 decisions:
+  - { id: D-2026-09-04-pulseflow-preview-host, status: proposed, source: project/decisions.md }
+  - { id: D-2026-09-04-live-design-transport, status: proposed, source: project/decisions.md }
   - { id: D-2026-08-21-upstream-t3-fidelity, status: locked, source: project/decisions.md }
   - { id: D-2026-08-21-selective-pulse-downstream, status: locked, source: project/decisions.md }
   - { id: D-2026-08-21-desktop-identity-isolation, status: locked, source: project/decisions.md }

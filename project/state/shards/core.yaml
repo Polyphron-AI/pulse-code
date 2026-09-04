@@ -1,8 +1,9 @@
 meta:
   project: "Pulse Code"
-  snapshot: 2026-08-21
+  snapshot: 2026-09-04
   status: draft
 product:
   purpose: "A minimal, remote-ready, multi-surface GUI for coding agents."
   integration_outcome: "Connect once per appropriate scope and use authorized external work context safely across clients."
+  live_design_outcome: "Run PulseFlow's complete Impeccable design loop in a thread-bound Preview while PulseFlow remains the document authority."
   authority: "prd/README.md"

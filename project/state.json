@@ -1,6 +1,6 @@
 {
   "schema": "product-ops.state/v1",
-  "last_cr_id": "CR-2026-08-21-desktop-product-line-boundary",
-  "note": "CR-2026-08-21-desktop-product-line-boundary is implemented at 448ead486 and sealed by prd-approved-2026-08-21-desktop-boundary; Windows installation evidence and macOS/Linux release evidence remain tracked gaps.",
-  "updated_at": "2026-08-21"
+  "last_cr_id": "CR-2026-09-04-pulseflow-live-design",
+  "note": "CR-2026-09-04-pulseflow-live-design is proposed. Local Preview hosting is feasible; the PulseFlow adapter, Windows-clean upstream baseline, and authenticated public Preview gateway remain implementation gates.",
+  "updated_at": "2026-09-04"
 }
