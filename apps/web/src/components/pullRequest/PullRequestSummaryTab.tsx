@@ -1,3 +1,4 @@
+import { pullRequestLabelColor } from "./pullRequestList.logic";
 import type {
   EnvironmentId,
   PullRequestActor,
@@ -65,12 +66,6 @@ import { sectionCollapseAnchorScrollTop } from "./pullRequestSummaryScroll.logic
 /** One reviewer, however a host happens to have cased their login this time. */
 function reviewerKey(login: string): string {
   return login.toLowerCase();
-}
-
-/** A host colour only when it is one, so a malformed value falls back to the neutral dot. */
-function labelDotColor(color: string | null): string | null {
-  const hex = color?.trim().replace(/^#/, "") ?? "";
-  return /^[0-9a-fA-F]{6}$/.test(hex) ? `#${hex}` : null;
 }
 
 /** The avatar carries the attribution alone; who it is arrives on hover, like the reviewer row. */
