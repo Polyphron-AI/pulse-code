@@ -694,7 +694,11 @@ items:
     blocked_by:
       - R-2026-08-19-integration-foundation
     metric:
-      { name: complete PulseFlow live-design journeys finished without leaving Preview, baseline: 0, target: 95 }
+      {
+        name: complete PulseFlow live-design journeys finished without leaving Preview,
+        baseline: 0,
+        target: 95,
+      }
     status: proposed
     history:
       - "2026-09-04 shaped in later from the cross-repository Impeccable and PulseFlow feasibility pass; promotion requires a working PulseFlow adapter fixture and explicit roadmap capacity."

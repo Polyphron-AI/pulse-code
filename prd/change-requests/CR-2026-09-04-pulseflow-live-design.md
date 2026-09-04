@@ -14,6 +14,7 @@ files_touched:
   - workflows/run-pulseflow-live-design.md
   - tool-flow/README.md
   - tool-flow/pulseflow-live-design.md
+  - vite.config.ts
   - project/decisions.md
   - project/known-gaps.md
   - project/state.json
@@ -59,6 +60,8 @@ validation, document mutation, receipts, and undo.
   carry the same scope and dependencies.
 - Workspace presentation metadata now covers every currently derived PRD row, which closes the
   stale presentation gap and allows the stable viewer and JSON authority to regenerate.
+- The formatter excludes the two generated workspace outputs, leaving their byte-stable form under
+  the ProductOps renderer instead of creating a formatter-versus-freshness loop.
 
 ## Locked decisions touched
 

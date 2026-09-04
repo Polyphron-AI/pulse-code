@@ -47,32 +47,32 @@ All 23 Impeccable commands and the root router remain discoverable through the e
 
 Pulse Code must not reduce the live experience to an Accept toolbar. The page adapter and Preview host jointly preserve the pinned upstream surface registry:
 
-| Surface | Hosted behavior | Primary owner |
-|---|---|---|
-| `global-bottom-bar` | Agent status; Pick, Insert, Detect with count, DESIGN.md, text or supported voice Steer, and Exit | PulseFlow page; Pulse Code transports status and focus |
-| `element-selection-chrome` + `action-picker` | Hover outline, target and clear; Freeform (`impeccable`), Bolder (`bolder`), Quieter (`quieter`), Distill (`distill`), Polish (`polish`), Typeset (`typeset`), Colorize (`colorize`), Layout (`layout`), Adapt (`adapt`), Animate (`animate`), Delight (`delight`), and Overdrive (`overdrive`) in pinned order; text or supported voice prompt; count 1 through 8; and Go | PulseFlow page |
-| `insert-mode-chrome` | Before, after, schema-valid inside, resizable placeholder, prompt or annotation-only creation, and Create | PulseFlow page |
-| `annotation-chrome` | Comment pins, editable comment text, strokes, clear, and annotated screenshot evidence | PulseFlow page plus existing Preview capture boundary |
-| `edit-chrome` + `pending-copy-edit-dock` | Edit badge, Save, Cancel, per-page staged count, Apply, discard, busy, Keep fixing, and Rollback | PulseFlow page; Pulse Code relays the exact action and receipt |
-| `generating-row` | Non-regressing phase, arrived progress, disabled conflicts, and honest agent or provider failure | Shared presentation of PulseFlow status |
-| `variant-cycling-row` | Original, previous, clickable dots, count, next, Tune, Accept, Discard, and keyboard cycle | Shared toolbar; PulseFlow state is authoritative |
-| `variant-params-panel` | Zero through four named range, steps, or toggle controls per variant; accepted values travel with the exact variant | PulseFlow page or host projection of typed state |
-| `saving-confirmed-rows` | Applying, duplicate lock, confirmation, typed rejection, and uncertain-outcome reconciliation | Pulse Code host and broker |
-| `design-system-panel` | Visual and Raw tabs, current tokens and components, missing or stale guidance, close, and copyable values where present | PulseFlow page |
-| `toasts-and-errors` | Bounded toasts and a persistent failed-variant card with Retry and Dismiss | Shared; a dismissed failure never becomes valid |
-| `css-isolation-boundary` | Host and page chrome stay unpickable and cannot corrupt each other's CSS, event, keyboard, capture, or annotation boundaries | Both |
+| Surface                                      | Hosted behavior                                                                                                                                                                                                                                                                                                                                                            | Primary owner                                                  |
+| -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| `global-bottom-bar`                          | Agent status; Pick, Insert, Detect with count, DESIGN.md, text or supported voice Steer, and Exit                                                                                                                                                                                                                                                                          | PulseFlow page; Pulse Code transports status and focus         |
+| `element-selection-chrome` + `action-picker` | Hover outline, target and clear; Freeform (`impeccable`), Bolder (`bolder`), Quieter (`quieter`), Distill (`distill`), Polish (`polish`), Typeset (`typeset`), Colorize (`colorize`), Layout (`layout`), Adapt (`adapt`), Animate (`animate`), Delight (`delight`), and Overdrive (`overdrive`) in pinned order; text or supported voice prompt; count 1 through 8; and Go | PulseFlow page                                                 |
+| `insert-mode-chrome`                         | Before, after, schema-valid inside, resizable placeholder, prompt or annotation-only creation, and Create                                                                                                                                                                                                                                                                  | PulseFlow page                                                 |
+| `annotation-chrome`                          | Comment pins, editable comment text, strokes, clear, and annotated screenshot evidence                                                                                                                                                                                                                                                                                     | PulseFlow page plus existing Preview capture boundary          |
+| `edit-chrome` + `pending-copy-edit-dock`     | Edit badge, Save, Cancel, per-page staged count, Apply, discard, busy, Keep fixing, and Rollback                                                                                                                                                                                                                                                                           | PulseFlow page; Pulse Code relays the exact action and receipt |
+| `generating-row`                             | Non-regressing phase, arrived progress, disabled conflicts, and honest agent or provider failure                                                                                                                                                                                                                                                                           | Shared presentation of PulseFlow status                        |
+| `variant-cycling-row`                        | Original, previous, clickable dots, count, next, Tune, Accept, Discard, and keyboard cycle                                                                                                                                                                                                                                                                                 | Shared toolbar; PulseFlow state is authoritative               |
+| `variant-params-panel`                       | Zero through four named range, steps, or toggle controls per variant; accepted values travel with the exact variant                                                                                                                                                                                                                                                        | PulseFlow page or host projection of typed state               |
+| `saving-confirmed-rows`                      | Applying, duplicate lock, confirmation, typed rejection, and uncertain-outcome reconciliation                                                                                                                                                                                                                                                                              | Pulse Code host and broker                                     |
+| `design-system-panel`                        | Visual and Raw tabs, current tokens and components, missing or stale guidance, close, and copyable values where present                                                                                                                                                                                                                                                    | PulseFlow page                                                 |
+| `toasts-and-errors`                          | Bounded toasts and a persistent failed-variant card with Retry and Dismiss                                                                                                                                                                                                                                                                                                 | Shared; a dismissed failure never becomes valid                |
+| `css-isolation-boundary`                     | Host and page chrome stay unpickable and cannot corrupt each other's CSS, event, keyboard, capture, or annotation boundaries                                                                                                                                                                                                                                               | Both                                                           |
 
 First selection may prefetch bounded page context. Generate, plan and progress, mount result, checkpoint, staged edit, Apply, Steer, accept, discard, completion, agent failure, reload, and reconnect events retain their ordered session identity. A pinned upstream command, surface, action, event, phase, or parameter-kind change fails compatibility review until both repositories map it or carry an explicit waiver.
 
 The host manifest maps the exact pinned protocol vocabulary:
 
-| Family | Exact pinned values | Host rule |
-|---|---|---|
-| Browser requests | `generate`, `accept`, `discard`, `checkpoint`, `agent_phase`, `variant_mounted`, `variant_mount_failed`, `exit`, `prefetch`, `manual_edits`, `steer`, `carbonize_cleanup` | Forward only after session, capability, schema, sequence, size, and origin validation. Carbonize is generic-source-only. |
-| Journal additions | `variant_plan`, `detector_waivers`, `variants_ready`, `agent_done`, `accept_intent`, `manual_edit_apply`, `steer_done`, `discarded`, `complete`, `agent_error` | Project bounded status and receipts without duplicating the PulseFlow journal. |
-| Agent progress | `picked_up`, `scaffolding`, `source_ready`, `scaffold_fallback`, `generation_ready`, `first_reviewable`, `second_reviewable`, `all_variants_ready` | Render monotonic progress and do not infer success from transport delivery. |
-| Session phases | `new`, `generate_requested`, `variants_ready`, `carbonize_required`, `carbonize_cleanup_requested`, `manual_edit_apply_requested`, `steer_requested`, `steer_done`, `accept_requested`, `discard_requested`, `discarded`, `completed`, `agent_error` | Map every phase to enabled controls and recovery. Carbonize phases remain generic-source-only. |
-| Parameters | `range`, `steps`, `toggle` | Render or relay named values within the zero-through-four budget and bind them to the selected variant. |
+| Family            | Exact pinned values                                                                                                                                                                                                                                  | Host rule                                                                                                                |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Browser requests  | `generate`, `accept`, `discard`, `checkpoint`, `agent_phase`, `variant_mounted`, `variant_mount_failed`, `exit`, `prefetch`, `manual_edits`, `steer`, `carbonize_cleanup`                                                                            | Forward only after session, capability, schema, sequence, size, and origin validation. Carbonize is generic-source-only. |
+| Journal additions | `variant_plan`, `detector_waivers`, `variants_ready`, `agent_done`, `accept_intent`, `manual_edit_apply`, `steer_done`, `discarded`, `complete`, `agent_error`                                                                                       | Project bounded status and receipts without duplicating the PulseFlow journal.                                           |
+| Agent progress    | `picked_up`, `scaffolding`, `source_ready`, `scaffold_fallback`, `generation_ready`, `first_reviewable`, `second_reviewable`, `all_variants_ready`                                                                                                   | Render monotonic progress and do not infer success from transport delivery.                                              |
+| Session phases    | `new`, `generate_requested`, `variants_ready`, `carbonize_required`, `carbonize_cleanup_requested`, `manual_edit_apply_requested`, `steer_requested`, `steer_done`, `accept_requested`, `discard_requested`, `discarded`, `completed`, `agent_error` | Map every phase to enabled controls and recovery. Carbonize phases remain generic-source-only.                           |
+| Parameters        | `range`, `steps`, `toggle`                                                                                                                                                                                                                           | Render or relay named values within the zero-through-four budget and bind them to the selected variant.                  |
 
 ## Host capability contract
 
@@ -80,14 +80,28 @@ Servers advertise an additive optional capability:
 
 ```ts
 type PreviewLiveDesignCapability = {
-  protocolVersions: readonly ["1"]
+  protocolVersions: readonly ["1"];
   operations: readonly (
-    | "start" | "status" | "target" | "insert" | "annotate" | "prefetch"
-    | "generate" | "preview" | "tune" | "steer" | "stageText"
-    | "applyText" | "discardText" | "retryMount" | "accept" | "discard" | "stop"
-  )[]
-  transports: readonly ("direct" | "private-network" | "gateway")[]
-}
+    | "start"
+    | "status"
+    | "target"
+    | "insert"
+    | "annotate"
+    | "prefetch"
+    | "generate"
+    | "preview"
+    | "tune"
+    | "steer"
+    | "stageText"
+    | "applyText"
+    | "discardText"
+    | "retryMount"
+    | "accept"
+    | "discard"
+    | "stop"
+  )[];
+  transports: readonly ("direct" | "private-network" | "gateway")[];
+};
 ```
 
 Every request is scoped by `environmentId`, thread, Preview tab, adapter origin, session ID, actor, and sequence. Every mutation-like request also carries an idempotency key. Results are runtime-validated and bounded before they enter client state or agent output.
@@ -96,27 +110,27 @@ The agent toolkit exposes narrow operations such as `preview_live_design_start`,
 
 ## Ownership
 
-| Concern | Pulse Code owns | PulseFlow owns |
-|---|---|---|
-| Browser | tab, webview, viewport, navigation, capture, pop-out, automation host | page rendering and authoring-only node markers |
-| Session routing | environment, thread, tab, origin, reconnect, capability skew | site, page, document revision, design phase, checkpoints |
-| Skills | discovery, picker, invocation context, tool delivery | target-specific context and operation adapter |
-| Picker | pointer transport, host chrome exclusion, focus coordination | pickable rules, stable node identity, placement validity |
-| Variants | progress and control presentation | generation, variation axes, validation, ephemeral revisions |
-| Mutation | explicit user action forwarding and receipt display | permissions, revision guard, atomic transaction, undo, audit |
-| Secrets | environment auth and browser-session credentials | model/provider and PulseFlow service credentials |
+| Concern         | Pulse Code owns                                                       | PulseFlow owns                                               |
+| --------------- | --------------------------------------------------------------------- | ------------------------------------------------------------ |
+| Browser         | tab, webview, viewport, navigation, capture, pop-out, automation host | page rendering and authoring-only node markers               |
+| Session routing | environment, thread, tab, origin, reconnect, capability skew          | site, page, document revision, design phase, checkpoints     |
+| Skills          | discovery, picker, invocation context, tool delivery                  | target-specific context and operation adapter                |
+| Picker          | pointer transport, host chrome exclusion, focus coordination          | pickable rules, stable node identity, placement validity     |
+| Variants        | progress and control presentation                                     | generation, variation axes, validation, ephemeral revisions  |
+| Mutation        | explicit user action forwarding and receipt display                   | permissions, revision guard, atomic transaction, undo, audit |
+| Secrets         | environment auth and browser-session credentials                      | model/provider and PulseFlow service credentials             |
 
 Pulse Code never stores a PulseFlow document, performs a design patch, or treats browser DOM as the source of truth.
 
 ## Transport and trust
 
-| Environment | Feasibility | Route | Release condition |
-|---|---|---|---|
-| Local desktop | High | Existing loopback port discovery and desktop Preview host | Adapter handshake and focused integration suite. |
-| Private-network remote | Medium to high | Existing environment-host substitution when directly reachable | Origin, TLS where applicable, reconnect, and latency verification. |
-| Public hosted or relay-only | Blocked today | New authenticated Preview gateway | Gateway must bind environment, user, tab, target port, origin, expiry, and byte limits. |
-| Web client | Conditional | Uses an automation-capable host attached to the environment | Show an actionable unavailable state when no host exists. |
-| Mobile | Read-only first release | Session status and deep link to web or desktop | No hidden webview or partial picker claim. |
+| Environment                 | Feasibility             | Route                                                          | Release condition                                                                       |
+| --------------------------- | ----------------------- | -------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Local desktop               | High                    | Existing loopback port discovery and desktop Preview host      | Adapter handshake and focused integration suite.                                        |
+| Private-network remote      | Medium to high          | Existing environment-host substitution when directly reachable | Origin, TLS where applicable, reconnect, and latency verification.                      |
+| Public hosted or relay-only | Blocked today           | New authenticated Preview gateway                              | Gateway must bind environment, user, tab, target port, origin, expiry, and byte limits. |
+| Web client                  | Conditional             | Uses an automation-capable host attached to the environment    | Show an actionable unavailable state when no host exists.                               |
+| Mobile                      | Read-only first release | Session status and deep link to web or desktop                 | No hidden webview or partial picker claim.                                              |
 
 The gateway must not publish a raw dev-server port. It terminates authenticated client traffic, opens the environment-side connection through the owning server, validates target and origin, applies request and stream limits, and preserves backpressure. Browser-local `localhost` is never rewritten as though it were the remote environment.
 

@@ -37,22 +37,22 @@
 
 ## Edge cases
 
-| Condition | Required response |
-|---|---|
-| Server lacks the capability | Keep Preview usable; show update-required guidance at the Live design entry point. |
-| Page lacks or mismatches the adapter | Keep ordinary Preview; show adapter version guidance without injecting a shim. |
-| No automation-capable host | Name the missing host and provide the supported handoff path. |
-| Local/private target cannot connect | Preserve the intended environment and show target diagnostics; do not fall back to another server. |
-| Public environment has no gateway | Return `gateway_required`; do not expose or guess a port. |
-| Tab navigates or origin changes | Invalidate the binding and require a new handshake. |
-| Page and host both want keyboard input | The focused page editable retains text keys; Escape unwinds annotation, configuration, selection, then session. |
-| Variant generation partly fails | Render valid variants and the failed slot reason. |
-| Variant mount fails | Keep the variant invalid and offer Retry or Dismiss without enabling Accept. |
-| Copy Apply fails or disconnects | Preserve the per-page staged batch and reconcile before Keep fixing, Rollback, or another Apply. |
-| Accept result is uncertain | Reconcile by idempotency key before enabling another accept or retry. |
-| Permission or document revision changed | Show PulseFlow's typed denial or conflict; preserve intent for rebase or regeneration. |
-| Client disconnects | Mark reconnecting, keep the page visible, restore checkpointed state, and disable accept until reconciled. |
-| Mobile opens the thread | Show read-only session state and handoff to a capable web or desktop host. |
+| Condition                               | Required response                                                                                               |
+| --------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Server lacks the capability             | Keep Preview usable; show update-required guidance at the Live design entry point.                              |
+| Page lacks or mismatches the adapter    | Keep ordinary Preview; show adapter version guidance without injecting a shim.                                  |
+| No automation-capable host              | Name the missing host and provide the supported handoff path.                                                   |
+| Local/private target cannot connect     | Preserve the intended environment and show target diagnostics; do not fall back to another server.              |
+| Public environment has no gateway       | Return `gateway_required`; do not expose or guess a port.                                                       |
+| Tab navigates or origin changes         | Invalidate the binding and require a new handshake.                                                             |
+| Page and host both want keyboard input  | The focused page editable retains text keys; Escape unwinds annotation, configuration, selection, then session. |
+| Variant generation partly fails         | Render valid variants and the failed slot reason.                                                               |
+| Variant mount fails                     | Keep the variant invalid and offer Retry or Dismiss without enabling Accept.                                    |
+| Copy Apply fails or disconnects         | Preserve the per-page staged batch and reconcile before Keep fixing, Rollback, or another Apply.                |
+| Accept result is uncertain              | Reconcile by idempotency key before enabling another accept or retry.                                           |
+| Permission or document revision changed | Show PulseFlow's typed denial or conflict; preserve intent for rebase or regeneration.                          |
+| Client disconnects                      | Mark reconnecting, keep the page visible, restore checkpointed state, and disable accept until reconciled.      |
+| Mobile opens the thread                 | Show read-only session state and handoff to a capable web or desktop host.                                      |
 
 ## Post-conditions
 
