@@ -13,6 +13,7 @@ const layer = Layer.mergeAll(
   NodePathLayer.layer,
   Layer.succeed(ElectronShell.ElectronShell, {
     openExternal: () => Effect.succeed(true),
+    openSystemSettings: () => Effect.succeed(true),
     revealPath: (path) =>
       Effect.sync(() => {
         revealedPaths.push(path);

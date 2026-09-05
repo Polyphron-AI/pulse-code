@@ -669,7 +669,7 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
         "--arch",
         "x64",
         "--output",
-        "/stage/resources/browser-secret/t3-browser-secret",
+        (yield* Path.Path).join("/stage/resources", "browser-secret", "t3-browser-secret"),
       ]);
     }).pipe(
       Effect.provide(
