@@ -67,6 +67,7 @@ import {
 } from "../../hooks/useTheme";
 import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { usePrimarySettings, useUpdatePrimarySettings } from "../../hooks/useSettings";
+import { VoiceSettings } from "../../voice/VoiceSettings";
 import { useThreadActions } from "../../hooks/useThreadActions";
 import { useDesktopUpdateState } from "../../state/desktopUpdate";
 import {
@@ -1958,6 +1959,7 @@ export function GeneralSettingsPanel() {
   return (
     <SettingsPageContainer>
       <SettingsSection title="General">
+        <VoiceSettings />
         <SettingsRow
           {...searchableSetting("messages-while-working")}
           description="Queue starts a follow-up turn. Steer adjusts the turn already in progress."

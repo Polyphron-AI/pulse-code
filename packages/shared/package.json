@@ -3,6 +3,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./voiceShortcut": {
+      "types": "./src/voiceShortcut.ts",
+      "import": "./src/voiceShortcut.ts"
+    },
     "./themePalettes": {
       "types": "./src/themePalettes.ts",
       "import": "./src/themePalettes.ts"

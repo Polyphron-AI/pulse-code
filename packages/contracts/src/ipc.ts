@@ -1062,6 +1062,22 @@ export const DesktopPreviewAutomationWaitForInputSchema = Schema.Struct({
 });
 
 export interface DesktopBridge {
+  voice?: {
+    configure: (settings: {
+      shortcut: string;
+      globalEnabled: boolean;
+      hoverEnabled: boolean;
+    }) => Promise<void>;
+    publish: (status: { phase: string; message: string }) => Promise<void>;
+    deliver: (target: string, text: string) => Promise<void>;
+    onAction: (
+      listener: (action: {
+        kind: "toggle" | "cancel" | "error";
+        target: string | null;
+        message?: string;
+      }) => void,
+    ) => () => void;
+  };
   getAppBranding: () => DesktopAppBranding | null;
   /**
    * The OS locale as a BCP-47 tag, which the renderer cannot read for itself:

@@ -90,6 +90,8 @@ import { type ComposerCommandItem, ComposerCommandMenu } from "./ComposerCommand
 import { ComposerPendingApprovalActions } from "./ComposerPendingApprovalActions";
 import { CompactComposerControlsMenu } from "./CompactComposerControlsMenu";
 import { ComposerPrimaryActions } from "./ComposerPrimaryActions";
+import { ComposerVoiceButton } from "../../voice/ComposerVoiceButton";
+import { voiceCapture } from "../../voice/voiceCapture";
 import { ComposerPendingApprovalPanel } from "./ComposerPendingApprovalPanel";
 import { ComposerPendingUserInputPanel } from "./ComposerPendingUserInputPanel";
 import { ComposerPlanFollowUpBanner } from "./ComposerPlanFollowUpBanner";
@@ -392,6 +394,7 @@ const ComposerFooterModeControls = memo(function ComposerFooterModeControls(prop
 });
 
 const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(props: {
+  voiceControl?: ReactNode;
   compact: boolean;
   activeContextWindow: ReturnType<typeof deriveLatestContextWindowSnapshot>;
   activeThreadModelDisplayName: string | null;
@@ -429,25 +432,28 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
       {props.isPreparingWorktree ? (
         <span className="text-secondary-label text-xs">Preparing worktree...</span>
       ) : null}
-      <ComposerPrimaryActions
-        compact={props.compact}
-        pendingAction={props.pendingAction}
-        isRunning={props.isRunning}
-        showPlanFollowUpPrompt={props.showPlanFollowUpPrompt}
-        promptHasText={props.promptHasText}
-        isSendBusy={props.isSendBusy}
-        sendDisabledReason={props.sendDisabledReason}
-        isConnecting={props.isConnecting}
-        isEnvironmentUnavailable={props.isEnvironmentUnavailable}
-        isPreparingWorktree={props.isPreparingWorktree}
-        hasSendableContent={props.hasSendableContent}
-        preserveComposerFocusOnPointerDown={props.preserveComposerFocusOnPointerDown ?? false}
-        showSendWhileRunning={props.showSendWhileRunning ?? false}
-        busyBehavior={props.busyBehavior}
-        onPreviousPendingQuestion={props.onPreviousPendingQuestion}
-        onInterrupt={props.onInterrupt}
-        onImplementPlanInNewThread={props.onImplementPlanInNewThread}
-      />
+      <div className="flex flex-col items-end gap-1">
+        {props.voiceControl}
+        <ComposerPrimaryActions
+          compact={props.compact}
+          pendingAction={props.pendingAction}
+          isRunning={props.isRunning}
+          showPlanFollowUpPrompt={props.showPlanFollowUpPrompt}
+          promptHasText={props.promptHasText}
+          isSendBusy={props.isSendBusy}
+          sendDisabledReason={props.sendDisabledReason}
+          isConnecting={props.isConnecting}
+          isEnvironmentUnavailable={props.isEnvironmentUnavailable}
+          isPreparingWorktree={props.isPreparingWorktree}
+          hasSendableContent={props.hasSendableContent}
+          preserveComposerFocusOnPointerDown={props.preserveComposerFocusOnPointerDown ?? false}
+          showSendWhileRunning={props.showSendWhileRunning ?? false}
+          busyBehavior={props.busyBehavior}
+          onPreviousPendingQuestion={props.onPreviousPendingQuestion}
+          onInterrupt={props.onInterrupt}
+          onImplementPlanInNewThread={props.onImplementPlanInNewThread}
+        />
+      </div>
     </>
   );
 });
@@ -1839,6 +1845,10 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
 
   const submitComposer = useCallback(
     (event?: { preventDefault: () => void }) => {
+      if (!["idle", "error"].includes(voiceCapture.getSnapshot().phase)) {
+        event?.preventDefault();
+        return;
+      }
       if (noProviderAvailable || isSendDisabled) {
         event?.preventDefault();
         return;
@@ -3214,6 +3224,21 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                 className="flex shrink-0 flex-nowrap items-center justify-end gap-2"
               >
                 <ComposerFooterPrimaryActions
+                  voiceControl={
+                    pendingUserInputs.length === 0 && !isComposerApprovalState ? (
+                      <ComposerVoiceButton
+                        owner={JSON.stringify(composerDraftTarget)}
+                        disabled={
+                          isConnecting ||
+                          projectSelectionRequired ||
+                          environmentUnavailable !== null
+                        }
+                        insert={(text) =>
+                          insertComposerTextAtEnd(text, { ensureLeadingBoundary: true })
+                        }
+                      />
+                    ) : null
+                  }
                   compact={isComposerPrimaryActionsCompact}
                   activeContextWindow={activeContextWindow}
                   activeThreadModelDisplayName={activeThreadModelDisplayName}

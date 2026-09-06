@@ -28,6 +28,17 @@ function unwrapEnsureSshEnvironmentResult(result: unknown) {
 }
 
 contextBridge.exposeInMainWorld("desktopBridge", {
+  voice: {
+    configure: (settings) => ipcRenderer.invoke("desktop:voice:configure", settings),
+    publish: (status) => ipcRenderer.invoke("desktop:voice:publish", status),
+    deliver: (target, text) => ipcRenderer.invoke("desktop:voice:deliver", { target, text }),
+    onAction: (listener) => {
+      const handler = (_event: Electron.IpcRendererEvent, action: Parameters<typeof listener>[0]) =>
+        listener(action);
+      ipcRenderer.on("desktop:voice:action", handler);
+      return () => ipcRenderer.removeListener("desktop:voice:action", handler);
+    },
+  },
   getAppBranding: () => {
     const result = ipcRenderer.sendSync(IpcChannels.GET_APP_BRANDING_CHANNEL);
     if (typeof result !== "object" || result === null) {

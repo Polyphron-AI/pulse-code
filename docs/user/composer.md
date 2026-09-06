@@ -15,3 +15,7 @@ working**:
 
 The composer stays available while the agent works. Its send button is labeled **Queue message** or
 **Steer current turn** while a turn is active, matching the selected behavior.
+
+# Voice dictation
+
+The microphone above Send adds a Parakeet transcript to your draft. Ctrl+Shift+Space starts or stops recording. Configure the shortcut and Windows hover mode in Settings → General → Voice capture. See [Voice capture](voice-capture.md).
