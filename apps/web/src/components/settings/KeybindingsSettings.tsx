@@ -1196,6 +1196,12 @@ export function KeybindingsSettingsPanel() {
 
   return (
     <SettingsPageContainer className="max-w-5xl">
+      <p className="px-4 text-sm text-muted-foreground">
+        Voice capture uses a device shortcut.{" "}
+        <a className="underline" href="/settings/general#voice-capture">
+          Edit voice shortcut and hover mode
+        </a>
+      </p>
       <SettingsSection
         {...searchableSetting("keybindings")}
         headerAction={

@@ -45,6 +45,11 @@ export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
  */
 export const SETTINGS_SEARCH_ITEMS = [
   {
+    id: "voice-capture",
+    title: "Voice capture, Parakeet, microphone, shortcut and hover mode",
+    to: "/settings/general",
+  },
+  {
     id: "color-scheme",
     title: "Color scheme",
     to: "/settings/appearance",

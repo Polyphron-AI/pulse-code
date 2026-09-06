@@ -81,7 +81,7 @@ export default defineConfig({
       outDir: "dist-electron",
       sourcemap: true,
       outExtensions: () => ({ js: ".cjs" }),
-      entry: ["src/preview-pip-preload.ts"],
+      entry: ["src/preview-pip-preload.ts", "src/voice-overlay-preload.ts"],
     },
   ],
 });

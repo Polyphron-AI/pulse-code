@@ -11,6 +11,7 @@ import * as ElectronDialog from "../electron/ElectronDialog.ts";
 import * as ElectronProtocol from "../electron/ElectronProtocol.ts";
 import * as ElectronSafeStorage from "../electron/ElectronSafeStorage.ts";
 import { installDesktopIpcHandlers } from "../ipc/DesktopIpcHandlers.ts";
+import { installVoiceDesktop } from "../voice/VoiceDesktop.ts";
 import * as DesktopAppIdentity from "./DesktopAppIdentity.ts";
 import * as DesktopClerk from "./DesktopClerk.ts";
 import * as DesktopApplicationMenu from "../window/DesktopApplicationMenu.ts";
@@ -198,6 +199,12 @@ const bootstrap = Effect.gen(function* () {
   }
 
   yield* installDesktopIpcHandlers();
+  yield* Effect.acquireRelease(
+    Effect.sync(() =>
+      installVoiceDesktop(environment.preloadPath, rendererTarget.origin, environment.platform),
+    ),
+    (dispose) => Effect.sync(dispose),
+  );
   yield* logBootstrapInfo("bootstrap ipc handlers registered");
 
   if (!(yield* Ref.get(state.quitting))) {

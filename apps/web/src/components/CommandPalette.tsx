@@ -1,4 +1,5 @@
 "use client";
+import { toggleComposerVoice } from "../voice/voiceCapture";
 
 import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
 import {
@@ -1442,6 +1443,17 @@ function OpenCommandPaletteDialog(props: {
   ]);
 
   const actionItems: Array<CommandPaletteActionItem | CommandPaletteSubmenuItem> = [];
+  actionItems.push({
+    kind: "action",
+    value: "action:voice-capture",
+    title: "Start or stop voice capture",
+    description: "Dictate into the current draft with Parakeet",
+    searchTerms: ["voice", "dictation", "microphone", "parakeet"],
+    icon: <MessageSquareIcon className={ITEM_ICON_CLASS} />,
+    run: async () => {
+      toggleComposerVoice();
+    },
+  });
 
   actionItems.push({
     kind: "action",
