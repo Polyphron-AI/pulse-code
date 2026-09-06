@@ -270,10 +270,17 @@ const PENDING_TASK_MENU_ACTIONS: MenuAction[] = [
   { id: "delete", title: "Delete", image: "trash", attributes: { destructive: true } },
 ];
 
+const DRAFT_TASK_MENU_ACTIONS: MenuAction[] = [
+  { id: "delete", title: "Discard", image: "trash", attributes: { destructive: true } },
+];
+
 /**
- * A queued new task waiting in the outbox for its environment to reconnect.
- * Tapping reopens the new-task composer with everything prefilled; the row
- * disappears once the task is delivered and the real thread arrives.
+ * Unsent work: a task queued in the outbox for its environment to reconnect,
+ * or a draft still sitting in the project's new-task composer. Tapping
+ * reopens the composer with everything prefilled; the row disappears once
+ * the work is sent and the real thread arrives. The two kinds differ in what
+ * happens next, so the pill and icon say which one this is: a queued task
+ * sends itself, a draft waits for the user.
  */
 export const PendingTaskListRow = memo(function PendingTaskListRow(props: {
   readonly variant: ThreadListVariant;
@@ -291,10 +298,15 @@ export const PendingTaskListRow = memo(function PendingTaskListRow(props: {
   const pressedBackgroundColor = useThemeColor("--color-subtle");
 
   const { pendingTask, onSelectPendingTask, onDeletePendingTask } = props;
-  const timestamp = relativeTime(pendingTask.message.createdAt);
-  const subtitleParts = [props.environmentLabel, pendingTask.creation.branch].filter(
-    (part): part is string => Boolean(part),
-  );
+  const isDraft = pendingTask.kind === "draft";
+  const timestamp = isDraft ? null : relativeTime(pendingTask.createdAt);
+  // The pill only has room for one word, so what happens next goes in the
+  // subtitle: a queued task sends itself, a draft waits for the user.
+  const subtitleParts = [
+    isDraft ? null : "Sends on reconnect",
+    props.environmentLabel,
+    pendingTask.branch,
+  ].filter((part): part is string => Boolean(part));
 
   const handleMenuAction = useCallback(
     ({ nativeEvent }: { readonly nativeEvent: { readonly event: string } }) => {
@@ -303,8 +315,12 @@ export const PendingTaskListRow = memo(function PendingTaskListRow(props: {
     [onDeletePendingTask, pendingTask],
   );
 
-  const statusPill = (
-    <View className="rounded-full bg-zinc-500/12 px-1.5 py-0.5 dark:bg-zinc-500/16">
+  const statusPill = isDraft ? (
+    <View className="rounded-full bg-amber-500/12 dark:bg-amber-500/16 px-1.5 py-0.5">
+      <Text className="text-3xs font-t3-bold text-amber-700 dark:text-amber-300">Draft</Text>
+    </View>
+  ) : (
+    <View className="rounded-full bg-zinc-500/12 dark:bg-zinc-500/16 px-1.5 py-0.5">
       <Text className="text-3xs font-t3-bold text-zinc-600 dark:text-zinc-300">Pending</Text>
     </View>
   );
@@ -313,7 +329,7 @@ export const PendingTaskListRow = memo(function PendingTaskListRow(props: {
     subtitleParts.length > 0 ? (
       <View className="mt-px flex-row items-center gap-1.5">
         <SymbolView
-          name="tray.and.arrow.up"
+          name={isDraft ? "square.and.pencil" : "tray.and.arrow.up"}
           size={10}
           tintColor={compact ? iconSubtleColor : mutedColor}
           type="monochrome"
@@ -338,9 +354,13 @@ export const PendingTaskListRow = memo(function PendingTaskListRow(props: {
       </View>
     ) : null;
 
+  const accessibilityHint = isDraft
+    ? "Opens the draft in the new task composer"
+    : "Sends when the environment reconnects. Opens the task for editing";
+
   const rowContent = compact ? (
     <Pressable
-      accessibilityHint="Opens the queued task for editing"
+      accessibilityHint={accessibilityHint}
       accessibilityLabel={pendingTask.title}
       accessibilityRole="button"
       className="bg-screen"
@@ -368,7 +388,9 @@ export const PendingTaskListRow = memo(function PendingTaskListRow(props: {
             </Text>
             <View className="flex-row items-center gap-2">
               {statusPill}
-              <Text className="text-base tabular-nums text-foreground-tertiary">{timestamp}</Text>
+              {timestamp !== null ? (
+                <Text className="text-base tabular-nums text-foreground-tertiary">{timestamp}</Text>
+              ) : null}
               <SymbolView
                 name="chevron.right"
                 size={13}
@@ -383,7 +405,7 @@ export const PendingTaskListRow = memo(function PendingTaskListRow(props: {
     </Pressable>
   ) : (
     <Pressable
-      accessibilityHint="Opens the queued task for editing"
+      accessibilityHint={accessibilityHint}
       accessibilityLabel={pendingTask.title}
       accessibilityRole="button"
       onPress={() => onSelectPendingTask(pendingTask)}
@@ -404,9 +426,11 @@ export const PendingTaskListRow = memo(function PendingTaskListRow(props: {
           </Text>
           <View className="flex-row items-center gap-2">
             {statusPill}
-            <Text className="text-xs tabular-nums text-foreground-muted" numberOfLines={1}>
-              {timestamp}
-            </Text>
+            {timestamp !== null ? (
+              <Text className="text-xs tabular-nums text-foreground-muted" numberOfLines={1}>
+                {timestamp}
+              </Text>
+            ) : null}
           </View>
         </View>
         {subtitleRow}
@@ -416,7 +440,7 @@ export const PendingTaskListRow = memo(function PendingTaskListRow(props: {
 
   return (
     <ControlPillMenu
-      actions={PENDING_TASK_MENU_ACTIONS}
+      actions={isDraft ? DRAFT_TASK_MENU_ACTIONS : PENDING_TASK_MENU_ACTIONS}
       onPressAction={handleMenuAction}
       shouldOpenOnLongPress
     >

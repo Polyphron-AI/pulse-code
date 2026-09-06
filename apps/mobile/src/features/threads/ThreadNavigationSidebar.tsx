@@ -354,7 +354,7 @@ function ThreadNavigationSidebarPane(
         ? pendingTasks
         : pendingTasks.filter((pendingTask) =>
             selectedProjectRefs.has(
-              scopedProjectKey(pendingTask.message.environmentId, pendingTask.creation.projectId),
+              scopedProjectKey(pendingTask.environmentId, pendingTask.projectId),
             ),
           ),
     [pendingTasks, selectedProjectRefs],
@@ -669,10 +669,10 @@ function ThreadNavigationSidebarPane(
     const v2PendingTasks = pendingTasks.filter(
       (pendingTask) =>
         (options.selectedEnvironmentId === null ||
-          pendingTask.message.environmentId === options.selectedEnvironmentId) &&
+          pendingTask.environmentId === options.selectedEnvironmentId) &&
         (selectedProjectRefs === null ||
           selectedProjectRefs.has(
-            scopedProjectKey(pendingTask.message.environmentId, pendingTask.creation.projectId),
+            scopedProjectKey(pendingTask.environmentId, pendingTask.projectId),
           )) &&
         (v2SearchQuery.length === 0 ||
           pendingTask.title.toLocaleLowerCase().includes(v2SearchQuery)),
@@ -969,8 +969,8 @@ function ThreadNavigationSidebarPane(
       switch (item.type) {
         case "v2-pending": {
           const pendingScopeKey = scopedProjectKey(
-            item.pendingTask.message.environmentId,
-            item.pendingTask.creation.projectId,
+            item.pendingTask.environmentId,
+            item.pendingTask.projectId,
           );
           return (
             <ThreadListV2PendingRow
@@ -979,13 +979,10 @@ function ThreadNavigationSidebarPane(
               projectTitle={projectTitleByProjectKey.get(pendingScopeKey)}
               environmentLabel={
                 Object.keys(savedConnectionsById).length > 1
-                  ? (savedConnectionsById[item.pendingTask.message.environmentId]
-                      ?.environmentLabel ?? null)
+                  ? (savedConnectionsById[item.pendingTask.environmentId]?.environmentLabel ?? null)
                   : null
               }
-              environmentMachine={machineByEnvironmentId.get(
-                item.pendingTask.message.environmentId,
-              )}
+              environmentMachine={machineByEnvironmentId.get(item.pendingTask.environmentId)}
               pane="sidebar"
               showPendingDivider={item.showPendingDivider}
               onSelectPendingTask={openPendingTask}
@@ -1123,12 +1120,9 @@ function ThreadNavigationSidebarPane(
               variant="sidebar"
               pendingTask={item.pendingTask}
               environmentLabel={
-                savedConnectionsById[item.pendingTask.message.environmentId]?.environmentLabel ??
-                null
+                savedConnectionsById[item.pendingTask.environmentId]?.environmentLabel ?? null
               }
-              environmentMachine={machineByEnvironmentId.get(
-                item.pendingTask.message.environmentId,
-              )}
+              environmentMachine={machineByEnvironmentId.get(item.pendingTask.environmentId)}
               isLast={item.isLast}
               onSelectPendingTask={openPendingTask}
               onDeletePendingTask={confirmDeletePendingTask}
