@@ -544,7 +544,6 @@ function SidebarSectionPlaceholder(props: {
 function SidebarDragBoundary(props: {
   marker: "pinned-header" | "pinned-divider";
   label: string;
-  hint: string | null;
   visible: boolean;
   isDropTarget: boolean;
 }) {
@@ -563,7 +562,6 @@ function SidebarDragBoundary(props: {
             )}
           >
             {props.label}
-            {props.hint ? <span className="font-normal">{props.hint}</span> : null}
           </span>
           <span
             aria-hidden
@@ -579,7 +577,6 @@ function SidebarDragBoundary(props: {
 function SidebarSectionHeader(props: {
   marker: "snoozed-header" | "settled-header";
   label: string;
-  hint?: string | null;
   isDropTarget?: boolean;
   toggle: { expanded: boolean; onToggle: () => void };
 }) {
@@ -600,7 +597,6 @@ function SidebarSectionHeader(props: {
           props.isDropTarget && "bg-primary/30",
         )}
       />
-      {props.hint ? <span className="truncate text-[11px] font-normal">{props.hint}</span> : null}
       <ChevronDownIcon
         aria-hidden
         className={cn(
@@ -1403,7 +1399,10 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
     ? {
         transform: CSS.Translate.toString(sortable.transform),
         transition: sortable.transition,
-        visibility: sortable.transform?.scaleY === 0 ? ("hidden" as const) : undefined,
+        visibility:
+          !sortable.isDragging && sortable.transform?.scaleY === 0
+            ? ("hidden" as const)
+            : undefined,
       }
     : undefined;
   const dragDestination =
@@ -4655,7 +4654,11 @@ export default function Sidebar() {
                             isPinned={section === "pinned"}
                             sortable={sortable}
                             dropSection={
-                              dragState?.activeKey === threadKey ? dragTargetSection : null
+                              dragState?.activeKey === threadKey &&
+                              dragTargetSection !== dragState.activeSection &&
+                              dragTargetSection !== "snoozed"
+                                ? dragTargetSection
+                                : null
                             }
                             snoozeWakeLabelText={
                               section === "snoozed" && thread.snoozedUntil != null
@@ -4748,14 +4751,6 @@ export default function Sidebar() {
                         dragTargetSection !== "pinned"
                           ? 1
                           : 0);
-                      const activeHint =
-                        from === "pinned"
-                          ? "Drop to unpin"
-                          : from === "settled"
-                            ? "Drop to un-settle"
-                            : from === "snoozed"
-                              ? "Drop to wake"
-                              : null;
                       const items: ReactNode[] = [
                         <SidebarDraftBlock
                           key="draft-sessions"
@@ -4780,7 +4775,6 @@ export default function Sidebar() {
                                 key="pinned-header"
                                 marker="pinned-header"
                                 label="Pinned"
-                                hint={from !== null && from !== "pinned" ? "Drop to pin" : null}
                                 isDropTarget={dragTargetSection === "pinned"}
                                 visible={from !== null}
                               />,
@@ -4792,7 +4786,6 @@ export default function Sidebar() {
                                 key="pinned-divider"
                                 marker="pinned-divider"
                                 label="Active"
-                                hint={dragTargetSection === "active" ? activeHint : null}
                                 isDropTarget={dragTargetSection === "active"}
                                 visible={from !== null && previewPinnedCount > 0}
                               />,
@@ -4803,7 +4796,7 @@ export default function Sidebar() {
                               <SidebarSectionPlaceholder
                                 key="active-placeholder"
                                 marker="active-placeholder"
-                                label={activeHint ?? "Drop here"}
+                                label="Active"
                                 showHint={from !== null}
                                 isDropTarget={dragTargetSection === "active"}
                               />,
@@ -4836,11 +4829,6 @@ export default function Sidebar() {
                                     ? "Settled"
                                     : `Settled (${settledThreads.length})`
                                 }
-                                hint={
-                                  dragTargetSection === "settled" && from !== "settled"
-                                    ? "Drop to settle"
-                                    : null
-                                }
                                 isDropTarget={dragTargetSection === "settled"}
                                 toggle={{
                                   expanded: settledShelfExpanded,
@@ -4854,7 +4842,7 @@ export default function Sidebar() {
                               <SidebarSectionPlaceholder
                                 key="settled-placeholder"
                                 marker="settled-placeholder"
-                                label="Drop to settle"
+                                label="Settled"
                                 showHint={from !== null && from !== "settled"}
                                 isDropTarget={dragTargetSection === "settled"}
                               />,
