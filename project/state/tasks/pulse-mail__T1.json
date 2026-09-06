@@ -1,0 +1,34 @@
+{
+  "blocked_by": [],
+  "commits": [],
+  "created_at": "2026-09-06T05:43:27Z",
+  "execution_context": {
+    "branch": "feat/pulse-mail",
+    "repository": "pulse-mail",
+    "worktree": "pulse-mail"
+  },
+  "files_touched": [
+    "apps/mobile/src/features/mail/MailRouteScreen.tsx",
+    "apps/server/src/mail/MailAdapter.ts",
+    "apps/server/src/mail/MailEngine.ts",
+    "apps/web/src/components/mail/MailWorkspace.tsx",
+    "docs/internals/mail.md",
+    "docs/user/email.md",
+    "packages/contracts/src/mail.ts",
+    "packages/contracts/src/rpc.ts",
+    "packages/contracts/src/settings.ts"
+  ],
+  "host_refs": {},
+  "id": "pulse-mail/T1",
+  "kind": "feature",
+  "local_id": null,
+  "owner": null,
+  "plan_id": null,
+  "roadmap_items": [],
+  "schema": "product-ops.task/v1",
+  "secret_overrides": [],
+  "status": "completed",
+  "subject": "Build Pulse alpha email client across server web and mobile",
+  "updated_at": "2026-09-06T06:14:20Z",
+  "verification_receipts": ["docs/internals/mail.md"]
+}

@@ -116,6 +116,7 @@ import * as UsageService from "./usage/UsageService.ts";
 import * as TraceDiagnostics from "./diagnostics/TraceDiagnostics.ts";
 import * as PullRequestService from "./pullRequest/PullRequestService.ts";
 import * as IssuesService from "./issues/IssuesService.ts";
+import * as MailService from "./mail/MailService.ts";
 import { makeIntegrationService } from "./integrations/IntegrationService.ts";
 import { makeIntegrationContextService } from "./integrations/IntegrationContextService.ts";
 import { makePulseIssuesIntegrationAdapter } from "./integrations/IntegrationAdapter.ts";
@@ -423,6 +424,7 @@ const makeWsRpcLayer = (
         yield* SourceControlRepositoryService.SourceControlRepositoryService;
       const pullRequests = yield* PullRequestService.PullRequestService;
       const issues = yield* IssuesService.IssuesService;
+      const mail = yield* MailService.MailService;
       const environmentId = yield* serverEnvironment.getEnvironmentId;
       const integrations = makeIntegrationService([
         makePulseIssuesIntegrationAdapter({ environmentId, issues }),
@@ -1076,6 +1078,30 @@ const makeWsRpcLayer = (
           .pipe(Effect.ignoreCause({ log: true }), Effect.forkDetach, Effect.asVoid);
 
       return WsRpcGroup.of({
+        [WS_METHODS.mailGetDraft]: (input) => mail.getDraft(input),
+        [WS_METHODS.mailGetPeopleContext]: (input) => mail.getPeopleContext(input),
+        [WS_METHODS.mailReviewPerson]: (input) => mail.reviewPerson(input),
+        [WS_METHODS.mailSavePeopleWork]: (input) => mail.savePeopleWork(input),
+        [WS_METHODS.mailReviewConnection]: (input) => mail.reviewConnection(input),
+        [WS_METHODS.mailGetStatus]: (input) => mail.getStatus(input),
+        [WS_METHODS.mailSetEnabled]: (input) => mail.setEnabled(input),
+        [WS_METHODS.mailSaveAccount]: (input) => mail.saveAccount(input),
+        [WS_METHODS.mailDisconnectAccount]: (input) => mail.disconnectAccount(input),
+        [WS_METHODS.mailListFolders]: (input) => mail.listFolders(input),
+        [WS_METHODS.mailCreateFolder]: (input) => mail.createFolder(input),
+        [WS_METHODS.mailRenameFolder]: (input) => mail.renameFolder(input),
+        [WS_METHODS.mailDeleteFolder]: (input) => mail.deleteFolder(input),
+        [WS_METHODS.mailListMessages]: (input) => mail.listMessages(input),
+        [WS_METHODS.mailReadMessage]: (input) => mail.readMessage(input),
+        [WS_METHODS.mailDownloadAttachment]: (input) => mail.downloadAttachment(input),
+        [WS_METHODS.mailDownloadOriginal]: (input) => mail.downloadOriginal(input),
+        [WS_METHODS.mailActOnMessages]: (input) => mail.actOnMessages(input),
+        [WS_METHODS.mailSaveMetadata]: (input) => mail.saveMetadata(input),
+        [WS_METHODS.mailListDrafts]: (input) => mail.listDrafts(input),
+        [WS_METHODS.mailSaveDraft]: (input) => mail.saveDraft(input),
+        [WS_METHODS.mailDeleteDraft]: (input) => mail.deleteDraft(input),
+        [WS_METHODS.mailSendDraft]: (input) => mail.sendDraft(input),
+        [WS_METHODS.mailListOutbox]: (input) => mail.listOutbox(input),
         [ORCHESTRATION_WS_METHODS.dispatchCommand]: (command) =>
           observeRpcEffect(
             ORCHESTRATION_WS_METHODS.dispatchCommand,
@@ -2457,6 +2483,7 @@ export const websocketRpcRouteLayer = Layer.unwrap(
     const serverSelfUpdate = yield* ServerSelfUpdate.ServerSelfUpdate;
     const pullRequests = yield* PullRequestService.PullRequestService;
     const issues = yield* IssuesService.IssuesService;
+    const mail = yield* MailService.MailService;
     return HttpRouter.add(
       "GET",
       "/ws",
@@ -2484,6 +2511,7 @@ export const websocketRpcRouteLayer = Layer.unwrap(
               // mutation invalidates the HTTP diff cache that every client reads from.
               Layer.provide(Layer.succeed(PullRequestService.PullRequestService, pullRequests)),
               Layer.provide(Layer.succeed(IssuesService.IssuesService, issues)),
+              Layer.provide(Layer.succeed(MailService.MailService, mail)),
               Layer.provide(
                 SourceControlDiscovery.layer.pipe(
                   Layer.provide(

@@ -1619,6 +1619,28 @@ function OpenCommandPaletteDialog(props: {
 
   actionItems.push({
     kind: "action",
+    value: "action:office",
+    searchTerms: ["office", "overview", "accounts", "drafts", "mailbox"],
+    title: "Open Office",
+    icon: <SettingsIcon className={ITEM_ICON_CLASS} />,
+    run: async () => {
+      await navigate({ to: "/office" });
+    },
+  });
+
+  actionItems.push({
+    kind: "action",
+    value: "action:mail",
+    searchTerms: ["mail", "email", "inbox", "imap", "smtp", "alpha"],
+    title: clientSettings.mailAlphaEnabled ? "Open Mail" : "Set up Mail alpha",
+    icon: <SettingsIcon className={ITEM_ICON_CLASS} />,
+    run: async () => {
+      await navigate({ to: "/mail" });
+    },
+  });
+
+  actionItems.push({
+    kind: "action",
     value: "action:settings",
     searchTerms: ["settings", "preferences", "configuration", "keybindings"],
     title: "Open settings",

@@ -45,6 +45,11 @@ export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
  */
 export const SETTINGS_SEARCH_ITEMS = [
   {
+    id: "mail-alpha",
+    title: "Show Mail alpha on this device",
+    to: "/settings/integrations",
+  },
+  {
     id: "color-scheme",
     title: "Color scheme",
     to: "/settings/appearance",

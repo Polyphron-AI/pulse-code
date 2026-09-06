@@ -1,4 +1,38 @@
 import * as Schema from "effect/Schema";
+import {
+  MailPeopleContextInput,
+  MailPeopleContext,
+  MailPersonReviewInput,
+  MailWorkSaveInput,
+  MailWork,
+  MailConnectionReviewInput,
+} from "./mailPeople.ts";
+import { MailDraftSummary, MailDraftGetInput } from "./mail.ts";
+import {
+  MailOperationError,
+  MailStatus,
+  MailAccountSaveInput,
+  MailAccount,
+  MailAccountInput,
+  MailFolder,
+  MailFolderInput,
+  MailFolderRenameInput,
+  MailMessagesInput,
+  MailMessagesResult,
+  MailMessageRef,
+  MailMessageDetail,
+  MailAttachmentInput,
+  MailDownload,
+  MailMessageActionInput,
+  MailActionResult,
+  MailMetadataSaveInput,
+  MailMetadata,
+  MailDraft,
+  MailDraftSaveInput,
+  MailDraftDeleteInput,
+  MailSendInput,
+  MailSendReceipt,
+} from "./mail.ts";
 import * as Rpc from "effect/unstable/rpc/Rpc";
 import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 
@@ -240,6 +274,30 @@ import {
 import { VcsError } from "./vcs.ts";
 
 export const WS_METHODS = {
+  mailGetDraft: "mail.getDraft",
+  mailGetPeopleContext: "mail.getPeopleContext",
+  mailReviewPerson: "mail.reviewPerson",
+  mailSavePeopleWork: "mail.savePeopleWork",
+  mailReviewConnection: "mail.reviewConnection",
+  mailGetStatus: "mail.getStatus",
+  mailSetEnabled: "mail.setEnabled",
+  mailSaveAccount: "mail.saveAccount",
+  mailDisconnectAccount: "mail.disconnectAccount",
+  mailListFolders: "mail.listFolders",
+  mailCreateFolder: "mail.createFolder",
+  mailRenameFolder: "mail.renameFolder",
+  mailDeleteFolder: "mail.deleteFolder",
+  mailListMessages: "mail.listMessages",
+  mailReadMessage: "mail.readMessage",
+  mailDownloadAttachment: "mail.downloadAttachment",
+  mailDownloadOriginal: "mail.downloadOriginal",
+  mailActOnMessages: "mail.actOnMessages",
+  mailSaveMetadata: "mail.saveMetadata",
+  mailListDrafts: "mail.listDrafts",
+  mailSaveDraft: "mail.saveDraft",
+  mailDeleteDraft: "mail.deleteDraft",
+  mailSendDraft: "mail.sendDraft",
+  mailListOutbox: "mail.listOutbox",
   // Project registry methods
   projectsList: "projects.list",
   projectsAdd: "projects.add",
@@ -1237,7 +1295,148 @@ export const WsSubscribeResourceTelemetryRpc = Rpc.make(WS_METHODS.subscribeReso
   stream: true,
 });
 
+export const WsMailGetStatusRpc = Rpc.make(WS_METHODS.mailGetStatus, {
+  payload: Schema.Struct({}),
+  success: MailStatus,
+  error: Schema.Union([MailOperationError, EnvironmentAuthorizationError]),
+});
+export const WsMailSetEnabledRpc = Rpc.make(WS_METHODS.mailSetEnabled, {
+  payload: Schema.Struct({ enabled: Schema.Boolean }),
+  success: MailStatus,
+  error: Schema.Union([MailOperationError, EnvironmentAuthorizationError]),
+});
+export const WsMailSaveAccountRpc = Rpc.make(WS_METHODS.mailSaveAccount, {
+  payload: MailAccountSaveInput,
+  success: MailAccount,
+  error: Schema.Union([MailOperationError, EnvironmentAuthorizationError]),
+});
+export const WsMailDisconnectAccountRpc = Rpc.make(WS_METHODS.mailDisconnectAccount, {
+  payload: MailAccountInput,
+  success: MailStatus,
+  error: Schema.Union([MailOperationError, EnvironmentAuthorizationError]),
+});
+export const WsMailListFoldersRpc = Rpc.make(WS_METHODS.mailListFolders, {
+  payload: MailAccountInput,
+  success: Schema.Array(MailFolder),
+  error: Schema.Union([MailOperationError, EnvironmentAuthorizationError]),
+});
+export const WsMailCreateFolderRpc = Rpc.make(WS_METHODS.mailCreateFolder, {
+  payload: MailFolderInput,
+  success: Schema.Void,
+  error: Schema.Union([MailOperationError, EnvironmentAuthorizationError]),
+});
+export const WsMailRenameFolderRpc = Rpc.make(WS_METHODS.mailRenameFolder, {
+  payload: MailFolderRenameInput,
+  success: Schema.Void,
+  error: Schema.Union([MailOperationError, EnvironmentAuthorizationError]),
+});
+export const WsMailDeleteFolderRpc = Rpc.make(WS_METHODS.mailDeleteFolder, {
+  payload: MailFolderInput,
+  success: Schema.Void,
+  error: Schema.Union([MailOperationError, EnvironmentAuthorizationError]),
+});
+export const WsMailListMessagesRpc = Rpc.make(WS_METHODS.mailListMessages, {
+  payload: MailMessagesInput,
+  success: MailMessagesResult,
+  error: Schema.Union([MailOperationError, EnvironmentAuthorizationError]),
+});
+export const WsMailReadMessageRpc = Rpc.make(WS_METHODS.mailReadMessage, {
+  payload: MailMessageRef,
+  success: MailMessageDetail,
+  error: Schema.Union([MailOperationError, EnvironmentAuthorizationError]),
+});
+export const WsMailDownloadAttachmentRpc = Rpc.make(WS_METHODS.mailDownloadAttachment, {
+  payload: MailAttachmentInput,
+  success: MailDownload,
+  error: Schema.Union([MailOperationError, EnvironmentAuthorizationError]),
+});
+export const WsMailDownloadOriginalRpc = Rpc.make(WS_METHODS.mailDownloadOriginal, {
+  payload: MailMessageRef,
+  success: MailDownload,
+  error: Schema.Union([MailOperationError, EnvironmentAuthorizationError]),
+});
+export const WsMailActOnMessagesRpc = Rpc.make(WS_METHODS.mailActOnMessages, {
+  payload: MailMessageActionInput,
+  success: MailActionResult,
+  error: Schema.Union([MailOperationError, EnvironmentAuthorizationError]),
+});
+export const WsMailSaveMetadataRpc = Rpc.make(WS_METHODS.mailSaveMetadata, {
+  payload: MailMetadataSaveInput,
+  success: MailMetadata,
+  error: Schema.Union([MailOperationError, EnvironmentAuthorizationError]),
+});
+export const WsMailListDraftsRpc = Rpc.make(WS_METHODS.mailListDrafts, {
+  payload: Schema.Struct({}),
+  success: Schema.Array(MailDraftSummary),
+  error: Schema.Union([MailOperationError, EnvironmentAuthorizationError]),
+});
+export const WsMailGetDraftRpc = Rpc.make(WS_METHODS.mailGetDraft, {
+  payload: MailDraftGetInput,
+  success: MailDraft,
+  error: Schema.Union([MailOperationError, EnvironmentAuthorizationError]),
+});
+export const WsMailSaveDraftRpc = Rpc.make(WS_METHODS.mailSaveDraft, {
+  payload: MailDraftSaveInput,
+  success: MailDraft,
+  error: Schema.Union([MailOperationError, EnvironmentAuthorizationError]),
+});
+export const WsMailDeleteDraftRpc = Rpc.make(WS_METHODS.mailDeleteDraft, {
+  payload: MailDraftDeleteInput,
+  success: Schema.Void,
+  error: Schema.Union([MailOperationError, EnvironmentAuthorizationError]),
+});
+export const WsMailSendDraftRpc = Rpc.make(WS_METHODS.mailSendDraft, {
+  payload: MailSendInput,
+  success: MailSendReceipt,
+  error: Schema.Union([MailOperationError, EnvironmentAuthorizationError]),
+});
+export const WsMailListOutboxRpc = Rpc.make(WS_METHODS.mailListOutbox, {
+  payload: Schema.Struct({}),
+  success: Schema.Array(MailSendReceipt),
+  error: Schema.Union([MailOperationError, EnvironmentAuthorizationError]),
+});
+
 export const WsRpcGroup = RpcGroup.make(
+  Rpc.make(WS_METHODS.mailGetPeopleContext, {
+    payload: MailPeopleContextInput,
+    success: MailPeopleContext,
+    error: Schema.Union([MailOperationError, EnvironmentAuthorizationError]),
+  }),
+  Rpc.make(WS_METHODS.mailReviewPerson, {
+    payload: MailPersonReviewInput,
+    success: Schema.Void,
+    error: Schema.Union([MailOperationError, EnvironmentAuthorizationError]),
+  }),
+  Rpc.make(WS_METHODS.mailSavePeopleWork, {
+    payload: MailWorkSaveInput,
+    success: MailWork,
+    error: Schema.Union([MailOperationError, EnvironmentAuthorizationError]),
+  }),
+  Rpc.make(WS_METHODS.mailReviewConnection, {
+    payload: MailConnectionReviewInput,
+    success: Schema.Void,
+    error: Schema.Union([MailOperationError, EnvironmentAuthorizationError]),
+  }),
+  WsMailGetDraftRpc,
+  WsMailGetStatusRpc,
+  WsMailSetEnabledRpc,
+  WsMailSaveAccountRpc,
+  WsMailDisconnectAccountRpc,
+  WsMailListFoldersRpc,
+  WsMailCreateFolderRpc,
+  WsMailRenameFolderRpc,
+  WsMailDeleteFolderRpc,
+  WsMailListMessagesRpc,
+  WsMailReadMessageRpc,
+  WsMailDownloadAttachmentRpc,
+  WsMailDownloadOriginalRpc,
+  WsMailActOnMessagesRpc,
+  WsMailSaveMetadataRpc,
+  WsMailListDraftsRpc,
+  WsMailSaveDraftRpc,
+  WsMailDeleteDraftRpc,
+  WsMailSendDraftRpc,
+  WsMailListOutboxRpc,
   WsServerProbeRpc,
   WsServerGetConfigRpc,
   WsServerRefreshProvidersRpc,

@@ -3,6 +3,14 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./state/mail": {
+      "types": "./src/state/mail.ts",
+      "default": "./src/state/mail.ts"
+    },
+    "./state/mail-compose": {
+      "types": "./src/state/mailCompose.ts",
+      "default": "./src/state/mailCompose.ts"
+    },
     "./connection": {
       "types": "./src/connection/index.ts",
       "default": "./src/connection/index.ts"

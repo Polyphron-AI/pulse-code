@@ -530,6 +530,7 @@ function ConfiguredSettingsRouteScreen() {
 }
 
 function GeneralSettingsSection() {
+  const navigation = useNavigation();
   const preferencesResult = useAtomValue(mobilePreferencesAtom);
   const savePreferences = useAtomSet(updateMobilePreferencesAtom);
   const autoSettleOnMerge =
@@ -559,6 +560,12 @@ function GeneralSettingsSection() {
 
   return (
     <SettingsSection title="General">
+      <SettingsRow
+        icon="envelope"
+        label="Mail"
+        value="Alpha"
+        onPress={() => navigation.navigate("Mail")}
+      />
       <SettingsRow icon="folder" label="Project Grouping" target="SettingsProjectGrouping" />
       <SettingsRow
         icon="text.bubble"

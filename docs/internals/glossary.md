@@ -11,8 +11,13 @@ This is a living glossary for Pulse Code. It explains what common terms mean in 
 - [Orchestration](#orchestration)
 - [Provider runtime](#provider-runtime)
 - [Checkpointing](#checkpointing)
+- [Mail](#mail)
 
 ## Concepts
+
+### Mail
+
+Mail is an optional environment-owned IMAP/SMTP client. A mail account holds provider connection settings; received message references combine account, folder, UIDVALIDITY, and UID. Drafts and send receipts are separate from coding threads and provider turns. See [Mail integration](mail.md) for storage, identity, and delivery semantics.
 
 ### Project and workspace
 

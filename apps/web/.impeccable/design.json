@@ -1,0 +1,419 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-06T13:19:49.772Z",
+  "title": "Design System: Pulse Office and Mail",
+  "extensions": {
+    "colorMeta": {
+      "primary": {
+        "role": "primary",
+        "displayName": "primary",
+        "tonalRamp": [
+          "oklch(from var(--primary) 0.15 c h)",
+          "oklch(from var(--primary) 0.26 c h)",
+          "oklch(from var(--primary) 0.38 c h)",
+          "oklch(from var(--primary) 0.49 c h)",
+          "oklch(from var(--primary) 0.61 c h)",
+          "oklch(from var(--primary) 0.72 c h)",
+          "oklch(from var(--primary) 0.84 c h)",
+          "oklch(from var(--primary) 0.95 c h)"
+        ]
+      },
+      "primary-foreground": {
+        "role": "primary",
+        "displayName": "primary foreground",
+        "tonalRamp": [
+          "oklch(from var(--primary-foreground) 0.15 c h)",
+          "oklch(from var(--primary-foreground) 0.26 c h)",
+          "oklch(from var(--primary-foreground) 0.38 c h)",
+          "oklch(from var(--primary-foreground) 0.49 c h)",
+          "oklch(from var(--primary-foreground) 0.61 c h)",
+          "oklch(from var(--primary-foreground) 0.72 c h)",
+          "oklch(from var(--primary-foreground) 0.84 c h)",
+          "oklch(from var(--primary-foreground) 0.95 c h)"
+        ]
+      },
+      "secondary": {
+        "role": "secondary",
+        "displayName": "secondary",
+        "tonalRamp": [
+          "oklch(from var(--secondary) 0.15 c h)",
+          "oklch(from var(--secondary) 0.26 c h)",
+          "oklch(from var(--secondary) 0.38 c h)",
+          "oklch(from var(--secondary) 0.49 c h)",
+          "oklch(from var(--secondary) 0.61 c h)",
+          "oklch(from var(--secondary) 0.72 c h)",
+          "oklch(from var(--secondary) 0.84 c h)",
+          "oklch(from var(--secondary) 0.95 c h)"
+        ]
+      },
+      "secondary-foreground": {
+        "role": "secondary",
+        "displayName": "secondary foreground",
+        "tonalRamp": [
+          "oklch(from var(--secondary-foreground) 0.15 c h)",
+          "oklch(from var(--secondary-foreground) 0.26 c h)",
+          "oklch(from var(--secondary-foreground) 0.38 c h)",
+          "oklch(from var(--secondary-foreground) 0.49 c h)",
+          "oklch(from var(--secondary-foreground) 0.61 c h)",
+          "oklch(from var(--secondary-foreground) 0.72 c h)",
+          "oklch(from var(--secondary-foreground) 0.84 c h)",
+          "oklch(from var(--secondary-foreground) 0.95 c h)"
+        ]
+      },
+      "background": {
+        "role": "neutral",
+        "displayName": "background",
+        "tonalRamp": [
+          "oklch(from var(--background) 0.15 c h)",
+          "oklch(from var(--background) 0.26 c h)",
+          "oklch(from var(--background) 0.38 c h)",
+          "oklch(from var(--background) 0.49 c h)",
+          "oklch(from var(--background) 0.61 c h)",
+          "oklch(from var(--background) 0.72 c h)",
+          "oklch(from var(--background) 0.84 c h)",
+          "oklch(from var(--background) 0.95 c h)"
+        ]
+      },
+      "foreground": {
+        "role": "neutral",
+        "displayName": "foreground",
+        "tonalRamp": [
+          "oklch(from var(--foreground) 0.15 c h)",
+          "oklch(from var(--foreground) 0.26 c h)",
+          "oklch(from var(--foreground) 0.38 c h)",
+          "oklch(from var(--foreground) 0.49 c h)",
+          "oklch(from var(--foreground) 0.61 c h)",
+          "oklch(from var(--foreground) 0.72 c h)",
+          "oklch(from var(--foreground) 0.84 c h)",
+          "oklch(from var(--foreground) 0.95 c h)"
+        ]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "muted",
+        "tonalRamp": [
+          "oklch(from var(--muted) 0.15 c h)",
+          "oklch(from var(--muted) 0.26 c h)",
+          "oklch(from var(--muted) 0.38 c h)",
+          "oklch(from var(--muted) 0.49 c h)",
+          "oklch(from var(--muted) 0.61 c h)",
+          "oklch(from var(--muted) 0.72 c h)",
+          "oklch(from var(--muted) 0.84 c h)",
+          "oklch(from var(--muted) 0.95 c h)"
+        ]
+      },
+      "muted-foreground": {
+        "role": "neutral",
+        "displayName": "muted foreground",
+        "tonalRamp": [
+          "oklch(from var(--muted-foreground) 0.15 c h)",
+          "oklch(from var(--muted-foreground) 0.26 c h)",
+          "oklch(from var(--muted-foreground) 0.38 c h)",
+          "oklch(from var(--muted-foreground) 0.49 c h)",
+          "oklch(from var(--muted-foreground) 0.61 c h)",
+          "oklch(from var(--muted-foreground) 0.72 c h)",
+          "oklch(from var(--muted-foreground) 0.84 c h)",
+          "oklch(from var(--muted-foreground) 0.95 c h)"
+        ]
+      },
+      "accent": {
+        "role": "neutral",
+        "displayName": "accent",
+        "tonalRamp": [
+          "oklch(from var(--accent) 0.15 c h)",
+          "oklch(from var(--accent) 0.26 c h)",
+          "oklch(from var(--accent) 0.38 c h)",
+          "oklch(from var(--accent) 0.49 c h)",
+          "oklch(from var(--accent) 0.61 c h)",
+          "oklch(from var(--accent) 0.72 c h)",
+          "oklch(from var(--accent) 0.84 c h)",
+          "oklch(from var(--accent) 0.95 c h)"
+        ]
+      },
+      "card": {
+        "role": "neutral",
+        "displayName": "card",
+        "tonalRamp": [
+          "oklch(from var(--card) 0.15 c h)",
+          "oklch(from var(--card) 0.26 c h)",
+          "oklch(from var(--card) 0.38 c h)",
+          "oklch(from var(--card) 0.49 c h)",
+          "oklch(from var(--card) 0.61 c h)",
+          "oklch(from var(--card) 0.72 c h)",
+          "oklch(from var(--card) 0.84 c h)",
+          "oklch(from var(--card) 0.95 c h)"
+        ]
+      },
+      "card-foreground": {
+        "role": "neutral",
+        "displayName": "card foreground",
+        "tonalRamp": [
+          "oklch(from var(--card-foreground) 0.15 c h)",
+          "oklch(from var(--card-foreground) 0.26 c h)",
+          "oklch(from var(--card-foreground) 0.38 c h)",
+          "oklch(from var(--card-foreground) 0.49 c h)",
+          "oklch(from var(--card-foreground) 0.61 c h)",
+          "oklch(from var(--card-foreground) 0.72 c h)",
+          "oklch(from var(--card-foreground) 0.84 c h)",
+          "oklch(from var(--card-foreground) 0.95 c h)"
+        ]
+      },
+      "popover": {
+        "role": "neutral",
+        "displayName": "popover",
+        "tonalRamp": [
+          "oklch(from var(--popover) 0.15 c h)",
+          "oklch(from var(--popover) 0.26 c h)",
+          "oklch(from var(--popover) 0.38 c h)",
+          "oklch(from var(--popover) 0.49 c h)",
+          "oklch(from var(--popover) 0.61 c h)",
+          "oklch(from var(--popover) 0.72 c h)",
+          "oklch(from var(--popover) 0.84 c h)",
+          "oklch(from var(--popover) 0.95 c h)"
+        ]
+      },
+      "border": {
+        "role": "neutral",
+        "displayName": "border",
+        "tonalRamp": [
+          "oklch(from var(--border) 0.15 c h)",
+          "oklch(from var(--border) 0.26 c h)",
+          "oklch(from var(--border) 0.38 c h)",
+          "oklch(from var(--border) 0.49 c h)",
+          "oklch(from var(--border) 0.61 c h)",
+          "oklch(from var(--border) 0.72 c h)",
+          "oklch(from var(--border) 0.84 c h)",
+          "oklch(from var(--border) 0.95 c h)"
+        ]
+      },
+      "input": {
+        "role": "neutral",
+        "displayName": "input",
+        "tonalRamp": [
+          "oklch(from var(--input) 0.15 c h)",
+          "oklch(from var(--input) 0.26 c h)",
+          "oklch(from var(--input) 0.38 c h)",
+          "oklch(from var(--input) 0.49 c h)",
+          "oklch(from var(--input) 0.61 c h)",
+          "oklch(from var(--input) 0.72 c h)",
+          "oklch(from var(--input) 0.84 c h)",
+          "oklch(from var(--input) 0.95 c h)"
+        ]
+      },
+      "ring": {
+        "role": "neutral",
+        "displayName": "ring",
+        "tonalRamp": [
+          "oklch(from var(--ring) 0.15 c h)",
+          "oklch(from var(--ring) 0.26 c h)",
+          "oklch(from var(--ring) 0.38 c h)",
+          "oklch(from var(--ring) 0.49 c h)",
+          "oklch(from var(--ring) 0.61 c h)",
+          "oklch(from var(--ring) 0.72 c h)",
+          "oklch(from var(--ring) 0.84 c h)",
+          "oklch(from var(--ring) 0.95 c h)"
+        ]
+      },
+      "destructive": {
+        "role": "neutral",
+        "displayName": "destructive",
+        "tonalRamp": [
+          "oklch(from var(--destructive) 0.15 c h)",
+          "oklch(from var(--destructive) 0.26 c h)",
+          "oklch(from var(--destructive) 0.38 c h)",
+          "oklch(from var(--destructive) 0.49 c h)",
+          "oklch(from var(--destructive) 0.61 c h)",
+          "oklch(from var(--destructive) 0.72 c h)",
+          "oklch(from var(--destructive) 0.84 c h)",
+          "oklch(from var(--destructive) 0.95 c h)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "headline": {
+        "displayName": "Office headline",
+        "purpose": "Your office heading."
+      },
+      "title": {
+        "displayName": "Section title",
+        "purpose": "Office activity, account, and workspace headings."
+      },
+      "body": {
+        "displayName": "Supporting prose",
+        "purpose": "Office descriptions and reader text, with component-specific line height."
+      },
+      "label": {
+        "displayName": "Metadata",
+        "purpose": "Dates, recipients, folders, and secondary labels."
+      }
+    },
+    "shadows": [
+      {
+        "name": "shared-control-low",
+        "value": "0 1px 2px 0 rgb(0 0 0 / 5%)",
+        "purpose": "Shared outline/input/card shallow shadow; primary buttons use the theme action color at 24%."
+      },
+      {
+        "name": "button-highlight",
+        "value": "inset 0 1px rgb(255 255 255 / 16%)",
+        "purpose": "Enabled primary button inset highlight."
+      },
+      {
+        "name": "button-focus",
+        "value": "0 0 0 1px var(--background), 0 0 0 3px var(--ring)",
+        "purpose": "Shared button focus ring with background offset."
+      },
+      {
+        "name": "input-focus",
+        "value": "0 0 0 3px color-mix(in oklab, var(--ring) 24%, transparent)",
+        "purpose": "Shared input focus ring; border also changes to ring color."
+      }
+    ],
+    "motion": [
+      {
+        "name": "control-state",
+        "value": "transition-property: box-shadow; transition-duration: var(--default-transition-duration, 150ms)",
+        "purpose": "Existing shared button/input transition. Office and Mail add no decorative animation."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "sm",
+        "value": "40rem"
+      },
+      {
+        "name": "md",
+        "value": "48rem"
+      },
+      {
+        "name": "lg",
+        "value": "64rem"
+      },
+      {
+        "name": "xl",
+        "value": "80rem"
+      },
+      {
+        "name": "2xl",
+        "value": "96rem"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Shared default button used for enabling Mail and starting a message. Example uses default size.",
+      "html": "<button class=\"ds-button ds-primary\">New message</button>",
+      "css": ".ds-button{position:relative;display:inline-flex;align-items:center;justify-content:center;gap:0.5rem;flex-shrink:0;white-space:nowrap;cursor:pointer;height:2.25rem;padding:0 calc(0.75rem - 1px);border:1px solid transparent;border-radius:var(--control-radius);font-family:var(--font-sans);font-size:1rem;font-weight:500;outline:none;transition-property:box-shadow;transition-duration:var(--default-transition-duration,150ms)}.ds-button:focus-visible{box-shadow:0 0 0 1px var(--background),0 0 0 3px var(--ring)}.ds-button:disabled{opacity:0.64;pointer-events:none}@media(min-width:40rem){.ds-button{height:2rem;font-size:0.875rem}}@media(pointer:coarse){.ds-button:after{content:'';position:absolute;min-width:2.75rem;min-height:2.75rem;width:100%;height:100%}}.ds-primary{background:var(--primary);color:var(--primary-foreground);border-color:var(--primary);box-shadow:0 1px 2px color-mix(in oklab,var(--primary) 24%,transparent),inset 0 1px rgb(255 255 255 / 16%)}.ds-primary:hover{background:color-mix(in oklab,var(--primary) 90%,transparent)}.ds-primary:active{box-shadow:inset 0 1px rgb(0 0 0 / 8%)}.ds-primary:disabled{box-shadow:none}"
+    },
+    {
+      "name": "Ghost button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Secondary toolbar actions reuse the shared ghost button. Example uses default size.",
+      "html": "<button class=\"ds-button ds-ghost\">Reply</button>",
+      "css": ".ds-button{position:relative;display:inline-flex;align-items:center;justify-content:center;gap:0.5rem;flex-shrink:0;white-space:nowrap;cursor:pointer;height:2.25rem;padding:0 calc(0.75rem - 1px);border:1px solid transparent;border-radius:var(--control-radius);font-family:var(--font-sans);font-size:1rem;font-weight:500;outline:none;transition-property:box-shadow;transition-duration:var(--default-transition-duration,150ms)}.ds-button:focus-visible{box-shadow:0 0 0 1px var(--background),0 0 0 3px var(--ring)}.ds-button:disabled{opacity:0.64;pointer-events:none}@media(min-width:40rem){.ds-button{height:2rem;font-size:0.875rem}}@media(pointer:coarse){.ds-button:after{content:'';position:absolute;min-width:2.75rem;min-height:2.75rem;width:100%;height:100%}}.ds-ghost{background:transparent;color:var(--foreground)}.ds-ghost:hover,.ds-ghost[data-pressed]{background:var(--accent)}"
+    },
+    {
+      "name": "Outline button",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "Supporting actions such as Retry and attachment downloads. Example uses default size.",
+      "html": "<button class=\"ds-button ds-outline\">Retry</button>",
+      "css": ".ds-button{position:relative;display:inline-flex;align-items:center;justify-content:center;gap:0.5rem;flex-shrink:0;white-space:nowrap;cursor:pointer;height:2.25rem;padding:0 calc(0.75rem - 1px);border:1px solid transparent;border-radius:var(--control-radius);font-family:var(--font-sans);font-size:1rem;font-weight:500;outline:none;transition-property:box-shadow;transition-duration:var(--default-transition-duration,150ms)}.ds-button:focus-visible{box-shadow:0 0 0 1px var(--background),0 0 0 3px var(--ring)}.ds-button:disabled{opacity:0.64;pointer-events:none}@media(min-width:40rem){.ds-button{height:2rem;font-size:0.875rem}}@media(pointer:coarse){.ds-button:after{content:'';position:absolute;min-width:2.75rem;min-height:2.75rem;width:100%;height:100%}}.ds-outline{border-color:var(--input);background:var(--popover);color:var(--foreground);box-shadow:0 1px 2px rgb(0 0 0 / 5%)}.ds-outline:hover{background:color-mix(in oklab,var(--accent) 50%,transparent)}.ds-outline:active,.ds-outline:disabled{box-shadow:none}:host-context(.dark) .ds-outline{background:color-mix(in oklab,var(--input) 32%,transparent)}:host-context(.dark) .ds-outline:hover{background:color-mix(in oklab,var(--input) 64%,transparent)}"
+    },
+    {
+      "name": "Secondary button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Selected Drafts or Outbox control. Example uses default size.",
+      "html": "<button class=\"ds-button ds-secondary\">Drafts</button>",
+      "css": ".ds-button{position:relative;display:inline-flex;align-items:center;justify-content:center;gap:0.5rem;flex-shrink:0;white-space:nowrap;cursor:pointer;height:2.25rem;padding:0 calc(0.75rem - 1px);border:1px solid transparent;border-radius:var(--control-radius);font-family:var(--font-sans);font-size:1rem;font-weight:500;outline:none;transition-property:box-shadow;transition-duration:var(--default-transition-duration,150ms)}.ds-button:focus-visible{box-shadow:0 0 0 1px var(--background),0 0 0 3px var(--ring)}.ds-button:disabled{opacity:0.64;pointer-events:none}@media(min-width:40rem){.ds-button{height:2rem;font-size:0.875rem}}@media(pointer:coarse){.ds-button:after{content:'';position:absolute;min-width:2.75rem;min-height:2.75rem;width:100%;height:100%}}.ds-secondary{background:var(--secondary);color:var(--secondary-foreground)}.ds-secondary:hover{background:color-mix(in oklab,var(--secondary) 90%,transparent)}.ds-secondary:active{background:color-mix(in oklab,var(--secondary) 80%,transparent)}"
+    },
+    {
+      "name": "Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Shared input treatment for folder search and context fields. Native input inside the styled wrapper.",
+      "html": "<span class=\"ds-input-shell\"><input class=\"ds-input\" aria-label=\"Search this mail folder\" placeholder=\"Search this folder\"></span>",
+      "css": ".ds-input-shell{display:inline-flex;width:100%;border:1px solid var(--input);border-radius:var(--radius);background:var(--background);color:var(--foreground);font-family:var(--font-sans);font-size:1rem;box-shadow:0 1px 2px rgb(0 0 0 / 5%);transition-property:box-shadow;transition-duration:var(--default-transition-duration,150ms)}.ds-input{width:100%;min-width:0;height:2.125rem;padding:0 calc(0.75rem - 1px);border:0;border-radius:inherit;background:transparent;color:inherit;font:inherit;outline:none}.ds-input::placeholder{color:var(--placeholder)}.ds-input-shell:has(:focus-visible){border-color:var(--ring);box-shadow:0 0 0 3px color-mix(in oklab,var(--ring) 24%,transparent)}.ds-input-shell:has(:disabled){opacity:0.64;box-shadow:none}.ds-input-shell:has([aria-invalid=true]){border-color:color-mix(in oklab,var(--destructive) 36%,transparent)}.ds-input-shell:has([aria-invalid=true]:focus-visible){border-color:color-mix(in oklab,var(--destructive) 64%,transparent);box-shadow:0 0 0 3px color-mix(in oklab,var(--destructive) 16%,transparent)}:host-context(.dark) .ds-input-shell{background:color-mix(in oklab,var(--input) 32%,transparent)}@media(min-width:40rem){.ds-input-shell{font-size:0.875rem}.ds-input{height:1.875rem}}"
+    },
+    {
+      "name": "Workspace navigation",
+      "kind": "nav",
+      "refersTo": "workspace-navigation",
+      "description": "Office and Mail retain top-level workspace links and current-page focus styling while omitting the Code project sidebar and sidebar toggle. Preview links are local anchors.",
+      "html": "<nav class=\"ds-nav\" aria-label=\"Workspace\"><a class=\"ds-nav-link ds-focus\" href=\"#office\" aria-current=\"page\">Office</a><a class=\"ds-nav-link ds-focus\" href=\"#mail\">Mail</a><a class=\"ds-nav-link ds-focus\" href=\"#code\">Code</a></nav>",
+      "css": ".ds-focus:focus-visible{outline:none;box-shadow:0 0 0 2px var(--ring)}.ds-nav{display:flex;align-items:center;gap:0.25rem;font-family:var(--font-sans)}.ds-nav-link{display:inline-flex;align-items:center;gap:0.5rem;min-height:2.25rem;flex-shrink:0;border-radius:calc(var(--radius) - 2px);padding:0 0.75rem;color:var(--muted-foreground);font-size:0.875rem;text-decoration:none}.ds-nav-link:hover{background:var(--accent)}.ds-nav-link[aria-current=page]{background:var(--accent);color:var(--foreground);font-weight:500}"
+    },
+    {
+      "name": "Context tag",
+      "kind": "chip",
+      "refersTo": "context-tag",
+      "description": "Reader tag with its named removal control. Below md, tags appear after expanding Linked context; desktop keeps context visible. Sample text is illustrative.",
+      "html": "<span class=\"ds-tag\">Project <button class=\"ds-remove ds-focus\" aria-label=\"Remove tag Project\"><svg aria-hidden=\"true\" viewBox=\"0 0 24 24\" width=\"12\" height=\"12\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\"><path d=\"M18 6 6 18M6 6l12 12\"/></svg></button></span>",
+      "css": ".ds-focus:focus-visible{outline:none;box-shadow:0 0 0 2px var(--ring)}.ds-tag{display:inline-flex;align-items:center;gap:0.25rem;border-radius:0.25rem;background:var(--muted);color:var(--foreground);padding:0.25rem 0.5rem;font-family:var(--font-sans);font-size:0.75rem}.ds-remove{position:relative;display:inline-flex;align-items:center;justify-content:center;width:1.25rem;height:1.25rem;padding:0;border:1px solid transparent;border-radius:calc(var(--radius) - 4px);background:transparent;color:var(--muted-foreground);cursor:pointer}.ds-remove:hover{background:var(--accent)}.ds-remove:disabled{opacity:0.64;pointer-events:none}@media(pointer:coarse){.ds-remove:after{content:'';position:absolute;min-width:2.75rem;min-height:2.75rem}}"
+    },
+    {
+      "name": "Shared card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Existing shared Card geometry, retained for appropriate containers. Office's divided sections do not use this wrapper.",
+      "html": "<section class=\"ds-card\"><div class=\"ds-card-panel\">Shared container</div></section>",
+      "css": ".ds-card{position:relative;display:flex;flex-direction:column;border:1px solid var(--border);border-radius:calc(var(--radius) + 8px);background:var(--card);color:var(--card-foreground);font-family:var(--font-sans);box-shadow:0 1px 2px rgb(0 0 0 / 5%)}.ds-card:before{content:'';pointer-events:none;position:absolute;inset:0;border-radius:calc(var(--radius) + 7px);box-shadow:0 1px rgb(0 0 0 / 4%)}:host-context(.dark) .ds-card:before{box-shadow:0 -1px rgb(255 255 255 / 6%)}.ds-card-panel{padding:1.5rem}"
+    },
+    {
+      "name": "Message row",
+      "kind": "custom",
+      "refersTo": "message-row",
+      "description": "Unread message with separate checkbox and opener. Example labels do not represent account data.",
+      "html": "<div class=\"ds-message-row\"><input type=\"checkbox\" aria-label=\"Select example message\"><button class=\"ds-message-open ds-focus\"><span class=\"ds-message-top\"><span class=\"ds-message-sender\">Example sender</span><time class=\"ds-message-date\">09:30</time></span><span class=\"ds-message-subject\">Example message subject</span></button></div>",
+      "css": ".ds-focus:focus-visible{outline:none;box-shadow:0 0 0 2px var(--ring)}.ds-message-row{display:flex;align-items:flex-start;gap:0.75rem;padding:1rem;border-bottom:1px solid color-mix(in oklab,var(--border) 60%,transparent);font-family:var(--font-sans);color:var(--foreground)}.ds-message-row:hover{background:color-mix(in oklab,var(--accent) 50%,transparent)}.ds-message-row:has([aria-current=true]){background:var(--accent)}.ds-message-row>input{margin-top:0.25rem}.ds-message-open{flex:1;min-width:0;border:0;padding:0;background:transparent;color:inherit;text-align:left;font:inherit;cursor:pointer}.ds-message-top{display:flex;align-items:flex-start;gap:0.5rem}.ds-message-sender{flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-size:0.875rem;font-weight:600}.ds-message-date{flex-shrink:0;font-size:0.75rem;color:var(--muted-foreground);font-variant-numeric:tabular-nums}.ds-message-subject{display:block;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;margin-top:0.25rem;font-size:0.75rem;font-weight:500}"
+    },
+    {
+      "name": "Planned Office disclosure",
+      "kind": "custom",
+      "refersTo": "planned-disclosure",
+      "description": "Native reversible disclosure with an explicit unsupported-state explanation.",
+      "html": "<details class=\"ds-planned\"><summary class=\"ds-planned-summary ds-focus\"><span class=\"ds-planned-name\">Calendar</span><span class=\"ds-planned-closed\">Planned</span><span class=\"ds-planned-open\">Close</span></summary><p class=\"ds-planned-description\">Connect a calendar to review availability, prepare meetings, and keep invitations in sync. This environment does not support this Office space yet.</p></details>",
+      "css": ".ds-focus:focus-visible{outline:none;box-shadow:0 0 0 2px var(--ring)}.ds-planned{padding:1rem 0;border-bottom:1px solid var(--border);font-family:var(--font-sans);color:var(--foreground)}.ds-planned-summary{display:flex;align-items:center;gap:0.75rem;list-style:none;cursor:pointer;border-radius:calc(var(--radius) - 4px);font-size:0.875rem}.ds-planned-summary::-webkit-details-marker{display:none}.ds-planned-name{flex:1;font-weight:500}.ds-planned-closed,.ds-planned-open{font-size:0.75rem;color:var(--muted-foreground)}.ds-planned-open{display:none}.ds-planned[open] .ds-planned-open{display:inline}.ds-planned[open] .ds-planned-closed{display:none}.ds-planned-description{margin:0.75rem 0 0;padding-left:1.75rem;font-size:0.875rem;line-height:1.5rem;color:var(--muted-foreground)}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Familiar Outlook-style mailbox",
+    "overview": "Office and Mail extend Pulse's existing visual system. Compact controls, readable message rows, and restrained dividers keep everyday email actions easy to find. The confirmed direction is familiar and predictable. It introduces no separate Office brand.\n\nThis document records the web implementation, which the desktop client also wraps. Its scope is the Office and Mail composition, plus shared controls used there. It does not redefine unrelated Pulse screens or the separate React Native mobile UI. Product commitments live in `PRODUCT.md`; the Office and Mail brief lives in `.impeccable/surfaces/office-mail.md`.\n\nDesign values and behavior in this document are extracted from source. Sources are `src/index.css`, `src/components/ui/button.tsx`, `input.tsx`, `card.tsx`, `src/components/office/OfficeHeader.tsx`, `OfficeWorkspace.tsx`, `src/components/mail/MailWorkspace.tsx`, `MailReader.tsx`, and `MailSetup.tsx`. Breakpoints and the base spacing unit come from the installed Tailwind theme. Authorised Playwright/Edge inspection covered desktop Office and Mail, mobile setup, drafts, list, folders, reader, expanded account actions, and expanded linked context. Captures from the earlier mobile review are in `.impeccable/review/`: `desktop.png`, `mobile.png`, `folders-mobile.png`, `office-desktop.png`, `account-actions-mobile.png`, and `context-mobile.png`. At 390 by 844px, the reader body now begins at y=588 rather than y=814, with no horizontal overflow in the inspected state. Expanded account controls and context removal controls were checked. Earlier fixture checks passed for the exact second-account draft link, draft save/close and exact-account Outbox navigation, link retention, and keyboard operation. Final scoped typecheck and lint pass. These fixture checks do not verify real provider receiving or sending, backend integration, the separate native mobile clients, or contrast across all themes. After inspecting all six final captures, the visual reviewer returned a \"ship\" disposition for the single mobile density finding, which was resolved. This is a scoped UI verdict, not backend approval. The six captures predate the subsequent removal of the Code project sidebar from Office and Mail. Scoped typecheck and lint pass for that shell correction, and the layout detector returned no findings. The source reviewer confirmed all three implementation findings resolved and requested recapture only for fresh visual and runtime evidence. The user renewed browser permission, and Playwright/Edge verified the full-width shell. Current captures are in .impeccable/review/full-width/: mail-desktop.png, mail-mobile.png, office-desktop.png, office-mobile.png, folders-mobile.png, and code-return.png. Mail spans 1440px with no project sidebar or toggle; mobile has no horizontal overflow. Code retains both expanded and collapsed sidebar states and its 256px width through Office navigation. The sidebar and command palette Office entry points were exercised. The reviewer inspected all six current captures and returned a ship verdict for the Office/Mail shell correction, with no material findings in that scope. Mac Electron window-control clearance remains source-verified only on this Windows host.",
+    "keyCharacteristics": [
+      "Theme and font preferences remain live through CSS custom properties.",
+      "Shared Office, Mail, and Code navigation keeps workspace identity visible.",
+      "Office and Mail use their own shell width without the Code project sidebar.",
+      "Folder, list, and reader regions adapt to available width.",
+      "Below the medium breakpoint, account actions and linked context start collapsed.",
+      "Dividers and selected rows organize work without decorative panels.",
+      "Pending, disabled, disconnected, error, and empty states use distinct copy."
+    ],
+    "rules": [
+      {
+        "name": "The Theme Inheritance Rule",
+        "body": "Keep semantic colors and runtime font variables intact. Do not replace them with fixed Office colors or a fixed font stack.",
+        "section": "colors"
+      }
+    ],
+    "dos": [
+      "Do inherit the active Pulse theme and font variables.",
+      "Do reuse shared controls and preserve their keyboard focus states.",
+      "Do keep account and environment context when linking to drafts or Outbox.",
+      "Do retain separate loading, empty, disabled, disconnected, and error messages.",
+      "Do expose the way back from a reader or expanded disclosure.",
+      "Do keep planned capabilities visibly labelled as unavailable."
+    ],
+    "donts": [
+      "Don't fix Office to a separate palette or font.",
+      "Don't turn the overview into a grid of elevated decorative cards.",
+      "Don't claim working tools, successful operations, or populated data from placeholders.",
+      "Don't add continuously repainting decorative motion.",
+      "Don't treat code inspection as visual or keyboard verification."
+    ]
+  }
+}

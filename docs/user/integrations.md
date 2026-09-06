@@ -1,5 +1,7 @@
 # Connect Pulse to Pulse Code
 
+For IMAP accounts and SMTP sending, see [Email alpha](email.md).
+
 Pulse Code can keep a Pulse connection on the server that owns your coding environment. You enter
 the Pulse endpoint and personal access token once for that environment; web, desktop, and mobile
 clients connected to the same server can then use the permitted Pulse Issues data without storing
