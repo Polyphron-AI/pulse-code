@@ -63,3 +63,5 @@ On mobile, Photos includes videos when the connected server supports file upload
 ## Editing files
 
 Edits in the web or desktop file panel save automatically to the selected environment. Closing the file saves pending edits without resending an already-saved revision.
+
+If a thread cannot finish loading, Pulse Code displays a synchronization error and keeps any cached conversation visible. A temporary connection loss can still recover when the environment reconnects.
