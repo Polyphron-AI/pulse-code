@@ -3,12 +3,13 @@ import {
   ChartNoAxesColumnIcon,
   CircleDotIcon,
   GitPullRequestIcon,
+  BriefcaseBusinessIcon,
   SettingsIcon,
 } from "lucide-react";
 import { memo, useCallback, useMemo } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 
-import { useEnvironmentIdentificationMode } from "../../hooks/useSettings";
+import { useClientSettings, useEnvironmentIdentificationMode } from "../../hooks/useSettings";
 import { cn } from "../../lib/utils";
 import { useEnvironments } from "../../state/environments";
 import { useIssueConnections, useIssueList } from "../../state/issues";
@@ -113,6 +114,7 @@ function PulseWordmark() {
 
 export const SidebarChromeFooter = memo(function SidebarChromeFooter() {
   const navigate = useNavigate();
+  const mailEnabled = useClientSettings((settings) => settings.mailAlphaEnabled);
   const { isMobile, setOpenMobile } = useSidebar();
   const currentFooterPage = useLocation({
     select: (location) =>
@@ -120,9 +122,11 @@ export const SidebarChromeFooter = memo(function SidebarChromeFooter() {
         ? "usage"
         : location.pathname === "/issues"
           ? "issues"
-          : location.pathname === "/pull-requests"
-            ? "pull-requests"
-            : null,
+          : location.pathname === "/mail" || location.pathname === "/office"
+            ? "mail"
+            : location.pathname === "/pull-requests"
+              ? "pull-requests"
+              : null,
   });
   const { environments } = useEnvironments();
   // The page reads every connected server, so one of them offering pull requests is enough for
@@ -221,6 +225,27 @@ export const SidebarChromeFooter = memo(function SidebarChromeFooter() {
                 <TooltipPopup side="top">Settings</TooltipPopup>
               </Tooltip>
             </SidebarMenuItem>
+            {mailEnabled ? (
+              <SidebarMenuItem className="shrink-0">
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <SidebarMenuButton
+                        aria-label="Office alpha"
+                        size="icon"
+                        onClick={() => {
+                          closeMobileSidebar();
+                          void navigate({ to: "/office" });
+                        }}
+                      >
+                        <BriefcaseBusinessIcon />
+                      </SidebarMenuButton>
+                    }
+                  />
+                  <TooltipPopup side="top">Office · Alpha</TooltipPopup>
+                </Tooltip>
+              </SidebarMenuItem>
+            ) : null}
             {pullRequestsSupported ? (
               <SidebarMenuItem className="shrink-0">
                 <Tooltip>

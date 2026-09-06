@@ -35,3 +35,5 @@ export * from "./previewAutomation.ts";
 export * from "./resourceTelemetry.ts";
 export * from "./usage.ts";
 export * from "./rpc.ts";
+export * from "./mail.ts";
+export * from "./mailPeople.ts";

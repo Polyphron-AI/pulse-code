@@ -46,6 +46,9 @@ export const ServerSelfUpdateCapability = Schema.Literals([
 export type ServerSelfUpdateCapability = typeof ServerSelfUpdateCapability.Type;
 
 export const ExecutionEnvironmentCapabilities = Schema.Struct({
+  /** Alpha mail RPCs exist; actual activation and account readiness come from mail.getStatus. */
+  mail: Schema.optionalKey(Schema.Boolean),
+  mailPeople: Schema.optionalKey(Schema.Boolean),
   repositoryIdentity: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   connectionProbe: Schema.optionalKey(Schema.Boolean),
   /** Server exposes the pull-request list, detail, activity, diff, and mutation APIs. Absent on

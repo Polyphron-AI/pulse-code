@@ -1,4 +1,5 @@
 import {
+  AuthAccessWriteScope,
   AuthOrchestrationOperateScope,
   AuthOrchestrationReadScope,
   AuthRelayReadScope,
@@ -11,6 +12,40 @@ import { describe, expect, it } from "@effect/vitest";
 import { RPC_REQUIRED_SCOPES, requiredScopeForRpcMethod } from "./RpcAuthorization.ts";
 
 describe("RPC authorization scopes", () => {
+  it("separates reading participant history from changing identity and work", () => {
+    expect(requiredScopeForRpcMethod(WS_METHODS.mailGetPeopleContext)).toBe(
+      AuthOrchestrationReadScope,
+    );
+    for (const method of [
+      WS_METHODS.mailReviewPerson,
+      WS_METHODS.mailSavePeopleWork,
+      WS_METHODS.mailReviewConnection,
+    ])
+      expect(requiredScopeForRpcMethod(method)).toBe(AuthOrchestrationOperateScope);
+  });
+  it("requires account administration for mail setup and operation authority for sending", () => {
+    for (const method of [
+      WS_METHODS.mailSetEnabled,
+      WS_METHODS.mailSaveAccount,
+      WS_METHODS.mailDisconnectAccount,
+    ]) {
+      expect(requiredScopeForRpcMethod(method)).toBe(AuthAccessWriteScope);
+    }
+    for (const method of [
+      WS_METHODS.mailGetStatus,
+      WS_METHODS.mailReadMessage,
+      WS_METHODS.mailListDrafts,
+    ]) {
+      expect(requiredScopeForRpcMethod(method)).toBe(AuthOrchestrationReadScope);
+    }
+    for (const method of [
+      WS_METHODS.mailSendDraft,
+      WS_METHODS.mailSaveMetadata,
+      WS_METHODS.mailActOnMessages,
+    ]) {
+      expect(requiredScopeForRpcMethod(method)).toBe(AuthOrchestrationOperateScope);
+    }
+  });
   it("declares exactly one scope for every RPC in the server group", () => {
     expect(new Set(Object.keys(RPC_REQUIRED_SCOPES))).toEqual(new Set(WsRpcGroup.requests.keys()));
   });

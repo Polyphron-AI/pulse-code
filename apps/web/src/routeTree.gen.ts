@@ -29,6 +29,8 @@ import { Route as ProjectsProjectKeyRouteImport } from './routes/projects.$proje
 import { Route as ConnectCallbackRouteImport } from './routes/connect_.callback'
 import { Route as ChatWorkspaceRouteImport } from './routes/_chat.workspace'
 import { Route as ChatPullRequestsRouteImport } from './routes/_chat.pull-requests'
+import { Route as ChatOfficeRouteImport } from './routes/_chat.office'
+import { Route as ChatMailRouteImport } from './routes/_chat.mail'
 import { Route as ChatIssuesRouteImport } from './routes/_chat.issues'
 import { Route as ChatDraftDraftIdRouteImport } from './routes/_chat.draft.$draftId'
 import { Route as ChatEnvironmentIdThreadIdRouteImport } from './routes/_chat.$environmentId.$threadId'
@@ -132,6 +134,16 @@ const ChatPullRequestsRoute = ChatPullRequestsRouteImport.update({
   path: '/pull-requests',
   getParentRoute: () => ChatRoute,
 } as any)
+const ChatOfficeRoute = ChatOfficeRouteImport.update({
+  id: '/office',
+  path: '/office',
+  getParentRoute: () => ChatRoute,
+} as any)
+const ChatMailRoute = ChatMailRouteImport.update({
+  id: '/mail',
+  path: '/mail',
+  getParentRoute: () => ChatRoute,
+} as any)
 const ChatIssuesRoute = ChatIssuesRouteImport.update({
   id: '/issues',
   path: '/issues',
@@ -156,6 +168,8 @@ export interface FileRoutesByFullPath {
   '/settings': typeof SettingsRouteWithChildren
   '/usage': typeof UsageRoute
   '/issues': typeof ChatIssuesRoute
+  '/mail': typeof ChatMailRoute
+  '/office': typeof ChatOfficeRoute
   '/pull-requests': typeof ChatPullRequestsRoute
   '/workspace': typeof ChatWorkspaceRoute
   '/connect/callback': typeof ConnectCallbackRoute
@@ -179,6 +193,8 @@ export interface FileRoutesByTo {
   '/settings': typeof SettingsRouteWithChildren
   '/usage': typeof UsageRoute
   '/issues': typeof ChatIssuesRoute
+  '/mail': typeof ChatMailRoute
+  '/office': typeof ChatOfficeRoute
   '/pull-requests': typeof ChatPullRequestsRoute
   '/workspace': typeof ChatWorkspaceRoute
   '/connect/callback': typeof ConnectCallbackRoute
@@ -205,6 +221,8 @@ export interface FileRoutesById {
   '/settings': typeof SettingsRouteWithChildren
   '/usage': typeof UsageRoute
   '/_chat/issues': typeof ChatIssuesRoute
+  '/_chat/mail': typeof ChatMailRoute
+  '/_chat/office': typeof ChatOfficeRoute
   '/_chat/pull-requests': typeof ChatPullRequestsRoute
   '/_chat/workspace': typeof ChatWorkspaceRoute
   '/connect_/callback': typeof ConnectCallbackRoute
@@ -232,6 +250,8 @@ export interface FileRouteTypes {
     | '/settings'
     | '/usage'
     | '/issues'
+    | '/mail'
+    | '/office'
     | '/pull-requests'
     | '/workspace'
     | '/connect/callback'
@@ -255,6 +275,8 @@ export interface FileRouteTypes {
     | '/settings'
     | '/usage'
     | '/issues'
+    | '/mail'
+    | '/office'
     | '/pull-requests'
     | '/workspace'
     | '/connect/callback'
@@ -280,6 +302,8 @@ export interface FileRouteTypes {
     | '/settings'
     | '/usage'
     | '/_chat/issues'
+    | '/_chat/mail'
+    | '/_chat/office'
     | '/_chat/pull-requests'
     | '/_chat/workspace'
     | '/connect_/callback'
@@ -451,6 +475,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ChatPullRequestsRouteImport
       parentRoute: typeof ChatRoute
     }
+    '/_chat/office': {
+      id: '/_chat/office'
+      path: '/office'
+      fullPath: '/office'
+      preLoaderRoute: typeof ChatOfficeRouteImport
+      parentRoute: typeof ChatRoute
+    }
+    '/_chat/mail': {
+      id: '/_chat/mail'
+      path: '/mail'
+      fullPath: '/mail'
+      preLoaderRoute: typeof ChatMailRouteImport
+      parentRoute: typeof ChatRoute
+    }
     '/_chat/issues': {
       id: '/_chat/issues'
       path: '/issues'
@@ -477,6 +515,8 @@ declare module '@tanstack/react-router' {
 
 interface ChatRouteChildren {
   ChatIssuesRoute: typeof ChatIssuesRoute
+  ChatMailRoute: typeof ChatMailRoute
+  ChatOfficeRoute: typeof ChatOfficeRoute
   ChatPullRequestsRoute: typeof ChatPullRequestsRoute
   ChatWorkspaceRoute: typeof ChatWorkspaceRoute
   ChatIndexRoute: typeof ChatIndexRoute
@@ -486,6 +526,8 @@ interface ChatRouteChildren {
 
 const ChatRouteChildren: ChatRouteChildren = {
   ChatIssuesRoute: ChatIssuesRoute,
+  ChatMailRoute: ChatMailRoute,
+  ChatOfficeRoute: ChatOfficeRoute,
   ChatPullRequestsRoute: ChatPullRequestsRoute,
   ChatWorkspaceRoute: ChatWorkspaceRoute,
   ChatIndexRoute: ChatIndexRoute,

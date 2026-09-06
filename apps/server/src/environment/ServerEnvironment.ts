@@ -149,6 +149,8 @@ export const make = Effect.gen(function* () {
       pullRequests: true,
       issues: true,
       integrations: true,
+      mail: true,
+      mailPeople: true,
       threadSettlement: true,
       threadSnooze: true,
       threadPinning: true,
