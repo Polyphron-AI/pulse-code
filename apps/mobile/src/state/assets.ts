@@ -3,18 +3,26 @@ import {
   type AssetUrlState,
   assetUrlStateFromResult,
   createAssetEnvironmentAtoms,
+  createProjectFaviconUrlAtomFamily,
   EMPTY_ASSET_URL_ATOM,
 } from "@t3tools/client-runtime/state/assets";
 import type { AssetResource, EnvironmentId } from "@t3tools/contracts";
 import { useCallback } from "react";
 
 import { connectionAtomRuntime } from "../connection/runtime";
-import { usePreparedConnection } from "./session";
+import { projectFaviconCache } from "../lib/projectFaviconCache";
+import { environmentSession, usePreparedConnection } from "./session";
 import { useAtomQueryRunner } from "./use-atom-query-runner";
 
 export type { AssetUrlState } from "@t3tools/client-runtime/state/assets";
 
 export const assetEnvironment = createAssetEnvironmentAtoms(connectionAtomRuntime);
+
+export const projectFaviconUrlAtom = createProjectFaviconUrlAtomFamily({
+  imageCache: projectFaviconCache,
+  createUrl: assetEnvironment.createUrl,
+  preparedConnection: environmentSession.preparedConnectionValueAtom,
+});
 
 export function useAssetUrlState(
   environmentId: EnvironmentId | null,
