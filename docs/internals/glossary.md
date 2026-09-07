@@ -20,6 +20,10 @@ This is a living glossary for Pulse Code. It explains what common terms mean in 
 
 The top-level workspace record in the app. In [the orchestration contracts][1], a project has a `workspaceRoot` and a title. It does not contain threads: `OrchestrationProject` and `OrchestrationThread` are separate arrays on the read model, and a project can have zero threads. See [workspace-layout.md][2].
 
+#### Infrastructure target
+
+A development, staging, or production deployment accessible through an explicitly configured infrastructure integration. Distinct from a Pulse Code environment, which runs the server and agent. A target identifies its service, repository, and permitted telemetry queries. See [infrastructure setup](../operations/infrastructure.md).
+
 #### Workspace root
 
 The root filesystem path for a project. In [the orchestration model][1], it is the base directory for branches and optional worktrees. See [workspace-layout.md][2].
