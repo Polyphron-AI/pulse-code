@@ -29,7 +29,6 @@ type ThemeSnapshot = {
   followSystem: boolean;
   appearanceMode: ThemePreferenceMode;
   themeHalves: ThemeHalves | null;
-  onboardingActive: boolean;
 };
 
 type DesktopThemeBridge = Pick<DesktopBridge, "setTheme">;
@@ -42,7 +41,6 @@ const DEFAULT_THEME_SNAPSHOT: ThemeSnapshot = {
   followSystem: true,
   appearanceMode: "system",
   themeHalves: null,
-  onboardingActive: false,
 };
 
 /** Live read of the stored appearance mix, for callers that must not rely on
@@ -62,13 +60,6 @@ function readStoredThemeHalves(): ThemeHalves | null {
 
 function themeHalvesSignature(halves: ThemeHalves | null): string {
   return `${halves?.light ?? ""}|${halves?.dark ?? ""}`;
-}
-
-function isOnboardingThemeActive(): boolean {
-  return (
-    typeof document !== "undefined" &&
-    document.documentElement.dataset?.onboardingSurface !== undefined
-  );
 }
 
 const THEME_COLOR_META_NAME = "theme-color";
@@ -265,22 +256,15 @@ function resolveBrowserChromeSurface(): HTMLElement {
 
 export function syncBrowserChromeTheme() {
   if (typeof document === "undefined" || typeof getComputedStyle === "undefined") return;
-  const onboardingActive = isOnboardingThemeActive();
   const rootStyles = getComputedStyle(document.documentElement);
-  const themeChromeColor =
-    !onboardingActive && document.documentElement.dataset.themeId
-      ? normalizeThemeColor(rootStyles.getPropertyValue("--app-chrome-background"))
-      : null;
+  const themeChromeColor = document.documentElement.dataset.themeId
+    ? normalizeThemeColor(rootStyles.getPropertyValue("--app-chrome-background"))
+    : null;
   const surfaceColor = normalizeThemeColor(
     getComputedStyle(resolveBrowserChromeSurface()).backgroundColor,
   );
   const fallbackColor = normalizeThemeColor(getComputedStyle(document.body).backgroundColor);
-  // Dark onboarding pins a true-black canvas; light onboarding uses the
-  // default light palette and reads it back from the document like the app.
-  const backgroundColor =
-    onboardingActive && document.documentElement.classList.contains("dark")
-      ? "#000"
-      : (themeChromeColor ?? surfaceColor ?? fallbackColor);
+  const backgroundColor = themeChromeColor ?? surfaceColor ?? fallbackColor;
   if (!backgroundColor) return;
 
   document.documentElement.style.backgroundColor = backgroundColor;
@@ -301,7 +285,6 @@ export function syncBrowserChromeTheme() {
 
 function applyTheme(theme: Theme, suppressTransitions = false) {
   if (typeof document === "undefined" || typeof window === "undefined") return;
-  const onboardingActive = isOnboardingThemeActive();
   const appearanceMode = readAppearanceModePreference(theme);
   const followSystem = appearanceMode === "system";
   const systemDark = followSystem ? getSystemDark() : false;
@@ -327,11 +310,7 @@ function applyTheme(theme: Theme, suppressTransitions = false) {
     appearanceMode,
     themeHalves,
   );
-  // Onboarding follows the saved light/dark appearance but never applies a
-  // custom palette, so the wizard keeps its fixed neutral tokens.
-  if (!onboardingActive) {
-    applyThemePalette(resolveThemeHalf(theme, themeHalves, resolvedAppearance), resolvedAppearance);
-  }
+  applyThemePalette(resolveThemeHalf(theme, themeHalves, resolvedAppearance), resolvedAppearance);
   document.documentElement.classList.toggle("dark", resolvedAppearance === "dark");
   lastAppliedTheme = {
     theme,
@@ -339,7 +318,6 @@ function applyTheme(theme: Theme, suppressTransitions = false) {
     followSystem,
     appearanceMode,
     themeHalves,
-    onboardingActive,
   };
   syncBrowserChromeTheme();
   syncDesktopTheme(theme, followSystem, appearanceMode);
@@ -351,32 +329,6 @@ function applyTheme(theme: Theme, suppressTransitions = false) {
       document.documentElement.classList.remove("no-transitions");
     });
   }
-}
-
-/**
- * Own the document-wide palette used by the first-run wizard and its portals.
- * The wizard follows the saved light or dark appearance (and system changes)
- * but drops any custom theme palette until the returned cleanup runs.
- */
-export function mountOnboardingTheme(): () => void {
-  if (typeof document === "undefined" || typeof window === "undefined") return () => {};
-
-  const root = document.documentElement;
-  // "system" is a reserved id with no palette, so this clears theme variables.
-  applyThemePalette("system");
-  root.dataset.onboardingSurface = "";
-  lastAppliedTheme = null;
-  applyTheme(getStored());
-  emitChange();
-
-  return () => {
-    delete root.dataset.onboardingSurface;
-    root.style.backgroundColor = "";
-    document.body.style.backgroundColor = "";
-    lastAppliedTheme = null;
-    applyTheme(getStored(), true);
-    emitChange();
-  };
 }
 
 export async function syncDesktopThemePreference(
@@ -439,7 +391,6 @@ function getSnapshot(): ThemeSnapshot {
   const followSystem = appearanceMode === "system";
   const systemDark = followSystem ? getSystemDark() : false;
   const themeHalves = readStoredThemeHalves();
-  const onboardingActive = isOnboardingThemeActive();
 
   if (
     lastSnapshot &&
@@ -447,13 +398,12 @@ function getSnapshot(): ThemeSnapshot {
     lastSnapshot.systemDark === systemDark &&
     lastSnapshot.followSystem === followSystem &&
     lastSnapshot.appearanceMode === appearanceMode &&
-    lastSnapshot.onboardingActive === onboardingActive &&
     themeHalvesSignature(lastSnapshot.themeHalves) === themeHalvesSignature(themeHalves)
   ) {
     return lastSnapshot;
   }
 
-  lastSnapshot = { theme, systemDark, followSystem, appearanceMode, themeHalves, onboardingActive };
+  lastSnapshot = { theme, systemDark, followSystem, appearanceMode, themeHalves };
   return lastSnapshot;
 }
 
