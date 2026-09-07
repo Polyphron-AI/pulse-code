@@ -175,6 +175,10 @@ Shared buttons adapt height and typography at `sm` and extend coarse-pointer hit
 
 Below `md`, the account selector remains visible while Account actions hides Add, account settings, Disconnect, and Disable until expanded. Its button exposes `aria-expanded` and `aria-controls`. Expanding it reveals the existing controls in a wrapping row; collapsing restores the compact account bar. From `md`, those actions remain inline without the disclosure.
 
+### Voice text fields
+
+Pulse Talq adds one transient microphone beside the focused eligible field, using the existing theme, Tooltip, and focus treatment. Reserve at least 48px inside the field; use a 44px square touch control and a 32px height for fine pointers. Keep the portal in the field's parent DOM context so keyboard and dialog interactions retain their target. The [voice text fields brief](.impeccable/surfaces/voice-text-fields.md) records behavior, scope, and verification limits.
+
 ### Shared navigation
 
 OfficeHeader contains workspace navigation, Alpha, and the environment selector. Its sidebar trigger is removed; the Code project sidebar and shell toggle are absent on Office and Mail routes. Office and Mail links preserve the active environment and mark the active destination with `aria-current="page"`, an accent fill, and medium weight. Code returns to the root route. Links have explicit focus-visible rings. Mail folders use the same active-state vocabulary and expose their full path through accessible names and tooltips.

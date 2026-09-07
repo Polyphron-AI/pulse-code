@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { VoiceController } from "./VoiceController";
+import { captureVoiceTextTarget, currentVoiceTextField } from "./voiceTextTarget";
 
 let worker: Worker | null = null;
 let requestId = 0;
@@ -54,12 +55,16 @@ export const voiceCapture = new VoiceController({
 export function useVoiceCapture() {
   return useSyncExternalStore(voiceCapture.subscribe, voiceCapture.getSnapshot);
 }
-export const VOICE_TOGGLE_EVENT = "pulse:voice-toggle";
-export function toggleComposerVoice() {
+export function toggleVoiceCapture() {
   if (voiceCapture.getSnapshot().phase === "recording") {
     void voiceCapture.stop();
     return;
   }
-  if (!window.dispatchEvent(new Event(VOICE_TOGGLE_EVENT, { cancelable: true }))) return;
-  voiceCapture.reportError("Open an available chat draft to use voice capture.");
+  if (!["idle", "error"].includes(voiceCapture.getSnapshot().phase)) return;
+  const field = currentVoiceTextField();
+  if (field) {
+    void voiceCapture.start(captureVoiceTextTarget(field));
+    return;
+  }
+  voiceCapture.reportError("Click an editable text field to use Pulse Talq.");
 }
