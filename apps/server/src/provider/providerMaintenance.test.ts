@@ -212,6 +212,7 @@ it.layer(NodeServices.layer)("providerMaintenance", (it) => {
       {
         provider: driver("codex"),
         npmPackageName: "@openai/codex",
+        homebrewFormula: null,
         nativeUpdate: {
           executable: visiblePath,
           lockKey: "codex-native",
