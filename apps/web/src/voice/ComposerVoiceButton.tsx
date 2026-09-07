@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { MicIcon, SquareIcon } from "lucide-react";
 import { useClientSettings } from "../hooks/useSettings";
-import { voiceCapture, useVoiceCapture, VOICE_TOGGLE_EVENT } from "./voiceCapture";
+import { voiceCapture, useVoiceCapture } from "./voiceCapture";
+import { captureVoiceTextTarget, currentVoiceTextField } from "./voiceTextTarget";
 import { Tooltip, TooltipTrigger, TooltipPopup } from "../components/ui/tooltip";
 
 export function ComposerVoiceButton({
@@ -26,20 +27,18 @@ export function ComposerVoiceButton({
       return;
     }
     if (disabled || !["idle", "error"].includes(state.phase)) return;
+    const field = currentVoiceTextField();
+    const deliver = field?.matches('[data-testid="composer-editor"]')
+      ? captureVoiceTextTarget(field)
+      : null;
     void voiceCapture.start((text) => {
-      if (!voiceCapture.isOwnedBy(captureOwner) || !insertLatest.current(text))
+      if (!voiceCapture.isOwnedBy(captureOwner))
+        throw new Error("The draft is no longer available. Copy the transcript below.");
+      if (deliver) deliver(text);
+      else if (!insertLatest.current(text))
         throw new Error("The draft is no longer available. Copy the transcript below.");
     }, captureOwner);
   }, [state.phase, disabled, captureOwner]);
-  useEffect(() => {
-    const handle = (event: Event) => {
-      if (event.defaultPrevented || disabled) return;
-      event.preventDefault();
-      toggle();
-    };
-    window.addEventListener(VOICE_TOGGLE_EVENT, handle);
-    return () => window.removeEventListener(VOICE_TOGGLE_EVENT, handle);
-  }, [toggle, disabled]);
   useLayoutEffect(() => {
     return () => {
       if (voiceCapture.isOwnedBy(captureOwner)) voiceCapture.cancel();
@@ -53,6 +52,8 @@ export function ComposerVoiceButton({
         render={
           <button
             type="button"
+            data-composer-voice
+            onPointerDown={(event) => event.preventDefault()}
             onClick={() => toggle()}
             disabled={disabled || busy || (state.phase === "recording" && !recording)}
             aria-label={recording ? "Stop voice capture" : "Start voice capture"}
@@ -64,7 +65,7 @@ export function ComposerVoiceButton({
         {recording ? <SquareIcon className="size-3.5" /> : <MicIcon className="size-4" />}
       </TooltipTrigger>
       <TooltipPopup>
-        {recording ? "Stop recording" : "Dictate with Parakeet"} ({shortcut})
+        {recording ? "Stop recording" : "Dictate with Pulse Talq"} ({shortcut})
       </TooltipPopup>
     </Tooltip>
   );

@@ -15,11 +15,12 @@ export function VoiceSettings() {
       aria-labelledby="voice-settings-title"
     >
       <h2 id="voice-settings-title" className="font-medium">
-        Voice capture
+        Pulse Talq · Voice capture
       </h2>
       <p className="text-sm text-muted-foreground">
         Parakeet transcribes on this device. Its speech model downloads on first use. Dictation adds
-        text without sending the message.
+        text into the focused field without submitting it. Focus a field and use its Pulse Talq
+        control or your shortcut. Passwords and read-only fields are excluded.
       </p>
       <form
         onSubmit={(event) => {

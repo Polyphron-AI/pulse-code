@@ -1,5 +1,6 @@
 "use client";
-import { toggleComposerVoice } from "../voice/voiceCapture";
+import { voiceCapture } from "../voice/voiceCapture";
+import { captureVoiceTextTarget, currentVoiceTextField } from "../voice/voiceTextTarget";
 
 import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
 import {
@@ -571,6 +572,10 @@ function OpenCommandPaletteDialog(props: {
   const navigate = useNavigate();
   const { clearOpenIntent, openIntent, openOverlayMode, setOpen } = props;
   const [query, setQuery] = useState("");
+  const [voiceDestination] = useState(() => {
+    const field = currentVoiceTextField();
+    return field ? captureVoiceTextTarget(field) : null;
+  });
   const deferredQuery = useDeferredValue(query);
   const isActionsOnly = deferredQuery.startsWith(">");
   const [highlightedItemValue, setHighlightedItemValue] = useState<string | null>(null);
@@ -1446,12 +1451,17 @@ function OpenCommandPaletteDialog(props: {
   actionItems.push({
     kind: "action",
     value: "action:voice-capture",
-    title: "Start or stop voice capture",
-    description: "Dictate into the current draft with Parakeet",
-    searchTerms: ["voice", "dictation", "microphone", "parakeet"],
+    title: "Start or stop Pulse Talq",
+    description: "Dictate into the focused text field",
+    searchTerms: ["voice", "dictation", "microphone", "parakeet", "talq"],
     icon: <MessageSquareIcon className={ITEM_ICON_CLASS} />,
     run: async () => {
-      toggleComposerVoice();
+      if (voiceCapture.getSnapshot().phase === "recording") void voiceCapture.stop();
+      else if (voiceDestination) void voiceCapture.start(voiceDestination);
+      else
+        voiceCapture.reportError(
+          "Click an editable text field before opening the command palette to use Pulse Talq.",
+        );
     },
   });
 
