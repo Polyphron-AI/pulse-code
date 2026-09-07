@@ -2,12 +2,10 @@ import {
   CommandId,
   MessageId,
   ThreadId,
-  type ChatFileAttachment,
   type ModelSelection,
   type ProjectId,
   type ProviderInteractionMode,
   type RuntimeMode,
-  type UploadChatImageAttachment,
 } from "@t3tools/contracts";
 import { assistantCitationsToPlainText } from "@t3tools/shared/assistantCitations";
 
