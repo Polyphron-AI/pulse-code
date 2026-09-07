@@ -857,7 +857,7 @@ describe("mobile composer drafts", () => {
     );
 
     // Clearing content on the way out drops the stamp with it.
-    clearComposerDraftContent(first, { clearModelSelection: true, clearWorkspaceSelection: true });
+    clearComposerDraftContent(first, { clearWorkspaceSelection: true });
     expect(appAtomRegistry.get(composerDraftsAtom)[first]).toBeUndefined();
     expect(getComposerDraftSnapshot(second).text).toBe("second idea");
   });
