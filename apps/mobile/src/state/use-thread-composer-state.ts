@@ -33,6 +33,7 @@ import { buildThreadFeed } from "../lib/threadActivity";
 import { acknowledgedThreadMessagesAtom } from "./acknowledged-thread-messages";
 import { appendPendingThreadMessages } from "../features/threads/pending-thread-feed";
 import { appAtomRegistry } from "../state/atom-registry";
+import { pendingThreadCreationMessage } from "./pending-thread-creation";
 import {
   appendComposerDraftAttachments,
   appendComposerDraftText,
@@ -93,7 +94,11 @@ export function useThreadDraftForThread(input: {
 }
 
 export function useThreadComposerState() {
-  const { selectedThread: selectedThreadShell, selectedEnvironmentRuntime } = useThreadSelection();
+  const {
+    selectedThread: selectedThreadShell,
+    selectedThreadCreation,
+    selectedEnvironmentRuntime,
+  } = useThreadSelection();
   const selectedThreadDetail = useSelectedThreadDetail();
   const composerDrafts = useAtomValue(composerDraftsAtom);
   const acknowledgedMessages = useAtomValue(acknowledgedThreadMessagesAtom);
@@ -111,13 +116,39 @@ export function useThreadComposerState() {
   const selectedThreadKey = selectedThreadShell
     ? scopedThreadKey(selectedThreadShell.environmentId, selectedThreadShell.id)
     : null;
+  // The creation entry is the thread itself (rendered as the first message),
+  // not a follow-up waiting behind it.
   const selectedThreadQueuedMessages = useMemo(
-    () => (selectedThreadKey ? (queuedMessagesByThreadKey[selectedThreadKey] ?? []) : []),
+    () =>
+      selectedThreadKey
+        ? (queuedMessagesByThreadKey[selectedThreadKey] ?? []).filter(
+            (message) => message.creation === undefined,
+          )
+        : [],
     [queuedMessagesByThreadKey, selectedThreadKey],
   );
   const selectedThreadMessages = selectedThreadDetail?.messages;
+  const pendingCreationMessage = selectedThreadCreation?.message ?? null;
   const selectedThreadFeed = useMemo(() => {
-    const feed = selectedThreadDetail ? buildThreadFeed(selectedThreadDetail) : [];
+    const base = selectedThreadDetail;
+    const loadedMessages = base?.messages ?? [];
+    const messages =
+      pendingCreationMessage &&
+      !loadedMessages.some((message) => message.id === pendingCreationMessage.messageId)
+        ? [...loadedMessages, pendingThreadCreationMessage(pendingCreationMessage)]
+        : loadedMessages;
+    const feed = base
+      ? buildThreadFeed({ ...base, messages })
+      : pendingCreationMessage
+        ? [
+            {
+              type: "message" as const,
+              id: pendingCreationMessage.messageId,
+              createdAt: pendingCreationMessage.createdAt,
+              message: pendingThreadCreationMessage(pendingCreationMessage),
+            },
+          ]
+        : [];
     const pendingAcknowledgments = acknowledgedMessages.filter(
       (message) =>
         scopedThreadKey(message.environmentId, message.threadId) === selectedThreadKey &&
@@ -127,7 +158,13 @@ export function useThreadComposerState() {
     return appendPendingThreadMessages(feed, feed, pendingAcknowledgments).map((entry) =>
       entry.pendingMessage ? { ...entry, acknowledged: true } : entry,
     );
-  }, [selectedThreadDetail, selectedThreadKey, selectedThreadQueuedMessages, acknowledgedMessages]);
+  }, [
+    selectedThreadDetail,
+    pendingCreationMessage,
+    selectedThreadKey,
+    selectedThreadQueuedMessages,
+    acknowledgedMessages,
+  ]);
   useEffect(() => {
     const echoedIds = new Set(selectedThreadMessages?.map((message) => message.id));
     if (acknowledgedMessages.some((message) => echoedIds.has(message.messageId))) {
@@ -211,6 +248,13 @@ export function useThreadComposerState() {
     if (!selectedThreadShell) {
       return null;
     }
+    // The server has not created this thread yet. Queuing a follow-up against
+    // its id would strand the message: if the creation is rejected the thread
+    // never appears and the drain drops the orphan. The composer disables its
+    // send button too; this guard also covers the editor's submit key.
+    if (selectedThreadCreation !== null) {
+      return null;
+    }
 
     const threadKey = scopedThreadKey(selectedThreadShell.environmentId, selectedThreadShell.id);
     const draft = getComposerDraftSnapshot(threadKey);
@@ -291,7 +335,13 @@ export function useThreadComposerState() {
       },
     );
     return messageId;
-  }, [composerBusyBehavior, selectedEnvironmentRuntime, selectedThreadDetail, selectedThreadShell]);
+  }, [
+    composerBusyBehavior,
+    selectedThreadCreation,
+    selectedEnvironmentRuntime,
+    selectedThreadDetail,
+    selectedThreadShell,
+  ]);
 
   const onChangeDraftMessage = useCallback(
     (value: string) => {

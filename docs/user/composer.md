@@ -132,3 +132,9 @@ When an agent reads an image, its tool result can show an image preview. The pre
 Open file previews, the file tree, Git status, and working-tree diffs refresh after agent commands or file changes. A file with a pending edit waits until the edit finishes before refreshing.
 
 Skill and command suggestions attach to the top of the composer and follow it when panels resize. Skill-source icons distinguish app, repository, project, personal, and system skills on desktop, web, and mobile.
+
+## Mobile drafts and queued tasks
+
+Mobile keeps unfinished new-task drafts beside pending tasks in the thread list. You can keep several drafts for one project, reopen a draft, or discard it. Switching environments carries the current draft to the corresponding project without sending it.
+
+When you submit a task while connected, its thread opens with your prompt while setup runs. If setup fails, **Edit task** reopens the saved draft. Offline submissions stay queued until the environment reconnects. Queued follow-up messages remain visible in the conversation; you can edit one before delivery starts.

@@ -1,3 +1,4 @@
+import { AppText as Text } from "../../components/AppText";
 import { resolveProviderSkillsForCwd } from "@t3tools/client-runtime/providerSkills";
 import { type EnvironmentConnectionPhase } from "@t3tools/client-runtime/connection";
 import type { EnvironmentThreadStatus } from "@t3tools/client-runtime/state/threads";
@@ -74,6 +75,7 @@ import type {
 import { PendingApprovalCard } from "./PendingApprovalCard";
 import { ComposerUsageLimits } from "./ComposerUsageLimits";
 import { PendingUserInputCard } from "./PendingUserInputCard";
+import { ThreadCreationFailedCard } from "./ThreadCreationFailedCard";
 import {
   derivePendingUserInputMaxHeight,
   ESTIMATED_KEYBOARD_HEIGHT,
@@ -96,6 +98,15 @@ export interface ThreadDetailScreenProps {
   readonly selectedThreadFeed: ReadonlyArray<ThreadFeedEntry>;
   readonly activeWorkStartedAt: string | null;
   readonly isCompacting: boolean;
+  /**
+   * The server has not created this thread yet. "preparing" runs while the
+   * queued creation is delivered (a worktree may be checking out); "failed"
+   * is a rejected creation whose content went back to the project draft.
+   */
+  readonly creationState:
+    | { readonly kind: "preparing"; readonly preparingWorktree: boolean }
+    | { readonly kind: "failed"; readonly reason: string; readonly onEditTask: () => void }
+    | null;
   readonly activePendingApproval: PendingApproval | null;
   readonly respondingApprovalId: ApprovalRequestId | null;
   readonly activePendingUserInput: PendingUserInput | null;
@@ -831,10 +842,33 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
               ) : null}
             </View>
 
+            {props.creationState?.kind === "failed" ? (
+              <View className="px-4 pb-3">
+                <ThreadCreationFailedCard
+                  reason={props.creationState.reason}
+                  onEditTask={props.creationState.onEditTask}
+                />
+              </View>
+            ) : props.creationState?.kind === "preparing" ? (
+              <View className="px-4 pb-3">
+                <Text accessibilityLiveRegion="polite" className="text-sm text-foreground-muted">
+                  {props.creationState.preparingWorktree ? "Preparing worktree?" : "Starting task?"}
+                </Text>
+              </View>
+            ) : null}
             {/* Hidden (not unmounted) while a user-input request owns the
                 composer slot, so composer drafts and editor state survive. */}
-            <View style={activeUserInputRequestId !== null ? { display: "none" } : undefined}>
+            <View
+              style={
+                activeUserInputRequestId !== null || props.creationState?.kind === "failed"
+                  ? { display: "none" }
+                  : undefined
+              }
+            >
               <ThreadComposer
+                sendBlockedReason={
+                  props.creationState !== null ? "This task is still starting" : null
+                }
                 editorRef={composerEditorRef}
                 draftMessage={props.draftMessage}
                 draftAttachments={props.draftAttachments}
