@@ -275,9 +275,12 @@ export function syncBrowserChromeTheme() {
     getComputedStyle(resolveBrowserChromeSurface()).backgroundColor,
   );
   const fallbackColor = normalizeThemeColor(getComputedStyle(document.body).backgroundColor);
-  const backgroundColor = onboardingActive
-    ? "#000"
-    : (themeChromeColor ?? surfaceColor ?? fallbackColor);
+  // Dark onboarding pins a true-black canvas; light onboarding uses the
+  // default light palette and reads it back from the document like the app.
+  const backgroundColor =
+    onboardingActive && document.documentElement.classList.contains("dark")
+      ? "#000"
+      : (themeChromeColor ?? surfaceColor ?? fallbackColor);
   if (!backgroundColor) return;
 
   document.documentElement.style.backgroundColor = backgroundColor;
@@ -310,13 +313,7 @@ function applyTheme(theme: Theme, suppressTransitions = false) {
     lastAppliedTheme.appearanceMode === appearanceMode &&
     themeHalvesSignature(lastAppliedTheme.themeHalves) === themeHalvesSignature(themeHalves)
   ) {
-    if (onboardingActive) {
-      document.documentElement.classList.add("dark");
-      syncBrowserChromeTheme();
-      syncDesktopTheme("dark", false, "dark");
-    } else {
-      syncDesktopTheme(theme, followSystem, appearanceMode);
-    }
+    syncDesktopTheme(theme, followSystem, appearanceMode);
     return;
   }
 
@@ -330,12 +327,12 @@ function applyTheme(theme: Theme, suppressTransitions = false) {
     appearanceMode,
     themeHalves,
   );
-  if (onboardingActive) {
-    document.documentElement.classList.add("dark");
-  } else {
+  // Onboarding follows the saved light/dark appearance but never applies a
+  // custom palette, so the wizard keeps its fixed neutral tokens.
+  if (!onboardingActive) {
     applyThemePalette(resolveThemeHalf(theme, themeHalves, resolvedAppearance), resolvedAppearance);
-    document.documentElement.classList.toggle("dark", resolvedAppearance === "dark");
   }
+  document.documentElement.classList.toggle("dark", resolvedAppearance === "dark");
   lastAppliedTheme = {
     theme,
     systemDark,
@@ -345,11 +342,7 @@ function applyTheme(theme: Theme, suppressTransitions = false) {
     onboardingActive,
   };
   syncBrowserChromeTheme();
-  if (onboardingActive) {
-    syncDesktopTheme("dark", false, "dark");
-  } else {
-    syncDesktopTheme(theme, followSystem, appearanceMode);
-  }
+  syncDesktopTheme(theme, followSystem, appearanceMode);
   if (suppressTransitions) {
     // Force a reflow so the no-transitions class takes effect before removal
     // oxlint-disable-next-line no-unused-expressions
@@ -360,16 +353,20 @@ function applyTheme(theme: Theme, suppressTransitions = false) {
   }
 }
 
-/** Own the document-wide dark palette used by the first-run wizard and its portals. */
+/**
+ * Own the document-wide palette used by the first-run wizard and its portals.
+ * The wizard follows the saved light or dark appearance (and system changes)
+ * but drops any custom theme palette until the returned cleanup runs.
+ */
 export function mountOnboardingTheme(): () => void {
   if (typeof document === "undefined" || typeof window === "undefined") return () => {};
 
   const root = document.documentElement;
-  applyThemePalette("dark", "dark");
+  // "system" is a reserved id with no palette, so this clears theme variables.
+  applyThemePalette("system");
   root.dataset.onboardingSurface = "";
-  root.classList.add("dark");
-  syncBrowserChromeTheme();
-  syncDesktopTheme("dark", false, "dark");
+  lastAppliedTheme = null;
+  applyTheme(getStored());
   emitChange();
 
   return () => {
@@ -521,15 +518,13 @@ export function useTheme() {
   const snapshot = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
   const theme = snapshot.theme;
 
-  const resolvedTheme: "light" | "dark" = snapshot.onboardingActive
-    ? "dark"
-    : resolveThemeAppearance(
-        theme,
-        snapshot.systemDark,
-        snapshot.followSystem,
-        snapshot.appearanceMode,
-        snapshot.themeHalves,
-      );
+  const resolvedTheme: "light" | "dark" = resolveThemeAppearance(
+    theme,
+    snapshot.systemDark,
+    snapshot.followSystem,
+    snapshot.appearanceMode,
+    snapshot.themeHalves,
+  );
 
   const setTheme = useCallback((next: Theme): boolean => {
     if (typeof window === "undefined") return false;
