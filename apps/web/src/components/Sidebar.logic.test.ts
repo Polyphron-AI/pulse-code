@@ -49,6 +49,7 @@ import {
   type SidebarListItem,
   type SidebarListMarker,
   type SidebarSection,
+  resolveSidebarDropVerb,
 } from "./Sidebar.logic";
 import {
   EnvironmentId,
@@ -2594,5 +2595,25 @@ describe("animateSidebarLayoutChanges", () => {
 
   it("keeps layout movement while the user is sorting", () => {
     expect(animateSidebarLayoutChanges({ ...baseArgs, isSorting: true })).toBe(true);
+  });
+});
+describe("resolveSidebarDropVerb", () => {
+  it("names the state change a cross-section drop performs", () => {
+    expect(resolveSidebarDropVerb("active", "pinned")).toBe("pin");
+    expect(resolveSidebarDropVerb("settled", "pinned")).toBe("pin");
+    expect(resolveSidebarDropVerb("snoozed", "pinned")).toBe("pin");
+    expect(resolveSidebarDropVerb("pinned", "active")).toBe("unpin");
+    expect(resolveSidebarDropVerb("settled", "active")).toBe("unsettle");
+    expect(resolveSidebarDropVerb("snoozed", "active")).toBe("wake");
+    expect(resolveSidebarDropVerb("active", "settled")).toBe("settle");
+    expect(resolveSidebarDropVerb("pinned", "settled")).toBe("settle");
+    expect(resolveSidebarDropVerb("snoozed", "settled")).toBe("settle");
+  });
+
+  it("stays silent for same-section reorders, no target, and the snoozed shelf", () => {
+    expect(resolveSidebarDropVerb("active", "active")).toBeNull();
+    expect(resolveSidebarDropVerb("pinned", "pinned")).toBeNull();
+    expect(resolveSidebarDropVerb("active", null)).toBeNull();
+    expect(resolveSidebarDropVerb("active", "snoozed")).toBeNull();
   });
 });
