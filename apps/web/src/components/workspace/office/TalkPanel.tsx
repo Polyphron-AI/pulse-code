@@ -82,8 +82,8 @@ export function TalkPanel() {
         </Button>
       </div>
       <p className="text-sm text-muted-foreground">
-        Record selected audio sources locally, up to 5 minutes per recording. Transcription runs
-        only when requested. Recording always starts with your action.
+        Record selected audio sources locally. Transcription runs only when requested. Recording
+        always starts with your action.
       </p>
       <RequestState busy={busy} error={error} />
       {notice && (
