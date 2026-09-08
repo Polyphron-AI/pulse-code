@@ -102,10 +102,11 @@ function resolveDesktopAppBranding(input: {
   readonly appVersion: string;
 }): DesktopAppBranding {
   const stageLabel = resolveDesktopAppStageLabel(input);
+  const preview = input.appVersion.includes("-pulse-preview.");
   return {
-    baseName: APP_BASE_NAME,
+    baseName: preview ? "Pulse" : APP_BASE_NAME,
     stageLabel,
-    displayName: `${APP_BASE_NAME} (${stageLabel})`,
+    displayName: preview ? "Pulse Preview" : `${APP_BASE_NAME} (${stageLabel})`,
   };
 }
 
@@ -155,10 +156,14 @@ const make = Effect.fn("desktop.environment.make")(function* (
       : input.platform === "darwin"
         ? path.join(homeDirectory, "Library", "Application Support")
         : Option.getOrElse(config.xdgConfigHome, () => path.join(homeDirectory, ".config"));
+  const preview = input.appVersion.includes("-pulse-preview.");
+  const effectiveHome = preview
+    ? Option.some(path.join(homeDirectory, ".pulse-preview"))
+    : config.t3Home;
   const baseDir = resolveDesktopBaseDir({
     homeDirectory,
     joinPath: path.join,
-    t3Home: config.t3Home,
+    t3Home: effectiveHome,
   });
   const rootDir = path.resolve(input.dirname, "../../..");
   const appRoot = input.isPackaged ? input.appPath : rootDir;
@@ -175,9 +180,9 @@ const make = Effect.fn("desktop.environment.make")(function* (
     baseDir,
     isDevelopment,
     joinPath: path.join,
-    t3Home: config.t3Home,
+    t3Home: effectiveHome,
   });
-  const userDataDirName = isDevelopment ? "pulsecode-dev" : "pulsecode";
+  const userDataDirName = preview ? "pulse-preview" : isDevelopment ? "pulsecode-dev" : "pulsecode";
   const linuxApplicationsDir = path.join(
     Option.getOrElse(config.xdgDataHome, () => path.join(homeDirectory, ".local", "share")),
     "applications",
@@ -221,9 +226,11 @@ const make = Effect.fn("desktop.environment.make")(function* (
     otlpExportIntervalMs: config.otlpExportIntervalMs,
     branding,
     displayName,
-    appUserModelId: Option.getOrElse(config.appUserModelIdOverride, () =>
-      isDevelopment ? "ai.polyphron.pulsecode.dev" : "ai.polyphron.pulsecode",
-    ),
+    appUserModelId: preview
+      ? "ai.polyphron.pulse.preview"
+      : Option.getOrElse(config.appUserModelIdOverride, () =>
+          isDevelopment ? "ai.polyphron.pulsecode.dev" : "ai.polyphron.pulsecode",
+        ),
     linuxDesktopEntryName: isDevelopment ? "pulsecode-dev.desktop" : "pulsecode.desktop",
     linuxWmClass: isDevelopment ? "pulsecode-dev" : "pulsecode",
     linuxApplicationsDir,

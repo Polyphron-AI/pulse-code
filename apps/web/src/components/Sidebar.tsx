@@ -3577,7 +3577,7 @@ export default function Sidebar() {
               size="sm"
               isActive={isWorkspaceRoute}
               aria-current={isWorkspaceRoute ? "page" : undefined}
-              aria-label={`Open ORCA workspace, ${workspaceStatusLabel}`}
+              aria-label={`Open Code workspace, ${workspaceStatusLabel}`}
               className={cn(
                 "relative h-8 gap-2 rounded-md px-2 focus-visible:ring-offset-1 focus-visible:ring-offset-sidebar",
                 isWorkspaceRoute
@@ -3593,7 +3593,7 @@ export default function Sidebar() {
                 <NetworkIcon className="size-4" />
               </span>
               <span className="min-w-0 flex-1 truncate text-left text-sm font-medium">
-                ORCA workspace
+                Workspace
               </span>
               <span className="shrink-0 text-[10px] tabular-nums text-sidebar-muted-foreground/80">
                 {workspaceStatusLabel}

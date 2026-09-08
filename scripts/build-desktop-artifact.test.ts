@@ -428,6 +428,25 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
     ]);
   });
 
+  it.effect("isolates the Windows preview from release identity, updates and protocols", () =>
+    Effect.gen(function* () {
+      const config = yield* createBuildConfig(
+        "win",
+        "nsis",
+        "0.0.33-pulse-preview.20260905.1",
+        false,
+        true,
+        8080,
+        undefined,
+      );
+      assert.equal(config.appId, "ai.polyphron.pulse.preview");
+      assert.equal(config.productName, "Pulse Preview");
+      assert.equal(config.artifactName, "Pulse-Preview-${version}-${arch}.${ext}");
+      assert.deepStrictEqual(config.publish, []);
+      assert.deepStrictEqual((config.win as Record<string, unknown>).protocols, []);
+    }),
+  );
+
   it.effect("applies platform-specific packaging to the build config", () =>
     Effect.gen(function* () {
       const mac = yield* createBuildConfig(
@@ -562,7 +581,8 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
         assert.isBelow(result.fileCount, WINDOWS_PACKAGED_PAYLOAD_FILE_LIMIT);
         assert.deepStrictEqual(secondAsar, firstAsar);
       }),
-    ),
+      // The fixture executable is text. Native probes have dedicated mocked Windows tests.
+    ).pipe(Effect.provide(Layer.succeed(HostProcessPlatform, "linux"))),
   );
 
   it.effect("probes fff through the packaged Windows primary instead of helper executables", () => {
@@ -801,7 +821,8 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
         assert.instanceOf(error, BundleNotSelfContainedError);
         assert.include(error.output, "t3code-deliberately-missing-package");
       }),
-    ),
+      // The fixture executable is text. Native probes have dedicated mocked Windows tests.
+    ).pipe(Effect.provide(Layer.succeed(HostProcessPlatform, "linux"))),
   );
 
   it.effect("preserves both Linux icon resize failures with structural context", () => {

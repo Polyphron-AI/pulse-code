@@ -2053,6 +2053,7 @@ export function resolvePackageManagerUserAgent(packageManager: string): string {
 }
 
 export function resolveDesktopProductName(version: string): string {
+  if (version.includes("-pulse-preview.")) return "Pulse Preview";
   return resolveDesktopUpdateChannel(version) === "nightly"
     ? "Pulse Code (Nightly)"
     : (desktopPackageJson.productName ?? "Pulse Code");
@@ -2073,9 +2074,11 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
     | undefined,
 ) {
   const buildConfig: Record<string, unknown> = {
-    appId: DESKTOP_APP_ID,
+    appId: version.includes("-pulse-preview.") ? "ai.polyphron.pulse.preview" : DESKTOP_APP_ID,
     productName: resolveDesktopProductName(version),
-    artifactName: "Pulse-Code-${version}-${arch}.${ext}",
+    artifactName: version.includes("-pulse-preview.")
+      ? "Pulse-Preview-${version}-${arch}.${ext}"
+      : "Pulse-Code-${version}-${arch}.${ext}",
     electronLanguages: [...DESKTOP_ELECTRON_LANGUAGES],
     files: [...DESKTOP_FILE_EXCLUSIONS],
     directories: {
@@ -2092,7 +2095,9 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
   };
   const updateChannel = resolveDesktopUpdateChannel(version);
   const publishConfig = yield* resolveGitHubPublishConfig(updateChannel);
-  if (publishConfig) {
+  if (version.includes("-pulse-preview.")) {
+    buildConfig.publish = [];
+  } else if (publishConfig) {
     buildConfig.publish = [publishConfig];
   } else if (mockUpdates) {
     buildConfig.publish = [
@@ -2178,7 +2183,9 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
     const winConfig: Record<string, unknown> = {
       target: [target],
       executableName: DESKTOP_EXECUTABLE_NAME,
-      protocols: [{ name: "Pulse Code", schemes: [...DESKTOP_PROTOCOL_SCHEMES] }],
+      protocols: version.includes("-pulse-preview.")
+        ? []
+        : [{ name: "Pulse Code", schemes: [...DESKTOP_PROTOCOL_SCHEMES] }],
       icon: "icon.ico",
       // Resource editing applies the product metadata and icon independently
       // of code signing. Disabling it for local unsigned builds leaves the

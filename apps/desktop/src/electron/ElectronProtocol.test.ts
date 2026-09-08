@@ -39,7 +39,7 @@ describe("ElectronProtocol", () => {
     }>;
     assert.deepEqual(
       registrations.map(({ scheme }) => scheme),
-      ["pulsecode", "pulsecode-dev"],
+      ["pulsecode", "pulsecode-dev", "pulse-preview"],
     );
     assert.notInclude(
       registrations.map(({ scheme }) => scheme),
@@ -49,6 +49,12 @@ describe("ElectronProtocol", () => {
       registrations.map(({ scheme }) => scheme),
       "t3code-dev",
     );
+  });
+
+  it("uses one distinct preview scheme for the renderer and OAuth callback", () => {
+    assert.equal(ElectronProtocol.getDesktopScheme(false, true), "pulse-preview");
+    assert.equal(ElectronProtocol.getDesktopUrl(false, true), "pulse-preview://app/");
+    assert.equal(ElectronProtocol.getDesktopUrl(false), "pulsecode://app/");
   });
 
   it.effect("proxies the stable renderer origin to the current app server", () =>

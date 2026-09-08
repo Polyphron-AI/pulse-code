@@ -40,6 +40,20 @@ const makeEnvironment = (
   DesktopEnvironment.DesktopEnvironment.pipe(Effect.provide(makeEnvironmentLayer(overrides, env)));
 
 describe("DesktopEnvironment", () => {
+  it.effect("isolates a preview install from the existing app and ambient live home", () =>
+    Effect.gen(function* () {
+      const environment = yield* makeEnvironment(
+        { platform: "win32", isPackaged: true, appVersion: "0.0.33-pulse-preview.20260905.1" },
+        { PULSE_CODE_HOME: "/live/installation", T3CODE_HOME: "/live/legacy" },
+      );
+      assertPathEqual(environment.baseDir, "/Users/alice/.pulse-preview");
+      assertPathEqual(environment.stateDir, "/Users/alice/.pulse-preview/userdata");
+      assert.equal(environment.userDataDirName, "pulse-preview");
+      assert.equal(environment.appUserModelId, "ai.polyphron.pulse.preview");
+      assert.equal(environment.displayName, "Pulse Preview");
+    }),
+  );
+
   it.effect("derives state paths and development identity inside Effect", () =>
     Effect.gen(function* () {
       const environment = yield* makeEnvironment(

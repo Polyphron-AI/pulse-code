@@ -1445,13 +1445,25 @@ function OpenCommandPaletteDialog(props: {
 
   actionItems.push({
     kind: "action",
-    value: "action:orca-workspace",
+    value: "action:code-workspace",
     searchTerms: ["orca", "workspace", "coordinate", "threads", "overview", "ledger"],
-    title: "Open ORCA workspace",
+    title: "Open Code workspace",
     description: "Cross-project thread overview",
     icon: <NetworkIcon className={ITEM_ICON_CLASS} />,
     run: async () => {
       await navigate({ to: "/workspace" });
+    },
+  });
+
+  actionItems.push({
+    kind: "action",
+    value: "action:office-workspace",
+    searchTerms: ["office", "workspace", "meetings", "calendar", "email"],
+    title: "Open Office workspace",
+    description: "Meetings, calendar and email integration preview",
+    icon: <NetworkIcon className={ITEM_ICON_CLASS} />,
+    run: async () => {
+      await navigate({ to: "/workspace", search: { space: "office" } });
     },
   });
 

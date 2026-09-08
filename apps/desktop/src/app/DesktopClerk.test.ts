@@ -28,10 +28,11 @@ import * as ElectronWindow from "../electron/ElectronWindow.ts";
 import * as DesktopClerk from "./DesktopClerk.ts";
 import * as DesktopEnvironment from "./DesktopEnvironment.ts";
 
-const makeDesktopClerkLayer = (isDevelopment = true, events: string[] = []) => {
+const makeDesktopClerkLayer = (isDevelopment = true, events: string[] = [], preview = false) => {
   const environment = DesktopEnvironment.DesktopEnvironment.of({
     stateDir: "/tmp/pulse-state",
     isDevelopment,
+    appUserModelId: preview ? "ai.polyphron.pulse.preview" : "ai.polyphron.pulsecode",
     appDataDirectory: "/tmp/app-data",
     userDataDirName: isDevelopment ? "pulsecode-dev" : "pulsecode",
     path: { join: (...parts: ReadonlyArray<string>) => parts.join("/") },
@@ -187,6 +188,30 @@ describe("DesktopClerk", () => {
       Effect.provide(makeDesktopClerkLayer()),
       Effect.provideService(ElectronApp.ElectronApp, electronApp),
       Effect.provideService(ElectronWindow.ElectronWindow, electronWindow),
+    );
+  });
+
+  it.effect("leaves the installed app's protocol handler untouched in the preview", () => {
+    storageMock.mockReturnValue(storageAdapter);
+    createClerkBridgeMock.mockReturnValue({ cleanup: vi.fn(), isPrimaryInstance: true });
+    const register = vi.fn(() => true);
+    const electronApp = {
+      quit: Effect.void,
+      setAsDefaultProtocolClient: () => Effect.sync(register),
+      on: () => Effect.void,
+    } as unknown as ElectronApp.ElectronApp["Service"];
+    return Effect.gen(function* () {
+      const clerk = yield* DesktopClerk.DesktopClerk;
+      yield* Effect.scoped(clerk.configure);
+      assert.equal(register.mock.calls.length, 0);
+      assert.equal(createClerkBridgeMock.mock.calls[0]?.[0].renderer.scheme, "pulse-preview");
+    }).pipe(
+      Effect.provide(makeDesktopClerkLayer(false, [], true)),
+      Effect.provideService(ElectronApp.ElectronApp, electronApp),
+      Effect.provideService(
+        ElectronWindow.ElectronWindow,
+        {} as ElectronWindow.ElectronWindow["Service"],
+      ),
     );
   });
 
