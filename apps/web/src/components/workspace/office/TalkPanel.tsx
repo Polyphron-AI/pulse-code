@@ -3,9 +3,12 @@ import type { TalkRecording, TalkStatus } from "@t3tools/contracts";
 import { Button } from "../../ui/button";
 import { Card } from "../../ui/card";
 import { fieldClass, RequestState, useTalkRequest } from "./shared";
+import { TalkModelPanel } from "./TalkModelPanel";
 
 export function TalkPanel() {
-  const { run, busy, error } = useTalkRequest();
+  const { run, busy: requestBusy, error } = useTalkRequest();
+  const [modelBusy, setModelBusy] = useState(false);
+  const busy = requestBusy || modelBusy;
   const [status, setStatus] = useState<TalkStatus>();
   const [recordings, setRecordings] = useState<readonly TalkRecording[]>([]);
   const [title, setTitle] = useState("");
@@ -16,8 +19,10 @@ export function TalkPanel() {
   async function refresh() {
     const result = await run({ operation: "status" });
     if (result?.status) setStatus(result.status);
+    if (!result?.status?.enabled) return;
     const list = await run({ operation: "recordings.list" });
     if (list?.recordings) setRecordings(list.recordings);
+    if (list?.status) setStatus(list.status);
   }
   useEffect(() => {
     void refresh();
@@ -155,18 +160,16 @@ export function TalkPanel() {
                   </Button>
                 )}
               </div>
-              <Button
-                className="self-start"
-                variant="outline"
-                disabled={busy || status.recording || !status.workerAvailable}
-                onClick={() => void act({ operation: "model.choose" })}
-              >
-                Choose installed model
-              </Button>
             </>
           )}
         </>
       )}
+      <TalkModelPanel
+        status={status}
+        disabled={requestBusy}
+        onStatusChange={setStatus}
+        onBusyChange={setModelBusy}
+      />
       <div className="space-y-3">
         <h3 className="text-sm font-medium">Local recordings</h3>
         {recordings.length === 0 && !busy && (
@@ -204,7 +207,12 @@ export function TalkPanel() {
               <Button
                 size="sm"
                 variant="outline"
-                disabled={busy}
+                disabled={
+                  busy ||
+                  !status?.enabled ||
+                  recording.status === "recording" ||
+                  !recording.audioPath
+                }
                 onClick={() => void act({ operation: "recordings.open", id: recording.id })}
               >
                 Open audio
@@ -227,7 +235,7 @@ export function TalkPanel() {
               <Button
                 size="sm"
                 variant="ghost"
-                disabled={busy}
+                disabled={busy || !status?.enabled || recording.status === "recording"}
                 onClick={() => setRemoveId(recording.id)}
               >
                 Delete
