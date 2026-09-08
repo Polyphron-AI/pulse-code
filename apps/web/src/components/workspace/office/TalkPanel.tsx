@@ -4,11 +4,15 @@ import { Button } from "../../ui/button";
 import { Card } from "../../ui/card";
 import { fieldClass, RequestState, useTalkRequest } from "./shared";
 import { TalkModelPanel } from "./TalkModelPanel";
+import { TalkDictationPanel } from "./TalkDictationPanel";
 
 export function TalkPanel() {
   const { run, busy: requestBusy, error } = useTalkRequest();
   const [modelBusy, setModelBusy] = useState(false);
-  const busy = requestBusy || modelBusy;
+  const [dictationBusy, setDictationBusy] = useState(false);
+  const busy = requestBusy || modelBusy || dictationBusy;
+  const [transcripts, setTranscripts] = useState<Record<string, string>>({});
+  const [visibleTranscripts, setVisibleTranscripts] = useState<Record<string, boolean>>({});
   const [status, setStatus] = useState<TalkStatus>();
   const [recordings, setRecordings] = useState<readonly TalkRecording[]>([]);
   const [title, setTitle] = useState("");
@@ -43,6 +47,30 @@ export function TalkPanel() {
       return;
     }
     if (result.status) setStatus(result.status);
+    if (result.recording?.transcript !== undefined) {
+      const recording = result.recording;
+      setTranscripts((previous) => ({ ...previous, [recording.id]: recording.transcript ?? "" }));
+      setVisibleTranscripts((previous) => ({ ...previous, [recording.id]: true }));
+    }
+    if (request.operation === "recordings.delete") {
+      setTranscripts((previous) => {
+        const next = { ...previous };
+        delete next[request.id];
+        return next;
+      });
+      setVisibleTranscripts((previous) => {
+        const next = { ...previous };
+        delete next[request.id];
+        return next;
+      });
+    }
+    if (request.operation === "recordings.get") {
+      if (result.recording?.transcript === undefined)
+        setNotice(
+          "No transcript is available for this recording. You can try transcription again.",
+        );
+      return;
+    }
     await refresh();
   }
   return (
@@ -166,9 +194,15 @@ export function TalkPanel() {
       )}
       <TalkModelPanel
         status={status}
-        disabled={requestBusy}
+        disabled={requestBusy || dictationBusy}
         onStatusChange={setStatus}
         onBusyChange={setModelBusy}
+      />
+      <TalkDictationPanel
+        status={status}
+        disabled={requestBusy || modelBusy}
+        onStatusChange={setStatus}
+        onBusyChange={setDictationBusy}
       />
       <div className="space-y-3">
         <h3 className="text-sm font-medium">Local recordings</h3>
@@ -260,13 +294,29 @@ export function TalkPanel() {
                 </Button>
               </div>
             )}
-            {recording.transcript && (
-              <details>
-                <summary className="cursor-pointer text-sm">Transcript</summary>
-                <p className="mt-2 whitespace-pre-wrap break-words text-sm">
-                  {recording.transcript}
-                </p>
-              </details>
+            {(recording.status === "transcribed" || transcripts[recording.id] !== undefined) && (
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy || !status?.enabled}
+                  aria-expanded={visibleTranscripts[recording.id] ?? false}
+                  onClick={() => {
+                    if (visibleTranscripts[recording.id])
+                      setVisibleTranscripts((previous) => ({ ...previous, [recording.id]: false }));
+                    else if (transcripts[recording.id] !== undefined)
+                      setVisibleTranscripts((previous) => ({ ...previous, [recording.id]: true }));
+                    else void act({ operation: "recordings.get", id: recording.id });
+                  }}
+                >
+                  {visibleTranscripts[recording.id] ? "Hide transcript" : "View transcript"}
+                </Button>
+                {visibleTranscripts[recording.id] && (
+                  <p className="mt-2 select-text whitespace-pre-wrap break-words text-sm">
+                    {transcripts[recording.id] || "The transcript is empty."}
+                  </p>
+                )}
+              </>
             )}
           </article>
         ))}
