@@ -417,6 +417,8 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
       "!**/node_modules/@anthropic-ai/claude-agent-sdk-*/**/*",
       "!apps/desktop/prod-resources/windows-server",
       "!apps/desktop/prod-resources/windows-server/**/*",
+      "!apps/desktop/prod-resources/talk",
+      "!apps/desktop/prod-resources/talk/**/*",
     ]);
     assert.equal(WINDOWS_SERVER_RESOURCE_SOURCE_DIR, "apps/desktop/prod-resources/windows-server");
     assert.deepStrictEqual(WINDOWS_SERVER_EXTRA_RESOURCES, [
@@ -521,6 +523,8 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
           to: "resource-monitor",
         },
         ...WINDOWS_SERVER_EXTRA_RESOURCES,
+        { from: "apps/desktop/prod-resources/talk", to: "talk" },
+        { from: "apps/desktop/prod-resources/office-oauth.json", to: "office-oauth.json" },
       ]);
       assert.deepStrictEqual(win.nsis, { differentialPackage: true });
       // Native binaries and helper executables cannot load from inside an

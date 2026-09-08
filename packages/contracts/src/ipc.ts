@@ -1062,6 +1062,12 @@ export const DesktopPreviewAutomationWaitForInputSchema = Schema.Struct({
 });
 
 export interface DesktopBridge {
+  officeInvoke?: (
+    request: import("./office.ts").OfficeRequest,
+  ) => Promise<import("./office.ts").OfficeResult>;
+  talkInvoke?: (
+    request: import("./talk.ts").TalkRequest,
+  ) => Promise<import("./talk.ts").TalkResult>;
   getAppBranding: () => DesktopAppBranding | null;
   /**
    * The OS locale as a BCP-47 tag, which the renderer cannot read for itself:
