@@ -8,7 +8,8 @@ import {
 } from "lucide-react";
 import { isElectron } from "../../env";
 import { SidebarChromeHeader } from "../sidebar/SidebarChrome";
-import { Badge } from "../ui/badge";
+import { OfficePanel } from "./office/OfficePanel";
+import { TalkPanel } from "./office/TalkPanel";
 import { Card } from "../ui/card";
 import { SidebarContent, SidebarGroup, SidebarInset, useSidebar } from "../ui/sidebar";
 import { COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS } from "../../workspaceTitlebar";
@@ -89,58 +90,34 @@ export function OfficeWorkspace() {
       <main className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-8">
         <div className="mx-auto max-w-6xl space-y-6">
           <div>
-            <div className="mb-2 flex items-center gap-3">
-              <h1 className="text-2xl font-semibold tracking-tight">Office workspace</h1>
-              <Badge variant="outline">Integration preview</Badge>
-            </div>
-            <p className="text-sm text-muted-foreground">
+            <h1 className="text-2xl font-semibold tracking-tight">Office workspace</h1>
+            <p className="mt-2 text-sm text-muted-foreground">
               Meetings, calendar and email alongside your coding work.
             </p>
           </div>
-          <Card className="gap-2 p-5">
-            <h2 className="font-medium">Your office is ready to connect</h2>
-            <p className="text-sm text-muted-foreground">
-              This workspace uses the existing Pulse interface. Office services are not connected
-              yet; no recordings, emails or calendar events have been loaded.
-            </p>
-          </Card>
-          <div className="grid gap-4 lg:grid-cols-2">
-            <Card id="office-meetings" className="gap-3 p-5">
-              <MicIcon className="size-5 text-muted-foreground" />
-              <h2 className="font-semibold">Meetings</h2>
+          {window.desktopBridge?.talkInvoke ? (
+            <TalkPanel />
+          ) : (
+            <Card id="office-meetings" className="gap-2 p-5">
+              <h2 className="font-semibold">Pulse Talk</h2>
               <p className="text-sm text-muted-foreground">
-                Recording and meeting history will be supplied by Pulse Talk. Local voice remains
-                optional, with transcription and summaries only on request.
+                Open Pulse on Windows to enable local recording and transcription.
               </p>
-              <Badge variant="outline">Not connected</Badge>
             </Card>
-            <Card id="office-calendar" className="gap-3 p-5">
-              <CalendarDaysIcon className="size-5 text-muted-foreground" />
-              <h2 className="font-semibold">Calendar</h2>
+          )}
+          {window.desktopBridge?.officeInvoke ? (
+            <OfficePanel />
+          ) : (
+            <Card id="office-calendar" className="gap-2 p-5">
+              <h2 id="office-email" className="font-semibold">
+                Calendar and email
+              </h2>
               <p className="text-sm text-muted-foreground">
-                A combined agenda for selected Google calendars, with reminders and a passive
-                meeting board.
+                Connect your accounts in the Pulse Windows desktop app. Office accounts are stored
+                on that computer and are not available through remote web connections.
               </p>
-              <Badge variant="outline">Not connected</Badge>
             </Card>
-            <Card id="office-email" className="gap-3 p-5">
-              <MailIcon className="size-5 text-muted-foreground" />
-              <h2 className="font-semibold">Email</h2>
-              <p className="text-sm text-muted-foreground">
-                Email belongs in Office. Provider and message-action support are still being
-                defined; no mailbox access is requested here.
-              </p>
-              <Badge variant="outline">Planned</Badge>
-            </Card>
-            <Card className="gap-3 p-5">
-              <h2 className="font-semibold">Shared context</h2>
-              <p className="text-sm text-muted-foreground">
-                Pulse Online connects chat and bug context across Office and Code. Cross-device chat
-                synchronization follows the Windows desktop milestone.
-              </p>
-              <Badge variant="outline">Sync not available yet</Badge>
-            </Card>
-          </div>
+          )}
         </div>
       </main>
     </SidebarInset>
