@@ -72,12 +72,16 @@ export const desktopClerkFrontendApiHostname = resolveDesktopClerkFrontendApiHos
     : __T3CODE_BUILD_CLERK_PUBLISHABLE_KEY__,
 );
 
-export function createDesktopClerkBridge(stateDir: string, isDevelopment: boolean) {
+export function createDesktopClerkBridge(
+  stateDir: string,
+  isDevelopment: boolean,
+  preview = false,
+) {
   return createClerkBridge({
     storage: storage({ path: stateDir }),
     passkeys: true,
     renderer: {
-      scheme: ElectronProtocol.getDesktopScheme(isDevelopment),
+      scheme: ElectronProtocol.getDesktopScheme(isDevelopment, preview),
       host: ElectronProtocol.DESKTOP_HOST,
     },
   });
@@ -96,7 +100,12 @@ export const make = Effect.gen(function* () {
 
   const bridge = yield* Effect.acquireRelease(
     Effect.try({
-      try: () => createDesktopClerkBridge(environment.stateDir, environment.isDevelopment),
+      try: () =>
+        createDesktopClerkBridge(
+          environment.stateDir,
+          environment.isDevelopment,
+          environment.appUserModelId === "ai.polyphron.pulse.preview",
+        ),
       catch: (cause) =>
         new DesktopClerkBridgeInitializationError({
           stateDir: environment.stateDir,
@@ -133,10 +142,12 @@ export const make = Effect.gen(function* () {
         return yield* Effect.interrupt;
       }
 
-      // Keep OAuth/deep-link callbacks scoped to this Pulse Code installation.
-      yield* electronApp.setAsDefaultProtocolClient(
-        ElectronProtocol.getDesktopScheme(environment.isDevelopment),
-      );
+      // The separate preview must leave the installed app's OAuth handler alone.
+      if (environment.appUserModelId !== "ai.polyphron.pulse.preview") {
+        yield* electronApp.setAsDefaultProtocolClient(
+          ElectronProtocol.getDesktopScheme(environment.isDevelopment),
+        );
+      }
 
       yield* electronApp.on("second-instance", () => {
         void runPromise(

@@ -11,18 +11,23 @@ import * as Electron from "electron";
 export const DESKTOP_HOST = "app";
 export const DESKTOP_PRODUCTION_SCHEME = "pulsecode";
 export const DESKTOP_DEVELOPMENT_SCHEME = "pulsecode-dev";
-export type DesktopScheme = typeof DESKTOP_PRODUCTION_SCHEME | typeof DESKTOP_DEVELOPMENT_SCHEME;
+export const DESKTOP_PREVIEW_SCHEME = "pulse-preview";
+export type DesktopScheme =
+  | typeof DESKTOP_PRODUCTION_SCHEME
+  | typeof DESKTOP_DEVELOPMENT_SCHEME
+  | typeof DESKTOP_PREVIEW_SCHEME;
 
-export function getDesktopScheme(isDevelopment: boolean): DesktopScheme {
+export function getDesktopScheme(isDevelopment: boolean, preview = false): DesktopScheme {
+  if (preview) return DESKTOP_PREVIEW_SCHEME;
   return isDevelopment ? DESKTOP_DEVELOPMENT_SCHEME : DESKTOP_PRODUCTION_SCHEME;
 }
 
-export function getDesktopOrigin(isDevelopment: boolean): string {
-  return `${getDesktopScheme(isDevelopment)}://${DESKTOP_HOST}`;
+export function getDesktopOrigin(isDevelopment: boolean, preview = false): string {
+  return `${getDesktopScheme(isDevelopment, preview)}://${DESKTOP_HOST}`;
 }
 
-export function getDesktopUrl(isDevelopment: boolean): string {
-  return `${getDesktopOrigin(isDevelopment)}/`;
+export function getDesktopUrl(isDevelopment: boolean, preview = false): string {
+  return `${getDesktopOrigin(isDevelopment, preview)}/`;
 }
 
 export class ElectronProtocolRegistrationError extends Schema.TaggedErrorClass<ElectronProtocolRegistrationError>()(
@@ -111,15 +116,17 @@ function withContentSecurityPolicy(response: Response, policy: string): Response
  */
 export function registerDesktopSchemePrivilegesSync(): void {
   Electron.protocol.registerSchemesAsPrivileged(
-    [DESKTOP_PRODUCTION_SCHEME, DESKTOP_DEVELOPMENT_SCHEME].map((scheme) => ({
-      scheme,
-      privileges: {
-        standard: true,
-        secure: true,
-        supportFetchAPI: true,
-        corsEnabled: true,
-      },
-    })),
+    [DESKTOP_PRODUCTION_SCHEME, DESKTOP_DEVELOPMENT_SCHEME, DESKTOP_PREVIEW_SCHEME].map(
+      (scheme) => ({
+        scheme,
+        privileges: {
+          standard: true,
+          secure: true,
+          supportFetchAPI: true,
+          corsEnabled: true,
+        },
+      }),
+    ),
   );
 }
 
