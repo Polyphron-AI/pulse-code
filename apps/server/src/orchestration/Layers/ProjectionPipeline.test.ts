@@ -1311,6 +1311,10 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
         WHERE projector = ${ORCHESTRATION_PROJECTOR_NAMES.projects}
       `;
       assert.deepEqual(stateRows, [{ lastAppliedSequence: lastSequence }]);
+      const projectRows = yield* sql<{ readonly title: string }>`
+        SELECT title FROM projection_projects WHERE project_id = ${projectId}
+      `;
+      assert.deepEqual(projectRows, [{ title: "Bootstrap backlog 1000" }]);
     }),
   );
 
