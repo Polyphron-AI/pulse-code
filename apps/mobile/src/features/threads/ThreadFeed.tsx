@@ -1,14 +1,24 @@
 import * as Haptics from "expo-haptics";
 import { KeyboardAwareLegendList } from "@legendapp/list/keyboard";
 import { type LegendListRef } from "@legendapp/list/react-native";
+import type {
+  ChatAttachment,
+  ChatFileAttachment,
+  ChatImageAttachment,
+  EnvironmentId,
+  MessageId,
+  ThreadId,
+  TurnId,
+} from "@t3tools/contracts";
 import { resolveAssetUrl } from "@t3tools/client-runtime/state/assets";
+import { formatAttachmentSize } from "@t3tools/client-runtime/state/attachments";
+import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { environmentEndpointUrl } from "@t3tools/client-runtime/environment";
-import type { EnvironmentId, MessageId, ThreadId, TurnId } from "@t3tools/contracts";
 import { CHAT_LIST_ANCHOR_OFFSET, resolveChatListAnchoredEndSpace } from "@t3tools/shared/chatList";
 import { formatElapsed } from "@t3tools/shared/orchestrationTiming";
 import { SymbolView } from "../../components/AppSymbol";
 import { HeaderHeightContext } from "@react-navigation/elements";
-import { useNavigation } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import {
   memo,
   useCallback,
@@ -54,6 +64,7 @@ import { useFontFamily } from "../../lib/useFontFamily";
 import { scopedThreadKey } from "../../lib/scopedEntities";
 import { copyTextWithHaptic } from "../../lib/copyTextWithHaptic";
 import { tryOpenExternalUrl } from "../../lib/openExternalUrl";
+import { downloadAndShareAttachment } from "../../lib/attachmentDownload";
 import { hasWideMarkdownBlock } from "../../lib/wideMarkdownBlocks";
 import { splitMermaidMarkdown } from "../../lib/mermaidMarkdown";
 import {
@@ -116,6 +127,7 @@ import {
   resolveWorkspaceRelativeFilePath,
 } from "../files/filePath";
 import { openWorkspaceFileWith } from "../files/openWorkspaceFileWith";
+import * as Option from "effect/Option";
 
 const WIDE_MARKDOWN_BLOCK_OPTIONS = {
   includeOrderedLists: Platform.OS === "android",
@@ -203,6 +215,122 @@ function MessageAttachmentImage(props: {
     <TouchableOpacity activeOpacity={0.7} onPress={() => props.onPressImage(uri)}>
       <Image source={{ uri }} className={props.className} resizeMode="cover" />
     </TouchableOpacity>
+  );
+}
+
+// The attachment union has an open member (`type: string` for attachment
+// types from newer servers), so literal comparisons do not narrow it. Split
+// with guards and render unknown types as inert rows, never crash.
+function isImageAttachment(attachment: ChatAttachment): attachment is ChatImageAttachment {
+  return attachment.type === "image";
+}
+
+function isFileAttachment(attachment: ChatAttachment): attachment is ChatFileAttachment {
+  return attachment.type === "file";
+}
+
+function MessageAttachmentFile(props: {
+  readonly environmentId: EnvironmentId;
+  readonly attachment: ChatFileAttachment;
+}) {
+  const createAssetUrl = useAtomQueryRunner(assetEnvironment.createUrl, {
+    reportFailure: false,
+  });
+  const preparedConnection = usePreparedConnection(props.environmentId);
+  const { attachment } = props;
+  const httpBaseUrl = Option.isSome(preparedConnection)
+    ? preparedConnection.value.httpBaseUrl
+    : null;
+  const openingRef = useRef<AbortController | null>(null);
+  const [opening, setOpening] = useState(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      setOpening(false);
+      return () => {
+        openingRef.current?.abort();
+        openingRef.current = null;
+      };
+    }, [props.environmentId, attachment.id, httpBaseUrl]),
+  );
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Open ${attachment.name}`}
+      accessibilityState={{ disabled: opening || httpBaseUrl === null, busy: opening }}
+      disabled={opening || httpBaseUrl === null}
+      className="flex-row items-center gap-2 py-1"
+      onPress={() => {
+        if (httpBaseUrl === null || openingRef.current) return;
+        const controller = new AbortController();
+        openingRef.current = controller;
+        setOpening(true);
+        void (async () => {
+          try {
+            const result = await createAssetUrl({
+              environmentId: props.environmentId,
+              input: {
+                resource: {
+                  _tag: "attachment",
+                  attachmentId: attachment.id,
+                  fileName: attachment.name,
+                  mimeType: attachment.mimeType,
+                },
+              },
+            });
+            if (controller.signal.aborted) return;
+            if (result._tag === "Failure") {
+              throw squashAtomCommandFailure(result);
+            }
+            const url = resolveAssetUrl(httpBaseUrl, result.value.relativeUrl);
+            if (url === null) {
+              throw new Error("The attachment could not be opened.");
+            }
+            await downloadAndShareAttachment({ url, attachment, signal: controller.signal });
+          } catch (error) {
+            if (!controller.signal.aborted) {
+              Alert.alert(
+                "Could not open attachment",
+                error instanceof Error ? error.message : "The attachment is unavailable.",
+              );
+            }
+          } finally {
+            if (openingRef.current === controller) {
+              openingRef.current = null;
+              setOpening(false);
+            }
+          }
+        })();
+      }}
+    >
+      {opening ? (
+        <ActivityIndicator size="small" />
+      ) : (
+        <SymbolView name="doc.text" size={16} tintColor="#a3a3a3" type="monochrome" />
+      )}
+      <Text className="min-w-0 flex-1 text-sm text-foreground" numberOfLines={1}>
+        {attachment.name}
+      </Text>
+      <Text className="text-xs text-foreground-muted">
+        {formatAttachmentSize(attachment.sizeBytes)}
+      </Text>
+    </Pressable>
+  );
+}
+
+/**
+ * An attachment type this build does not know (newer server). Rendered as an
+ * inert row: the name is still useful, but there is nothing to open.
+ */
+function MessageAttachmentUnknown(props: { readonly name: string }) {
+  return (
+    <View className="flex-row items-center gap-2 py-1">
+      <SymbolView name="doc.text" size={16} tintColor="#a3a3a3" type="monochrome" />
+      <Text className="min-w-0 flex-1 text-sm text-foreground" numberOfLines={1}>
+        {props.name}
+      </Text>
+    </View>
   );
 }
 
@@ -924,7 +1052,7 @@ function renderFeedEntry(
               />
             ) : null}
             {attachments.map((attachment) => {
-              return (
+              return isImageAttachment(attachment) ? (
                 <MessageAttachmentImage
                   key={attachment.id}
                   environmentId={props.environmentId}
@@ -932,6 +1060,14 @@ function renderFeedEntry(
                   className="aspect-[1.3] w-full rounded-[14px] bg-white/15"
                   onPressImage={props.onPressImage}
                 />
+              ) : isFileAttachment(attachment) ? (
+                <MessageAttachmentFile
+                  key={attachment.id}
+                  environmentId={props.environmentId}
+                  attachment={attachment}
+                />
+              ) : (
+                <MessageAttachmentUnknown key={attachment.id} name={attachment.name} />
               );
             })}
           </View>
@@ -975,7 +1111,7 @@ function renderFeedEntry(
           />
         ) : null}
         {attachments.map((attachment) => {
-          return (
+          return isImageAttachment(attachment) ? (
             <MessageAttachmentImage
               key={attachment.id}
               environmentId={props.environmentId}
@@ -983,6 +1119,14 @@ function renderFeedEntry(
               className="mt-1.5 aspect-[1.3] w-full rounded-[18px] bg-neutral-200 dark:bg-neutral-800"
               onPressImage={props.onPressImage}
             />
+          ) : isFileAttachment(attachment) ? (
+            <MessageAttachmentFile
+              key={attachment.id}
+              environmentId={props.environmentId}
+              attachment={attachment}
+            />
+          ) : (
+            <MessageAttachmentUnknown key={attachment.id} name={attachment.name} />
           );
         })}
         {showAssistantMeta ? (

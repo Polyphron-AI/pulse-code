@@ -16,6 +16,8 @@ working**:
 The composer stays available while the agent works. Its send button is labeled **Queue message** or
 **Steer current turn** while a turn is active, matching the selected behavior.
 
+On mobile, the **+** control offers Photos and adds Files when the connected server supports file uploads. Share a file into Pulse Code through the system share sheet. Files upload when the message sends; queued messages retain their files until delivery. Select a received file to save it or open it in another app.
+
 # Voice dictation
 
 The microphone above Send adds a Parakeet transcript to your draft. Ctrl+Shift+Space starts or stops recording. Configure the shortcut and Windows hover mode in Settings → General → Voice capture. See [Voice capture](voice-capture.md).
