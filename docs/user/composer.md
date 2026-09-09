@@ -25,3 +25,13 @@ The microphone above Send adds a Parakeet transcript to your draft. Ctrl+Shift+S
 Pulse Code remembers the last provider, model and model options you selected for new threads. An explicit project default overrides that remembered selection; resetting the project setting restores it. Existing project defaults are preserved during updates.
 
 Provider default options remain display values until you choose them in Pulse Code. Only explicitly selected options are sent, allowing an unset reasoning level or service tier to come from the provider configuration.
+
+### Workspace skills
+
+The skill and command menus use the selected provider and workspace, including a thread's worktree.
+They refresh after a provider is reconfigured. Skills disabled by the provider or reserved for the
+agent are hidden from composer picks. Use `$` to find a skill, or `/` to browse skills alongside
+provider commands. Native provider commands must start the message.
+
+Mobile offers these menus in existing threads and while composing a new task. Switching drafts
+moves the text selection to the end of the newly selected draft.
