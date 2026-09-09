@@ -1,3 +1,4 @@
+import { ProjectAutoPullSettings } from "./components/ProjectAutoPullSettings";
 import { useEnvironments } from "../../state/environments";
 import { AutoSettlementSettings } from "./components/AutoSettlementSettings";
 import { useAuth, useUser } from "@clerk/expo";
@@ -129,6 +130,8 @@ function LocalSettingsRouteScreen() {
         </SettingsSection>
 
         <GeneralSettingsSection />
+
+        <ProjectAutoPullSettings />
 
         <SettingsSection title="Appearance">
           <SettingsRow icon="paintbrush" label="Appearance" target="SettingsAppearance" />

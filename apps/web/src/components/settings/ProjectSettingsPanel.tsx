@@ -96,6 +96,7 @@ import {
 } from "../ui/menu";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { SidebarInset } from "../ui/sidebar";
+import { Switch } from "../ui/switch";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import {
@@ -366,11 +367,13 @@ function ProjectDetail({ group }: { group: SidebarProjectSnapshot }) {
         title: string;
         defaultModelSelection: ModelSelection | null;
         defaultThreadEnvMode: ThreadEnvMode | null;
+        autoPull: boolean;
         faviconPath: string | null;
       }>,
       failureTitle: string,
     ): Promise<AtomCommandResult<void, unknown>> => {
       for (const member of group.memberProjects) {
+        if (input.autoPull !== undefined && member.autoPull === undefined) continue;
         const result = mapAtomCommandResult(
           await updateProject({
             environmentId: member.environmentId,
@@ -440,6 +443,17 @@ function ProjectDetail({ group }: { group: SidebarProjectSnapshot }) {
         { defaultThreadEnvMode: mode },
         "Failed to update new-thread workspace",
       ),
+    [updateAllMembers],
+  );
+
+  const autoPullProject =
+    representative.autoPull !== undefined
+      ? representative
+      : group.memberProjects.find((member) => member.autoPull !== undefined);
+  const autoPull = autoPullProject?.autoPull ?? false;
+  const setAutoPull = useCallback(
+    (enabled: boolean) =>
+      void updateAllMembers({ autoPull: enabled }, "Failed to update automatic pull setting"),
     [updateAllMembers],
   );
 
@@ -910,6 +924,19 @@ function ProjectDetail({ group }: { group: SidebarProjectSnapshot }) {
               </Select>
             }
           />
+          {autoPullProject ? (
+            <SettingsRow
+              title="Automatically pull"
+              description="Keeps the default branch current in the background when the checkout has no local changes or commits."
+              control={
+                <Switch
+                  checked={autoPull}
+                  aria-label="Automatically pull the default branch"
+                  onCheckedChange={setAutoPull}
+                />
+              }
+            />
+          ) : null}
         </SettingsSection>
 
         <SettingsSection
