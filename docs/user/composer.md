@@ -19,3 +19,9 @@ The composer stays available while the agent works. Its send button is labeled *
 # Voice dictation
 
 The microphone above Send adds a Parakeet transcript to your draft. Ctrl+Shift+Space starts or stops recording. Configure the shortcut and Windows hover mode in Settings → General → Voice capture. See [Voice capture](voice-capture.md).
+
+## Model defaults
+
+Pulse Code remembers the last provider, model and model options you selected for new threads. An explicit project default overrides that remembered selection; resetting the project setting restores it. Existing project defaults are preserved during updates.
+
+Provider default options remain display values until you choose them in Pulse Code. Only explicitly selected options are sent, allowing an unset reasoning level or service tier to come from the provider configuration.

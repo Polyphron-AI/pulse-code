@@ -651,6 +651,7 @@ export const ProjectCreateCommand = Schema.Struct({
   title: TrimmedNonEmptyString,
   workspaceRoot: TrimmedNonEmptyString,
   createWorkspaceRootIfMissing: Schema.optional(Schema.Boolean),
+  // Explicit caller-supplied default; automatic creation paths leave this unset.
   defaultModelSelection: Schema.optional(Schema.NullOr(ModelSelection)),
   createdAt: IsoDateTime,
 });
