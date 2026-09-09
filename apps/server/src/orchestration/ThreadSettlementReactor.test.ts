@@ -200,9 +200,9 @@ const makeHarness = Effect.fn("makeThreadSettlementHarness")(function* (options:
       return next;
     });
 
-  const branchPullRequest: GitManager["Service"]["branchPullRequest"] = (input) =>
+  const branchPullRequest: GitManager["Service"]["branchPullRequest"] = (input, readOptions) =>
     Ref.update(branchCalls, (calls) => [...calls, input]).pipe(
-      Effect.andThen(options.branchPullRequest?.(input) ?? Effect.succeed(null)),
+      Effect.andThen(options.branchPullRequest?.(input, readOptions) ?? Effect.succeed(null)),
     );
 
   const pullRequestDetail: PullRequestService["Service"]["detail"] = (input) =>
@@ -254,6 +254,7 @@ const makeHarness = Effect.fn("makeThreadSettlementHarness")(function* (options:
     }),
     Layer.mock(PullRequestService)({
       detail: pullRequestDetail,
+      summary: (input) => pullRequestDetail(input),
       subscribeMerges: PubSub.subscribe(merges).pipe(Effect.map(Stream.fromSubscription)),
     }),
     Layer.mock(OrchestrationEngineService)({
@@ -384,7 +385,18 @@ describe("ThreadSettlementReactor", () => {
           ]),
           branchPullRequest: () =>
             Ref.get(pullRequest).pipe(
-              Effect.map((state) => ({ state, mergedAt: NOW, closedAt: NOW, updatedAt: NOW })),
+              Effect.map((state) => ({
+                number: 1,
+                title: "PR",
+                url: "https://example.test/pr/1",
+                baseRef: "main",
+                headRef: "feature",
+                repositoryKey: "github.com/owner/repo",
+                state,
+                mergedAt: NOW,
+                closedAt: NOW,
+                updatedAt: NOW,
+              })),
             ),
         });
 
@@ -450,6 +462,12 @@ describe("ThreadSettlementReactor", () => {
               ),
               Effect.andThen(Ref.get(state)),
               Effect.map((pullRequestState) => ({
+                number: 1,
+                title: "PR",
+                url: "https://example.test/pr/1",
+                baseRef: "main",
+                headRef: "feature",
+                repositoryKey: "github.com/owner/repo",
                 state: pullRequestState,
                 mergedAt: NOW,
                 closedAt: NOW,
@@ -612,7 +630,17 @@ describe("ThreadSettlementReactor", () => {
             ],
           ),
           branchPullRequest: () =>
-            Effect.succeed({ state: "closed", closedAt: NOW, updatedAt: NOW }),
+            Effect.succeed({
+              number: 1,
+              title: "PR",
+              url: "https://example.test/pr/1",
+              baseRef: "main",
+              headRef: "feature",
+              repositoryKey: "github.com/owner/repo",
+              state: "closed",
+              closedAt: NOW,
+              updatedAt: NOW,
+            }),
           pullRequestDetail: (input) =>
             Effect.succeed(makePullRequestDetail({ ...input, state: "merged" })),
         });
@@ -712,6 +740,12 @@ describe("ThreadSettlementReactor", () => {
             ),
             branchPullRequest: () =>
               Effect.succeed({
+                number: 1,
+                title: "PR",
+                url: "https://example.test/pr/1",
+                baseRef: "main",
+                headRef: "feature",
+                repositoryKey: "github.com/owner/repo",
                 state: branchMerged ? "merged" : "open",
                 mergedAt: branchMerged ? NOW : null,
                 updatedAt: NOW,
@@ -757,6 +791,93 @@ describe("ThreadSettlementReactor", () => {
           assert.strictEqual(yield* Ref.get(fixture.snapshotReadCount), 0);
           assert.deepStrictEqual(yield* Ref.get(fixture.branchCalls), []);
           assert.deepStrictEqual(yield* Ref.get(fixture.detailCalls), []);
+        }).pipe(Effect.provide(fixture.layer));
+      }),
+    ),
+  );
+  it.effect("keeps resumed work and branches with newer PRs unsettled", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        yield* TestClock.setTime(Date.parse(NOW));
+        const previous = {
+          projectId: PROJECT_ID,
+          repository: "owner/repository",
+          number: 1,
+          url: "https://example.test/owner/repository/pull/1",
+        };
+        const project = {
+          ...makeProject(),
+          repositoryIdentity: {
+            canonicalKey: "example.test/owner/repository",
+            rootPath: "/workspace/project",
+            displayName: "owner/repository",
+            locator: {
+              source: "git-remote" as const,
+              remoteName: "origin",
+              remoteUrl: "https://example.test/owner/repository.git",
+            },
+          },
+        };
+        const fixture = yield* makeHarness({
+          snapshot: makeSnapshot(
+            [
+              makeThread("retained-terminal", { branch: "main", branchPullRequest: previous }),
+              makeThread("reused-manual", { branch: "reused", linkedPullRequest: previous }),
+              makeThread("reused-detected", { branch: "reused", branchPullRequest: previous }),
+              makeThread("foreign-branch-pr", { branch: "foreign", linkedPullRequest: previous }),
+              makeThread("resumed-manual", {
+                branch: "main",
+                linkedPullRequest: previous,
+                latestUserMessageAt: "2026-08-28T00:00:00.000Z",
+              }),
+              makeThread("resumed-detected", {
+                branch: "main",
+                branchPullRequest: previous,
+                latestUserMessageAt: "2026-08-28T00:00:00.000Z",
+              }),
+            ],
+            [project],
+          ),
+          settings: {
+            ...DEFAULT_SERVER_SETTINGS,
+            sidebarAutoSettleAfterDays: null,
+            sidebarAutoSettleOnMerge: true,
+          },
+          branchPullRequest: ({ branch }, options) =>
+            Effect.succeed(
+              branch === "main"
+                ? null
+                : {
+                    number: 2,
+                    title: "New work",
+                    url: "https://example.test/owner/repository/pull/2",
+                    baseRef: "main",
+                    headRef: branch,
+                    repositoryKey:
+                      branch === "foreign"
+                        ? "example.test/another/repository"
+                        : "example.test/owner/repository",
+                    state: options?.refresh ? ("open" as const) : ("merged" as const),
+                    updatedAt: NOW,
+                    mergedAt: options?.refresh ? null : NOW,
+                  },
+            ),
+          pullRequestDetail: (input) =>
+            Effect.succeed(
+              makePullRequestDetail({
+                ...input,
+                state: "merged",
+                updatedAt: "2026-08-27T00:00:00.000Z",
+              }),
+            ),
+        });
+        yield* Effect.gen(function* () {
+          const reactor = yield* ThreadSettlementReactor.ThreadSettlementReactor;
+          yield* startHarness(reactor, fixture.activation, fixture.snapshotReads);
+          assert.deepStrictEqual(
+            new Set((yield* Ref.get(fixture.commands)).map((command) => command.threadId)),
+            new Set([ThreadId.make("retained-terminal"), ThreadId.make("foreign-branch-pr")]),
+          );
         }).pipe(Effect.provide(fixture.layer));
       }),
     ),

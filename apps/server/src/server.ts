@@ -69,6 +69,7 @@ import { ScheduleHandoffGitLive } from "./orchestration/Layers/ScheduleHandoffGi
 import { ScheduleProviderInstancesLive } from "./orchestration/Layers/ScheduleProviderInstances.ts";
 import { ScheduleWorkingTreeProbeLive } from "./orchestration/Layers/ScheduleWorkingTreeProbe.ts";
 import * as ThreadSettlementReactor from "./orchestration/ThreadSettlementReactor.ts";
+import * as ThreadPullRequestReactor from "./orchestration/ThreadPullRequestReactor.ts";
 import * as AgentAwarenessRelay from "./relay/AgentAwarenessRelay.ts";
 import { hasCloudPublicConfig } from "./cloud/publicConfig.ts";
 import { ProviderPlanUsageTrackerLive } from "./provider/Layers/ProviderPlanUsageTracker.ts";
@@ -272,6 +273,7 @@ const ReactorLayerLive = Layer.empty.pipe(
   Layer.provideMerge(ScheduleWorkingTreeProbeLive),
   Layer.provideMerge(ScheduleProviderInstancesLive),
   Layer.provideMerge(ThreadSettlementReactor.layer),
+  Layer.provideMerge(ThreadPullRequestReactor.layer),
   Layer.provideMerge(AgentAwarenessRelay.layer.pipe(Layer.provide(ServerSecretStore.layer))),
   Layer.provideMerge(ProviderPlanUsageTrackerLive),
   Layer.provideMerge(RuntimeReceiptBusLive),
@@ -310,7 +312,6 @@ const PullRequestServiceLive = PullRequestService.layer.pipe(
   Layer.provide(PullRequestProviderRegistry.layer),
   Layer.provide(SourceControlProviderRegistryLayerLive),
   Layer.provide(SourceControlRateLimit.layer),
-  Layer.provide(VcsProcess.layer),
 );
 
 const GitManagerLayerLive = GitManager.layer.pipe(
@@ -724,7 +725,8 @@ export const makeServerLayer = Layer.unwrap(
       Layer.provideMerge(HttpServerLive),
       Layer.provide(ApplicationObservabilityLive),
       Layer.provideMerge(FetchHttpClient.layer),
-      Layer.provideMerge(VcsProcess.layer),
+      // PR reads, Git operations, and WebSocket discovery share one process limiter.
+      Layer.provide(VcsProcess.layer),
       Layer.provideMerge(PlatformServicesLive),
     );
   }),

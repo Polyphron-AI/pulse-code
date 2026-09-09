@@ -1,9 +1,11 @@
+import * as Schema from "effect/Schema";
 import {
   CheckpointRef,
   EventId,
   MessageId,
   ProjectId,
   ThreadId,
+  ThreadLinkedPullRequest,
   TurnId,
   ProviderInstanceId,
 } from "@t3tools/contracts";
@@ -27,6 +29,9 @@ const asTurnId = (value: string): TurnId => TurnId.make(value);
 const asMessageId = (value: string): MessageId => MessageId.make(value);
 const asEventId = (value: string): EventId => EventId.make(value);
 const asCheckpointRef = (value: string): CheckpointRef => CheckpointRef.make(value);
+const encodeThreadLinkedPullRequest = Schema.encodeSync(
+  Schema.fromJsonString(ThreadLinkedPullRequest),
+);
 
 const projectionSnapshotLayer = it.layer(
   OrchestrationProjectionSnapshotQueryLive.pipe(
@@ -43,6 +48,12 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
     Effect.gen(function* () {
       const snapshotQuery = yield* ProjectionSnapshotQuery;
       const sql = yield* SqlClient.SqlClient;
+      const branchPullRequest = {
+        projectId: asProjectId("project-1"),
+        repository: "pingdotgg/t3code",
+        number: 43,
+        url: "https://github.com/pingdotgg/t3code/pull/43",
+      };
 
       yield* sql`DELETE FROM projection_projects`;
       yield* sql`DELETE FROM projection_state`;
@@ -83,6 +94,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           branch,
           worktree_path,
           linked_pull_request_json,
+          branch_pull_request_json,
           latest_turn_id,
           latest_user_message_at,
           pending_approval_count,
@@ -104,6 +116,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           NULL,
           NULL,
           '{"projectId":"project-1","repository":"pingdotgg/t3code","number":42,"url":"https://github.com/pingdotgg/t3code/pull/42"}',
+          ${encodeThreadLinkedPullRequest(branchPullRequest)},
           'turn-1',
           '2026-02-24T00:00:04.000Z',
           1,
@@ -314,6 +327,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
             number: 42,
             url: "https://github.com/pingdotgg/t3code/pull/42",
           },
+          branchPullRequest,
           latestTurn: {
             turnId: asTurnId("turn-1"),
             state: "completed",
@@ -442,6 +456,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
             number: 42,
             url: "https://github.com/pingdotgg/t3code/pull/42",
           },
+          branchPullRequest,
           latestTurn: {
             turnId: asTurnId("turn-1"),
             state: "completed",
@@ -495,6 +510,12 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
     Effect.gen(function* () {
       const snapshotQuery = yield* ProjectionSnapshotQuery;
       const sql = yield* SqlClient.SqlClient;
+      const branchPullRequest = {
+        projectId: asProjectId("project-archive-test"),
+        repository: "pingdotgg/t3code",
+        number: 43,
+        url: "https://github.com/pingdotgg/t3code/pull/43",
+      };
 
       yield* sql`DELETE FROM projection_projects`;
       yield* sql`DELETE FROM projection_threads`;
@@ -601,6 +622,13 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
         shellSnapshot.threads.map((thread) => thread.id),
         [ThreadId.make("thread-active")],
       );
+      assert.equal(shellSnapshot.threads[0]?.branchPullRequest, null);
+
+      yield* sql`
+        UPDATE projection_threads
+        SET branch_pull_request_json = ${encodeThreadLinkedPullRequest(branchPullRequest)}
+        WHERE thread_id = 'thread-archived'
+      `;
 
       const archivedShellSnapshot = yield* snapshotQuery.getArchivedShellSnapshot();
       assert.deepEqual(

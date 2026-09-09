@@ -397,6 +397,7 @@ export function projectEvent(
             worktreePath: payload.worktreePath,
             // Absent on pre-schedule events; consumers read absent as "user".
             ...(payload.origin !== undefined ? { origin: payload.origin } : {}),
+            branchPullRequest: null,
             latestTurn: null,
             createdAt: payload.createdAt,
             updatedAt: payload.updatedAt,
@@ -570,6 +571,9 @@ export function projectEvent(
             ...(payload.worktreePath !== undefined ? { worktreePath: payload.worktreePath } : {}),
             ...(payload.linkedPullRequest !== undefined
               ? { linkedPullRequest: payload.linkedPullRequest }
+              : {}),
+            ...(payload.branchPullRequest !== undefined
+              ? { branchPullRequest: payload.branchPullRequest }
               : {}),
             updatedAt: payload.updatedAt,
           }),

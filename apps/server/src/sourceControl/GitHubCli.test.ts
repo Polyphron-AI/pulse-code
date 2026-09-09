@@ -66,6 +66,7 @@ describe("GitHubCli.layer", () => {
               headRefName: "feature/pr-threads",
               state: "OPEN",
               mergedAt: null,
+              updatedAt: "2026-08-24T12:34:56Z",
               isCrossRepository: true,
               headRepository: {
                 nameWithOwner: "octocat/codething-mvp",
@@ -93,6 +94,7 @@ describe("GitHubCli.layer", () => {
         state: "open",
         closedAt: null,
         mergedAt: null,
+        updatedAt: "2026-08-24T12:34:56.000Z",
         isCrossRepository: true,
         headRepositoryNameWithOwner: "octocat/codething-mvp",
         headRepositoryOwnerLogin: "octocat",

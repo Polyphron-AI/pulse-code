@@ -17,6 +17,7 @@ import * as ServerSettings from "../serverSettings.ts";
 import { forkParked } from "../serverActivation.ts";
 import * as OrchestrationEngine from "./Services/OrchestrationEngine.ts";
 import * as ProjectionSnapshotQuery from "./Services/ProjectionSnapshotQuery.ts";
+import { pullRequestMatchesProject } from "./ThreadPullRequestReactor.ts";
 import {
   isAutoSettlementCandidate,
   resolveAutoSettlementAt,
@@ -105,10 +106,10 @@ export const make = Effect.gen(function* () {
       (thread) =>
         Effect.gen(function* () {
           const project = projects.get(thread.projectId);
-          if (project === undefined || thread.linkedPullRequest != null || thread.branch === null)
-            return;
+          if (project === undefined || thread.branch === null) return;
           const exists =
-            thread.worktreePath !== null && (yield* fileSystem.exists(thread.worktreePath));
+            thread.worktreePath !== null &&
+            (yield* fileSystem.exists(thread.worktreePath).pipe(Effect.orElseSucceed(() => false)));
           lookupCwds.set(
             thread.id,
             exists && thread.worktreePath !== null ? thread.worktreePath : project.workspaceRoot,
@@ -121,7 +122,7 @@ export const make = Effect.gen(function* () {
       const cwds = [
         ...new Set(
           lookupCandidates
-            .filter((thread) => thread.linkedPullRequest == null && thread.branch !== null)
+            .filter((thread) => thread.branch !== null)
             .map(lookupCwd)
             .filter((cwd) => cwd !== undefined),
         ),
@@ -132,12 +133,15 @@ export const make = Effect.gen(function* () {
       });
     }
     const lookupKey = (thread: (typeof candidates)[number]) => {
-      if (thread.linkedPullRequest != null) {
+      const reference = thread.linkedPullRequest ?? thread.branchPullRequest;
+      if (reference != null) {
         return JSON.stringify([
           "linked",
-          thread.linkedPullRequest.projectId,
-          thread.linkedPullRequest.repository,
-          thread.linkedPullRequest.number,
+          reference.projectId,
+          reference.repository,
+          reference.number,
+          lookupCwd(thread),
+          thread.branch,
         ]);
       }
       if (thread.branch === null) return JSON.stringify(["none", thread.id]);
@@ -153,30 +157,43 @@ export const make = Effect.gen(function* () {
     const pullRequestFor = Effect.fn("ThreadSettlementReactor.pullRequestFor")(function* (
       thread: (typeof candidates)[number],
     ) {
-      if (thread.linkedPullRequest != null) {
-        if (
+      const reference = thread.linkedPullRequest ?? thread.branchPullRequest;
+      if (reference != null) {
+        const matchesMerge =
           mergedPullRequest !== null &&
-          thread.linkedPullRequest.projectId === mergedPullRequest.projectId &&
-          thread.linkedPullRequest.repository.toLowerCase() ===
-            mergedPullRequest.repository.toLowerCase() &&
-          thread.linkedPullRequest.number === mergedPullRequest.number
-        )
-          return {
-            state: "merged",
-            mergedAt: mergedPullRequest.mergedAt,
-          } satisfies SettlementPullRequest;
-        if (!projects.has(thread.linkedPullRequest.projectId)) {
+          reference.projectId === mergedPullRequest.projectId &&
+          reference.repository.toLowerCase() === mergedPullRequest.repository.toLowerCase() &&
+          reference.number === mergedPullRequest.number;
+        if (!matchesMerge && !projects.has(reference.projectId))
           return yield* Effect.die(new Error("linked pull request project not found"));
+        const summary = matchesMerge
+          ? { state: "merged" as const, closedAt: null, mergedAt: mergedPullRequest.mergedAt }
+          : yield* pullRequests.summary(
+              {
+                projectId: reference.projectId,
+                repository: reference.repository,
+                number: reference.number,
+              },
+              { recoverTransientFailure: false },
+            );
+        const cwd = lookupCwd(thread);
+        if (summary.state !== "open" && thread.branch !== null && cwd !== undefined) {
+          const current = yield* git.branchPullRequest(
+            { cwd, branch: thread.branch },
+            { refresh: true },
+          );
+          const project = projects.get(thread.projectId);
+          if (
+            current?.state === "open" &&
+            project !== undefined &&
+            pullRequestMatchesProject(current, project)
+          )
+            return current;
         }
-        const detail = yield* pullRequests.detail({
-          projectId: thread.linkedPullRequest.projectId,
-          repository: thread.linkedPullRequest.repository,
-          number: thread.linkedPullRequest.number,
-        });
         return {
-          state: detail.state,
-          closedAt: detail.closedAt,
-          mergedAt: detail.mergedAt,
+          state: summary.state,
+          closedAt: summary.closedAt ?? null,
+          mergedAt: summary.mergedAt ?? null,
         } satisfies SettlementPullRequest;
       }
       if (thread.branch === null) return null;
