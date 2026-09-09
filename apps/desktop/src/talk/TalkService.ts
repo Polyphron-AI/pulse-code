@@ -51,7 +51,12 @@ const NativeStatus = Schema.Struct({
     parakeet: Schema.Boolean,
   }),
 });
-const RecordedList = Schema.Struct({ recordings: Schema.Array(TalkRecording) });
+// Native recordings use null until transcription has been requested.
+const NativeRecording = Schema.Struct({
+  ...TalkRecording.fields,
+  transcript: Schema.optional(Schema.NullOr(Schema.String)),
+});
+const RecordedList = Schema.Struct({ recordings: Schema.Array(NativeRecording) });
 
 const decodeNativeStatus = Schema.decodeUnknownSync(NativeStatus);
 
@@ -59,9 +64,16 @@ const decodeTalkRequest = Schema.decodeUnknownSync(TalkRequest);
 
 const decodeTalkResult = Schema.decodeUnknownSync(TalkResult);
 
-const decodeRecordedList = Schema.decodeUnknownSync(RecordedList);
+const decodeNativeRecordings = Schema.decodeUnknownSync(RecordedList);
+const decodeNativeRecording = Schema.decodeUnknownSync(NativeRecording);
+const decodeRecordedList = (value: unknown) => ({
+  recordings: decodeNativeRecordings(value).recordings.map(normalizeRecording),
+});
 
-const decodeTalkRecording = Schema.decodeUnknownSync(TalkRecording);
+function normalizeRecording(recording: typeof NativeRecording.Type): TalkRecording {
+  return { ...recording, transcript: recording.transcript ?? undefined };
+}
+const decodeTalkRecording = (value: unknown) => normalizeRecording(decodeNativeRecording(value));
 
 const decodeAudioPath = Schema.decodeUnknownSync(Schema.Struct({ path: Schema.String }));
 const decodeRecordingId = Schema.decodeUnknownSync(Schema.Struct({ id: Schema.String }));

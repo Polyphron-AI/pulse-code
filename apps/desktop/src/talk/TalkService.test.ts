@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vite-plus/test";
 import { TalkService } from "./TalkService.ts";
 
-function fixture(options: { modelLoaded?: boolean; shortcutAvailable?: boolean } = {}) {
+function fixture(
+  options: {
+    modelLoaded?: boolean;
+    shortcutAvailable?: boolean;
+    transcript?: string | null | number | undefined;
+  } = {},
+) {
   let enabled = false;
   let recording = false;
   let running = false;
@@ -15,6 +21,7 @@ function fixture(options: { modelLoaded?: boolean; shortcutAvailable?: boolean }
     durationSeconds: 12,
     audioPath: "/isolated/meeting.wav",
     status: "recorded" as const,
+    transcript: options.transcript,
   };
   const worker = {
     get running() {
@@ -90,6 +97,30 @@ function fixture(options: { modelLoaded?: boolean; shortcutAvailable?: boolean }
 }
 
 describe("Talk consent and lifecycle", () => {
+  it.each([null, undefined, "", "Saved words"])(
+    "accepts native transcript %s when listing and saving",
+    async (transcript) => {
+      const { service } = fixture({ transcript });
+      await service.invoke({ operation: "enable", enabled: true });
+      const list = await service.invoke({ operation: "recordings.list" });
+      expect(list).toMatchObject({
+        ok: true,
+        recordings: [{ id: "meeting", transcript: transcript ?? undefined }],
+      });
+      await service.invoke({ operation: "recordings.start", title: "Review" });
+      expect(await service.invoke({ operation: "recordings.stop" })).toMatchObject({
+        ok: true,
+        recording: { transcript: transcript ?? undefined },
+      });
+      await service.close();
+    },
+  );
+  it("still rejects invalid native transcript values", async () => {
+    const { service } = fixture({ transcript: 42 });
+    await service.invoke({ operation: "enable", enabled: true });
+    expect(await service.invoke({ operation: "recordings.list" })).toMatchObject({ ok: false });
+    await service.close();
+  });
   it("never starts a worker when shutdown overtakes an availability check", async () => {
     let resolveAvailability!: (value: boolean) => void;
     let signalChecking!: () => void;
