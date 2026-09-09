@@ -299,6 +299,19 @@ describe("sortThreadsForListV2", () => {
     ]);
     expect(sorted.map((thread) => thread.id)).toEqual(["newest", "middle", "oldest"]);
   });
+
+  it("surfaces an un-settled thread at the top via its re-entry stamp", () => {
+    const sorted = sortThreadsForListV2([
+      {
+        id: "old-unsettled",
+        createdAt: "2026-06-01T08:00:00.000Z",
+        unsettledAt: "2026-06-01T13:00:00.000Z",
+      },
+      { id: "newest", createdAt: "2026-06-01T12:00:00.000Z" },
+      { id: "middle", createdAt: "2026-06-01T10:00:00.000Z" },
+    ]);
+    expect(sorted.map((thread) => thread.id)).toEqual(["old-unsettled", "newest", "middle"]);
+  });
 });
 
 describe("buildThreadListV2Items", () => {
@@ -691,6 +704,32 @@ describe("buildThreadListV2Items", () => {
     expect(items.map((item) => item.thread.id)).toEqual(["newer-created", "older-created"]);
   });
 
+  it("sorts settled threads by their persisted settlement timestamp", () => {
+    const { items } = buildThreadListV2Items({
+      threads: [
+        makeThread({
+          id: ThreadId.make("settled-newer"),
+          title: "Settled newer",
+          settledOverride: "settled",
+          settledAt: "2026-06-01T12:00:00.000Z",
+          latestUserMessageAt: "2026-06-01T08:00:00.000Z",
+        }),
+        makeThread({
+          id: ThreadId.make("settled-older"),
+          title: "Settled older",
+          settledOverride: "settled",
+          settledAt: "2026-06-01T10:00:00.000Z",
+          latestUserMessageAt: "2026-06-01T09:00:00.000Z",
+        }),
+      ],
+      environmentId: null,
+      searchQuery: "",
+      now: NOW,
+    });
+
+    expect(items.map((item) => item.thread.id)).toEqual(["settled-newer", "settled-older"]);
+  });
+
   it("keeps settled threads in the tail and filters by search query", () => {
     const { items } = buildThreadListV2Items({
       threads: [
@@ -788,7 +827,7 @@ describe("buildThreadListV2Items settled paging", () => {
           id: ThreadId.make(`settled-${index}`),
           title: `Settled ${index}`,
           settledOverride: "settled",
-          settledAt: NOW,
+          settledAt: `2026-06-01T0${index}:10:00.000Z`,
           latestUserMessageAt: `2026-06-01T0${index}:00:00.000Z`,
           // A turn adopted the message (same requestedAt): without it the
           // thread reads as a queued turn start, which never settles.

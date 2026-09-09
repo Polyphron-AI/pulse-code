@@ -4,6 +4,9 @@ Pin a thread from its context menu to keep it in the pinned section above your a
 Pinned threads are shown independently of their project, including when you connect to more than
 one environment.
 
+When you un-settle a thread, it returns to the top of the active list so you can find it right
+away. Its original creation time does not change. Other threads keep their positions.
+
 Right-click a pull request link in a thread and choose **Link to thread** to show that pull request
 in the sidebar. Right-click the same link and choose **Unlink from thread** to remove it.
 

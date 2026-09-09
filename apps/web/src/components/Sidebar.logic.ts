@@ -12,9 +12,12 @@ import type {
 } from "@t3tools/client-runtime/state/models";
 import type { SidebarProjectSortOrder, SidebarThreadSortOrder } from "@t3tools/contracts/settings";
 import {
+  activeThreadAnchorTimestampMs,
   getThreadSortTimestamp,
+  resolveSettledThreadTimestamp,
   sortThreads,
   toSortableTimestamp,
+  type SettledThreadTimestampInput,
   type ThreadSortInput,
 } from "../lib/threadSort";
 import type { SidebarThreadSummary, Thread } from "../types";
@@ -736,16 +739,23 @@ export function firstValidTimestamp(
   return null;
 }
 
-// Sidebar sort: static creation order, newest thread on top. Activity NEVER
-// reorders the list — a row holds its position from open until settled, so
-// the screen only moves at lifecycle transitions. Status (including pending
-// approval) is carried by each card's edge strip, not by position.
+// Sidebar sort: static order, newest anchor on top. Activity NEVER reorders
+// the list — a row holds its position between lifecycle transitions, so the
+// screen only moves when a thread enters or leaves the active list. The
+// anchor is creation time until an un-settle re-anchors it (see
+// activeThreadAnchorTimestampMs), so an un-settled thread surfaces at the
+// top instead of sinking back to its creation-order slot. Status (including
+// pending approval) is carried by each card's edge strip, not by position.
 export function sortThreadsForSidebar<
-  T extends { readonly id: string; readonly createdAt: string },
+  T extends {
+    readonly id: string;
+    readonly createdAt: string;
+    readonly unsettledAt?: string | null | undefined;
+  },
 >(threads: readonly T[]): T[] {
   return [...threads].toSorted(
     (left, right) =>
-      parseTimestampMs(right.createdAt) - parseTimestampMs(left.createdAt) ||
+      activeThreadAnchorTimestampMs(right) - activeThreadAnchorTimestampMs(left) ||
       left.id.localeCompare(right.id),
   );
 }
@@ -773,44 +783,15 @@ export function searchSidebarThreadsByTitle<T extends { readonly title: string }
   return threads.filter((thread) => thread.title.toLowerCase().includes(normalizedQuery));
 }
 
-type SettledTimestampInput = Pick<
-  SidebarThreadSummary,
-  "settledAt" | "latestUserMessageAt" | "latestTurn" | "updatedAt"
->;
-
-/** The timestamp a settled row sorts and labels by: settledAt when stamped
-    (explicit settles), otherwise last activity — the same candidates
-    threadLastActivityAt feeds the auto-settle window (user message plus all
-    latestTurn stamps), so a thread whose last activity was a turn completion
-    doesn't sort by an older message time. updatedAt is the final net. */
-export function resolveSettledTimestamp(thread: SettledTimestampInput): string | null {
-  const settledAt = firstValidTimestamp(thread.settledAt);
-  if (settledAt !== null) return settledAt;
-  let latest: string | null = null;
-  let latestMs = Number.NEGATIVE_INFINITY;
-  for (const candidate of [
-    thread.latestUserMessageAt,
-    thread.latestTurn?.requestedAt,
-    thread.latestTurn?.startedAt,
-    thread.latestTurn?.completedAt,
-  ]) {
-    if (candidate == null) continue;
-    const parsed = Date.parse(candidate);
-    if (!Number.isNaN(parsed) && parsed > latestMs) {
-      latest = candidate;
-      latestMs = parsed;
-    }
-  }
-  return latest ?? firstValidTimestamp(thread.updatedAt);
-}
+export { resolveSettledThreadTimestamp as resolveSettledTimestamp } from "../lib/threadSort";
 
 // Settled rows are history, so they order by when the work ENDED, not when
 // the thread was created or last touched.
 export function sortSettledThreadsForSidebar<
-  T extends SettledTimestampInput & { readonly id: string },
+  T extends SettledThreadTimestampInput & { readonly id: string },
 >(threads: readonly T[]): T[] {
   const timestampMs = (thread: T) => {
-    const timestamp = resolveSettledTimestamp(thread);
+    const timestamp = resolveSettledThreadTimestamp(thread);
     return timestamp === null ? 0 : Date.parse(timestamp);
   };
   return [...threads].toSorted(
