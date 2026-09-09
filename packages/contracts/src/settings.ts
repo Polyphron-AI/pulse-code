@@ -1,3 +1,4 @@
+import { ManagedSkills, ThreadSkillOverrides, ManagedSkillOperation } from "./managedSkills.ts";
 import { McpServers, ThreadMcpOverrides } from "./mcp.ts";
 import * as Effect from "effect/Effect";
 import * as Duration from "effect/Duration";
@@ -690,6 +691,9 @@ export const ServerSettings = Schema.Struct({
   providerInstances: Schema.Record(ProviderInstanceId, ProviderInstanceConfig).pipe(
     Schema.withDecodingDefault(Effect.succeed({})),
   ),
+  managedSkillsConfigured: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  managedSkills: ManagedSkills.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
+  threadSkillOverrides: ThreadSkillOverrides.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   mcpServers: McpServers.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   threadMcpOverrides: ThreadMcpOverrides.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   observability: ObservabilitySettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
@@ -840,6 +844,10 @@ export const ServerSettingsPatch = Schema.Struct({
   // patches risk leaving driver-specific config in a half-merged state.
   // The web UI sends a fully-formed map every time it edits this field.
   providerInstances: Schema.optionalKey(Schema.Record(ProviderInstanceId, ProviderInstanceConfig)),
+  skillOperations: Schema.optionalKey(
+    Schema.Array(ManagedSkillOperation).check(Schema.isMaxLength(1)),
+  ),
+  threadSkillOverrides: Schema.optionalKey(ThreadSkillOverrides),
   mcpServers: Schema.optionalKey(McpServers),
   threadMcpOverrides: Schema.optionalKey(ThreadMcpOverrides),
 });

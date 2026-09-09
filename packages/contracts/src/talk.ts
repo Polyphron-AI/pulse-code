@@ -76,6 +76,14 @@ export const TalkModelStatus = Schema.Struct({
 export type TalkModelStatus = typeof TalkModelStatus.Type;
 
 export const TalkRequest = Schema.Union([
+  Schema.Struct({
+    operation: Schema.Literals([
+      "draftDictation.start",
+      "draftDictation.stop",
+      "draftDictation.cancel",
+    ]),
+    sessionId: Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9-]{1,100}$/)),
+  }),
   Schema.Struct({ operation: Schema.Literal("status") }),
   Schema.Struct({ operation: Schema.Literal("enable"), enabled: Schema.Boolean }),
   Schema.Struct({ operation: Schema.Literal("recordings.list") }),

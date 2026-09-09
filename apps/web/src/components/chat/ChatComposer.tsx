@@ -1,3 +1,6 @@
+import { ThreadDictationButton } from "./ThreadDictationButton";
+import { PaperclipIcon } from "lucide-react";
+import { ThreadSkillsMenu } from "./ThreadSkillsMenu";
 import { ThreadMcpMenu } from "./ThreadMcpMenu";
 import type {
   ApprovalRequestId,
@@ -679,7 +682,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     setThreadError,
     onExpandImage,
   } = props;
-  const isSendDisabled = sendDisabledReason !== null;
+  const [dictationBusy, setDictationBusy] = useState(false);
+  const attachmentInputRef = useRef<HTMLInputElement>(null);
+  const isSendDisabled = sendDisabledReason !== null || dictationBusy;
 
   // ------------------------------------------------------------------
   // Store subscriptions (prompt / images / terminal contexts)
@@ -2812,7 +2817,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                       showPlanFollowUpPrompt={false}
                       promptHasText={false}
                       isSendBusy={isSendBusy}
-                      sendDisabledReason={sendDisabledReason}
+                      sendDisabledReason={
+                        dictationBusy ? "Finish dictation before sending." : sendDisabledReason
+                      }
                       isConnecting={isConnecting}
                       isEnvironmentUnavailable={
                         environmentUnavailable !== null ||
@@ -3095,7 +3102,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     showPlanFollowUpPrompt={false}
                     promptHasText={false}
                     isSendBusy={isSendBusy}
-                    sendDisabledReason={sendDisabledReason}
+                    sendDisabledReason={
+                      dictationBusy ? "Finish dictation before sending." : sendDisabledReason
+                    }
                     isConnecting={isConnecting}
                     isEnvironmentUnavailable={
                       environmentUnavailable !== null ||
@@ -3132,7 +3141,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
               data-chat-composer-footer="true"
               data-chat-composer-footer-compact={isComposerFooterCompact ? "true" : "false"}
               className={cn(
-                "flex min-w-0 flex-nowrap items-center justify-between gap-2 overflow-visible px-3 pb-3 sm:px-4 sm:pb-4",
+                "flex min-w-0 flex-nowrap items-end justify-between gap-2 overflow-visible px-3 pb-3 sm:px-4 sm:pb-4",
                 pendingUserInputs.length > 0 && "pt-2",
                 isComposerFooterCompact ? "gap-1.5" : "gap-2 sm:gap-0",
                 showMobilePendingAnswerActions && "hidden sm:flex",
@@ -3178,14 +3187,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   />
                 )}
 
-                <ThreadMcpMenu
-                  key={`${environmentId}:${activeThreadId}:${selectedInstanceId}`}
-                  environmentId={environmentId}
-                  threadId={activeThreadId}
-                  instanceId={selectedInstanceId}
-                  driver={selectedProvider}
-                />
-
                 {isComposerFooterCompact ? (
                   <CompactComposerControlsMenu
                     interactionMode={interactionMode}
@@ -3212,41 +3213,97 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     />
                   </>
                 )}
+                <ThreadMcpMenu
+                  key={`${environmentId}:${activeThreadId}:${selectedInstanceId}`}
+                  environmentId={environmentId}
+                  threadId={activeThreadId}
+                  instanceId={selectedInstanceId}
+                  driver={selectedProvider}
+                />
+
+                <ThreadSkillsMenu
+                  key={`skills:${environmentId}:${activeThreadId}:${selectedInstanceId}`}
+                  environmentId={environmentId}
+                  threadId={activeThreadId}
+                  instanceId={selectedInstanceId}
+                />
               </div>
 
-              {/* Right side: send / stop button */}
+              <input
+                ref={attachmentInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                aria-label="Attach images"
+                onChange={(event) => {
+                  const files = Array.from(event.target.files ?? []);
+                  event.target.value = "";
+                  void addComposerImages(files);
+                }}
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Attach images"
+                disabled={isSendBusy}
+                onClick={() => attachmentInputRef.current?.click()}
+              >
+                <PaperclipIcon className="size-4" />
+              </Button>
+              {/* Right side: dictation above send / stop. */}
               <div
                 data-chat-composer-actions="right"
                 data-chat-composer-primary-actions-compact={
                   isComposerPrimaryActionsCompact ? "true" : "false"
                 }
-                className="flex shrink-0 flex-nowrap items-center justify-end gap-2"
+                className="flex shrink-0 flex-col items-end justify-end gap-1"
               >
-                <ComposerFooterPrimaryActions
-                  compact={isComposerPrimaryActionsCompact}
-                  activeContextWindow={activeContextWindow}
-                  activeThreadModelDisplayName={activeThreadModelDisplayName}
-                  pendingAction={pendingPrimaryAction}
-                  isRunning={phase === "running"}
-                  busyBehavior={settings.composerBusyBehavior}
-                  showPlanFollowUpPrompt={pendingUserInputs.length === 0 && showPlanFollowUpPrompt}
-                  promptHasText={prompt.trim().length > 0}
-                  isSendBusy={isSendBusy}
-                  sendDisabledReason={sendDisabledReason}
-                  isConnecting={isConnecting}
-                  isEnvironmentUnavailable={
-                    environmentUnavailable !== null ||
-                    noProviderAvailable ||
-                    projectSelectionRequired
-                  }
-                  isPreparingWorktree={isPreparingWorktree}
-                  hasSendableContent={composerSendState.hasSendableContent}
-                  preserveComposerFocusOnPointerDown={isMobileViewport}
-                  showSendWhileRunning
-                  onPreviousPendingQuestion={onPreviousActivePendingUserInputQuestion}
-                  onInterrupt={handleInterruptPrimaryAction}
-                  onImplementPlanInNewThread={handleImplementPlanInNewThreadPrimaryAction}
+                <ThreadDictationButton
+                  key={`${environmentId}:${activeThreadId ?? (typeof composerDraftTarget === "string" ? composerDraftTarget : composerDraftTarget.threadId)}`}
+                  disabled={pendingUserInputs.length > 0 || isSendBusy}
+                  onBusyChange={setDictationBusy}
+                  onTranscript={(text) => {
+                    const length = promptRef.current.length;
+                    applyPromptReplacement(
+                      length,
+                      length,
+                      `${length && !/\s$/.test(promptRef.current) ? " " : ""}${text}`,
+                    );
+                  }}
                 />
+                <div className="flex items-center gap-2">
+                  <ComposerFooterPrimaryActions
+                    compact={isComposerPrimaryActionsCompact}
+                    activeContextWindow={activeContextWindow}
+                    activeThreadModelDisplayName={activeThreadModelDisplayName}
+                    pendingAction={pendingPrimaryAction}
+                    isRunning={phase === "running"}
+                    busyBehavior={settings.composerBusyBehavior}
+                    showPlanFollowUpPrompt={
+                      pendingUserInputs.length === 0 && showPlanFollowUpPrompt
+                    }
+                    promptHasText={prompt.trim().length > 0}
+                    isSendBusy={isSendBusy}
+                    sendDisabledReason={
+                      dictationBusy ? "Finish dictation before sending." : sendDisabledReason
+                    }
+                    isConnecting={isConnecting}
+                    isEnvironmentUnavailable={
+                      environmentUnavailable !== null ||
+                      noProviderAvailable ||
+                      projectSelectionRequired
+                    }
+                    isPreparingWorktree={isPreparingWorktree}
+                    hasSendableContent={composerSendState.hasSendableContent}
+                    preserveComposerFocusOnPointerDown={isMobileViewport}
+                    showSendWhileRunning
+                    onPreviousPendingQuestion={onPreviousActivePendingUserInputQuestion}
+                    onInterrupt={handleInterruptPrimaryAction}
+                    onImplementPlanInNewThread={handleImplementPlanInNewThreadPrimaryAction}
+                  />
+                </div>
               </div>
             </div>
           )}

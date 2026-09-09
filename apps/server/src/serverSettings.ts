@@ -1,3 +1,5 @@
+import { ManagedSkillStore } from "./skills/ManagedSkillStore.ts";
+import * as Schedule from "effect/Schedule";
 /**
  * ServerSettings - Server-authoritative settings service.
  *
@@ -266,6 +268,7 @@ function stripDefaultServerSettings(current: unknown, defaults: unknown): unknow
 
 const make = Effect.gen(function* () {
   const { settingsPath } = yield* ServerConfig.ServerConfig;
+  const skillStore = new ManagedSkillStore(settingsPath);
   const fs = yield* FileSystem.FileSystem;
   const pathService = yield* Path.Path;
   const secretStore = yield* ServerSecretStore.ServerSecretStore;
@@ -650,6 +653,52 @@ const make = Effect.gen(function* () {
     );
   });
 
+  const refreshSkills = Effect.gen(function* () {
+    const snapshot = yield* getSettingsFromCache;
+    const operations = Object.entries(snapshot.managedSkills)
+      .filter(([, skill]) => skill.source.type === "github" && skill.autoUpdate)
+      .map(([id]) => ({ type: "sync" as const, id }));
+    if (!operations.length) return;
+    const refreshed = yield* Effect.tryPromise({
+      try: () => skillStore.apply(snapshot, operations),
+      catch: (cause) => new ServerSettingsError({ settingsPath, operation: "normalize", cause }),
+    });
+    yield* writeSemaphore.withPermits(1)(
+      Effect.gen(function* () {
+        const current = yield* getSettingsFromCache;
+        const managedSkills = { ...current.managedSkills };
+        for (const { id } of operations) {
+          const previous = snapshot.managedSkills[id];
+          const latest = current.managedSkills[id];
+          const updated = refreshed.managedSkills[id];
+          if (
+            latest &&
+            previous &&
+            updated &&
+            latest.autoUpdate &&
+            latest.revision === previous.revision &&
+            latest.source.type === "github" &&
+            previous.source.type === "github" &&
+            latest.source.repository === previous.source.repository &&
+            latest.source.ref === previous.source.ref &&
+            latest.source.directory === previous.source.directory &&
+            latest.checkedAt === previous.checkedAt
+          ) {
+            managedSkills[id] = {
+              ...updated,
+              defaultProviders: latest.defaultProviders,
+              autoUpdate: latest.autoUpdate,
+            };
+          }
+        }
+        const next = { ...current, managedSkills };
+        yield* writeSettingsAtomically(next);
+        yield* Cache.set(settingsCache, cacheKey, next);
+        yield* emitChange(next);
+      }),
+    );
+  }).pipe(Effect.ignoreCause({ log: true }));
+
   const start = Effect.gen(function* () {
     const shouldStart = yield* Ref.modify(startedRef, (started) => [!started, true]);
     if (!shouldStart) {
@@ -660,6 +709,10 @@ const make = Effect.gen(function* () {
       yield* startWatcher;
       yield* Cache.invalidate(settingsCache, cacheKey);
       yield* getSettingsFromCache;
+      yield* refreshSkills.pipe(
+        Effect.repeat(Schedule.spaced(Duration.hours(1))),
+        Effect.forkIn(watcherScope),
+      );
     });
 
     const startupExit = yield* Effect.exit(startup);
@@ -682,10 +735,16 @@ const make = Effect.gen(function* () {
       writeSemaphore.withPermits(1)(
         Effect.gen(function* () {
           const current = yield* getSettingsFromCache;
-          const nextPersisted = yield* persistProviderEnvironmentSecrets(
-            current,
-            applyServerSettingsPatch(current, patch),
-          );
+          const { skillOperations, ...settingsPatch } = patch;
+          const patched = applyServerSettingsPatch(current, settingsPatch);
+          const withSkills = skillOperations?.length
+            ? yield* Effect.tryPromise({
+                try: () => skillStore.apply(patched, skillOperations),
+                catch: (cause) =>
+                  new ServerSettingsError({ settingsPath, operation: "normalize", cause }),
+              })
+            : patched;
+          const nextPersisted = yield* persistProviderEnvironmentSecrets(current, withSkills);
           const next = yield* normalizeServerSettings(nextPersisted);
           yield* writeSettingsAtomically(next);
           yield* Cache.set(settingsCache, cacheKey, next);

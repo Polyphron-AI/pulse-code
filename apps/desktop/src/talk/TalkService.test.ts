@@ -43,7 +43,8 @@ function fixture(options: { modelLoaded?: boolean; shortcutAvailable?: boolean }
         return item;
       }
       if (op === "recordings.list") return { recordings: [item] };
-      if (op === "recordings.get") return { ...item, transcript: "Saved transcript" };
+      if (op === "recordings.get" || op === "recordings.transcribe")
+        return { ...item, transcript: "Saved transcript" };
       if (op === "dictation.hold")
         return new Promise((resolve) => {
           finishDictation = resolve;
@@ -225,5 +226,46 @@ describe("Talk consent and lifecycle", () => {
       recording: { transcript: "Saved transcript" },
     });
     await service.close();
+  });
+});
+
+describe("thread draft dictation", () => {
+  it("requires existing consent and a loaded model", async () => {
+    const { service, calls } = fixture({ modelLoaded: true });
+    const result = await service.invoke({
+      operation: "draftDictation.start",
+      sessionId: "thread-one",
+    });
+    expect(result.ok).toBe(false);
+    expect(calls).not.toContain("recordings.start");
+    await service.close();
+  });
+  it("only lets the owning draft stop capture and returns text without pasting", async () => {
+    const { service, calls } = fixture({ modelLoaded: true });
+    await service.invoke({ operation: "enable", enabled: true });
+    await service.invoke({ operation: "recordings.list" });
+    await service.waitForIdle();
+    expect(
+      await service.invoke({ operation: "draftDictation.start", sessionId: "thread-one" }),
+    ).toMatchObject({ ok: true });
+    expect(
+      await service.invoke({ operation: "draftDictation.stop", sessionId: "thread-two" }),
+    ).toMatchObject({ ok: false });
+    expect(await service.invoke({ operation: "recordings.stop" })).toMatchObject({ ok: false });
+    expect(
+      await service.invoke({ operation: "draftDictation.stop", sessionId: "thread-one" }),
+    ).toMatchObject({ ok: true, recording: { transcript: "Saved transcript" } });
+    expect(calls).not.toContain("dictation.hold");
+    await service.close();
+  });
+  it("stops draft capture on shutdown without transcribing", async () => {
+    const { service, calls } = fixture({ modelLoaded: true });
+    await service.invoke({ operation: "enable", enabled: true });
+    await service.invoke({ operation: "recordings.list" });
+    await service.waitForIdle();
+    await service.invoke({ operation: "draftDictation.start", sessionId: "thread-one" });
+    await service.close();
+    expect(calls).toContain("recordings.stop");
+    expect(calls).not.toContain("recordings.transcribe");
   });
 });

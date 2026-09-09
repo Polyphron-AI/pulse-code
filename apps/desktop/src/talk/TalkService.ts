@@ -1,3 +1,4 @@
+// @effect-diagnostics globalTimers:off - Main-process microphone safety timeout; cleared on stop and shutdown.
 import * as Schema from "effect/Schema";
 import {
   TalkRecording,
@@ -83,6 +84,9 @@ export class TalkService {
   private closing = false;
   private mutation: Promise<unknown> = Promise.resolve();
   private operationActive = false;
+  private draftDictation:
+    | { sessionId: string; recordingId: string; timer: ReturnType<typeof setTimeout> }
+    | undefined;
   private dictationEnabled = false;
   private dictationActive = false;
   private dictationError: string | null = null;
@@ -177,6 +181,52 @@ export class TalkService {
     if (request.operation === "models.status") {
       if (!this.options.models) throw new Error("Model setup is unavailable in this build.");
       return { ok: true, model: await this.options.models.status() };
+    }
+    if (
+      request.operation === "draftDictation.stop" ||
+      request.operation === "draftDictation.cancel"
+    ) {
+      const draft = this.draftDictation;
+      if (!draft || draft.sessionId !== request.sessionId)
+        throw new Error("This draft does not own the active microphone recording.");
+      clearTimeout(draft.timer);
+      const recording = decodeTalkRecording(await this.worker!.request("recordings.stop"));
+      this.draftDictation = undefined;
+      if (recording.id !== draft.recordingId)
+        throw new Error("Recording changed. Recover your transcript from Talk history.");
+      if (request.operation === "draftDictation.cancel") return { ok: true, cancelled: true };
+      const transcribed = decodeTalkRecording(
+        await this.worker!.request("recordings.transcribe", { id: draft.recordingId }),
+      );
+      return { ok: true, recording: transcribed };
+    }
+    if (this.draftDictation)
+      throw new Error(
+        "Finish dictation in the thread before changing Talk settings or recordings.",
+      );
+    if (request.operation === "draftDictation.start") {
+      const status = await this.status();
+      if (!this.enabled || !status.modelLoaded || !status.capabilities.microphone)
+        throw new Error("Enable dictation and load Parakeet in Settings > Dictation first.");
+      if (status.recording || this.dictationActive || this.background)
+        throw new Error("Talk is busy. Finish the current recording or transcription first.");
+      if (!(await this.options.workerAvailable()))
+        throw new Error("The Talk worker is unavailable.");
+      if (this.closing) throw new Error("Talk is shutting down.");
+      this.worker ??= this.options.createWorker();
+      const recording = decodeRecordingId(
+        await this.worker.request("recordings.start", {
+          title: "Thread dictation",
+          microphone: true,
+          systemAudio: false,
+        }),
+      );
+      const timer = setTimeout(() => {
+        void this.invoke({ operation: "draftDictation.cancel", sessionId: request.sessionId });
+      }, 120_000);
+      timer.unref?.();
+      this.draftDictation = { sessionId: request.sessionId, recordingId: recording.id, timer };
+      return { ok: true };
     }
     if (this.dictationActive)
       throw new Error("Release the dictation shortcut and wait for transcription to finish.");
@@ -329,6 +379,7 @@ export class TalkService {
       this.closing ||
       this.background ||
       this.dictationActive ||
+      this.draftDictation ||
       this.nativeStatus?.recording ||
       this.preparationError ||
       (!this.enabled && this.pendingTranscriptions.length === 0)
@@ -337,7 +388,13 @@ export class TalkService {
     const task = this.mutation
       .catch(() => undefined)
       .then(async () => {
-        if (this.closing || this.dictationActive || this.nativeStatus?.recording) return;
+        if (
+          this.closing ||
+          this.dictationActive ||
+          this.draftDictation ||
+          this.nativeStatus?.recording
+        )
+          return;
         if (!this.nativeStatus?.modelLoaded) {
           if ((await this.options.models?.status())?.state !== "installed") return;
           const path = await this.options.models?.installedPath();
@@ -410,7 +467,8 @@ export class TalkService {
   }
 
   private beginDictation() {
-    if (!this.dictationEnabled || this.dictationActive || this.closing) return;
+    if (!this.dictationEnabled || this.dictationActive || this.draftDictation || this.closing)
+      return;
     if (
       this.operationActive ||
       this.background ||
@@ -446,6 +504,13 @@ export class TalkService {
   }
 
   async close() {
+    if (this.draftDictation) {
+      clearTimeout(this.draftDictation.timer);
+      await this.invoke({
+        operation: "draftDictation.cancel",
+        sessionId: this.draftDictation.sessionId,
+      });
+    }
     this.closing = true;
     this.disableDictation();
     this.options.dictation?.showActive(false);

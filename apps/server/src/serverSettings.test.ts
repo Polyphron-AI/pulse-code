@@ -855,3 +855,39 @@ it.effect(
       assert.deepEqual((yield* service.getSettings).mcpServers, {});
     }).pipe(Effect.provide(makeServerSettingsLayer()), Effect.provide(NodeServices.layer)),
 );
+
+it.effect("managed uploads persist files separately and remove thread overrides", () =>
+  Effect.gen(function* () {
+    const service = yield* ServerSettingsModule.ServerSettingsService;
+    const config = yield* ServerConfig.ServerConfig;
+    const fs = yield* FileSystem.FileSystem;
+    const base64 = btoa(
+      "---\nname: test-skill\ndescription: Test skill\n---\nPrivate instructions",
+    );
+    const added = yield* service.updateSettings({
+      skillOperations: [
+        {
+          type: "import",
+          id: "test-skill",
+          source: { type: "upload" },
+          files: [{ path: "SKILL.md", base64 }],
+        },
+      ],
+    });
+    assert.isDefined(added.managedSkills["test-skill"]);
+    const persisted = yield* fs.readFileString(config.settingsPath);
+    assert.notInclude(persisted, base64);
+    assert.notInclude(persisted, "Private instructions");
+    assert.notInclude(persisted, "skillOperations");
+    yield* service.updateSettings({
+      threadSkillOverrides: { one: { "test-skill": true }, two: { "test-skill": false } },
+    });
+    yield* service.updateSettings({ threadSkillOverrides: { one: { "test-skill": null } } });
+    assert.isFalse((yield* service.getSettings).threadSkillOverrides.two!["test-skill"]);
+    yield* service.updateSettings({ skillOperations: [{ type: "remove", id: "test-skill" }] });
+    const removed = yield* service.getSettings;
+    assert.deepEqual(removed.managedSkills, {});
+    assert.deepEqual(removed.threadSkillOverrides.one, {});
+    assert.isTrue(removed.managedSkillsConfigured);
+  }).pipe(Effect.provide(makeServerSettingsLayer().pipe(Layer.provideMerge(NodeServices.layer)))),
+);

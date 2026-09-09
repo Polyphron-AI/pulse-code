@@ -1,3 +1,4 @@
+import { ManagedSkillStore } from "../../skills/ManagedSkillStore.ts";
 import * as ExternalMcp from "../../mcp/ExternalMcp.ts";
 /**
  * ProviderServiceLive - Cross-provider orchestration layer.
@@ -228,6 +229,8 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
   const registry = yield* ProviderAdapterRegistry.ProviderAdapterRegistry;
   const directory = yield* ProviderSessionDirectory.ProviderSessionDirectory;
   const serverSettings = yield* ServerSettings.ServerSettingsService;
+  const skillStore = new ManagedSkillStore(serverConfig.settingsPath);
+  const turnSkillSelections = new Map<string, string>();
   const issueMcpCredential =
     options?.issueMcpCredential ?? McpSessionRegistry.issueActiveMcpCredential;
   const revokeMcpCredential =
@@ -843,7 +846,42 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
       // rather than issuing a new one: sessions that go a long time between
       // browser tool calls used to lose the toolkit outright.
       yield* McpSessionRegistry.touchActiveMcpThread(input.threadId);
-      const turn = yield* routed.adapter.sendTurn(input);
+      const skillSettings = yield* serverSettings.getSettings.pipe(
+        Effect.mapError((cause) =>
+          toValidationError("Skill selection", "Could not load skill settings.", cause),
+        ),
+      );
+      const loadedSkillInstructions = yield* Effect.tryPromise({
+        try: () => skillStore.turnInstructions(skillSettings, routed.instanceId, input.threadId),
+        catch: (cause) =>
+          toValidationError(
+            "Skill selection",
+            "A selected skill is unavailable. Sync or disable it in Manage skills and retry.",
+            cause,
+          ),
+      });
+      const skillInstructions =
+        loadedSkillInstructions ||
+        (turnSkillSelections.get(input.threadId)
+          ? "[Pulse managed skills for this turn] No managed skills are enabled. Earlier Pulse-managed skill instructions no longer apply. [/Pulse managed skills]"
+          : "");
+      if ((turnSkillSelections.get(input.threadId) ?? "") !== skillInstructions) {
+        const session = (yield* routed.adapter.listSessions()).find(
+          (candidate) => candidate.threadId === input.threadId,
+        );
+        if (session?.activeTurnId)
+          return yield* toValidationError(
+            "Skill selection",
+            "Skill changes are pending. Wait for the active turn to finish before sending another turn.",
+          );
+      }
+      const turn = yield* routed.adapter.sendTurn({
+        ...input,
+        ...(skillInstructions
+          ? { input: [skillInstructions, input.input].filter(Boolean).join("\n\n") }
+          : {}),
+      });
+      turnSkillSelections.set(input.threadId, skillInstructions);
       yield* directory.upsert({
         threadId: input.threadId,
         provider: routed.adapter.provider,

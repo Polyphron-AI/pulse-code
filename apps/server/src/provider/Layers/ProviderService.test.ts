@@ -1,3 +1,4 @@
+import { ManagedSkillStore } from "../../skills/ManagedSkillStore.ts";
 import * as ExternalMcp from "../../mcp/ExternalMcp.ts";
 // @effect-diagnostics nodeBuiltinImport:off
 import * as NodeFS from "node:fs";
@@ -2118,6 +2119,49 @@ mcpRouting.layer("thread MCP changes", (it) => {
       assert.equal(failure._tag, "ProviderValidationError");
       assert.equal(mcpRouting.codex.stopSession.mock.calls.length, 0);
       assert.deepEqual(ExternalMcp.readExternalMcp(threadId), {});
+    }),
+  );
+});
+
+const skillRouting = makeProviderServiceLayer();
+skillRouting.layer("thread skill changes", (it) => {
+  it.effect("captures skills per turn and defers changes while a turn is active", () =>
+    Effect.gen(function* () {
+      const service = yield* ProviderService.ProviderService;
+      const threadId = asThreadId("skill-thread");
+      const instructions = vi
+        .spyOn(ManagedSkillStore.prototype, "turnInstructions")
+        .mockResolvedValue("skills revision one");
+      try {
+        yield* service.startSession(threadId, {
+          threadId,
+          providerInstanceId: codexInstanceId,
+          runtimeMode: "full-access",
+        });
+        yield* service.sendTurn({ threadId, input: "Review" });
+        assert.include(
+          skillRouting.codex.sendTurn.mock.calls.at(-1)?.[0].input ?? "",
+          "skills revision one",
+        );
+        instructions.mockResolvedValue("skills revision two");
+        skillRouting.codex.updateSession(threadId, (session) => ({
+          ...session,
+          activeTurnId: asTurnId("running"),
+        }));
+        const failure = yield* Effect.flip(service.sendTurn({ threadId, input: "Continue" }));
+        assert.equal(failure._tag, "ProviderValidationError");
+        skillRouting.codex.updateSession(threadId, (session) => ({
+          ...session,
+          activeTurnId: undefined,
+        }));
+        yield* service.sendTurn({ threadId, input: "Continue" });
+        assert.include(
+          skillRouting.codex.sendTurn.mock.calls.at(-1)?.[0].input ?? "",
+          "skills revision two",
+        );
+      } finally {
+        instructions.mockRestore();
+      }
     }),
   );
 });
