@@ -165,6 +165,7 @@ export type TimelineLatestTurn = Pick<
 >;
 
 export type MessagesTimelineRow =
+  | { kind: "context-compaction"; id: string; createdAt: string; label: string }
   | {
       kind: "work";
       id: string;
@@ -345,6 +346,7 @@ function deriveTurnFolds(input: {
       pendingUserBoundary = entry.message.createdAt;
       continue;
     }
+    if (entry.kind === "work" && entry.entry.sourceActivityKind === "context-compaction") continue;
     const turnId =
       entry.kind === "message" && entry.message.role === "assistant"
         ? (entry.message.turnId ?? null)
@@ -503,6 +505,18 @@ export function deriveMessagesTimelineRows(input: {
       continue;
     }
 
+    if (
+      timelineEntry.kind === "work" &&
+      timelineEntry.entry.sourceActivityKind === "context-compaction"
+    ) {
+      nextRows.push({
+        kind: "context-compaction",
+        id: timelineEntry.id,
+        createdAt: timelineEntry.createdAt,
+        label: timelineEntry.entry.label,
+      });
+      continue;
+    }
     if (timelineEntry.kind === "work") {
       const groupedEntries = [timelineEntry.entry];
       let cursor = index + 1;
@@ -511,6 +525,7 @@ export function deriveMessagesTimelineRows(input: {
         if (
           !nextEntry ||
           nextEntry.kind !== "work" ||
+          nextEntry.entry.sourceActivityKind === "context-compaction" ||
           collapsedEntryIds.has(nextEntry.id) ||
           foldsByAnchorEntryId.has(nextEntry.id)
         ) {
@@ -677,6 +692,10 @@ function isRowUnchanged(a: MessagesTimelineRow, b: MessagesTimelineRow): boolean
       return a.createdAt === bf.createdAt && a.label === bf.label && a.expanded === bf.expanded;
     }
 
+    case "context-compaction": {
+      const bc = b as typeof a;
+      return a.createdAt === bc.createdAt && a.label === bc.label;
+    }
     case "proposed-plan":
       return a.proposedPlan === (b as typeof a).proposedPlan;
 

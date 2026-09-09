@@ -1,3 +1,4 @@
+import { withConfiguredCompactionThreshold } from "./contextWindow";
 import { describe, expect, it } from "vite-plus/test";
 import { EventId, type OrchestrationThreadActivity, TurnId } from "@t3tools/contracts";
 
@@ -26,6 +27,7 @@ describe("contextWindow", () => {
         usedTokens: 14_000,
         maxTokens: 258_000,
         compactsAutomatically: true,
+        autoCompactThreshold: 200_000,
       }),
     ]);
 
@@ -34,6 +36,7 @@ describe("contextWindow", () => {
     expect(snapshot?.totalProcessedTokens).toBeNull();
     expect(snapshot?.maxTokens).toBe(258_000);
     expect(snapshot?.compactsAutomatically).toBe(true);
+    expect(snapshot?.autoCompactThreshold).toBe(200_000);
   });
 
   it("ignores malformed payloads", () => {
@@ -80,5 +83,29 @@ describe("contextWindow", () => {
 
     expect(snapshot?.usedTokens).toBe(81_659);
     expect(snapshot?.totalProcessedTokens).toBe(748_126);
+  });
+});
+
+describe("withConfiguredCompactionThreshold", () => {
+  it("uses the selected instance setting when telemetry omits a threshold", () => {
+    const snapshot = { autoCompactThreshold: null } as Parameters<
+      typeof withConfiguredCompactionThreshold
+    >[0];
+    expect(
+      withConfiguredCompactionThreshold(snapshot, "claudeAgent", { autoCompactWindow: "300000" }),
+    ).toMatchObject({ autoCompactThreshold: 300000, compactsAutomatically: true });
+    expect(
+      withConfiguredCompactionThreshold(snapshot, "codex", { autoCompactWindow: "300000" }),
+    ).toBe(snapshot);
+    expect(
+      withConfiguredCompactionThreshold(snapshot, "claudeAgent", { autoCompactWindow: "" }),
+    ).toBe(snapshot);
+    expect(
+      withConfiguredCompactionThreshold(snapshot, "claudeAgent", { autoCompactWindow: "invalid" }),
+    ).toBe(snapshot);
+    const measured = { ...snapshot!, autoCompactThreshold: 250000 };
+    expect(
+      withConfiguredCompactionThreshold(measured, "claudeAgent", { autoCompactWindow: "300000" }),
+    ).toBe(measured);
   });
 });

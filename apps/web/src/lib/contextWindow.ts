@@ -88,6 +88,7 @@ export function deriveLatestContextWindowSnapshot(
       toolUses: asFiniteNumber(payload?.toolUses),
       durationMs: asFiniteNumber(payload?.durationMs),
       compactsAutomatically: asBoolean(payload?.compactsAutomatically) ?? false,
+      autoCompactThreshold: asFiniteNumber(payload?.autoCompactThreshold),
       updatedAt: activity.createdAt,
     };
   }
@@ -109,4 +110,18 @@ export function formatContextWindowTokens(value: number | null): string {
     return `${Math.round(value / 1_000)}k`;
   }
   return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, "")}m`;
+}
+
+export function withConfiguredCompactionThreshold(
+  snapshot: ContextWindowSnapshot | null,
+  provider: string,
+  config: unknown,
+): ContextWindowSnapshot | null {
+  if (!snapshot || provider !== "claudeAgent" || snapshot.autoCompactThreshold !== null)
+    return snapshot;
+  const configured = asRecord(config)?.autoCompactWindow;
+  const threshold = typeof configured === "string" && configured.trim() ? Number(configured) : NaN;
+  return Number.isInteger(threshold) && threshold >= 100_000 && threshold <= 1_000_000
+    ? { ...snapshot, autoCompactThreshold: threshold, compactsAutomatically: true }
+    : snapshot;
 }

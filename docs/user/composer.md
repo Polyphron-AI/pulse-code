@@ -41,3 +41,7 @@ moves the text selection to the end of the newly selected draft.
 ## Compact an existing conversation
 
 Enter `/compact` in an idle thread to summarize its context before continuing. Codex, Claude, Cursor, Grok, and OpenCode support this action. Wait for compaction to finish before sending the next message. A new thread needs conversation history first; OMP does not currently support this action.
+
+# Compact context
+
+Send `/compact` in an existing conversation to reduce its context when the connected provider supports it. On web and desktop, the context meter also offers **Compact context**; send or clear your draft first. On mobile, choose `/compact` from the command menu. Compaction runs without attachments, shows **Compacting…** while active, and leaves a separate result in the conversation. Unsupported providers do not offer the command.

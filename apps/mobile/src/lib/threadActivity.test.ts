@@ -151,6 +151,33 @@ function makeThread(
 }
 
 describe("buildThreadFeed", () => {
+  it("keeps context compaction as a standalone timeline row", () => {
+    const thread = makeThread({
+      id: ThreadId.make("thread-context-compaction"),
+      projectId: ProjectId.make("project-1"),
+      title: "Context compaction",
+      activities: [
+        makeActivity({
+          id: EventId.make("context-compaction"),
+          kind: "context-compaction",
+          tone: "info",
+          summary: "Compacted context 899K → 19K tokens",
+          createdAt: "2026-09-01T00:00:00.000Z",
+          turnId: TurnId.make("turn-context-compaction"),
+        }),
+      ],
+    });
+
+    const presented = deriveThreadFeedPresentation(buildThreadFeed(thread), null, new Set());
+    expect(presented).toMatchObject([
+      {
+        type: "activity-group",
+        id: "context-compaction",
+        activities: [{ summary: "Compacted context 899K → 19K tokens" }],
+      },
+    ]);
+  });
+
   it("keeps historic work entries attributed to their turns", () => {
     const thread = makeThread({
       id: ThreadId.make("thread-1"),

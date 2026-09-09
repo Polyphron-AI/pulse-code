@@ -25,6 +25,7 @@ export interface PendingUserInputDraftAnswer {
 }
 
 export interface ThreadFeedActivity {
+  readonly activityKind?: string;
   readonly id: string;
   readonly createdAt: string;
   readonly turnId: TurnId | null;
@@ -130,6 +131,14 @@ export type ThreadFeedLatestTurn = Pick<
   OrchestrationLatestTurn,
   "turnId" | "state" | "startedAt" | "completedAt"
 >;
+
+export function isContextCompactionActivityGroup(
+  entry: Extract<ThreadFeedEntry, { readonly type: "activity-group" }>,
+): boolean {
+  return (
+    entry.activities.length === 1 && entry.activities[0]?.activityKind === "context-compaction"
+  );
+}
 
 function normalizeDraftAnswer(value: string | undefined): string | null {
   if (typeof value !== "string") {
@@ -998,6 +1007,18 @@ function groupAdjacentActivities(entries: ReadonlyArray<RawThreadFeedEntry>): Th
       continue;
     }
 
+    if (entry.activity.activityKind === "context-compaction") {
+      grouped.push({
+        type: "activity-group",
+        id: entry.id,
+        createdAt: entry.createdAt,
+        turnId: entry.turnId,
+        activities: [entry.activity],
+      });
+      openGroupActivities = null;
+      continue;
+    }
+
     if (openGroupActivities !== null && openGroupTurnId === entry.turnId) {
       openGroupActivities.push(entry.activity);
       continue;
@@ -1071,6 +1092,9 @@ function deriveThreadFeedTurnFolds(
   for (const entry of feed) {
     if (entry.type === "message" && entry.message.role === "user") {
       pendingUserBoundary = entry.message.createdAt;
+      continue;
+    }
+    if (entry.type === "activity-group" && isContextCompactionActivityGroup(entry)) {
       continue;
     }
     const turnId =
@@ -1208,6 +1232,10 @@ function appendPresentedFeedEntry(
   expandedWorkGroupIds: ReadonlySet<string>,
 ): void {
   if (entry.type !== "activity-group") {
+    result.push(entry);
+    return;
+  }
+  if (isContextCompactionActivityGroup(entry)) {
     result.push(entry);
     return;
   }
@@ -1372,6 +1400,7 @@ export function buildThreadFeed(
             createdAt: entry.createdAt,
             turnId: entry.turnId,
             activity: {
+              activityKind: entry.activityKind,
               id: entry.id,
               createdAt: entry.createdAt,
               turnId: entry.turnId,

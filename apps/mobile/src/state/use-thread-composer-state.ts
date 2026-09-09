@@ -1,3 +1,4 @@
+import { isThreadContextCompacting } from "../lib/contextCompaction";
 import { Alert } from "react-native";
 import { useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/unstable/reactivity";
@@ -45,7 +46,7 @@ import { setPendingConnectionError } from "../state/use-remote-environment-regis
 import { useSelectedThreadDetail } from "../state/use-thread-detail";
 import { useThreadSelection } from "../state/use-thread-selection";
 import { enqueueThreadOutboxMessage } from "./thread-outbox";
-import { useThreadOutboxMessages } from "./use-thread-outbox";
+import { dispatchingQueuedMessageIdAtom, useThreadOutboxMessages } from "./use-thread-outbox";
 import { mobilePreferencesAtom } from "./preferences";
 
 export function appendReviewCommentToDraft(input: {
@@ -91,6 +92,7 @@ export function useThreadComposerState() {
   const selectedThreadDetail = useSelectedThreadDetail();
   const composerDrafts = useAtomValue(composerDraftsAtom);
   const queuedMessagesByThreadKey = useThreadOutboxMessages();
+  const dispatchingQueuedMessageId = useAtomValue(dispatchingQueuedMessageIdAtom);
   const preferences = useAtomValue(mobilePreferencesAtom);
   const composerBusyBehavior = AsyncResult.isSuccess(preferences)
     ? (preferences.value.composerBusyBehavior ?? "queue")
@@ -133,18 +135,43 @@ export function useThreadComposerState() {
     };
   }, [selectedThreadDetail, selectedThreadShell]);
 
+  const isCompacting = isThreadContextCompacting({
+    messages: selectedThreadDetail?.messages ?? [],
+    activities: selectedThreadDetail?.activities ?? [],
+    latestTurn: selectedThread?.latestTurn ?? null,
+    session: selectedThread?.session ?? null,
+    queuedMessages: selectedThreadQueuedMessages,
+    dispatchingMessageId: dispatchingQueuedMessageId,
+  });
+
+  const compactionStartedAt = isCompacting
+    ? (selectedThreadQueuedMessages.find(
+        (message) => message.messageId === dispatchingQueuedMessageId,
+      )?.createdAt ??
+      selectedThreadDetail?.messages.findLast(
+        (message) =>
+          message.role === "user" &&
+          message.text.trim().toLowerCase() === "/compact" &&
+          !message.attachments?.length,
+      )?.createdAt ??
+      null)
+    : null;
   const activeWorkStartedAt = useMemo(() => {
     const selectedThread = selectedThreadDetail ?? selectedThreadShell;
     if (!selectedThread) {
       return null;
     }
 
-    return deriveActiveWorkStartedAt(
-      selectedThread.latestTurn,
-      selectedThreadSessionActivity,
-      null,
+    return (
+      deriveActiveWorkStartedAt(selectedThread.latestTurn, selectedThreadSessionActivity, null) ??
+      compactionStartedAt
     );
-  }, [selectedThreadDetail, selectedThreadSessionActivity, selectedThreadShell]);
+  }, [
+    compactionStartedAt,
+    selectedThreadDetail,
+    selectedThreadSessionActivity,
+    selectedThreadShell,
+  ]);
 
   const onSendMessage = useCallback(async () => {
     if (!selectedThreadShell) {
@@ -374,6 +401,7 @@ export function useThreadComposerState() {
     selectedThreadFeed,
     selectedThreadQueueCount,
     activeWorkStartedAt,
+    isCompacting,
     draftMessage,
     draftAttachments,
     modelSelection,
