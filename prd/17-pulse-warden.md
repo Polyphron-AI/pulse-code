@@ -1,6 +1,6 @@
 # Pulse Warden: passwords, passkeys and delegated access
 
-Status: draft detailed specification based on confirmed product direction, 2026-09-07. All new capability is planned; this document is not implementation, release approval or proof of security.
+Status: draft detailed specification based on confirmed product direction, 2026-09-07. The full capability remains planned. The [September 10 readiness packet](warden/readiness.md) records the merged Go foundation and unmerged integration work; this PRD is not release approval or proof of security.
 
 Change record: [Warden CR](change-requests/CR-2026-09-07-pulse-warden.md). [Acceptance criteria](20-acceptance-criteria/pulse-warden.md), [surfaces](../sitemap/pulse-warden.md), [workflows](../workflows/pulse-warden.md), [ownership](../tool-flow/pulse-warden.md).
 

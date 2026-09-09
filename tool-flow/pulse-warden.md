@@ -44,3 +44,7 @@ Per-tenant encryption and grant implementation; pinned Bitwarden/Vaultwarden com
 MCP toolkit/registry/invocation context owns session-scoped Warden tools. Go cmd/cli owns pulse-cli warden commands; both consume the same broker. [MCP/CLI contract](../prd/warden/mcp-cli.md) defines setup, schema, output and cancellation; no agent-callable approval or secret lookup.
 
 **Created:** 2026-09-07 . **Last opened:** 2026-09-07 . **Last edited:** 2026-09-07 . **Status:** draft . **Owner:** Engineering
+
+## September 10 implementation evidence
+
+The [readiness packet](../prd/warden/readiness.md) supersedes the blanket not-built interpretation of this historical ownership map. Go internal/warden now has a merged primitive foundation; credential/workload/HTTP and Pulse infrastructure client code exist on separate branches. Reconcile them before adding modules or choosing migration numbers. Full Warden MCP/CLI and personal-vault/native capabilities remain incomplete.
