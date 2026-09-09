@@ -234,7 +234,7 @@ export function NewTaskDraftScreen(props: {
         : (flow.selectedWorktreePath ?? selectedProject?.workspaceRoot)) || null,
     selectedProviderStatus: flow.selectedProviderStatus,
     hasThread: false,
-    enabled: isComposerFocused && !isIncomingShareTransferPending,
+    enabled: isComposerFocused && !isComposerInteractionLocked,
     onChangeDraftMessage: flow.setPrompt,
     onUpdateInteractionMode: flow.planModeEnabled ? flow.setInteractionMode : undefined,
   });
