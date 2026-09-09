@@ -6,7 +6,7 @@ This branch starts from reconciled develop `3f18c538c`. Implementation starts af
 
 ## Selected work
 
-- [ ] Publish preview containing the first 11 upstream fixes and retained preview features.
+- [x] Publish preview containing the first 11 upstream fixes and retained preview features: [preview .3](https://github.com/Polyphron-AI/pulse-code/releases/tag/pulse-preview-20260909.3), source `7669022658792a8314cc773091552c09ccbb8ceb`. All eight uploaded asset hashes matched local verification.
 - [ ] Port `f925d6394`, expanded Codex multi-agent event values, including generator overrides and schema regressions.
 - [ ] Port `94401d01b`, expanded Codex account-plan values and presentation, after the preceding schema work.
 - [ ] Port `75ab5ab3f` and `95139254b`, accepting rate-limit and policy-error variants on thread read/resume/rollback/fork and turn completion. Keep generator output reproducible.
