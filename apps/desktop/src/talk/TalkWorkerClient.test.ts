@@ -25,7 +25,8 @@ function client() {
     executable: process.execPath,
     args: ["-e", fixture, "--"],
     dataDir: "isolated-fixture",
-    timeoutMs: 1000,
+    // Allow process startup on busy Windows build hosts.
+    timeoutMs: 5000,
     maxFrameBytes: 1024,
   });
 }
@@ -61,9 +62,10 @@ describe("Talk worker supervision", () => {
   it("bounds an unresponsive request", async () => {
     const worker = client();
     try {
+      await worker.request("hello");
       await expect(worker.request("hang")).rejects.toThrow("did not respond");
     } finally {
       await worker.close();
     }
-  });
+  }, 15_000);
 });
