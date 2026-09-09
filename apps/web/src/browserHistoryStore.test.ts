@@ -442,3 +442,7 @@ describe("mergeBrowserHistoryState", () => {
     expect(merged.pendingTitlesByThreadKey).toEqual({});
   });
 });
+
+it("excludes expiring asset credentials from persisted browser history", () => {
+  expect(normalizeHistoryUrl("https://remote.example/api/assets/token/report.html")).toBeNull();
+});

@@ -31,6 +31,8 @@ import {
 import { resolveDiscoveredServerUrl } from "~/browser/browserTargetResolver";
 import { useEnvironmentHttpBaseUrl } from "~/state/environments";
 import { issueEnvironment } from "~/state/issues";
+import { assetEnvironment } from "~/state/assets";
+import { readSavedOutputPreview, resolveSavedOutputPreviewUrl } from "~/browser/savedOutputPreview";
 import { previewEnvironment } from "~/state/preview";
 import { useEnvironmentQuery } from "~/state/query";
 import { useAtomCommand } from "~/state/use-atom-command";
@@ -149,6 +151,8 @@ export function PreviewView({
     ? new URL(environmentHttpBaseUrl).hostname
     : null;
   const open = useAtomCommand(previewEnvironment.open);
+  const createAssetUrl = useAtomCommand(assetEnvironment.createFreshUrl, { reportFailure: false });
+  const refreshingOutput = useRef(false);
   const resize = useAtomCommand(previewEnvironment.resize, "preview viewport resize");
 
   usePreviewSession(threadRef);
@@ -174,6 +178,8 @@ export function PreviewView({
   const desktopOverlay = tabId ? (previewState.desktopByTabId[tabId] ?? null) : null;
   const navStatus = snapshot?.navStatus ?? { _tag: "Idle" as const };
   const url = navStatus._tag === "Idle" ? "" : navStatus.url;
+  const currentNavigation = useRef({ runtimeTabId, url });
+  currentNavigation.current = { runtimeTabId, url };
   const loading = desktopOverlay?.loading ?? navStatus._tag === "Loading";
   const canGoBack = desktopOverlay?.canGoBack ?? snapshot?.canGoBack ?? false;
   const canGoForward = desktopOverlay?.canGoForward ?? snapshot?.canGoForward ?? false;
@@ -218,15 +224,24 @@ export function PreviewView({
   const navigateToResolvedUrl = useCallback(
     async (resolvedUrl: string) => {
       if (runtimeTabId && previewBridge) {
+        const freshUrl = tabId
+          ? await resolveSavedOutputPreviewUrl({
+              threadRef,
+              tabId,
+              url: resolvedUrl,
+              httpBaseUrl: environmentHttpBaseUrl,
+              createAssetUrl,
+            })
+          : null;
         // The bridge mirrors the resolved URL back to the server.
-        await previewBridge.navigate(runtimeTabId, resolvedUrl);
+        await previewBridge.navigate(runtimeTabId, freshUrl ?? resolvedUrl);
         rememberPreviewUrl(threadRef, resolvedUrl);
         return true;
       }
       const result = await openPreviewSession({ openPreview: open, threadRef, url: resolvedUrl });
       return result._tag === "Success";
     },
-    [open, runtimeTabId, threadRef],
+    [createAssetUrl, environmentHttpBaseUrl, open, runtimeTabId, tabId, threadRef],
   );
 
   const handleSubmitUrl = useCallback(
@@ -257,9 +272,51 @@ export function PreviewView({
     [navigateToResolvedUrl, threadRef],
   );
 
+  const resolveCurrentOutputUrl = useCallback(async () => {
+    if (!tabId) return null;
+    return resolveSavedOutputPreviewUrl({
+      threadRef,
+      tabId,
+      url,
+      httpBaseUrl: environmentHttpBaseUrl,
+      createAssetUrl,
+    });
+  }, [createAssetUrl, environmentHttpBaseUrl, tabId, threadRef, url]);
+
+  useEffect(() => {
+    if (tabId && url) readSavedOutputPreview(threadRefRef.current, tabId, url);
+  }, [tabId, threadKey, url]);
+
   const handleRefresh = useCallback(() => {
-    if (previewBridge && runtimeTabId) void previewBridge.refresh(runtimeTabId);
-  }, [runtimeTabId]);
+    const bridge = previewBridge;
+    if (!bridge || !runtimeTabId || refreshingOutput.current) return;
+    refreshingOutput.current = true;
+    void resolveCurrentOutputUrl()
+      .then(async (freshUrl) => {
+        if (
+          currentNavigation.current.runtimeTabId !== runtimeTabId ||
+          currentNavigation.current.url !== url
+        )
+          return;
+        if (freshUrl) await bridge.navigate(runtimeTabId, freshUrl);
+        else await bridge.refresh(runtimeTabId);
+      })
+      .catch((error: unknown) => {
+        toastManager.add(
+          stackedThreadToast({
+            type: "error",
+            title: "Unable to reload preview",
+            description:
+              error instanceof Error
+                ? error.message
+                : "Reconnect to the environment and try again.",
+          }),
+        );
+      })
+      .finally(() => {
+        refreshingOutput.current = false;
+      });
+  }, [resolveCurrentOutputUrl, runtimeTabId, url]);
 
   const handleZoomIn = useCallback(() => {
     if (previewBridge && runtimeTabId) void previewBridge.zoomIn(runtimeTabId);
@@ -330,8 +387,21 @@ export function PreviewView({
 
   const handleOpenInBrowser = useCallback(() => {
     if (!localApi || !url) return;
-    void localApi.shell.openExternal(url).catch(() => undefined);
-  }, [url]);
+    void resolveCurrentOutputUrl()
+      .then((freshUrl) => localApi.shell.openExternal(freshUrl ?? url))
+      .catch((error: unknown) => {
+        toastManager.add(
+          stackedThreadToast({
+            type: "error",
+            title: "Unable to open preview",
+            description:
+              error instanceof Error
+                ? error.message
+                : "Reconnect to the environment and try again.",
+          }),
+        );
+      });
+  }, [resolveCurrentOutputUrl, url]);
 
   const handlePictureInPicture = useCallback(() => {
     if (!tabId) return;

@@ -31,6 +31,7 @@ export function normalizeHistoryUrl(raw: string): string | null {
   } catch {
     return null;
   }
+  if (parsed.pathname.startsWith("/api/assets/")) return null;
   parsed.username = parsed.password = "";
   return parsed.href.length > BROWSER_HISTORY_MAX_URL_LENGTH ? null : parsed.href;
 }

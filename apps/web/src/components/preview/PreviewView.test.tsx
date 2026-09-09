@@ -9,6 +9,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 const mocks = vi.hoisted(() => ({
+  refresh: vi.fn(async () => undefined),
+  reload: null as (() => void) | null,
+  resolveOutputUrl: vi.fn<() => Promise<string | null>>(async () => null),
   navigate: vi.fn(async (_tabId: string, _url: string): Promise<void> => undefined),
   rememberPreviewUrl: vi.fn(),
   readPreparedConnection: vi.fn(() => ({ httpBaseUrl: "http://172.25.85.75:3773" })),
@@ -35,6 +38,10 @@ const mocks = vi.hoisted(() => ({
 
 const EMPTY_HISTORY: never[] = [];
 
+vi.mock("~/browser/savedOutputPreview", () => ({
+  readSavedOutputPreview: vi.fn(),
+  resolveSavedOutputPreviewUrl: mocks.resolveOutputUrl,
+}));
 vi.mock("~/browserHistoryStore", () => ({
   recordVisitForThread: mocks.recordVisitForThread,
   setTitleForThreadUrl: vi.fn(),
@@ -198,6 +205,7 @@ vi.mock("~/components/ui/toast", () => ({
 vi.mock("./previewBridge", () => ({
   previewBridge: {
     navigate: mocks.navigate,
+    refresh: mocks.refresh,
     pickElement: mocks.pickElement,
     pictureInPicture: {
       open: mocks.openPictureInPicture,
@@ -208,6 +216,7 @@ vi.mock("./previewBridge", () => ({
 
 vi.mock("./PreviewChromeRow", () => ({
   PreviewChromeRow: (props: {
+    onRefresh: () => void;
     onSubmit: (url: string) => void;
     onPickElement?: () => void;
     onPictureInPicture?: () => void;
@@ -216,6 +225,7 @@ vi.mock("./PreviewChromeRow", () => ({
       props: { onNativePictureInPicture?: () => void };
     };
   }) => {
+    mocks.reload = props.onRefresh;
     mocks.submittedUrl = props.onSubmit;
     mocks.toggleAnnotation = props.onPickElement ?? null;
     mocks.togglePictureInPicture = props.onPictureInPicture ?? null;
@@ -483,4 +493,19 @@ describe("PreviewView navigation", () => {
     await vi.waitFor(() => expect(onSendAnnotation).toHaveBeenCalledWith(annotation, null));
     expect(mocks.addImage).not.toHaveBeenCalled();
   });
+});
+
+it("renews a saved output before refreshing its existing tab", async () => {
+  mocks.resolveOutputUrl.mockResolvedValueOnce(
+    "https://remote.example/api/assets/fresh/report.html",
+  );
+  renderToStaticMarkup(<PreviewView threadRef={TEST_THREAD_REF} tabId="tab-1" visible />);
+  mocks.reload?.();
+  await vi.waitFor(() =>
+    expect(mocks.navigate).toHaveBeenCalledWith(
+      TEST_RUNTIME_TAB_ID,
+      "https://remote.example/api/assets/fresh/report.html",
+    ),
+  );
+  expect(mocks.refresh).not.toHaveBeenCalled();
 });

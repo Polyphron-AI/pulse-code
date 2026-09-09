@@ -21,6 +21,7 @@ import {
   isPreviewSupportedInRuntime,
   rememberPreviewUrl,
 } from "~/previewStateStore";
+import { rememberSavedOutputPreview } from "./savedOutputPreview";
 import { useRightPanelStore } from "~/rightPanelStore";
 
 export const isBrowserPreviewFile = (path: string): boolean =>
@@ -41,6 +42,7 @@ export async function openUrlInPreview<E>(input: {
   readonly threadRef: ScopedThreadRef;
   readonly url: string;
   readonly remember?: boolean;
+  readonly resource?: AssetResource;
   readonly openPreview: OpenPreviewMutation<E>;
 }): Promise<AtomCommandResult<void, E>> {
   const result = await input.openPreview({
@@ -48,6 +50,8 @@ export async function openUrlInPreview<E>(input: {
     input: { threadId: input.threadRef.threadId, url: input.url },
   });
   return mapAtomCommandResult(result, (snapshot) => {
+    if (input.resource)
+      rememberSavedOutputPreview(input.threadRef, snapshot.tabId, input.resource, input.url);
     applyPreviewServerSnapshot(input.threadRef, snapshot);
     if (input.remember !== false) rememberPreviewUrl(input.threadRef, input.url);
     useRightPanelStore.getState().openBrowser(input.threadRef, snapshot.tabId);
@@ -99,6 +103,16 @@ export async function openFileInPreview<AssetError, PreviewError>(input: {
     threadRef: input.threadRef,
     url: assetUrl,
     remember: false,
+    ...(input.messageId
+      ? {
+          resource: {
+            _tag: "session-output" as const,
+            threadId: input.threadRef.threadId,
+            messageId: input.messageId,
+            path: input.filePath,
+          },
+        }
+      : {}),
     openPreview: input.openPreview,
   });
 }
