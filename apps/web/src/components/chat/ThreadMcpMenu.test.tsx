@@ -8,6 +8,7 @@ import {
 } from "@t3tools/contracts";
 import { reactHookHarness as hooks } from "../../test/reactHookHarness";
 import { visitElements } from "../../test/reactElementTree";
+import { Input } from "../ui/input";
 import { Switch } from "../ui/switch";
 
 const state = vi.hoisted(() => ({
@@ -97,4 +98,40 @@ describe("thread MCP controls", () => {
       input: { patch: { threadMcpOverrides: { [threadId]: { tools: null } } } },
     });
   });
+});
+
+it("searches names and IDs with effective enabled connections first", () => {
+  state.settings = {
+    ...state.settings!,
+    mcpServers: {
+      alpha: { name: "Alpha", defaultProviders: [], connectionRedacted: true },
+      zulu: { name: "Zulu", defaultProviders: [instanceId], connectionRedacted: true },
+      browser: { name: "Beta", defaultProviders: [], connectionRedacted: true },
+      gamma: { name: "Gamma", defaultProviders: [instanceId], connectionRedacted: true },
+    },
+    threadMcpOverrides: { [threadId]: { browser: true, gamma: false } },
+  };
+  const rows = () => {
+    const ids: string[] = [];
+    visitElements(render(), (element) => {
+      if (element.type === "label") ids.push(String(element.key));
+      return false;
+    });
+    return ids;
+  };
+  expect(rows()).toEqual(["browser", "zulu", "alpha", "gamma"]);
+  const search = (value: string) => {
+    const input = visitElements(render(), (element) => element.type === Input)!;
+    (input.props.onChange as (event: { target: { value: string } }) => void)({ target: { value } });
+  };
+  search(" BROWSER ");
+  expect(rows()).toEqual(["browser"]);
+  search("ZULU");
+  expect(rows()).toEqual(["zulu"]);
+  search("missing");
+  expect(rows()).toEqual([]);
+  expect(
+    visitElements(render(), (element) => element.props.children === "No MCPs match your search."),
+  ).not.toBeNull();
+  expect(state.persist).not.toHaveBeenCalled();
 });

@@ -8,6 +8,8 @@ Choose providers under **Always available** to give their threads access by defa
 
 In a thread, open **MCP** beside the model picker. Toggle individual connections, or choose **Use defaults** to remove the thread's overrides. **Manage MCPs** opens the connection settings without leaving the conversation. New threads use provider defaults until a thread exists to store overrides.
 
+The dropdown lists enabled connections first and lets you search by name or server ID. Scroll to browse the remaining connections; it shows up to three rows on narrow screens and four on desktop, with search and management controls kept outside the scrolling list.
+
 Changes apply before the next turn. Pulse reconnects the provider using the saved conversation when needed. An active turn keeps its current connections. If another message is sent while a changed selection is pending and a turn is still active, Pulse asks you to wait. A failed reconnect appears as a session error; the MCP count means selected connections, not a successful connection check.
 
 Codex, Claude, Cursor and Grok have thread-scoped MCP wiring. OpenCode and OMP do not yet support these selections. OpenCode's shared MCP registry needs session isolation before it can offer independent thread controls. Provider-managed connections outside Pulse remain controlled by that provider.
