@@ -461,6 +461,7 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
   sendDisabledReason: string | null;
   isConnecting: boolean;
   isEnvironmentUnavailable: boolean;
+  environmentUnavailableReason: string;
   hasSendableContent: boolean;
   preserveComposerFocusOnPointerDown?: boolean;
   showSendWhileRunning?: boolean;
@@ -498,6 +499,7 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
           sendDisabledReason={props.sendDisabledReason}
           isConnecting={props.isConnecting}
           isEnvironmentUnavailable={props.isEnvironmentUnavailable}
+          environmentUnavailableReason={props.environmentUnavailableReason}
           isPreparingWorktree={props.isPreparingWorktree}
           hasSendableContent={props.hasSendableContent}
           preserveComposerFocusOnPointerDown={props.preserveComposerFocusOnPointerDown ?? false}
@@ -1040,6 +1042,14 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       : undefined,
   );
   const noProviderAvailable = selectedProviderEntry === undefined;
+  const environmentUnavailableReason =
+    environmentUnavailable !== null
+      ? "Environment disconnected"
+      : projectSelectionRequired
+        ? "Choose a project to send a message"
+        : noProviderAvailable
+          ? "No provider available"
+          : "Sending unavailable";
   const resolvedCompactDisabledReason =
     compactDisabledReason ?? (noProviderAvailable ? "Compacting is unavailable right now" : null);
   // The driver kind follows the instance that will actually run the turn,
@@ -3464,6 +3474,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                         noProviderAvailable ||
                         projectSelectionRequired
                       }
+                      environmentUnavailableReason={environmentUnavailableReason}
                       isPreparingWorktree={false}
                       hasSendableContent={false}
                       preserveComposerFocusOnPointerDown
@@ -3900,6 +3911,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                       noProviderAvailable ||
                       projectSelectionRequired
                     }
+                    environmentUnavailableReason={environmentUnavailableReason}
                     isPreparingWorktree={false}
                     hasSendableContent={false}
                     preserveComposerFocusOnPointerDown
@@ -4045,6 +4057,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     noProviderAvailable ||
                     projectSelectionRequired
                   }
+                  environmentUnavailableReason={environmentUnavailableReason}
                   isPreparingWorktree={isPreparingWorktree}
                   hasSendableContent={composerSendState.hasSendableContent}
                   preserveComposerFocusOnPointerDown={isMobileViewport}

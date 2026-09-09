@@ -274,3 +274,35 @@ describe("ComposerPrimaryActions", () => {
     expect(markup).not.toContain('aria-label="Queue message"');
   });
 });
+
+describe("unavailable send labels", () => {
+  it.each([
+    "No provider available",
+    "Choose a project to send a message",
+    "Environment disconnected",
+  ])("reports the actual blocker: %s", (reason) => {
+    const markup = renderToStaticMarkup(
+      createElement(ComposerPrimaryActions, {
+        compact: false,
+        pendingAction: null,
+        isRunning: false,
+        showPlanFollowUpPrompt: false,
+        promptHasText: true,
+        isSendBusy: false,
+        sendDisabledReason: null,
+        isConnecting: false,
+        isEnvironmentUnavailable: true,
+        environmentUnavailableReason: reason,
+        isPreparingWorktree: false,
+        hasSendableContent: true,
+        onPreviousPendingQuestion: () => {},
+        onInterrupt: () => {},
+        onImplementPlanInNewThread: () => {},
+      }),
+    );
+    expect(markup).toContain(`aria-label="${reason}"`);
+    expect(markup).toContain('disabled=""');
+    if (reason !== "Environment disconnected")
+      expect(markup).not.toContain('aria-label="Environment disconnected"');
+  });
+});

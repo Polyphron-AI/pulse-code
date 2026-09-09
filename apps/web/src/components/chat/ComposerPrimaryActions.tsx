@@ -26,6 +26,7 @@ interface ComposerPrimaryActionsProps {
   sendDisabledReason: string | null;
   isConnecting: boolean;
   isEnvironmentUnavailable: boolean;
+  environmentUnavailableReason?: string;
   isPreparingWorktree: boolean;
   hasSendableContent: boolean;
   preserveComposerFocusOnPointerDown?: boolean;
@@ -69,6 +70,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
   sendDisabledReason,
   isConnecting,
   isEnvironmentUnavailable,
+  environmentUnavailableReason,
   isPreparingWorktree,
   hasSendableContent,
   preserveComposerFocusOnPointerDown = false,
@@ -239,7 +241,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
       }
       aria-label={
         isEnvironmentUnavailable
-          ? "Environment disconnected"
+          ? (environmentUnavailableReason ?? "Sending unavailable")
           : sendDisabledReason
             ? sendDisabledReason
             : isConnecting
