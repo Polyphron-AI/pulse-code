@@ -299,6 +299,11 @@ export const SETTINGS_SEARCH_ITEMS = [
     to: "/settings/connections",
   },
   {
+    id: "load-balancing",
+    title: "Load balancing",
+    to: "/settings/connections",
+  },
+  {
     id: "archive",
     title: "Archived threads",
     to: "/settings/archived",

@@ -112,7 +112,7 @@ export function useNewThreadHandler() {
       const applyComposerSeed = (draftId: DraftId): boolean =>
         options?.composerSeed === undefined ||
         applyNewThreadComposerSeed({
-          store: { getComposerDraft, setModelSelection, setPrompt },
+          store: { getComposerDraft, setModelSelection, setPrompt, setDraftThreadContext },
           draftId,
           seed: options.composerSeed,
         });

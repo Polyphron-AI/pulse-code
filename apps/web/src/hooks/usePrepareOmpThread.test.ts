@@ -14,10 +14,12 @@ describe("applyNewThreadComposerSeed", () => {
   it("pins the exact instance and seeds an empty draft before navigation", () => {
     const setModelSelection = vi.fn();
     const setPrompt = vi.fn();
+    const setDraftThreadContext = vi.fn();
     const store = {
       getComposerDraft: vi.fn(() => null),
       setModelSelection,
       setPrompt,
+      setDraftThreadContext,
     } as unknown as Parameters<typeof applyNewThreadComposerSeed>[0]["store"];
 
     expect(
@@ -31,15 +33,21 @@ describe("applyNewThreadComposerSeed", () => {
       replaceOptions: true,
     });
     expect(setPrompt).toHaveBeenCalledWith(draftId, "Senior crew brief");
+    expect(setDraftThreadContext).toHaveBeenCalledWith(draftId, {
+      environmentSelection: "manual",
+      loadBalancedEnvironmentId: null,
+    });
   });
 
   it("never overwrites content added while the draft opens", () => {
     const setModelSelection = vi.fn();
     const setPrompt = vi.fn();
+    const setDraftThreadContext = vi.fn();
     const store = {
       getComposerDraft: vi.fn(() => ({ prompt: "My existing task" })),
       setModelSelection,
       setPrompt,
+      setDraftThreadContext,
     } as unknown as Parameters<typeof applyNewThreadComposerSeed>[0]["store"];
 
     expect(
@@ -51,5 +59,6 @@ describe("applyNewThreadComposerSeed", () => {
     ).toBe(false);
     expect(setModelSelection).not.toHaveBeenCalled();
     expect(setPrompt).not.toHaveBeenCalled();
+    expect(setDraftThreadContext).not.toHaveBeenCalled();
   });
 });
