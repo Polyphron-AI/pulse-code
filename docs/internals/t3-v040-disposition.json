@@ -1,16 +1,18 @@
 {
   "target": "09e8de9c655ae85410bf6b00446f272a01da81c7",
-  "assessedHead": "d272b766179b1c55e53d3b08e612dce3226ad538",
+  "assessedHead": "8eb5ab63d72bcf4c985842614b93d8e39c38a93c",
   "scope": "Source commit inventory; pending rows require semantic review.",
   "statusDefinitions": {
     "ported-reviewed": "See compatibility ledgers for adaptations and tests.",
+    "partially-ported": "Only the stated source portions are integrated; remaining behavior is not claimed.",
     "target-files-identical": "All touched file blobs match target, including matching deletions. Tree evidence does not independently verify behavior.",
     "needs-disposition": "Path differences alone do not establish a missing feature or incompatibility."
   },
   "counts": {
-    "needs-disposition": 1034,
-    "ported-reviewed": 19,
-    "target-files-identical": 1
+    "needs-disposition": 960,
+    "ported-reviewed": 82,
+    "partially-ported": 9,
+    "target-files-identical": 3
   },
   "commits": [
     {
@@ -86,7 +88,7 @@
     {
       "source": "e7f6a30caba5c390d5bbc9c300de89b68601c057",
       "subject": "fix(server): stop probing Grok, Cursor, and OpenCode unless turned on (#7459)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server", "apps/web", "docs", "packages/contracts", "packages/shared"],
       "differingTargetPaths": 12
     },
@@ -199,7 +201,7 @@
       "subject": "Add OpenCode skill discovery (#3154)",
       "status": "needs-disposition",
       "domains": ["apps/server"],
-      "differingTargetPaths": 5
+      "differingTargetPaths": 2
     },
     {
       "source": "07f8027d9a542f72b12db927caceebb2c9c72aa7",
@@ -276,7 +278,7 @@
       "subject": "feat(web): attach composer state drawers (#7150)",
       "status": "needs-disposition",
       "domains": ["apps/mobile", "apps/web", "packages/client-runtime"],
-      "differingTargetPaths": 32
+      "differingTargetPaths": 30
     },
     {
       "source": "b2e2ccfdb462c45a8de394ff9ff0f58a4a689900",
@@ -337,7 +339,7 @@
     {
       "source": "0929907ff9aecd2541050fe4361ad03199ffbf73",
       "subject": "fix(server): reconcile orphaned provider sessions (#7719)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": [".macroscope", "apps/server"],
       "differingTargetPaths": 4
     },
@@ -416,7 +418,7 @@
       "subject": "feat(composer): list skills with slash commands (#7737)",
       "status": "needs-disposition",
       "domains": ["apps/mobile", "apps/web"],
-      "differingTargetPaths": 11
+      "differingTargetPaths": 8
     },
     {
       "source": "6d3bf01b4f021eb3fbd2feaf07fcacaa4f55881d",
@@ -618,7 +620,7 @@
     {
       "source": "11f051373e79b38fa16f3ec1af825f5164907c1b",
       "subject": "feat(analytics): threads and turns now know which client started them (#7774)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": [
         "apps/mobile",
         "apps/server",
@@ -640,7 +642,7 @@
       "subject": "fix(web): command-click spaced folder links (#6439)",
       "status": "needs-disposition",
       "domains": ["apps/web"],
-      "differingTargetPaths": 3
+      "differingTargetPaths": 2
     },
     {
       "source": "2274444e92275fda2033de6636e3143ac3599ffb",
@@ -689,7 +691,7 @@
       "subject": "fix: render workspace images in chat markdown (#6433)",
       "status": "needs-disposition",
       "domains": ["apps/mobile", "apps/web", "packages/client-runtime"],
-      "differingTargetPaths": 15
+      "differingTargetPaths": 12
     },
     {
       "source": "6c693baecf75454cac96d1ae3f78afc73f2cbe53",
@@ -821,7 +823,7 @@
         "packages/client-runtime",
         "packages/contracts"
       ],
-      "differingTargetPaths": 12
+      "differingTargetPaths": 8
     },
     {
       "source": "09df91f729c1c61e637e7dd0ef22827cfc8a6cb1",
@@ -896,7 +898,7 @@
     {
       "source": "7c6163c67aa122fa7c13466536c012888db102c6",
       "subject": "fix(codex): show app access approval prompts (#8058)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": [
         "apps/mobile",
         "apps/server",
@@ -905,21 +907,21 @@
         "packages/contracts",
         "packages/effect-codex-app-server"
       ],
-      "differingTargetPaths": 24
+      "differingTargetPaths": 23
     },
     {
       "source": "e9f50c3efcb02a199042364ead292e164274e716",
       "subject": "feat(web): upload image attachments before sending (#8048)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server", "apps/web", "docs", "packages/contracts"],
-      "differingTargetPaths": 37
+      "differingTargetPaths": 24
     },
     {
       "source": "58ba5594439c984b08d13b6d4efb5407adb06943",
       "subject": "fix(server): bound OpenCode skill discovery output (#7675)",
       "status": "needs-disposition",
       "domains": ["apps/server"],
-      "differingTargetPaths": 5
+      "differingTargetPaths": 1
     },
     {
       "source": "9eba1252c1f8264b6951068d2e2396363412299c",
@@ -1003,7 +1005,7 @@
       "subject": "fix(server): honor auto-accept edits for the OpenCode provider (#7100)",
       "status": "needs-disposition",
       "domains": ["apps/server"],
-      "differingTargetPaths": 2
+      "differingTargetPaths": 1
     },
     {
       "source": "3fd50643311d0b0e702628f906f7cb6bbe84e1ba",
@@ -1080,7 +1082,7 @@
       "subject": "fix: open agent file links in the file viewer (#8098)",
       "status": "needs-disposition",
       "domains": ["apps/mobile", "apps/web"],
-      "differingTargetPaths": 5
+      "differingTargetPaths": 4
     },
     {
       "source": "c034f51bb727de3d4888c74497b13e878ee65187",
@@ -1113,7 +1115,7 @@
     {
       "source": "3c75eb1132bb5d67cfa95ac6271ef68959f986c1",
       "subject": "feat: link pull requests to threads (#8160)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": [
         "apps/mobile",
         "apps/server",
@@ -1122,14 +1124,14 @@
         "packages/client-runtime",
         "packages/contracts"
       ],
-      "differingTargetPaths": 39
+      "differingTargetPaths": 36
     },
     {
       "source": "bd9ed2b4bbda3dd6e468df1cb06233e29c4a9f5c",
       "subject": "feat(web): safely attach HEIC photos as JPEG images (#8161)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/web", "docs", "pnpm-lock.yaml"],
-      "differingTargetPaths": 6
+      "differingTargetPaths": 4
     },
     {
       "source": "bce680926d38915f3590242c0d1a4309e7ca1b9a",
@@ -1161,7 +1163,7 @@
     {
       "source": "43f723f807e8cc05d7fcd36ee7c3e57c9b3c4980",
       "subject": "fix(server): stop probing Cursor until enabled (#8175)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server", "packages/contracts"],
       "differingTargetPaths": 3
     },
@@ -1182,9 +1184,9 @@
     {
       "source": "c7222ca4dfdea50df1d02ca33710aac5daddbeb7",
       "subject": "feat(claude): compact old threads before they burn through usage (#8144)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server", "apps/web", "docs", "packages/contracts", "packages/shared"],
-      "differingTargetPaths": 25
+      "differingTargetPaths": 22
     },
     {
       "source": "589a9d0e29e26b290024899c16f0a4e0d6aebe26",
@@ -1196,7 +1198,7 @@
     {
       "source": "06de9e90ab0832727968c58ce72282b94a95ae17",
       "subject": "fix(server): keep previously used providers working after upgrades (#8176)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server", "packages/contracts"],
       "differingTargetPaths": 4
     },
@@ -1247,7 +1249,7 @@
       "subject": "feat(server): fetch legacy model classification from a hosted manifest (#8227)",
       "status": "needs-disposition",
       "domains": ["apps/server", "docs"],
-      "differingTargetPaths": 14
+      "differingTargetPaths": 13
     },
     {
       "source": "860caaa6023a3aaf616a5899816c74c195ca8de2",
@@ -1266,7 +1268,7 @@
     {
       "source": "3b86ef941c218a000a2ea9920480f469b726f437",
       "subject": "fix(app): un-settled threads return to the top of the list (#8231)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": [
         "apps/mobile",
         "apps/server",
@@ -1275,7 +1277,7 @@
         "packages/client-runtime",
         "packages/contracts"
       ],
-      "differingTargetPaths": 22
+      "differingTargetPaths": 17
     },
     {
       "source": "a3a8cbd60539b4af4de8f96c892dbd07a2b6c041",
@@ -1296,7 +1298,7 @@
       "subject": "fix(codex): accept Codex 0.150 multi-agent events (#8346)",
       "status": "ported-reviewed",
       "domains": ["packages/effect-codex-app-server"],
-      "differingTargetPaths": 3
+      "differingTargetPaths": 2
     },
     {
       "source": "d3c24a14b92ccd8d832466dc7f0f51d979a8a21d",
@@ -1308,7 +1310,7 @@
     {
       "source": "ead4ce52a1624d9c55461f61524580978fc8b719",
       "subject": "fix(grok): improve skills, plans, usage, and turn reliability (#8358)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": [
         "apps/mobile",
         "apps/server",
@@ -1317,7 +1319,7 @@
         "packages/contracts",
         "packages/shared"
       ],
-      "differingTargetPaths": 33
+      "differingTargetPaths": 30
     },
     {
       "source": "230c5d4a5cc31656de3d46719e7f4d2a13369991",
@@ -1379,7 +1381,7 @@
       "subject": "fix(codex): accept Codex 0.150 account plans (#8447)",
       "status": "ported-reviewed",
       "domains": ["apps/server", "packages/effect-codex-app-server"],
-      "differingTargetPaths": 4
+      "differingTargetPaths": 3
     },
     {
       "source": "b0ae3f3a8527bdcccb6a5cbda93548ad66fbcfea",
@@ -1393,7 +1395,7 @@
       "subject": "fix(mobile): keep iOS home header stable (#8467)",
       "status": "needs-disposition",
       "domains": ["patches", "pnpm-lock.yaml"],
-      "differingTargetPaths": 2
+      "differingTargetPaths": 1
     },
     {
       "source": "f1e6f0c9bbe527a76eaae9e3b498a5977ce3c7d6",
@@ -1471,9 +1473,9 @@
     {
       "source": "8f49132214a40c85cf46bf5e3d8ea11c04a9610a",
       "subject": "feat(server): accept PDF, ZIP, and other file uploads up to 50MB (#8235)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/mobile", "apps/server", "apps/web", "docs", "packages/contracts"],
-      "differingTargetPaths": 38
+      "differingTargetPaths": 29
     },
     {
       "source": "4c51b4c9b6a85d96a22e0df41d5cfd2d8fc9901d",
@@ -1527,7 +1529,7 @@
     {
       "source": "94f1948166620c804937f5548a68f5739d76c9fb",
       "subject": "fix(connect): explain DPoP connection failures (#8351)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": [
         "apps/mobile",
         "apps/server",
@@ -1538,7 +1540,7 @@
         "packages/contracts",
         "packages/shared"
       ],
-      "differingTargetPaths": 33
+      "differingTargetPaths": 24
     },
     {
       "source": "48c176b3cfda7a714c10f18a12d398528ff4c2f9",
@@ -1580,7 +1582,7 @@
       "subject": "fix(opencode): handle child approvals, stops, and model catalogs (#8480)",
       "status": "needs-disposition",
       "domains": ["apps/mobile", "apps/server", "apps/web", "docs"],
-      "differingTargetPaths": 42
+      "differingTargetPaths": 35
     },
     {
       "source": "0bbecfabf189349b16ad2d7e6558a95a98a3b196",
@@ -1680,14 +1682,14 @@
       "subject": "fix(mobile): stabilize iOS header item transitions (#8607)",
       "status": "needs-disposition",
       "domains": ["apps/mobile", "docs", "patches", "pnpm-lock.yaml"],
-      "differingTargetPaths": 7
+      "differingTargetPaths": 6
     },
     {
       "source": "3e6ab36f6ed303f95f210971f56cc8642214c6fc",
       "subject": "chore(mobile): upgrade to Expo SDK 57 (#8609)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/mobile", "patches", "pnpm-lock.yaml", "pnpm-workspace.yaml"],
-      "differingTargetPaths": 8
+      "differingTargetPaths": 5
     },
     {
       "source": "38dcd7a404d24c2fa514cc82c1a5c4fd6a9d4a7a",
@@ -1699,7 +1701,7 @@
     {
       "source": "c131f289268d407bb0d8540dc33ba6ddb88f46ed",
       "subject": "fix(server): stop querying Claude context usage after turns (#8610)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server"],
       "differingTargetPaths": 2
     },
@@ -1713,9 +1715,9 @@
     {
       "source": "bcb855a633566c2dc70239155ddcd28f0fa736c4",
       "subject": "feat(web): attach PDFs, ZIPs, and other files to a turn (#8236)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/web", "docs", "packages/client-runtime"],
-      "differingTargetPaths": 30
+      "differingTargetPaths": 23
     },
     {
       "source": "d22709f759ced90b0ae7b7cb73d7ad22c2ce962b",
@@ -1799,7 +1801,7 @@
       "subject": "fix(web): render nested markdown images correctly (#8501)",
       "status": "needs-disposition",
       "domains": ["apps/web", "packages/client-runtime"],
-      "differingTargetPaths": 8
+      "differingTargetPaths": 4
     },
     {
       "source": "3d32797f6f4614205debf8a61f09e950f5f9a81c",
@@ -1868,16 +1870,16 @@
     {
       "source": "7880a6e583f8a04db2eaeef2366ce9c81c3f7bec",
       "subject": "fix(grok): allow model changes in existing threads (#8392)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server"],
       "differingTargetPaths": 2
     },
     {
       "source": "86c9a9288b5704e79bbe68fb0834d56036456f3e",
       "subject": "feat(mobile): pick, share, and receive files in threads (#8237)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/mobile", "docs", "patches", "pnpm-lock.yaml", "pnpm-workspace.yaml"],
-      "differingTargetPaths": 46
+      "differingTargetPaths": 37
     },
     {
       "source": "6e324b9bbfc72e694c3c16abeb59716c37fc02d5",
@@ -2066,7 +2068,7 @@
       "subject": "fix(web): hide invalid slash skill completions (#8904)",
       "status": "needs-disposition",
       "domains": ["apps/web"],
-      "differingTargetPaths": 3
+      "differingTargetPaths": 1
     },
     {
       "source": "746c932e164d49ddb4ac98a42176194b11bf0699",
@@ -2129,7 +2131,7 @@
         "packages/shared",
         "pnpm-lock.yaml"
       ],
-      "differingTargetPaths": 34
+      "differingTargetPaths": 32
     },
     {
       "source": "f47e74004af232f0e3df8dc10093601d1c2c3ea3",
@@ -2225,9 +2227,10 @@
     {
       "source": "b17cc3d1bf0f4a5deee6dd6a470e36970b864a9b",
       "subject": "perf(server): reduce frequency of full tool call output being loaded into memory from db (#8988)",
-      "status": "needs-disposition",
+      "status": "partially-ported",
       "domains": ["apps/server"],
-      "differingTargetPaths": 10
+      "differingTargetPaths": 10,
+      "remaining": "Durable request lifecycle lookup only; broader source changes still require disposition."
     },
     {
       "source": "d35c71d1b975660ec6a71bbceb6aa7dfd0e8c3d5",
@@ -2274,7 +2277,7 @@
     {
       "source": "0bfb6df34b26dfe0162db6c09dca00bc8c5a5ec4",
       "subject": "perf(server): cut idle CPU use and stop provider event leaks (#8187)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": [
         "apps/server",
         "docs",
@@ -2301,7 +2304,7 @@
     {
       "source": "f32f9a2f41342bf8a1a109d6ebe9b70044c5311b",
       "subject": "fix(server): settle threads server-side (#8600)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": [
         "apps/desktop",
         "apps/mobile",
@@ -2311,14 +2314,14 @@
         "packages/client-runtime",
         "packages/contracts"
       ],
-      "differingTargetPaths": 55
+      "differingTargetPaths": 52
     },
     {
       "source": "8b033de48247086c1b6c6968ce7cf33b358a1ec5",
       "subject": "fix(clients): dedupe skills in composer menus (#8043)",
       "status": "needs-disposition",
       "domains": ["apps/mobile", "apps/web", "packages/client-runtime"],
-      "differingTargetPaths": 5
+      "differingTargetPaths": 3
     },
     {
       "source": "62d39bf00d5ddd83a9b36a81321fe9aa4d2502bb",
@@ -2395,7 +2398,7 @@
       "subject": "feat(claude): add Claude Fable 5.1 model (#9078)",
       "status": "needs-disposition",
       "domains": ["apps/server", "packages/contracts", "packages/shared"],
-      "differingTargetPaths": 7
+      "differingTargetPaths": 6
     },
     {
       "source": "ef7014d851f56bb037a9da963095ffd883c7fa08",
@@ -2428,9 +2431,10 @@
     {
       "source": "03542836834d008a097450cf24d0d9c6f965b859",
       "subject": "feat(models): discover Claude models from remote manifest (#9084)",
-      "status": "needs-disposition",
+      "status": "partially-ported",
       "domains": ["apps/server", "apps/web", "docs", "packages/contracts", "packages/shared"],
-      "differingTargetPaths": 26
+      "differingTargetPaths": 19,
+      "remaining": "Bundled fixed-target V40 model catalog and per-instance aliases integrated. Intentionally omit mutable upstream-main catalog fetch to preserve Pulse metadata ownership."
     },
     {
       "source": "163d50846bc8989b5858802bb02253254dcee0dd",
@@ -2503,7 +2507,7 @@
         "packages/shared",
         "pnpm-lock.yaml"
       ],
-      "differingTargetPaths": 80
+      "differingTargetPaths": 65
     },
     {
       "source": "04efa7907e9ec207e2d6af459ce3b2ffd55f6107",
@@ -2564,7 +2568,7 @@
     {
       "source": "ea71a19d4181ce13b0e8f374f45ba9237ee4a9ce",
       "subject": "fix(claude): skills picked from the composer now run (#9128)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": [
         "apps/mobile",
         "apps/server",
@@ -2573,7 +2577,7 @@
         "packages/client-runtime",
         "packages/contracts"
       ],
-      "differingTargetPaths": 16
+      "differingTargetPaths": 11
     },
     {
       "source": "feb3ea7ebf83de2e301adb1f20300b262773ec54",
@@ -2662,9 +2666,9 @@
     {
       "source": "a434677eca737771dd64703545c13eb11ba92ce2",
       "subject": "fix(grok): health check, model selection, and stop all work against the real CLI (#9154)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server", "docs", "packages/contracts", "packages/effect-acp"],
-      "differingTargetPaths": 14
+      "differingTargetPaths": 13
     },
     {
       "source": "80c708a1fa8986bce0b2d1ba4d35e79d9e4094ba",
@@ -2676,7 +2680,7 @@
     {
       "source": "b2f25d390a8546e42eb6186115b673a53b8c38dc",
       "subject": "feat(desktop): update the desktop app on remote Macs from the Update button (#6554)",
-      "status": "needs-disposition",
+      "status": "partially-ported",
       "domains": [
         "apps/desktop",
         "apps/server",
@@ -2685,7 +2689,8 @@
         "packages/client-runtime",
         "packages/contracts"
       ],
-      "differingTargetPaths": 41
+      "differingTargetPaths": 39,
+      "remaining": "Remote prepare/commit update flow and client recovery integrated with focused tests; real installer update verification pending."
     },
     {
       "source": "c37fd136edf546fd58daeac146548436c1fa38c2",
@@ -2727,7 +2732,7 @@
         "packages/contracts",
         "packages/shared"
       ],
-      "differingTargetPaths": 26
+      "differingTargetPaths": 25
     },
     {
       "source": "d937e30759ceae421bf3cc1b84414de4b67df76c",
@@ -2874,9 +2879,9 @@
     {
       "source": "80a14b6588f0e856983e6d10002cde9e00e9d3e2",
       "subject": "fix(server): discover project skills for Codex and OpenCode (#8778)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server", "apps/web", "packages/client-runtime", "packages/contracts"],
-      "differingTargetPaths": 24
+      "differingTargetPaths": 19
     },
     {
       "source": "0681d854994ec0ceed0562ae74549ccf8ef2ec41",
@@ -2902,7 +2907,7 @@
     {
       "source": "5392c9bb99c4be1f1c3fd78743df62885fd214dd",
       "subject": "fix(models): restore sticky new-thread selections (#9164)",
-      "status": "needs-disposition",
+      "status": "partially-ported",
       "domains": [
         "apps/mobile",
         "apps/server",
@@ -2911,7 +2916,8 @@
         "packages/contracts",
         "packages/shared"
       ],
-      "differingTargetPaths": 17
+      "differingTargetPaths": 17,
+      "remaining": "Intentionally preserve historical explicit model choices: Pulse cannot reliably distinguish them from automatic defaults. New automatic project creation and sticky client choices are adapted."
     },
     {
       "source": "827345a07a3d2348abc63e5215e57184024078d8",
@@ -2939,7 +2945,7 @@
       "subject": "fix(server): bound OpenCode version probes (#8750)",
       "status": "needs-disposition",
       "domains": ["apps/server"],
-      "differingTargetPaths": 3
+      "differingTargetPaths": 2
     },
     {
       "source": "a56b0cd7178dfef299aa49b26773a80a34abe205",
@@ -2979,7 +2985,7 @@
     {
       "source": "dd6879ffea24da9fc16cb62d7d6072d2c5b2bae3",
       "subject": "fix(pull-requests): reuse github api reads (#9176)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": [
         "apps/mobile",
         "apps/server",
@@ -2999,9 +3005,10 @@
     {
       "source": "5b7d72aad14ed37e8e5e4c02a6d49814bfe528ac",
       "subject": "feat(updates): continue active threads across server restarts (#9167)",
-      "status": "needs-disposition",
+      "status": "partially-ported",
       "domains": ["apps/desktop", "apps/server", "apps/web", "docs", "packages/contracts"],
-      "differingTargetPaths": 26
+      "differingTargetPaths": 26,
+      "remaining": "Boot-service handoff and remote desktop updater integrated; desktop update-specific thread continuation remains unadvertised."
     },
     {
       "source": "7e9d5a7efa70f92f91d960a4f50243ba44d805da",
@@ -3027,7 +3034,7 @@
     {
       "source": "bc918e74ace5dbb4fe1ce73b59d06a9ca1be9ed3",
       "subject": "fix(server): discover project skills for Claude (#9210)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server"],
       "differingTargetPaths": 1
     },
@@ -3055,16 +3062,16 @@
     {
       "source": "b5a09e13fa464a8681e0bf9df404dd3c0afe8ac8",
       "subject": "fix(release): pin patched expo-sharing version (#9250)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/mobile", "pnpm-lock.yaml"],
       "differingTargetPaths": 2
     },
     {
       "source": "aab4049646ffa8b9bcff92562992e6c3a8554bf0",
       "subject": "fix(ci): keep Expo Sharing patch applied (#9248)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/mobile", "patches", "pnpm-lock.yaml", "pnpm-workspace.yaml"],
-      "differingTargetPaths": 4
+      "differingTargetPaths": 3
     },
     {
       "source": "2a7a449cca3c7760b689a54b3aa02476a206dbc9",
@@ -3153,9 +3160,9 @@
     {
       "source": "ba3cb0773859334fe9f75016295bb3893c9e6044",
       "subject": "feat(projects): automatically pull clean default branches (#9277)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server", "apps/web", "docs", "packages/contracts"],
-      "differingTargetPaths": 20
+      "differingTargetPaths": 18
     },
     {
       "source": "1eb36b45ef7aa5c028380afb7266bcabf258a55e",
@@ -3169,7 +3176,7 @@
       "subject": "feat(providers): add context compaction across harnesses (#8808)",
       "status": "needs-disposition",
       "domains": ["apps/mobile", "apps/server", "apps/web", "docs", "packages/contracts"],
-      "differingTargetPaths": 35
+      "differingTargetPaths": 34
     },
     {
       "source": "fb93902ee24d4ba380508df33d25478d3baf7a72",
@@ -3197,7 +3204,7 @@
       "subject": "Revert \"feat(providers): add context compaction across harnesses\" (#9284)",
       "status": "needs-disposition",
       "domains": ["apps/mobile", "apps/server", "apps/web", "docs", "packages/contracts"],
-      "differingTargetPaths": 35
+      "differingTargetPaths": 34
     },
     {
       "source": "c742edd46c5b6792ec8647f934a4703f9103aa82",
@@ -3209,9 +3216,9 @@
     {
       "source": "994bd7373cf3a335c204a617604e690ed4c00cba",
       "subject": "fix(cursor): honor auto and full access modes (#9283)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server", "docs"],
-      "differingTargetPaths": 5
+      "differingTargetPaths": 3
     },
     {
       "source": "4ba39a6f408bdee468df2e3ffdf7d5dc08e7b59d",
@@ -3230,14 +3237,14 @@
     {
       "source": "15fea6c5f40331c8325f33bd08b2dcbf924e935a",
       "subject": "fix(providers): discover workspace skills everywhere (#9180)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/mobile", "apps/server", "apps/web"],
       "differingTargetPaths": 15
     },
     {
       "source": "2971ec3209d7ef1b00d7ded70fe6342816b1539f",
       "subject": "fix(server): preserve automatic settlement timestamps (#9254)",
-      "status": "needs-disposition",
+      "status": "partially-ported",
       "domains": [
         "apps/mobile",
         "apps/server",
@@ -3246,7 +3253,8 @@
         "packages/client-runtime",
         "packages/contracts"
       ],
-      "differingTargetPaths": 22
+      "differingTargetPaths": 17,
+      "remaining": "Command settledAt and safe Pulse migration 48 integrated; source-wide disposition still needs final comparison."
     },
     {
       "source": "dbc7bfa3f36cc61a3f1a2015e47d71ae9dee5421",
@@ -3260,7 +3268,7 @@
       "subject": "feat(web): preview document attachments in the file viewer (#9292)",
       "status": "needs-disposition",
       "domains": ["apps/server", "apps/web", "docs", "packages/contracts"],
-      "differingTargetPaths": 16
+      "differingTargetPaths": 14
     },
     {
       "source": "e94603adfac7d8734f9af01e33f67e776daf482d",
@@ -3286,7 +3294,7 @@
     {
       "source": "d897641d738c67dd7c12cbb3a273b43fe17a5eb1",
       "subject": "fix(pull-requests): keep cached PR chrome on reopen (#9294)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server", "apps/web"],
       "differingTargetPaths": 5
     },
@@ -3322,7 +3330,7 @@
       "subject": "refactor(media): unify file and media previews across clients (#9253)",
       "status": "needs-disposition",
       "domains": ["apps/mobile", "apps/web", "docs", "packages/client-runtime"],
-      "differingTargetPaths": 50
+      "differingTargetPaths": 42
     },
     {
       "source": "ec44bc56f598be16ffbc22ed0e4e095447043844",
@@ -3451,9 +3459,9 @@
     {
       "source": "f6c04c552c203350705f9ab1e47773ea736af245",
       "subject": "feat(web): add customizable project icons (#9137)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server", "apps/web", "docs", "packages/contracts"],
-      "differingTargetPaths": 34
+      "differingTargetPaths": 30
     },
     {
       "source": "1575ada305b9686b9771df2dca304f391e85a76e",
@@ -3494,7 +3502,7 @@
     {
       "source": "854541a04e07b7960698b381bcfd2fda73eb276c",
       "subject": "fix(pull-requests): shared state + not settling? (#9332)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server", "apps/web"],
       "differingTargetPaths": 9
     },
@@ -3585,7 +3593,7 @@
     {
       "source": "18573d60aab1344bf124a044b01445086e910c4c",
       "subject": "fix(claude): expand slash commands when a message has attachments (#9122)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server"],
       "differingTargetPaths": 2
     },
@@ -3619,7 +3627,7 @@
         "packages/effect-acp",
         "pnpm-lock.yaml"
       ],
-      "differingTargetPaths": 165
+      "differingTargetPaths": 164
     },
     {
       "source": "2aa907b1969237efdaced29612fb46ba51be7041",
@@ -3654,7 +3662,7 @@
       "subject": "fix(antigravity): refresh the model manifest so older Gemini models fold as legacy (#9397)",
       "status": "needs-disposition",
       "domains": ["apps/server", "docs"],
-      "differingTargetPaths": 5
+      "differingTargetPaths": 4
     },
     {
       "source": "fff33f9e851912363c5b1f3ac65598be35eb5f0d",
@@ -3729,7 +3737,7 @@
     {
       "source": "c78f05a45e1c2b274d8b0ab2b4d2d88b4767c968",
       "subject": "fix(server): reuse pr state when settling threads (#9459)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server"],
       "differingTargetPaths": 2
     },
@@ -3785,7 +3793,7 @@
     {
       "source": "d2b6f3b9296f682c6158b894ab33d98d0c4bfb2b",
       "subject": "fix(server): full-access OpenCode threads no longer ask for approvals (#9282)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server", "docs"],
       "differingTargetPaths": 3
     },
@@ -4016,7 +4024,7 @@
     {
       "source": "d76b24dd15a219666941ab1b4967d8f738adcda0",
       "subject": "feat(codex): support async questions (#9512)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": [
         "apps/mobile",
         "apps/server",
@@ -4025,7 +4033,7 @@
         "packages/contracts",
         "packages/effect-codex-app-server"
       ],
-      "differingTargetPaths": 26
+      "differingTargetPaths": 25
     },
     {
       "source": "0a0b6be96833adae68b36540c00d347eda278736",
@@ -4047,7 +4055,7 @@
         "packages/contracts",
         "packages/shared"
       ],
-      "differingTargetPaths": 53
+      "differingTargetPaths": 52
     },
     {
       "source": "343db2c328af56fe0fa7672f3af055550832689b",
@@ -4075,7 +4083,7 @@
       "subject": "fix(codex): accept rate limit errors on thread resume (#8897)",
       "status": "ported-reviewed",
       "domains": ["packages/effect-codex-app-server"],
-      "differingTargetPaths": 3
+      "differingTargetPaths": 2
     },
     {
       "source": "6319a9714881a1d25549f797c468fabebae92813",
@@ -4122,9 +4130,9 @@
     {
       "source": "c5ba51d629b3813182cf3e161cc3f23b1e541dc3",
       "subject": "feat(providers): add context compaction command (#9293)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/mobile", "apps/server", "apps/web", "docs", "packages/contracts"],
-      "differingTargetPaths": 53
+      "differingTargetPaths": 52
     },
     {
       "source": "5989de44a24888dab02854477ea1d0f50ac3a4a6",
@@ -4186,7 +4194,7 @@
         "packages/client-runtime",
         "packages/contracts"
       ],
-      "differingTargetPaths": 17
+      "differingTargetPaths": 18
     },
     {
       "source": "4e547318b60031eb546d8cf2b84ad9fa0785a87a",
@@ -4464,9 +4472,10 @@
     {
       "source": "01f3e50eca5102ccd881de6f942a98fe6a518ad4",
       "subject": "fix(server): unblock OpenCode approvals and stop (#9653)",
-      "status": "needs-disposition",
+      "status": "partially-ported",
       "domains": ["apps/mobile", "apps/server", "apps/web", "docs", "packages/client-runtime"],
-      "differingTargetPaths": 17
+      "differingTargetPaths": 14,
+      "remaining": "OpenCode adapter/runtime, abort ingestion and projection portions integrated; remaining client activity presentation needs review."
     },
     {
       "source": "caa8a0db98f9d32e98a1645caa7f7dd37b14f187",
@@ -4478,7 +4487,7 @@
     {
       "source": "560afffdea82000d757c98ea79678aee75f8648c",
       "subject": "fix(server): update Claude Agent SDK to 0.3.260 (#9135)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server", "pnpm-lock.yaml", "pnpm-workspace.yaml"],
       "differingTargetPaths": 5
     },
@@ -4681,9 +4690,9 @@
     {
       "source": "d536b0580d044967dc644498d8c5a6e96464f767",
       "subject": "fix(server): settle inactive threads with open PRs (#9610)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server", "docs"],
-      "differingTargetPaths": 4
+      "differingTargetPaths": 2
     },
     {
       "source": "108f295cc3672716c3cb8291ce487846df5ce098",
@@ -4856,9 +4865,9 @@
     {
       "source": "bc03c3640d6d3bb44e5fb477bfd78d7484cd0e00",
       "subject": "fix(models): make GPT-6-Astra current (#9762)",
-      "status": "needs-disposition",
+      "status": "target-files-identical",
       "domains": ["apps/server"],
-      "differingTargetPaths": 1
+      "differingTargetPaths": 0
     },
     {
       "source": "d115a96763b76d00f06b06272688cf68eebe8206",
@@ -5122,7 +5131,7 @@
     {
       "source": "b906ce2d73d025e801877f42a35b7a2f5629806f",
       "subject": "fix(server): recover opted-in threads after machine restarts (#9803)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/desktop", "apps/server", "apps/web", "docs", "packages/contracts"],
       "differingTargetPaths": 11
     },
@@ -5136,9 +5145,9 @@
     {
       "source": "5a433244d0b827176df8b76a05959cd1a7a98ce2",
       "subject": "feat: add custom model names and option descriptors (#9807)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server", "apps/web", "docs", "packages/contracts", "packages/shared"],
-      "differingTargetPaths": 19
+      "differingTargetPaths": 15
     },
     {
       "source": "087cfb8ae262f344f7e409f5a8c0eda6f0ef12f9",
@@ -5192,7 +5201,7 @@
     {
       "source": "a5bbad910f78cc14eef8baa94fe6f46676f78d5a",
       "subject": "fix(server): surface Claude safety model fallback notices instead of dropping them (#8853)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server"],
       "differingTargetPaths": 2
     },
@@ -5215,7 +5224,7 @@
       "subject": "fix(web): respect case in POSIX file links (#9309)",
       "status": "needs-disposition",
       "domains": ["apps/web", "packages/client-runtime"],
-      "differingTargetPaths": 5
+      "differingTargetPaths": 3
     },
     {
       "source": "fce8508456e7f9218eebb02ecd764f9b3a47df6b",
@@ -5297,9 +5306,10 @@
     {
       "source": "940e8233c227a186044078e99e45e1933eb525e4",
       "subject": "fix(claude): surface usage-limit pauses in the thread (#7165)",
-      "status": "needs-disposition",
+      "status": "partially-ported",
       "domains": ["apps/server", "docs"],
-      "differingTargetPaths": 3
+      "differingTargetPaths": 3,
+      "remaining": "Usage pause behavior integrated; normalized account Limits and probed model-window names remain."
     },
     {
       "source": "ce4712d5b04fb998f79fe132245289191147e5d5",
@@ -5311,7 +5321,7 @@
     {
       "source": "57a6b70e24221f00c9a161f1e5b6b2ddd753bc8f",
       "subject": "fix(codex): show what a file-change approval will change (#8669)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server"],
       "differingTargetPaths": 2
     },
@@ -5332,7 +5342,7 @@
     {
       "source": "d7fe47fd0957a34fc2e8bb05f12db19bac3403b6",
       "subject": "fix(server): dismiss native questions when their turn ends (#9851)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server"],
       "differingTargetPaths": 2
     },
@@ -5465,7 +5475,7 @@
     {
       "source": "f47a3fe90354a3dfa14276e3699541d552426276",
       "subject": "fix(settings): share restart continuation across environments (#9933)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": [
         "apps/mobile",
         "apps/server",
@@ -5619,9 +5629,9 @@
     {
       "source": "044a6e168ad1eb213c2c7c277034e65c638cc937",
       "subject": "refactor(client-runtime): remove unused file position predicate (#9976)",
-      "status": "needs-disposition",
+      "status": "target-files-identical",
       "domains": ["packages/client-runtime"],
-      "differingTargetPaths": 2
+      "differingTargetPaths": 0
     },
     {
       "source": "5fe29c89456c151529a63ddcbf132b4c518f1838",
@@ -6467,7 +6477,7 @@
       "subject": "refactor(client-runtime): remove unused runtime exports and helpers (#10167)",
       "status": "needs-disposition",
       "domains": ["apps/web", "packages/client-runtime"],
-      "differingTargetPaths": 40
+      "differingTargetPaths": 39
     },
     {
       "source": "5716dec97e4eaefea59369b07a8d54191fc33e31",
@@ -6613,9 +6623,9 @@
     {
       "source": "050690d1bc048c1f94096c17a1c9231c3ad61a83",
       "subject": "fix(server): settle threads using actual pull request terminal timestamps (#9934)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server", "apps/web", "packages/contracts"],
-      "differingTargetPaths": 30
+      "differingTargetPaths": 26
     },
     {
       "source": "eee05575ebd514db36f61d7eb05d2258a10c96bd",
@@ -6781,7 +6791,7 @@
     {
       "source": "9f40b2f563c662b43887b11ff99c466fe871c1af",
       "subject": "feat(settings): add shared project defaults and scoped overrides (#9754)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": [
         "apps/mobile",
         "apps/server",
@@ -6791,12 +6801,12 @@
         "packages/contracts",
         "packages/shared"
       ],
-      "differingTargetPaths": 38
+      "differingTargetPaths": 33
     },
     {
       "source": "420fd76f60433fe05b8d2c76f4fbde430dc49968",
       "subject": "feat(connections): balance new threads across connected machines (#9895)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": [
         "apps/desktop",
         "apps/server",
@@ -6805,7 +6815,7 @@
         "packages/client-runtime",
         "packages/contracts"
       ],
-      "differingTargetPaths": 26
+      "differingTargetPaths": 23
     },
     {
       "source": "f1e84c28fe5982ecb507f4c934acf7a1a7b253b7",
@@ -6854,7 +6864,7 @@
       "subject": "feat(usage): pool subscription limits per provider across accounts and environments (#10300)",
       "status": "needs-disposition",
       "domains": ["apps/server", "apps/web", "docs", "packages/shared"],
-      "differingTargetPaths": 6
+      "differingTargetPaths": 8
     },
     {
       "source": "00d6109cbb1a13712d7347701969870aee83252d",
@@ -6936,14 +6946,14 @@
     {
       "source": "4c7cd17a832269ef17edcf99e987ac25ae1b640a",
       "subject": "refactor(server): share Claude result status and error mapping (#10296)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server"],
       "differingTargetPaths": 2
     },
     {
       "source": "f66cfe2219e3f255f573f6430f9c989c58ed517d",
       "subject": "fix(server): settle inactive threads without a PR lookup (#10103)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server"],
       "differingTargetPaths": 2
     },
@@ -7006,7 +7016,7 @@
     {
       "source": "e63ddb48e2fd23854a0b4a480b32cbf33e601981",
       "subject": "fix(threads): keep completed requests closed across clients (#10123)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/mobile", "apps/web", "packages/client-runtime"],
       "differingTargetPaths": 9
     },
@@ -7020,14 +7030,14 @@
     {
       "source": "5fa35d211682ee02e34fba0711838ca431ed003b",
       "subject": "refactor(server): let adapters declare context compaction (#10112)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server"],
       "differingTargetPaths": 11
     },
     {
       "source": "223ff4490f764a74ff911589e97b9bbcd595fee8",
       "subject": "fix(server): link thread PRs without an open client (#10101)",
-      "status": "needs-disposition",
+      "status": "partially-ported",
       "domains": [
         "apps/mobile",
         "apps/server",
@@ -7037,7 +7047,8 @@
         "packages/contracts",
         "packages/shared"
       ],
-      "differingTargetPaths": 50
+      "differingTargetPaths": 48,
+      "remaining": "Branch associations, summaries and open-PR client flows integrated with Pulse migration 50; copy-reference actions still require the shared thread-reference prerequisite."
     },
     {
       "source": "72cb638a8a6656d0b89899d9d62afaed0c2f7e5f",
@@ -7063,14 +7074,14 @@
     {
       "source": "2d645df474f0af5e261edb56a79f7a2a9a2d442e",
       "subject": "feat(threads): persist manual active thread order (#9729)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server", "packages/client-runtime", "packages/contracts"],
-      "differingTargetPaths": 27
+      "differingTargetPaths": 22
     },
     {
       "source": "6766e682ac1a0aa33020358ba98707f4f8fee467",
       "subject": "feat(mobile): arrange active threads from both thread lists (#9730)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/mobile"],
       "differingTargetPaths": 11
     },
@@ -7079,7 +7090,7 @@
       "subject": "feat(web): drag threads across sections with consistent motion (#9731)",
       "status": "needs-disposition",
       "domains": ["apps/web", "docs", "packages/client-runtime"],
-      "differingTargetPaths": 12
+      "differingTargetPaths": 8
     },
     {
       "source": "9a47c7bd40522977c7df022a5b64759aae7b58e0",
@@ -7128,7 +7139,7 @@
       "subject": "fix(server): stop Windows terminal polling from spiking CPU (#9476)",
       "status": "ported-reviewed",
       "domains": ["apps/server", "native/resource-monitor", "packages/contracts"],
-      "differingTargetPaths": 7
+      "differingTargetPaths": 6
     },
     {
       "source": "c2c4185e175daea86f8fd6336fd8839a81cc616e",
@@ -7140,7 +7151,7 @@
     {
       "source": "7ac93e300ee17a4ee5e92192264fcfd438805b6f",
       "subject": "fix(server): allow settling threads with unanswered async questions (#10400)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server", "docs"],
       "differingTargetPaths": 3
     },
@@ -7262,7 +7273,7 @@
         "packages/contracts",
         "packages/shared"
       ],
-      "differingTargetPaths": 16
+      "differingTargetPaths": 18
     },
     {
       "source": "79394154dfe1e6373534995022f53ffdcf293e55",
@@ -7288,9 +7299,9 @@
     {
       "source": "3d00cfd5a710a58bf108de7a66fbe00a1420cc78",
       "subject": "fix(claude): name the expired login or usage limit instead of a generic API error (#10321)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server"],
-      "differingTargetPaths": 4
+      "differingTargetPaths": 2
     },
     {
       "source": "66a24d6c1a008430eebd855cd5640607d5aef38c",
@@ -7311,12 +7322,12 @@
       "subject": "fix(codex): accept misalignment policy errors on thread resume (#10373)",
       "status": "ported-reviewed",
       "domains": ["packages/effect-codex-app-server"],
-      "differingTargetPaths": 3
+      "differingTargetPaths": 2
     },
     {
       "source": "d3d4ea42ee569f20d8a79562974355f659dc46d9",
       "subject": "fix(server): skip disabled settlement lookups (#10424)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server"],
       "differingTargetPaths": 2
     },
@@ -7332,7 +7343,7 @@
       "subject": "feat(web): name the drop action while dragging sidebar threads (#10378)",
       "status": "needs-disposition",
       "domains": ["apps/web", "docs"],
-      "differingTargetPaths": 8
+      "differingTargetPaths": 6
     },
     {
       "source": "252df7742047af8a1b859dc652b2f40b639d16b3",
@@ -7351,7 +7362,7 @@
     {
       "source": "7112697e8be2d6f231726a91eb565e00ddbeebec",
       "subject": "feat(threads): dismiss async questions without replying (#10431)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": [
         "apps/mobile",
         "apps/server",
@@ -7360,7 +7371,7 @@
         "packages/client-runtime",
         "packages/contracts"
       ],
-      "differingTargetPaths": 18
+      "differingTargetPaths": 17
     },
     {
       "source": "a12589dc0bec60b498e72bdd2190871ee6b5c80d",
@@ -7372,7 +7383,7 @@
     {
       "source": "1abc717f0dbd08027b5be4ec45ae6c5bccf96418",
       "subject": "fix(server): keep interrupted threads resumable after restarts (#10421)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server"],
       "differingTargetPaths": 5
     },
@@ -7479,14 +7490,14 @@
       "subject": "fix(web): keep sidebar drag dividers clear and gestures smooth (#10453)",
       "status": "needs-disposition",
       "domains": ["apps/web"],
-      "differingTargetPaths": 6
+      "differingTargetPaths": 2
     },
     {
       "source": "6134b90ffb19c18e0b2f468aa172095a393470b0",
       "subject": "fix(server): mark Cursor transport error answers as failed (#10337)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server"],
-      "differingTargetPaths": 4
+      "differingTargetPaths": 2
     },
     {
       "source": "f5fb056d248be557e14358d08525361eca047e01",
@@ -7500,7 +7511,7 @@
       "subject": "fix(web): clarify sidebar drag dividers and empty targets (#10464)",
       "status": "needs-disposition",
       "domains": ["apps/web"],
-      "differingTargetPaths": 2
+      "differingTargetPaths": 1
     },
     {
       "source": "f729e8fd837e4d6de86781351c3aee5a4ea19ab3",
@@ -7715,7 +7726,7 @@
     {
       "source": "3bf74eb6dce3e1372cfafc2ca84825f4b13bae6a",
       "subject": "fix(claude): report usage limits on retried turns (#10549)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server"],
       "differingTargetPaths": 2
     },
