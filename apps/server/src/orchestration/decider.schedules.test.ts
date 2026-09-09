@@ -103,6 +103,42 @@ const startOccurrence = (input: {
   }) satisfies OrchestrationCommand;
 
 it.layer(NodeServices.layer)("decider schedules", (it) => {
+  it.effect("does not auto-settle a scheduled occurrence while its session is idle", () =>
+    Effect.gen(function* () {
+      let model = yield* seedSchedule();
+      model = yield* decideAndApply(model, {
+        type: "thread.create",
+        commandId: cmd("create-auto-settle-schedule-thread"),
+        threadId: threadA,
+        projectId: projectA,
+        title: "Scheduled work",
+        modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5" },
+        runtimeMode: "full-access",
+        interactionMode: "default",
+        branch: null,
+        worktreePath: null,
+        createdAt: now,
+      });
+      model = yield* decideAndApply(
+        model,
+        startOccurrence({
+          projectId: projectA,
+          threadId: threadA,
+          dateLocal: "2026-01-01",
+        }),
+      );
+      const result = yield* decideOrchestrationCommand({
+        readModel: model,
+        command: {
+          type: "thread.auto-settle",
+          commandId: cmd("auto-settle-active-schedule"),
+          threadId: threadA,
+          snapshotSequence: model.snapshotSequence,
+        },
+      }).pipe(Effect.flip);
+      expect(result._tag).toBe("OrchestrationThreadSettleBlockedError");
+    }),
+  );
   it.effect("creates a schedule with defaults and materializes it in the read model", () =>
     Effect.gen(function* () {
       const model = yield* seedSchedule();

@@ -68,6 +68,7 @@ import { ScheduleAuthProbeLive } from "./orchestration/Layers/ScheduleAuthProbe.
 import { ScheduleHandoffGitLive } from "./orchestration/Layers/ScheduleHandoffGit.ts";
 import { ScheduleProviderInstancesLive } from "./orchestration/Layers/ScheduleProviderInstances.ts";
 import { ScheduleWorkingTreeProbeLive } from "./orchestration/Layers/ScheduleWorkingTreeProbe.ts";
+import * as ThreadSettlementReactor from "./orchestration/ThreadSettlementReactor.ts";
 import * as AgentAwarenessRelay from "./relay/AgentAwarenessRelay.ts";
 import { hasCloudPublicConfig } from "./cloud/publicConfig.ts";
 import { ProviderPlanUsageTrackerLive } from "./provider/Layers/ProviderPlanUsageTracker.ts";
@@ -263,6 +264,7 @@ const ReactorLayerLive = Layer.empty.pipe(
   Layer.provideMerge(ScheduleHandoffGitLive),
   Layer.provideMerge(ScheduleWorkingTreeProbeLive),
   Layer.provideMerge(ScheduleProviderInstancesLive),
+  Layer.provideMerge(ThreadSettlementReactor.layer),
   Layer.provideMerge(AgentAwarenessRelay.layer.pipe(Layer.provide(ServerSecretStore.layer))),
   Layer.provideMerge(ProviderPlanUsageTrackerLive),
   Layer.provideMerge(RuntimeReceiptBusLive),
@@ -295,6 +297,13 @@ const SourceControlProviderRegistryLayerLive = SourceControlProviderRegistry.lay
   ),
   Layer.provideMerge(GitVcsDriver.layer),
   Layer.provideMerge(VcsDriverRegistryLayerLive),
+);
+
+const PullRequestServiceLive = PullRequestService.layer.pipe(
+  Layer.provide(PullRequestProviderRegistry.layer),
+  Layer.provide(SourceControlProviderRegistryLayerLive),
+  Layer.provide(SourceControlRateLimit.layer),
+  Layer.provide(VcsProcess.layer),
 );
 
 const GitManagerLayerLive = GitManager.layer.pipe(
@@ -392,7 +401,9 @@ const RuntimeCoreDependenciesLive = ReactorLayerLive.pipe(
   // Core Services
   Layer.provideMerge(ServerSettingsLayerLive),
   Layer.provideMerge(CheckpointingLayerLive),
-  Layer.provideMerge(SourceControlProviderRegistryLayerLive),
+  Layer.provideMerge(
+    Layer.mergeAll(SourceControlProviderRegistryLayerLive, PullRequestServiceLive),
+  ),
   Layer.provideMerge(GitLayerLive),
   Layer.provideMerge(VcsLayerLive),
   Layer.provideMerge(ProviderRuntimeLayerLive),
@@ -454,14 +465,6 @@ const commandReadinessLayer = HttpRouter.middleware(
       startup.awaitCommandReady.pipe(Effect.orDie, Effect.andThen(httpEffect)),
     ),
   { global: true },
-);
-
-const PullRequestServiceLive = PullRequestService.layer.pipe(
-  // One registry entry per supported host; the service only knows the registry.
-  Layer.provide(PullRequestProviderRegistry.layer),
-  Layer.provide(SourceControlProviderRegistryLayerLive),
-  Layer.provide(SourceControlRateLimit.layer),
-  Layer.provide(VcsProcess.layer),
 );
 
 const IssuesStoreLive = IssuesStore.layer.pipe(Layer.provide(PersistenceLayerLive));

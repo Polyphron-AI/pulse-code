@@ -153,6 +153,7 @@ export const make = Effect.gen(function* () {
       mailPeople: true,
       threadSettlement: true,
       threadRestartContinuation: true,
+      threadAutoSettlement: true,
       threadSnooze: true,
       threadPinning: true,
       threadPinReorder: true,
