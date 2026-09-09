@@ -228,3 +228,9 @@ If the preset needs different Claude files, give it a different `CLAUDE_CONFIG_D
 different API keys, base URLs, or router settings, use Environment variables.
 
 Do not put environment variable assignments in `Launch arguments`.
+
+## Reduce Context Usage
+
+In Settings, open your Claude provider and set **Auto-compact after** to a token count between `100000` and `1000000`. For example, `300000` compacts the conversation into a summary once it reaches about 300,000 tokens, without changing the model context window. Leave the field empty to keep Claude Code defaults.
+
+When Claude asks whether to compact an older session, you can compact and continue, keep the full history, or skip future resume prompts. This question appears through the usual approval interface on web, desktop, and mobile.

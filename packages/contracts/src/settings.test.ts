@@ -4,6 +4,7 @@ import * as Schema from "effect/Schema";
 import { PROVIDER_DISPLAY_NAMES } from "./model.ts";
 import { ProviderDriverKind, ProviderInstanceId } from "./providerInstance.ts";
 import {
+  ClaudeSettings,
   ClientSettingsSchema,
   ClientSettingsPatch,
   DEFAULT_SERVER_SETTINGS,
@@ -413,5 +414,36 @@ describe("ServerSettingsPatch string normalization", () => {
     expect(encoded.addProjectBaseDirectory).toBe("~/Development");
     expect(encoded.providers?.codex?.binaryPath).toBe("/opt/homebrew/bin/codex");
     expect(encoded.providers?.codex?.launchArgs).toBe("--strict-config");
+  });
+});
+
+const decodeClaudeSettings = Schema.decodeUnknownSync(ClaudeSettings);
+
+describe("ClaudeSettings auto-compaction", () => {
+  it("uses Claude's default threshold when no override is configured", () => {
+    expect(decodeClaudeSettings({}).autoCompactWindow).toBe("");
+  });
+
+  it.each(["100000", "300000", "1000000"])(
+    "accepts a supported auto-compaction threshold: %s",
+    (value) => {
+      expect(decodeClaudeSettings({ autoCompactWindow: value }).autoCompactWindow).toBe(value);
+    },
+  );
+
+  it.each(["99999", "1000001", "300k", "invalid"])(
+    "rejects an unsupported auto-compaction threshold: %s",
+    (value) => {
+      expect(() => decodeClaudeSettings({ autoCompactWindow: value })).toThrow();
+    },
+  );
+
+  it("rejects an unsupported threshold at the settings patch boundary", () => {
+    expect(() =>
+      decodeServerSettingsPatch({ providers: { claudeAgent: { autoCompactWindow: "300k" } } }),
+    ).toThrow();
+    expect(
+      decodeServerSettingsPatch({ providers: { claudeAgent: { autoCompactWindow: "300000" } } }),
+    ).toBeDefined();
   });
 });
