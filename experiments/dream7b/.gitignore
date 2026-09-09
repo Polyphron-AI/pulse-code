@@ -1,0 +1,7 @@
+*
+!.gitignore
+!*.py
+!*.md
+!*.json
+!*.ps1
+!requirements*.txt

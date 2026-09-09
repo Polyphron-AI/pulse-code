@@ -1,0 +1,291 @@
+{
+  "n": 100,
+  "reference": "golden_opus.json; summary only",
+  "models": {
+    "dream32": {
+      "sem": {
+        "mean": 0.21365069609245282,
+        "ci95": [
+          0.19453124985683728,
+          0.23642672383685354
+        ]
+      },
+      "rougeL": {
+        "mean": 0.01922950612605785,
+        "ci95": [
+          0.004137931034482759,
+          0.03951395730706076
+        ]
+      },
+      "rouge1": {
+        "mean": 0.021896172792724516,
+        "ci95": [
+          0.005,
+          0.04355058734369079
+        ]
+      },
+      "strict_json": 3,
+      "nonempty_summary": 5,
+      "mean_seconds": 4.036745143001899,
+      "peak_gib": 5.832622051239014,
+      "avg_summary_characters": 3.18,
+      "no_eos": 0,
+      "hybrid_coverage": {
+        "reference": {
+          "captured": 645,
+          "present": 1160,
+          "rate": 0.5560344827586207
+        },
+        "amount": {
+          "captured": 46,
+          "present": 51,
+          "rate": 0.9019607843137255
+        },
+        "date": {
+          "captured": 36,
+          "present": 52,
+          "rate": 0.6923076923076923
+        },
+        "overall": {
+          "captured": 727,
+          "present": 1263,
+          "rate": 0.5756136183689627
+        }
+      },
+      "generated_coverage": {
+        "reference": {
+          "captured": 13,
+          "present": 1160,
+          "rate": 0.011206896551724138
+        },
+        "amount": {
+          "captured": 0,
+          "present": 51,
+          "rate": 0.0
+        },
+        "date": {
+          "captured": 2,
+          "present": 52,
+          "rate": 0.038461538461538464
+        },
+        "overall": {
+          "captured": 15,
+          "present": 1263,
+          "rate": 0.011876484560570071
+        }
+      }
+    },
+    "dream160": {
+      "sem": {
+        "mean": 0.2323865068398913,
+        "ci95": [
+          0.2095342462568907,
+          0.2567919746331269
+        ]
+      },
+      "rougeL": {
+        "mean": 0.02962945138571999,
+        "ci95": [
+          0.013310819262038774,
+          0.04922150091325337
+        ]
+      },
+      "rouge1": {
+        "mean": 0.035213581607998874,
+        "ci95": [
+          0.01599581834145512,
+          0.05767350212511504
+        ]
+      },
+      "strict_json": 0,
+      "nonempty_summary": 12,
+      "mean_seconds": 20.40585935499752,
+      "peak_gib": 5.832622528076172,
+      "avg_summary_characters": 7.64,
+      "no_eos": 0,
+      "hybrid_coverage": {
+        "reference": {
+          "captured": 660,
+          "present": 1160,
+          "rate": 0.5689655172413793
+        },
+        "amount": {
+          "captured": 46,
+          "present": 51,
+          "rate": 0.9019607843137255
+        },
+        "date": {
+          "captured": 36,
+          "present": 52,
+          "rate": 0.6923076923076923
+        },
+        "overall": {
+          "captured": 742,
+          "present": 1263,
+          "rate": 0.5874901029295329
+        }
+      },
+      "generated_coverage": {
+        "reference": {
+          "captured": 30,
+          "present": 1160,
+          "rate": 0.02586206896551724
+        },
+        "amount": {
+          "captured": 0,
+          "present": 51,
+          "rate": 0.0
+        },
+        "date": {
+          "captured": 0,
+          "present": 52,
+          "rate": 0.0
+        },
+        "overall": {
+          "captured": 30,
+          "present": 1263,
+          "rate": 0.023752969121140142
+        }
+      }
+    },
+    "qwen4b_pp": {
+      "sem": {
+        "mean": 0.853024242593664,
+        "ci95": [
+          0.8331861360693718,
+          0.868701054479569
+        ]
+      },
+      "rougeL": {
+        "mean": 0.5418347469230972,
+        "ci95": [
+          0.5107959858082117,
+          0.5708439521791698
+        ]
+      },
+      "rouge1": {
+        "mean": 0.5998581286004286,
+        "ci95": [
+          0.5729121559899643,
+          0.6254151837587653
+        ]
+      },
+      "strict_json": 99,
+      "nonempty_summary": 99,
+      "mean_seconds": 8.545794565994292,
+      "peak_gib": 8.01538896560669,
+      "avg_summary_characters": 153.31,
+      "no_eos": 1,
+      "hybrid_coverage": {
+        "reference": {
+          "captured": 792,
+          "present": 1160,
+          "rate": 0.6827586206896552
+        },
+        "amount": {
+          "captured": 47,
+          "present": 51,
+          "rate": 0.9215686274509803
+        },
+        "date": {
+          "captured": 37,
+          "present": 52,
+          "rate": 0.7115384615384616
+        },
+        "overall": {
+          "captured": 876,
+          "present": 1263,
+          "rate": 0.6935866983372921
+        }
+      },
+      "generated_coverage": {
+        "reference": {
+          "captured": 484,
+          "present": 1160,
+          "rate": 0.41724137931034483
+        },
+        "amount": {
+          "captured": 20,
+          "present": 51,
+          "rate": 0.39215686274509803
+        },
+        "date": {
+          "captured": 16,
+          "present": 52,
+          "rate": 0.3076923076923077
+        },
+        "overall": {
+          "captured": 520,
+          "present": 1263,
+          "rate": 0.4117181314330958
+        }
+      }
+    }
+  },
+  "paired": {
+    "dream32 minus qwen4b_pp": {
+      "sem": {
+        "mean_difference": -0.6393735,
+        "ci95": [
+          -0.6644217000000002,
+          -0.6116073999999999
+        ],
+        "dream_higher": 0,
+        "qwen_higher": 99,
+        "ties": 1
+      },
+      "rougeL": {
+        "mean_difference": -0.5226055,
+        "ci95": [
+          -0.5554643999999996,
+          -0.4891151000000002
+        ],
+        "dream_higher": 0,
+        "qwen_higher": 99,
+        "ties": 1
+      },
+      "rouge1": {
+        "mean_difference": -0.5779620000000001,
+        "ci95": [
+          -0.6089804999999998,
+          -0.5467532999999998
+        ],
+        "dream_higher": 0,
+        "qwen_higher": 99,
+        "ties": 1
+      }
+    },
+    "dream160 minus qwen4b_pp": {
+      "sem": {
+        "mean_difference": -0.6206377,
+        "ci95": [
+          -0.6490662999999998,
+          -0.5899196999999998
+        ],
+        "dream_higher": 0,
+        "qwen_higher": 99,
+        "ties": 1
+      },
+      "rougeL": {
+        "mean_difference": -0.5122056,
+        "ci95": [
+          -0.5458342999999999,
+          -0.47915029999999975
+        ],
+        "dream_higher": 0,
+        "qwen_higher": 99,
+        "ties": 1
+      },
+      "rouge1": {
+        "mean_difference": -0.5646446000000003,
+        "ci95": [
+          -0.5969952000000001,
+          -0.5320678999999997
+        ],
+        "dream_higher": 0,
+        "qwen_higher": 99,
+        "ties": 1
+      }
+    }
+  }
+}
