@@ -760,6 +760,51 @@ it.layer(TestLayer)("GitVcsDriver core integration", (it) => {
       }),
     );
 
+    it.effect("does not prune when checking a missing worktree fails with a permission error", () =>
+      Effect.gen(function* () {
+        const cwd = yield* makeTmpDir();
+        const pathService = yield* Path.Path;
+        const fileSystem = yield* FileSystem.FileSystem;
+        const delegate = yield* ChildProcessSpawner.ChildProcessSpawner;
+        const missingWorktree = pathService.join(cwd, "missing-worktree");
+        const commands = yield* Ref.make<ReadonlyArray<ReadonlyArray<string>>>([]);
+        const countingSpawner = ChildProcessSpawner.make((command) =>
+          Effect.gen(function* () {
+            if (ChildProcess.isStandardCommand(command)) {
+              yield* Ref.update(commands, (current) => [...current, command.args]);
+            }
+            return yield* delegate.spawn(command);
+          }),
+        );
+        const driver = yield* makeGitVcsDriverCore().pipe(
+          Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, countingSpawner),
+          Effect.provideService(FileSystem.FileSystem, {
+            ...fileSystem,
+            exists: (path) =>
+              path === missingWorktree
+                ? Effect.fail(
+                    PlatformError.systemError({
+                      _tag: "PermissionDenied",
+                      module: "FileSystem",
+                      method: "exists",
+                      pathOrDescriptor: path,
+                    }),
+                  )
+                : fileSystem.exists(path),
+          }),
+          Effect.provide(ServerConfigLayer),
+        );
+        yield* driver.initRepo({ cwd });
+
+        const error = yield* driver
+          .removeWorktree({ cwd, path: missingWorktree })
+          .pipe(Effect.flip);
+
+        assert.equal(error._tag, "GitCommandError");
+        assert.isFalse((yield* Ref.get(commands)).some((args) => args.includes("prune")));
+      }),
+    );
+
     it.effect("treats removing an already-gone worktree as a no-op", () =>
       Effect.gen(function* () {
         const cwd = yield* makeTmpDir();
@@ -1387,6 +1432,42 @@ it.layer(TestLayer)("GitVcsDriver core integration", (it) => {
       }),
     );
 
+    it.effect("allows worktree checkout to exceed the default command timeout", () =>
+      Effect.gen(function* () {
+        const delegate = yield* ChildProcessSpawner.ChildProcessSpawner;
+        const checkoutStarted = yield* Deferred.make<void>();
+        const releaseCheckout = yield* Deferred.make<void>();
+        const delayedCheckoutSpawner = ChildProcessSpawner.make((command) =>
+          Effect.gen(function* () {
+            if (
+              ChildProcess.isStandardCommand(command) &&
+              command.args[0] === "worktree" &&
+              command.args[1] === "add"
+            ) {
+              yield* Deferred.succeed(checkoutStarted, undefined);
+              yield* Deferred.await(releaseCheckout);
+            }
+            return yield* delegate.spawn(command);
+          }),
+        );
+        const driver = yield* makeGitVcsDriverCore().pipe(
+          Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, delayedCheckoutSpawner),
+          Effect.provide(ServerConfigLayer),
+        );
+        const cwd = yield* makeTmpDir();
+        const { initialBranch } = yield* initRepoWithCommit(cwd);
+        const pathService = yield* Path.Path;
+        const worktreePath = pathService.join(yield* makeTmpDir("git-worktrees-"), "slow");
+        const creating = yield* driver
+          .createWorktree({ cwd, path: worktreePath, refName: initialBranch, newRefName: "slow" })
+          .pipe(Effect.forkChild({ startImmediately: true }));
+        yield* Deferred.await(checkoutStarted);
+        yield* TestClock.adjust("31 seconds");
+        yield* Deferred.succeed(releaseCheckout, undefined);
+        assert.equal((yield* Fiber.join(creating)).worktree.path, worktreePath);
+      }),
+    );
+
     it.effect("checks out submodules in a new worktree", () =>
       Effect.gen(function* () {
         const fileSystem = yield* FileSystem.FileSystem;
@@ -1454,6 +1535,12 @@ it.layer(TestLayer)("GitVcsDriver core integration", (it) => {
           '[submodule "missing"]\n\tpath = missing\n\turl = /nonexistent/repo.git\n',
         );
         yield* git(cwd, ["add", "."]);
+        yield* git(cwd, [
+          "update-index",
+          "--add",
+          "--cacheinfo",
+          `160000,${yield* git(cwd, ["rev-parse", "HEAD"])},missing`,
+        ]);
         yield* git(cwd, ["commit", "-m", "add unreachable submodule"]);
 
         const worktreePath = pathService.join(
@@ -1871,6 +1958,63 @@ it.layer(TestLayer)("GitVcsDriver core integration", (it) => {
         );
         assert.equal(yield* driver.readConfigValue(cwd, "branch.feature/x.gh-merge-base"), "dev");
       }),
+    );
+
+    it.effect.each([false, true])(
+      "respects push remote precedence when publishing a branch tracking its base, branch override %s",
+      (branchOverride) =>
+        Effect.gen(function* () {
+          const cwd = yield* makeTmpDir();
+          const origin = yield* makeTmpDir("git-origin-");
+          const fork = yield* makeTmpDir("git-fork-");
+          const branchRemote = yield* makeTmpDir("git-branch-remote-");
+          yield* initRepoWithCommit(cwd);
+          const driver = yield* GitVcsDriver.GitVcsDriver;
+          yield* git(cwd, ["branch", "-M", "main"]);
+          for (const [name, remote] of [
+            ["origin", origin],
+            ["fork", fork],
+            ["branch-remote", branchRemote],
+          ] as const) {
+            yield* git(remote, ["init", "--bare"]);
+            yield* git(cwd, ["remote", "add", name, remote]);
+          }
+          yield* git(cwd, ["push", "-u", "origin", "main"]);
+          const baseSha = yield* git(origin, ["rev-parse", "main"]);
+          yield* git(cwd, ["checkout", "-b", "feature/publish", "origin/main"]);
+          yield* git(cwd, ["config", "remote.pushDefault", "fork"]);
+          if (branchOverride) {
+            yield* git(cwd, ["config", "branch.feature/publish.pushRemote", "branch-remote"]);
+          }
+          yield* writeTextFile(cwd, "feature.txt", "feature\n");
+          yield* driver.prepareCommitContext(cwd);
+          yield* driver.commit(cwd, "Add feature", "");
+
+          const pushed = yield* driver.pushCurrentBranch(cwd, null);
+
+          assert.equal(
+            pushed.upstreamBranch,
+            `${branchOverride ? "branch-remote" : "fork"}/feature/publish`,
+          );
+          assert.equal(yield* git(origin, ["rev-parse", "main"]), baseSha);
+          assert.equal(
+            yield* git(branchOverride ? branchRemote : fork, [
+              "log",
+              "-1",
+              "--pretty=%s",
+              "feature/publish",
+            ]),
+            "Add feature",
+          );
+          assert.equal(
+            yield* git(branchOverride ? fork : branchRemote, [
+              "for-each-ref",
+              "--format=%(refname)",
+              "refs/heads",
+            ]),
+            "",
+          );
+        }),
     );
 
     it.effect("keeps a recorded merge base when publishing a tracked branch", () =>

@@ -3084,7 +3084,7 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
     // `worktree add` at the same path.
     const alreadyGone =
       isMissingWorktreeStderr(result.stderr) &&
-      !(yield* fileSystem.exists(input.path).pipe(Effect.orElseSucceed(() => false)));
+      !(yield* fileSystem.exists(input.path).pipe(Effect.orElseSucceed(() => true)));
     if (alreadyGone) {
       yield* executeGit("GitVcsDriver.pruneWorktrees", input.cwd, ["worktree", "prune"], {
         timeoutMs: 15_000,
