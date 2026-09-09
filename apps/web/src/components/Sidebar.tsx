@@ -1470,7 +1470,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
     sortable?.isDragging && props.dropVerb !== null ? (
       <span
         role="status"
-        className="ml-auto shrink-0 rounded-sm border border-primary/30 bg-sidebar px-1.5 text-[11px] text-primary"
+        className="pointer-events-none ml-auto inline-flex h-5 shrink-0 items-center gap-1 rounded-sm border border-primary/30 bg-sidebar px-1.5 text-[11px] font-medium text-primary"
       >
         {dropVerbBadge[props.dropVerb]}
       </span>
@@ -1534,7 +1534,10 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
               remain visible AND clickable while the row is hovered. Only
               the time/jump label yields to the settle affordance. */}
             {prBadge}
-            <span className="relative ml-auto flex h-6 min-w-8 shrink-0 items-center justify-end">
+            <span
+              style={{ display: sortable?.isDragging ? "none" : undefined }}
+              className="relative ml-auto flex h-6 min-w-8 shrink-0 items-center justify-end"
+            >
               <span
                 className={cn(
                   "inline-flex justify-end tabular-nums text-secondary-label transition-opacity",
@@ -1674,7 +1677,8 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
               ) : (
                 <span className="flex-1" />
               )}
-              {props.isPinned ? (
+              {props.isPinned &&
+              (!sortable?.isDragging || (props.dragOverPinned && props.dropVerb === null)) ? (
                 props.pinningSupported ? (
                   <Tooltip>
                     <TooltipTrigger
@@ -1703,7 +1707,10 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
                   actions on hover/keyboard focus or while the popover is open. Keeping
                   the hidden state out of flow lets the project label reclaim
                   space without either state overlapping it. */}
-              <span className="group/sidebar-status-slot relative ml-auto flex h-5 min-w-8 shrink-0 items-stretch justify-end text-xs">
+              <span
+                style={{ display: sortable?.isDragging ? "none" : undefined }}
+                className="group/sidebar-status-slot relative ml-auto flex h-5 min-w-8 shrink-0 items-stretch justify-end text-xs"
+              >
                 {/* Read-only status labels yield to the hover actions. Woke is
                     itself an action, so it stays pointer-enabled and visible
                     while the other controls appear beside it. */}
