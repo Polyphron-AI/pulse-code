@@ -648,6 +648,7 @@ const buildAppUnderTest = (options?: {
                 current: Effect.succeed([]),
                 streamChanges: Stream.empty,
                 refresh: Effect.void,
+                consumeResetCredit: () => Effect.succeed({ outcome: "nothingToReset" as const }),
               }),
             ),
           ),

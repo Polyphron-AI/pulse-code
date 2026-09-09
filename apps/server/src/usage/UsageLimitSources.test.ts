@@ -50,7 +50,7 @@ it.effect("reads only enabled configured hubs and drops removed sources", () =>
           Effect.sync(() => {
             requests.push(request.url);
             assert.equal(request.headers.authorization, "Bearer test-key");
-            return HttpClientResponse.fromWeb(request, Response.json({ accounts: {} }));
+            return HttpClientResponse.fromWeb(request, Response.json({ files: [] }));
           }),
         ),
       ),
@@ -58,7 +58,7 @@ it.effect("reads only enabled configured hubs and drops removed sources", () =>
     yield* sources.refresh;
     assert.isAbove(requests.length, 0);
     assert.isTrue(
-      requests.every((url) => url === "https://quota.example/v0/management/quota-scheduler/status"),
+      requests.every((url) => url === "https://quota.example/v0/management/auth-files"),
     );
     assert.deepEqual(
       (yield* sources.current).map((source) => source.id),

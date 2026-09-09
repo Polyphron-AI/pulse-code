@@ -1629,6 +1629,7 @@ const makeWsRpcLayer = (
           observeRpcEffect(
             WS_METHODS.providerConsumeResetCredit,
             Effect.gen(function* () {
+              if ("sourceId" in input) return yield* usageLimitSources.consumeResetCredit(input);
               const instance = yield* resetCreditInstances.getInstance(input.instanceId);
               if (!instance || !instance.enabled)
                 return yield* new ProviderResetCreditError({
