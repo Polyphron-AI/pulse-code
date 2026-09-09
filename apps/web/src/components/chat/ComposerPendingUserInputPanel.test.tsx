@@ -8,6 +8,7 @@ import type { PendingUserInput } from "../../session-logic";
 const prompt: PendingUserInput = {
   requestId: ApprovalRequestId.make("request-1"),
   createdAt: "2026-08-15T00:00:00.000Z",
+  dismissible: false,
   questions: [
     {
       id: "question-1",
@@ -22,20 +23,31 @@ const prompt: PendingUserInput = {
   ],
 };
 
-function renderPanel() {
+function renderPanel(dismissible = false, responding = false) {
   return renderToStaticMarkup(
     <ComposerPendingUserInputPanel
-      pendingUserInputs={[prompt]}
-      respondingRequestIds={[]}
+      pendingUserInputs={[{ ...prompt, dismissible }]}
+      respondingRequestIds={responding ? [prompt.requestId] : []}
       answers={{}}
       questionIndex={0}
       onToggleOption={() => {}}
       onAdvance={() => {}}
+      onDismiss={() => {}}
     />,
   );
 }
 
 describe("ComposerPendingUserInputPanel", () => {
+  it("only offers dismissal for async questions", () => {
+    expect(renderPanel()).not.toContain("data-pending-user-input-dismiss");
+    expect(renderPanel(true)).toContain('aria-label="Dismiss question without answering"');
+  });
+  it("disables dismissal while a response is being recorded", () => {
+    const dismiss = renderPanel(true, true).match(
+      /<button[^>]*data-pending-user-input-dismiss[^>]*>/,
+    )?.[0];
+    expect(dismiss).toContain("disabled");
+  });
   it("renders the header as a disclosure control for the question body", () => {
     const markup = renderPanel();
 

@@ -73,7 +73,7 @@ describe("pending user input answers", () => {
       undefined,
       "  Orders  ",
     );
-    expect(paddedOrders).toEqual({ customAnswer: "", selectedOptionLabels: ["Orders"] });
+    expect(paddedOrders).toEqual({ customAnswer: "", selectedOptionLabels: ["  Orders  "] });
     expect(
       togglePendingUserInputOptionSelection(multiSelectQuestion, paddedOrders, "  Orders  "),
     ).toEqual({ customAnswer: "" });
@@ -100,9 +100,9 @@ describe("pending user input answers", () => {
     ).toEqual({ customAnswer: "Orders first" });
   });
 
-  it("matches selected chips against normalized option labels", () => {
+  it("matches selected chips against exact native answer keys", () => {
     expect(
-      isPendingUserInputOptionSelected({ selectedOptionLabels: ["Orders"] }, "  Orders  "),
+      isPendingUserInputOptionSelected({ selectedOptionLabels: ["  Orders  "] }, "  Orders  "),
     ).toBe(true);
     expect(
       isPendingUserInputOptionSelected(
@@ -661,5 +661,37 @@ describe("quiet timeline: nested agents", () => {
     );
     expect(ids).toContain("nested-done");
     expect(ids).not.toContain("shell-done");
+  });
+});
+
+describe("native and async question answers", () => {
+  const question = {
+    id: "native",
+    header: "Question",
+    question: "Which one?",
+    multiSelect: false,
+    allowCustomAnswer: false,
+    options: [
+      { label: "Same label", description: "", value: " native\t" },
+      { label: "Same label", description: "", value: "second" },
+    ],
+  };
+  it("preserves distinct native answer values including whitespace", () => {
+    const draft = togglePendingUserInputOptionSelection(question, undefined, " native\t");
+    expect(buildPendingUserInputAnswers([question], { native: draft })).toEqual({
+      native: " native\t",
+    });
+  });
+  it("does not submit custom text for a choice-only question", () => {
+    expect(
+      buildPendingUserInputAnswers([question], { native: { customAnswer: "unsupported" } }),
+    ).toBeNull();
+  });
+  it("submits freeform async answers without options", () => {
+    expect(
+      buildPendingUserInputAnswers([{ ...question, options: [], allowCustomAnswer: true }], {
+        native: { customAnswer: "An answer" },
+      }),
+    ).toEqual({ native: "An answer" });
   });
 });

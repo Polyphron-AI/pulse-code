@@ -36,9 +36,8 @@ function normalizeSelectedOptionLabels(value: string[] | undefined): string[] {
   const normalized: string[] = [];
   for (const entry of value) {
     if (typeof entry !== "string") continue;
-    const trimmed = entry.trim();
-    if (trimmed.length > 0) {
-      normalized.push(trimmed);
+    if (entry.length > 0) {
+      normalized.push(entry);
     }
   }
 
@@ -50,7 +49,7 @@ export function resolvePendingUserInputAnswer(
   draft: PendingUserInputDraftAnswer | undefined,
 ): string | string[] | null {
   const customAnswer = normalizeDraftAnswer(draft?.customAnswer);
-  if (customAnswer) {
+  if (customAnswer && question.allowCustomAnswer !== false) {
     return customAnswer;
   }
 

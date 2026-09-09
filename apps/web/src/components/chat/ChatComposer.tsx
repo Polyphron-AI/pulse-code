@@ -544,7 +544,11 @@ export interface ChatComposerProps {
     isLastQuestion: boolean;
     canAdvance: boolean;
     customAnswer: string;
-    activeQuestion: { id: string; multiSelect?: boolean | undefined } | null;
+    activeQuestion: {
+      id: string;
+      multiSelect?: boolean | undefined;
+      allowCustomAnswer?: boolean | undefined;
+    } | null;
   } | null;
   activePendingResolvedAnswers: Record<string, unknown> | null;
   activePendingIsResponding: boolean;
@@ -593,6 +597,7 @@ export interface ChatComposerProps {
   ) => Promise<unknown>;
   onSelectActivePendingUserInputOption: (questionId: string, optionLabel: string) => void;
   onAdvanceActivePendingUserInput: () => void;
+  onDismissActivePendingUserInput: (requestId: ApprovalRequestId) => void;
   onPreviousActivePendingUserInputQuestion: () => void;
   onChangeActivePendingUserInputCustomAnswer: (
     questionId: string,
@@ -672,6 +677,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     onRespondToApproval,
     onSelectActivePendingUserInputOption,
     onAdvanceActivePendingUserInput,
+    onDismissActivePendingUserInput,
     onPreviousActivePendingUserInputQuestion,
     onChangeActivePendingUserInputCustomAnswer,
     onProviderModelSelect,
@@ -2751,6 +2757,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   questionIndex={activePendingQuestionIndex}
                   onToggleOption={onSelectActivePendingUserInputOption}
                   onAdvance={onAdvanceActivePendingUserInput}
+                  onDismiss={onDismissActivePendingUserInput}
                 />
               </div>
             ) : showPlanFollowUpPrompt && activeProposedPlan ? (
@@ -2791,6 +2798,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                 questionIndex={activePendingQuestionIndex}
                 onToggleOption={onSelectActivePendingUserInputOption}
                 onAdvance={onAdvanceActivePendingUserInput}
+                onDismiss={onDismissActivePendingUserInput}
               />
               <div className="px-3 pb-3 sm:px-4">
                 <div
@@ -2810,6 +2818,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     onPointerDown={(event) => event.preventDefault()}
                     onClick={expandMobileComposer}
                     aria-label="Write custom answer"
+                    disabled={activePendingProgress?.activeQuestion?.allowCustomAnswer === false}
                   >
                     {activePendingProgress?.customAnswer || "Write custom answer"}
                   </button>
@@ -3079,7 +3088,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   isComposerApprovalState
                     ? (activePendingApproval?.detail ?? "Resolve this approval request to continue")
                     : activePendingProgress
-                      ? "Type your own answer, or leave this blank to use the selected option"
+                      ? activePendingProgress.activeQuestion?.allowCustomAnswer === false
+                        ? "Select an answer above"
+                        : "Type your own answer, or leave this blank to use the selected option"
                       : showPlanFollowUpPrompt && activeProposedPlan
                         ? "Add feedback to refine the plan, or leave this blank to implement it"
                         : projectSelectionRequired
@@ -3090,7 +3101,12 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                               ? "Ask for follow-up changes or attach images"
                               : "Ask anything, @tag files/folders, $use skills, or / for commands"
                 }
-                disabled={isConnecting || isComposerApprovalState || projectSelectionRequired}
+                disabled={
+                  isConnecting ||
+                  isComposerApprovalState ||
+                  projectSelectionRequired ||
+                  activePendingProgress?.activeQuestion?.allowCustomAnswer === false
+                }
               />
               {showMobilePendingAnswerActions ? (
                 <div
