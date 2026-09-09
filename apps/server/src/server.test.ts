@@ -58,6 +58,7 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as PubSub from "effect/PubSub";
 import * as Queue from "effect/Queue";
+import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
@@ -658,6 +659,9 @@ const buildAppUnderTest = (options?: {
           updateSettings: () => Effect.succeed(DEFAULT_SERVER_SETTINGS),
           streamChanges: Stream.empty,
           ...options?.layers?.serverSettings,
+          subscribeChanges:
+            options?.layers?.serverSettings?.subscribeChanges ??
+            Effect.succeed(options?.layers?.serverSettings?.streamChanges ?? Stream.empty),
         }),
       ),
       Layer.provide(
@@ -4946,6 +4950,44 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
         version: 1,
         type: "keybindingsUpdated",
         payload: { keybindings: [], issues: [] },
+      });
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
+  it.effect("retains settings changed while the server config snapshot is loading", () =>
+    Effect.gen(function* () {
+      const updates = yield* PubSub.unbounded<typeof DEFAULT_SERVER_SETTINGS>();
+      const subscribed = yield* Ref.make(false);
+      const next = { ...DEFAULT_SERVER_SETTINGS, continueThreadsAfterServerUpdate: true };
+      yield* buildAppUnderTest({
+        layers: {
+          serverSettings: {
+            subscribeChanges: PubSub.subscribe(updates).pipe(
+              Effect.tap(() => Ref.set(subscribed, true)),
+              Effect.map(Stream.fromSubscription),
+            ),
+          },
+          externalLauncher: {
+            resolveAvailableEditors: () =>
+              Effect.gen(function* () {
+                assert.equal(yield* Ref.get(subscribed), true);
+                yield* PubSub.publish(updates, next);
+                return [];
+              }),
+          },
+        },
+      });
+      const wsUrl = yield* getWsServerUrl("/ws");
+      const events = yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) =>
+          client[WS_METHODS.subscribeServerConfig]({}).pipe(Stream.take(2), Stream.runCollect),
+        ),
+      );
+      assert.equal(events[0]?.type, "snapshot");
+      assert.deepEqual(events[1], {
+        version: 1,
+        type: "settingsUpdated",
+        payload: { settings: next },
       });
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
