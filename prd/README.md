@@ -36,6 +36,11 @@ Pulse Issues work as its reference adapter.
 - [Preview live-design host tool flow](../tool-flow/pulseflow-live-design.md)
 - [Roadmap source](../project/state/shards/roadmap.yaml)
 
+- [Pulse Warden](17-pulse-warden.md): Bitwarden/Vaultwarden integration, passwords, passkeys, server/agent delegation and commercial Pulse branding.
+- [Warden acceptance](20-acceptance-criteria/pulse-warden.md): 30 planned acceptance scenarios and cross-product release evidence.
+
+- [Warden MCP and CLI contract](warden/mcp-cli.md): explicit tools, commands, auth/setup, output and cross-interface acceptance. Proposed 2026-09-09.
+
 ---
 
 **Created:** 2026-08-19 . **Last opened:** 2026-09-04 . **Last edited:** 2026-09-04 . **Status:** draft . **Owner:** Product . **Layer:** stable

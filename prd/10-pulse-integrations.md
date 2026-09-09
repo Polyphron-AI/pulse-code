@@ -36,6 +36,8 @@ maintainers and users on mixed client/server versions.
 - Shipping every provider at once or promising provider parity before capability evidence exists.
 - Sending long-lived credentials to web, desktop renderer, mobile, or agent subprocesses.
 
+Warden extension: [Pulse Warden](17-pulse-warden.md) specifies tenant-brokered integration use and a separate trusted user-unlocked password/passkey client boundary. Existing integration secrets remain server-owned and absent from ordinary clients and agents. Vaultwarden human storage is not a machine-grant service. The proposed Warden scope does not weaken the existing first-release integration contract.
+
 ## Scope and provider boundary
 
 Pulse Code owns the connection record, secret reference, health state, project mapping, capability
