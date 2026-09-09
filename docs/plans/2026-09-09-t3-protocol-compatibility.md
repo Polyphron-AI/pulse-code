@@ -7,15 +7,15 @@ This branch starts from reconciled develop `3f18c538c`. Implementation starts af
 ## Selected work
 
 - [x] Publish preview containing the first 11 upstream fixes and retained preview features: [preview .3](https://github.com/Polyphron-AI/pulse-code/releases/tag/pulse-preview-20260909.3), source `7669022658792a8314cc773091552c09ccbb8ceb`. All eight uploaded asset hashes matched local verification.
-- [ ] Port `f925d6394`, expanded Codex multi-agent event values, including generator overrides and schema regressions.
-- [ ] Port `94401d01b`, expanded Codex account-plan values and presentation, after the preceding schema work.
-- [ ] Port `75ab5ab3f` and `95139254b`, accepting rate-limit and policy-error variants on thread read/resume/rollback/fork and turn completion. Keep generator output reproducible.
-- [ ] Port `230c5d4a5`, stale Codex approval callback recovery. Retain generic ACP permission-error handling and exercise both forms.
-- [ ] Port `ea646c083` as a complete Windows terminal performance change, including Rust process-table support, protocol version 3, native client request routing, telemetry contracts, terminal fallback, and server layer wiring.
-- [ ] Validate native request cleanup, timeout and sidecar termination, alongside the upstream behavioral tests.
-- [ ] Rebuild the Windows x64 monitor and verify protocol 3 handshake and process-table output with synthetic requests.
-- [ ] Review cross-provider, scheduled-thread, Office, and remote-client compatibility.
-- [ ] Run focused tests, changed-file lint, and scoped typechecks; record source provenance and remaining limitations.
+- [x] Port `f925d6394`, expanded Codex multi-agent event values, including generator overrides and schema regressions.
+- [x] Port `94401d01b`, expanded Codex account-plan values and presentation, after the preceding schema work.
+- [x] Port `75ab5ab3f` and `95139254b`, accepting rate-limit and policy-error variants on thread read/resume/rollback/fork and turn completion. Preserve generator overrides; full regeneration verification initially encountered HTTP 503 from the pinned source.
+- [x] Port `230c5d4a5`, stale Codex approval callback recovery. Retain generic ACP permission-error handling and exercise both forms.
+- [x] Port `ea646c083` as a complete Windows terminal performance change, including Rust process-table support, protocol version 3, native client request routing, telemetry contracts, terminal fallback, and server layer wiring.
+- [x] Validate native request cleanup, timeout and sidecar termination, alongside the upstream behavioral tests.
+- [x] Rebuild the Windows x64 monitor and verify protocol 3 handshake and process-table output with synthetic requests.
+- [x] Review cross-provider, scheduled-thread, Office, and remote-client compatibility.
+- [x] Run focused tests, changed-file lint, and scoped typechecks; record source provenance and remaining limitations.
 - [ ] Integrate the verified batch into remote develop without overwriting local work.
 
 ## Boundaries

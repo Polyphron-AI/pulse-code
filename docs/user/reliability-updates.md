@@ -10,5 +10,7 @@ Pulse includes these fixes for everyday coding and remote work:
 - Clients resume interrupted queries when a connection returns. During a server update, a temporary credential rejection receives a paced retry; permission and configuration failures remain blocked.
 - Claude title and source-control text generation runs without executable tools, hooks, slash commands, or inherited MCP servers. Title generation also runs outside the project directory.
 - Saving provider settings with redacted secret values preserves the stored secrets. Explicit replacement and clearing remain available.
+- Codex accepts newer multi-agent events, account plans, and rate-limit or policy errors when loading or continuing saved threads. Approval responses give a clearer explanation when the request is no longer pending.
+- Windows terminal activity checks use the environment's native monitor to avoid repeatedly starting PowerShell. If the monitor fails, checks fall back to PowerShell at a reduced frequency; activity labels may take longer to update until it recovers.
 
 These fixes do not change provider selection, scheduled-chat settings, or the database schema.
