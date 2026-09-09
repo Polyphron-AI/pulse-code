@@ -45,10 +45,14 @@ Expired-login errors identify the Claude account configuration that needs signin
 
 ## Where Claude Skills Are Loaded
 
-Pulse Code looks for Claude skills in the Claude config directory's `skills` folder, then
-`<workspace>/.agents/skills`, then `<workspace>/.claude/skills`.
+Claude skills come from the configured Claude directory and `.claude/skills` folders in the
+workspace and its repository ancestors. User skills take precedence when names overlap.
+Claude's enabled plugin skills and `skillOverrides` settings are respected, including managed
+administrator settings. Skills stored only in `.agents/skills` are not native Claude commands.
 
-If the same skill name exists in more than one folder, the later folder wins.
+Composer skill picks run through Claude's native slash command, including picks embedded in a
+longer prompt or sent with images. Skills marked `user-invocable: false` are reserved for Claude
+and are hidden from composer picks.
 
 ## I Want Work And Personal Claude Accounts
 
