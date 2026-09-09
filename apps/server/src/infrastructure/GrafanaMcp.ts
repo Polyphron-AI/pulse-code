@@ -1,3 +1,4 @@
+// Legacy adapter retained for historical tests. Infrastructure uses WardenBroker; catalog v1 is unsupported.
 import { InfrastructureError } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";

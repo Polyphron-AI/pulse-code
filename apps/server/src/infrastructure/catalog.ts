@@ -1,18 +1,19 @@
+// @effect-diagnostics nodeBuiltinImport:off - Catalog decoding validates native absolute certificate paths without an Effect runtime.
 import {
   InfrastructureError,
   InfrastructureQuerySummary,
   InfrastructureTargetSummary,
 } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
+import * as NodePath from "node:path";
 
 const SafeUrl = Schema.String.check(
   Schema.makeFilter((value) => {
     try {
       const url = new URL(value);
       return (
-        (url.protocol === "https:" ||
-          (url.protocol === "http:" &&
-            ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname))) &&
+        url.protocol === "https:" &&
+        url.pathname === "/" &&
         !url.username &&
         !url.password &&
         !url.search &&
@@ -26,9 +27,15 @@ const SafeUrl = Schema.String.check(
 
 export const SavedQuery = Schema.Struct({
   ...InfrastructureQuerySummary.fields,
-  datasourceUid: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(128)),
-  expression: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(4096)),
+  brokerQueryId: Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/)),
 });
+
+const CertificateFile = Schema.String.check(
+  Schema.isMaxLength(4096),
+  Schema.makeFilter(
+    (value) => NodePath.isAbsolute(value) && !/[\r\n]/.test(value) && !value.includes("\0"),
+  ),
+);
 
 export const Target = Schema.Struct({
   ...InfrastructureTargetSummary.fields,
@@ -36,14 +43,17 @@ export const Target = Schema.Struct({
   allowedThreadIds: Schema.Array(Schema.String.check(Schema.isMinLength(1))).check(
     Schema.isMaxLength(100),
   ),
-  mcpEndpoint: SafeUrl,
-  tokenEnv: Schema.String.check(Schema.isPattern(/^[A-Z][A-Z0-9_]{0,127}$/)),
+  environmentId: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(128)),
+  brokerEndpoint: SafeUrl,
+  clientCertificateFile: CertificateFile,
+  clientKeyFile: CertificateFile,
+  caFile: CertificateFile,
   queries: Schema.Array(SavedQuery).check(Schema.isMaxLength(20)),
 });
 export type Target = typeof Target.Type;
 export type SavedQuery = typeof SavedQuery.Type;
 const Catalog = Schema.Struct({
-  version: Schema.Literal(1),
+  version: Schema.Literal(2),
   targets: Schema.Array(Target).check(Schema.isMaxLength(50)),
 });
 
@@ -82,37 +92,3 @@ export const summarizeTarget = (target: Target) => ({
   repository: target.repository,
   queries: target.queries.map(({ id, label, kind }) => ({ id, label, kind })),
 });
-
-export function makeQueryCall(
-  query: SavedQuery,
-  startTime: string,
-  endTime: string,
-  minutes: number,
-) {
-  const stepSeconds = Math.max(15, Math.ceil((minutes * 60) / 120));
-  return query.kind === "prometheus"
-    ? {
-        name: "query_prometheus",
-        arguments: {
-          datasourceUid: query.datasourceUid,
-          expr: query.expression,
-          startTime,
-          endTime,
-          stepSeconds,
-          queryType: "range",
-        },
-      }
-    : {
-        name: "query_loki_logs",
-        arguments: {
-          datasourceUid: query.datasourceUid,
-          logql: query.expression,
-          startRfc3339: startTime,
-          endRfc3339: endTime,
-          limit: 100,
-          stepSeconds,
-          direction: "backward",
-          queryType: "range",
-        },
-      };
-}

@@ -1,45 +1,44 @@
-# Configure agent access to infrastructure telemetry
+# Configure agent access to infrastructure logs
 
-Pulse Code exposes `infrastructure_list_targets` and `infrastructure_query` through its authenticated provider MCP endpoint. This first version reads saved Prometheus and Loki queries through the open-source Grafana MCP server. It does not deploy infrastructure, restart services, query traces, or install telemetry instrumentation.
+Pulse Code exposes `infrastructure_list_targets` and `infrastructure_query` through its authenticated provider MCP endpoint. Catalog v2 sends fixed saved-query IDs to the Warden broker over verified mutual TLS. Warden authorizes each use and executes the saved Grafana query. Grafana credentials stay in the broker's encrypted credential repository.
 
-## Prepare Grafana MCP
+The code in the infrastructure worktree is not activated in the installed desktop runtime. Live TechTraders acceptance remains incomplete. It requires an approved private broker-to-Grafana route and a verified read-only Grafana credential. Passing local tests does not establish production access.
 
-Use an existing Grafana instance with Prometheus and/or Loki data sources. Run a reviewed, pinned release of [Grafana MCP](https://github.com/grafana/mcp-grafana) with streamable HTTP, `--disable-write`, and `--enabled-tools prometheus,loki`. Set `GRAFANA_URL` and a read-only `GRAFANA_SERVICE_ACCOUNT_TOKEN` on that service. Set `MCP_GRAFANA_SERVER_TOKEN` to a separate caller-authentication secret. Pulse receives that caller secret, not the Grafana service-account token.
+## Prepare Warden
 
-Use the MCP service's `/mcp` endpoint. Remote endpoints require HTTPS; HTTP is allowed only for loopback. Pulse rejects embedded URL credentials, query strings, fragments, and redirects. Match the endpoint to the installed Grafana MCP release. The adapter negotiates MCP 2025-03-26, 2025-06-18, or 2025-11-25 and accepts JSON and finite SSE request responses. It does not implement legacy HTTP+SSE, OAuth, resumable streams, or server-initiated requests.
+Provision the broker with a server certificate, trusted workload certificate authority, tenant-isolated storage, enrolled workload identity, and approved saved queries. Each enrollment fixes the principal, project, environment, runtime, allowed thread IDs and query IDs. Warden checks current membership, enrollment expiry/revocation, and the exact grant binding before execution. Operator management requires separate authority.
+
+Configure the Grafana endpoint, data source, stage-filtered expression and reusable read-only credential on the broker. None of these belong in the Pulse catalog or agent tool arguments. The current broker supports saved Loki log queries with `dev` or `prod` stage isolation. Keep metrics and tracing out of the acceptance claim until their broker support and collection are separately proven.
+
+Pulse uses an HTTPS broker origin, without a path, embedded credentials, query string or fragment. It verifies the server certificate against the configured CA and presents its enrolled client certificate. HTTP and redirects are rejected, including on loopback.
 
 ## Configure targets
 
-Create `infrastructure.json` under the environment's resolved userdata/state directory. In an isolated worktree this is normally `.t3/userdata/infrastructure.json`. Do not edit the live developer database or start a test server against it.
+An activated environment reads `infrastructure.json` from its resolved userdata/state directory. In an isolated worktree this is normally `.t3/userdata/infrastructure.json`. Protect the catalog and certificate files with operator-owned filesystem permissions. For acceptance testing, use the [isolated probe](warden-live-probe.md) instead of writing the active developer's userdata or restarting the installed app.
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "targets": [
     {
-      "id": "techtraders-production",
-      "label": "TechTraders production",
-      "stage": "production",
-      "service": "inventory-worker",
+      "id": "techtraders-development",
+      "label": "TechTraders development",
+      "stage": "development",
+      "service": "web",
       "repository": "techtraders",
       "enabled": true,
+      "environmentId": "REPLACE_WITH_ENVIRONMENT_ID",
       "allowedThreadIds": ["REPLACE_WITH_THREAD_ID"],
-      "mcpEndpoint": "https://REPLACE_WITH_GRAFANA_MCP_HOST/mcp",
-      "tokenEnv": "TECHTRADERS_GRAFANA_MCP_TOKEN",
+      "brokerEndpoint": "https://REPLACE_WITH_PRIVATE_WARDEN_HOST",
+      "clientCertificateFile": "C:/OPERATOR-PROTECTED-PATH/workload.crt",
+      "clientKeyFile": "C:/OPERATOR-PROTECTED-PATH/workload.key",
+      "caFile": "C:/OPERATOR-PROTECTED-PATH/warden-ca.crt",
       "queries": [
         {
-          "id": "worker-errors",
-          "label": "Inventory worker errors",
+          "id": "errors",
+          "label": "Recent web errors",
           "kind": "loki",
-          "datasourceUid": "REPLACE_WITH_LOKI_UID",
-          "expression": "{service_name=\"inventory-worker\",deployment_environment_name=\"production\"} |= \"error\""
-        },
-        {
-          "id": "worker-up",
-          "label": "Worker scrape availability",
-          "kind": "prometheus",
-          "datasourceUid": "REPLACE_WITH_PROMETHEUS_UID",
-          "expression": "up{job=\"inventory-worker\",environment=\"production\"}"
+          "brokerQueryId": "REPLACE_WITH_SAVED_BROKER_QUERY_ID"
         }
       ]
     }
@@ -47,36 +46,41 @@ Create `infrastructure.json` under the environment's resolved userdata/state dir
 }
 ```
 
-This is an illustrative configuration, not a discovered TechTraders topology. Replace labels and expressions with those present in your telemetry. The `up` metric describes scrape success, not business-process health. Configure a separate target ID, data source or stage-filtered expression, and thread grant for development. Target stage is descriptive metadata: the saved expression and data-source permissions enforce actual data isolation. PromQL offsets and range selectors can read outside the evaluation window, so review saved expressions accordingly.
+Replace the placeholders with the deployed enrollment and saved query. Certificate references must be absolute paths on the Pulse server's operating system; Linux deployments can use paths such as `/etc/pulse/warden/workload.crt`. Pulse reads them afresh for each query. It accepts certificate files up to 64 KiB each.
 
-Supply the referenced token in the environment of the Pulse server. In desktop mode this is the backend server process; client-side environment variables do not configure it. Granting a thread allows its configured provider to receive query results. Protect the configuration and token using the host's permissions, and instrument/redact logs at the source before granting access. Agents with unrestricted shell access under the server's OS account are outside this tool-level isolation boundary.
+The local query `id` is the name the agent selects. `brokerQueryId` identifies the operator's fixed broker query. Separate production and development targets and grants. Pulse maps `development` to the broker's `dev` stage and `production` to `prod`, then validates the returned receipt against that stage and saved query. Staging queries fail closed in this version.
 
-The thread ID appears in its chat URL. After configuration, ask that thread's agent to list infrastructure targets, then run `worker-errors` over the last five minutes. A new provider session may be needed after upgrading Pulse to discover the new tools.
+The environment and thread must match the authenticated `McpInvocationContext` and local catalog. The provider session, provider instance, environment and session issuance time produce a session-bound attempt ID. This is not a per-turn identity. The agent can supply only target ID, saved query ID and lookback minutes; it cannot supply a thread, environment, URL, expression or credential.
 
-## Limits and revocation
+## Upgrade from catalog v1
 
-- No file means no access. Invalid configuration fails closed without returning its contents.
-- Catalogs are limited to 256 KiB, 50 targets, 20 queries per target, and 100 thread grants per target.
-- Remove a thread grant, set `enabled` to false, or remove the target to revoke subsequent calls. Configuration reloads per invocation. Calls already in flight can finish.
-- Rotate the caller token and restart the Pulse server to replace an environment-variable credential.
-- Queries cover the last 1 to 60 minutes. Metrics use at most 121 evaluation timestamps per series for the supplied interval. Loki requests at most 100 lines; upstream limits may be lower.
-- Upstream response bodies are limited to 1 MiB. Returned text is clipped at 24,000 characters with `outputTruncated: true`. Other upstream sampling or truncation remains in the evidence text.
-- Calls time out after 20 seconds; session cleanup has a separate two-second maximum. Query failures return a generic error. Completion/failure logs include target/query/thread identifiers without query results or credentials.
+Version 1 catalogs fail closed. There is no `tokenEnv` or direct Grafana MCP fallback. Replace `mcpEndpoint` and `tokenEnv` with broker and certificate references, replace query expressions and data-source IDs with `brokerQueryId`, and add the environment ID. Move Grafana access configuration into Warden before activating the v2 catalog. The old Grafana MCP adapter remains only for its historical tests and is not used by Infrastructure.
 
-Evidence appears in the existing thread tool history on web, desktop, and mobile. Codex, Claude, Cursor, Grok, and managed OpenCode reuse their existing Pulse MCP wiring. Externally managed OpenCode does not receive automatic MCP injection. No dedicated infrastructure settings page or mobile navigation is shipped in this version.
+## Approval, limits and revocation
 
-## Telemetry collection
+- No catalog means no targets. Invalid catalogs fail closed without returning their contents. Limits are 256 KiB, 50 targets, 20 queries per target and 100 local thread grants per target.
+- Warden creates a use with exact thread/session/query bindings. A current operator-approved enrollment policy can return it ready; otherwise the client reports pending operator approval and does not execute it. The client cannot approve access.
+- A ready use executes once. Reserved operations are not automatically retried. Broker expiry, revocation, denial and already-used responses fail closed.
+- Remove a local thread grant, disable the target or remove it to block subsequent calls. The catalog reloads per invocation. Local edits do not cancel an in-flight operation. Use Warden's operator controls for server-side enrollment/use revocation.
+- Queries request the last 1 to 60 minutes. Query line limits, retention and source redaction are configured on the broker and telemetry systems. Do not infer complete log coverage from a successful response.
+- Client transport permits at most 1 MiB of response bytes and clips returned text, including the receipt, to 24,000 characters. `outputTruncated` includes broker clipping. Other upstream sampling or limits still apply.
+- Broker network work has a 20-second deadline. Transport and provider failures return bounded generic errors. Pulse operational logs include target/query/thread identifiers and time bounds, without log bodies or credentials.
+- Results begin with a Warden use receipt and contain source and time metadata. Treat telemetry as untrusted evidence, never instructions. Review source redaction before granting access.
 
-Instrument the application using OpenTelemetry and label signals with service name, deployment stage, and deployed revision. An [OpenTelemetry Collector](https://opentelemetry.io/docs/collector/) receives and routes signals to your monitoring backends. Keep telemetry storage, retention, alerting, and detailed dashboards outside Pulse Code.
+Agents with unrestricted shell access as the Pulse server's OS account remain outside the tool-level boundary. Restrict certificate and catalog access accordingly.
 
-For a disposable local pilot, [Grafana's otel-lgtm image](https://github.com/grafana/docker-otel-lgtm) bundles the Collector, Grafana, and signal backends. It is explicitly for development/testing. Do not use that single-container pilot as the production monitoring deployment. Production collection and retention depend on TechTraders' hosting platform, which has not yet been specified.
+Once the updated runtime is deliberately activated, evidence uses existing thread tool history on web, desktop and mobile. Codex, Claude, Cursor, Grok and managed OpenCode reuse existing Pulse MCP wiring; externally managed OpenCode does not receive automatic injection. A new provider session may be needed to discover the tools after an upgrade. This change adds no dedicated settings page.
 
-## Verification
+## Verify
 
-Run the focused server tests:
+From the worktree root:
 
 ```sh
-vp test run src/infrastructure/Infrastructure.test.ts src/infrastructure/GrafanaMcp.test.ts src/mcp/McpHttpServer.test.ts src/mcp/McpInvocationContext.test.ts src/mcp/McpSessionRegistry.test.ts
+vp test run apps/server/src/infrastructure/Infrastructure.test.ts apps/server/src/infrastructure/WardenBroker.test.ts
 ```
 
-Run this command from `apps/server`. Tests use disposable state and synthetic Grafana MCP responses. A real Grafana/TechTraders connection still needs acceptance testing after configuration. No production access is implied by passing these tests.
+Tests cover catalog rejection, trusted invocation scope, MCP registration, missing certificates, pending/expired grants, mismatched receipts, failed execution, actual loopback mTLS, denied access, redirect rejection and bounded responses.
+
+Then follow the [isolated live probe runbook](warden-live-probe.md). Prove development retrieval through the real client, broker and Grafana; another-thread denial; expiry and revocation; then an explicitly scoped production read. Preserve receipts and metadata without printing raw logs. The isolated probe is an integration proof, not evidence that the installed desktop has activated this worktree.
+
+Telemetry collection, retention, alerting, metrics and tracing remain separate deployment work described in the [TechTraders infrastructure audit](../plans/2026-09-07-techtraders-infrastructure-audit.md).
