@@ -11,7 +11,7 @@ vi.mock("../../hooks/useSettings", () => ({
     id: string,
     selector: (value: { continueThreadsAfterServerUpdate: boolean }) => unknown,
   ) => selector({ continueThreadsAfterServerUpdate: state.enabled[id] ?? false }),
-  useUpdateEnvironmentSettings: (id: string) => (patch: unknown) => state.updates(id, patch),
+  useUpdateSharedSettings: (id: string) => (patch: unknown) => state.updates(id, patch),
 }));
 vi.mock("../../state/environments", () => ({
   useEnvironments: () => ({ environments: state.environments }),
@@ -40,7 +40,7 @@ describe("restart continuation settings", () => {
     state.environments = [];
     state.updates.mockReset();
   });
-  it("reads and writes only the selected environment", () => {
+  it("reads the chosen environment and requests an explicit shared write", () => {
     state.enabled = { local: false, remote: true };
     expect(row("local").props.control.props.checked).toBe(false);
     const remote = row("remote");
@@ -50,7 +50,7 @@ describe("restart continuation settings", () => {
       continueThreadsAfterServerUpdate: false,
     });
   });
-  it("resets the selected environment to the off default", () => {
+  it("resets shared continuation to the off default", () => {
     state.enabled.remote = true;
     row("remote").props.resetAction?.props.onClick();
     expect(state.updates).toHaveBeenCalledExactlyOnceWith("remote", {

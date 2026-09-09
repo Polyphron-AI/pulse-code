@@ -1,5 +1,5 @@
 import type { EnvironmentId } from "@t3tools/contracts";
-import { useEnvironmentSettings, useUpdateEnvironmentSettings } from "../../hooks/useSettings";
+import { useEnvironmentSettings, useUpdateSharedSettings } from "../../hooks/useSettings";
 import { useEnvironments } from "../../state/environments";
 import { Switch } from "../ui/switch";
 import { SettingResetButton, SettingsRow } from "./settingsLayout";
@@ -18,11 +18,11 @@ export function RestartContinuationEnvironmentRow({
     environmentId,
     (settings) => settings.continueThreadsAfterServerUpdate,
   );
-  const updateSettings = useUpdateEnvironmentSettings(environmentId);
+  const updateSettings = useUpdateSharedSettings(environmentId);
   return (
     <SettingsRow
       title={label}
-      description="Automatically continue eligible active threads after this server or machine restarts. Applies only to this environment."
+      description="Automatically continue eligible active threads after this server or machine restarts. Changes apply to every connected environment that supports restart continuation."
       resetAction={
         enabled && connected ? (
           <SettingResetButton
@@ -56,7 +56,7 @@ export function RestartContinuationSettings() {
     <div>
       <SettingsRow
         {...searchableSetting("continue-threads-after-server-restart")}
-        description="Off by default. Choose which environments may continue agent work automatically."
+        description="Off by default. Changing a value applies it to all connected supported environments."
       />
       {supported.map((environment) => (
         <RestartContinuationEnvironmentRow

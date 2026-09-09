@@ -1,3 +1,4 @@
+import { SharedSettingsMismatchAlert } from "./SharedSettingsMismatchAlert";
 import { ArchiveIcon, ArchiveX, ChevronRightIcon, LoaderIcon, SettingsIcon } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import type { CSSProperties, ReactNode } from "react";
@@ -1959,6 +1960,7 @@ export function GeneralSettingsPanel() {
 
   return (
     <SettingsPageContainer>
+      <SharedSettingsMismatchAlert />
       <SettingsSection title="General">
         <VoiceSettings />
         <RestartContinuationSettings />

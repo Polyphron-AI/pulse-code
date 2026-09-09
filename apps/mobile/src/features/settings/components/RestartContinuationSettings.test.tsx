@@ -1,4 +1,4 @@
-import type { EnvironmentId } from "@t3tools/contracts";
+import { DEFAULT_SERVER_SETTINGS, type EnvironmentId } from "@t3tools/contracts";
 import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 const state = vi.hoisted(() => ({
@@ -14,6 +14,7 @@ vi.mock("../../../state/use-atom-command", () => ({ useAtomCommand: () => state.
 vi.mock("../../../state/environments", () => ({
   useEnvironments: () => ({ environments: state.environments }),
 }));
+vi.mock("./SettingsRow", () => ({ SettingsRow: () => null }));
 vi.mock("./SettingsSection", () => ({ SettingsSection: () => null }));
 vi.mock("./SettingsSwitchRow", () => ({ SettingsSwitchRow: () => null }));
 import {
@@ -37,25 +38,61 @@ describe("mobile restart continuation", () => {
     state.environments = [];
     state.update.mockReset();
   });
-  it("reads and updates one remote environment without changing another", () => {
+  it("reads each environment and applies changes to connected supported environments", () => {
     state.settings = {
       remote: { continueThreadsAfterServerUpdate: true },
       other: { continueThreadsAfterServerUpdate: false },
     };
+    state.environments = ["remote", "other", "offline", "legacy"].map((id) => ({
+      environmentId: id,
+      label: id,
+      connection: { phase: id === "offline" ? "reconnecting" : "connected" },
+      serverConfig: {
+        settings: state.settings[id] ?? {},
+        environment: { capabilities: { threadRestartContinuation: id !== "legacy" } },
+      },
+    }));
     expect(row("remote").props.value).toBe(true);
     expect(row("other").props.value).toBe(false);
     row("remote").props.onValueChange(false);
-    expect(state.update).toHaveBeenCalledExactlyOnceWith({
+    expect(state.update).toHaveBeenCalledTimes(2);
+    expect(state.update).toHaveBeenNthCalledWith(1, {
       environmentId: "remote",
       input: { patch: { continueThreadsAfterServerUpdate: false } },
     });
+    expect(state.update).toHaveBeenNthCalledWith(2, {
+      environmentId: "other",
+      input: { patch: { continueThreadsAfterServerUpdate: false } },
+    });
+  });
+  it("offers explicit shared recovery using the named connected source", () => {
+    state.environments = ["remote", "other"].map((id) => ({
+      environmentId: id,
+      label: id,
+      connection: { phase: "connected" },
+      serverConfig: {
+        settings: { ...DEFAULT_SERVER_SETTINGS, continueThreadsAfterServerUpdate: id === "remote" },
+        environment: { capabilities: { threadRestartContinuation: true } },
+      },
+    }));
+    const section = RestartContinuationSettings() as ReactElement<{
+      children: ReactElement<{ value: string; onPress: () => void }>[];
+    }>;
+    const action = section.props.children[0]!;
+    expect(action.props.value).toBe("remote");
+    expect(state.update).not.toHaveBeenCalled();
+    action.props.onPress();
+    expect(state.update).toHaveBeenCalledTimes(2);
+    expect(state.update.mock.calls[1]?.[0].input.patch.continueThreadsAfterServerUpdate).toBe(true);
   });
   it("defaults missing settings off and disables offline updates", () => {
     expect(row("offline", false).props.value).toBe(false);
     expect(row("offline", false).props.disabled).toBe(true);
   });
   it("hides controls on servers without restart continuation support", () => {
-    state.environments = [{ serverConfig: { environment: { capabilities: {} } } }];
+    state.environments = [
+      { connection: { phase: "connected" }, serverConfig: { environment: { capabilities: {} } } },
+    ];
     expect(RestartContinuationSettings()).toBeNull();
   });
 });
