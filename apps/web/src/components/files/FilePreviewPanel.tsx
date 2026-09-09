@@ -4,7 +4,11 @@ import type {
   ResolvedKeybindingsConfig,
   ScopedThreadRef,
 } from "@t3tools/contracts";
-import { isWorkspaceImagePreviewPath } from "@t3tools/shared/filePreview";
+import {
+  isWorkspaceImagePreviewPath,
+  isWorkspaceDownloadOnlyPath,
+} from "@t3tools/shared/filePreview";
+import { useWorkspaceFileDownload } from "~/assets/downloadWorkspaceFile";
 import { VirtualizedFile, type SelectedLineRange } from "@pierre/diffs";
 import { Editor } from "@pierre/diffs/editor";
 import { EditProvider, File, type FileOptions, Virtualizer } from "@pierre/diffs/react";
@@ -781,7 +785,11 @@ export default function FilePreviewPanel({
     reportFailure: false,
   });
   const isImage = relativePath !== null && isWorkspaceImagePreviewPath(relativePath);
-  const file = useProjectFileQuery(environmentId, cwd, relativePath, !isImage);
+  const downloadOnly =
+    relativePath !== null &&
+    (isWorkspaceDownloadOnlyPath(relativePath) || /\.pdf$/i.test(relativePath));
+  const downloadFile = useWorkspaceFileDownload(threadRef);
+  const file = useProjectFileQuery(environmentId, cwd, relativePath, !isImage && !downloadOnly);
   const [explorerOpen, setExplorerOpen] = useState(initialExplorerOpen);
   // Reading markdown rendered is a preference, not a property of one file. Keeping
   // it on the panel meant a thread switch dropped it and forced source back.
@@ -903,6 +911,15 @@ export default function FilePreviewPanel({
               ))}
             </div>
           </ScrollArea>
+          {absolutePath ? (
+            <button
+              type="button"
+              className="shrink-0 rounded px-2 py-1 text-xs hover:bg-accent"
+              onClick={() => void downloadFile(absolutePath)}
+            >
+              Download file
+            </button>
+          ) : null}
           {absolutePath &&
           (environmentId === primaryEnvironmentId || remoteOpenState.mode !== "local-exec") ? (
             <OpenInPicker
@@ -994,7 +1011,18 @@ export default function FilePreviewPanel({
             relativePath ? "flex" : "hidden",
           )}
         >
-          {relativePath && isImage && absolutePath ? (
+          {relativePath && downloadOnly && absolutePath ? (
+            <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 text-center text-sm text-muted-foreground">
+              <p>This file needs an app on your device to open it.</p>
+              <button
+                type="button"
+                className="rounded border px-3 py-2 text-foreground hover:bg-accent"
+                onClick={() => void downloadFile(absolutePath)}
+              >
+                Download file
+              </button>
+            </div>
+          ) : relativePath && isImage && absolutePath ? (
             <WorkspaceImagePreview
               key={absolutePath}
               environmentId={environmentId}

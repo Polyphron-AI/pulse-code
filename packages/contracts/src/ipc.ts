@@ -1138,6 +1138,7 @@ export interface DesktopBridge {
     position?: { x: number; y: number },
   ) => Promise<T | null>;
   openExternal: (url: string) => Promise<boolean>;
+  downloadFile?: (url: string) => Promise<boolean>;
   /**
    * Reveal a file on this desktop in the platform file manager. Optional so
    * newer renderer bundles remain compatible with older desktop builds.

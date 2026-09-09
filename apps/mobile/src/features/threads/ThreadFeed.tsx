@@ -1,7 +1,6 @@
 import * as Haptics from "expo-haptics";
 import { KeyboardAwareLegendList } from "@legendapp/list/keyboard";
 import { type LegendListRef } from "@legendapp/list/react-native";
-import { resolveAssetUrl } from "@t3tools/client-runtime/state/assets";
 import { environmentEndpointUrl } from "@t3tools/client-runtime/environment";
 import type { EnvironmentId, MessageId, ThreadId, TurnId } from "@t3tools/contracts";
 import { CHAT_LIST_ANCHOR_OFFSET, resolveChatListAnchoredEndSpace } from "@t3tools/shared/chatList";
@@ -107,15 +106,10 @@ import {
   WORK_GROUP_TOGGLE_HEIGHT,
 } from "./thread-work-log";
 import { useMarkdownCodeHighlight } from "./markdownCodeHighlightState";
-import { assetEnvironment, useAssetUrl } from "../../state/assets";
-import { useAtomQueryRunner } from "../../state/use-atom-query-runner";
+import { useAssetUrl } from "../../state/assets";
 import { usePreparedConnection } from "../../state/session";
-import {
-  basename,
-  resolveWorkspaceFilePath,
-  resolveWorkspaceRelativeFilePath,
-} from "../files/filePath";
-import { openWorkspaceFileWith } from "../files/openWorkspaceFileWith";
+import { basename, resolveWorkspaceRelativeFilePath } from "../files/filePath";
+import { useWorkspaceFileDownload } from "../files/useWorkspaceFileDownload";
 
 const WIDE_MARKDOWN_BLOCK_OPTIONS = {
   includeOrderedLists: Platform.OS === "android",
@@ -1361,11 +1355,7 @@ function ThreadFeedPlaceholder(props: {
 export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
   const navigation = useNavigation();
   const preparedConnection = usePreparedConnection(props.environmentId);
-  const createAssetUrl = useAtomQueryRunner(assetEnvironment.createUrl, {
-    label: "open linked workspace file",
-    reportFailure: false,
-    reportDefect: false,
-  });
+  const downloadFile = useWorkspaceFileDownload(props.environmentId, props.threadId);
   const copyFeedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const foldSettleFrameRef = useRef<number | null>(null);
   const foldSettleSecondFrameRef = useRef<number | null>(null);
@@ -1471,42 +1461,14 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
             });
           };
           const openWith = () => {
-            if (!props.workspaceRoot || preparedConnection._tag === "None") {
-              Alert.alert("Could not open file", "Reconnect to the environment and try again.");
-              return;
-            }
-            const absolutePath = resolveWorkspaceFilePath(props.workspaceRoot, relativePath);
-            void openWorkspaceFileWith({
-              key: JSON.stringify([props.environmentId, props.threadId, absolutePath]),
-              path: absolutePath,
-              resolveAssetUrl: async () => {
-                const result = await createAssetUrl({
-                  environmentId: props.environmentId,
-                  input: {
-                    resource: {
-                      _tag: "workspace-file",
-                      threadId: props.threadId,
-                      path: absolutePath,
-                    },
-                  },
-                });
-                return result._tag === "Success"
-                  ? resolveAssetUrl(preparedConnection.value.httpBaseUrl, result.value.relativeUrl)
-                  : null;
-              },
-            }).catch(() => {
-              Alert.alert(
-                "Could not open file",
-                "The file could not be downloaded or opened. Check the environment connection and available apps, then try again.",
-              );
-            });
+            downloadFile(relativePath);
           };
 
           if (Platform.OS === "ios") {
             ActionSheetIOS.showActionSheetWithOptions(
               {
                 title: basename(relativePath),
-                options: ["Preview in Pulse Code", "Open with…", "Cancel"],
+                options: ["Preview in Pulse Code", "Download file", "Cancel"],
                 cancelButtonIndex: 2,
               },
               (buttonIndex) => {
@@ -1517,7 +1479,7 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
           } else {
             Alert.alert(basename(relativePath), "Choose how to open this file.", [
               { text: "Preview in Pulse Code", onPress: preview },
-              { text: "Open with…", onPress: openWith },
+              { text: "Download file", onPress: openWith },
               { text: "Cancel", style: "cancel" },
             ]);
           }
@@ -1529,14 +1491,7 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
         void tryOpenExternalUrl(presentation.href, "markdown-link");
       }
     },
-    [
-      createAssetUrl,
-      navigation,
-      preparedConnection,
-      props.environmentId,
-      props.threadId,
-      props.workspaceRoot,
-    ],
+    [downloadFile, navigation, props.environmentId, props.threadId, props.workspaceRoot],
   );
   const markdownStyles = useMarkdownStyles(onMarkdownLinkPress);
   const reviewCommentColors = useReviewCommentColors();

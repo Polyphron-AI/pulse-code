@@ -257,7 +257,9 @@ export class ProjectReadFileError extends Schema.TaggedErrorClass<ProjectReadFil
       ...props,
       message:
         decodedProjectErrorMessage(props) ??
-        `Failed to read workspace file '${props.relativePath}' in '${props.cwd}'.`,
+        (props.failure === "binary_file"
+          ? "This file cannot be previewed as text. Download it to open it on your device."
+          : `Failed to read workspace file '${props.relativePath}' in '${props.cwd}'.`),
     } as any);
   }
 }

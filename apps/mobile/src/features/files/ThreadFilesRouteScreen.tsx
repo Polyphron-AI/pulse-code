@@ -1,7 +1,9 @@
 import { NativeHeaderToolbar, NativeStackScreenOptions } from "../../native/StackHeader";
 import { StackActions, useNavigation, type StaticScreenProps } from "@react-navigation/native";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Platform, View } from "react-native";
+import { ActivityIndicator, Platform, Pressable, View } from "react-native";
+import { isWorkspaceDownloadOnlyPath } from "@t3tools/shared/filePreview";
+import { useWorkspaceFileDownload } from "./useWorkspaceFileDownload";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import {
@@ -481,6 +483,12 @@ export function ThreadFileScreen(props: ThreadFileRouteScreenProps) {
   const [previewRevision, setPreviewRevision] = useState(0);
   const isBrowserFile = relativePath !== null && isBrowserPreviewFile(relativePath);
   const isImageFile = relativePath !== null && isImagePreviewFile(relativePath);
+  const downloadOnly = relativePath !== null && isWorkspaceDownloadOnlyPath(relativePath);
+  const download = useWorkspaceFileDownload(environmentId, threadId);
+  const downloadFile = () => {
+    if (!relativePath) return;
+    download(relativePath);
+  };
   const canPreview =
     relativePath !== null && (isMarkdownPreviewFile(relativePath) || isBrowserFile || isImageFile);
   const activeMode =
@@ -501,6 +509,7 @@ export function ThreadFileScreen(props: ThreadFileRouteScreenProps) {
       : `${assetPreviewUri}${assetPreviewUri.includes("?") ? "&" : "?"}revision=${previewRevision}`;
   const needsFileContents =
     relativePath !== null &&
+    !downloadOnly &&
     (resolvedActiveMode === "source" || isMarkdownPreviewFile(relativePath));
   const fileQuery = useEnvironmentQuery(
     environmentId !== null && cwd !== null && relativePath !== null && needsFileContents
@@ -612,7 +621,10 @@ export function ThreadFileScreen(props: ThreadFileRouteScreenProps) {
             />
           ) : null}
           <NativeHeaderToolbar.Menu accessibilityLabel="File actions" icon="ellipsis">
-            {canPreview && !isImageFile ? (
+            <NativeHeaderToolbar.MenuAction icon="square.and.arrow.down" onPress={downloadFile}>
+              Download file
+            </NativeHeaderToolbar.MenuAction>
+            {canPreview && !isImageFile && !/\.pdf$/i.test(relativePath) ? (
               <NativeHeaderToolbar.Menu inline>
                 <NativeHeaderToolbar.MenuAction
                   icon="eye"
@@ -658,16 +670,40 @@ export function ThreadFileScreen(props: ThreadFileRouteScreenProps) {
             ) : null}
           </NativeHeaderToolbar.Menu>
         </NativeHeaderToolbar>
-        <FileContent
-          activeMode={resolvedActiveMode}
-          previewUri={previewUri}
-          fileContents={fileData?.contents ?? null}
-          fileError={fileQuery.error}
-          initialLine={targetLine}
-          relativePath={relativePath}
-          truncated={fileData?.truncated ?? false}
-          onRefresh={() => fileQuery.refresh()}
-        />
+        {Platform.OS === "android" && !downloadOnly ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={downloadFile}
+            className="items-end border-b border-border px-4 py-3"
+          >
+            <Text>Download file</Text>
+          </Pressable>
+        ) : null}
+        {downloadOnly ? (
+          <View className="flex-1 items-center justify-center gap-3 bg-sheet px-6">
+            <Text className="text-center text-sm text-foreground-muted">
+              This file needs an app on your device to open it.
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              onPress={downloadFile}
+              className="rounded-lg border border-border px-4 py-3"
+            >
+              <Text>Download file</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <FileContent
+            activeMode={resolvedActiveMode}
+            previewUri={previewUri}
+            fileContents={fileData?.contents ?? null}
+            fileError={fileQuery.error}
+            initialLine={targetLine}
+            relativePath={relativePath}
+            truncated={fileData?.truncated ?? false}
+            onRefresh={() => fileQuery.refresh()}
+          />
+        )}
       </View>
     </ReviewHighlighterProvider>
   );

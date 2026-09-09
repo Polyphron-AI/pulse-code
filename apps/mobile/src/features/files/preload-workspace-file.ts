@@ -1,4 +1,5 @@
 import { executeAtomQuery } from "@t3tools/client-runtime/state/runtime";
+import { isWorkspaceDownloadOnlyPath } from "@t3tools/shared/filePreview";
 import type { EnvironmentId } from "@t3tools/contracts";
 
 import { appAtomRegistry } from "../../state/atom-registry";
@@ -25,7 +26,11 @@ export function preloadWorkspaceFileContents(input: {
   readonly relativePath: string;
   readonly theme: ReviewDiffTheme;
 }): void {
-  if (isBrowserPreviewFile(input.relativePath) || isImagePreviewFile(input.relativePath)) {
+  if (
+    isBrowserPreviewFile(input.relativePath) ||
+    isImagePreviewFile(input.relativePath) ||
+    isWorkspaceDownloadOnlyPath(input.relativePath)
+  ) {
     return;
   }
 

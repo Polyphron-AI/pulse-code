@@ -1,4 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
+import { useWorkspaceFileDownload } from "~/assets/downloadWorkspaceFile";
 import {
   CheckIcon,
   ChevronRightIcon,
@@ -1123,6 +1124,7 @@ const MarkdownFileLink = memo(function MarkdownFileLink({
   onOpenInBrowser,
   className,
 }: MarkdownFileLinkProps) {
+  const downloadFile = useWorkspaceFileDownload(threadRef);
   const handleOpenInEditor = useCallback(() => {
     void (async () => {
       try {
@@ -1255,6 +1257,7 @@ const MarkdownFileLink = memo(function MarkdownFileLink({
         const clicked = await api.contextMenu.show(
           [
             { id: "open", label: "Open in editor" },
+            ...(threadRef ? [{ id: "download", label: "Download file" }] : []),
             ...(onOpenInBrowser
               ? ([{ id: "open-in-browser", label: "Open in integrated browser" }] as const)
               : []),
@@ -1264,6 +1267,10 @@ const MarkdownFileLink = memo(function MarkdownFileLink({
           { x: event.clientX, y: event.clientY },
         );
 
+        if (clicked === "download") {
+          void downloadFile(iconPath);
+          return;
+        }
         if (clicked === "open") {
           handleOpenInEditor();
           return;
@@ -1286,7 +1293,17 @@ const MarkdownFileLink = memo(function MarkdownFileLink({
         );
       }
     },
-    [displayPath, handleCopy, handleOpenInBrowser, handleOpenInEditor, onOpenInBrowser, targetPath],
+    [
+      displayPath,
+      handleCopy,
+      handleOpenInBrowser,
+      handleOpenInEditor,
+      onOpenInBrowser,
+      targetPath,
+      downloadFile,
+      iconPath,
+      threadRef,
+    ],
   );
 
   return (

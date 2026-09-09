@@ -1,4 +1,6 @@
 import { LexicalComposer, type InitialConfigType } from "@lexical/react/LexicalComposer";
+import { readLocalApi } from "~/localApi";
+import { toastManager } from "./ui/toast";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { ContentEditable } from "@lexical/react/LexicalContentEditable";
 import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary";
@@ -135,7 +137,12 @@ const ComposerTerminalContextActionsContext = createContext<{
   onRemoveTerminalContext: () => {},
 });
 
+const ComposerFileDownloadContext = createContext<((path: string) => Promise<void>) | undefined>(
+  undefined,
+);
+
 function ComposerMentionDecorator(props: { path: string }) {
+  const downloadFile = use(ComposerFileDownloadContext);
   const theme = resolvedThemeFromDocument();
   const chip = (
     <span
@@ -143,6 +150,25 @@ function ComposerMentionDecorator(props: { path: string }) {
       contentEditable={false}
       spellCheck={false}
       data-composer-mention-chip="true"
+      onContextMenu={
+        downloadFile
+          ? (event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              void readLocalApi()
+                ?.contextMenu.show([{ id: "download", label: "Download file" }], {
+                  x: event.clientX,
+                  y: event.clientY,
+                })
+                .then((action) => {
+                  if (action === "download") return downloadFile(props.path);
+                })
+                .catch(() =>
+                  toastManager.add({ type: "error", title: "Could not open file actions" }),
+                );
+            }
+          : undefined
+      }
     >
       <FileTagChipContent path={props.path} label={basenameOfPath(props.path)} theme={theme} />
     </span>
@@ -878,6 +904,7 @@ export interface ComposerPromptEditorHandle {
 }
 
 interface ComposerPromptEditorProps {
+  onDownloadFile?: ((path: string) => Promise<void>) | undefined;
   value: string;
   cursor: number;
   terminalContexts: ReadonlyArray<TerminalContextDraft>;
@@ -1788,6 +1815,7 @@ function ComposerPromptEditorInner({
 }
 
 export function ComposerPromptEditor({
+  onDownloadFile,
   value,
   cursor,
   terminalContexts,
@@ -1824,21 +1852,23 @@ export function ComposerPromptEditor({
   );
 
   return (
-    <LexicalComposer key={COMPOSER_EDITOR_HMR_KEY} initialConfig={initialConfig}>
-      <ComposerPromptEditorInner
-        value={value}
-        cursor={cursor}
-        terminalContexts={terminalContexts}
-        skills={skills}
-        disabled={disabled}
-        placeholder={placeholder}
-        onRemoveTerminalContext={onRemoveTerminalContext}
-        onChange={onChange}
-        onPaste={onPaste}
-        editorRef={editorRef}
-        {...(onCommandKeyDown ? { onCommandKeyDown } : {})}
-        {...(className ? { className } : {})}
-      />
-    </LexicalComposer>
+    <ComposerFileDownloadContext value={onDownloadFile}>
+      <LexicalComposer key={COMPOSER_EDITOR_HMR_KEY} initialConfig={initialConfig}>
+        <ComposerPromptEditorInner
+          value={value}
+          cursor={cursor}
+          terminalContexts={terminalContexts}
+          skills={skills}
+          disabled={disabled}
+          placeholder={placeholder}
+          onRemoveTerminalContext={onRemoveTerminalContext}
+          onChange={onChange}
+          onPaste={onPaste}
+          editorRef={editorRef}
+          {...(onCommandKeyDown ? { onCommandKeyDown } : {})}
+          {...(className ? { className } : {})}
+        />
+      </LexicalComposer>
+    </ComposerFileDownloadContext>
   );
 }
