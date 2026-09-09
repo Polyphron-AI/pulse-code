@@ -32,6 +32,8 @@ import {
 } from "../../components/ComposerToolbar";
 import { AndroidScreenHeader } from "../../components/AndroidScreenHeader";
 import { ComposerAttachmentStrip } from "../../components/ComposerAttachmentStrip";
+import { FilePreviewModal, type FilePreviewSource } from "../../components/FilePreviewModal";
+import { VideoPreviewModal, type VideoPreviewSource } from "../../components/VideoPreviewModal";
 import { ProviderIcon } from "../../components/ProviderIcon";
 import { SymbolView } from "../../components/AppSymbol";
 import { AppText as Text } from "../../components/AppText";
@@ -48,6 +50,7 @@ import {
   convertPastedImagesToAttachments,
   pickComposerFiles,
   pickComposerImages,
+  type DraftComposerFileAttachment,
 } from "../../lib/composerImages";
 import { useScaledTextRole } from "../settings/appearance/useScaledTextRole";
 import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
@@ -139,6 +142,34 @@ export function NewTaskDraftScreen(props: {
   const promptInputRef = useRef<ComposerEditorHandle>(null);
   const loadedBranchesProjectKeyRef = useRef<string | null>(null);
   const [isComposerFocused, setIsComposerFocused] = useState(false);
+  const [previewVideo, setPreviewVideo] = useState<VideoPreviewSource | null>(null);
+  const [previewFile, setPreviewFile] = useState<FilePreviewSource | null>(null);
+  const wasFocusedBeforePreviewRef = useRef(false);
+  const openVideoPreview = useCallback(
+    (attachment: DraftComposerFileAttachment, sourceIdentifier: string) => {
+      wasFocusedBeforePreviewRef.current = isComposerFocused;
+      setPreviewFile(null);
+      setPreviewVideo((current) => current ?? { type: "local", attachment, sourceIdentifier });
+    },
+    [isComposerFocused],
+  );
+  const openFilePreview = useCallback(
+    (source: FilePreviewSource) => {
+      wasFocusedBeforePreviewRef.current = isComposerFocused;
+      setPreviewVideo(null);
+      setPreviewFile((current) => current ?? source);
+    },
+    [isComposerFocused],
+  );
+  const closeMediaPreview = useCallback(() => {
+    setPreviewVideo(null);
+    setPreviewFile(null);
+    if (wasFocusedBeforePreviewRef.current) {
+      setTimeout(() => {
+        if (navigation.isFocused()) promptInputRef.current?.focus();
+      }, 100);
+    }
+  }, [navigation]);
   const settingsSheetPresentation = useThreadSettingsSheetPresentation({
     editorRef: promptInputRef,
     isEditorFocused: isComposerFocused,
@@ -688,7 +719,11 @@ export function NewTaskDraftScreen(props: {
     if (isComposerInteractionLocked) {
       return;
     }
-    const result = await pickComposerImages({ existingCount: flow.attachments.length });
+    const result = await pickComposerImages({
+      existingCount: flow.attachments.length,
+      maxVideoBytes:
+        selectedEnvironmentServerConfig?.environment.capabilities.fileAttachments?.maxUploadBytes,
+    });
     const rejectedCount = result.images.length > 0 ? flow.appendAttachments(result.images) : 0;
     const problems = [
       ...(result.error ? [result.error] : []),
@@ -1113,6 +1148,8 @@ export function NewTaskDraftScreen(props: {
               imageBorderRadius={16}
               imageSize={72}
               onRemove={isComposerInteractionLocked ? () => undefined : flow.removeAttachment}
+              onPressPreview={isComposerInteractionLocked ? undefined : openFilePreview}
+              onPressVideo={isComposerInteractionLocked ? undefined : openVideoPreview}
             />
           </View>
         ) : null}
@@ -1184,6 +1221,8 @@ export function NewTaskDraftScreen(props: {
           />
         </ComposerToolbarRow>
       </ComposerSurface>
+      <VideoPreviewModal source={previewVideo} onRequestClose={closeMediaPreview} />
+      <FilePreviewModal source={previewFile} onRequestClose={closeMediaPreview} />
     </View>
   );
 

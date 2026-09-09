@@ -10,10 +10,11 @@ import {
   type EnvironmentId,
   type UploadChatImageAttachment,
 } from "@t3tools/contracts";
-import type { PickMultipleFilesResult } from "expo-file-system";
+import type { DocumentPickerResult } from "expo-document-picker";
 import { estimateBase64ByteSize } from "./base64";
 import {
   COMPOSER_ATTACHMENT_DIRECTORY,
+  isComposerAttachmentFileRetained,
   resolveOwnedComposerAttachmentFileUri,
 } from "./composerAttachmentFiles";
 import { beginForegroundHandoff } from "./foreground-handoff";
@@ -145,7 +146,7 @@ export async function removePersistedComposerAttachmentFile(uri: string): Promis
   try {
     const { File, Paths } = await import("expo-file-system");
     const ownedUri = resolveOwnedComposerAttachmentFileUri(uri, Paths.document.uri);
-    if (ownedUri === null) {
+    if (ownedUri === null || isComposerAttachmentFileRetained(ownedUri)) {
       return;
     }
     const file = new File(ownedUri);
@@ -172,11 +173,18 @@ export async function pickComposerFiles(input: {
     };
   }
 
-  const { File } = await import("expo-file-system");
+  const { getDocumentAsync } = await import("expo-document-picker");
   const endHandoff = beginForegroundHandoff();
-  let result: PickMultipleFilesResult;
+  let result: DocumentPickerResult;
   try {
-    result = await File.pickFileAsync({ multipleFiles: true });
+    // File providers may expose a URI that FileSystem cannot read directly.
+    // Import a readable cache copy before persisting the draft's owned file.
+    result = await getDocumentAsync({ multiple: true, copyToCacheDirectory: true });
+  } catch (cause) {
+    return {
+      files: [],
+      error: cause instanceof Error ? cause.message : "Could not open the file picker.",
+    };
   } finally {
     endHandoff();
   }
@@ -190,7 +198,7 @@ export async function pickComposerFiles(input: {
   const attachments: DraftComposerFileAttachment[] = [];
   let error: string | null = null;
   let exceededAttachmentLimit = false;
-  for (const file of result.result) {
+  for (const file of result.assets) {
     if (attachments.length >= remainingSlots) {
       exceededAttachmentLimit = true;
       break;
@@ -206,6 +214,7 @@ export async function pickComposerFiles(input: {
     }
     try {
       const fileUri = await persistComposerAttachmentFile(file.uri, name, maxBytes);
+      const { File } = await import("expo-file-system");
       const storedSizeBytes = new File(fileUri).size ?? sizeBytes ?? 0;
       if (storedSizeBytes <= 0) {
         await removePersistedComposerAttachmentFile(fileUri);
@@ -221,7 +230,7 @@ export async function pickComposerFiles(input: {
         id: uuidv4(),
         type: "file",
         name,
-        mimeType: file.type || "application/octet-stream",
+        mimeType: file.mimeType || "application/octet-stream",
         sizeBytes: storedSizeBytes,
         fileUri,
       });
@@ -251,8 +260,22 @@ async function loadClipboard() {
   }
 }
 
-export async function pickComposerImages(input: { readonly existingCount: number }): Promise<{
+export function pickComposerImages(input: { readonly existingCount: number }): Promise<{
   readonly images: ReadonlyArray<DraftComposerImageAttachment>;
+  readonly error: string | null;
+}>;
+export function pickComposerImages(input: {
+  readonly existingCount: number;
+  readonly maxVideoBytes?: number;
+}): Promise<{
+  readonly images: ReadonlyArray<DraftComposerAttachment>;
+  readonly error: string | null;
+}>;
+export async function pickComposerImages(input: {
+  readonly existingCount: number;
+  readonly maxVideoBytes?: number;
+}): Promise<{
+  readonly images: ReadonlyArray<DraftComposerAttachment>;
   readonly error: string | null;
 }> {
   const remainingSlots = PROVIDER_SEND_TURN_MAX_ATTACHMENTS - input.existingCount;
@@ -280,7 +303,7 @@ export async function pickComposerImages(input: { readonly existingCount: number
   let result: Awaited<ReturnType<typeof imagePicker.launchImageLibraryAsync>>;
   try {
     result = await imagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
+      mediaTypes: input.maxVideoBytes === undefined ? ["images"] : ["images", "videos"],
       allowsMultipleSelection: true,
       selectionLimit: remainingSlots,
       base64: true,
@@ -297,40 +320,102 @@ export async function pickComposerImages(input: { readonly existingCount: number
     };
   }
 
-  const nextImages: DraftComposerImageAttachment[] = [];
+  const nextImages: DraftComposerAttachment[] = [];
   let error: string | null = null;
 
   for (const asset of result.assets) {
-    const mimeType = asset.mimeType?.toLowerCase();
+    if (nextImages.length >= remainingSlots) {
+      error = `You can attach up to ${PROVIDER_SEND_TURN_MAX_ATTACHMENTS} attachments per message.`;
+      break;
+    }
+    let mimeType = asset.mimeType?.toLowerCase();
+    if (asset.type === "video" || mimeType?.startsWith("video/")) {
+      if (input.maxVideoBytes === undefined) {
+        error = "Video attachments are unavailable here.";
+        continue;
+      }
+      const name = asset.fileName?.trim() || "video.mp4";
+      const maxBytes = clampFileAttachmentUploadBytes(input.maxVideoBytes);
+      try {
+        const { File } = await import("expo-file-system");
+        const fileUri = await persistComposerAttachmentFile(asset.uri, name, maxBytes);
+        const sizeBytes = new File(fileUri).size ?? asset.fileSize ?? 0;
+        if (sizeBytes <= 0 || sizeBytes > maxBytes) {
+          await removePersistedComposerAttachmentFile(fileUri);
+          throw new Error(
+            sizeBytes <= 0
+              ? `'${name}' is empty or could not be read.`
+              : fileAttachmentTooLargeMessage(name, maxBytes),
+          );
+        }
+        nextImages.push({
+          id: uuidv4(),
+          type: "file",
+          name,
+          mimeType: mimeType || "video/mp4",
+          sizeBytes,
+          fileUri,
+        });
+      } catch (cause) {
+        error = cause instanceof Error ? cause.message : `Could not read '${name}'.`;
+      }
+      continue;
+    }
     if (!mimeType?.startsWith("image/")) {
       error = `Unsupported file type for '${asset.fileName ?? "image"}'.`;
       continue;
     }
-    if (!isProviderSendTurnSupportedImageMimeType(mimeType)) {
-      error = `'${asset.fileName ?? "image"}' is not a supported image type. Attach GIF, JPEG, PNG, or WebP images.`;
-      continue;
-    }
 
-    const base64 = asset.base64;
+    let base64 = asset.base64;
     if (!base64) {
       error = `Failed to read '${asset.fileName ?? "image"}'.`;
       continue;
     }
 
-    const sizeBytes = asset.fileSize ?? estimateBase64ByteSize(base64);
+    let name = asset.fileName?.trim() || "image";
+    // The iOS picker returns JPEG base64 even when its metadata describes HEIC,
+    // PNG, or GIF. Keep supported originals so transparency and animation survive;
+    // use the native JPEG conversion for formats providers cannot accept.
+    if (base64.startsWith("/9j/")) {
+      if (
+        mimeType &&
+        mimeType !== "image/jpeg" &&
+        isProviderSendTurnSupportedImageMimeType(mimeType)
+      ) {
+        try {
+          const { File } = await import("expo-file-system");
+          base64 = await new File(asset.uri).base64();
+        } catch {
+          error = `Failed to read '${name}'.`;
+          continue;
+        }
+      } else {
+        mimeType = "image/jpeg";
+        if (!/\.jpe?g$/i.test(name)) {
+          name = `${name.replace(/\.[^.]+$/, "")}.jpg`;
+        }
+      }
+    }
+    if (!mimeType || !isProviderSendTurnSupportedImageMimeType(mimeType)) {
+      error = `'${name}' is not a supported image type. Attach GIF, JPEG, PNG, or WebP images.`;
+      continue;
+    }
+
+    const sizeBytes = estimateBase64ByteSize(base64);
     if (sizeBytes <= 0 || sizeBytes > PROVIDER_SEND_TURN_MAX_IMAGE_BYTES) {
       error = `'${asset.fileName ?? "image"}' exceeds the 10 MB attachment limit.`;
       continue;
     }
 
+    const dataUrl = `data:${mimeType};base64,${base64}`;
     nextImages.push({
       id: uuidv4(),
       type: "image",
-      name: asset.fileName ?? "image",
+      name,
       mimeType,
       sizeBytes,
-      dataUrl: `data:${mimeType};base64,${base64}`,
-      previewUri: asset.uri,
+      dataUrl,
+      previewUri: mimeType === asset.mimeType?.toLowerCase() ? asset.uri : dataUrl,
     });
   }
 
