@@ -1,5 +1,10 @@
 import { ProviderInstanceRegistry } from "./provider/Services/ProviderInstanceRegistry.ts";
 import { ProviderResetCreditError } from "@t3tools/contracts";
+import { ServerProvider } from "@t3tools/contracts";
+import {
+  sameUsageLimitCommandCoverage,
+  withUsageLimitsCommands,
+} from "@t3tools/shared/usageLimits";
 import * as Cause from "effect/Cause";
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
@@ -2521,6 +2526,17 @@ const makeWsRpcLayer = (
             WS_METHODS.subscribeServerConfig,
             Effect.gen(function* () {
               const settingsChanges = yield* serverSettings.subscribeChanges;
+              const usageLimitsCommand = input.usageLimitsCommand === true;
+              const initialConfig = yield* loadServerConfig;
+              const config = usageLimitsCommand
+                ? {
+                    ...initialConfig,
+                    providers: withUsageLimitsCommands(
+                      initialConfig.providers,
+                      yield* usageLimitSources.current,
+                    ),
+                  }
+                : initialConfig;
               const keybindingsUpdates = keybindings.streamChanges.pipe(
                 Stream.map((event) => ({
                   version: 1 as const,
@@ -2531,7 +2547,23 @@ const makeWsRpcLayer = (
                   },
                 })),
               );
-              const providerStatuses = providerRegistry.streamChanges.pipe(
+              const providerChanges = usageLimitsCommand
+                ? Stream.zipLatestWith(
+                    Stream.concat(
+                      Stream.fromEffect(providerRegistry.getProviders),
+                      providerRegistry.streamChanges,
+                    ),
+                    usageLimitSources.streamChanges.pipe(
+                      Stream.changesWith(sameUsageLimitCommandCoverage),
+                    ),
+                    withUsageLimitsCommands,
+                  ).pipe(
+                    (updates) => Stream.concat(Stream.make(config.providers), updates),
+                    Stream.changesWith(Schema.toEquivalence(Schema.Array(ServerProvider))),
+                    Stream.drop(1),
+                  )
+                : providerRegistry.streamChanges;
+              const providerStatuses = providerChanges.pipe(
                 Stream.map((providers) => ({
                   version: 1 as const,
                   type: "providerStatuses" as const,
@@ -2574,7 +2606,7 @@ const makeWsRpcLayer = (
                 Stream.make({
                   version: 1 as const,
                   type: "snapshot" as const,
-                  config: yield* loadServerConfig,
+                  config,
                 }),
                 liveUpdates,
               );
