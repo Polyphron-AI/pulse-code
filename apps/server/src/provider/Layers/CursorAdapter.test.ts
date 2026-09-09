@@ -41,11 +41,31 @@ const mockAgentPath = NodePath.join(__dirname, "../../../scripts/acp-mock-agent.
 const mockAgentCommand = "node";
 const mockAgentArgs = [mockAgentPath] as const;
 
+async function makeWindowsMockAgentWrapper(
+  dir: string,
+  extraEnv: Record<string, string> = {},
+  argvLogPath?: string,
+  initialDelaySeconds?: number,
+) {
+  const wrapperPath = NodePath.join(dir, "fake-agent.cmd");
+  const script = `import * as fs from "node:fs";
+Object.assign(process.env, ${JSON.stringify(extraEnv)});
+${argvLogPath ? `fs.appendFileSync(${JSON.stringify(argvLogPath)}, process.argv.slice(2).join("\\t") + "\\n");` : ""}
+${initialDelaySeconds ? `await new Promise((resolve) => setTimeout(resolve, ${initialDelaySeconds * 1000}));` : ""}
+await import(${JSON.stringify(NodeURL.pathToFileURL(mockAgentPath).href)});
+`;
+  await NodeFSP.writeFile(NodePath.join(dir, "bootstrap.mjs"), script, "utf8");
+  await NodeFSP.writeFile(wrapperPath, '@echo off\r\nnode "%~dp0bootstrap.mjs" %*\r\n', "utf8");
+  return wrapperPath;
+}
+
 async function makeMockAgentWrapper(
   extraEnv?: Record<string, string>,
   options?: { initialDelaySeconds?: number },
 ) {
   const dir = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "cursor-acp-mock-"));
+  if (NodePath.sep === "\\")
+    return makeWindowsMockAgentWrapper(dir, extraEnv, undefined, options?.initialDelaySeconds);
   const wrapperPath = NodePath.join(dir, "fake-agent.sh");
   const envExports = Object.entries(extraEnv ?? {})
     .map(([key, value]) => `export ${key}=${JSON.stringify(value)}`)
@@ -66,6 +86,12 @@ async function makeProbeWrapper(
   extraEnv?: Record<string, string>,
 ) {
   const dir = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "cursor-acp-probe-"));
+  if (NodePath.sep === "\\")
+    return makeWindowsMockAgentWrapper(
+      dir,
+      { ...extraEnv, T3_ACP_REQUEST_LOG_PATH: requestLogPath },
+      argvLogPath,
+    );
   const wrapperPath = NodePath.join(dir, "fake-agent.sh");
   const envExports = Object.entries(extraEnv ?? {})
     .map(([key, value]) => `export ${key}=${JSON.stringify(value)}`)
@@ -168,6 +194,42 @@ const cursorAdapterTestLayer = it.layer(
 );
 
 cursorAdapterTestLayer("CursorAdapterLive", (it) => {
+  it.effect("rejects a Cursor transport error returned as a successful assistant answer", () =>
+    Effect.gen(function* () {
+      const adapter = yield* CursorAdapter;
+      const settings = yield* ServerSettingsService;
+      const threadId = ThreadId.make("cursor-transport-error-answer");
+      const wrapperPath = yield* Effect.promise(() =>
+        makeMockAgentWrapper({
+          T3_ACP_PROMPT_RESPONSE_TEXT: "Error: RetriableError: WritableIterable is closed",
+        }),
+      );
+      yield* settings.updateSettings({ providers: { cursor: { binaryPath: wrapperPath } } });
+      const runtimeEventsFiber = yield* adapter.streamEvents.pipe(
+        Stream.takeUntil((event) => event.type === "session.exited"),
+        Stream.runCollect,
+        Effect.forkChild,
+      );
+      yield* adapter.startSession({
+        threadId,
+        provider: ProviderDriverKind.make("cursor"),
+        cwd: process.cwd(),
+        runtimeMode: "full-access",
+      });
+      const error = yield* adapter
+        .sendTurn({ threadId, input: "continue", attachments: [] })
+        .pipe(Effect.flip);
+      assert.equal(error._tag, "ProviderAdapterRequestError");
+      if (error._tag === "ProviderAdapterRequestError") {
+        assert.equal(error.detail, "Cursor reported a transport failure.");
+        assert.equal(error.cause, "Error: RetriableError: WritableIterable is closed");
+      }
+      yield* adapter.stopSession(threadId);
+      const runtimeEvents = yield* Fiber.join(runtimeEventsFiber);
+      assert.isFalse(runtimeEvents.some((event) => event.type === "turn.completed"));
+    }),
+  );
+
   it.effect("starts a session and maps mock ACP prompt flow to runtime events", () =>
     Effect.gen(function* () {
       const adapter = yield* CursorAdapter;
@@ -880,6 +942,9 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
         );
         assert.isDefined(permissionResponse);
 
+        const argvRuns = yield* Effect.promise(() => readArgvLog(argvLogPath));
+        assert.deepStrictEqual(argvRuns, [["--force", "acp"]]);
+
         yield* adapter.stopSession(threadId);
       }),
   );
@@ -1320,7 +1385,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
 
       const argvRuns = yield* Effect.promise(() => readArgvLog(argvLogPath));
       assert.lengthOf(argvRuns, 1, "session should not restart — only one spawn");
-      assert.deepStrictEqual(argvRuns[0], ["acp"]);
+      assert.deepStrictEqual(argvRuns[0], ["--force", "acp"]);
 
       const requests = yield* Effect.promise(() => readJsonLines(requestLogPath));
       const setConfigRequests = requests.filter(
