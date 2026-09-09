@@ -44,3 +44,5 @@ Pulse Issues work as its reference adapter.
 ---
 
 **Created:** 2026-08-19 . **Last opened:** 2026-09-04 . **Last edited:** 2026-09-04 . **Status:** draft . **Owner:** Product . **Layer:** stable
+
+- [Warden build readiness](warden/readiness.md): current implementation evidence, feasibility gates and coordinated first-read task graph, 2026-09-10.

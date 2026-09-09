@@ -1,0 +1,26 @@
+# Warden decision register
+
+Status: D1 approved by the owner on 10 September 2026; other recommendations remain proposed. Existing confirmed direction remains both manager integration and later Pulse-managed credentials, Bitwarden/Vaultwarden first and Pulse-owned commercial branding. Only D1 is recorded as owner approval.
+
+| ID                    | Recommendation                                                                                                    | Alternatives and reason                                                                                                       | Gate                                                                                  |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| D1 First broker proof | Use existing saved-query Grafana read for generic UI/MCP/CLI conformance; retain GitHub/Beat separately           | GitHub first preserves old order but its port is outside main; synthetic-only proof cannot establish provider compatibility   | Approved by owner, 2026-09-10; Grafana first, Beat/GitHub separately gated            |
+| D2 Reuse model        | User-installed manager handoff, then Pulse-owned clients with audited dependencies                                | Forking whole Bitwarden clients adds mixed-license and update obligations; building a new backend duplicates Vaultwarden sync | Component inventory before copied code; distribution review before commercial release |
+| D3 Personal recovery  | Explicit user-held recovery material; no organization escrow by default                                           | Mandatory escrow changes who can decrypt; no recovery increases device-loss risk                                              | Owner selection plus crypto design and restore proof before personal secrets          |
+| D4 Offline/local      | First broker online-only, existing local Pulse integrations unaffected; defer offline personal vault              | Offline machine grants complicate current-policy enforcement; entirely local authority is separate product scope              | Confirm offline personal promise before native vault implementation                   |
+| D5 Retention          | Configure audit/credential deletion retention explicitly per storage class; define restore and tombstone behavior | One universal retention period confuses encrypted vault, access audit and provider content                                    | Owner/compliance decision before production persistence policy                        |
+| D6 Platform order     | External browser first; native Android and Apple feasibility independently; embedded Electron later               | Universal desktop extension/provider parity is not evidenced                                                                  | Platform proof and package/signing decisions per advertised capability                |
+| D7 Broker integration | Reuse narrow mTLS service branch, map target public API at adapter boundary                                       | Ambient app-plane transaction violates committed reservation; new broker duplicates already-written stores                    | Branch review, migration reconciliation and scoped identity bootstrap                 |
+| D8 Public status      | Map internal pending/running to pending_approval/executing; expose revocation separately from execution outcome   | Renaming durable states immediately adds migration risk; reporting revoked as proof of stopped work is incorrect              | Shared fixtures and reviewed status precedence before API implementation              |
+
+D3-D6 do not block synthetic first-read implementation. D1 is resolved: use the existing saved-query Grafana reader for the first end-to-end Pulse/MCP/CLI proof. None authorizes production deployment, live vault access, secret export or clearing a historical Beat approval.
+
+## Historical dependency evidence
+
+The Beat port commit 50924d0 is not an ancestor of inspected Go main, and no PR with exact head feat/beat-external-read-port was returned. Keep WQ-01 open until the responsible change record and equivalent implementation are reconciled. Do not silently close it because another provider can perform reads.
+
+## Existing work coordination
+
+Go feat/warden-infrastructure and Pulse feat/pulse-infrastructure contain overlapping implementation. T1/T2 inspect and reuse those changes before schema or consumer work. Their operational receipts are branch-authored claims unless reverified. A missing live credential is an operational dependency of that delivery, not permission to request or read credentials in this planning task.
+
+The older integrations-foundation and integration-oauth-release-gates task ledgers are stale and overlap connection/auth ownership. Reconcile existing service responsibilities before assigning new connection or OAuth tasks. Warden does not replace provider subscription login or silently adopt broad PAT/OAuth scopes as workload authority.
