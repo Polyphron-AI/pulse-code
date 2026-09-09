@@ -1,0 +1,1092 @@
+{
+  "version": "pulse-warden/read-v1",
+  "valid": [
+    {
+      "name": "minimum",
+      "request": {
+        "requestId": "11111111-1111-4111-8111-111111111111",
+        "credentialRef": "urn:pulse:example:credential:grafana",
+        "action": "grafana.saved_query.read",
+        "resource": "urn:pulse:example:resource:dev",
+        "taskRef": "urn:pulse:example:task:task-1",
+        "attemptRef": "urn:pulse:example:attempt:turn-1",
+        "payload": {
+          "queryRef": "urn:pulse:example:query:errors",
+          "lookbackSeconds": 60
+        }
+      },
+      "authority": {
+        "tenantId": "22222222-2222-4222-8222-222222222222",
+        "principalId": "33333333-3333-4333-8333-333333333333",
+        "workloadId": "44444444-4444-4444-8444-444444444444",
+        "environmentRef": "urn:pulse:example:environment:dev",
+        "runtime": "codex",
+        "threadRef": "urn:pulse:example:thread:thread-1",
+        "policyVersion": "1",
+        "credentialVersion": "2",
+        "queryVersion": "3",
+        "expiresAt": 1800000000
+      },
+      "canonical": "[\"pulse-warden/read-v1\",\"11111111-1111-4111-8111-111111111111\",\"urn:pulse:example:credential:grafana\",\"grafana.saved_query.read\",\"urn:pulse:example:resource:dev\",\"urn:pulse:example:task:task-1\",\"urn:pulse:example:attempt:turn-1\",\"urn:pulse:example:query:errors\",60,\"22222222-2222-4222-8222-222222222222\",\"33333333-3333-4333-8333-333333333333\",\"44444444-4444-4444-8444-444444444444\",\"urn:pulse:example:environment:dev\",\"codex\",\"urn:pulse:example:thread:thread-1\",\"1\",\"2\",\"3\",1800000000]",
+      "sha256": "66b74fcb2ebf12304764ff19487a188159cb320c0b77769d4452816eb423d940"
+    },
+    {
+      "name": "ordinary",
+      "request": {
+        "requestId": "11111111-1111-4111-8111-111111111111",
+        "credentialRef": "urn:pulse:example:credential:grafana",
+        "action": "grafana.saved_query.read",
+        "resource": "urn:pulse:example:resource:dev",
+        "taskRef": "urn:pulse:example:task:task-1",
+        "attemptRef": "urn:pulse:example:attempt:turn-1",
+        "payload": {
+          "queryRef": "urn:pulse:example:query:errors",
+          "lookbackSeconds": 300
+        }
+      },
+      "authority": {
+        "tenantId": "22222222-2222-4222-8222-222222222222",
+        "principalId": "33333333-3333-4333-8333-333333333333",
+        "workloadId": "44444444-4444-4444-8444-444444444444",
+        "environmentRef": "urn:pulse:example:environment:dev",
+        "runtime": "codex",
+        "threadRef": "urn:pulse:example:thread:thread-1",
+        "policyVersion": "1",
+        "credentialVersion": "2",
+        "queryVersion": "3",
+        "expiresAt": 1800000000
+      },
+      "canonical": "[\"pulse-warden/read-v1\",\"11111111-1111-4111-8111-111111111111\",\"urn:pulse:example:credential:grafana\",\"grafana.saved_query.read\",\"urn:pulse:example:resource:dev\",\"urn:pulse:example:task:task-1\",\"urn:pulse:example:attempt:turn-1\",\"urn:pulse:example:query:errors\",300,\"22222222-2222-4222-8222-222222222222\",\"33333333-3333-4333-8333-333333333333\",\"44444444-4444-4444-8444-444444444444\",\"urn:pulse:example:environment:dev\",\"codex\",\"urn:pulse:example:thread:thread-1\",\"1\",\"2\",\"3\",1800000000]",
+      "sha256": "deb26184e1f12e2883f95371b32e1dc8e74774bbed6bc8378b0347f5c459c5bb"
+    },
+    {
+      "name": "maximum",
+      "request": {
+        "requestId": "11111111-1111-4111-8111-111111111111",
+        "credentialRef": "urn:pulse:example:credential:grafana",
+        "action": "grafana.saved_query.read",
+        "resource": "urn:pulse:example:resource:dev",
+        "taskRef": "urn:pulse:example:task:task-1",
+        "attemptRef": "urn:pulse:example:attempt:turn-1",
+        "payload": {
+          "queryRef": "urn:pulse:example:query:errors",
+          "lookbackSeconds": 3600
+        }
+      },
+      "authority": {
+        "tenantId": "22222222-2222-4222-8222-222222222222",
+        "principalId": "33333333-3333-4333-8333-333333333333",
+        "workloadId": "44444444-4444-4444-8444-444444444444",
+        "environmentRef": "urn:pulse:example:environment:dev",
+        "runtime": "codex",
+        "threadRef": "urn:pulse:example:thread:thread-1",
+        "policyVersion": "1",
+        "credentialVersion": "2",
+        "queryVersion": "3",
+        "expiresAt": 1800000000
+      },
+      "canonical": "[\"pulse-warden/read-v1\",\"11111111-1111-4111-8111-111111111111\",\"urn:pulse:example:credential:grafana\",\"grafana.saved_query.read\",\"urn:pulse:example:resource:dev\",\"urn:pulse:example:task:task-1\",\"urn:pulse:example:attempt:turn-1\",\"urn:pulse:example:query:errors\",3600,\"22222222-2222-4222-8222-222222222222\",\"33333333-3333-4333-8333-333333333333\",\"44444444-4444-4444-8444-444444444444\",\"urn:pulse:example:environment:dev\",\"codex\",\"urn:pulse:example:thread:thread-1\",\"1\",\"2\",\"3\",1800000000]",
+      "sha256": "a79b4c8ddfd2d4c7ed14a2fc6bfa0115f3220c851be4e8b6578637f951c0bf06"
+    },
+    {
+      "name": "changed-tenantId",
+      "request": {
+        "requestId": "11111111-1111-4111-8111-111111111111",
+        "credentialRef": "urn:pulse:example:credential:grafana",
+        "action": "grafana.saved_query.read",
+        "resource": "urn:pulse:example:resource:dev",
+        "taskRef": "urn:pulse:example:task:task-1",
+        "attemptRef": "urn:pulse:example:attempt:turn-1",
+        "payload": {
+          "queryRef": "urn:pulse:example:query:errors",
+          "lookbackSeconds": 300
+        }
+      },
+      "authority": {
+        "tenantId": "55555555-5555-4555-8555-555555555555",
+        "principalId": "33333333-3333-4333-8333-333333333333",
+        "workloadId": "44444444-4444-4444-8444-444444444444",
+        "environmentRef": "urn:pulse:example:environment:dev",
+        "runtime": "codex",
+        "threadRef": "urn:pulse:example:thread:thread-1",
+        "policyVersion": "1",
+        "credentialVersion": "2",
+        "queryVersion": "3",
+        "expiresAt": 1800000000
+      },
+      "canonical": "[\"pulse-warden/read-v1\",\"11111111-1111-4111-8111-111111111111\",\"urn:pulse:example:credential:grafana\",\"grafana.saved_query.read\",\"urn:pulse:example:resource:dev\",\"urn:pulse:example:task:task-1\",\"urn:pulse:example:attempt:turn-1\",\"urn:pulse:example:query:errors\",300,\"55555555-5555-4555-8555-555555555555\",\"33333333-3333-4333-8333-333333333333\",\"44444444-4444-4444-8444-444444444444\",\"urn:pulse:example:environment:dev\",\"codex\",\"urn:pulse:example:thread:thread-1\",\"1\",\"2\",\"3\",1800000000]",
+      "sha256": "f76daa95fbaac2f22daab2f3dfffc94fc2a49cbf7723fc1b49ef24a30173d6ea"
+    },
+    {
+      "name": "changed-principalId",
+      "request": {
+        "requestId": "11111111-1111-4111-8111-111111111111",
+        "credentialRef": "urn:pulse:example:credential:grafana",
+        "action": "grafana.saved_query.read",
+        "resource": "urn:pulse:example:resource:dev",
+        "taskRef": "urn:pulse:example:task:task-1",
+        "attemptRef": "urn:pulse:example:attempt:turn-1",
+        "payload": {
+          "queryRef": "urn:pulse:example:query:errors",
+          "lookbackSeconds": 300
+        }
+      },
+      "authority": {
+        "tenantId": "22222222-2222-4222-8222-222222222222",
+        "principalId": "55555555-5555-4555-8555-555555555555",
+        "workloadId": "44444444-4444-4444-8444-444444444444",
+        "environmentRef": "urn:pulse:example:environment:dev",
+        "runtime": "codex",
+        "threadRef": "urn:pulse:example:thread:thread-1",
+        "policyVersion": "1",
+        "credentialVersion": "2",
+        "queryVersion": "3",
+        "expiresAt": 1800000000
+      },
+      "canonical": "[\"pulse-warden/read-v1\",\"11111111-1111-4111-8111-111111111111\",\"urn:pulse:example:credential:grafana\",\"grafana.saved_query.read\",\"urn:pulse:example:resource:dev\",\"urn:pulse:example:task:task-1\",\"urn:pulse:example:attempt:turn-1\",\"urn:pulse:example:query:errors\",300,\"22222222-2222-4222-8222-222222222222\",\"55555555-5555-4555-8555-555555555555\",\"44444444-4444-4444-8444-444444444444\",\"urn:pulse:example:environment:dev\",\"codex\",\"urn:pulse:example:thread:thread-1\",\"1\",\"2\",\"3\",1800000000]",
+      "sha256": "bc1dd2cb794ba381640947879f0a92185ecbed2c8872978a64564fb999db181b"
+    },
+    {
+      "name": "changed-workloadId",
+      "request": {
+        "requestId": "11111111-1111-4111-8111-111111111111",
+        "credentialRef": "urn:pulse:example:credential:grafana",
+        "action": "grafana.saved_query.read",
+        "resource": "urn:pulse:example:resource:dev",
+        "taskRef": "urn:pulse:example:task:task-1",
+        "attemptRef": "urn:pulse:example:attempt:turn-1",
+        "payload": {
+          "queryRef": "urn:pulse:example:query:errors",
+          "lookbackSeconds": 300
+        }
+      },
+      "authority": {
+        "tenantId": "22222222-2222-4222-8222-222222222222",
+        "principalId": "33333333-3333-4333-8333-333333333333",
+        "workloadId": "55555555-5555-4555-8555-555555555555",
+        "environmentRef": "urn:pulse:example:environment:dev",
+        "runtime": "codex",
+        "threadRef": "urn:pulse:example:thread:thread-1",
+        "policyVersion": "1",
+        "credentialVersion": "2",
+        "queryVersion": "3",
+        "expiresAt": 1800000000
+      },
+      "canonical": "[\"pulse-warden/read-v1\",\"11111111-1111-4111-8111-111111111111\",\"urn:pulse:example:credential:grafana\",\"grafana.saved_query.read\",\"urn:pulse:example:resource:dev\",\"urn:pulse:example:task:task-1\",\"urn:pulse:example:attempt:turn-1\",\"urn:pulse:example:query:errors\",300,\"22222222-2222-4222-8222-222222222222\",\"33333333-3333-4333-8333-333333333333\",\"55555555-5555-4555-8555-555555555555\",\"urn:pulse:example:environment:dev\",\"codex\",\"urn:pulse:example:thread:thread-1\",\"1\",\"2\",\"3\",1800000000]",
+      "sha256": "5358d01f5f62db0bcb7dab6d6ec0bea0a3ceac688794f455a5da1b924d1ecadc"
+    },
+    {
+      "name": "changed-environmentRef",
+      "request": {
+        "requestId": "11111111-1111-4111-8111-111111111111",
+        "credentialRef": "urn:pulse:example:credential:grafana",
+        "action": "grafana.saved_query.read",
+        "resource": "urn:pulse:example:resource:dev",
+        "taskRef": "urn:pulse:example:task:task-1",
+        "attemptRef": "urn:pulse:example:attempt:turn-1",
+        "payload": {
+          "queryRef": "urn:pulse:example:query:errors",
+          "lookbackSeconds": 300
+        }
+      },
+      "authority": {
+        "tenantId": "22222222-2222-4222-8222-222222222222",
+        "principalId": "33333333-3333-4333-8333-333333333333",
+        "workloadId": "44444444-4444-4444-8444-444444444444",
+        "environmentRef": "urn:pulse:example:environment:dev2",
+        "runtime": "codex",
+        "threadRef": "urn:pulse:example:thread:thread-1",
+        "policyVersion": "1",
+        "credentialVersion": "2",
+        "queryVersion": "3",
+        "expiresAt": 1800000000
+      },
+      "canonical": "[\"pulse-warden/read-v1\",\"11111111-1111-4111-8111-111111111111\",\"urn:pulse:example:credential:grafana\",\"grafana.saved_query.read\",\"urn:pulse:example:resource:dev\",\"urn:pulse:example:task:task-1\",\"urn:pulse:example:attempt:turn-1\",\"urn:pulse:example:query:errors\",300,\"22222222-2222-4222-8222-222222222222\",\"33333333-3333-4333-8333-333333333333\",\"44444444-4444-4444-8444-444444444444\",\"urn:pulse:example:environment:dev2\",\"codex\",\"urn:pulse:example:thread:thread-1\",\"1\",\"2\",\"3\",1800000000]",
+      "sha256": "8dcec0ebebf23398d617c8f52f1e8f924027ee8796383a7dea940a75e9cc16e7"
+    },
+    {
+      "name": "changed-runtime",
+      "request": {
+        "requestId": "11111111-1111-4111-8111-111111111111",
+        "credentialRef": "urn:pulse:example:credential:grafana",
+        "action": "grafana.saved_query.read",
+        "resource": "urn:pulse:example:resource:dev",
+        "taskRef": "urn:pulse:example:task:task-1",
+        "attemptRef": "urn:pulse:example:attempt:turn-1",
+        "payload": {
+          "queryRef": "urn:pulse:example:query:errors",
+          "lookbackSeconds": 300
+        }
+      },
+      "authority": {
+        "tenantId": "22222222-2222-4222-8222-222222222222",
+        "principalId": "33333333-3333-4333-8333-333333333333",
+        "workloadId": "44444444-4444-4444-8444-444444444444",
+        "environmentRef": "urn:pulse:example:environment:dev",
+        "runtime": "codex2",
+        "threadRef": "urn:pulse:example:thread:thread-1",
+        "policyVersion": "1",
+        "credentialVersion": "2",
+        "queryVersion": "3",
+        "expiresAt": 1800000000
+      },
+      "canonical": "[\"pulse-warden/read-v1\",\"11111111-1111-4111-8111-111111111111\",\"urn:pulse:example:credential:grafana\",\"grafana.saved_query.read\",\"urn:pulse:example:resource:dev\",\"urn:pulse:example:task:task-1\",\"urn:pulse:example:attempt:turn-1\",\"urn:pulse:example:query:errors\",300,\"22222222-2222-4222-8222-222222222222\",\"33333333-3333-4333-8333-333333333333\",\"44444444-4444-4444-8444-444444444444\",\"urn:pulse:example:environment:dev\",\"codex2\",\"urn:pulse:example:thread:thread-1\",\"1\",\"2\",\"3\",1800000000]",
+      "sha256": "14f6082a1163bd989c4e23324abc9440aaa8ce0ac601a42e2724449fdafb3e1d"
+    },
+    {
+      "name": "changed-threadRef",
+      "request": {
+        "requestId": "11111111-1111-4111-8111-111111111111",
+        "credentialRef": "urn:pulse:example:credential:grafana",
+        "action": "grafana.saved_query.read",
+        "resource": "urn:pulse:example:resource:dev",
+        "taskRef": "urn:pulse:example:task:task-1",
+        "attemptRef": "urn:pulse:example:attempt:turn-1",
+        "payload": {
+          "queryRef": "urn:pulse:example:query:errors",
+          "lookbackSeconds": 300
+        }
+      },
+      "authority": {
+        "tenantId": "22222222-2222-4222-8222-222222222222",
+        "principalId": "33333333-3333-4333-8333-333333333333",
+        "workloadId": "44444444-4444-4444-8444-444444444444",
+        "environmentRef": "urn:pulse:example:environment:dev",
+        "runtime": "codex",
+        "threadRef": "urn:pulse:example:thread:thread-12",
+        "policyVersion": "1",
+        "credentialVersion": "2",
+        "queryVersion": "3",
+        "expiresAt": 1800000000
+      },
+      "canonical": "[\"pulse-warden/read-v1\",\"11111111-1111-4111-8111-111111111111\",\"urn:pulse:example:credential:grafana\",\"grafana.saved_query.read\",\"urn:pulse:example:resource:dev\",\"urn:pulse:example:task:task-1\",\"urn:pulse:example:attempt:turn-1\",\"urn:pulse:example:query:errors\",300,\"22222222-2222-4222-8222-222222222222\",\"33333333-3333-4333-8333-333333333333\",\"44444444-4444-4444-8444-444444444444\",\"urn:pulse:example:environment:dev\",\"codex\",\"urn:pulse:example:thread:thread-12\",\"1\",\"2\",\"3\",1800000000]",
+      "sha256": "a0034ed308269a134620d90725abb496a7011e8d34b95df4d019dc977ba76ece"
+    },
+    {
+      "name": "changed-policyVersion",
+      "request": {
+        "requestId": "11111111-1111-4111-8111-111111111111",
+        "credentialRef": "urn:pulse:example:credential:grafana",
+        "action": "grafana.saved_query.read",
+        "resource": "urn:pulse:example:resource:dev",
+        "taskRef": "urn:pulse:example:task:task-1",
+        "attemptRef": "urn:pulse:example:attempt:turn-1",
+        "payload": {
+          "queryRef": "urn:pulse:example:query:errors",
+          "lookbackSeconds": 300
+        }
+      },
+      "authority": {
+        "tenantId": "22222222-2222-4222-8222-222222222222",
+        "principalId": "33333333-3333-4333-8333-333333333333",
+        "workloadId": "44444444-4444-4444-8444-444444444444",
+        "environmentRef": "urn:pulse:example:environment:dev",
+        "runtime": "codex",
+        "threadRef": "urn:pulse:example:thread:thread-1",
+        "policyVersion": "12",
+        "credentialVersion": "2",
+        "queryVersion": "3",
+        "expiresAt": 1800000000
+      },
+      "canonical": "[\"pulse-warden/read-v1\",\"11111111-1111-4111-8111-111111111111\",\"urn:pulse:example:credential:grafana\",\"grafana.saved_query.read\",\"urn:pulse:example:resource:dev\",\"urn:pulse:example:task:task-1\",\"urn:pulse:example:attempt:turn-1\",\"urn:pulse:example:query:errors\",300,\"22222222-2222-4222-8222-222222222222\",\"33333333-3333-4333-8333-333333333333\",\"44444444-4444-4444-8444-444444444444\",\"urn:pulse:example:environment:dev\",\"codex\",\"urn:pulse:example:thread:thread-1\",\"12\",\"2\",\"3\",1800000000]",
+      "sha256": "68a035fdde91960093b3fc5e25165e74a31effee304ff339aea6728c582c75da"
+    },
+    {
+      "name": "changed-credentialVersion",
+      "request": {
+        "requestId": "11111111-1111-4111-8111-111111111111",
+        "credentialRef": "urn:pulse:example:credential:grafana",
+        "action": "grafana.saved_query.read",
+        "resource": "urn:pulse:example:resource:dev",
+        "taskRef": "urn:pulse:example:task:task-1",
+        "attemptRef": "urn:pulse:example:attempt:turn-1",
+        "payload": {
+          "queryRef": "urn:pulse:example:query:errors",
+          "lookbackSeconds": 300
+        }
+      },
+      "authority": {
+        "tenantId": "22222222-2222-4222-8222-222222222222",
+        "principalId": "33333333-3333-4333-8333-333333333333",
+        "workloadId": "44444444-4444-4444-8444-444444444444",
+        "environmentRef": "urn:pulse:example:environment:dev",
+        "runtime": "codex",
+        "threadRef": "urn:pulse:example:thread:thread-1",
+        "policyVersion": "1",
+        "credentialVersion": "22",
+        "queryVersion": "3",
+        "expiresAt": 1800000000
+      },
+      "canonical": "[\"pulse-warden/read-v1\",\"11111111-1111-4111-8111-111111111111\",\"urn:pulse:example:credential:grafana\",\"grafana.saved_query.read\",\"urn:pulse:example:resource:dev\",\"urn:pulse:example:task:task-1\",\"urn:pulse:example:attempt:turn-1\",\"urn:pulse:example:query:errors\",300,\"22222222-2222-4222-8222-222222222222\",\"33333333-3333-4333-8333-333333333333\",\"44444444-4444-4444-8444-444444444444\",\"urn:pulse:example:environment:dev\",\"codex\",\"urn:pulse:example:thread:thread-1\",\"1\",\"22\",\"3\",1800000000]",
+      "sha256": "a79ad146e2a70e0f4773e37a93d8b6c3ea1dc7fdca3c13189f4bebd1158871db"
+    },
+    {
+      "name": "changed-queryVersion",
+      "request": {
+        "requestId": "11111111-1111-4111-8111-111111111111",
+        "credentialRef": "urn:pulse:example:credential:grafana",
+        "action": "grafana.saved_query.read",
+        "resource": "urn:pulse:example:resource:dev",
+        "taskRef": "urn:pulse:example:task:task-1",
+        "attemptRef": "urn:pulse:example:attempt:turn-1",
+        "payload": {
+          "queryRef": "urn:pulse:example:query:errors",
+          "lookbackSeconds": 300
+        }
+      },
+      "authority": {
+        "tenantId": "22222222-2222-4222-8222-222222222222",
+        "principalId": "33333333-3333-4333-8333-333333333333",
+        "workloadId": "44444444-4444-4444-8444-444444444444",
+        "environmentRef": "urn:pulse:example:environment:dev",
+        "runtime": "codex",
+        "threadRef": "urn:pulse:example:thread:thread-1",
+        "policyVersion": "1",
+        "credentialVersion": "2",
+        "queryVersion": "32",
+        "expiresAt": 1800000000
+      },
+      "canonical": "[\"pulse-warden/read-v1\",\"11111111-1111-4111-8111-111111111111\",\"urn:pulse:example:credential:grafana\",\"grafana.saved_query.read\",\"urn:pulse:example:resource:dev\",\"urn:pulse:example:task:task-1\",\"urn:pulse:example:attempt:turn-1\",\"urn:pulse:example:query:errors\",300,\"22222222-2222-4222-8222-222222222222\",\"33333333-3333-4333-8333-333333333333\",\"44444444-4444-4444-8444-444444444444\",\"urn:pulse:example:environment:dev\",\"codex\",\"urn:pulse:example:thread:thread-1\",\"1\",\"2\",\"32\",1800000000]",
+      "sha256": "0da0589fd9a0bebc7620a8bf6aae9fa0b7074ef9d05bb588e595839a78a55f5b"
+    },
+    {
+      "name": "changed-expiresAt",
+      "request": {
+        "requestId": "11111111-1111-4111-8111-111111111111",
+        "credentialRef": "urn:pulse:example:credential:grafana",
+        "action": "grafana.saved_query.read",
+        "resource": "urn:pulse:example:resource:dev",
+        "taskRef": "urn:pulse:example:task:task-1",
+        "attemptRef": "urn:pulse:example:attempt:turn-1",
+        "payload": {
+          "queryRef": "urn:pulse:example:query:errors",
+          "lookbackSeconds": 300
+        }
+      },
+      "authority": {
+        "tenantId": "22222222-2222-4222-8222-222222222222",
+        "principalId": "33333333-3333-4333-8333-333333333333",
+        "workloadId": "44444444-4444-4444-8444-444444444444",
+        "environmentRef": "urn:pulse:example:environment:dev",
+        "runtime": "codex",
+        "threadRef": "urn:pulse:example:thread:thread-1",
+        "policyVersion": "1",
+        "credentialVersion": "2",
+        "queryVersion": "3",
+        "expiresAt": 1800000001
+      },
+      "canonical": "[\"pulse-warden/read-v1\",\"11111111-1111-4111-8111-111111111111\",\"urn:pulse:example:credential:grafana\",\"grafana.saved_query.read\",\"urn:pulse:example:resource:dev\",\"urn:pulse:example:task:task-1\",\"urn:pulse:example:attempt:turn-1\",\"urn:pulse:example:query:errors\",300,\"22222222-2222-4222-8222-222222222222\",\"33333333-3333-4333-8333-333333333333\",\"44444444-4444-4444-8444-444444444444\",\"urn:pulse:example:environment:dev\",\"codex\",\"urn:pulse:example:thread:thread-1\",\"1\",\"2\",\"3\",1800000001]",
+      "sha256": "f4d11f6f9f4c4599a7da831ec8f0d013d286892a02ad501e2bc1fe76071e6dcc"
+    },
+    {
+      "name": "changed-requestId",
+      "request": {
+        "requestId": "55555555-5555-4555-8555-555555555555",
+        "credentialRef": "urn:pulse:example:credential:grafana",
+        "action": "grafana.saved_query.read",
+        "resource": "urn:pulse:example:resource:dev",
+        "taskRef": "urn:pulse:example:task:task-1",
+        "attemptRef": "urn:pulse:example:attempt:turn-1",
+        "payload": {
+          "queryRef": "urn:pulse:example:query:errors",
+          "lookbackSeconds": 300
+        }
+      },
+      "authority": {
+        "tenantId": "22222222-2222-4222-8222-222222222222",
+        "principalId": "33333333-3333-4333-8333-333333333333",
+        "workloadId": "44444444-4444-4444-8444-444444444444",
+        "environmentRef": "urn:pulse:example:environment:dev",
+        "runtime": "codex",
+        "threadRef": "urn:pulse:example:thread:thread-1",
+        "policyVersion": "1",
+        "credentialVersion": "2",
+        "queryVersion": "3",
+        "expiresAt": 1800000000
+      },
+      "canonical": "[\"pulse-warden/read-v1\",\"55555555-5555-4555-8555-555555555555\",\"urn:pulse:example:credential:grafana\",\"grafana.saved_query.read\",\"urn:pulse:example:resource:dev\",\"urn:pulse:example:task:task-1\",\"urn:pulse:example:attempt:turn-1\",\"urn:pulse:example:query:errors\",300,\"22222222-2222-4222-8222-222222222222\",\"33333333-3333-4333-8333-333333333333\",\"44444444-4444-4444-8444-444444444444\",\"urn:pulse:example:environment:dev\",\"codex\",\"urn:pulse:example:thread:thread-1\",\"1\",\"2\",\"3\",1800000000]",
+      "sha256": "b9bd81f38e5d7807f19075e2199918ce71578244b03c767c9107cabd97cb5f30"
+    },
+    {
+      "name": "changed-credentialRef",
+      "request": {
+        "requestId": "11111111-1111-4111-8111-111111111111",
+        "credentialRef": "urn:pulse:example:credential:grafana2",
+        "action": "grafana.saved_query.read",
+        "resource": "urn:pulse:example:resource:dev",
+        "taskRef": "urn:pulse:example:task:task-1",
+        "attemptRef": "urn:pulse:example:attempt:turn-1",
+        "payload": {
+          "queryRef": "urn:pulse:example:query:errors",
+          "lookbackSeconds": 300
+        }
+      },
+      "authority": {
+        "tenantId": "22222222-2222-4222-8222-222222222222",
+        "principalId": "33333333-3333-4333-8333-333333333333",
+        "workloadId": "44444444-4444-4444-8444-444444444444",
+        "environmentRef": "urn:pulse:example:environment:dev",
+        "runtime": "codex",
+        "threadRef": "urn:pulse:example:thread:thread-1",
+        "policyVersion": "1",
+        "credentialVersion": "2",
+        "queryVersion": "3",
+        "expiresAt": 1800000000
+      },
+      "canonical": "[\"pulse-warden/read-v1\",\"11111111-1111-4111-8111-111111111111\",\"urn:pulse:example:credential:grafana2\",\"grafana.saved_query.read\",\"urn:pulse:example:resource:dev\",\"urn:pulse:example:task:task-1\",\"urn:pulse:example:attempt:turn-1\",\"urn:pulse:example:query:errors\",300,\"22222222-2222-4222-8222-222222222222\",\"33333333-3333-4333-8333-333333333333\",\"44444444-4444-4444-8444-444444444444\",\"urn:pulse:example:environment:dev\",\"codex\",\"urn:pulse:example:thread:thread-1\",\"1\",\"2\",\"3\",1800000000]",
+      "sha256": "17a73e53161f499232909b6a4b1eea80babe37b322a18baf45af61c6eb340556"
+    },
+    {
+      "name": "changed-resource",
+      "request": {
+        "requestId": "11111111-1111-4111-8111-111111111111",
+        "credentialRef": "urn:pulse:example:credential:grafana",
+        "action": "grafana.saved_query.read",
+        "resource": "urn:pulse:example:resource:dev2",
+        "taskRef": "urn:pulse:example:task:task-1",
+        "attemptRef": "urn:pulse:example:attempt:turn-1",
+        "payload": {
+          "queryRef": "urn:pulse:example:query:errors",
+          "lookbackSeconds": 300
+        }
+      },
+      "authority": {
+        "tenantId": "22222222-2222-4222-8222-222222222222",
+        "principalId": "33333333-3333-4333-8333-333333333333",
+        "workloadId": "44444444-4444-4444-8444-444444444444",
+        "environmentRef": "urn:pulse:example:environment:dev",
+        "runtime": "codex",
+        "threadRef": "urn:pulse:example:thread:thread-1",
+        "policyVersion": "1",
+        "credentialVersion": "2",
+        "queryVersion": "3",
+        "expiresAt": 1800000000
+      },
+      "canonical": "[\"pulse-warden/read-v1\",\"11111111-1111-4111-8111-111111111111\",\"urn:pulse:example:credential:grafana\",\"grafana.saved_query.read\",\"urn:pulse:example:resource:dev2\",\"urn:pulse:example:task:task-1\",\"urn:pulse:example:attempt:turn-1\",\"urn:pulse:example:query:errors\",300,\"22222222-2222-4222-8222-222222222222\",\"33333333-3333-4333-8333-333333333333\",\"44444444-4444-4444-8444-444444444444\",\"urn:pulse:example:environment:dev\",\"codex\",\"urn:pulse:example:thread:thread-1\",\"1\",\"2\",\"3\",1800000000]",
+      "sha256": "50f7771ac38d8927c8e3323f9f8b122768b14d7d5913d5db84cb45b4b7432f62"
+    },
+    {
+      "name": "changed-taskRef",
+      "request": {
+        "requestId": "11111111-1111-4111-8111-111111111111",
+        "credentialRef": "urn:pulse:example:credential:grafana",
+        "action": "grafana.saved_query.read",
+        "resource": "urn:pulse:example:resource:dev",
+        "taskRef": "urn:pulse:example:task:task-12",
+        "attemptRef": "urn:pulse:example:attempt:turn-1",
+        "payload": {
+          "queryRef": "urn:pulse:example:query:errors",
+          "lookbackSeconds": 300
+        }
+      },
+      "authority": {
+        "tenantId": "22222222-2222-4222-8222-222222222222",
+        "principalId": "33333333-3333-4333-8333-333333333333",
+        "workloadId": "44444444-4444-4444-8444-444444444444",
+        "environmentRef": "urn:pulse:example:environment:dev",
+        "runtime": "codex",
+        "threadRef": "urn:pulse:example:thread:thread-1",
+        "policyVersion": "1",
+        "credentialVersion": "2",
+        "queryVersion": "3",
+        "expiresAt": 1800000000
+      },
+      "canonical": "[\"pulse-warden/read-v1\",\"11111111-1111-4111-8111-111111111111\",\"urn:pulse:example:credential:grafana\",\"grafana.saved_query.read\",\"urn:pulse:example:resource:dev\",\"urn:pulse:example:task:task-12\",\"urn:pulse:example:attempt:turn-1\",\"urn:pulse:example:query:errors\",300,\"22222222-2222-4222-8222-222222222222\",\"33333333-3333-4333-8333-333333333333\",\"44444444-4444-4444-8444-444444444444\",\"urn:pulse:example:environment:dev\",\"codex\",\"urn:pulse:example:thread:thread-1\",\"1\",\"2\",\"3\",1800000000]",
+      "sha256": "1cd3c051b3ea4f6a542197d74243389569ca018dbf7620eacf8c464089bd5202"
+    },
+    {
+      "name": "changed-attemptRef",
+      "request": {
+        "requestId": "11111111-1111-4111-8111-111111111111",
+        "credentialRef": "urn:pulse:example:credential:grafana",
+        "action": "grafana.saved_query.read",
+        "resource": "urn:pulse:example:resource:dev",
+        "taskRef": "urn:pulse:example:task:task-1",
+        "attemptRef": "urn:pulse:example:attempt:turn-12",
+        "payload": {
+          "queryRef": "urn:pulse:example:query:errors",
+          "lookbackSeconds": 300
+        }
+      },
+      "authority": {
+        "tenantId": "22222222-2222-4222-8222-222222222222",
+        "principalId": "33333333-3333-4333-8333-333333333333",
+        "workloadId": "44444444-4444-4444-8444-444444444444",
+        "environmentRef": "urn:pulse:example:environment:dev",
+        "runtime": "codex",
+        "threadRef": "urn:pulse:example:thread:thread-1",
+        "policyVersion": "1",
+        "credentialVersion": "2",
+        "queryVersion": "3",
+        "expiresAt": 1800000000
+      },
+      "canonical": "[\"pulse-warden/read-v1\",\"11111111-1111-4111-8111-111111111111\",\"urn:pulse:example:credential:grafana\",\"grafana.saved_query.read\",\"urn:pulse:example:resource:dev\",\"urn:pulse:example:task:task-1\",\"urn:pulse:example:attempt:turn-12\",\"urn:pulse:example:query:errors\",300,\"22222222-2222-4222-8222-222222222222\",\"33333333-3333-4333-8333-333333333333\",\"44444444-4444-4444-8444-444444444444\",\"urn:pulse:example:environment:dev\",\"codex\",\"urn:pulse:example:thread:thread-1\",\"1\",\"2\",\"3\",1800000000]",
+      "sha256": "b47e94ba9d05823597198d6e6a5d910b2c4696919b060d882303b4b04b9036ac"
+    },
+    {
+      "name": "changed-queryRef",
+      "request": {
+        "requestId": "11111111-1111-4111-8111-111111111111",
+        "credentialRef": "urn:pulse:example:credential:grafana",
+        "action": "grafana.saved_query.read",
+        "resource": "urn:pulse:example:resource:dev",
+        "taskRef": "urn:pulse:example:task:task-1",
+        "attemptRef": "urn:pulse:example:attempt:turn-1",
+        "payload": {
+          "queryRef": "urn:pulse:example:query:errors2",
+          "lookbackSeconds": 300
+        }
+      },
+      "authority": {
+        "tenantId": "22222222-2222-4222-8222-222222222222",
+        "principalId": "33333333-3333-4333-8333-333333333333",
+        "workloadId": "44444444-4444-4444-8444-444444444444",
+        "environmentRef": "urn:pulse:example:environment:dev",
+        "runtime": "codex",
+        "threadRef": "urn:pulse:example:thread:thread-1",
+        "policyVersion": "1",
+        "credentialVersion": "2",
+        "queryVersion": "3",
+        "expiresAt": 1800000000
+      },
+      "canonical": "[\"pulse-warden/read-v1\",\"11111111-1111-4111-8111-111111111111\",\"urn:pulse:example:credential:grafana\",\"grafana.saved_query.read\",\"urn:pulse:example:resource:dev\",\"urn:pulse:example:task:task-1\",\"urn:pulse:example:attempt:turn-1\",\"urn:pulse:example:query:errors2\",300,\"22222222-2222-4222-8222-222222222222\",\"33333333-3333-4333-8333-333333333333\",\"44444444-4444-4444-8444-444444444444\",\"urn:pulse:example:environment:dev\",\"codex\",\"urn:pulse:example:thread:thread-1\",\"1\",\"2\",\"3\",1800000000]",
+      "sha256": "6f8d85cf4bc2b8ee59f1093b323f6e11f4d123a8acc035b3b15b6e0439840dd3"
+    }
+  ],
+  "invalid": [
+    {
+      "name": "injected-tenant",
+      "request": {
+        "requestId": "11111111-1111-4111-8111-111111111111",
+        "credentialRef": "urn:pulse:example:credential:grafana",
+        "action": "grafana.saved_query.read",
+        "resource": "urn:pulse:example:resource:dev",
+        "taskRef": "urn:pulse:example:task:task-1",
+        "attemptRef": "urn:pulse:example:attempt:turn-1",
+        "payload": {
+          "queryRef": "urn:pulse:example:query:errors",
+          "lookbackSeconds": 300
+        },
+        "tenantId": "other"
+      }
+    },
+    {
+      "name": "auto-approval",
+      "request": {
+        "requestId": "11111111-1111-4111-8111-111111111111",
+        "credentialRef": "urn:pulse:example:credential:grafana",
+        "action": "grafana.saved_query.read",
+        "resource": "urn:pulse:example:resource:dev",
+        "taskRef": "urn:pulse:example:task:task-1",
+        "attemptRef": "urn:pulse:example:attempt:turn-1",
+        "payload": {
+          "queryRef": "urn:pulse:example:query:errors",
+          "lookbackSeconds": 300
+        },
+        "ready": true
+      }
+    },
+    {
+      "name": "raw-token",
+      "request": {
+        "requestId": "11111111-1111-4111-8111-111111111111",
+        "credentialRef": "urn:pulse:example:credential:grafana",
+        "action": "grafana.saved_query.read",
+        "resource": "urn:pulse:example:resource:dev",
+        "taskRef": "urn:pulse:example:task:task-1",
+        "attemptRef": "urn:pulse:example:attempt:turn-1",
+        "payload": {
+          "queryRef": "urn:pulse:example:query:errors",
+          "lookbackSeconds": 300,
+          "token": "CANARY-NOT-A-SECRET"
+        }
+      }
+    },
+    {
+      "name": "raw-expression",
+      "request": {
+        "requestId": "11111111-1111-4111-8111-111111111111",
+        "credentialRef": "urn:pulse:example:credential:grafana",
+        "action": "grafana.saved_query.read",
+        "resource": "urn:pulse:example:resource:dev",
+        "taskRef": "urn:pulse:example:task:task-1",
+        "attemptRef": "urn:pulse:example:attempt:turn-1",
+        "payload": {
+          "queryRef": "urn:pulse:example:query:errors",
+          "lookbackSeconds": 300,
+          "expression": "{env=\"prod\"}"
+        }
+      }
+    },
+    {
+      "name": "foreign-action",
+      "request": {
+        "requestId": "11111111-1111-4111-8111-111111111111",
+        "credentialRef": "urn:pulse:example:credential:grafana",
+        "action": "grafana.query",
+        "resource": "urn:pulse:example:resource:dev",
+        "taskRef": "urn:pulse:example:task:task-1",
+        "attemptRef": "urn:pulse:example:attempt:turn-1",
+        "payload": {
+          "queryRef": "urn:pulse:example:query:errors",
+          "lookbackSeconds": 300
+        }
+      }
+    },
+    {
+      "name": "wrong-kind",
+      "request": {
+        "requestId": "11111111-1111-4111-8111-111111111111",
+        "credentialRef": "urn:pulse:example:query:grafana",
+        "action": "grafana.saved_query.read",
+        "resource": "urn:pulse:example:resource:dev",
+        "taskRef": "urn:pulse:example:task:task-1",
+        "attemptRef": "urn:pulse:example:attempt:turn-1",
+        "payload": {
+          "queryRef": "urn:pulse:example:query:errors",
+          "lookbackSeconds": 300
+        }
+      }
+    },
+    {
+      "name": "unqualified-ref",
+      "request": {
+        "requestId": "11111111-1111-4111-8111-111111111111",
+        "credentialRef": "urn:pulse:example:credential:grafana",
+        "action": "grafana.saved_query.read",
+        "resource": "urn:pulse:example:resource:dev",
+        "taskRef": "task-1",
+        "attemptRef": "urn:pulse:example:attempt:turn-1",
+        "payload": {
+          "queryRef": "urn:pulse:example:query:errors",
+          "lookbackSeconds": 300
+        }
+      }
+    },
+    {
+      "name": "unicode-ref",
+      "request": {
+        "requestId": "11111111-1111-4111-8111-111111111111",
+        "credentialRef": "urn:pulse:example:credential:grafana",
+        "action": "grafana.saved_query.read",
+        "resource": "urn:pulse:example:resource:dev",
+        "taskRef": "urn:pulse:example:task:café",
+        "attemptRef": "urn:pulse:example:attempt:turn-1",
+        "payload": {
+          "queryRef": "urn:pulse:example:query:errors",
+          "lookbackSeconds": 300
+        }
+      }
+    },
+    {
+      "name": "newline-ref",
+      "request": {
+        "requestId": "11111111-1111-4111-8111-111111111111",
+        "credentialRef": "urn:pulse:example:credential:grafana",
+        "action": "grafana.saved_query.read",
+        "resource": "urn:pulse:example:resource:dev",
+        "taskRef": "urn:pulse:example:task:task-1\n",
+        "attemptRef": "urn:pulse:example:attempt:turn-1",
+        "payload": {
+          "queryRef": "urn:pulse:example:query:errors",
+          "lookbackSeconds": 300
+        }
+      }
+    },
+    {
+      "name": "null",
+      "request": {
+        "requestId": "11111111-1111-4111-8111-111111111111",
+        "credentialRef": "urn:pulse:example:credential:grafana",
+        "action": "grafana.saved_query.read",
+        "resource": null,
+        "taskRef": "urn:pulse:example:task:task-1",
+        "attemptRef": "urn:pulse:example:attempt:turn-1",
+        "payload": {
+          "queryRef": "urn:pulse:example:query:errors",
+          "lookbackSeconds": 300
+        }
+      }
+    },
+    {
+      "name": "fractional",
+      "request": {
+        "requestId": "11111111-1111-4111-8111-111111111111",
+        "credentialRef": "urn:pulse:example:credential:grafana",
+        "action": "grafana.saved_query.read",
+        "resource": "urn:pulse:example:resource:dev",
+        "taskRef": "urn:pulse:example:task:task-1",
+        "attemptRef": "urn:pulse:example:attempt:turn-1",
+        "payload": {
+          "queryRef": "urn:pulse:example:query:errors",
+          "lookbackSeconds": 60.5
+        }
+      }
+    },
+    {
+      "name": "sub-minute",
+      "request": {
+        "requestId": "11111111-1111-4111-8111-111111111111",
+        "credentialRef": "urn:pulse:example:credential:grafana",
+        "action": "grafana.saved_query.read",
+        "resource": "urn:pulse:example:resource:dev",
+        "taskRef": "urn:pulse:example:task:task-1",
+        "attemptRef": "urn:pulse:example:attempt:turn-1",
+        "payload": {
+          "queryRef": "urn:pulse:example:query:errors",
+          "lookbackSeconds": 61
+        }
+      }
+    },
+    {
+      "name": "too-large",
+      "request": {
+        "requestId": "11111111-1111-4111-8111-111111111111",
+        "credentialRef": "urn:pulse:example:credential:grafana",
+        "action": "grafana.saved_query.read",
+        "resource": "urn:pulse:example:resource:dev",
+        "taskRef": "urn:pulse:example:task:task-1",
+        "attemptRef": "urn:pulse:example:attempt:turn-1",
+        "payload": {
+          "queryRef": "urn:pulse:example:query:errors",
+          "lookbackSeconds": 3660
+        }
+      }
+    },
+    {
+      "name": "string-time",
+      "request": {
+        "requestId": "11111111-1111-4111-8111-111111111111",
+        "credentialRef": "urn:pulse:example:credential:grafana",
+        "action": "grafana.saved_query.read",
+        "resource": "urn:pulse:example:resource:dev",
+        "taskRef": "urn:pulse:example:task:task-1",
+        "attemptRef": "urn:pulse:example:attempt:turn-1",
+        "payload": {
+          "queryRef": "urn:pulse:example:query:errors",
+          "lookbackSeconds": "300"
+        }
+      }
+    },
+    {
+      "name": "nil-uuid",
+      "request": {
+        "requestId": "00000000-0000-0000-0000-000000000000",
+        "credentialRef": "urn:pulse:example:credential:grafana",
+        "action": "grafana.saved_query.read",
+        "resource": "urn:pulse:example:resource:dev",
+        "taskRef": "urn:pulse:example:task:task-1",
+        "attemptRef": "urn:pulse:example:attempt:turn-1",
+        "payload": {
+          "queryRef": "urn:pulse:example:query:errors",
+          "lookbackSeconds": 300
+        }
+      }
+    },
+    {
+      "name": "extra-top-level",
+      "request": {
+        "requestId": "11111111-1111-4111-8111-111111111111",
+        "credentialRef": "urn:pulse:example:credential:grafana",
+        "action": "grafana.saved_query.read",
+        "resource": "urn:pulse:example:resource:dev",
+        "taskRef": "urn:pulse:example:task:task-1",
+        "attemptRef": "urn:pulse:example:attempt:turn-1",
+        "payload": {
+          "queryRef": "urn:pulse:example:query:errors",
+          "lookbackSeconds": 300
+        },
+        "CANARY-NOT-A-SECRET": "CANARY-NOT-A-SECRET"
+      }
+    },
+    {
+      "name": "missing-query",
+      "request": {
+        "requestId": "11111111-1111-4111-8111-111111111111",
+        "credentialRef": "urn:pulse:example:credential:grafana",
+        "action": "grafana.saved_query.read",
+        "resource": "urn:pulse:example:resource:dev",
+        "taskRef": "urn:pulse:example:task:task-1",
+        "attemptRef": "urn:pulse:example:attempt:turn-1",
+        "payload": {
+          "lookbackSeconds": 300
+        }
+      }
+    },
+    {
+      "name": "missing-requestId",
+      "request": {
+        "credentialRef": "urn:pulse:example:credential:grafana",
+        "action": "grafana.saved_query.read",
+        "resource": "urn:pulse:example:resource:dev",
+        "taskRef": "urn:pulse:example:task:task-1",
+        "attemptRef": "urn:pulse:example:attempt:turn-1",
+        "payload": {
+          "queryRef": "urn:pulse:example:query:errors",
+          "lookbackSeconds": 300
+        }
+      }
+    },
+    {
+      "name": "null-requestId",
+      "request": {
+        "requestId": null,
+        "credentialRef": "urn:pulse:example:credential:grafana",
+        "action": "grafana.saved_query.read",
+        "resource": "urn:pulse:example:resource:dev",
+        "taskRef": "urn:pulse:example:task:task-1",
+        "attemptRef": "urn:pulse:example:attempt:turn-1",
+        "payload": {
+          "queryRef": "urn:pulse:example:query:errors",
+          "lookbackSeconds": 300
+        }
+      }
+    },
+    {
+      "name": "missing-credentialRef",
+      "request": {
+        "requestId": "11111111-1111-4111-8111-111111111111",
+        "action": "grafana.saved_query.read",
+        "resource": "urn:pulse:example:resource:dev",
+        "taskRef": "urn:pulse:example:task:task-1",
+        "attemptRef": "urn:pulse:example:attempt:turn-1",
+        "payload": {
+          "queryRef": "urn:pulse:example:query:errors",
+          "lookbackSeconds": 300
+        }
+      }
+    },
+    {
+      "name": "null-credentialRef",
+      "request": {
+        "requestId": "11111111-1111-4111-8111-111111111111",
+        "credentialRef": null,
+        "action": "grafana.saved_query.read",
+        "resource": "urn:pulse:example:resource:dev",
+        "taskRef": "urn:pulse:example:task:task-1",
+        "attemptRef": "urn:pulse:example:attempt:turn-1",
+        "payload": {
+          "queryRef": "urn:pulse:example:query:errors",
+          "lookbackSeconds": 300
+        }
+      }
+    },
+    {
+      "name": "missing-action",
+      "request": {
+        "requestId": "11111111-1111-4111-8111-111111111111",
+        "credentialRef": "urn:pulse:example:credential:grafana",
+        "resource": "urn:pulse:example:resource:dev",
+        "taskRef": "urn:pulse:example:task:task-1",
+        "attemptRef": "urn:pulse:example:attempt:turn-1",
+        "payload": {
+          "queryRef": "urn:pulse:example:query:errors",
+          "lookbackSeconds": 300
+        }
+      }
+    },
+    {
+      "name": "null-action",
+      "request": {
+        "requestId": "11111111-1111-4111-8111-111111111111",
+        "credentialRef": "urn:pulse:example:credential:grafana",
+        "action": null,
+        "resource": "urn:pulse:example:resource:dev",
+        "taskRef": "urn:pulse:example:task:task-1",
+        "attemptRef": "urn:pulse:example:attempt:turn-1",
+        "payload": {
+          "queryRef": "urn:pulse:example:query:errors",
+          "lookbackSeconds": 300
+        }
+      }
+    },
+    {
+      "name": "missing-resource",
+      "request": {
+        "requestId": "11111111-1111-4111-8111-111111111111",
+        "credentialRef": "urn:pulse:example:credential:grafana",
+        "action": "grafana.saved_query.read",
+        "taskRef": "urn:pulse:example:task:task-1",
+        "attemptRef": "urn:pulse:example:attempt:turn-1",
+        "payload": {
+          "queryRef": "urn:pulse:example:query:errors",
+          "lookbackSeconds": 300
+        }
+      }
+    },
+    {
+      "name": "null-resource",
+      "request": {
+        "requestId": "11111111-1111-4111-8111-111111111111",
+        "credentialRef": "urn:pulse:example:credential:grafana",
+        "action": "grafana.saved_query.read",
+        "resource": null,
+        "taskRef": "urn:pulse:example:task:task-1",
+        "attemptRef": "urn:pulse:example:attempt:turn-1",
+        "payload": {
+          "queryRef": "urn:pulse:example:query:errors",
+          "lookbackSeconds": 300
+        }
+      }
+    },
+    {
+      "name": "missing-taskRef",
+      "request": {
+        "requestId": "11111111-1111-4111-8111-111111111111",
+        "credentialRef": "urn:pulse:example:credential:grafana",
+        "action": "grafana.saved_query.read",
+        "resource": "urn:pulse:example:resource:dev",
+        "attemptRef": "urn:pulse:example:attempt:turn-1",
+        "payload": {
+          "queryRef": "urn:pulse:example:query:errors",
+          "lookbackSeconds": 300
+        }
+      }
+    },
+    {
+      "name": "null-taskRef",
+      "request": {
+        "requestId": "11111111-1111-4111-8111-111111111111",
+        "credentialRef": "urn:pulse:example:credential:grafana",
+        "action": "grafana.saved_query.read",
+        "resource": "urn:pulse:example:resource:dev",
+        "taskRef": null,
+        "attemptRef": "urn:pulse:example:attempt:turn-1",
+        "payload": {
+          "queryRef": "urn:pulse:example:query:errors",
+          "lookbackSeconds": 300
+        }
+      }
+    },
+    {
+      "name": "missing-attemptRef",
+      "request": {
+        "requestId": "11111111-1111-4111-8111-111111111111",
+        "credentialRef": "urn:pulse:example:credential:grafana",
+        "action": "grafana.saved_query.read",
+        "resource": "urn:pulse:example:resource:dev",
+        "taskRef": "urn:pulse:example:task:task-1",
+        "payload": {
+          "queryRef": "urn:pulse:example:query:errors",
+          "lookbackSeconds": 300
+        }
+      }
+    },
+    {
+      "name": "null-attemptRef",
+      "request": {
+        "requestId": "11111111-1111-4111-8111-111111111111",
+        "credentialRef": "urn:pulse:example:credential:grafana",
+        "action": "grafana.saved_query.read",
+        "resource": "urn:pulse:example:resource:dev",
+        "taskRef": "urn:pulse:example:task:task-1",
+        "attemptRef": null,
+        "payload": {
+          "queryRef": "urn:pulse:example:query:errors",
+          "lookbackSeconds": 300
+        }
+      }
+    },
+    {
+      "name": "missing-payload",
+      "request": {
+        "requestId": "11111111-1111-4111-8111-111111111111",
+        "credentialRef": "urn:pulse:example:credential:grafana",
+        "action": "grafana.saved_query.read",
+        "resource": "urn:pulse:example:resource:dev",
+        "taskRef": "urn:pulse:example:task:task-1",
+        "attemptRef": "urn:pulse:example:attempt:turn-1"
+      }
+    },
+    {
+      "name": "null-payload",
+      "request": {
+        "requestId": "11111111-1111-4111-8111-111111111111",
+        "credentialRef": "urn:pulse:example:credential:grafana",
+        "action": "grafana.saved_query.read",
+        "resource": "urn:pulse:example:resource:dev",
+        "taskRef": "urn:pulse:example:task:task-1",
+        "attemptRef": "urn:pulse:example:attempt:turn-1",
+        "payload": null
+      }
+    },
+    {
+      "name": "missing-payload-queryRef",
+      "request": {
+        "requestId": "11111111-1111-4111-8111-111111111111",
+        "credentialRef": "urn:pulse:example:credential:grafana",
+        "action": "grafana.saved_query.read",
+        "resource": "urn:pulse:example:resource:dev",
+        "taskRef": "urn:pulse:example:task:task-1",
+        "attemptRef": "urn:pulse:example:attempt:turn-1",
+        "payload": {
+          "lookbackSeconds": 300
+        }
+      }
+    },
+    {
+      "name": "null-payload-queryRef",
+      "request": {
+        "requestId": "11111111-1111-4111-8111-111111111111",
+        "credentialRef": "urn:pulse:example:credential:grafana",
+        "action": "grafana.saved_query.read",
+        "resource": "urn:pulse:example:resource:dev",
+        "taskRef": "urn:pulse:example:task:task-1",
+        "attemptRef": "urn:pulse:example:attempt:turn-1",
+        "payload": {
+          "queryRef": null,
+          "lookbackSeconds": 300
+        }
+      }
+    },
+    {
+      "name": "missing-payload-lookbackSeconds",
+      "request": {
+        "requestId": "11111111-1111-4111-8111-111111111111",
+        "credentialRef": "urn:pulse:example:credential:grafana",
+        "action": "grafana.saved_query.read",
+        "resource": "urn:pulse:example:resource:dev",
+        "taskRef": "urn:pulse:example:task:task-1",
+        "attemptRef": "urn:pulse:example:attempt:turn-1",
+        "payload": {
+          "queryRef": "urn:pulse:example:query:errors"
+        }
+      }
+    },
+    {
+      "name": "null-payload-lookbackSeconds",
+      "request": {
+        "requestId": "11111111-1111-4111-8111-111111111111",
+        "credentialRef": "urn:pulse:example:credential:grafana",
+        "action": "grafana.saved_query.read",
+        "resource": "urn:pulse:example:resource:dev",
+        "taskRef": "urn:pulse:example:task:task-1",
+        "attemptRef": "urn:pulse:example:attempt:turn-1",
+        "payload": {
+          "queryRef": "urn:pulse:example:query:errors",
+          "lookbackSeconds": null
+        }
+      }
+    },
+    {
+      "name": "null-root",
+      "request": null
+    },
+    {
+      "name": "array-root",
+      "request": []
+    },
+    {
+      "name": "string-root",
+      "request": "x"
+    },
+    {
+      "name": "number-root",
+      "request": 1
+    },
+    {
+      "name": "boolean-root",
+      "request": true
+    }
+  ]
+}

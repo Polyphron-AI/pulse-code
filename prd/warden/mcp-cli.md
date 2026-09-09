@@ -2,6 +2,8 @@
 
 Status: proposed, 2026-09-09. This is the coordinated `pulse-warden/v1` interface specification, not shipped commands or tools. Identical copies live at `prd/warden/mcp-cli.md` in Pulse and Pulse Go; change and validate them together. Go owns authorization/execution; adapters do not implement independent policy engines.
 
+The first saved-query read now has an [executable binding specification](read-v1.md), shared schemas and fixtures. Runtime handlers, MCP tools and CLI commands still require adoption and conformance; see [branch reconciliation](reconciliation-2026-09-10.md).
+
 ## MCP tool catalogue
 
 All tools have closed, versioned JSON input/output schemas with bounded strings, enums and pagination. Require schema validation before dispatch. Derive tenant, principal and runtime identity from authenticated context, never a model-supplied identity. References are authority-qualified opaque IDs. Capabilities and current policy are rechecked on each call, even if tool discovery previously advertised support.
