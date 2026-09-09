@@ -1,5 +1,5 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { AssetPreviewTypeValidationError, ThreadId } from "@t3tools/contracts";
+import { AssetPreviewTypeValidationError, MessageId, ThreadId } from "@t3tools/contracts";
 import { PROJECT_FAVICON_FALLBACK_MARKER } from "@t3tools/shared/projectFavicon";
 import { describe, expect, it } from "@effect/vitest";
 import * as Crypto from "effect/Crypto";
@@ -16,6 +16,7 @@ import * as ProjectFaviconResolver from "../project/ProjectFaviconResolver.ts";
 import * as T3ProjectFileLoader from "../project/T3ProjectFileLoader.ts";
 import * as WorkspacePaths from "../workspace/WorkspacePaths.ts";
 import { ASSET_ROUTE_PREFIX, issueAssetUrl, resolveAsset } from "./AssetAccess.ts";
+import { saveSessionOutput } from "./sessionOutputStore.ts";
 
 const configLayer = ServerConfig.ServerConfig.layerTest(process.cwd(), {
   prefix: "t3-asset-access-test-",
@@ -31,6 +32,48 @@ const testLayer = Layer.mergeAll(
 ).pipe(Layer.provideMerge(NodeServices.layer));
 
 describe("AssetAccess", () => {
+  it.effect("renews saved output downloads after expiry and original deletion", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const config = yield* ServerConfig.ServerConfig;
+      const root = yield* fileSystem.makeTempDirectoryScoped({ prefix: "pulse-saved-asset-" });
+      const source = path.join(root, "final report.csv");
+      yield* fileSystem.writeFileString(source, "name,value\nresult,42");
+      const savedOutput = yield* Effect.tryPromise(() =>
+        saveSessionOutput({
+          storeRoot: path.join(path.dirname(config.attachmentsDir), "session-outputs"),
+          cwd: root,
+          sourcePath: source,
+          threadId: "thread-output",
+          messageId: "message-output",
+          turnId: "turn-output",
+        }),
+      );
+      const resource = {
+        _tag: "session-output",
+        threadId: ThreadId.make("thread-output"),
+        messageId: MessageId.make("message-output"),
+        path: source,
+        download: true,
+      } as const;
+      const first = yield* issueAssetUrl({ resource, savedOutput });
+      expect(first.downloadName).toBe("final report.csv");
+      const tokenFrom = (url: string) => url.slice(`${ASSET_ROUTE_PREFIX}/`.length).split("/")[0]!;
+      const firstToken = tokenFrom(first.relativeUrl);
+      yield* fileSystem.remove(source);
+      const resolved = yield* resolveAsset(firstToken, "final%20report.csv");
+      expect(resolved?.downloadName).toBe("final report.csv");
+      expect(yield* fileSystem.readFileString(resolved!.path)).toBe("name,value\nresult,42");
+      expect(yield* resolveAsset(firstToken, "other.csv")).toBeNull();
+      yield* TestClock.adjust("61 minutes");
+      expect(yield* resolveAsset(firstToken, "final%20report.csv")).toBeNull();
+      const renewed = yield* issueAssetUrl({ resource, savedOutput });
+      expect(
+        yield* resolveAsset(tokenFrom(renewed.relativeUrl), "final%20report.csv"),
+      ).not.toBeNull();
+    }).pipe(Effect.provide(testLayer)),
+  );
   it.effect("issues workspace URLs that resolve the entry file and sibling assets", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;

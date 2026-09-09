@@ -41,6 +41,11 @@ import { resolveAttachmentPathById } from "../attachmentStore.ts";
 import * as ServerConfig from "../config.ts";
 import * as ProjectFaviconResolver from "../project/ProjectFaviconResolver.ts";
 import * as WorkspacePaths from "../workspace/WorkspacePaths.ts";
+import {
+  resolveSessionOutputFile,
+  sessionOutputDownloadName,
+  type SessionOutputMetadata,
+} from "./sessionOutputStore.ts";
 
 export const ASSET_ROUTE_PREFIX = "/api/assets";
 
@@ -61,6 +66,13 @@ const PREVIEW_ASSET_EXTENSIONS = new Set([
 ]);
 
 const AssetClaimsSchema = Schema.Union([
+  Schema.Struct({
+    version: Schema.Literal(1),
+    kind: Schema.Literal("session-output"),
+    outputId: Schema.String,
+    download: Schema.Boolean,
+    expiresAt: Schema.Number,
+  }),
   Schema.Struct({
     version: Schema.Literal(1),
     kind: Schema.Literal("workspace-file"),
@@ -95,7 +107,11 @@ const AssetClaimsJson = Schema.fromJsonString(AssetClaimsSchema);
 const decodeAssetClaims = Schema.decodeUnknownOption(AssetClaimsJson);
 const encodeAssetClaims = Schema.encodeSync(AssetClaimsJson);
 
-export type ResolvedAsset = { readonly kind: "file"; readonly path: string };
+export type ResolvedAsset = {
+  readonly kind: "file";
+  readonly path: string;
+  readonly downloadName?: string;
+};
 
 function decodeClaims(encodedPayload: string): AssetClaims | null {
   try {
@@ -170,6 +186,7 @@ export const issueAssetUrl = Effect.fn("AssetAccess.issueAssetUrl")(function* (i
   readonly resource: AssetResource;
   readonly workspaceRoot?: string;
   readonly projectFaviconPath?: string;
+  readonly savedOutput?: SessionOutputMetadata;
 }) {
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -180,6 +197,21 @@ export const issueAssetUrl = Effect.fn("AssetAccess.issueAssetUrl")(function* (i
   let sourcePath: string | undefined;
 
   switch (input.resource._tag) {
+    case "session-output": {
+      if (!input.savedOutput)
+        return yield* new AssetWorkspaceContextNotFoundError({ resource: input.resource });
+      claims = {
+        version: 1,
+        kind: "session-output",
+        outputId: input.savedOutput.id,
+        download: input.resource.download ?? false,
+        expiresAt,
+      };
+      fileName = input.resource.download
+        ? sessionOutputDownloadName(input.savedOutput)
+        : input.savedOutput.name;
+      break;
+    }
     case "workspace-file": {
       if (!input.workspaceRoot) {
         return yield* new AssetWorkspaceContextNotFoundError({
@@ -304,7 +336,7 @@ export const issueAssetUrl = Effect.fn("AssetAccess.issueAssetUrl")(function* (i
       if (relativePath && !isWorkspaceImagePreviewPath(relativePath)) {
         return yield* new AssetPreviewTypeValidationError({ resource: input.resource });
       }
-      sourcePath = relativePath ?? undefined;
+      sourcePath = relativePath?.replaceAll("\\", "/") ?? undefined;
       const canonicalFaviconPath = relativePath
         ? yield* resolveCanonicalWorkspaceFile({ workspaceRoot, relativePath }).pipe(
             Effect.mapError(
@@ -386,6 +418,7 @@ export const issueAssetUrl = Effect.fn("AssetAccess.issueAssetUrl")(function* (i
   const token = `${encodedPayload}.${signPayload(encodedPayload, signingSecret)}`;
   return {
     relativeUrl: `${ASSET_ROUTE_PREFIX}/${token}/${encodeURIComponent(fileName)}`,
+    ...(claims.kind === "session-output" && claims.download ? { downloadName: fileName } : {}),
     expiresAt,
     ...(sourcePath !== undefined ? { sourcePath } : {}),
   };
@@ -408,6 +441,28 @@ export const resolveAsset = Effect.fn("AssetAccess.resolveAsset")(function* (
 
   const claims = decodeClaims(encodedPayload);
   if (!claims || claims.expiresAt <= (yield* Clock.currentTimeMillis)) return null;
+
+  if (claims.kind === "session-output") {
+    const config = yield* ServerConfig.ServerConfig;
+    const path = yield* Path.Path;
+    const decoded = decodeRelativePath(relativePath);
+    if (!decoded) return null;
+    const saved = yield* Effect.tryPromise(() =>
+      resolveSessionOutputFile(
+        path.join(path.dirname(config.attachmentsDir), "session-outputs"),
+        claims.outputId,
+        decoded,
+        claims.download,
+      ),
+    ).pipe(Effect.orElseSucceed(() => null));
+    return saved
+      ? ({
+          kind: "file",
+          path: saved.filePath,
+          ...(claims.download ? { downloadName: saved.name } : {}),
+        } satisfies ResolvedAsset)
+      : null;
+  }
 
   if (claims.kind === "attachment") {
     const config = yield* ServerConfig.ServerConfig;

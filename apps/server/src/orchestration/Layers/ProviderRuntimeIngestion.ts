@@ -45,6 +45,7 @@ import { projectActivityPayload } from "../ActivityPayloadProjection.ts";
 import { forkParked } from "../../serverActivation.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
 import { canReplaceThreadTitle } from "../threadTitles.ts";
+import { captureMessageOutputs } from "../../assets/SessionOutputs.ts";
 
 const providerTurnKey = (threadId: ThreadId, turnId: TurnId) => `${threadId}:${turnId}`;
 const providerTaskKey = (threadId: ThreadId, taskId: string) => `${threadId}:${taskId}`;
@@ -1190,6 +1191,11 @@ const make = Effect.gen(function* () {
       return flushedMessageIds;
     });
 
+  const outputWorker = yield* makeDrainableWorker(
+    (input: { threadId: ThreadId; messageId: MessageId }) =>
+      captureMessageOutputs(input.threadId, input.messageId),
+  );
+
   const finalizeAssistantMessage = (input: {
     event: ProviderRuntimeEvent;
     threadId: ThreadId;
@@ -1232,6 +1238,7 @@ const make = Effect.gen(function* () {
           ...(input.turnId ? { turnId: input.turnId } : {}),
           createdAt: input.createdAt,
         });
+        yield* outputWorker.enqueue({ threadId: input.threadId, messageId: input.messageId });
       }
       yield* clearAssistantMessageState(input.messageId);
     });
@@ -2074,7 +2081,7 @@ const make = Effect.gen(function* () {
 
   return {
     start,
-    drain: worker.drain,
+    drain: worker.drain.pipe(Effect.andThen(outputWorker.drain)),
   } satisfies ProviderRuntimeIngestionShape;
 });
 

@@ -90,6 +90,7 @@ import * as TerminalManager from "./terminal/Manager.ts";
 import * as PreviewAutomationBroker from "./mcp/PreviewAutomationBroker.ts";
 import * as PreviewManager from "./preview/Manager.ts";
 import { issueAssetUrl } from "./assets/AssetAccess.ts";
+import { saveMessageOutput } from "./assets/SessionOutputs.ts";
 import * as PortScanner from "./preview/PortScanner.ts";
 import * as WorkspaceEntries from "./workspace/WorkspaceEntries.ts";
 import * as WorkspaceFileSystem from "./workspace/WorkspaceFileSystem.ts";
@@ -2011,6 +2012,10 @@ const makeWsRpcLayer = (
           observeRpcEffect(
             WS_METHODS.assetsCreateUrl,
             Effect.gen(function* () {
+              if (input.resource._tag === "session-output") {
+                const savedOutput = yield* saveMessageOutput(input.resource);
+                return yield* issueAssetUrl({ resource: input.resource, savedOutput });
+              }
               if (input.resource._tag === "attachment") {
                 return yield* issueAssetUrl({ resource: input.resource });
               }

@@ -1,11 +1,17 @@
 import * as Schema from "effect/Schema";
 
-import { ThreadId, TrimmedNonEmptyString } from "./baseSchemas.ts";
+import { MessageId, ThreadId, TrimmedNonEmptyString } from "./baseSchemas.ts";
 import { ProjectFaviconPath } from "./orchestration.ts";
 
 const ASSET_PATH_MAX_LENGTH = 1024;
 
 export const AssetResource = Schema.Union([
+  Schema.TaggedStruct("session-output", {
+    threadId: ThreadId,
+    messageId: MessageId,
+    path: TrimmedNonEmptyString.check(Schema.isMaxLength(ASSET_PATH_MAX_LENGTH)),
+    download: Schema.optional(Schema.Boolean),
+  }),
   Schema.TaggedStruct("workspace-file", {
     threadId: ThreadId,
     path: TrimmedNonEmptyString.check(Schema.isMaxLength(ASSET_PATH_MAX_LENGTH)),
@@ -28,6 +34,7 @@ export const AssetCreateUrlInput = Schema.Struct({
 export type AssetCreateUrlInput = typeof AssetCreateUrlInput.Type;
 
 export const AssetCreateUrlResult = Schema.Struct({
+  downloadName: Schema.optional(Schema.String),
   relativeUrl: TrimmedNonEmptyString.check(Schema.isMaxLength(4096)),
   expiresAt: Schema.Number,
   sourcePath: Schema.optional(
@@ -187,7 +194,16 @@ export class AssetSigningKeyLoadError extends Schema.TaggedErrorClass<AssetSigni
   }
 }
 
+export class SessionOutputAccessError extends Schema.TaggedErrorClass<SessionOutputAccessError>()(
+  "SessionOutputAccessError",
+  {
+    code: Schema.Literals(["missing", "denied", "unsupported", "too-large", "unavailable"]),
+    message: Schema.String,
+  },
+) {}
+
 export const AssetAccessError = Schema.Union([
+  SessionOutputAccessError,
   AssetWorkspaceContextNotFoundError,
   AssetWorkspaceContextResolutionError,
   AssetWorkspaceRootNormalizationError,

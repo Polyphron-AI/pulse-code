@@ -7,6 +7,7 @@
  * @module ProjectionSnapshotQuery
  */
 import type {
+  MessageId,
   CheckpointRef,
   OrchestrationCheckpointSummary,
   OrchestrationProject,
@@ -27,6 +28,7 @@ import type * as Option from "effect/Option";
 import type * as Effect from "effect/Effect";
 
 import type { ProjectionRepositoryError } from "../../persistence/Errors.ts";
+import type { ProjectionThreadMessage } from "../../persistence/Services/ProjectionThreadMessages.ts";
 
 export interface ProjectionSnapshotCounts {
   readonly projectCount: number;
@@ -58,6 +60,9 @@ export interface ProjectionFullThreadDiffContext {
  * ProjectionSnapshotQueryShape - Service API for read-model snapshots.
  */
 export interface ProjectionSnapshotQueryShape {
+  readonly getMessageById: (
+    messageId: MessageId,
+  ) => Effect.Effect<Option.Option<ProjectionThreadMessage>, ProjectionRepositoryError>;
   /**
    * Read the lightweight command snapshot used to bootstrap the in-memory
    * orchestration engine without hydrating message/activity/checkpoint bodies.

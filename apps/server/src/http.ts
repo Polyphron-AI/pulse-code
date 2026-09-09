@@ -219,7 +219,15 @@ export const assetRouteLayer = HttpRouter.add(
     }
     return yield* HttpServerResponse.file(asset.path, {
       status: 200,
-      headers: assetResponseHeaders(asset.path),
+      headers: {
+        ...assetResponseHeaders(asset.path),
+        ...(asset.downloadName
+          ? {
+              "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(asset.downloadName).replaceAll("'", "%27")}`,
+              "Cache-Control": "private, no-store",
+            }
+          : {}),
+      },
     }).pipe(
       Effect.orElseSucceed(() => HttpServerResponse.text("Internal Server Error", { status: 500 })),
     );

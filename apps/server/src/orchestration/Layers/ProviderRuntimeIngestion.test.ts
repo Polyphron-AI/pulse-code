@@ -35,6 +35,11 @@ import { it as effectIt } from "@effect/vitest";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 
 import { OrchestrationEventStoreLive } from "../../persistence/Layers/OrchestrationEventStore.ts";
+import {
+  readSessionOutput,
+  resolveSessionOutputFile,
+  sessionOutputId,
+} from "../../assets/sessionOutputStore.ts";
 import { OrchestrationCommandReceiptRepositoryLive } from "../../persistence/Layers/OrchestrationCommandReceipts.ts";
 import { SqlitePersistenceMemory } from "../../persistence/Layers/Sqlite.ts";
 import {
@@ -227,6 +232,7 @@ describe("ProviderRuntimeIngestion", () => {
     threadTitle?: string;
   }) {
     const workspaceRoot = makeTempDir("t3-provider-project-");
+    const stateRoot = makeTempDir("t3-provider-state-");
     NodeFS.mkdirSync(NodePath.join(workspaceRoot, ".git"));
     const provider = createProviderServiceHarness();
     const orchestrationLayer = OrchestrationEngineLive.pipe(
@@ -251,7 +257,7 @@ describe("ProviderRuntimeIngestion", () => {
       Layer.provideMerge(SqlitePersistenceMemory),
       Layer.provideMerge(Layer.succeed(ProviderService, provider.service)),
       Layer.provideMerge(makeTestServerSettingsLayer(options?.serverSettings)),
-      Layer.provideMerge(ServerConfig.layerTest(process.cwd(), process.cwd())),
+      Layer.provideMerge(ServerConfig.layerTest(process.cwd(), stateRoot)),
       Layer.provideMerge(NodeServices.layer),
     );
     runtime = ManagedRuntime.make(layer);
@@ -318,6 +324,8 @@ describe("ProviderRuntimeIngestion", () => {
 
     return {
       engine,
+      workspaceRoot,
+      stateRoot,
       dispatch,
       readModel: () => Effect.runPromise(snapshotQuery.getSnapshot()),
       emit: provider.emit,
@@ -325,6 +333,42 @@ describe("ProviderRuntimeIngestion", () => {
       drain,
     };
   }
+
+  it("captures completed assistant outputs without retaining their worktree", async () => {
+    const harness = await createHarness();
+    NodeFS.writeFileSync(NodePath.join(harness.workspaceRoot, "report.txt"), "delivered result");
+    const common = {
+      provider: ProviderDriverKind.make("codex"),
+      threadId: asThreadId("thread-1"),
+      createdAt: "2026-01-01T00:00:00.000Z",
+      turnId: asTurnId("turn-output"),
+    };
+    harness.emit({ ...common, type: "turn.started", eventId: asEventId("output-start") });
+    await harness.drain();
+    harness.emit({
+      ...common,
+      type: "content.delta",
+      eventId: asEventId("output-delta"),
+      itemId: asItemId("output-message"),
+      payload: { streamKind: "assistant_text", delta: "[Result](report.txt)" },
+    });
+    await harness.drain();
+    harness.emit({
+      ...common,
+      type: "item.completed",
+      eventId: asEventId("output-complete"),
+      itemId: asItemId("output-message"),
+      payload: { itemType: "assistant_message", status: "completed" },
+    });
+    await harness.drain();
+    const storeRoot = NodePath.join(harness.stateRoot, "userdata", "session-outputs");
+    const id = sessionOutputId("thread-1", "assistant:output-message", "report.txt");
+    const metadata = await readSessionOutput(storeRoot, id);
+    expect(metadata.turnId).toBe("turn-output");
+    NodeFS.rmSync(harness.workspaceRoot, { recursive: true, force: true });
+    const saved = await resolveSessionOutputFile(storeRoot, id, "report.txt");
+    expect(NodeFS.readFileSync(saved!.filePath, "utf8")).toBe("delivered result");
+  });
 
   it("maps turn started/completed events into thread session updates", async () => {
     const harness = await createHarness();

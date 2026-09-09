@@ -49,6 +49,8 @@ import { ProjectionProject } from "../../persistence/Services/ProjectionProjects
 import { ProjectionState } from "../../persistence/Services/ProjectionState.ts";
 import { ProjectionThreadActivity } from "../../persistence/Services/ProjectionThreadActivities.ts";
 import { ProjectionThreadMessage } from "../../persistence/Services/ProjectionThreadMessages.ts";
+import { ProjectionThreadMessageRepository } from "../../persistence/Services/ProjectionThreadMessages.ts";
+import { ProjectionThreadMessageRepositoryLive } from "../../persistence/Layers/ProjectionThreadMessages.ts";
 import { ProjectionThreadProposedPlan } from "../../persistence/Services/ProjectionThreadProposedPlans.ts";
 import { ProjectionThreadSession } from "../../persistence/Services/ProjectionThreadSessions.ts";
 import { ProjectionThread } from "../../persistence/Services/ProjectionThreads.ts";
@@ -353,6 +355,10 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
   const threadBackgroundLiveness = yield* ThreadBackgroundLivenessService;
   const threadPlanProgress = yield* ThreadPlanProgressService;
   const sql = yield* SqlClient.SqlClient;
+  const messages = yield* ProjectionThreadMessageRepository.pipe(
+    Effect.provide(ProjectionThreadMessageRepositoryLive),
+  );
+  const getMessageById = (messageId: MessageId) => messages.getByMessageId({ messageId });
   const repositoryIdentityResolver = yield* RepositoryIdentityResolver.RepositoryIdentityResolver;
   const repositoryIdentityResolutionConcurrency = 4;
   const resolveRepositoryIdentitiesForProjects = Effect.fn(
@@ -2813,6 +2819,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
 
   return {
     getCommandReadModel,
+    getMessageById,
     getSnapshot,
     getShellSnapshot,
     getArchivedShellSnapshot,
