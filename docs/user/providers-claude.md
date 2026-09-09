@@ -34,6 +34,15 @@ When you set this field, Pulse Code points Claude Code at that directory with th
 `CLAUDE_CONFIG_DIR` environment variable. It does not change `HOME`, so your system keychain and
 the rest of your environment stay as they are.
 
+## Usage Limits
+
+When Claude runs out of subscription usage during a turn, Pulse Code shows the limit and the
+remaining wait when Claude provides a reset time. Claude can hold the turn until that window
+reopens, so it may still show as working. Wait for the reset, or stop the turn and continue later.
+The warning's timestamp shows when the displayed wait started.
+
+Expired-login errors identify the Claude account configuration that needs signing in again.
+
 ## Where Claude Skills Are Loaded
 
 Pulse Code looks for Claude skills in the Claude config directory's `skills` folder, then
