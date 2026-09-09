@@ -111,6 +111,8 @@ An empty database is a bad test. Seed your worktree's `.t3` with a copy of real 
 
 ## Pull requests
 
+- Maintainer instruction for Pulse installer work, 2026-09-09: commit the relevant changes, push the component branches, publish the verified installer to GitHub Releases, and return its GitHub link. This is authorized for now. Publish previews as prereleases and preserve the existing stable release. Do not create a PR unless separately requested.
+
 - Never make a PR unless the developer explicitly asks you to do so.
 - Conventional commit titles, plain language: `fix(web): new threads no longer spike CPU`.
 - Body: the problem in a sentence or two, then how you fixed it. End with the model and harness that did the work.
