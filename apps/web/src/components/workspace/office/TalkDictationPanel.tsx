@@ -9,7 +9,6 @@ export function TalkDictationPanel({
   status,
   disabled,
   onStatusChange,
-  onBusyChange,
 }: {
   status: TalkStatus | undefined;
   disabled: boolean;
@@ -44,17 +43,6 @@ export function TalkDictationPanel({
       document.removeEventListener("visibilitychange", onFocus);
     };
   }, [refresh, disabled]);
-  async function enable(enabled: boolean) {
-    onBusyChange(true);
-    try {
-      const result = await run({ operation: "dictation.enable", enabled });
-      if (!result) return;
-      if (result.status) onStatusChange(result.status);
-      await refresh();
-    } finally {
-      onBusyChange(false);
-    }
-  }
   async function copy(text: string) {
     try {
       await navigator.clipboard.writeText(text);
@@ -63,7 +51,6 @@ export function TalkDictationPanel({
       setCopyNotice("Could not copy. Select the text below and copy it manually.");
     }
   }
-  const enabled = status?.dictation?.enabled ?? false;
   const canEnable = status?.enabled && status.modelLoaded && status.capabilities.dictationDelivery;
   return (
     <section
@@ -88,20 +75,9 @@ export function TalkDictationPanel({
         into the app where you started. Press Escape to cancel.
       </p>
       <RequestState busy={busy} error={error} />
-      <label className="flex items-center gap-2 text-sm">
-        <input
-          type="checkbox"
-          checked={enabled}
-          disabled={busy || disabled || (!enabled && (!canEnable || status?.recording))}
-          onChange={(event) => void enable(event.target.checked)}
-        />
-        Enable push-to-talk dictation
-      </label>
-      {!canEnable && !enabled && (
+      {!canEnable && (
         <p className="text-sm text-muted-foreground">
-          {!status?.capabilities.dictationDelivery
-            ? "Dictation delivery is unavailable until the supported Talk worker is running."
-            : "Enable Talk and load a transcription model to use dictation."}
+          Dictation is unavailable until it is enabled and Parakeet is ready.
         </p>
       )}
       {status?.dictation?.active && (

@@ -1,29 +1,27 @@
 import { useEffect, useState } from "react";
+import { Link } from "@tanstack/react-router";
 import type { TalkRecording, TalkStatus } from "@t3tools/contracts";
 import { Button } from "../../ui/button";
 import { Card } from "../../ui/card";
 import { fieldClass, RequestState, useTalkRequest } from "./shared";
-import { TalkModelPanel } from "./TalkModelPanel";
-import { TalkDictationPanel } from "./TalkDictationPanel";
 
 export function TalkPanel() {
   const { run, busy: requestBusy, error } = useTalkRequest();
-  const [modelBusy, setModelBusy] = useState(false);
-  const [dictationBusy, setDictationBusy] = useState(false);
-  const busy = requestBusy || modelBusy || dictationBusy;
+  const busy = requestBusy;
+  const [meetingEnabled, setMeetingEnabled] = useState(false);
   const [transcripts, setTranscripts] = useState<Record<string, string>>({});
   const [visibleTranscripts, setVisibleTranscripts] = useState<Record<string, boolean>>({});
   const [status, setStatus] = useState<TalkStatus>();
   const [recordings, setRecordings] = useState<readonly TalkRecording[]>([]);
   const [title, setTitle] = useState("");
   const [microphone, setMicrophone] = useState(true);
-  const [systemAudio, setSystemAudio] = useState(false);
+  const [systemAudio, setSystemAudio] = useState(true);
   const [notice, setNotice] = useState("");
   const [removeId, setRemoveId] = useState<string>();
   async function refresh() {
     const result = await run({ operation: "status" });
     if (result?.status) setStatus(result.status);
-    if (!result?.status?.enabled) return;
+    if (!result?.status?.workerAvailable || result.status.transcribingId) return;
     const list = await run({ operation: "recordings.list" });
     if (list?.recordings) setRecordings(list.recordings);
     if (list?.status) setStatus(list.status);
@@ -32,12 +30,12 @@ export function TalkPanel() {
     void refresh();
   }, [run]);
   useEffect(() => {
-    if (!status?.recording || busy || error) return;
+    if ((!status?.recording && !status?.pendingTranscriptions?.length) || busy || error) return;
     const timer = window.setTimeout(() => {
       void refresh();
     }, 3000);
     return () => window.clearTimeout(timer);
-  }, [status?.recording, busy, error]);
+  }, [status, busy, error]);
   async function act(request: Parameters<typeof run>[0]) {
     setNotice("");
     const result = await run(request);
@@ -47,6 +45,7 @@ export function TalkPanel() {
       return;
     }
     if (result.status) setStatus(result.status);
+    if (request.operation === "recordings.stop") setMeetingEnabled(false);
     if (result.recording?.transcript !== undefined) {
       const recording = result.recording;
       setTranscripts((previous) => ({ ...previous, [recording.id]: recording.transcript ?? "" }));
@@ -76,14 +75,14 @@ export function TalkPanel() {
   return (
     <Card id="office-meetings" className="gap-4 p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="font-semibold">Meetings · Pulse Talk</h2>
+        <h2 className="font-semibold">Meetings</h2>
         <Button variant="outline" disabled={busy} onClick={() => void refresh()}>
           Refresh
         </Button>
       </div>
       <p className="text-sm text-muted-foreground">
-        Record selected audio sources locally. Transcription runs only when requested. Recording
-        always starts with your action.
+        Record your microphone and meeting audio. Saved recordings transcribe when Parakeet is
+        ready.
       </p>
       <RequestState busy={busy} error={error} />
       {notice && (
@@ -93,31 +92,60 @@ export function TalkPanel() {
       )}
       {status && (
         <>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={status.enabled}
-              disabled={busy || status.recording}
-              onChange={(event) => void act({ operation: "enable", enabled: event.target.checked })}
-            />
-            Enable local Talk
-          </label>
+          <div className="flex flex-wrap items-center gap-3 text-sm">
+            <Link
+              to="/settings/dictation"
+              className="text-muted-foreground underline underline-offset-4"
+            >
+              Dictation settings
+            </Link>
+            {!meetingEnabled && !status.everyMeeting && !status.recording ? (
+              <>
+                <Button variant="outline" disabled={busy} onClick={() => setMeetingEnabled(true)}>
+                  Turn on for this meeting
+                </Button>
+                <Button
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => void act({ operation: "meetings.configure", everyMeeting: true })}
+                >
+                  Turn on for every meeting
+                </Button>
+              </>
+            ) : (
+              <>
+                <span>
+                  Capture enabled{status.everyMeeting ? " for every meeting" : " for this meeting"}
+                </span>
+                <Button
+                  variant="ghost"
+                  disabled={busy || status.recording}
+                  onClick={() => {
+                    setMeetingEnabled(false);
+                    if (status.everyMeeting)
+                      void act({ operation: "meetings.configure", everyMeeting: false });
+                  }}
+                >
+                  Turn off
+                </Button>
+              </>
+            )}
+          </div>
           {!status.workerAvailable && (
             <p className="text-sm text-muted-foreground">
-              The Talk worker is unavailable. Install a desktop build that includes Talk.
+              Meeting capture requires the Windows desktop build.
             </p>
           )}
-          {status.enabled && (
+          {(meetingEnabled || status.everyMeeting || status.recording) && (
             <>
-              <p role="status" className="text-sm">
+              <p role="status" className="text-sm text-muted-foreground">
                 {status.recording
-                  ? "Recording is active. Stop to save the audio."
-                  : status.running
-                    ? "Talk is ready."
-                    : "Talk is stopped."}{" "}
-                {status.modelLoaded
-                  ? "Transcription model loaded."
-                  : "Choose an installed model to transcribe."}
+                  ? "Recording audio. Stop to save."
+                  : status.transcribingId
+                    ? "Transcribing saved audio..."
+                    : !status.modelLoaded
+                      ? "Record now, transcribe when ready. Parakeet setup is in Dictation settings."
+                      : "Ready to record."}
               </p>
               <fieldset className="space-y-2 text-sm" disabled={busy || status.recording}>
                 <legend className="mb-2 font-medium">Audio sources</legend>
@@ -169,7 +197,7 @@ export function TalkPanel() {
                   <Button
                     disabled={
                       busy ||
-                      !status.running ||
+                      !status.workerAvailable ||
                       !(
                         (microphone && status.capabilities.microphone) ||
                         (systemAudio && status.capabilities.systemAudio)
@@ -181,10 +209,11 @@ export function TalkPanel() {
                         title: title.trim() || "Untitled meeting",
                         microphone: microphone && status.capabilities.microphone,
                         systemAudio: systemAudio && status.capabilities.systemAudio,
+                        transcribeWhenReady: true,
                       })
                     }
                   >
-                    Start recording
+                    {status.modelLoaded ? "Start recording" : "Record now, transcribe when ready"}
                   </Button>
                 )}
               </div>
@@ -192,18 +221,27 @@ export function TalkPanel() {
           )}
         </>
       )}
-      <TalkModelPanel
-        status={status}
-        disabled={requestBusy || dictationBusy}
-        onStatusChange={setStatus}
-        onBusyChange={setModelBusy}
-      />
-      <TalkDictationPanel
-        status={status}
-        disabled={requestBusy || modelBusy}
-        onStatusChange={setStatus}
-        onBusyChange={setDictationBusy}
-      />
+      {status?.pendingTranscriptions?.length ? (
+        <p role="status" className="text-sm text-muted-foreground">
+          {status.transcribingId
+            ? "Transcribing saved audio..."
+            : "Transcription queued. Audio is saved on this device."}
+        </p>
+      ) : null}
+      {(status?.transcriptionError || status?.preparationError) && (
+        <div className="space-y-2">
+          <p role="alert" className="text-sm text-destructive-foreground">
+            {status.transcriptionError || status.preparationError}
+          </p>
+          <Button
+            variant="outline"
+            disabled={busy}
+            onClick={() => void act({ operation: "transcription.retry" })}
+          >
+            Retry transcription
+          </Button>
+        </div>
+      )}
       <div className="space-y-3">
         <h3 className="text-sm font-medium">Local recordings</h3>
         {recordings.length === 0 && !busy && (
@@ -241,12 +279,7 @@ export function TalkPanel() {
               <Button
                 size="sm"
                 variant="outline"
-                disabled={
-                  busy ||
-                  !status?.enabled ||
-                  recording.status === "recording" ||
-                  !recording.audioPath
-                }
+                disabled={busy || recording.status === "recording" || !recording.audioPath}
                 onClick={() => void act({ operation: "recordings.open", id: recording.id })}
               >
                 Open audio
@@ -256,20 +289,31 @@ export function TalkPanel() {
                 variant="outline"
                 disabled={
                   busy ||
-                  !status?.enabled ||
-                  !status.modelLoaded ||
-                  status.recording ||
+                  !status?.modelLoaded ||
+                  status?.recording ||
                   recording.status === "recording" ||
                   !recording.audioPath
                 }
                 onClick={() => void act({ operation: "recordings.transcribe", id: recording.id })}
               >
-                Transcribe locally
+                {status?.pendingTranscriptions?.includes(recording.id)
+                  ? "Waiting for transcription"
+                  : "Transcribe locally"}
               </Button>
+              {status?.pendingTranscriptions?.includes(recording.id) && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={busy || status.transcribingId === recording.id}
+                  onClick={() => void act({ operation: "transcription.cancel", id: recording.id })}
+                >
+                  Keep audio only
+                </Button>
+              )}
               <Button
                 size="sm"
                 variant="ghost"
-                disabled={busy || !status?.enabled || recording.status === "recording"}
+                disabled={busy || recording.status === "recording"}
                 onClick={() => setRemoveId(recording.id)}
               >
                 Delete
@@ -299,7 +343,7 @@ export function TalkPanel() {
                 <Button
                   size="sm"
                   variant="outline"
-                  disabled={busy || !status?.enabled}
+                  disabled={busy}
                   aria-expanded={visibleTranscripts[recording.id] ?? false}
                   onClick={() => {
                     if (visibleTranscripts[recording.id])

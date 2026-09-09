@@ -4,7 +4,11 @@ import * as NodeFSP from "node:fs/promises";
 import * as NodePath from "node:path";
 import * as Schema from "effect/Schema";
 import { OfficeRequest, OfficeResult } from "../../../../packages/contracts/src/office.ts";
-import { TalkRequest, TalkResult } from "../../../../packages/contracts/src/talk.ts";
+import {
+  TalkRequest,
+  TalkResult,
+  TalkPreferences,
+} from "../../../../packages/contracts/src/talk.ts";
 import { OfficeService } from "./OfficeService.ts";
 import { encryptedOfficeStorage } from "./EncryptedOfficeStorage.ts";
 import { TalkWorkerClient } from "../talk/TalkWorkerClient.ts";
@@ -23,7 +27,7 @@ const decodeTalkRequest = Schema.decodeUnknownSync(TalkRequest);
 
 const decodeTalkResult = Schema.decodeUnknownSync(TalkResult);
 
-const decodePreferences = Schema.decodeUnknownSync(Schema.Struct({ enabled: Schema.Boolean }));
+const decodePreferences = Schema.decodeUnknownSync(TalkPreferences);
 
 export function isTrustedOfficeFrame(url: string, mainFrame: boolean, scheme: string) {
   if (!mainFrame) return false;
@@ -85,19 +89,21 @@ export async function installOfficeRuntime(options: {
         () => true,
         () => false,
       ),
-    readEnabled: async () => {
+    readEnabled: async () => false,
+    writeEnabled: async () => undefined,
+    readPreferences: async () => {
       try {
-        return decodePreferences(JSON.parse(await NodeFSP.readFile(preferencesPath, "utf8")))
-          .enabled;
+        return decodePreferences(JSON.parse(await NodeFSP.readFile(preferencesPath, "utf8")));
       } catch (error) {
-        if (error instanceof Error && "code" in error && error.code === "ENOENT") return false;
+        if (error instanceof Error && "code" in error && error.code === "ENOENT")
+          return { enabled: false };
         // oxlint-disable-next-line preserve-caught-error -- Only the sanitized settings failure crosses IPC.
         throw new Error("Talk settings could not be read.");
       }
     },
-    writeEnabled: async (enabled) => {
+    writePreferences: async (preferences) => {
       await NodeFSP.mkdir(dataDir, { recursive: true });
-      await NodeFSP.writeFile(`${preferencesPath}.tmp`, JSON.stringify({ enabled }), {
+      await NodeFSP.writeFile(`${preferencesPath}.tmp`, JSON.stringify(preferences), {
         mode: 0o600,
       });
       await NodeFSP.rename(`${preferencesPath}.tmp`, preferencesPath);
@@ -154,6 +160,8 @@ export async function installOfficeRuntime(options: {
     }
     return decodeTalkResult(await talk.invoke(request));
   });
+  // Restore opted-in dictation and queued transcripts without starting capture.
+  await talk.invoke({ operation: "status" });
   return {
     async close() {
       ipcMain.removeHandler("pulse:office");

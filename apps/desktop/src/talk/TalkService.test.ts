@@ -130,13 +130,13 @@ describe("Talk consent and lifecycle", () => {
     expect(calls).toEqual([]);
     await service.close();
   });
-  it("requires saving before disabling and never transcribes on recording stop", async () => {
+  it("turning off dictation preserves active meeting audio and does not transcribe without opt-in", async () => {
     const { service, calls } = fixture();
     await service.invoke({ operation: "enable", enabled: true });
     await service.invoke({ operation: "recordings.start", title: "Review" });
     expect(await service.invoke({ operation: "enable", enabled: false })).toMatchObject({
-      ok: false,
-      error: { message: expect.stringContaining("Stop and save") },
+      ok: true,
+      status: { recording: true, enabled: false },
     });
     expect(await service.invoke({ operation: "recordings.stop" })).toMatchObject({
       ok: true,
@@ -145,6 +145,7 @@ describe("Talk consent and lifecycle", () => {
     await service.invoke({ operation: "enable", enabled: false });
     expect(calls).not.toContain("recordings.transcribe");
     expect(calls).toContain("close");
+    await service.close();
   });
   it("model-picker cancellation never starts model loading", async () => {
     const { service, calls } = fixture();
@@ -156,20 +157,23 @@ describe("Talk consent and lifecycle", () => {
     expect(calls).toEqual([]);
     await service.close();
   });
-  it("requires a loaded model and handles an occupied shortcut without capturing", async () => {
+  it("remembers enablement before download and reports occupied shortcuts without capturing", async () => {
     const { service, calls } = fixture({ shortcutAvailable: false });
-    expect((await service.invoke({ operation: "dictation.enable", enabled: true })).ok).toBe(false);
+    expect((await service.invoke({ operation: "dictation.enable", enabled: true })).ok).toBe(true);
     await service.invoke({ operation: "enable", enabled: true });
     await service.invoke({ operation: "recordings.list" });
-    expect((await service.invoke({ operation: "dictation.enable", enabled: true })).ok).toBe(false);
+    expect((await service.invoke({ operation: "dictation.enable", enabled: true })).ok).toBe(true);
     expect(calls).not.toContain("dictation.hold");
     await service.close();
     const occupied = fixture({ modelLoaded: true, shortcutAvailable: false });
     await occupied.service.invoke({ operation: "enable", enabled: true });
     await occupied.service.invoke({ operation: "recordings.list" });
-    expect(
-      await occupied.service.invoke({ operation: "dictation.enable", enabled: true }),
-    ).toMatchObject({ ok: false, error: { message: expect.stringContaining("already in use") } });
+    await occupied.service.invoke({ operation: "dictation.enable", enabled: true });
+    await occupied.service.waitForIdle();
+    expect(await occupied.service.invoke({ operation: "status" })).toMatchObject({
+      ok: true,
+      status: { dictation: { enabled: true, lastError: expect.stringContaining("unavailable") } },
+    });
     expect(occupied.calls).not.toContain("dictation.hold");
     await occupied.service.close();
   });
@@ -178,6 +182,7 @@ describe("Talk consent and lifecycle", () => {
     await service.invoke({ operation: "enable", enabled: true });
     await service.invoke({ operation: "recordings.list" });
     await service.invoke({ operation: "dictation.enable", enabled: true });
+    await service.waitForIdle();
     expect(calls).not.toContain("dictation.hold");
     press();
     press();

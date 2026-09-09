@@ -15,6 +15,7 @@ import {
   BotIcon,
   GitBranchIcon,
   KeyboardIcon,
+  MicIcon,
   Link2Icon,
   PaletteIcon,
   SearchIcon,
@@ -48,6 +49,7 @@ const SETTINGS_SECTION_ICONS: Readonly<
   Record<SettingsPath, ComponentType<{ className?: string }>>
 > = {
   "/settings/general": Settings2Icon,
+  "/settings/dictation": MicIcon,
   "/settings/appearance": PaletteIcon,
   "/settings/keybindings": KeyboardIcon,
   "/settings/providers": BotIcon,

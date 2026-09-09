@@ -99,9 +99,10 @@ export function OfficeWorkspace() {
             <TalkPanel />
           ) : (
             <Card id="office-meetings" className="gap-2 p-5">
-              <h2 className="font-semibold">Pulse Talk</h2>
+              <h2 className="font-semibold">Meetings</h2>
               <p className="text-sm text-muted-foreground">
-                Open Pulse on Windows to enable local recording and transcription.
+                Open Pulse on Windows to record meeting audio. Manage dictation and transcription in
+                Settings ? Dictation.
               </p>
             </Card>
           )}

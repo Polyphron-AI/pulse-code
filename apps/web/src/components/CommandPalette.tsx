@@ -1631,6 +1631,17 @@ function OpenCommandPaletteDialog(props: {
 
   actionItems.push({
     kind: "action",
+    value: "action:dictation-settings",
+    searchTerms: ["dictation", "voice", "parakeet", "meeting", "transcription"],
+    title: "Open dictation settings",
+    icon: <SettingsIcon className={ITEM_ICON_CLASS} />,
+    run: async () => {
+      await navigate({ to: "/settings/dictation" });
+    },
+  });
+
+  actionItems.push({
+    kind: "action",
     value: "action:settings",
     searchTerms: ["settings", "preferences", "configuration", "keybindings"],
     title: "Open settings",

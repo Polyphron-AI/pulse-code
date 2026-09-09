@@ -1,12 +1,19 @@
 import * as Schema from "effect/Schema";
 
+export const TalkPreferences = Schema.Struct({
+  enabled: Schema.Boolean,
+  everyMeeting: Schema.optionalKey(Schema.Boolean),
+  pendingTranscriptions: Schema.optionalKey(Schema.Array(Schema.String)),
+});
+export type TalkPreferences = typeof TalkPreferences.Type;
+
 export const TalkRecording = Schema.Struct({
   id: Schema.String,
   title: Schema.String,
   startedAt: Schema.String,
   durationSeconds: Schema.Number,
   audioPath: Schema.String,
-  transcript: Schema.optional(Schema.String),
+  transcript: Schema.optional(Schema.NullOr(Schema.String)),
   status: Schema.Literals(["recorded", "transcribed", "recording", "failed", "interrupted"]),
   sources: Schema.optionalKey(
     Schema.Struct({ microphone: Schema.Boolean, systemAudio: Schema.Boolean }),
@@ -28,6 +35,11 @@ export const TalkDictation = Schema.Struct({
 export type TalkDictation = typeof TalkDictation.Type;
 
 export const TalkStatus = Schema.Struct({
+  everyMeeting: Schema.optionalKey(Schema.Boolean),
+  pendingTranscriptions: Schema.optionalKey(Schema.Array(Schema.String)),
+  transcribingId: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  preparationError: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  transcriptionError: Schema.optionalKey(Schema.NullOr(Schema.String)),
   enabled: Schema.Boolean,
   running: Schema.Boolean,
   recording: Schema.Boolean,
@@ -69,12 +81,16 @@ export const TalkRequest = Schema.Union([
   Schema.Struct({ operation: Schema.Literal("recordings.list") }),
   Schema.Struct({ operation: Schema.Literal("recordings.get"), id: Schema.String }),
   Schema.Struct({ operation: Schema.Literal("dictation.enable"), enabled: Schema.Boolean }),
+  Schema.Struct({ operation: Schema.Literal("meetings.configure"), everyMeeting: Schema.Boolean }),
+  Schema.Struct({ operation: Schema.Literal("transcription.retry") }),
+  Schema.Struct({ operation: Schema.Literal("transcription.cancel"), id: Schema.String }),
   Schema.Struct({ operation: Schema.Literal("dictation.history") }),
   Schema.Struct({
     operation: Schema.Literal("recordings.start"),
     title: Schema.String,
     microphone: Schema.optionalKey(Schema.Boolean),
     systemAudio: Schema.optionalKey(Schema.Boolean),
+    transcribeWhenReady: Schema.optionalKey(Schema.Boolean),
   }),
   Schema.Struct({ operation: Schema.Literal("recordings.stop") }),
   Schema.Struct({ operation: Schema.Literal("recordings.transcribe"), id: Schema.String }),

@@ -1,6 +1,7 @@
 import { isElectron } from "~/env";
 
 export type SettingsPath =
+  | "/settings/dictation"
   | "/settings/general"
   | "/settings/appearance"
   | "/settings/keybindings"
@@ -27,6 +28,7 @@ export interface SettingsSearchItem {
  */
 export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
   "/settings/general": "General",
+  "/settings/dictation": "Dictation",
   "/settings/appearance": "Appearance",
   "/settings/keybindings": "Keybindings",
   "/settings/providers": "Providers",
@@ -44,6 +46,11 @@ export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
  * here once instead of separately in the panel and the index.
  */
 export const SETTINGS_SEARCH_ITEMS = [
+  {
+    id: "dictation",
+    title: "Dictation, microphone, shortcut, Parakeet and meeting transcription",
+    to: "/settings/dictation",
+  },
   {
     id: "color-scheme",
     title: "Color scheme",
