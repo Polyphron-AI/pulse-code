@@ -79,8 +79,9 @@ export function TalkModelPanel({
         </Button>
       </div>
       <p className="text-sm text-muted-foreground">
-        Download about 670 MB to transcribe recordings locally on your CPU. Downloading does not
-        load the model or turn on recording. Load it when you are ready to transcribe.
+        {installed
+          ? "Parakeet transcribes on your computer. Load it when you need it."
+          : "Download Parakeet (670 MB) for local transcription. Downloading does not start recording or load the model."}
       </p>
       <RequestState busy={busy && !downloading} error={error} />
       {notice && (
@@ -90,44 +91,6 @@ export function TalkModelPanel({
       )}
       {model && (
         <>
-          <dl className="grid gap-x-4 gap-y-1 text-xs sm:grid-cols-[auto_1fr]">
-            <dt className="text-muted-foreground">Model</dt>
-            <dd className="break-words">{model.modelId}</dd>
-            <dt className="text-muted-foreground">Download size</dt>
-            <dd>
-              {megabytes(model.totalBytes)} · {model.totalBytes.toLocaleString()} bytes
-            </dd>
-            <dt className="text-muted-foreground">License</dt>
-            <dd>{model.license}</dd>
-            <dt className="text-muted-foreground">Revision</dt>
-            <dd className="break-all">{model.revision}</dd>
-            <dt className="text-muted-foreground">Source</dt>
-            <dd className="break-all">
-              {model.sourceUrl.startsWith("https://") ? (
-                <a
-                  className="underline underline-offset-4"
-                  href={model.sourceUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  {model.sourceUrl}
-                </a>
-              ) : (
-                model.sourceUrl
-              )}
-            </dd>
-            <dt className="text-muted-foreground">Available memory</dt>
-            <dd>
-              {gigabytes(model.memory.freeBytes)} of {gigabytes(model.memory.totalBytes)}
-            </dd>
-            <dt className="text-muted-foreground">Free disk space</dt>
-            <dd>
-              {model.disk.freeBytes === null ? "Unavailable" : gigabytes(model.disk.freeBytes)}
-            </dd>
-          </dl>
-          <p className="text-xs text-muted-foreground">
-            Memory and disk values are from the latest status check.
-          </p>
           {downloading ? (
             <div className="space-y-2">
               <label htmlFor="talk-model-progress" className="block text-sm">
@@ -229,6 +192,51 @@ export function TalkModelPanel({
             </>
           )}
         </>
+      )}
+      {model && (
+        <details className="text-sm">
+          <summary className="cursor-pointer rounded-md py-2 text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            Model details and storage
+          </summary>
+          <dl className="grid gap-x-4 gap-y-1 text-xs sm:grid-cols-[auto_1fr]">
+            <dt className="text-muted-foreground">Model</dt>
+            <dd className="break-words">{model.modelId}</dd>
+            <dt className="text-muted-foreground">Download size</dt>
+            <dd>
+              {megabytes(model.totalBytes)} · {model.totalBytes.toLocaleString()} bytes
+            </dd>
+            <dt className="text-muted-foreground">License</dt>
+            <dd>{model.license}</dd>
+            <dt className="text-muted-foreground">Revision</dt>
+            <dd className="break-all">{model.revision}</dd>
+            <dt className="text-muted-foreground">Source</dt>
+            <dd className="break-all">
+              {model.sourceUrl.startsWith("https://") ? (
+                <a
+                  className="underline underline-offset-4"
+                  href={model.sourceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {model.sourceUrl}
+                </a>
+              ) : (
+                model.sourceUrl
+              )}
+            </dd>
+            <dt className="text-muted-foreground">Available memory</dt>
+            <dd>
+              {gigabytes(model.memory.freeBytes)} of {gigabytes(model.memory.totalBytes)}
+            </dd>
+            <dt className="text-muted-foreground">Free disk space</dt>
+            <dd>
+              {model.disk.freeBytes === null ? "Unavailable" : gigabytes(model.disk.freeBytes)}
+            </dd>
+          </dl>
+          <p className="text-xs text-muted-foreground">
+            Memory and disk values are from the latest status check.
+          </p>
+        </details>
       )}
       <Button
         variant="outline"

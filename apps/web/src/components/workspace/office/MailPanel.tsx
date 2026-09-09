@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { OfficeAccount, OfficeDraft, OfficeMessage } from "@t3tools/contracts";
 import { Button } from "../../ui/button";
 import { Card } from "../../ui/card";
+import { MailIcon } from "lucide-react";
 import { fieldClass, RequestState, useOfficeRequest } from "./shared";
 
 export function MailPanel({ accounts }: { accounts: readonly OfficeAccount[] }) {
@@ -56,22 +57,36 @@ export function MailPanel({ accounts }: { accounts: readonly OfficeAccount[] }) 
     setSaved(false);
   }
   return (
-    <Card id="office-email" className="gap-4 p-5">
+    <Card id="office-email" className="@container gap-4 p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="font-semibold">Email</h2>
+        <h2 className="flex items-center gap-2 font-semibold">
+          <MailIcon className="size-4 text-muted-foreground" />
+          Email
+        </h2>
         <Button variant="outline" disabled={busy || !activeId} onClick={() => void load()}>
           Refresh inbox
         </Button>
       </div>
       <p className="text-sm text-muted-foreground">
-        Read your inbox and save drafts on this computer. Drafts are not sent or synced to your
-        provider.
+        Read your inbox. Drafts stay on this computer and are never sent or synced.
       </p>
       <RequestState busy={busy} error={error} />
       {mailAccounts.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          Connect an email account to open your inbox.
-        </p>
+        <div className="space-y-2 py-6 text-center">
+          <p className="text-sm text-muted-foreground">
+            Connect an email account to open your inbox.
+          </p>
+          <a
+            href="#office-accounts"
+            onClick={() => {
+              const details = document.getElementById("office-accounts");
+              if (details instanceof HTMLDetailsElement) details.open = true;
+            }}
+            className="inline-block rounded-md text-sm font-medium underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            Connect an account
+          </a>
+        </div>
       ) : (
         <>
           <label className="space-y-1 text-sm">
@@ -89,7 +104,7 @@ export function MailPanel({ accounts }: { accounts: readonly OfficeAccount[] }) 
               ))}
             </select>
           </label>
-          <div className="grid min-w-0 gap-4 lg:grid-cols-2">
+          <div className="grid min-w-0 gap-4 @2xl:grid-cols-2">
             <div className="min-w-0 space-y-2">
               <h3 className="text-sm font-medium">Inbox</h3>
               {messages.map((item) => (

@@ -88,36 +88,42 @@ export function OfficeWorkspace() {
         Workspace / Office
       </header>
       <main className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-8">
-        <div className="mx-auto max-w-6xl space-y-6">
+        <div className="mx-auto max-w-7xl space-y-8">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Office workspace</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">Office</h1>
             <p className="mt-2 text-sm text-muted-foreground">
-              Meetings, calendar and email alongside your coding work.
+              Your meetings, messages and week ahead.
             </p>
           </div>
-          {window.desktopBridge?.talkInvoke ? (
-            <TalkPanel />
-          ) : (
-            <Card id="office-meetings" className="gap-2 p-5">
-              <h2 className="font-semibold">Pulse Talk</h2>
-              <p className="text-sm text-muted-foreground">
-                Open Pulse on Windows to enable local recording and transcription.
-              </p>
-            </Card>
-          )}
-          {window.desktopBridge?.officeInvoke ? (
-            <OfficePanel />
-          ) : (
-            <Card id="office-calendar" className="gap-2 p-5">
-              <h2 id="office-email" className="font-semibold">
-                Calendar and email
-              </h2>
-              <p className="text-sm text-muted-foreground">
-                Connect your accounts in the Pulse Windows desktop app. Office accounts are stored
-                on that computer and are not available through remote web connections.
-              </p>
-            </Card>
-          )}
+          <div className="grid items-start gap-8 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
+            <div className="min-w-0">
+              {window.desktopBridge?.talkInvoke ? (
+                <TalkPanel />
+              ) : (
+                <Card id="office-meetings" className="gap-2 p-5">
+                  <h2 className="font-semibold">Pulse Talk</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Open Pulse on Windows to enable local recording and transcription.
+                  </p>
+                </Card>
+              )}
+            </div>
+            <div className="min-w-0 space-y-6">
+              {window.desktopBridge?.officeInvoke ? (
+                <OfficePanel />
+              ) : (
+                <Card id="office-calendar" className="gap-2 p-5">
+                  <h2 id="office-email" className="font-semibold">
+                    Calendar and email
+                  </h2>
+                  <p className="text-sm text-muted-foreground">
+                    Connect your accounts in the Pulse Windows desktop app. Office accounts are
+                    stored on that computer and are not available through remote web connections.
+                  </p>
+                </Card>
+              )}
+            </div>
+          </div>
         </div>
       </main>
     </SidebarInset>
