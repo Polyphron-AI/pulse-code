@@ -537,9 +537,9 @@ it.layer(NodeServices.layer)("server settings", (it) => {
       const settings = yield* ServerSettingsModule.ServerSettingsService;
       yield* recordProviderUsage("omp", "omp_disabled");
       yield* recordProviderUsage("cursor");
-      // @effect-diagnostics-next-line preferSchemaOverJson:off
       yield* fs.writeFileString(
         config.settingsPath,
+        // @effect-diagnostics-next-line preferSchemaOverJson:off
         JSON.stringify({
           providers: { omp: { enabled: false } },
           providerInstances: {
