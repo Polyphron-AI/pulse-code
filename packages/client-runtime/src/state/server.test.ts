@@ -1,5 +1,6 @@
 import {
   EnvironmentId,
+  UsageLimitSourceId,
   type ServerConfig,
   type ServerConfigStreamEvent,
   type ServerLifecycleWelcomePayload,
@@ -32,6 +33,7 @@ import type { WsRpcProtocolClient } from "../rpc/protocol.ts";
 import type { RpcSession } from "../rpc/session.ts";
 import {
   applyServerConfigProjection,
+  withoutUsageLimitSources,
   makeEnvironmentServerConfigState,
   isLegacyUpdateHandoffLoss,
   matchesServerUpdateReadyEvent,
@@ -49,6 +51,7 @@ import {
 } from "./server.ts";
 
 const CONFIG = {
+  environment: { capabilities: {} },
   availableEditors: [],
   issues: [],
   keybindings: {},
@@ -514,7 +517,7 @@ describe("server state projection", () => {
 
       yield* Effect.scoped(
         Effect.gen(function* () {
-          const state = yield* makeEnvironmentServerConfigState().pipe(
+          const state = yield* makeEnvironmentServerConfigState({}).pipe(
             Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor),
             Effect.provideService(Persistence.EnvironmentCacheStore, cache),
           );
@@ -574,7 +577,7 @@ describe("server state projection", () => {
       });
 
       yield* Effect.scoped(
-        makeEnvironmentServerConfigState().pipe(
+        makeEnvironmentServerConfigState({}).pipe(
           Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor),
           Effect.provideService(Persistence.EnvironmentCacheStore, cache),
         ),
@@ -583,4 +586,66 @@ describe("server state projection", () => {
       expect(yield* Queue.poll(savedConfigs)).toEqual(Option.none());
     }),
   );
+});
+
+describe("usage-limit source projection", () => {
+  const sources = [
+    {
+      id: UsageLimitSourceId.make("test-hub"),
+      kind: "cliproxy" as const,
+      label: "Test hub",
+      checkedAt: "2026-09-10T00:00:00.000Z",
+      accounts: [],
+    },
+  ];
+  const capable = {
+    ...CONFIG,
+    environment: {
+      ...CONFIG.environment,
+      capabilities: { ...CONFIG.environment.capabilities, usageLimitSources: true },
+    },
+  };
+  it("waits for a config snapshot before publishing source events", () => {
+    expect(
+      Option.isNone(
+        applyServerConfigProjection(Option.none(), {
+          version: 1,
+          type: "usageLimitSourcesUpdated",
+          payload: { sources },
+        }),
+      ),
+    ).toBe(true);
+  });
+  it("carries sources across capable snapshots and clears them after removal or downgrade", () => {
+    const base = applyServerConfigProjection(Option.none(), snapshotEvent(capable));
+    const updated = applyServerConfigProjection(base, {
+      version: 1,
+      type: "usageLimitSourcesUpdated",
+      payload: { sources },
+    });
+    expect(Option.getOrThrow(updated).config.usageLimitSources).toEqual(sources);
+    expect(
+      Option.getOrThrow(applyServerConfigProjection(updated, snapshotEvent(capable))).config
+        .usageLimitSources,
+    ).toEqual(sources);
+    expect(
+      Option.getOrThrow(applyServerConfigProjection(updated, snapshotEvent(CONFIG))).config
+        .usageLimitSources,
+    ).toBeUndefined();
+    expect(
+      Option.getOrThrow(
+        applyServerConfigProjection(updated, {
+          version: 1,
+          type: "usageLimitSourcesUpdated",
+          payload: { sources: [] },
+        }),
+      ).config.usageLimitSources,
+    ).toBeUndefined();
+  });
+  it("does not cache account source snapshots but retains provider models and settings", () => {
+    const cached = withoutUsageLimitSources({ ...capable, usageLimitSources: sources });
+    expect(cached).not.toHaveProperty("usageLimitSources");
+    expect(cached.providers).toBe(capable.providers);
+    expect(cached.settings).toBe(capable.settings);
+  });
 });

@@ -346,6 +346,12 @@ export interface ServerConfigProjection {
   readonly source: "cache" | "live";
 }
 
+export function withoutUsageLimitSources(config: ServerConfig): ServerConfig {
+  if (config.usageLimitSources === undefined) return config;
+  const { usageLimitSources: _sources, ...rest } = config;
+  return rest;
+}
+
 export function applyServerConfigProjection(
   current: Option.Option<ServerConfigProjection>,
   event: ServerConfigStreamEvent,
@@ -353,7 +359,14 @@ export function applyServerConfigProjection(
   switch (event.type) {
     case "snapshot":
       return Option.some({
-        config: event.config,
+        config: {
+          ...event.config,
+          ...(event.config.environment.capabilities.usageLimitSources === true &&
+          Option.isSome(current) &&
+          current.value.config.usageLimitSources !== undefined
+            ? { usageLimitSources: current.value.config.usageLimitSources }
+            : {}),
+        },
         latestEvent: event,
         source: "live",
       });
@@ -372,6 +385,15 @@ export function applyServerConfigProjection(
         config: {
           ...projection.config,
           providers: event.payload.providers,
+        },
+        latestEvent: event,
+        source: "live",
+      }));
+    case "usageLimitSourcesUpdated":
+      return Option.map(current, (projection) => ({
+        config: {
+          ...projection.config,
+          usageLimitSources: event.payload.sources.length > 0 ? event.payload.sources : undefined,
         },
         latestEvent: event,
         source: "live",
@@ -402,13 +424,12 @@ const cachedConfigSnapshotEvent = (config: ServerConfig): ServerConfigStreamEven
   config,
 });
 
-/**
- * Keeps a complete server configuration available during reconnects. Server
- * config carries the provider/model catalogue used by task creation, so it is
- * useful—and safe—to retain after a transport session ends.
- */
+export interface ServerConfigSubscriptionOptions {
+  readonly usageLimitSources?: boolean;
+}
+
 export const makeEnvironmentServerConfigState = Effect.fn("EnvironmentServerConfigState.make")(
-  function* () {
+  function* (subscription: ServerConfigSubscriptionOptions = {}) {
     const supervisor = yield* EnvironmentSupervisor;
     const cache = yield* EnvironmentCacheStore;
     const environmentId = supervisor.target.environmentId;
@@ -425,8 +446,8 @@ export const makeEnvironmentServerConfigState = Effect.fn("EnvironmentServerConf
     );
     const state = yield* SubscriptionRef.make<Option.Option<ServerConfigProjection>>(
       Option.map(cachedConfig, (config) => ({
-        config,
-        latestEvent: cachedConfigSnapshotEvent(config),
+        config: withoutUsageLimitSources(config),
+        latestEvent: cachedConfigSnapshotEvent(withoutUsageLimitSources(config)),
         source: "cache" as const,
       })),
     );
@@ -436,7 +457,7 @@ export const makeEnvironmentServerConfigState = Effect.fn("EnvironmentServerConf
     const persist = Effect.fn("EnvironmentServerConfigState.persist")(function* (
       config: ServerConfig,
     ) {
-      return yield* cache.saveServerConfig(environmentId, config).pipe(
+      return yield* cache.saveServerConfig(environmentId, withoutUsageLimitSources(config)).pipe(
         Effect.as(true),
         Effect.catch((error) =>
           Effect.logWarning("Could not persist cached server configuration.").pipe(
@@ -467,7 +488,10 @@ export const makeEnvironmentServerConfigState = Effect.fn("EnvironmentServerConf
       Effect.forkScoped,
     );
 
-    yield* subscribe(WS_METHODS.subscribeServerConfig, {}).pipe(
+    yield* subscribe(
+      WS_METHODS.subscribeServerConfig,
+      subscription.usageLimitSources === true ? { usageLimitSources: true } : {},
+    ).pipe(
       Stream.runForEach((event) =>
         Effect.gen(function* () {
           const next = applyServerConfigProjection(yield* SubscriptionRef.get(state), event);
@@ -497,11 +521,14 @@ export const makeEnvironmentServerConfigState = Effect.fn("EnvironmentServerConf
   },
 );
 
-export function serverConfigStateChanges(environmentId: EnvironmentId) {
+export function serverConfigStateChanges(
+  environmentId: EnvironmentId,
+  subscription: ServerConfigSubscriptionOptions = {},
+) {
   return followStreamInEnvironment(
     environmentId,
     Stream.unwrap(
-      makeEnvironmentServerConfigState().pipe(
+      makeEnvironmentServerConfigState(subscription).pipe(
         Effect.map((state) =>
           SubscriptionRef.changes(state).pipe(
             Stream.filterMap((projection) =>
@@ -554,6 +581,8 @@ export function createServerEnvironmentAtoms<R, E>(
     readonly initialConfigValueAtom: (
       environmentId: EnvironmentId,
     ) => Atom.Atom<ServerConfig | null>;
+    /** Whether this surface renders quota from configured usage-limit sources. */
+    readonly usageLimitSources?: boolean;
   },
 ) {
   const configScheduler = createAtomCommandScheduler();
@@ -565,7 +594,12 @@ export function createServerEnvironmentAtoms<R, E>(
   };
   const configProjectionFamily = Atom.family((environmentId: EnvironmentId) =>
     runtime
-      .atom(serverConfigStateChanges(environmentId))
+      .atom(
+        serverConfigStateChanges(
+          environmentId,
+          options.usageLimitSources === true ? { usageLimitSources: true } : {},
+        ),
+      )
       .pipe(
         Atom.setIdleTTL(5 * 60_000),
         Atom.withLabel(`environment-data:server:config-projection:${environmentId}`),
