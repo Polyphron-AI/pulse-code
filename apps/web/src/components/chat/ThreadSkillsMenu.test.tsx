@@ -9,6 +9,7 @@ import {
 import { reactHookHarness as hooks } from "../../test/reactHookHarness";
 import { visitElements } from "../../test/reactElementTree";
 import { Switch } from "../ui/switch";
+import { Input } from "../ui/input";
 
 const state = vi.hoisted(() => ({
   settings: null as UnifiedSettings | null,
@@ -105,5 +106,51 @@ describe("thread skill controls", () => {
       environmentId,
       input: { patch: { threadSkillOverrides: { [threadId]: { tools: null } } } },
     });
+  });
+});
+
+describe("skill browsing", () => {
+  const rows = (tree: ReturnType<typeof render>) => {
+    const ids: string[] = [];
+    visitElements(tree, (element) => {
+      if (element.type === "label") ids.push(String(element.key));
+      return false;
+    });
+    return ids;
+  };
+  function library() {
+    const skill = state.settings!.managedSkills.tools!;
+    state.settings = {
+      ...state.settings!,
+      managedSkills: {
+        alpha: { ...skill, name: "Alpha", defaultProviders: [] },
+        zulu: { ...skill, name: "Zulu" },
+        beta: { ...skill, name: "Beta", description: "Browser testing", defaultProviders: [] },
+        gamma: { ...skill, name: "Gamma" },
+      },
+      threadSkillOverrides: { [threadId]: { beta: true, gamma: false } },
+    };
+  }
+  it("puts effective enabled skills first, including thread overrides", () => {
+    library();
+    expect(rows(render())).toEqual(["beta", "zulu", "alpha", "gamma"]);
+  });
+  it("searches names and descriptions without changing the selection", () => {
+    library();
+    const input = visitElements(render(), (element) => element.type === Input)!;
+    (input.props.onChange as (event: { target: { value: string } }) => void)({
+      target: { value: " BROWSER " },
+    });
+    expect(rows(render())).toEqual(["beta"]);
+    expect(state.persist).not.toHaveBeenCalled();
+    (input.props.onChange as (event: { target: { value: string } }) => void)({
+      target: { value: "missing" },
+    });
+    expect(
+      visitElements(
+        render(),
+        (element) => element.props.children === "No skills match your search.",
+      ),
+    ).not.toBeNull();
   });
 });

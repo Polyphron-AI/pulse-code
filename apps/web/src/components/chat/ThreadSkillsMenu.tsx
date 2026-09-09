@@ -10,6 +10,7 @@ import { useEnvironmentSettings } from "../../hooks/useSettings";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { serverEnvironment } from "../../state/server";
 import { Button } from "../ui/button";
+import { Input } from "../ui/input";
 import { Switch } from "../ui/switch";
 import { Popover, PopoverPopup, PopoverTrigger, PopoverTitle } from "../ui/popover";
 import { Dialog, DialogPopup, DialogTitle, DialogDescription } from "../ui/dialog";
@@ -31,11 +32,24 @@ export function ThreadSkillsMenu({
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
+  const [query, setQuery] = useState("");
   const overrides = threadId ? (settings.threadSkillOverrides[threadId] ?? {}) : {};
   const entries = Object.entries(settings.managedSkills);
   const count = entries.filter(([id, server]) =>
     isManagedSkillEnabled(server, instanceId, overrides[id]),
   ).length;
+  const search = query.trim().toLocaleLowerCase();
+  const visibleEntries = entries
+    .filter(([id, skill]) =>
+      `${skill.name} ${id} ${skill.description}`.toLocaleLowerCase().includes(search),
+    )
+    .sort(
+      ([leftId, left], [rightId, right]) =>
+        Number(isManagedSkillEnabled(right, instanceId, overrides[rightId])) -
+          Number(isManagedSkillEnabled(left, instanceId, overrides[leftId])) ||
+        left.name.localeCompare(right.name) ||
+        leftId.localeCompare(rightId),
+    );
   const update = async (patch: Record<string, boolean | null>) => {
     if (!threadId) return;
     setSaving(true);
@@ -62,7 +76,13 @@ export function ThreadSkillsMenu({
   };
   return (
     <>
-      <Popover open={open} onOpenChange={setOpen}>
+      <Popover
+        open={open}
+        onOpenChange={(value) => {
+          setOpen(value);
+          if (value) setQuery("");
+        }}
+      >
         <PopoverTrigger
           render={
             <Button
@@ -77,16 +97,38 @@ export function ThreadSkillsMenu({
           <span>Skills{count ? ` ${count}` : ""}</span>
           <ChevronDownIcon className="size-3" />
         </PopoverTrigger>
-        <PopoverPopup side="top" align="start" className="w-80 max-w-[calc(100vw-2rem)]">
+        <PopoverPopup
+          initialFocus={false}
+          side="top"
+          align="start"
+          className="w-80 max-w-[calc(100vw-2rem)]"
+          viewportClassName="flex min-h-0 flex-col"
+        >
           <PopoverTitle className="text-sm">Thread skills</PopoverTitle>
           <p className="mt-2 text-xs text-muted-foreground">
             {!threadId
               ? "Start a thread to choose its skills. Provider defaults apply to the first turn."
-              : "Changes apply before your next turn. Active work keeps its current skills."}
+              : "Enabled skills appear first. Changes apply before your next turn."}
           </p>
-          <div className="my-3 max-h-64 space-y-3 overflow-y-auto">
-            {entries.map(([id, server]) => (
-              <label key={id} className="flex items-center justify-between gap-3 text-sm">
+          <Input
+            type="search"
+            aria-label="Search skills"
+            placeholder="Search skills"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            className="mt-3 shrink-0"
+          />
+          <div
+            className="my-3 min-h-0 max-h-48 shrink overflow-y-auto overscroll-contain sm:max-h-64"
+            role="region"
+            aria-label="Skills"
+            tabIndex={0}
+          >
+            {visibleEntries.map(([id, server]) => (
+              <label
+                key={id}
+                className="flex min-h-16 items-center justify-between gap-3 py-2 text-sm"
+              >
                 <span className="min-w-0">
                   <span className="block truncate">{server.name}</span>
                   <span className="block text-xs text-muted-foreground">
@@ -104,6 +146,11 @@ export function ThreadSkillsMenu({
                 />
               </label>
             ))}
+            {entries.length > 0 && visibleEntries.length === 0 && (
+              <p role="status" className="py-3 text-sm text-muted-foreground">
+                No skills match your search.
+              </p>
+            )}
             {!entries.length && (
               <p className="text-sm text-muted-foreground">Add a skill to get started.</p>
             )}
@@ -118,7 +165,7 @@ export function ThreadSkillsMenu({
               {message}
             </p>
           )}
-          <div className="flex justify-between gap-2">
+          <div className="flex shrink-0 justify-between gap-2">
             <Button
               size="sm"
               variant="ghost"
