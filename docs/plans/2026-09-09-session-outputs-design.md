@@ -20,7 +20,7 @@ Capture linked files when assistant messages complete, using the provider-neutra
 - [x] Fix web/desktop environment routing and add saved-output download actions; cover mobile.
 - [x] Verify focused tests, scoped typechecks/lint, and review integrated change.
 - [x] Document output retention and recovery behavior.
-- [ ] Build Windows preview, verify packaged payload, push branch and publish prerelease.
+- [x] Build Windows preview, verify packaged payload, push branch and publish prerelease.
 
 ## Acceptance
 
@@ -29,3 +29,7 @@ Open/download the delivered version after original deletion or worktree removal.
 ## Verification before packaging
 
 117 focused asset/client tests and four provider ingestion tests passed. Server, web and client-runtime scoped typechecks passed. Targeted lint has one pre-existing mobile index-key warning. The unchanged baseline ingestion suite also has timeout failures; the focused completion/capture cases pass. Mobile full typecheck has pre-existing navigation errors. Authenticated live RPC and HTTP checks passed for CSV content, download headers, ZIP dependencies, source-folder removal, missing output and unlinked-file rejection. Browser verification was authorized but the computer-use tool exposed no available browsers, so no visual acceptance is claimed.
+
+## Published preview
+
+[Windows preview 20260909.1](https://github.com/Polyphron-AI/pulse-code/releases/tag/v0.0.33-pulse-preview.20260909.1) was built from `cc247bda2c9b12fd1161a5203aa5834f8a5d8546`. Installer SHA-256: `a52af210a5c4f180f34e889690ed7c95ab0d25f1903f04838da6d2352bce2a6b`. All eight uploaded assets matched their local SHA-256 and byte counts before publication. The tag resolves to the built source commit. Stable release `v0.0.37` remains latest. The feature and preview component branches were pushed. Google Drive delivery was cancelled by the maintainer in favor of GitHub Releases.
