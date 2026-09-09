@@ -36,3 +36,9 @@ Updated environments settle inactive threads and threads with merged or closed p
 Change auto-settlement preferences in General settings. Changes apply to connected environments that support server auto-settlement. Older environments retain this device's local preferences and classification. Offline environments keep their saved settings until you reconnect and apply shared preferences.
 
 Pull-request links are discovered by an updated server even when no client is open. An explicitly linked pull request takes priority over the branch's automatically discovered link. The sidebar and PR panel share status updates, including merges and reopened requests. Older servers continue using checkout-based discovery until upgraded.
+
+## Arrange threads on mobile
+
+Open a thread's menu and choose **Move up** or **Move down** to arrange active or pinned threads. Home and the navigation sidebar share the saved order, and search or project filters do not change what a move means. New and reopened threads appear above the saved active arrangement; ordinary activity does not reorder the list.
+
+The connected environment must support arrangement. When a participating older environment still settles threads locally, active arrangement becomes available after updating it to server-owned settlement. Pinned arrangement remains available on environments that support it.
