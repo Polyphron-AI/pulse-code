@@ -16,7 +16,7 @@ This branch starts from reconciled develop `3f18c538c`. Implementation starts af
 - [x] Rebuild the Windows x64 monitor and verify protocol 3 handshake and process-table output with synthetic requests.
 - [x] Review cross-provider, scheduled-thread, Office, and remote-client compatibility.
 - [x] Run focused tests, changed-file lint, and scoped typechecks; record source provenance and remaining limitations.
-- [ ] Integrate the verified batch into remote develop without overwriting local work.
+- [x] Integrate the verified batch into remote develop without overwriting local work. Pushed `11d7322d873355f7c79e2cee9053577238674397` and verified the remote ref. The main workspace's 48 pre-existing modified files remain untouched.
 
 ## Boundaries
 
