@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:pulse:warden:read-authority:v1",
+  "title": "Trusted Warden read binding authority (never agent input)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "tenantId",
+    "principalId",
+    "workloadId",
+    "environmentRef",
+    "runtime",
+    "threadRef",
+    "policyVersion",
+    "credentialVersion",
+    "queryVersion",
+    "expiresAt"
+  ],
+  "properties": {
+    "tenantId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+    },
+    "principalId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+    },
+    "workloadId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+    },
+    "environmentRef": {
+      "type": "string",
+      "maxLength": 200,
+      "pattern": "^urn:pulse:[A-Za-z0-9._-]{1,64}:environment:[A-Za-z0-9._-]{1,64}(?![\\s\\S])"
+    },
+    "runtime": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._-]{1,64}(?![\\s\\S])"
+    },
+    "threadRef": {
+      "type": "string",
+      "maxLength": 200,
+      "pattern": "^urn:pulse:[A-Za-z0-9._-]{1,64}:thread:[A-Za-z0-9._-]{1,64}(?![\\s\\S])"
+    },
+    "policyVersion": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._-]{1,64}(?![\\s\\S])"
+    },
+    "credentialVersion": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._-]{1,64}(?![\\s\\S])"
+    },
+    "queryVersion": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._-]{1,64}(?![\\s\\S])"
+    },
+    "expiresAt": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 253402300799
+    }
+  }
+}
