@@ -6,6 +6,7 @@ import {
   resolveProviderInstanceEnabled,
   ServerSettings,
   ServerSettingsPatch,
+  UsageLimitSourceId,
 } from "@t3tools/contracts";
 import { createModelSelection } from "@t3tools/shared/model";
 import { assert, it } from "@effect/vitest";
@@ -73,6 +74,63 @@ const recordProviderUsage = (provider: string, instanceId: string | null = provi
   });
 
 it.layer(NodeServices.layer)("server settings", (it) => {
+  it.effect("stores quota source keys separately and preserves, clears, and removes them", () =>
+    Effect.gen(function* () {
+      const settings = yield* ServerSettingsModule.ServerSettingsService;
+      const config = yield* ServerConfig.ServerConfig;
+      const fs = yield* FileSystem.FileSystem;
+      const id = UsageLimitSourceId.make("hub");
+      const source = {
+        kind: "cliproxy" as const,
+        url: "https://quota.example",
+        enabled: true,
+        managementKey: "quota-secret",
+      };
+      const saved = yield* settings.updateSettings({ usageLimitSources: { [id]: source } });
+      assert.equal(saved.usageLimitSources[id]?.managementKey, "quota-secret");
+      assert.notInclude(yield* fs.readFileString(config.settingsPath), "quota-secret");
+      const redacted = ServerSettingsModule.redactServerSettingsForClient(saved);
+      assert.notEqual(redacted.usageLimitSources[id]?.managementKey, "quota-secret");
+      const preserved = yield* settings.updateSettings({
+        usageLimitSources: redacted.usageLimitSources,
+      });
+      assert.equal(preserved.usageLimitSources[id]?.managementKey, "quota-secret");
+      const cleared = yield* settings.updateSettings({
+        usageLimitSources: { [id]: { ...source, managementKey: "" } },
+      });
+      assert.equal(cleared.usageLimitSources[id]?.managementKey, "");
+      yield* settings.updateSettings({ usageLimitSources: { [id]: source } });
+      const removed = yield* settings.updateSettings({ usageLimitSources: { [id]: null } });
+      assert.isUndefined(removed.usageLimitSources[id]);
+      const recreated = yield* settings.updateSettings({
+        usageLimitSources: { [id]: redacted.usageLimitSources[id]! },
+      });
+      assert.equal(recreated.usageLimitSources[id]?.managementKey, "");
+    }).pipe(Effect.provide(makeServerSettingsLayer())),
+  );
+
+  it.effect("preserves an inline quota key when saving its redacted client value", () =>
+    Effect.gen(function* () {
+      const settings = yield* ServerSettingsModule.ServerSettingsService;
+      const config = yield* ServerConfig.ServerConfig;
+      const fs = yield* FileSystem.FileSystem;
+      yield* fs.writeFileString(
+        config.settingsPath,
+        '{"usageLimitSources":{"hub":{"kind":"cliproxy","url":"https://quota.example","managementKey":"inline-quota-secret"}}}',
+      );
+      const current = yield* settings.getSettings;
+      const saved = yield* settings.updateSettings({
+        usageLimitSources:
+          ServerSettingsModule.redactServerSettingsForClient(current).usageLimitSources,
+      });
+      assert.equal(
+        saved.usageLimitSources[UsageLimitSourceId.make("hub")]?.managementKey,
+        "inline-quota-secret",
+      );
+      assert.notInclude(yield* fs.readFileString(config.settingsPath), "inline-quota-secret");
+    }).pipe(Effect.provide(makeServerSettingsLayer())),
+  );
+
   it.effect("preserves context when reading a provider environment secret fails", () => {
     const platformCause = PlatformError.systemError({
       _tag: "PermissionDenied",

@@ -110,6 +110,7 @@ import { isThreadDetailEvent, resolveAvailableEditorsForConfig } from "./ws.ts";
 import * as CheckpointDiffQuery from "./checkpointing/CheckpointDiffQuery.ts";
 import * as GitManager from "./git/GitManager.ts";
 import * as Keybindings from "./keybindings.ts";
+import * as UsageLimitSources from "./usage/UsageLimitSources.ts";
 import * as ExternalLauncher from "./process/externalLauncher.ts";
 import * as RemoteOpenTargets from "./environment/RemoteOpenTargets.ts";
 import * as OrchestrationEngine from "./orchestration/Services/OrchestrationEngine.ts";
@@ -637,7 +638,15 @@ const buildAppUnderTest = (options?: {
           }),
           streamChanges: Stream.empty,
           ...options?.layers?.keybindings,
-        }),
+        }).pipe(
+          Layer.merge(
+            Layer.succeed(UsageLimitSources.UsageLimitSources, {
+              current: Effect.succeed([]),
+              streamChanges: Stream.empty,
+              refresh: Effect.void,
+            }),
+          ),
+        ),
       ),
       Layer.provide(
         Layer.mock(ProviderRegistry.ProviderRegistry)({

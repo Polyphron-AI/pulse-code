@@ -164,6 +164,7 @@ export const make = Effect.gen(function* () {
       mail: true,
       mailPeople: true,
       threadSettlement: true,
+      usageLimitSources: true,
       threadRestartContinuation: true,
       threadAutoSettlement: true,
       threadSnooze: true,

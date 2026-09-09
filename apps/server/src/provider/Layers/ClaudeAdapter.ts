@@ -1,3 +1,4 @@
+import { type ClaudeScopedLimitNames, claudeRateLimitEventToUpdate } from "./claudeUsageLimits.ts";
 /**
  * ClaudeAdapterLive - Scoped live implementation for the Claude Agent provider adapter.
  *
@@ -321,6 +322,8 @@ export interface ClaudeAdapterLiveOptions {
   readonly nativeEventLogPath?: string;
   readonly nativeEventLogger?: EventNdjsonLogger;
   readonly modelCatalog?: Effect.Effect<ClaudeModelCatalog>;
+  /** Scoped-bucket names the driver's status probe last saw; see `claudeUsageLimits`. */
+  readonly scopedLimitNames?: Ref.Ref<ClaudeScopedLimitNames>;
 }
 
 function isUuid(value: string): boolean {
@@ -3680,6 +3683,10 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     }
 
     if (message.type === "rate_limit_event") {
+      const names = options?.scopedLimitNames
+        ? yield* Ref.get(options.scopedLimitNames)
+        : { overageIncluded: undefined };
+      const limits = claudeRateLimitEventToUpdate(message.rate_limit_info, names);
       const rateLimitInfo = message.rate_limit_info;
       if (!rateLimitInfo) return;
       yield* offerRuntimeEvent({
@@ -3687,6 +3694,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         type: "account.rate-limits.updated",
         payload: {
           rateLimits: message,
+          ...(limits ? { limits } : {}),
         },
       });
       // A rejected window parks the turn inside the SDK: no further messages
