@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import type { TalkRecording, TalkStatus } from "@t3tools/contracts";
 import { Button } from "../../ui/button";
-import { Card } from "../../ui/card";
+import { MicIcon, AudioLinesIcon } from "lucide-react";
 import { fieldClass, RequestState, useTalkRequest } from "./shared";
 
 export function TalkPanel() {
@@ -73,9 +73,16 @@ export function TalkPanel() {
     await refresh();
   }
   return (
-    <Card id="office-meetings" className="gap-4 p-5">
+    <section
+      id="office-meetings"
+      aria-labelledby="office-meetings-heading"
+      className="min-w-0 space-y-5"
+    >
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="font-semibold">Meetings</h2>
+        <h2 id="office-meetings-heading" className="flex items-center gap-2 text-lg font-semibold">
+          <MicIcon className="size-5 text-muted-foreground" />
+          Meetings
+        </h2>
         <Button variant="outline" disabled={busy} onClick={() => void refresh()}>
           Refresh
         </Button>
@@ -147,7 +154,10 @@ export function TalkPanel() {
                       ? "Record now, transcribe when ready. Parakeet setup is in Dictation settings."
                       : "Ready to record."}
               </p>
-              <fieldset className="space-y-2 text-sm" disabled={busy || status.recording}>
+              <fieldset
+                className="flex flex-wrap gap-x-5 gap-y-2 rounded-lg bg-muted/40 p-4 text-sm"
+                disabled={busy || status.recording}
+              >
                 <legend className="mb-2 font-medium">Audio sources</legend>
                 <label className="flex items-center gap-2">
                   <input
@@ -243,9 +253,17 @@ export function TalkPanel() {
         </div>
       )}
       <div className="space-y-3">
-        <h3 className="text-sm font-medium">Local recordings</h3>
-        {recordings.length === 0 && !busy && (
-          <p className="text-sm text-muted-foreground">No recordings saved yet.</p>
+        <h3 className="flex items-center gap-2 text-sm font-medium">
+          <AudioLinesIcon className="size-4 text-muted-foreground" />
+          Recordings <span className="text-muted-foreground">{recordings.length}</span>
+        </h3>
+        {recordings.length === 0 && !busy && !error && (
+          <div className="rounded-lg bg-muted/30 px-5 py-8 text-center">
+            <p className="text-sm font-medium">Your meetings will appear here</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Start a recording above. Audio and transcripts stay on this computer.
+            </p>
+          </div>
         )}
         {recordings.map((recording) => (
           <article key={recording.id} className="space-y-2 border-t border-border pt-3">
@@ -365,6 +383,6 @@ export function TalkPanel() {
           </article>
         ))}
       </div>
-    </Card>
+    </section>
   );
 }
