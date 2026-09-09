@@ -1,3 +1,5 @@
+import { useEnvironments } from "../../state/environments";
+import { AutoSettlementSettings } from "./components/AutoSettlementSettings";
 import { useAuth, useUser } from "@clerk/expo";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import Constants from "expo-constants";
@@ -530,6 +532,11 @@ function ConfiguredSettingsRouteScreen() {
 }
 
 function GeneralSettingsSection() {
+  const { environments } = useEnvironments();
+  const hasLegacyEnvironments = environments.some(
+    (environment) =>
+      environment.serverConfig?.environment.capabilities.threadAutoSettlement !== true,
+  );
   const navigation = useNavigation();
   const preferencesResult = useAtomValue(mobilePreferencesAtom);
   const savePreferences = useAtomSet(updateMobilePreferencesAtom);
@@ -573,12 +580,16 @@ function GeneralSettingsSection() {
         value={composerBusyBehavior === "steer" ? "Steer" : "Queue"}
         onPress={chooseComposerBusyBehavior}
       />
-      <SettingsSwitchRow
-        icon="arrow.triangle.branch"
-        label="Auto-settle merged threads"
-        value={autoSettleOnMerge}
-        onValueChange={(value) => savePreferences({ autoSettleOnMerge: value })}
-      />
+      {hasLegacyEnvironments ? (
+        <SettingsSwitchRow
+          icon="arrow.triangle.branch"
+          label="Auto-settle merged threads on older servers"
+          subtitle="Saved on this device for environments without server auto-settlement."
+          value={autoSettleOnMerge}
+          onValueChange={(value) => savePreferences({ autoSettleOnMerge: value })}
+        />
+      ) : null}
+      <AutoSettlementSettings />
       <SettingsRow icon="chart.bar.xaxis" label="Usage" target="SettingsUsage" />
     </SettingsSection>
   );

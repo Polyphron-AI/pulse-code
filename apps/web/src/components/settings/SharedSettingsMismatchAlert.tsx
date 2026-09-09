@@ -19,8 +19,8 @@ export function SharedSettingsMismatchAlert() {
     <Alert variant="warning" className="mx-3 sm:mx-4">
       <TriangleAlertIcon />
       <AlertDescription>
-        Settings differ on {labels}. Apply the primary environment's restart, thread defaults and
-        source control preferences to the connected supported environments.
+        Settings differ on {labels}. Apply the primary environment's restart, auto-settlement,
+        thread defaults and source control preferences to the connected supported environments.
       </AlertDescription>
       <AlertAction>
         <Button variant="outline" size="compact" onClick={applyToAll}>

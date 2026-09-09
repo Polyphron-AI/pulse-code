@@ -89,8 +89,9 @@ export function canSettle(
     OrchestrationThreadShell,
     "hasPendingApprovals" | "hasPendingUserInput" | "session" | "latestUserMessageAt" | "latestTurn"
   >,
-  options: { readonly now: string },
+  options: { readonly now: string; readonly serverAutoSettlement?: boolean },
 ): boolean {
+  if (options.serverAutoSettlement) return true;
   if (shell.hasPendingApprovals || shell.hasPendingUserInput) return false;
   if (shell.session?.status === "starting" || shell.session?.status === "running") return false;
   // Queued work is as blocked-on-progress as a live session: settling it
@@ -238,12 +239,15 @@ export function threadWokeAt(
 export function effectiveSettled(
   shell: OrchestrationThreadShell,
   options: {
+    readonly serverAutoSettlement?: boolean;
     readonly now: string;
     readonly autoSettleAfterDays: number | null;
     readonly autoSettleOnMerge?: boolean;
     readonly changeRequestState?: ChangeRequestStateLike | null;
   },
 ): boolean {
+  // Capable servers persist the complete settlement decision, including manual settlement.
+  if (options.serverAutoSettlement) return shell.settledOverride === "settled";
   // Blocked work must remain visible even when a user explicitly settled it.
   if (shell.hasPendingApprovals || shell.hasPendingUserInput) return false;
   if (shell.session?.status === "starting" || shell.session?.status === "running") return false;

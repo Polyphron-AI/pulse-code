@@ -49,7 +49,12 @@ describe("mobile restart continuation", () => {
       connection: { phase: id === "offline" ? "reconnecting" : "connected" },
       serverConfig: {
         settings: state.settings[id] ?? {},
-        environment: { capabilities: { threadRestartContinuation: id !== "legacy" } },
+        environment: {
+          capabilities: {
+            threadRestartContinuation: id !== "legacy",
+            threadAutoSettlement: id !== "legacy",
+          },
+        },
       },
     }));
     expect(row("remote").props.value).toBe(true);
@@ -72,7 +77,9 @@ describe("mobile restart continuation", () => {
       connection: { phase: "connected" },
       serverConfig: {
         settings: { ...DEFAULT_SERVER_SETTINGS, continueThreadsAfterServerUpdate: id === "remote" },
-        environment: { capabilities: { threadRestartContinuation: true } },
+        environment: {
+          capabilities: { threadRestartContinuation: true, threadAutoSettlement: true },
+        },
       },
     }));
     const section = RestartContinuationSettings() as ReactElement<{

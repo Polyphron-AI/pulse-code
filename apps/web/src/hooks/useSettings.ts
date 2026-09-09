@@ -14,6 +14,7 @@ import { useAtomValue } from "@effect/atom-react";
 import {
   DEFAULT_SERVER_SETTINGS,
   type EnvironmentId,
+  type ExecutionEnvironmentCapabilities,
   ServerSettings,
   type ServerSettingsPatch,
 } from "@t3tools/contracts";
@@ -43,7 +44,11 @@ import {
   themeAllowsSidebarArtwork,
 } from "~/themePalette";
 import * as Struct from "effect/Struct";
-import { primaryServerSettingsAtom, serverEnvironment } from "~/state/server";
+import {
+  primaryServerSettingsAtom,
+  primaryServerConfigAtom,
+  serverEnvironment,
+} from "~/state/server";
 import { useEnvironments, usePrimaryEnvironment } from "~/state/environments";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { useTheme } from "./useTheme";
@@ -224,19 +229,23 @@ function useClientSettingsValue(): ClientSettings {
 export function mergeEnvironmentSettings(
   serverSettings: ServerSettings,
   clientSettings: ClientSettings,
+  capabilities?: Pick<ExecutionEnvironmentCapabilities, "threadAutoSettlement">,
 ): UnifiedSettings {
-  return { ...serverSettings, ...clientSettings };
+  return capabilities?.threadAutoSettlement === true
+    ? { ...clientSettings, ...serverSettings }
+    : { ...serverSettings, ...clientSettings };
 }
 
 function useMergedSettings<T>(
   serverSettings: ServerSettings,
   selector: ((settings: UnifiedSettings) => T) | undefined,
+  capabilities?: Pick<ExecutionEnvironmentCapabilities, "threadAutoSettlement">,
 ): T {
   const clientSettings = useClientSettingsValue();
 
   const merged = useMemo<UnifiedSettings>(
-    () => mergeEnvironmentSettings(serverSettings, clientSettings),
-    [clientSettings, serverSettings],
+    () => mergeEnvironmentSettings(serverSettings, clientSettings, capabilities),
+    [clientSettings, serverSettings, capabilities],
   );
 
   return useMemo(() => (selector ? selector(merged) : (merged as T)), [merged, selector]);
@@ -304,14 +313,24 @@ export function useEnvironmentSettings<T = UnifiedSettings>(
   selector?: (settings: UnifiedSettings) => T,
 ): T {
   const serverSettings = useAtomValue(serverEnvironment.settingsValueAtom(environmentId));
-  return useMergedSettings(serverSettings ?? DEFAULT_SERVER_SETTINGS, selector);
+  const config = useAtomValue(serverEnvironment.configValueAtom(environmentId));
+  return useMergedSettings(
+    serverSettings ?? DEFAULT_SERVER_SETTINGS,
+    selector,
+    config?.environment.capabilities,
+  );
 }
 
 /** Primary-only settings access for the settings UI and other explicitly global surfaces. */
 export function usePrimarySettings<T = UnifiedSettings>(
   selector?: (settings: UnifiedSettings) => T,
 ): T {
-  return useMergedSettings(useAtomValue(primaryServerSettingsAtom), selector);
+  const config = useAtomValue(primaryServerConfigAtom);
+  return useMergedSettings(
+    useAtomValue(primaryServerSettingsAtom),
+    selector,
+    config?.environment.capabilities,
+  );
 }
 
 /**
@@ -329,11 +348,26 @@ function useUpdateSettingsTarget(environmentId: EnvironmentId | null, sharePrefe
   const updateSettings = useCallback(
     (patch: UnifiedSettingsPatch) => {
       const { serverPatch, clientPatch } = splitPatch(patch);
+      const target = environments.find(
+        (environment) => environment.environmentId === environmentId,
+      );
+      if (target?.serverConfig?.environment.capabilities.threadAutoSettlement !== true) {
+        Object.assign(
+          clientPatch,
+          Struct.pick(patch, ["sidebarAutoSettleAfterDays", "sidebarAutoSettleOnMerge"]),
+        );
+      }
 
       if (Object.keys(serverPatch).length > 0) {
         const { sharedPatch, localPatch } = sharePreferences
           ? splitSharedServerPatch(serverPatch)
-          : { sharedPatch: {}, localPatch: serverPatch };
+          : {
+              sharedPatch: {},
+              localPatch: filterSharedServerPatch(
+                serverPatch,
+                target?.serverConfig?.environment.capabilities,
+              ),
+            };
         if (Object.keys(localPatch).length > 0) {
           if (environmentId)
             void persistServerSettings({ environmentId, input: { patch: localPatch } });
@@ -367,7 +401,7 @@ function useUpdateSettingsTarget(environmentId: EnvironmentId | null, sharePrefe
               writes.push({ environmentId: target.environmentId, input: { patch: legacyPatch } });
           }
           for (const write of writes) void persistServerSettings(write);
-          if (writes.length === 0)
+          if (writes.length === 0 && Object.keys(sharedPatch).some((key) => !(key in clientPatch)))
             toastManager.add({
               type: "warning",
               title: "Setting not saved",

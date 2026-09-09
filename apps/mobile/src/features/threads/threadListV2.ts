@@ -351,6 +351,7 @@ export function buildThreadListV2Items(input: {
   /** Environments whose server supports thread.settle/unsettle. Threads on
       other environments never classify as settled — the user could neither
       un-settle nor pin them. Absent = no gating (tests). */
+  readonly autoSettlementEnvironmentIds?: ReadonlySet<EnvironmentId>;
   readonly settlementEnvironmentIds?: ReadonlySet<EnvironmentId>;
   /** Environments whose server supports thread.snooze/unsnooze. Same
       contract as settlementEnvironmentIds. */
@@ -438,6 +439,8 @@ export function buildThreadListV2Items(input: {
     if (
       supportsSettlement &&
       effectiveSettled(thread, {
+        serverAutoSettlement:
+          input.autoSettlementEnvironmentIds?.has(thread.environmentId) === true,
         now,
         autoSettleAfterDays,
         autoSettleOnMerge,

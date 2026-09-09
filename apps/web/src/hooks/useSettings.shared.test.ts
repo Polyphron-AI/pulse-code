@@ -4,6 +4,7 @@ const state = vi.hoisted(() => ({
   environments: [] as unknown[],
   update: vi.fn(),
   warning: vi.fn(),
+  saveClient: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock("react", async (original) => ({
   ...(await original<typeof import("react")>()),
@@ -15,6 +16,9 @@ vi.mock("~/state/environments", () => ({
   usePrimaryEnvironment: () => state.environments[0] ?? null,
 }));
 vi.mock("~/state/use-atom-command", () => ({ useAtomCommand: () => state.update }));
+vi.mock("~/localApi", () => ({
+  ensureLocalApi: () => ({ persistence: { setClientSettings: state.saveClient } }),
+}));
 vi.mock("~/components/ui/toast", () => ({ toastManager: { add: state.warning } }));
 import {
   useUpdateEnvironmentSettings,
@@ -31,13 +35,16 @@ function environment(id = primary, supported = true, connected = true) {
     connection: { phase: connected ? "connected" : "reconnecting" },
     serverConfig: {
       settings: DEFAULT_SERVER_SETTINGS,
-      environment: { capabilities: { threadRestartContinuation: supported } },
+      environment: {
+        capabilities: { threadRestartContinuation: supported, threadAutoSettlement: supported },
+      },
     },
   };
 }
 beforeEach(() => {
   state.update.mockReset();
   state.warning.mockReset();
+  state.saveClient.mockClear();
   state.environments = [environment(), environment(remote)];
 });
 describe("shared settings routing", () => {
@@ -75,6 +82,38 @@ describe("shared settings routing", () => {
       environmentId: primary,
       input: { patch: { defaultThreadEnvMode: "worktree" } },
     });
+  });
+  it("writes server auto-settlement preferences without overwriting device legacy preferences", () => {
+    useUpdatePrimarySettings()({
+      sidebarAutoSettleAfterDays: null,
+      sidebarAutoSettleOnMerge: false,
+    });
+    expect(state.update).toHaveBeenCalledTimes(2);
+    expect(state.update.mock.calls[1]?.[0].input.patch).toEqual({
+      sidebarAutoSettleAfterDays: null,
+      sidebarAutoSettleOnMerge: false,
+    });
+    expect(state.saveClient).not.toHaveBeenCalled();
+  });
+  it("keeps legacy preferences local while updating capable remote environments", () => {
+    state.environments = [environment(primary, false), environment(remote)];
+    useUpdatePrimarySettings()({ sidebarAutoSettleOnMerge: false });
+    expect(state.update).toHaveBeenCalledExactlyOnceWith({
+      environmentId: remote,
+      input: { patch: { sidebarAutoSettleOnMerge: false } },
+    });
+    expect(state.saveClient).toHaveBeenCalledWith(
+      expect.objectContaining({ sidebarAutoSettleOnMerge: false }),
+    );
+  });
+  it("keeps scoped legacy auto-settlement writes local without unsupported RPCs", () => {
+    state.environments = [environment(primary, false)];
+    useUpdateEnvironmentSettings(primary)({ sidebarAutoSettleAfterDays: null });
+    expect(state.update).not.toHaveBeenCalled();
+    expect(state.saveClient).toHaveBeenCalledWith(
+      expect.objectContaining({ sidebarAutoSettleAfterDays: null }),
+    );
+    expect(state.warning).not.toHaveBeenCalled();
   });
   it("reports drift without writing until explicitly applied", () => {
     state.environments = [

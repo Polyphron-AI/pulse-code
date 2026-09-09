@@ -21,6 +21,8 @@ import type { EnvironmentConnectionPhase } from "../connection/presentation.ts";
 
 /** Server keys that hold a user preference rather than machine config. */
 export const SHARED_SERVER_SETTING_KEYS = [
+  "sidebarAutoSettleAfterDays",
+  "sidebarAutoSettleOnMerge",
   "continueThreadsAfterServerUpdate",
   "defaultThreadEnvMode",
   "newWorktreesStartFromOrigin",
@@ -54,36 +56,48 @@ export function splitSharedServerPatch(patch: ServerSettingsPatch): {
 /** Omit restart recovery on servers that cannot persist its preference. */
 export function filterSharedServerPatch(
   patch: ServerSettingsPatch,
-  capabilities: Pick<ExecutionEnvironmentCapabilities, "threadRestartContinuation"> | undefined,
+  capabilities:
+    | Pick<ExecutionEnvironmentCapabilities, "threadRestartContinuation" | "threadAutoSettlement">
+    | undefined,
 ): ServerSettingsPatch {
+  const supportedPatch =
+    capabilities?.threadAutoSettlement === true
+      ? patch
+      : Struct.omit(patch, ["sidebarAutoSettleAfterDays", "sidebarAutoSettleOnMerge"]);
   return capabilities?.threadRestartContinuation === true
-    ? patch
-    : Struct.omit(patch, ["continueThreadsAfterServerUpdate"]);
+    ? supportedPatch
+    : Struct.omit(supportedPatch, ["continueThreadsAfterServerUpdate"]);
 }
 
 /** The shared subset supported by one environment. */
 export function pickSharedServerSettings(
   settings: ServerSettings,
-  capabilities?: Pick<ExecutionEnvironmentCapabilities, "threadRestartContinuation">,
+  capabilities?: Pick<
+    ExecutionEnvironmentCapabilities,
+    "threadRestartContinuation" | "threadAutoSettlement"
+  >,
 ): ServerSettingsPatch {
   return filterSharedServerPatch(Struct.pick(settings, SHARED_SERVER_SETTING_KEYS), capabilities);
 }
 
 /**
  * Whether an environment can participate in shared-settings sync right now.
- * Restart continuation establishes a known settings-capable server for this compatibility batch.
+ * Server auto-settlement establishes support for shared server preferences.
  */
 export function supportsSharedSettingsSync(environment: {
   readonly connection: { readonly phase: EnvironmentConnectionPhase };
   readonly serverConfig: {
     readonly environment: {
-      readonly capabilities: Pick<ExecutionEnvironmentCapabilities, "threadRestartContinuation">;
+      readonly capabilities: Pick<
+        ExecutionEnvironmentCapabilities,
+        "threadRestartContinuation" | "threadAutoSettlement"
+      >;
     };
   } | null;
 }): boolean {
   return (
     environment.connection.phase === "connected" &&
-    environment.serverConfig?.environment.capabilities.threadRestartContinuation === true
+    environment.serverConfig?.environment.capabilities.threadAutoSettlement === true
   );
 }
 
@@ -93,7 +107,7 @@ export interface SharedSettingsEnvironment {
   readonly syncEligible: boolean;
   readonly settings: ServerSettings | null;
   readonly capabilities?:
-    | Pick<ExecutionEnvironmentCapabilities, "threadRestartContinuation">
+    | Pick<ExecutionEnvironmentCapabilities, "threadRestartContinuation" | "threadAutoSettlement">
     | undefined;
 }
 
@@ -109,7 +123,7 @@ export function findSharedSettingsMismatches(input: {
   readonly primaryEnvironmentId: EnvironmentId | null;
   readonly primarySettings: ServerSettings | null;
   readonly primaryCapabilities?:
-    | Pick<ExecutionEnvironmentCapabilities, "threadRestartContinuation">
+    | Pick<ExecutionEnvironmentCapabilities, "threadRestartContinuation" | "threadAutoSettlement">
     | undefined;
   readonly environments: ReadonlyArray<SharedSettingsEnvironment>;
 }): ReadonlyArray<{ readonly environmentId: EnvironmentId; readonly label: string }> {

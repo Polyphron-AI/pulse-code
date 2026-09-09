@@ -13,14 +13,18 @@ import {
 const primaryId = EnvironmentId.make("env-primary");
 const laptopId = EnvironmentId.make("env-laptop");
 const boxId = EnvironmentId.make("env-box");
-const restartCapabilities = { threadRestartContinuation: true };
+const restartCapabilities = { threadRestartContinuation: true, threadAutoSettlement: true };
 
 describe("supportsSharedSettingsSync", () => {
   it("accepts only connected servers that advertise the shared-settings capability", () => {
     expect(
       supportsSharedSettingsSync({
         connection: { phase: "connected" },
-        serverConfig: { environment: { capabilities: { threadRestartContinuation: true } } },
+        serverConfig: {
+          environment: {
+            capabilities: { threadRestartContinuation: true, threadAutoSettlement: true },
+          },
+        },
       }),
     ).toBe(true);
     expect(
@@ -32,7 +36,11 @@ describe("supportsSharedSettingsSync", () => {
     expect(
       supportsSharedSettingsSync({
         connection: { phase: "reconnecting" },
-        serverConfig: { environment: { capabilities: { threadRestartContinuation: true } } },
+        serverConfig: {
+          environment: {
+            capabilities: { threadRestartContinuation: true, threadAutoSettlement: true },
+          },
+        },
       }),
     ).toBe(false);
   });
@@ -61,6 +69,8 @@ describe("pickSharedServerSettings", () => {
       "continueThreadsAfterServerUpdate",
       "defaultThreadEnvMode",
       "newWorktreesStartFromOrigin",
+      "sidebarAutoSettleAfterDays",
+      "sidebarAutoSettleOnMerge",
       "sourceControlWritingStyle",
     ]);
   });
@@ -280,4 +290,20 @@ describe("sharedServerSettingsWrites", () => {
     ).toEqual([]);
     expect(sharedServerSettingsWrites({ enableAgentBrowserAccess: true }, [target])).toEqual([]);
   });
+});
+
+it("filters auto-settlement independently from restart continuation", () => {
+  const patch = {
+    sidebarAutoSettleAfterDays: null,
+    sidebarAutoSettleOnMerge: false,
+    continueThreadsAfterServerUpdate: true,
+  };
+  expect(filterSharedServerPatch(patch, { threadAutoSettlement: true })).toEqual({
+    sidebarAutoSettleAfterDays: null,
+    sidebarAutoSettleOnMerge: false,
+  });
+  expect(filterSharedServerPatch(patch, { threadRestartContinuation: true })).toEqual({
+    continueThreadsAfterServerUpdate: true,
+  });
+  expect(filterSharedServerPatch(patch, {})).toEqual({});
 });

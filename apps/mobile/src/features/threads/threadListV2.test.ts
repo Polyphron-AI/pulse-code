@@ -961,3 +961,37 @@ describe("buildThreadListV2ListItems", () => {
     ]);
   });
 });
+
+describe("mixed server settlement versions", () => {
+  it("partitions each environment using its own settlement authority", () => {
+    const legacyId = EnvironmentId.make("legacy");
+    const canonical = makeThread({
+      id: ThreadId.make("canonical"),
+      title: "Canonical",
+      latestUserMessageAt: "2026-05-01T00:00:00.000Z",
+    });
+    const legacy = makeThread({
+      ...canonical,
+      environmentId: legacyId,
+      id: ThreadId.make("legacy"),
+      title: "Legacy",
+    });
+    const settled = makeThread({
+      id: ThreadId.make("settled"),
+      title: "Settled",
+      settledOverride: "settled",
+      hasPendingUserInput: true,
+    });
+    const layout = buildThreadListV2Items({
+      threads: [canonical, legacy, settled],
+      environmentId: null,
+      searchQuery: "",
+      now: NOW,
+      autoSettlementEnvironmentIds: new Set([environmentId]),
+    });
+    expect(layout.settledCount).toBe(2);
+    expect(layout.items.find((item) => item.thread.id === canonical.id)?.variant).toBe("card");
+    expect(layout.items.find((item) => item.thread.id === legacy.id)?.variant).toBe("slim");
+    expect(layout.items.find((item) => item.thread.id === settled.id)?.variant).toBe("slim");
+  });
+});

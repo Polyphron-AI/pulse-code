@@ -4187,6 +4187,7 @@ function ChatViewContent(props: ChatViewProps) {
   }, [activeThreadPr, openThreadPullRequest]);
   const pullRequestSurfaceAvailable =
     supportsPullRequests && activeThreadPr !== null && threadRepository !== null;
+  const serverAutoSettlement = serverConfig?.environment.capabilities.threadAutoSettlement === true;
   const supportsSettlement = serverConfig?.environment.capabilities.threadSettlement === true;
   const supportsSnooze = serverConfig?.environment.capabilities.threadSnooze === true;
   const nowMinute = useNowMinute();
@@ -4222,7 +4223,12 @@ function ChatViewContent(props: ChatViewProps) {
   );
   const activeThreadWokeVisible = useMemo(() => {
     if (activeThreadWokeAt === null) return false;
-    if (changeRequestAutoSettles(activeThreadPr?.state, autoSettleOnMerge)) return false;
+    if (
+      serverAutoSettlement
+        ? activeThreadShell?.settledOverride === "settled"
+        : changeRequestAutoSettles(activeThreadPr?.state, autoSettleOnMerge)
+    )
+      return false;
     const wokeAtMs = Date.parse(activeThreadWokeAt);
     if (Number.isNaN(wokeAtMs)) return false;
     // Having the thread open counts as a visit at completedAt (the effect
@@ -4243,12 +4249,15 @@ function ChatViewContent(props: ChatViewProps) {
     activeLatestTurn?.completedAt,
     activeThreadLastVisitedAt,
     activeThreadPr?.state,
+    activeThreadShell?.settledOverride,
+    serverAutoSettlement,
     activeThreadWokeAt,
     autoSettleOnMerge,
   ]);
   const activeThreadSettled = useMemo(() => {
     if (activeThreadShell === null || !supportsSettlement) return false;
     return effectiveSettled(activeThreadShell, {
+      serverAutoSettlement,
       now: `${nowMinute}:00.000Z`,
       autoSettleAfterDays,
       autoSettleOnMerge,
@@ -4262,6 +4271,7 @@ function ChatViewContent(props: ChatViewProps) {
     changeRequestSnapshotByKey,
     nowMinute,
     supportsSettlement,
+    serverAutoSettlement,
   ]);
   const unsettleThreadMutation = useAtomCommand(threadEnvironment.unsettle, {
     reportFailure: false,

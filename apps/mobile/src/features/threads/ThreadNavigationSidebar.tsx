@@ -484,6 +484,15 @@ function ThreadNavigationSidebarPane(
   // Threads on servers without the settlement capability never classify as
   // settled (the user could neither un-settle nor pin them).
   const serverConfigs = useAtomValue(environmentServerConfigsAtom);
+  const autoSettlementEnvironmentIds = useMemo(
+    () =>
+      new Set(
+        [...serverConfigs]
+          .filter(([, config]) => config.environment.capabilities.threadAutoSettlement === true)
+          .map(([id]) => id),
+      ),
+    [serverConfigs],
+  );
   const settlementEnvironmentIds = useMemo(() => {
     const supported = new Set<EnvironmentId>();
     for (const [environmentId, config] of serverConfigs) {
@@ -562,6 +571,7 @@ function ThreadNavigationSidebarPane(
       changeRequestByKey,
       autoSettleOnMerge,
       settlementEnvironmentIds,
+      autoSettlementEnvironmentIds,
       snoozeEnvironmentIds,
       settledLimit: settledVisibleCount,
       now: `${nowMinute}:00.000Z`,
@@ -583,6 +593,7 @@ function ThreadNavigationSidebarPane(
     matchedThreadKeys,
     settledVisibleCount,
     settlementEnvironmentIds,
+    autoSettlementEnvironmentIds,
     snoozeEnvironmentIds,
     threadListV2Enabled,
     threads,

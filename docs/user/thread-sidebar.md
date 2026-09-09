@@ -25,3 +25,9 @@ pill** fallback because their colors are not controlled by Pulse Code.
 To generate a fresh title from the conversation, open a thread's context menu and choose
 **Regenerate title**. While Pulse Code is generating it, the action reads **Regenerating…** and cannot
 be selected again. The option is hidden when the connected environment needs a server update.
+
+### Server auto-settlement
+
+Updated environments settle inactive threads and threads with merged or closed pull requests on the server, even when every client is closed. Web, desktop and mobile show the same saved settlement state. Manual settlement is handled by the server and can interrupt active work; requests that still require a native provider answer must be resolved first.
+
+Change auto-settlement preferences in General settings. Changes apply to connected environments that support server auto-settlement. Older environments retain this device's local preferences and classification. Offline environments keep their saved settings until you reconnect and apply shared preferences.

@@ -596,6 +596,15 @@ export function HomeScreen(props: HomeScreenProps) {
   // Threads on servers without the settlement capability never classify as
   // settled (the user could neither un-settle nor pin them).
   const serverConfigs = useAtomValue(environmentServerConfigsAtom);
+  const autoSettlementEnvironmentIds = useMemo(
+    () =>
+      new Set(
+        [...serverConfigs]
+          .filter(([, config]) => config.environment.capabilities.threadAutoSettlement === true)
+          .map(([id]) => id),
+      ),
+    [serverConfigs],
+  );
   const settlementEnvironmentIds = useMemo(() => {
     const supported = new Set<EnvironmentId>();
     for (const [environmentId, config] of serverConfigs) {
@@ -677,6 +686,7 @@ export function HomeScreen(props: HomeScreenProps) {
       changeRequestByKey,
       autoSettleOnMerge,
       settlementEnvironmentIds,
+      autoSettlementEnvironmentIds,
       snoozeEnvironmentIds,
       settledLimit: settledVisibleCount,
       now: `${nowMinute}:00.000Z`,
@@ -694,6 +704,7 @@ export function HomeScreen(props: HomeScreenProps) {
     settledShelfExpanded,
     settledVisibleCount,
     settlementEnvironmentIds,
+    autoSettlementEnvironmentIds,
     snoozeEnvironmentIds,
     props.searchQuery,
     props.selectedEnvironmentId,

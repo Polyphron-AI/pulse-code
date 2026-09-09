@@ -25,6 +25,7 @@ import {
   readEnvironmentSupportsPinning,
   readEnvironmentSupportsPinReorder,
   readEnvironmentSupportsSettlement,
+  readEnvironmentSupportsAutoSettlement,
   readEnvironmentSupportsSnooze,
   readEnvironmentThreadRefs,
   readProject,
@@ -486,7 +487,13 @@ export function useThreadActions() {
       // Settle may only target what effectiveSettled could classify as
       // settled: not starting/running sessions, not threads waiting on
       // approvals or user input. Anything else would hide live work.
-      if (resolved && !canSettle(resolved.thread, { now: new Date().toISOString() })) {
+      if (
+        resolved &&
+        !canSettle(resolved.thread, {
+          now: new Date().toISOString(),
+          serverAutoSettlement: readEnvironmentSupportsAutoSettlement(target.environmentId),
+        })
+      ) {
         return AsyncResult.failure(
           Cause.fail(
             new ThreadSettleBlockedError({

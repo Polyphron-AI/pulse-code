@@ -710,6 +710,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
   // False on environments whose server predates thread.settle/unsettle:
   // the lifecycle affordances hide entirely rather than fail on click.
   settlementSupported: boolean;
+  serverAutoSettlement: boolean;
   autoSettleOnMerge: boolean;
   // Same contract for thread.snooze/unsnooze.
   snoozeSupported: boolean;
@@ -841,7 +842,9 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
   const isWoke =
     wokeAtDate !== null &&
     (lastVisitedDate === null || lastVisitedDate < wokeAtDate) &&
-    !changeRequestAutoSettles(prState, props.autoSettleOnMerge);
+    !(props.serverAutoSettlement
+      ? thread.settledOverride === "settled"
+      : changeRequestAutoSettles(prState, props.autoSettleOnMerge));
   // In-flight rows (working, or waiting on approval/input) fade as a whole:
   // there is nothing for the user to do yet, so prominence is reserved for
   // rows that need a human — done (unread), read-but-unsettled, failed, and
@@ -2216,6 +2219,9 @@ export default function Sidebar() {
       } else if (
         supportsSettlement &&
         effectiveSettled(thread, {
+          serverAutoSettlement:
+            serverConfigs.get(thread.environmentId)?.environment.capabilities
+              .threadAutoSettlement === true,
           now,
           autoSettleAfterDays,
           autoSettleOnMerge,
@@ -4027,6 +4033,10 @@ export default function Sidebar() {
                         settlementSupported={
                           serverConfigs.get(thread.environmentId)?.environment.capabilities
                             .threadSettlement === true
+                        }
+                        serverAutoSettlement={
+                          serverConfigs.get(thread.environmentId)?.environment.capabilities
+                            .threadAutoSettlement === true
                         }
                         autoSettleOnMerge={autoSettleOnMerge}
                         snoozeSupported={
