@@ -1,3 +1,4 @@
+import { videoMimeType } from "@t3tools/shared/video";
 import {
   resolveProviderSkillsForCwd,
   resolveProviderSlashCommandsForCwd,
@@ -146,7 +147,11 @@ import {
   providerSupportsManualCompaction,
   resolveContextWindowModelDisplayName,
 } from "./ContextWindowMeter.logic";
-import { buildExpandedImagePreview, type ExpandedImagePreview } from "./ExpandedImagePreview";
+import {
+  attachVideoThumbnail,
+  buildExpandedImagePreview,
+  type ExpandedImagePreview,
+} from "./ExpandedImagePreview";
 import { basenameOfPath } from "../../pierre-icons";
 import { cn, randomUUID } from "~/lib/utils";
 import { Separator } from "../ui/separator";
@@ -156,6 +161,29 @@ import {
   submitComposerDraft,
 } from "./composerSubmission";
 import { ComposerPromptLengthValidation } from "./ComposerPromptLengthValidation";
+import { prepareVideoFirstFrame } from "../../lib/videoFirstFrame";
+
+function ComposerVideoThumbnail({ file }: { file: File }) {
+  const setVideo = useCallback(
+    (video: HTMLVideoElement | null) => {
+      if (!video) return;
+      return attachVideoThumbnail(video, file);
+    },
+    [file],
+  );
+
+  return (
+    <video
+      ref={setVideo}
+      muted
+      playsInline
+      preload="metadata"
+      aria-hidden="true"
+      onLoadedMetadata={(event) => prepareVideoFirstFrame(event.currentTarget)}
+      className="pointer-events-none absolute inset-0 size-full object-cover"
+    />
+  );
+}
 
 type ComposerCommandMenuPosition = {
   bottom: number;
@@ -3760,7 +3788,30 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                         key={file.id}
                         className="flex min-w-0 items-center gap-2 py-1 text-sm text-foreground"
                       >
-                        <FileIcon className="size-4 shrink-0 text-secondary-label" />
+                        {file.file && videoMimeType(file) ? (
+                          <button
+                            type="button"
+                            className="relative block size-12 shrink-0 overflow-hidden rounded"
+                            aria-label={`Preview ${file.name}`}
+                            onClick={() => {
+                              if (file.file)
+                                onExpandImage({
+                                  images: [
+                                    {
+                                      src: URL.createObjectURL(file.file),
+                                      name: file.name,
+                                      type: "video",
+                                    },
+                                  ],
+                                  index: 0,
+                                });
+                            }}
+                          >
+                            <ComposerVideoThumbnail file={file.file} />
+                          </button>
+                        ) : (
+                          <FileIcon className="size-4 shrink-0 text-secondary-label" />
+                        )}
                         <span className="min-w-0 flex-1 truncate">{file.name}</span>
                         <span className="shrink-0 text-xs text-secondary-label">
                           {needsReattach

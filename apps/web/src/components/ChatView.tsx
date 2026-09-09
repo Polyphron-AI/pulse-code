@@ -121,6 +121,7 @@ import {
   DEFAULT_THREAD_TERMINAL_ID,
   MAX_TERMINALS_PER_GROUP,
   type ChatMessage,
+  isBrowserPreviewAttachment,
   isImageAttachment,
   type SessionPhase,
   type Thread,
@@ -276,7 +277,7 @@ import { MessagesTimeline } from "./chat/MessagesTimeline";
 import { resolveTimelineIsAtEnd } from "./chat/MessagesTimeline.logic";
 import { ChatHeader } from "./chat/ChatHeader";
 import { PanelLayoutControls, RightPanelMaximizeControl } from "./chat/PanelLayoutControls";
-import { type ExpandedImagePreview } from "./chat/ExpandedImagePreview";
+import { expandedImageKey, type ExpandedImagePreview } from "./chat/ExpandedImagePreview";
 import { NoActiveThreadState } from "./NoActiveThreadState";
 import {
   resolveEffectiveEnvMode,
@@ -344,6 +345,7 @@ import {
   cloneComposerImageForRetry,
   deriveLockedProvider,
   readFileAsDataUrl,
+  resolveFileAttachmentUrl,
   reconcileMountedTerminalThreadIds,
   resolveThreadMetadataUpdateForNextTurn,
   resolveSendEnvMode,
@@ -394,7 +396,7 @@ import {
   serverUpdateGuidance,
   supportsDesktopAppUpdate,
 } from "../versionSkew";
-import { resolveAssetUrl, useAssetUrls } from "../assets/assetUrls";
+import { useAssetUrls } from "../assets/assetUrls";
 
 const ATTACHMENT_ONLY_BOOTSTRAP_PROMPT =
   "[User attached one or more files without additional text. Respond using the conversation context and the attached files.]";
@@ -1294,6 +1296,7 @@ function ChatViewContent(props: ChatViewProps) {
   const startThreadTurn = useAtomCommand(threadEnvironment.startTurn, { reportFailure: false });
   const createAttachmentAssetUrl = useAtomQueryRunner(assetEnvironment.createUrl, {
     reportFailure: false,
+    refresh: true,
   });
   const interruptThreadTurn = useAtomCommand(threadEnvironment.interruptTurn, {
     reportFailure: false,
@@ -1418,6 +1421,12 @@ function ChatViewContent(props: ChatViewProps) {
   const [isWorkspaceFileDragActive, setIsWorkspaceFileDragActive] = useState(false);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [expandedImage, setExpandedImage] = useState<ExpandedImagePreview | null>(null);
+  useEffect(() => {
+    const item = expandedImage?.images[expandedImage.index];
+    if (item?.type !== "video" || item.src === null || !item.src.startsWith("blob:")) return;
+    const src = item.src;
+    return () => revokeBlobPreviewUrl(src);
+  }, [expandedImage]);
   const [optimisticUserMessages, setOptimisticUserMessages] = useState<ChatMessage[]>([]);
   const optimisticUserMessagesRef = useRef(optimisticUserMessages);
   optimisticUserMessagesRef.current = optimisticUserMessages;
@@ -1714,8 +1723,6 @@ function ChatViewContent(props: ChatViewProps) {
     },
     [activePullRequestSurfaceId],
   );
-  const activeFileSurface =
-    activeRightPanelSurface?.kind === "file" ? activeRightPanelSurface : null;
   const activePreviewState = useThreadPreviewState(activeThreadRef);
   const activePreviewMiniPlayer = usePreviewMiniPlayerStore((state) =>
     selectThreadPreviewMiniPlayer(state.byThreadKey, activeThreadRef),
@@ -2528,41 +2535,36 @@ function ChatViewContent(props: ChatViewProps) {
         return;
       }
 
-      // fileName and mimeType ride in the signed claims so the download gets
-      // a real filename and Content-Type even when the anchor's `download`
-      // attribute is ignored (cross-origin environment servers).
-      const result = await createAttachmentAssetUrl({
-        environmentId,
-        input: {
-          resource: {
-            _tag: "attachment",
-            attachmentId: attachment.id,
-            fileName: attachment.name,
-            mimeType: attachment.mimeType,
-          },
-        },
-      });
-      if (result._tag === "Failure") {
-        const error = squashAtomCommandFailure(result);
+      try {
+        const url = await resolveFileAttachmentUrl({
+          attachment,
+          environmentId,
+          httpBaseUrl: connection.httpBaseUrl,
+          createAssetUrl: createAttachmentAssetUrl,
+        });
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = attachment.name;
+        anchor.click();
+      } catch (error) {
         toastManager.add({
           type: "error",
-          title: `Could not download ${attachment.name}`,
+          title: "Could not download " + attachment.name,
           description: error instanceof Error ? error.message : "The attachment is unavailable.",
         });
-        return;
       }
-
-      const url = resolveAssetUrl(connection.httpBaseUrl, result.value.relativeUrl);
-      if (!url) {
-        toastManager.add({ type: "error", title: `Could not download ${attachment.name}` });
-        return;
-      }
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = attachment.name;
-      anchor.click();
     },
     [createAttachmentAssetUrl, environmentId],
+  );
+  const openFileAttachment = useCallback(
+    (attachment: ChatFileAttachment) => {
+      if (isBrowserPreviewAttachment(attachment) && activeThreadRef) {
+        useRightPanelStore.getState().openAttachment(activeThreadRef, attachment);
+        return;
+      }
+      void downloadFileAttachment(attachment);
+    },
+    [activeThreadRef, downloadFileAttachment],
   );
   const serverAttachmentIds = useMemo(() => {
     const attachmentIds = new Set<string>();
@@ -6887,14 +6889,18 @@ function ChatViewContent(props: ChatViewProps) {
         threadId={activeThreadRef?.threadId ?? null}
       />
     ) : (activeRightPanelSurface?.kind === "files" || activeRightPanelSurface?.kind === "file") &&
-      activeProject &&
-      activeWorkspaceRoot ? (
+      ((activeProject && activeWorkspaceRoot) ||
+        (activeRightPanelSurface.kind === "file" && activeRightPanelSurface.attachment)) ? (
       <Suspense fallback={null}>
         <FilePreviewPanel
-          key={`${activeProject.environmentId}:${activeWorkspaceRoot}`}
-          environmentId={activeProject.environmentId}
-          cwd={activeWorkspaceRoot}
-          projectName={activeProject.title}
+          key={`${activeThread.environmentId}:${
+            activeRightPanelSurface.kind === "file" && activeRightPanelSurface.attachment
+              ? `attachment:${activeRightPanelSurface.attachment.id}`
+              : activeWorkspaceRoot
+          }`}
+          environmentId={activeThread.environmentId}
+          cwd={activeWorkspaceRoot ?? ""}
+          projectName={activeProject?.title ?? ""}
           threadRef={activeThreadRef}
           composerDraftTarget={composerDraftTarget}
           keybindings={keybindings}
@@ -6902,8 +6908,17 @@ function ChatViewContent(props: ChatViewProps) {
           relativePath={
             activeRightPanelSurface.kind === "file" ? activeRightPanelSurface.relativePath : null
           }
-          revealLine={activeFileSurface?.revealLine ?? null}
-          revealRequestId={activeFileSurface?.revealRequestId ?? 0}
+          {...(activeRightPanelSurface.kind === "file" && activeRightPanelSurface.attachment
+            ? { attachment: activeRightPanelSurface.attachment }
+            : {})}
+          revealLine={
+            activeRightPanelSurface.kind === "file"
+              ? (activeRightPanelSurface.revealLine ?? null)
+              : null
+          }
+          revealRequestId={
+            activeRightPanelSurface.kind === "file" ? activeRightPanelSurface.revealRequestId : 0
+          }
           onOpenFile={openFileSurface}
           onPendingChange={handleFilePendingChange}
         />
@@ -7042,6 +7057,7 @@ function ChatViewContent(props: ChatViewProps) {
                 onRevertUserMessage={onRevertUserMessage}
                 isRevertingCheckpoint={isRevertingCheckpoint}
                 onImageExpand={onExpandTimelineImage}
+                onFileOpen={openFileAttachment}
                 onFileDownload={downloadFileAttachment}
                 markdownCwd={gitCwd ?? undefined}
                 resolvedTheme={resolvedTheme}
@@ -7439,7 +7455,7 @@ function ChatViewContent(props: ChatViewProps) {
 
       {expandedImage && (
         <ExpandedImageDialog
-          key={`${expandedImage.images[expandedImage.index]?.src ?? "image"}:${expandedImage.index}`}
+          key={expandedImageKey(expandedImage)}
           preview={expandedImage}
           onClose={closeExpandedImage}
         />

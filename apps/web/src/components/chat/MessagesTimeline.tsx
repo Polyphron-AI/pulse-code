@@ -1,5 +1,4 @@
 import {
-  type ChatFileAttachment,
   type EnvironmentId,
   type MessageId,
   type ScopedThreadRef,
@@ -41,8 +40,11 @@ import {
   workLogEntryIsToolLike,
 } from "../../session-logic";
 import {
+  type ChatFileAttachment,
   type ChatImageAttachment,
+  isBrowserPreviewAttachment,
   isFileAttachment,
+  isVideoAttachment,
   isImageAttachment,
   type TurnDiffSummary,
 } from "../../types";
@@ -60,7 +62,6 @@ import {
   CircleAlertIcon,
   DownloadIcon,
   EyeIcon,
-  FileIcon,
   GlobeIcon,
   HammerIcon,
   MessageCircleIcon,
@@ -75,11 +76,18 @@ import {
   ZapIcon,
 } from "lucide-react";
 import { Button } from "../ui/button";
-import { buildExpandedImagePreview, ExpandedImagePreview } from "./ExpandedImagePreview";
+import { useAssetUrlRefresh, useAssetUrlState } from "../../assets/assetUrls";
+import { MediaVideoPlayer } from "../media/MediaVideoPlayer";
+import {
+  buildAttachmentVideoAsset,
+  buildExpandedImagePreview,
+  ExpandedImagePreview,
+} from "./ExpandedImagePreview";
 import { ProposedPlanCard } from "./ProposedPlanCard";
 import { ChangedFilesCard } from "./ChangedFilesTree";
 import { shouldAutoExpandChangedFiles } from "./changedFilesPresentation";
 import { MessageCopyButton } from "./MessageCopyButton";
+import { PierreEntryIcon } from "./PierreEntryIcon";
 import {
   computeStableMessagesTimelineRows,
   deriveMessagesTimelineRows,
@@ -149,6 +157,7 @@ interface TimelineRowSharedState {
   activeThreadEnvironmentId: EnvironmentId;
   onRevertUserMessage: (messageId: MessageId) => void;
   onImageExpand: (preview: ExpandedImagePreview) => void;
+  onFileOpen: (attachment: ChatFileAttachment) => void;
   onFileDownload: (attachment: ChatFileAttachment) => void;
   onOpenTurnDiff: (turnId: TurnId, filePath?: string) => void;
   onToggleTurnFold: (turnId: TurnId) => void;
@@ -232,6 +241,7 @@ interface MessagesTimelineProps {
   onRevertUserMessage: (messageId: MessageId) => void;
   isRevertingCheckpoint: boolean;
   onImageExpand: (preview: ExpandedImagePreview) => void;
+  onFileOpen?: (attachment: ChatFileAttachment) => void;
   onFileDownload?: (attachment: ChatFileAttachment) => void;
   activeThreadEnvironmentId: EnvironmentId;
   markdownCwd: string | undefined;
@@ -280,6 +290,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   onRevertUserMessage,
   isRevertingCheckpoint,
   onImageExpand,
+  onFileOpen = NOOP_DOWNLOAD_ATTACHMENT,
   onFileDownload = NOOP_DOWNLOAD_ATTACHMENT,
   activeThreadEnvironmentId,
   markdownCwd,
@@ -528,6 +539,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       activeThreadEnvironmentId,
       onRevertUserMessage,
       onImageExpand,
+      onFileOpen,
       onFileDownload,
       onOpenTurnDiff,
       onToggleTurnFold,
@@ -545,6 +557,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       activeThreadEnvironmentId,
       onRevertUserMessage,
       onImageExpand,
+      onFileOpen,
       onFileDownload,
       onOpenTurnDiff,
       onToggleTurnFold,
@@ -987,12 +1000,53 @@ const TimelineRowContent = memo(function TimelineRowContent({ row }: { row: Time
   );
 });
 
+function UserVideoAttachment({ file }: { readonly file: ChatFileAttachment }) {
+  const ctx = use(TimelineRowCtx);
+  const asset = useMemo(
+    () =>
+      file.downloadable === false
+        ? null
+        : buildAttachmentVideoAsset(ctx.activeThreadEnvironmentId, file),
+    [ctx.activeThreadEnvironmentId, file.downloadable, file.id, file.mimeType, file.name],
+  );
+  const resource = asset?.resource ?? null;
+  const assetUrl = useAssetUrlState(ctx.activeThreadEnvironmentId, resource);
+  const refreshAssetUrl = useAssetUrlRefresh(ctx.activeThreadEnvironmentId, resource);
+  const src = assetUrl._tag === "Success" ? assetUrl.url : (file.previewUrl ?? null);
+
+  if (asset === null && src === null) {
+    return (
+      <div className="flex aspect-[4/3] w-full items-center justify-center rounded-lg border border-border/80 bg-black px-2 py-3 text-center text-[11px] text-white/70">
+        {file.name}
+      </div>
+    );
+  }
+
+  return (
+    <MediaVideoPlayer
+      src={src}
+      sourceFailed={
+        file.previewUrl === undefined && resource !== null && assetUrl._tag === "Failure"
+      }
+      label={file.name}
+      preload="visible"
+      className="block aspect-[4/3] w-full"
+      videoClassName="aspect-auto size-full rounded-lg border border-border/80"
+      stateClassName="aspect-auto min-h-full rounded-lg border border-border/80 bg-black text-white"
+      onRetry={asset ? refreshAssetUrl : undefined}
+      actionsSource={asset ? { kind: "video", name: file.name, src, asset } : undefined}
+    />
+  );
+}
+
 function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" }> }) {
   const ctx = use(TimelineRowCtx);
   // The attachment union has an open member, so guards (not literal type
   // comparisons) split it. Unknown types render as inert rows below the files.
   const userImages = (row.message.attachments ?? []).filter(isImageAttachment);
   const userFiles = (row.message.attachments ?? []).filter(isFileAttachment);
+  const userVideos = userFiles.filter(isVideoAttachment);
+  const otherUserFiles = userFiles.filter((file) => !isVideoAttachment(file));
   const unknownAttachments = (row.message.attachments ?? []).filter(
     (attachment) => !isImageAttachment(attachment) && !isFileAttachment(attachment),
   );
@@ -1018,17 +1072,17 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
   return (
     <div className="group flex flex-col items-end gap-1">
       <div className="relative max-w-[80%] rounded-2xl bg-message p-3 text-message-foreground">
-        {regularImages.length > 0 && (
+        {(regularImages.length > 0 || userVideos.length > 0) && (
           <div className="mb-2 grid max-w-[420px] grid-cols-2 gap-2">
             {regularImages.map((image) => (
               <div
                 key={image.id}
-                className="overflow-hidden rounded-lg border border-border/80 bg-background/70"
+                className="aspect-[4/3] overflow-hidden rounded-lg border border-border/80 bg-background/70"
               >
                 {image.previewUrl ? (
                   <button
                     type="button"
-                    className="h-full w-full cursor-zoom-in"
+                    className="block h-full w-full cursor-zoom-in"
                     aria-label={`Preview ${image.name}`}
                     onClick={() => {
                       const preview = buildExpandedImagePreview(regularImages, image.id);
@@ -1039,7 +1093,7 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
                     <img
                       src={image.previewUrl}
                       alt={image.name}
-                      className="block h-auto max-h-[220px] w-full object-cover"
+                      className="block size-full object-cover"
                     />
                   </button>
                 ) : (
@@ -1048,6 +1102,9 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
                   </div>
                 )}
               </div>
+            ))}
+            {userVideos.map((file) => (
+              <UserVideoAttachment key={file.id} file={file} />
             ))}
           </div>
         )}
@@ -1058,19 +1115,56 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
             image={previewImages[index] ?? null}
           />
         ))}
-        {userFiles.length > 0 || unknownAttachments.length > 0 ? (
+        {otherUserFiles.length > 0 || unknownAttachments.length > 0 ? (
           <div className="mb-2 flex flex-col gap-1">
-            {userFiles.map((file) => {
+            {otherUserFiles.map((file) => {
+              const opensInPreview = isBrowserPreviewAttachment(file);
+              const fileIdentity = (
+                <>
+                  <PierreEntryIcon pathValue={file.name} kind="file" theme={ctx.resolvedTheme} />
+                  <span className="min-w-0 flex-1 truncate">{file.name}</span>
+                </>
+              );
+              if (opensInPreview && file.downloadable !== false) {
+                return (
+                  <div key={file.id} className="flex min-w-0 items-center gap-1">
+                    <button
+                      type="button"
+                      aria-label={`Preview ${file.name}`}
+                      onClick={() => ctx.onFileOpen(file)}
+                      className="focus-visible:ring-ring/70 flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md py-1 text-left text-sm hover:underline focus-visible:ring-2 focus-visible:outline-none focus-visible:ring-inset"
+                    >
+                      {fileIdentity}
+                      <EyeIcon className="size-4 shrink-0" />
+                    </button>
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <Button
+                            size="icon-xs"
+                            variant="ghost-muted"
+                            aria-label={`Download ${file.name}`}
+                            onClick={() => ctx.onFileDownload(file)}
+                          />
+                        }
+                      >
+                        <DownloadIcon />
+                      </TooltipTrigger>
+                      <TooltipPopup side="top">Download {file.name}</TooltipPopup>
+                    </Tooltip>
+                  </div>
+                );
+              }
+
               const content = (
                 <>
-                  <FileIcon className="size-4 shrink-0 text-secondary-label" />
-                  <span className="min-w-0 flex-1 truncate">{file.name}</span>
+                  {fileIdentity}
                   {file.downloadable === false ? null : (
                     <DownloadIcon className="size-4 shrink-0" />
                   )}
                 </>
               );
-              return file.previewUrl ? (
+              return file.previewUrl && !opensInPreview ? (
                 <a
                   key={file.id}
                   href={file.previewUrl}
@@ -1087,8 +1181,8 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
                 <button
                   key={file.id}
                   type="button"
-                  aria-label={`Download ${file.name}`}
-                  onClick={() => ctx.onFileDownload(file)}
+                  aria-label={`${opensInPreview ? "Preview" : "Download"} ${file.name}`}
+                  onClick={() => ctx.onFileOpen(file)}
                   className="flex min-w-0 cursor-pointer items-center gap-2 rounded-md py-1 text-left text-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70"
                 >
                   {content}
@@ -1097,7 +1191,11 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
             })}
             {unknownAttachments.map((attachment) => (
               <div key={attachment.id} className="flex min-w-0 items-center gap-2 py-1 text-sm">
-                <FileIcon className="size-4 shrink-0 text-secondary-label" />
+                <PierreEntryIcon
+                  pathValue={attachment.name}
+                  kind="file"
+                  theme={ctx.resolvedTheme}
+                />
                 <span className="min-w-0 flex-1 truncate">{attachment.name}</span>
               </div>
             ))}

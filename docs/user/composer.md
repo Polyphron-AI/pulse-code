@@ -49,3 +49,11 @@ Send `/compact` in an existing conversation to reduce its context when the conne
 ## Custom models
 
 Custom models can have a display name and model options in Settings → Providers. Edit a custom model to define its available options or copy options from a built-in model. Existing custom model slugs keep working. These settings belong to the selected provider instance and are available to connected web, desktop, and mobile clients. The model slug sent to the provider stays unchanged.
+
+## Preview files and media
+
+On web and desktop, select an image to expand it. Videos play in the conversation, and a video attached to a draft has a preview button. Markdown can show images and videos from the thread's host environment without downloading the whole video before playback. Playback depends on the formats supported by your browser.
+
+Use a media context menu to copy its original path or URL, save it, or copy an image. A remote host must allow browser access for save and copy operations.
+
+PDF and HTML attachments open in the file panel with a separate download action. Workspace PDF and HTML files can also be viewed there; HTML offers a source view. HTML previews are isolated from Pulse Code's session and storage.
