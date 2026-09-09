@@ -15,6 +15,7 @@ import {
   buildServerProvider,
   isCommandMissingCause,
   parseGenericCliVersion,
+  providerModelsFromSettings,
   spawnAndCollect,
   type ProviderProbeResult,
   type ServerProviderDraft,
@@ -109,7 +110,11 @@ export function buildOmpProviderSnapshot(input: {
     presentation: OMP_PRESENTATION,
     enabled: input.ompSettings.enabled,
     checkedAt: input.checkedAt,
-    models: input.models,
+    models: providerModelsFromSettings(
+      input.models,
+      input.ompSettings.customModels,
+      EMPTY_CAPABILITIES,
+    ),
     probe: input.probe,
   });
 }

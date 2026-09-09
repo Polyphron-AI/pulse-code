@@ -256,7 +256,11 @@ describe("OmpDriver registration", () => {
       displayName: "Oh My Pi",
       supportsMultipleInstances: true,
     });
-    expect(OmpDriver.defaultConfig()).toEqual({ enabled: true, binaryPath: "omp" });
+    expect(OmpDriver.defaultConfig()).toEqual({
+      customModels: [],
+      enabled: true,
+      binaryPath: "omp",
+    });
     expect(BUILT_IN_DRIVERS).toContain(OmpDriver);
     const defaultId = ProviderInstanceId.make("omp");
     expect(deriveProviderInstanceConfigMap(DEFAULT_SERVER_SETTINGS)[defaultId]?.driver).toBe(
@@ -278,7 +282,7 @@ it.layer(testLayer)("OmpDriver", (it) => {
           accentColor: "#123456",
           environment: providerEnvironment({ OPENAI_API_KEY: "driver-secret" }),
           enabled: false,
-          config: { enabled: false, binaryPath: customBinary },
+          config: { customModels: [], enabled: false, binaryPath: customBinary },
         });
         const standard = yield* OmpDriver.create({
           instanceId: defaultId,
@@ -362,7 +366,7 @@ it.layer(testLayer)("OmpDriver", (it) => {
                 accentColor: undefined,
                 environment: instanceEnvironment(fixture, "a"),
                 enabled: true,
-                config: { enabled: true, binaryPath: fixture.wrapperPath },
+                config: { customModels: [], enabled: true, binaryPath: fixture.wrapperPath },
               }),
               OmpDriver.create({
                 instanceId: idB,
@@ -370,7 +374,7 @@ it.layer(testLayer)("OmpDriver", (it) => {
                 accentColor: undefined,
                 environment: instanceEnvironment(fixture, "b"),
                 enabled: true,
-                config: { enabled: true, binaryPath: fixture.wrapperPath },
+                config: { customModels: [], enabled: true, binaryPath: fixture.wrapperPath },
               }),
             ],
             { concurrency: "unbounded" },
@@ -523,7 +527,7 @@ it.layer(testLayer)("OmpDriver", (it) => {
             OPENAI_API_KEY: secret,
           }),
           enabled: true,
-          config: { enabled: true, binaryPath: fixture.wrapperPath },
+          config: { customModels: [], enabled: true, binaryPath: fixture.wrapperPath },
         }).pipe(Effect.provideService(HttpClient.HttpClient, client));
 
         const failed = yield* instance.snapshot.refresh;

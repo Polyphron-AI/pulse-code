@@ -28,10 +28,12 @@ describe("OmpSettings", () => {
     expect(decodeOmpSettings({})).toEqual({
       enabled: true,
       binaryPath: "omp",
+      customModels: [],
     });
     expect(DEFAULT_SERVER_SETTINGS.providers.omp).toEqual({
       enabled: true,
       binaryPath: "omp",
+      customModels: [],
     });
   });
 
@@ -461,5 +463,22 @@ describe("ClaudeSettings auto-compaction", () => {
     expect(
       decodeServerSettingsPatch({ providers: { claudeAgent: { autoCompactWindow: "300000" } } }),
     ).toBeDefined();
+  });
+});
+
+describe("custom model settings compatibility", () => {
+  it("accepts legacy strings and named descriptors for every Pulse provider", () => {
+    const customModels = [
+      "old-slug",
+      { slug: "new-slug", name: "Named model", capabilities: { optionDescriptors: [] } },
+    ];
+    for (const driver of ["codex", "claudeAgent", "cursor", "grok", "opencode", "omp"] as const) {
+      const settings = decodeServerSettings({ providers: { [driver]: { customModels } } });
+      expect(settings.providers[driver].customModels).toEqual(customModels);
+      expect(
+        decodeServerSettingsPatch({ providers: { [driver]: { customModels } } }).providers?.[driver]
+          ?.customModels,
+      ).toEqual(customModels);
+    }
   });
 });

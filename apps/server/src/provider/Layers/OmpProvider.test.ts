@@ -11,6 +11,7 @@ import {
 } from "./OmpProvider.ts";
 
 const enabledSettings: OmpSettings = {
+  customModels: [],
   enabled: true,
   binaryPath: "omp",
 };
@@ -153,3 +154,17 @@ describe("OMP provider snapshots", () => {
     });
   });
 });
+
+it.effect("preserves authored OMP model names and options in pending snapshots", () =>
+  Effect.gen(function* () {
+    const capabilities = createModelCapabilities({ optionDescriptors: [] });
+    const snapshot = yield* buildInitialOmpProviderSnapshot({
+      ...enabledSettings,
+      customModels: ["legacy/slug", { slug: "custom/slug", name: "Custom OMP", capabilities }],
+    });
+    expect(snapshot.models).toEqual([
+      { slug: "legacy/slug", name: "legacy/slug", isCustom: true, capabilities },
+      { slug: "custom/slug", name: "Custom OMP", isCustom: true, capabilities },
+    ]);
+  }),
+);

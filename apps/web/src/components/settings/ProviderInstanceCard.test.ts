@@ -29,7 +29,7 @@ describe("deriveProviderModelsForDisplay", () => {
     expect(
       deriveProviderModelsForDisplay({
         liveModels,
-        customModels: ["kept-custom"],
+        customModels: [{ slug: "kept-custom", name: "Renamed", capabilities: null }],
       }).map((model) => model.slug),
     ).toEqual(["server-model", "kept-custom"]);
   });
