@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { TalkRecording, TalkStatus } from "@t3tools/contracts";
 import { Button } from "../../ui/button";
-import { Card } from "../../ui/card";
+import { MicIcon, AudioLinesIcon, ChevronDownIcon } from "lucide-react";
 import { fieldClass, RequestState, useTalkRequest } from "./shared";
 import { TalkModelPanel } from "./TalkModelPanel";
 import { TalkDictationPanel } from "./TalkDictationPanel";
@@ -74,16 +74,22 @@ export function TalkPanel() {
     await refresh();
   }
   return (
-    <Card id="office-meetings" className="gap-4 p-5">
+    <section
+      id="office-meetings"
+      aria-labelledby="office-meetings-heading"
+      className="min-w-0 space-y-5"
+    >
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="font-semibold">Meetings · Pulse Talk</h2>
+        <h2 id="office-meetings-heading" className="flex items-center gap-2 text-lg font-semibold">
+          <MicIcon className="size-5 text-muted-foreground" />
+          Meetings
+        </h2>
         <Button variant="outline" disabled={busy} onClick={() => void refresh()}>
           Refresh
         </Button>
       </div>
       <p className="text-sm text-muted-foreground">
-        Record selected audio sources locally. Transcription runs only when requested. Recording
-        always starts with your action.
+        Record on this computer. Transcribe when you choose.
       </p>
       <RequestState busy={busy} error={error} />
       {notice && (
@@ -117,9 +123,12 @@ export function TalkPanel() {
                     : "Talk is stopped."}{" "}
                 {status.modelLoaded
                   ? "Transcription model loaded."
-                  : "Choose an installed model to transcribe."}
+                  : "Open transcription setup to load a model."}
               </p>
-              <fieldset className="space-y-2 text-sm" disabled={busy || status.recording}>
+              <fieldset
+                className="flex flex-wrap gap-x-5 gap-y-2 rounded-lg bg-muted/40 p-4 text-sm"
+                disabled={busy || status.recording}
+              >
                 <legend className="mb-2 font-medium">Audio sources</legend>
                 <label className="flex items-center gap-2">
                   <input
@@ -140,7 +149,7 @@ export function TalkPanel() {
                   Computer audio
                 </label>
                 {!status.capabilities.systemAudio && (
-                  <p className="text-muted-foreground">
+                  <p className="w-full text-xs text-muted-foreground">
                     Computer audio is unavailable on this installation.
                   </p>
                 )}
@@ -192,22 +201,18 @@ export function TalkPanel() {
           )}
         </>
       )}
-      <TalkModelPanel
-        status={status}
-        disabled={requestBusy || dictationBusy}
-        onStatusChange={setStatus}
-        onBusyChange={setModelBusy}
-      />
-      <TalkDictationPanel
-        status={status}
-        disabled={requestBusy || modelBusy}
-        onStatusChange={setStatus}
-        onBusyChange={setDictationBusy}
-      />
-      <div className="space-y-3">
-        <h3 className="text-sm font-medium">Local recordings</h3>
-        {recordings.length === 0 && !busy && (
-          <p className="text-sm text-muted-foreground">No recordings saved yet.</p>
+      <div className="space-y-3 border-t border-border pt-5">
+        <h3 className="flex items-center gap-2 text-sm font-medium">
+          <AudioLinesIcon className="size-4 text-muted-foreground" />
+          Recordings <span className="text-muted-foreground">{recordings.length}</span>
+        </h3>
+        {recordings.length === 0 && !busy && !error && (
+          <div className="rounded-lg bg-muted/30 px-5 py-8 text-center">
+            <p className="text-sm font-medium">Your meetings will appear here</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Start a recording above. Audio and transcripts stay on this computer.
+            </p>
+          </div>
         )}
         {recordings.map((recording) => (
           <article key={recording.id} className="space-y-2 border-t border-border pt-3">
@@ -321,6 +326,29 @@ export function TalkPanel() {
           </article>
         ))}
       </div>
-    </Card>
+      <details className="group border-t border-border pt-4">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-md py-2 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+          <span>
+            Transcription setup{" "}
+            <span className="ml-2 font-normal text-muted-foreground">
+              {status?.modelLoaded ? "Model loaded" : "Model not loaded"}
+            </span>
+          </span>
+          <ChevronDownIcon className="size-4 shrink-0 group-open:rotate-180" />
+        </summary>
+        <TalkModelPanel
+          status={status}
+          disabled={requestBusy || dictationBusy}
+          onStatusChange={setStatus}
+          onBusyChange={setModelBusy}
+        />
+      </details>
+      <TalkDictationPanel
+        status={status}
+        disabled={requestBusy || modelBusy}
+        onStatusChange={setStatus}
+        onBusyChange={setDictationBusy}
+      />
+    </section>
   );
 }

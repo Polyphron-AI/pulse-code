@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { OfficeAccount, OfficeCalendar, OfficeEvent } from "@t3tools/contracts";
 import { Button } from "../../ui/button";
 import { Card } from "../../ui/card";
+import { CalendarDaysIcon, ChevronDownIcon, LinkIcon } from "lucide-react";
 import { fieldClass, RequestState, useOfficeRequest } from "./shared";
 import { MailPanel } from "./MailPanel";
 
@@ -67,201 +68,13 @@ export function OfficePanel() {
   }, [accounts, loaded]);
   return (
     <>
-      <Card className="gap-4 p-5">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="font-semibold">Office accounts</h2>
-          <Button variant="outline" disabled={busy} onClick={() => void refresh()}>
-            Refresh accounts
-          </Button>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          Connect Gmail and Google Calendar, Microsoft email, or another mailbox over IMAP. You can
-          add multiple accounts.
-        </p>
-        <RequestState busy={busy} error={error} />
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant="outline"
-            disabled={busy || !configuration?.google}
-            onClick={() => void connect("google")}
-          >
-            Connect Google
-          </Button>
-          <Button
-            variant="outline"
-            disabled={busy || !configuration?.microsoft}
-            onClick={() => void connect("microsoft")}
-          >
-            Connect Microsoft
-          </Button>
-          <Button
-            variant="outline"
-            disabled={busy || !configuration?.imap}
-            onClick={() => setImap(!imap)}
-          >
-            Other email · IMAP
-          </Button>
-        </div>
-        {configuration && (!configuration.google || !configuration.microsoft) && (
-          <p className="text-sm text-muted-foreground">
-            {[!configuration.google && "Google", !configuration.microsoft && "Microsoft"]
-              .filter(Boolean)
-              .join(" and ")}{" "}
-            sign-in needs OAuth configuration in this desktop installation.
-          </p>
-        )}
-        {imap && (
-          <form
-            className="grid gap-3 sm:grid-cols-2"
-            onSubmit={(event) => {
-              event.preventDefault();
-              const secret = password;
-              setPassword("");
-              void (async () => {
-                const result = await run({
-                  operation: "accounts.connectImap",
-                  host: host.trim(),
-                  port: Number(port),
-                  username: username.trim(),
-                  password: secret,
-                  tls,
-                });
-                if (result) {
-                  setImap(false);
-                  await refresh();
-                }
-              })();
-            }}
-          >
-            <label className="space-y-1 text-sm">
-              IMAP host
-              <input
-                required
-                className={fieldClass}
-                value={host}
-                onChange={(event) => setHost(event.target.value)}
-                placeholder="imap.example.com"
-              />
-            </label>
-            <label className="space-y-1 text-sm">
-              Username or email
-              <input
-                required
-                autoComplete="username"
-                className={fieldClass}
-                value={username}
-                onChange={(event) => setUsername(event.target.value)}
-              />
-            </label>
-            <label className="space-y-1 text-sm">
-              Password or app password
-              <input
-                required
-                type="password"
-                autoComplete="off"
-                className={fieldClass}
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-              />
-            </label>
-            <label className="space-y-1 text-sm">
-              Security
-              <select
-                className={fieldClass}
-                value={tls}
-                onChange={(event) => {
-                  const value = event.target.value === "starttls" ? "starttls" : "implicit";
-                  setTls(value);
-                  setPort(value === "implicit" ? "993" : "143");
-                }}
-              >
-                <option value="implicit">TLS</option>
-                <option value="starttls">STARTTLS</option>
-              </select>
-            </label>
-            <label className="space-y-1 text-sm">
-              Port
-              <input
-                required
-                type="number"
-                min={1}
-                max={65535}
-                className={fieldClass}
-                value={port}
-                onChange={(event) => setPort(event.target.value)}
-              />
-            </label>
-            <div className="flex items-end gap-2">
-              <Button type="submit" disabled={busy}>
-                Connect mailbox
-              </Button>
-              <Button
-                variant="outline"
-                disabled={busy}
-                onClick={() => {
-                  setImap(false);
-                  setPassword("");
-                }}
-              >
-                Cancel
-              </Button>
-            </div>
-          </form>
-        )}
-        {loaded && accounts.length === 0 && (
-          <p className="text-sm text-muted-foreground">No accounts connected.</p>
-        )}
-        {accounts.map((account) => (
-          <div
-            key={account.id}
-            className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3 text-sm"
-          >
-            <div className="min-w-0 break-words">
-              {account.email}
-              <p className="text-xs text-muted-foreground">
-                {account.provider} · {account.status} · {account.capabilities.join(", ")}
-              </p>
-              {account.status !== "connected" && (
-                <p className="text-xs text-muted-foreground">
-                  Refresh or connect again to restore access.
-                </p>
-              )}
-            </div>
-            {disconnectId === account.id ? (
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant="destructive"
-                  disabled={busy}
-                  onClick={() =>
-                    void (async () => {
-                      const result = await run({
-                        operation: "accounts.disconnect",
-                        accountId: account.id,
-                      });
-                      if (result) {
-                        setDisconnectId(undefined);
-                        await refresh();
-                      }
-                    })()
-                  }
-                >
-                  Confirm disconnect
-                </Button>
-                <Button variant="outline" onClick={() => setDisconnectId(undefined)}>
-                  Keep account
-                </Button>
-              </div>
-            ) : (
-              <Button variant="ghost" disabled={busy} onClick={() => setDisconnectId(account.id)}>
-                Disconnect
-              </Button>
-            )}
-          </div>
-        ))}
-      </Card>
+      <RequestState busy={busy} error={error} />
       <Card id="office-calendar" className="gap-4 p-5">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="font-semibold">Calendar · next 7 days</h2>
+          <h2 className="flex items-center gap-2 font-semibold">
+            <CalendarDaysIcon className="size-4 text-muted-foreground" />
+            Next 7 days
+          </h2>
           <Button
             variant="outline"
             disabled={
@@ -273,8 +86,7 @@ export function OfficePanel() {
           </Button>
         </div>
         <p className="text-sm text-muted-foreground">
-          Choose which Google calendars appear in your combined agenda. Meetings never start a
-          recording automatically.
+          Your selected Google calendars in one agenda. Recording always starts with you.
         </p>
         {calendars.map((calendar) => (
           <label
@@ -329,14 +141,231 @@ export function OfficePanel() {
           </article>
         ))}
         {events.length === 0 && !busy && (
-          <p className="text-sm text-muted-foreground">
-            {calendars.length
-              ? "No events loaded for the selected calendars."
-              : "Connect Google to choose calendars and load your agenda."}
-          </p>
+          <div className="space-y-2 py-6 text-center">
+            <p className="text-sm text-muted-foreground">
+              {calendars.length
+                ? "No events loaded for the selected calendars."
+                : "Connect Google Calendar to see your week ahead."}
+            </p>
+            {!accounts.some((account) => account.capabilities.includes("calendar")) && (
+              <a
+                href="#office-accounts"
+                onClick={() => {
+                  const details = document.getElementById("office-accounts");
+                  if (details instanceof HTMLDetailsElement) details.open = true;
+                }}
+                className="inline-block rounded-md text-sm font-medium underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                Connect an account
+              </a>
+            )}
+          </div>
         )}
       </Card>
       <MailPanel key={accounts.map((account) => account.id).join("|")} accounts={accounts} />
+      <details id="office-accounts" className="group rounded-xl border border-border p-5">
+        <summary className="flex cursor-pointer list-none items-center gap-2 rounded-md text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+          <LinkIcon className="size-4 text-muted-foreground" />
+          Accounts
+          <span className="ml-auto font-normal text-muted-foreground">
+            {loaded
+              ? `${accounts.filter((account) => account.status === "connected").length} connected`
+              : "Loading…"}
+          </span>
+          <ChevronDownIcon className="size-4 group-open:rotate-180" />
+        </summary>
+        <div className="mt-5 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="font-semibold">Office accounts</h2>
+            <Button variant="outline" disabled={busy} onClick={() => void refresh()}>
+              Refresh accounts
+            </Button>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Connect Gmail and Google Calendar, Microsoft email, or another mailbox over IMAP. You
+            can add multiple accounts.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              disabled={busy || !configuration?.google}
+              onClick={() => void connect("google")}
+            >
+              Connect Google
+            </Button>
+            <Button
+              variant="outline"
+              disabled={busy || !configuration?.microsoft}
+              onClick={() => void connect("microsoft")}
+            >
+              Connect Microsoft
+            </Button>
+            <Button
+              variant="outline"
+              disabled={busy || !configuration?.imap}
+              onClick={() => setImap(!imap)}
+            >
+              Other email · IMAP
+            </Button>
+          </div>
+          {configuration && (!configuration.google || !configuration.microsoft) && (
+            <p className="text-sm text-muted-foreground">
+              {[!configuration.google && "Google", !configuration.microsoft && "Microsoft"]
+                .filter(Boolean)
+                .join(" and ")}{" "}
+              sign-in needs OAuth configuration in this desktop installation.
+            </p>
+          )}
+          {imap && (
+            <form
+              className="grid gap-3 sm:grid-cols-2"
+              onSubmit={(event) => {
+                event.preventDefault();
+                const secret = password;
+                setPassword("");
+                void (async () => {
+                  const result = await run({
+                    operation: "accounts.connectImap",
+                    host: host.trim(),
+                    port: Number(port),
+                    username: username.trim(),
+                    password: secret,
+                    tls,
+                  });
+                  if (result) {
+                    setImap(false);
+                    await refresh();
+                  }
+                })();
+              }}
+            >
+              <label className="space-y-1 text-sm">
+                IMAP host
+                <input
+                  required
+                  className={fieldClass}
+                  value={host}
+                  onChange={(event) => setHost(event.target.value)}
+                  placeholder="imap.example.com"
+                />
+              </label>
+              <label className="space-y-1 text-sm">
+                Username or email
+                <input
+                  required
+                  autoComplete="username"
+                  className={fieldClass}
+                  value={username}
+                  onChange={(event) => setUsername(event.target.value)}
+                />
+              </label>
+              <label className="space-y-1 text-sm">
+                Password or app password
+                <input
+                  required
+                  type="password"
+                  autoComplete="off"
+                  className={fieldClass}
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                />
+              </label>
+              <label className="space-y-1 text-sm">
+                Security
+                <select
+                  className={fieldClass}
+                  value={tls}
+                  onChange={(event) => {
+                    const value = event.target.value === "starttls" ? "starttls" : "implicit";
+                    setTls(value);
+                    setPort(value === "implicit" ? "993" : "143");
+                  }}
+                >
+                  <option value="implicit">TLS</option>
+                  <option value="starttls">STARTTLS</option>
+                </select>
+              </label>
+              <label className="space-y-1 text-sm">
+                Port
+                <input
+                  required
+                  type="number"
+                  min={1}
+                  max={65535}
+                  className={fieldClass}
+                  value={port}
+                  onChange={(event) => setPort(event.target.value)}
+                />
+              </label>
+              <div className="flex items-end gap-2">
+                <Button type="submit" disabled={busy}>
+                  Connect mailbox
+                </Button>
+                <Button
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => {
+                    setImap(false);
+                    setPassword("");
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          )}
+          {loaded && accounts.length === 0 && (
+            <p className="text-sm text-muted-foreground">No accounts connected.</p>
+          )}
+          {accounts.map((account) => (
+            <div
+              key={account.id}
+              className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3 text-sm"
+            >
+              <div className="min-w-0 break-words">
+                {account.email}
+                <p className="text-xs text-muted-foreground">
+                  {account.provider} · {account.status} · {account.capabilities.join(", ")}
+                </p>
+                {account.status !== "connected" && (
+                  <p className="text-xs text-muted-foreground">
+                    Refresh or connect again to restore access.
+                  </p>
+                )}
+              </div>
+              {disconnectId === account.id ? (
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="destructive"
+                    disabled={busy}
+                    onClick={() =>
+                      void (async () => {
+                        const result = await run({
+                          operation: "accounts.disconnect",
+                          accountId: account.id,
+                        });
+                        if (result) {
+                          setDisconnectId(undefined);
+                          await refresh();
+                        }
+                      })()
+                    }
+                  >
+                    Confirm disconnect
+                  </Button>
+                  <Button variant="outline" onClick={() => setDisconnectId(undefined)}>
+                    Keep account
+                  </Button>
+                </div>
+              ) : (
+                <Button variant="ghost" disabled={busy} onClick={() => setDisconnectId(account.id)}>
+                  Disconnect
+                </Button>
+              )}
+            </div>
+          ))}
+        </div>
+      </details>
     </>
   );
 }
