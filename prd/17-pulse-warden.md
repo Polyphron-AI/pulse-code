@@ -10,13 +10,13 @@ Users need website sign-in, operational connections and agent access without cop
 
 Pulse Warden must show what a credential can access, who may use it, what is using it, and how to stop future use. People retain familiar password-manager workflows while Pulse gains its own commercially distributable clients over time.
 
-| User | Job | Completion evidence |
-| --- | --- | --- |
-| Individual | Save, find and use a password or passkey | Correct account on the correct origin, with storage authority visible |
-| Office operator | Connect mail/calendar/CRM for permitted work | Healthy credential binding and separately scoped actions |
-| Coding user | Let an agent perform one authorised operation | Bounded result, receipt and ended access |
-| Organisation admin | Govern shared credentials and devices | Membership, use history, rotation and revocation state |
-| Remote/mobile user | Approve use on the intended environment | Exact environment/device/action binding; no accidental local operation |
+| User               | Job                                           | Completion evidence                                                    |
+| ------------------ | --------------------------------------------- | ---------------------------------------------------------------------- |
+| Individual         | Save, find and use a password or passkey      | Correct account on the correct origin, with storage authority visible  |
+| Office operator    | Connect mail/calendar/CRM for permitted work  | Healthy credential binding and separately scoped actions               |
+| Coding user        | Let an agent perform one authorised operation | Bounded result, receipt and ended access                               |
+| Organisation admin | Govern shared credentials and devices         | Membership, use history, rotation and revocation state                 |
+| Remote/mobile user | Approve use on the intended environment       | Exact environment/device/action binding; no accidental local operation |
 
 ## Confirmed direction and proposed detail
 
@@ -29,13 +29,13 @@ The August 30 Pulse Go Warden map established one broker and one management inte
 
 ## Ownership and scope
 
-| Domain | Authority | What crosses the boundary |
-| --- | --- | --- |
-| Human vault using Vaultwarden | Selected vault service plus trusted, user-unlocked clients | Encrypted sync; selected credentials only within trusted credential use |
-| Server-managed customer integration | Pulse Go Warden, tenant-scoped | Authenticated capability requests and bounded results; exceptional short-lived leases only to isolated runtimes |
-| Task/run and browser execution | Pulse Code/Office owning environment | Task/attempt references, cancellation, host/document binding and receipts |
-| Existing external manager | Its own clients and storage | Explicit handoff initially; additional operations only after proof |
-| Machine bootstrap identities | Existing environment store; orchestrator's OpenBao role remains separate | No customer-vault copies or personal-vault master unlock keys |
+| Domain                              | Authority                                                                | What crosses the boundary                                                                                       |
+| ----------------------------------- | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| Human vault using Vaultwarden       | Selected vault service plus trusted, user-unlocked clients               | Encrypted sync; selected credentials only within trusted credential use                                         |
+| Server-managed customer integration | Pulse Go Warden, tenant-scoped                                           | Authenticated capability requests and bounded results; exceptional short-lived leases only to isolated runtimes |
+| Task/run and browser execution      | Pulse Code/Office owning environment                                     | Task/attempt references, cancellation, host/document binding and receipts                                       |
+| Existing external manager           | Its own clients and storage                                              | Explicit handoff initially; additional operations only after proof                                              |
+| Machine bootstrap identities        | Existing environment store; orchestrator's OpenBao role remains separate | No customer-vault copies or personal-vault master unlock keys                                                   |
 
 Pulse Go's corresponding authority is `prd/29-pulse-warden.md` in the separate `pulse-go` repository. Both PRDs use the same shared contract version, `pulse-warden/v1`, as a proposed design identifier, not a shipped wire protocol.
 
@@ -60,32 +60,32 @@ The selected Vaultwarden human backend supplies its own encrypted storage/sync. 
 
 Each requirement has a matching `AC-WAR-NN` scenario. Go-owned operations have complementary `WG-*` requirements in its §29; the ownership document records the common contract.
 
-| ID | Requirement |
-| --- | --- |
-| WAR-01 | Present one Warden management hierarchy: summary, credential, grants and receipts. Connections, tasks and departments link into it; do not create competing detail records. |
-| WAR-02 | Show storage mode, owner, tenant where applicable, environment/device and supported capabilities. Configured, authenticated, unlocked and verified healthy are distinct states. |
-| WAR-03 | First deliver an explicit handoff to the installed Bitwarden client using the selected Bitwarden-hosted/self-hosted/Vaultwarden origin. No master password or vault session enters Pulse Go. |
-| WAR-04 | Record handoff requested/cancelled/returned and user-reported completion honestly. Browser launch alone cannot establish successful sign-in, credential identity or grant completion. |
-| WAR-05 | Negotiate metadata, handoff, vault-read, embedded-fill, passkey, delegated and unattended capabilities independently. Unsupported clients retain status/recovery access and cannot activate an unproved capability. |
-| WAR-06 | Bind Go tenant membership to authenticated Pulse environment and runtime principals. Context links, matching names/email and pairing transport do not widen permission. |
-| WAR-07 | Request credential use with a named action, normalized resource, requester and task/attempt. Grant references alone are not bearer authorization. Return typed pending/denied/locked/expired/revoked/unsupported/error states. |
-| WAR-08 | Bind approvals to operation/resource, payload digest where needed, policy version and consumer. Recheck immediately before use; atomically reserve duration/use budgets. |
-| WAR-09 | Keep reusable secrets out of prompts, tool arguments/results, events, ordinary WebSockets, task payloads, logs, exports and checkpoints. Secret ingress uses a separate authenticated, non-recorded channel. |
-| WAR-10 | Cancel, expire and revoke grants on run termination, policy invalidation or disconnect. Distinguish broker denial from provider token/session revocation pending, completed or unavailable. |
-| WAR-11 | Optional CLI bridge runs in dedicated state and a proved worker-isolation boundary. Never expose generic `bw`, `BW_SESSION`, unrestricted list/get/export or the master password to an agent. |
+| ID     | Requirement                                                                                                                                                                                                                                             |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| WAR-01 | Present one Warden management hierarchy: summary, credential, grants and receipts. Connections, tasks and departments link into it; do not create competing detail records.                                                                             |
+| WAR-02 | Show storage mode, owner, tenant where applicable, environment/device and supported capabilities. Configured, authenticated, unlocked and verified healthy are distinct states.                                                                         |
+| WAR-03 | First deliver an explicit handoff to the installed Bitwarden client using the selected Bitwarden-hosted/self-hosted/Vaultwarden origin. No master password or vault session enters Pulse Go.                                                            |
+| WAR-04 | Record handoff requested/cancelled/returned and user-reported completion honestly. Browser launch alone cannot establish successful sign-in, credential identity or grant completion.                                                                   |
+| WAR-05 | Negotiate metadata, handoff, vault-read, embedded-fill, passkey, delegated and unattended capabilities independently. Unsupported clients retain status/recovery access and cannot activate an unproved capability.                                     |
+| WAR-06 | Bind Go tenant membership to authenticated Pulse environment and runtime principals. Context links, matching names/email and pairing transport do not widen permission.                                                                                 |
+| WAR-07 | Request credential use with a named action, normalized resource, requester and task/attempt. Grant references alone are not bearer authorization. Return typed pending/denied/locked/expired/revoked/unsupported/error states.                          |
+| WAR-08 | Bind approvals to operation/resource, payload digest where needed, policy version and consumer. Recheck immediately before use; atomically reserve duration/use budgets.                                                                                |
+| WAR-09 | Keep reusable secrets out of prompts, tool arguments/results, events, ordinary WebSockets, task payloads, logs, exports and checkpoints. Secret ingress uses a separate authenticated, non-recorded channel.                                            |
+| WAR-10 | Cancel, expire and revoke grants on run termination, policy invalidation or disconnect. Distinguish broker denial from provider token/session revocation pending, completed or unavailable.                                                             |
+| WAR-11 | Optional CLI bridge runs in dedicated state and a proved worker-isolation boundary. Never expose generic `bw`, `BW_SESSION`, unrestricted list/get/export or the master password to an agent.                                                           |
 | WAR-12 | Office connections resolve credentials through a replaceable binding; read/send/write actions remain distinct. Migration verifies new storage before reference cutover and reconciles superseded/orphan secrets without touching unrelated credentials. |
-| WAR-13 | Personal vault supports create/generate/save/update/search/reveal/copy/delete/restore and explicit previewed import/export. Unlock, site scope and owner remain explicit; plaintext exports receive deliberate confirmation. |
-| WAR-14 | Desktop/extension save and fill bind to actual origin, frame, tab, document generation, account and profile. Recheck after navigation; support save/update/never-save and fill without automatic submit. |
-| WAR-15 | Keep personal browser profiles separate from delegated profiles. Scope authenticated-session control independently; document current same-user automation limitations and prohibit protected-mode claims without bypass tests. |
-| WAR-16 | Passkey sign-in to Pulse is a relying-party feature with public-key records, replay-resistant registration/authentication, credential removal and account recovery. It is independent of storing third-party passkeys. |
-| WAR-17 | Pulse-native passkey providers perform legitimate registration/assertion and user verification using supported OS APIs. Never use virtual test authenticators in production or equate agent approval with user verification. |
-| WAR-18 | Deleting a stored passkey and unregistering it at its website are separate actions. Portability, shared identity and device-bound limitations are visible; preserve a recoverable access path. |
-| WAR-19 | Define key custody, device enrollment, locking, encrypted sync, conflict resolution, backup/restore and recovery before real personal secrets. Login reset does not imply decryption recovery. |
-| WAR-20 | Shared vault membership distributes only authorized keys; transfer/removal/rotation are explicit. Offline revocation cannot erase prior copies; recovery must not resurrect devices or grants. |
-| WAR-21 | Scheduled operations use dedicated server-managed identities and fresh per-occurrence grants. Handle uncertain writes through reconciliation/idempotency; personal vault unlock is never assumed. |
-| WAR-22 | TOTP seeds and recovery codes are separately scoped items/capabilities. Permission to use a password does not automatically authorize its second factor or reveal recovery material. |
-| WAR-23 | Make Pulse-distributed UI, extension/native identities, packaging and updates independently brandable. Licence-audit exact dependencies, exclude restricted modules, retain required notices/source offers and never relabel GPL/AGPL code MIT. |
-| WAR-24 | Use bounded metadata pages, delta sync and scoped subscriptions. Do not broadcast vault data; use allowlisted audit fields and record no secret-bearing diagnostic/capture payload. |
+| WAR-13 | Personal vault supports create/generate/save/update/search/reveal/copy/delete/restore and explicit previewed import/export. Unlock, site scope and owner remain explicit; plaintext exports receive deliberate confirmation.                            |
+| WAR-14 | Desktop/extension save and fill bind to actual origin, frame, tab, document generation, account and profile. Recheck after navigation; support save/update/never-save and fill without automatic submit.                                                |
+| WAR-15 | Keep personal browser profiles separate from delegated profiles. Scope authenticated-session control independently; document current same-user automation limitations and prohibit protected-mode claims without bypass tests.                          |
+| WAR-16 | Passkey sign-in to Pulse is a relying-party feature with public-key records, replay-resistant registration/authentication, credential removal and account recovery. It is independent of storing third-party passkeys.                                  |
+| WAR-17 | Pulse-native passkey providers perform legitimate registration/assertion and user verification using supported OS APIs. Never use virtual test authenticators in production or equate agent approval with user verification.                            |
+| WAR-18 | Deleting a stored passkey and unregistering it at its website are separate actions. Portability, shared identity and device-bound limitations are visible; preserve a recoverable access path.                                                          |
+| WAR-19 | Define key custody, device enrollment, locking, encrypted sync, conflict resolution, backup/restore and recovery before real personal secrets. Login reset does not imply decryption recovery.                                                          |
+| WAR-20 | Shared vault membership distributes only authorized keys; transfer/removal/rotation are explicit. Offline revocation cannot erase prior copies; recovery must not resurrect devices or grants.                                                          |
+| WAR-21 | Scheduled operations use dedicated server-managed identities and fresh per-occurrence grants. Handle uncertain writes through reconciliation/idempotency; personal vault unlock is never assumed.                                                       |
+| WAR-22 | TOTP seeds and recovery codes are separately scoped items/capabilities. Permission to use a password does not automatically authorize its second factor or reveal recovery material.                                                                    |
+| WAR-23 | Make Pulse-distributed UI, extension/native identities, packaging and updates independently brandable. Licence-audit exact dependencies, exclude restricted modules, retain required notices/source offers and never relabel GPL/AGPL code MIT.         |
+| WAR-24 | Use bounded metadata pages, delta sync and scoped subscriptions. Do not broadcast vault data; use allowlisted audit fields and record no secret-bearing diagnostic/capture payload.                                                                     |
 
 ## Shared operation contract
 
@@ -107,27 +107,27 @@ New capabilities must work across local, remote/relay and tunnel connections wit
 
 ## Delivery gates
 
-| Gate | Scope and required proof |
-| --- | --- |
-| W0 | Exact upstream/client/SDK licence inventory, permitted reuse and Pulse branding plan; no runtime readiness implied |
-| W1 | Existing Bitwarden/Vaultwarden browser handoff on pinned versions; truthful status, lock/cancel and no secret ingress |
-| W2 | Go tenant/grant/key lifecycle plus one read-only provider operation; identity, RLS, expiry, concurrent use and receipts |
-| W3 | Pulse runtime and one Office connection binding; cancelled runs and failed/superseded credential migration reconciled |
-| W4 | Personal vault custody/recovery resolved; encrypted CRUD/sync and tested embedded/extension save/fill |
-| W5 | Pulse relying-party passkey login; independent native-provider Apple/Android proofs and declared desktop compatibility |
-| W6 | Constrained agent sign-in, scheduled/write operations, human sharing, recovery exercise and full brandable distribution evidence |
+| Gate | Scope and required proof                                                                                                         |
+| ---- | -------------------------------------------------------------------------------------------------------------------------------- |
+| W0   | Exact upstream/client/SDK licence inventory, permitted reuse and Pulse branding plan; no runtime readiness implied               |
+| W1   | Existing Bitwarden/Vaultwarden browser handoff on pinned versions; truthful status, lock/cancel and no secret ingress            |
+| W2   | Go tenant/grant/key lifecycle plus one read-only provider operation; identity, RLS, expiry, concurrent use and receipts          |
+| W3   | Pulse runtime and one Office connection binding; cancelled runs and failed/superseded credential migration reconciled            |
+| W4   | Personal vault custody/recovery resolved; encrypted CRUD/sync and tested embedded/extension save/fill                            |
+| W5   | Pulse relying-party passkey login; independent native-provider Apple/Android proofs and declared desktop compatibility           |
+| W6   | Constrained agent sign-in, scheduled/write operations, human sharing, recovery exercise and full brandable distribution evidence |
 
 Existing-manager integration precedes release of Pulse-managed passwords/native passkeys. Each gate decomposes into small implementation tasks only when its dependencies are evidenced. Historical Beat read-only prerequisites remain unresolved until checked against their actual CR and branch; no arbitrary write rollout is implied by this PRD.
 
 ### Open release decisions
 
-| ID | Decision | Blocks |
-| --- | --- | --- |
-| Q-WAR-01 | Personal recovery method, organisation escrow disclosure and device-loss policy | Real-secret W4 |
-| Q-WAR-02 | Offline cache limits and whether a separate standalone local authority is in scope | Offline personal vault release; existing local integrations stay supported |
-| Q-WAR-03 | Exact browser/OS/client versions, Electron feasibility and enforceable worker isolation | Corresponding W1/W4/W5/W6 claims |
-| Q-WAR-04 | Upstream revisions, code/assets/SDK reuse, distribution and source-offer arrangement | Reused-code build and commercial distribution |
-| Q-WAR-05 | Credential audit retention, deletion/restore retention and recovery material custody | Production audit/personal vault release |
+| ID       | Decision                                                                                | Blocks                                                                     |
+| -------- | --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| Q-WAR-01 | Personal recovery method, organisation escrow disclosure and device-loss policy         | Real-secret W4                                                             |
+| Q-WAR-02 | Offline cache limits and whether a separate standalone local authority is in scope      | Offline personal vault release; existing local integrations stay supported |
+| Q-WAR-03 | Exact browser/OS/client versions, Electron feasibility and enforceable worker isolation | Corresponding W1/W4/W5/W6 claims                                           |
+| Q-WAR-04 | Upstream revisions, code/assets/SDK reuse, distribution and source-offer arrangement    | Reused-code build and commercial distribution                              |
+| Q-WAR-05 | Credential audit retention, deletion/restore retention and recovery material custody    | Production audit/personal vault release                                    |
 
 ## Measurement and verification
 

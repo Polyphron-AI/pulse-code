@@ -39,7 +39,6 @@ Pulse Issues work as its reference adapter.
 - [Pulse Warden](17-pulse-warden.md): Bitwarden/Vaultwarden integration, passwords, passkeys, server/agent delegation and commercial Pulse branding.
 - [Warden acceptance](20-acceptance-criteria/pulse-warden.md): 30 planned acceptance scenarios and cross-product release evidence.
 
-
 - [Warden MCP and CLI contract](warden/mcp-cli.md): explicit tools, commands, auth/setup, output and cross-interface acceptance. Proposed 2026-09-09.
 
 ---

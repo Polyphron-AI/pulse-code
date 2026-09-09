@@ -2,15 +2,15 @@
 
 Authority: [Warden PRD](../prd/17-pulse-warden.md). All surfaces below are planned logical destinations; router paths remain implementation decisions. No route is claimed to exist.
 
-| Surface ID | View and actions | Client / authority |
-| --- | --- | --- |
-| warden-summary | Credentials, active grants, health and recent redacted receipts; connect manager | Go-owned hierarchy rendered or linked by capable Pulse clients |
-| warden-credential | Storage mode, owner, scope, policies, use history, rotate/revoke | One authority-qualified credential identity |
-| warden-grants | Request, approval, consumer/attempt, expiry and revocation progress | Go authority; approve/revoke only for eligible principal |
-| warden-receipts | Allowlisted outcome and provider status, redacted export | Go audit linked to Pulse task receipts |
-| warden-device-vault | Unlock/lock, items, save/update, recovery, device/member controls | Trusted Pulse credential client; later gate |
-| warden-manager-handoff | Selected manager/server/device and explicit external sign-in | Existing Bitwarden client initially; no fabricated success |
-| warden-passkeys | Separate Pulse account passkeys and third-party stored passkeys | Relying-party settings versus native provider |
+| Surface ID             | View and actions                                                                 | Client / authority                                             |
+| ---------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| warden-summary         | Credentials, active grants, health and recent redacted receipts; connect manager | Go-owned hierarchy rendered or linked by capable Pulse clients |
+| warden-credential      | Storage mode, owner, scope, policies, use history, rotate/revoke                 | One authority-qualified credential identity                    |
+| warden-grants          | Request, approval, consumer/attempt, expiry and revocation progress              | Go authority; approve/revoke only for eligible principal       |
+| warden-receipts        | Allowlisted outcome and provider status, redacted export                         | Go audit linked to Pulse task receipts                         |
+| warden-device-vault    | Unlock/lock, items, save/update, recovery, device/member controls                | Trusted Pulse credential client; later gate                    |
+| warden-manager-handoff | Selected manager/server/device and explicit external sign-in                     | Existing Bitwarden client initially; no fabricated success     |
+| warden-passkeys        | Separate Pulse account passkeys and third-party stored passkeys                  | Relying-party settings versus native provider                  |
 
 Settings/Connections, Office account setup, tasks, departments and command palette entries link into the hierarchy with authority, credential/attempt and return context. Summary tiles are allowed; local credential-detail copies are not. Authorised mobile users can review supported metadata/approvals. Native fill/unlock requires native capability, not a normal WebSocket payload.
 

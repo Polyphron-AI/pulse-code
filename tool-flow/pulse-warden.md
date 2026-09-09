@@ -2,18 +2,18 @@
 
 Authority: [PRD](../prd/17-pulse-warden.md), [acceptance](../prd/20-acceptance-criteria/pulse-warden.md). Proposed paths are explicitly labeled; existing files are extension points, not Warden implementations.
 
-| Owner | Existing/proposed module | Responsibility |
-| --- | --- | --- |
-| Pulse Go | Proposed `internal/warden`, existing crypto and RLS migration infrastructure | Tenant-scoped policies, grants, server key envelopes, bounded provider operations and audit |
-| Vaultwarden | Separately deployed selected human vault | Client-encrypted item storage and sync; no assumed machine-grant API |
-| Server | Existing `apps/server/src/integrations`, proposed `apps/server/src/warden` | Reuse connection metadata/lifecycle; add authenticated grant consumer and cancellation |
-| Contracts | Proposed `packages/contracts/src/warden.ts` | Secret-free binding/state/receipt schemas and additive capabilities |
-| Shared client | Proposed `packages/client-runtime/src/warden` | Status, supported actions and authority-qualified deep links |
-| Desktop | Existing `apps/desktop/src/preview/BrowserSession.ts`, preview manager | Explicit profile/account isolation and trusted non-recorded save/fill channel |
-| Automation | Existing `apps/server/src/mcp/PreviewAutomationBroker.ts` | Host/session routing plus tab/document/origin/account/operation binding; constrained mode requires additional isolation |
-| Office mail | Unmerged `.worktrees/pulse-mail` `MailEngine` / `MailSecretAccess` | Replaceable credential binding, verified reference cutover and orphan cleanup |
-| Web/mobile | Existing settings/connections and native modules | Management/approval UI; native secret use negotiated separately from ordinary client transport |
-| Extension/native providers | New standalone deliverables, package paths not yet chosen | Pulse-owned branding, signing/update identity, external autofill and native passkey operations |
+| Owner                      | Existing/proposed module                                                     | Responsibility                                                                                                          |
+| -------------------------- | ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Pulse Go                   | Proposed `internal/warden`, existing crypto and RLS migration infrastructure | Tenant-scoped policies, grants, server key envelopes, bounded provider operations and audit                             |
+| Vaultwarden                | Separately deployed selected human vault                                     | Client-encrypted item storage and sync; no assumed machine-grant API                                                    |
+| Server                     | Existing `apps/server/src/integrations`, proposed `apps/server/src/warden`   | Reuse connection metadata/lifecycle; add authenticated grant consumer and cancellation                                  |
+| Contracts                  | Proposed `packages/contracts/src/warden.ts`                                  | Secret-free binding/state/receipt schemas and additive capabilities                                                     |
+| Shared client              | Proposed `packages/client-runtime/src/warden`                                | Status, supported actions and authority-qualified deep links                                                            |
+| Desktop                    | Existing `apps/desktop/src/preview/BrowserSession.ts`, preview manager       | Explicit profile/account isolation and trusted non-recorded save/fill channel                                           |
+| Automation                 | Existing `apps/server/src/mcp/PreviewAutomationBroker.ts`                    | Host/session routing plus tab/document/origin/account/operation binding; constrained mode requires additional isolation |
+| Office mail                | Unmerged `.worktrees/pulse-mail` `MailEngine` / `MailSecretAccess`           | Replaceable credential binding, verified reference cutover and orphan cleanup                                           |
+| Web/mobile                 | Existing settings/connections and native modules                             | Management/approval UI; native secret use negotiated separately from ordinary client transport                          |
+| Extension/native providers | New standalone deliverables, package paths not yet chosen                    | Pulse-owned branding, signing/update identity, external autofill and native passkey operations                          |
 
 The existing `ServerSecretStore` holds raw bytes with filesystem protection. Do not expose arbitrary names through new APIs or call it an encrypted vault. Machine bootstrap identity stays there under existing release constraints; customer delegation is resolved via Warden. OpenBao remains the orchestrator's distinct identity store.
 

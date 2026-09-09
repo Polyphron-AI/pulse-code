@@ -6,15 +6,15 @@ Status: proposed, 2026-09-09. This is the coordinated `pulse-warden/v1` interfac
 
 All tools have closed, versioned JSON input/output schemas with bounded strings, enums and pagination. Require schema validation before dispatch. Derive tenant, principal and runtime identity from authenticated context, never a model-supplied identity. References are authority-qualified opaque IDs. Capabilities and current policy are rechecked on each call, even if tool discovery previously advertised support.
 
-| Proposed tool | Input | Structured result and authority |
-| --- | --- | --- |
-| `warden_capabilities` | Optional credential reference | Supported operations and availability reasons for this caller/environment; no global vault inventory |
-| `warden_credentials_list` | Optional provider/resource filter, cursor, limit | Paginated authorized metadata only; no ciphertext, passwords, TOTP seeds or passkey private material |
-| `warden_use_request` | credentialRef, action, resource, taskRef, attemptRef, requestId; payload/payloadDigest only for a defined operation schema | useRef, normalized request digest, state, expiry and safe approval reference if pending; server validates task ownership and binds immutable payload |
-| `warden_use_execute` | useRef, requestId, expectedRequestDigest | Bounded adapter result plus receiptRef or operationRef; no arbitrary URL, shell command or secret-returning operation |
-| `warden_use_status` | useRef or operationRef | Typed lifecycle, receipt reference and provider cleanup state, including outcome_unknown |
-| `warden_use_revoke` | useRef, optional bounded reason code | Revocation state for a caller-owned use or an explicitly authorized management action |
-| `warden_receipts_list` | Optional useRef/taskRef, cursor, limit | Allowlisted redacted receipts within caller visibility |
+| Proposed tool             | Input                                                                                                                      | Structured result and authority                                                                                                                      |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `warden_capabilities`     | Optional credential reference                                                                                              | Supported operations and availability reasons for this caller/environment; no global vault inventory                                                 |
+| `warden_credentials_list` | Optional provider/resource filter, cursor, limit                                                                           | Paginated authorized metadata only; no ciphertext, passwords, TOTP seeds or passkey private material                                                 |
+| `warden_use_request`      | credentialRef, action, resource, taskRef, attemptRef, requestId; payload/payloadDigest only for a defined operation schema | useRef, normalized request digest, state, expiry and safe approval reference if pending; server validates task ownership and binds immutable payload |
+| `warden_use_execute`      | useRef, requestId, expectedRequestDigest                                                                                   | Bounded adapter result plus receiptRef or operationRef; no arbitrary URL, shell command or secret-returning operation                                |
+| `warden_use_status`       | useRef or operationRef                                                                                                     | Typed lifecycle, receipt reference and provider cleanup state, including outcome_unknown                                                             |
+| `warden_use_revoke`       | useRef, optional bounded reason code                                                                                       | Revocation state for a caller-owned use or an explicitly authorized management action                                                                |
+| `warden_receipts_list`    | Optional useRef/taskRef, cursor, limit                                                                                     | Allowlisted redacted receipts within caller visibility                                                                                               |
 
 Agent-visible tools cannot approve their own requests, widen policies, enroll recovery devices, reveal/export vault items or rotate arbitrary credentials. Existing policies can authorize eligible work without a new prompt; models cannot manufacture standing authority. A dedicated browser sign-in capability uses the same grant flow only after the constrained-browser proof. No general `secret.get` exists.
 
@@ -38,15 +38,15 @@ Source references: [MCP transports](https://modelcontextprotocol.io/specificatio
 
 Extend the existing Go `cmd/cli` binary named `pulse-cli`; do not create a second credential CLI or rename existing commands. `bw` is the optional internal manager bridge, not the Pulse-facing interface.
 
-| Proposed command after `pulse-cli warden` | Contract |
-| --- | --- |
-| `capabilities`, `credentials list`, `credentials show <ref>` | Authorized metadata, storage mode and health; no secret reveal |
-| `use request --credential <ref> --action <action> --resource <ref> --task <ref> --attempt <ref>` | Validate required identity/context, bind request ID and supported operation payload; return pending/ready/denied |
-| `use execute <use-ref>` | Execute the approved immutable request once; supplied expected digest must match |
-| `use status <use-ref>`, `use wait <use-ref> --timeout <duration>` | Status or bounded server-notification wait; timeout never implicitly re-executes or approves |
-| `use revoke <use-ref>`, `receipts list --use <use-ref>` | End permitted access and inspect redacted outcomes |
-| `use approve <use-ref>`, `use deny <use-ref>` | Human management mode only: authenticated eligible approver, exact request review and explicit confirmation; not exported as agent MCP tools |
-| `mcp config`, `mcp doctor`, `mcp serve` | Configuration preview, harmless connection proof and local stdio lifecycle |
+| Proposed command after `pulse-cli warden`                                                        | Contract                                                                                                                                     |
+| ------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `capabilities`, `credentials list`, `credentials show <ref>`                                     | Authorized metadata, storage mode and health; no secret reveal                                                                               |
+| `use request --credential <ref> --action <action> --resource <ref> --task <ref> --attempt <ref>` | Validate required identity/context, bind request ID and supported operation payload; return pending/ready/denied                             |
+| `use execute <use-ref>`                                                                          | Execute the approved immutable request once; supplied expected digest must match                                                             |
+| `use status <use-ref>`, `use wait <use-ref> --timeout <duration>`                                | Status or bounded server-notification wait; timeout never implicitly re-executes or approves                                                 |
+| `use revoke <use-ref>`, `receipts list --use <use-ref>`                                          | End permitted access and inspect redacted outcomes                                                                                           |
+| `use approve <use-ref>`, `use deny <use-ref>`                                                    | Human management mode only: authenticated eligible approver, exact request review and explicit confirmation; not exported as agent MCP tools |
+| `mcp config`, `mcp doctor`, `mcp serve`                                                          | Configuration preview, harmless connection proof and local stdio lifecycle                                                                   |
 
 Use explicit `--environment` and authority/tenant selection when context is ambiguous. A configured default is allowed only if its binding is displayed in human mode and included in structured output. Fail on conflicting flags rather than choosing silently. Reuse existing login/device authorization where available; headless users get a safe authorization instruction, not a password prompt captured by an agent.
 
