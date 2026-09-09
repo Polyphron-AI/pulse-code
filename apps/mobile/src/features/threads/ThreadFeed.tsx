@@ -1577,7 +1577,15 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
         void tryOpenExternalUrl(presentation.href, "markdown-link");
       }
     },
-    [downloadFile, navigation, props.environmentId, props.threadId, props.workspaceRoot],
+    [
+      createAssetUrl,
+      downloadFile,
+      navigation,
+      preparedConnection,
+      props.environmentId,
+      props.threadId,
+      props.workspaceRoot,
+    ],
   );
   const markdownStyles = useMarkdownStyles(onMarkdownLinkPress);
   const reviewCommentColors = useReviewCommentColors();
