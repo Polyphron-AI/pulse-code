@@ -84,6 +84,7 @@ import {
   buildThreadListV2ListItems,
   THREAD_LIST_V2_SETTLED_INITIAL_COUNT,
   THREAD_LIST_V2_SETTLED_PAGE_COUNT,
+  type ThreadListV2ChangeRequestState,
   type ThreadListV2ListItem,
 } from "./threadListV2";
 
@@ -420,18 +421,24 @@ function ThreadNavigationSidebarPane(
   // (HomeScreen.tsx): flat creation-order card block + settled recency tail.
   // PR states stream in per-row. The next partition applies the configured
   // merge rule and the always-on close rule.
-  const [changeRequestStateByKey, setChangeRequestStateByKey] = useState<
-    ReadonlyMap<string, "open" | "closed" | "merged">
+  const [changeRequestByKey, setChangeRequestByKey] = useState<
+    ReadonlyMap<string, ThreadListV2ChangeRequestState>
   >(() => new Map());
   const handleChangeRequestState = useCallback(
-    (threadKey: string, state: "open" | "closed" | "merged" | null) => {
-      setChangeRequestStateByKey((current) => {
-        if ((current.get(threadKey) ?? null) === state) return current;
+    (threadKey: string, changeRequest: ThreadListV2ChangeRequestState | null) => {
+      setChangeRequestByKey((current) => {
+        const existing = current.get(threadKey) ?? null;
+        if (
+          (existing?.state ?? null) === (changeRequest?.state ?? null) &&
+          (existing?.linkedPullRequestKey ?? null) === (changeRequest?.linkedPullRequestKey ?? null)
+        ) {
+          return current;
+        }
         const next = new Map(current);
-        if (state === null) {
+        if (changeRequest === null) {
           next.delete(threadKey);
         } else {
-          next.set(threadKey, state);
+          next.set(threadKey, changeRequest);
         }
         return next;
       });
@@ -552,7 +559,7 @@ function ThreadNavigationSidebarPane(
       projectRefs: selectedProjectScope === null ? null : selectedProjectScope.projectRefs,
       searchQuery: props.searchQuery,
       matchedThreadKeys,
-      changeRequestStateByKey,
+      changeRequestByKey,
       autoSettleOnMerge,
       settlementEnvironmentIds,
       snoozeEnvironmentIds,
@@ -564,7 +571,7 @@ function ThreadNavigationSidebarPane(
       selectedThreadKey: props.selectedThreadKey ?? null,
     });
   }, [
-    changeRequestStateByKey,
+    changeRequestByKey,
     autoSettleOnMerge,
     nowMinute,
     snoozeWakeTick,
