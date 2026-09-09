@@ -19,7 +19,9 @@ export interface OpenWorkspaceFileWithDependencies {
 export interface OpenWorkspaceFileWithInput {
   readonly key: string;
   readonly path: string;
-  readonly resolveAssetUrl: () => Promise<string | null>;
+  readonly resolveAssetUrl: () => Promise<
+    string | { readonly url: string; readonly fileName: string } | null
+  >;
 }
 
 function fileNameCharacter(character: string): string {
@@ -106,9 +108,11 @@ async function runOpenWorkspaceFileWith(
     throw new Error("The connected environment did not provide a usable file URL.");
   }
 
-  const target = await dependencies.createCacheTarget(sanitizeWorkspaceFileName(input.path));
+  const target = await dependencies.createCacheTarget(
+    sanitizeWorkspaceFileName(typeof assetUrl === "string" ? input.path : assetUrl.fileName),
+  );
   try {
-    await target.download(assetUrl);
+    await target.download(typeof assetUrl === "string" ? assetUrl : assetUrl.url);
     await dependencies.share(target.uri);
   } catch (error) {
     removeQuietly(target);

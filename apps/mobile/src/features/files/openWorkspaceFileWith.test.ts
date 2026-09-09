@@ -138,3 +138,20 @@ describe("openWorkspaceFileWith", () => {
     expect(harness.share).toHaveBeenCalledOnce();
   });
 });
+
+it("uses the server bundle filename when a saved HTML output downloads as an archive", async () => {
+  const harness = createHarness();
+  await openWorkspaceFileWith(
+    {
+      key: "html-bundle",
+      path: "report.html",
+      resolveAssetUrl: async () => ({
+        url: "https://remote.example/api/assets/bundle",
+        fileName: "report.zip",
+      }),
+    },
+    harness.dependencies,
+  );
+  expect(harness.createCacheTarget).toHaveBeenCalledWith("report.zip");
+  expect(harness.download).toHaveBeenCalledWith("https://remote.example/api/assets/bundle");
+});

@@ -121,6 +121,12 @@ function updateThreadPreviewState(
 }
 
 const dedupeRecentUrls = (existing: string[], url: string): string[] => {
+  // Asset paths contain expiring credentials. Reopen them from their message instead.
+  try {
+    if (new URL(url).pathname.startsWith("/api/assets/")) return existing;
+  } catch {
+    return existing;
+  }
   const next = [url, ...existing.filter((entry) => entry !== url)];
   return next.slice(0, PREVIEW_RECENT_URL_LIMIT);
 };

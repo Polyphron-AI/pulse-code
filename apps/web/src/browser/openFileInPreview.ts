@@ -2,6 +2,7 @@ import type {
   AssetCreateUrlResult,
   AssetResource,
   EnvironmentId,
+  MessageId,
   PreviewOpenInput,
   PreviewSessionSnapshot,
   ScopedThreadRef,
@@ -39,6 +40,7 @@ export type OpenPreviewMutation<E = unknown> = (input: {
 export async function openUrlInPreview<E>(input: {
   readonly threadRef: ScopedThreadRef;
   readonly url: string;
+  readonly remember?: boolean;
   readonly openPreview: OpenPreviewMutation<E>;
 }): Promise<AtomCommandResult<void, E>> {
   const result = await input.openPreview({
@@ -47,7 +49,7 @@ export async function openUrlInPreview<E>(input: {
   });
   return mapAtomCommandResult(result, (snapshot) => {
     applyPreviewServerSnapshot(input.threadRef, snapshot);
-    rememberPreviewUrl(input.threadRef, input.url);
+    if (input.remember !== false) rememberPreviewUrl(input.threadRef, input.url);
     useRightPanelStore.getState().openBrowser(input.threadRef, snapshot.tabId);
   });
 }
@@ -55,6 +57,7 @@ export async function openUrlInPreview<E>(input: {
 export async function openFileInPreview<AssetError, PreviewError>(input: {
   readonly threadRef: ScopedThreadRef;
   readonly filePath: string;
+  readonly messageId?: MessageId | undefined;
   readonly httpBaseUrl: string;
   readonly createAssetUrl: (input: {
     readonly environmentId: EnvironmentId;
@@ -75,7 +78,9 @@ export async function openFileInPreview<AssetError, PreviewError>(input: {
     environmentId: input.threadRef.environmentId,
     input: {
       resource: {
-        _tag: "workspace-file",
+        ...(input.messageId
+          ? { _tag: "session-output" as const, messageId: input.messageId }
+          : { _tag: "workspace-file" as const }),
         threadId: input.threadRef.threadId,
         path: input.filePath,
       },
@@ -93,6 +98,7 @@ export async function openFileInPreview<AssetError, PreviewError>(input: {
   return openUrlInPreview({
     threadRef: input.threadRef,
     url: assetUrl,
+    remember: false,
     openPreview: input.openPreview,
   });
 }

@@ -1,3 +1,4 @@
+import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import * as Haptics from "expo-haptics";
 import { KeyboardAwareLegendList } from "@legendapp/list/keyboard";
 import { type LegendListRef } from "@legendapp/list/react-native";
@@ -11,6 +12,7 @@ import { HeaderHeightContext } from "@react-navigation/elements";
 import { useNavigation } from "@react-navigation/native";
 import {
   memo,
+  createContext,
   useCallback,
   useContext,
   useEffect,
@@ -108,7 +110,7 @@ import {
 } from "./thread-work-log";
 import { useMarkdownCodeHighlight } from "./markdownCodeHighlightState";
 import { assetEnvironment, useAssetUrl } from "../../state/assets";
-import { useAtomQueryRunner } from "../../state/use-atom-query-runner";
+import { useAtomCommand } from "../../state/use-atom-command";
 import { usePreparedConnection } from "../../state/session";
 import {
   basename,
@@ -422,7 +424,28 @@ function useReviewCommentColors(): ReviewCommentColors {
   );
 }
 
-function useMarkdownStyles(onLinkPress: (href: string) => void): MarkdownStyleSets {
+const AssistantOutputLinkContext = createContext<MessageId | undefined>(undefined);
+function OutputAwareFileLink(props: {
+  href: string;
+  onLinkPress: (href: string, messageId?: MessageId) => void;
+  color: string;
+  children: ReactNode;
+}) {
+  const messageId = useContext(AssistantOutputLinkContext);
+  return (
+    <NativeText
+      className="font-t3-bold"
+      onPress={() => props.onLinkPress(props.href, messageId)}
+      style={{ color: props.color }}
+    >
+      {props.children}
+    </NativeText>
+  );
+}
+
+function useMarkdownStyles(
+  onLinkPress: (href: string, messageId?: MessageId) => void,
+): MarkdownStyleSets {
   const { appearance, themeAppearance } = useAppearancePreferences();
   const markdownFontSizes = useMemo(
     () => resolveMarkdownFontSizes(appearance.baseFontSize),
@@ -554,17 +577,13 @@ function useMarkdownStyles(onLinkPress: (href: string) => void): MarkdownStyleSe
         const presentation = resolveMarkdownLinkPresentation(href);
         if (presentation.kind === "file") {
           return (
-            <NativeText
-              className="font-t3-bold"
-              onPress={() => onLinkPress(href)}
-              style={{ color: inlineTextColor }}
-            >
+            <OutputAwareFileLink href={href} onLinkPress={onLinkPress} color={inlineTextColor}>
               <Image
                 source={markdownFileIconSource(presentation.icon)}
                 style={markdownLinkStyles.inlineIcon}
               />
               {presentation.label}
-            </NativeText>
+            </OutputAwareFileLink>
           );
         }
         if (presentation.kind === "external") {
@@ -820,7 +839,7 @@ function renderFeedEntry(
     readonly onToggleWorkRow: (rowId: string) => void;
     readonly onToggleTurnFold: (turnId: TurnId) => void;
     readonly onPressImage: (uri: string, headers?: Record<string, string>) => void;
-    readonly onMarkdownLinkPress: (href: string) => void;
+    readonly onMarkdownLinkPress: (href: string, messageId?: MessageId) => void;
     readonly iconSubtleColor: string | import("react-native").ColorValue;
     readonly userBubbleColor: string | import("react-native").ColorValue;
     readonly markdownStyles: MarkdownStyleSets;
@@ -964,13 +983,17 @@ function renderFeedEntry(
         {...(enterAnimated ? { entering: FadeIn.duration(220) } : {})}
       >
         {message.text.trim().length > 0 ? (
-          <AssistantMarkdownContent
-            text={message.text}
-            settled={!assistantTurnStillInProgress && !message.streaming}
-            markdownStyles={styles}
-            skills={props.skills}
-            onLinkPress={props.onMarkdownLinkPress}
-          />
+          <AssistantOutputLinkContext value={message.streaming ? undefined : message.id}>
+            <AssistantMarkdownContent
+              text={message.text}
+              settled={!assistantTurnStillInProgress && !message.streaming}
+              markdownStyles={styles}
+              skills={props.skills}
+              onLinkPress={(href) =>
+                props.onMarkdownLinkPress(href, message.streaming ? undefined : message.id)
+              }
+            />
+          </AssistantOutputLinkContext>
         ) : null}
         {attachments.map((attachment) => {
           return (
@@ -1361,7 +1384,7 @@ function ThreadFeedPlaceholder(props: {
 export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
   const navigation = useNavigation();
   const preparedConnection = usePreparedConnection(props.environmentId);
-  const createAssetUrl = useAtomQueryRunner(assetEnvironment.createUrl, {
+  const createAssetUrl = useAtomCommand(assetEnvironment.createFreshUrl, {
     label: "open linked workspace file",
     reportFailure: false,
     reportDefect: false,
@@ -1453,9 +1476,64 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
   const iconSubtleColor = useThemeColor("--color-icon-subtle");
   const userBubbleColor = useThemeColor("--color-user-bubble");
   const onMarkdownLinkPress = useCallback(
-    (href: string) => {
+    (href: string, messageId?: MessageId) => {
       const presentation = resolveMarkdownLinkPresentation(href);
       if (presentation.kind === "file") {
+        if (messageId) {
+          const downloadSaved = () => {
+            if (preparedConnection._tag === "None") {
+              Alert.alert(
+                "Could not download saved output",
+                "Reconnect to the output's environment and try again.",
+              );
+              return;
+            }
+            void openWorkspaceFileWith({
+              key: JSON.stringify([
+                props.environmentId,
+                props.threadId,
+                messageId,
+                presentation.path,
+              ]),
+              path: presentation.path,
+              resolveAssetUrl: async () => {
+                const result = await createAssetUrl({
+                  environmentId: props.environmentId,
+                  input: {
+                    resource: {
+                      _tag: "session-output",
+                      threadId: props.threadId,
+                      messageId,
+                      path: presentation.path,
+                      download: true,
+                    },
+                  },
+                });
+                if (result._tag === "Failure") throw squashAtomCommandFailure(result);
+                const url = resolveAssetUrl(
+                  preparedConnection.value.httpBaseUrl,
+                  result.value.relativeUrl,
+                );
+                return url && result.value.downloadName
+                  ? { url, fileName: result.value.downloadName }
+                  : url;
+              },
+            }).catch((error: unknown) =>
+              Alert.alert(
+                "Could not download saved output",
+                error instanceof Error
+                  ? error.message
+                  : "Reconnect to the environment and try again.",
+              ),
+            );
+          };
+          Alert.alert(presentation.label, "Open the saved output or the current source file.", [
+            { text: "Download saved output", onPress: downloadSaved },
+            { text: "Open source file", onPress: () => onMarkdownLinkPress(href) },
+            { text: "Cancel", style: "cancel" },
+          ]);
+          return;
+        }
         const relativePath = resolveWorkspaceRelativeFilePath(
           props.workspaceRoot,
           presentation.path,

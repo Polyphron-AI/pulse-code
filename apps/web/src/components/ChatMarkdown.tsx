@@ -3,6 +3,7 @@ import {
   CheckIcon,
   ChevronRightIcon,
   CopyIcon,
+  DownloadIcon,
   GlobeIcon,
   InfoIcon,
   LightbulbIcon,
@@ -13,7 +14,7 @@ import {
   TriangleAlertIcon,
   WrapTextIcon,
 } from "lucide-react";
-import type { ScopedThreadRef, ServerProviderSkill } from "@t3tools/contracts";
+import type { MessageId, ScopedThreadRef, ServerProviderSkill } from "@t3tools/contracts";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
@@ -112,6 +113,7 @@ import { MermaidDiagram } from "./MermaidDiagram";
 
 interface ChatMarkdownProps {
   text: string;
+  messageId?: MessageId | undefined;
   cwd: string | undefined;
   threadRef?: ScopedThreadRef | undefined;
   onTaskListChange?: ((input: { markerOffset: number; checked: boolean }) => void) | undefined;
@@ -824,6 +826,7 @@ interface MarkdownFileLinkProps {
   threadRef?: ScopedThreadRef | undefined;
   onOpen: (targetPath: string) => Promise<AtomCommandResult<unknown, unknown>>;
   onOpenInPanel: (workspaceRelativePath: string, line: number | undefined) => void;
+  onDownload?: (() => Promise<void>) | undefined;
   onOpenInBrowser?: (() => Promise<AtomCommandResult<unknown, unknown>>) | undefined;
   className?: string | undefined;
 }
@@ -1121,8 +1124,33 @@ const MarkdownFileLink = memo(function MarkdownFileLink({
   onOpen,
   onOpenInPanel,
   onOpenInBrowser,
+  onDownload,
   className,
 }: MarkdownFileLinkProps) {
+  const busy = useRef(false);
+  const [isBusy, setIsBusy] = useState(false);
+  const handleDownload = useCallback(() => {
+    if (!onDownload || busy.current) return;
+    busy.current = true;
+    setIsBusy(true);
+    void onDownload()
+      .catch((error: unknown) => {
+        toastManager.add(
+          stackedThreadToast({
+            type: "error",
+            title: "Unable to download saved output",
+            description:
+              error instanceof Error
+                ? error.message
+                : "Reconnect to the environment and try again.",
+          }),
+        );
+      })
+      .finally(() => {
+        busy.current = false;
+        setIsBusy(false);
+      });
+  }, [onDownload]);
   const handleOpenInEditor = useCallback(() => {
     void (async () => {
       try {
@@ -1167,9 +1195,10 @@ const MarkdownFileLink = memo(function MarkdownFileLink({
   }, [handleOpenInEditor, line, onOpenInPanel, threadRef, workspaceRelativePath]);
 
   const handleOpenInBrowser = useCallback(() => {
-    if (!onOpenInBrowser) {
+    if (!onOpenInBrowser || busy.current) {
       return;
     }
+    busy.current = true;
     void (async () => {
       try {
         const result = await onOpenInBrowser();
@@ -1200,6 +1229,8 @@ const MarkdownFileLink = memo(function MarkdownFileLink({
             description: cause instanceof Error ? cause.message : "An error occurred.",
           }),
         );
+      } finally {
+        busy.current = false;
       }
     })();
   }, [onOpenInBrowser, targetPath]);
@@ -1254,6 +1285,7 @@ const MarkdownFileLink = memo(function MarkdownFileLink({
       try {
         const clicked = await api.contextMenu.show(
           [
+            ...(onDownload ? [{ id: "download", label: "Download saved output" }] : []),
             { id: "open", label: "Open in editor" },
             ...(onOpenInBrowser
               ? ([{ id: "open-in-browser", label: "Open in integrated browser" }] as const)
@@ -1264,6 +1296,10 @@ const MarkdownFileLink = memo(function MarkdownFileLink({
           { x: event.clientX, y: event.clientY },
         );
 
+        if (clicked === "download") {
+          handleDownload();
+          return;
+        }
         if (clicked === "open") {
           handleOpenInEditor();
           return;
@@ -1286,41 +1322,67 @@ const MarkdownFileLink = memo(function MarkdownFileLink({
         );
       }
     },
-    [displayPath, handleCopy, handleOpenInBrowser, handleOpenInEditor, onOpenInBrowser, targetPath],
+    [
+      displayPath,
+      handleCopy,
+      handleDownload,
+      handleOpenInBrowser,
+      handleOpenInEditor,
+      onDownload,
+      onOpenInBrowser,
+      targetPath,
+    ],
   );
 
   return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <a
-            href={href}
-            className={cn(CHAT_FILE_TAG_CHIP_CLASS_NAME, MARKDOWN_FILE_LINK_CLASS_NAME, className)}
-            data-markdown-copy={copyMarkdown}
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              if (onOpenInBrowser) {
-                handleOpenInBrowser();
-                return;
-              }
-              handleOpenInFilePreview();
-            }}
-            onContextMenu={handleContextMenu}
-          >
-            <FileTagChipContent path={iconPath} label={label} theme={theme} selectable />
-          </a>
-        }
-      />
-      <TooltipPopup
-        side="top"
-        className="max-w-[min(40rem,calc(100vw-2rem))] font-mono text-[11px] leading-tight"
-      >
-        <div className="overflow-x-auto whitespace-nowrap [scrollbar-color:color-mix(in_srgb,var(--border)_78%,transparent)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[color-mix(in_srgb,var(--border)_78%,transparent)] [&::-webkit-scrollbar-track]:bg-transparent">
-          {displayPath}
-        </div>
-      </TooltipPopup>
-    </Tooltip>
+    <span className="inline-flex items-center gap-0.5">
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <a
+              href={href}
+              className={cn(
+                CHAT_FILE_TAG_CHIP_CLASS_NAME,
+                MARKDOWN_FILE_LINK_CLASS_NAME,
+                className,
+              )}
+              data-markdown-copy={copyMarkdown}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                if (onOpenInBrowser) {
+                  handleOpenInBrowser();
+                  return;
+                }
+                handleOpenInFilePreview();
+              }}
+              onContextMenu={handleContextMenu}
+            >
+              <FileTagChipContent path={iconPath} label={label} theme={theme} selectable />
+            </a>
+          }
+        />
+        <TooltipPopup
+          side="top"
+          className="max-w-[min(40rem,calc(100vw-2rem))] font-mono text-[11px] leading-tight"
+        >
+          <div className="overflow-x-auto whitespace-nowrap [scrollbar-color:color-mix(in_srgb,var(--border)_78%,transparent)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[color-mix(in_srgb,var(--border)_78%,transparent)] [&::-webkit-scrollbar-track]:bg-transparent">
+            {displayPath}
+          </div>
+        </TooltipPopup>
+      </Tooltip>
+      {onDownload ? (
+        <button
+          type="button"
+          disabled={isBusy}
+          aria-label={`Download saved output ${label}`}
+          className="inline-flex rounded p-1 text-muted-foreground hover:text-foreground disabled:opacity-50"
+          onClick={handleDownload}
+        >
+          <DownloadIcon className="size-3" />
+        </button>
+      ) : null}
+    </span>
   );
 }, areMarkdownFileLinkPropsEqual);
 
@@ -1342,12 +1404,14 @@ function areMarkdownFileLinkPropsEqual(
     previous.onOpen === next.onOpen &&
     previous.onOpenInPanel === next.onOpenInPanel &&
     previous.onOpenInBrowser === next.onOpenInBrowser &&
+    previous.onDownload === next.onDownload &&
     previous.className === next.className
   );
 }
 
 function ChatMarkdown({
   text,
+  messageId,
   cwd,
   threadRef,
   onTaskListChange,
@@ -1358,7 +1422,7 @@ function ChatMarkdown({
   parseRawHtml = true,
 }: ChatMarkdownProps) {
   const { resolvedTheme } = useTheme();
-  const createAssetUrl = useAtomQueryRunner(assetEnvironment.createUrl, {
+  const createAssetUrl = useAtomCommand(assetEnvironment.createFreshUrl, {
     reportFailure: false,
   });
   const searchProjectEntries = useAtomQueryRunner(projectEnvironment.searchEntries, {
@@ -1368,7 +1432,8 @@ function ChatMarkdown({
     reportFailure: false,
   });
   const preparedConnection = usePreparedConnection(threadRef?.environmentId ?? null);
-  const environmentId = useActiveEnvironmentId();
+  const activeEnvironmentId = useActiveEnvironmentId();
+  const environmentId = threadRef?.environmentId ?? activeEnvironmentId;
   const serverConfig = useAtomValue(serverEnvironment.configValueAtom(environmentId));
   const openInPreferredEditor = useOpenInPreferredEditor(
     environmentId,
@@ -1460,12 +1525,47 @@ function ChatMarkdown({
       return openFileInPreview({
         threadRef,
         filePath: path,
+        messageId,
         httpBaseUrl: preparedConnection.value.httpBaseUrl,
         createAssetUrl,
         openPreview,
       });
     },
-    [createAssetUrl, openPreview, preparedConnection, threadRef],
+    [createAssetUrl, messageId, openPreview, preparedConnection, threadRef],
+  );
+  const downloadOutput = useCallback(
+    async (path: string) => {
+      if (!threadRef || !messageId || preparedConnection._tag === "None") {
+        throw new Error("Reconnect to the output's environment to download this file.");
+      }
+      const result = await createAssetUrl({
+        environmentId: threadRef.environmentId,
+        input: {
+          resource: {
+            _tag: "session-output",
+            threadId: threadRef.threadId,
+            messageId,
+            path,
+            download: true,
+          },
+        },
+      });
+      if (result._tag === "Failure") throw squashAtomCommandFailure(result);
+      const url = new URL(result.value.relativeUrl, preparedConnection.value.httpBaseUrl).href;
+      const api = readLocalApi();
+      if (!api) throw new Error("File downloads are unavailable in this client.");
+      if (window.desktopBridge) {
+        await api.shell.openExternal(url);
+      } else {
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = result.value.downloadName ?? path.split(/[\\/]/).at(-1) ?? "output";
+        document.body.append(link);
+        link.click();
+        link.remove();
+      }
+    },
+    [createAssetUrl, messageId, preparedConnection, threadRef],
   );
   // A bare filename resolves to the workspace root, which is rarely where the
   // file is, so ask the index before opening.
@@ -1533,6 +1633,11 @@ function ChatMarkdown({
           copyMarkdown={copyMarkdown}
           theme={resolvedTheme}
           threadRef={threadRef}
+          onDownload={
+            messageId && threadRef && !isStreaming
+              ? () => downloadOutput(fileLinkMeta.filePath)
+              : undefined
+          }
           onOpen={openInPreferredEditor}
           onOpenInPanel={openFileInPanel}
           onOpenInBrowser={
@@ -1772,6 +1877,8 @@ function ChatMarkdown({
   }, [
     cwd,
     diffThemeName,
+    downloadOutput,
+    messageId,
     fileLinkParentSuffixByPath,
     inlineCodeFileLinkMetaByText,
     isStreaming,

@@ -577,3 +577,9 @@ describe("previewStateStore (single-tab)", () => {
     expect(state).toEqual(__testing.EMPTY_THREAD_PREVIEW_STATE);
   });
 });
+
+it("does not save signed output URLs in recent preview history", () => {
+  resetPreviewStateForTests();
+  rememberPreviewUrl(ref, "https://remote.example/api/assets/signed-token/report.html");
+  expect(readThreadPreviewState(ref).recentlySeenUrls).toEqual([]);
+});
