@@ -1,3 +1,4 @@
+import { ProviderInstanceRegistry } from "./provider/Services/ProviderInstanceRegistry.ts";
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import * as NodeSocket from "@effect/platform-node/NodeSocket";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -639,11 +640,16 @@ const buildAppUnderTest = (options?: {
           ...options?.layers?.keybindings,
         }).pipe(
           Layer.merge(
-            Layer.succeed(UsageLimitSources.UsageLimitSources, {
-              current: Effect.succeed([]),
-              streamChanges: Stream.empty,
-              refresh: Effect.void,
-            }),
+            Layer.mergeAll(
+              Layer.mock(ProviderInstanceRegistry)({
+                getInstance: () => Effect.succeed(undefined),
+              }),
+              Layer.succeed(UsageLimitSources.UsageLimitSources, {
+                current: Effect.succeed([]),
+                streamChanges: Stream.empty,
+                refresh: Effect.void,
+              }),
+            ),
           ),
         ),
       ),

@@ -1,3 +1,5 @@
+import { ProviderInstanceRegistry } from "./provider/Services/ProviderInstanceRegistry.ts";
+import { ProviderResetCreditError } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
@@ -443,6 +445,7 @@ const makeWsRpcLayer = (
       const checkpointDiffQuery = yield* CheckpointDiffQuery.CheckpointDiffQuery;
       const keybindings = yield* Keybindings.Keybindings;
       const usageLimitSources = yield* UsageLimitSources.UsageLimitSources;
+      const resetCreditInstances = yield* ProviderInstanceRegistry;
       const externalLauncher = yield* ExternalLauncher.ExternalLauncher;
       const remoteOpenTargets = yield* RemoteOpenTargets.RemoteOpenTargets;
       const gitWorkflow = yield* GitWorkflowService.GitWorkflowService;
@@ -1621,6 +1624,34 @@ const makeWsRpcLayer = (
                 : providerRegistry.refresh()
             ).pipe(Effect.map((providers) => ({ providers }))),
             { "rpc.aggregate": "server" },
+          ),
+        [WS_METHODS.providerConsumeResetCredit]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.providerConsumeResetCredit,
+            Effect.gen(function* () {
+              const instance = yield* resetCreditInstances.getInstance(input.instanceId);
+              if (!instance || !instance.enabled)
+                return yield* new ProviderResetCreditError({
+                  instanceId: input.instanceId,
+                  detail: instance ? "This provider is disabled." : "Provider instance not found.",
+                });
+              if (!instance.consumeResetCredit)
+                return yield* new ProviderResetCreditError({
+                  instanceId: input.instanceId,
+                  detail: "This provider does not bank reset credits.",
+                });
+              const outcome = yield* instance.consumeResetCredit().pipe(
+                Effect.mapError(
+                  (error) =>
+                    new ProviderResetCreditError({
+                      instanceId: input.instanceId,
+                      detail: error.detail,
+                    }),
+                ),
+              );
+              return { outcome };
+            }),
+            { "rpc.aggregate": "provider" },
           ),
         [WS_METHODS.serverUpdateProvider]: (input) =>
           observeRpcEffect(

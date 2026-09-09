@@ -1,3 +1,4 @@
+import * as CodexResetCredit from "./codexResetCredit.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, it, assert } from "@effect/vitest";
 import * as Deferred from "effect/Deferred";
@@ -1613,6 +1614,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
               }),
             ),
             Layer.provideMerge(TestHttpClientLive),
+            Layer.provideMerge(CodexResetCredit.layerTest),
             Layer.provideMerge(
               Layer.succeed(
                 ProviderEventLoggers.ProviderEventLoggers,
@@ -1708,6 +1710,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
               }),
             ),
             Layer.provideMerge(TestHttpClientLive),
+            Layer.provideMerge(CodexResetCredit.layerTest),
             Layer.provideMerge(
               Layer.succeed(
                 ProviderEventLoggers.ProviderEventLoggers,
@@ -1849,6 +1852,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
               }),
             ),
             Layer.provideMerge(TestHttpClientLive),
+            Layer.provideMerge(CodexResetCredit.layerTest),
             Layer.provideMerge(
               Layer.succeed(
                 ProviderEventLoggers.ProviderEventLoggers,
@@ -1908,6 +1912,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
                 }),
               ),
               Layer.provideMerge(TestHttpClientLive),
+              Layer.provideMerge(CodexResetCredit.layerTest),
               Layer.provideMerge(
                 Layer.succeed(
                   ProviderEventLoggers.ProviderEventLoggers,
