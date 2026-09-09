@@ -508,7 +508,7 @@ function createGitHubCliWithFakeGh(scenario: FakeGhScenario = {}): {
             "--limit",
             String(input.limit ?? 1),
             "--json",
-            "number,title,url,baseRefName,headRefName,state,mergedAt,isCrossRepository,headRepository,headRepositoryOwner",
+            "number,title,url,baseRefName,headRefName,state,mergedAt,closedAt,isCrossRepository,headRepository,headRepositoryOwner",
           ],
         }).pipe(
           Effect.map((result) => JSON.parse(result.stdout) as unknown[]),
@@ -552,7 +552,7 @@ function createGitHubCliWithFakeGh(scenario: FakeGhScenario = {}): {
             "view",
             input.reference,
             "--json",
-            "number,title,url,baseRefName,headRefName,state,mergedAt,isCrossRepository,headRepository,headRepositoryOwner",
+            "number,title,url,baseRefName,headRefName,state,mergedAt,closedAt,isCrossRepository,headRepository,headRepositoryOwner",
           ],
         }).pipe(
           Effect.map((result) => JSON.parse(result.stdout) as GitHubCli.GitHubPullRequestSummary),
@@ -1065,6 +1065,8 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
 
       expect(pullRequest).toEqual({
         state: "open",
+        closedAt: null,
+        mergedAt: null,
         updatedAt: "2026-04-03T15:00:00.000Z",
       });
       expect((yield* runGit(repoDir, ["branch", "--show-current"])).stdout.trim()).toBe("main");
@@ -1096,6 +1098,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
                 baseRefName: "develop",
                 headRefName: "main",
                 state: "MERGED",
+                mergedAt: "2026-04-07T15:00:00Z",
                 updatedAt: "2026-04-08T15:00:00Z",
               },
             ]),
@@ -1107,6 +1110,8 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
 
       expect(pullRequest).toEqual({
         state: "merged",
+        closedAt: null,
+        mergedAt: "2026-04-07T15:00:00Z",
         updatedAt: "2026-04-08T15:00:00.000Z",
       });
     }),
@@ -1158,6 +1163,8 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
 
       expect(pullRequest).toEqual({
         state: "merged",
+        closedAt: null,
+        mergedAt: null,
         updatedAt: "2026-04-04T15:00:00.000Z",
       });
       expect(ghCalls.some((call) => call.includes("--head feature/deleted-local-branch"))).toBe(
@@ -1222,6 +1229,8 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
 
       expect(pullRequest).toEqual({
         state: "merged",
+        closedAt: null,
+        mergedAt: null,
         updatedAt: "2026-04-05T15:00:00.000Z",
       });
       expect(
@@ -1337,6 +1346,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
                 baseRefName: "main",
                 headRefName: "feature/shared-pr-cache",
                 state: "MERGED",
+                mergedAt: "2026-04-06T10:00:00Z",
                 updatedAt: "2026-04-07T15:00:00Z",
               },
             ]),
@@ -1352,6 +1362,8 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
 
       expect(status.pr?.state).toBe("merged");
       expect(pullRequest?.state).toBe("merged");
+      expect(pullRequest?.mergedAt).toBe("2026-04-06T10:00:00Z");
+      expect(pullRequest?.updatedAt).toBe("2026-04-07T15:00:00.000Z");
       expect(ghCalls.filter((call) => call.startsWith("pr list "))).toHaveLength(1);
     }),
   );
@@ -1497,7 +1509,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
     expect(Duration.toMillis(GitManager.prLookupFailureTtl(1))).toBe(20_000);
     expect(Duration.toMillis(GitManager.prLookupFailureTtl(2))).toBe(40_000);
     // The point of the backoff: by the third retry a failing branch must not be
-    // asking more often than a healthy one, which refreshes every 2 minutes.
+    // asking more often than a healthy one, which refreshes every minute.
     expect(Duration.toMillis(GitManager.prLookupFailureTtl(4))).toBeGreaterThan(120_000);
     expect(Duration.toMillis(GitManager.prLookupFailureTtl(20))).toBe(900_000);
   });
@@ -1607,7 +1619,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
           state: "open",
         });
         expect(ghCalls).toContain(
-          "pr list --head jasonLaster:statemachine --state all --limit 20 --json number,title,url,baseRefName,headRefName,state,mergedAt,updatedAt,isCrossRepository,headRepository,headRepositoryOwner",
+          "pr list --head jasonLaster:statemachine --state all --limit 20 --json number,title,url,baseRefName,headRefName,state,mergedAt,closedAt,updatedAt,isCrossRepository,headRepository,headRepositoryOwner",
         );
       }),
     20_000,

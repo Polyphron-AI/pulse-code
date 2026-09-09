@@ -17,6 +17,7 @@ import { assert, describe, it } from "@effect/vitest";
 import * as Crypto from "effect/Crypto";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as PubSub from "effect/PubSub";
 import * as Queue from "effect/Queue";
@@ -174,7 +175,11 @@ const makeHarness = Effect.fn("makeThreadSettlementHarness")(function* (options:
   const snapshotReadCount = yield* Ref.make(0);
   const snapshotReads = yield* Queue.unbounded<number>();
   const settings = yield* Ref.make(options.settings ?? DEFAULT_SERVER_SETTINGS);
+  const settingsReads = yield* Queue.unbounded<void>();
   const settingsChanges = yield* PubSub.unbounded<ServerSettings>();
+  const merges =
+    yield* PubSub.unbounded<import("../pullRequest/PullRequestService.ts").PullRequestMergeEvent>();
+  const invalidated = yield* Ref.make<ReadonlyArray<string>>([]);
   const commands = yield* Ref.make<ReadonlyArray<AutoSettleCommand>>([]);
   const branchCalls = yield* Ref.make<
     ReadonlyArray<{ readonly cwd: string; readonly branch: string }>
@@ -226,7 +231,7 @@ const makeHarness = Effect.fn("makeThreadSettlementHarness")(function* (options:
   const serverSettings = ServerSettingsService.of({
     start: Effect.void,
     ready: Effect.void,
-    getSettings: Ref.get(settings),
+    getSettings: Ref.get(settings).pipe(Effect.tap(() => Queue.offer(settingsReads, undefined))),
     updateSettings,
     streamChanges: Stream.fromPubSub(settingsChanges),
     subscribeChanges: PubSub.subscribe(settingsChanges).pipe(
@@ -242,8 +247,15 @@ const makeHarness = Effect.fn("makeThreadSettlementHarness")(function* (options:
           Effect.andThen(Ref.get(snapshots)),
         ),
     }),
-    Layer.mock(GitManager)({ branchPullRequest }),
-    Layer.mock(PullRequestService)({ detail: pullRequestDetail }),
+    FileSystem.layerNoop({ exists: () => Effect.succeed(false) }),
+    Layer.mock(GitManager)({
+      branchPullRequest,
+      invalidateStatus: (cwd) => Ref.update(invalidated, (values) => [...values, cwd]),
+    }),
+    Layer.mock(PullRequestService)({
+      detail: pullRequestDetail,
+      subscribeMerges: PubSub.subscribe(merges).pipe(Effect.map(Stream.fromSubscription)),
+    }),
     Layer.mock(OrchestrationEngineService)({
       readEvents: () => Stream.empty,
       dispatch,
@@ -257,9 +269,12 @@ const makeHarness = Effect.fn("makeThreadSettlementHarness")(function* (options:
 
   return {
     activation,
+    merges,
+    invalidated,
     snapshots,
     snapshotReadCount,
     snapshotReads,
+    settingsReads,
     commands,
     branchCalls,
     detailCalls,
@@ -326,25 +341,27 @@ describe("ThreadSettlementReactor", () => {
           const commands = yield* Ref.get(fixture.commands);
           assert.deepStrictEqual(
             commands
-              .map(({ threadId, snapshotSequence }) => ({ threadId, snapshotSequence }))
+              .map(({ threadId, snapshotSequence, settledAt }) => ({
+                threadId,
+                snapshotSequence,
+                settledAt,
+              }))
               .sort((left, right) => left.threadId.localeCompare(right.threadId)),
             [
               {
                 threadId: ThreadId.make("closed-pr"),
                 snapshotSequence: 1,
+                settledAt: "2026-08-20T00:00:00.000Z",
               },
               {
                 threadId: ThreadId.make("inactive"),
                 snapshotSequence: 1,
+                settledAt: "2026-08-20T00:00:00.000Z",
               },
             ],
           );
-          assert.deepStrictEqual(yield* Ref.get(fixture.branchCalls), [
-            { cwd: "/workspace/project", branch: "inactive-feature" },
-          ]);
-          assert.deepStrictEqual(yield* Ref.get(fixture.detailCalls), [
-            { projectId: LINKED_PROJECT_ID, repository: "owner/repository", number: 42 },
-          ]);
+          assert.deepStrictEqual(yield* Ref.get(fixture.branchCalls), []);
+          assert.deepStrictEqual(yield* Ref.get(fixture.detailCalls), []);
         }).pipe(Effect.provide(fixture.layer));
       }),
     ),
@@ -366,7 +383,9 @@ describe("ThreadSettlementReactor", () => {
             }),
           ]),
           branchPullRequest: () =>
-            Ref.get(pullRequest).pipe(Effect.map((state) => ({ state, updatedAt: NOW }))),
+            Ref.get(pullRequest).pipe(
+              Effect.map((state) => ({ state, mergedAt: NOW, closedAt: NOW, updatedAt: NOW })),
+            ),
         });
 
         yield* Effect.gen(function* () {
@@ -402,7 +421,12 @@ describe("ThreadSettlementReactor", () => {
         const releaseLaterLookup = yield* Deferred.make<void>();
         const lookupCount = yield* Ref.make(0);
         const fixture = yield* makeHarness({
-          snapshot: makeSnapshot([makeThread("settings-thread", { branch: "saved-feature" })]),
+          snapshot: makeSnapshot([
+            makeThread("settings-thread", {
+              branch: "saved-feature",
+              latestUserMessageAt: "2026-08-27T12:00:00.000Z",
+            }),
+          ]),
           settings: {
             ...DEFAULT_SERVER_SETTINGS,
             sidebarAutoSettleAfterDays: null,
@@ -413,19 +437,24 @@ describe("ThreadSettlementReactor", () => {
               Effect.tap((count) =>
                 count === 1
                   ? Deferred.succeed(firstLookupStarted, undefined)
-                  : count === 3
+                  : count === 2
                     ? Deferred.succeed(laterLookupStarted, undefined)
                     : Effect.void,
               ),
               Effect.tap((count) =>
                 count === 1
                   ? Deferred.await(releaseFirstLookup)
-                  : count === 3
+                  : count === 2
                     ? Deferred.await(releaseLaterLookup)
                     : Effect.void,
               ),
               Effect.andThen(Ref.get(state)),
-              Effect.map((pullRequestState) => ({ state: pullRequestState, updatedAt: NOW })),
+              Effect.map((pullRequestState) => ({
+                state: pullRequestState,
+                mergedAt: NOW,
+                closedAt: NOW,
+                updatedAt: NOW,
+              })),
             ),
         });
 
@@ -438,10 +467,9 @@ describe("ThreadSettlementReactor", () => {
 
           yield* fixture.updateSettings({ sidebarAutoSettleOnMerge: false });
           yield* Deferred.succeed(releaseFirstLookup, undefined);
-          yield* Queue.take(fixture.snapshotReads);
           yield* reactor.drain;
           assert.deepStrictEqual(yield* Ref.get(fixture.commands), []);
-          assert.strictEqual(yield* Ref.get(fixture.snapshotReadCount), 2);
+          assert.strictEqual(yield* Ref.get(fixture.snapshotReadCount), 1);
 
           yield* Ref.set(state, "closed");
           yield* fixture.updateSettings({ enableAgentBrowserAccess: false });
@@ -450,8 +478,8 @@ describe("ThreadSettlementReactor", () => {
           yield* Deferred.succeed(releaseLaterLookup, undefined);
           yield* reactor.drain;
 
-          assert.strictEqual(yield* Ref.get(fixture.snapshotReadCount), 3);
-          assert.strictEqual(yield* Ref.get(lookupCount), 3);
+          assert.strictEqual(yield* Ref.get(fixture.snapshotReadCount), 2);
+          assert.strictEqual(yield* Ref.get(lookupCount), 2);
           assert.deepStrictEqual(
             (yield* Ref.get(fixture.commands)).map((command) => command.threadId),
             [ThreadId.make("settings-thread")],
@@ -469,6 +497,7 @@ describe("ThreadSettlementReactor", () => {
           snapshot: makeSnapshot(
             [
               makeThread("lookup-failed", {
+                latestUserMessageAt: "2026-08-27T00:00:00.000Z",
                 linkedPullRequest: {
                   projectId: LINKED_PROJECT_ID,
                   repository: "owner/repository",
@@ -516,8 +545,14 @@ describe("ThreadSettlementReactor", () => {
         const fixture = yield* makeHarness({
           snapshot: makeSnapshot(
             [
-              makeThread("missing-own-project", { linkedPullRequest }),
-              makeThread("missing-branch-project", { branch: "saved-feature" }),
+              makeThread("missing-own-project", {
+                linkedPullRequest,
+                latestUserMessageAt: "2026-08-27T00:00:00.000Z",
+              }),
+              makeThread("missing-branch-project", {
+                branch: "saved-feature",
+                latestUserMessageAt: "2026-08-27T00:00:00.000Z",
+              }),
             ],
             [makeProject(LINKED_PROJECT_ID, "/workspace/linked")],
           ),
@@ -553,22 +588,31 @@ describe("ThreadSettlementReactor", () => {
           snapshot: makeSnapshot(
             [
               makeThread("branch-one", {
+                latestUserMessageAt: "2026-08-27T00:00:00.000Z",
                 branch: "saved-feature",
                 worktreePath: "/deleted/worktree-one",
               }),
               makeThread("branch-two", {
+                latestUserMessageAt: "2026-08-27T00:00:00.000Z",
                 branch: "saved-feature",
                 worktreePath: "/deleted/worktree-two",
               }),
-              makeThread("linked-one", { linkedPullRequest }),
-              makeThread("linked-two", { linkedPullRequest }),
+              makeThread("linked-one", {
+                linkedPullRequest,
+                latestUserMessageAt: "2026-08-27T00:00:00.000Z",
+              }),
+              makeThread("linked-two", {
+                linkedPullRequest,
+                latestUserMessageAt: "2026-08-27T00:00:00.000Z",
+              }),
             ],
             [
               makeProject(PROJECT_ID, "/workspace/project-root"),
               makeProject(LINKED_PROJECT_ID, "/workspace/linked-root"),
             ],
           ),
-          branchPullRequest: () => Effect.succeed({ state: "closed", updatedAt: NOW }),
+          branchPullRequest: () =>
+            Effect.succeed({ state: "closed", closedAt: NOW, updatedAt: NOW }),
           pullRequestDetail: (input) =>
             Effect.succeed(makePullRequestDetail({ ...input, state: "merged" })),
         });
@@ -633,6 +677,86 @@ describe("ThreadSettlementReactor", () => {
           yield* Queue.take(fixture.snapshotReads);
           yield* reactor.drain;
           assert.strictEqual((yield* Ref.get(fixture.commands)).length, 4);
+        }).pipe(Effect.provide(fixture.layer));
+      }),
+    ),
+  );
+  it.effect(
+    "reacts to confirmed merges and invalidates branch caches without settling unrelated linked requests",
+    () =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          yield* TestClock.setTime(Date.parse(NOW));
+          let branchMerged = false;
+          const link = {
+            projectId: LINKED_PROJECT_ID,
+            repository: "owner/repository",
+            number: 42,
+            url: "https://example.test/pr/42",
+          };
+          const recent = { latestUserMessageAt: "2026-08-27T00:00:00.000Z" };
+          const fixture = yield* makeHarness({
+            snapshot: makeSnapshot(
+              [
+                makeThread("branch-merge", { ...recent, branch: "feature" }),
+                makeThread("linked-merge", { ...recent, linkedPullRequest: link }),
+                makeThread("unrelated", { ...recent, linkedPullRequest: { ...link, number: 43 } }),
+                makeThread("omp-pending", {
+                  ...recent,
+                  modelSelection: { instanceId: ProviderInstanceId.make("omp"), model: "default" },
+                  hasPendingApprovals: true,
+                  branch: "omp",
+                }),
+              ],
+              [makeProject(), makeProject(LINKED_PROJECT_ID)],
+            ),
+            branchPullRequest: () =>
+              Effect.succeed({
+                state: branchMerged ? "merged" : "open",
+                mergedAt: branchMerged ? NOW : null,
+                updatedAt: NOW,
+              }),
+          });
+          yield* Effect.gen(function* () {
+            const reactor = yield* ThreadSettlementReactor.ThreadSettlementReactor;
+            yield* startHarness(reactor, fixture.activation, fixture.snapshotReads);
+            assert.deepStrictEqual(yield* Ref.get(fixture.commands), []);
+            branchMerged = true;
+            yield* PubSub.publish(fixture.merges, { ...link, mergedAt: NOW });
+            yield* Queue.take(fixture.snapshotReads);
+            yield* reactor.drain;
+            assert.deepStrictEqual(
+              new Set((yield* Ref.get(fixture.commands)).map((command) => command.threadId)),
+              new Set([ThreadId.make("branch-merge"), ThreadId.make("linked-merge")]),
+            );
+            assert.deepStrictEqual(yield* Ref.get(fixture.invalidated), ["/workspace/project"]);
+          }).pipe(Effect.provide(fixture.layer));
+        }),
+      ),
+  );
+
+  it.effect("skips all snapshot and PR reads when settlement is disabled", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        yield* TestClock.setTime(Date.parse(NOW));
+        const fixture = yield* makeHarness({
+          snapshot: makeSnapshot([makeThread("disabled", { branch: "feature" })]),
+          settings: {
+            ...DEFAULT_SERVER_SETTINGS,
+            sidebarAutoSettleAfterDays: null,
+            sidebarAutoSettleOnMerge: false,
+          },
+        });
+        yield* Effect.gen(function* () {
+          const reactor = yield* ThreadSettlementReactor.ThreadSettlementReactor;
+          yield* reactor.start();
+          yield* Queue.take(fixture.settingsReads);
+          yield* Deferred.succeed(fixture.activation, undefined);
+          yield* Queue.take(fixture.settingsReads);
+          yield* reactor.drain;
+          assert.strictEqual(yield* Ref.get(fixture.snapshotReadCount), 0);
+          assert.deepStrictEqual(yield* Ref.get(fixture.branchCalls), []);
+          assert.deepStrictEqual(yield* Ref.get(fixture.detailCalls), []);
         }).pipe(Effect.provide(fixture.layer));
       }),
     ),

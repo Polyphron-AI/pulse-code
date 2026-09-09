@@ -14,6 +14,8 @@ export interface NormalizedAzureDevOpsPullRequestRecord {
   readonly baseRefName: string;
   readonly headRefName: string;
   readonly state: "open" | "closed" | "merged";
+  readonly closedAt?: string | null;
+  readonly mergedAt?: string | null;
   readonly updatedAt: Option.Option<DateTime.Utc>;
 }
 
@@ -161,13 +163,20 @@ function normalizeAzureDevOpsPullRequestUrl(
 function normalizeAzureDevOpsPullRequestRecord(
   raw: Schema.Schema.Type<typeof AzureDevOpsPullRequestSchema>,
 ): NormalizedAzureDevOpsPullRequestRecord {
+  const state = normalizeAzureDevOpsPullRequestState(raw.status);
+  const terminalAt = Option.match(raw.closedDate ?? Option.none(), {
+    onNone: () => null,
+    onSome: DateTime.formatIso,
+  });
   return {
     number: raw.pullRequestId,
     title: raw.title,
     url: normalizeAzureDevOpsPullRequestUrl(raw),
     baseRefName: normalizeRefName(raw.targetRefName),
     headRefName: normalizeRefName(raw.sourceRefName),
-    state: normalizeAzureDevOpsPullRequestState(raw.status),
+    state,
+    closedAt: state === "closed" ? terminalAt : null,
+    mergedAt: state === "merged" ? terminalAt : null,
     updatedAt: (raw.closedDate ?? Option.none()).pipe(
       Option.orElse(() => raw.creationDate ?? Option.none()),
     ),

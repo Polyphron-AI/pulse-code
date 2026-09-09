@@ -1,6 +1,8 @@
 import { assert, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Stream from "effect/Stream";
+import * as Fiber from "effect/Fiber";
 import type {
   OrchestrationProjectShell,
   ProjectId,
@@ -1904,6 +1906,7 @@ it.effect("refuses a merge strategy the host does not offer", () =>
             review: FULL_REVIEW,
             reviewers: FULL_REVIEWERS,
           },
+          getChangeRequest: () => Effect.fail(requestFailed),
           runAction: (input) => {
             ranWith = input.mergeMethod ?? "merge";
             return Effect.void;
@@ -3384,4 +3387,56 @@ it.effect("names the signed-in account in the detail, and says nothing where the
     assert.strictEqual(named.viewer, "bilal");
     assert.strictEqual(unnamed.viewer, undefined);
   }),
+);
+
+it.effect("publishes only a host-confirmed merge after invalidating cached detail", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      let merged = false;
+      let reads = 0;
+      const reference = { projectId: "p1" as ProjectId, repository: "acme/web", number: 1 };
+      const terminalAt = "2026-07-05T12:00:00.000Z";
+      const service = yield* makeService({
+        projects: [
+          project({ id: "p1", title: "web", workspaceRoot: "/a", repository: "acme/web" }),
+        ],
+        providers: [
+          fakeProvider("github", {
+            getChangeRequest: () => {
+              reads += 1;
+              return Effect.succeed({
+                ...changeRequest(1, "2026-07-09T12:00:00.000Z"),
+                state: merged ? "merged" : "open",
+                body: "",
+                changedFiles: 0,
+                mergedAt: merged ? terminalAt : null,
+                closedAt: null,
+                reviewers: [],
+                checks: [],
+                mergeCapabilities: { merge: true, squash: true, rebase: true },
+                viewerPermissions: {
+                  actions: ["merge"],
+                  comment: true,
+                  resolve: true,
+                  verdicts: [],
+                  requestReviewers: true,
+                },
+              });
+            },
+          }),
+        ],
+      });
+      const merges = yield* service.subscribeMerges;
+      const firstMerge = yield* merges.pipe(Stream.take(1), Stream.runCollect, Effect.forkChild);
+      yield* service.detail(reference);
+      yield* service.runAction({ ...reference, action: "merge" });
+      assert.strictEqual(reads, 2);
+      merged = true;
+      yield* service.runAction({ ...reference, action: "merge" });
+      assert.strictEqual(reads, 3);
+      assert.deepStrictEqual(yield* Fiber.join(firstMerge), [
+        { ...reference, mergedAt: terminalAt },
+      ]);
+    }),
+  ),
 );

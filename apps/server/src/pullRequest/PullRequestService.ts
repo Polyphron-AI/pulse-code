@@ -5,6 +5,9 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
+import * as PubSub from "effect/PubSub";
+import * as Stream from "effect/Stream";
+import type * as Scope from "effect/Scope";
 import {
   PullRequestOperationError,
   PullRequestUnavailableError,
@@ -122,6 +125,10 @@ const DIFF_CACHE_CAPACITY = 128;
 
 export type PullRequestError = PullRequestUnavailableError | PullRequestOperationError;
 
+export interface PullRequestMergeEvent extends PullRequestRef {
+  readonly mergedAt: string;
+}
+
 export class PullRequestService extends Context.Service<
   PullRequestService,
   {
@@ -131,6 +138,11 @@ export class PullRequestService extends Context.Service<
     readonly listStats: (
       input: PullRequestListStatsInput,
     ) => Effect.Effect<PullRequestListStatsResult, PullRequestError>;
+    readonly subscribeMerges: Effect.Effect<
+      Stream.Stream<PullRequestMergeEvent>,
+      never,
+      Scope.Scope
+    >;
     readonly detail: (input: PullRequestRef) => Effect.Effect<PullRequestDetail, PullRequestError>;
     readonly activity: (
       input: PullRequestRef,
@@ -494,6 +506,7 @@ export function repositoryIdentityOf(project: OrchestrationProjectShell): string
 }
 
 export const make = Effect.gen(function* () {
+  const mergedPullRequests = yield* PubSub.unbounded<PullRequestMergeEvent>();
   const registry = yield* PullRequestProviderRegistry;
   const projections = yield* ProjectionSnapshotQuery.ProjectionSnapshotQuery;
   const sourceControlProviders = yield* SourceControlProviderRegistry.SourceControlProviderRegistry;
@@ -2122,7 +2135,33 @@ export const make = Effect.gen(function* () {
         ),
       );
 
+  // A host can accept a merge action while only queueing it. Publish after a fresh
+  // detail confirms the actual merge and provides its terminal timestamp.
+  const runActionAndNotify = (input: PullRequestActionInput) =>
+    invalidatedByMutation(runAction)(input).pipe(
+      Effect.tap(() =>
+        input.action !== "merge"
+          ? Effect.void
+          : detail(input).pipe(
+              Effect.flatMap((confirmed) =>
+                confirmed.state !== "merged" || confirmed.mergedAt === null
+                  ? Effect.void
+                  : PubSub.publish(mergedPullRequests, {
+                      projectId: input.projectId,
+                      repository: confirmed.repository,
+                      number: input.number,
+                      mergedAt: confirmed.mergedAt,
+                    }).pipe(Effect.asVoid),
+              ),
+              Effect.catch((error) =>
+                Effect.logWarning("failed to confirm pull request merge", { error }),
+              ),
+            ),
+      ),
+    );
+
   return PullRequestService.of({
+    subscribeMerges: PubSub.subscribe(mergedPullRequests).pipe(Effect.map(Stream.fromSubscription)),
     list,
     listStats,
     detail,
@@ -2130,7 +2169,7 @@ export const make = Effect.gen(function* () {
     threadComments,
     diff,
     diffFileContents,
-    runAction: invalidatedByMutation(runAction),
+    runAction: runActionAndNotify,
     update: invalidatedByMutation(update),
     comment: invalidatedByMutation(comment),
     updateComment: invalidatedByMutation(updateComment),

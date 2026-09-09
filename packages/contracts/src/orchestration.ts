@@ -723,6 +723,7 @@ const ThreadAutoSettleCommand = Schema.Struct({
   commandId: CommandId,
   threadId: ThreadId,
   snapshotSequence: NonNegativeInt,
+  settledAt: Schema.optional(IsoDateTime),
 });
 
 const ThreadUnsettleCommand = Schema.Struct({

@@ -95,7 +95,12 @@ export class GitManager extends Context.Service<
       readonly cwd: string;
       readonly branch: string;
     }) => Effect.Effect<
-      { readonly state: "open" | "closed" | "merged"; readonly updatedAt: string | null } | null,
+      {
+        readonly state: "open" | "closed" | "merged";
+        readonly updatedAt: string | null;
+        readonly closedAt?: string | null;
+        readonly mergedAt?: string | null;
+      } | null,
       GitManagerServiceError
     >;
     readonly invalidateLocalStatus: (cwd: string) => Effect.Effect<void, never>;
@@ -120,7 +125,8 @@ const SHORT_SHA_LENGTH = 7;
 const TOAST_DESCRIPTION_MAX = 72;
 const STATUS_RESULT_CACHE_TTL = Duration.seconds(1);
 const STATUS_RESULT_CACHE_CAPACITY = 2_048;
-const PR_LOOKUP_CACHE_TTL = Duration.minutes(2);
+// Match the settlement sweep cadence; failed host reads retain exponential backoff.
+const PR_LOOKUP_CACHE_TTL = Duration.seconds(60);
 const PR_LOOKUP_FAILURE_BASE_TTL = Duration.seconds(20);
 const PR_LOOKUP_FAILURE_MAX_TTL = Duration.minutes(15);
 const PR_LOOKUP_CACHE_CAPACITY = 2_048;
@@ -159,6 +165,8 @@ interface OpenPrInfo {
 
 interface PullRequestInfo extends OpenPrInfo, PullRequestHeadRemoteInfo {
   state: "open" | "closed" | "merged";
+  closedAt?: string | null;
+  mergedAt?: string | null;
   updatedAt: Option.Option<DateTime.Utc>;
 }
 
@@ -393,6 +401,8 @@ function toPullRequestInfo(summary: ChangeRequest): PullRequestInfo {
     baseRefName: summary.baseRefName,
     headRefName: summary.headRefName,
     state: summary.state ?? "open",
+    closedAt: summary.closedAt ?? null,
+    mergedAt: summary.mergedAt ?? null,
     updatedAt: summary.updatedAt,
     ...(summary.isCrossRepository !== undefined
       ? { isCrossRepository: summary.isCrossRepository }
@@ -1983,6 +1993,8 @@ export const make = Effect.gen(function* () {
     return {
       state: latest.state,
       updatedAt: Option.getOrNull(Option.map(latest.updatedAt, DateTime.formatIso)),
+      closedAt: latest.closedAt ?? null,
+      mergedAt: latest.mergedAt ?? null,
     };
   });
   const invalidateLocalStatus: GitManager["Service"]["invalidateLocalStatus"] = Effect.fn(
