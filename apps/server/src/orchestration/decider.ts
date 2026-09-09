@@ -15,10 +15,17 @@ import {
   type ProjectId,
   type ScheduleScope,
   type ScheduleInterval,
+  MessageId,
+  UserInputRequestedPayload,
+  type OrchestrationThread,
+  type OrchestrationThreadActivity,
 } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import type * as PlatformError from "effect/PlatformError";
 
 import { OrchestrationCommandInvariantError } from "./Errors.ts";
@@ -37,6 +44,7 @@ import {
 import { projectEvent } from "./projector.ts";
 
 const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
+const decodeUserInputRequestedPayload = Schema.decodeUnknownOption(UserInputRequestedPayload);
 
 // Session adoption takes seconds; a user message still unadopted after this
 // window is a failed/stale start, not pending work. Mirrors the client's
@@ -68,16 +76,11 @@ function isStaleRequestFailureDetail(payload: Record<string, unknown> | null): b
 }
 
 // Scans the read model's activities, which the projector caps at the most
-// recent 500. That bound is safe here: an OPEN approval/user-input request
-// blocks its turn, so the thread cannot accumulate hundreds of later
-// activities while one is outstanding — a request that has scrolled out of
-// the window is one whose turn kept running, i.e. it was resolved or went
-// stale. (The projection pipeline's pendingApprovalCount reads the same
-// capped stream and stays consistent with this view.)
-function hasOpenBlockingRequest(thread: {
-  readonly activities: ReadonlyArray<{ readonly kind: string; readonly payload: unknown }>;
-}): boolean {
-  const openRequestIds = new Set<string>();
+// recent 500 plus pending async questions. Async questions remain actionable
+// while the agent works, so they must not expire with the activity window.
+function openRequests(thread: Pick<OrchestrationThread, "activities">) {
+  const requests = new Map<string, OrchestrationThreadActivity>();
+  const closed = new Set<string>();
   for (const activity of thread.activities) {
     const payload =
       typeof activity.payload === "object" && activity.payload !== null
@@ -86,18 +89,20 @@ function hasOpenBlockingRequest(thread: {
     const requestId = typeof payload?.requestId === "string" ? payload.requestId : null;
     if (requestId === null) continue;
     if (activity.kind === "approval.requested" || activity.kind === "user-input.requested") {
-      openRequestIds.add(requestId);
+      if (!closed.has(requestId)) requests.set(requestId, activity);
     } else if (activity.kind === "approval.resolved" || activity.kind === "user-input.resolved") {
-      openRequestIds.delete(requestId);
+      closed.add(requestId);
+      requests.delete(requestId);
     } else if (
       (activity.kind === "provider.approval.respond.failed" ||
         activity.kind === "provider.user-input.respond.failed") &&
       isStaleRequestFailureDetail(payload)
     ) {
-      openRequestIds.delete(requestId);
+      closed.add(requestId);
+      requests.delete(requestId);
     }
   }
-  return openRequestIds.size > 0;
+  return requests;
 }
 
 /**
@@ -312,9 +317,11 @@ const decideCommandSequence = Effect.fn("decideCommandSequence")(function* ({
 export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand")(function* ({
   command,
   readModel,
+  userInputActivity,
 }: {
   readonly command: OrchestrationCommand;
   readonly readModel: OrchestrationReadModel;
+  readonly userInputActivity?: OrchestrationThreadActivity;
 }): Effect.fn.Return<
   DecideOrchestrationCommandResult,
   OrchestrationCommandInvariantError | PlatformError.PlatformError,
@@ -565,16 +572,21 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           }),
         );
       }
-      // Pending approval / user-input requests are blocked-on-you work: a
-      // raced or stale client must not park them behind a settled override
-      // that would surface only after the request resolves.
-      if (hasOpenBlockingRequest(thread)) {
-        return yield* Effect.fail(
-          new OrchestrationCommandInvariantError({
-            commandType: command.type,
-            detail: `thread ${command.threadId} has a pending approval or user-input request and cannot be settled`,
-          }),
-        );
+      const pendingRequests = openRequests(thread);
+      // Manual settlement dismisses async questions without answering them.
+      // Native callbacks and approvals still need a response or interruption.
+      if (
+        Array.from(pendingRequests.values()).some(
+          (activity) =>
+            activity.kind !== "user-input.requested" ||
+            !Predicate.isObject(activity.payload) ||
+            activity.payload.responseMode !== "message",
+        )
+      ) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: `thread ${command.threadId} has a pending approval or user-input request and cannot be settled`,
+        });
       }
       const occurredAt = yield* nowIso;
       // Settling inside the adoption window would hide just-requested work.
@@ -610,6 +622,29 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       // Settling is "I'm done with this": clear states that would keep the
       // row pinned or snoozed instead of showing the new settled state.
       const companionEvents: Array<Omit<OrchestrationEvent, "sequence">> = [];
+      for (const [requestId, request] of pendingRequests) {
+        companionEvents.push({
+          ...(yield* withEventBase({
+            aggregateKind: "thread",
+            aggregateId: command.threadId,
+            occurredAt,
+            commandId: command.commandId,
+          })),
+          type: "thread.activity-appended",
+          payload: {
+            threadId: command.threadId,
+            activity: {
+              id: EventId.make(`settle:${command.commandId}:${requestId}`),
+              kind: "user-input.resolved",
+              summary: "User input dismissed",
+              tone: "info",
+              turnId: request.turnId,
+              createdAt: occurredAt,
+              payload: { requestId, responseMode: "message" },
+            },
+          },
+        });
+      }
       if (thread.pinnedAt != null) {
         companionEvents.push({
           ...(yield* withEventBase({
@@ -696,7 +731,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       // user-input request is the agent waiting on the user, and hiding it
       // defeats the request. (A running session IS snoozable — snooze only
       // affects visibility, never the agent.)
-      if (hasOpenBlockingRequest(thread)) {
+      if (openRequests(thread).size > 0) {
         return yield* Effect.fail(
           new OrchestrationCommandInvariantError({
             commandType: command.type,
@@ -1185,11 +1220,76 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
     }
 
     case "thread.user-input.respond": {
-      yield* requireThread({
+      const thread = yield* requireThread({
         readModel,
         command,
         threadId: command.threadId,
       });
+      const request = userInputActivity;
+      if (
+        request &&
+        Predicate.isObject(request.payload) &&
+        request.payload.responseMode === "message"
+      ) {
+        const payload = decodeUserInputRequestedPayload(request.payload);
+        if (request.kind !== "user-input.requested" || Option.isNone(payload)) {
+          return yield* new OrchestrationCommandInvariantError({
+            commandType: command.type,
+            detail: "This question has already been answered.",
+          });
+        }
+        const replies: string[] = [];
+        for (const question of payload.value.questions) {
+          const answer = command.answers[question.id];
+          if (typeof answer !== "string" || answer.trim().length === 0) {
+            return yield* new OrchestrationCommandInvariantError({
+              commandType: command.type,
+              detail: "Answer each question before sending.",
+            });
+          }
+          replies.push(`${question.question}\n${answer.trim()}`);
+        }
+        // Commit the answer and its message together. The normal turn path
+        // steers a running agent or resumes an idle session.
+        return yield* decideCommandSequence({
+          readModel,
+          commands: [
+            {
+              type: "thread.activity.append",
+              commandId: command.commandId,
+              threadId: command.threadId,
+              createdAt: command.createdAt,
+              activity: {
+                id: EventId.make(`async-answer:${command.requestId}`),
+                kind: "user-input.resolved",
+                summary: "User input submitted",
+                tone: "info",
+                turnId: request.turnId,
+                createdAt: command.createdAt,
+                payload: {
+                  requestId: command.requestId,
+                  responseMode: "message",
+                  answers: command.answers,
+                },
+              },
+            },
+            {
+              type: "thread.turn.start",
+              commandId: command.commandId,
+              threadId: command.threadId,
+              createdAt: command.createdAt,
+              runtimeMode: thread.runtimeMode,
+              interactionMode: thread.interactionMode,
+              message: {
+                messageId: MessageId.make(`async-answer:${command.requestId}`),
+                role: "user",
+                text: replies.join("\n\n"),
+                attachments: [],
+              },
+            },
+          ],
+        });
+      }
       return {
         ...(yield* withEventBase({
           aggregateKind: "thread",
@@ -1206,6 +1306,51 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           requestId: command.requestId,
           answers: command.answers,
           createdAt: command.createdAt,
+        },
+      };
+    }
+
+    case "thread.user-input.dismiss": {
+      yield* requireThread({
+        readModel,
+        command,
+        threadId: command.threadId,
+      });
+      const request = userInputActivity;
+      if (request === undefined || request.kind !== "user-input.requested") {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: "This question has already been answered.",
+        });
+      }
+      // Only async questions can be dropped silently. A native callback
+      // question leaves the provider blocked until it gets a reply, so it
+      // still needs an answer or an interrupted turn.
+      if (!Predicate.isObject(request.payload) || request.payload.responseMode !== "message") {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: "This question needs an answer. Answer it or stop the turn.",
+        });
+      }
+      return {
+        ...(yield* withEventBase({
+          aggregateKind: "thread",
+          aggregateId: command.threadId,
+          occurredAt: command.createdAt,
+          commandId: command.commandId,
+        })),
+        type: "thread.activity-appended",
+        payload: {
+          threadId: command.threadId,
+          activity: {
+            id: EventId.make(`async-dismiss:${command.requestId}`),
+            kind: "user-input.resolved",
+            summary: "User input dismissed",
+            tone: "info",
+            turnId: request.turnId,
+            createdAt: command.createdAt,
+            payload: { requestId: command.requestId, responseMode: "message" },
+          },
         },
       };
     }

@@ -182,9 +182,33 @@ const makeOrchestrationEngine = Effect.gen(function* () {
           });
         }
 
+        // Command snapshots omit activities at startup and cap them while running.
+        // Read this request's durable state before deciding how to send the answer.
+        const userInputActivity =
+          envelope.command.type === "thread.user-input.respond" ||
+          envelope.command.type === "thread.user-input.dismiss"
+            ? yield* projectionSnapshotQuery.getUserInputActivity(envelope.command)
+            : Option.none();
+        const requestGuardThread =
+          envelope.command.type === "thread.settle" || envelope.command.type === "thread.snooze"
+            ? yield* projectionSnapshotQuery.getThreadDetailById(envelope.command.threadId)
+            : Option.none();
+        const decisionReadModel = Option.isSome(requestGuardThread)
+          ? {
+              ...commandReadModel,
+              threads: commandReadModel.threads.map((thread) =>
+                thread.id === requestGuardThread.value.id
+                  ? { ...thread, activities: requestGuardThread.value.activities }
+                  : thread,
+              ),
+            }
+          : commandReadModel;
         const eventBase = yield* decideOrchestrationCommand({
           command: envelope.command,
-          readModel: commandReadModel,
+          readModel: decisionReadModel,
+          ...(Option.isSome(userInputActivity)
+            ? { userInputActivity: userInputActivity.value }
+            : {}),
         }).pipe(
           Effect.provideService(Crypto.Crypto, crypto),
           Effect.mapError((cause) =>
