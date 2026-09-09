@@ -35,11 +35,39 @@ function makeFakeClaudeBinary(dir: string) {
     yield* fs.writeFileString(
       stubPath,
       [
-        'const args = process.argv.slice(2).join(" ");',
+        "const argv = process.argv.slice(2);",
+        'const args = argv.join(" ");',
+        'const { realpathSync } = await import("node:fs");',
         "",
         "function fail(message, code) {",
         '  process.stderr.write(message + "\\n");',
         "  process.exit(code);",
+        "}",
+        "",
+        'const toolsIndex = argv.indexOf("--tools");',
+        'if (toolsIndex === -1 || argv[toolsIndex + 1] !== "") {',
+        '  fail("text generation must receive an explicit empty tool set", 6);',
+        "}",
+        'if (argv.includes("--dangerously-skip-permissions")) {',
+        '  fail("text generation must not bypass permissions", 7);',
+        "}",
+        'if (!argv.includes("--disable-slash-commands")) {',
+        '  fail("text generation must disable skills", 8);',
+        "}",
+        'if (!argv.includes("--strict-mcp-config")) {',
+        '  fail("text generation must not load configured MCP servers", 9);',
+        "}",
+        'const settingsIndex = argv.indexOf("--settings");',
+        "if (settingsIndex === -1 || JSON.parse(argv[settingsIndex + 1]).disableAllHooks !== true) {",
+        '  fail("text generation must disable hooks", 10);',
+        "}",
+        "const cwdMustNotBe = process.env.T3_FAKE_CLAUDE_CWD_MUST_NOT_BE;",
+        "if (cwdMustNotBe && realpathSync(process.cwd()) === realpathSync(cwdMustNotBe)) {",
+        '  fail("text generation ran in the project directory", 11);',
+        "}",
+        "const cwdMustBe = process.env.T3_FAKE_CLAUDE_CWD_MUST_BE;",
+        "if (cwdMustBe && realpathSync(process.cwd()) !== realpathSync(cwdMustBe)) {",
+        '  fail("source-control generation lost the project directory", 12);',
         "}",
         "",
         'let stdinContent = "";',
@@ -111,6 +139,8 @@ function withFakeClaudeEnv<A, E, R>(
     argsMustNotContain?: string;
     stdinMustContain?: string;
     configDirMustBe?: string;
+    cwdMustNotBe?: string;
+    cwdMustBe?: string;
     claudeConfig?: Partial<ClaudeSettings>;
   },
   effectFn: (textGeneration: TextGeneration.TextGeneration["Service"]) => Effect.Effect<A, E, R>,
@@ -128,6 +158,8 @@ function withFakeClaudeEnv<A, E, R>(
     const previousArgsMustNotContain = process.env.T3_FAKE_CLAUDE_ARGS_MUST_NOT_CONTAIN;
     const previousStdinMustContain = process.env.T3_FAKE_CLAUDE_STDIN_MUST_CONTAIN;
     const previousConfigDirMustBe = process.env.T3_FAKE_CLAUDE_CONFIG_DIR_MUST_BE;
+    const previousCwdMustNotBe = process.env.T3_FAKE_CLAUDE_CWD_MUST_NOT_BE;
+    const previousCwdMustBe = process.env.T3_FAKE_CLAUDE_CWD_MUST_BE;
 
     yield* Effect.acquireRelease(
       Effect.sync(() => {
@@ -168,6 +200,16 @@ function withFakeClaudeEnv<A, E, R>(
           process.env.T3_FAKE_CLAUDE_CONFIG_DIR_MUST_BE = input.configDirMustBe;
         } else {
           delete process.env.T3_FAKE_CLAUDE_CONFIG_DIR_MUST_BE;
+        }
+        if (input.cwdMustNotBe !== undefined) {
+          process.env.T3_FAKE_CLAUDE_CWD_MUST_NOT_BE = input.cwdMustNotBe;
+        } else {
+          delete process.env.T3_FAKE_CLAUDE_CWD_MUST_NOT_BE;
+        }
+        if (input.cwdMustBe !== undefined) {
+          process.env.T3_FAKE_CLAUDE_CWD_MUST_BE = input.cwdMustBe;
+        } else {
+          delete process.env.T3_FAKE_CLAUDE_CWD_MUST_BE;
         }
       }),
       () =>
@@ -215,6 +257,16 @@ function withFakeClaudeEnv<A, E, R>(
           } else {
             process.env.T3_FAKE_CLAUDE_CONFIG_DIR_MUST_BE = previousConfigDirMustBe;
           }
+          if (previousCwdMustNotBe === undefined) {
+            delete process.env.T3_FAKE_CLAUDE_CWD_MUST_NOT_BE;
+          } else {
+            process.env.T3_FAKE_CLAUDE_CWD_MUST_NOT_BE = previousCwdMustNotBe;
+          }
+          if (previousCwdMustBe === undefined) {
+            delete process.env.T3_FAKE_CLAUDE_CWD_MUST_BE;
+          } else {
+            process.env.T3_FAKE_CLAUDE_CWD_MUST_BE = previousCwdMustBe;
+          }
         }),
     );
 
@@ -234,7 +286,8 @@ it.layer(ClaudeTextGenerationTestLayer)("ClaudeTextGeneration", (it) => {
             body: "",
           },
         }),
-        argsMustContain: '--settings {"alwaysThinkingEnabled":false}',
+        argsMustContain: '--settings {"disableAllHooks":true,"alwaysThinkingEnabled":false}',
+        cwdMustBe: process.cwd(),
         argsMustNotContain: "--effort",
       },
       (textGeneration) =>
@@ -266,7 +319,8 @@ it.layer(ClaudeTextGenerationTestLayer)("ClaudeTextGeneration", (it) => {
             body: "Body",
           },
         }),
-        argsMustContain: '--effort max --settings {"fastMode":true}',
+        argsMustContain: '--effort max --settings {"disableAllHooks":true,"fastMode":true}',
+        cwdMustBe: process.cwd(),
       },
       (textGeneration) =>
         Effect.gen(function* () {
@@ -290,7 +344,7 @@ it.layer(ClaudeTextGenerationTestLayer)("ClaudeTextGeneration", (it) => {
     ),
   );
 
-  it.effect("generates thread titles through the Claude provider", () =>
+  it.effect("generates thread titles outside the project without executable capabilities", () =>
     withFakeClaudeEnv(
       {
         output: JSON.stringify({
@@ -299,13 +353,14 @@ it.layer(ClaudeTextGenerationTestLayer)("ClaudeTextGeneration", (it) => {
               '  "Reconnect failures after restart because the session state does not recover"  ',
           },
         }),
-        stdinMustContain: "Please investigate reconnect failures after restarting the session.",
+        stdinMustContain: "/call-script",
+        cwdMustNotBe: process.cwd(),
       },
       (textGeneration) =>
         Effect.gen(function* () {
           const generated = yield* textGeneration.generateThreadTitle({
             cwd: process.cwd(),
-            message: "Please investigate reconnect failures after restarting the session.",
+            message: "/call-script",
             modelSelection: {
               instanceId: ProviderInstanceId.make("claudeAgent"),
               model: "claude-sonnet-4-6",
@@ -317,6 +372,29 @@ it.layer(ClaudeTextGenerationTestLayer)("ClaudeTextGeneration", (it) => {
               '"Reconnect failures after restart because the session state does not recover"',
             ),
           );
+        }),
+    ),
+  );
+
+  it.effect("generates branch names from skill prompts without executable capabilities", () =>
+    withFakeClaudeEnv(
+      {
+        output: JSON.stringify({ structured_output: { branch: "call-script" } }),
+        stdinMustContain: "/call-script",
+        cwdMustBe: process.cwd(),
+      },
+      (textGeneration) =>
+        Effect.gen(function* () {
+          const generated = yield* textGeneration.generateBranchName({
+            cwd: process.cwd(),
+            message: "/call-script",
+            modelSelection: {
+              instanceId: ProviderInstanceId.make("claudeAgent"),
+              model: "claude-sonnet-4-6",
+            },
+          });
+
+          expect(generated.branch).toBe("call-script");
         }),
     ),
   );
