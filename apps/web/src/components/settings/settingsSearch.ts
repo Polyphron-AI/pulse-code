@@ -1,6 +1,7 @@
 import { isElectron } from "~/env";
 
 export type SettingsPath =
+  | "/settings/projects"
   | "/settings/general"
   | "/settings/appearance"
   | "/settings/keybindings"
@@ -28,6 +29,7 @@ export interface SettingsSearchItem {
 export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
   "/settings/general": "General",
   "/settings/appearance": "Appearance",
+  "/settings/projects": "Projects",
   "/settings/keybindings": "Keybindings",
   "/settings/providers": "Providers",
   "/settings/integrations": "Integrations",
@@ -58,6 +60,11 @@ export const SETTINGS_SEARCH_ITEMS = [
     id: "mail-alpha",
     title: "Show Mail alpha on this device",
     to: "/settings/integrations",
+  },
+  {
+    id: "project-defaults",
+    title: "Project defaults and overrides",
+    to: "/settings/projects",
   },
   {
     id: "color-scheme",
@@ -155,13 +162,12 @@ export const SETTINGS_SEARCH_ITEMS = [
   {
     id: "new-threads",
     title: "New threads",
-    to: "/settings/general",
+    to: "/settings/projects",
   },
   {
     id: "start-from-origin",
     title: "Start from origin",
     to: "/settings/general",
-    targetId: "new-threads",
   },
   {
     id: "add-project-starts-in",
@@ -232,6 +238,11 @@ export const SETTINGS_SEARCH_ITEMS = [
   {
     id: "agent-browser-access",
     title: "Agent browser access",
+    to: "/settings/projects",
+  },
+  {
+    id: "browser-profiles",
+    title: "Browser profiles",
     to: "/settings/integrations",
     targetId: "browser",
   },

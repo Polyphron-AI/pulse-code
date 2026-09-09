@@ -49,15 +49,19 @@ describe("supportsSharedSettingsSync", () => {
 describe("splitSharedServerPatch", () => {
   it("routes preference keys to the shared patch and machine keys to the local patch", () => {
     const { sharedPatch, localPatch } = splitSharedServerPatch({
-      defaultThreadEnvMode: "worktree" as const,
       continueThreadsAfterServerUpdate: true,
       enableAgentBrowserAccess: false,
+      defaultThreadEnvMode: "worktree",
+      newWorktreesStartFromOrigin: true,
     });
     expect(sharedPatch).toEqual({
-      defaultThreadEnvMode: "worktree" as const,
       continueThreadsAfterServerUpdate: true,
+      newWorktreesStartFromOrigin: true,
     });
-    expect(localPatch).toEqual({ enableAgentBrowserAccess: false });
+    expect(localPatch).toEqual({
+      enableAgentBrowserAccess: false,
+      defaultThreadEnvMode: "worktree",
+    });
   });
 });
 
@@ -67,7 +71,6 @@ describe("pickSharedServerSettings", () => {
       Object.keys(pickSharedServerSettings(DEFAULT_SERVER_SETTINGS, restartCapabilities)).sort(),
     ).toEqual([
       "continueThreadsAfterServerUpdate",
-      "defaultThreadEnvMode",
       "newWorktreesStartFromOrigin",
       "sidebarAutoSettleAfterDays",
       "sidebarAutoSettleOnMerge",
@@ -102,7 +105,7 @@ describe("filterSharedServerPatch", () => {
 });
 
 describe("findSharedSettingsMismatches", () => {
-  const primarySettings = { ...DEFAULT_SERVER_SETTINGS, defaultThreadEnvMode: "worktree" as const };
+  const primarySettings = { ...DEFAULT_SERVER_SETTINGS, newWorktreesStartFromOrigin: true };
 
   it.each([true, false])(
     "detects remote restart continuation drift when the preference is %s",
@@ -171,7 +174,7 @@ describe("findSharedSettingsMismatches", () => {
           environments: [
             {
               ...environment,
-              settings: { ...environment.settings, defaultThreadEnvMode: "local" as const },
+              settings: { ...environment.settings, newWorktreesStartFromOrigin: false },
             },
           ],
         }),
@@ -200,7 +203,7 @@ describe("findSharedSettingsMismatches", () => {
           environmentId: boxId,
           label: "Remote Box",
           syncEligible: true,
-          settings: DEFAULT_SERVER_SETTINGS,
+          settings: { ...DEFAULT_SERVER_SETTINGS, newWorktreesStartFromOrigin: false },
         },
       ],
     });
@@ -216,7 +219,12 @@ describe("findSharedSettingsMismatches", () => {
           environmentId: boxId,
           label: "Remote Box",
           syncEligible: true,
-          settings: { ...primarySettings, enableAgentBrowserAccess: false },
+          settings: {
+            ...primarySettings,
+            enableAgentBrowserAccess: false,
+            defaultThreadEnvMode:
+              primarySettings.defaultThreadEnvMode === "local" ? "worktree" : "local",
+          },
         },
       ],
     });
@@ -253,7 +261,7 @@ describe("findSharedSettingsMismatches", () => {
           environmentId: laptopId,
           label: "Laptop",
           syncEligible: false,
-          settings: DEFAULT_SERVER_SETTINGS,
+          settings: { ...DEFAULT_SERVER_SETTINGS, newWorktreesStartFromOrigin: false },
         },
         { environmentId: boxId, label: "Remote Box", syncEligible: true, settings: null },
       ],
@@ -268,7 +276,7 @@ describe("sharedServerSettingsWrites", () => {
       environmentId: primaryId,
       label: "Desktop",
       syncEligible: true,
-      settings: DEFAULT_SERVER_SETTINGS,
+      settings: { ...DEFAULT_SERVER_SETTINGS, newWorktreesStartFromOrigin: false },
       capabilities: restartCapabilities,
     };
     expect(

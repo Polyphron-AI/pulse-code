@@ -4,7 +4,12 @@ import {
   scopeProjectRef,
   scopeThreadRef,
 } from "@t3tools/client-runtime/environment";
-import { DEFAULT_RUNTIME_MODE, type ScopedProjectRef, type ThreadId } from "@t3tools/contracts";
+import {
+  DEFAULT_RUNTIME_MODE,
+  DEFAULT_SERVER_SETTINGS,
+  type ScopedProjectRef,
+  type ThreadId,
+} from "@t3tools/contracts";
 import { useParams, useRouter } from "@tanstack/react-router";
 import { useCallback, useMemo } from "react";
 import {
@@ -26,7 +31,7 @@ import { resolveDefaultThreadEnvMode } from "@t3tools/shared/threadEnvMode";
 import { readThreadShell, useProjects, useThread } from "../state/entities";
 import { resolveNewDraftStartFromOrigin } from "../lib/chatThreadActions";
 import { readT3ProjectFileDefaultThreadEnvMode } from "../lib/t3ProjectFileDefaults";
-import { primaryServerSettingsAtom } from "../state/server";
+import { environmentServerConfigsAtom, primaryServerSettingsAtom } from "../state/server";
 import { resolveThreadRouteTarget } from "../threadRoutes";
 import { legacyProjectCwdPreferenceKey, useUiStateStore } from "../uiStateStore";
 import { applyNewThreadComposerSeed, type NewThreadComposerSeed } from "./newThreadComposerSeed";
@@ -54,11 +59,7 @@ function pickExplicitWorkspaceOptions(options: NewThreadWorkspaceOptions | undef
 
 export function useNewThreadHandler() {
   const projects = useProjects();
-  // New-thread defaults are a user preference, and the settings UI only ever
-  // edits the primary environment's settings.json. Reading the target
-  // environment's own settings here would silently reset remote projects to
-  // the decoded defaults ("local" mode, current branch), since nothing can
-  // set those values on a remote server.
+  const environmentServerConfigs = useAtomValue(environmentServerConfigsAtom);
   const primaryServerSettings = useAtomValue(primaryServerSettingsAtom);
   const projectGroupingSettings = useClientSettings(selectProjectGroupingSettings);
   const router = useRouter();
@@ -94,6 +95,8 @@ export function useNewThreadHandler() {
       // prepared checkout, a task to write — addresses that one rather than looking the project
       // up again and finding whichever draft it happens to hold.
     ): Promise<{ draftId: DraftId; threadId: ThreadId } | null> => {
+      const targetServerSettings =
+        environmentServerConfigs.get(projectRef.environmentId)?.settings ?? DEFAULT_SERVER_SETTINGS;
       const {
         getComposerDraft,
         getDraftSessionByLogicalProjectKey,
@@ -188,6 +191,10 @@ export function useNewThreadHandler() {
           candidate.id === projectRef.projectId &&
           candidate.environmentId === projectRef.environmentId,
       );
+      const initialModelSelection =
+        project?.defaultModelSelection ??
+        targetServerSettings.defaultModelSelection ??
+        carryModelSelection;
       // The shared resolver owns the priority order. The t3.json read is
       // skipped entirely when a higher-priority source decides, and its
       // query atom caches per project after the first call.
@@ -201,7 +208,7 @@ export function useNewThreadHandler() {
                 project.workspaceRoot,
               )
             : null,
-          globalDefault: primaryServerSettings.defaultThreadEnvMode,
+          globalDefault: targetServerSettings.defaultThreadEnvMode,
         });
       };
       const logicalProjectKey = project
@@ -300,11 +307,11 @@ export function useNewThreadHandler() {
               ...(carryRuntimeMode ? { runtimeMode: carryRuntimeMode } : {}),
               ...(carryInteractionMode ? { interactionMode: carryInteractionMode } : {}),
             });
-            if (carryModelSelection) {
+            if (initialModelSelection) {
               // The carried selection is a complete snapshot of the viewed
               // thread's model state: absent options mean "no options", not
               // "keep the stale draft's options".
-              setModelSelection(emptyStoredDraftThread.draftId, carryModelSelection, {
+              setModelSelection(emptyStoredDraftThread.draftId, initialModelSelection, {
                 replaceOptions: true,
               });
             }
@@ -447,13 +454,13 @@ export function useNewThreadHandler() {
           ...(carryInteractionMode ? { interactionMode: carryInteractionMode } : {}),
         });
         applyStickyState(draftId);
-        if (carryModelSelection) {
+        if (initialModelSelection) {
           // After sticky state so the viewed thread's exact selection
           // (model + options like effort and context window) wins over the
           // globally sticky one. replaceOptions: the carried selection is a
           // complete snapshot — absent options mean "no options", not "keep
           // whatever sticky state just wrote".
-          setModelSelection(draftId, carryModelSelection, { replaceOptions: true });
+          setModelSelection(draftId, initialModelSelection, { replaceOptions: true });
         }
         carryComposerContentTo(draftId);
         if (!applyComposerSeed(draftId)) {
@@ -468,7 +475,14 @@ export function useNewThreadHandler() {
         return { draftId, threadId };
       })();
     },
-    [getCurrentRouteTarget, primaryServerSettings, projectGroupingSettings, projects, router],
+    [
+      environmentServerConfigs,
+      getCurrentRouteTarget,
+      primaryServerSettings,
+      projectGroupingSettings,
+      projects,
+      router,
+    ],
   );
 }
 
