@@ -179,6 +179,8 @@ the conversation and in **Settings** → **Connections**. Follow the action show
 be able to update and reconnect the server for you, or it may ask you to update the desktop app or
 run a copied command on the server machine.
 
+If Pulse Connect reports that a connection proof is outside its time window, check that automatic date and time is enabled on both devices, then try again. Other authentication failures include retry guidance and a trace ID.
+
 Finish active work before updating because the server restarts briefly. For step-by-step guidance,
 see [Keeping Pulse Code in Sync](./updating.md).
 
