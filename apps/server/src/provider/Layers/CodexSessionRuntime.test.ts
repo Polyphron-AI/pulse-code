@@ -319,6 +319,32 @@ describe("Codex MCP elicitation approvals", () => {
     });
   });
 
+  it("does not turn a one-time approval into a persistent form default", () => {
+    const persistentDefault = {
+      ...request,
+      requestedSchema: {
+        type: "object",
+        properties: {
+          approval: { type: "string", enum: ["always", "session"], default: "always" },
+        },
+        required: ["approval"],
+      },
+    } satisfies EffectCodexSchema.McpServerElicitationRequestParams;
+    NodeAssert.deepStrictEqual(toMcpElicitationResponse(persistentDefault, "accept"), {
+      action: "decline",
+    });
+    NodeAssert.deepStrictEqual(toMcpElicitationResponse(persistentDefault, "acceptForSession"), {
+      action: "accept",
+      _meta: { persist: "session" },
+      content: { approval: "session" },
+    });
+    NodeAssert.deepStrictEqual(toMcpElicitationResponse(persistentDefault, "acceptAlways"), {
+      action: "accept",
+      _meta: { persist: "always" },
+      content: { approval: "always" },
+    });
+  });
+
   it("returns rejection without form content", () => {
     NodeAssert.deepStrictEqual(toMcpElicitationResponse(request, "decline"), {
       action: "decline",

@@ -435,6 +435,11 @@ export function toMcpElicitationResponse(
     } else if (field.type === "boolean" && isMcpElicitationPersistenceField(key, field)) {
       content[key] = decision === "acceptAlways";
     } else if (field.default !== undefined && field.default !== null) {
+      const defaultPersistence =
+        typeof field.default === "string" ? mcpElicitationPersistenceDecision(field.default) : null;
+      if (defaultPersistence !== null && defaultPersistence !== decision) {
+        return { action: "decline" };
+      }
       content[key] = field.default;
     }
   }
