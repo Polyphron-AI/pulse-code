@@ -152,12 +152,15 @@ export const make = Effect.gen(function* () {
       mail: true,
       mailPeople: true,
       threadSettlement: true,
+      threadRestartContinuation: true,
       threadSnooze: true,
       threadPinning: true,
       threadPinReorder: true,
       threadTitleRegeneration: true,
       ...(serverSelfUpdate === null ? {} : { serverSelfUpdate }),
-      ...(serverSelfUpdate === "boot-service" ? { serverSelfUpdateProgress: true } : {}),
+      ...(serverSelfUpdate === "boot-service"
+        ? { serverSelfUpdateProgress: true, serverUpdateThreadContinuation: true }
+        : {}),
     },
   };
 
