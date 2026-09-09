@@ -1361,7 +1361,10 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
             activity.kind,
             ROW_NUMBER() OVER (
               PARTITION BY json_extract(activity.payload_json, '$.requestId')
-              ORDER BY activity.created_at DESC, activity.activity_id DESC
+              ORDER BY
+                CASE WHEN activity.kind = 'user-input.requested' THEN 1 ELSE 0 END ASC,
+                activity.created_at DESC,
+                activity.activity_id DESC
             ) AS request_order
           FROM pending_user_input_thread AS pending
           CROSS JOIN projection_thread_activities AS activity
@@ -1409,6 +1412,36 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           ON activity.activity_id = pinned.activity_id
         ORDER BY activity.created_at ASC, activity.activity_id ASC
       `,
+  });
+
+  const listTerminalUserInputRows = SqlSchema.findAll({
+    Request: Schema.Struct({ threadId: ThreadId, requestIds: Schema.Array(Schema.String) }),
+    Result: ProjectionThreadActivityDbRowSchema,
+    execute: ({ threadId, requestIds }) => sql`
+      WITH terminal_rows AS (
+        SELECT *, ROW_NUMBER() OVER (
+          PARTITION BY json_extract(payload_json, '$.requestId')
+          ORDER BY created_at DESC, activity_id DESC
+        ) AS request_order
+        FROM projection_thread_activities
+        WHERE thread_id = ${threadId}
+          AND json_extract(payload_json, '$.requestId') IN (
+            SELECT value FROM json_each(${JSON.stringify(requestIds)})
+          )
+          AND (
+            kind = 'user-input.resolved'
+            OR (kind = 'provider.user-input.respond.failed' AND (
+              lower(COALESCE(json_extract(payload_json, '$.detail'), '')) LIKE '%stale pending user-input request%'
+              OR lower(COALESCE(json_extract(payload_json, '$.detail'), '')) LIKE '%unknown pending user-input request%'
+              OR lower(COALESCE(json_extract(payload_json, '$.detail'), '')) LIKE '%unknown pending user input request%'
+              OR lower(COALESCE(json_extract(payload_json, '$.detail'), '')) LIKE '%unknown pending codex user input request%'
+            ))
+          )
+      )
+      SELECT activity_id AS "activityId", thread_id AS "threadId", turn_id AS "turnId",
+        tone, kind, summary, payload_json AS "payload", sequence, created_at AS "createdAt"
+      FROM terminal_rows WHERE request_order = 1
+    `,
   });
 
   const listThreadActivityRowsByThreadWindow = SqlSchema.findAll({
@@ -2667,9 +2700,38 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
         return Option.none<OrchestrationThread>();
       }
 
+      // A replayed or provider-sequenced request may be inside the window while
+      // its terminal event is outside. Keep one durable terminal per visible ID.
+      const visibleRequestIds = [
+        ...new Set(
+          [...activityRows, ...pinnedActivityRows].flatMap((row) => {
+            const payload = row.payload;
+            return row.kind === "user-input.requested" &&
+              typeof payload === "object" &&
+              payload !== null &&
+              "requestId" in payload &&
+              typeof payload.requestId === "string"
+              ? [payload.requestId]
+              : [];
+          }),
+        ),
+      ];
+      const terminalActivityRows =
+        visibleRequestIds.length === 0
+          ? []
+          : yield* listTerminalUserInputRows({ threadId, requestIds: visibleRequestIds }).pipe(
+              Effect.mapError(
+                toPersistenceSqlOrDecodeError(
+                  "ProjectionSnapshotQuery.getThreadDetailById:listTerminalInputs:query",
+                  "ProjectionSnapshotQuery.getThreadDetailById:listTerminalInputs:decodeRows",
+                ),
+              ),
+            );
       const selectedActivityRows = [
         ...new Map(
-          [...activityRows, ...pinnedActivityRows].map((row) => [row.activityId, row] as const),
+          [...activityRows, ...pinnedActivityRows, ...terminalActivityRows].map(
+            (row) => [row.activityId, row] as const,
+          ),
         ).values(),
       ].toSorted(
         (left, right) =>

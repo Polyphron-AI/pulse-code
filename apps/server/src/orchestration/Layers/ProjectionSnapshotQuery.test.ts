@@ -2390,9 +2390,9 @@ projectionSnapshotLayer("ProjectionSnapshotQuery windowed thread detail", (it) =
             '2026-03-01T00:00:02.000Z'
           ),
           (
-            'user-input-closed', 'thread-w', NULL, 'approval', 'user-input.requested',
-            'Closed question', '{"requestId":"input-closed"}', NULL,
-            '2026-03-01T00:00:03.000Z'
+            'user-input-closed', 'thread-w', 'turn-5', 'approval', 'user-input.requested',
+            'Replayed closed question', '{"requestId":"input-closed"}', 42,
+            '2026-03-01T00:00:06.000Z'
           ),
           (
             'user-input-closed-resolution', 'thread-w', NULL, 'info', 'user-input.resolved',
@@ -2432,8 +2432,9 @@ projectionSnapshotLayer("ProjectionSnapshotQuery windowed thread detail", (it) =
         assert.equal(detailWithPinnedRequests.value.activities.length, 503);
         assert.equal(ids.includes(asEventId("approval-old")), true);
         assert.equal(ids.includes(asEventId("user-input-old")), true);
-        assert.equal(ids.includes(asEventId("user-input-closed")), false);
-        assert.equal(ids.includes(asEventId("user-input-tied-z-request")), true);
+        assert.equal(ids.includes(asEventId("user-input-closed")), true);
+        assert.equal(ids.includes(asEventId("user-input-closed-resolution")), true);
+        assert.equal(ids.includes(asEventId("user-input-tied-z-request")), false);
       }
 
       const windowWithPinnedRequests = yield* snapshotQuery.getThreadDetailSnapshot(threadW, {
@@ -2445,8 +2446,9 @@ projectionSnapshotLayer("ProjectionSnapshotQuery windowed thread detail", (it) =
         assert.equal(windowWithPinnedRequests.value.thread.activities.length, 503);
         assert.equal(ids.includes(asEventId("approval-old")), true);
         assert.equal(ids.includes(asEventId("user-input-old")), true);
-        assert.equal(ids.includes(asEventId("user-input-closed")), false);
-        assert.equal(ids.includes(asEventId("user-input-tied-z-request")), true);
+        assert.equal(ids.includes(asEventId("user-input-closed")), true);
+        assert.equal(ids.includes(asEventId("user-input-closed-resolution")), true);
+        assert.equal(ids.includes(asEventId("user-input-tied-z-request")), false);
       }
     }),
   );
