@@ -1,5 +1,7 @@
 import {
   ApprovalRequestId,
+  ProviderApprovalOption,
+  ProviderRequestKind,
   type OrchestrationThreadActivity,
   UserInputQuestion,
 } from "@t3tools/contracts";
@@ -9,9 +11,11 @@ import * as Schema from "effect/Schema";
 
 export interface PendingApproval {
   readonly requestId: ApprovalRequestId;
-  readonly requestKind: "command" | "file-read" | "file-change";
+  readonly requestKind: ProviderRequestKind;
   readonly createdAt: string;
   readonly detail?: string;
+  readonly appName?: string;
+  readonly options?: ReadonlyArray<ProviderApprovalOption>;
 }
 
 export interface PendingUserInput {
@@ -23,7 +27,8 @@ export interface PendingUserInput {
 }
 
 const isRequestId = Schema.is(ApprovalRequestId);
-const isProviderRequestKind = Schema.is(Schema.Literals(["command", "file-read", "file-change"]));
+const isProviderRequestKind = Schema.is(ProviderRequestKind);
+const isProviderApprovalOption = Schema.is(ProviderApprovalOption);
 const QuestionOption = Schema.Struct({
   ...UserInputQuestion.fields.options.value.fields,
   label: Schema.String,
@@ -54,6 +59,8 @@ export function requestKindFromRequestType(
     case "file_change_approval":
     case "apply_patch_approval":
       return "file-change";
+    case "mcp_elicitation_approval":
+      return "mcp-elicitation";
     default:
       return null;
   }
@@ -139,12 +146,19 @@ export function derivePendingRequests(activities: ReadonlyArray<OrchestrationThr
       const requestKind = isProviderRequestKind(payload.requestKind)
         ? payload.requestKind
         : requestKindFromRequestType(payload.requestType);
+      const options = Array.isArray(payload.options)
+        ? payload.options.filter(isProviderApprovalOption)
+        : [];
       approvals.set(requestId, {
         requestId,
         // Older OpenCode approvals do not always include a recognized kind.
         requestKind: requestKind ?? "command",
         createdAt: activity.createdAt,
         ...(typeof payload.detail === "string" && payload.detail ? { detail: payload.detail } : {}),
+        ...(typeof payload.appName === "string" && payload.appName
+          ? { appName: payload.appName }
+          : {}),
+        ...(options.length > 0 ? { options } : {}),
       });
     } else if (activity.kind === "user-input.requested") {
       if (closedUserInputs.has(requestId)) continue;

@@ -5,6 +5,25 @@ import { describe, expect, it } from "vite-plus/test";
 import { ComposerPendingApprovalPanel } from "./ComposerPendingApprovalPanel";
 
 describe("ComposerPendingApprovalPanel", () => {
+  it("shows the app and complete access request", () => {
+    const markup = renderToStaticMarkup(
+      <ComposerPendingApprovalPanel
+        approval={{
+          requestId: ApprovalRequestId.make("app-approval"),
+          requestKind: "mcp-elicitation",
+          createdAt: "2026-09-09T00:00:00.000Z",
+          appName: "Safari",
+          detail: "Allow ChatGPT to use Safari?",
+        }}
+        pendingCount={1}
+      />,
+    );
+    expect(markup).toContain("App access approval requested");
+    expect(markup).toContain('aria-label="App access request"');
+    expect(markup).toContain("Safari");
+    expect(markup).toContain("Allow ChatGPT to use Safari?");
+  });
+
   it("renders complete multiline command details without hover or truncation", () => {
     const detail = `bun run release -- ${"x".repeat(500)}\nsecond line`;
     const markup = renderToStaticMarkup(
