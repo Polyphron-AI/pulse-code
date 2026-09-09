@@ -20,6 +20,14 @@ connection will disappear briefly and work that is still running may be interrup
 
 The update does not remove saved threads, settings, or project files.
 
+### Continue Threads After a Restart
+
+In **Settings** ? **General** ? **Continue threads after restart**, enable continuation separately for each environment. On mobile, open **Settings** ? **Environments**. The option is off by default and appears when that server supports it.
+
+When enabled, eligible active threads can continue automatically after that server or machine restarts, including a supported server update. Scheduled work and threads waiting for approval may still need your attention. Turning the option off restores manual continuation for that environment; it does not change other connected environments.
+
+The desktop update remains available on the machine running the desktop app.
+
 ## Choose the Action You See
 
 | Action                     | What to do                                                                                                                                                                     |

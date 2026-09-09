@@ -5,6 +5,7 @@ import {
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
 
+import { useEnvironmentSettings } from "~/hooks/useSettings";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 import { serverEnvironment } from "~/state/server";
 import { useAtomCommand } from "~/state/use-atom-command";
@@ -76,14 +77,20 @@ export function ServerUpdateAction({
   serverLabel,
   selfUpdate,
   targetVersion,
+  supportsThreadContinuation = false,
   label = "Update",
 }: {
   readonly environmentId: EnvironmentId;
   readonly serverLabel: string;
   readonly selfUpdate: ServerSelfUpdateCapability | null;
   readonly targetVersion: string;
+  readonly supportsThreadContinuation?: boolean;
   readonly label?: string;
 }) {
+  const continueThreads = useEnvironmentSettings(
+    environmentId,
+    (settings) => settings.continueThreadsAfterServerUpdate,
+  );
   const updateServer = useAtomCommand(serverEnvironment.updateServer, {
     reportFailure: false,
   });
@@ -113,7 +120,12 @@ export function ServerUpdateAction({
     try {
       const result = await updateServer({
         environmentId,
-        input: { targetVersion },
+        input: {
+          targetVersion,
+          ...(supportsThreadContinuation && continueThreads
+            ? { continueRunningThreads: true }
+            : {}),
+        },
       });
       if (result._tag === "Failure") {
         if (isAtomCommandInterrupted(result)) {

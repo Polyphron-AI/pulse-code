@@ -8,8 +8,18 @@ import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 const testState = vi.hoisted(() => ({
   updateServer: vi.fn(),
   toast: vi.fn(),
+  continueByEnvironment: {} as Record<string, boolean>,
 }));
 
+vi.mock("~/hooks/useSettings", () => ({
+  useEnvironmentSettings: (
+    environmentId: string,
+    selector: (settings: { continueThreadsAfterServerUpdate: boolean }) => unknown,
+  ) =>
+    selector({
+      continueThreadsAfterServerUpdate: testState.continueByEnvironment[environmentId] ?? false,
+    }),
+}));
 vi.mock("~/hooks/useCopyToClipboard", () => ({
   useCopyToClipboard: () => ({ copyToClipboard: vi.fn() }),
 }));
@@ -29,9 +39,13 @@ type ActionElement = ReactElement<{
   readonly onClick?: () => void;
 }>;
 
-function renderAction(): ActionElement {
+function renderAction(
+  supportsThreadContinuation = false,
+  environmentId = "env-test",
+): ActionElement {
   return ServerUpdateAction({
-    environmentId: "env-test" as EnvironmentId,
+    environmentId: environmentId as EnvironmentId,
+    supportsThreadContinuation,
     serverLabel: "Test server",
     selfUpdate: "boot-service",
     targetVersion: "0.0.31",
@@ -47,7 +61,30 @@ describe("ServerUpdateAction", () => {
   beforeEach(() => {
     testState.updateServer.mockReset();
     testState.toast.mockReset();
+    testState.continueByEnvironment = {};
   });
+
+  it.each([false, true])(
+    "only sends continuation when the target environment opts in (capability %s)",
+    async (capable) => {
+      testState.continueByEnvironment = { "env-opted-in": true, "env-opted-out": false };
+      testState.updateServer.mockResolvedValue(
+        AsyncResult.success({ targetVersion: "0.0.31", method: "boot-service" as const }),
+      );
+      renderAction(capable, "env-opted-in").props.onClick?.();
+      await flushPromises();
+      renderAction(capable, "env-opted-out").props.onClick?.();
+      await flushPromises();
+      expect(testState.updateServer).toHaveBeenNthCalledWith(1, {
+        environmentId: "env-opted-in",
+        input: { targetVersion: "0.0.31", ...(capable ? { continueRunningThreads: true } : {}) },
+      });
+      expect(testState.updateServer).toHaveBeenNthCalledWith(2, {
+        environmentId: "env-opted-out",
+        input: { targetVersion: "0.0.31" },
+      });
+    },
+  );
 
   it("reports success only after the shared update flow reconnects", async () => {
     testState.updateServer.mockResolvedValue(

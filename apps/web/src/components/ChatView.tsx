@@ -351,6 +351,7 @@ import {
   isVersionMismatchDismissed,
   resolveServerConfigVersionMismatch,
   resolveServerSelfUpdateCapability,
+  resolveServerUpdateThreadContinuationCapability,
   serverUpdateGuidance,
 } from "../versionSkew";
 import { useAssetUrls } from "../assets/assetUrls";
@@ -2187,6 +2188,9 @@ function ChatViewContent(props: ChatViewProps) {
               environmentId={serverUpdateEnvironmentId}
               serverLabel={versionMismatchServerLabel}
               selfUpdate={versionMismatchSelfUpdate}
+              supportsThreadContinuation={resolveServerUpdateThreadContinuationCapability(
+                serverConfig,
+              )}
               targetVersion={versionMismatch.clientVersion}
               label={updateFailed ? "Retry" : "Update"}
             />

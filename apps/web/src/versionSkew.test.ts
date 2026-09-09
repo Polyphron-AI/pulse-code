@@ -9,11 +9,32 @@ import {
   isVersionMismatchDismissed,
   resolveServerConfigVersionMismatch,
   resolveServerSelfUpdateCapability,
+  resolveServerUpdateThreadContinuationCapability,
   resolveVersionMismatch,
   serverUpdateGuidance,
 } from "./versionSkew";
 
 describe("versionSkew", () => {
+  it.each([undefined, false, true])(
+    "requires explicit server update continuation support (%s)",
+    (capability) => {
+      expect(
+        resolveServerUpdateThreadContinuationCapability({
+          environment: {
+            environmentId: EnvironmentId.make("remote"),
+            label: "Remote",
+            platform: { os: "linux", arch: "x64" },
+            serverVersion: "0.0.40",
+            capabilities: {
+              repositoryIdentity: true,
+              ...(capability === undefined ? {} : { serverUpdateThreadContinuation: capability }),
+            },
+          },
+        }),
+      ).toBe(capability === true);
+      expect(resolveServerUpdateThreadContinuationCapability(null)).toBe(false);
+    },
+  );
   it("does not warn when versions match", () => {
     expect(resolveVersionMismatch(APP_VERSION)).toBeNull();
   });

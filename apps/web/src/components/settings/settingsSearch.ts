@@ -45,6 +45,11 @@ export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
  */
 export const SETTINGS_SEARCH_ITEMS = [
   {
+    id: "continue-threads-after-server-restart",
+    title: "Continue threads after server or machine restart",
+    to: "/settings/general",
+  },
+  {
     id: "voice-capture",
     title: "Voice capture, Parakeet, microphone, shortcut and hover mode",
     to: "/settings/general",
