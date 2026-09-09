@@ -428,109 +428,114 @@ export const issueAssetUrl = Effect.fn("AssetAccess.issueAssetUrl")(function* (i
   };
 });
 
-export const resolveAsset = Effect.fn("AssetAccess.resolveAsset")(function* (
-  token: string,
-  relativePath: string,
-) {
-  const [encodedPayload, signature] = token.split(".");
-  if (!encodedPayload || !signature) return null;
+export const resolveAsset = Effect.fn("AssetAccess.resolveAsset")(
+  function* (token: string, relativePath: string) {
+    const [encodedPayload, signature] = token.split(".");
+    if (!encodedPayload || !signature) return null;
 
-  const secretStore = yield* ServerSecretStore.ServerSecretStore;
-  const signingSecret = yield* secretStore.getOrCreateRandom(SIGNING_SECRET_NAME, 32).pipe(
-    Effect.tapError((cause) => Effect.logError("Failed to load the asset signing key.", { cause })),
-    Effect.orElseSucceed(() => null),
-  );
-  if (!signingSecret) return null;
-  if (!timingSafeEqualBase64Url(signature, signPayload(encodedPayload, signingSecret))) return null;
-
-  const claims = decodeClaims(encodedPayload);
-  if (!claims || claims.expiresAt <= (yield* Clock.currentTimeMillis)) return null;
-
-  if (claims.kind === "session-output") {
-    const config = yield* ServerConfig.ServerConfig;
-    const path = yield* Path.Path;
-    const decoded = decodeRelativePath(relativePath);
-    if (!decoded) return null;
-    const saved = yield* Effect.tryPromise(() =>
-      resolveSessionOutputFile(
-        path.join(path.dirname(config.attachmentsDir), "session-outputs"),
-        claims.outputId,
-        decoded,
-        claims.download,
-      ),
-    ).pipe(Effect.orElseSucceed(() => null));
-    return saved
-      ? ({
-          kind: "file",
-          path: saved.filePath,
-          ...(claims.download ? { downloadName: saved.name } : {}),
-        } satisfies ResolvedAsset)
-      : null;
-  }
-
-  if (claims.kind === "attachment") {
-    const config = yield* ServerConfig.ServerConfig;
-    const attachmentPath = resolveAttachmentPathById({
-      attachmentsDir: config.attachmentsDir,
-      attachmentId: claims.attachmentId,
-    });
-    if (!attachmentPath) return null;
-    const fileSystem = yield* FileSystem.FileSystem;
-    const info = yield* optionOnNotFound(fileSystem.stat(attachmentPath)).pipe(
+    const secretStore = yield* ServerSecretStore.ServerSecretStore;
+    const signingSecret = yield* secretStore.getOrCreateRandom(SIGNING_SECRET_NAME, 32).pipe(
       Effect.tapError((cause) =>
-        Effect.logError("Failed to inspect attachment asset.", {
-          attachmentId: claims.attachmentId,
-          path: attachmentPath,
-          cause,
-        }),
+        Effect.logError("Failed to load the asset signing key.", { cause }),
       ),
-      Effect.orElseSucceed(() => Option.none()),
+      Effect.orElseSucceed(() => null),
     );
-    return Option.isSome(info) && info.value.type === "File"
-      ? ({ kind: "file", path: attachmentPath } satisfies ResolvedAsset)
-      : null;
-  }
+    if (!signingSecret) return null;
+    if (!timingSafeEqualBase64Url(signature, signPayload(encodedPayload, signingSecret)))
+      return null;
 
-  if (claims.kind === "project-favicon") {
-    if (claims.relativePath === null) return null;
-    const faviconPath = yield* resolveCanonicalWorkspaceFileForRequest({
-      workspaceRoot: claims.workspaceRoot,
-      relativePath: claims.relativePath,
-    });
-    return faviconPath ? ({ kind: "file", path: faviconPath } satisfies ResolvedAsset) : null;
-  }
+    const claims = decodeClaims(encodedPayload);
+    if (!claims || claims.expiresAt <= (yield* Clock.currentTimeMillis)) return null;
 
-  const decodedPath = decodeRelativePath(relativePath);
-  if (decodedPath === null) return null;
-  const path = yield* Path.Path;
-  if (claims.kind === "workspace-file-exact") {
-    if (decodedPath !== path.basename(claims.relativePath)) return null;
-    const exactWorkspaceFile = yield* resolveCanonicalWorkspaceFileForRequest({
+    if (claims.kind === "session-output") {
+      const config = yield* ServerConfig.ServerConfig;
+      const path = yield* Path.Path;
+      const decoded = decodeRelativePath(relativePath);
+      if (!decoded) return null;
+      const saved = yield* Effect.tryPromise(() =>
+        resolveSessionOutputFile(
+          path.join(path.dirname(config.attachmentsDir), "session-outputs"),
+          claims.outputId,
+          decoded,
+          claims.download,
+        ),
+      ).pipe(Effect.orElseSucceed(() => null));
+      return saved
+        ? ({
+            kind: "file",
+            path: saved.filePath,
+            ...(claims.download ? { downloadName: saved.name } : {}),
+          } satisfies ResolvedAsset)
+        : null;
+    }
+
+    if (claims.kind === "attachment") {
+      const config = yield* ServerConfig.ServerConfig;
+      const attachmentPath = resolveAttachmentPathById({
+        attachmentsDir: config.attachmentsDir,
+        attachmentId: claims.attachmentId,
+      });
+      if (!attachmentPath) return null;
+      const fileSystem = yield* FileSystem.FileSystem;
+      const info = yield* optionOnNotFound(fileSystem.stat(attachmentPath)).pipe(
+        Effect.tapError((cause) =>
+          Effect.logError("Failed to inspect attachment asset.", {
+            attachmentId: claims.attachmentId,
+            path: attachmentPath,
+            cause,
+          }),
+        ),
+        Effect.orElseSucceed(() => Option.none()),
+      );
+      return Option.isSome(info) && info.value.type === "File"
+        ? ({ kind: "file", path: attachmentPath } satisfies ResolvedAsset)
+        : null;
+    }
+
+    if (claims.kind === "project-favicon") {
+      if (claims.relativePath === null) return null;
+      const faviconPath = yield* resolveCanonicalWorkspaceFileForRequest({
+        workspaceRoot: claims.workspaceRoot,
+        relativePath: claims.relativePath,
+      });
+      return faviconPath ? ({ kind: "file", path: faviconPath } satisfies ResolvedAsset) : null;
+    }
+
+    const decodedPath = decodeRelativePath(relativePath);
+    if (decodedPath === null) return null;
+    const path = yield* Path.Path;
+    if (claims.kind === "workspace-file-exact") {
+      if (decodedPath !== path.basename(claims.relativePath)) return null;
+      const exactWorkspaceFile = yield* resolveCanonicalWorkspaceFileForRequest({
+        workspaceRoot: claims.workspaceRoot,
+        relativePath: claims.relativePath,
+      });
+      return exactWorkspaceFile
+        ? ({
+            kind: "file",
+            path: exactWorkspaceFile,
+            ...(claims.download ? { download: true } : {}),
+          } satisfies ResolvedAsset)
+        : null;
+    }
+    const segments = decodedPath.split(/[\\/]/);
+    if (
+      decodedPath.length === 0 ||
+      decodedPath.includes("\0") ||
+      segments.some((segment) => segment === "." || segment === ".." || segment.startsWith(".")) ||
+      !PREVIEW_ASSET_EXTENSIONS.has(path.extname(decodedPath).toLowerCase())
+    ) {
+      return null;
+    }
+    const joinedRelativePath =
+      claims.baseRelativePath === "."
+        ? decodedPath
+        : path.join(claims.baseRelativePath, decodedPath);
+    const workspaceFile = yield* resolveCanonicalWorkspaceFileForRequest({
       workspaceRoot: claims.workspaceRoot,
-      relativePath: claims.relativePath,
+      relativePath: joinedRelativePath,
     });
-    return exactWorkspaceFile
-      ? ({
-          kind: "file",
-          path: exactWorkspaceFile,
-          ...(claims.download ? { download: true } : {}),
-        } satisfies ResolvedAsset)
-      : null;
-  }
-  const segments = decodedPath.split(/[\\/]/);
-  if (
-    decodedPath.length === 0 ||
-    decodedPath.includes("\0") ||
-    segments.some((segment) => segment === "." || segment === ".." || segment.startsWith(".")) ||
-    !PREVIEW_ASSET_EXTENSIONS.has(path.extname(decodedPath).toLowerCase())
-  ) {
-    return null;
-  }
-  const joinedRelativePath =
-    claims.baseRelativePath === "." ? decodedPath : path.join(claims.baseRelativePath, decodedPath);
-  const workspaceFile = yield* resolveCanonicalWorkspaceFileForRequest({
-    workspaceRoot: claims.workspaceRoot,
-    relativePath: joinedRelativePath,
-  });
-  return workspaceFile ? ({ kind: "file", path: workspaceFile } satisfies ResolvedAsset) : null;
-});
+    return workspaceFile ? ({ kind: "file", path: workspaceFile } satisfies ResolvedAsset) : null;
+  },
+  Effect.map((asset): ResolvedAsset | null => asset),
+);
