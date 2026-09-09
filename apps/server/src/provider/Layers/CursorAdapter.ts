@@ -132,6 +132,7 @@ interface CursorSessionContext {
   readonly threadId: ThreadId;
   session: ProviderSession;
   readonly scope: Scope.Closeable;
+  readonly stoppedSignal: Deferred.Deferred<void>;
   readonly acp: AcpSessionRuntime.AcpSessionRuntime["Service"];
   notificationFiber: Fiber.Fiber<void, never> | undefined;
   readonly pendingApprovals: Map<ApprovalRequestId, PendingApproval>;
@@ -469,6 +470,7 @@ export function makeCursorAdapter(
       Effect.gen(function* () {
         if (ctx.stopped) return;
         ctx.stopped = true;
+        yield* Deferred.succeed(ctx.stoppedSignal, undefined);
         yield* settlePendingApprovalsAsCancelled(ctx.pendingApprovals);
         yield* settlePendingUserInputsAsEmptyAnswers(ctx.pendingUserInputs);
         if (ctx.notificationFiber) {
@@ -781,6 +783,7 @@ export function makeCursorAdapter(
             threadId: input.threadId,
             session,
             scope: sessionScope,
+            stoppedSignal: yield* Deferred.make<void>(),
             acp,
             notificationFiber: undefined,
             pendingApprovals,
@@ -1056,7 +1059,10 @@ export function makeCursorAdapter(
               ),
             );
 
-          yield* ctx.acp.drainEvents;
+          yield* Effect.raceFirst(ctx.acp.drainEvents, Deferred.await(ctx.stoppedSignal));
+          if (ctx.stopped) {
+            return { threadId: input.threadId, turnId, resumeCursor: ctx.session.resumeCursor };
+          }
           const failure = ctx.assistantReply.failure;
           if (ctx.promptsInFlight === 1 && result.stopReason !== "cancelled" && failure) {
             return yield* new ProviderAdapterRequestError({
