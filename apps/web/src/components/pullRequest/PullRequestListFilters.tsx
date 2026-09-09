@@ -1,6 +1,7 @@
 import type {
   EnvironmentId,
   ProjectId,
+  ProjectIconOverride,
   PullRequestInvolvement,
   PullRequestListFilters,
   PullRequestListState,
@@ -237,6 +238,8 @@ export function PullRequestFiltersMenu({
     readonly environmentId: EnvironmentId;
     readonly title: string;
     readonly workspaceRoot: string;
+    readonly faviconPath?: string | null;
+    readonly projectIcon?: ProjectIconOverride | null;
   }>;
   projectId: ProjectId | undefined;
   /**
@@ -398,6 +401,9 @@ export function PullRequestFiltersMenu({
                     <ProjectFavicon
                       environmentId={project.environmentId}
                       cwd={project.workspaceRoot}
+                      projectName={project.title}
+                      faviconPath={project.faviconPath}
+                      projectIcon={project.projectIcon}
                       fallbackIcon={FolderGit2Icon}
                       className="size-3.5 shrink-0"
                     />

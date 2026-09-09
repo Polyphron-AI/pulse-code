@@ -1,13 +1,12 @@
-import { SymbolView } from "./AppSymbol";
+import { ProjectIcon } from "./ProjectIcon";
 import { Image } from "expo-image";
 import { useLayoutEffect, useMemo, useState } from "react";
 import { View } from "react-native";
-import type { EnvironmentId } from "@t3tools/contracts";
+import type { EnvironmentId, ProjectIconOverride } from "@t3tools/contracts";
 import {
   getProjectFaviconCacheKey,
   isProjectFaviconFallbackUrl,
 } from "@t3tools/shared/projectFavicon";
-import { useThemeColor } from "../lib/useThemeColor";
 import { useAssetUrl } from "../state/assets";
 import {
   beginProjectFaviconRequest,
@@ -25,11 +24,12 @@ export function ProjectFavicon(props: {
   readonly projectTitle: string;
   readonly workspaceRoot?: string | null;
   readonly faviconPath?: string | null;
+  readonly projectIcon?: ProjectIconOverride | null;
 }) {
   const size = props.size ?? 42;
   const faviconUrl = useAssetUrl(
     props.environmentId,
-    props.workspaceRoot === null || props.workspaceRoot === undefined
+    props.projectIcon || props.workspaceRoot === null || props.workspaceRoot === undefined
       ? null
       : {
           _tag: "project-favicon",
@@ -50,19 +50,22 @@ export function ProjectFavicon(props: {
       faviconUrl={renderableFaviconUrl}
       open={props.open}
       projectTitle={props.projectTitle}
+      projectIcon={props.projectIcon}
+      workspaceRoot={props.workspaceRoot}
       size={size}
     />
   );
 }
 
 function ProjectFaviconImage(props: {
+  readonly projectIcon?: ProjectIconOverride | null;
+  readonly workspaceRoot?: string | null;
   readonly cacheKey: string | null;
   readonly faviconUrl: string | null;
   readonly open?: boolean;
   readonly projectTitle: string;
   readonly size: number;
 }) {
-  const iconMuted = useThemeColor("--color-icon-subtle");
   const faviconRequest = useMemo(
     () => createProjectFaviconRequest(props.cacheKey, props.faviconUrl),
     [props.cacheKey, props.faviconUrl],
@@ -92,13 +95,13 @@ function ProjectFaviconImage(props: {
         justifyContent: "center",
       }}
     >
-      {/* Folder icon fallback (matches web's FolderIcon) */}
+      {/* Project icon fallback */}
       {!showImage ? (
-        <SymbolView
-          name={{ ios: "folder.fill", android: props.open ? "folder_open" : "folder" }}
+        <ProjectIcon
+          projectTitle={props.projectTitle}
+          workspaceRoot={props.workspaceRoot}
+          projectIcon={props.projectIcon}
           size={props.size * 0.78}
-          tintColor={iconMuted}
-          type="monochrome"
         />
       ) : null}
 

@@ -1,3 +1,4 @@
+import { ProjectIconSettings } from "./components/ProjectIconSettings";
 import { ProjectAutoPullSettings } from "./components/ProjectAutoPullSettings";
 import { useEnvironments } from "../../state/environments";
 import { AutoSettlementSettings } from "./components/AutoSettlementSettings";
@@ -132,6 +133,7 @@ function LocalSettingsRouteScreen() {
         <GeneralSettingsSection />
 
         <ProjectAutoPullSettings />
+        <ProjectIconSettings />
 
         <SettingsSection title="Appearance">
           <SettingsRow icon="paintbrush" label="Appearance" target="SettingsAppearance" />
@@ -519,6 +521,9 @@ function ConfiguredSettingsRouteScreen() {
         </SettingsSection>
 
         <GeneralSettingsSection />
+
+        <ProjectAutoPullSettings />
+        <ProjectIconSettings />
 
         <SettingsSection title="Appearance">
           <SettingsRow icon="paintbrush" label="Appearance" target="SettingsAppearance" />

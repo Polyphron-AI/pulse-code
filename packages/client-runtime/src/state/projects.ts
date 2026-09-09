@@ -196,3 +196,5 @@ export function canNavigateUp(currentPath: string): boolean {
 
 export * from "./projectCommands.ts";
 export * from "./projectEntities.ts";
+
+export * from "./projectIconModel.ts";
