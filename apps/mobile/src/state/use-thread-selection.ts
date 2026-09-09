@@ -40,7 +40,7 @@ function latestUserMessageAt(thread: OrchestrationThread): OrchestrationThread["
   return null;
 }
 
-function threadDetailToShell(
+export function threadDetailToShell(
   environmentId: EnvironmentId,
   thread: OrchestrationThread,
 ): EnvironmentThreadShell {
@@ -54,12 +54,18 @@ function threadDetailToShell(
     interactionMode: thread.interactionMode,
     branch: thread.branch,
     worktreePath: thread.worktreePath,
+    linkedPullRequest: thread.linkedPullRequest,
+    branchPullRequest: thread.branchPullRequest,
     latestTurn: thread.latestTurn,
     createdAt: thread.createdAt,
     updatedAt: thread.updatedAt,
     archivedAt: thread.archivedAt,
     settledOverride: thread.settledOverride,
     settledAt: thread.settledAt,
+    unsettledAt: thread.unsettledAt,
+    activeOrderKey: thread.activeOrderKey,
+    pinnedAt: thread.pinnedAt,
+    pinOrderKey: thread.pinOrderKey,
     snoozedUntil: thread.snoozedUntil ?? null,
     snoozedAt: thread.snoozedAt ?? null,
     session: thread.session,
