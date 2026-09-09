@@ -84,4 +84,17 @@ describe("thread MCP controls", () => {
       visitElements(render("codex", null), (element) => element.type === Switch)?.props.disabled,
     ).toBe(true);
   });
+  it("lets a thread clear overrides after switching to an unsupported provider", () => {
+    state.settings = { ...state.settings!, threadMcpOverrides: { [threadId]: { tools: true } } };
+    const button = visitElements(
+      render("opencode"),
+      (element) => element.props.children === "Use defaults",
+    )!;
+    expect(button.props.disabled).toBe(false);
+    (button.props.onClick as () => void)();
+    expect(state.persist).toHaveBeenCalledWith({
+      environmentId,
+      input: { patch: { threadMcpOverrides: { [threadId]: { tools: null } } } },
+    });
+  });
 });

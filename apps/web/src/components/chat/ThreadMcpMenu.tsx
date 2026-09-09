@@ -129,7 +129,6 @@ export function ThreadMcpMenu({
               size="sm"
               variant="ghost"
               disabled={
-                !supported ||
                 !threadId ||
                 saving ||
                 !Object.values(overrides).some((value) => typeof value === "boolean")

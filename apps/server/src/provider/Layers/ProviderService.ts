@@ -279,7 +279,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
       if (Object.keys(external).length && !supportsThreadMcp(info.driverKind)) {
         return yield* toValidationError(
           "MCP settings",
-          "This provider does not support thread-scoped MCP connections.",
+          "This provider does not support thread-scoped MCP connections. Use defaults in the MCP menu to clear thread overrides, or select a supported provider.",
         );
       }
       if (!(yield* agentBrowserAccessEnabled)) {
@@ -831,7 +831,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         if (!supportsThreadMcp(routed.adapter.provider)) {
           return yield* toValidationError(
             "MCP settings",
-            "This provider does not support thread-scoped MCP connections.",
+            "This provider does not support thread-scoped MCP connections. Use defaults in the MCP menu to clear thread overrides, or select a supported provider.",
           );
         }
         yield* routed.adapter.stopSession(input.threadId);
