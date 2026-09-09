@@ -235,6 +235,45 @@ const advanceIdleClock = Effect.gen(function* () {
 });
 
 it.layer(OpenCodeTextGenerationTestLayer)("OpenCodeTextGeneration", (it) => {
+  it.effect("excludes generic files from thread title generation", () =>
+    withOpenCodeTextGeneration(DEFAULT_OPENCODE_SETTINGS, (textGeneration) =>
+      Effect.gen(function* () {
+        runtimeMock.state.promptResult = {
+          data: {
+            parts: [{ type: "text", text: '{"title":"Review uploaded report"}' }],
+          },
+        };
+
+        yield* textGeneration.generateThreadTitle({
+          cwd: process.cwd(),
+          message: "Review these attachments.",
+          modelSelection: DEFAULT_TEST_MODEL_SELECTION,
+          attachments: [
+            {
+              type: "image",
+              id: "thread-image-attachment",
+              name: "screenshot.png",
+              mimeType: "image/png",
+              sizeBytes: 3,
+            },
+            {
+              type: "file",
+              id: "thread-report-attachment-pdf",
+              name: "report.pdf",
+              mimeType: "application/pdf",
+              sizeBytes: 42,
+            },
+          ],
+        });
+
+        expect(runtimeMock.state.promptParts[0]).toEqual([
+          expect.objectContaining({ type: "text" }),
+          expect.objectContaining({ type: "file", filename: "screenshot.png" }),
+        ]);
+      }),
+    ),
+  );
+
   it.effect("passes configured authentication to a locally spawned server", () =>
     withOpenCodeTextGeneration(LOCAL_AUTH_OPENCODE_SETTINGS, (textGeneration) =>
       Effect.gen(function* () {

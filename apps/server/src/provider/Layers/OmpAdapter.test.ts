@@ -227,68 +227,82 @@ adapterTest("OMP adapter", (it) => {
     }),
   );
 
-  it.effect("starts, resumes, streams a turn, and cleans up its child", () =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const fixture = yield* makeFixture;
-        const adapter = yield* makeAdapter(fixture);
-        const threadId = ThreadId.make("omp-session-flow");
-        const eventsFiber = yield* Stream.take(adapter.streamEvents, 9).pipe(
-          Stream.runCollect,
-          Effect.forkChild,
-        );
-        const session = yield* adapter.startSession({
-          threadId,
-          provider: ProviderDriverKind.make("omp"),
-          cwd: process.cwd(),
-          runtimeMode: "approval-required",
-        });
-        assert.equal(session.providerInstanceId, "omp_work");
-        assert.deepStrictEqual(session.resumeCursor, {
-          schemaVersion: 1,
-          sessionId: "mock-session-1",
-        });
-        yield* adapter.sendTurn({ threadId, input: "hello OMP", attachments: [] });
-        const events = Array.from(yield* Fiber.join(eventsFiber));
-        for (const type of [
-          "session.started",
-          "session.state.changed",
-          "thread.started",
-          "turn.started",
-          "turn.plan.updated",
-          "item.started",
-          "content.delta",
-          "item.completed",
-          "turn.completed",
-        ])
-          assert.include(
-            events.map((event) => event.type),
-            type,
+  it.effect(
+    "starts, resumes, keeps generic files out of image payloads, and cleans up its child",
+    () =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const fixture = yield* makeFixture;
+          const adapter = yield* makeAdapter(fixture);
+          const threadId = ThreadId.make("omp-session-flow");
+          const eventsFiber = yield* Stream.take(adapter.streamEvents, 9).pipe(
+            Stream.runCollect,
+            Effect.forkChild,
           );
+          const session = yield* adapter.startSession({
+            threadId,
+            provider: ProviderDriverKind.make("omp"),
+            cwd: process.cwd(),
+            runtimeMode: "approval-required",
+          });
+          assert.equal(session.providerInstanceId, "omp_work");
+          assert.deepStrictEqual(session.resumeCursor, {
+            schemaVersion: 1,
+            sessionId: "mock-session-1",
+          });
+          yield* adapter.sendTurn({
+            threadId,
+            input: "hello OMP",
+            attachments: [
+              {
+                type: "file",
+                id: "not-an-image",
+                name: "report.pdf",
+                mimeType: "application/pdf",
+                sizeBytes: 42,
+              },
+            ],
+          });
+          const events = Array.from(yield* Fiber.join(eventsFiber));
+          for (const type of [
+            "session.started",
+            "session.state.changed",
+            "thread.started",
+            "turn.started",
+            "turn.plan.updated",
+            "item.started",
+            "content.delta",
+            "item.completed",
+            "turn.completed",
+          ])
+            assert.include(
+              events.map((event) => event.type),
+              type,
+            );
 
-        yield* adapter.stopSession(threadId);
-        const invocation = readJsonLines(fixture.argsLogPath)[0] as
-          | { readonly pid?: number; readonly args?: ReadonlyArray<string> }
-          | undefined;
-        assert.deepStrictEqual(invocation?.args, ["acp", "--approval-mode", "always-ask"]);
-        assert.isFalse(invocation?.pid ? processIsAlive(invocation.pid) : true);
+          yield* adapter.stopSession(threadId);
+          const invocation = readJsonLines(fixture.argsLogPath)[0] as
+            | { readonly pid?: number; readonly args?: ReadonlyArray<string> }
+            | undefined;
+          assert.deepStrictEqual(invocation?.args, ["acp", "--approval-mode", "always-ask"]);
+          assert.isFalse(invocation?.pid ? processIsAlive(invocation.pid) : true);
 
-        const resumedThreadId = ThreadId.make("omp-resumed-flow");
-        const resumed = yield* adapter.startSession({
-          threadId: resumedThreadId,
-          cwd: process.cwd(),
-          runtimeMode: "approval-required",
-          resumeCursor: { schemaVersion: 1, sessionId: "persisted-omp-session" },
-        });
-        assert.deepStrictEqual(resumed.resumeCursor, {
-          schemaVersion: 1,
-          sessionId: "persisted-omp-session",
-        });
-        assert.isTrue(
-          readJsonLines(fixture.requestLogPath).some((entry) => entry.method === "session/load"),
-        );
-      }),
-    ),
+          const resumedThreadId = ThreadId.make("omp-resumed-flow");
+          const resumed = yield* adapter.startSession({
+            threadId: resumedThreadId,
+            cwd: process.cwd(),
+            runtimeMode: "approval-required",
+            resumeCursor: { schemaVersion: 1, sessionId: "persisted-omp-session" },
+          });
+          assert.deepStrictEqual(resumed.resumeCursor, {
+            schemaVersion: 1,
+            sessionId: "persisted-omp-session",
+          });
+          assert.isTrue(
+            readJsonLines(fixture.requestLogPath).some((entry) => entry.method === "session/load"),
+          );
+        }),
+      ),
   );
 
   it.effect("sets the exact model before thinking and applies exact plan/default modes", () =>

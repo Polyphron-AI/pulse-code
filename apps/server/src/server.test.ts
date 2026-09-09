@@ -4648,6 +4648,162 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
+  it.effect("uploads image bytes through a signed URL issued by websocket rpc", () =>
+    Effect.gen(function* () {
+      const config = yield* buildAppUnderTest();
+      const fileSystem = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const wsUrl = yield* getWsServerUrl("/ws");
+
+      yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) =>
+          Effect.gen(function* () {
+            const issued = yield* client[WS_METHODS.attachmentsCreateUploadUrl]({
+              name: "screenshot.png",
+              mimeType: "image/png",
+              sizeBytes: 6,
+            });
+            const rejected = yield* HttpClient.post(issued.relativeUrl, {
+              body: HttpBody.uint8Array(new Uint8Array([1, 2, 3]), "image/png"),
+            });
+            assert.equal(rejected.status, 400);
+
+            const response = yield* HttpClient.post(issued.relativeUrl, {
+              headers: { origin: crossOriginClientOrigin },
+              body: HttpBody.uint8Array(new Uint8Array([1, 2, 3, 4, 5, 6]), "image/png"),
+            });
+            assert.equal(response.status, 204);
+            assertBrowserApiCorsResponseHeaders(response.headers);
+
+            const attachmentPath = path.join(config.attachmentsDir, `${issued.attachmentId}.png`);
+            assert.isTrue(yield* fileSystem.exists(attachmentPath));
+
+            yield* client[WS_METHODS.attachmentsDelete]({ attachmentId: issued.attachmentId });
+            assert.isFalse(yield* fileSystem.exists(attachmentPath));
+
+            const streamed = yield* client[WS_METHODS.attachmentsCreateUploadUrl]({
+              name: "streamed.png",
+              mimeType: "image/png",
+              sizeBytes: 6,
+            });
+            const streamedResponse = yield* HttpClient.post(streamed.relativeUrl, {
+              body: HttpBody.stream(Stream.make(new Uint8Array([1, 2, 3, 4, 5, 6])), "image/png"),
+            });
+            assert.equal(streamedResponse.status, 204);
+            yield* client[WS_METHODS.attachmentsDelete]({ attachmentId: streamed.attachmentId });
+
+            const uploadedFile = yield* client[WS_METHODS.attachmentsCreateUploadUrl]({
+              type: "file",
+              name: "report.pdf",
+              mimeType: "application/pdf",
+              sizeBytes: 6,
+            });
+            const fileResponse = yield* HttpClient.post(uploadedFile.relativeUrl, {
+              body: HttpBody.stream(
+                Stream.make(new Uint8Array([1, 2, 3]), new Uint8Array([4, 5, 6])),
+                "application/pdf",
+              ),
+            });
+            assert.equal(fileResponse.status, 204);
+            const uploadedFilePath = path.join(
+              config.attachmentsDir,
+              `${uploadedFile.attachmentId}.pdf`,
+            );
+            assert.isTrue(yield* fileSystem.exists(uploadedFilePath));
+
+            // A mint that carries the attachment's display name and mime
+            // serves a real download filename and Content-Type.
+            const download = yield* client[WS_METHODS.assetsCreateUrl]({
+              resource: {
+                _tag: "attachment",
+                attachmentId: uploadedFile.attachmentId,
+                fileName: "report.pdf",
+                mimeType: "application/pdf",
+              },
+            });
+            const downloadResponse = yield* HttpClient.get(download.relativeUrl);
+            assert.equal(downloadResponse.status, 200);
+            assert.equal(
+              downloadResponse.headers["content-disposition"],
+              'attachment; filename="report.pdf"',
+            );
+            assert.equal(downloadResponse.headers["content-type"], "application/pdf");
+
+            // Old clients mint without name or mime and still get a download.
+            const bareDownload = yield* client[WS_METHODS.assetsCreateUrl]({
+              resource: { _tag: "attachment", attachmentId: uploadedFile.attachmentId },
+            });
+            const bareResponse = yield* HttpClient.get(bareDownload.relativeUrl);
+            assert.equal(bareResponse.status, 200);
+            assert.equal(bareResponse.headers["content-disposition"], "attachment");
+            assert.equal(bareResponse.headers["content-type"], "application/octet-stream");
+
+            yield* client[WS_METHODS.attachmentsDelete]({
+              attachmentId: uploadedFile.attachmentId,
+            });
+            assert.isFalse(yield* fileSystem.exists(uploadedFilePath));
+          }),
+        ),
+      );
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
+  it.effect("rejects an over-limit chunked upload through the route without hanging", () =>
+    Effect.gen(function* () {
+      const config = yield* buildAppUnderTest();
+      const fileSystem = yield* FileSystem.FileSystem;
+      const wsUrl = yield* getWsServerUrl("/ws");
+
+      yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) =>
+          Effect.gen(function* () {
+            const issued = yield* client[WS_METHODS.attachmentsCreateUploadUrl]({
+              type: "file",
+              name: "big.bin",
+              mimeType: "application/octet-stream",
+              sizeBytes: 6,
+            });
+            const NodeHttp = yield* Effect.promise(() => import("node:http"));
+            const uploadUrl = new URL(issued.relativeUrl, yield* getHttpServerUrl());
+            const status = yield* Effect.callback<number, Error>((resume) => {
+              let completed = false;
+              const complete = (result: Effect.Effect<number, Error>) => {
+                if (completed) return;
+                completed = true;
+                resume(result);
+              };
+              const request = NodeHttp.request(
+                uploadUrl,
+                {
+                  method: "POST",
+                  headers: {
+                    "content-type": "application/octet-stream",
+                    "transfer-encoding": "chunked",
+                  },
+                },
+                (response) => {
+                  request.end();
+                  response.resume();
+                  response.once("end", () => complete(Effect.succeed(response.statusCode ?? 0)));
+                  response.once("error", (error) => complete(Effect.fail(error)));
+                },
+              );
+              request.once("error", (error) => complete(Effect.fail(error)));
+              request.flushHeaders();
+              request.write(new Uint8Array(4), () => {
+                request.write(new Uint8Array(4));
+              });
+
+              return Effect.sync(() => request.destroy());
+            });
+            assert.equal(status, 400);
+            assert.deepEqual(yield* fileSystem.readDirectory(config.attachmentsDir), []);
+          }),
+        ),
+      );
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
   it.effect("shares one preview automation broker across websocket sessions", () =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -8161,12 +8317,14 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
   it.effect("cleans up created bootstrap threads when worktree creation defects", () =>
     Effect.gen(function* () {
       const dispatchedCommands: Array<OrchestrationCommand> = [];
+      const fileSystem = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
       const createWorktree = vi.fn(
         (_: Parameters<GitVcsDriver.GitVcsDriver["Service"]["createWorktree"]>[0]) =>
           Effect.die(new Error("worktree exploded")),
       );
 
-      yield* buildAppUnderTest({
+      const config = yield* buildAppUnderTest({
         layers: {
           gitVcsDriver: {
             createWorktree,
@@ -8184,40 +8342,62 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
 
       const createdAt = "2026-01-01T00:00:00.000Z";
       const wsUrl = yield* getWsServerUrl("/ws");
+      let pendingAttachmentId: string | undefined;
       const result = yield* Effect.scoped(
         withWsRpcClient(wsUrl, (client) =>
-          client[ORCHESTRATION_WS_METHODS.dispatchCommand]({
-            type: "thread.turn.start",
-            commandId: CommandId.make("cmd-bootstrap-turn-start-defect"),
-            threadId: ThreadId.make("thread-bootstrap-defect"),
-            message: {
-              messageId: MessageId.make("msg-bootstrap-defect"),
-              role: "user",
-              text: "hello",
-              attachments: [],
-            },
-            modelSelection: defaultModelSelection,
-            runtimeMode: "full-access",
-            interactionMode: "default",
-            bootstrap: {
-              createThread: {
-                projectId: defaultProjectId,
-                title: "Bootstrap Thread",
-                modelSelection: defaultModelSelection,
-                runtimeMode: "full-access",
-                interactionMode: "default",
-                branch: "main",
-                worktreePath: null,
-                createdAt,
+          Effect.gen(function* () {
+            const upload = yield* client[WS_METHODS.attachmentsCreateUploadUrl]({
+              name: "screenshot.png",
+              mimeType: "image/png",
+              sizeBytes: 6,
+            });
+            pendingAttachmentId = upload.attachmentId;
+            const uploadResponse = yield* HttpClient.post(upload.relativeUrl, {
+              body: HttpBody.uint8Array(new Uint8Array([1, 2, 3, 4, 5, 6]), "image/png"),
+            });
+            assert.equal(uploadResponse.status, 204);
+
+            return yield* client[ORCHESTRATION_WS_METHODS.dispatchCommand]({
+              type: "thread.turn.start",
+              commandId: CommandId.make("cmd-bootstrap-turn-start-defect"),
+              threadId: ThreadId.make("thread-bootstrap-defect"),
+              message: {
+                messageId: MessageId.make("msg-bootstrap-defect"),
+                role: "user",
+                text: "hello",
+                attachments: [
+                  {
+                    type: "image",
+                    id: upload.attachmentId,
+                    name: "screenshot.png",
+                    mimeType: "image/png",
+                    sizeBytes: 6,
+                  },
+                ],
               },
-              prepareWorktree: {
-                projectCwd: "/tmp/project",
-                baseBranch: "main",
-                branch: "t3code/bootstrap-refName",
+              modelSelection: defaultModelSelection,
+              runtimeMode: "full-access",
+              interactionMode: "default",
+              bootstrap: {
+                createThread: {
+                  projectId: defaultProjectId,
+                  title: "Bootstrap Thread",
+                  modelSelection: defaultModelSelection,
+                  runtimeMode: "full-access",
+                  interactionMode: "default",
+                  branch: "main",
+                  worktreePath: null,
+                  createdAt,
+                },
+                prepareWorktree: {
+                  projectCwd: "/tmp/project",
+                  baseBranch: "main",
+                  branch: "t3code/bootstrap-refName",
+                },
+                runSetupScript: false,
               },
-              runSetupScript: false,
-            },
-            createdAt,
+              createdAt,
+            });
           }),
         ).pipe(Effect.result),
       );
@@ -8229,6 +8409,13 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
         dispatchedCommands.map((command) => command.type),
         ["thread.create", "thread.delete"],
       );
+      assert.isDefined(pendingAttachmentId);
+      assert.isTrue(
+        yield* fileSystem.exists(path.join(config.attachmentsDir, `${pendingAttachmentId}.png`)),
+      );
+      assert.deepEqual(yield* fileSystem.readDirectory(config.attachmentsDir), [
+        `${pendingAttachmentId}.png`,
+      ]);
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
