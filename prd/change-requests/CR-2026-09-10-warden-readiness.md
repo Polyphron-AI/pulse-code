@@ -18,8 +18,10 @@ files_touched:
 
 The owner asked to proceed with feasibility and implementation planning after merging the Warden PRDs. This packet records current code/branch evidence, manager/native feasibility, a concrete first-read contract, outstanding decisions and dependency-wired tasks.
 
-Go PR66 now supplies internal broker primitives. Additional Go/Pulse infrastructure branches overlap planned work and must be reconciled before implementation. The old Beat port remains outside inspected main. D1 proposes using existing Grafana reads for generic first-slice conformance; this does not change the existing GitHub/Beat release gate without the owner's choice.
+Go PR66 now supplies internal broker primitives. Additional Go/Pulse infrastructure branches overlap planned work and must be reconciled before implementation. The old Beat port remains outside inspected main. On 10 September the owner approved D1: use existing saved-query Grafana reads for the first end-to-end Pulse/MCP/CLI proof. Beat/GitHub remains a separately gated follow-up; its historical gate is not cleared.
 
 The packet proposes status mapping, digest binding, narrow CLI identity bootstrap and reuse of warden_uses instead of a duplicate grant store. Detailed schema/protocol changes remain proposed. No historical approval, production readiness, upstream licensing clearance, native compatibility or live read is implied.
 
 The shared five-document packet is identical across repositories. The Go task ledger is authoritative for the cross-product graph. Documentation/link/coverage checks and the focused synthetic foundation test command are recorded in readiness.md. Original mixed local workspaces and operational credentials are untouched.
+
+Decision update: D1 provider order is approved. The CR remains proposed for the other engineering details and open decisions.

@@ -61,6 +61,6 @@ Every existing requirement remains in scope. A first-slice mapping means partial
 
 ## What can proceed
 
-Repository reconciliation, shared schema fixtures, synthetic policy/transaction tests and the component inventory can start without choosing personal recovery. Implementing or deploying a changed first-provider sequence waits on D1. Browser/native proofs require the scoped test environment and user authorization before launching those tools. Production reads and existing private infrastructure remain owned by their separate delivery.
+Repository reconciliation, shared schema fixtures, synthetic policy/transaction tests and the component inventory can start without choosing personal recovery. The owner approved D1 on 10 September: use Grafana for the first end-to-end Pulse/MCP/CLI proof, keeping Beat/GitHub as a separately gated follow-up. Browser/native proofs require the scoped test environment and user authorization before launching those tools. Production reads and existing private infrastructure remain owned by their separate delivery.
 
 The task graph is a build packet, not a delivery-date commitment. It contains 20 bounded work units with review/split checkpoints; resolving migrations, upstream licensing or platform feasibility can produce additional tasks. Do not convert these units into a full-product percentage or an elapsed-time estimate.

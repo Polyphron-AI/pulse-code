@@ -1,6 +1,6 @@
 # Warden first read implementation design
 
-Status: proposed engineering contract, 10 September 2026. This refines [MCP/CLI requirements](mcp-cli.md). D1 in the [decision register](decisions.md) determines first live provider; examples below use the existing Grafana read. They do not clear Beat's GitHub gate.
+Status: proposed engineering contract, 10 September 2026. This refines [MCP/CLI requirements](mcp-cli.md). The owner approved D1 in the [decision register](decisions.md): use the existing saved-query Grafana reader for the first end-to-end Pulse/MCP/CLI proof. Beat/GitHub remains a separately gated follow-up.
 
 ## One authority, three callers
 

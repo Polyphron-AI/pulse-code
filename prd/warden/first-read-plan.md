@@ -8,7 +8,7 @@ execution_mode: frontier
 
 Source: [readiness](readiness.md), [design](first-read.md), [decisions](decisions.md). The Go copy owns task identity; the identical Pulse copy is a cross-product reference, not a second execution queue. Stable IDs are P-2026-09-10-warden-first-read/Tn.
 
-Planning authorized; runtime tasks are pending. D1 controls live-provider order. Each task is a 1-2 hour review/implementation unit estimate, not a guaranteed duration. Stop and split if its evidence or diff exceeds one focused unit. Existing infrastructure branch adoption and full client UI work must retain their own reviewed task graphs; this plan does not label them complete. Owners are responsible teams, not invented named assignees.
+Planning authorized; runtime tasks are pending. D1 is approved: Grafana is the first end-to-end provider; Beat/GitHub remains separately gated. Each task is a 1-2 hour review/implementation unit estimate, not a guaranteed duration. Stop and split if its evidence or diff exceeds one focused unit. Existing infrastructure branch adoption and full client UI work must retain their own reviewed task graphs; this plan does not label them complete. Owners are responsible teams, not invented named assignees.
 
 Dependency edges below are canonical. Tasks sharing a runtime file serialize. T18 is the completion join. T19/T20 are feasibility gates; their fixtures/inventory can be prepared independently. No production deployment or real-vault test is scheduled here.
 
@@ -280,7 +280,7 @@ Decide whether the selected first capability can be enabled from actual receipts
 
 Acceptance:
 
-- Require D1 decision, relevant branch integration, client proof and scoped provider evidence.
+- Apply approved D1 Grafana-first order; require relevant branch integration, client proof and scoped provider evidence.
 - Record operator enable/disable/revoke/recovery procedure, exact revisions and remaining unsupported capabilities.
 - Approve a release only for passed capabilities; live deployment or external account access needs its own authorized execution.
 
