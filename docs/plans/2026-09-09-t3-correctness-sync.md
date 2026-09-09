@@ -9,15 +9,15 @@ Pulse base: `f3d6b59b2`. Upstream stable target for source selection: T3 v0.0.40
 - [x] Review stable changes, overlap, migration collisions, and active Pulse work.
 - [x] Select staged cherry-picks and minimal ports over a whole-branch merge.
 - [x] Create a separate integration worktree and three agent worktrees.
-- [ ] Verify focused baselines after dependency setup.
-- [ ] Git agent: push destination safety, submodule setup, missing-worktree deletion, and worktree timeout.
-- [ ] Replay agent: complete projection bootstrap replay, bounded routine history reads, and linear Codex input buffering.
-- [ ] Claude agent: restrict metadata capabilities and preserve provider secrets on redacted saves.
-- [ ] Coordinator: restore queries after connection interruption and retry credentials during an update restart.
-- [ ] Review each agent's commits and resolve findings.
-- [ ] Integrate and run focused tests, lint, and package-scoped typechecks.
-- [ ] Record exact upstream provenance, adaptations, verification, and deferred work.
-- [ ] Check all pre-existing modified files remain unchanged before local integration.
+- [x] Verify focused baselines after dependency setup.
+- [x] Git agent: push destination safety, submodule setup, missing-worktree deletion, and worktree timeout.
+- [x] Replay agent: complete projection bootstrap replay, bounded routine history reads, and linear Codex input buffering.
+- [x] Claude agent: restrict metadata capabilities and preserve provider secrets on redacted saves.
+- [x] Coordinator: restore queries after connection interruption and retry credentials during an update restart.
+- [x] Review each agent's commits and resolve findings.
+- [x] Integrate and run focused tests, lint, and package-scoped typechecks.
+- [x] Record exact upstream provenance, adaptations, verification, and deferred work.
+- [x] Check all pre-existing modified files remain unchanged before local integration.
 
 ## Integration constraints
 
