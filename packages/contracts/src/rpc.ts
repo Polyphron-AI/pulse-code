@@ -2,6 +2,7 @@ import {
   ProviderConsumeResetCreditInput,
   ProviderConsumeResetCreditResult,
   ProviderResetCreditError,
+  UsageLimitSourceError,
 } from "./providerUsageLimits.ts";
 import { TrimmedNonEmptyString } from "./baseSchemas.ts";
 import * as Schema from "effect/Schema";
@@ -514,7 +515,11 @@ export const WsServerRefreshProvidersRpc = Rpc.make(WS_METHODS.serverRefreshProv
 export const WsProviderConsumeResetCreditRpc = Rpc.make(WS_METHODS.providerConsumeResetCredit, {
   payload: ProviderConsumeResetCreditInput,
   success: ProviderConsumeResetCreditResult,
-  error: Schema.Union([ProviderResetCreditError, EnvironmentAuthorizationError]),
+  error: Schema.Union([
+    ProviderResetCreditError,
+    UsageLimitSourceError,
+    EnvironmentAuthorizationError,
+  ]),
 });
 
 export const WsServerUpdateProviderRpc = Rpc.make(WS_METHODS.serverUpdateProvider, {
@@ -1320,7 +1325,10 @@ export const WsSubscribeTerminalMetadataRpc = Rpc.make(WS_METHODS.subscribeTermi
 });
 
 export const WsSubscribeServerConfigRpc = Rpc.make(WS_METHODS.subscribeServerConfig, {
-  payload: Schema.Struct({ usageLimitSources: Schema.optional(Schema.Boolean) }),
+  payload: Schema.Struct({
+    usageLimitSources: Schema.optional(Schema.Boolean),
+    usageLimitsCommand: Schema.optional(Schema.Boolean),
+  }),
   success: ServerConfigStreamEvent,
   error: Schema.Union([KeybindingsConfigError, ServerSettingsError, EnvironmentAuthorizationError]),
   stream: true,
