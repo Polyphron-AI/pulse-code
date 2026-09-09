@@ -1,3 +1,4 @@
+import { McpSettingsPanel } from "./McpSettingsPanel";
 import { useAtomValue } from "@effect/atom-react";
 import { connectionStatusText } from "@t3tools/client-runtime/connection";
 import { safeErrorLogAttributes } from "@t3tools/client-runtime/errors";
@@ -886,6 +887,8 @@ export function EnvironmentProviderSettings({
           })}
         </div>
       </SettingsSection>
+
+      <McpSettingsPanel environmentId={environmentId} readOnly={readOnly} />
 
       {isAddInstanceDialogOpen ? (
         <AddProviderInstanceDialog

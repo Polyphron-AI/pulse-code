@@ -1,3 +1,4 @@
+import * as ExternalMcp from "../../mcp/ExternalMcp.ts";
 /**
  * ProviderServiceLive - Cross-provider orchestration layer.
  *
@@ -10,6 +11,7 @@
  * @module ProviderServiceLive
  */
 import {
+  supportsThreadMcp,
   ModelSelection,
   NonNegativeInt,
   ThreadId,
@@ -258,8 +260,28 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     ),
   );
 
+  const loadExternalMcp = (threadId: ThreadId, instanceId: ProviderInstanceId) =>
+    serverSettings.getSettings.pipe(
+      Effect.map((settings) => ExternalMcp.selectMcpConnections(settings, instanceId, threadId)),
+      Effect.mapError(
+        () =>
+          new ProviderValidationError({
+            operation: "MCP settings",
+            issue: "Could not load MCP connections. Check environment settings.",
+          }),
+      ),
+    );
+
   const prepareMcpSession = (threadId: ThreadId, providerInstanceId: ProviderInstanceId) =>
     Effect.gen(function* () {
+      const external = yield* loadExternalMcp(threadId, providerInstanceId);
+      const info = yield* registry.getInstanceInfo(providerInstanceId);
+      if (Object.keys(external).length && !supportsThreadMcp(info.driverKind)) {
+        return yield* toValidationError(
+          "MCP settings",
+          "This provider does not support thread-scoped MCP connections.",
+        );
+      }
       if (!(yield* agentBrowserAccessEnabled)) {
         // Revoke as well as clear. Every other prepare path reaches
         // `issueActiveMcpCredential`, which revokes the thread first, so
@@ -269,17 +291,24 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         // model) re-prepares without stopping, so it relies on this.
         yield* revokeMcpCredential(threadId);
         yield* Effect.sync(() => McpProviderSession.clearMcpProviderSession(threadId));
+        ExternalMcp.setExternalMcp(threadId, external);
         return undefined;
       }
       const credential = yield* issueMcpCredential({ threadId, providerInstanceId });
       if (credential) {
         yield* Effect.sync(() => McpProviderSession.setMcpProviderSession(credential.config));
       }
+      ExternalMcp.setExternalMcp(threadId, external);
       return credential;
     });
   const clearMcpSession = (threadId: ThreadId) =>
     McpSessionRegistry.revokeActiveMcpThread(threadId).pipe(
-      Effect.tap(() => Effect.sync(() => McpProviderSession.clearMcpProviderSession(threadId))),
+      Effect.tap(() =>
+        Effect.sync(() => {
+          McpProviderSession.clearMcpProviderSession(threadId);
+          ExternalMcp.clearExternalMcp(threadId);
+        }),
+      ),
     );
 
   const publishRuntimeEvent = (event: ProviderRuntimeEvent): Effect.Effect<void> =>
@@ -778,6 +807,36 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         "provider.kind": routed.adapter.provider,
         ...(input.modelSelection?.model ? { "provider.model": input.modelSelection.model } : {}),
       });
+      const desiredMcp = yield* loadExternalMcp(input.threadId, routed.instanceId);
+      if (
+        ExternalMcp.mcpFingerprint(desiredMcp) !==
+        ExternalMcp.mcpFingerprint(ExternalMcp.readExternalMcp(input.threadId))
+      ) {
+        const session = (yield* routed.adapter.listSessions()).find(
+          (candidate) => candidate.threadId === input.threadId,
+        );
+        if (session?.activeTurnId) {
+          return yield* toValidationError(
+            "MCP settings",
+            "MCP changes are pending. Wait for the active turn to finish before sending another turn.",
+          );
+        }
+        const binding = Option.getOrUndefined(yield* directory.getBinding(input.threadId));
+        if (!binding || !binding.resumeCursor) {
+          return yield* toValidationError(
+            "MCP settings",
+            "MCP changes need a resumable session. Start a new thread to use this selection.",
+          );
+        }
+        if (!supportsThreadMcp(routed.adapter.provider)) {
+          return yield* toValidationError(
+            "MCP settings",
+            "This provider does not support thread-scoped MCP connections.",
+          );
+        }
+        yield* routed.adapter.stopSession(input.threadId);
+        yield* recoverSessionForThread({ binding, operation: "Apply MCP selection" });
+      }
       // A turn is the clearest sign a session is still alive. The MCP
       // credential is minted once at session start and cannot be rotated into
       // an already-spawned agent process, so we keep the existing token valid
@@ -1141,6 +1200,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     yield* Effect.forEach(currentAdapters, ([, adapter]) => adapter.stopAll()).pipe(Effect.asVoid);
     yield* McpSessionRegistry.revokeAllActiveMcpCredentials();
     McpProviderSession.clearAllMcpProviderSessions();
+    ExternalMcp.clearAllExternalMcp();
     const bindings = yield* directory.listBindings().pipe(Effect.orElseSucceed(() => []));
     yield* Effect.forEach(bindings, (binding) =>
       Effect.gen(function* () {

@@ -1,3 +1,4 @@
+import * as ExternalMcp from "../../mcp/ExternalMcp.ts";
 /**
  * CodexAdapterLive - Scoped live implementation for the Codex provider adapter.
  *
@@ -1674,6 +1675,9 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
             ? getCodexServiceTierOptionValue(input.modelSelection)
             : undefined;
         const mcpSession = McpProviderSession.readMcpProviderSession(input.threadId);
+        const externalMcp = ExternalMcp.codexMcpOptions(
+          ExternalMcp.readExternalMcp(input.threadId),
+        );
         const runtimeInput: CodexSessionRuntimeOptions = {
           threadId: input.threadId,
           providerInstanceId: boundInstanceId,
@@ -1694,6 +1698,7 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
             ? {
                 environment: {
                   ...(options?.environment ?? process.env),
+                  ...externalMcp.environment,
                   T3_MCP_BEARER_TOKEN: mcpSession.authorizationHeader.replace(/^Bearer\s+/, ""),
                 },
                 appServerArgs: [
@@ -1701,9 +1706,18 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
                   `mcp_servers.t3-code.url=${mcpSession.endpoint}`,
                   "-c",
                   'mcp_servers.t3-code.bearer_token_env_var="T3_MCP_BEARER_TOKEN"',
+                  ...externalMcp.args,
                 ],
               }
-            : {}),
+            : externalMcp.args.length
+              ? {
+                  environment: {
+                    ...(options?.environment ?? process.env),
+                    ...externalMcp.environment,
+                  },
+                  appServerArgs: externalMcp.args,
+                }
+              : {}),
         };
         const sessionScope = yield* Scope.make("sequential");
         let sessionScopeTransferred = false;

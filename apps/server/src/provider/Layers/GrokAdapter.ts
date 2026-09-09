@@ -1,3 +1,4 @@
+import * as ExternalMcp from "../../mcp/ExternalMcp.ts";
 import {
   ApprovalRequestId,
   type GrokSettings,
@@ -581,6 +582,7 @@ export function makeGrokAdapter(grokSettings: GrokSettings, options?: GrokAdapte
             ...(mcpSession
               ? {
                   mcpServers: [
+                    ...ExternalMcp.acpMcpServers(ExternalMcp.readExternalMcp(input.threadId)),
                     {
                       type: "http" as const,
                       name: "t3-code",
@@ -594,7 +596,11 @@ export function makeGrokAdapter(grokSettings: GrokSettings, options?: GrokAdapte
                     },
                   ],
                 }
-              : {}),
+              : {
+                  mcpServers: ExternalMcp.acpMcpServers(
+                    ExternalMcp.readExternalMcp(input.threadId),
+                  ),
+                }),
             ...acpNativeLoggers,
           }).pipe(
             Effect.provideService(Crypto.Crypto, crypto),

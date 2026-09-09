@@ -1,3 +1,4 @@
+import * as ExternalMcp from "../../mcp/ExternalMcp.ts";
 /**
  * ClaudeAdapterLive - Scoped live implementation for the Claude Agent provider adapter.
  *
@@ -4192,6 +4193,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         ...(mcpSession
           ? {
               mcpServers: {
+                ...ExternalMcp.claudeMcpServers(ExternalMcp.readExternalMcp(input.threadId)),
                 "t3-code": {
                   type: "http",
                   url: mcpSession.endpoint,
@@ -4201,7 +4203,9 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
                 },
               },
             }
-          : {}),
+          : {
+              mcpServers: ExternalMcp.claudeMcpServers(ExternalMcp.readExternalMcp(input.threadId)),
+            }),
       };
 
       yield* Effect.annotateCurrentSpan({

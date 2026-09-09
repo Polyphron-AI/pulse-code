@@ -1,3 +1,4 @@
+import { ThreadMcpMenu } from "./ThreadMcpMenu";
 import type {
   ApprovalRequestId,
   EnvironmentId,
@@ -3176,6 +3177,14 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     onInstanceModelChange={onProviderModelSelect}
                   />
                 )}
+
+                <ThreadMcpMenu
+                  key={`${environmentId}:${activeThreadId}:${selectedInstanceId}`}
+                  environmentId={environmentId}
+                  threadId={activeThreadId}
+                  instanceId={selectedInstanceId}
+                  driver={selectedProvider}
+                />
 
                 {isComposerFooterCompact ? (
                   <CompactComposerControlsMenu

@@ -11,6 +11,8 @@
  * @module ServerSettings
  */
 import {
+  McpConnection,
+  type McpServer,
   DEFAULT_TEXT_GENERATION_MODEL,
   DEFAULT_TEXT_GENERATION_MODEL_BY_PROVIDER,
   DEFAULT_MODEL_BY_PROVIDER,
@@ -57,6 +59,9 @@ export { resolveSourceControlWriterModelSelection } from "@t3tools/shared/server
 const encodeServerSettings = Schema.encodeEffect(ServerSettings);
 const encodeServerSettingsJson = Schema.encodeUnknownEffect(fromJsonStringPretty(ServerSettings));
 const decodeServerSettings = Schema.decodeUnknownEffect(ServerSettings);
+
+const decodeMcpConnection = Schema.decodeUnknownEffect(Schema.fromJsonString(McpConnection));
+const encodeMcpConnection = Schema.encodeEffect(Schema.fromJsonString(McpConnection));
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
@@ -109,7 +114,16 @@ export function redactServerSettingsForClient(settings: ServerSettings): ServerS
         : instance,
     ]),
   );
-  return { ...settings, providerInstances };
+  return {
+    ...settings,
+    providerInstances,
+    mcpServers: Object.fromEntries(
+      Object.entries(settings.mcpServers).map(([id, { connection, ...server }]) => [
+        id,
+        { ...server, ...(connection ? { connectionRedacted: true } : {}) },
+      ]),
+    ),
+  };
 }
 
 export class ServerSettingsService extends Context.Service<
@@ -320,6 +334,40 @@ const make = Effect.gen(function* () {
       const providerInstances: Record<string, ProviderInstanceConfig> = {
         ...settings.providerInstances,
       };
+      const mcpServers: Record<string, McpServer> = {};
+      for (const [id, server] of Object.entries(settings.mcpServers)) {
+        if (!server.connection && server.connectionRedacted) {
+          const secret = yield* secretStore
+            .get(`mcp-connection-${id}`)
+            .pipe(
+              Effect.mapError(
+                (cause) =>
+                  new ServerSettingsError({ settingsPath, operation: "read-secret", cause }),
+              ),
+            );
+          if (Option.isNone(secret)) {
+            return yield* new ServerSettingsError({
+              settingsPath,
+              operation: "read-secret",
+              cause: new Error("MCP connection is missing. Re-enter it in Settings."),
+            });
+          }
+          const connection = yield* decodeMcpConnection(textDecoder.decode(secret.value)).pipe(
+            Effect.mapError(
+              () =>
+                new ServerSettingsError({
+                  settingsPath,
+                  operation: "read-secret",
+                  cause: new Error("Invalid stored MCP connection."),
+                }),
+            ),
+          );
+          mcpServers[id] = { ...server, connection };
+        } else {
+          mcpServers[id] = server;
+        }
+      }
+
       for (const [instanceId, instance] of Object.entries(settings.providerInstances)) {
         if (!instance.environment) continue;
         const environment: ProviderInstanceEnvironmentVariable[] = [];
@@ -354,6 +402,7 @@ const make = Effect.gen(function* () {
       }
       return {
         ...settings,
+        mcpServers,
         providerInstances: providerInstances as ServerSettings["providerInstances"],
       };
     });
@@ -383,6 +432,48 @@ const make = Effect.gen(function* () {
       const providerInstances: Record<string, ProviderInstanceConfig> = {
         ...next.providerInstances,
       };
+      const mcpServers: Record<string, McpServer> = {};
+      for (const [id, { connection, ...server }] of Object.entries(next.mcpServers)) {
+        if (connection) {
+          const encodedConnection = yield* encodeMcpConnection(connection).pipe(
+            Effect.mapError(
+              () =>
+                new ServerSettingsError({
+                  settingsPath,
+                  operation: "normalize",
+                  cause: new Error("Invalid MCP connection."),
+                }),
+            ),
+          );
+          yield* secretStore
+            .set(`mcp-connection-${id}`, textEncoder.encode(encodedConnection))
+            .pipe(
+              Effect.mapError(
+                (cause) =>
+                  new ServerSettingsError({ settingsPath, operation: "write-secret", cause }),
+              ),
+            );
+        } else if (!server.connectionRedacted || !current.mcpServers[id]) {
+          return yield* new ServerSettingsError({
+            settingsPath,
+            operation: "normalize",
+            cause: new Error("An MCP connection is required."),
+          });
+        }
+        mcpServers[id] = { ...server, connectionRedacted: true };
+      }
+      for (const id of Object.keys(current.mcpServers)) {
+        if (!next.mcpServers[id]) {
+          yield* secretStore
+            .remove(`mcp-connection-${id}`)
+            .pipe(
+              Effect.mapError(
+                (cause) =>
+                  new ServerSettingsError({ settingsPath, operation: "remove-secret", cause }),
+              ),
+            );
+        }
+      }
 
       const nextSecretKeys = new Set<string>();
       for (const [instanceId, instance] of Object.entries(next.providerInstances)) {
@@ -483,6 +574,7 @@ const make = Effect.gen(function* () {
 
       return {
         ...next,
+        mcpServers,
         providerInstances: providerInstances as ServerSettings["providerInstances"],
       };
     });

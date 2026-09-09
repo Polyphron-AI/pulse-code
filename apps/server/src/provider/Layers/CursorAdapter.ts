@@ -1,3 +1,4 @@
+import * as ExternalMcp from "../../mcp/ExternalMcp.ts";
 /**
  * CursorAdapterLive — Cursor CLI (`agent acp`) via ACP.
  *
@@ -543,6 +544,7 @@ export function makeCursorAdapter(
             ...(mcpSession
               ? {
                   mcpServers: [
+                    ...ExternalMcp.acpMcpServers(ExternalMcp.readExternalMcp(input.threadId)),
                     {
                       type: "http" as const,
                       name: "t3-code",
@@ -556,7 +558,11 @@ export function makeCursorAdapter(
                     },
                   ],
                 }
-              : {}),
+              : {
+                  mcpServers: ExternalMcp.acpMcpServers(
+                    ExternalMcp.readExternalMcp(input.threadId),
+                  ),
+                }),
             ...acpNativeLoggers,
           }).pipe(
             Effect.provideService(Crypto.Crypto, crypto),

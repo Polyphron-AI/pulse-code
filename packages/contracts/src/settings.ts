@@ -1,3 +1,4 @@
+import { McpServers, ThreadMcpOverrides } from "./mcp.ts";
 import * as Effect from "effect/Effect";
 import * as Duration from "effect/Duration";
 import * as Schema from "effect/Schema";
@@ -689,6 +690,8 @@ export const ServerSettings = Schema.Struct({
   providerInstances: Schema.Record(ProviderInstanceId, ProviderInstanceConfig).pipe(
     Schema.withDecodingDefault(Effect.succeed({})),
   ),
+  mcpServers: McpServers.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
+  threadMcpOverrides: ThreadMcpOverrides.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   observability: ObservabilitySettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
 });
 export type ServerSettings = typeof ServerSettings.Type;
@@ -837,6 +840,8 @@ export const ServerSettingsPatch = Schema.Struct({
   // patches risk leaving driver-specific config in a half-merged state.
   // The web UI sends a fully-formed map every time it edits this field.
   providerInstances: Schema.optionalKey(Schema.Record(ProviderInstanceId, ProviderInstanceConfig)),
+  mcpServers: Schema.optionalKey(McpServers),
+  threadMcpOverrides: Schema.optionalKey(ThreadMcpOverrides),
 });
 export type ServerSettingsPatch = typeof ServerSettingsPatch.Type;
 

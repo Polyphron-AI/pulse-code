@@ -1,3 +1,4 @@
+import * as ExternalMcp from "../../mcp/ExternalMcp.ts";
 // @effect-diagnostics nodeBuiltinImport:off
 import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
@@ -307,7 +308,7 @@ function makeProviderServiceLayer() {
         ),
       ),
       directoryLayer,
-
+      defaultServerSettingsLayer,
       runtimeRepositoryLayer,
       NodeServices.layer,
     ),
@@ -2043,5 +2044,80 @@ describe("agent browser access", () => {
 
       assert.deepEqual(issued, [threadId]);
     }).pipe(Effect.provide(NodeServices.layer)),
+  );
+});
+
+const mcpRouting = makeProviderServiceLayer();
+mcpRouting.layer("thread MCP changes", (it) => {
+  it.effect(
+    "applies defaults at startup and reconnects only the changed thread with its history",
+    () =>
+      Effect.gen(function* () {
+        const service = yield* ProviderService.ProviderService;
+        const settings = yield* ServerSettings.ServerSettingsService;
+        const threadId = asThreadId("mcp-reconnect");
+        yield* settings.updateSettings({
+          mcpServers: {
+            example: {
+              name: "Example",
+              defaultProviders: [codexInstanceId],
+              connection: { type: "http", url: "https://example.com/mcp" },
+            },
+          },
+        });
+        const session = yield* service.startSession(threadId, {
+          threadId,
+          providerInstanceId: codexInstanceId,
+          cwd: "/project",
+          runtimeMode: "full-access",
+        });
+        assert.isDefined(ExternalMcp.readExternalMcp(threadId).example);
+        yield* settings.updateSettings({ threadMcpOverrides: { [threadId]: { example: false } } });
+        mcpRouting.codex.startSession.mockClear();
+        mcpRouting.codex.stopSession.mockClear();
+        yield* service.sendTurn({ threadId, input: "hello", interactionMode: "default" });
+        assert.equal(mcpRouting.codex.stopSession.mock.calls.length, 1);
+        assert.deepEqual(
+          mcpRouting.codex.startSession.mock.calls[0]?.[0].resumeCursor,
+          session.resumeCursor,
+        );
+        assert.equal(mcpRouting.codex.startSession.mock.calls[0]?.[0].cwd, "/project");
+        assert.deepEqual(ExternalMcp.readExternalMcp(threadId), {});
+        yield* service.sendTurn({ threadId, input: "again", interactionMode: "default" });
+        assert.equal(mcpRouting.codex.stopSession.mock.calls.length, 1);
+      }),
+  );
+  it.effect("does not interrupt an active turn when MCP settings change", () =>
+    Effect.gen(function* () {
+      const service = yield* ProviderService.ProviderService;
+      const settings = yield* ServerSettings.ServerSettingsService;
+      const threadId = asThreadId("mcp-active");
+      yield* settings.updateSettings({
+        mcpServers: {
+          example: {
+            name: "Example",
+            defaultProviders: [],
+            connection: { type: "http", url: "https://example.com/mcp" },
+          },
+        },
+      });
+      yield* service.startSession(threadId, {
+        threadId,
+        providerInstanceId: codexInstanceId,
+        runtimeMode: "full-access",
+      });
+      mcpRouting.codex.updateSession(threadId, (session) => ({
+        ...session,
+        activeTurnId: asTurnId("running"),
+      }));
+      yield* settings.updateSettings({ threadMcpOverrides: { [threadId]: { example: true } } });
+      mcpRouting.codex.stopSession.mockClear();
+      const failure = yield* Effect.flip(
+        service.sendTurn({ threadId, input: "follow up", interactionMode: "default" }),
+      );
+      assert.equal(failure._tag, "ProviderValidationError");
+      assert.equal(mcpRouting.codex.stopSession.mock.calls.length, 0);
+      assert.deepEqual(ExternalMcp.readExternalMcp(threadId), {});
+    }),
   );
 });

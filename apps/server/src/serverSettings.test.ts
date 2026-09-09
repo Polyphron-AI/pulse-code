@@ -813,3 +813,45 @@ it.layer(NodeServices.layer)("server settings", (it) => {
     }).pipe(Effect.provide(makeServerSettingsLayer())),
   );
 });
+
+it.effect(
+  "MCP credentials stay outside settings and client responses, survive edits, and are removed",
+  () =>
+    Effect.gen(function* () {
+      const service = yield* ServerSettingsModule.ServerSettingsService;
+      const config = yield* ServerConfig.ServerConfig;
+      const fs = yield* FileSystem.FileSystem;
+      const added = yield* service.updateSettings({
+        mcpServers: {
+          example: {
+            name: "Example",
+            defaultProviders: [ProviderInstanceId.make("codex")],
+            connection: {
+              type: "http",
+              url: "https://example.com/mcp",
+              headers: { Authorization: "private-mcp-token" },
+            },
+          },
+        },
+      });
+      assert.notInclude(yield* fs.readFileString(config.settingsPath), "private-mcp-token");
+      const safe = ServerSettingsModule.redactServerSettingsForClient(added);
+      assert.isUndefined(safe.mcpServers.example?.connection);
+      assert.isTrue(safe.mcpServers.example?.connectionRedacted);
+      yield* service.updateSettings({
+        mcpServers: { example: { ...safe.mcpServers.example!, name: "Renamed" } },
+      });
+      const loaded = yield* service.getSettings;
+      assert.deepEqual(loaded.mcpServers.example?.connection, added.mcpServers.example?.connection);
+      yield* service.updateSettings({
+        threadMcpOverrides: { a: { example: true }, b: { example: false } },
+      });
+      yield* service.updateSettings({ threadMcpOverrides: { a: { example: null } } });
+      assert.deepEqual((yield* service.getSettings).threadMcpOverrides, {
+        a: { example: null },
+        b: { example: false },
+      });
+      yield* service.updateSettings({ mcpServers: {} });
+      assert.deepEqual((yield* service.getSettings).mcpServers, {});
+    }).pipe(Effect.provide(makeServerSettingsLayer()), Effect.provide(NodeServices.layer)),
+);
