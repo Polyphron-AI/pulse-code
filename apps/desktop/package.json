@@ -24,11 +24,14 @@
     "electron": "41.5.0",
     "electron-store": "^8.2.0",
     "electron-updater": "^6.6.2",
+    "imapflow": "^1.7.8",
+    "mailparser": "^3.9.22",
     "playwright-core": "1.60.0",
     "react-grab": "^0.1.32"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
+    "@types/mailparser": "^3.4.6",
     "@types/node": "catalog:",
     "cross-env": "^10.1.0",
     "electron-builder": "26.15.6",

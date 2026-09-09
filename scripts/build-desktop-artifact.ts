@@ -33,6 +33,8 @@ import {
   selectCliRuntimeExternalDependencies,
 } from "./lib/cli-external-packages.ts";
 import { loadRepoEnv } from "./lib/public-config.ts";
+import { stageTalkWorker } from "./lib/talk-worker-package.ts";
+import { officeOAuthConfigurationFromEnvironment } from "../apps/desktop/src/office/OfficeOAuthConfig.ts";
 import { resolveCatalogDependencies } from "./lib/resolve-catalog.ts";
 
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
@@ -808,6 +810,8 @@ export const DESKTOP_FILE_EXCLUSIONS = [
   // staging inputs out of app.asar; they are emitted once at resources/.
   "!apps/desktop/prod-resources/windows-server",
   "!apps/desktop/prod-resources/windows-server/**/*",
+  "!apps/desktop/prod-resources/talk",
+  "!apps/desktop/prod-resources/talk/**/*",
 ] as const;
 // Windows ships the server tree (bundle + node_modules) as a separate
 // resources/server.asar sidecar instead of loose files: the NSIS installer
@@ -2053,6 +2057,7 @@ export function resolvePackageManagerUserAgent(packageManager: string): string {
 }
 
 export function resolveDesktopProductName(version: string): string {
+  if (version.includes("-pulse-preview.")) return "Pulse Preview";
   return resolveDesktopUpdateChannel(version) === "nightly"
     ? "Pulse Code (Nightly)"
     : (desktopPackageJson.productName ?? "Pulse Code");
@@ -2073,9 +2078,11 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
     | undefined,
 ) {
   const buildConfig: Record<string, unknown> = {
-    appId: DESKTOP_APP_ID,
+    appId: version.includes("-pulse-preview.") ? "ai.polyphron.pulse.preview" : DESKTOP_APP_ID,
     productName: resolveDesktopProductName(version),
-    artifactName: "Pulse-Code-${version}-${arch}.${ext}",
+    artifactName: version.includes("-pulse-preview.")
+      ? "Pulse-Preview-${version}-${arch}.${ext}"
+      : "Pulse-Code-${version}-${arch}.${ext}",
     electronLanguages: [...DESKTOP_ELECTRON_LANGUAGES],
     files: [...DESKTOP_FILE_EXCLUSIONS],
     directories: {
@@ -2087,12 +2094,20 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
     // hand-packed server.asar sidecar (see WINDOWS_SERVER_ASAR_RESOURCE).
     extraResources: [
       ...DESKTOP_EXTRA_RESOURCES,
-      ...(platform === "win" ? WINDOWS_SERVER_EXTRA_RESOURCES : []),
+      ...(platform === "win"
+        ? [
+            ...WINDOWS_SERVER_EXTRA_RESOURCES,
+            { from: "apps/desktop/prod-resources/talk", to: "talk" },
+            { from: "apps/desktop/prod-resources/office-oauth.json", to: "office-oauth.json" },
+          ]
+        : []),
     ],
   };
   const updateChannel = resolveDesktopUpdateChannel(version);
   const publishConfig = yield* resolveGitHubPublishConfig(updateChannel);
-  if (publishConfig) {
+  if (version.includes("-pulse-preview.")) {
+    buildConfig.publish = [];
+  } else if (publishConfig) {
     buildConfig.publish = [publishConfig];
   } else if (mockUpdates) {
     buildConfig.publish = [
@@ -2178,7 +2193,9 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
     const winConfig: Record<string, unknown> = {
       target: [target],
       executableName: DESKTOP_EXECUTABLE_NAME,
-      protocols: [{ name: "Pulse Code", schemes: [...DESKTOP_PROTOCOL_SCHEMES] }],
+      protocols: version.includes("-pulse-preview.")
+        ? []
+        : [{ name: "Pulse Code", schemes: [...DESKTOP_PROTOCOL_SCHEMES] }],
       icon: "icon.ico",
       // Resource editing applies the product metadata and icon independently
       // of code signing. Disabling it for local unsigned builds leaves the
@@ -2881,6 +2898,22 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
   // electron-builder is filtering out stageResourcesDir directory in the AppImage for production
   const stageProdResourcesDir = path.join(stageAppDir, "apps/desktop/prod-resources");
   yield* fs.copy(stageResourcesDir, stageProdResourcesDir);
+  if (options.platform === "win") {
+    const talkWorkerDir = yield* Config.string("PULSE_TALK_WORKER_DIR");
+    if (options.arch !== "x64")
+      return yield* Effect.die(
+        new Error("The unified Talk worker is currently packaged for Windows x64 only."),
+      );
+    yield* Effect.promise(() =>
+      stageTalkWorker(talkWorkerDir, path.join(stageProdResourcesDir, "talk")),
+    );
+    yield* Effect.log("[desktop-artifact] Verified and staged the native Talk worker.");
+    const officeOAuth = officeOAuthConfigurationFromEnvironment(loadRepoEnv({ repoRoot }));
+    yield* fs.writeFileString(
+      path.join(stageProdResourcesDir, "office-oauth.json"),
+      JSON.stringify(officeOAuth),
+    );
+  }
 
   const configuredMacPasskeySigning =
     options.platform === "mac" && options.signed
@@ -3103,8 +3136,11 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
   // Only Windows unpacks anything; macOS and Linux keep the whole tree inside
   // the app asar. Windows validates and executes the separately packed server
   // sidecar after electron-builder copies it into the final payload.
+  let windowsPayload:
+    | { packagedAppDir: string; fileCount: number; unpackedFiles: readonly string[] }
+    | undefined;
   if (options.platform === "win") {
-    yield* validateWindowsPackagedPayload({
+    windowsPayload = yield* validateWindowsPackagedPayload({
       stageDistDir,
       appExecutableName: WINDOWS_DESKTOP_EXECUTABLE_FILE_NAME,
       targetArch: options.arch,
@@ -3114,6 +3150,21 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
 
   const stageEntries = yield* fs.readDirectory(stageDistDir);
   yield* fs.makeDirectory(options.outputDir, { recursive: true });
+  if (windowsPayload && options.keepStage) {
+    yield* fs.writeFileString(
+      path.join(options.outputDir, "packaged-payload.json"),
+      JSON.stringify(
+        {
+          schemaVersion: 1,
+          ...windowsPayload,
+          stageAppDir,
+          version: appVersion,
+        },
+        null,
+        2,
+      ),
+    );
+  }
 
   const copiedArtifacts: string[] = [];
   for (const entry of stageEntries) {

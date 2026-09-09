@@ -534,7 +534,7 @@ export function OrcaWorkspace(props: {
           <span className="mx-2 text-muted-foreground/35" aria-hidden>
             /
           </span>
-          <span className="truncate text-sm text-muted-foreground">ORCA</span>
+          <span className="truncate text-sm text-muted-foreground">Code</span>
         </header>
 
         <main className="min-h-0 flex-1 overflow-y-auto">
@@ -549,12 +549,12 @@ export function OrcaWorkspace(props: {
                       tabIndex={-1}
                       className="font-heading text-2xl font-semibold tracking-tight outline-none sm:text-3xl"
                     >
-                      ORCA workspace
+                      Code workspace
                     </h1>
                     <Badge variant="outline">Pulse coordination view</Badge>
                   </div>
                   <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground sm:text-base">
-                    Pulse-native visibility across active threads, with reviewable OMP handoffs.
+                    An attention-first overview of your projects and threads.
                   </p>
                 </div>
               </div>

@@ -11,6 +11,9 @@ import * as ElectronDialog from "../electron/ElectronDialog.ts";
 import * as ElectronProtocol from "../electron/ElectronProtocol.ts";
 import * as ElectronSafeStorage from "../electron/ElectronSafeStorage.ts";
 import { installDesktopIpcHandlers } from "../ipc/DesktopIpcHandlers.ts";
+import { installOfficeRuntime } from "../office/OfficeRuntime.ts";
+
+let officeRuntime: Awaited<ReturnType<typeof installOfficeRuntime>> | undefined;
 import * as DesktopAppIdentity from "./DesktopAppIdentity.ts";
 import * as DesktopClerk from "./DesktopClerk.ts";
 import * as DesktopApplicationMenu from "../window/DesktopApplicationMenu.ts";
@@ -179,7 +182,10 @@ const bootstrap = Effect.gen(function* () {
     ? Option.getOrThrow(environment.devServerUrl)
     : backendConfig.httpBaseUrl;
   yield* electronProtocol.registerDesktopProtocol({
-    scheme: ElectronProtocol.getDesktopScheme(environment.isDevelopment),
+    scheme: ElectronProtocol.getDesktopScheme(
+      environment.isDevelopment,
+      environment.appUserModelId === "ai.polyphron.pulse.preview",
+    ),
     targetOrigin: rendererTarget,
     backendOrigin: backendConfig.httpBaseUrl,
     clerkFrontendApiHostname: DesktopClerk.desktopClerkFrontendApiHostname,
@@ -198,6 +204,18 @@ const bootstrap = Effect.gen(function* () {
   }
 
   yield* installDesktopIpcHandlers();
+  const appIdentity = yield* DesktopAppIdentity.DesktopAppIdentity;
+  const officeStateDir = yield* appIdentity.resolveUserDataPath;
+  officeRuntime = yield* Effect.promise(() =>
+    installOfficeRuntime({
+      stateDir: officeStateDir,
+      platform: environment.platform,
+      scheme: ElectronProtocol.getDesktopScheme(
+        environment.isDevelopment,
+        environment.appUserModelId === "ai.polyphron.pulse.preview",
+      ),
+    }),
+  );
   yield* logBootstrapInfo("bootstrap ipc handlers registered");
 
   if (!(yield* Ref.get(state.quitting))) {
@@ -300,6 +318,10 @@ const scopedProgram = Effect.scoped(
 
     yield* Effect.addFinalizer(() =>
       Effect.gen(function* () {
+        yield* Effect.promise(async () => {
+          await officeRuntime?.close();
+          officeRuntime = undefined;
+        });
         const pool = yield* DesktopBackendPool.DesktopBackendPool;
         // Stop every backend in the pool, not just the primary. The
         // electronApp.quit() path can race ahead of the layer-scope
