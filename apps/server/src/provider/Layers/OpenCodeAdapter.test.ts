@@ -1044,6 +1044,40 @@ it.layer(OpenCodeAdapterTestLayer)("OpenCodeAdapterLive", (it) => {
     }),
   );
 
+  it.effect("compacts through the native OpenCode session API", () =>
+    Effect.gen(function* () {
+      const adapter = yield* OpenCodeAdapter;
+      const threadId = asThreadId("thread-opencode-compact");
+      runtimeMock.state.subscribedEvents.push({
+        type: "session.compacted",
+        properties: { sessionID: "http://127.0.0.1:9999/session" },
+      });
+      const eventsFiber = yield* adapter.streamEvents.pipe(
+        Stream.filter((event) => event.threadId === threadId),
+        Stream.take(3),
+        Stream.runCollect,
+        Effect.forkChild,
+      );
+      yield* adapter.startSession({
+        provider: ProviderDriverKind.make("opencode"),
+        threadId,
+        runtimeMode: "full-access",
+      });
+      NodeAssert.ok(adapter.compaction?.type === "native");
+      yield* adapter.compaction.start(
+        threadId,
+        createModelSelection(ProviderInstanceId.make("opencode"), "openai/gpt-5"),
+      );
+      const summarizeCall = runtimeMock.state.summarizeCalls[0] as Record<string, unknown>;
+      NodeAssert.equal(summarizeCall.modelID, "gpt-5");
+      const events = Array.from(yield* Fiber.join(eventsFiber));
+      yield* adapter.stopSession(threadId);
+      const compacted = events.some(
+        (event) => event.type === "thread.state.changed" && event.payload.state === "compacted",
+      );
+      NodeAssert.equal(compacted, true);
+    }),
+  );
   it.effect("falls back to a fresh session when the persisted session is gone", () =>
     Effect.gen(function* () {
       const adapter = yield* OpenCodeAdapter;

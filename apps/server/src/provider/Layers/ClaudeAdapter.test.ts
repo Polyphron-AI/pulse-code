@@ -5910,6 +5910,249 @@ describe("ClaudeAdapterLive", () => {
     );
   });
 
+  it.effect("publishes before and after token counts when Claude compacts", () => {
+    const harness = makeHarness();
+    return Effect.gen(function* () {
+      const adapter = yield* ClaudeAdapter;
+      const session = yield* adapter.startSession({
+        threadId: THREAD_ID,
+        provider: ProviderDriverKind.make("claudeAgent"),
+        runtimeMode: "full-access",
+      });
+      yield* Stream.take(adapter.streamEvents, 3).pipe(Stream.runDrain);
+      const compacted = yield* adapter.streamEvents.pipe(
+        Stream.filter(
+          (event) => event.type === "thread.state.changed" && event.payload.state === "compacted",
+        ),
+        Stream.runHead,
+        Effect.forkChild,
+      );
+      harness.query.emit({
+        type: "system",
+        subtype: "compact_boundary",
+        compact_metadata: { pre_tokens: 200, post_tokens: 40 },
+        session_id: "sdk-compaction",
+        uuid: "compaction-counts",
+      } as unknown as SDKMessage);
+      const event = yield* Fiber.join(compacted);
+      assert.equal(event._tag, "Some");
+      if (event._tag === "Some" && event.value.type === "thread.state.changed") {
+        assert.equal(event.value.payload.beforeTokens, 200);
+        assert.equal(event.value.payload.afterTokens, 40);
+      }
+      yield* adapter.stopSession(session.threadId);
+    }).pipe(
+      Effect.provideService(Random.Random, makeDeterministicRandomService()),
+      Effect.provide(harness.layer),
+    );
+  });
+
+  it.effect("completes with result usage without querying current context usage", () => {
+    const harness = makeHarness();
+    let getContextUsageCalls = 0;
+    Object.assign(harness.query, {
+      getContextUsage: async () => {
+        getContextUsageCalls += 1;
+        return {
+          totalTokens: 999,
+          maxTokens: 200000,
+          isAutoCompactEnabled: true,
+        };
+      },
+    });
+    return Effect.gen(function* () {
+      const adapter = yield* ClaudeAdapter;
+      const runtimeEventsFiber = yield* Stream.take(adapter.streamEvents, 7).pipe(
+        Stream.runCollect,
+        Effect.forkChild,
+      );
+      yield* adapter.startSession({
+        threadId: THREAD_ID,
+        provider: ProviderDriverKind.make("claudeAgent"),
+        runtimeMode: "full-access",
+      });
+      yield* adapter.sendTurn({
+        threadId: THREAD_ID,
+        input: "hello",
+        attachments: [],
+      });
+
+      harness.query.emit({
+        type: "assistant",
+        session_id: "sdk-session-result-usage",
+        uuid: "assistant-result-usage-1",
+        parent_tool_use_id: null,
+        message: {
+          id: "assistant-message-result-usage-1",
+          role: "assistant",
+          content: [],
+          usage: {
+            input_tokens: 80,
+            output_tokens: 20,
+          },
+        },
+      } as unknown as SDKMessage);
+      harness.query.emit({
+        type: "assistant",
+        session_id: "sdk-session-result-usage",
+        uuid: "assistant-result-usage-2",
+        parent_tool_use_id: null,
+        message: {
+          id: "assistant-message-result-usage-2",
+          role: "assistant",
+          content: [],
+          usage: {
+            input_tokens: 180,
+            output_tokens: 20,
+          },
+        },
+      } as unknown as SDKMessage);
+      harness.query.emit({
+        type: "assistant",
+        session_id: "sdk-session-result-usage",
+        uuid: "assistant-result-usage-3",
+        parent_tool_use_id: null,
+        message: {
+          id: "assistant-message-result-usage-3",
+          role: "assistant",
+          content: [],
+        },
+      } as unknown as SDKMessage);
+      harness.query.emit({
+        type: "result",
+        subtype: "success",
+        is_error: false,
+        duration_ms: 1234,
+        duration_api_ms: 1200,
+        num_turns: 1,
+        result: "done",
+        stop_reason: "end_turn",
+        session_id: "sdk-session-result-usage",
+        usage: {
+          input_tokens: 400,
+          output_tokens: 50,
+        },
+        modelUsage: {
+          "claude-opus-4-6": {
+            contextWindow: 200000,
+            maxOutputTokens: 64000,
+          },
+        },
+      } as unknown as SDKMessage);
+
+      const runtimeEvents = Array.from(yield* Fiber.join(runtimeEventsFiber));
+      assert.equal(getContextUsageCalls, 0);
+      const usageEvent = runtimeEvents.find((event) => event.type === "thread.token-usage.updated");
+      assert.equal(usageEvent?.type, "thread.token-usage.updated");
+      if (usageEvent?.type === "thread.token-usage.updated") {
+        assert.deepEqual(usageEvent.payload.usage, {
+          usedTokens: 200,
+          lastUsedTokens: 200,
+          totalProcessedTokens: 450,
+          inputTokens: 180,
+          outputTokens: 20,
+          maxTokens: 200000,
+        });
+      }
+      assert.equal(
+        runtimeEvents.find((event) => event.type === "turn.completed")?.type,
+        "turn.completed",
+      );
+    }).pipe(
+      Effect.provideService(Random.Random, makeDeterministicRandomService()),
+      Effect.provide(harness.layer),
+    );
+  });
+
+  it.effect("preserves compacted usage when completion follows an older assistant frame", () => {
+    const harness = makeHarness();
+    return Effect.gen(function* () {
+      const adapter = yield* ClaudeAdapter;
+      const runtimeEventsFiber = yield* Stream.take(adapter.streamEvents, 9).pipe(
+        Stream.runCollect,
+        Effect.forkChild,
+      );
+
+      yield* adapter.startSession({
+        threadId: THREAD_ID,
+        provider: ProviderDriverKind.make("claudeAgent"),
+        runtimeMode: "full-access",
+      });
+      yield* adapter.sendTurn({
+        threadId: THREAD_ID,
+        input: "hello",
+        attachments: [],
+      });
+      harness.query.emit({
+        type: "assistant",
+        session_id: "sdk-session-compacted-usage",
+        uuid: "assistant-compacted-usage",
+        parent_tool_use_id: null,
+        message: {
+          id: "assistant-message-compacted-usage",
+          role: "assistant",
+          content: [],
+          usage: {
+            input_tokens: 180,
+            output_tokens: 20,
+          },
+        },
+      } as unknown as SDKMessage);
+      harness.query.emit({
+        type: "system",
+        subtype: "compact_boundary",
+        compact_metadata: {
+          pre_tokens: 200,
+          post_tokens: 40,
+        },
+        session_id: "sdk-session-compacted-usage",
+        uuid: "compact-boundary-usage",
+      } as unknown as SDKMessage);
+      harness.query.emit({
+        type: "result",
+        subtype: "success",
+        is_error: false,
+        duration_ms: 1234,
+        duration_api_ms: 1200,
+        num_turns: 2,
+        result: "done",
+        stop_reason: "end_turn",
+        session_id: "sdk-session-compacted-usage",
+        usage: {
+          input_tokens: 400,
+          output_tokens: 50,
+        },
+        modelUsage: {
+          "claude-opus-4-6": {
+            contextWindow: 200000,
+            maxOutputTokens: 64000,
+          },
+        },
+      } as unknown as SDKMessage);
+
+      const runtimeEvents = Array.from(yield* Fiber.join(runtimeEventsFiber));
+      const finalUsageEvent = runtimeEvents.findLast(
+        (event) => event.type === "thread.token-usage.updated",
+      );
+      assert.equal(finalUsageEvent?.type, "thread.token-usage.updated");
+      if (finalUsageEvent?.type === "thread.token-usage.updated") {
+        assert.deepEqual(finalUsageEvent.payload.usage, {
+          usedTokens: 40,
+          lastUsedTokens: 200,
+          totalProcessedTokens: 450,
+          maxTokens: 200000,
+        });
+      }
+      assert.equal(
+        runtimeEvents.find((event) => event.type === "turn.completed")?.type,
+        "turn.completed",
+      );
+    }).pipe(
+      Effect.provideService(Random.Random, makeDeterministicRandomService()),
+      Effect.provide(harness.layer),
+    );
+  });
+
   it.effect("routes Claude resume compaction through the shared user-input UI", () => {
     const harness = makeHarness();
     return Effect.gen(function* () {

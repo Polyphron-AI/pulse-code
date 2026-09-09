@@ -35,3 +35,7 @@ provider commands. Native provider commands must start the message.
 
 Mobile offers these menus in existing threads and while composing a new task. Switching drafts
 moves the text selection to the end of the newly selected draft.
+
+## Compact an existing conversation
+
+Enter `/compact` in an idle thread to summarize its context before continuing. Codex, Claude, Cursor, Grok, and OpenCode support this action. Wait for compaction to finish before sending the next message. A new thread needs conversation history first; OMP does not currently support this action.

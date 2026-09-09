@@ -144,6 +144,9 @@ describe("ProviderCommandReactor", () => {
   });
 
   async function createHarness(input?: {
+    readonly onTurnSent?: () => Effect.Effect<void>;
+    readonly beforeReadySessionDispatch?: () => Effect.Effect<void>;
+    readonly compactThreadEffect?: () => Effect.Effect<void, ProviderAdapterRequestError>;
     readonly baseDir?: string;
     readonly threadModelSelection?: ModelSelection;
     readonly sessionModelSwitch?: "unsupported" | "in-session";
@@ -234,8 +237,9 @@ describe("ProviderCommandReactor", () => {
       Effect.succeed({
         threadId: ThreadId.make("thread-1"),
         turnId: asTurnId("turn-1"),
-      }),
+      }).pipe(Effect.tap(() => input?.onTurnSent?.() ?? Effect.void)),
     );
+    const compactThread = vi.fn((_: ThreadId) => input?.compactThreadEffect?.() ?? Effect.void);
     const interruptTurn = vi.fn((_: unknown) => Effect.void);
     const respondToRequest = vi.fn<ProviderServiceShape["respondToRequest"]>(() => Effect.void);
     const respondToUserInput = vi.fn<ProviderServiceShape["respondToUserInput"]>(() => Effect.void);
@@ -313,6 +317,7 @@ describe("ProviderCommandReactor", () => {
     const service: ProviderServiceShape = {
       startSession: startSession as ProviderServiceShape["startSession"],
       sendTurn: sendTurn as ProviderServiceShape["sendTurn"],
+      compactThread,
       interruptTurn: interruptTurn as ProviderServiceShape["interruptTurn"],
       respondToRequest: respondToRequest as ProviderServiceShape["respondToRequest"],
       respondToUserInput: respondToUserInput as ProviderServiceShape["respondToUserInput"],
@@ -380,7 +385,11 @@ describe("ProviderCommandReactor", () => {
                 return Effect.die(new Error("Injected title regeneration completion failure"));
               }
             }
-            return engine.dispatch(command);
+            return (
+              command.type === "thread.session.set" && command.session.status === "ready"
+                ? (input?.beforeReadySessionDispatch?.() ?? Effect.void)
+                : Effect.void
+            ).pipe(Effect.andThen(engine.dispatch(command)));
           },
           get streamDomainEvents() {
             return engine.streamDomainEvents;
@@ -495,6 +504,7 @@ describe("ProviderCommandReactor", () => {
     return {
       engine,
       readModel: () => Effect.runPromise(snapshotQuery.getSnapshot()),
+      compactThread,
       startSession,
       sendTurn,
       interruptTurn,
@@ -514,6 +524,98 @@ describe("ProviderCommandReactor", () => {
       },
     };
   }
+
+  effectIt.effect("rejects compaction without conversation history", () =>
+    Effect.gen(function* () {
+      const harness = yield* Effect.promise(() => createHarness());
+      yield* harness.engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.make("compact-empty"),
+        threadId: ThreadId.make("thread-1"),
+        message: {
+          messageId: asMessageId("compact-empty"),
+          role: "user",
+          text: "/compact",
+          attachments: [],
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        createdAt: "2026-01-01T00:00:00.000Z",
+      });
+      yield* Effect.promise(() => harness.drain());
+      expect(harness.compactThread).not.toHaveBeenCalled();
+      expect(harness.sendTurn).not.toHaveBeenCalled();
+      const snapshot = yield* Effect.promise(() => harness.readModel());
+      expect(
+        snapshot.threads[0]?.activities.some(
+          (activity) => activity.kind === "provider.turn.start.failed",
+        ),
+      ).toBe(true);
+    }),
+  );
+
+  effectIt.effect("routes manual compaction and blocks ordinary turns until it finishes", () =>
+    Effect.gen(function* () {
+      const sent = yield* Deferred.make<void>();
+      const compactStarted = yield* Deferred.make<void>();
+      const releaseCompact = yield* Deferred.make<void>();
+      const restoringReady = yield* Deferred.make<void>();
+      const harness = yield* Effect.promise(() =>
+        createHarness({
+          onTurnSent: () => Deferred.succeed(sent, undefined).pipe(Effect.asVoid),
+          compactThreadEffect: () =>
+            Deferred.succeed(compactStarted, undefined).pipe(
+              Effect.andThen(Deferred.await(releaseCompact)),
+            ),
+          beforeReadySessionDispatch: () =>
+            Deferred.succeed(restoringReady, undefined).pipe(Effect.asVoid),
+        }),
+      );
+      const threadId = ThreadId.make("thread-1");
+      const dispatchTurn = (id: string, text: string) =>
+        harness.engine.dispatch({
+          type: "thread.turn.start",
+          commandId: CommandId.make(id),
+          threadId,
+          message: { messageId: asMessageId(id), role: "user" as const, text, attachments: [] },
+          interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+          runtimeMode: "approval-required" as const,
+          createdAt: "2026-01-01T00:00:00.000Z",
+        });
+      yield* dispatchTurn("before-compact", "Existing conversation");
+      yield* Deferred.await(sent);
+      yield* harness.engine.dispatch({
+        type: "thread.session.set",
+        commandId: CommandId.make("ready-before-compact"),
+        threadId,
+        session: {
+          threadId,
+          status: "ready",
+          providerName: "codex",
+          providerInstanceId: ProviderInstanceId.make("codex"),
+          runtimeMode: "approval-required",
+          activeTurnId: null,
+          lastError: null,
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+        createdAt: "2026-01-01T00:00:00.000Z",
+      });
+      yield* dispatchTurn("manual-compact", "/compact");
+      yield* Deferred.await(compactStarted);
+      yield* dispatchTurn("during-compact", "Wait for compaction");
+      yield* Effect.promise(() => harness.drain());
+      expect(harness.compactThread).toHaveBeenCalledTimes(1);
+      expect(harness.sendTurn).toHaveBeenCalledTimes(1);
+      const snapshot = yield* Effect.promise(() => harness.readModel());
+      expect(
+        snapshot.threads[0]?.activities.some(
+          (activity) => activity.kind === "provider.turn.start.failed",
+        ),
+      ).toBe(true);
+      yield* Deferred.succeed(releaseCompact, undefined);
+      yield* Deferred.await(restoringReady);
+    }),
+  );
 
   it("reacts to thread.turn.start by ensuring session and sending provider turn", async () => {
     const harness = await createHarness();

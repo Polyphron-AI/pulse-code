@@ -15,7 +15,6 @@ import {
   type PermissionUpdate,
   type SDKMessage,
   type SDKRateLimitInfo,
-  type SDKControlGetContextUsageResponse,
   type SDKResultMessage,
   type SettingSource,
   type SDKUserMessage,
@@ -149,6 +148,8 @@ interface ClaudeTurnState {
   readonly assistantTextBlocks: Map<number, AssistantTextBlockState>;
   readonly assistantTextBlockOrder: Array<AssistantTextBlockState>;
   readonly capturedProposedPlanKeys: Set<string>;
+  latestAssistantUsage: unknown | undefined;
+  compactedSinceLatestAssistantUsage: boolean;
   nextSyntheticAssistantBlockIndex: number;
   authenticationFailureMessage: string | undefined;
   rejectedRateLimitTypes: Set<string>;
@@ -303,7 +304,6 @@ interface ClaudeQueryRuntime extends AsyncIterable<SDKMessage> {
   readonly setModel: (model?: string) => Promise<void>;
   readonly setPermissionMode: (mode: PermissionMode) => Promise<void>;
   readonly setMaxThinkingTokens: (maxThinkingTokens: number | null) => Promise<void>;
-  readonly getContextUsage?: () => Promise<SDKControlGetContextUsageResponse>;
   readonly close: () => void;
 }
 
@@ -660,20 +660,6 @@ function normalizeClaudeActiveTokenUsage(
   });
 }
 
-function normalizeClaudeContextUsageApiSnapshot(
-  value: SDKControlGetContextUsageResponse,
-  totalProcessedTokens?: number,
-): ThreadTokenUsageSnapshot | undefined {
-  const autoCompactThreshold = finitePositiveInteger(value.autoCompactThreshold);
-  return makeClaudeTokenUsageSnapshot({
-    activeTokens: value.totalTokens,
-    contextWindow: value.maxTokens,
-    ...(totalProcessedTokens !== undefined ? { totalProcessedTokens } : {}),
-    compactsAutomatically: value.isAutoCompactEnabled,
-    ...(autoCompactThreshold !== undefined ? { autoCompactThreshold } : {}),
-  });
-}
-
 function compactBoundaryTokenUsageSnapshot(
   message: Record<string, unknown>,
   contextWindow?: number,
@@ -691,12 +677,17 @@ function compactBoundaryTokenUsageSnapshot(
   }
 
   const preTokens = finiteNonNegativeInteger(compactMetadata.pre_tokens);
-  return makeClaudeTokenUsageSnapshot({
+  const snapshot = makeClaudeTokenUsageSnapshot({
     activeTokens: postTokens,
     ...(preTokens !== undefined ? { lastUsedTokens: preTokens } : {}),
     ...(contextWindow !== undefined ? { contextWindow } : {}),
     ...(totalProcessedTokens !== undefined ? { totalProcessedTokens } : {}),
   });
+  if (snapshot === undefined || preTokens !== undefined) {
+    return snapshot;
+  }
+  const { lastUsedTokens: _lastUsedTokens, ...snapshotWithoutBeforeTokens } = snapshot;
+  return snapshotWithoutBeforeTokens;
 }
 
 function normalizeClaudeTaskProgressTokenUsage(
@@ -2228,29 +2219,6 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     });
   });
 
-  const queryCurrentContextUsage = Effect.fn("queryCurrentContextUsage")(function* (
-    context: ClaudeSessionContext,
-    totalProcessedTokens?: number,
-  ) {
-    if (!context.query.getContextUsage) {
-      return undefined;
-    }
-
-    const usage = yield* Effect.promise(async () => {
-      try {
-        return await context.query.getContextUsage?.();
-      } catch {
-        return undefined;
-      }
-    });
-    if (!usage) {
-      return undefined;
-    }
-
-    context.lastKnownContextWindow = usage.maxTokens;
-    return normalizeClaudeContextUsageApiSnapshot(usage, totalProcessedTokens);
-  });
-
   const emitProposedPlanCompleted = Effect.fn("emitProposedPlanCompleted")(function* (
     context: ClaudeSessionContext,
     input: {
@@ -2351,10 +2319,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
       context.lastKnownTotalProcessedTokens = accumulatedTotalProcessedTokens;
     }
 
-    const contextUsageSnapshot = yield* queryCurrentContextUsage(
-      context,
-      accumulatedTotalProcessedTokens ?? context.lastKnownTotalProcessedTokens,
-    );
+    // Avoid getContextUsage because its token-count fallback can make extra model requests.
     const resultUsageRecord =
       result?.usage && typeof result.usage === "object" && !Array.isArray(result.usage)
         ? (result.usage as Record<string, unknown>)
@@ -2376,24 +2341,31 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
           accumulatedTotalProcessedTokens ?? context.lastKnownTotalProcessedTokens,
         )
       : undefined;
+    const latestAssistantSnapshot = normalizeClaudeActiveTokenUsage(
+      context.turnState?.latestAssistantUsage,
+      maxTokens,
+      accumulatedTotalProcessedTokens ?? context.lastKnownTotalProcessedTokens,
+    );
     const lastGoodUsage = context.lastKnownTokenUsage;
     const usageSnapshot: ThreadTokenUsageSnapshot | undefined =
-      contextUsageSnapshot ??
-      (resultTotalOnly && lastGoodUsage
-        ? {
-            ...lastGoodUsage,
-            ...(typeof maxTokens === "number" && Number.isFinite(maxTokens) && maxTokens > 0
-              ? { maxTokens }
-              : {}),
-            ...(typeof accumulatedTotalProcessedTokens === "number" &&
-            Number.isFinite(accumulatedTotalProcessedTokens) &&
-            accumulatedTotalProcessedTokens > lastGoodUsage.usedTokens
-              ? {
-                  totalProcessedTokens: accumulatedTotalProcessedTokens,
-                }
-              : {}),
-          }
-        : resultIterationSnapshot) ??
+      latestAssistantSnapshot ??
+      (context.turnState?.compactedSinceLatestAssistantUsage
+        ? undefined
+        : resultTotalOnly && lastGoodUsage
+          ? {
+              ...lastGoodUsage,
+              ...(typeof maxTokens === "number" && Number.isFinite(maxTokens) && maxTokens > 0
+                ? { maxTokens }
+                : {}),
+              ...(typeof accumulatedTotalProcessedTokens === "number" &&
+              Number.isFinite(accumulatedTotalProcessedTokens) &&
+              accumulatedTotalProcessedTokens > lastGoodUsage.usedTokens
+                ? {
+                    totalProcessedTokens: accumulatedTotalProcessedTokens,
+                  }
+                : {}),
+            }
+          : resultIterationSnapshot) ??
       (lastGoodUsage
         ? {
             ...lastGoodUsage,
@@ -3040,6 +3012,8 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         assistantTextBlocks: new Map(),
         assistantTextBlockOrder: [],
         capturedProposedPlanKeys: new Set(),
+        latestAssistantUsage: undefined,
+        compactedSinceLatestAssistantUsage: false,
         nextSyntheticAssistantBlockIndex: -1,
         authenticationFailureMessage: undefined,
         rejectedRateLimitTypes: new Set(),
@@ -3114,6 +3088,16 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         });
       }
       context.turnState.items.push(message.message);
+      if (
+        normalizeClaudeActiveTokenUsage(
+          message.message.usage,
+          context.lastKnownContextWindow,
+          context.lastKnownTotalProcessedTokens,
+        )
+      ) {
+        context.turnState.latestAssistantUsage = message.message.usage;
+        context.turnState.compactedSinceLatestAssistantUsage = false;
+      }
       yield* backfillAssistantTextBlocksFromSnapshot(context, message);
     }
 
@@ -3278,28 +3262,36 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
           },
         });
         return;
-      case "compact_boundary":
-        yield* emitThreadTokenUsage(
-          context,
-          compactBoundaryTokenUsageSnapshot(
-            message as unknown as Record<string, unknown>,
-            context.lastKnownContextWindow,
-            context.lastKnownTotalProcessedTokens,
-          ),
-          {
-            rawMethod: "claude/system/compact_boundary",
-            rawPayload: message,
-          },
+      case "compact_boundary": {
+        if (context.turnState) {
+          context.turnState.latestAssistantUsage = undefined;
+          context.turnState.compactedSinceLatestAssistantUsage = true;
+        }
+        const compactedUsage = compactBoundaryTokenUsageSnapshot(
+          message as unknown as Record<string, unknown>,
+          context.lastKnownContextWindow,
+          context.lastKnownTotalProcessedTokens,
         );
+        yield* emitThreadTokenUsage(context, compactedUsage, {
+          rawMethod: "claude/system/compact_boundary",
+          rawPayload: message,
+        });
         yield* offerRuntimeEvent({
           ...base,
           type: "thread.state.changed",
           payload: {
             state: "compacted",
+            ...(compactedUsage?.lastUsedTokens !== undefined
+              ? { beforeTokens: compactedUsage.lastUsedTokens }
+              : {}),
+            ...(compactedUsage?.usedTokens !== undefined
+              ? { afterTokens: compactedUsage.usedTokens }
+              : {}),
             detail: message,
           },
         });
         return;
+      }
       case "hook_started":
         yield* offerRuntimeEvent({
           ...base,
@@ -3897,7 +3889,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
 
     // Same reason as the approvals above: a request nobody can answer any more
     // must not stay open, or the thread can never be settled.
-    for (const pending of [...context.pendingUserInputs.values()]) {
+    for (const pending of context.pendingUserInputs.values()) {
       yield* pending.cancel;
     }
 
@@ -4765,6 +4757,8 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         assistantTextBlocks: new Map(),
         assistantTextBlockOrder: [],
         capturedProposedPlanKeys: new Set(),
+        latestAssistantUsage: undefined,
+        compactedSinceLatestAssistantUsage: false,
         nextSyntheticAssistantBlockIndex: -1,
         authenticationFailureMessage: undefined,
         rejectedRateLimitTypes: new Set(),
@@ -5004,6 +4998,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     capabilities: {
       sessionModelSwitch: "in-session",
     },
+    compaction: { type: "slash-command", command: "/compact" },
     startSession,
     sendTurn,
     interruptTurn,
