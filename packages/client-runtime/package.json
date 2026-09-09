@@ -182,6 +182,26 @@
     "./state/vcs": {
       "types": "./src/state/vcs.ts",
       "default": "./src/state/vcs.ts"
+    },
+    "./markdownLinks": {
+      "types": "./src/markdownLinks.ts",
+      "default": "./src/markdownLinks.ts"
+    },
+    "./markdownImages": {
+      "types": "./src/markdownImages.ts",
+      "default": "./src/markdownImages.ts"
+    },
+    "./mediaReference": {
+      "types": "./src/mediaReference.ts",
+      "default": "./src/mediaReference.ts"
+    },
+    "./mediaSource": {
+      "types": "./src/mediaSource.ts",
+      "default": "./src/mediaSource.ts"
+    },
+    "./mediaActions": {
+      "types": "./src/mediaActions.ts",
+      "default": "./src/mediaActions.ts"
     }
   },
   "scripts": {
