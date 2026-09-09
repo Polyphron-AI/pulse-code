@@ -1,6 +1,6 @@
 {
   "name": "@t3tools/web",
-  "version": "0.0.33-pulse-preview.20260909.5",
+  "version": "0.0.33-pulse-preview.20260909.6",
   "private": true,
   "type": "module",
   "scripts": {
