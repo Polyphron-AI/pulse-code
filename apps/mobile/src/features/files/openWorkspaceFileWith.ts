@@ -91,7 +91,7 @@ const nativeDependencies: OpenWorkspaceFileWithDependencies = {
   },
   share: async (uri) => {
     const { shareAsync } = await import("expo-sharing");
-    await shareAsync(uri, { dialogTitle: "Open file" });
+    await shareAsync(uri, { dialogTitle: "Save or open file" });
   },
 };
 

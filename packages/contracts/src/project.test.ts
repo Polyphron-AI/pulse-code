@@ -38,6 +38,16 @@ describe("project search inputs", () => {
 });
 
 describe("project RPC errors", () => {
+  it("explains that binary files need a download", () => {
+    const error = new ProjectReadFileError({
+      cwd: "/workspace",
+      relativePath: "report.xlsx",
+      failure: "binary_file",
+    });
+    expect(error.message).toBe(
+      "This file cannot be previewed as text. Download it to open it on your device.",
+    );
+  });
   it("derives stable messages from structured request context while retaining causes", () => {
     const cause = new Error("sensitive platform detail");
     const searchError = new ProjectSearchEntriesError({

@@ -54,21 +54,25 @@ describe("sanitizeWorkspaceFileName", () => {
 });
 
 describe("openWorkspaceFileWith", () => {
-  it("downloads the resolved asset into cache and invokes native sharing", async () => {
-    const harness = createHarness();
-    const resolveAssetUrl = vi.fn(async () => "https://environment.test/api/assets/report.pdf");
+  it.each(["report.pdf", "report.xlsx", "notes.md", "WorkspaceFileSystem.ts"])(
+    "downloads %s from its environment and invokes native sharing",
+    async (fileName) => {
+      const harness = createHarness();
+      const sourceUrl = `https://environment.test/api/assets/${fileName}`;
+      const resolveAssetUrl = vi.fn(async () => sourceUrl);
 
-    await openWorkspaceFileWith(
-      { key: "success", path: "reports/report.pdf", resolveAssetUrl },
-      harness.dependencies,
-    );
+      await openWorkspaceFileWith(
+        { key: fileName, path: `reports/${fileName}`, resolveAssetUrl },
+        harness.dependencies,
+      );
 
-    expect(resolveAssetUrl).toHaveBeenCalledOnce();
-    expect(harness.createCacheTarget).toHaveBeenCalledWith("report.pdf");
-    expect(harness.download).toHaveBeenCalledWith("https://environment.test/api/assets/report.pdf");
-    expect(harness.share).toHaveBeenCalledWith("file:///cache/report.pdf");
-    expect(harness.remove).not.toHaveBeenCalled();
-  });
+      expect(resolveAssetUrl).toHaveBeenCalledOnce();
+      expect(harness.createCacheTarget).toHaveBeenCalledWith(fileName);
+      expect(harness.download).toHaveBeenCalledWith(sourceUrl);
+      expect(harness.share).toHaveBeenCalledWith("file:///cache/report.pdf");
+      expect(harness.remove).not.toHaveBeenCalled();
+    },
+  );
 
   it("fails before requesting an asset when native sharing is unavailable", async () => {
     const harness = createHarness({ available: false });

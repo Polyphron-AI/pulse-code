@@ -28,6 +28,16 @@ describe("http dev routing", () => {
 });
 
 describe("assetResponseHeaders", () => {
+  it("forces download with the original Unicode filename and inert content type", () => {
+    expect(assetResponseHeaders("C:\\work\\supplier résumé.xlsx", true)).toMatchObject({
+      "Content-Type": "application/octet-stream",
+      "Content-Disposition": "attachment; filename*=UTF-8''supplier%20r%C3%A9sum%C3%A9.xlsx",
+    });
+    expect(assetResponseHeaders("/work/report.html", true)["Content-Type"]).toBe(
+      "application/octet-stream",
+    );
+  });
+
   it("sandboxes SVG assets", () => {
     expect(assetResponseHeaders("/attachments/user-image.svg")).toMatchObject({
       "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox",

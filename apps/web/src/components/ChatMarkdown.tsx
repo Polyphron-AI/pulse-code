@@ -1,4 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
+import { startFileDownload, useWorkspaceFileDownload } from "~/assets/downloadWorkspaceFile";
 import {
   CheckIcon,
   ChevronRightIcon,
@@ -1151,6 +1152,7 @@ const MarkdownFileLink = memo(function MarkdownFileLink({
         setIsBusy(false);
       });
   }, [onDownload]);
+  const downloadFile = useWorkspaceFileDownload(threadRef);
   const handleOpenInEditor = useCallback(() => {
     void (async () => {
       try {
@@ -1285,8 +1287,9 @@ const MarkdownFileLink = memo(function MarkdownFileLink({
       try {
         const clicked = await api.contextMenu.show(
           [
-            ...(onDownload ? [{ id: "download", label: "Download saved output" }] : []),
+            ...(onDownload ? [{ id: "download-saved", label: "Download saved output" }] : []),
             { id: "open", label: "Open in editor" },
+            ...(threadRef ? [{ id: "download", label: "Download file" }] : []),
             ...(onOpenInBrowser
               ? ([{ id: "open-in-browser", label: "Open in integrated browser" }] as const)
               : []),
@@ -1296,8 +1299,12 @@ const MarkdownFileLink = memo(function MarkdownFileLink({
           { x: event.clientX, y: event.clientY },
         );
 
-        if (clicked === "download") {
+        if (clicked === "download-saved") {
           handleDownload();
+          return;
+        }
+        if (clicked === "download") {
+          void downloadFile(iconPath);
           return;
         }
         if (clicked === "open") {
@@ -1331,6 +1338,9 @@ const MarkdownFileLink = memo(function MarkdownFileLink({
       onDownload,
       onOpenInBrowser,
       targetPath,
+      downloadFile,
+      iconPath,
+      threadRef,
     ],
   );
 
@@ -1552,18 +1562,7 @@ function ChatMarkdown({
       });
       if (result._tag === "Failure") throw squashAtomCommandFailure(result);
       const url = new URL(result.value.relativeUrl, preparedConnection.value.httpBaseUrl).href;
-      const api = readLocalApi();
-      if (!api) throw new Error("File downloads are unavailable in this client.");
-      if (window.desktopBridge) {
-        await api.shell.openExternal(url);
-      } else {
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = result.value.downloadName ?? path.split(/[\\/]/).at(-1) ?? "output";
-        document.body.append(link);
-        link.click();
-        link.remove();
-      }
+      await startFileDownload(url);
     },
     [createAssetUrl, messageId, preparedConnection, threadRef],
   );

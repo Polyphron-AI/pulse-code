@@ -1,5 +1,8 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { AssetPreviewTypeValidationError, MessageId, ThreadId } from "@t3tools/contracts";
+import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import { PROJECT_FAVICON_FALLBACK_MARKER } from "@t3tools/shared/projectFavicon";
 import { describe, expect, it } from "@effect/vitest";
 import * as Crypto from "effect/Crypto";
@@ -17,6 +20,7 @@ import * as T3ProjectFileLoader from "../project/T3ProjectFileLoader.ts";
 import * as WorkspacePaths from "../workspace/WorkspacePaths.ts";
 import { ASSET_ROUTE_PREFIX, issueAssetUrl, resolveAsset } from "./AssetAccess.ts";
 import { saveSessionOutput } from "./sessionOutputStore.ts";
+import { assetRouteLayer } from "../http.ts";
 
 const configLayer = ServerConfig.ServerConfig.layerTest(process.cwd(), {
   prefix: "t3-asset-access-test-",
@@ -74,6 +78,81 @@ describe("AssetAccess", () => {
       ).not.toBeNull();
     }).pipe(Effect.provide(testLayer)),
   );
+  it.effect("streams an Excel download over HTTP without changing its bytes", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-download-http-" });
+      const bytes = new Uint8Array([80, 75, 0, 255, 42]);
+      yield* fileSystem.writeFile(path.join(root, "supplier report.xlsx"), bytes);
+      const asset = yield* issueAssetUrl({
+        resource: {
+          _tag: "workspace-file",
+          threadId: ThreadId.make("thread-remote"),
+          path: "supplier report.xlsx",
+          download: true,
+        },
+        workspaceRoot: root,
+      });
+      yield* HttpRouter.serve(assetRouteLayer, {
+        disableListenLog: true,
+        disableLogger: true,
+      }).pipe(Layer.build);
+      const response = yield* HttpClient.get(asset.relativeUrl);
+      expect(response.status).toBe(200);
+      expect(response.headers["content-disposition"]).toBe(
+        "attachment; filename*=UTF-8''supplier%20report.xlsx",
+      );
+      expect(response.headers["content-type"]).toBe("application/octet-stream");
+      expect(Array.from(new Uint8Array(yield* response.arrayBuffer))).toEqual(Array.from(bytes));
+    }).pipe(Effect.provide(Layer.mergeAll(testLayer, NodeHttpServer.layerTest))),
+  );
+
+  it.effect("downloads binary, Markdown and source files with exact expiring URLs", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-download-" });
+      for (const name of ["report.xlsx", "notes.md", "WorkspaceFileSystem.ts", "report.html"]) {
+        const file = path.join(root, name);
+        const bytes = new Uint8Array([80, 75, 0, 255, 42]);
+        yield* fileSystem.writeFile(file, bytes);
+        const result = yield* issueAssetUrl({
+          resource: {
+            _tag: "workspace-file",
+            threadId: ThreadId.make("thread-1"),
+            path: file,
+            download: true,
+          },
+          workspaceRoot: root,
+        });
+        const token = result.relativeUrl.slice(`${ASSET_ROUTE_PREFIX}/`.length).split("/")[0]!;
+        const resolved = yield* resolveAsset(token, name);
+        expect(resolved).toEqual({
+          kind: "file",
+          path: yield* fileSystem.realPath(file),
+          download: true,
+        });
+        expect(Array.from(yield* fileSystem.readFile(resolved!.path))).toEqual(Array.from(bytes));
+        expect(yield* resolveAsset(token, "other.xlsx")).toBeNull();
+        expect(yield* resolveAsset(token, `../${name}`)).toBeNull();
+        expect(yield* resolveAsset(`${token}tampered`, name)).toBeNull();
+        yield* TestClock.adjust("61 minutes");
+        expect(yield* resolveAsset(token, name)).toBeNull();
+      }
+      const error = yield* issueAssetUrl({
+        resource: {
+          _tag: "workspace-file",
+          threadId: ThreadId.make("thread-1"),
+          path: "../outside.xlsx",
+          download: true,
+        },
+        workspaceRoot: root,
+      }).pipe(Effect.flip);
+      expect(error._tag).toBe("AssetWorkspacePathValidationError");
+    }).pipe(Effect.provide(testLayer)),
+  );
+
   it.effect("issues workspace URLs that resolve the entry file and sibling assets", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;

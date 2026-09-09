@@ -2,6 +2,7 @@ import { ThreadDictationButton } from "./ThreadDictationButton";
 import { PaperclipIcon } from "lucide-react";
 import { ThreadSkillsMenu } from "./ThreadSkillsMenu";
 import { ThreadMcpMenu } from "./ThreadMcpMenu";
+import { useWorkspaceFileDownload } from "~/assets/downloadWorkspaceFile";
 import type {
   ApprovalRequestId,
   EnvironmentId,
@@ -698,6 +699,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const composerReviewComments = composerDraft.reviewComments;
   const nonPersistedComposerImageIds = composerDraft.nonPersistedImageIds;
 
+  const downloadWorkspaceFile = useWorkspaceFileDownload(
+    routeKind === "server" ? routeThreadRef : undefined,
+  );
   const setComposerDraftPrompt = useComposerDraftStore((store) => store.setPrompt);
   const addComposerDraftImage = useComposerDraftStore((store) => store.addImage);
   const addComposerDraftImages = useComposerDraftStore((store) => store.addImages);
@@ -3053,6 +3057,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
 
             <div className="relative">
               <ComposerPromptEditor
+                onDownloadFile={routeKind === "server" ? downloadWorkspaceFile : undefined}
                 editorRef={composerEditorRef}
                 value={
                   isComposerApprovalState

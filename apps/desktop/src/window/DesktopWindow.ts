@@ -28,6 +28,7 @@ import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
 import * as DesktopClientSettings from "../settings/DesktopClientSettings.ts";
 import * as ElectronApp from "../electron/ElectronApp.ts";
 import { makeQuitHoldHandler } from "./QuitHold.ts";
+import { installWorkspaceDownloads } from "./WorkspaceDownloads.ts";
 
 const TITLEBAR_HEIGHT = 40;
 const TITLEBAR_COLOR = "#01000000"; // #00000000 does not work correctly on Linux
@@ -522,6 +523,12 @@ export const make = Effect.gen(function* () {
 
       void runPromise(electronMenu.popupTemplate({ window, template: menuTemplate }));
     });
+
+    const removeWorkspaceDownloads = installWorkspaceDownloads(
+      window.webContents,
+      Electron.app.getPath("downloads"),
+    );
+    window.once("closed", removeWorkspaceDownloads);
 
     window.webContents.setWindowOpenHandler(({ url }) => {
       if (Option.isSome(ElectronShell.parseSafeExternalUrl(url))) {

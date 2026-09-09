@@ -27,3 +27,10 @@ export function isWorkspaceImagePreviewPath(path: string): boolean {
 export function isWorkspacePreviewEntryPath(path: string): boolean {
   return isWorkspaceBrowserPreviewPath(path) || isWorkspaceImagePreviewPath(path);
 }
+
+/** Files that should be downloaded instead of being sent to the UTF-8 editor. */
+export function isWorkspaceDownloadOnlyPath(path: string): boolean {
+  return /\.(?:xlsx?|xlsm|xlsb|ods|docx?|odt|pptx?|odp|zip|gz|bz2|xz|7z|rar|tar|exe|dll|so|dylib|dmg|iso|sqlite3?|db|woff2?|ttf|otf|mp[34]|m4[av]|mov|webm|wav|ogg|flac|bin)$/i.test(
+    path.split(/[?#]/, 1)[0] ?? "",
+  );
+}
