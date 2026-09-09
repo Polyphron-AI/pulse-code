@@ -3,6 +3,8 @@ import { ProviderDriverKind, ProviderInstanceId, type ModelCapabilities } from "
 
 import {
   applyClaudePromptEffortPrefix,
+  normalizeModelSlug,
+  normalizeCustomModelSlug,
   buildExplicitProviderOptionSelectionsFromDescriptors,
   buildProviderOptionSelectionsFromDescriptors,
   createModelCapabilities,
@@ -12,8 +14,6 @@ import {
   getProviderOptionDescriptors,
   getProviderOptionBooleanSelectionValue,
   getProviderOptionStringSelectionValue,
-  normalizeCustomModelSlug,
-  normalizeModelSlug,
 } from "./model.ts";
 
 const codexCaps: ModelCapabilities = createModelCapabilities({
@@ -169,7 +169,7 @@ describe("model slug normalization", () => {
   it("preserves exact custom slugs instead of expanding provider aliases", () => {
     const claude = ProviderDriverKind.make("claudeAgent");
 
-    expect(normalizeModelSlug("opus", claude)).toBe("claude-opus-5");
+    expect(normalizeModelSlug("opus", claude)).toBe("opus");
     expect(normalizeCustomModelSlug(" opus ")).toBe("opus");
   });
 });

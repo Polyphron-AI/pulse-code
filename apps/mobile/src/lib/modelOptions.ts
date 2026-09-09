@@ -8,6 +8,7 @@ import {
 import {
   buildExplicitProviderOptionSelectionsFromDescriptors,
   getProviderOptionDescriptors,
+  resolveSelectableModel,
 } from "@t3tools/shared/model";
 
 export type ModelOption = {
@@ -60,10 +61,20 @@ function normalizeSelectionOptions(
       };
 }
 
+function resolveSelectionAlias(
+  selection: ModelSelection,
+  provider: T3ServerConfig["providers"][number] | undefined,
+): ModelSelection {
+  const slug = provider
+    ? resolveSelectableModel(provider.driver, selection.model, provider.models ?? [])
+    : null;
+  return slug && slug !== selection.model ? { ...selection, model: slug } : selection;
+}
+
 /**
  * A stored model selection is only usable when its provider instance is
  * currently enabled, installed, and authenticated on the server. Returns the
- * selection unchanged when usable, otherwise `null` so callers fall through to
+ * selection with a server-declared alias resolved when usable, otherwise `null` so callers fall through to
  * the server's default model. A missing config (environment offline) cannot be
  * validated, so stored selections pass through untouched.
  */
@@ -81,7 +92,7 @@ export function resolveSelectableModelSelection(
     provider.enabled &&
     provider.installed &&
     provider.auth.status !== "unauthenticated"
-    ? selection
+    ? resolveSelectionAlias(selection, provider)
     : null;
 }
 
@@ -110,6 +121,14 @@ export function buildModelOptions(
   fallbackModelSelection: ModelSelection | null,
 ): ReadonlyArray<ModelOption> {
   const options = new Map<string, ModelOption>();
+  if (fallbackModelSelection) {
+    fallbackModelSelection = resolveSelectionAlias(
+      fallbackModelSelection,
+      config?.providers.find(
+        (provider) => provider.instanceId === fallbackModelSelection?.instanceId,
+      ),
+    );
+  }
 
   for (const provider of config?.providers ?? []) {
     if (!provider.enabled || !provider.installed || provider.auth.status === "unauthenticated") {

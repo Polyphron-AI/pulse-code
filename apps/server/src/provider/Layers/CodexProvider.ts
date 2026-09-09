@@ -22,11 +22,16 @@ import type {
   ServerProviderModel,
   ServerProviderSkill,
 } from "@t3tools/contracts";
-import { PREFERRED_DEFAULT_CODEX_MODELS, ServerSettingsError } from "@t3tools/contracts";
+import {
+  PREFERRED_DEFAULT_CODEX_MODELS,
+  ProviderDriverKind,
+  ServerSettingsError,
+} from "@t3tools/contracts";
 
 import { createModelCapabilities } from "@t3tools/shared/model";
 import { resolveSpawnCommand } from "@t3tools/shared/shell";
 import { codexAppServerArgs, resolveCodexLaunchArgs } from "./codexLaunchArgs.ts";
+import { BUNDLED_MODEL_MANIFEST, isLegacyModel } from "../ModelManifest.ts";
 import {
   AUTH_PROBE_TIMEOUT_MS,
   buildServerProvider,
@@ -63,10 +68,9 @@ const REASONING_EFFORT_LABELS: Readonly<Record<string, string>> = {
 };
 
 const DEFAULT_SERVICE_TIER_ID = "default";
-const CURRENT_CODEX_MODELS = new Set(["gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol"]);
 
 export function isLegacyCodexModel(model: string): boolean {
-  return !CURRENT_CODEX_MODELS.has(model);
+  return isLegacyModel(BUNDLED_MODEL_MANIFEST, ProviderDriverKind.make("codex"), model);
 }
 
 function reasoningEffortLabel(reasoningEffort: string): string {

@@ -202,3 +202,67 @@ describe("mobile model options", () => {
     expect(resolveDefaultableModelSelection(null, legacy)).toBe(legacy);
   });
 });
+
+describe("mobile model aliases", () => {
+  const config = {
+    providers: [
+      {
+        instanceId: "work",
+        driver: "claudeAgent",
+        enabled: true,
+        installed: true,
+        auth: { status: "authenticated" },
+        models: [
+          {
+            slug: "legacy-model",
+            name: "Legacy",
+            aliases: ["same-alias"],
+            isLegacy: true,
+            isCustom: false,
+            capabilities: null,
+          },
+          { slug: "custom-alias", name: "Custom", isCustom: true, capabilities: null },
+          {
+            slug: "native-model",
+            name: "Native",
+            aliases: ["custom-alias"],
+            isCustom: false,
+            capabilities: null,
+          },
+        ],
+      },
+      {
+        instanceId: "personal",
+        driver: "claudeAgent",
+        enabled: true,
+        installed: true,
+        auth: { status: "authenticated" },
+        models: [
+          {
+            slug: "current-model",
+            name: "Current",
+            aliases: ["same-alias"],
+            isCustom: false,
+            capabilities: null,
+          },
+        ],
+      },
+    ],
+  } as unknown as ServerConfig;
+
+  it("resolves aliases only within their provider instance and enforces legacy defaults", () => {
+    const work = { instanceId: ProviderInstanceId.make("work"), model: "same-alias" };
+    const personal = { instanceId: ProviderInstanceId.make("personal"), model: "same-alias" };
+    expect(resolveSelectableModelSelection(config, work)?.model).toBe("legacy-model");
+    expect(resolveDefaultableModelSelection(config, work)).toBeNull();
+    expect(resolveSelectableModelSelection(config, personal)?.model).toBe("current-model");
+    expect(
+      buildModelOptions(config, personal).filter((option) => option.providerKey === "personal"),
+    ).toHaveLength(1);
+  });
+
+  it("preserves an exact custom slug when it shadows a built-in alias", () => {
+    const selection = { instanceId: ProviderInstanceId.make("work"), model: "custom-alias" };
+    expect(resolveSelectableModelSelection(config, selection)).toBe(selection);
+  });
+});

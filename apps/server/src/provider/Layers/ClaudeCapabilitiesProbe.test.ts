@@ -1,3 +1,5 @@
+import { BUNDLED_MODEL_MANIFEST, isLegacyModel } from "../ModelManifest.ts";
+import { ProviderDriverKind } from "@t3tools/contracts";
 import { ClaudeSettings } from "@t3tools/contracts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
@@ -9,20 +11,26 @@ import * as Schema from "effect/Schema";
 import {
   buildClaudeCapabilitiesProbeQueryOptions,
   CLAUDE_CAPABILITIES_PROBE_SETTING_SOURCES,
-  isLegacyClaudeModel,
   probeClaudeCapabilities,
 } from "./ClaudeProvider.ts";
 
 const decodeClaudeSettings = Schema.decodeSync(ClaudeSettings);
 
-it("keeps only the Claude 5 family out of legacy models", () => {
+it("classifies Claude models with the bundled V40 catalog", () => {
   assert.deepStrictEqual(
-    ["claude-fable-5", "claude-opus-5", "claude-sonnet-5", "claude-opus-4-8"].map((model) => [
+    [
+      "claude-fable-5-1",
+      "claude-fable-5",
+      "claude-opus-5",
+      "claude-sonnet-5",
+      "claude-opus-4-8",
+    ].map((model) => [
       model,
-      isLegacyClaudeModel(model),
+      isLegacyModel(BUNDLED_MODEL_MANIFEST, ProviderDriverKind.make("claudeAgent"), model),
     ]),
     [
-      ["claude-fable-5", false],
+      ["claude-fable-5-1", false],
+      ["claude-fable-5", true],
       ["claude-opus-5", false],
       ["claude-sonnet-5", false],
       ["claude-opus-4-8", true],
@@ -86,6 +94,8 @@ it.layer(NodeServices.layer)("Claude capability probe SDK boundary", (it) => {
           "  connectorEnv: process.env.ENABLE_CLAUDEAI_MCP_SERVERS,",
           "  mcpConfig,",
           "}));",
+          // Release the fixture cwd after recording it; SDK shutdown is asynchronous on Windows.
+          "process.chdir(process.env.TEMP ?? process.cwd());",
           "const lines = createInterface({ input: process.stdin });",
           'lines.on("line", (line) => {',
           "  const message = JSON.parse(line);",

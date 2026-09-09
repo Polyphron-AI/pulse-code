@@ -6,13 +6,19 @@ import {
   mapCodexModelCapabilities,
 } from "./CodexProvider.ts";
 
-it("keeps only the GPT-5.6 Codex family out of legacy models", () => {
+it("classifies current Codex models from the bundled V40 catalog", () => {
   assert.deepStrictEqual(
-    ["gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol", "gpt-5.4"].map((model) => [
-      model,
-      isLegacyCodexModel(model),
-    ]),
     [
+      "gpt-6-astra",
+      "gpt-daybreak-blue-latest",
+      "gpt-5.6-luna",
+      "gpt-5.6-terra",
+      "gpt-5.6-sol",
+      "gpt-5.4",
+    ].map((model) => [model, isLegacyCodexModel(model)]),
+    [
+      ["gpt-6-astra", false],
+      ["gpt-daybreak-blue-latest", false],
       ["gpt-5.6-luna", false],
       ["gpt-5.6-terra", false],
       ["gpt-5.6-sol", false],
