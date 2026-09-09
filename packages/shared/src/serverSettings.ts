@@ -172,6 +172,7 @@ export function applyServerSettingsPatch(
     // Merged per entry below; its `null` removals must not reach deepMerge.
     projectAgentBrowserAccessOverrides: projectAgentBrowserAccessOverridesPatch,
     projectAutoPullOverrides: projectAutoPullOverridesPatch,
+    usageLimitSources: usageLimitSourcesPatch,
     ...patchForMerge
   } = patch;
   const currentBackgroundActivity = normalizeServerBackgroundActivitySettings(current);
@@ -256,6 +257,14 @@ export function applyServerSettingsPatch(
             ...current.projectScriptOverrides,
             ...patch.projectScriptOverrides,
           },
+        }
+      : {}),
+    ...(usageLimitSourcesPatch !== undefined
+      ? {
+          usageLimitSources: mergeSettingsEntries(
+            current.usageLimitSources,
+            usageLimitSourcesPatch,
+          ),
         }
       : {}),
     ...(patch.sourceControlWriterModelSelection !== undefined

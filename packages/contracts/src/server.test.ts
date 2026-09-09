@@ -189,3 +189,20 @@ describe("server config forward compatibility", () => {
     expect(parsed).toEqual([decodedBase]);
   });
 });
+
+it("drops incompatible usage windows while retaining a valid provider snapshot", () => {
+  const parsed = decodeServerProvider({
+    ...baseProviderSnapshot,
+    usageLimits: {
+      checkedAt: "2026-04-10T00:00:00.000Z",
+      windows: [
+        { id: "primary", kind: "session", label: "Session", usedPercent: 12 },
+        { id: "future", kind: "unknown", label: "Future", usedPercent: 1 },
+        { id: "bad", kind: "weekly", label: "Weekly", usedPercent: 120 },
+      ],
+    },
+  });
+  expect(parsed.usageLimits?.windows).toEqual([
+    { id: "primary", kind: "session", label: "Session", usedPercent: 12 },
+  ]);
+});

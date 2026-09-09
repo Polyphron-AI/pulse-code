@@ -1308,7 +1308,7 @@ export const WsSubscribeTerminalMetadataRpc = Rpc.make(WS_METHODS.subscribeTermi
 });
 
 export const WsSubscribeServerConfigRpc = Rpc.make(WS_METHODS.subscribeServerConfig, {
-  payload: Schema.Struct({}),
+  payload: Schema.Struct({ usageLimitSources: Schema.optional(Schema.Boolean) }),
   success: ServerConfigStreamEvent,
   error: Schema.Union([KeybindingsConfigError, ServerSettingsError, EnvironmentAuthorizationError]),
   stream: true,

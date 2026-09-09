@@ -48,6 +48,8 @@ export const ServerSelfUpdateCapability = Schema.Literals([
 export type ServerSelfUpdateCapability = typeof ServerSelfUpdateCapability.Type;
 
 export const ExecutionEnvironmentCapabilities = Schema.Struct({
+  /** Streams configured quota sources when a client opts in. */
+  usageLimitSources: Schema.optionalKey(Schema.Boolean),
   /** Alpha mail RPCs exist; actual activation and account readiness come from mail.getStatus. */
   mail: Schema.optionalKey(Schema.Boolean),
   mailPeople: Schema.optionalKey(Schema.Boolean),
