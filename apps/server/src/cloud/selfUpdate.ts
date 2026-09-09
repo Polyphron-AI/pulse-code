@@ -17,6 +17,7 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 
 import * as ServerConfig from "../config.ts";
+import * as DesktopAppUpdate from "../desktopUpdate/DesktopAppUpdate.ts";
 import * as ProcessRunner from "../processRunner.ts";
 import {
   ensurePinnedRuntimeInstalled,
@@ -47,6 +48,9 @@ export class ServerSelfUpdate extends Context.Service<
       ) => Effect.Effect<void, ServerSelfUpdateError>,
       onHandoffAccepted?: () => Effect.Effect<void>,
     ) => Effect.Effect<ServerSelfUpdateResult, ServerSelfUpdateError>;
+    readonly commitDesktopUpdate: (
+      requestId: string,
+    ) => Effect.Effect<never, ServerSelfUpdateError>;
   }
 >()("t3/cloud/selfUpdate/ServerSelfUpdate") {}
 
@@ -110,11 +114,12 @@ export const withRunningThreadContinuation = Effect.fn(
     );
   };
 
-  return Effect.succeed(ServerSelfUpdate.of({ update }));
+  return Effect.succeed(ServerSelfUpdate.of({ ...input.selfUpdate, update }));
 });
 
 export const make = Effect.fn("cloud.server_self_update.make")(function* () {
   const serverConfig = yield* ServerConfig.ServerConfig;
+  const desktopAppUpdate = yield* DesktopAppUpdate.DesktopAppUpdate;
   const launcher = yield* ServiceLauncherClient.ServiceLauncherClient;
   const runner = yield* ProcessRunner.ProcessRunner;
   const fs = yield* FileSystem.FileSystem;
@@ -133,6 +138,12 @@ export const make = Effect.fn("cloud.server_self_update.make")(function* () {
     "cloud.server_self_update.update",
   )(function* (input, reportProgress = () => Effect.void, onHandoffAccepted = () => Effect.void) {
     if (capability === "desktop-managed") {
+      // input.targetVersion is meaningless here: the desktop app's own
+      // update feed decides what it downloads, and the result carries what
+      // it actually got.
+      if (desktopAppUpdate.available) {
+        return yield* desktopAppUpdate.run(reportProgress);
+      }
       return yield* failWith(
         "This server is managed by the Pulse Code desktop app on its machine; update the desktop app to update it.",
       );
@@ -260,7 +271,10 @@ export const make = Effect.fn("cloud.server_self_update.make")(function* () {
     }).pipe(Effect.onError(() => Ref.set(inFlight, false)));
   });
 
-  return ServerSelfUpdate.of({ update });
+  return ServerSelfUpdate.of({
+    update,
+    commitDesktopUpdate: (requestId) => desktopAppUpdate.commit(requestId),
+  });
 });
 
 export const layer = Layer.effect(ServerSelfUpdate, make()).pipe(

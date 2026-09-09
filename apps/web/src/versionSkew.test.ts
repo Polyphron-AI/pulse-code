@@ -12,6 +12,7 @@ import {
   resolveServerUpdateThreadContinuationCapability,
   resolveVersionMismatch,
   serverUpdateGuidance,
+  supportsDesktopAppUpdate,
 } from "./versionSkew";
 
 describe("versionSkew", () => {
@@ -115,6 +116,27 @@ describe("versionSkew", () => {
       }),
     ).toBe("desktop-managed");
     expect(resolveServerSelfUpdateCapability(null)).toBeNull();
+  });
+
+  it("detects remote desktop-app update support from config descriptors", () => {
+    const descriptor = (desktopAppUpdate?: boolean) => ({
+      environment: {
+        environmentId: EnvironmentId.make("environment-desktop"),
+        label: "Desktop",
+        platform: { os: "darwin", arch: "arm64" } as const,
+        serverVersion: "9.9.9",
+        capabilities: {
+          repositoryIdentity: true,
+          serverSelfUpdate: "desktop-managed" as const,
+          ...(desktopAppUpdate === undefined ? {} : { desktopAppUpdate }),
+        },
+      },
+    });
+
+    expect(supportsDesktopAppUpdate(descriptor(true))).toBe(true);
+    expect(supportsDesktopAppUpdate(descriptor(false))).toBe(false);
+    expect(supportsDesktopAppUpdate(descriptor())).toBe(false);
+    expect(supportsDesktopAppUpdate(null)).toBe(false);
   });
 
   it("matches version-drift guidance to the advertised update path", () => {
