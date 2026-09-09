@@ -1,0 +1,36 @@
+{
+  "created_utc": "2026-09-09T21:54:47.217432+00:00",
+  "n": 100,
+  "ids": [
+    2800,
+    2899
+  ],
+  "max_new_tokens": 160,
+  "seed": 42,
+  "dream": {
+    "model_manifest": {
+      "repo": "Dream-org/Dream-v0-Instruct-7B",
+      "revision": "05334cb9faaf763692dcf9d8737c642be2b2a6ae"
+    },
+    "quantization": "NF4 double quantization BF16 compute",
+    "steps": [
+      32,
+      160
+    ],
+    "algorithm": "entropy",
+    "temperature": 0,
+    "algorithm_temperature": 0,
+    "transformers": "4.46.2"
+  },
+  "qwen": {
+    "base": "Qwen/Qwen3-4B-Instruct-2507",
+    "base_revision": "cdbee75f17c01a7cc42f958dc650907174af0554",
+    "adapter": "summary_grounded4b_pp",
+    "dtype": "BF16",
+    "transformers": "4.57.6",
+    "peft": "0.19.1",
+    "do_sample": false
+  },
+  "timing": "generation only, CUDA synchronized; includes first-call kernel warmup, excludes load, tokenization and decoding",
+  "external_judge": "not run; automated original scoring only"
+}

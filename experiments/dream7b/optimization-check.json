@@ -1,0 +1,9 @@
+{
+  "exact_equivalence_checks": "passed",
+  "seconds_per_sampler_call": {
+    "original": 0.0020621799980290235,
+    "top2": 0.00035155999939888715
+  },
+  "sampler_speedup": 5.865798161210121,
+  "note": "Sampler microbenchmark only. This is not end-to-end model speed."
+}

@@ -1,0 +1,169 @@
+[
+  {
+    "run": "20260909T205611Z",
+    "quantization": "NF4 double quantization, BF16 compute",
+    "case_ids": [
+      "arithmetic"
+    ],
+    "summary": {
+      "fast": {
+        "cases": 1,
+        "strict_correct": 0,
+        "normalized_correct": 0,
+        "mean_seconds": 2.136946899932809,
+        "peak_allocated_gib": 5.461246967315674,
+        "failed_cases_after_fence_removal": [
+          "arithmetic"
+        ]
+      }
+    },
+    "margin_outputs_identical": null
+  },
+  {
+    "run": "20260909T205720Z",
+    "quantization": "NF4 double quantization, BF16 compute",
+    "case_ids": [
+      "arithmetic",
+      "extract_task",
+      "missing_information",
+      "sort_numbers",
+      "deduplicate",
+      "routing",
+      "untrusted_message",
+      "code_trace"
+    ],
+    "summary": {
+      "baseline": {
+        "cases": 8,
+        "strict_correct": 3,
+        "normalized_correct": 5,
+        "mean_seconds": 8.630296899995301,
+        "peak_allocated_gib": 5.4725189208984375,
+        "failed_cases_after_fence_removal": [
+          "arithmetic",
+          "extract_task",
+          "routing"
+        ]
+      },
+      "fast": {
+        "cases": 8,
+        "strict_correct": 1,
+        "normalized_correct": 3,
+        "mean_seconds": 2.16361482499633,
+        "peak_allocated_gib": 5.472518444061279,
+        "failed_cases_after_fence_removal": [
+          "arithmetic",
+          "sort_numbers",
+          "deduplicate",
+          "routing",
+          "untrusted_message"
+        ]
+      },
+      "margin": {
+        "cases": 8,
+        "strict_correct": 2,
+        "normalized_correct": 6,
+        "mean_seconds": 2.218588762509171,
+        "peak_allocated_gib": 6.068897724151611,
+        "failed_cases_after_fence_removal": [
+          "arithmetic",
+          "routing"
+        ]
+      },
+      "margin_top2": {
+        "cases": 8,
+        "strict_correct": 2,
+        "normalized_correct": 6,
+        "mean_seconds": 2.2432324250112288,
+        "peak_allocated_gib": 6.068897724151611,
+        "failed_cases_after_fence_removal": [
+          "arithmetic",
+          "routing"
+        ]
+      },
+      "structured": {
+        "cases": 8,
+        "strict_correct": 1,
+        "normalized_correct": 7,
+        "mean_seconds": 2.1878027625061804,
+        "peak_allocated_gib": 5.479604244232178,
+        "failed_cases_after_fence_removal": [
+          "arithmetic"
+        ]
+      }
+    },
+    "margin_outputs_identical": true
+  },
+  {
+    "run": "20260909T210223Z",
+    "quantization": "int8",
+    "case_ids": [
+      "arithmetic",
+      "extract_task"
+    ],
+    "summary": {
+      "baseline": {
+        "cases": 2,
+        "strict_correct": 0,
+        "normalized_correct": 0,
+        "mean_seconds": 21.251703949994408,
+        "peak_allocated_gib": 8.364359378814697,
+        "failed_cases_after_fence_removal": [
+          "arithmetic",
+          "extract_task"
+        ]
+      },
+      "structured": {
+        "cases": 2,
+        "strict_correct": 0,
+        "normalized_correct": 1,
+        "mean_seconds": 5.519978699972853,
+        "peak_allocated_gib": 8.370222568511963,
+        "failed_cases_after_fence_removal": [
+          "arithmetic"
+        ]
+      }
+    },
+    "margin_outputs_identical": null
+  },
+  {
+    "run": "20260909T210447Z",
+    "quantization": "NF4 double quantization, BF16 compute",
+    "case_ids": [
+      "cancelled_task",
+      "tentative_owner",
+      "corrected_deadline",
+      "invoice_calculation",
+      "dependency_order",
+      "python_aliasing"
+    ],
+    "summary": {
+      "structured": {
+        "cases": 6,
+        "strict_correct": 0,
+        "normalized_correct": 2,
+        "mean_seconds": 2.2305870166940927,
+        "peak_allocated_gib": 5.479959011077881,
+        "failed_cases_after_fence_removal": [
+          "cancelled_task",
+          "invoice_calculation",
+          "dependency_order",
+          "python_aliasing"
+        ]
+      },
+      "structured_quality": {
+        "cases": 6,
+        "strict_correct": 0,
+        "normalized_correct": 3,
+        "mean_seconds": 8.778790050011594,
+        "peak_allocated_gib": 5.479959487915039,
+        "failed_cases_after_fence_removal": [
+          "cancelled_task",
+          "invoice_calculation",
+          "python_aliasing"
+        ]
+      }
+    },
+    "margin_outputs_identical": null
+  }
+]

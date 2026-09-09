@@ -1,0 +1,6 @@
+# Isolated Qwen environment overlays the existing Dream GPU environment via
+# .qwen-venv/Lib/site-packages/dream_shared.pth. Install these with --no-deps.
+# The shared runtime supplies torch==2.7.1+cu128 and other pinned dependencies.
+transformers==4.57.6
+tokenizers==0.22.2
+peft==0.19.1
