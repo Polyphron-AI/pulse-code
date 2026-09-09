@@ -1,3 +1,4 @@
+import type { RightPanelSurface } from "../rightPanelStore";
 import {
   type EnvironmentId,
   isProviderDriverKind,
@@ -8,6 +9,7 @@ import {
   type ScopedProjectRef,
   type ScopedThreadRef,
   type ThreadId,
+  type ThreadLinkedPullRequest,
   type TurnId,
 } from "@t3tools/contracts";
 import { type ChatMessage, type SessionPhase, type Thread, type ThreadShell } from "../types";
@@ -575,5 +577,23 @@ export function hasServerAcknowledgedLocalDispatch(input: {
     latestTurnChanged ||
     input.localDispatch.sessionStatus !== (session?.status ?? null) ||
     input.localDispatch.sessionUpdatedAt !== (session?.updatedAt ?? null)
+  );
+}
+
+/** Follow a changed server link only when the panel still shows the previous linked PR. */
+export function shouldRetargetThreadPullRequestPanel(
+  previous: ThreadLinkedPullRequest | null,
+  current: ThreadLinkedPullRequest | null,
+  surface: RightPanelSurface | null,
+): boolean {
+  if (previous === null || current === null || surface?.kind !== "pull-request") return false;
+  const previousRepository = previous.repository.toLowerCase();
+  return (
+    (previous.projectId !== current.projectId ||
+      previousRepository !== current.repository.toLowerCase() ||
+      previous.number !== current.number) &&
+    surface.projectId === previous.projectId &&
+    surface.repository.toLowerCase() === previousRepository &&
+    surface.number === previous.number
   );
 }

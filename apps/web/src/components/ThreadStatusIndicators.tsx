@@ -12,7 +12,11 @@ import { appAtomRegistry } from "../rpc/atomRegistry";
 import { useEnvironment, usePrimaryEnvironmentId } from "../state/environments";
 import { useProject } from "../state/entities";
 import { useEnvironmentQuery } from "../state/query";
-import { linkedPullRequestDetailAtom } from "../state/pullRequests";
+import {
+  linkedPullRequestDetailAtom,
+  linkedPullRequestSummaryAtom,
+  useSharedPullRequestSummary,
+} from "../state/pullRequests";
 import { useThreadRunningTerminalIds } from "../state/terminalSessions";
 import { vcsEnvironment } from "../state/vcs";
 import { useUiStateStore } from "../uiStateStore";
@@ -47,11 +51,13 @@ export interface LinkedThreadPullRequestStatus {
 export function useLinkedThreadPullRequest(
   environmentId: EnvironmentId | null,
   linkedPullRequest: ThreadLinkedPullRequest | null | undefined,
+  useSummary = false,
+  enabled = true,
 ): LinkedThreadPullRequestStatus | null {
-  const detail = useEnvironmentQuery(
-    environmentId === null || linkedPullRequest == null
+  const queried = useEnvironmentQuery(
+    !enabled || environmentId === null || linkedPullRequest == null
       ? null
-      : linkedPullRequestDetailAtom({
+      : (useSummary ? linkedPullRequestSummaryAtom : linkedPullRequestDetailAtom)({
           environmentId,
           input: {
             projectId: linkedPullRequest.projectId,
@@ -60,6 +66,7 @@ export function useLinkedThreadPullRequest(
           },
         }),
   ).data;
+  const detail = useSharedPullRequestSummary(environmentId, linkedPullRequest ?? null, queried);
 
   return useMemo(
     () =>
@@ -261,6 +268,7 @@ export function nextThreadChangeRequestSnapshot(input: {
   snapshot: ThreadChangeRequestSnapshot | null | undefined;
   retainTerminalOnBranchMismatch: boolean;
   linkedPullRequest?: ThreadLinkedPullRequest | null | undefined;
+  serverOwnsBranchPullRequest?: boolean;
   linkedPullRequestStatus?: LinkedThreadPullRequestStatus | null | undefined;
 }): ThreadChangeRequestSnapshot | null | undefined {
   const {
@@ -284,6 +292,7 @@ export function nextThreadChangeRequestSnapshot(input: {
       linkedPullRequest,
     };
   }
+  if (input.serverOwnsBranchPullRequest) return null;
   if (gitStatus === null) {
     return snapshot?.linkedPullRequest === undefined ? undefined : null;
   }
@@ -329,6 +338,7 @@ export function resolveDisplayedThreadPr(input: {
   snapshot: ThreadChangeRequestSnapshot | null | undefined;
   retainTerminalOnBranchMismatch: boolean;
   linkedPullRequest?: ThreadLinkedPullRequest | null | undefined;
+  serverOwnsBranchPullRequest?: boolean;
   linkedPullRequestStatus?: LinkedThreadPullRequestStatus | null | undefined;
 }): ThreadPr | null {
   const {
@@ -347,6 +357,7 @@ export function resolveDisplayedThreadPr(input: {
         : null)
     );
   }
+  if (input.serverOwnsBranchPullRequest) return null;
   if (
     threadBranch !== null &&
     gitStatus !== null &&
@@ -375,6 +386,7 @@ export function resolveDisplayedThreadPrProvider(input: {
   snapshot: ThreadChangeRequestSnapshot | null | undefined;
   retainTerminalOnBranchMismatch: boolean;
   linkedPullRequest?: ThreadLinkedPullRequest | null | undefined;
+  serverOwnsBranchPullRequest?: boolean;
   linkedPullRequestStatus?: LinkedThreadPullRequestStatus | null | undefined;
 }): VcsStatusResult["sourceControlProvider"] | undefined {
   const {
@@ -393,6 +405,7 @@ export function resolveDisplayedThreadPrProvider(input: {
         : undefined)
     );
   }
+  if (input.serverOwnsBranchPullRequest) return undefined;
   if (
     threadBranch !== null &&
     gitStatus !== null &&
@@ -533,10 +546,12 @@ export function ThreadRowLeadingStatus({ thread }: { thread: SidebarThreadSummar
   const gitCwd = thread.worktreePath ?? threadProjectCwd;
   const linkedPullRequest = useLinkedThreadPullRequest(
     thread.environmentId,
-    thread.linkedPullRequest,
+    thread.linkedPullRequest ?? thread.branchPullRequest,
+    thread.branchPullRequest !== undefined,
   );
   const gitStatus = useEnvironmentQuery(
-    thread.linkedPullRequest == null &&
+    thread.branchPullRequest === undefined &&
+      thread.linkedPullRequest == null &&
       (thread.branch != null || thread.worktreePath !== null) &&
       gitCwd !== null
       ? vcsEnvironment.status({
@@ -546,7 +561,7 @@ export function ThreadRowLeadingStatus({ thread }: { thread: SidebarThreadSummar
       : null,
   );
   const pr =
-    thread.linkedPullRequest == null
+    thread.branchPullRequest === undefined && thread.linkedPullRequest == null
       ? resolveThreadPr({ threadBranch: thread.branch, gitStatus: gitStatus.data })
       : (linkedPullRequest?.pr ?? null);
   const prStatus = prStatusIndicator(

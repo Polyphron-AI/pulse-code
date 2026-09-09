@@ -309,6 +309,7 @@ import {
   scheduleEnvironmentReconnectWarning,
   hasServerAcknowledgedLocalDispatch,
   isBranchMismatchDismissedForSession,
+  shouldRetargetThreadPullRequestPanel,
   shouldShowBranchMismatchBanner,
   getStartedThreadModelChangeBlockReason,
   LAST_INVOKED_SCRIPT_BY_PROJECT_KEY,
@@ -3330,7 +3331,37 @@ function ChatViewContent(props: ChatViewProps) {
   );
   // The thread's own change request, placed against the project it belongs to. Without a
   // project there is nothing to resolve it against, so the caller falls back to the browser.
-  const linkedThreadPullRequest = activeThread?.linkedPullRequest ?? null;
+  const linkedThreadPullRequest =
+    activeThread?.linkedPullRequest ?? activeThread?.branchPullRequest ?? null;
+  const previousThreadPullRequestRef = useRef<{
+    threadKey: string | null;
+    reference: typeof linkedThreadPullRequest;
+  } | null>(null);
+  useEffect(() => {
+    const previous = previousThreadPullRequestRef.current;
+    previousThreadPullRequestRef.current = {
+      threadKey: activeThreadKey,
+      reference: linkedThreadPullRequest,
+    };
+    if (
+      !activeThreadRef ||
+      previous?.threadKey !== activeThreadKey ||
+      !linkedThreadPullRequest ||
+      !shouldRetargetThreadPullRequestPanel(
+        previous.reference,
+        linkedThreadPullRequest,
+        activeRightPanelSurface,
+      )
+    )
+      return;
+    if (
+      activeRightPanelSurface?.kind === "pull-request" &&
+      activeRightPanelSurface.environmentId !== undefined &&
+      activeRightPanelSurface.environmentId !== activeThreadRef.environmentId
+    )
+      return;
+    useRightPanelStore.getState().openPullRequest(activeThreadRef, linkedThreadPullRequest);
+  }, [activeRightPanelSurface, activeThreadKey, activeThreadRef, linkedThreadPullRequest]);
   const activeProjectRepository = activeProject?.repositoryIdentity?.displayName ?? null;
   const threadRepository = linkedThreadPullRequest?.repository ?? activeProjectRepository;
   const openThreadPullRequest = useCallback(
@@ -4177,12 +4208,14 @@ function ChatViewContent(props: ChatViewProps) {
   const linkedPullRequestStatus = useLinkedThreadPullRequest(
     activeThreadRef?.environmentId ?? null,
     linkedThreadPullRequest,
+    activeThread?.branchPullRequest !== undefined,
   );
   const activeThreadPr = resolveDisplayedThreadPr({
     threadBranch: activeThread?.branch ?? null,
     gitStatus: gitStatusQuery.data ?? null,
     snapshot: activeThreadKey ? changeRequestSnapshotByKey.get(activeThreadKey) : undefined,
     retainTerminalOnBranchMismatch: activeThread?.worktreePath === null,
+    serverOwnsBranchPullRequest: activeThread?.branchPullRequest !== undefined,
     linkedPullRequest: linkedThreadPullRequest,
     linkedPullRequestStatus,
   });

@@ -415,7 +415,10 @@ export const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThr
   const threadProjectCwd = threadProject?.workspaceRoot ?? null;
   const gitCwd = thread.worktreePath ?? threadProjectCwd ?? props.projectCwd;
   const gitStatus = useEnvironmentQuery(
-    thread.linkedPullRequest == null && thread.branch != null && gitCwd !== null
+    thread.branchPullRequest === undefined &&
+      thread.linkedPullRequest == null &&
+      thread.branch != null &&
+      gitCwd !== null
       ? vcsEnvironment.status({
           environmentId: thread.environmentId,
           input: { cwd: gitCwd },
@@ -458,10 +461,11 @@ export const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThr
   });
   const linkedPullRequestStatus = useLinkedThreadPullRequest(
     thread.environmentId,
-    thread.linkedPullRequest,
+    thread.linkedPullRequest ?? thread.branchPullRequest,
+    thread.branchPullRequest !== undefined,
   );
   const pr =
-    thread.linkedPullRequest == null
+    thread.branchPullRequest === undefined && thread.linkedPullRequest == null
       ? resolveThreadPr({ threadBranch: thread.branch, gitStatus: gitStatus.data })
       : (linkedPullRequestStatus?.pr ?? null);
   const prStatus = prStatusIndicator(

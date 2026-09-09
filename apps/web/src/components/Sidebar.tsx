@@ -815,7 +815,8 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
   const gitCwd = thread.worktreePath ?? props.projectCwd;
   const linkedPullRequestStatus = useLinkedThreadPullRequest(
     thread.environmentId,
-    thread.linkedPullRequest,
+    thread.linkedPullRequest ?? thread.branchPullRequest,
+    thread.branchPullRequest !== undefined,
   );
   const gitStatus = useEnvironmentQuery(
     (thread.branch != null || thread.worktreePath !== null) && gitCwd !== null
@@ -831,7 +832,8 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
     gitStatus: gitStatus.data,
     snapshot: changeRequestSnapshot,
     retainTerminalOnBranchMismatch,
-    linkedPullRequest: thread.linkedPullRequest,
+    serverOwnsBranchPullRequest: thread.branchPullRequest !== undefined,
+    linkedPullRequest: thread.linkedPullRequest ?? thread.branchPullRequest,
     linkedPullRequestStatus,
   });
   const prState = pr?.state ?? null;
@@ -933,7 +935,8 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
     gitStatus: gitStatus.data,
     snapshot: changeRequestSnapshot,
     retainTerminalOnBranchMismatch,
-    linkedPullRequest: thread.linkedPullRequest,
+    serverOwnsBranchPullRequest: thread.branchPullRequest !== undefined,
+    linkedPullRequest: thread.linkedPullRequest ?? thread.branchPullRequest,
     linkedPullRequestStatus,
   });
   const prStatus = prStatusIndicator(pr, prProvider);
@@ -944,7 +947,8 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
       gitStatus: gitStatus.data,
       snapshot: changeRequestSnapshot,
       retainTerminalOnBranchMismatch,
-      linkedPullRequest: thread.linkedPullRequest,
+      serverOwnsBranchPullRequest: thread.branchPullRequest !== undefined,
+      linkedPullRequest: thread.linkedPullRequest ?? thread.branchPullRequest,
       linkedPullRequestStatus,
     });
     if (nextSnapshot === undefined) return;
@@ -957,6 +961,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
     retainTerminalOnBranchMismatch,
     thread.branch,
     thread.linkedPullRequest,
+    thread.branchPullRequest,
     threadKey,
   ]);
 
@@ -2222,13 +2227,15 @@ export default function Sidebar() {
         serverConfigs.get(thread.environmentId)?.environment.capabilities.threadSnooze === true;
       const threadKey = scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id));
       const snapshot = changeRequestSnapshotByKey.get(threadKey);
+      const pullRequestRef = thread.linkedPullRequest ?? thread.branchPullRequest;
       const changeRequest =
         snapshot != null &&
-        (thread.linkedPullRequest == null
-          ? thread.worktreePath === null || snapshot.branch === thread.branch
-          : snapshot.linkedPullRequest?.projectId === thread.linkedPullRequest.projectId &&
-            snapshot.linkedPullRequest.repository === thread.linkedPullRequest.repository &&
-            snapshot.linkedPullRequest.number === thread.linkedPullRequest.number)
+        (pullRequestRef == null
+          ? thread.branchPullRequest === undefined &&
+            (thread.worktreePath === null || snapshot.branch === thread.branch)
+          : snapshot.linkedPullRequest?.projectId === pullRequestRef.projectId &&
+            snapshot.linkedPullRequest.repository === pullRequestRef.repository &&
+            snapshot.linkedPullRequest.number === pullRequestRef.number)
           ? snapshot.pr
           : null;
       // Snooze outranks everything, including a pin: "hide until Tuesday"

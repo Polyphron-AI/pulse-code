@@ -30,6 +30,7 @@ import {
   resolveSendEnvMode,
   scheduleEnvironmentReconnectWarning,
   startNewThreadForProject,
+  shouldRetargetThreadPullRequestPanel,
   shouldShowBranchMismatchBanner,
   shouldWriteThreadErrorToCurrentServerThread,
 } from "./ChatView.logic";
@@ -715,5 +716,33 @@ describe("hasServerAcknowledgedLocalDispatch", () => {
     expect(hasServerAcknowledgedLocalDispatch({ ...common, hasPendingApproval: true })).toBe(true);
     expect(hasServerAcknowledgedLocalDispatch({ ...common, hasPendingUserInput: true })).toBe(true);
     expect(hasServerAcknowledgedLocalDispatch({ ...common, threadError: "failed" })).toBe(true);
+  });
+});
+
+describe("server replacement pull request panels", () => {
+  it("follows only the previously linked PR and respects manual panel choices", () => {
+    const previous = {
+      projectId: ProjectId.make("project-1"),
+      repository: "Owner/Repo",
+      number: 1,
+      url: "https://example.com/1",
+    };
+    const current = { ...previous, number: 2, url: "https://example.com/2" };
+    const surface = {
+      id: "pull-request:1" as const,
+      kind: "pull-request" as const,
+      projectId: previous.projectId,
+      repository: "owner/repo",
+      number: 1,
+    };
+    expect(shouldRetargetThreadPullRequestPanel(previous, current, surface)).toBe(true);
+    expect(shouldRetargetThreadPullRequestPanel(previous, current, { ...surface, number: 3 })).toBe(
+      false,
+    );
+    expect(shouldRetargetThreadPullRequestPanel(previous, previous, surface)).toBe(false);
+    expect(shouldRetargetThreadPullRequestPanel(previous, null, surface)).toBe(false);
+    expect(
+      shouldRetargetThreadPullRequestPanel(previous, current, { id: "diff", kind: "diff" }),
+    ).toBe(false);
   });
 });

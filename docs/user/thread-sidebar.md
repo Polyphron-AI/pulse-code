@@ -34,3 +34,5 @@ be selected again. The option is hidden when the connected environment needs a s
 Updated environments settle inactive threads and threads with merged or closed pull requests on the server, even when every client is closed. Web, desktop and mobile show the same saved settlement state. Manual settlement is handled by the server and can interrupt active work; requests that still require a native provider answer must be resolved first.
 
 Change auto-settlement preferences in General settings. Changes apply to connected environments that support server auto-settlement. Older environments retain this device's local preferences and classification. Offline environments keep their saved settings until you reconnect and apply shared preferences.
+
+Pull-request links are discovered by an updated server even when no client is open. An explicitly linked pull request takes priority over the branch's automatically discovered link. The sidebar and PR panel share status updates, including merges and reopened requests. Older servers continue using checkout-based discovery until upgraded.
