@@ -285,6 +285,7 @@ import {
 } from "../state/entities";
 import { environmentShell } from "../state/shell";
 import { ChatComposer, type ChatComposerHandle } from "./chat/ChatComposer";
+import { resolveComposerScrollCollapseInset } from "./composerFooterLayout";
 import { DraftHeroHeadline } from "./chat/DraftHeroHeadline";
 import { ExpandedImageDialog } from "./chat/ExpandedImageDialog";
 import { PullRequestThreadDialog } from "./PullRequestThreadDialog";
@@ -1513,7 +1514,19 @@ function ChatViewContent(props: ChatViewProps) {
   const legendListRef = useRef<LegendListRef | null>(null);
   const [composerOverlayElement, setComposerOverlayElement] = useState<HTMLDivElement | null>(null);
   const [composerOverlayHeight, setComposerOverlayHeight] = useState(0);
+  const composerScrollCollapsedRef = useRef(false);
+  const onComposerScrollCollapseChange = useCallback((collapsed: boolean) => {
+    composerScrollCollapsedRef.current = collapsed;
+  }, []);
+  const getComposerTimelineNode = useCallback(() => {
+    const node = legendListRef.current?.getScrollableNode();
+    return node instanceof HTMLElement ? node : null;
+  }, []);
   const isAtEndRef = useRef(true);
+  const isComposerTimelineAtEnd = useCallback(
+    () => resolveTimelineIsAtEnd(legendListRef.current?.getState(), composerOverlayHeight) === true,
+    [composerOverlayHeight],
+  );
   const attachmentPreviewHandoffByMessageIdRef = useRef<Record<string, string[]>>({});
   const attachmentPreviewPromotionInFlightByMessageIdRef = useRef<Record<string, true>>({});
   const sendInFlightRef = useRef(false);
@@ -1526,7 +1539,11 @@ function ChatViewContent(props: ChatViewProps) {
       const nextHeight = Math.ceil(composerOverlayElement.getBoundingClientRect().height);
       if (nextHeight <= 0) return;
       setComposerOverlayHeight((currentHeight) =>
-        currentHeight === nextHeight ? currentHeight : nextHeight,
+        resolveComposerScrollCollapseInset(
+          nextHeight,
+          currentHeight,
+          composerScrollCollapsedRef.current,
+        ),
       );
     };
 
@@ -7501,6 +7518,10 @@ function ChatViewContent(props: ChatViewProps) {
                       <div className="chat-composer-glass-host relative z-10 w-full rounded-[22px]">
                         <div ref={attachDraftHeroComposerAnchorRef} className="relative z-10">
                           <ChatComposer
+                            getTimelineNode={getComposerTimelineNode}
+                            timelineOverflows={timelineRealContentOverflowsViewport}
+                            isTimelineAtLogicalEnd={isComposerTimelineAtEnd}
+                            onScrollCollapseChange={onComposerScrollCollapseChange}
                             composerRef={composerRef}
                             composerDraftTarget={composerDraftTarget}
                             environmentId={environmentId}

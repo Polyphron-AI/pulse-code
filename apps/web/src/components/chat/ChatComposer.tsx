@@ -151,6 +151,8 @@ import {
   renderProviderTraitsPicker,
 } from "./composerProviderState";
 import { ContextWindowMeter } from "./ContextWindowMeter";
+import { useComposerScrollCollapse } from "./useComposerScrollCollapse";
+import { useComposerMultilinePrompt } from "./useComposerMultilinePrompt";
 import {
   providerSupportsManualCompaction,
   resolveContextWindowModelDisplayName,
@@ -613,6 +615,10 @@ export interface ChatComposerProps {
 
   // Thread context
   activeThreadId: ThreadId | null;
+  getTimelineNode?: (() => HTMLElement | null) | undefined;
+  timelineOverflows?: (() => boolean) | undefined;
+  isTimelineAtLogicalEnd?: (() => boolean) | undefined;
+  onScrollCollapseChange?: ((collapsed: boolean) => void) | undefined;
   activeThreadEnvironmentId: EnvironmentId | undefined;
   activeThread: Thread | undefined;
   isServerThread: boolean;
@@ -1210,6 +1216,36 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     active: false,
   });
   const isMobileViewport = useMediaQuery("max-sm");
+  const [promptBody, setPromptBody] = useState<HTMLDivElement | null>(null);
+  const hasMultilinePrompt = useComposerMultilinePrompt(
+    settings.composerCollapseOnScroll && !isMobileViewport ? promptBody : null,
+  );
+  const scrollCollapse = useComposerScrollCollapse({
+    enabled:
+      settings.composerCollapseOnScroll &&
+      !isMobileViewport &&
+      routeKind === "server" &&
+      activeThreadId !== null &&
+      !hasMultilinePrompt &&
+      !prompt.includes("\n") &&
+      !activePendingApproval &&
+      pendingUserInputs.length === 0 &&
+      !showPlanFollowUpPrompt &&
+      !isComposerModelPickerOpen &&
+      !composerTrigger &&
+      !isStashMenuOpen &&
+      !isDragOverComposer &&
+      composerImages.length === 0 &&
+      composerFiles.length === 0,
+    threadId: activeThreadId,
+    getTimelineNode: props.getTimelineNode,
+    timelineOverflows: props.timelineOverflows,
+    isAtLogicalEnd: props.isTimelineAtLogicalEnd,
+  });
+  useLayoutEffect(() => {
+    props.onScrollCollapseChange?.(scrollCollapse.collapsed);
+    return () => props.onScrollCollapseChange?.(false);
+  }, [props.onScrollCollapseChange, scrollCollapse.collapsed]);
   const isComposerCollapsedMobile =
     isMobileViewport && !forceExpandedOnMobile && !isComposerFocused;
 
@@ -3361,6 +3397,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         <div
           ref={composerSurfaceRef}
           data-chat-composer-mobile-collapsed={isComposerCollapsedMobile ? "true" : "false"}
+          data-chat-composer-scroll-collapsed={scrollCollapse.collapsed ? "true" : "false"}
+          onPointerDownCapture={scrollCollapse.restore}
+          onKeyDownCapture={scrollCollapse.restore}
           className={cn(
             "rounded-[20px] transition-[background-color] duration-200",
             isDragOverComposer ? "bg-accent/45 ring-1 ring-primary/70" : null,
@@ -3368,6 +3407,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
             composerProviderState.composerSurfaceClassName,
           )}
           onFocusCapture={(event) => {
+            scrollCollapse.restore();
             const activeElement = event.target;
             if (
               isComposerCollapsedMobile &&
@@ -3846,7 +3886,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                 </div>
               )}
 
-            <div className="relative">
+            <div ref={setPromptBody} className="relative">
               <ComposerPromptEditor
                 editorRef={composerEditorRef}
                 value={
@@ -3863,7 +3903,10 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     : []
                 }
                 skills={selectedProviderSkills}
-                {...(showMobilePendingAnswerActions ? { className: "max-sm:pb-11" } : {})}
+                className={cn(
+                  showMobilePendingAnswerActions && "max-sm:pb-11",
+                  scrollCollapse.collapsed && "min-h-8 max-h-8 overflow-hidden",
+                )}
                 onRemoveTerminalContext={removeComposerTerminalContextFromDraft}
                 onChange={onPromptChange}
                 onCommandKeyDown={onComposerCommandKey}

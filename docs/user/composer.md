@@ -6,6 +6,14 @@ multiple messages, then send again in the same thread.
 
 ## Messages while the agent is working
 
+On web and desktop, scrolling a conversation can shorten a single-line composer draft to leave
+more room for reading. The footer controls stay visible. Click the composer, start typing, or
+return to the end of the conversation to expand it. Multiline drafts and pending approval or
+answer controls stay expanded. Moving focus away does not collapse the desktop composer.
+
+Turn off **Collapse composer on scroll** under **Settings → General** to keep the composer expanded.
+The mobile keyboard and composer keep their existing behavior.
+
 Choose how messages behave during an active turn under **Settings → General → Messages while
 working**:
 

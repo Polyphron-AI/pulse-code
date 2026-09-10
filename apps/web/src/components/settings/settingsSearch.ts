@@ -180,6 +180,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     to: "/settings/general",
   },
   {
+    id: "composer-collapse",
+    title: "Collapse composer on scroll",
+    to: "/settings/general",
+    searchTerms: ["composer rest resting scroll wheel conversation timeline shrink minimize"],
+  },
+  {
     id: "provider-update-checks",
     title: "Provider update checks",
     to: "/settings/general",

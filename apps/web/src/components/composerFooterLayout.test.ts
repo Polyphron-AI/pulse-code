@@ -5,7 +5,16 @@ import {
   COMPOSER_FOOTER_WIDE_ACTIONS_COMPACT_BREAKPOINT_PX,
   shouldUseCompactComposerPrimaryActions,
   shouldUseCompactComposerFooter,
+  resolveComposerScrollCollapseInset,
 } from "./composerFooterLayout";
+
+describe("scroll-collapse timeline inset", () => {
+  it("keeps space for expansion and allows new controls to increase it", () => {
+    expect(resolveComposerScrollCollapseInset(92, 130, true)).toBe(130);
+    expect(resolveComposerScrollCollapseInset(150, 130, true)).toBe(150);
+    expect(resolveComposerScrollCollapseInset(130, 150, false)).toBe(130);
+  });
+});
 
 describe("shouldUseCompactComposerFooter", () => {
   it("stays expanded without a measured width", () => {
