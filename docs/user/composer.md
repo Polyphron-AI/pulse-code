@@ -59,3 +59,7 @@ Use a media context menu to copy its original path or URL, save it, or copy an i
 PDF and HTML attachments open in the file panel with a separate download action. Workspace PDF and HTML files can also be viewed there; HTML offers a source view. HTML previews are isolated from Pulse Code's session and storage.
 
 On mobile, Photos includes videos when the connected server supports file uploads. You can also choose videos from Files. Tap an image, PDF, or video in a draft or conversation to preview it; the media menu offers the available copy and share actions. Video playback pauses when the app or screen loses focus, and offscreen conversation videos do not load until needed.
+
+## Editing files
+
+Edits in the web or desktop file panel save automatically to the selected environment. Closing the file saves pending edits without resending an already-saved revision.
