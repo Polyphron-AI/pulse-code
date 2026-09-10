@@ -1,5 +1,8 @@
 import { PullRequestNamedFilters } from "../components/pullRequest/PullRequestNamedFilters";
-import { pullRequestNamedFilters } from "../components/pullRequest/pullRequestNamedFilters.logic";
+import {
+  pullRequestNamedFilters,
+  pullRequestFacetTargets,
+} from "../components/pullRequest/pullRequestNamedFilters.logic";
 import {
   pullRequestListPreferences,
   readPullRequestListSort,
@@ -55,6 +58,7 @@ import {
   mergePullRequestDiffStats,
   partitionPullRequestsWithPriority,
   pullRequestEntryKey,
+  collectPullRequestListFacets,
   pullRequestEntryViewer,
   rankPullRequestMatches,
   rankPullRequestsByMergeReadiness,
@@ -522,6 +526,7 @@ function PullRequestsRouteView() {
   // it is sent. Until it lands, the rows already on screen are narrowed locally: the answer is
   // late but the page is not.
   const typedQuery = (search.q ?? "").trim();
+  const [namedFiltersOpen, setNamedFiltersOpen] = useState(false);
   const sentQuery = useDebouncedValue(typedQuery, SEARCH_DEBOUNCE_MS);
   const querySettled = typedQuery === sentQuery;
   // What was typed, split into the qualifiers the hosts can act on and the words that are left.
@@ -732,6 +737,18 @@ function PullRequestsRouteView() {
     ],
   );
   const baselineQuery = usePullRequestList(baselineTargets);
+  const facetTargets = useMemo(
+    () =>
+      pullRequestFacetTargets({
+        open: namedFiltersOpen,
+        environments: environmentQueries,
+        involvement: search.involvement,
+        projectId: scopedProjectId,
+        host: search.host,
+      }),
+    [namedFiltersOpen, environmentQueries, search.involvement, scopedProjectId, search.host],
+  );
+  const facetQuery = usePullRequestList(facetTargets);
   // The priority groups' own reads. The feed below is paginated by recency, so an older authored
   // or review-requested row can be missing from its first page; partitioned from these
   // server-filtered reads instead, the priority view is complete up front and a continuation can
@@ -802,6 +819,7 @@ function PullRequestsRouteView() {
     }
     refreshList();
     baselineQuery.refresh();
+    facetQuery.refresh();
     authoredQuery.refresh();
     reviewingQuery.refresh();
     statsQuery.refresh();
@@ -1075,6 +1093,17 @@ function PullRequestsRouteView() {
   );
 
   const viewers = baselineQuery.data?.viewers ?? listData?.viewers ?? EMPTY_VIEWERS;
+  const facets = useMemo(
+    () =>
+      collectPullRequestListFacets(
+        [
+          ...(facetQuery.data?.entries ?? []),
+          ...(baselineQuery.data?.entries ?? listData?.entries ?? []),
+        ],
+        search.state,
+      ),
+    [facetQuery.data?.entries, baselineQuery.data?.entries, listData?.entries, search.state],
+  );
   const listErrors = baselineQuery.data?.errors ?? listData?.errors ?? [];
 
   /** The hosts that narrowed the listing themselves, so their answer is not narrowed again. */
@@ -1617,6 +1646,9 @@ function PullRequestsRouteView() {
         </MenuPopup>
       </Menu>
       <PullRequestNamedFilters
+        onOpenChange={setNamedFiltersOpen}
+        authorOptions={facets.authors}
+        labelOptions={facets.labels}
         author={search.author}
         labels={search.labels}
         onChange={updateListScope}
@@ -1813,6 +1845,7 @@ function PullRequestsRouteView() {
               onActed={() => {
                 refreshList();
                 baselineQuery.refresh();
+                facetQuery.refresh();
                 authoredQuery.refresh();
                 reviewingQuery.refresh();
               }}

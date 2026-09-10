@@ -1,16 +1,31 @@
+import { XIcon } from "lucide-react";
+import {
+  pullRequestLabelColor,
+  type PullRequestAuthorFacet,
+  type PullRequestLabelFacet,
+} from "./pullRequestList.logic";
+import { PullRequestActorAvatar } from "./pullRequestPresentation";
 import { useState } from "react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Popover, PopoverTrigger, PopoverPopup } from "../ui/popover";
 import { pullRequestNamedFilters } from "./pullRequestNamedFilters.logic";
 
+const EMPTY_AUTHORS: ReadonlyArray<PullRequestAuthorFacet> = [];
+const EMPTY_LABEL_OPTIONS: ReadonlyArray<PullRequestLabelFacet> = [];
 const EMPTY_LABELS: ReadonlyArray<string> = [];
 
 export function PullRequestNamedFilters({
   author,
   labels = EMPTY_LABELS,
   onChange,
+  onOpenChange,
+  authorOptions = EMPTY_AUTHORS,
+  labelOptions = EMPTY_LABEL_OPTIONS,
 }: {
+  onOpenChange?: (open: boolean) => void;
+  authorOptions?: ReadonlyArray<PullRequestAuthorFacet>;
+  labelOptions?: ReadonlyArray<PullRequestLabelFacet>;
   author: string | undefined;
   labels: ReadonlyArray<string> | undefined;
   onChange: (filters: {
@@ -22,10 +37,22 @@ export function PullRequestNamedFilters({
   const [authorDraft, setAuthorDraft] = useState(author ?? "");
   const [labelDraft, setLabelDraft] = useState("");
   const [labelSelection, setLabelSelection] = useState(labels);
+  const changeOpen = (next: boolean) => {
+    setOpen(next);
+    onOpenChange?.(next);
+  };
+  const authorNeedle = authorDraft === (author ?? "") ? "" : authorDraft.trim().toLowerCase();
+  const visibleAuthors = authorOptions
+    .filter(
+      (option) =>
+        option.actor.login.toLowerCase().includes(authorNeedle) ||
+        option.actor.name?.toLowerCase().includes(authorNeedle),
+    )
+    .slice(0, 10);
   const apply = () => {
     const next = pullRequestNamedFilters({ author: authorDraft, labels: labelSelection });
     onChange({ author: next.author, labels: next.labels });
-    setOpen(false);
+    changeOpen(false);
   };
   const addLabel = () => {
     setLabelSelection(
@@ -43,7 +70,7 @@ export function PullRequestNamedFilters({
           setLabelSelection(labels);
           setLabelDraft("");
         }
-        setOpen(next);
+        changeOpen(next);
       }}
     >
       <PopoverTrigger
@@ -71,6 +98,26 @@ export function PullRequestNamedFilters({
               }}
             />
           </label>
+          {open ? (
+            <div aria-label="Suggested authors" className="max-h-40 overflow-y-auto">
+              {visibleAuthors.map((option) => (
+                <Button
+                  key={option.actor.login.toLowerCase()}
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-start"
+                  aria-label={`Select author ${option.actor.login}`}
+                  onClick={() => setAuthorDraft(option.actor.login)}
+                >
+                  <PullRequestActorAvatar actor={option.actor} />
+                  <span className="min-w-0 flex-1 truncate">{option.actor.login}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {option.count} loaded, {option.mergedCount} merged
+                  </span>
+                </Button>
+              ))}
+            </div>
+          ) : null}
           <div className="space-y-1">
             <label className="block text-xs" htmlFor="pr-label-filter">
               Labels (all must match)
@@ -99,6 +146,48 @@ export function PullRequestNamedFilters({
                 Add
               </Button>
             </div>
+            {open ? (
+              <div aria-label="Suggested labels" className="max-h-40 overflow-y-auto">
+                {labelOptions
+                  .filter((option) =>
+                    option.name.toLowerCase().includes(labelDraft.trim().toLowerCase()),
+                  )
+                  .map((option) => {
+                    const selected = labelSelection.some(
+                      (label) => label.toLowerCase() === option.name.toLowerCase(),
+                    );
+                    const color = pullRequestLabelColor(option.color);
+                    return (
+                      <Button
+                        key={option.name.toLowerCase()}
+                        variant="ghost"
+                        size="sm"
+                        className="w-full justify-start"
+                        aria-label={`Toggle label ${option.name}`}
+                        aria-pressed={selected}
+                        disabled={!selected && labelSelection.length >= 10}
+                        onClick={() =>
+                          setLabelSelection(
+                            selected
+                              ? labelSelection.filter(
+                                  (label) => label.toLowerCase() !== option.name.toLowerCase(),
+                                )
+                              : [...labelSelection, option.name],
+                          )
+                        }
+                      >
+                        <span
+                          aria-hidden
+                          className="size-2.5 shrink-0 rounded-full bg-muted-foreground"
+                          {...(color ? { style: { backgroundColor: color } } : {})}
+                        />
+                        <span className="min-w-0 flex-1 truncate">{option.name}</span>
+                        <span className="text-xs text-muted-foreground">{option.count} loaded</span>
+                      </Button>
+                    );
+                  })}
+              </div>
+            ) : null}
             {labelSelection.map((label) => (
               <Button
                 key={label}
@@ -107,7 +196,7 @@ export function PullRequestNamedFilters({
                 aria-label={`Remove label ${label}`}
                 onClick={() => setLabelSelection(labelSelection.filter((held) => held !== label))}
               >
-                {label} ?
+                {label} <XIcon aria-hidden className="size-3" />
               </Button>
             ))}
           </div>
@@ -117,7 +206,7 @@ export function PullRequestNamedFilters({
               size="sm"
               onClick={() => {
                 onChange({ author: undefined, labels: undefined });
-                setOpen(false);
+                changeOpen(false);
               }}
             >
               Clear

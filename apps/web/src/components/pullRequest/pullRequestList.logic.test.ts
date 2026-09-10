@@ -7,6 +7,7 @@ import type { EnvironmentId, ProjectId, PullRequestListEntry } from "@t3tools/co
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  collectPullRequestListFacets,
   filterPullRequestsByInvolvement,
   findScopedProject,
   mergePullRequestLists,
@@ -1180,5 +1181,48 @@ describe("remembered pull request list controls", () => {
     expect(() =>
       writePullRequestListPreferences({ involvement: "all", state: "open" }, denied),
     ).not.toThrow();
+  });
+});
+
+describe("pull request facets", () => {
+  it("deduplicates loaded pages, groups casing, counts the selected state and ranks merge history", () => {
+    const alice = { login: "Alice", name: "Alice Example", avatarUrl: null };
+    const bob = { login: "bob", name: null, avatarUrl: null };
+    const first = entry({ number: 1, author: alice, labels: [{ name: "Bug", color: "ff0000" }] });
+    const facets = collectPullRequestListFacets(
+      [
+        first,
+        first,
+        entry({
+          number: 2,
+          author: { ...alice, login: "alice" },
+          labels: [{ name: "bug", color: "ff0000" }],
+        }),
+        entry({ number: 3, author: bob }),
+        entry({
+          number: 4,
+          author: bob,
+          state: "merged",
+          labels: [{ name: "closed-only", color: null }],
+        }),
+      ],
+      "open",
+    );
+    expect(
+      facets.authors.map((facet) => [facet.actor.login, facet.count, facet.mergedCount]),
+    ).toEqual([
+      ["bob", 1, 1],
+      ["Alice", 2, 0],
+    ]);
+    expect(facets.labels).toEqual([{ name: "Bug", color: "ff0000", count: 2 }]);
+  });
+  it("keeps separate environments and includes every state when requested", () => {
+    const first = entry({ number: 1, labels: [{ name: "bug", color: null }] });
+    const facets = collectPullRequestListFacets(
+      [first, { ...first, environmentId: "env-2" as EnvironmentId, state: "merged" }],
+      "all",
+    );
+    expect(facets.authors[0]).toMatchObject({ count: 2, mergedCount: 1 });
+    expect(facets.labels[0]?.count).toBe(2);
   });
 });
