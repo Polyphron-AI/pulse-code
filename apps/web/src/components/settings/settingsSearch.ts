@@ -254,6 +254,9 @@ export const SETTINGS_SEARCH_ITEMS = [
     id: "providers",
     title: "Providers",
     to: "/settings/providers",
+    searchTerms: [
+      "Antigravity Google sign in sign out install authentication api key models codex claude cursor grok opencode omp Oh My Pi",
+    ],
   },
   {
     id: "agent-browser-access",

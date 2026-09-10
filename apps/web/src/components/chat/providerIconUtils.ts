@@ -33,6 +33,7 @@ function isAvailableProviderOption(option: (typeof PROVIDER_OPTIONS)[number]): o
 export const AVAILABLE_PROVIDER_OPTIONS = PROVIDER_OPTIONS.filter(isAvailableProviderOption);
 
 export type ModelEsque = {
+  isUnavailable?: boolean | undefined;
   badge?: "new" | undefined;
   slug: string;
   name: string;

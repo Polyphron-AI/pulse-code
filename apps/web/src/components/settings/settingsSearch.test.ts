@@ -72,6 +72,10 @@ describe("searchSettings", () => {
     ]);
   });
 
+  it("finds Antigravity setup by provider and sign-in terms", () => {
+    expect(searchSettings("Antigravity")[0]?.id).toBe("providers");
+    expect(searchSettings("Google sign in")[0]?.id).toBe("providers");
+  });
   it("returns no results for an empty query", () => {
     expect(searchSettings("   ", ITEMS)).toEqual([]);
   });
