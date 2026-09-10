@@ -261,6 +261,9 @@ export function useThreadComposerState() {
     const threadKey = scopedThreadKey(selectedThreadShell.environmentId, selectedThreadShell.id);
     const result = await pickComposerImages({
       existingCount: composerDrafts[threadKey]?.attachments.length ?? 0,
+      maxVideoBytes:
+        selectedEnvironmentRuntime?.serverConfig?.environment.capabilities.fileAttachments
+          ?.maxUploadBytes,
     });
     const rejectedImageCount = appendComposerDraftAttachments(threadKey, result.images);
     const problems = [
@@ -272,7 +275,7 @@ export function useThreadComposerState() {
     if (problems.length > 0) {
       Alert.alert("Could not attach image", problems.join("\n\n"));
     }
-  }, [composerDrafts, selectedThreadShell]);
+  }, [composerDrafts, selectedThreadShell, selectedEnvironmentRuntime]);
 
   const onPickDraftFiles = useCallback(async () => {
     if (!selectedThreadShell) {

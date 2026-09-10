@@ -173,15 +173,18 @@ it.layer(NodeServices.layer)("ServerEnvironmentLive", (it) => {
       const withFd = yield* describeWith({ mode: "desktop", desktopTelemetryControlFd: 5 });
       expect(withFd.capabilities.serverSelfUpdate).toBe("desktop-managed");
       expect(withFd.capabilities.desktopAppUpdate).toBe(true);
+      expect(withFd.capabilities.serverUpdateThreadContinuation).toBe(true);
       expect(withFd.capabilities.serverSelfUpdateProgress).toBe(true);
 
       const withoutFd = yield* describeWith({ mode: "desktop" });
       expect(withoutFd.capabilities.serverSelfUpdate).toBe("desktop-managed");
       expect(withoutFd.capabilities.desktopAppUpdate).toBeUndefined();
+      expect(withoutFd.capabilities.serverUpdateThreadContinuation).toBeUndefined();
       expect(withoutFd.capabilities.serverSelfUpdateProgress).toBeUndefined();
 
       const web = yield* describeWith({ mode: "web", desktopTelemetryControlFd: 5 });
       expect(web.capabilities.desktopAppUpdate).toBeUndefined();
+      expect(web.capabilities.serverUpdateThreadContinuation).toBeUndefined();
     }),
   );
 

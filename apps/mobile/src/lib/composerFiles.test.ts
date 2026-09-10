@@ -3,10 +3,12 @@ import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 const mocks = vi.hoisted(() => ({
   documentUri: "file:///documents",
   pickFile: vi.fn(),
+  pickMedia: vi.fn(),
   copy: vi.fn(),
   delete: vi.fn(),
   open: vi.fn(),
   size: vi.fn(),
+  readBase64: vi.fn(),
 }));
 
 vi.mock("expo-file-system", () => {
@@ -21,8 +23,6 @@ vi.mock("expo-file-system", () => {
   }
 
   class File {
-    static pickFileAsync = mocks.pickFile;
-
     readonly uri: string;
 
     constructor(source: string | Directory, name?: string) {
@@ -47,6 +47,10 @@ vi.mock("expo-file-system", () => {
       mocks.copy(this.uri, destination.uri);
     }
 
+    async base64(): Promise<string> {
+      return mocks.readBase64(this.uri);
+    }
+
     delete(): void {
       mocks.delete(this.uri);
     }
@@ -64,33 +68,95 @@ vi.mock("expo-file-system", () => {
   };
 });
 
+vi.mock("expo-image-picker", () => ({ launchImageLibraryAsync: mocks.pickMedia }));
+vi.mock("expo-document-picker", () => ({ getDocumentAsync: mocks.pickFile }));
 vi.mock("./uuid", () => ({ uuidv4: () => "attachment-id" }));
 
 import {
   persistComposerAttachmentFile,
   pickComposerFiles,
+  pickComposerImages,
   removePersistedComposerAttachmentFile,
 } from "./composerImages";
+import { isForegroundHandoffActive } from "./foreground-handoff";
+import { retainComposerAttachmentFile } from "./composerAttachmentFiles";
 
 describe("pickComposerFiles", () => {
   beforeEach(() => {
     mocks.documentUri = "file:///documents";
     mocks.pickFile.mockReset();
+    mocks.pickMedia.mockReset();
     mocks.copy.mockReset();
     mocks.delete.mockReset();
     mocks.open.mockReset();
     mocks.size.mockReset();
+    mocks.readBase64.mockReset();
     mocks.size.mockImplementation((uri: string) => (uri.startsWith("content:") ? null : 42));
+  });
+
+  it("retains picked videos without reading base64 and honors the server size limit", async () => {
+    mocks.pickMedia.mockResolvedValue({
+      canceled: false,
+      assets: [
+        {
+          uri: "file:///picker/demo.mp4",
+          type: "video",
+          fileName: "demo.mp4",
+          mimeType: "video/mp4",
+          fileSize: 42,
+        },
+      ],
+    });
+    const result = await pickComposerImages({ existingCount: 0, maxVideoBytes: 100 });
+    expect(result.error).toBeNull();
+    expect(result.images).toEqual([
+      expect.objectContaining({ type: "file", name: "demo.mp4", sizeBytes: 42 }),
+    ]);
+    expect(mocks.readBase64).not.toHaveBeenCalled();
+    expect(mocks.pickMedia).toHaveBeenCalledWith(
+      expect.objectContaining({ mediaTypes: ["images", "videos"] }),
+    );
+  });
+
+  it("refuses picker videos when the server has no file attachment capability", async () => {
+    mocks.pickMedia.mockResolvedValue({
+      canceled: false,
+      assets: [{ uri: "file:///picker/demo.mp4", type: "video", mimeType: "video/mp4" }],
+    });
+    const result = await pickComposerImages({ existingCount: 0 });
+    expect(result.images).toEqual([]);
+    expect(result.error).toContain("unavailable");
+    expect(mocks.copy).not.toHaveBeenCalled();
+  });
+
+  it("rejects oversized picker videos before retaining a draft file", async () => {
+    mocks.size.mockReturnValue(101);
+    mocks.pickMedia.mockResolvedValue({
+      canceled: false,
+      assets: [
+        {
+          uri: "file:///picker/demo.mp4",
+          type: "video",
+          fileName: "demo.mp4",
+          mimeType: "video/mp4",
+          fileSize: 42,
+        },
+      ],
+    });
+    const result = await pickComposerImages({ existingCount: 0, maxVideoBytes: 100 });
+    expect(result.images).toEqual([]);
+    expect(result.error).toContain("exceeds");
+    expect(mocks.copy).not.toHaveBeenCalled();
   });
 
   it("copies picked files into app-owned storage without loading their contents", async () => {
     mocks.pickFile.mockResolvedValue({
       canceled: false,
-      result: [
+      assets: [
         {
           uri: "file:///downloads/report.pdf",
           name: "report.pdf",
-          type: "application/pdf",
+          mimeType: "application/pdf",
           size: 42,
         },
       ],
@@ -115,14 +181,120 @@ describe("pickComposerFiles", () => {
     );
   });
 
+  it("preserves Android picker metadata instead of using the content URI document id", async () => {
+    const uri = "content://com.android.providers.media.documents/document/video%3A18";
+    mocks.pickFile.mockResolvedValue({
+      canceled: false,
+      assets: [
+        {
+          uri,
+          name: "preview-h264.mp4",
+          mimeType: "video/mp4",
+          size: 620_992,
+          lastModified: 0,
+        },
+      ],
+    });
+    mocks.size.mockReturnValue(620_992);
+
+    await expect(pickComposerFiles({ existingCount: 0 })).resolves.toEqual({
+      files: [
+        {
+          id: "attachment-id",
+          type: "file",
+          name: "preview-h264.mp4",
+          mimeType: "video/mp4",
+          sizeBytes: 620_992,
+          fileUri: "file:///documents/t3-composer-attachments/attachment-id-preview-h264.mp4",
+        },
+      ],
+      error: null,
+    });
+    expect(mocks.pickFile).toHaveBeenCalledWith({ multiple: true, copyToCacheDirectory: true });
+    expect(mocks.copy).toHaveBeenCalledWith(
+      uri,
+      "file:///documents/t3-composer-attachments/attachment-id-preview-h264.mp4",
+    );
+    expect(mocks.delete).not.toHaveBeenCalled();
+  });
+
+  it("persists provider selections that require a readable cache copy", async () => {
+    const providerUri = "content://cloud-provider/documents/clip";
+    const cachedUri = "file:///cache/DocumentPicker/clip.mp4";
+    mocks.pickFile.mockImplementation(async (options) => ({
+      canceled: false,
+      assets: [
+        {
+          uri: options.copyToCacheDirectory ? cachedUri : providerUri,
+          name: "Cloud recording.mp4",
+          mimeType: "video/mp4",
+          size: 42,
+          lastModified: 0,
+        },
+      ],
+    }));
+    mocks.copy.mockImplementation((uri: string) => {
+      if (uri === providerUri) throw new Error("The provider URI is not directly readable.");
+    });
+
+    const result = await pickComposerFiles({ existingCount: 0 });
+
+    expect(result.error).toBeNull();
+    expect(result.files).toEqual([
+      expect.objectContaining({
+        name: "Cloud recording.mp4",
+        fileUri: "file:///documents/t3-composer-attachments/attachment-id-Cloud recording.mp4",
+      }),
+    ]);
+    expect(mocks.copy).toHaveBeenCalledWith(cachedUri, result.files[0]!.fileUri);
+  });
+
+  it("ends the foreground handoff when the picker is canceled without copying files", async () => {
+    mocks.pickFile.mockImplementation(async () => {
+      expect(isForegroundHandoffActive()).toBe(true);
+      return { canceled: true, assets: null };
+    });
+
+    await expect(pickComposerFiles({ existingCount: 0 })).resolves.toEqual({
+      files: [],
+      error: null,
+    });
+
+    expect(isForegroundHandoffActive()).toBe(false);
+    expect(mocks.copy).not.toHaveBeenCalled();
+    expect(mocks.open).not.toHaveBeenCalled();
+  });
+
+  it("reports picker failures and releases the foreground handoff", async () => {
+    mocks.pickFile.mockRejectedValue(new Error("The document provider is unavailable."));
+
+    await expect(pickComposerFiles({ existingCount: 0 })).resolves.toEqual({
+      files: [],
+      error: "The document provider is unavailable.",
+    });
+
+    expect(isForegroundHandoffActive()).toBe(false);
+    expect(mocks.copy).not.toHaveBeenCalled();
+  });
+
+  it("does not open the picker when the draft has no remaining attachment slots", async () => {
+    await expect(pickComposerFiles({ existingCount: 8 })).resolves.toEqual({
+      files: [],
+      error: "You can attach up to 8 files per message.",
+    });
+
+    expect(mocks.pickFile).not.toHaveBeenCalled();
+    expect(isForegroundHandoffActive()).toBe(false);
+  });
+
   it("falls back to a usable name when the picker reports a blank one", async () => {
     mocks.pickFile.mockResolvedValue({
       canceled: false,
-      result: [
+      assets: [
         {
           uri: "file:///downloads/unnamed",
           name: "   ",
-          type: "application/pdf",
+          mimeType: "application/pdf",
           size: 42,
         },
       ],
@@ -137,11 +309,11 @@ describe("pickComposerFiles", () => {
   it("rejects files that exceed the environment's advertised upload limit", async () => {
     mocks.pickFile.mockResolvedValue({
       canceled: false,
-      result: [
+      assets: [
         {
           uri: "file:///downloads/archive.zip",
           name: "archive.zip",
-          type: "application/zip",
+          mimeType: "application/zip",
           size: 2 * 1024 * 1024,
         },
       ],
@@ -157,11 +329,11 @@ describe("pickComposerFiles", () => {
   it("never accepts files above the 50 MB contract limit", async () => {
     mocks.pickFile.mockResolvedValue({
       canceled: false,
-      result: [
+      assets: [
         {
           uri: "file:///downloads/archive.zip",
           name: "archive.zip",
-          type: "application/zip",
+          mimeType: "application/zip",
           size: 51 * 1024 * 1024,
         },
       ],
@@ -178,11 +350,11 @@ describe("pickComposerFiles", () => {
   it("rejects a file that grew after the picker reported its size", async () => {
     mocks.pickFile.mockResolvedValue({
       canceled: false,
-      result: [
+      assets: [
         {
           uri: "file:///downloads/archive.zip",
           name: "archive.zip",
-          type: "application/zip",
+          mimeType: "application/zip",
           size: 42,
         },
       ],
@@ -246,11 +418,11 @@ describe("pickComposerFiles", () => {
     mocks.size.mockReturnValue(0);
     mocks.pickFile.mockResolvedValue({
       canceled: false,
-      result: [
+      assets: [
         {
           uri: "file:///downloads/empty.txt",
           name: "empty.txt",
-          type: "text/plain",
+          mimeType: "text/plain",
           size: 0,
         },
       ],
@@ -262,7 +434,7 @@ describe("pickComposerFiles", () => {
     });
   });
 
-  it("copies an Android SAF file when the picker reports an unknown zero size", async () => {
+  it.each([0, undefined])("copies an Android SAF file when the picker size is %s", async (size) => {
     const reader = {
       readBytes: vi
         .fn()
@@ -275,12 +447,12 @@ describe("pickComposerFiles", () => {
     mocks.open.mockImplementation((uri: string) => (uri.startsWith("content:") ? reader : writer));
     mocks.pickFile.mockResolvedValue({
       canceled: false,
-      result: [
+      assets: [
         {
           uri: "content://shared/report",
           name: "report.pdf",
-          type: "application/pdf",
-          size: 0,
+          mimeType: "application/pdf",
+          size,
         },
       ],
     });
@@ -303,17 +475,17 @@ describe("pickComposerFiles", () => {
   it("uses the remaining slot for the first valid file after an oversized selection", async () => {
     mocks.pickFile.mockResolvedValue({
       canceled: false,
-      result: [
+      assets: [
         {
           uri: "file:///downloads/huge.zip",
           name: "huge.zip",
-          type: "application/zip",
+          mimeType: "application/zip",
           size: 2 * 1024 * 1024,
         },
         {
           uri: "file:///downloads/report.pdf",
           name: "report.pdf",
-          type: "application/pdf",
+          mimeType: "application/pdf",
           size: 42,
         },
       ],
@@ -367,6 +539,26 @@ describe("pickComposerFiles", () => {
     expect(mocks.delete.mock.calls).toEqual([
       [`${mocks.documentUri}/t3-composer-attachments/${fileName}`],
     ]);
+  });
+
+  it("rechecks preview ownership after loading the native filesystem", async () => {
+    const fileName = "33333333-3333-4333-8333-333333333333-recording.mp4";
+    const oldUri = `file:///private/var/mobile/Containers/Data/Application/11111111-1111-4111-8111-111111111111/Documents/t3-composer-attachments/${fileName}`;
+    mocks.documentUri =
+      "file:///var/mobile/Containers/Data/Application/22222222-2222-4222-8222-222222222222/Documents";
+    const currentUri = `${mocks.documentUri}/t3-composer-attachments/${fileName}`;
+
+    const deleting = removePersistedComposerAttachmentFile(oldUri);
+    const release = retainComposerAttachmentFile(currentUri, () => {});
+    try {
+      await deleting;
+      expect(mocks.delete).not.toHaveBeenCalled();
+    } finally {
+      release();
+    }
+
+    await removePersistedComposerAttachmentFile(oldUri);
+    expect(mocks.delete.mock.calls).toEqual([[currentUri]]);
   });
 
   it("copies an open-in-place source from its actual container without rebasing it", async () => {

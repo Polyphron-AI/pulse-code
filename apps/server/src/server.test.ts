@@ -1,3 +1,4 @@
+import { ProviderInstanceRegistry } from "./provider/Services/ProviderInstanceRegistry.ts";
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import * as NodeSocket from "@effect/platform-node/NodeSocket";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -397,6 +398,7 @@ const buildAppUnderTest = (options?: {
   config?: Partial<ServerConfig.ServerConfig["Service"]>;
   layers?: {
     keybindings?: Partial<Keybindings.Keybindings["Service"]>;
+    usageLimitSources?: Partial<UsageLimitSources.UsageLimitSources["Service"]>;
     providerRegistry?: Partial<ProviderRegistry.ProviderRegistry["Service"]>;
     serverSettings?: Partial<ServerSettings.ServerSettingsService["Service"]>;
     externalLauncher?: Partial<ExternalLauncher.ExternalLauncher["Service"]>;
@@ -639,11 +641,18 @@ const buildAppUnderTest = (options?: {
           ...options?.layers?.keybindings,
         }).pipe(
           Layer.merge(
-            Layer.succeed(UsageLimitSources.UsageLimitSources, {
-              current: Effect.succeed([]),
-              streamChanges: Stream.empty,
-              refresh: Effect.void,
-            }),
+            Layer.mergeAll(
+              Layer.mock(ProviderInstanceRegistry)({
+                getInstance: () => Effect.succeed(undefined),
+              }),
+              Layer.succeed(UsageLimitSources.UsageLimitSources, {
+                current: Effect.succeed([]),
+                streamChanges: Stream.make([]),
+                refresh: Effect.void,
+                consumeResetCredit: () => Effect.succeed({ outcome: "nothingToReset" as const }),
+                ...options?.layers?.usageLimitSources,
+              }),
+            ),
           ),
         ),
       ),
@@ -5106,6 +5115,61 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       assert.equal(snapshot.value.processes.length, 0);
       assert.equal(snapshot.value.groups.backend.processCount, 0);
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
+  it.effect.each([false, true])(
+    "gates usage-limit commands in config snapshots (%s)",
+    (usageLimitsCommand) =>
+      Effect.gen(function* () {
+        const providers = [
+          {
+            instanceId: ProviderInstanceId.make("codex"),
+            driver: ProviderDriverKind.make("codex"),
+            enabled: true,
+            installed: true,
+            version: "1.0.0",
+            status: "ready" as const,
+            auth: { status: "authenticated" as const },
+            checkedAt: "2026-04-11T00:00:00.000Z",
+            models: [],
+            slashCommands: [],
+            skills: [],
+            usageLimits: {
+              checkedAt: "2026-04-11T00:00:00.000Z",
+              windows: [
+                { id: "weekly", kind: "weekly" as const, label: "Weekly", usedPercent: 25 },
+              ],
+            },
+          },
+        ];
+        yield* buildAppUnderTest({
+          layers: {
+            providerRegistry: {
+              getProviders: Effect.succeed(providers),
+              streamChanges: Stream.empty,
+            },
+          },
+        });
+        const wsUrl = yield* getWsServerUrl("/ws");
+        const events = yield* Effect.scoped(
+          withWsRpcClient(wsUrl, (client) =>
+            client[WS_METHODS.subscribeServerConfig]({ usageLimitsCommand }).pipe(
+              Stream.take(1),
+              Stream.runCollect,
+            ),
+          ),
+        );
+        const snapshot = Array.from(events)[0];
+        assert.equal(snapshot?.type, "snapshot");
+        if (snapshot?.type === "snapshot") {
+          assert.equal(
+            snapshot.config.providers[0]?.slashCommands.some(
+              (command) => command.name === "usage-limits",
+            ),
+            usageLimitsCommand,
+          );
+        }
+      }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
   it.effect("routes websocket rpc subscribeServerConfig emits provider status updates", () =>

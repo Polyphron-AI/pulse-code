@@ -18,6 +18,7 @@ export interface SettingsSearchItem {
   readonly title: string;
   readonly to: SettingsPath;
   readonly targetId?: string;
+  readonly searchTerms?: readonly string[];
   // Its row only renders in the desktop app, so a browser result would land on
   // an anchor that isn't there.
   readonly desktopOnly?: boolean;
@@ -52,6 +53,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     id: "dictation",
     title: "Dictation, microphone, shortcut, Parakeet and meeting transcription",
     to: "/settings/dictation",
+  },
+  {
+    id: "usage-providers",
+    title: "Usage providers",
+    to: "/settings/providers",
+    searchTerms: ["CLIProxyAPI", "CLI proxy hub", "management key", "subscription quota limits"],
   },
   {
     id: "continue-threads-after-server-restart",
@@ -355,6 +362,8 @@ export function searchSettings(
   return items.filter(
     (item) =>
       (isElectron || item.desktopOnly !== true) &&
-      normalizeSearchText(item.title).includes(normalizedQuery),
+      [item.title, ...(item.searchTerms ?? [])].some((text) =>
+        normalizeSearchText(text).includes(normalizedQuery),
+      ),
   );
 }

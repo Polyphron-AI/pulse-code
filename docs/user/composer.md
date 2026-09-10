@@ -57,3 +57,5 @@ On web and desktop, select an image to expand it. Videos play in the conversatio
 Use a media context menu to copy its original path or URL, save it, or copy an image. A remote host must allow browser access for save and copy operations.
 
 PDF and HTML attachments open in the file panel with a separate download action. Workspace PDF and HTML files can also be viewed there; HTML offers a source view. HTML previews are isolated from Pulse Code's session and storage.
+
+On mobile, Photos includes videos when the connected server supports file uploads. You can also choose videos from Files. Tap an image, PDF, or video in a draft or conversation to preview it; the media menu offers the available copy and share actions. Video playback pauses when the app or screen loses focus, and offscreen conversation videos do not load until needed.

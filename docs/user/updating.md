@@ -28,7 +28,7 @@ Changing this preference applies it to every connected environment that supports
 
 When enabled, eligible active threads can continue after a server or machine restarts, including a supported server update. Scheduled work and threads waiting for approval may still need your attention. Turning the option off restores manual continuation on the connected supported environments.
 
-The desktop update remains available on the machine running the desktop app.
+Supported desktop-hosted environments also offer continuation when installing an update from a connected client. The selected continuation option takes effect when installation starts, so you can download an update while threads keep running.
 
 ## Choose the Action You See
 

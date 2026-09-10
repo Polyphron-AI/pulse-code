@@ -1,3 +1,9 @@
+import {
+  ProviderConsumeResetCreditInput,
+  ProviderConsumeResetCreditResult,
+  ProviderResetCreditError,
+  UsageLimitSourceError,
+} from "./providerUsageLimits.ts";
 import { TrimmedNonEmptyString } from "./baseSchemas.ts";
 import * as Schema from "effect/Schema";
 import {
@@ -374,6 +380,7 @@ export const WS_METHODS = {
   serverGetConfig: "server.getConfig",
   serverRefreshProviders: "server.refreshProviders",
   serverUpdateProvider: "server.updateProvider",
+  providerConsumeResetCredit: "provider.consumeResetCredit",
   serverUpdateServer: "server.updateServer",
   serverUpdateServerWithProgress: "server.updateServerWithProgress",
   serverCommitDesktopUpdate: "server.commitDesktopUpdate",
@@ -503,6 +510,16 @@ export const WsServerRefreshProvidersRpc = Rpc.make(WS_METHODS.serverRefreshProv
   }),
   success: ServerProviderUpdatedPayload,
   error: EnvironmentAuthorizationError,
+});
+
+export const WsProviderConsumeResetCreditRpc = Rpc.make(WS_METHODS.providerConsumeResetCredit, {
+  payload: ProviderConsumeResetCreditInput,
+  success: ProviderConsumeResetCreditResult,
+  error: Schema.Union([
+    ProviderResetCreditError,
+    UsageLimitSourceError,
+    EnvironmentAuthorizationError,
+  ]),
 });
 
 export const WsServerUpdateProviderRpc = Rpc.make(WS_METHODS.serverUpdateProvider, {
@@ -1308,7 +1325,10 @@ export const WsSubscribeTerminalMetadataRpc = Rpc.make(WS_METHODS.subscribeTermi
 });
 
 export const WsSubscribeServerConfigRpc = Rpc.make(WS_METHODS.subscribeServerConfig, {
-  payload: Schema.Struct({ usageLimitSources: Schema.optional(Schema.Boolean) }),
+  payload: Schema.Struct({
+    usageLimitSources: Schema.optional(Schema.Boolean),
+    usageLimitsCommand: Schema.optional(Schema.Boolean),
+  }),
   success: ServerConfigStreamEvent,
   error: Schema.Union([KeybindingsConfigError, ServerSettingsError, EnvironmentAuthorizationError]),
   stream: true,
@@ -1488,6 +1508,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerGetConfigRpc,
   WsServerRefreshProvidersRpc,
   WsServerUpdateProviderRpc,
+  WsProviderConsumeResetCreditRpc,
   WsServerUpdateServerRpc,
   WsServerUpdateServerWithProgressRpc,
   WsServerCommitDesktopUpdateRpc,
