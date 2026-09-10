@@ -1,3 +1,9 @@
+import { useAtomValue } from "@effect/atom-react";
+import {
+  composerAttachmentUploadBlockReason,
+  composerAttachmentsStillUploading,
+  composerAttachmentUploadsAtom,
+} from "../../state/composer-attachment-uploads";
 import { NativeHeaderToolbar, NativeStackScreenOptions } from "../../native/StackHeader";
 import {
   StackActions,
@@ -143,6 +149,19 @@ export function NewTaskDraftScreen(props: {
     connectedEnvironments.find(
       (environment) => environment.environmentId === selectedProject.environmentId,
     )?.connectionState === "connected";
+  const uploadStates = useAtomValue(composerAttachmentUploadsAtom);
+  const uploadInput = selectedProject
+    ? {
+        environmentId: selectedProject.environmentId,
+        attachments: flow.attachments,
+        serverConfig: selectedEnvironmentServerConfig,
+        states: uploadStates,
+      }
+    : null;
+  const attachmentBlockReason = uploadInput
+    ? composerAttachmentUploadBlockReason({ ...uploadInput, connected: environmentConnected })
+    : null;
+  const attachmentsUploading = uploadInput ? composerAttachmentsStillUploading(uploadInput) : false;
   const modelUnavailable = environmentConnected && flow.selectedModelOption?.isUnavailable === true;
   const promptInputRef = useRef<ComposerEditorHandle>(null);
   const loadedBranchesProjectKeyRef = useRef<string | null>(null);
@@ -888,6 +907,7 @@ export function NewTaskDraftScreen(props: {
     if (
       !modelSelection ||
       initialMessageText.length === 0 ||
+      attachmentBlockReason !== null ||
       flow.submitting ||
       (workspaceMode === "worktree" && !selectedBranchName)
     ) {
@@ -947,7 +967,7 @@ export function NewTaskDraftScreen(props: {
       }
     }
 
-    const queuesInsteadOfStarting = !environmentConnected;
+    const queuesInsteadOfStarting = !environmentConnected || attachmentsUploading;
     // Every submission goes through the outbox: the drain uploads the
     // attachments and delivers the creation, retrying across reconnects.
     // When it can send now the thread screen opens immediately with the
@@ -1038,6 +1058,7 @@ export function NewTaskDraftScreen(props: {
   const isAndroid = Platform.OS === "android";
   const isDarkMode = colorScheme === "dark";
   const canStart =
+    attachmentBlockReason === null &&
     !modelUnavailable &&
     Boolean(flow.selectedProject) &&
     Boolean(flow.selectedModel) &&
@@ -1236,6 +1257,7 @@ export function NewTaskDraftScreen(props: {
         {flow.attachments.length > 0 ? (
           <View className="pb-2.5">
             <ComposerAttachmentStrip
+              environmentId={selectedProject.environmentId}
               attachments={flow.attachments}
               imageBorderRadius={16}
               imageSize={72}
@@ -1303,10 +1325,15 @@ export function NewTaskDraftScreen(props: {
           </ComposerToolbarScroller>
           <ComposerToolbarButton
             accessibilityLabel={
-              flow.submitting ? "Starting task" : environmentConnected ? "Start task" : "Queue task"
+              attachmentBlockReason ??
+              (flow.submitting
+                ? "Starting task"
+                : environmentConnected && !attachmentsUploading
+                  ? "Start task"
+                  : "Queue task")
             }
             disabled={!canStart}
-            icon={environmentConnected ? "arrow.up" : "tray.and.arrow.up"}
+            icon={environmentConnected && !attachmentsUploading ? "arrow.up" : "tray.and.arrow.up"}
             onPress={() => void handleStart()}
             showChevron={false}
             variant="primary"

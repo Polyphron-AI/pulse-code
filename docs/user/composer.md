@@ -154,3 +154,5 @@ To start another task on a thread's branch, open that thread's menu and choose *
 Mobile keeps unsent Pulse Connect drafts and queued messages on the device when you sign out. Signing back into the same account restores them; another account does not receive that work. If the local backup fails, Pulse keeps the work and reports the cleanup failure so it can be retried.
 
 Files linked by an agent can also live outside the workspace. Markdown opens read-only with links relative to its own directory. HTML and PDF host files open in the file viewer. These paths belong to the connected environment, so remote files stay on that host.
+
+On mobile, attachments begin uploading while you compose when the connected environment supports uploads. The attachment shows progress or a Retry control if the upload fails. You can send while an upload is running; the queued message keeps its local bytes until it can be delivered. Retry or remove a failed attachment before sending while connected. Leaving the composer does not cancel a draft's upload, and disconnected drafts remain available offline.

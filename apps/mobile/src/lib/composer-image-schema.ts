@@ -4,6 +4,8 @@ import { EnvironmentId } from "@t3tools/contracts";
 export const DraftComposerImageAttachmentSchema = Schema.Struct({
   id: Schema.String,
   previewUri: Schema.String,
+  uploadedAttachmentId: Schema.optional(Schema.String),
+  uploadEnvironmentId: Schema.optional(EnvironmentId),
   type: Schema.Literal("image"),
   name: Schema.String,
   mimeType: Schema.String,

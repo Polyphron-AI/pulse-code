@@ -23,6 +23,8 @@ import { uuidv4 } from "./uuid";
 export interface DraftComposerImageAttachment extends Omit<UploadChatImageAttachment, "dataUrl"> {
   readonly id: string;
   readonly previewUri: string;
+  readonly uploadedAttachmentId?: string;
+  readonly uploadEnvironmentId?: EnvironmentId;
   /** Owned image bytes from a file-backed draft. Current writers still use inline bytes. */
   readonly fileUri?: string;
   /** Inline bytes from current writers and older drafts. */

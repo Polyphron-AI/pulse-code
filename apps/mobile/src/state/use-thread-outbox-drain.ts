@@ -144,6 +144,9 @@ export async function prepareQueuedMessageAttachments(queuedMessage: QueuedThrea
   const result = await prepareTurnAttachments({
     environmentId: queuedMessage.environmentId,
     attachments: queuedMessage.attachments,
+    supportsImageUploads:
+      appAtomRegistry.get(serverEnvironment.configValueAtom(queuedMessage.environmentId))
+        ?.environment.capabilities.attachmentUploads === true,
     persistUploadedReferences: async (draftAttachments) => {
       if (appAtomRegistry.get(editingQueuedMessageIdsAtom)[queuedMessage.messageId]) {
         return "abandon";
@@ -512,18 +515,14 @@ async function preserveUploadedAttachmentsForEditor(
   const draftKey = `pending-task:${originalMessage.messageId}`;
   const draft = getComposerDraftSnapshot(draftKey);
   const uploadedById = new Map(
-    uploadedMessage.attachments
-      .filter((attachment) => attachment.type === "file")
-      .map((attachment) => [attachment.id, attachment] as const),
+    uploadedMessage.attachments.map((attachment) => [attachment.id, attachment] as const),
   );
   let changed = false;
   const nextAttachments = draft.attachments.map((attachment) => {
-    if (attachment.type !== "file") {
-      return attachment;
-    }
     const uploaded = uploadedById.get(attachment.id);
     if (
       !uploaded?.uploadedAttachmentId ||
+      uploaded.type !== attachment.type ||
       uploaded.uploadEnvironmentId !== originalMessage.environmentId ||
       (attachment.uploadedAttachmentId === uploaded.uploadedAttachmentId &&
         attachment.uploadEnvironmentId === uploaded.uploadEnvironmentId)
@@ -814,12 +813,6 @@ export function useThreadOutboxDrain(): void {
         (await completeQueuedMessageDelivery(persistedMessage, deliveryRevision)) === "removed";
       if (delivered) {
         acknowledgedExistingThreadMessageIdsRef.current.delete(persistedMessage.messageId);
-        // The delivered turn holds its own copy of the bytes. A failed delete
-        // is surfaced (never fails the delivered turn); the server also
-        // expires leaked pending uploads.
-        await prepared.releaseUploads().catch((error) => {
-          console.warn("[thread-outbox] could not delete consumed pending uploads", error);
-        });
       }
       return delivered;
     },
@@ -953,9 +946,6 @@ export function useThreadOutboxDrain(): void {
         return recoverEditedCreationAfterDelivery(persistedMessage);
       }
       if (outcome === "removed") {
-        await prepared.releaseUploads().catch((error) => {
-          console.warn("[thread-outbox] could not delete consumed pending uploads", error);
-        });
         return true;
       }
       return false;

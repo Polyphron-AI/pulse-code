@@ -87,6 +87,9 @@ export function useCreateProjectThread() {
         prepared = await prepareTurnAttachments({
           environmentId: input.project.environmentId,
           attachments: input.initialAttachments,
+          supportsImageUploads:
+            appAtomRegistry.get(serverEnvironment.configValueAtom(input.project.environmentId))
+              ?.environment.capabilities.attachmentUploads === true,
           persistUploadedReferences: async (draftAttachments) => {
             await input.onAttachmentsUploaded(draftAttachments);
             return "persisted";
@@ -153,13 +156,8 @@ export function useCreateProjectThread() {
         );
         return AsyncResult.failure(result.cause);
       }
-      // The started turn holds its own copy of the bytes; a failed delete is
-      // surfaced without failing the started task.
-      await prepared.releaseUploads().catch((error) => {
-        console.warn("[project-thread] could not delete consumed pending uploads", error);
-      });
       setPendingConnectionError(null);
-      scheduleUnusedComposerAttachmentCleanup(input.initialAttachments);
+      scheduleUnusedComposerAttachmentCleanup(prepared.draftAttachments);
 
       return mapAtomCommandResult(result, () =>
         scopeThreadRef(input.project.environmentId, threadId),
