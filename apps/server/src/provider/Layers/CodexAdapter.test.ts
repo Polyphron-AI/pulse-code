@@ -220,6 +220,7 @@ const providerSessionDirectoryTestLayer = Layer.succeed(ProviderSessionDirectory
     Effect.die(new Error("ProviderSessionDirectory.getProvider is not used in test")),
   getBinding: () => Effect.succeed(Option.none()),
   listThreadIds: () => Effect.succeed([]),
+  recordImportedTranscript: () => Effect.void,
   listBindings: () => Effect.succeed([]),
 });
 

@@ -24,6 +24,12 @@ import {
 import { rememberSavedOutputPreview } from "./savedOutputPreview";
 import { useRightPanelStore } from "~/rightPanelStore";
 
+import {
+  browserDefaultOpenProfileId,
+  browserDefaultOpenViewport,
+  resolveBrowserDefaults,
+} from "./browserDefaults";
+
 export const isBrowserPreviewFile = (path: string): boolean =>
   /\.(?:html?|pdf)$/i.test(path.split(/[?#]/, 1)[0] ?? "");
 
@@ -45,9 +51,18 @@ export async function openUrlInPreview<E>(input: {
   readonly resource?: AssetResource;
   readonly openPreview: OpenPreviewMutation<E>;
 }): Promise<AtomCommandResult<void, E>> {
+  const defaults = await resolveBrowserDefaults();
   const result = await input.openPreview({
     environmentId: input.threadRef.environmentId,
-    input: { threadId: input.threadRef.threadId, url: input.url },
+    input: {
+      threadId: input.threadRef.threadId,
+      url: input.url,
+      // Built here rather than via `openPreviewSession` because this path
+      // maps the result differently, so the configured defaults have to be
+      // applied explicitly or file/link opens would ignore them.
+      viewport: browserDefaultOpenViewport(defaults),
+      profileId: browserDefaultOpenProfileId(defaults),
+    },
   });
   return mapAtomCommandResult(result, (snapshot) => {
     if (input.resource)

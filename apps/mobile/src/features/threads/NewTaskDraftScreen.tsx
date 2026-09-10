@@ -22,6 +22,7 @@ import {
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
 import { PROVIDER_SEND_TURN_MAX_ATTACHMENTS } from "@t3tools/contracts";
+import { wasBootstrapThreadDeleted } from "@t3tools/client-runtime/errors";
 
 import { ComposerEditor, type ComposerEditorHandle } from "../../components/ComposerEditor";
 import {
@@ -852,12 +853,29 @@ export function NewTaskDraftScreen(props: {
       return;
     }
 
-    const editingPendingTask = flow.editingPendingTask;
+    let editingPendingTask = flow.editingPendingTask;
+    if (editingPendingTask) {
+      flow.setSubmitting(true);
+      try {
+        editingPendingTask = await flow.preparePendingTaskRetry();
+        if (!editingPendingTask) {
+          flow.setSubmitting(false);
+          return;
+        }
+      } catch (error) {
+        flow.setSubmitting(false);
+        Alert.alert(
+          "Could not prepare retry",
+          error instanceof Error ? error.message : "The pending task could not be saved.",
+        );
+        return;
+      }
+    }
 
     if (!environmentConnected) {
       // Offline: park the task in the outbox; the drain sends it when the
       // environment reconnects. Editing an existing pending task re-queues it
-      // under its original identifiers.
+      // under its retained message identity and current thread identifiers.
       const metadata = editingPendingTask
         ? {
             threadId: editingPendingTask.threadId,
@@ -868,6 +886,7 @@ export function NewTaskDraftScreen(props: {
         : makeTurnCommandMetadata();
       const message = flow.buildPendingTaskMessage(metadata);
       if (!message) {
+        flow.setSubmitting(false);
         return;
       }
       flow.setSubmitting(true);
@@ -935,18 +954,33 @@ export function NewTaskDraftScreen(props: {
           }
         : {}),
     });
-    flow.setSubmitting(false);
-
     if (result._tag === "Failure") {
       if (!isAtomCommandInterrupted(result)) {
         const error = squashAtomCommandFailure(result);
+        if (editingPendingTask && wasBootstrapThreadDeleted(error)) {
+          try {
+            await flow.preparePendingTaskRetry(editingPendingTask.threadId);
+          } catch (retryError) {
+            flow.setSubmitting(false);
+            Alert.alert(
+              "Could not prepare retry",
+              retryError instanceof Error
+                ? retryError.message
+                : "The pending task could not be saved.",
+            );
+            return;
+          }
+        }
         Alert.alert(
           "Could not start task",
           error instanceof Error ? error.message : "The task could not be started.",
         );
       }
+      flow.setSubmitting(false);
       return;
     }
+
+    flow.setSubmitting(false);
 
     if (editingPendingTask) {
       try {

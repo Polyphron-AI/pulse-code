@@ -18,6 +18,7 @@ import {
   normalizeCommandPath,
   ProviderVersionCache,
   resolveLatestProviderVersion,
+  resolvePackageManagedProviderMaintenance,
   resolveProviderMaintenanceCapabilitiesEffect,
 } from "./providerMaintenance.ts";
 
@@ -196,6 +197,41 @@ it.layer(NodeServices.layer)("providerMaintenance", (it) => {
 
         lockKey: "static-tool",
       },
+    });
+  });
+
+  // The Codex Windows installer exposes `%LOCALAPPDATA%\\Programs\\OpenAI\\Codex\\bin`
+  // as a junction into `%CODEX_HOME%\\packages\\standalone\\current\\bin`. Node's
+  // realpath follows junctions, so the real path carries the standalone marker
+  // even though the visible path does not.
+  it("recognizes a Windows standalone install through its junctioned bin dir", () => {
+    const visiblePath = "C:\\Users\\Theo\\AppData\\Local\\Programs\\OpenAI\\Codex\\bin\\codex.exe";
+    const realPath =
+      "C:\\Users\\Theo\\.codex\\packages\\standalone\\releases\\0.120.0-x86_64\\bin\\codex.exe";
+    const capabilities = resolvePackageManagedProviderMaintenance(
+      {
+        provider: driver("codex"),
+        npmPackageName: "@openai/codex",
+        homebrewFormula: null,
+        nativeUpdate: {
+          executable: visiblePath,
+          lockKey: "codex-native",
+          args: ["update"],
+          isCommandPath: isNativeTestCommandPath("/packages/standalone/"),
+        },
+      },
+      {
+        binaryPath: "codex",
+        resolvedCommandPath: visiblePath,
+        realCommandPath: realPath,
+        env: {},
+      },
+    );
+
+    expect(capabilities.update).toMatchObject({
+      executable: visiblePath,
+      args: ["update"],
+      lockKey: "codex-native",
     });
   });
 

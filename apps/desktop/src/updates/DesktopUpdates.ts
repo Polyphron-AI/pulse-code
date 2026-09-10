@@ -786,7 +786,7 @@ export const make = Effect.gen(function* () {
               return;
             }
             const checkedAt = yield* currentIsoTimestamp;
-            const releaseNotes = normalizeDesktopUpdateReleaseNotes(
+            const { releaseNotes, omittedReleaseCount } = normalizeDesktopUpdateReleaseNotes(
               info.releaseNotes,
               info.version,
             );
@@ -796,6 +796,7 @@ export const make = Effect.gen(function* () {
                 info.version,
                 checkedAt,
                 releaseNotes,
+                omittedReleaseCount,
               ),
             );
             yield* Ref.set(lastLoggedDownloadMilestoneRef, -1);
@@ -827,14 +828,24 @@ export const make = Effect.gen(function* () {
           }
 
           const checkedAt = yield* currentIsoTimestamp;
-          const releaseNotes = normalizeDesktopUpdateReleaseNotes(info.releaseNotes, info.version);
+          const { releaseNotes, omittedReleaseCount } = normalizeDesktopUpdateReleaseNotes(
+            info.releaseNotes,
+            info.version,
+          );
           yield* setState(
-            reduceDesktopUpdateStateOnUpdateAvailable(state, info.version, checkedAt, releaseNotes),
+            reduceDesktopUpdateStateOnUpdateAvailable(
+              state,
+              info.version,
+              checkedAt,
+              releaseNotes,
+              omittedReleaseCount,
+            ),
           );
           yield* Ref.set(lastLoggedDownloadMilestoneRef, -1);
           yield* logUpdaterInfo("update available", {
             version: info.version,
             releaseNoteGroups: releaseNotes.length,
+            omittedReleaseCount,
           });
         }),
       ),

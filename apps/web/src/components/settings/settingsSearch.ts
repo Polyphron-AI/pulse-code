@@ -205,8 +205,9 @@ export const SETTINGS_SEARCH_ITEMS = [
   },
   {
     id: "quit-confirmation",
-    title: "Hold to quit",
+    title: "Quit shortcut",
     to: "/settings/general",
+    searchTerms: ["confirmation desktop app exit direct hold double click press twice"],
     desktopOnly: true,
   },
   {
@@ -259,6 +260,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     title: "Browser profiles",
     to: "/settings/integrations",
     targetId: "browser",
+  },
+  {
+    id: "browser-default-profile",
+    title: "Default browser profile",
+    to: "/settings/integrations",
+    targetId: "browser-profiles",
   },
   {
     id: "browser-default-viewport",

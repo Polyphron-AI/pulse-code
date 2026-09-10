@@ -1,3 +1,4 @@
+import { writeTextToClipboard } from "../hooks/useCopyToClipboard";
 import { derivePendingRequests } from "@t3tools/client-runtime/pending-requests";
 import { useLoadBalancedEnvironment } from "../hooks/useLoadBalancedEnvironment";
 import type { UsageLimitSourceSnapshots } from "@t3tools/contracts";
@@ -38,6 +39,7 @@ import {
   connectionStatusTitle,
   type EnvironmentConnectionPresentation,
 } from "@t3tools/client-runtime/connection";
+import { wasBootstrapThreadDeleted } from "@t3tools/client-runtime/errors";
 import {
   changeRequestAutoSettles,
   effectiveSettled,
@@ -56,6 +58,7 @@ import {
   resolvePromptInjectedEffort,
 } from "@t3tools/shared/model";
 import { CHAT_LIST_ANCHOR_OFFSET } from "@t3tools/shared/chatList";
+import { resolveThreadReferenceCopyTarget } from "@t3tools/shared/threadReference";
 import {
   projectScriptCwd,
   projectScriptRuntimeEnv,
@@ -215,7 +218,9 @@ import {
 } from "../hooks/useSettings";
 import { useNowMinute } from "../hooks/useNowMinute";
 import { useNewThreadHandler } from "../hooks/useHandleNewThread";
+import { useOpenPanelPullRequestUrl } from "../hooks/useOpenPanelPullRequestUrl";
 import { resolveAppModelSelectionForInstance } from "../modelSelection";
+import { isPreviewFocused } from "../lib/previewFocus";
 import { getTerminalFocusOwner } from "../lib/terminalFocus";
 import { preventRepeatedTerminalCloseShortcut } from "../lib/terminalCloseShortcut";
 import { resolveNewDraftStartFromOrigin } from "../lib/chatThreadActions";
@@ -331,6 +336,7 @@ import {
   buildExpiredTerminalContextToastCopy,
   buildLocalDraftThread,
   buildLoadingThreadFromShell,
+  buildRunningThreadTurnInterruptInput,
   buildThreadTurnInterruptInput,
   collectUserMessageBlobPreviewUrls,
   createLocalDispatchSnapshot,
@@ -3271,6 +3277,27 @@ function ChatViewContent(props: ChatViewProps) {
     [activeServerThread, draftId, routeThreadKey, routeThreadRef],
   );
 
+  const interruptContextRef = useRef({ activeThread, phase, setThreadError });
+  interruptContextRef.current = { activeThread, phase, setThreadError };
+  const onInterrupt = useCallback(async () => {
+    const { activeThread, phase, setThreadError } = interruptContextRef.current;
+    const input = buildRunningThreadTurnInterruptInput(activeThread, phase);
+    if (!input || !activeThread) return;
+    const result = await interruptThreadTurn({
+      environmentId: activeThread.environmentId,
+      input,
+    });
+    if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+      const error = squashAtomCommandFailure(result);
+      setThreadError(
+        activeThread.id,
+        error instanceof Error ? error.message : "Failed to interrupt the current turn.",
+      );
+    }
+  }, [interruptThreadTurn]);
+  const canInterruptRunningThread =
+    buildRunningThreadTurnInterruptInput(activeThread, phase) !== null;
+
   const focusComposer = useCallback(() => {
     composerRef.current?.focusAtEnd();
   }, [composerRef]);
@@ -3751,10 +3778,17 @@ function ChatViewContent(props: ChatViewProps) {
   const toggleInteractionMode = useCallback(() => {
     handleInteractionModeChange(interactionMode === "plan" ? "default" : "plan");
   }, [handleInteractionModeChange, interactionMode]);
-  const createBrowserSurface = useCallback(() => {
-    if (!activeThreadRef) return;
-    void addBrowserSurface({ threadRef: activeThreadRef, openPreview });
-  }, [activeThreadRef, openPreview]);
+  const createBrowserSurface = useCallback(
+    (profileId?: string) => {
+      if (!activeThreadRef) return;
+      void addBrowserSurface({
+        threadRef: activeThreadRef,
+        openPreview,
+        ...(profileId === undefined ? {} : { profileId }),
+      });
+    },
+    [activeThreadRef, openPreview],
+  );
   const addDiffSurface = useCallback(() => {
     if (!activeThreadRef || !isServerThread || !isGitRepo) return;
     useRightPanelStore.getState().open(activeThreadRef, "diff");
@@ -4669,6 +4703,49 @@ function ChatViewContent(props: ChatViewProps) {
     linkedPullRequest: linkedThreadPullRequest,
     linkedPullRequestStatus,
   });
+  const openPanelPullRequestUrl = useOpenPanelPullRequestUrl(activeThreadRef);
+  const activeThreadReferenceCopyTarget = useMemo(
+    () =>
+      activeThreadId === null || !isServerThread
+        ? null
+        : resolveThreadReferenceCopyTarget({
+            threadId: activeThreadId,
+            openPanelPullRequestUrl,
+            linkedPullRequestUrl:
+              (linkedThreadPullRequest ?? activeThread?.branchPullRequest)?.url ?? null,
+          }),
+    [
+      activeThreadId,
+      activeThread?.branchPullRequest?.url,
+      isServerThread,
+      linkedThreadPullRequest?.url,
+      openPanelPullRequestUrl,
+    ],
+  );
+  const copyActiveThreadReference = useCallback(() => {
+    const target = activeThreadReferenceCopyTarget;
+    if (target === null) return;
+    void writeTextToClipboard(target.value, target.clipboardTarget).then(
+      (didCopy) => {
+        if (!didCopy) return;
+        toastManager.add({
+          type: "success",
+          title: target.successTitle,
+          description: target.value,
+        });
+      },
+      (error) => {
+        console.error(error);
+        toastManager.add(
+          stackedThreadToast({
+            type: "error",
+            title: target.failureTitle,
+            description: error instanceof Error ? error.message : "An error occurred.",
+          }),
+        );
+      },
+    );
+  }, [activeThreadReferenceCopyTarget]);
   // The right panel offers the thread's own change request, so it can only offer it once the
   // branch has one; until then the picker says so rather than opening an empty panel.
   const addPullRequestSurface = useCallback(() => {
@@ -5352,6 +5429,8 @@ function ChatViewContent(props: ChatViewProps) {
       const shortcutContext = {
         terminalFocus: terminalFocusOwner !== null,
         terminalOpen: Boolean(terminalUiState.terminalOpen),
+        previewFocus: isPreviewFocused(),
+        previewOpen: previewPanelOpen,
         modelPickerOpen: composerRef.current?.isModelPickerOpen() ?? false,
       };
 
@@ -5371,6 +5450,13 @@ function ChatViewContent(props: ChatViewProps) {
         context: shortcutContext,
       });
       if (!command) return;
+
+      if (command === "thread.copyReference") {
+        event.preventDefault();
+        event.stopPropagation();
+        if (!event.repeat) copyActiveThreadReference();
+        return;
+      }
 
       if (command === "terminal.toggle") {
         event.preventDefault();
@@ -5461,6 +5547,16 @@ function ChatViewContent(props: ChatViewProps) {
         return;
       }
 
+      if (command === "thread.stop") {
+        // An unavailable command should not shadow contextual shortcuts such as Escape to close a dialog.
+        if (!canInterruptRunningThread) return;
+        event.preventDefault();
+        event.stopPropagation();
+        if (event.repeat) return;
+        void onInterrupt();
+        return;
+      }
+
       const scriptId = projectScriptIdFromCommand(command);
       if (!scriptId || !activeProject) return;
       const script = activeProjectScripts.find((entry) => entry.id === scriptId);
@@ -5476,6 +5572,7 @@ function ChatViewContent(props: ChatViewProps) {
     activeRightPanelSurface,
     activeProjectScripts,
     addTerminalSurface,
+    canInterruptRunningThread,
     terminalUiState.terminalOpen,
     terminalUiState.activeTerminalId,
     activeThreadId,
@@ -5487,7 +5584,10 @@ function ChatViewContent(props: ChatViewProps) {
     splitTerminal,
     splitPanelTerminal,
     keybindings,
+    onInterrupt,
     onToggleDiff,
+    copyActiveThreadReference,
+    previewPanelOpen,
     toggleRightPanel,
     toggleRightPanelMaximized,
     toggleTerminalVisibility,
@@ -6181,6 +6281,20 @@ function ChatViewContent(props: ChatViewProps) {
       }
       if (!isAtomCommandInterrupted(failure)) {
         const error = squashAtomCommandFailure(failure);
+        if (isLocalDraftThread && draftId && wasBootstrapThreadDeleted(error)) {
+          const failedDraftSession = getDraftSession(draftId);
+          if (failedDraftSession?.threadId === threadIdForSend) {
+            setLogicalProjectDraftThreadId(
+              failedDraftSession.logicalProjectKey,
+              scopeProjectRef(failedDraftSession.environmentId, failedDraftSession.projectId),
+              draftId,
+              {
+                threadId: newThreadId(),
+                createdAt: new Date().toISOString(),
+              },
+            );
+          }
+        }
         setThreadError(
           threadIdForSend,
           error instanceof Error ? error.message : "Failed to send message.",
@@ -6193,21 +6307,6 @@ function ChatViewContent(props: ChatViewProps) {
         currentThreadKey === activeThreadKey ? null : currentThreadKey,
       );
       resetLocalDispatch();
-    }
-  };
-
-  const onInterrupt = async () => {
-    if (!activeThread) return;
-    const result = await interruptThreadTurn({
-      environmentId,
-      input: buildThreadTurnInterruptInput(activeThread),
-    });
-    if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
-      const error = squashAtomCommandFailure(result);
-      setThreadError(
-        activeThread.id,
-        error instanceof Error ? error.message : "Failed to interrupt the current turn.",
-      );
     }
   };
 
@@ -7546,7 +7645,8 @@ function ChatViewContent(props: ChatViewProps) {
           onCloseSurfacesToRight={closeRightPanelSurfacesToRight}
           onCloseAllSurfaces={closeAllRightPanelSurfaces}
           onCopyFilePath={copyRightPanelFilePath}
-          onAddBrowser={createBrowserSurface}
+          onAddBrowser={() => createBrowserSurface()}
+          onAddBrowserInProfile={createBrowserSurface}
           onAddTerminal={addTerminalSurface}
           onAddDiff={addDiffSurface}
           onAddFiles={addFilesSurface}
@@ -7587,7 +7687,8 @@ function ChatViewContent(props: ChatViewProps) {
             onCloseSurfacesToRight={closeRightPanelSurfacesToRight}
             onCloseAllSurfaces={closeAllRightPanelSurfaces}
             onCopyFilePath={copyRightPanelFilePath}
-            onAddBrowser={createBrowserSurface}
+            onAddBrowser={() => createBrowserSurface()}
+            onAddBrowserInProfile={createBrowserSurface}
             onAddTerminal={addTerminalSurface}
             onAddDiff={addDiffSurface}
             onAddFiles={addFilesSurface}

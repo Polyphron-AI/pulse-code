@@ -36,11 +36,23 @@ describe("DesktopUpdates", () => {
       const rollback = yield* updates.rollback("1.2.2").pipe(Effect.forkChild);
       yield* Deferred.await(checkStarted);
       assert.isFalse((yield* updates.check("remote")).checked);
-      harness.emit("update-available", { version: "1.2.2" });
+      harness.emit("update-available", {
+        version: "1.2.2",
+        releaseNotes: Array.from({ length: 7 }, (_, index) => ({
+          version: `1.2.${2 - index}`,
+          note: "- Older fix\n- Latest fix",
+        })),
+      });
       yield* Deferred.succeed(releaseCheck, undefined);
       assert.isTrue((yield* Fiber.join(rollback)).accepted);
       yield* Deferred.await(downloadStarted);
       assert.equal((yield* updates.getState).rollbackVersion, "1.2.2");
+      assert.equal((yield* updates.getState).omittedReleaseCount, 1);
+      assert.deepEqual((yield* updates.getState).releaseNotes[0], {
+        version: "1.2.2",
+        items: ["Latest fix", "Older fix"],
+        totalItems: 2,
+      });
       assert.equal(harness.downloadCount(), 1);
       assert.isTrue(
         harness
@@ -197,13 +209,17 @@ describe("DesktopUpdates", () => {
           {
             version: "1.2.4-nightly.20260709.766",
             items: ["feat(client): persist offline environment data by @juliusmarminge in #3795"],
+            totalItems: 1,
           },
           {
             version: "1.2.4-nightly.20260709.765",
             items: ["[codex] Upgrade Clerk stack by @juliusmarminge in #3821"],
+            totalItems: 1,
           },
         ]);
         assert.deepEqual(harness.sentStates.at(-1)?.releaseNotes, state.releaseNotes);
+        assert.equal(state.omittedReleaseCount, 0);
+        assert.equal(harness.sentStates.at(-1)?.omittedReleaseCount, 0);
       }),
     ).pipe(Effect.provide(Layer.merge(TestClock.layer(), harness.layer)));
   });

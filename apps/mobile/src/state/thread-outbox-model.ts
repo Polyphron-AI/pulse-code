@@ -1,4 +1,7 @@
-import { isTransportConnectionErrorMessage } from "@t3tools/client-runtime/errors";
+import {
+  isTransportConnectionErrorMessage,
+  wasBootstrapThreadDeleted,
+} from "@t3tools/client-runtime/errors";
 import {
   clampFileAttachmentUploadBytes,
   fileAttachmentTooLargeMessage,
@@ -270,6 +273,13 @@ export function resolveThreadOutboxFailureAction(input: {
   readonly error: unknown;
   readonly interrupted: boolean;
 }): ThreadOutboxFailureAction {
+  if (
+    input.stage === "start-turn" &&
+    !input.interrupted &&
+    wasBootstrapThreadDeleted(input.error)
+  ) {
+    return "restore";
+  }
   if (
     input.stage === "settings-sync" ||
     input.interrupted ||

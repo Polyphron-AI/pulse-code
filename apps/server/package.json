@@ -1,6 +1,6 @@
 {
   "name": "t3",
-  "version": "0.0.33-pulse-preview.20260910.4",
+  "version": "0.0.33-pulse-preview.20260910.5",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -38,6 +38,8 @@
     "msgpackr-extract": "3.0.4",
     "node-pty": "^1.1.0",
     "nodemailer": "^7.0.11",
+    "stream-chain": "^4.2.5",
+    "stream-json": "3.6.0",
     "yaml": "catalog:",
     "yazl": "3.3.1"
   },

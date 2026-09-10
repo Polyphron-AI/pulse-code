@@ -52,6 +52,10 @@ successful pick; its hover glow and badge preview the element and color family t
 `rightPanel.toggleMaximized` maximizes or restores the open right panel. It has no default shortcut,
 so add one in **Settings** → **Keybindings** if you want to use it.
 
+`thread.copyReference` copies the active thread's pull request link, or its thread ID when no pull
+request is available. Its default shortcut is `mod+shift+c`, and it does not replace terminal copy
+while the terminal has focus.
+
 The command palette searches active thread titles, projects, branches, user messages, and final
 agent responses across connected environments. Message matches show one labeled excerpt while
 keeping the thread's project, branch, and machine context visible. Message search begins after two
@@ -59,6 +63,9 @@ characters and uses SQLite's ASCII case-insensitive matching.
 
 The full command list and the current defaults are shown in **Settings** → **Keybindings**, which
 always matches the build you are running. Use that rather than a copied list.
+
+`thread.stop` interrupts the running turn in the focused thread. It has no default
+shortcut; assign one in **Settings → Keybindings**.
 
 Note that `chat.new` and `chat.newLocal` both create a thread through the same path. A new thread
 inherits the project you were in, along with model and mode selections. Branch, worktree, and

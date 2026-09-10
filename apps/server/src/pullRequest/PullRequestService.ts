@@ -223,6 +223,9 @@ const ACTION_ACCESS_REFUSALS: Record<PullRequestAction, string> = {
     "You need write access on this repository to have it merged for you once it is ready.",
   "disable-auto-merge":
     "You need write access on this repository to stop it being merged for you once it is ready.",
+  revert: "You need write access on this repository to open a revert pull request.",
+  "approve-workflows":
+    "You need write access on this repository to approve workflows from a fork pull request.",
 };
 
 /**
@@ -1294,6 +1297,9 @@ export const make = Effect.gen(function* () {
               deletions: changeRequest.deletions,
               changedFiles: changeRequest.changedFiles,
               headBranch: changeRequest.headBranch,
+              ...(changeRequest.headRepositoryNameWithOwner === undefined
+                ? {}
+                : { headRepositoryNameWithOwner: changeRequest.headRepositoryNameWithOwner }),
               baseBranch: changeRequest.baseBranch,
               createdAt: changeRequest.createdAt,
               updatedAt: changeRequest.updatedAt,
@@ -1312,6 +1318,12 @@ export const make = Effect.gen(function* () {
               ...(changeRequest.autoMergeEnabled === undefined
                 ? {}
                 : { autoMergeEnabled: changeRequest.autoMergeEnabled }),
+              ...(changeRequest.autoMergeMethod === undefined
+                ? {}
+                : { autoMergeMethod: changeRequest.autoMergeMethod }),
+              ...(changeRequest.workflowApprovalsRequired === undefined
+                ? {}
+                : { workflowApprovalsRequired: changeRequest.workflowApprovalsRequired }),
             }),
           ),
         ),

@@ -1,9 +1,9 @@
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { LinkIcon, PlusIcon, RotateCcwIcon } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
-import { openCommandPalette } from "../commandPaletteBus";
+import { NoProjectsHero } from "../components/NoProjectsHero";
 import { sortScopedProjectsForSidebar } from "../components/Sidebar.logic";
 import { Button } from "../components/ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "../components/ui/empty";
@@ -22,10 +22,11 @@ import { COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS } from "~/workspaceTitlebar";
 
 function ChatIndexRouteView() {
   const { authGateState } = Route.useRouteContext();
-  const { environments } = useEnvironments();
+  const { environments, isReady } = useEnvironments();
 
-  if (authGateState.status === "hosted-static" && environments.length === 0) {
-    return <HostedStaticOnboardingState />;
+  if (authGateState.status === "hosted-static") {
+    if (!isReady) return null;
+    if (environments.length === 0) return <HostedStaticOnboardingState />;
   }
 
   return <IndexDraftLanding />;
@@ -80,6 +81,8 @@ function IndexDraftLanding() {
       />
     ) : null;
   }
+  // First-run routing to the welcome wizard happens in FirstRunGate at the
+  // root, before this route ever renders.
   return <NoProjectsHero />;
 }
 
@@ -100,35 +103,6 @@ function DraftStartError({ onRetry }: { readonly onRetry: () => void }) {
           </div>
         </EmptyHeader>
       </Empty>
-    </SidebarInset>
-  );
-}
-
-function NoProjectsHero() {
-  const openAddProject = useCallback(() => openCommandPalette({ open: "add-project" }), []);
-
-  return (
-    <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground">
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden bg-background">
-        <Empty className="flex-1">
-          <div className="w-full max-w-lg px-8 py-12">
-            <EmptyHeader className="max-w-none">
-              <EmptyTitle className="text-foreground text-2xl sm:text-3xl">
-                What should we work on?
-              </EmptyTitle>
-              <EmptyDescription className="mt-2 text-sm text-muted-foreground/78">
-                Add a project to start your first thread.
-              </EmptyDescription>
-              <div className="mt-6 flex justify-center">
-                <Button size="sm" onClick={openAddProject}>
-                  <PlusIcon className="size-4" />
-                  Add project
-                </Button>
-              </div>
-            </EmptyHeader>
-          </div>
-        </Empty>
-      </div>
     </SidebarInset>
   );
 }

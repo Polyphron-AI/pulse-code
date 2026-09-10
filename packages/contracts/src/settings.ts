@@ -19,6 +19,7 @@ import {
   ModelSelection,
   ProjectScript,
 } from "./orchestration.ts";
+import { BrowserProfile, BrowserProfileId, DEFAULT_BROWSER_PROFILE_ID } from "./browserProfile.ts";
 import {
   DEFAULT_PREVIEW_APPEARANCE,
   DEFAULT_PREVIEW_ZOOM_FACTOR,
@@ -125,6 +126,21 @@ export const EnvironmentIdentificationMode = Schema.Literals(["artwork", "pill",
 export type EnvironmentIdentificationMode = typeof EnvironmentIdentificationMode.Type;
 export const DEFAULT_ENVIRONMENT_IDENTIFICATION_MODE: EnvironmentIdentificationMode = "artwork";
 
+export const QuitConfirmationMode = Schema.Literals(["direct", "hold", "double-click"]);
+export type QuitConfirmationMode = typeof QuitConfirmationMode.Type;
+export const DEFAULT_QUIT_CONFIRMATION_MODE: QuitConfirmationMode = "hold";
+
+const LegacyConfirmQuit = Schema.Boolean.pipe(
+  Schema.decodeTo(
+    QuitConfirmationMode,
+    SchemaTransformation.transform({
+      decode: (confirmQuit): QuitConfirmationMode => (confirmQuit ? "hold" : "direct"),
+      encode: (mode) => mode === "hold",
+    }),
+  ),
+);
+const QuitConfirmationModeSetting = Schema.Union([QuitConfirmationMode, LegacyConfirmQuit]);
+
 /**
  * A user-chosen font family (a single name or a comma-separated list). Empty
  * means "use the app default"; clients compose their own fallback stacks.
@@ -173,9 +189,23 @@ export const ClientSettingsSchema = Schema.Struct({
   browserAutoShowFloatingPreview: Schema.Boolean.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_BROWSER_AUTO_SHOW_FLOATING_PREVIEW)),
   ),
-  // Desktop-only: require holding the quit shortcut (Cmd/Ctrl+Q) before the
-  // app quits; a quick tap only shows a hint. Browser clients ignore it.
-  confirmQuit: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  // Desktop-only. Legacy booleans decode to their equivalent mode and encode
+  // back as the canonical string value.
+  confirmQuit: QuitConfirmationModeSetting.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_QUIT_CONFIRMATION_MODE)),
+  ),
+  /**
+   * User-created browser profiles. The built-in Default and Incognito profiles
+   * are synthesized by `resolveBrowserProfiles`, not stored here, so they
+   * cannot be renamed away or deleted.
+   */
+  browserProfiles: Schema.Array(BrowserProfile).pipe(
+    Schema.withDecodingDefault(Effect.succeed([])),
+  ),
+  /** Profile new tabs open under. Falls back to Default if it no longer exists. */
+  browserDefaultProfileId: BrowserProfileId.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_BROWSER_PROFILE_ID)),
+  ),
   confirmThreadArchive: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   confirmThreadDelete: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   composerBusyBehavior: ComposerBusyBehavior.pipe(
@@ -210,6 +240,13 @@ export const ClientSettingsSchema = Schema.Struct({
   // Grayscale `-webkit-font-smoothing: antialiased` (thinner strokes);
   // disabling restores the platform's heavier default. No effect off macOS.
   fontSmoothing: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  // When the first-run welcome wizard finished (or was skipped), as an ISO
+  // timestamp. `null` alone does not mean "show the wizard" — every install
+  // that predates this field decodes to `null` — so the gate also requires an
+  // empty workspace before it treats the client as a fresh install.
+  onboardingCompletedAt: Schema.NullOr(Schema.String).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null)),
+  ),
   // Model favorites. Historically keyed by provider kind, now
   // widened to `ProviderInstanceId` so users can favorite a specific model
   // on a custom provider instance (e.g. "Codex Personal · gpt-5") without
@@ -1028,13 +1065,16 @@ export const ClientSettingsPatch = Schema.Struct({
   browserDefaultZoomFactor: Schema.optionalKey(PreviewZoomFactor),
   browserDefaultAppearance: Schema.optionalKey(PreviewAppearancePreference),
   browserAutoShowFloatingPreview: Schema.optionalKey(Schema.Boolean),
-  confirmQuit: Schema.optionalKey(Schema.Boolean),
+  confirmQuit: Schema.optionalKey(QuitConfirmationMode),
+  browserProfiles: Schema.optionalKey(Schema.Array(BrowserProfile)),
+  browserDefaultProfileId: Schema.optionalKey(BrowserProfileId),
   confirmThreadArchive: Schema.optionalKey(Schema.Boolean),
   confirmThreadDelete: Schema.optionalKey(Schema.Boolean),
   composerBusyBehavior: Schema.optionalKey(ComposerBusyBehavior),
   diffIgnoreWhitespace: Schema.optionalKey(Schema.Boolean),
   environmentIdentificationMode: Schema.optionalKey(EnvironmentIdentificationMode),
   glassOpacity: Schema.optionalKey(GlassOpacity),
+  onboardingCompletedAt: Schema.optionalKey(Schema.NullOr(Schema.String)),
   fontSizeInterface: Schema.optionalKey(InterfaceFontSize),
   fontSizePrompt: Schema.optionalKey(PromptFontSize),
   fontSizeCode: Schema.optionalKey(CodeFontSize),

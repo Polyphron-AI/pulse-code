@@ -109,6 +109,10 @@ export function useEnvironmentThreadRefs(
   );
 }
 
+export function readProjects(): ReadonlyArray<EnvironmentProject> {
+  return appAtomRegistry.get(environmentProjects.projectsAtom);
+}
+
 export function useProjects(): ReadonlyArray<EnvironmentProject> {
   return useAtomValue(environmentProjects.projectsAtom);
 }

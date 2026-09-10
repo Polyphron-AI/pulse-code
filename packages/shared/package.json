@@ -171,6 +171,10 @@
       "types": "./src/keybindings.ts",
       "import": "./src/keybindings.ts"
     },
+    "./threadReference": {
+      "types": "./src/threadReference.ts",
+      "import": "./src/threadReference.ts"
+    },
     "./composerTrigger": {
       "types": "./src/composerTrigger.ts",
       "import": "./src/composerTrigger.ts"
@@ -246,6 +250,18 @@
     "./video": {
       "types": "./src/video.ts",
       "import": "./src/video.ts"
+    },
+    "./dateTime": {
+      "types": "./src/dateTime.ts",
+      "import": "./src/dateTime.ts"
+    },
+    "./testing/symlinks": {
+      "types": "./src/testing/symlinks.ts",
+      "import": "./src/testing/symlinks.ts"
+    },
+    "./nodeSqliteClient": {
+      "types": "./src/nodeSqliteClient.ts",
+      "import": "./src/nodeSqliteClient.ts"
     }
   },
   "scripts": {

@@ -4,7 +4,26 @@ Target: `09e8de9c655ae85410bf6b00446f272a01da81c7`. The [source disposition inve
 
 The target changes 2,389 paths from the declared baseline: 728 web, 507 server, 454 mobile, 155 client runtime, 132 desktop, 81 marketing, 73 shared, and 48 contracts. These counts describe source scope, not missing features. The audit inspected migration sources, all changed contract filenames, provider history, native dependency/configuration diffs, and selected implementations. It did not independently verify every path.
 
-## Integrated checkpoint through `8eb5ab63d`
+## Integrated checkpoint through `cb9f7fec2`
+
+- Preview [pulse-preview-20260910.4](https://github.com/Polyphron-AI/pulse-code/releases/tag/pulse-preview-20260910.4) is published from `4350ae4f38771f0402545bc4a9984566a6953d95`, containing compatibility through `62d63d26a` and preserving the previous preview's Office/Talk work. The Windows x64 installer SHA256 is `1002c23568ce14e594eedb54f89ff1bcd514b375123664f3cebb4c162b5cd0bc`; the uploaded asset digest matches. Packaged server/web/desktop versions, Talk smoke checks, and resource-monitor protocol checks passed. Installed-app update acceptance remains pending.
+- Later commits add the shared onboarding wizard, standalone provider installation, repository grouping, old-server import fallback, and bounded streaming of oversized transcript records. Final import validation passed 123 focused checks using synthetic histories.
+- Quit confirmation now accepts legacy Boolean settings and V40 direct, hold, and double-press modes. CLI client metadata and legacy PR checkout results decode correctly. Deleted bootstrap failures carry cleanup disposition and web retries create fresh identities; the Pulse mobile pending-task retry edge remains in progress.
+- Grok usage v5 is integrated in `534aef05e` with compatible v4 totals, synthetic session parsing, pricing, and web/mobile labels. Its 70 focused tests passed. Integrated mobile, web, and server typechecks passed after the usage and import batches.
+- Native scrolling and coordinated thread dismissal are integrated in `0a87a185d` and `d46bbf351`, with 29 and 28 focused agent tests respectively. Android build 8 succeeded in 11m7s and its development APK was installed into the isolated emulator. Runtime acceptance is still in progress.
+- The repeated Chromium attachment add/remove check passed with no page errors. These newer commits are not yet included in the published preview. Full V40 compatibility is not claimed.
+
+## Earlier checkpoint through `5a12b7e1e`
+
+- The compatibility branch was pushed through `cefe4e166`. Preview source `4350ae4f3` preserves published `.20260910.3` Office, Talk, MCP/skill search, dictation, and downloads, and includes compatibility through `62d63d26a`. Its `.20260910.4` installer is being rebuilt with matching server/web/desktop metadata; publication is not yet claimed.
+- Native media `8ee58fbb4` and lock `87c1849c6` passed 168 agent tests and mobile types. Android build 7 succeeded in 10m10s with 835 tasks. The isolated client paired, rendered seeded messages, expanded its composer, and opened Photos/Files and the document picker. The session ended before selection/removal was verified. Playback is not yet accepted.
+- Chromium attachment paste and removal passed with no page errors. The harness needed a real ClipboardEvent; the earlier synthetic event did not reach the composer correctly.
+- Reset-credit contracts, scoped commands, configured hub protocol corrections, pooled limits, and local `/usage-limits` clients are integrated through `f78e5d9d1`. Redemption remains explicit and confirmed. No real credits were consumed.
+- Desktop continuation `62d63d26a` prepares eligible threads at installation, clears markers on failure, and preserves them only after accepted handoff. Its 24 focused tests and server types passed. Nightly release-note counts/links through `42924220b` preserve Pulse rollback feeds; 56 backend/desktop and 46 web checks passed.
+- Import foundation `8e34a5a9c` passed 328 focused agent tests. Copy-reference `fed143810` and stop shortcut `33065a21a` passed focused tests and web/mobile types; the new Android keyboard module needs a rebuild. Setup prerequisite `5a12b7e1e` passed 141 agent and 23 integrated client-runtime checks. Onboarding UI remains in progress.
+- The preview merge passed server, contracts, web, desktop, and mobile types. Merged evidence includes 58 backend assets, 36 desktop/shared media, 79 web, 30 follow-up client, and 67 packaging/Office/Talk checks. These overlap agent suites and must not be summed as unique tests.
+
+## Earlier checkpoint through `8eb5ab63d`
 
 - Normalized subscription limits and explicitly configured quota sources now span contracts, backend, web, and mobile. Reset-credit actions and subsequent quota UI refinements remain a separate coordinated batch.
 - Web sidebar arrangement now supports cross-section destinations, action labels, empty targets, pointer cancellation, and cleanup while preserving Pulse row actions. Agent validation passed 235 focused tests and web types.

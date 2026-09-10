@@ -2,7 +2,8 @@
  * Usage reporting contract.
  *
  * Each environment scans the provider CLIs' own on-disk session transcripts
- * (`~/.claude/projects/**\/*.jsonl`, `~/.codex/sessions/**\/*.jsonl`) rather than
+ * (`~/.claude/projects/**\/*.jsonl`, `~/.codex/sessions/**\/*.jsonl`,
+ * `~/.grok/sessions/**\/updates.jsonl`) rather than
  * relying on Pulse Code's own orchestration projections, so usage stays complete
  * even for turns that were never driven through Pulse Code. This mirrors the
  * approach `ccusage` takes.
@@ -21,9 +22,12 @@ import { NonNegativeInt, TrimmedNonEmptyString } from "./baseSchemas.ts";
  * client renders partial coverage when an environment reports an older version
  * rather than failing the whole page.
  */
-export const USAGE_CONTRACT_VERSION = 4 as const;
+export const USAGE_CONTRACT_VERSION = 5 as const;
 
-export const UsageProviderKind = Schema.Literals(["claude", "codex"]);
+/** v5 adds Grok; v4 Claude and Codex totals remain safe to merge. */
+export const USAGE_MERGE_COMPATIBLE_SINCE = 4 as const;
+
+export const UsageProviderKind = Schema.Literals(["claude", "codex", "grok"]);
 export type UsageProviderKind = typeof UsageProviderKind.Type;
 
 /**

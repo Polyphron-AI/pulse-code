@@ -343,7 +343,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
   readonly onSelectThread: (thread: EnvironmentThreadShell) => void;
   readonly onDeleteThread: (thread: EnvironmentThreadShell) => void;
   readonly onRegenerateThreadTitle: (thread: EnvironmentThreadShell) => void;
-  readonly onSettleThread: (thread: EnvironmentThreadShell) => void;
+  readonly onSettleThread: (thread: EnvironmentThreadShell) => Promise<boolean>;
   readonly onSnoozeThread: (thread: EnvironmentThreadShell, snoozedUntil: string) => void;
   readonly onUnsnoozeThread: (thread: EnvironmentThreadShell) => void;
   readonly onUnsettleThread: (thread: EnvironmentThreadShell) => void;
@@ -924,6 +924,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
   return (
     <>
       <ThreadSwipeable
+        threadKey={`${thread.environmentId}:${thread.id}`}
         backgroundColor={sidebarPane ? drawerColor : screenColor}
         compactActions={variant === "slim"}
         containerStyle={
@@ -939,7 +940,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
         onSwipeableWillOpen={props.onSwipeableWillOpen}
         primaryAction={primaryAction}
         secondaryAction={secondaryAction}
-        resetKey={`${thread.environmentId}:${thread.id}`}
+        resetKey={`${thread.environmentId}:${thread.id}:${variant}:${snoozedRow}:${thread.settledAt}:${thread.unsettledAt}:${thread.snoozedUntil}`}
         simultaneousWithExternalGesture={props.simultaneousSwipeGesture}
         threadTitle={thread.title}
       >

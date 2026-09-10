@@ -1,4 +1,6 @@
 import {
+  DEFAULT_BROWSER_PROFILE_ID,
+  DEFAULT_CLIENT_SETTINGS,
   FILL_PREVIEW_VIEWPORT,
   type PreviewOpenInput,
   type PreviewSessionSnapshot,
@@ -9,6 +11,8 @@ import { AsyncResult } from "effect/unstable/reactivity";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { readThreadPreviewState, resetPreviewStateForTests } from "~/previewStateStore";
+
+import { __setClientSettingsForTests } from "~/hooks/useSettings";
 
 import { openPreviewSession } from "./openPreviewSession";
 
@@ -30,7 +34,10 @@ const snapshot: PreviewSessionSnapshot = {
   updatedAt: "2026-06-11T23:00:00.000Z",
 };
 
-beforeEach(resetPreviewStateForTests);
+beforeEach(() => {
+  resetPreviewStateForTests();
+  __setClientSettingsForTests(DEFAULT_CLIENT_SETTINGS);
+});
 
 describe("openPreviewSession", () => {
   it("creates an idle tab without recording a recently visited URL", async () => {
@@ -49,6 +56,7 @@ describe("openPreviewSession", () => {
     expect(open).toHaveBeenCalledWith({
       threadId: "thread-1",
       viewport: FILL_PREVIEW_VIEWPORT,
+      profileId: DEFAULT_BROWSER_PROFILE_ID,
     });
     expect(readThreadPreviewState(threadRef).snapshot).toEqual(idleSnapshot);
     expect(readThreadPreviewState(threadRef).recentlySeenUrls).toEqual([]);
@@ -67,6 +75,7 @@ describe("openPreviewSession", () => {
       threadId: "thread-1",
       url: "t3.chat",
       viewport: FILL_PREVIEW_VIEWPORT,
+      profileId: DEFAULT_BROWSER_PROFILE_ID,
     });
     expect(readThreadPreviewState(threadRef).snapshot).toEqual(snapshot);
     expect(readThreadPreviewState(threadRef).recentlySeenUrls).toEqual(["https://t3.chat/"]);

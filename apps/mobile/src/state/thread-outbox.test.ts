@@ -1,4 +1,5 @@
 import { describe, expect, it } from "@effect/vitest";
+import { OrchestrationDispatchCommandError } from "@t3tools/contracts";
 import {
   CommandId,
   EnvironmentId,
@@ -1120,6 +1121,19 @@ describe("thread outbox", () => {
         stage: "start-turn",
         error: deterministicFailure,
         interrupted: false,
+      }),
+    ).toBe("restore");
+  });
+
+  it("restores a confirmed deleted bootstrap even when its error resembles a transport failure", () => {
+    expect(
+      resolveThreadOutboxFailureAction({
+        stage: "start-turn",
+        interrupted: false,
+        error: new OrchestrationDispatchCommandError({
+          message: "Socket is not connected",
+          bootstrapThreadDisposition: "deleted",
+        }),
       }),
     ).toBe("restore");
   });

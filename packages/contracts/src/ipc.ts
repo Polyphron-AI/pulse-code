@@ -88,10 +88,16 @@ import type {
   OrchestrationThreadStreamItem,
 } from "./orchestration.ts";
 import { EnvironmentId } from "./baseSchemas.ts";
+import { BrowserProfileId } from "./browserProfile.ts";
+import type {
+  BrowserImportResult,
+  BrowserImportSource,
+  BrowserImportSourceId,
+} from "./browserImport.ts";
 import { AuthAccessTokenResult, AuthSessionState, AuthWebSocketTicketResult } from "./auth.ts";
 import { AdvertisedEndpoint } from "./remoteAccess.ts";
 import { ExecutionEnvironmentDescriptor } from "./environment.ts";
-import type { ClientSettings } from "./settings.ts";
+import type { ClientSettings, QuitConfirmationMode } from "./settings.ts";
 import type { EditorId } from "./editor.ts";
 import type {
   SourceControlCloneRepositoryInput,
@@ -113,6 +119,10 @@ export interface ContextMenuItem<T extends string = string> {
   icon?: string;
   children?: readonly ContextMenuItem<T>[];
 }
+
+export type QuitShortcutHintEvent =
+  | { readonly state: "down"; readonly mode: Exclude<QuitConfirmationMode, "direct"> }
+  | { readonly state: "up" };
 
 export interface ContextMenuItemSchemaType {
   readonly id: string;
@@ -203,6 +213,7 @@ export interface DesktopUpdateState {
   availableVersion: string | null;
   downloadedVersion: string | null;
   releaseNotes: ReadonlyArray<DesktopUpdateReleaseNote>;
+  omittedReleaseCount: number;
   downloadPercent: number | null;
   checkedAt: string | null;
   message: string | null;
@@ -216,11 +227,13 @@ export interface DesktopUpdateState {
 export interface DesktopUpdateReleaseNote {
   version: string;
   items: ReadonlyArray<string>;
+  totalItems: number;
 }
 
 export const DesktopUpdateReleaseNoteSchema = Schema.Struct({
   version: Schema.String,
   items: Schema.Array(Schema.String),
+  totalItems: Schema.Number,
 });
 
 export const DesktopUpdateStateSchema = Schema.Struct({
@@ -234,6 +247,7 @@ export const DesktopUpdateStateSchema = Schema.Struct({
   availableVersion: Schema.NullOr(Schema.String),
   downloadedVersion: Schema.NullOr(Schema.String),
   releaseNotes: Schema.Array(DesktopUpdateReleaseNoteSchema),
+  omittedReleaseCount: Schema.Number,
   downloadPercent: Schema.NullOr(Schema.Number),
   checkedAt: Schema.NullOr(Schema.String),
   message: Schema.NullOr(Schema.String),
@@ -969,11 +983,14 @@ export const PreviewAnnotationSubmissionSchema: Schema.Codec<PreviewAnnotationSu
 export interface PreviewAnnotationSubmissionResult {
   annotation: PreviewAnnotationPayload;
   submission: PreviewAnnotationSubmission;
+  /** The crop was requested but failed or timed out, so `annotation.screenshot` is null. */
+  screenshotFailed?: boolean;
 }
 export const PreviewAnnotationSubmissionResultSchema: Schema.Codec<PreviewAnnotationSubmissionResult> =
   Schema.Struct({
     annotation: PreviewAnnotationPayloadSchema,
     submission: PreviewAnnotationSubmissionSchema,
+    screenshotFailed: Schema.optionalKey(Schema.Boolean),
   });
 
 export const DesktopPreviewTabInputSchema = Schema.Struct({
@@ -1010,6 +1027,19 @@ export const DesktopPreviewNavigateInputSchema = Schema.Struct({
 
 export const DesktopPreviewConfigInputSchema = Schema.Struct({
   environmentId: EnvironmentId,
+  /**
+   * Browser profile the partition is derived from. Derivation stays in main:
+   * `will-attach-webview` only prefix-checks the partition string, so a
+   * renderer-supplied partition could attach to a session that never had the
+   * UA rewrite or permission handlers installed.
+   */
+  profileId: Schema.optional(BrowserProfileId),
+});
+
+export const DesktopPreviewClearDataInputSchema = Schema.Struct({
+  environmentId: EnvironmentId,
+  /** Omit to clear every profile; otherwise only this profile's partition. */
+  profileId: Schema.optional(BrowserProfileId),
 });
 
 export const DesktopPreviewSetColorSchemeInputSchema = Schema.Struct({
@@ -1060,6 +1090,13 @@ export const DesktopPreviewAutomationWaitForInputSchema = Schema.Struct({
   tabId: DesktopPreviewTabIdSchema,
   input: PreviewAutomationWaitForInput,
 });
+
+/**
+ * A System Settings pane the app can deep-link to. The identifier crosses IPC
+ * rather than a URL, so the renderer can only reach these known destinations.
+ */
+export const SystemSettingsPaneSchema = Schema.Literals(["full-disk-access"]);
+export type SystemSettingsPane = typeof SystemSettingsPaneSchema.Type;
 
 export interface DesktopBridge {
   officeInvoke?: (
@@ -1151,6 +1188,11 @@ export interface DesktopBridge {
    */
   revealPath?: (path: string) => Promise<boolean>;
   /**
+   * Open a System Settings pane by identifier. Optional: older desktop builds
+   * lack it, and callers no-op when it is missing.
+   */
+  openSystemSettings?: (pane: SystemSettingsPane) => Promise<boolean>;
+  /**
    * Probe this desktop machine for installed remote-capable editor CLIs
    * (used for remote open-in-editor deep links). Optional: older desktop
    * builds lack it; callers fall back to VS Code only.
@@ -1158,11 +1200,10 @@ export interface DesktopBridge {
   probeRemoteEditors?: () => Promise<readonly EditorId[]>;
   onMenuAction: (listener: (action: string) => void) => () => void;
   /**
-   * Hold-to-quit hint pushes: "down" when the quit shortcut is first pressed,
-   * "up" when it is released before the hold completes. Optional: older
-   * desktop builds never emit it.
+   * Quit-confirmation hints include the selected mode. Optional: older
+   * desktop builds do not emit hints.
    */
-  onQuitShortcut?: (listener: (state: "down" | "up") => void) => () => void;
+  onQuitShortcut?: (listener: (event: QuitShortcutHintEvent) => void) => () => void;
   getWindowFullscreenState: () => boolean;
   onWindowFullscreenStateChange: (listener: (fullscreen: boolean) => void) => () => void;
   getUpdateState: () => Promise<DesktopUpdateState>;
@@ -1201,16 +1242,27 @@ export interface DesktopPreviewBridge {
   /** Open the guest webview's DevTools (detached). */
   openDevTools: (tabId: string) => Promise<void>;
   /** Drop cookies + storage data for the preview partition (all tabs). */
-  clearCookies: () => Promise<void>;
+  clearCookies: (environmentId: EnvironmentId, profileId?: string) => Promise<void>;
   /** Drop the HTTP cache for the preview partition (all tabs). */
-  clearCache: () => Promise<void>;
+  clearCache: (environmentId: EnvironmentId, profileId?: string) => Promise<void>;
   /**
    * One-shot config for mounting a preview `<webview>`. Replaces three
    * earlier round-trip calls (`getBrowserPartition`, `getWebviewPreferences`,
    * `getPickPreloadPath`) so adding a new field here only requires touching
    * the contract + main, not the renderer's mount logic.
    */
-  getPreviewConfig: (environmentId: EnvironmentId) => Promise<DesktopPreviewWebviewConfig>;
+  getPreviewConfig: (
+    environmentId: EnvironmentId,
+    profileId?: string,
+  ) => Promise<DesktopPreviewWebviewConfig>;
+  /** Browsers on this machine whose cookies can be imported. */
+  listBrowserImportSources: () => Promise<ReadonlyArray<BrowserImportSource>>;
+  importBrowserCookies: (input: {
+    readonly environmentId: EnvironmentId;
+    readonly sourceId: BrowserImportSourceId;
+    readonly sourceProfileDirectory: string;
+    readonly targetProfileId: string;
+  }) => Promise<BrowserImportResult>;
   setAnnotationTheme: (theme: DesktopPreviewAnnotationTheme) => Promise<void>;
   /**
    * Activate the in-page element picker for the given tab. Resolves with
@@ -1277,6 +1329,8 @@ export interface LocalApi {
     openExternal: (url: string) => Promise<void>;
     /** Present only when the local host can reveal filesystem paths. */
     revealPath?: (path: string) => Promise<void>;
+    /** Opens a known System Settings pane; no-ops outside the desktop app. */
+    openSystemSettings: (pane: SystemSettingsPane) => Promise<void>;
   };
   contextMenu: {
     show: <T extends string>(

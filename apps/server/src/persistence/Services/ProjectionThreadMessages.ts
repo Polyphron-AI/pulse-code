@@ -53,6 +53,9 @@ export type DeleteProjectionThreadMessagesInput = typeof DeleteProjectionThreadM
  * ProjectionThreadMessageRepositoryShape - Service API for projected thread messages.
  */
 export interface ProjectionThreadMessageRepositoryShape {
+  readonly getLatestUserMessageAt: (
+    input: ListProjectionThreadMessagesInput,
+  ) => Effect.Effect<string | null, ProjectionRepositoryError>;
   /**
    * Insert or replace a projected thread message row.
    *

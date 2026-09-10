@@ -1,5 +1,7 @@
 import type { ProviderInstanceEnvironment } from "@t3tools/contracts";
 
+import { expandHomePath } from "../pathExpansion.ts";
+
 export function mergeProviderInstanceEnvironment(
   environment: ProviderInstanceEnvironment | undefined,
   platform: NodeJS.Platform,
@@ -19,7 +21,11 @@ export function mergeProviderInstanceEnvironment(
         }
       }
     }
-    next[variable.name] = variable.value;
+    // Child processes do not apply shell expansion to environment values.
+    next[variable.name] =
+      variable.name === "CODEX_HOME" || variable.name === "CLAUDE_CONFIG_DIR"
+        ? expandHomePath(variable.value)
+        : variable.value;
   }
   return next;
 }

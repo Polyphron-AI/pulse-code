@@ -61,6 +61,7 @@ function readStoredThemeHalves(): ThemeHalves | null {
 function themeHalvesSignature(halves: ThemeHalves | null): string {
   return `${halves?.light ?? ""}|${halves?.dark ?? ""}`;
 }
+
 const THEME_COLOR_META_NAME = "theme-color";
 const DYNAMIC_THEME_COLOR_SELECTOR = `meta[name="${THEME_COLOR_META_NAME}"][data-dynamic-theme-color="true"]`;
 
@@ -310,9 +311,14 @@ function applyTheme(theme: Theme, suppressTransitions = false) {
     themeHalves,
   );
   applyThemePalette(resolveThemeHalf(theme, themeHalves, resolvedAppearance), resolvedAppearance);
-  const isDark = resolvedAppearance === "dark";
-  document.documentElement.classList.toggle("dark", isDark);
-  lastAppliedTheme = { theme, systemDark, followSystem, appearanceMode, themeHalves };
+  document.documentElement.classList.toggle("dark", resolvedAppearance === "dark");
+  lastAppliedTheme = {
+    theme,
+    systemDark,
+    followSystem,
+    appearanceMode,
+    themeHalves,
+  };
   syncBrowserChromeTheme();
   syncDesktopTheme(theme, followSystem, appearanceMode);
   if (suppressTransitions) {
