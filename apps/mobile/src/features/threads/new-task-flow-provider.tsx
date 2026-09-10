@@ -26,7 +26,8 @@ import * as Arr from "effect/Array";
 import { pipe } from "effect/Function";
 
 import { useEnvironmentServerConfig, useProjects, useThreadShells } from "../../state/entities";
-import type { TurnCommandMetadata } from "../../lib/commandMetadata";
+import { makeTurnCommandMetadata, type TurnCommandMetadata } from "../../lib/commandMetadata";
+import { rotateDeletedPendingTaskBootstrap } from "../../state/pending-task-bootstrap-retry";
 import type { DraftComposerAttachment } from "../../lib/composerImages";
 import type { ModelOption, ProviderGroup } from "../../lib/modelOptions";
 import {
@@ -172,6 +173,9 @@ type NewTaskFlowContextValue = {
   readonly setStartFromOrigin: (value: boolean) => void;
   readonly beginEditingPendingTask: (messageId: string) => boolean;
   readonly finishEditingPendingTask: () => void;
+  readonly preparePendingTaskRetry: (
+    deletedThreadId?: ThreadId,
+  ) => Promise<QueuedThreadMessage | null>;
   readonly cancelEditingPendingTask: () => void;
   readonly buildPendingTaskMessage: (metadata: TurnCommandMetadata) => QueuedThreadMessage | null;
   readonly setPrompt: (value: string) => void;
@@ -232,6 +236,7 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
   // Mirrors `editingPendingTask` synchronously so the unmount flush cannot act
   // on a task whose editing session already ended this render.
   const editingPendingTaskRef = useRef<QueuedThreadMessage | null>(null);
+  const deletedBootstrapRef = useRef<QueuedThreadMessage | null>(null);
   // Outbox revision this editor session may write after its predecessor save.
   // Unrelated accepted writes still beat the dismissed session's CAS.
   const editingRevisionRef = useRef(Promise.resolve(0));
@@ -920,6 +925,22 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
     ],
   );
 
+  const preparePendingTaskRetry = useCallback(async (deletedThreadId?: ThreadId) => {
+    const editing = editingPendingTaskRef.current;
+    if (!editing) return null;
+    if (deletedThreadId === editing.threadId) deletedBootstrapRef.current = editing;
+    const failed = deletedBootstrapRef.current;
+    if (!failed || failed.messageId !== editing.messageId) return editing;
+    const next = await rotateDeletedPendingTaskBootstrap(failed, makeTurnCommandMetadata());
+    if (next && editingPendingTaskRef.current?.messageId === editing.messageId) {
+      editingPendingTaskRef.current = next;
+      editingRevisionRef.current = capturePendingTaskEditorWriteBaseline(next.messageId);
+      setEditingPendingTask(next);
+    }
+    deletedBootstrapRef.current = null;
+    return next;
+  }, []);
+
   const finishEditingPendingTask = useCallback(() => {
     const editing = editingPendingTaskRef.current;
     editingPendingTaskRef.current = null;
@@ -1065,6 +1086,7 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
       setStartFromOrigin,
       beginEditingPendingTask,
       finishEditingPendingTask,
+      preparePendingTaskRetry,
       cancelEditingPendingTask,
       buildPendingTaskMessage,
       setPrompt,
@@ -1097,6 +1119,7 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
       expandedProvider,
       filteredBranches,
       finishEditingPendingTask,
+      preparePendingTaskRetry,
       interactionMode,
       planModeEnabled,
       loadBranches,

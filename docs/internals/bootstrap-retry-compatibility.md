@@ -16,10 +16,17 @@ Mobile assessment:
 - Ordinary New Task submission allocates fresh turn metadata on each attempt.
 - Background queued creation failures normally restore content to a new-task
   draft, whose next send allocates fresh metadata.
-- Manually sending an edited pending task retains its queued metadata. A
-  confirmed deleted bootstrap needs a separate durable identity rotation for
-  that path, preserving its message ID, editor ownership, and draft content.
-  This source adaptation does not claim that Pulse-specific edge is fixed.
+- Manually sending an edited pending task rotates its thread and command IDs
+  after confirmed deletion. The update is durable before another online send or
+  offline requeue; its message ID, queue ordering, editor lock, and draft key stay
+  unchanged. CAS retries preserve concurrently accepted edits and never recreate
+  a removed entry. A storage failure keeps the task queued and blocks sending
+  until the editor can persist the retry identity.
+- A confirmed deleted bootstrap restores the background queue entry even when
+  the underlying failure text resembles a transport error; it must not keep
+  retrying the deleted thread ID.
 
 Validation covers the dispatch schema, typed error recognition, draft-preserving
 ID rotation, cleanup success and failure, and pending-upload preservation.
+The mobile followup adds 46 focused outbox/editor tests and a passing mobile
+typecheck. No client checks use live data.
