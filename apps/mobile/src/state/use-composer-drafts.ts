@@ -109,10 +109,14 @@ export const composerDraftsAtom = Atom.make<Record<string, ComposerDraft>>({}).p
 );
 
 let loadPromise: Promise<void> | null = null;
+let persistRetryNeeded = false;
 
 /** Resets hydration between isolated persistence tests. */
 export function resetComposerDraftsLoadState(): void {
   loadPromise = null;
+  persistRetryNeeded = false;
+  if (persistTimer !== null) clearTimeout(persistTimer);
+  persistTimer = null;
 }
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
 const persistenceQueue = new SerializedAsyncQueue();
@@ -173,16 +177,12 @@ async function loadPersistedComposerDrafts(): Promise<Record<string, ComposerDra
     operation = "decode";
     return decodePersistedComposerDrafts(JSON.parse(raw) as unknown);
   } catch (cause) {
-    console.warn(
-      "[composer-drafts] ignored persisted draft failure",
-      new ComposerDraftPersistenceError({
-        operation,
-        directory: COMPOSER_DRAFTS_DIRECTORY,
-        fileName: COMPOSER_DRAFTS_FILE,
-        cause,
-      }),
-    );
-    return {};
+    throw new ComposerDraftPersistenceError({
+      operation,
+      directory: COMPOSER_DRAFTS_DIRECTORY,
+      fileName: COMPOSER_DRAFTS_FILE,
+      cause,
+    });
   }
 }
 
@@ -211,33 +211,38 @@ async function writePersistedComposerDrafts(drafts: Record<string, ComposerDraft
   }
 }
 
-async function savePersistedComposerDrafts(drafts: Record<string, ComposerDraft>): Promise<void> {
+async function savePersistedComposerDrafts(): Promise<void> {
   try {
-    await persistenceQueue.run(() => writePersistedComposerDrafts(drafts));
+    await persistenceQueue.run(async () => {
+      await waitForComposerDraftsLoaded();
+      await writePersistedComposerDrafts(appAtomRegistry.get(composerDraftsAtom));
+    });
+    persistRetryNeeded = false;
   } catch (error) {
+    persistRetryNeeded = true;
     console.warn("[composer-drafts] failed to persist drafts", error);
-    // Draft persistence is best-effort; in-memory drafts still keep working.
   }
 }
 
-/**
- * Lands any debounced or in-flight draft write before the JS runtime is torn
- * down (app update restart), so the freshest draft state survives it. A write
- * failure propagates so the caller can decide whether the restart may proceed.
- */
+/** Persist pending edits before restart, retaining them for retry after storage failure. */
 export async function flushComposerDrafts(): Promise<void> {
-  // An edit during an awaited write schedules another debounced write, so
-  // keep landing snapshots until no debounce is pending after a queue drain.
   do {
-    while (persistTimer !== null) {
-      clearTimeout(persistTimer);
+    while (persistTimer !== null || persistRetryNeeded) {
+      if (persistTimer !== null) clearTimeout(persistTimer);
       persistTimer = null;
-      await persistenceQueue.run(() =>
-        writePersistedComposerDrafts(appAtomRegistry.get(composerDraftsAtom)),
-      );
+      persistRetryNeeded = false;
+      try {
+        await persistenceQueue.run(async () => {
+          await waitForComposerDraftsLoaded();
+          await writePersistedComposerDrafts(appAtomRegistry.get(composerDraftsAtom));
+        });
+      } catch (error) {
+        persistRetryNeeded = true;
+        throw error;
+      }
     }
     await persistenceQueue.run(() => Promise.resolve());
-  } while (persistTimer !== null);
+  } while (persistTimer !== null || persistRetryNeeded);
 }
 
 function isComposerAttachmentFileReferenced(fileUri: string): boolean {
@@ -402,51 +407,38 @@ export function retainComposerAttachmentFileForPreview(
   });
 }
 
-function schedulePersistComposerDrafts(drafts: Record<string, ComposerDraft>): void {
+function schedulePersistComposerDrafts(): void {
   if (persistTimer !== null) {
     clearTimeout(persistTimer);
   }
   persistTimer = setTimeout(() => {
     persistTimer = null;
-    void savePersistedComposerDrafts(drafts);
+    void savePersistedComposerDrafts();
   }, PERSIST_DEBOUNCE_MS);
 }
 
 export function ensureComposerDraftsLoaded(): void {
-  if (loadPromise !== null) {
-    return;
-  }
-  loadPromise = loadPersistedComposerDrafts()
-    .then((persistedDrafts) => {
-      if (Object.keys(persistedDrafts).length === 0) {
-        return;
-      }
-      const current = appAtomRegistry.get(composerDraftsAtom);
-      appAtomRegistry.set(composerDraftsAtom, {
-        ...persistedDrafts,
-        ...current,
-      });
-    })
-    .catch((cause) => {
-      console.warn(
-        "[composer-drafts] failed to hydrate drafts",
-        new ComposerDraftPersistenceError({
-          operation: "hydrate",
-          directory: COMPOSER_DRAFTS_DIRECTORY,
-          fileName: COMPOSER_DRAFTS_FILE,
-          cause,
-        }),
-      );
-      // Draft loading is best-effort; in-memory drafts still keep working.
-    });
+  void waitForComposerDraftsLoaded().catch((error) => {
+    console.warn("[composer-drafts] failed to hydrate drafts", error);
+  });
 }
 
-/** Wait until persisted drafts have been merged into the in-memory composer state. */
+/** Reject failed reads so persistence and cleanup cannot mistake them for empty storage. */
 export async function waitForComposerDraftsLoaded(): Promise<void> {
-  ensureComposerDraftsLoaded();
-  if (loadPromise !== null) {
-    await loadPromise;
+  if (loadPromise === null) {
+    loadPromise = loadPersistedComposerDrafts()
+      .then((persisted) => {
+        appAtomRegistry.set(composerDraftsAtom, {
+          ...persisted,
+          ...appAtomRegistry.get(composerDraftsAtom),
+        });
+      })
+      .catch((error) => {
+        loadPromise = null;
+        throw error;
+      });
   }
+  await loadPromise;
 }
 
 function updateComposerDrafts(
@@ -458,7 +450,7 @@ function updateComposerDrafts(
     return;
   }
   appAtomRegistry.set(composerDraftsAtom, next);
-  schedulePersistComposerDrafts(next);
+  schedulePersistComposerDrafts();
 }
 
 export function setComposerDraftText(draftKey: string, value: string): void {
@@ -679,10 +671,7 @@ export async function copyComposerDraftContentIfEmpty(
   sourceDraftKey: string,
   targetDraftKey: string,
 ): Promise<void> {
-  ensureComposerDraftsLoaded();
-  if (loadPromise !== null) {
-    await loadPromise;
-  }
+  await waitForComposerDraftsLoaded();
   updateComposerDrafts((current) =>
     copyComposerDraftContentState(current, sourceDraftKey, targetDraftKey),
   );
@@ -754,10 +743,7 @@ export async function mergeComposerDraftContent(
   draftKey: string,
   content: ComposerDraftContent,
 ): Promise<{ readonly skippedAttachmentCount: number }> {
-  ensureComposerDraftsLoaded();
-  if (loadPromise !== null) {
-    await loadPromise;
-  }
+  await waitForComposerDraftsLoaded();
   if (persistTimer !== null) {
     clearTimeout(persistTimer);
     persistTimer = null;
@@ -789,10 +775,7 @@ export async function restoreComposerDraftSnapshot(
   draftKey: string,
   snapshot: ComposerDraft,
 ): Promise<void> {
-  ensureComposerDraftsLoaded();
-  if (loadPromise !== null) {
-    await loadPromise;
-  }
+  await waitForComposerDraftsLoaded();
   if (persistTimer !== null) {
     clearTimeout(persistTimer);
     persistTimer = null;
@@ -885,10 +868,7 @@ export async function undoComposerDraftMerge(
   snapshot: ComposerDraft,
   merged: ComposerDraft,
 ): Promise<void> {
-  ensureComposerDraftsLoaded();
-  if (loadPromise !== null) {
-    await loadPromise;
-  }
+  await waitForComposerDraftsLoaded();
   if (persistTimer !== null) {
     clearTimeout(persistTimer);
     persistTimer = null;
@@ -955,10 +935,7 @@ export function removeComposerDraftsForEnvironment(
 }
 
 export async function clearComposerDraftsEnvironment(environmentId: EnvironmentId): Promise<void> {
-  ensureComposerDraftsLoaded();
-  if (loadPromise !== null) {
-    await loadPromise;
-  }
+  await waitForComposerDraftsLoaded();
 
   const current = appAtomRegistry.get(composerDraftsAtom);
   const next = removeComposerDraftsForEnvironment(current, environmentId);
