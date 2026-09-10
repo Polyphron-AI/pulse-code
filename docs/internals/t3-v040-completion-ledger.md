@@ -4,7 +4,13 @@ Target: `09e8de9c655ae85410bf6b00446f272a01da81c7`. The [source disposition inve
 
 The target changes 2,389 paths from the declared baseline: 728 web, 507 server, 454 mobile, 155 client runtime, 132 desktop, 81 marketing, 73 shared, and 48 contracts. These counts describe source scope, not missing features. The audit inspected migration sources, all changed contract filenames, provider history, native dependency/configuration diffs, and selected implementations. It did not independently verify every path.
 
-## Integrated checkpoint through `80672e344`
+## Integrated checkpoint through `0bb876d37`
+
+- Antigravity contracts, ACP transport, backend setup, web/desktop settings, account model selection, mobile send gates, and web composer capability handling are integrated through `8e6f499ce`. Existing Pulse provider IDs, compaction, usage panels, dictation, and browser profiles remain. Agent checks passed 573 backend/contract/ACP cases, with five platform skips, and focused client suites. Integrated web, server, and mobile typechecks pass. No real Antigravity installation, account login, or provider turn was performed.
+- Draft PR presentation and lookup after remote head deletion are integrated in `53840b9db` and `9f188ccda`. Custom model pricing is integrated in `5772defe6`, including explicit zero prices and removal that restores automatic rates. Pulse usage scanning and charts are retained. Agent pricing validation passed 170 focused checks; the merged PR and pricing suites passed 31 tests. `0bb876d37` aligns four PR permission fixtures with the triage contract.
+- SSH suggestions, preview tab mute, and local CLI desktop activation are integrated. Token usage normalization and additional environment metadata are still in progress. These changes are not in the locally built `.5` artifact. Full V40 compatibility remains unverified.
+
+## Earlier checkpoint through `80672e344`
 
 - Preview `.20260910.5` is built and locally verified from `2d86d084e8abd35199b09abe5e673fd52c52374c`, containing compatibility through `f420040f0`. It preserves published `.4` Office/Talk/downloads. Installer size is 172,946,157 bytes; SHA256 is `69e722123a53ecc8c62f32ed4beb4206243814352dcaf108d736226854dc843a`. Package source/version, Talk, and resource monitor checks pass. It is not published: automatic approval review requires explicit approval of the public repository and payload; that request is pending. The compatibility remote remains at `11c4ebc8a`.
 - The first `.5` build stopped at the 80-file packaging guard. Comparing staged payloads identified exactly seven new keyring loader/native files required by browser import. `229c20840` retains a bounded 87-file budget, with 50 packaging tests passing. The rebuilt artifact has 82 files and 35 server sidecar natives.
