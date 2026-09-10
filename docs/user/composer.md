@@ -130,3 +130,5 @@ Mobile shows the full saved quote and its comment in sent messages. It does not 
 When an agent reads an image, its tool result can show an image preview. The preview loads from the connected environment and supports the same viewing actions as images in messages.
 
 Open file previews, the file tree, Git status, and working-tree diffs refresh after agent commands or file changes. A file with a pending edit waits until the edit finishes before refreshing.
+
+Skill and command suggestions attach to the top of the composer and follow it when panels resize. Skill-source icons distinguish app, repository, project, personal, and system skills on desktop, web, and mobile.

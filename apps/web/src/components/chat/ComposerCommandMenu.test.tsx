@@ -78,3 +78,11 @@ describe("ComposerCommandMenu skills", () => {
     expect(renderMenu([skill], "slash-command", false)).toContain("Review Code");
   });
 });
+
+it("renders skill results as an attached composer drawer", () => {
+  const markup = renderMenu([skill], "skill");
+  expect(markup).toContain('data-composer-command-drawer="true"');
+  expect(markup).toContain("chat-composer-drawer-surface");
+  expect(markup).toContain("chat-composer-drawer-attached");
+  expect(markup).not.toContain("dropdown-glass");
+});

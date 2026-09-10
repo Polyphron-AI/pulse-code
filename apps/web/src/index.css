@@ -2133,3 +2133,54 @@ code {
     visibility: visible;
   }
 }
+
+@layer components {
+  [data-chat-composer-form="true"] {
+    --chat-composer-drawer-inset: 1.375rem;
+  }
+
+  .chat-composer-drawer-surface {
+    --chat-composer-attachment-overlap: calc(1rem + 1px);
+    --chat-composer-attached-surface: var(--chat-composer-glass-surface, var(--card));
+    --chat-composer-attached-outline: var(--chat-composer-outline, var(--border));
+    position: relative;
+    isolation: isolate;
+    border: 0;
+    background: transparent;
+  }
+
+  .chat-composer-drawer-attached {
+    padding-bottom: var(--chat-composer-attachment-overlap);
+  }
+
+  .chat-composer-drawer-surface::before {
+    content: "";
+    position: absolute;
+    pointer-events: none;
+    z-index: -1;
+    inset: 0;
+    border: 1px solid var(--chat-composer-attached-outline);
+    border-radius: 16px 16px 0 0;
+    background: color-mix(
+      in srgb,
+      var(--chat-composer-attached-surface) var(--glass-opacity),
+      transparent
+    );
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+    -webkit-mask-image: linear-gradient(
+      to top,
+      transparent 0 var(--chat-composer-attachment-overlap),
+      black var(--chat-composer-attachment-overlap)
+    );
+    mask-image: linear-gradient(
+      to top,
+      transparent 0 var(--chat-composer-attachment-overlap),
+      black var(--chat-composer-attachment-overlap)
+    );
+    box-shadow: 0 12px 28px -18px rgb(0 0 0 / 40%);
+    @supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+      background: var(--chat-composer-attached-surface);
+    }
+  }
+}

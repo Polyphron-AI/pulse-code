@@ -1,3 +1,4 @@
+import { composerDrawerPosition } from "./composerDrawerPosition";
 import { videoMimeType } from "@t3tools/shared/video";
 import {
   resolveProviderSkillsForCwd,
@@ -228,13 +229,23 @@ function ComposerCommandMenuLayer(props: { anchor: HTMLElement | null; children:
     }
 
     const updatePosition = () => {
-      const rect = anchor.getBoundingClientRect();
-      const next = {
-        bottom: window.innerHeight - rect.top + 8,
+      const form = anchor.closest<HTMLElement>('[data-chat-composer-form="true"]');
+      const surface = form?.querySelector<HTMLElement>('[data-chat-composer-main-surface="true"]');
+      const rect = (surface ?? form ?? anchor).getBoundingClientRect();
+      const rootFontSize =
+        Number.parseFloat(window.getComputedStyle(document.documentElement).fontSize) || 16;
+      const insetRem =
+        Number.parseFloat(
+          window.getComputedStyle(form ?? anchor).getPropertyValue("--chat-composer-drawer-inset"),
+        ) || 1.375;
+      const next = composerDrawerPosition({
+        top: rect.top,
         left: rect.left,
-        maxHeight: Math.max(96, rect.top - 24),
         width: rect.width,
-      };
+        viewportHeight: window.innerHeight,
+        rootFontSize,
+        insetRem,
+      });
       setPosition((current) =>
         current && composerCommandMenuPositionsEqual(current, next) ? current : next,
       );
@@ -269,6 +280,7 @@ function ComposerCommandMenuLayer(props: { anchor: HTMLElement | null; children:
   return createPortal(
     <div
       className="pointer-events-auto fixed z-[70]"
+      data-composer-drawer-layer="true"
       style={{
         bottom: position.bottom,
         left: position.left,
@@ -351,6 +363,7 @@ const runtimeModeConfig: Record<
 
 const runtimeModeOptions = Object.keys(runtimeModeConfig) as RuntimeMode[];
 const COMPOSER_FLOATING_LAYER_SELECTOR = [
+  '[data-composer-drawer-layer="true"]',
   '[data-slot="popover-popup"]',
   '[data-slot="menu-popup"]',
   '[data-slot="select-popup"]',
@@ -3490,6 +3503,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       >
         <div
           ref={composerSurfaceRef}
+          data-chat-composer-main-surface="true"
           data-chat-composer-mobile-collapsed={isComposerCollapsedMobile ? "true" : "false"}
           data-chat-composer-scroll-collapsed={scrollCollapse.collapsed ? "true" : "false"}
           onPointerDownCapture={scrollCollapse.restore}
