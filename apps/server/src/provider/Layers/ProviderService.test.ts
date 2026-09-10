@@ -2605,6 +2605,7 @@ describe("agent browser access", () => {
         Layer.provide(runtimeRepositoryLayer),
       );
       const projectionLayer = Layer.succeed(ProjectionSnapshotQuery.ProjectionSnapshotQuery, {
+        getImportedAgentSessionSources: () => Effect.succeed([]),
         getUserInputActivity: () => Effect.die("unused"),
         getCommandReadModel: () => Effect.die("unused"),
         getSnapshot: () => Effect.die("unused"),
