@@ -1,3 +1,5 @@
+import { PullRequestNamedFilters } from "../components/pullRequest/PullRequestNamedFilters";
+import { pullRequestNamedFilters } from "../components/pullRequest/pullRequestNamedFilters.logic";
 import {
   pullRequestListPreferences,
   readPullRequestListSort,
@@ -151,6 +153,8 @@ export interface PullRequestsSearch {
    */
   readonly selectedEnvironmentId?: EnvironmentId;
   readonly q?: string;
+  readonly author?: string;
+  readonly labels?: ReadonlyArray<string>;
   /**
    * The narrowings beyond state and involvement, each absent when that group is unfiltered. Flat
    * in the URL because a link is read and edited by hand; folded into one record for the listing.
@@ -206,6 +210,7 @@ const EMPTY_PENDING_SURFACES = new Set<string>();
 
 export const Route = createFileRoute("/_chat/pull-requests")({
   validateSearch: (raw: Record<string, unknown>): PullRequestsSearch => ({
+    ...pullRequestNamedFilters(raw),
     ...(readPullRequestListSort(raw.sort) ? { sort: readPullRequestListSort(raw.sort)! } : {}),
     involvement:
       raw.involvement === "reviewing" || raw.involvement === "authored" ? raw.involvement : "all",
@@ -473,6 +478,7 @@ function PullRequestsRouteView() {
               ? { selectedEnvironmentId: next.selectedEnvironmentId }
               : {}),
             ...(next.q ? { q: next.q } : {}),
+            ...pullRequestNamedFilters(next),
             ...(next.draft ? { draft: next.draft } : {}),
             ...(next.review ? { review: next.review } : {}),
             ...(next.checks ? { checks: next.checks } : {}),
@@ -527,15 +533,17 @@ function PullRequestsRouteView() {
   // inputs stay identical between renders.
   const menuFilters = useMemo(
     (): PullRequestListFilters => ({
+      ...(search.author ? { author: search.author } : {}),
+      ...(search.labels?.length ? { labels: search.labels.map((label) => [label]) } : {}),
       ...(search.draft ? { draft: search.draft } : {}),
       ...(search.review ? { review: search.review } : {}),
       ...(search.checks ? { checks: search.checks } : {}),
     }),
-    [search.checks, search.draft, search.review],
+    [search.author, search.labels, search.checks, search.draft, search.review],
   );
   const menuFiltered = Object.keys(menuFilters).length > 0;
   // A typed qualifier wins over the menu's own answer for the same thing, since it is the more
-  // recent word on it; labels only ever come from the query, so there is nothing to overrule.
+  // recent word on it, including typed author or label qualifiers.
   const filters = useMemo(
     (): PullRequestListFilters => ({ ...menuFilters, ...sentParsed.filters }),
     [menuFilters, sentParsed.filters],
@@ -612,7 +620,7 @@ function PullRequestsRouteView() {
     .map(([environmentId, revision]) => `${environmentId}:${revision}`)
     .join("|");
   // Page size is view state, not a URL concern: a shared link should open the first page.
-  const scopeKey = `${environmentKey}:${assignmentKey}:${search.state}:${search.involvement}:${scopedProjectId ?? ""}:${search.host ?? ""}:${search.draft ?? ""}:${search.review ?? ""}:${search.checks ?? ""}`;
+  const scopeKey = `${environmentKey}:${assignmentKey}:${search.state}:${search.involvement}:${scopedProjectId ?? ""}:${search.host ?? ""}:${search.draft ?? ""}:${search.review ?? ""}:${search.checks ?? ""}:${search.author ?? ""}:${JSON.stringify(search.labels ?? [])}`;
   const filterKey = `${scopeKey}:${sentQuery}`;
   // Where the next slice carries on from, per repository within each environment, as that
   // environment handed it back. Sending it is what makes a second page cost a second page rather
@@ -1608,6 +1616,11 @@ function PullRequestsRouteView() {
           </MenuRadioGroup>
         </MenuPopup>
       </Menu>
+      <PullRequestNamedFilters
+        author={search.author}
+        labels={search.labels}
+        onChange={updateListScope}
+      />
       <PullRequestFiltersMenu
         state={search.state}
         stateOptions={STATE_TABS}

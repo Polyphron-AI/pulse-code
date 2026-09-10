@@ -165,3 +165,5 @@ Control settings**.
 - [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/)
 
 The pull request list remembers its filters and sort order when reopened from the sidebar. Filtering or sorting keeps the selected review panel open. Merge readiness is the default browse order: approved passing work comes first, followed by passing work, other open work, finished work, and conflicts. Smaller measured changes come first within each tier. Text searches keep relevance order unless you choose another sort.
+
+The pull request list?s **Author / labels** control filters by a login (or `me`) and one or more labels. Add labels individually; all selected labels must match. Apply saves these controls in the shareable URL and remembers them for the next visit. Remove an individual label or use Clear to broaden the list. Search qualifiers such as `author:` and `label:` take precedence over the corresponding controls. Filtering keeps the selected pull request open.
