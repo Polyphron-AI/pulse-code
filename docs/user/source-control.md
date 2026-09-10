@@ -45,7 +45,16 @@ Pulse Code works with the platforms your team already uses:
 - Command-click (Control-click on Windows and Linux) a pull request number in the sidebar to open it in your browser instead of in Pulse Code
 - Check out a teammate's branch to review code locally
 
-**Fix what you wrote, in place**
+**Manage merge and workflow state**
+
+- On GitHub, **Revert changes** opens a new pull request reversing a merged pull request. Review the confirmation before creating it.
+- Fork workflows awaiting permission appear as **Action required**, rather than passed checks. **Approve workflows to run** is available when your account can approve them; review the code and workflow changes before confirming.
+- Auto-merge shows the strategy reported by the host. You can disable it or choose **Merge now** when permitted.
+- You can post a comment and close or reopen a review together. If the state change fails after posting, the comment remains saved.
+
+Actions depend on the hosting provider and your permissions. These controls are available in the web and desktop pull-request workspace.
+
+**Edit review text**
 
 - Rewrite a pull request's title and description from the review itself, in Markdown, with a
   preview before you save
