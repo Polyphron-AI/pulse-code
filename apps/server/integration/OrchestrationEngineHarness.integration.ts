@@ -8,6 +8,7 @@ import {
   ProviderDriverKind,
   type OrchestrationEvent,
   type OrchestrationThread,
+  type ProviderApprovalDecision,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -64,6 +65,8 @@ import {
 } from "../src/orchestration/Services/OrchestrationEngine.ts";
 import { ScheduleReactor } from "../src/orchestration/Services/ScheduleReactor.ts";
 import { ThreadDeletionReactor } from "../src/orchestration/Services/ThreadDeletionReactor.ts";
+import * as ThreadSettlementReactor from "../src/orchestration/ThreadSettlementReactor.ts";
+import * as ThreadPullRequestReactor from "../src/orchestration/ThreadPullRequestReactor.ts";
 import { OrchestrationReactor } from "../src/orchestration/Services/OrchestrationReactor.ts";
 import { ProjectionSnapshotQuery } from "../src/orchestration/Services/ProjectionSnapshotQuery.ts";
 import {
@@ -200,14 +203,14 @@ export interface OrchestrationIntegrationHarness {
     requestId: string,
     predicate: (row: {
       readonly status: "pending" | "resolved";
-      readonly decision: "accept" | "acceptForSession" | "decline" | "cancel" | null;
+      readonly decision: ProviderApprovalDecision | null;
       readonly resolvedAt: string | null;
     }) => boolean,
     timeoutMs?: number,
   ) => Effect.Effect<
     {
       readonly status: "pending" | "resolved";
-      readonly decision: "accept" | "acceptForSession" | "decline" | "cancel" | null;
+      readonly decision: ProviderApprovalDecision | null;
       readonly resolvedAt: string | null;
     },
     never
@@ -383,6 +386,18 @@ export const makeOrchestrationIntegrationHarness = (
         }),
       ),
       Layer.provideMerge(
+        Layer.succeed(ThreadPullRequestReactor.ThreadPullRequestReactor, {
+          start: () => Effect.void,
+          drain: Effect.void,
+        }),
+      ),
+      Layer.provideMerge(
+        Layer.succeed(ThreadSettlementReactor.ThreadSettlementReactor, {
+          start: () => Effect.void,
+          drain: Effect.void,
+        }),
+      ),
+      Layer.provideMerge(
         Layer.succeed(AgentAwarenessRelay.AgentAwarenessRelay, {
           publishThread: () => Effect.void,
           start: () => Effect.void,
@@ -500,7 +515,7 @@ export const makeOrchestrationIntegrationHarness = (
           row,
         ): row is {
           readonly status: "pending" | "resolved";
-          readonly decision: "accept" | "acceptForSession" | "decline" | "cancel" | null;
+          readonly decision: ProviderApprovalDecision | null;
           readonly resolvedAt: string | null;
         } => row !== null && predicate(row),
         `pending approval '${requestId}'`,
@@ -508,7 +523,7 @@ export const makeOrchestrationIntegrationHarness = (
       ) as Effect.Effect<
         {
           readonly status: "pending" | "resolved";
-          readonly decision: "accept" | "acceptForSession" | "decline" | "cancel" | null;
+          readonly decision: ProviderApprovalDecision | null;
           readonly resolvedAt: string | null;
         },
         never

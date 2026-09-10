@@ -1,3 +1,4 @@
+import { SharedSettingsMismatchAlert } from "./SharedSettingsMismatchAlert";
 import { ArchiveIcon, ArchiveX, ChevronRightIcon, LoaderIcon, SettingsIcon } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import type { CSSProperties, ReactNode } from "react";
@@ -67,6 +68,8 @@ import {
 } from "../../hooks/useTheme";
 import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { usePrimarySettings, useUpdatePrimarySettings } from "../../hooks/useSettings";
+import { RestartContinuationSettings } from "./RestartContinuationSettings";
+import { VoiceSettings } from "../../voice/VoiceSettings";
 import { useThreadActions } from "../../hooks/useThreadActions";
 import { useDesktopUpdateState } from "../../state/desktopUpdate";
 import {
@@ -80,7 +83,11 @@ import {
 } from "../../providerInstances";
 import { ensureLocalApi, readLocalApi } from "../../localApi";
 import { isMacPlatform } from "../../lib/utils";
-import { primaryServerObservabilityAtom, primaryServerProvidersAtom } from "../../state/server";
+import {
+  primaryServerConfigAtom,
+  primaryServerObservabilityAtom,
+  primaryServerProvidersAtom,
+} from "../../state/server";
 import { useProjects } from "../../state/entities";
 import { useArchivedThreadSnapshots } from "../../lib/archivedThreadsState";
 import { formatRelativeTimeLabel } from "../../timestampFormat";
@@ -1903,6 +1910,8 @@ function LegacyFeaturesSection() {
 }
 
 export function GeneralSettingsPanel() {
+  const supportsAutoSettlement =
+    useAtomValue(primaryServerConfigAtom)?.environment.capabilities.threadAutoSettlement === true;
   const settings = usePrimarySettings();
   const updateSettings = useUpdatePrimarySettings();
   const [backgroundActivityDialogOpen, setBackgroundActivityDialogOpen] = useState(false);
@@ -1957,7 +1966,10 @@ export function GeneralSettingsPanel() {
 
   return (
     <SettingsPageContainer>
+      <SharedSettingsMismatchAlert />
       <SettingsSection title="General">
+        <VoiceSettings />
+        <RestartContinuationSettings />
         <SettingsRow
           {...searchableSetting("messages-while-working")}
           description="Queue starts a follow-up turn. Steer adjusts the turn already in progress."
@@ -2037,7 +2049,11 @@ export function GeneralSettingsPanel() {
 
         <SettingsRow
           {...searchableSetting("auto-settle-merged-threads")}
-          description="Settle a thread when its pull request merges. Closed pull requests still settle automatically."
+          description={
+            supportsAutoSettlement
+              ? "Settle threads when their pull requests merge, even with the app closed. Applies to connected supported environments. Closed pull requests still settle automatically."
+              : "Settle threads on older servers when their pull requests merge. Saved on this device; connected supported environments receive the same preference."
+          }
           resetAction={
             settings.sidebarAutoSettleOnMerge !==
             DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleOnMerge ? (
@@ -2064,7 +2080,11 @@ export function GeneralSettingsPanel() {
 
         <SettingsRow
           {...searchableSetting("auto-settle-inactive-threads")}
-          description="Sidebar threads with no activity for this long settle automatically."
+          description={
+            supportsAutoSettlement
+              ? "Servers settle inactive threads even with the app closed. Applies to connected supported environments."
+              : "Sidebar threads with no activity for this long settle automatically. Saved on this device for older servers."
+          }
           resetAction={
             settings.sidebarAutoSettleAfterDays !==
             DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleAfterDays ? (
@@ -2282,16 +2302,30 @@ export function GeneralSettingsPanel() {
 
         <SettingsRow
           {...searchableSetting("new-threads")}
-          description="Pick the default workspace mode for newly created draft threads."
+          description="Choose the default model and workspace for all projects or a specific project."
+          control={
+            <Button
+              render={
+                <Link to="/settings/projects" search={{ project: undefined, machine: undefined }} />
+              }
+              size="sm"
+              variant="outline"
+            >
+              Project settings
+            </Button>
+          }
+        />
+
+        <SettingsRow
+          {...searchableSetting("start-from-origin")}
+          description="Creates the worktree from the latest matching branch on origin instead of your local branch."
           resetAction={
-            settings.defaultThreadEnvMode !== DEFAULT_UNIFIED_SETTINGS.defaultThreadEnvMode ||
             settings.newWorktreesStartFromOrigin !==
-              DEFAULT_UNIFIED_SETTINGS.newWorktreesStartFromOrigin ? (
+            DEFAULT_UNIFIED_SETTINGS.newWorktreesStartFromOrigin ? (
               <SettingResetButton
-                label="new threads"
+                label="new worktrees start from origin"
                 onClick={() =>
                   updateSettings({
-                    defaultThreadEnvMode: DEFAULT_UNIFIED_SETTINGS.defaultThreadEnvMode,
                     newWorktreesStartFromOrigin:
                       DEFAULT_UNIFIED_SETTINGS.newWorktreesStartFromOrigin,
                   })
@@ -2300,62 +2334,15 @@ export function GeneralSettingsPanel() {
             ) : null
           }
           control={
-            <Select
-              value={settings.defaultThreadEnvMode}
-              onValueChange={(value) => {
-                if (value === "local" || value === "worktree") {
-                  updateSettings({ defaultThreadEnvMode: value });
-                }
-              }}
-            >
-              <SelectTrigger className="w-full sm:w-44" aria-label="Default thread mode">
-                <SelectValue>
-                  {settings.defaultThreadEnvMode === "worktree" ? "New worktree" : "Local"}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectPopup align="end" alignItemWithTrigger={false}>
-                <SelectItem hideIndicator value="local">
-                  Local
-                </SelectItem>
-                <SelectItem hideIndicator value="worktree">
-                  New worktree
-                </SelectItem>
-              </SelectPopup>
-            </Select>
+            <Switch
+              checked={settings.newWorktreesStartFromOrigin}
+              onCheckedChange={(checked) =>
+                updateSettings({ newWorktreesStartFromOrigin: Boolean(checked) })
+              }
+              aria-label="Start new worktrees from origin by default"
+            />
           }
         />
-
-        {settings.defaultThreadEnvMode === "worktree" ? (
-          <SettingsRow
-            className="bg-muted/20 sm:pl-9"
-            title={searchableSetting("start-from-origin").title}
-            description="Creates the worktree from the latest matching branch on origin instead of your local branch."
-            resetAction={
-              settings.newWorktreesStartFromOrigin !==
-              DEFAULT_UNIFIED_SETTINGS.newWorktreesStartFromOrigin ? (
-                <SettingResetButton
-                  label="new worktrees start from origin"
-                  onClick={() =>
-                    updateSettings({
-                      newWorktreesStartFromOrigin:
-                        DEFAULT_UNIFIED_SETTINGS.newWorktreesStartFromOrigin,
-                    })
-                  }
-                />
-              ) : null
-            }
-            control={
-              <Switch
-                checked={settings.newWorktreesStartFromOrigin}
-                onCheckedChange={(checked) =>
-                  updateSettings({ newWorktreesStartFromOrigin: Boolean(checked) })
-                }
-                aria-label="Start new worktrees from origin by default"
-              />
-            }
-          />
-        ) : null}
-
         <SettingsRow
           {...searchableSetting("add-project-starts-in")}
           description='Leave empty to use "~/" when the Add Project browser opens.'
@@ -2587,6 +2574,7 @@ export function ArchivedThreadsPanel() {
                 name: project.title,
                 cwd: project.workspaceRoot,
                 faviconPath: project.faviconPath,
+                projectIcon: project.projectIcon,
               },
             ] as const,
         ),
@@ -2712,7 +2700,9 @@ export function ArchivedThreadsPanel() {
               <ProjectFavicon
                 environmentId={project.environmentId}
                 cwd={project.cwd}
+                projectName={project.name}
                 faviconPath={project.faviconPath}
+                projectIcon={project.projectIcon}
               />
             }
           >

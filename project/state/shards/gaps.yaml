@@ -1,8 +1,26 @@
 gaps:
   - {
-      id: G-2026-08-21-desktop-boundary-presentation-metadata,
+      id: G-2026-09-04-pulseflow-adapter-unimplemented,
       severity: high,
       status: open,
+      source: project/known-gaps.md,
+    }
+  - {
+      id: G-2026-09-04-public-preview-gateway,
+      severity: high,
+      status: open,
+      source: project/known-gaps.md,
+    }
+  - {
+      id: G-2026-09-04-impeccable-windows-live-baseline,
+      severity: high,
+      status: open,
+      source: project/known-gaps.md,
+    }
+  - {
+      id: G-2026-08-21-desktop-boundary-presentation-metadata,
+      severity: high,
+      status: resolved,
       source: project/known-gaps.md,
     }
   - {

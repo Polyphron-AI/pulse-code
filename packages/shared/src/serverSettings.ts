@@ -1,7 +1,9 @@
 import {
   isProviderDriverKind,
   isProviderAvailable,
+  resolveProviderInstanceEnabled,
   type ModelSelection,
+  type ProjectId,
   type ProviderDriverKind,
   type ServerProvider,
   ServerSettings,
@@ -22,6 +24,27 @@ import {
 const ServerSettingsJson = fromLenientJson(ServerSettings);
 const decodeServerSettingsJson = Schema.decodeUnknownOption(ServerSettingsJson);
 
+export function resolveProjectAgentBrowserAccess(
+  settings: Pick<ServerSettings, "enableAgentBrowserAccess" | "projectAgentBrowserAccessOverrides">,
+  projectId: ProjectId,
+): boolean {
+  return (
+    settings.projectAgentBrowserAccessOverrides[projectId] ?? settings.enableAgentBrowserAccess
+  );
+}
+
+export function resolveProjectAutoPull(
+  settings: Pick<ServerSettings, "defaultAutoPull" | "projectAutoPullOverrides">,
+  projectId: ProjectId,
+  legacyAutoPull: boolean | undefined,
+): boolean {
+  // Existing opt-ins stay enabled until explicitly overridden or reset.
+  return (
+    settings.projectAutoPullOverrides[projectId] ??
+    (legacyAutoPull === true || settings.defaultAutoPull)
+  );
+}
+
 type LegacyProviderSettings = ServerSettings["providers"][keyof ServerSettings["providers"]];
 
 const getLegacyProviderSettings = (
@@ -36,7 +59,7 @@ export function isModelSelectionProviderEnabled(
 ): boolean {
   const instanceConfig = settings.providerInstances[selection.instanceId];
   if (instanceConfig !== undefined) {
-    return instanceConfig.enabled ?? true;
+    return resolveProviderInstanceEnabled(instanceConfig);
   }
 
   return (
@@ -121,6 +144,21 @@ function mergeModelSelectionOptionsById(input: {
   return [...merged.entries()].map(([id, value]) => ({ id, value }));
 }
 
+function mergeSettingsEntries<Value>(
+  current: Readonly<Record<string, Value>>,
+  patch: Readonly<Record<string, Value | null>>,
+): Record<string, Value> {
+  const next = new Map(Object.entries(current));
+  for (const [id, config] of Object.entries(patch)) {
+    if (config === null) {
+      next.delete(id);
+    } else {
+      next.set(id, config);
+    }
+  }
+  return Object.fromEntries(next);
+}
+
 export function applyServerSettingsPatch(
   current: ServerSettings,
   patch: ServerSettingsPatch,
@@ -131,6 +169,10 @@ export function applyServerSettingsPatch(
     providerHealthRefreshInterval,
     backgroundActivityProfile,
     backgroundActivity,
+    // Merged per entry below; its `null` removals must not reach deepMerge.
+    projectAgentBrowserAccessOverrides: projectAgentBrowserAccessOverridesPatch,
+    projectAutoPullOverrides: projectAutoPullOverridesPatch,
+    usageLimitSources: usageLimitSourcesPatch,
     ...patchForMerge
   } = patch;
   const currentBackgroundActivity = normalizeServerBackgroundActivitySettings(current);
@@ -187,6 +229,44 @@ export function applyServerSettingsPatch(
       : {}),
     ...(patch.providerInstances !== undefined
       ? { providerInstances: patch.providerInstances }
+      : {}),
+    ...(projectAgentBrowserAccessOverridesPatch !== undefined
+      ? {
+          projectAgentBrowserAccessOverrides: mergeSettingsEntries(
+            current.projectAgentBrowserAccessOverrides,
+            projectAgentBrowserAccessOverridesPatch,
+          ),
+        }
+      : {}),
+    ...(projectAutoPullOverridesPatch !== undefined
+      ? {
+          projectAutoPullOverrides: mergeSettingsEntries(
+            current.projectAutoPullOverrides,
+            projectAutoPullOverridesPatch,
+          ),
+        }
+      : {}),
+    ...(patch.defaultModelSelection !== undefined
+      ? { defaultModelSelection: patch.defaultModelSelection }
+      : {}),
+    ...(patch.defaultProjectScripts !== undefined
+      ? { defaultProjectScripts: patch.defaultProjectScripts }
+      : {}),
+    ...(patch.projectScriptOverrides !== undefined
+      ? {
+          projectScriptOverrides: {
+            ...current.projectScriptOverrides,
+            ...patch.projectScriptOverrides,
+          },
+        }
+      : {}),
+    ...(usageLimitSourcesPatch !== undefined
+      ? {
+          usageLimitSources: mergeSettingsEntries(
+            current.usageLimitSources,
+            usageLimitSourcesPatch,
+          ),
+        }
       : {}),
     ...(patch.sourceControlWriterModelSelection !== undefined
       ? { sourceControlWriterModelSelection: patch.sourceControlWriterModelSelection }

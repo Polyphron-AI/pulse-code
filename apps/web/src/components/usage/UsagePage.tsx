@@ -7,7 +7,9 @@ import type { DailyTotals, HourlyTotals } from "@t3tools/shared/usageMerge";
 
 import { isElectron } from "../../env";
 import { cn } from "../../lib/utils";
+import { usePrimaryEnvironmentId } from "../../state/environments";
 import { useUsage, type EnvironmentUsageStatus } from "../../state/usage";
+import { useAtomCommand } from "../../state/use-atom-command";
 import {
   enumerateDays,
   enumerateHourStarts,
@@ -31,6 +33,15 @@ import { COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS } from "../../workspaceTitlebar"
 import { UsageChartLegend, UsageProviderChart, type UsageChartMetric } from "./UsageProviderChart";
 import { PROVIDER_ORDER, PROVIDER_PRESENTATION } from "./usageProviders";
 
+import { UsageLimitsSection } from "./UsageLimits";
+
+type UsageMetric = UsageChartMetric | "limits";
+const METRIC_OPTIONS = [
+  { value: "cost", label: "Cost" },
+  { value: "tokens", label: "Tokens" },
+  { value: "limits", label: "Limits" },
+] as const satisfies readonly { value: UsageMetric; label: string }[];
+
 const WINDOW_OPTIONS = [
   { days: 1, label: "Past 24h" },
   { days: 7, label: "7 days" },
@@ -43,11 +54,16 @@ export function UsagePage() {
     days: 30,
     window: makeWindow(30),
   }));
-  const [metric, setMetric] = useState<UsageChartMetric>("cost");
+  const [metric, setMetric] = useState<UsageMetric>("cost");
+  const showingLimits = metric === "limits";
   const [breakdown, setBreakdown] = useState<"model" | "time">("model");
   const { days: windowDays, window } = windowSelection;
   const isPast24Hours = windowDays === 1;
   const { merged, environments, isPending, isPartial, refresh } = useUsage(window);
+  const primaryEnvironmentId = usePrimaryEnvironmentId();
+  const refreshProviders = useAtomCommand(serverEnvironment.refreshProviders, {
+    reportFailure: false,
+  });
 
   // Hold the content until every environment is terminal. Rendering merged
   // totals while devices are still answering makes every number on the page
@@ -94,6 +110,15 @@ export function UsagePage() {
     });
   };
   const refreshWindow = () => {
+    // On Limits the button re-probes every provider (and usage-limit source)
+    // on the primary environment; the live snapshots then flow in over the
+    // config stream, so nothing else needs to move.
+    if (showingLimits) {
+      if (primaryEnvironmentId) {
+        void refreshProviders({ environmentId: primaryEnvironmentId, input: {} });
+      }
+      return;
+    }
     const nextWindow = makeWindow(windowDays, undefined, isPast24Hours ? "hour" : "day");
     if (
       nextWindow.sinceDay === window.sinceDay &&
@@ -140,12 +165,36 @@ export function UsagePage() {
           <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-6 py-6">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <p className="text-sm text-muted-foreground">
-                {isPast24Hours && window.sinceTime !== undefined && window.untilTime !== undefined
-                  ? `${formatDateTimeShort(window.sinceTime, window.timeZone)} to ${formatDateTimeShort(window.untilTime, window.timeZone)}`
-                  : `${formatDayShort(window.sinceDay)} to ${formatDayShort(window.untilDay)}`}
+                {showingLimits
+                  ? "Subscription limits"
+                  : isPast24Hours &&
+                      window.sinceTime !== undefined &&
+                      window.untilTime !== undefined
+                    ? `${formatDateTimeShort(window.sinceTime, window.timeZone)} to ${formatDateTimeShort(window.untilTime, window.timeZone)}`
+                    : `${formatDayShort(window.sinceDay)} to ${formatDayShort(window.untilDay)}`}
               </p>
-              <div className="flex items-center gap-2">
-                <div className="flex rounded-md border border-border">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex rounded-md border border-border" aria-label="Usage view">
+                  {METRIC_OPTIONS.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      aria-pressed={metric === option.value}
+                      onClick={() => setMetric(option.value)}
+                      className={cn(
+                        "cursor-pointer px-3 py-1.5 text-xs",
+                        metric === option.value
+                          ? "bg-muted text-foreground"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+                <div
+                  className={cn("flex rounded-md border border-border", showingLimits && "hidden")}
+                >
                   {WINDOW_OPTIONS.map((option) => (
                     <button
                       key={option.days}
@@ -174,9 +223,11 @@ export function UsagePage() {
               </div>
             </div>
 
-            <PlanUsageSection />
+            {!showingLimits && <PlanUsageSection />}
 
-            {settling ? (
+            {showingLimits ? (
+              <UsageLimitsSection />
+            ) : settling ? (
               <>
                 {environments.length > 1 ? <UsageDeviceStrip environments={environments} /> : null}
                 <UsageSkeleton resolution={isPast24Hours ? "hour" : "day"} />

@@ -1,4 +1,9 @@
-import { ApprovalRequestId, isToolLifecycleItemType } from "@t3tools/contracts";
+import {
+  derivePendingRequests,
+  requestKindFromRequestType,
+  type PendingApproval,
+} from "@t3tools/client-runtime/pending-requests";
+import { isToolLifecycleItemType } from "@t3tools/contracts";
 import type {
   OrchestrationLatestTurn,
   OrchestrationThread,
@@ -12,18 +17,7 @@ import { formatDuration } from "@t3tools/shared/orchestrationTiming";
 import * as Arr from "effect/Array";
 import * as Order from "effect/Order";
 
-export interface PendingApproval {
-  readonly requestId: ApprovalRequestId;
-  readonly requestKind: "command" | "file-read" | "file-change";
-  readonly createdAt: string;
-  readonly detail?: string;
-}
-
-export interface PendingUserInput {
-  readonly requestId: ApprovalRequestId;
-  readonly createdAt: string;
-  readonly questions: ReadonlyArray<UserInputQuestion>;
-}
+export type { PendingApproval, PendingUserInput } from "@t3tools/client-runtime/pending-requests";
 
 export interface PendingUserInputDraftAnswer {
   readonly selectedOptionLabels?: ReadonlyArray<string>;
@@ -31,6 +25,7 @@ export interface PendingUserInputDraftAnswer {
 }
 
 export interface ThreadFeedActivity {
+  readonly activityKind?: string;
   readonly id: string;
   readonly createdAt: string;
   readonly turnId: TurnId | null;
@@ -137,86 +132,12 @@ export type ThreadFeedLatestTurn = Pick<
   "turnId" | "state" | "startedAt" | "completedAt"
 >;
 
-function requestKindFromRequestType(requestType: unknown): PendingApproval["requestKind"] | null {
-  switch (requestType) {
-    case "command_execution_approval":
-    case "exec_command_approval":
-      return "command";
-    case "file_read_approval":
-      return "file-read";
-    case "file_change_approval":
-    case "apply_patch_approval":
-      return "file-change";
-    default:
-      return null;
-  }
-}
-
-function isStalePendingRequestFailureDetail(detail: string | undefined): boolean {
-  const normalized = detail?.toLowerCase();
-  if (!normalized) {
-    return false;
-  }
+export function isContextCompactionActivityGroup(
+  entry: Extract<ThreadFeedEntry, { readonly type: "activity-group" }>,
+): boolean {
   return (
-    normalized.includes("stale pending approval request") ||
-    normalized.includes("stale pending user-input request") ||
-    normalized.includes("unknown pending approval request") ||
-    normalized.includes("unknown pending permission request") ||
-    normalized.includes("unknown pending user-input request")
+    entry.activities.length === 1 && entry.activities[0]?.activityKind === "context-compaction"
   );
-}
-
-function parseApprovalRequestId(value: unknown): ApprovalRequestId | null {
-  return typeof value === "string" && value.length > 0 ? ApprovalRequestId.make(value) : null;
-}
-
-function parseUserInputQuestions(
-  payload: Record<string, unknown> | null,
-): ReadonlyArray<UserInputQuestion> | null {
-  const questions = payload?.questions;
-  if (!Array.isArray(questions)) {
-    return null;
-  }
-
-  const parsed = questions
-    .map<UserInputQuestion | null>((entry) => {
-      if (!entry || typeof entry !== "object") return null;
-      const question = entry as Record<string, unknown>;
-      if (
-        typeof question.id !== "string" ||
-        typeof question.header !== "string" ||
-        typeof question.question !== "string" ||
-        !Array.isArray(question.options)
-      ) {
-        return null;
-      }
-      const options = question.options
-        .map<UserInputQuestion["options"][number] | null>((option) => {
-          if (!option || typeof option !== "object") return null;
-          const record = option as Record<string, unknown>;
-          if (typeof record.label !== "string" || typeof record.description !== "string") {
-            return null;
-          }
-          return {
-            label: record.label,
-            description: record.description,
-          };
-        })
-        .filter((option): option is UserInputQuestion["options"][number] => option !== null);
-      if (options.length === 0) {
-        return null;
-      }
-      return {
-        id: question.id,
-        header: question.header,
-        question: question.question,
-        options,
-        multiSelect: question.multiSelect === true,
-      };
-    })
-    .filter((question): question is UserInputQuestion => question !== null);
-
-  return parsed.length > 0 ? parsed : null;
 }
 
 function normalizeDraftAnswer(value: string | undefined): string | null {
@@ -234,9 +155,7 @@ function normalizeSelectedOptionLabels(
     return [];
   }
 
-  return Array.from(
-    new Set(value.map((entry) => entry.trim()).filter((entry) => entry.length > 0)),
-  );
+  return Array.from(new Set(value.filter((entry) => entry.length > 0)));
 }
 
 function resolvePendingUserInputAnswer(
@@ -244,7 +163,7 @@ function resolvePendingUserInputAnswer(
   draft: PendingUserInputDraftAnswer | undefined,
 ): string | ReadonlyArray<string> | null {
   const customAnswer = normalizeDraftAnswer(draft?.customAnswer);
-  if (customAnswer) {
+  if (customAnswer && question.allowCustomAnswer !== false) {
     return customAnswer;
   }
 
@@ -967,7 +886,8 @@ function extractWorkLogRequestKind(
   if (
     payload?.requestKind === "command" ||
     payload?.requestKind === "file-read" ||
-    payload?.requestKind === "file-change"
+    payload?.requestKind === "file-change" ||
+    payload?.requestKind === "mcp-elicitation"
   ) {
     return payload.requestKind;
   }
@@ -1087,6 +1007,18 @@ function groupAdjacentActivities(entries: ReadonlyArray<RawThreadFeedEntry>): Th
       continue;
     }
 
+    if (entry.activity.activityKind === "context-compaction") {
+      grouped.push({
+        type: "activity-group",
+        id: entry.id,
+        createdAt: entry.createdAt,
+        turnId: entry.turnId,
+        activities: [entry.activity],
+      });
+      openGroupActivities = null;
+      continue;
+    }
+
     if (openGroupActivities !== null && openGroupTurnId === entry.turnId) {
       openGroupActivities.push(entry.activity);
       continue;
@@ -1160,6 +1092,9 @@ function deriveThreadFeedTurnFolds(
   for (const entry of feed) {
     if (entry.type === "message" && entry.message.role === "user") {
       pendingUserBoundary = entry.message.createdAt;
+      continue;
+    }
+    if (entry.type === "activity-group" && isContextCompactionActivityGroup(entry)) {
       continue;
     }
     const turnId =
@@ -1300,6 +1235,10 @@ function appendPresentedFeedEntry(
     result.push(entry);
     return;
   }
+  if (isContextCompactionActivityGroup(entry)) {
+    result.push(entry);
+    return;
+  }
 
   const activities = entry.activities.filter(
     (activity) => !(activity.toolLike && activity.status === "neutral"),
@@ -1341,105 +1280,11 @@ function appendPresentedFeedEntry(
   });
 }
 
-/**
- * Sorts activities into lifecycle order. `derivePendingApprovals` and
- * `derivePendingUserInputs` both expect this ordering; sorting once and
- * passing the result to both avoids re-sorting the full activity history
- * per derivation.
- */
-export function sortThreadActivities(
-  activities: ReadonlyArray<OrchestrationThreadActivity>,
-): ReadonlyArray<OrchestrationThreadActivity> {
-  return Arr.sort(activities, activityOrder);
+export function derivePendingApprovals(activities: ReadonlyArray<OrchestrationThreadActivity>) {
+  return derivePendingRequests(activities).approvals;
 }
-
-export function derivePendingApprovals(
-  sortedActivities: ReadonlyArray<OrchestrationThreadActivity>,
-): PendingApproval[] {
-  const openByRequestId = new Map<ApprovalRequestId, PendingApproval>();
-
-  for (const activity of sortedActivities) {
-    const payload =
-      activity.payload && typeof activity.payload === "object"
-        ? (activity.payload as Record<string, unknown>)
-        : null;
-    const requestId = parseApprovalRequestId(payload?.requestId);
-    const requestKind =
-      payload?.requestKind === "command" ||
-      payload?.requestKind === "file-read" ||
-      payload?.requestKind === "file-change"
-        ? payload.requestKind
-        : requestKindFromRequestType(payload?.requestType);
-    const detail = typeof payload?.detail === "string" ? payload.detail : undefined;
-
-    if (activity.kind === "approval.requested" && requestId && requestKind) {
-      openByRequestId.set(requestId, {
-        requestId,
-        requestKind,
-        createdAt: activity.createdAt,
-        ...(detail ? { detail } : {}),
-      });
-      continue;
-    }
-
-    if (activity.kind === "approval.resolved" && requestId) {
-      openByRequestId.delete(requestId);
-      continue;
-    }
-
-    if (
-      activity.kind === "provider.approval.respond.failed" &&
-      requestId &&
-      isStalePendingRequestFailureDetail(detail)
-    ) {
-      openByRequestId.delete(requestId);
-    }
-  }
-
-  return Arr.sortWith([...openByRequestId.values()], (s) => new Date(s.createdAt), Order.Date);
-}
-
-export function derivePendingUserInputs(
-  sortedActivities: ReadonlyArray<OrchestrationThreadActivity>,
-): PendingUserInput[] {
-  const openByRequestId = new Map<ApprovalRequestId, PendingUserInput>();
-
-  for (const activity of sortedActivities) {
-    const payload =
-      activity.payload && typeof activity.payload === "object"
-        ? (activity.payload as Record<string, unknown>)
-        : null;
-    const requestId = parseApprovalRequestId(payload?.requestId);
-    const detail = typeof payload?.detail === "string" ? payload.detail : undefined;
-
-    if (activity.kind === "user-input.requested" && requestId) {
-      const questions = parseUserInputQuestions(payload);
-      if (!questions) {
-        continue;
-      }
-      openByRequestId.set(requestId, {
-        requestId,
-        createdAt: activity.createdAt,
-        questions,
-      });
-      continue;
-    }
-
-    if (activity.kind === "user-input.resolved" && requestId) {
-      openByRequestId.delete(requestId);
-      continue;
-    }
-
-    if (
-      activity.kind === "provider.user-input.respond.failed" &&
-      requestId &&
-      isStalePendingRequestFailureDetail(detail)
-    ) {
-      openByRequestId.delete(requestId);
-    }
-  }
-
-  return Arr.sortWith(openByRequestId.values(), (s) => new Date(s.createdAt), Order.Date);
+export function derivePendingUserInputs(activities: ReadonlyArray<OrchestrationThreadActivity>) {
+  return derivePendingRequests(activities).userInputs;
 }
 
 export function setPendingUserInputCustomAnswer(
@@ -1464,7 +1309,7 @@ export function isPendingUserInputOptionSelected(
     return false;
   }
 
-  return normalizeSelectedOptionLabels(draft?.selectedOptionLabels).includes(optionLabel.trim());
+  return normalizeSelectedOptionLabels(draft?.selectedOptionLabels).includes(optionLabel);
 }
 
 export function togglePendingUserInputOptionSelection(
@@ -1472,7 +1317,7 @@ export function togglePendingUserInputOptionSelection(
   draft: PendingUserInputDraftAnswer | undefined,
   optionLabel: string,
 ): PendingUserInputDraftAnswer {
-  const normalizedOptionLabel = optionLabel.trim();
+  const normalizedOptionLabel = optionLabel;
 
   if (question.multiSelect) {
     const selectedOptionLabels = normalizeSelectedOptionLabels(draft?.selectedOptionLabels);
@@ -1555,6 +1400,7 @@ export function buildThreadFeed(
             createdAt: entry.createdAt,
             turnId: entry.turnId,
             activity: {
+              activityKind: entry.activityKind,
               id: entry.id,
               createdAt: entry.createdAt,
               turnId: entry.turnId,

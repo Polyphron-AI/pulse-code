@@ -1,5 +1,6 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it } from "@effect/vitest";
+import { ServerSelfUpdateError, ThreadId } from "@t3tools/contracts";
 import { HostProcessExecutablePath } from "@t3tools/shared/hostProcess";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -9,6 +10,7 @@ import * as Path from "effect/Path";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 
 import * as ServerConfig from "../config.ts";
+import * as DesktopAppUpdate from "../desktopUpdate/DesktopAppUpdate.ts";
 import * as ProcessRunner from "../processRunner.ts";
 import * as ServiceLauncherClient from "./serviceLauncherClient.ts";
 import { SERVICE_LAUNCHER_PROTOCOL } from "./serviceProtocol.ts";
@@ -19,6 +21,7 @@ interface HarnessOptions {
   readonly managed?: boolean;
   readonly preflight?: "ready" | "blocked";
   readonly requestUpdate?: ServiceLauncherClient.ServiceLauncherClient["Service"]["requestUpdate"];
+  readonly desktopAppUpdate?: DesktopAppUpdate.DesktopAppUpdate["Service"];
 }
 
 const makeHarness = Effect.fn("test.make_self_update_harness")(function* (
@@ -88,6 +91,14 @@ const makeHarness = Effect.fn("test.make_self_update_harness")(function* (
   const selfUpdate = yield* ServerSelfUpdate.make().pipe(
     Effect.provideService(ProcessRunner.ProcessRunner, runner),
     Effect.provideService(ServiceLauncherClient.ServiceLauncherClient, launcher),
+    Effect.provideService(
+      DesktopAppUpdate.DesktopAppUpdate,
+      options.desktopAppUpdate ?? {
+        available: false,
+        commit: () => Effect.die("unexpected desktop commit"),
+        run: () => Effect.die("unexpected desktop app update run"),
+      },
+    ),
     Effect.provideService(HostProcessExecutablePath, "/usr/bin/node"),
     Effect.provide(ServerConfig.layer({ ...config, mode: options.mode ?? "web" })),
   );
@@ -95,6 +106,94 @@ const makeHarness = Effect.fn("test.make_self_update_harness")(function* (
 });
 
 it.layer(NodeServices.layer)("server self update", (it) => {
+  it.effect("marks running threads at the boot-service handoff", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      const selfUpdate = yield* ServerSelfUpdate.withRunningThreadContinuation({
+        mode: "web",
+        selfUpdate: {
+          commitDesktopUpdate: () => Effect.die("unexpected desktop commit"),
+          update: (_input, reportProgress = () => Effect.void) =>
+            reportProgress("downloading").pipe(
+              Effect.andThen(reportProgress("installing")),
+              Effect.as({
+                targetVersion: "1.1.0",
+                method: "boot-service" as const,
+                updateId: "update-id",
+              }),
+            ),
+        },
+        prepare: Effect.sync(() => {
+          events.push("prepare");
+          return [ThreadId.make("thread-running")];
+        }),
+        clear: () => Effect.sync(() => void events.push("clear")),
+      });
+
+      yield* selfUpdate.update({ targetVersion: "1.1.0", continueRunningThreads: true }, (stage) =>
+        Effect.sync(() => void events.push(stage)),
+      );
+
+      expect(events).toEqual(["downloading", "prepare", "installing"]);
+    }),
+  );
+
+  it.effect("reports a failed continuation-marker cleanup", () =>
+    Effect.gen(function* () {
+      const updateError = new ServerSelfUpdateError({ reason: "update failed" });
+      const clearError = new ServerSelfUpdateError({ reason: "marker cleanup failed" });
+      const selfUpdate = yield* ServerSelfUpdate.withRunningThreadContinuation({
+        mode: "web",
+        selfUpdate: {
+          commitDesktopUpdate: () => Effect.die("unexpected desktop commit"),
+          update: (_input, reportProgress = () => Effect.void) =>
+            reportProgress("installing").pipe(Effect.andThen(Effect.fail(updateError))),
+        },
+        prepare: Effect.succeed([ThreadId.make("thread-cleanup-failure")]),
+        clear: () => Effect.fail(clearError),
+      });
+
+      expect(
+        yield* selfUpdate
+          .update({ targetVersion: "1.1.0", continueRunningThreads: true })
+          .pipe(Effect.flip),
+      ).toBe(clearError);
+    }),
+  );
+
+  it.effect("keeps continuation markers after the boot-service handoff is accepted", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      const selfUpdate = yield* ServerSelfUpdate.withRunningThreadContinuation({
+        mode: "web",
+        selfUpdate: {
+          commitDesktopUpdate: () => Effect.die("unexpected desktop commit"),
+          update: (
+            _input,
+            reportProgress = () => Effect.void,
+            onHandoffAccepted = () => Effect.void,
+          ) =>
+            reportProgress("installing").pipe(
+              Effect.andThen(onHandoffAccepted()),
+              Effect.andThen(Effect.interrupt),
+            ),
+        },
+        prepare: Effect.sync(() => {
+          events.push("prepare");
+          return [ThreadId.make("thread-accepted-boot-handoff")];
+        }),
+        clear: () => Effect.sync(() => void events.push("clear")),
+      });
+
+      const exit = yield* selfUpdate
+        .update({ targetVersion: "1.1.0", continueRunningThreads: true })
+        .pipe(Effect.exit);
+
+      expect(exit._tag).toBe("Failure");
+      expect(events).toEqual(["prepare"]);
+    }),
+  );
+
   it.effect("stages and preflights before asking the launcher for an update ID", () =>
     Effect.gen(function* () {
       const { selfUpdate, order } = yield* makeHarness();
@@ -118,6 +217,31 @@ it.layer(NodeServices.layer)("server self update", (it) => {
         (yield* desktop.selfUpdate.update({ targetVersion: "1.1.0" }).pipe(Effect.flip)).reason,
       ).toContain("desktop app");
       expect([...web.order, ...desktop.order]).toEqual([]);
+    }),
+  );
+
+  it.effect("delegates desktop-managed updates to the desktop app when available", () =>
+    Effect.gen(function* () {
+      const stages: string[] = [];
+      const { selfUpdate, order } = yield* makeHarness({
+        mode: "desktop",
+        desktopAppUpdate: {
+          available: true,
+          run: (reportProgress) =>
+            reportProgress("downloading").pipe(
+              Effect.andThen(reportProgress("installing")),
+              Effect.as({ targetVersion: "1.2.0", method: "desktop-app" as const }),
+            ),
+          commit: () => Effect.never,
+        },
+      });
+      const result = yield* selfUpdate.update({ targetVersion: "1.1.0" }, (stage) =>
+        Effect.sync(() => void stages.push(stage)),
+      );
+      expect(result).toEqual({ targetVersion: "1.2.0", method: "desktop-app" });
+      expect(stages).toEqual(["downloading", "installing"]);
+      // The launcher staging path must not run on the desktop path.
+      expect(order).toEqual([]);
     }),
   );
 

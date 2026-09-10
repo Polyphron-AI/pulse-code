@@ -153,7 +153,7 @@ export function BranchToolbarBranchSelector({
   // Thread branch mutation (colocated — only this component calls it)
   // ---------------------------------------------------------------------------
   const setThreadBranch = useCallback(
-    (branch: string | null, worktreePath: string | null) => {
+    (branch: string | null, worktreePath: string | null, automatic = false) => {
       if (!activeThreadId || !activeProject) return;
       if (serverSession && worktreePath !== activeWorktreePath) {
         void stopThreadSession({
@@ -184,6 +184,7 @@ export function BranchToolbarBranchSelector({
         branch,
         worktreePath,
         envMode: nextDraftEnvMode,
+        environmentSelection: automatic ? (draftThread?.environmentSelection ?? "auto") : "manual",
         projectRef: scopeProjectRef(environmentId, activeProject.id),
       });
     },
@@ -199,6 +200,7 @@ export function BranchToolbarBranchSelector({
       threadRef,
       environmentId,
       effectiveEnvMode,
+      draftThread?.environmentSelection,
       stopThreadSession,
       updateThreadMetadata,
     ],
@@ -505,7 +507,7 @@ export function BranchToolbarBranchSelector({
     ) {
       return;
     }
-    setThreadBranch(worktreeBaseBranchCandidate, null);
+    setThreadBranch(worktreeBaseBranchCandidate, null, true);
   }, [
     activeThreadBranch,
     activeWorktreePath,

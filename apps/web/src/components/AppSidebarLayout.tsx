@@ -131,7 +131,7 @@ function SidebarControl() {
   );
 }
 
-// Settings swaps the thread sidebar out of the tree. Keep the lightweight
+// Settings and Office swap the thread sidebar out of the tree. Keep the lightweight
 // project projection subscribed so returning to a draft never renders the
 // zero-project state while the environment snapshot reconnects.
 function ProjectProjectionRetention() {
@@ -147,6 +147,7 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
   // sidebar is active.
   const pathname = useLocation({ select: (location) => location.pathname });
   const isOnSettings = pathname === "/settings" || pathname.startsWith("/settings/");
+  const isOnOffice = /^\/(office|mail)(\/|$)/.test(pathname);
   const isMacosDesktop = isElectron && isMacPlatform(navigator.platform);
   const [sidebarWidth, setSidebarWidth] = useState(readInitialThreadSidebarWidth);
   // Subscribed rather than read once: the clamp must track live window size,
@@ -245,7 +246,7 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
         <SidebarRail onDoubleClick={resetSidebarWidth} />
       </Sidebar>
       {children}
-      <SidebarControl />
+      {!isOnOffice && <SidebarControl />}
     </SidebarProvider>
   );
 }

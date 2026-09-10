@@ -332,7 +332,7 @@ describe("OMP process boundary", () => {
         Effect.gen(function* () {
           const secret = "omp-catalog-secret-value";
           const statusFiber = yield* checkOmpProviderStatus(
-            { enabled: true, binaryPath: fixture.wrapperPath },
+            { customModels: [], enabled: true, binaryPath: fixture.wrapperPath },
             {
               cwd: fixture.directory,
               agentDir: NodePath.join(fixture.directory, "agent"),
@@ -378,7 +378,7 @@ describe("OMP process boundary", () => {
         Effect.gen(function* () {
           const startedAt = yield* Clock.currentTimeMillis;
           const snapshot = yield* checkOmpProviderStatus(
-            { enabled: true, binaryPath: fixture.wrapperPath },
+            { customModels: [], enabled: true, binaryPath: fixture.wrapperPath },
             {
               cwd: fixture.directory,
               agentDir: NodePath.join(fixture.directory, "agent"),
@@ -417,7 +417,7 @@ describe("OMP process boundary", () => {
       Effect.gen(function* () {
         const secret = "omp-status-secret-value";
         const snapshot = yield* checkOmpProviderStatus(
-          { enabled: true, binaryPath: fixture.wrapperPath },
+          { customModels: [], enabled: true, binaryPath: fixture.wrapperPath },
           {
             cwd: fixture.directory,
             agentDir: NodePath.join(fixture.directory, "agent"),
@@ -441,7 +441,7 @@ describe("OMP process boundary", () => {
     Effect.gen(function* () {
       const ready = yield* withFixture((fixture) =>
         checkOmpProviderStatus(
-          { enabled: true, binaryPath: fixture.wrapperPath },
+          { customModels: [], enabled: true, binaryPath: fixture.wrapperPath },
           {
             cwd: fixture.directory,
             agentDir: NodePath.join(fixture.directory, "agent"),
@@ -469,7 +469,7 @@ describe("OMP process boundary", () => {
 
       const malformed = yield* withFixture((fixture) =>
         checkOmpProviderStatus(
-          { enabled: true, binaryPath: fixture.wrapperPath },
+          { customModels: [], enabled: true, binaryPath: fixture.wrapperPath },
           {
             cwd: fixture.directory,
             agentDir: NodePath.join(fixture.directory, "agent"),
@@ -487,7 +487,7 @@ describe("OMP process boundary", () => {
 
       const empty = yield* withFixture((fixture) =>
         checkOmpProviderStatus(
-          { enabled: true, binaryPath: fixture.wrapperPath },
+          { customModels: [], enabled: true, binaryPath: fixture.wrapperPath },
           {
             cwd: fixture.directory,
             agentDir: NodePath.join(fixture.directory, "agent"),

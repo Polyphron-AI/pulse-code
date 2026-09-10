@@ -20,11 +20,14 @@ import { threadEnvironment } from "../state/threads";
 import { vcsEnvironment } from "../state/vcs";
 import { useNewThreadHandler } from "./useHandleNewThread";
 import { refreshArchivedThreadsForEnvironment } from "../lib/archivedThreadsState";
+import { releaseComposerDraftUploads } from "../lib/composerDraftUploads";
 import { readLocalApi } from "../localApi";
 import {
   readEnvironmentSupportsPinning,
   readEnvironmentSupportsPinReorder,
+  readEnvironmentSupportsActiveReorder,
   readEnvironmentSupportsSettlement,
+  readEnvironmentSupportsAutoSettlement,
   readEnvironmentSupportsSnooze,
   readEnvironmentThreadRefs,
   readProject,
@@ -135,6 +138,18 @@ export class ThreadPinReorderUnsupportedError extends Schema.TaggedErrorClass<Th
   }
 }
 
+export class ThreadActiveReorderUnsupportedError extends Schema.TaggedErrorClass<ThreadActiveReorderUnsupportedError>()(
+  "ThreadActiveReorderUnsupportedError",
+  {
+    environmentId: EnvironmentId,
+    threadId: ThreadId,
+  },
+) {
+  override get message(): string {
+    return "Update this environment's server to reorder active threads.";
+  }
+}
+
 export function useThreadActions() {
   const closeTerminal = useAtomCommand(terminalEnvironment.close);
   const archiveThreadMutation = useAtomCommand(threadEnvironment.archive, {
@@ -159,6 +174,9 @@ export function useThreadActions() {
     reportFailure: false,
   });
   const reorderPinnedThreadMutation = useAtomCommand(threadEnvironment.reorderPin, {
+    reportFailure: false,
+  });
+  const reorderActiveThreadMutation = useAtomCommand(threadEnvironment.reorderActive, {
     reportFailure: false,
   });
   const snoozeThreadMutation = useAtomCommand(threadEnvironment.snooze, {
@@ -364,6 +382,7 @@ export function useThreadActions() {
         return deleteResult;
       }
       refreshArchivedThreadsForEnvironment(threadRef.environmentId);
+      releaseComposerDraftUploads(threadRef);
       clearComposerDraftForThread(threadRef);
       clearProjectDraftThreadById(
         scopeProjectRef(threadRef.environmentId, thread.projectId),
@@ -486,7 +505,13 @@ export function useThreadActions() {
       // Settle may only target what effectiveSettled could classify as
       // settled: not starting/running sessions, not threads waiting on
       // approvals or user input. Anything else would hide live work.
-      if (resolved && !canSettle(resolved.thread, { now: new Date().toISOString() })) {
+      if (
+        resolved &&
+        !canSettle(resolved.thread, {
+          now: new Date().toISOString(),
+          serverAutoSettlement: readEnvironmentSupportsAutoSettlement(target.environmentId),
+        })
+      ) {
         return AsyncResult.failure(
           Cause.fail(
             new ThreadSettleBlockedError({
@@ -611,6 +636,26 @@ export function useThreadActions() {
     [reorderPinnedThreadMutation],
   );
 
+  const reorderActiveThread = useCallback(
+    async (target: ScopedThreadRef, orderKey: string) => {
+      if (!readEnvironmentSupportsActiveReorder(target.environmentId)) {
+        return AsyncResult.failure(
+          Cause.fail(
+            new ThreadActiveReorderUnsupportedError({
+              environmentId: target.environmentId,
+              threadId: target.threadId,
+            }),
+          ),
+        );
+      }
+      return reorderActiveThreadMutation({
+        environmentId: target.environmentId,
+        input: { threadId: target.threadId, orderKey },
+      });
+    },
+    [reorderActiveThreadMutation],
+  );
+
   const snoozeThread = useCallback(
     async (target: ScopedThreadRef, snoozedUntil: string) => {
       // Version skew: never send the command to a server that predates it.
@@ -708,6 +753,7 @@ export function useThreadActions() {
       pinThread,
       unpinThread,
       reorderPinnedThread,
+      reorderActiveThread,
     }),
     [
       archiveThread,
@@ -715,6 +761,7 @@ export function useThreadActions() {
       deleteThread,
       pinThread,
       reorderPinnedThread,
+      reorderActiveThread,
       settleThread,
       snoozeThread,
       unarchiveThread,

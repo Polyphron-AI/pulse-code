@@ -67,6 +67,7 @@ import {
 } from "../acp/AcpRuntimeModel.ts";
 import { makeAcpNativeLoggerFactory } from "../acp/AcpNativeLogging.ts";
 import { applyCursorAcpModelSelection, makeCursorAcpRuntime } from "../acp/CursorAcpSupport.ts";
+import { CursorTransportFailure } from "../acp/CursorTransportFailure.ts";
 import {
   CursorAskQuestionRequest,
   CursorCreatePlanRequest,
@@ -78,6 +79,11 @@ import {
 import { type CursorAdapterShape } from "../Services/CursorAdapter.ts";
 import { resolveCursorAcpBaseModelId } from "./CursorProvider.ts";
 import { type EventNdjsonLogger, makeEventNdjsonLogger } from "./EventNdjsonLogger.ts";
+import {
+  discoverCursorSkills,
+  hasCursorSkillMention,
+  rewriteCursorSkillMentions,
+} from "../Drivers/CursorSkills.ts";
 const encodeUnknownJsonStringExit = Schema.encodeUnknownExit(Schema.fromJsonString(Schema.Unknown));
 
 const PROVIDER = ProviderDriverKind.make("cursor");
@@ -127,6 +133,7 @@ interface CursorSessionContext {
   readonly threadId: ThreadId;
   session: ProviderSession;
   readonly scope: Scope.Closeable;
+  readonly stoppedSignal: Deferred.Deferred<void>;
   readonly acp: AcpSessionRuntime.AcpSessionRuntime["Service"];
   notificationFiber: Fiber.Fiber<void, never> | undefined;
   readonly pendingApprovals: Map<ApprovalRequestId, PendingApproval>;
@@ -134,11 +141,13 @@ interface CursorSessionContext {
   readonly turns: Array<{ id: TurnId; items: Array<unknown> }>;
   lastPlanFingerprint: string | undefined;
   activeTurnId: TurnId | undefined;
+  cursorSkillNames: ReadonlySet<string> | undefined;
   /** Number of sendTurn prompts currently in flight or being prepared.
    * >0 means a turn is actively running, so a new sendTurn is a steer that
    * continues it, and only the last remaining prompt settles the turn. */
   promptsInFlight: number;
   readonly queueTurnSemaphore: Semaphore.Semaphore;
+  assistantReply: CursorTransportFailure;
   stopped: boolean;
 }
 
@@ -462,6 +471,7 @@ export function makeCursorAdapter(
       Effect.gen(function* () {
         if (ctx.stopped) return;
         ctx.stopped = true;
+        yield* Deferred.succeed(ctx.stoppedSignal, undefined);
         yield* settlePendingApprovalsAsCancelled(ctx.pendingApprovals);
         yield* settlePendingUserInputsAsEmptyAnswers(ctx.pendingUserInputs);
         if (ctx.notificationFiber) {
@@ -539,6 +549,7 @@ export function makeCursorAdapter(
             ...(options?.environment ? { environment: options.environment } : {}),
             childProcessSpawner,
             cwd,
+            runtimeMode: input.runtimeMode,
             ...(resumeSessionId ? { resumeSessionId } : {}),
             clientInfo: { name: "t3-code", version: "0.0.0" },
             ...(mcpSession
@@ -778,6 +789,7 @@ export function makeCursorAdapter(
             threadId: input.threadId,
             session,
             scope: sessionScope,
+            stoppedSignal: yield* Deferred.make<void>(),
             acp,
             notificationFiber: undefined,
             pendingApprovals,
@@ -785,8 +797,10 @@ export function makeCursorAdapter(
             turns: [],
             lastPlanFingerprint: undefined,
             activeTurnId: undefined,
+            cursorSkillNames: undefined,
             promptsInFlight: 0,
             queueTurnSemaphore: yield* Semaphore.make(1),
+            assistantReply: new CursorTransportFailure(),
             stopped: false,
           };
 
@@ -800,6 +814,7 @@ export function makeCursorAdapter(
                   case "ModeChanged":
                     return;
                   case "AssistantItemStarted":
+                    ctx.assistantReply = new CursorTransportFailure();
                     yield* offerRuntimeEvent(
                       makeAcpAssistantItemEvent({
                         stamp: yield* makeEventStamp(),
@@ -857,6 +872,7 @@ export function makeCursorAdapter(
                     );
                     return;
                   case "ContentDelta":
+                    ctx.assistantReply.push(event.text);
                     yield* logNative(
                       ctx.threadId,
                       "session/update",
@@ -956,6 +972,7 @@ export function makeCursorAdapter(
           ctx.activeTurnId = turnId;
           if (steeringTurnId === undefined) {
             ctx.lastPlanFingerprint = undefined;
+            ctx.assistantReply = new CursorTransportFailure();
           }
           ctx.session = {
             ...ctx.session,
@@ -975,11 +992,36 @@ export function makeCursorAdapter(
           }
 
           const promptParts: Array<EffectAcpSchema.ContentBlock> = [];
-          if (input.input?.trim()) {
-            promptParts.push({ type: "text", text: input.input.trim() });
+          const rawPrompt = input.input?.trim() ?? "";
+          if (rawPrompt) {
+            let cursorSkillNames = ctx.cursorSkillNames;
+            if (hasCursorSkillMention(rawPrompt) && cursorSkillNames === undefined) {
+              const skills = yield* discoverCursorSkills(
+                ctx.session.cwd,
+                options?.environment,
+              ).pipe(
+                Effect.provideService(FileSystem.FileSystem, fileSystem),
+                Effect.provideService(Path.Path, path),
+              );
+              cursorSkillNames = new Set(
+                skills
+                  .filter((skill) => skill.enabled && skill.userInvocable !== false)
+                  .map((skill) => skill.name),
+              );
+              ctx.cursorSkillNames = cursorSkillNames;
+            }
+            const prompt = cursorSkillNames
+              ? rewriteCursorSkillMentions(rawPrompt, cursorSkillNames)
+              : rawPrompt;
+            promptParts.push({ type: "text", text: prompt });
           }
           if (input.attachments && input.attachments.length > 0) {
             for (const attachment of input.attachments) {
+              // Cursor ingests images only. Generic files reach the agent
+              // through the path line ProviderService puts in the prompt.
+              if (attachment.type !== "image") {
+                continue;
+              }
               const attachmentPath = resolveAttachmentPath({
                 attachmentsDir: serverConfig.attachmentsDir,
                 attachment,
@@ -1027,6 +1069,20 @@ export function makeCursorAdapter(
                 mapAcpToAdapterError(PROVIDER, input.threadId, "session/prompt", error),
               ),
             );
+
+          yield* Effect.raceFirst(ctx.acp.drainEvents, Deferred.await(ctx.stoppedSignal));
+          if (ctx.stopped) {
+            return { threadId: input.threadId, turnId, resumeCursor: ctx.session.resumeCursor };
+          }
+          const failure = ctx.assistantReply.failure;
+          if (ctx.promptsInFlight === 1 && result.stopReason !== "cancelled" && failure) {
+            return yield* new ProviderAdapterRequestError({
+              provider: PROVIDER,
+              method: "session/prompt",
+              detail: "Cursor reported a transport failure.",
+              cause: failure,
+            });
+          }
 
           const turnRecord = ctx.turns.find((turn) => turn.id === turnId);
           if (turnRecord) {
@@ -1190,6 +1246,7 @@ export function makeCursorAdapter(
     return {
       provider: PROVIDER,
       capabilities: { sessionModelSwitch: "in-session" },
+      compaction: { type: "slash-command", command: "/compress" },
       startSession,
       sendTurn,
       interruptTurn,

@@ -9,12 +9,8 @@ import { splitPullRequestBody } from "./pullRequestMarkdown.logic";
  * A pull request body, rendered with the app's markdown renderer plus a card for each upload
  * embedded in it, which that renderer drops on the floor.
  *
- * The card links out instead of playing in place, because nothing here can play. A
- * `github.com/user-attachments/assets/…` link is a 302 to a signed S3 URL that serves the file
- * as uploaded — `video/quicktime` for anything recorded on a Mac, which no Chromium decodes —
- * and the desktop window's content policy declares no `media-src`, so media falls back to
- * `default-src 'self'` and every remote source is refused before a byte is fetched. A player
- * here can only be the box that never fills in; a card that opens the host is a real answer.
+ * These upload URLs do not identify the media format. The card links to GitHub, where the
+ * original upload can be opened or downloaded even when its codec cannot play in the client.
  */
 export function PullRequestMarkdown({
   text,

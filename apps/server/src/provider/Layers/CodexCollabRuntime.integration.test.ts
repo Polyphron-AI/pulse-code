@@ -1,3 +1,4 @@
+import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
 /**
  * Runtime-level collab regression: boots the REAL CodexSessionRuntime against
  * a scripted mock app-server peer that replays the captured multi-agent wire
@@ -13,9 +14,16 @@ import * as NodePath from "node:path";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { it } from "@effect/vitest";
-import { ThreadId } from "@t3tools/contracts";
+import {
+  ApprovalRequestId,
+  type ProviderApprovalDecision,
+  type ProviderEvent,
+  ThreadId,
+} from "@t3tools/contracts";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
+import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { assert, describe } from "vite-plus/test";
 
@@ -25,6 +33,14 @@ import { makeCodexSessionRuntime } from "./CodexSessionRuntime.ts";
 const ROOT = wireFixture.rootThreadId;
 const [CHILD_A, CHILD_B] = wireFixture.childThreadIds as [string, string];
 const MEMORY = "memory-consolidation-thread";
+const decodeMcpElicitationResponse = Schema.decodeUnknownEffect(
+  Schema.fromJsonString(
+    Schema.Struct({
+      id: Schema.Number,
+      result: Schema.Unknown,
+    }),
+  ),
+);
 
 /**
  * The captured sequence, extended with the shapes the live capture didn't
@@ -72,11 +88,19 @@ function buildScript() {
 }
 
 const scriptPath = NodePath.join(import.meta.dirname, "../testFixtures/.collab-script.json");
-const peerPath = NodePath.join(import.meta.dirname, "../testFixtures/codexCollabMockPeer.sh");
+const peerPathForHost = Effect.map(HostProcessPlatform, (platform) =>
+  NodePath.join(
+    import.meta.dirname,
+    platform === "win32"
+      ? "../testFixtures/codexCollabMockPeer.cmd"
+      : "../testFixtures/codexCollabMockPeer.sh",
+  ),
+);
 
 describe("CodexSessionRuntime collab integration", () => {
   it.effect("replays the captured fan-out into synthetic agent events without child leaks", () =>
     Effect.gen(function* () {
+      const peerPath = yield* peerPathForHost;
       // @effect-diagnostics-next-line preferSchemaOverJson:off
       NodeFS.writeFileSync(scriptPath, JSON.stringify(buildScript()), "utf8");
       yield* Effect.addFinalizer(() =>
@@ -86,7 +110,7 @@ describe("CodexSessionRuntime collab integration", () => {
       const runtime = yield* makeCodexSessionRuntime({
         threadId: ThreadId.make("thread-collab-integration"),
         binaryPath: peerPath,
-        cwd: "/tmp",
+        cwd: NodePath.dirname(peerPath),
         runtimeMode: "full-access",
         environment: { ...process.env, T3_CODEX_COLLAB_SCRIPT: scriptPath },
       });
@@ -152,6 +176,7 @@ describe("CodexSessionRuntime collab integration", () => {
   // TestClock the internal timers freeze and the join never completes.
   it.live("Stop interrupts every live child regardless of registration timing", () =>
     Effect.gen(function* () {
+      const peerPath = yield* peerPathForHost;
       // Ordering + liveness torture for stop-everything: child A's
       // turn/started arrives BEFORE anything registers it (foreign
       // suppression path must record the live turn); child B's arrives after
@@ -228,7 +253,7 @@ describe("CodexSessionRuntime collab integration", () => {
       const runtime = yield* makeCodexSessionRuntime({
         threadId: ThreadId.make("thread-collab-stop"),
         binaryPath: peerPath,
-        cwd: "/tmp",
+        cwd: NodePath.dirname(peerPath),
         runtimeMode: "full-access",
         environment: { ...process.env, T3_CODEX_COLLAB_SCRIPT: scriptPath },
       });
@@ -282,6 +307,7 @@ describe("CodexSessionRuntime collab integration", () => {
 
   it.live("Stop targets the active turn when Codex has accepted a queued follow-up", () =>
     Effect.gen(function* () {
+      const peerPath = yield* peerPathForHost;
       const activeTurnId = "019fe3e8-f908-7f31-8d51-283f4a47897a";
       const queuedTurnId = "019fe3eb-8faf-7de3-a85b-ac64c7f9c8c3";
       const script = {
@@ -306,7 +332,7 @@ describe("CodexSessionRuntime collab integration", () => {
       const runtime = yield* makeCodexSessionRuntime({
         threadId: ThreadId.make("thread-codex-queued-stop"),
         binaryPath: peerPath,
-        cwd: "/tmp",
+        cwd: NodePath.dirname(peerPath),
         runtimeMode: "full-access",
         environment: { ...process.env, T3_CODEX_COLLAB_SCRIPT: scriptPath },
       });
@@ -328,4 +354,129 @@ describe("CodexSessionRuntime collab integration", () => {
       yield* runtime.close;
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
+
+  const elicitationCases = [
+    {
+      decision: "accept",
+      response: { action: "accept", content: { approval: "once" } },
+    },
+    {
+      decision: "acceptForSession",
+      response: {
+        action: "accept",
+        _meta: { persist: "session" },
+        content: { approval: "session" },
+      },
+    },
+    {
+      decision: "acceptAlways",
+      response: {
+        action: "accept",
+        _meta: { persist: "always" },
+        content: { approval: "always" },
+      },
+    },
+    { decision: "decline", response: { action: "decline" } },
+    { decision: "cancel", response: { action: "cancel" } },
+  ] satisfies ReadonlyArray<{
+    readonly decision: ProviderApprovalDecision;
+    readonly response: Record<string, unknown>;
+  }>;
+
+  for (const { decision, response } of elicitationCases) {
+    it.live(`returns the MCP elicitation ${decision} response to Codex`, () =>
+      Effect.gen(function* () {
+        const peerPath = yield* peerPathForHost;
+        const scriptedRequest = {
+          id: 7001,
+          method: "mcpServer/elicitation/request",
+          params: {
+            mode: "form",
+            message: "Allow ChatGPT to use Safari?",
+            serverName: "computer-use",
+            threadId: ROOT,
+            turnId: wireFixture.responses.turnStart.turn.id,
+            _meta: { app_name: "Safari", persist: ["session", "always"] },
+            requestedSchema: {
+              type: "object",
+              properties: {
+                approval: {
+                  type: "string",
+                  enum: ["once", "session", "always"],
+                },
+              },
+              required: ["approval"],
+            },
+          },
+        };
+        const script = {
+          rootThreadId: ROOT,
+          holdTurnOpen: true,
+          completeTurnOnServerResponse: true,
+          notifications: [],
+          serverRequests: [scriptedRequest],
+        };
+        const responsesPath = `${scriptPath}.responses`;
+        // @effect-diagnostics-next-line preferSchemaOverJson:off
+        NodeFS.writeFileSync(scriptPath, JSON.stringify(script), "utf8");
+        NodeFS.rmSync(responsesPath, { force: true });
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => {
+            NodeFS.rmSync(scriptPath, { force: true });
+            NodeFS.rmSync(responsesPath, { force: true });
+          }),
+        );
+
+        const runtime = yield* makeCodexSessionRuntime({
+          threadId: ThreadId.make("thread-codex-mcp-elicitation"),
+          binaryPath: peerPath,
+          cwd: NodePath.dirname(peerPath),
+          runtimeMode: "auto",
+          environment: { ...process.env, T3_CODEX_COLLAB_SCRIPT: scriptPath },
+        });
+        const approvalRequested = yield* Deferred.make<ProviderEvent>();
+        const turnCompleted = yield* Deferred.make<void>();
+        yield* runtime.events.pipe(
+          Stream.runForEach((event) =>
+            event.method === "mcpServer/elicitation/request"
+              ? Deferred.succeed(approvalRequested, event).pipe(Effect.asVoid)
+              : event.method === "turn/completed"
+                ? Deferred.succeed(turnCompleted, undefined).pipe(Effect.asVoid)
+                : Effect.void,
+          ),
+          Effect.forkScoped,
+        );
+
+        yield* runtime.start();
+        yield* runtime.sendTurn({ input: "Open Safari" });
+        const approval = yield* Deferred.await(approvalRequested);
+        assert.equal(approval.requestKind, "mcp-elicitation");
+        assert.isDefined(approval.requestId);
+        if (approval.requestId === undefined) return;
+
+        assert.isFalse(
+          NodeFS.existsSync(responsesPath),
+          "app access waits for an explicit decision",
+        );
+        const foreignRequest = yield* runtime
+          .respondToRequest(ApprovalRequestId.make("another-session-request"), "accept")
+          .pipe(Effect.flip);
+        assert.equal(foreignRequest._tag, "CodexSessionRuntimePendingApprovalNotFoundError");
+        yield* runtime.respondToRequest(approval.requestId, decision);
+        const repeatedDecision = yield* runtime
+          .respondToRequest(approval.requestId, decision)
+          .pipe(Effect.flip);
+        assert.equal(repeatedDecision._tag, "CodexSessionRuntimePendingApprovalNotFoundError");
+        yield* Deferred.await(turnCompleted);
+
+        const recordedResponse = yield* decodeMcpElicitationResponse(
+          NodeFS.readFileSync(responsesPath, "utf8"),
+        );
+        assert.equal(recordedResponse.id, scriptedRequest.id);
+        assert.deepEqual(recordedResponse.result, response);
+
+        yield* runtime.close;
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+    );
+  }
 });

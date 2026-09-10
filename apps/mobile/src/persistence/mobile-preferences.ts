@@ -47,6 +47,8 @@ export interface Preferences {
   readonly legacyThreadListEnabled?: boolean;
   /** Device-local counterpart of desktop's `planModeEnabled` legacy flag. */
   readonly planModeEnabled?: boolean;
+  /** Mail alpha opt-in is independent of the app update channel. */
+  readonly mailAlphaEnabled?: boolean;
 }
 
 export class MobilePreferencesLoadError extends Schema.TaggedErrorClass<MobilePreferencesLoadError>()(
@@ -106,6 +108,7 @@ function sanitizePreferences(parsed: Preferences): Preferences {
     composerBusyBehavior?: ComposerBusyBehavior;
     legacyThreadListEnabled?: boolean;
     planModeEnabled?: boolean;
+    mailAlphaEnabled?: boolean;
   } = {};
 
   if (typeof parsed.liveActivitiesEnabled === "boolean") {
@@ -178,6 +181,9 @@ function sanitizePreferences(parsed: Preferences): Preferences {
   }
   if (typeof parsed.planModeEnabled === "boolean") {
     preferences.planModeEnabled = parsed.planModeEnabled;
+  }
+  if (typeof parsed.mailAlphaEnabled === "boolean") {
+    preferences.mailAlphaEnabled = parsed.mailAlphaEnabled;
   }
   return preferences;
 }

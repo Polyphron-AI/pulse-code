@@ -1,16 +1,34 @@
+import type { RightPanelSurface } from "../rightPanelStore";
 import {
+  type AssetCreateUrlInput,
+  type AssetCreateUrlResult,
+  type ChatFileAttachment,
   type EnvironmentId,
   isProviderDriverKind,
   ProjectId,
   type ModelSelection,
+  type ProviderInteractionMode,
   type ProviderDriverKind,
   type ServerProvider,
   type ScopedProjectRef,
   type ScopedThreadRef,
   type ThreadId,
+  type ThreadLinkedPullRequest,
   type TurnId,
 } from "@t3tools/contracts";
-import { type ChatMessage, type SessionPhase, type Thread, type ThreadShell } from "../types";
+import { resolveAssetUrl } from "@t3tools/client-runtime/state/assets";
+import {
+  squashAtomCommandFailure,
+  type AtomCommandResult,
+} from "@t3tools/client-runtime/state/runtime";
+import { videoMimeType } from "@t3tools/shared/video";
+import {
+  type ChatMessage,
+  isImageAttachment,
+  type SessionPhase,
+  type Thread,
+  type ThreadShell,
+} from "../types";
 import { type ComposerImageAttachment, type DraftThreadState } from "../composerDraftStore";
 import * as Schema from "effect/Schema";
 import { appAtomRegistry } from "../rpc/atomRegistry";
@@ -203,12 +221,40 @@ export function revokeBlobPreviewUrl(previewUrl: string | undefined): void {
   URL.revokeObjectURL(previewUrl);
 }
 
+/** Signs an attachment URL without reading its bytes, so video playback can request byte ranges. */
+export async function resolveFileAttachmentUrl(input: {
+  attachment: ChatFileAttachment;
+  environmentId: EnvironmentId;
+  httpBaseUrl: string;
+  createAssetUrl: (input: {
+    environmentId: EnvironmentId;
+    input: AssetCreateUrlInput;
+  }) => Promise<AtomCommandResult<AssetCreateUrlResult, unknown>>;
+}): Promise<string> {
+  const { attachment } = input;
+  const result = await input.createAssetUrl({
+    environmentId: input.environmentId,
+    input: {
+      resource: {
+        _tag: "attachment",
+        attachmentId: attachment.id,
+        fileName: attachment.name,
+        mimeType: videoMimeType(attachment) ?? attachment.mimeType,
+      },
+    },
+  });
+  if (result._tag === "Failure") throw squashAtomCommandFailure(result);
+  const url = resolveAssetUrl(input.httpBaseUrl, result.value.relativeUrl);
+  if (url === null) throw new Error("The environment returned an invalid attachment URL.");
+  return url;
+}
+
 export function revokeUserMessagePreviewUrls(message: ChatMessage): void {
   if (message.role !== "user" || !message.attachments) {
     return;
   }
   for (const attachment of message.attachments) {
-    if (attachment.type !== "image") {
+    if (!isImageAttachment(attachment)) {
       continue;
     }
     revokeBlobPreviewUrl(attachment.previewUrl);
@@ -221,7 +267,7 @@ export function collectUserMessageBlobPreviewUrls(message: ChatMessage): string[
   }
   const previewUrls: string[] = [];
   for (const attachment of message.attachments) {
-    if (attachment.type !== "image") continue;
+    if (!isImageAttachment(attachment)) continue;
     if (!attachment.previewUrl || !attachment.previewUrl.startsWith("blob:")) continue;
     previewUrls.push(attachment.previewUrl);
   }
@@ -350,6 +396,22 @@ export function shouldShowBranchMismatchBanner(input: {
     return false;
   }
   return input.composerHasContent || input.wasShownForCurrentMismatch;
+}
+
+export function shouldShowPlanFollowUpPrompt(input: {
+  pendingUserInputCount: number;
+  interactionMode: ProviderInteractionMode;
+  latestTurnSettled: boolean;
+  hasActionableProposedPlan: boolean;
+  hasComposerAttachments: boolean;
+}): boolean {
+  return (
+    input.pendingUserInputCount === 0 &&
+    input.interactionMode === "plan" &&
+    input.latestTurnSettled &&
+    input.hasActionableProposedPlan &&
+    !input.hasComposerAttachments
+  );
 }
 
 // Session-scoped (module-level so it survives ChatView remounts, e.g. route
@@ -498,6 +560,24 @@ export interface LocalDispatchSnapshot {
   latestTurnCompletedAt: string | null;
   sessionStatus: NonNullable<Thread["session"]>["status"] | null;
   sessionUpdatedAt: string | null;
+  latestTurnStartFailureId: string | null;
+}
+
+export function latestTurnStartFailureId(
+  activeThread: Thread | undefined,
+  latestUserMessageId: ChatMessage["id"] | null,
+): string | null {
+  if (latestUserMessageId === null) return null;
+  return (
+    activeThread?.activities.findLast((activity) => {
+      if (activity.kind !== "provider.turn.start.failed") return false;
+      const payload =
+        typeof activity.payload === "object" && activity.payload !== null
+          ? (activity.payload as { readonly requestId?: unknown })
+          : null;
+      return payload?.requestId === latestUserMessageId;
+    })?.id ?? null
+  );
 }
 
 export function createLocalDispatchSnapshot(
@@ -517,6 +597,7 @@ export function createLocalDispatchSnapshot(
     latestTurnCompletedAt: latestTurn?.completedAt ?? null,
     sessionStatus: session?.status ?? null,
     sessionUpdatedAt: session?.updatedAt ?? null,
+    latestTurnStartFailureId: latestTurnStartFailureId(activeThread, latestUserMessage?.id ?? null),
   };
 }
 
@@ -528,12 +609,20 @@ export function hasServerAcknowledgedLocalDispatch(input: {
   session: Thread["session"] | null;
   hasPendingApproval: boolean;
   hasPendingUserInput: boolean;
+  latestTurnStartFailureId?: string | null;
   threadError: string | null | undefined;
 }): boolean {
   if (!input.localDispatch) {
     return false;
   }
   if (input.hasPendingApproval || input.hasPendingUserInput || Boolean(input.threadError)) {
+    return true;
+  }
+  if (
+    input.latestTurnStartFailureId !== undefined &&
+    input.latestTurnStartFailureId !== null &&
+    input.latestTurnStartFailureId !== input.localDispatch.latestTurnStartFailureId
+  ) {
     return true;
   }
 
@@ -575,5 +664,23 @@ export function hasServerAcknowledgedLocalDispatch(input: {
     latestTurnChanged ||
     input.localDispatch.sessionStatus !== (session?.status ?? null) ||
     input.localDispatch.sessionUpdatedAt !== (session?.updatedAt ?? null)
+  );
+}
+
+/** Follow a changed server link only when the panel still shows the previous linked PR. */
+export function shouldRetargetThreadPullRequestPanel(
+  previous: ThreadLinkedPullRequest | null,
+  current: ThreadLinkedPullRequest | null,
+  surface: RightPanelSurface | null,
+): boolean {
+  if (previous === null || current === null || surface?.kind !== "pull-request") return false;
+  const previousRepository = previous.repository.toLowerCase();
+  return (
+    (previous.projectId !== current.projectId ||
+      previousRepository !== current.repository.toLowerCase() ||
+      previous.number !== current.number) &&
+    surface.projectId === previous.projectId &&
+    surface.repository.toLowerCase() === previousRepository &&
+    surface.number === previous.number
   );
 }

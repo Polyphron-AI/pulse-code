@@ -4,9 +4,11 @@ import * as Effect from "effect/Effect";
 import * as Duration from "effect/Duration";
 import * as Schema from "effect/Schema";
 import * as SchemaTransformation from "effect/SchemaTransformation";
-import { TrimmedNonEmptyString, TrimmedString } from "./baseSchemas.ts";
+import { ProjectId, TrimmedNonEmptyString, TrimmedString } from "./baseSchemas.ts";
+import { UsageLimitSourceId } from "./usageLimitSourceId.ts";
 import { ThreadEnvMode } from "./environment.ts";
 import {
+  CustomModelSetting,
   DEFAULT_TEXT_GENERATION_MODEL,
   DEFAULT_TEXT_GENERATION_REASONING_EFFORT,
   ProviderOptionSelections,
@@ -15,6 +17,7 @@ import {
   ComposerBusyBehavior,
   DEFAULT_COMPOSER_BUSY_BEHAVIOR,
   ModelSelection,
+  ProjectScript,
 } from "./orchestration.ts";
 import {
   DEFAULT_PREVIEW_APPEARANCE,
@@ -24,7 +27,11 @@ import {
   PreviewViewportSetting,
   PreviewZoomFactor,
 } from "./preview.ts";
-import { ProviderInstanceConfig, ProviderInstanceId } from "./providerInstance.ts";
+import {
+  ProviderInstanceConfig,
+  ProviderInstanceId,
+  type ProviderDriverKind,
+} from "./providerInstance.ts";
 
 // ── Client Settings (local-only) ───────────────────────────────
 
@@ -134,7 +141,20 @@ export type FontFamilyPreference = typeof FontFamilyPreference.Type;
 export const DEFAULT_BROWSER_VIEWPORT: PreviewViewportSetting = FILL_PREVIEW_VIEWPORT;
 export const DEFAULT_BROWSER_AUTO_SHOW_FLOATING_PREVIEW = true;
 
+export const LoadBalancingWeights = Schema.Record(
+  TrimmedNonEmptyString,
+  Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 100 })),
+);
+
 export const ClientSettingsSchema = Schema.Struct({
+  loadBalancingEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  loadBalancingWeights: LoadBalancingWeights.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
+  voiceShortcut: Schema.String.pipe(Schema.withDecodingDefault(Effect.succeed("ctrl+shift+space"))),
+  voiceGlobalShortcutEnabled: Schema.Boolean.pipe(
+    Schema.withDecodingDefault(Effect.succeed(false)),
+  ),
+  voiceHoverEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  mailAlphaEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   browserDefaultViewport: PreviewViewportSetting.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_BROWSER_VIEWPORT)),
   ),
@@ -355,7 +375,7 @@ export const CodexSettings = makeProviderSettingsSchema(
         description: "Additional CLI arguments passed to codex app-server on session start.",
       }),
     ),
-    customModels: Schema.Array(Schema.String).pipe(
+    customModels: Schema.Array(CustomModelSetting).pipe(
       Schema.withDecodingDefault(Effect.succeed([])),
       Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
     ),
@@ -365,6 +385,11 @@ export const CodexSettings = makeProviderSettingsSchema(
   },
 );
 export type CodexSettings = typeof CodexSettings.Type;
+
+// Empty, or an integer from 100,000 to 1,000,000. Shared by the full
+// Claude settings schema and its patch so an out-of-range value fails at
+// the update that introduced it.
+const CLAUDE_AUTO_COMPACT_WINDOW_PATTERN = /^(?:|[1-9]\d{5}|1000000)$/;
 
 export const ClaudeSettings = makeProviderSettingsSchema(
   {
@@ -388,7 +413,7 @@ export const ClaudeSettings = makeProviderSettingsSchema(
         providerSettingsForm: { placeholder: "~/.claude", clearWhenEmpty: "omit" },
       }),
     ),
-    customModels: Schema.Array(Schema.String).pipe(
+    customModels: Schema.Array(CustomModelSetting).pipe(
       Schema.withDecodingDefault(Effect.succeed([])),
       Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
     ),
@@ -403,15 +428,31 @@ export const ClaudeSettings = makeProviderSettingsSchema(
         },
       }),
     ),
+    autoCompactWindow: TrimmedString.check(
+      Schema.isPattern(CLAUDE_AUTO_COMPACT_WINDOW_PATTERN),
+    ).pipe(
+      Schema.withDecodingDefault(Effect.succeed("")),
+      Schema.annotateKey({
+        title: "Auto-compact after",
+        description:
+          "Compact after 100,000 to 1,000,000 tokens. Leave empty to use Claude's default.",
+        providerSettingsForm: {
+          placeholder: "e.g. 300000",
+          clearWhenEmpty: "omit",
+        },
+      }),
+    ),
   },
   {
-    order: ["binaryPath", "homePath", "launchArgs"],
+    order: ["binaryPath", "homePath", "autoCompactWindow", "launchArgs"],
   },
 );
 export type ClaudeSettings = typeof ClaudeSettings.Type;
 
 export const CursorSettings = makeProviderSettingsSchema(
   {
+    // Off by default (like Grok and OpenCode): the binding is not yet
+    // stable enough to probe on every install. Users opt in from Settings.
     enabled: Schema.Boolean.pipe(
       Schema.withDecodingDefault(Effect.succeed(false)),
       Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
@@ -434,7 +475,7 @@ export const CursorSettings = makeProviderSettingsSchema(
         },
       }),
     ),
-    customModels: Schema.Array(Schema.String).pipe(
+    customModels: Schema.Array(CustomModelSetting).pipe(
       Schema.withDecodingDefault(Effect.succeed([])),
       Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
     ),
@@ -447,8 +488,10 @@ export type CursorSettings = typeof CursorSettings.Type;
 
 export const GrokSettings = makeProviderSettingsSchema(
   {
+    // Off by default (like Cursor and OpenCode): the binding is not yet
+    // stable enough to probe on every install. Users opt in from Settings.
     enabled: Schema.Boolean.pipe(
-      Schema.withDecodingDefault(Effect.succeed(true)),
+      Schema.withDecodingDefault(Effect.succeed(false)),
       Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
     ),
     binaryPath: makeBinaryPathSetting("grok").pipe(
@@ -458,7 +501,7 @@ export const GrokSettings = makeProviderSettingsSchema(
         providerSettingsForm: { placeholder: "grok", clearWhenEmpty: "omit" },
       }),
     ),
-    customModels: Schema.Array(Schema.String).pipe(
+    customModels: Schema.Array(CustomModelSetting).pipe(
       Schema.withDecodingDefault(Effect.succeed([])),
       Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
     ),
@@ -471,6 +514,10 @@ export type GrokSettings = typeof GrokSettings.Type;
 
 export const OmpSettings = makeProviderSettingsSchema(
   {
+    customModels: Schema.Array(CustomModelSetting).pipe(
+      Schema.withDecodingDefault(Effect.succeed([])),
+      Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
+    ),
     enabled: Schema.Boolean.pipe(
       Schema.withDecodingDefault(Effect.succeed(true)),
       Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
@@ -491,8 +538,10 @@ export type OmpSettings = typeof OmpSettings.Type;
 
 export const OpenCodeSettings = makeProviderSettingsSchema(
   {
+    // Off by default (like Cursor and Grok): the binding is not yet stable
+    // enough to probe on every install. Users opt in from Settings.
     enabled: Schema.Boolean.pipe(
-      Schema.withDecodingDefault(Effect.succeed(true)),
+      Schema.withDecodingDefault(Effect.succeed(false)),
       Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
     ),
     binaryPath: makeBinaryPathSetting("opencode").pipe(
@@ -528,7 +577,7 @@ export const OpenCodeSettings = makeProviderSettingsSchema(
         },
       }),
     ),
-    customModels: Schema.Array(Schema.String).pipe(
+    customModels: Schema.Array(CustomModelSetting).pipe(
       Schema.withDecodingDefault(Effect.succeed([])),
       Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
     ),
@@ -538,6 +587,21 @@ export const OpenCodeSettings = makeProviderSettingsSchema(
   },
 );
 export type OpenCodeSettings = typeof OpenCodeSettings.Type;
+
+/**
+ * A read-only quota source outside this environment's provider CLIs. The
+ * only kind today is a CLIProxyAPI hub, whose management API reports the
+ * windows of every pooled account. The key travels in settings for now, like
+ * provider environment secrets; it is redacted before reaching a client.
+ */
+export const UsageLimitSourceConfig = Schema.Struct({
+  kind: Schema.Literal("cliproxy"),
+  label: Schema.optional(TrimmedNonEmptyString),
+  url: TrimmedNonEmptyString,
+  managementKey: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+});
+export type UsageLimitSourceConfig = typeof UsageLimitSourceConfig.Type;
 
 export const ObservabilitySettings = Schema.Struct({
   otlpTracesUrl: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
@@ -613,6 +677,10 @@ export const ServerSettings = Schema.Struct({
     Schema.withDecodingDefault(Effect.succeed(false)),
   ),
   enableProviderUpdateChecks: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  // Retain the update-era key; recovery now needs an environment-owned opt-in.
+  continueThreadsAfterServerUpdate: Schema.Boolean.pipe(
+    Schema.withDecodingDefault(Effect.succeed(false)),
+  ),
   /**
    * Whether agents may drive the in-app preview browser. Turning this off
    * withholds the MCP credential, so the `t3-code` server (and with it every
@@ -625,6 +693,26 @@ export const ServerSettings = Schema.Struct({
    * between a desktop window and a phone attached to the same server.
    */
   enableAgentBrowserAccess: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  projectAgentBrowserAccessOverrides: Schema.Record(ProjectId, Schema.Boolean).pipe(
+    Schema.withDecodingDefault(Effect.succeed({})),
+  ),
+  defaultAutoPull: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  defaultProjectScripts: Schema.Array(ProjectScript).pipe(
+    Schema.withDecodingDefault(Effect.succeed([])),
+  ),
+  projectScriptOverrides: Schema.Record(ProjectId, Schema.NullOr(Schema.Array(ProjectScript))).pipe(
+    Schema.withDecodingDefault(Effect.succeed({})),
+  ),
+  projectAutoPullOverrides: Schema.Record(ProjectId, Schema.Boolean).pipe(
+    Schema.withDecodingDefault(Effect.succeed({})),
+  ),
+  defaultModelSelection: Schema.NullOr(ModelSelection).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null)),
+  ),
+  sidebarAutoSettleAfterDays: Schema.NullOr(SidebarAutoSettleAfterDays).pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_SIDEBAR_AUTO_SETTLE_AFTER_DAYS)),
+  ),
+  sidebarAutoSettleOnMerge: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   backgroundActivity: BackgroundActivitySettings,
   // Legacy flat fields retained for old settings files and old clients. New
   // consumers should resolve `backgroundActivity` instead.
@@ -697,15 +785,64 @@ export const ServerSettings = Schema.Struct({
   mcpServers: McpServers.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   threadMcpOverrides: ThreadMcpOverrides.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   observability: ObservabilitySettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
+  // Keyed by a user-chosen id so a source keeps its rows across edits.
+  usageLimitSources: Schema.Record(UsageLimitSourceId, UsageLimitSourceConfig).pipe(
+    Schema.withDecodingDefault(Effect.succeed({})),
+  ),
 });
 export type ServerSettings = typeof ServerSettings.Type;
 
 export const DEFAULT_SERVER_SETTINGS: ServerSettings = Schema.decodeSync(ServerSettings)({});
 
+/**
+ * Read the legacy `enabled` flag embedded in a provider instance config
+ * blob. The envelope-level `ProviderInstanceConfig.enabled` is the single
+ * flag going forward; this reader exists for legacy `providers.<kind>`
+ * blobs and old settings files that still carry the flag in-config.
+ */
+export const providerInstanceConfigEnabledFlag = (config: unknown): boolean | undefined => {
+  if (config === null || typeof config !== "object" || Array.isArray(config)) {
+    return undefined;
+  }
+  const enabled = (config as { readonly enabled?: unknown }).enabled;
+  return typeof enabled === "boolean" ? enabled : undefined;
+};
+
+/**
+ * Default enabled state for a built-in driver when neither the envelope nor
+ * the config blob carries a flag. Derived from the driver's settings schema
+ * through `DEFAULT_SERVER_SETTINGS`, so the schema's decoding default stays
+ * the single source of truth. Unknown (fork) drivers default to enabled.
+ */
+export const defaultEnabledForDriver = (driver: ProviderDriverKind): boolean => {
+  const legacyDefaults = DEFAULT_SERVER_SETTINGS.providers as Record<
+    string,
+    { readonly enabled?: boolean } | undefined
+  >;
+  return legacyDefaults[driver]?.enabled ?? true;
+};
+
+/**
+ * Resolve whether a configured provider instance is enabled. An explicit
+ * false on either the envelope or the in-config flag wins (most
+ * restrictive), so a user's disable is never silently undone by the other
+ * flag. Otherwise: envelope, then config, then the driver's default.
+ */
+export const resolveProviderInstanceEnabled = (
+  instance: Pick<ProviderInstanceConfig, "driver" | "enabled" | "config">,
+): boolean => {
+  const configEnabled = providerInstanceConfigEnabledFlag(instance.config);
+  if (instance.enabled === false || configEnabled === false) {
+    return false;
+  }
+  return instance.enabled ?? configEnabled ?? defaultEnabledForDriver(instance.driver);
+};
+
 export const ServerSettingsOperation = Schema.Literals([
   "normalize",
   "check-exists",
   "read-file",
+  "read-provider-history",
   "read-secret",
   "remove-secret",
   "remove-stale-secret",
@@ -758,31 +895,37 @@ const CodexSettingsPatch = Schema.Struct({
   homePath: Schema.optionalKey(TrimmedString),
   shadowHomePath: Schema.optionalKey(TrimmedString),
   launchArgs: Schema.optionalKey(TrimmedString),
-  customModels: Schema.optionalKey(Schema.Array(Schema.String)),
+  customModels: Schema.optionalKey(Schema.Array(CustomModelSetting)),
 });
 
 const ClaudeSettingsPatch = Schema.Struct({
   enabled: Schema.optionalKey(Schema.Boolean),
   binaryPath: Schema.optionalKey(TrimmedString),
   homePath: Schema.optionalKey(TrimmedString),
-  customModels: Schema.optionalKey(Schema.Array(Schema.String)),
+  customModels: Schema.optionalKey(Schema.Array(CustomModelSetting)),
   launchArgs: Schema.optionalKey(TrimmedString),
+  // Validated at the patch boundary so a typo fails the one update with a
+  // schema error instead of a generic whole-settings failure.
+  autoCompactWindow: Schema.optionalKey(
+    TrimmedString.check(Schema.isPattern(CLAUDE_AUTO_COMPACT_WINDOW_PATTERN)),
+  ),
 });
 
 const CursorSettingsPatch = Schema.Struct({
   enabled: Schema.optionalKey(Schema.Boolean),
   binaryPath: Schema.optionalKey(TrimmedString),
   apiEndpoint: Schema.optionalKey(TrimmedString),
-  customModels: Schema.optionalKey(Schema.Array(Schema.String)),
+  customModels: Schema.optionalKey(Schema.Array(CustomModelSetting)),
 });
 
 const GrokSettingsPatch = Schema.Struct({
   enabled: Schema.optionalKey(Schema.Boolean),
   binaryPath: Schema.optionalKey(TrimmedString),
-  customModels: Schema.optionalKey(Schema.Array(Schema.String)),
+  customModels: Schema.optionalKey(Schema.Array(CustomModelSetting)),
 });
 
 const OmpSettingsPatch = Schema.Struct({
+  customModels: Schema.optionalKey(Schema.Array(CustomModelSetting)),
   enabled: Schema.optionalKey(Schema.Boolean),
   binaryPath: Schema.optionalKey(TrimmedString),
 });
@@ -792,14 +935,29 @@ const OpenCodeSettingsPatch = Schema.Struct({
   binaryPath: Schema.optionalKey(TrimmedString),
   serverUrl: Schema.optionalKey(TrimmedString),
   serverPassword: Schema.optionalKey(TrimmedString),
-  customModels: Schema.optionalKey(Schema.Array(Schema.String)),
+  customModels: Schema.optionalKey(Schema.Array(CustomModelSetting)),
 });
 
 export const ServerSettingsPatch = Schema.Struct({
   // Server settings
   enableLegacyTokenStreaming: Schema.optionalKey(Schema.Boolean),
   enableProviderUpdateChecks: Schema.optionalKey(Schema.Boolean),
+  continueThreadsAfterServerUpdate: Schema.optionalKey(Schema.Boolean),
   enableAgentBrowserAccess: Schema.optionalKey(Schema.Boolean),
+  projectAgentBrowserAccessOverrides: Schema.optionalKey(
+    Schema.Record(ProjectId, Schema.NullOr(Schema.Boolean)),
+  ),
+  defaultAutoPull: Schema.optionalKey(Schema.Boolean),
+  defaultProjectScripts: Schema.optionalKey(Schema.Array(ProjectScript)),
+  projectScriptOverrides: Schema.optionalKey(
+    Schema.Record(ProjectId, Schema.NullOr(Schema.Array(ProjectScript))),
+  ),
+  projectAutoPullOverrides: Schema.optionalKey(
+    Schema.Record(ProjectId, Schema.NullOr(Schema.Boolean)),
+  ),
+  defaultModelSelection: Schema.optionalKey(Schema.NullOr(ModelSelection)),
+  sidebarAutoSettleAfterDays: Schema.optionalKey(Schema.NullOr(SidebarAutoSettleAfterDays)),
+  sidebarAutoSettleOnMerge: Schema.optionalKey(Schema.Boolean),
   backgroundActivity: Schema.optionalKey(
     Schema.Struct({
       schemaVersion: Schema.optionalKey(Schema.Literal(1)),
@@ -850,10 +1008,22 @@ export const ServerSettingsPatch = Schema.Struct({
   threadSkillOverrides: Schema.optionalKey(ThreadSkillOverrides),
   mcpServers: Schema.optionalKey(McpServers),
   threadMcpOverrides: Schema.optionalKey(ThreadMcpOverrides),
+  // Per-entry, unlike `providerInstances`: a client only ever adds or removes
+  // one source, and sending the whole map races another edit that has not
+  // echoed back yet. `null` removes; the server merges into its current map.
+  usageLimitSources: Schema.optionalKey(
+    Schema.Record(UsageLimitSourceId, Schema.NullOr(UsageLimitSourceConfig)),
+  ),
 });
 export type ServerSettingsPatch = typeof ServerSettingsPatch.Type;
 
 export const ClientSettingsPatch = Schema.Struct({
+  loadBalancingEnabled: Schema.optionalKey(Schema.Boolean),
+  loadBalancingWeights: Schema.optionalKey(LoadBalancingWeights),
+  voiceShortcut: Schema.optionalKey(Schema.String),
+  voiceGlobalShortcutEnabled: Schema.optionalKey(Schema.Boolean),
+  voiceHoverEnabled: Schema.optionalKey(Schema.Boolean),
+  mailAlphaEnabled: Schema.optionalKey(Schema.Boolean),
   browserDefaultViewport: Schema.optionalKey(PreviewViewportSetting),
   browserDefaultZoomFactor: Schema.optionalKey(PreviewZoomFactor),
   browserDefaultAppearance: Schema.optionalKey(PreviewAppearancePreference),

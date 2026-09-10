@@ -5,3 +5,6 @@ journeys:
   - id: use-context-and-act
     source: workflows/use-integration-context.md
     state: specified
+  - id: pulseflow-live-design
+    source: workflows/run-pulseflow-live-design.md
+    state: specified

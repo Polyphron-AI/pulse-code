@@ -415,7 +415,7 @@ function insertThread(
       `INSERT INTO projection_thread_sessions (
         thread_id, status, provider_name, provider_instance_id, provider_session_id,
         provider_thread_id, runtime_mode, active_turn_id, last_error, updated_at
-      ) VALUES (?, ?, 'Codex', 'codex', NULL, NULL, 'full-access', ?, NULL, ?)`,
+      ) VALUES (?, ?, 'codex', 'codex', NULL, NULL, 'full-access', ?, NULL, ?)`,
     )
     .run(input.id, isWorking ? "running" : "ready", isWorking ? turnId : null, updatedAt);
 }

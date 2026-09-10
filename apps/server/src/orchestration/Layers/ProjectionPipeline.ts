@@ -157,13 +157,9 @@ function derivePendingUserInputCountFromActivities(
   activities: ReadonlyArray<ProjectionThreadActivity>,
 ): number {
   const openRequestIds = new Set<string>();
-  const ordered = [...activities].toSorted(
-    (left, right) =>
-      left.createdAt.localeCompare(right.createdAt) ||
-      left.activityId.localeCompare(right.activityId),
-  );
+  const closedRequestIds = new Set<string>();
 
-  for (const activity of ordered) {
+  for (const activity of activities) {
     const requestId = extractActivityRequestId(activity.payload);
     if (requestId === null) {
       continue;
@@ -175,11 +171,12 @@ function derivePendingUserInputCountFromActivities(
     const detail = typeof payload?.detail === "string" ? payload.detail.toLowerCase() : null;
 
     if (activity.kind === "user-input.requested") {
-      openRequestIds.add(requestId);
+      if (!closedRequestIds.has(requestId)) openRequestIds.add(requestId);
       continue;
     }
 
     if (activity.kind === "user-input.resolved") {
+      closedRequestIds.add(requestId);
       openRequestIds.delete(requestId);
       continue;
     }
@@ -192,6 +189,7 @@ function derivePendingUserInputCountFromActivities(
         detail.includes("unknown pending user input request") ||
         detail.includes("unknown pending codex user input request"))
     ) {
+      closedRequestIds.add(requestId);
       openRequestIds.delete(requestId);
     }
   }
@@ -361,14 +359,14 @@ function collectThreadAttachmentRelativePaths(
   const relativePaths = new Set<string>();
   for (const message of messages) {
     for (const attachment of message.attachments ?? []) {
-      if (attachment.type !== "image") {
-        continue;
-      }
       const attachmentThreadSegment = parseThreadSegmentFromAttachmentId(attachment.id);
       if (!attachmentThreadSegment || attachmentThreadSegment !== threadSegment) {
         continue;
       }
-      relativePaths.add(attachmentRelativePath(attachment));
+      const relativePath = attachmentRelativePath(attachment);
+      if (relativePath) {
+        relativePaths.add(relativePath);
+      }
     }
   }
   return relativePaths;
@@ -519,7 +517,9 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             workspaceRoot: event.payload.workspaceRoot,
             defaultModelSelection: event.payload.defaultModelSelection,
             defaultThreadEnvMode: null,
+            autoPull: false,
             faviconPath: event.payload.faviconPath ?? null,
+            projectIcon: event.payload.projectIcon ?? null,
             scripts: event.payload.scripts,
             createdAt: event.payload.createdAt,
             updatedAt: event.payload.updatedAt,
@@ -546,8 +546,12 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             ...(event.payload.defaultThreadEnvMode !== undefined
               ? { defaultThreadEnvMode: event.payload.defaultThreadEnvMode }
               : {}),
+            ...(event.payload.autoPull !== undefined ? { autoPull: event.payload.autoPull } : {}),
             ...(event.payload.faviconPath !== undefined
               ? { faviconPath: event.payload.faviconPath }
+              : {}),
+            ...(event.payload.projectIcon !== undefined
+              ? { projectIcon: event.payload.projectIcon }
               : {}),
             ...(event.payload.scripts !== undefined ? { scripts: event.payload.scripts } : {}),
             updatedAt: event.payload.updatedAt,
@@ -634,16 +638,20 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             interactionMode: event.payload.interactionMode,
             branch: event.payload.branch,
             worktreePath: event.payload.worktreePath,
+            linkedPullRequest: null,
+            branchPullRequest: null,
             latestTurnId: null,
             createdAt: event.payload.createdAt,
             updatedAt: event.payload.updatedAt,
             archivedAt: null,
             settledOverride: null,
             settledAt: null,
+            unsettledAt: null,
             snoozedUntil: null,
             snoozedAt: null,
             pinnedAt: null,
             pinOrderKey: null,
+            activeOrderKey: null,
             titleRegenerationRequestId: null,
             titleRegenerationStartedAt: null,
             latestUserMessageAt: null,
@@ -697,6 +705,8 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             ...existingRow.value,
             settledOverride: "settled",
             settledAt: event.payload.settledAt,
+            unsettledAt: null,
+            activeOrderKey: null,
             updatedAt: event.payload.updatedAt,
           });
           return;
@@ -713,6 +723,13 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             ...existingRow.value,
             settledOverride: event.payload.reason === "user" ? "active" : null,
             settledAt: null,
+            // Re-entry stamp for active-list ordering. A thread already pinned
+            // active keeps its stamp: the activity reset that clears the pin
+            // is not a re-entry and must not reorder the list.
+            unsettledAt:
+              existingRow.value.settledOverride === "active"
+                ? existingRow.value.unsettledAt
+                : event.payload.updatedAt,
             updatedAt: event.payload.updatedAt,
           });
           return;
@@ -809,6 +826,9 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
           yield* projectionThreadRepository.upsert({
             ...existingRow.value,
             ...(event.payload.title !== undefined ? { title: event.payload.title } : {}),
+            ...(event.payload.activeOrderKey !== undefined
+              ? { activeOrderKey: event.payload.activeOrderKey }
+              : {}),
             ...(event.payload.titleRegeneration !== undefined
               ? {
                   titleRegenerationRequestId: event.payload.titleRegeneration?.requestId ?? null,
@@ -821,6 +841,12 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             ...(event.payload.branch !== undefined ? { branch: event.payload.branch } : {}),
             ...(event.payload.worktreePath !== undefined
               ? { worktreePath: event.payload.worktreePath }
+              : {}),
+            ...(event.payload.linkedPullRequest !== undefined
+              ? { linkedPullRequest: event.payload.linkedPullRequest }
+              : {}),
+            ...(event.payload.branchPullRequest !== undefined
+              ? { branchPullRequest: event.payload.branchPullRequest }
               : {}),
             updatedAt: event.payload.updatedAt,
           });
@@ -1175,6 +1201,22 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
     )(function* (event, _attachmentSideEffects) {
       switch (event.type) {
         case "thread.turn-start-requested": {
+          const pendingTurnStart = yield* projectionTurnRepository.getPendingTurnStartByThreadId({
+            threadId: event.payload.threadId,
+          });
+          if (Option.isSome(pendingTurnStart)) {
+            const pendingMessage = yield* projectionThreadMessageRepository.getByMessageId({
+              messageId: pendingTurnStart.value.messageId,
+            });
+            if (
+              Option.isSome(pendingMessage) &&
+              pendingMessage.value.role === "user" &&
+              (pendingMessage.value.attachments?.length ?? 0) === 0 &&
+              pendingMessage.value.text.trim().toLowerCase() === "/compact"
+            ) {
+              return;
+            }
+          }
           yield* projectionTurnRepository.replacePendingTurnStart({
             threadId: event.payload.threadId,
             messageId: event.payload.messageId,
@@ -1185,10 +1227,42 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
           return;
         }
 
+        case "thread.activity-appended": {
+          if (event.payload.activity.kind === "context-compaction") {
+            const pendingTurnStart = yield* projectionTurnRepository.getPendingTurnStartByThreadId(
+              event.payload,
+            );
+            if (
+              Option.isNone(pendingTurnStart) ||
+              String(pendingTurnStart.value.messageId) !==
+                extractActivityRequestId(event.payload.activity.payload)
+            ) {
+              return;
+            }
+            yield* projectionTurnRepository.deletePendingTurnStartByThreadId(event.payload);
+            return;
+          }
+          if (event.payload.activity.kind !== "provider.turn.start.failed") return;
+          const pendingTurnStart = yield* projectionTurnRepository.getPendingTurnStartByThreadId(
+            event.payload,
+          );
+          if (
+            Option.isNone(pendingTurnStart) ||
+            String(pendingTurnStart.value.messageId) !==
+              extractActivityRequestId(event.payload.activity.payload)
+          ) {
+            return;
+          }
+          yield* projectionTurnRepository.deletePendingTurnStartByThreadId(event.payload);
+          return;
+        }
+
         case "thread.session-set": {
           const turnId = event.payload.session.activeTurnId;
           if (turnId === null || event.payload.session.status !== "running") {
             if (
+              (event.payload.session.status === "ready" &&
+                event.commandId?.startsWith("server:provider-session-set:") === true) ||
               event.payload.session.status === "error" ||
               event.payload.session.status === "stopped" ||
               event.payload.session.status === "interrupted"
@@ -1532,6 +1606,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             const resolvedDecision =
               resolvedDecisionRaw === "accept" ||
               resolvedDecisionRaw === "acceptForSession" ||
+              resolvedDecisionRaw === "acceptAlways" ||
               resolvedDecisionRaw === "decline" ||
               resolvedDecisionRaw === "cancel"
                 ? resolvedDecisionRaw
@@ -1578,6 +1653,44 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
                 resolvedAt: event.payload.activity.createdAt,
               });
               return;
+            }
+            if (Option.isNone(existingRow) || existingRow.value.status !== "resolved") {
+              return;
+            }
+
+            // Sending a reply clears the badge before the provider accepts it.
+            // A failed reply must restore the request unless a terminal event
+            // already closed it, including a reply from another client.
+            const requestActivities = (yield* projectionThreadActivityRepository.listByThreadId({
+              threadId: existingRow.value.threadId,
+            })).filter((activity) => extractActivityRequestId(activity.payload) === requestId);
+            const wasRequested = requestActivities.some(
+              (activity) => activity.kind === "approval.requested",
+            );
+            const wasResolved = requestActivities.some((activity) => {
+              if (activity.kind === "approval.resolved") {
+                return true;
+              }
+              if (activity.kind !== "provider.approval.respond.failed") {
+                return false;
+              }
+              const activityPayload =
+                typeof activity.payload === "object" && activity.payload !== null
+                  ? (activity.payload as Record<string, unknown>)
+                  : null;
+              return isStalePendingApprovalFailureDetail(
+                typeof activityPayload?.detail === "string"
+                  ? activityPayload.detail.toLowerCase()
+                  : null,
+              );
+            });
+            if (wasRequested && !wasResolved) {
+              yield* projectionPendingApprovalRepository.upsert({
+                ...existingRow.value,
+                status: "pending",
+                decision: null,
+                resolvedAt: null,
+              });
             }
             return;
           }

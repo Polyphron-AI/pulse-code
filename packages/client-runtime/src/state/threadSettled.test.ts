@@ -471,3 +471,26 @@ describe("canSettle", () => {
     expect(effectiveSettled(blocked, { now: NOW, autoSettleAfterDays: 3 })).toBe(false);
   });
 });
+
+describe("server auto-settlement authority", () => {
+  it("ignores local inactivity and merge classification on capable servers", () => {
+    const shell = makeShell({ activityAt: STALE });
+    const options = { now: NOW, autoSettleAfterDays: 1, changeRequestState: "merged" as const };
+    expect(effectiveSettled(shell, options)).toBe(true);
+    expect(effectiveSettled(shell, { ...options, serverAutoSettlement: true })).toBe(false);
+  });
+  it("trusts persisted manual settlement and leaves validation to the capable server", () => {
+    const shell = makeShell({
+      activityAt: FRESH,
+      settledOverride: "settled",
+      sessionStatus: "running",
+      pending: "user-input",
+    });
+    expect(
+      effectiveSettled(shell, { now: NOW, autoSettleAfterDays: 3, serverAutoSettlement: true }),
+    ).toBe(true);
+    expect(effectiveSettled(shell, { now: NOW, autoSettleAfterDays: 3 })).toBe(false);
+    expect(canSettle(shell, { now: NOW, serverAutoSettlement: true })).toBe(true);
+    expect(canSettle(shell, { now: NOW })).toBe(false);
+  });
+});

@@ -1,13 +1,20 @@
 import { useAtomValue } from "@effect/atom-react";
-import { createPullRequestEnvironmentAtoms } from "@t3tools/client-runtime/state/pull-requests";
+import {
+  createLinkedPullRequestSummaryAtomFamily,
+  createLinkedPullRequestDetailAtomFamily,
+  newestPullRequestSummary,
+  createPullRequestEnvironmentAtoms,
+} from "@t3tools/client-runtime/state/pull-requests";
 import type {
   EnvironmentId,
   PullRequestListInput,
   PullRequestListStatsInput,
+  PullRequestRef,
+  PullRequestSummary,
 } from "@t3tools/contracts";
 import * as Option from "effect/Option";
 import { AsyncResult, Atom } from "effect/unstable/reactivity";
-import { useCallback, useMemo } from "react";
+import { useCallback, useLayoutEffect, useMemo } from "react";
 
 import { connectionAtomRuntime } from "../connection/runtime";
 import { appAtomRegistry } from "../rpc/atomRegistry";
@@ -19,6 +26,45 @@ import {
 import { formatEnvironmentQueryError } from "./query";
 
 export const pullRequestEnvironment = createPullRequestEnvironmentAtoms(connectionAtomRuntime);
+export const linkedPullRequestSummaryAtom =
+  createLinkedPullRequestSummaryAtomFamily(connectionAtomRuntime);
+export const linkedPullRequestDetailAtom =
+  createLinkedPullRequestDetailAtomFamily(connectionAtomRuntime);
+
+const observedPullRequestSummaryAtom = Atom.family((key: string) =>
+  Atom.make<PullRequestSummary | null>(null).pipe(
+    Atom.setIdleTTL(5 * 60_000),
+    Atom.withLabel(`web-pull-requests:observed-summary:${key}`),
+  ),
+);
+
+export { newestPullRequestSummary };
+
+export function useSharedPullRequestSummary(
+  environmentId: EnvironmentId | null,
+  reference: PullRequestRef | null,
+  current: PullRequestSummary | null,
+): PullRequestSummary | null {
+  const key =
+    environmentId === null || reference === null
+      ? "none"
+      : JSON.stringify([
+          environmentId,
+          reference.projectId,
+          reference.repository.toLowerCase(),
+          reference.number,
+        ]);
+  const atom = observedPullRequestSummaryAtom(key);
+  const observed = useAtomValue(atom);
+  useLayoutEffect(() => {
+    if (environmentId === null || current === null) return;
+    appAtomRegistry.modify(atom, (previous) => {
+      const next = newestPullRequestSummary(previous, current);
+      return next === previous ? [false, previous] : [true, next];
+    });
+  }, [atom, current, environmentId]);
+  return newestPullRequestSummary(current, observed);
+}
 
 export interface EnvironmentQueryTarget<Input> {
   readonly environmentId: EnvironmentId;

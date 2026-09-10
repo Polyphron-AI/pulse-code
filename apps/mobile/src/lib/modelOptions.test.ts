@@ -75,7 +75,7 @@ describe("mobile model options", () => {
     ]);
   });
 
-  it("normalizes a legacy fallback selection against current capabilities", () => {
+  it("does not materialize catalog defaults for missing stored options", () => {
     const config = {
       providers: [
         {
@@ -113,11 +113,17 @@ describe("mobile model options", () => {
     const [option] = buildModelOptions(config, {
       instanceId: ProviderInstanceId.make("codex"),
       model: "gpt-test",
-      options: [{ id: "fastMode", value: true }],
     });
 
     expect(option?.capabilities?.optionDescriptors?.[0]?.id).toBe("serviceTier");
-    expect(option?.selection.options).toEqual([{ id: "serviceTier", value: "default" }]);
+    expect(option?.selection.options).toBeUndefined();
+
+    const [explicitOption] = buildModelOptions(config, {
+      instanceId: ProviderInstanceId.make("codex"),
+      model: "gpt-test",
+      options: [{ id: "serviceTier", value: "priority" }],
+    });
+    expect(explicitOption?.selection.options).toEqual([{ id: "serviceTier", value: "priority" }]);
   });
 
   it("rejects stored selections whose provider is not usable", () => {
@@ -194,5 +200,69 @@ describe("mobile model options", () => {
     expect(resolveDefaultableModelSelection(config, legacy)).toBeNull();
     // Offline: nothing to validate against, selection passes through.
     expect(resolveDefaultableModelSelection(null, legacy)).toBe(legacy);
+  });
+});
+
+describe("mobile model aliases", () => {
+  const config = {
+    providers: [
+      {
+        instanceId: "work",
+        driver: "claudeAgent",
+        enabled: true,
+        installed: true,
+        auth: { status: "authenticated" },
+        models: [
+          {
+            slug: "legacy-model",
+            name: "Legacy",
+            aliases: ["same-alias"],
+            isLegacy: true,
+            isCustom: false,
+            capabilities: null,
+          },
+          { slug: "custom-alias", name: "Custom", isCustom: true, capabilities: null },
+          {
+            slug: "native-model",
+            name: "Native",
+            aliases: ["custom-alias"],
+            isCustom: false,
+            capabilities: null,
+          },
+        ],
+      },
+      {
+        instanceId: "personal",
+        driver: "claudeAgent",
+        enabled: true,
+        installed: true,
+        auth: { status: "authenticated" },
+        models: [
+          {
+            slug: "current-model",
+            name: "Current",
+            aliases: ["same-alias"],
+            isCustom: false,
+            capabilities: null,
+          },
+        ],
+      },
+    ],
+  } as unknown as ServerConfig;
+
+  it("resolves aliases only within their provider instance and enforces legacy defaults", () => {
+    const work = { instanceId: ProviderInstanceId.make("work"), model: "same-alias" };
+    const personal = { instanceId: ProviderInstanceId.make("personal"), model: "same-alias" };
+    expect(resolveSelectableModelSelection(config, work)?.model).toBe("legacy-model");
+    expect(resolveDefaultableModelSelection(config, work)).toBeNull();
+    expect(resolveSelectableModelSelection(config, personal)?.model).toBe("current-model");
+    expect(
+      buildModelOptions(config, personal).filter((option) => option.providerKey === "personal"),
+    ).toHaveLength(1);
+  });
+
+  it("preserves an exact custom slug when it shadows a built-in alias", () => {
+    const selection = { instanceId: ProviderInstanceId.make("work"), model: "custom-alias" };
+    expect(resolveSelectableModelSelection(config, selection)).toBe(selection);
   });
 });

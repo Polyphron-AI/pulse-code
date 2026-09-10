@@ -2,18 +2,24 @@ apps:
   - id: server
     path: apps/server
     integration_role: "Owns credentials, mappings, provider adapters, validation, and audit receipts."
+    live_design_role: "Owns capability negotiation, environment and tab binding, broker state, idempotency reconciliation, and the public gateway."
   - id: web
     path: apps/web
     integration_role: "Manages connections and renders native resource/context surfaces."
+    live_design_role: "Hosts the Preview toolbar, page handshake, focus coordination, diagnostics, and receipts."
   - id: desktop
     path: apps/desktop
     integration_role: "Wraps web and may host the owning Pulse Code Server."
+    live_design_role: "Provides the full local browser host and preserves existing Preview capture and pop-out behavior."
   - id: mobile
     path: apps/mobile
     integration_role: "Consumes capable resource/health views without receiving provider secrets."
+    live_design_role: "Shows read-only session state and hands authoring to a capable web or desktop host."
   - id: contracts
     path: packages/contracts
     integration_role: "Owns additive typed transport and capability schemas."
+    live_design_role: "Owns optional versioned live-design capabilities, actions, events, errors, and receipts."
   - id: client-runtime
     path: packages/client-runtime
     integration_role: "Shares capability-gated queries and commands across web and mobile."
+    live_design_role: "Shares environment-scoped capability, status, reconciliation, and handoff state."

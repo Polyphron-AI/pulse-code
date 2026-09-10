@@ -7,6 +7,7 @@ import {
   EyeOffIcon,
   InfoIcon,
   PlusIcon,
+  PencilIcon,
   StarIcon,
   XIcon,
 } from "lucide-react";
@@ -16,13 +17,14 @@ import {
   type ProviderInstanceId,
   type ServerProviderModel,
 } from "@t3tools/contracts";
-import { normalizeCustomModelSlug } from "@t3tools/shared/model";
+import { type CustomModelDefinition, normalizeCustomModelSlug } from "@t3tools/shared/model";
 
 import { cn } from "../../lib/utils";
 import { sortModelsForProviderInstance } from "../../modelOrdering";
 import { MAX_CUSTOM_MODEL_LENGTH } from "../../modelSelection";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
+import { CustomModelEditor } from "./CustomModelEditor";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 
 /**
@@ -51,11 +53,11 @@ interface ProviderModelsSectionProps {
    */
   readonly models: ReadonlyArray<ServerProviderModel>;
   /**
-   * The persisted custom-model slug list for this instance. Drives dedup,
-   * and is the array we hand back verbatim (with the new slug appended /
+   * The persisted custom-model list for this instance, resolved. Drives
+   * dedup, and is the list we hand back (with an entry appended / replaced /
    * removed) via `onChange`.
    */
-  readonly customModels: ReadonlyArray<string>;
+  readonly customModels: ReadonlyArray<CustomModelDefinition>;
   /** Server-returned model slugs hidden from the model picker. */
   readonly hiddenModels: ReadonlyArray<string>;
   /** Model slugs favorited for this provider instance. */
@@ -67,7 +69,7 @@ interface ProviderModelsSectionProps {
    * write to the correct storage (legacy `settings.providers[kind]` vs.
    * `providerInstances[id].config`).
    */
-  readonly onChange: (next: ReadonlyArray<string>) => void;
+  readonly onChange: (next: ReadonlyArray<CustomModelDefinition>) => void;
   readonly onHiddenModelsChange: (next: ReadonlyArray<string>) => void;
   readonly onFavoriteModelsChange: (next: ReadonlyArray<string>) => void;
   readonly onModelOrderChange: (next: ReadonlyArray<string>) => void;
@@ -98,6 +100,8 @@ export function ProviderModelsSection({
   onModelOrderChange,
 }: ProviderModelsSectionProps) {
   const [input, setInput] = useState("");
+  const [editingSlug, setEditingSlug] = useState<string | null>(null);
+  const editingEntry = customModels.find((entry) => entry.slug === editingSlug);
   const [error, setError] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const hiddenModelSet = useMemo(() => new Set(hiddenModels), [hiddenModels]);
@@ -124,12 +128,13 @@ export function ProviderModelsSection({
       setError(`Model slugs must be ${MAX_CUSTOM_MODEL_LENGTH} characters or less.`);
       return;
     }
-    if (customModels.includes(normalized)) {
+    if (customModels.some((entry) => entry.slug === normalized)) {
       setError("That custom model is already saved.");
       return;
     }
 
-    onChange([...customModels, normalized]);
+    onChange([...customModels, { slug: normalized, name: normalized, capabilities: null }]);
+    setEditingSlug(normalized);
     setInput("");
     setError(null);
 
@@ -150,7 +155,8 @@ export function ProviderModelsSection({
   };
 
   const handleRemove = (slug: string) => {
-    onChange(customModels.filter((model) => model !== slug));
+    if (editingSlug === slug) setEditingSlug(null);
+    onChange(customModels.filter((model) => model.slug !== slug));
     onModelOrderChange(modelOrder.filter((model) => model !== slug));
     onFavoriteModelsChange(favoriteModels.filter((model) => model !== slug));
     setError(null);
@@ -354,6 +360,16 @@ export function ProviderModelsSection({
                   </Tooltip>
                 ) : null}
                 {model.isCustom ? (
+                  <Button
+                    size="icon-micro"
+                    variant="ghost-muted"
+                    aria-label={`Edit ${model.name}`}
+                    onClick={() => setEditingSlug(model.slug)}
+                  >
+                    <PencilIcon className="size-3" />
+                  </Button>
+                ) : null}
+                {model.isCustom ? (
                   <Tooltip>
                     <TooltipTrigger
                       render={
@@ -376,6 +392,20 @@ export function ProviderModelsSection({
         })}
       </div>
 
+      {editingEntry ? (
+        <CustomModelEditor
+          key={editingEntry.slug}
+          instanceId={instanceId}
+          driverKind={driverKind}
+          entry={editingEntry}
+          builtInModels={models.filter((model) => !model.isCustom)}
+          onCancel={() => setEditingSlug(null)}
+          onSave={(next) => {
+            onChange(customModels.map((entry) => (entry.slug === next.slug ? next : entry)));
+            setEditingSlug(null);
+          }}
+        />
+      ) : null}
       <div className="mt-3 flex flex-col gap-2 sm:flex-row">
         <Input
           id={`provider-instance-${instanceId}-custom-model`}

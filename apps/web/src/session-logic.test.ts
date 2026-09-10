@@ -285,6 +285,7 @@ describe("derivePendingUserInputs", () => {
     expect(derivePendingUserInputs(activities)).toEqual([
       {
         requestId: "req-user-input-1",
+        dismissible: false,
         createdAt: "2026-02-23T00:00:01.000Z",
         questions: [
           {

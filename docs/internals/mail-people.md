@@ -1,0 +1,11 @@
+# Mail participant context
+
+People and work extends the mail alpha's existing atomic state store. The optional `peopleContext` field allows older state files to load unchanged. The domain functions in `MailPeople.ts` derive candidates, apply revision-checked identity and work edits, and preserve evidence during provider-confirmed moves. Message reads store bounded header-derived observations, not bodies. Existing work edits do not require a live source fetch.
+
+The environment advertises `mailPeople`. Typed mail RPCs provide context reads, person review, work saves and connection review. Reads require orchestration read permission; mutations require orchestration operate permission. Web/desktop and native mobile use the shared environment-scoped atoms. Office and Mail address the same records. Context queries refresh while mounted and do not fetch IMAP bodies.
+
+This is a deliberately bounded mail alpha model, not the universal Tasks service. Limits are 2,000 people, sources, work records and connections; responses contain at most 100 people and 300 work/connection records. Work results prioritize outstanding items. Each person's latest three observed sources provide correspondence context. Sources older than the observation window are not a complete mailbox archive. Identity is environment-local and matching currently uses an exact normalized address; aliases, merge/unmerge and CRM reconciliation remain unimplemented.
+
+`MailDiscoveryResult`, `applyDiscovery` and focused tests establish the suggestion-validation boundary. They accept canonical IDs and exact source excerpts and preserve corrections/dismissals across reworded rescans. There is no model invocation, discovery RPC or automatic background worker in this build. Automatic approval review rejected the proposed email-to-Codex data flow pending explicit user approval; do not describe the validation functions as integrated Luna discovery.
+
+The next integration requires a Codex provider capability, bounded generation with receipts and cancellation, per-source deduplication, explicit account opt-in, and client actions with honest pending/error states. Other provider adapters must report unsupported discovery rather than silently choosing another runtime.

@@ -14,6 +14,8 @@ import {
   TurnId,
 } from "./baseSchemas.ts";
 import { ProviderInstanceId, ProviderDriverKind } from "./providerInstance.ts";
+import { ProviderUsageLimitsUpdate } from "./providerUsageLimits.ts";
+import { ProviderApprovalOption } from "./orchestration.ts";
 
 const TrimmedNonEmptyStringSchema = TrimmedNonEmptyString;
 const UnknownRecordSchema = Schema.Record(Schema.String, Schema.Unknown);
@@ -138,6 +140,7 @@ export const CanonicalRequestType = Schema.Literals([
   "file_change_approval",
   "apply_patch_approval",
   "exec_command_approval",
+  "mcp_elicitation_approval",
   "tool_user_input",
   "dynamic_tool_call",
   "auth_tokens_refresh",
@@ -296,6 +299,8 @@ export type ThreadStartedPayload = typeof ThreadStartedPayload.Type;
 
 const ThreadStateChangedPayload = Schema.Struct({
   state: RuntimeThreadState,
+  beforeTokens: Schema.optional(NonNegativeInt),
+  afterTokens: Schema.optional(NonNegativeInt),
   detail: Schema.optional(Schema.Unknown),
 });
 export type ThreadStateChangedPayload = typeof ThreadStateChangedPayload.Type;
@@ -322,6 +327,7 @@ export const ThreadTokenUsageSnapshot = Schema.Struct({
   toolUses: Schema.optional(NonNegativeInt),
   durationMs: Schema.optional(NonNegativeInt),
   compactsAutomatically: Schema.optional(Schema.Boolean),
+  autoCompactThreshold: Schema.optional(PositiveInt),
 });
 export type ThreadTokenUsageSnapshot = typeof ThreadTokenUsageSnapshot.Type;
 
@@ -430,6 +436,8 @@ export type ContentDeltaPayload = typeof ContentDeltaPayload.Type;
 const RequestOpenedPayload = Schema.Struct({
   requestType: CanonicalRequestType,
   detail: Schema.optional(TrimmedNonEmptyStringSchema),
+  appName: Schema.optional(TrimmedNonEmptyStringSchema),
+  options: Schema.optional(Schema.Array(ProviderApprovalOption)),
   args: Schema.optional(Schema.Unknown),
 });
 export type RequestOpenedPayload = typeof RequestOpenedPayload.Type;
@@ -443,7 +451,8 @@ export type RequestResolvedPayload = typeof RequestResolvedPayload.Type;
 
 const UserInputQuestionOption = Schema.Struct({
   label: TrimmedNonEmptyStringSchema,
-  description: TrimmedNonEmptyStringSchema,
+  description: Schema.String,
+  value: Schema.optional(Schema.String),
 });
 export type UserInputQuestionOption = typeof UserInputQuestionOption.Type;
 
@@ -452,14 +461,16 @@ export const UserInputQuestion = Schema.Struct({
   header: TrimmedNonEmptyStringSchema,
   question: TrimmedNonEmptyStringSchema,
   options: Schema.Array(UserInputQuestionOption),
+  allowCustomAnswer: Schema.optional(Schema.Boolean),
   multiSelect: Schema.optional(Schema.Boolean).pipe(
     Schema.withConstructorDefault(Effect.succeed(false)),
   ),
 });
 export type UserInputQuestion = typeof UserInputQuestion.Type;
 
-const UserInputRequestedPayload = Schema.Struct({
+export const UserInputRequestedPayload = Schema.Struct({
   questions: Schema.Array(UserInputQuestion),
+  responseMode: Schema.optional(Schema.Literal("message")),
 });
 export type UserInputRequestedPayload = typeof UserInputRequestedPayload.Type;
 
@@ -699,8 +710,13 @@ const AccountUpdatedPayload = Schema.Struct({
 });
 export type AccountUpdatedPayload = typeof AccountUpdatedPayload.Type;
 
+/**
+ * Adapters normalise their native rate-limit payload at the boundary so the
+ * consumer that folds it into the provider snapshot never sees driver shapes.
+ */
 const AccountRateLimitsUpdatedPayload = Schema.Struct({
   rateLimits: Schema.Unknown,
+  limits: Schema.optional(ProviderUsageLimitsUpdate),
 });
 export type AccountRateLimitsUpdatedPayload = typeof AccountRateLimitsUpdatedPayload.Type;
 

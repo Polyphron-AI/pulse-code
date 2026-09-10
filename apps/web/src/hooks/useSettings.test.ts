@@ -77,3 +77,26 @@ describe("mergeEnvironmentSettings", () => {
     expect(settings.favorites).toBe(clientSettings.favorites);
   });
 });
+
+it("uses canonical server settlement preferences only when the environment supports them", () => {
+  const server = {
+    ...DEFAULT_SERVER_SETTINGS,
+    sidebarAutoSettleAfterDays: null,
+    sidebarAutoSettleOnMerge: false,
+  };
+  const client = {
+    ...DEFAULT_CLIENT_SETTINGS,
+    sidebarAutoSettleAfterDays: 7,
+    sidebarAutoSettleOnMerge: true,
+  };
+  expect(
+    mergeEnvironmentSettings(server, client, { threadAutoSettlement: true })
+      .sidebarAutoSettleAfterDays,
+  ).toBeNull();
+  expect(
+    mergeEnvironmentSettings(server, client, { threadAutoSettlement: true })
+      .sidebarAutoSettleOnMerge,
+  ).toBe(false);
+  expect(mergeEnvironmentSettings(server, client, {}).sidebarAutoSettleAfterDays).toBe(7);
+  expect(mergeEnvironmentSettings(server, client).sidebarAutoSettleOnMerge).toBe(true);
+});

@@ -10,3 +10,15 @@ surfaces:
   - { id: project, path: "/projects/$projectKey", state: existing, source: sitemap/integrations.md }
   - { id: thread-context, path: null, state: building, source: sitemap/integrations.md }
   - { id: mobile-issues, path: null, state: building, source: sitemap/integrations.md }
+  - {
+      id: preview-live-design,
+      path: null,
+      state: planned,
+      source: sitemap/pulseflow-live-design.md,
+    }
+  - {
+      id: mobile-live-design-status,
+      path: null,
+      state: planned,
+      source: sitemap/pulseflow-live-design.md,
+    }

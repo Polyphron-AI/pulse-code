@@ -58,7 +58,7 @@ import { useProjects } from "~/state/entities";
 import { useEnvironments } from "~/state/environments";
 import { useEnvironmentQuery } from "~/state/query";
 import { useLiveRefresh } from "~/hooks/useLiveRefresh";
-import { pullRequestEnvironment } from "~/state/pullRequests";
+import { pullRequestEnvironment, useSharedPullRequestSummary } from "~/state/pullRequests";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { formatRelativeTimeLabel } from "~/timestampFormat";
 
@@ -483,14 +483,26 @@ export function PullRequestDetailPanel({
   const activityQuery = useEnvironmentQuery(
     pullRequestEnvironment.activity({ environmentId, input: reference }),
   );
-  // Detail and diff are independent server reads, so the diff for the default view (no commit,
-  // no cursor) is started here too rather than waiting for the Code tab to mount. This is one
-  // extra cached read per opened pull request even for readers who never open the tab, but it
-  // turns the tab's first paint from a cold request into a cache hit.
-  const _diffWarmUpQuery = useEnvironmentQuery(
-    pullRequestEnvironment.diff({ environmentId, input: { ...reference } }),
+  const sharedSummary = useSharedPullRequestSummary(environmentId, reference, detailQuery.data);
+  const coreDetail = useMemo(
+    () =>
+      detailQuery.data === null || sharedSummary === null || sharedSummary === detailQuery.data
+        ? detailQuery.data
+        : {
+            ...detailQuery.data,
+            ...sharedSummary,
+            isDraft: sharedSummary.isDraft ?? detailQuery.data.isDraft,
+            mergedAt:
+              sharedSummary.mergedAt === undefined
+                ? detailQuery.data.mergedAt
+                : sharedSummary.mergedAt,
+            closedAt:
+              sharedSummary.closedAt === undefined
+                ? detailQuery.data.closedAt
+                : sharedSummary.closedAt,
+          },
+    [detailQuery.data, sharedSummary],
   );
-  const coreDetail = detailQuery.data;
   const activity = activityQuery.data;
   const detail = useMemo(
     () =>
@@ -526,16 +538,16 @@ export function PullRequestDetailPanel({
     }
     activityRevision.current = next;
   }, [activityQuery.refresh, coreDetail, pullRequestKey]);
-  useEffect(() => {
-    if (!detail) return;
+  useLayoutEffect(() => {
+    if (!coreDetail) return;
     onStateChange?.({
-      projectId: detail.projectId,
-      repository: detail.repository,
-      number: detail.number,
-      state: detail.state,
-      isDraft: detail.isDraft,
+      projectId: coreDetail.projectId,
+      repository: coreDetail.repository,
+      number: coreDetail.number,
+      state: coreDetail.state,
+      isDraft: coreDetail.isDraft,
     });
-  }, [detail, onStateChange]);
+  }, [onStateChange, coreDetail]);
   // Core detail is cheap enough to re-read while this stays open. Activity is heavier, so the
   // revision effect above reads it only after this same pull request reports a change. Keyed by
   // the pull request rather than by the panel, because this one panel shows a different pull

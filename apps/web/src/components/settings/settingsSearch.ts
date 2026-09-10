@@ -2,6 +2,7 @@ import { isElectron } from "~/env";
 
 export type SettingsPath =
   | "/settings/dictation"
+  | "/settings/projects"
   | "/settings/general"
   | "/settings/appearance"
   | "/settings/keybindings"
@@ -30,6 +31,7 @@ export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
   "/settings/general": "General",
   "/settings/dictation": "Dictation",
   "/settings/appearance": "Appearance",
+  "/settings/projects": "Projects",
   "/settings/keybindings": "Keybindings",
   "/settings/providers": "Providers",
   "/settings/integrations": "Integrations",
@@ -50,6 +52,26 @@ export const SETTINGS_SEARCH_ITEMS = [
     id: "dictation",
     title: "Dictation, microphone, shortcut, Parakeet and meeting transcription",
     to: "/settings/dictation",
+  },
+  {
+    id: "continue-threads-after-server-restart",
+    title: "Continue threads after server or machine restart",
+    to: "/settings/general",
+  },
+  {
+    id: "voice-capture",
+    title: "Voice capture, Parakeet, microphone, shortcut and hover mode",
+    to: "/settings/general",
+  },
+  {
+    id: "mail-alpha",
+    title: "Show Mail alpha on this device",
+    to: "/settings/integrations",
+  },
+  {
+    id: "project-defaults",
+    title: "Project defaults and overrides",
+    to: "/settings/projects",
   },
   {
     id: "color-scheme",
@@ -147,13 +169,12 @@ export const SETTINGS_SEARCH_ITEMS = [
   {
     id: "new-threads",
     title: "New threads",
-    to: "/settings/general",
+    to: "/settings/projects",
   },
   {
     id: "start-from-origin",
     title: "Start from origin",
     to: "/settings/general",
-    targetId: "new-threads",
   },
   {
     id: "add-project-starts-in",
@@ -224,6 +245,11 @@ export const SETTINGS_SEARCH_ITEMS = [
   {
     id: "agent-browser-access",
     title: "Agent browser access",
+    to: "/settings/projects",
+  },
+  {
+    id: "browser-profiles",
+    title: "Browser profiles",
     to: "/settings/integrations",
     targetId: "browser",
   },
@@ -277,6 +303,11 @@ export const SETTINGS_SEARCH_ITEMS = [
   {
     id: "remote-environments",
     title: "Remote environments",
+    to: "/settings/connections",
+  },
+  {
+    id: "load-balancing",
+    title: "Load balancing",
     to: "/settings/connections",
   },
   {

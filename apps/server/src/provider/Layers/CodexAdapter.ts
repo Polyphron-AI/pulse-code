@@ -10,6 +10,7 @@ import * as ExternalMcp from "../../mcp/ExternalMcp.ts";
  */
 import {
   DEFAULT_COMPOSER_BUSY_BEHAVIOR,
+  EventId,
   type CanonicalItemType,
   type CanonicalRequestType,
   type CodexSettings,
@@ -60,6 +61,7 @@ import { ServerConfig } from "../../config.ts";
 import {
   CodexResumeCursorSchema,
   CodexSessionRuntimeThreadIdMissingError,
+  describeMcpElicitation,
   makeCodexSessionRuntime,
   type CodexSessionRuntimeError,
   type CodexSessionRuntimeOptions,
@@ -67,6 +69,7 @@ import {
 } from "./CodexSessionRuntime.ts";
 import { type EventNdjsonLogger, makeEventNdjsonLogger } from "./EventNdjsonLogger.ts";
 import { resolveCodexLaunchArgs } from "./codexLaunchArgs.ts";
+import { codexRateLimitsToUpdate } from "./codexUsageLimits.ts";
 const isCodexAppServerProcessExitedError = Schema.is(CodexErrors.CodexAppServerProcessExitedError);
 const isCodexAppServerTransportError = Schema.is(CodexErrors.CodexAppServerTransportError);
 const isCodexSessionRuntimeThreadIdMissingError = Schema.is(
@@ -297,6 +300,36 @@ function itemDetail(itemType: CanonicalItemType, item: CodexLifecycleItem): stri
   return undefined;
 }
 
+// Codex sends `reason` only sometimes, and sends it blank rather than absent
+// often enough to matter, so an empty one must not outrank the paths below.
+function nonEmptyDetail(value: string | null | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed === undefined || trimmed.length === 0 ? undefined : trimmed;
+}
+
+// Keeps one oversized patch from pushing a wall of paths through every consumer
+// of the approval, while still saying how much it covers.
+const MAX_DESCRIBED_FILE_CHANGES = 20;
+
+// An apply-patch approval carries the edited paths as the keys of `fileChanges`.
+// Without them the approval card has nothing to show but its own title — the
+// command-execution branch already falls back to the command for the same reason.
+function describeFileChanges(
+  fileChanges: EffectCodexSchema.ServerRequest__ApplyPatchApprovalParams["fileChanges"] | undefined,
+): string | undefined {
+  if (fileChanges === undefined) return undefined;
+  const entries = Object.entries(fileChanges).toSorted(([left], [right]) =>
+    left.localeCompare(right),
+  );
+  if (entries.length === 0) return undefined;
+  const described = entries.slice(0, MAX_DESCRIBED_FILE_CHANGES).map(([path, change]) => {
+    const movePath = change.type === "update" ? change.move_path : undefined;
+    return movePath ? `${change.type} ${path} -> ${movePath}` : `${change.type} ${path}`;
+  });
+  const remaining = entries.length - described.length;
+  return remaining > 0 ? `${described.join("\n")}\n+${remaining} more` : described.join("\n");
+}
+
 function toRequestTypeFromMethod(method: string): CanonicalRequestType {
   switch (method) {
     case "item/commandExecution/requestApproval":
@@ -305,6 +338,8 @@ function toRequestTypeFromMethod(method: string): CanonicalRequestType {
       return "file_read_approval";
     case "item/fileChange/requestApproval":
       return "file_change_approval";
+    case "mcpServer/elicitation/request":
+      return "mcp_elicitation_approval";
     case "applyPatchApproval":
       return "apply_patch_approval";
     case "execCommandApproval":
@@ -328,6 +363,8 @@ function toRequestTypeFromKind(kind: ProviderRequestKind | undefined): Canonical
       return "file_read_approval";
     case "file-change":
       return "file_change_approval";
+    case "mcp-elicitation":
+      return "mcp_elicitation_approval";
     default:
       return "unknown";
   }
@@ -815,6 +852,11 @@ function mapToRuntimeEvents(
       ];
     }
 
+    const elicitation =
+      event.method === "mcpServer/elicitation/request"
+        ? readPayload(EffectCodexSchema.McpServerElicitationRequestParams, event.payload)
+        : undefined;
+    const elicitationApproval = elicitation ? describeMcpElicitation(elicitation) : undefined;
     const detail = (() => {
       switch (event.method) {
         case "item/commandExecution/requestApproval": {
@@ -829,14 +871,22 @@ function mapToRuntimeEvents(
             EffectCodexSchema.ServerRequest__FileChangeRequestApprovalParams,
             event.payload,
           );
-          return payload?.reason ?? undefined;
+          // These params carry no path of their own, only the root the agent
+          // wants to write under.
+          return nonEmptyDetail(payload?.reason) ?? nonEmptyDetail(payload?.grantRoot);
         }
+        case "mcpServer/elicitation/request":
+          return elicitation?.message;
         case "applyPatchApproval": {
           const payload = readPayload(
             EffectCodexSchema.ServerRequest__ApplyPatchApprovalParams,
             event.payload,
           );
-          return payload?.reason ?? undefined;
+          return (
+            nonEmptyDetail(payload?.reason) ??
+            describeFileChanges(payload?.fileChanges) ??
+            nonEmptyDetail(payload?.grantRoot)
+          );
         }
         case "execCommandApproval": {
           const payload = readPayload(
@@ -864,6 +914,12 @@ function mapToRuntimeEvents(
         payload: {
           requestType: toRequestTypeFromMethod(event.method),
           ...(detail ? { detail } : {}),
+          ...(elicitationApproval
+            ? {
+                appName: elicitationApproval.appName,
+                options: elicitationApproval.options,
+              }
+            : {}),
           ...(event.payload !== undefined ? { args: event.payload } : {}),
         },
       },
@@ -1125,6 +1181,27 @@ function mapToRuntimeEvents(
     if (!item) {
       return [];
     }
+    if (item.type === "agentMessage" && item.delivery === "async" && item.questions?.length) {
+      return [
+        {
+          ...runtimeEventBase(event, canonicalThreadId),
+          type: "user-input.requested",
+          requestId: RuntimeRequestId.make(`codex-async:${canonicalThreadId}:${item.id}`),
+          eventId: EventId.make(`codex-async:${canonicalThreadId}:${item.id}`),
+          payload: {
+            responseMode: "message",
+            questions: item.questions.map((question, index) => ({
+              id: String(index),
+              header: "Question",
+              question: question.title,
+              options: (question.options ?? []).map((label) => ({ label, description: "" })),
+              allowCustomAnswer: true,
+              multiSelect: false,
+            })),
+          },
+        },
+      ];
+    }
     const itemType = toCanonicalItemType(item.type);
     if (itemType === "plan") {
       const detail = itemDetail(itemType, item);
@@ -1142,7 +1219,18 @@ function mapToRuntimeEvents(
       ];
     }
     const completed = mapItemLifecycle(event, canonicalThreadId, "item.completed");
-    return completed ? [completed] : [];
+    if (!completed || itemType !== "context_compaction") {
+      return completed ? [completed] : [];
+    }
+    return [
+      completed,
+      {
+        ...runtimeEventBase(event, canonicalThreadId),
+        eventId: EventId.make(`${event.id}:thread-compacted`),
+        type: "thread.state.changed",
+        payload: { state: "compacted" },
+      },
+    ];
   }
 
   if (
@@ -1405,16 +1493,19 @@ function mapToRuntimeEvents(
   }
 
   if (event.method === "account/rateLimits/updated") {
-    if (!readPayload(EffectCodexSchema.V2AccountRateLimitsUpdatedNotification, event.payload)) {
+    const payload = readPayload(
+      EffectCodexSchema.V2AccountRateLimitsUpdatedNotification,
+      event.payload,
+    );
+    const limits = payload ? codexRateLimitsToUpdate(payload.rateLimits) : undefined;
+    if (!payload) {
       return [];
     }
     return [
       {
         type: "account.rate-limits.updated",
         ...runtimeEventBase(event, canonicalThreadId),
-        payload: {
-          rateLimits: event.payload ?? {},
-        },
+        payload: { rateLimits: event.payload ?? {}, ...(limits ? { limits } : {}) },
       },
     ];
   }
@@ -1826,8 +1917,11 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
   });
 
   const sendTurn: CodexAdapterShape["sendTurn"] = Effect.fn("sendTurn")(function* (input) {
+    // Codex ingests images only. Anything else would be base64-encoded as an
+    // image and rejected or misread; generic files reach the agent through the
+    // path line ProviderService puts in the prompt.
     const codexAttachments = yield* Effect.forEach(
-      input.attachments ?? [],
+      (input.attachments ?? []).filter((attachment) => attachment.type === "image"),
       (attachment) => resolveAttachment(input, attachment),
       { concurrency: 1 },
     );
@@ -1880,6 +1974,13 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
           : mapCodexRuntimeError(threadId, "turn/interrupt", cause),
       ),
     );
+
+  const compactThread = Effect.fn("compactThread")(function* (threadId: ThreadId) {
+    const session = yield* requireSession(threadId);
+    yield* session.runtime.compactThread.pipe(
+      Effect.mapError((cause) => mapCodexRuntimeError(threadId, "thread/compact/start", cause)),
+    );
+  });
 
   const readThread: CodexAdapterShape["readThread"] = (threadId) =>
     requireSession(threadId).pipe(
@@ -2001,9 +2102,11 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
     provider: PROVIDER,
     capabilities: {
       sessionModelSwitch: "in-session",
+      promptlessTurnContinuation: true,
     },
     startSession,
     sendTurn,
+    compaction: { type: "native", start: compactThread },
     interruptTurn,
     readThread,
     rollbackThread,

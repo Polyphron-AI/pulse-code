@@ -3,6 +3,30 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./load-balancing": {
+      "types": "./src/load-balancing.ts",
+      "default": "./src/load-balancing.ts"
+    },
+    "./state/shared-settings": {
+      "types": "./src/state/sharedSettings.ts",
+      "default": "./src/state/sharedSettings.ts"
+    },
+    "./providerSkills": {
+      "types": "./src/providerSkills.ts",
+      "default": "./src/providerSkills.ts"
+    },
+    "./pending-requests": {
+      "types": "./src/pendingRequests.ts",
+      "default": "./src/pendingRequests.ts"
+    },
+    "./state/mail": {
+      "types": "./src/state/mail.ts",
+      "default": "./src/state/mail.ts"
+    },
+    "./state/mail-compose": {
+      "types": "./src/state/mailCompose.ts",
+      "default": "./src/state/mailCompose.ts"
+    },
     "./connection": {
       "types": "./src/connection/index.ts",
       "default": "./src/connection/index.ts"
@@ -46,6 +70,10 @@
     "./state/assets": {
       "types": "./src/state/assets.ts",
       "default": "./src/state/assets.ts"
+    },
+    "./state/attachments": {
+      "types": "./src/state/attachments.ts",
+      "default": "./src/state/attachments.ts"
     },
     "./state/connections": {
       "types": "./src/state/connections.ts",
@@ -154,6 +182,46 @@
     "./state/vcs": {
       "types": "./src/state/vcs.ts",
       "default": "./src/state/vcs.ts"
+    },
+    "./markdownLinks": {
+      "types": "./src/markdownLinks.ts",
+      "default": "./src/markdownLinks.ts"
+    },
+    "./markdownImages": {
+      "types": "./src/markdownImages.ts",
+      "default": "./src/markdownImages.ts"
+    },
+    "./mediaReference": {
+      "types": "./src/mediaReference.ts",
+      "default": "./src/mediaReference.ts"
+    },
+    "./mediaSource": {
+      "types": "./src/mediaSource.ts",
+      "default": "./src/mediaSource.ts"
+    },
+    "./mediaActions": {
+      "types": "./src/mediaActions.ts",
+      "default": "./src/mediaActions.ts"
+    },
+    "./markdown-links": {
+      "types": "./src/markdownLinks.ts",
+      "default": "./src/markdownLinks.ts"
+    },
+    "./markdown-images": {
+      "types": "./src/markdownImages.ts",
+      "default": "./src/markdownImages.ts"
+    },
+    "./media-reference": {
+      "types": "./src/mediaReference.ts",
+      "default": "./src/mediaReference.ts"
+    },
+    "./media-source": {
+      "types": "./src/mediaSource.ts",
+      "default": "./src/mediaSource.ts"
+    },
+    "./media-actions": {
+      "types": "./src/mediaActions.ts",
+      "default": "./src/mediaActions.ts"
     }
   },
   "scripts": {

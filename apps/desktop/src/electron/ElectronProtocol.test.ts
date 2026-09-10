@@ -36,6 +36,7 @@ describe("ElectronProtocol", () => {
 
     const registrations = registerSchemesAsPrivilegedMock.mock.calls[0]?.[0] as ReadonlyArray<{
       readonly scheme: string;
+      readonly privileges: { readonly stream: boolean };
     }>;
     assert.deepEqual(
       registrations.map(({ scheme }) => scheme),
@@ -49,6 +50,7 @@ describe("ElectronProtocol", () => {
       registrations.map(({ scheme }) => scheme),
       "t3code-dev",
     );
+    assert.isTrue(registrations.every(({ privileges }) => privileges.stream));
   });
 
   it("uses one distinct preview scheme for the renderer and OAuth callback", () => {
@@ -95,7 +97,7 @@ describe("ElectronProtocol", () => {
           );
           assert.include(
             response.headers.get("content-security-policy") ?? "",
-            "connect-src 'self' http: https: ws: wss:",
+            "connect-src 'self' http: https: ws: wss: blob:",
           );
           assert.include(
             response.headers.get("content-security-policy") ?? "",
@@ -274,7 +276,14 @@ describe("ElectronProtocol", () => {
       "https://clerk.t3.codes",
       "https://challenges.cloudflare.com",
     ]);
-    assert.deepEqual(directives["connect-src"], ["'self'", "http:", "https:", "ws:", "wss:"]);
+    assert.deepEqual(directives["connect-src"], [
+      "'self'",
+      "http:",
+      "https:",
+      "ws:",
+      "wss:",
+      "blob:",
+    ]);
     assert.deepEqual(directives["img-src"], [
       "'self'",
       "pulsecode:",
@@ -283,6 +292,7 @@ describe("ElectronProtocol", () => {
       "http:",
       "https:",
     ]);
+    assert.deepEqual(directives["media-src"], ["'self'", "pulsecode:", "blob:", "http:", "https:"]);
     assert.deepEqual(directives["font-src"], ["'self'", "pulsecode:", "data:"]);
   });
 });

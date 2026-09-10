@@ -22,6 +22,11 @@ OAuth-style scope strings:
 | `relay:read`            | Inspect managed relay connectivity.                                      |
 | `relay:write`           | Link, configure, or unlink managed relay connectivity.                   |
 
+Pairing-link lists and access-stream snapshots and updates contain metadata only.
+The raw credential is returned only by the creation request, after the server checks
+`access:write` and the delegated scopes. Web and desktop clients keep that response
+in memory for sharing. They do not recover credentials from access read models.
+
 Ordinary pairing links grant the four client-operation scopes and read access to
 managed relay connectivity:
 `orchestration:read orchestration:operate terminal:operate review:write relay:read`.
@@ -84,7 +89,9 @@ that sends a `DPoP` header has its proof verified by `verifyRequestDpopProof`;
 the resulting JWK thumbprint is stored on the session, which is then issued with
 method `dpop-access-token` and a one-hour TTL instead of the bearer default. An
 invalid proof gets a DPoP challenge header and a credential error rather than a
-bearer token.
+bearer token. Newer servers include a safe `dpopFailureReason` category in that
+error. When an older server omits the category, clients mention clock skew as
+one possible cause rather than presenting it as confirmed.
 
 `dpop-access-token` is advertised alongside `browser-session-cookie` and
 `bearer-access-token` in the descriptor's `sessionMethods`

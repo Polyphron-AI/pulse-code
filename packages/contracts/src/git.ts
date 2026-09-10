@@ -197,6 +197,12 @@ const VcsStatusChangeRequest = Schema.Struct({
   baseRef: TrimmedNonEmptyStringSchema,
   headRef: TrimmedNonEmptyStringSchema,
   state: VcsStatusChangeRequestState,
+  /**
+   * Last provider-side activity (ISO), including comments and metadata edits.
+   * This is not the time a change request closed or merged. Optional for old
+   * servers and providers whose lookups do not report it.
+   */
+  updatedAt: Schema.optional(Schema.NullOr(Schema.String)),
 });
 
 const VcsStatusLocalShape = {

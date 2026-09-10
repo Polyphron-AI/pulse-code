@@ -1,4 +1,5 @@
 import {
+  ApprovalRequestId,
   CommandId,
   EnvironmentId,
   ORCHESTRATION_WS_METHODS,
@@ -23,6 +24,7 @@ import * as EnvironmentSupervisor from "../connection/supervisor.ts";
 import * as RpcSession from "../rpc/session.ts";
 import type { WsRpcProtocolClient } from "../rpc/protocol.ts";
 import {
+  dismissThreadUserInput,
   createProjectSchedule,
   deleteProjectSchedule,
   pauseProjectSchedule,
@@ -30,6 +32,7 @@ import {
   updateProjectSchedule,
   archiveThread,
   createProject,
+  reorderActiveThread,
   settleThread,
   stopThreadSession,
   unsettleThread,
@@ -79,6 +82,27 @@ const makeSupervisor = Effect.fn("TestEnvironmentCommands.makeSupervisor")(funct
 });
 
 describe("environment commands", () => {
+  it.effect("dispatches an idempotent dismissal without starting a turn", () =>
+    Effect.gen(function* () {
+      const dispatched: ClientOrchestrationCommand[] = [];
+      const supervisor = yield* makeSupervisor(dispatched);
+      yield* dismissThreadUserInput({
+        commandId: CommandId.make("dismiss-command"),
+        threadId: ThreadId.make("thread-1"),
+        requestId: ApprovalRequestId.make("async-1"),
+        createdAt: "2026-09-09T00:00:00.000Z",
+      }).pipe(Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor));
+      expect(dispatched).toEqual([
+        {
+          type: "thread.user-input.dismiss",
+          commandId: "dismiss-command",
+          threadId: "thread-1",
+          requestId: "async-1",
+          createdAt: "2026-09-09T00:00:00.000Z",
+        },
+      ]);
+    }).pipe(Effect.provide(TEST_CRYPTO_LAYER)),
+  );
   it.effect("adds generated command metadata", () =>
     Effect.gen(function* () {
       const dispatched: ClientOrchestrationCommand[] = [];
@@ -232,6 +256,26 @@ describe("environment commands", () => {
         { type: "project.schedule.pause", commandId: "schedule-pause" },
         { type: "project.schedule.resume", commandId: "schedule-resume" },
         { type: "project.schedule.delete", commandId: "schedule-delete" },
+      ]);
+    }).pipe(Effect.provide(TEST_CRYPTO_LAYER)),
+  );
+
+  it.effect("sends an active order key without changing activity timestamps", () =>
+    Effect.gen(function* () {
+      const dispatched: ClientOrchestrationCommand[] = [];
+      const supervisor = yield* makeSupervisor(dispatched);
+      yield* reorderActiveThread({
+        commandId: CommandId.make("reorder-command"),
+        threadId: ThreadId.make("thread-1"),
+        orderKey: "mf",
+      }).pipe(Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor));
+      expect(dispatched).toEqual([
+        {
+          type: "thread.active.reorder",
+          commandId: "reorder-command",
+          threadId: "thread-1",
+          orderKey: "mf",
+        },
       ]);
     }).pipe(Effect.provide(TEST_CRYPTO_LAYER)),
   );

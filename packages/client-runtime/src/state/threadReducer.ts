@@ -86,12 +86,15 @@ export function applyThreadDetailEvent(
           interactionMode: event.payload.interactionMode,
           branch: event.payload.branch,
           worktreePath: event.payload.worktreePath,
+          branchPullRequest: null,
           latestTurn: null,
           createdAt: event.payload.createdAt,
           updatedAt: event.payload.updatedAt,
           archivedAt: null,
           settledOverride: null,
           settledAt: null,
+          unsettledAt: null,
+          activeOrderKey: null,
           snoozedUntil: null,
           snoozedAt: null,
           deletedAt: null,
@@ -130,6 +133,8 @@ export function applyThreadDetailEvent(
           ...thread,
           settledOverride: "settled",
           settledAt: event.payload.settledAt,
+          unsettledAt: null,
+          activeOrderKey: null,
           updatedAt: event.payload.updatedAt,
         },
       };
@@ -141,6 +146,12 @@ export function applyThreadDetailEvent(
           ...thread,
           settledOverride: event.payload.reason === "user" ? "active" : null,
           settledAt: null,
+          // A thread already pinned active keeps its re-entry stamp: the
+          // activity reset that clears the pin must not reorder the list.
+          unsettledAt:
+            thread.settledOverride === "active"
+              ? (thread.unsettledAt ?? null)
+              : event.payload.updatedAt,
           updatedAt: event.payload.updatedAt,
         },
       };
@@ -217,6 +228,15 @@ export function applyThreadDetailEvent(
           ...(event.payload.branch !== undefined ? { branch: event.payload.branch } : {}),
           ...(event.payload.worktreePath !== undefined
             ? { worktreePath: event.payload.worktreePath }
+            : {}),
+          ...(event.payload.linkedPullRequest !== undefined
+            ? { linkedPullRequest: event.payload.linkedPullRequest }
+            : {}),
+          ...(event.payload.branchPullRequest !== undefined
+            ? { branchPullRequest: event.payload.branchPullRequest }
+            : {}),
+          ...(event.payload.activeOrderKey !== undefined
+            ? { activeOrderKey: event.payload.activeOrderKey }
             : {}),
           updatedAt: event.payload.updatedAt,
         },

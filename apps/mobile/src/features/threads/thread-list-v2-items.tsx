@@ -4,6 +4,7 @@ import type {
 } from "@t3tools/client-runtime/state/shell";
 import type { EnvironmentThreadSearchMatch } from "@t3tools/client-runtime/state/thread-search";
 import { canSnooze, resolveSnoozePresets } from "@t3tools/client-runtime/state/thread-settled";
+import { resolveSettledThreadTimestamp } from "@t3tools/client-runtime/state/thread-sort";
 import type { MenuAction } from "@react-native-menu/menu";
 import { memo, useCallback, useEffect, useMemo, useState, type ComponentProps } from "react";
 import { Alert, Platform, Pressable, useWindowDimensions, View } from "react-native";
@@ -23,10 +24,12 @@ import { ThreadSwipeable } from "../home/thread-swipe-actions";
 import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
 import { buildThreadTitleRegenerationMenuItems } from "./thread-title-regeneration-menu";
 import {
+  resolveThreadListV2ChangeRequestState,
   resolveThreadListV2SnoozeMenuSelection,
   resolveThreadListV2SnoozeGateExpiryMs,
   resolveThreadListV2Status,
   resolveThreadListV2SwipeActions,
+  type ThreadListV2ChangeRequestState,
   type ThreadListV2Status,
 } from "./threadListV2";
 import { ThreadSearchMatchExcerpt } from "./thread-search-match";
@@ -228,6 +231,7 @@ export const ThreadListV2PendingRow = memo(function ThreadListV2PendingRow(props
           <ProjectFavicon
             environmentId={pendingTask.message.environmentId}
             faviconPath={props.project.faviconPath}
+            projectIcon={props.project.projectIcon}
             size={15}
             projectTitle={projectTitle}
             workspaceRoot={props.project.workspaceRoot}
@@ -355,21 +359,20 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
   readonly pinningSupported: boolean;
   /** False on servers that predate thread title regeneration. */
   readonly titleRegenerationSupported: boolean;
-  /** False on servers that predate thread.pin.reorder. Gates the pinned
-      Move up / Move down menu items. */
-  readonly pinReorderSupported?: boolean;
-  readonly onMovePinnedThread?: (thread: EnvironmentThreadShell, direction: "up" | "down") => void;
-  /** Position flags for the pinned block so the menu disables the move that
+  /** Server supports reordering this card's section. */
+  readonly reorderSupported?: boolean;
+  readonly onMoveThread?: (thread: EnvironmentThreadShell, direction: "up" | "down") => void;
+  /** Position flags for the card's section so the menu disables the move that
       would fall off the end of the list. */
-  readonly canMovePinnedUp?: boolean;
-  readonly canMovePinnedDown?: boolean;
+  readonly canMoveUp?: boolean;
+  readonly canMoveDown?: boolean;
   readonly onSwipeableWillOpen: (methods: SwipeableMethods) => void;
   readonly onSwipeableClose: (methods: SwipeableMethods) => void;
   /** Reports this row's live PR state for the partition's merge and close
       rules. Mirrors web's onChangeRequestState. */
   readonly onChangeRequestState?: (
     threadKey: string,
-    state: "open" | "closed" | "merged" | null,
+    changeRequest: ThreadListV2ChangeRequestState | null,
   ) => void;
   readonly projectCwd?: string | null;
   readonly searchMatch?: EnvironmentThreadSearchMatch;
@@ -392,7 +395,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
     onArchiveThread,
     onPinThread,
     onUnpinThread,
-    onMovePinnedThread,
+    onMoveThread,
     onChangeRequestState,
   } = props;
   const snoozedRow = props.snoozed === true;
@@ -402,8 +405,13 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
   const prState = pr?.state ?? null;
   const threadKey = `${thread.environmentId}:${thread.id}`;
   useEffect(() => {
-    onChangeRequestState?.(threadKey, prState);
-  }, [onChangeRequestState, prState, threadKey]);
+    const changeRequest = resolveThreadListV2ChangeRequestState({
+      linkedPullRequest: thread.linkedPullRequest,
+      state: prState,
+    });
+    if (changeRequest === undefined) return;
+    onChangeRequestState?.(threadKey, changeRequest);
+  }, [onChangeRequestState, prState, thread.linkedPullRequest, threadKey]);
 
   const screenColor = useThemeColor("--color-screen");
   const drawerColor = useThemeColor("--color-drawer");
@@ -415,7 +423,13 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
 
   const status = resolveThreadListV2Status(thread);
   const statusLabel = STATUS_LABEL_BY_STATUS[status];
-  const timeLabel = threadTimeLabel(thread);
+  // Settled rows label by the same stamp they sort by, so order and label
+  // can't disagree. updatedAt is always present, so the resolver never
+  // returns null here.
+  const settledTimestamp =
+    variant === "slim" && !snoozedRow ? resolveSettledThreadTimestamp(thread) : null;
+  const timeLabel =
+    settledTimestamp !== null ? relativeTime(settledTimestamp) : threadTimeLabel(thread);
 
   const handleDelete = useCallback(() => onDeleteThread(thread), [onDeleteThread, thread]);
   const handleRegenerateTitle = useCallback(
@@ -431,14 +445,8 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
   const handleUnsettle = useCallback(() => onUnsettleThread(thread), [onUnsettleThread, thread]);
   const handlePin = useCallback(() => onPinThread(thread), [onPinThread, thread]);
   const handleUnpin = useCallback(() => onUnpinThread(thread), [onUnpinThread, thread]);
-  const handleMovePinnedUp = useCallback(
-    () => onMovePinnedThread?.(thread, "up"),
-    [onMovePinnedThread, thread],
-  );
-  const handleMovePinnedDown = useCallback(
-    () => onMovePinnedThread?.(thread, "down"),
-    [onMovePinnedThread, thread],
-  );
+  const handleMoveUp = useCallback(() => onMoveThread?.(thread, "up"), [onMoveThread, thread]);
+  const handleMoveDown = useCallback(() => onMoveThread?.(thread, "down"), [onMoveThread, thread]);
   const handleArchive = useCallback(() => onArchiveThread(thread), [onArchiveThread, thread]);
 
   // Swipe: the v2 primary action is the lifecycle transition. Every settled
@@ -478,37 +486,39 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
   // Pinned cards keep the full lifecycle menu; only the pin item flips to
   // Unpin. (Settling a pinned thread clears the pin server-side; snoozing
   // hides the card until wake with the pin intact.)
-  const pinMenuItem = useMemo<MenuAction[]>(
-    () =>
-      props.pinningSupported
+  const arrangementMenuItems = useMemo<MenuAction[]>(
+    () => [
+      ...(variant === "card" && props.reorderSupported === true
         ? [
-            ...(pinnedRow && props.pinReorderSupported === true
-              ? [
-                  {
-                    id: "move-pin-up",
-                    title: "Move up",
-                    image: "arrow.up",
-                    attributes: { disabled: props.canMovePinnedUp !== true },
-                  } satisfies MenuAction,
-                  {
-                    id: "move-pin-down",
-                    title: "Move down",
-                    image: "arrow.down",
-                    attributes: { disabled: props.canMovePinnedDown !== true },
-                  } satisfies MenuAction,
-                ]
-              : []),
-            pinnedRow
+            {
+              id: "move-up",
+              title: "Move up",
+              image: "arrow.up",
+              attributes: { disabled: props.canMoveUp !== true },
+            } satisfies MenuAction,
+            {
+              id: "move-down",
+              title: "Move down",
+              image: "arrow.down",
+              attributes: { disabled: props.canMoveDown !== true },
+            } satisfies MenuAction,
+          ]
+        : []),
+      ...(props.pinningSupported
+        ? [
+            thread.pinnedAt != null
               ? { id: "unpin", title: "Unpin", image: "pin.slash" }
               : { id: "pin", title: "Pin", image: "pin" },
           ]
-        : [],
+        : []),
+    ],
     [
-      pinnedRow,
-      props.canMovePinnedDown,
-      props.canMovePinnedUp,
-      props.pinReorderSupported,
+      props.canMoveDown,
+      props.canMoveUp,
+      props.reorderSupported,
       props.pinningSupported,
+      thread.pinnedAt,
+      variant,
     ],
   );
   const titleRegenerationMenuItems = useMemo<MenuAction[]>(
@@ -528,32 +538,42 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
         image: "clock",
         subactions: snoozePresetActions,
       },
-      ...pinMenuItem,
+      ...arrangementMenuItems,
       ...titleRegenerationMenuItems,
       { id: "delete", title: "Delete", image: "trash", attributes: { destructive: true } },
     ],
-    [pinMenuItem, snoozePresetActions, titleRegenerationMenuItems],
+    [arrangementMenuItems, snoozePresetActions, titleRegenerationMenuItems],
   );
   const cardMenuActions = useMemo<MenuAction[]>(
     () => [
       CARD_MENU_ACTIONS[0]!,
-      ...pinMenuItem,
+      ...arrangementMenuItems,
       ...titleRegenerationMenuItems,
       ...CARD_MENU_ACTIONS.slice(1),
     ],
-    [pinMenuItem, titleRegenerationMenuItems],
+    [arrangementMenuItems, titleRegenerationMenuItems],
   );
   const slimMenuActions = useMemo<MenuAction[]>(
-    () => [SLIM_MENU_ACTIONS[0]!, ...titleRegenerationMenuItems, SLIM_MENU_ACTIONS[1]!],
-    [titleRegenerationMenuItems],
+    () => [
+      SLIM_MENU_ACTIONS[0]!,
+      ...(thread.pinnedAt != null ? arrangementMenuItems : []),
+      ...titleRegenerationMenuItems,
+      SLIM_MENU_ACTIONS[1]!,
+    ],
+    [arrangementMenuItems, thread.pinnedAt, titleRegenerationMenuItems],
   );
   const snoozedMenuActions = useMemo<MenuAction[]>(
     () => [SNOOZED_MENU_ACTIONS[0]!, ...titleRegenerationMenuItems, SNOOZED_MENU_ACTIONS[1]!],
     [titleRegenerationMenuItems],
   );
   const legacyMenuActions = useMemo<MenuAction[]>(
-    () => [LEGACY_MENU_ACTIONS[0]!, ...titleRegenerationMenuItems, LEGACY_MENU_ACTIONS[1]!],
-    [titleRegenerationMenuItems],
+    () => [
+      LEGACY_MENU_ACTIONS[0]!,
+      ...arrangementMenuItems,
+      ...titleRegenerationMenuItems,
+      LEGACY_MENU_ACTIONS[1]!,
+    ],
+    [arrangementMenuItems, titleRegenerationMenuItems],
   );
   const handleMenuAction = useCallback(
     ({ nativeEvent }: { readonly nativeEvent: { readonly event: string } }) => {
@@ -562,8 +582,8 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
       if (nativeEvent.event === "unsnooze") handleUnsnooze();
       if (nativeEvent.event === "pin") handlePin();
       if (nativeEvent.event === "unpin") handleUnpin();
-      if (nativeEvent.event === "move-pin-up") handleMovePinnedUp();
-      if (nativeEvent.event === "move-pin-down") handleMovePinnedDown();
+      if (nativeEvent.event === "move-up") handleMoveUp();
+      if (nativeEvent.event === "move-down") handleMoveDown();
       if (nativeEvent.event === "archive") handleArchive();
       if (nativeEvent.event === "regenerate-title") handleRegenerateTitle();
       if (nativeEvent.event === "delete") handleDelete();
@@ -582,8 +602,8 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
       handleArchive,
       handleDelete,
       handleRegenerateTitle,
-      handleMovePinnedDown,
-      handleMovePinnedUp,
+      handleMoveDown,
+      handleMoveUp,
       handlePin,
       handleSettle,
       handleSnooze,
@@ -665,6 +685,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
           <ProjectFavicon
             environmentId={thread.environmentId}
             faviconPath={props.project.faviconPath}
+            projectIcon={props.project.projectIcon}
             size={15}
             projectTitle={props.projectTitle ?? props.project.title}
             workspaceRoot={props.project.workspaceRoot}
@@ -856,6 +877,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
               <ProjectFavicon
                 environmentId={thread.environmentId}
                 faviconPath={props.project.faviconPath}
+                projectIcon={props.project.projectIcon}
                 size={15}
                 projectTitle={props.projectTitle ?? props.project.title}
                 workspaceRoot={props.project.workspaceRoot}
@@ -893,7 +915,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
           >
             {snoozedRow && props.snoozeWakeLabelText !== undefined
               ? props.snoozeWakeLabelText
-              : relativeTime(thread.latestUserMessageAt ?? thread.updatedAt ?? thread.createdAt)}
+              : timeLabel}
           </Text>
         </View>
       </Pressable>

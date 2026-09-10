@@ -1,9 +1,11 @@
+import * as Schema from "effect/Schema";
 import {
   CheckpointRef,
   EventId,
   MessageId,
   ProjectId,
   ThreadId,
+  ThreadLinkedPullRequest,
   TurnId,
   ProviderInstanceId,
 } from "@t3tools/contracts";
@@ -27,6 +29,9 @@ const asTurnId = (value: string): TurnId => TurnId.make(value);
 const asMessageId = (value: string): MessageId => MessageId.make(value);
 const asEventId = (value: string): EventId => EventId.make(value);
 const asCheckpointRef = (value: string): CheckpointRef => CheckpointRef.make(value);
+const encodeThreadLinkedPullRequest = Schema.encodeSync(
+  Schema.fromJsonString(ThreadLinkedPullRequest),
+);
 
 const projectionSnapshotLayer = it.layer(
   OrchestrationProjectionSnapshotQueryLive.pipe(
@@ -43,6 +48,12 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
     Effect.gen(function* () {
       const snapshotQuery = yield* ProjectionSnapshotQuery;
       const sql = yield* SqlClient.SqlClient;
+      const branchPullRequest = {
+        projectId: asProjectId("project-1"),
+        repository: "pingdotgg/t3code",
+        number: 43,
+        url: "https://github.com/pingdotgg/t3code/pull/43",
+      };
 
       yield* sql`DELETE FROM projection_projects`;
       yield* sql`DELETE FROM projection_state`;
@@ -82,6 +93,8 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           interaction_mode,
           branch,
           worktree_path,
+          linked_pull_request_json,
+          branch_pull_request_json,
           latest_turn_id,
           latest_user_message_at,
           pending_approval_count,
@@ -89,6 +102,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           has_actionable_proposed_plan,
           pinned_at,
           pin_order_key,
+          active_order_key,
           created_at,
           updated_at,
           deleted_at
@@ -102,6 +116,8 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           'default',
           NULL,
           NULL,
+          '{"projectId":"project-1","repository":"pingdotgg/t3code","number":42,"url":"https://github.com/pingdotgg/t3code/pull/42"}',
+          ${encodeThreadLinkedPullRequest(branchPullRequest)},
           'turn-1',
           '2026-02-24T00:00:04.000Z',
           1,
@@ -109,6 +125,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           0,
           '2026-02-24T00:00:01.000Z',
           'gm',
+          'hq',
           '2026-02-24T00:00:02.000Z',
           '2026-02-24T00:00:03.000Z',
           NULL
@@ -275,7 +292,9 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
             instanceId: ProviderInstanceId.make("codex"),
             model: "gpt-5-codex",
           },
+          autoPull: false,
           faviconPath: null,
+          projectIcon: null,
           scripts: [
             {
               id: "script-1",
@@ -304,6 +323,13 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           runtimeMode: "full-access",
           branch: null,
           worktreePath: null,
+          linkedPullRequest: {
+            projectId: asProjectId("project-1"),
+            repository: "pingdotgg/t3code",
+            number: 42,
+            url: "https://github.com/pingdotgg/t3code/pull/42",
+          },
+          branchPullRequest,
           latestTurn: {
             turnId: asTurnId("turn-1"),
             state: "completed",
@@ -321,10 +347,12 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           archivedAt: null,
           settledOverride: null,
           settledAt: null,
+          unsettledAt: null,
           snoozedUntil: null,
           snoozedAt: null,
           pinnedAt: "2026-02-24T00:00:01.000Z",
           pinOrderKey: "gm",
+          activeOrderKey: "hq",
           titleRegeneration: null,
           deletedAt: null,
           messages: [
@@ -395,7 +423,9 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
             instanceId: ProviderInstanceId.make("codex"),
             model: "gpt-5-codex",
           },
+          autoPull: false,
           faviconPath: null,
+          projectIcon: null,
           scripts: [
             {
               id: "script-1",
@@ -423,6 +453,13 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           runtimeMode: "full-access",
           branch: null,
           worktreePath: null,
+          linkedPullRequest: {
+            projectId: asProjectId("project-1"),
+            repository: "pingdotgg/t3code",
+            number: 42,
+            url: "https://github.com/pingdotgg/t3code/pull/42",
+          },
+          branchPullRequest,
           latestTurn: {
             turnId: asTurnId("turn-1"),
             state: "completed",
@@ -440,10 +477,12 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           archivedAt: null,
           settledOverride: null,
           settledAt: null,
+          unsettledAt: null,
           snoozedUntil: null,
           snoozedAt: null,
           pinnedAt: "2026-02-24T00:00:01.000Z",
           pinOrderKey: "gm",
+          activeOrderKey: "hq",
           titleRegeneration: null,
           session: {
             threadId: ThreadId.make("thread-1"),
@@ -475,6 +514,12 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
     Effect.gen(function* () {
       const snapshotQuery = yield* ProjectionSnapshotQuery;
       const sql = yield* SqlClient.SqlClient;
+      const branchPullRequest = {
+        projectId: asProjectId("project-archive-test"),
+        repository: "pingdotgg/t3code",
+        number: 43,
+        url: "https://github.com/pingdotgg/t3code/pull/43",
+      };
 
       yield* sql`DELETE FROM projection_projects`;
       yield* sql`DELETE FROM projection_threads`;
@@ -581,6 +626,13 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
         shellSnapshot.threads.map((thread) => thread.id),
         [ThreadId.make("thread-active")],
       );
+      assert.equal(shellSnapshot.threads[0]?.branchPullRequest, null);
+
+      yield* sql`
+        UPDATE projection_threads
+        SET branch_pull_request_json = ${encodeThreadLinkedPullRequest(branchPullRequest)}
+        WHERE thread_id = 'thread-archived'
+      `;
 
       const archivedShellSnapshot = yield* snapshotQuery.getArchivedShellSnapshot();
       assert.deepEqual(
@@ -832,6 +884,52 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           assert.equal(firstThreadId.value, ThreadId.make("thread-first"));
         }
       }),
+  );
+
+  it.effect("measures replay payload bytes without decoding event bodies", () =>
+    Effect.gen(function* () {
+      const snapshotQuery = yield* ProjectionSnapshotQuery;
+      const sql = yield* SqlClient.SqlClient;
+
+      yield* sql`DELETE FROM orchestration_events`;
+      yield* sql`
+        INSERT INTO orchestration_events (
+          event_id, aggregate_kind, stream_id, stream_version, event_type, occurred_at,
+          command_id, causation_event_id, correlation_id, actor_kind, payload_json, metadata_json
+        )
+        VALUES
+          (
+            'replay-event-1', 'thread', 'thread-replay', 1, 'thread.activity-appended',
+            '2026-03-01T00:00:00.000Z', NULL, NULL, NULL, 'provider',
+            json_object('output', printf('%.*c', 1000, 'x')), '{}'
+          ),
+          (
+            'replay-event-2', 'thread', 'thread-replay', 2, 'thread.activity-appended',
+            '2026-03-01T00:00:01.000Z', NULL, NULL, NULL, 'provider',
+            json_object('output', printf('%.*c', 2000, 'x')), '{}'
+          ),
+          (
+            'replay-event-3', 'thread', 'thread-replay', 3, 'thread.activity-appended',
+            '2026-03-01T00:00:02.000Z', NULL, NULL, NULL, 'provider',
+            json_object('output', printf('%.*c', 3000, 'x')), '{}'
+          ),
+          (
+            'replay-event-4', 'thread', 'thread-replay', 4, 'thread.activity-appended',
+            '2026-03-01T00:00:03.000Z', NULL, NULL, NULL, 'provider',
+            json_object('output', '😀'), '{}'
+          )
+      `;
+
+      // Bytes, not code points: the 4-byte emoji row is {"output":"😀"}, 17 bytes.
+      const stats = yield* snapshotQuery.getEventReplayStats({
+        fromSequenceExclusive: 1,
+        toSequenceInclusive: 4,
+      });
+      assert.deepStrictEqual(stats, {
+        eventCount: 3,
+        payloadBytes: 5043,
+      });
+    }),
   );
 
   it.effect("reads single-thread checkpoint context without hydrating unrelated threads", () =>
@@ -2344,9 +2442,9 @@ projectionSnapshotLayer("ProjectionSnapshotQuery windowed thread detail", (it) =
             '2026-03-01T00:00:02.000Z'
           ),
           (
-            'user-input-closed', 'thread-w', NULL, 'approval', 'user-input.requested',
-            'Closed question', '{"requestId":"input-closed"}', NULL,
-            '2026-03-01T00:00:03.000Z'
+            'user-input-closed', 'thread-w', 'turn-5', 'approval', 'user-input.requested',
+            'Replayed closed question', '{"requestId":"input-closed"}', 42,
+            '2026-03-01T00:00:06.000Z'
           ),
           (
             'user-input-closed-resolution', 'thread-w', NULL, 'info', 'user-input.resolved',
@@ -2386,8 +2484,9 @@ projectionSnapshotLayer("ProjectionSnapshotQuery windowed thread detail", (it) =
         assert.equal(detailWithPinnedRequests.value.activities.length, 503);
         assert.equal(ids.includes(asEventId("approval-old")), true);
         assert.equal(ids.includes(asEventId("user-input-old")), true);
-        assert.equal(ids.includes(asEventId("user-input-closed")), false);
-        assert.equal(ids.includes(asEventId("user-input-tied-z-request")), true);
+        assert.equal(ids.includes(asEventId("user-input-closed")), true);
+        assert.equal(ids.includes(asEventId("user-input-closed-resolution")), true);
+        assert.equal(ids.includes(asEventId("user-input-tied-z-request")), false);
       }
 
       const windowWithPinnedRequests = yield* snapshotQuery.getThreadDetailSnapshot(threadW, {
@@ -2399,8 +2498,9 @@ projectionSnapshotLayer("ProjectionSnapshotQuery windowed thread detail", (it) =
         assert.equal(windowWithPinnedRequests.value.thread.activities.length, 503);
         assert.equal(ids.includes(asEventId("approval-old")), true);
         assert.equal(ids.includes(asEventId("user-input-old")), true);
-        assert.equal(ids.includes(asEventId("user-input-closed")), false);
-        assert.equal(ids.includes(asEventId("user-input-tied-z-request")), true);
+        assert.equal(ids.includes(asEventId("user-input-closed")), true);
+        assert.equal(ids.includes(asEventId("user-input-closed-resolution")), true);
+        assert.equal(ids.includes(asEventId("user-input-tied-z-request")), false);
       }
     }),
   );

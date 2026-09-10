@@ -73,7 +73,7 @@ describe("pending user input answers", () => {
       undefined,
       "  Orders  ",
     );
-    expect(paddedOrders).toEqual({ customAnswer: "", selectedOptionLabels: ["Orders"] });
+    expect(paddedOrders).toEqual({ customAnswer: "", selectedOptionLabels: ["  Orders  "] });
     expect(
       togglePendingUserInputOptionSelection(multiSelectQuestion, paddedOrders, "  Orders  "),
     ).toEqual({ customAnswer: "" });
@@ -100,9 +100,9 @@ describe("pending user input answers", () => {
     ).toEqual({ customAnswer: "Orders first" });
   });
 
-  it("matches selected chips against normalized option labels", () => {
+  it("matches selected chips against exact native answer keys", () => {
     expect(
-      isPendingUserInputOptionSelected({ selectedOptionLabels: ["Orders"] }, "  Orders  "),
+      isPendingUserInputOptionSelected({ selectedOptionLabels: ["  Orders  "] }, "  Orders  "),
     ).toBe(true);
     expect(
       isPendingUserInputOptionSelected(
@@ -151,6 +151,33 @@ function makeThread(
 }
 
 describe("buildThreadFeed", () => {
+  it("keeps context compaction as a standalone timeline row", () => {
+    const thread = makeThread({
+      id: ThreadId.make("thread-context-compaction"),
+      projectId: ProjectId.make("project-1"),
+      title: "Context compaction",
+      activities: [
+        makeActivity({
+          id: EventId.make("context-compaction"),
+          kind: "context-compaction",
+          tone: "info",
+          summary: "Compacted context 899K → 19K tokens",
+          createdAt: "2026-09-01T00:00:00.000Z",
+          turnId: TurnId.make("turn-context-compaction"),
+        }),
+      ],
+    });
+
+    const presented = deriveThreadFeedPresentation(buildThreadFeed(thread), null, new Set());
+    expect(presented).toMatchObject([
+      {
+        type: "activity-group",
+        id: "context-compaction",
+        activities: [{ summary: "Compacted context 899K → 19K tokens" }],
+      },
+    ]);
+  });
+
   it("keeps historic work entries attributed to their turns", () => {
     const thread = makeThread({
       id: ThreadId.make("thread-1"),
@@ -661,5 +688,37 @@ describe("quiet timeline: nested agents", () => {
     );
     expect(ids).toContain("nested-done");
     expect(ids).not.toContain("shell-done");
+  });
+});
+
+describe("native and async question answers", () => {
+  const question = {
+    id: "native",
+    header: "Question",
+    question: "Which one?",
+    multiSelect: false,
+    allowCustomAnswer: false,
+    options: [
+      { label: "Same label", description: "", value: " native\t" },
+      { label: "Same label", description: "", value: "second" },
+    ],
+  };
+  it("preserves distinct native answer values including whitespace", () => {
+    const draft = togglePendingUserInputOptionSelection(question, undefined, " native\t");
+    expect(buildPendingUserInputAnswers([question], { native: draft })).toEqual({
+      native: " native\t",
+    });
+  });
+  it("does not submit custom text for a choice-only question", () => {
+    expect(
+      buildPendingUserInputAnswers([question], { native: { customAnswer: "unsupported" } }),
+    ).toBeNull();
+  });
+  it("submits freeform async answers without options", () => {
+    expect(
+      buildPendingUserInputAnswers([{ ...question, options: [], allowCustomAnswer: true }], {
+        native: { customAnswer: "An answer" },
+      }),
+    ).toEqual({ native: "An answer" });
   });
 });

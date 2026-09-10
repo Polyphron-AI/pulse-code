@@ -36,6 +36,14 @@ const ITEMS: ReadonlyArray<SettingsSearchItem> = [
 ];
 
 describe("searchSettings", () => {
+  it("finds the per-environment restart continuation setting", () => {
+    expect(searchSettings("machine restart").map((item) => item.id)).toContain(
+      "continue-threads-after-server-restart",
+    );
+    expect(searchableSetting("continue-threads-after-server-restart").id).toBe(
+      "continue-threads-after-server-restart",
+    );
+  });
   it("matches only setting titles", () => {
     expect(searchSettings("word", ITEMS).map((item) => item.id)).toEqual(["word-wrap"]);
     expect(searchSettings("network", ITEMS).map((item) => item.id)).toEqual(["network-access"]);

@@ -20,6 +20,7 @@ import {
 import { EditorId, RemoteOpenTarget } from "./editor.ts";
 import { ModelCapabilities } from "./model.ts";
 import { ProviderDriverKind, ProviderInstanceId } from "./providerInstance.ts";
+import { ServerProviderUsageLimits, UsageLimitSourceSnapshots } from "./providerUsageLimits.ts";
 import { ServerSettings } from "./settings.ts";
 
 const KeybindingsMalformedConfigIssue = Schema.Struct({
@@ -66,6 +67,8 @@ export const ServerProviderModel = Schema.Struct({
   name: TrimmedNonEmptyString,
   shortName: Schema.optional(TrimmedNonEmptyString),
   subProvider: Schema.optional(TrimmedNonEmptyString),
+  aliases: Schema.optional(Schema.Array(TrimmedNonEmptyString)),
+  badge: Schema.optional(Schema.Literal("new")),
   isCustom: Schema.Boolean,
   isDefault: Schema.optional(Schema.Boolean),
   isLegacy: Schema.optional(Schema.Boolean),
@@ -93,8 +96,28 @@ export const ServerProviderSkill = Schema.Struct({
   enabled: Schema.Boolean,
   displayName: Schema.optional(TrimmedNonEmptyString),
   shortDescription: Schema.optional(TrimmedNonEmptyString),
+  /**
+   * The skill is hidden from the agent's own skill tool, so only the user can
+   * start it — Claude Code's `disable-model-invocation`. Composers must offer
+   * it as a slash command; naming it in prose does nothing.
+   */
+  userInvocationOnly: Schema.optional(Schema.Boolean),
+  /**
+   * The mirror of {@link ServerProviderSkill.userInvocationOnly}: Claude Code's
+   * `user-invocable: false` keeps the skill out of its own slash commands, so
+   * only the agent can start it. Composers must not offer it under `/`.
+   */
+  userInvocable: Schema.optional(Schema.Boolean),
 });
 export type ServerProviderSkill = typeof ServerProviderSkill.Type;
+
+export const ServerProviderWorkspaceSnapshot = Schema.Struct({
+  cwd: TrimmedNonEmptyString,
+  checkedAt: IsoDateTime,
+  slashCommands: Schema.Array(ServerProviderSlashCommand),
+  skills: Schema.Array(ServerProviderSkill),
+});
+export type ServerProviderWorkspaceSnapshot = typeof ServerProviderWorkspaceSnapshot.Type;
 
 /**
  * Availability of a configured provider instance from the runtime's POV.
@@ -220,6 +243,8 @@ export const ServerProvider = Schema.Struct({
     Schema.withDecodingDefault(Effect.succeed([])),
   ),
   skills: Schema.Array(ServerProviderSkill).pipe(Schema.withDecodingDefault(Effect.succeed([]))),
+  workspaceSnapshots: Schema.optionalKey(Schema.Array(ServerProviderWorkspaceSnapshot)),
+  usageLimits: Schema.optional(ServerProviderUsageLimits),
   versionAdvisory: Schema.optionalKey(ServerProviderVersionAdvisory),
   updateState: Schema.optionalKey(ServerProviderUpdateState),
   // Optional for back-compat: only drivers that surface plan rate-limit
@@ -449,6 +474,8 @@ export const ServerSignalProcessResult = Schema.Struct({
 export type ServerSignalProcessResult = typeof ServerSignalProcessResult.Type;
 
 export const ServerConfig = Schema.Struct({
+  /** Supplied only by opt-in source stream events, not the initial snapshot. */
+  usageLimitSources: Schema.optional(UsageLimitSourceSnapshots),
   environment: ExecutionEnvironmentDescriptor,
   auth: ServerAuthDescriptor,
   cwd: TrimmedNonEmptyString,
@@ -561,7 +588,21 @@ export const ServerConfigStreamSettingsUpdatedEvent = Schema.Struct({
 export type ServerConfigStreamSettingsUpdatedEvent =
   typeof ServerConfigStreamSettingsUpdatedEvent.Type;
 
+export const ServerConfigUsageLimitSourcesUpdatedPayload = Schema.Struct({
+  sources: UsageLimitSourceSnapshots,
+});
+export type ServerConfigUsageLimitSourcesUpdatedPayload =
+  typeof ServerConfigUsageLimitSourcesUpdatedPayload.Type;
+export const ServerConfigStreamUsageLimitSourcesUpdatedEvent = Schema.Struct({
+  version: Schema.Literal(1),
+  type: Schema.Literal("usageLimitSourcesUpdated"),
+  payload: ServerConfigUsageLimitSourcesUpdatedPayload,
+});
+export type ServerConfigStreamUsageLimitSourcesUpdatedEvent =
+  typeof ServerConfigStreamUsageLimitSourcesUpdatedEvent.Type;
+
 export const ServerConfigStreamEvent = Schema.Union([
+  ServerConfigStreamUsageLimitSourcesUpdatedEvent,
   ServerConfigStreamSnapshotEvent,
   ServerConfigStreamKeybindingsUpdatedEvent,
   ServerConfigStreamProviderStatusesEvent,
@@ -646,6 +687,10 @@ export const ServerSelfUpdateInput = Schema.Struct({
   /** Exact npm version of the `t3` package to install (never a dist-tag, so
       the server and the acknowledging client agree on what was requested). */
   targetVersion: TrimmedNonEmptyString,
+  /** Opt-in recovery for provider turns that are running when the server
+      hands off to its replacement. Missing and false keep restart behavior
+      conservative under version skew. */
+  continueRunningThreads: Schema.optionalKey(Schema.Boolean),
 });
 export type ServerSelfUpdateInput = typeof ServerSelfUpdateInput.Type;
 
@@ -656,8 +701,15 @@ export const ServerSelfUpdateResult = Schema.Struct({
   method: ServerSelfUpdateMethod,
   /** Launcher-generated correlation ID. Absent when talking to older servers. */
   updateId: Schema.optionalKey(TrimmedNonEmptyString),
+  /** Desktop preparation token. Present only for the desktop-app method. */
+  desktopUpdateToken: Schema.optionalKey(TrimmedNonEmptyString),
 });
 export type ServerSelfUpdateResult = typeof ServerSelfUpdateResult.Type;
+
+export const DesktopUpdateCommitInput = Schema.Struct({
+  requestId: TrimmedNonEmptyString,
+});
+export type DesktopUpdateCommitInput = typeof DesktopUpdateCommitInput.Type;
 
 export const ServerSelfUpdateProgressStage = Schema.Literals(["downloading", "installing"]);
 export type ServerSelfUpdateProgressStage = typeof ServerSelfUpdateProgressStage.Type;

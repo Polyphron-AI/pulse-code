@@ -13,7 +13,7 @@ export interface NewThreadComposerSeed {
 
 type ComposerSeedStore = Pick<
   ReturnType<typeof useComposerDraftStore.getState>,
-  "getComposerDraft" | "setModelSelection" | "setPrompt"
+  "getComposerDraft" | "setModelSelection" | "setPrompt" | "setDraftThreadContext"
 >;
 
 /**
@@ -29,6 +29,10 @@ export function applyNewThreadComposerSeed(input: {
     return false;
   }
 
+  input.store.setDraftThreadContext(input.draftId, {
+    environmentSelection: "manual",
+    loadBalancedEnvironmentId: null,
+  });
   input.store.setModelSelection(input.draftId, input.seed.modelSelection, {
     replaceOptions: true,
   });

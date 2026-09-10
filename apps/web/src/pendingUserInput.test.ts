@@ -248,3 +248,35 @@ describe("pending user input question progress", () => {
     });
   });
 });
+
+describe("native and async question answers", () => {
+  const question = {
+    id: "native",
+    header: "Question",
+    question: "Which one?",
+    multiSelect: false,
+    allowCustomAnswer: false,
+    options: [
+      { label: "Same label", description: "", value: " native\t" },
+      { label: "Same label", description: "", value: "second" },
+    ],
+  };
+  it("preserves distinct native answer values including whitespace", () => {
+    const draft = togglePendingUserInputOptionSelection(question, undefined, " native\t");
+    expect(buildPendingUserInputAnswers([question], { native: draft })).toEqual({
+      native: " native\t",
+    });
+  });
+  it("does not submit custom text for a choice-only question", () => {
+    expect(
+      buildPendingUserInputAnswers([question], { native: { customAnswer: "unsupported" } }),
+    ).toBeNull();
+  });
+  it("submits freeform async answers without options", () => {
+    expect(
+      buildPendingUserInputAnswers([{ ...question, options: [], allowCustomAnswer: true }], {
+        native: { customAnswer: "An answer" },
+      }),
+    ).toEqual({ native: "An answer" });
+  });
+});

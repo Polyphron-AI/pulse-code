@@ -14,8 +14,10 @@ import type {
 } from "@t3tools/contracts";
 import {
   ApprovalRequestId,
-  EnvironmentId,
   EventId,
+  MessageId,
+  OrchestrationThreadShell,
+  ProjectId,
   ProviderDriverKind,
   ProviderInstanceId,
   ProviderSessionStartInput,
@@ -26,6 +28,7 @@ import { createModelSelection } from "@t3tools/shared/model";
 import { it, assert, describe, vi } from "@effect/vitest";
 
 import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
@@ -62,6 +65,7 @@ import * as ServerConfig from "../../config.ts";
 import * as ServerSettings from "../../serverSettings.ts";
 import * as AnalyticsService from "../../telemetry/AnalyticsService.ts";
 import { makeAdapterRegistryMock } from "../testUtils/providerAdapterRegistryMock.ts";
+import * as ProjectionSnapshotQuery from "../../orchestration/Services/ProjectionSnapshotQuery.ts";
 
 const defaultServerSettingsLayer = ServerSettings.ServerSettingsService.layerTest();
 const serverConfigTestLayer = ServerConfig.layerTest(process.cwd(), process.cwd()).pipe(
@@ -143,6 +147,19 @@ function makeFakeCodexAdapter(provider: ProviderDriverKind = CODEX_DRIVER) {
       Effect.void,
   );
 
+  const compactThread = vi.fn(
+    (threadId: ThreadId): Effect.Effect<void, ProviderAdapterError> =>
+      Effect.sync(() =>
+        emit({
+          type: "thread.state.changed",
+          eventId: asEventId("evt-native-compact"),
+          provider,
+          createdAt: "2026-01-01T00:00:00.000Z",
+          threadId,
+          payload: { state: "compacted" },
+        }),
+      ),
+  );
   const respondToRequest = vi.fn(
     (
       _threadId: ThreadId,
@@ -210,9 +227,17 @@ function makeFakeCodexAdapter(provider: ProviderDriverKind = CODEX_DRIVER) {
     provider,
     capabilities: {
       sessionModelSwitch: "in-session",
+      ...(provider === CODEX_DRIVER ? { promptlessTurnContinuation: true } : {}),
     },
     startSession,
     sendTurn,
+    ...(provider === CODEX_DRIVER
+      ? { compaction: { type: "native", start: compactThread } }
+      : provider === CURSOR_DRIVER
+        ? { compaction: { type: "slash-command", command: "/compress" } }
+        : provider === CLAUDE_AGENT_DRIVER
+          ? { compaction: { type: "slash-command", command: "/compact" } }
+          : {}),
     interruptTurn,
     respondToRequest,
     respondToUserInput,
@@ -248,6 +273,7 @@ function makeFakeCodexAdapter(provider: ProviderDriverKind = CODEX_DRIVER) {
     updateSession,
     startSession,
     sendTurn,
+    compactThread,
     interruptTurn,
     respondToRequest,
     respondToUserInput,
@@ -257,6 +283,45 @@ function makeFakeCodexAdapter(provider: ProviderDriverKind = CODEX_DRIVER) {
     readThread,
     rollbackThread,
     stopAll,
+  };
+}
+
+function makeStaticInstanceRegistry(
+  entries: ReadonlyArray<readonly [ProviderInstanceId, ProviderAdapterShape<ProviderAdapterError>]>,
+): ProviderAdapterRegistry.ProviderAdapterRegistry["Service"] {
+  const adapters = new Map(entries);
+  const unsupported = (instanceId: ProviderInstanceId) =>
+    new ProviderUnsupportedError({
+      provider: ProviderDriverKind.make(instanceId),
+    });
+
+  return {
+    getByInstance: (instanceId) => {
+      const adapter = adapters.get(instanceId);
+      return adapter ? Effect.succeed(adapter) : Effect.fail(unsupported(instanceId));
+    },
+    getInstanceInfo: (instanceId) => {
+      const adapter = adapters.get(instanceId);
+      return adapter
+        ? Effect.succeed({
+            instanceId,
+            driverKind: adapter.provider,
+            displayName: undefined,
+            enabled: true,
+            continuationIdentity: {
+              driverKind: adapter.provider,
+              continuationKey: `${adapter.provider}:instance:${instanceId}`,
+            },
+          })
+        : Effect.fail(unsupported(instanceId));
+    },
+    listInstances: () => Effect.succeed(Array.from(adapters.keys())),
+    listProviders: () =>
+      Effect.succeed(Array.from(adapters.values(), (adapter) => adapter.provider)),
+    streamChanges: Stream.empty,
+    subscribeChanges: Effect.flatMap(PubSub.unbounded<void>(), (pubsub) =>
+      PubSub.subscribe(pubsub),
+    ),
   };
 }
 
@@ -274,15 +339,19 @@ const hasMetricSnapshot = (
       Object.entries(attributes).every(([key, value]) => snapshot.attributes?.[key] === value),
   );
 
-function makeProviderServiceLayer() {
+function makeProviderServiceLayer(
+  input: { readonly registry?: ProviderAdapterRegistry.ProviderAdapterRegistry["Service"] } = {},
+) {
   const codex = makeFakeCodexAdapter();
   const claude = makeFakeCodexAdapter(CLAUDE_AGENT_DRIVER);
   const cursor = makeFakeCodexAdapter(CURSOR_DRIVER);
-  const registry = makeAdapterRegistryMock({
-    [ProviderDriverKind.make("codex")]: codex.adapter,
-    [ProviderDriverKind.make("claudeAgent")]: claude.adapter,
-    [ProviderDriverKind.make("cursor")]: cursor.adapter,
-  });
+  const registry =
+    input.registry ??
+    makeAdapterRegistryMock({
+      [ProviderDriverKind.make("codex")]: codex.adapter,
+      [ProviderDriverKind.make("claudeAgent")]: claude.adapter,
+      [ProviderDriverKind.make("cursor")]: cursor.adapter,
+    });
 
   const providerAdapterLayer = Layer.succeed(
     ProviderAdapterRegistry.ProviderAdapterRegistry,
@@ -321,6 +390,125 @@ function makeProviderServiceLayer() {
     cursor,
     layer,
   };
+}
+
+for (const [enabled, completed] of [
+  [false, false],
+  [true, false],
+  [true, true],
+] as const) {
+  it.effect(
+    `persists shutdown recovery before stopping providers when enabled=${enabled}, completed=${completed}`,
+    () =>
+      Effect.gen(function* () {
+        const codex = makeFakeCodexAdapter();
+        const persistence = yield* Layer.build(
+          ProviderSessionDirectoryLive.pipe(
+            Layer.provide(
+              ProviderSessionRuntime.layer.pipe(Layer.provide(SqlitePersistenceMemory)),
+            ),
+          ),
+        );
+        const directory = yield* ProviderSessionDirectory.ProviderSessionDirectory.pipe(
+          Effect.provide(persistence),
+        );
+        const threadId = asThreadId("shutdown-recovery");
+        const turnId = asTurnId("shutdown-recovery-turn");
+        const scope = yield* Scope.make();
+        const services = yield* Layer.build(
+          makeProviderServiceLive().pipe(
+            Layer.provide(
+              Layer.succeed(ProviderSessionDirectory.ProviderSessionDirectory, directory),
+            ),
+            Layer.provide(
+              Layer.succeed(
+                ProviderAdapterRegistry.ProviderAdapterRegistry,
+                makeAdapterRegistryMock({ [CODEX_DRIVER]: codex.adapter }),
+              ),
+            ),
+            Layer.provide(ServerSettings.layerTest({ continueThreadsAfterServerUpdate: enabled })),
+            Layer.provide(serverConfigTestLayer),
+            Layer.provide(AnalyticsService.layerTest),
+            Layer.provide(
+              Layer.succeed(
+                ProviderEventLoggers.ProviderEventLoggers,
+                ProviderEventLoggers.NoOpProviderEventLoggers,
+              ),
+            ),
+          ),
+        ).pipe(Scope.provide(scope));
+        const provider = yield* ProviderService.ProviderService.pipe(Effect.provide(services));
+        const session = yield* provider.startSession(threadId, {
+          provider: CODEX_DRIVER,
+          providerInstanceId: codexInstanceId,
+          threadId,
+          runtimeMode: "full-access",
+        });
+        codex.listSessions.mockReturnValue(
+          Effect.succeed([
+            {
+              ...session,
+              status: completed ? "ready" : "running",
+              activeTurnId: completed ? undefined : turnId,
+            },
+          ]),
+        );
+        const pending = yield* directory.getBinding(threadId);
+        assert(Option.isSome(pending));
+        yield* directory.upsert({
+          ...pending.value,
+          runtimePayload: { activeTurnId: null, continueAfterServerUpdate: turnId },
+        });
+        const accepted = yield* provider.sendTurn({ threadId, continuation: true });
+        const admitted = yield* directory.getBinding(threadId);
+        assert(Option.isSome(admitted));
+        assert.propertyVal(admitted.value.runtimePayload, "activeTurnId", accepted.turnId);
+        assert.propertyVal(admitted.value.runtimePayload, "continueAfterServerUpdate", null);
+        if (completed) {
+          // Updates can mark an already-admitted turn immediately before it finishes.
+          yield* directory.upsert({
+            ...admitted.value,
+            runtimePayload: {
+              continueAfterServerUpdate: accepted.turnId,
+              continueAfterServerUpdatePrepared: null,
+            },
+          });
+        }
+        const markers: unknown[] = [];
+        codex.stopAll.mockImplementation(() =>
+          Effect.gen(function* () {
+            const binding = yield* directory.getBinding(threadId);
+            assert(Option.isSome(binding));
+            markers.push(binding.value.runtimePayload);
+          }).pipe(Effect.orDie),
+        );
+        yield* Scope.close(scope, Exit.void);
+        const binding = yield* directory.getBinding(threadId);
+        assert(Option.isSome(binding));
+        assert.equal(codex.stopAll.mock.calls.length, 1);
+        assert.deepStrictEqual(binding.value.resumeCursor, session.resumeCursor);
+        assert.equal(binding.value.status, "stopped");
+        assert.propertyVal(markers[0], "activeTurnId", completed ? null : turnId);
+        if (enabled && !completed) {
+          assert.propertyVal(markers[0], "continueAfterServerUpdate", turnId);
+          assert.propertyVal(binding.value.runtimePayload, "continueAfterServerUpdate", turnId);
+        } else if (completed) {
+          assert.propertyVal(
+            binding.value.runtimePayload,
+            "continueAfterServerUpdate",
+            accepted.turnId,
+          );
+          assert.propertyVal(
+            binding.value.runtimePayload,
+            "continueAfterServerUpdatePrepared",
+            null,
+          );
+        } else {
+          assert.propertyVal(markers[0], "continueAfterServerUpdate", null);
+          assert.propertyVal(binding.value.runtimePayload, "continueAfterServerUpdate", null);
+        }
+      }).pipe(Effect.provide(NodeServices.layer)),
+  );
 }
 
 it.effect("ProviderServiceLive catches stopAll failures during shutdown", () =>
@@ -596,6 +784,124 @@ it.effect("ProviderServiceLive rejects new sessions for disabled custom instance
 );
 
 const routing = makeProviderServiceLayer();
+const customCompactionDriver = ProviderDriverKind.make("custom-compaction-provider");
+const nativeCompactionInstanceId = ProviderInstanceId.make("native-compaction");
+const slashCompactionInstanceId = ProviderInstanceId.make("slash-compaction");
+const unsupportedCompactionInstanceId = ProviderInstanceId.make("unsupported-compaction");
+const customNativeCompaction = makeFakeCodexAdapter(customCompactionDriver);
+const customSlashCompaction = makeFakeCodexAdapter(customCompactionDriver);
+const unsupportedCompaction = makeFakeCodexAdapter(customCompactionDriver);
+const declaredCompaction = makeProviderServiceLayer({
+  registry: makeStaticInstanceRegistry([
+    [
+      nativeCompactionInstanceId,
+      {
+        ...customNativeCompaction.adapter,
+        compaction: { type: "native", start: customNativeCompaction.compactThread },
+      },
+    ],
+    [
+      slashCompactionInstanceId,
+      {
+        ...customSlashCompaction.adapter,
+        compaction: { type: "slash-command", command: "/reduce-context" },
+      },
+    ],
+    [unsupportedCompactionInstanceId, unsupportedCompaction.adapter],
+  ]),
+});
+
+declaredCompaction.layer("ProviderService declared compaction", (it) => {
+  it.effect("starts declared native compaction instead of sending a prompt", () =>
+    Effect.gen(function* () {
+      const provider = yield* ProviderService.ProviderService;
+      const threadId = asThreadId("custom-native-compaction");
+      const requestId = MessageId.make("custom-native-request");
+      yield* provider.startSession(threadId, {
+        providerInstanceId: nativeCompactionInstanceId,
+        threadId,
+        runtimeMode: "full-access",
+      });
+      const compactedEventFiber = yield* provider.streamEvents.pipe(
+        Stream.filter(
+          (event) => event.threadId === threadId && event.type === "thread.state.changed",
+        ),
+        Stream.runHead,
+        Effect.forkChild({ startImmediately: true }),
+      );
+      yield* advanceTestClock(50);
+      yield* provider.compactThread(threadId, undefined, requestId);
+      const compacted = Option.getOrThrow(yield* Fiber.join(compactedEventFiber));
+      assert.equal(compacted.requestId, String(requestId));
+      assert.equal(customNativeCompaction.compactThread.mock.calls.length, 1);
+      assert.equal(customNativeCompaction.sendTurn.mock.calls.length, 0);
+      yield* provider.stopSession({ threadId });
+    }),
+  );
+
+  it.effect("sends the declared slash command as the compaction turn", () =>
+    Effect.gen(function* () {
+      const provider = yield* ProviderService.ProviderService;
+      const threadId = asThreadId("custom-slash-compaction");
+      const requestId = MessageId.make("custom-slash-request");
+      const modelSelection = createModelSelection(slashCompactionInstanceId, "custom-model");
+      yield* provider.startSession(threadId, {
+        providerInstanceId: slashCompactionInstanceId,
+        threadId,
+        runtimeMode: "full-access",
+      });
+      const compactedEventFiber = yield* provider.streamEvents.pipe(
+        Stream.filter(
+          (event) => event.threadId === threadId && event.type === "thread.state.changed",
+        ),
+        Stream.runHead,
+        Effect.forkChild({ startImmediately: true }),
+      );
+      const compactFiber = yield* provider
+        .compactThread(threadId, modelSelection, requestId)
+        .pipe(Effect.forkChild);
+      yield* advanceTestClock(50);
+      customSlashCompaction.emit({
+        type: "turn.completed",
+        eventId: asEventId("custom-slash-completed"),
+        provider: customCompactionDriver,
+        createdAt: "2026-01-01T00:00:01.000Z",
+        threadId,
+        turnId: asTurnId(`turn-${threadId}`),
+        payload: { state: "completed" },
+      });
+      yield* Fiber.join(compactFiber);
+      const compacted = Option.getOrThrow(yield* Fiber.join(compactedEventFiber));
+      assert.equal(compacted.requestId, String(requestId));
+      assert.equal(customSlashCompaction.compactThread.mock.calls.length, 0);
+      assert.equal(customSlashCompaction.sendTurn.mock.calls.length, 1);
+      assert.equal(customSlashCompaction.sendTurn.mock.calls[0]?.[0].input, "/reduce-context");
+      assert.deepEqual(
+        customSlashCompaction.sendTurn.mock.calls[0]?.[0].modelSelection,
+        modelSelection,
+      );
+      yield* provider.stopSession({ threadId });
+    }),
+  );
+
+  it.effect("rejects compaction for adapters without a declared strategy", () =>
+    Effect.gen(function* () {
+      const provider = yield* ProviderService.ProviderService;
+      const threadId = asThreadId("custom-unsupported-compaction");
+      yield* provider.startSession(threadId, {
+        providerInstanceId: unsupportedCompactionInstanceId,
+        threadId,
+        runtimeMode: "full-access",
+      });
+      const failure = yield* provider.compactThread(threadId).pipe(Effect.flip);
+      assert.instanceOf(failure, ProviderValidationError);
+      assert.include(failure.message, "does not support context compaction");
+      assert.equal(unsupportedCompaction.sendTurn.mock.calls.length, 0);
+      assert.equal(unsupportedCompaction.compactThread.mock.calls.length, 0);
+      yield* provider.stopSession({ threadId });
+    }),
+  );
+});
 
 it.effect("ProviderServiceLive writes canonical events to the emitting thread segment", () =>
   Effect.gen(function* () {
@@ -857,6 +1163,294 @@ it.effect(
 );
 
 routing.layer("ProviderServiceLive routing", (it) => {
+  it.effect("marks a successful fallback compaction as compacted", () =>
+    Effect.gen(function* () {
+      const provider = yield* ProviderService.ProviderService;
+      const threadId = asThreadId("thread-compact-cursor");
+      yield* provider.startSession(threadId, {
+        provider: CURSOR_DRIVER,
+        providerInstanceId: ProviderInstanceId.make("cursor"),
+        threadId,
+        runtimeMode: "full-access",
+      });
+      const compactedEventFiber = yield* provider.streamEvents.pipe(
+        Stream.filter((event) => event.type === "thread.state.changed"),
+        Stream.runHead,
+        Effect.forkChild,
+      );
+      const requestId = MessageId.make("message-compact-cursor");
+      const compactFiber = yield* provider
+        .compactThread(threadId, undefined, requestId)
+        .pipe(Effect.forkChild);
+      yield* advanceTestClock(50);
+      routing.cursor.emit({
+        type: "turn.completed",
+        eventId: asEventId("evt-cursor-stale-turn-completed"),
+        provider: CURSOR_DRIVER,
+        createdAt: "2026-01-01T00:00:00.500Z",
+        threadId,
+        turnId: asTurnId("turn-before-compaction"),
+        payload: { state: "completed" },
+      });
+      yield* Effect.yieldNow;
+      assert.equal(compactFiber.pollUnsafe(), undefined);
+      routing.cursor.emit({
+        type: "turn.completed",
+        eventId: asEventId("evt-cursor-compact-completed"),
+        provider: CURSOR_DRIVER,
+        createdAt: "2026-01-01T00:00:01.000Z",
+        threadId,
+        turnId: asTurnId(`turn-${threadId}`),
+        payload: { state: "completed" },
+      });
+      yield* Fiber.join(compactFiber);
+
+      const compacted = yield* Fiber.join(compactedEventFiber);
+      assert.equal(compacted._tag, "Some");
+      if (Option.isSome(compacted)) {
+        assert.equal(compacted.value.requestId, String(requestId));
+      }
+
+      const observedEvents = yield* Ref.make<Array<ProviderRuntimeEvent>>([]);
+      const observedEventsFiber = yield* provider.streamEvents.pipe(
+        Stream.filter(
+          (event) =>
+            event.threadId === threadId &&
+            event.type === "thread.state.changed" &&
+            event.payload.state === "compacted",
+        ),
+        Stream.runForEach((event) => Ref.update(observedEvents, (events) => [...events, event])),
+        Effect.forkChild,
+      );
+      const observedRequestId = MessageId.make("message-observed-compact-cursor");
+      const observedCompactFiber = yield* provider
+        .compactThread(threadId, undefined, observedRequestId)
+        .pipe(Effect.forkChild);
+      yield* advanceTestClock(50);
+      routing.cursor.emit({
+        type: "thread.state.changed",
+        eventId: asEventId("evt-cursor-provider-compacted"),
+        provider: CURSOR_DRIVER,
+        createdAt: "2026-01-01T00:00:02.000Z",
+        threadId,
+        turnId: asTurnId(`turn-${threadId}`),
+        payload: { state: "compacted" },
+      });
+      routing.cursor.emit({
+        type: "turn.completed",
+        eventId: asEventId("evt-cursor-observed-compact-completed"),
+        provider: CURSOR_DRIVER,
+        createdAt: "2026-01-01T00:00:03.000Z",
+        threadId,
+        turnId: asTurnId(`turn-${threadId}`),
+        payload: { state: "completed" },
+      });
+      yield* Fiber.join(observedCompactFiber);
+      yield* Effect.yieldNow;
+      const observed = yield* Ref.get(observedEvents);
+      assert.equal(observed.length, 1);
+      assert.equal(observed[0]?.requestId, String(observedRequestId));
+      yield* Fiber.interrupt(observedEventsFiber);
+
+      const failedStartEventId = asEventId("evt-cursor-failed-compact-start");
+      const failedStartEventFiber = yield* provider.streamEvents.pipe(
+        Stream.filter((event) => event.eventId === failedStartEventId),
+        Stream.runHead,
+        Effect.forkChild,
+      );
+      routing.cursor.sendTurn.mockImplementationOnce((input) =>
+        Effect.gen(function* () {
+          routing.cursor.emit({
+            type: "turn.completed",
+            eventId: failedStartEventId,
+            provider: CURSOR_DRIVER,
+            createdAt: "2026-01-01T00:00:04.000Z",
+            threadId: input.threadId,
+            turnId: asTurnId("turn-cursor-failed-compact-start"),
+            payload: { state: "failed" },
+          });
+          yield* Effect.yieldNow;
+          return yield* new ProviderAdapterRequestError({
+            provider: String(CURSOR_DRIVER),
+            method: "turn/start",
+            detail: "Failed after emitting a terminal event.",
+          });
+        }),
+      );
+      const failedStart = yield* provider.compactThread(threadId).pipe(Effect.result);
+      assert.equal(failedStart._tag, "Failure");
+      assert.equal(Option.isSome(yield* Fiber.join(failedStartEventFiber)), true);
+      yield* provider.stopSession({ threadId });
+    }),
+  );
+
+  it.effect("serializes native compaction and quarantines timed-out completions", () =>
+    Effect.gen(function* () {
+      const provider = yield* ProviderService.ProviderService;
+      const threadId = asThreadId("thread-compact-timeout");
+      yield* provider.startSession(threadId, {
+        provider: CODEX_DRIVER,
+        providerInstanceId: codexInstanceId,
+        threadId,
+        runtimeMode: "full-access",
+      });
+      routing.codex.compactThread.mockClear();
+      routing.codex.compactThread.mockImplementationOnce(() => Effect.never);
+
+      const resultFiber = yield* provider
+        .compactThread(threadId)
+        .pipe(Effect.result, Effect.forkChild);
+      yield* advanceTestClock(50);
+      const concurrent = yield* provider.compactThread(threadId).pipe(Effect.result);
+      assert.equal(concurrent._tag, "Failure");
+      assert.equal(routing.codex.compactThread.mock.calls.length, 1);
+
+      routing.cursor.emit({
+        type: "thread.state.changed",
+        eventId: asEventId("evt-stale-provider-compact"),
+        provider: CURSOR_DRIVER,
+        createdAt: "2026-01-01T00:00:00.100Z",
+        threadId,
+        payload: { state: "compacted" },
+      });
+      yield* Effect.yieldNow;
+      assert.equal(resultFiber.pollUnsafe(), undefined);
+
+      yield* advanceTestClock(600_001);
+      const result = yield* Fiber.join(resultFiber);
+      assert.equal(result._tag, "Failure");
+      if (result._tag === "Failure") {
+        assert.equal(result.failure._tag, "ProviderAdapterRequestError");
+      }
+
+      const blockedRetry = yield* provider.compactThread(threadId).pipe(Effect.result);
+      assert.equal(blockedRetry._tag, "Failure");
+      assert.equal(routing.codex.compactThread.mock.calls.length, 1);
+
+      routing.codex.emit({
+        type: "thread.state.changed",
+        eventId: asEventId("evt-native-compact-late"),
+        provider: CODEX_DRIVER,
+        createdAt: "2026-01-01T00:10:01.000Z",
+        threadId,
+        payload: { state: "compacted" },
+      });
+      yield* Effect.yieldNow;
+      yield* provider.compactThread(threadId);
+      assert.equal(routing.codex.compactThread.mock.calls.length, 2);
+
+      routing.codex.compactThread.mockImplementationOnce(() => Effect.void);
+      const stoppedResultFiber = yield* provider
+        .compactThread(threadId)
+        .pipe(Effect.result, Effect.forkChild);
+      yield* advanceTestClock(50);
+      yield* provider.stopSession({ threadId });
+      const stoppedResult = yield* Fiber.join(stoppedResultFiber);
+      assert.equal(stoppedResult._tag, "Failure");
+
+      yield* provider.startSession(threadId, {
+        provider: CODEX_DRIVER,
+        providerInstanceId: codexInstanceId,
+        threadId,
+        runtimeMode: "full-access",
+      });
+      yield* provider.compactThread(threadId);
+      assert.equal(routing.codex.compactThread.mock.calls.length, 4);
+      yield* provider.stopSession({ threadId });
+    }),
+  );
+
+  it.effect("times out fallback compaction when its turn never settles", () =>
+    Effect.gen(function* () {
+      const provider = yield* ProviderService.ProviderService;
+      const threadId = asThreadId("thread-compact-fallback-timeout");
+      yield* provider.startSession(threadId, {
+        provider: CURSOR_DRIVER,
+        providerInstanceId: ProviderInstanceId.make("cursor"),
+        threadId,
+        runtimeMode: "full-access",
+      });
+
+      const resultFiber = yield* provider
+        .compactThread(threadId)
+        .pipe(Effect.result, Effect.forkChild);
+      yield* advanceTestClock(600_001);
+      const result = yield* Fiber.join(resultFiber);
+      assert.equal(result._tag, "Failure");
+
+      routing.cursor.sendTurn.mockImplementationOnce((input) =>
+        Effect.succeed({
+          threadId: input.threadId,
+          turnId: asTurnId("turn-compact-fallback-retry"),
+        }),
+      );
+      const retryFiber = yield* provider.compactThread(threadId).pipe(Effect.forkChild);
+      yield* advanceTestClock(50);
+      routing.cursor.emit({
+        type: "turn.completed",
+        eventId: asEventId("evt-compact-fallback-retry-completed"),
+        provider: CURSOR_DRIVER,
+        createdAt: "2026-01-01T00:10:02.000Z",
+        threadId,
+        turnId: asTurnId("turn-compact-fallback-retry"),
+        payload: { state: "completed" },
+      });
+      yield* Fiber.join(retryFiber);
+      yield* provider.stopSession({ threadId });
+    }),
+  );
+
+  it.effect("allows promptless continuation only for capable providers", () =>
+    Effect.gen(function* () {
+      const provider = yield* ProviderService.ProviderService;
+      const codexThreadId = asThreadId("thread-promptless-continuation");
+      yield* provider.startSession(codexThreadId, {
+        provider: CODEX_DRIVER,
+        providerInstanceId: codexInstanceId,
+        threadId: codexThreadId,
+        runtimeMode: "full-access",
+      });
+
+      yield* provider.sendTurn({ threadId: codexThreadId, continuation: true });
+      assert.deepEqual(routing.codex.sendTurn.mock.calls.at(-1)?.[0], {
+        threadId: codexThreadId,
+        continuation: true,
+        attachments: [],
+      });
+
+      const claudeThreadId = asThreadId("thread-promptless-continuation-unsupported");
+      yield* provider.startSession(claudeThreadId, {
+        provider: CLAUDE_AGENT_DRIVER,
+        providerInstanceId: claudeAgentInstanceId,
+        threadId: claudeThreadId,
+        runtimeMode: "full-access",
+      });
+      const failure = yield* Effect.flip(
+        provider.sendTurn({ threadId: claudeThreadId, continuation: true }),
+      );
+      assert.instanceOf(failure, ProviderValidationError);
+      assert.include(failure.issue, "requires an explicit continuation prompt");
+      assert.equal(routing.claude.sendTurn.mock.calls.length, 0);
+
+      yield* provider.stopSession({ threadId: claudeThreadId });
+      routing.claude.startSession.mockClear();
+      const stoppedFailure = yield* Effect.flip(
+        provider.sendTurn({ threadId: claudeThreadId, continuation: true }),
+      );
+      assert.instanceOf(stoppedFailure, ProviderValidationError);
+      assert.include(stoppedFailure.issue, "requires an explicit continuation prompt");
+      assert.equal(routing.claude.startSession.mock.calls.length, 0);
+
+      yield* provider.stopSession({ threadId: codexThreadId });
+      routing.codex.startSession.mockClear();
+      routing.codex.sendTurn.mockClear();
+      routing.codex.stopSession.mockClear();
+      routing.claude.startSession.mockClear();
+      routing.claude.sendTurn.mockClear();
+      routing.claude.stopSession.mockClear();
+    }),
+  );
+
   it.effect("routes provider operations and rollback conversation", () =>
     Effect.gen(function* () {
       const provider = yield* ProviderService.ProviderService;
@@ -986,6 +1580,33 @@ routing.layer("ProviderServiceLive routing", (it) => {
       });
       const imageOnlyInput = routing.codex.sendTurn.mock.calls[0]?.[0] as ProviderSendTurnInput;
       assert.equal(imageOnlyInput.input?.startsWith('[Attached image "screenshot.png"'), true);
+
+      const fileAttachment = {
+        type: "file" as const,
+        id: "thread-attach-12345678-1234-1234-1234-123456789abc-pdf",
+        name: "report.pdf",
+        mimeType: "application/pdf",
+        sizeBytes: 456,
+      };
+
+      routing.codex.sendTurn.mockClear();
+      yield* provider.sendTurn({
+        threadId: session.threadId,
+        input: "summarize the report",
+        attachments: [attachment, fileAttachment],
+      });
+      const mixedInput = routing.codex.sendTurn.mock.calls[0]?.[0] as ProviderSendTurnInput;
+      assert.include(mixedInput.input ?? "", '[Attached file "report.pdf" is saved at: ');
+      assert.include(mixedInput.input ?? "", `${fileAttachment.id}.pdf]`);
+      // Every attachment reaches the adapter; each adapter decides what its
+      // provider ingests natively.
+      assert.deepEqual(mixedInput.attachments, [attachment, fileAttachment]);
+
+      routing.codex.sendTurn.mockClear();
+      yield* provider.sendTurn({ threadId: session.threadId, attachments: [fileAttachment] });
+      const fileOnlyInput = routing.codex.sendTurn.mock.calls[0]?.[0] as ProviderSendTurnInput;
+      assert.include(fileOnlyInput.input ?? "", '[Attached file "report.pdf" is saved at: ');
+      assert.deepEqual(fileOnlyInput.attachments, [fileAttachment]);
 
       yield* provider.stopSession({ threadId: session.threadId });
     }),
@@ -1961,10 +2582,17 @@ validation.layer("ProviderServiceLive validation", (it) => {
   );
 });
 
+const decodeBrowserAccessThreadShell = Schema.decodeUnknownEffect(OrchestrationThreadShell);
+
 describe("agent browser access", () => {
   const revokedThreads: Array<ThreadId> = [];
+  const projectId = ProjectId.make("project-browser-access");
 
-  const startSessionWith = (enableAgentBrowserAccess: boolean, threadId: ThreadId) =>
+  const startSessionWith = (
+    enableAgentBrowserAccess: boolean,
+    threadId: ThreadId,
+    projectOverride?: boolean,
+  ) =>
     Effect.gen(function* () {
       const issued: Array<ThreadId> = [];
       const codex = makeFakeCodexAdapter();
@@ -1978,6 +2606,48 @@ describe("agent browser access", () => {
       const directoryLayer = ProviderSessionDirectoryLive.pipe(
         Layer.provide(runtimeRepositoryLayer),
       );
+      const projectionLayer = Layer.succeed(ProjectionSnapshotQuery.ProjectionSnapshotQuery, {
+        getMessageById: () => Effect.die("unused"),
+        getUserInputActivity: () => Effect.die("unused"),
+        getCommandReadModel: () => Effect.die("unused"),
+        getSnapshot: () => Effect.die("unused"),
+        getShellSnapshot: () => Effect.die("unused"),
+        getArchivedShellSnapshot: () => Effect.die("unused"),
+        getSnapshotSequence: () => Effect.die("unused"),
+        getCounts: () => Effect.die("unused"),
+        getEventReplayStats: () => Effect.die("unused"),
+        getActiveProjectByWorkspaceRoot: () => Effect.die("unused"),
+        getProjectShellById: () => Effect.die("unused"),
+        getFirstActiveThreadIdByProjectId: () => Effect.die("unused"),
+        getThreadCheckpointContext: () => Effect.die("unused"),
+        getFullThreadDiffContext: () => Effect.die("unused"),
+        getThreadShellById: (requestedThreadId) =>
+          Effect.gen(function* () {
+            assert.equal(requestedThreadId, threadId);
+            return Option.some(
+              yield* decodeBrowserAccessThreadShell({
+                id: threadId,
+                projectId,
+                title: "Browser access test",
+                modelSelection: createModelSelection(codexInstanceId, "gpt-5.4"),
+                runtimeMode: "full-access",
+                branch: null,
+                worktreePath: null,
+                latestTurn: null,
+                createdAt: "2026-01-01T00:00:00.000Z",
+                updatedAt: "2026-01-01T00:00:00.000Z",
+                session: null,
+                latestUserMessageAt: null,
+                hasPendingApprovals: false,
+                hasPendingUserInput: false,
+                hasActionableProposedPlan: false,
+              }),
+            );
+          }).pipe(Effect.orDie),
+        getThreadDetailById: () => Effect.die("unused"),
+        getThreadDetailSnapshot: () => Effect.die("unused"),
+        searchThreads: () => Effect.die("unused"),
+      });
       const providerLayer = makeProviderServiceLive({
         issueMcpCredential: (request) =>
           Effect.sync(() => {
@@ -1988,7 +2658,14 @@ describe("agent browser access", () => {
       }).pipe(
         Layer.provide(providerAdapterLayer),
         Layer.provide(directoryLayer),
-        Layer.provide(ServerSettings.ServerSettingsService.layerTest({ enableAgentBrowserAccess })),
+        Layer.provide(projectionLayer),
+        Layer.provide(
+          ServerSettings.ServerSettingsService.layerTest({
+            enableAgentBrowserAccess,
+            projectAgentBrowserAccessOverrides:
+              projectOverride === undefined ? {} : { [projectId]: projectOverride },
+          }),
+        ),
         Layer.provide(serverConfigTestLayer),
         Layer.provide(AnalyticsService.layerTest),
         Layer.provide(
@@ -2043,6 +2720,24 @@ describe("agent browser access", () => {
 
       const issued = yield* startSessionWith(true, threadId);
 
+      assert.deepEqual(issued, [threadId]);
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("withholds and revokes MCP credentials when the project disables browser access", () =>
+    Effect.gen(function* () {
+      const threadId = asThreadId("thread-project-browser-off");
+      revokedThreads.length = 0;
+      const issued = yield* startSessionWith(true, threadId, false);
+      assert.deepEqual(issued, []);
+      assert.deepEqual(revokedThreads, [threadId]);
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("requests an MCP credential when the project overrides browser access to on", () =>
+    Effect.gen(function* () {
+      const threadId = asThreadId("thread-project-browser-on");
+      const issued = yield* startSessionWith(false, threadId, true);
       assert.deepEqual(issued, [threadId]);
     }).pipe(Effect.provide(NodeServices.layer)),
   );

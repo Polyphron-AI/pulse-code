@@ -1,4 +1,6 @@
 "use client";
+import { voiceCapture } from "../voice/voiceCapture";
+import { captureVoiceTextTarget, currentVoiceTextField } from "../voice/voiceTextTarget";
 
 import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
 import {
@@ -136,11 +138,7 @@ import { toggleThemeEditorForTheme } from "./settings/themeEditorStore";
 import { ThreadCommandSubtitle } from "./ThreadCommandSubtitle";
 import { ThreadRowLeadingStatus, ThreadRowTrailingStatus } from "./ThreadStatusIndicators";
 import { primaryServerKeybindingsAtom, primaryServerProvidersAtom } from "../state/server";
-import {
-  deriveProviderInstanceEntries,
-  resolveDefaultProviderModelSelection,
-  type ProviderInstanceEntry,
-} from "../providerInstances";
+import { deriveProviderInstanceEntries, type ProviderInstanceEntry } from "../providerInstances";
 import { resolveShortcutCommand, threadJumpIndexFromCommand } from "../keybindings";
 import { CommandDialog, CommandDialogPopup } from "./ui/command";
 import { Button } from "./ui/button";
@@ -164,8 +162,10 @@ function projectFavicon(project: Project) {
     <ProjectFavicon
       environmentId={project.environmentId}
       cwd={project.workspaceRoot}
+      projectName={project.title}
       faviconPath={project.faviconPath}
-      className={ITEM_ICON_CLASS}
+      projectIcon={project.projectIcon}
+      className="size-4"
     />
   );
 }
@@ -570,6 +570,10 @@ function OpenCommandPaletteDialog(props: {
   const navigate = useNavigate();
   const { clearOpenIntent, openIntent, openOverlayMode, setOpen } = props;
   const [query, setQuery] = useState("");
+  const [voiceDestination] = useState(() => {
+    const field = currentVoiceTextField();
+    return field ? captureVoiceTextTarget(field) : null;
+  });
   const deferredQuery = useDeferredValue(query);
   const isActionsOnly = deferredQuery.startsWith(">");
   const [highlightedItemValue, setHighlightedItemValue] = useState<string | null>(null);
@@ -856,6 +860,16 @@ function OpenCommandPaletteDialog(props: {
     () => new Map(projects.map((project) => [project.id, project.faviconPath ?? null] as const)),
     [projects],
   );
+  const projectIconByKey = useMemo(
+    () =>
+      new Map(
+        projects.map(
+          (project) =>
+            [`${project.environmentId}:${project.id}`, project.projectIcon ?? null] as const,
+        ),
+      ),
+    [projects],
+  );
   const projectTitleById = useMemo(
     () => new Map<ProjectId, string>(projects.map((project) => [project.id, project.title])),
     [projects],
@@ -1060,6 +1074,9 @@ function OpenCommandPaletteDialog(props: {
               environmentId={thread.environmentId}
               projectCwd={projectCwdById.get(thread.projectId) ?? null}
               projectFaviconPath={projectFaviconPathById.get(thread.projectId) ?? null}
+              projectIcon={
+                projectIconByKey.get(`${thread.environmentId}:${thread.projectId}`) ?? null
+              }
               projectTitle={projectTitle ?? null}
               branch={thread.branch}
               worktreePath={thread.worktreePath}
@@ -1099,6 +1116,7 @@ function OpenCommandPaletteDialog(props: {
       navigate,
       projectCwdById,
       projectFaviconPathById,
+      projectIconByKey,
       projectTitleById,
       providerEntryByEnvironmentAndInstanceId,
       threadContentMatchByKey,
@@ -1442,6 +1460,22 @@ function OpenCommandPaletteDialog(props: {
   ]);
 
   const actionItems: Array<CommandPaletteActionItem | CommandPaletteSubmenuItem> = [];
+  actionItems.push({
+    kind: "action",
+    value: "action:voice-capture",
+    title: "Start or stop Pulse Talq",
+    description: "Dictate into the focused text field",
+    searchTerms: ["voice", "dictation", "microphone", "parakeet", "talq"],
+    icon: <MessageSquareIcon className={ITEM_ICON_CLASS} />,
+    run: async () => {
+      if (voiceCapture.getSnapshot().phase === "recording") void voiceCapture.stop();
+      else if (voiceDestination) void voiceCapture.start(voiceDestination);
+      else
+        voiceCapture.reportError(
+          "Click an editable text field before opening the command palette to use Pulse Talq.",
+        );
+    },
+  });
 
   actionItems.push({
     kind: "action",
@@ -1642,6 +1676,28 @@ function OpenCommandPaletteDialog(props: {
 
   actionItems.push({
     kind: "action",
+    value: "action:office",
+    searchTerms: ["office", "overview", "accounts", "drafts", "mailbox"],
+    title: "Open Office",
+    icon: <SettingsIcon className={ITEM_ICON_CLASS} />,
+    run: async () => {
+      await navigate({ to: "/office" });
+    },
+  });
+
+  actionItems.push({
+    kind: "action",
+    value: "action:mail",
+    searchTerms: ["mail", "email", "inbox", "imap", "smtp", "alpha"],
+    title: clientSettings.mailAlphaEnabled ? "Open Mail" : "Set up Mail alpha",
+    icon: <SettingsIcon className={ITEM_ICON_CLASS} />,
+    run: async () => {
+      await navigate({ to: "/mail" });
+    },
+  });
+
+  actionItems.push({
+    kind: "action",
     value: "action:settings",
     searchTerms: ["settings", "preferences", "configuration", "keybindings"],
     title: "Open settings",
@@ -1784,10 +1840,6 @@ function OpenCommandPaletteDialog(props: {
       }
 
       const projectId = newProjectId();
-      const targetEnvironmentProviders =
-        environments.find((environment) => environment.environmentId === input.environmentId)
-          ?.serverConfig?.providers ??
-        (input.environmentId === primaryEnvironmentId ? providers : []);
       const createResult = await createProject({
         environmentId: input.environmentId,
         input: {
@@ -1795,10 +1847,7 @@ function OpenCommandPaletteDialog(props: {
           title: inferProjectTitleFromPath(cwd),
           workspaceRoot: cwd,
           createWorkspaceRootIfMissing: true,
-          defaultModelSelection: resolveDefaultProviderModelSelection(
-            targetEnvironmentProviders,
-            null,
-          ),
+          defaultModelSelection: null,
         },
       });
       if (createResult._tag === "Failure") {

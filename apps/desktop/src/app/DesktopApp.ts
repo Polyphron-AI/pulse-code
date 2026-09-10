@@ -14,6 +14,7 @@ import { installDesktopIpcHandlers } from "../ipc/DesktopIpcHandlers.ts";
 import { installOfficeRuntime } from "../office/OfficeRuntime.ts";
 
 let officeRuntime: Awaited<ReturnType<typeof installOfficeRuntime>> | undefined;
+import { installVoiceDesktop } from "../voice/VoiceDesktop.ts";
 import * as DesktopAppIdentity from "./DesktopAppIdentity.ts";
 import * as DesktopClerk from "./DesktopClerk.ts";
 import * as DesktopApplicationMenu from "../window/DesktopApplicationMenu.ts";
@@ -29,6 +30,7 @@ import * as DesktopServerExposure from "../backend/DesktopServerExposure.ts";
 import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
 import * as DesktopShellEnvironment from "../shell/DesktopShellEnvironment.ts";
 import * as DesktopState from "./DesktopState.ts";
+import * as DesktopRemoteUpdates from "../updates/DesktopRemoteUpdates.ts";
 import * as DesktopUpdates from "../updates/DesktopUpdates.ts";
 import * as DesktopWslBackend from "../wsl/DesktopWslBackend.ts";
 
@@ -216,6 +218,12 @@ const bootstrap = Effect.gen(function* () {
       ),
     }),
   );
+  yield* Effect.acquireRelease(
+    Effect.sync(() =>
+      installVoiceDesktop(environment.preloadPath, rendererTarget.origin, environment.platform),
+    ),
+    (dispose) => Effect.sync(dispose),
+  );
   yield* logBootstrapInfo("bootstrap ipc handlers registered");
 
   if (!(yield* Ref.get(state.quitting))) {
@@ -304,6 +312,7 @@ const startup = Effect.gen(function* () {
   yield* appIdentity.configure;
   yield* applicationMenu.configure;
   yield* updates.configure;
+  yield* DesktopRemoteUpdates.listen;
   yield* linuxUrlHandler.register;
   yield* bootstrap.pipe(Effect.catchCause((cause) => fatalStartupCause("bootstrap", cause)));
 }).pipe(Effect.withSpan("desktop.startup"));

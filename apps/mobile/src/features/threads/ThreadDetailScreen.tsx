@@ -1,3 +1,4 @@
+import { resolveProviderSkillsForCwd } from "@t3tools/client-runtime/providerSkills";
 import { type EnvironmentConnectionPhase } from "@t3tools/client-runtime/connection";
 import type { EnvironmentThreadStatus } from "@t3tools/client-runtime/state/threads";
 import { useKeyboardChatComposerInset, useKeyboardScrollToEnd } from "@legendapp/list/keyboard";
@@ -55,7 +56,7 @@ import { ControlPill } from "../../components/ControlPill";
 import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
 import type { ComposerEditorHandle } from "../../components/ComposerEditor";
 import type { StatusTone } from "../../components/StatusPill";
-import type { DraftComposerImageAttachment } from "../../lib/composerImages";
+import type { DraftComposerAttachment } from "../../lib/composerImages";
 import { CHAT_CONTENT_MAX_WIDTH, type LayoutVariant } from "../../lib/layout";
 import { IOS_NAV_BAR_HEIGHT } from "../../lib/layoutMetrics";
 import { scopedThreadKey } from "../../lib/scopedEntities";
@@ -88,6 +89,7 @@ export interface ThreadDetailScreenProps {
   readonly environmentLabel: string | null;
   readonly selectedThreadFeed: ReadonlyArray<ThreadFeedEntry>;
   readonly activeWorkStartedAt: string | null;
+  readonly isCompacting: boolean;
   readonly activePendingApproval: PendingApproval | null;
   readonly respondingApprovalId: ApprovalRequestId | null;
   readonly activePendingUserInput: PendingUserInput | null;
@@ -95,7 +97,7 @@ export interface ThreadDetailScreenProps {
   readonly activePendingUserInputAnswers: Record<string, string | ReadonlyArray<string>> | null;
   readonly respondingUserInputId: ApprovalRequestId | null;
   readonly draftMessage: string;
-  readonly draftAttachments: ReadonlyArray<DraftComposerImageAttachment>;
+  readonly draftAttachments: ReadonlyArray<DraftComposerAttachment>;
   readonly connectionStateLabel: EnvironmentConnectionPhase;
   /** Message sync status for the selected thread (drives the composer status pill). */
   readonly threadSyncStatus?: EnvironmentThreadStatus;
@@ -112,6 +114,7 @@ export interface ThreadDetailScreenProps {
   readonly onOpenConnectionEditor: () => void;
   readonly onChangeDraftMessage: (value: string) => void;
   readonly onPickDraftImages: () => Promise<void>;
+  readonly onPickDraftFiles: () => Promise<void>;
   readonly onNativePasteImages: (uris: ReadonlyArray<string>) => Promise<void>;
   readonly onRemoveDraftImage: (imageId: string) => void;
   readonly onStopThread: () => void;
@@ -135,6 +138,7 @@ export interface ThreadDetailScreenProps {
     customAnswer: string,
   ) => void;
   readonly onSubmitUserInput: () => Promise<unknown>;
+  readonly onDismissUserInput: () => Promise<unknown>;
   readonly showContent?: boolean;
 }
 
@@ -289,6 +293,15 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
     }
   })();
   const selectedThreadFeed = props.selectedThreadFeed;
+  const hasCompactableConversation =
+    selectedThreadFeed.some(
+      (entry) =>
+        entry.type === "message" &&
+        entry.message.role === "user" &&
+        ((entry.message.attachments?.length ?? 0) > 0 ||
+          entry.message.text.trim().toLowerCase() !== "/compact"),
+    ) ||
+    (Boolean(props.loadEarlier) && props.selectedThread.latestUserMessageAt !== null);
   const composerChrome = composerExpanded ? COMPOSER_EXPANDED_CHROME : COMPOSER_COLLAPSED_CHROME;
   const composerOverlapHeight = composerChrome + composerBottomInset;
   // While a user-input request is pending, the questionnaire owns the
@@ -445,12 +458,14 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
   const contentMaxWidth = isSplitLayout ? CHAT_CONTENT_MAX_WIDTH : undefined;
   const selectedInstanceId = props.selectedThread.modelSelection.instanceId;
   useStreamingHaptics(props.selectedThread.id, props.selectedThreadFeed);
-  const selectedProviderSkills = useMemo(
-    () =>
-      props.serverConfig?.providers.find((provider) => provider.instanceId === selectedInstanceId)
-        ?.skills ?? [],
-    [props.serverConfig, selectedInstanceId],
-  );
+  const selectedProviderSkills = useMemo(() => {
+    const provider = props.serverConfig?.providers.find(
+      (candidate) => candidate.instanceId === selectedInstanceId,
+    );
+    return provider
+      ? resolveProviderSkillsForCwd(provider, props.threadCwd ?? props.projectWorkspaceRoot)
+      : [];
+  }, [props.projectWorkspaceRoot, props.serverConfig, props.threadCwd, selectedInstanceId]);
 
   useLayoutEffect(() => {
     selectedThreadKeyRef.current = selectedThreadKey;
@@ -592,6 +607,7 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
             agentLabel={agentLabel}
             latestTurn={props.selectedThread.latestTurn}
             activeWorkStartedAt={props.activeWorkStartedAt}
+            isCompacting={props.isCompacting}
             listRef={listRef}
             freeze={freeze}
             anchorMessageId={anchorMessageId}
@@ -705,6 +721,7 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
                       onSelectOption={props.onSelectUserInputOption}
                       onChangeCustomAnswer={props.onChangeUserInputCustomAnswer}
                       onSubmit={props.onSubmitUserInput}
+                      onDismiss={props.onDismissUserInput}
                     />
                   ) : null}
                 </Animated.View>
@@ -725,13 +742,15 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
                 environmentLabel={props.environmentLabel}
                 threadSyncPhase={threadSyncPhase}
                 selectedThread={props.selectedThread}
+                hasCompactableConversation={hasCompactableConversation}
                 serverConfig={props.serverConfig}
                 queueCount={props.selectedThreadQueueCount}
                 environmentId={props.environmentId}
-                projectCwd={props.projectWorkspaceRoot}
+                projectCwd={props.threadCwd ?? props.projectWorkspaceRoot}
                 bottomInset={composerBottomInset}
                 onChangeDraftMessage={props.onChangeDraftMessage}
                 onPickDraftImages={props.onPickDraftImages}
+                onPickDraftFiles={props.onPickDraftFiles}
                 onNativePasteImages={props.onNativePasteImages}
                 onRemoveDraftImage={props.onRemoveDraftImage}
                 onStopThread={props.onStopThread}

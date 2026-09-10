@@ -1,3 +1,4 @@
+import { RestartContinuationSettings } from "./components/RestartContinuationSettings";
 import { NativeHeaderToolbar, NativeStackScreenOptions } from "../../native/StackHeader";
 import { useNavigation } from "@react-navigation/native";
 import { SymbolView } from "../../components/AppSymbol";
@@ -172,6 +173,7 @@ export function SettingsEnvironmentsRouteScreen() {
               }
             : {})}
         />
+        <RestartContinuationSettings />
       </ScrollView>
     </View>
   );

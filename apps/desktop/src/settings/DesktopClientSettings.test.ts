@@ -13,6 +13,10 @@ import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
 import * as DesktopClientSettings from "./DesktopClientSettings.ts";
 
 const clientSettings: ClientSettings = {
+  mailAlphaEnabled: false,
+  voiceShortcut: "ctrl+windows",
+  voiceGlobalShortcutEnabled: true,
+  voiceHoverEnabled: true,
   browserDefaultViewport: { _tag: "preset", width: 1024, height: 600, presetId: "nest-hub" },
   browserDefaultZoomFactor: 1.25,
   browserDefaultAppearance: "dark",
@@ -47,6 +51,8 @@ const clientSettings: ClientSettings = {
   sidebarThreadSortOrder: "created_at",
   sidebarThreadPreviewCount: 6,
   legacySidebarEnabled: false,
+  loadBalancingEnabled: false,
+  loadBalancingWeights: { "environment-1": 75, "environment-2": 0 },
   timestampFormat: "24-hour",
   wordWrap: true,
 };

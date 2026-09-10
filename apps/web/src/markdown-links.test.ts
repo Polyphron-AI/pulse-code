@@ -2,17 +2,30 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
   extractMarkdownLinkHrefs,
+  isWindowsDrivePathHref,
   resolveInlineCodeFileLinkMeta,
   resolveMarkdownFileLinkMeta,
   resolveMarkdownFileLinkTarget,
   rewriteMarkdownFileUriHref,
 } from "./markdown-links";
 
+describe("isWindowsDrivePathHref", () => {
+  it.each([
+    ["C:\\repo\\image.png", true],
+    ["C:%5Crepo%5Cimage.png", true],
+    ["https://example.com/image.png", false],
+  ])("classifies %s as %s", (href, expected) => {
+    expect(isWindowsDrivePathHref(href)).toBe(expected);
+  });
+});
+
 describe("extractMarkdownLinkHrefs", () => {
   it("extracts angle-bracketed Windows file links whose paths contain spaces", () => {
     const href = "<F:/Dev Ops/T3/Pulse Code/docs/internals/integrations-platform.md>";
 
-    expect(extractMarkdownLinkHrefs(`- [Platform architecture](${href})`)).toEqual([href]);
+    expect(extractMarkdownLinkHrefs(`- [Platform architecture](${href})`)).toEqual([
+      href.slice(1, -1),
+    ]);
   });
 });
 
@@ -35,6 +48,18 @@ describe("rewriteMarkdownFileUriHref", () => {
         "file:///D:/Programme/t3code/apps/web/src/components/chat/OpenInPicker.tsx#L69",
       ),
     ).toBe("D:/Programme/t3code/apps/web/src/components/chat/OpenInPicker.tsx#L69");
+  });
+
+  it("preserves file uri authorities as windows UNC paths", () => {
+    expect(rewriteMarkdownFileUriHref("file://server/share/workspace-image.svg")).toBe(
+      "\\\\server\\share\\workspace-image.svg",
+    );
+  });
+
+  it("treats a localhost file uri as a local path", () => {
+    expect(rewriteMarkdownFileUriHref("file://localhost/home/me/notes.md")).toBe(
+      "/home/me/notes.md",
+    );
   });
 
   it("unwraps angle-bracketed file uri hrefs", () => {
@@ -77,11 +102,24 @@ describe("resolveMarkdownFileLinkTarget", () => {
 
   it("ignores external urls", () => {
     expect(resolveMarkdownFileLinkTarget("https://example.com/docs")).toBeNull();
+    expect(resolveMarkdownFileLinkTarget("//cdn.example.com/clip.mp4", "/workspace")).toBeNull();
   });
 
   it("does not double-decode file URLs", () => {
     expect(resolveMarkdownFileLinkTarget("file:///Users/julius/project/file%2520name.md")).toBe(
       "/Users/julius/project/file%20name.md",
+    );
+  });
+
+  it("resolves file uri authorities as windows UNC paths", () => {
+    expect(resolveMarkdownFileLinkTarget("file://server/share/workspace-image.svg")).toBe(
+      "\\\\server\\share\\workspace-image.svg",
+    );
+  });
+
+  it("resolves a localhost file uri as a local path", () => {
+    expect(resolveMarkdownFileLinkTarget("file://localhost/home/me/notes.md")).toBe(
+      "/home/me/notes.md",
     );
   });
 
@@ -142,6 +180,16 @@ describe("resolveMarkdownFileLinkTarget", () => {
         "F:/Dev%20Ops/T3/Pulse%20Code/docs/internals/integrations-platform.md",
       ),
     ).toBe(target);
+  });
+  it("does not treat app routes as file links, even with a line anchor", () => {
+    expect(resolveMarkdownFileLinkTarget("/chat/settings")).toBeNull();
+    expect(resolveMarkdownFileLinkTarget("/chat/settings#L3", "/repo")).toBeNull();
+  });
+
+  it("decodes an encoded drive colon in a file uri before dropping its slash", () => {
+    expect(resolveMarkdownFileLinkTarget("file:///c%3A/Users/x/shot.png")).toBe(
+      "c:/Users/x/shot.png",
+    );
   });
 
   it("does not treat app routes as file links", () => {

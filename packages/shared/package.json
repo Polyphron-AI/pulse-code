@@ -3,6 +3,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./voiceShortcut": {
+      "types": "./src/voiceShortcut.ts",
+      "import": "./src/voiceShortcut.ts"
+    },
     "./themePalettes": {
       "types": "./src/themePalettes.ts",
       "import": "./src/themePalettes.ts"
@@ -230,6 +234,18 @@
     "./usageFormat": {
       "types": "./src/usageFormat.ts",
       "import": "./src/usageFormat.ts"
+    },
+    "./usageLimits": {
+      "types": "./src/usageLimits.ts",
+      "import": "./src/usageLimits.ts"
+    },
+    "./claudeCompaction": {
+      "types": "./src/claudeCompaction.ts",
+      "import": "./src/claudeCompaction.ts"
+    },
+    "./video": {
+      "types": "./src/video.ts",
+      "import": "./src/video.ts"
     }
   },
   "scripts": {

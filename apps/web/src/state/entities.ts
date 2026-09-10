@@ -230,6 +230,13 @@ export function readThreadShell(ref: ScopedThreadRef): EnvironmentThreadShell | 
 /** Whether the environment's server understands thread.settle/unsettle.
     False for pre-settlement servers (capability defaults false on decode),
     so clients under version skew fall back instead of erroring. */
+export function readEnvironmentSupportsAutoSettlement(environmentId: EnvironmentId): boolean {
+  return (
+    appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)?.environment.capabilities
+      .threadAutoSettlement === true
+  );
+}
+
 export function readEnvironmentSupportsSettlement(environmentId: EnvironmentId): boolean {
   return (
     appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)?.environment.capabilities
@@ -275,6 +282,13 @@ export function readEnvironmentSupportsPinReorder(environmentId: EnvironmentId):
 
 export function readThreadDetail(ref: ScopedThreadRef): EnvironmentThread | null {
   return appAtomRegistry.get(environmentThreadDetails.detailAtom(ref));
+}
+
+export function readEnvironmentSupportsActiveReorder(environmentId: EnvironmentId): boolean {
+  return (
+    appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)?.environment.capabilities
+      .threadActiveReorder === true
+  );
 }
 
 export function readEnvironmentThreadRefs(

@@ -18,6 +18,7 @@ import { Route as ChatIndexRouteImport } from './routes/_chat.index'
 import { Route as SettingsSourceControlRouteImport } from './routes/settings.source-control'
 import { Route as SettingsScheduledChatsRouteImport } from './routes/settings.scheduled-chats'
 import { Route as SettingsProvidersRouteImport } from './routes/settings.providers'
+import { Route as SettingsProjectsRouteImport } from './routes/settings.projects'
 import { Route as SettingsKeybindingsRouteImport } from './routes/settings.keybindings'
 import { Route as SettingsIntegrationsRouteImport } from './routes/settings.integrations'
 import { Route as SettingsGeneralRouteImport } from './routes/settings.general'
@@ -30,6 +31,8 @@ import { Route as ProjectsProjectKeyRouteImport } from './routes/projects.$proje
 import { Route as ConnectCallbackRouteImport } from './routes/connect_.callback'
 import { Route as ChatWorkspaceRouteImport } from './routes/_chat.workspace'
 import { Route as ChatPullRequestsRouteImport } from './routes/_chat.pull-requests'
+import { Route as ChatOfficeRouteImport } from './routes/_chat.office'
+import { Route as ChatMailRouteImport } from './routes/_chat.mail'
 import { Route as ChatIssuesRouteImport } from './routes/_chat.issues'
 import { Route as ChatDraftDraftIdRouteImport } from './routes/_chat.draft.$draftId'
 import { Route as ChatEnvironmentIdThreadIdRouteImport } from './routes/_chat.$environmentId.$threadId'
@@ -76,6 +79,11 @@ const SettingsScheduledChatsRoute = SettingsScheduledChatsRouteImport.update({
 const SettingsProvidersRoute = SettingsProvidersRouteImport.update({
   id: '/providers',
   path: '/providers',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const SettingsProjectsRoute = SettingsProjectsRouteImport.update({
+  id: '/projects',
+  path: '/projects',
   getParentRoute: () => SettingsRoute,
 } as any)
 const SettingsKeybindingsRoute = SettingsKeybindingsRouteImport.update({
@@ -138,6 +146,16 @@ const ChatPullRequestsRoute = ChatPullRequestsRouteImport.update({
   path: '/pull-requests',
   getParentRoute: () => ChatRoute,
 } as any)
+const ChatOfficeRoute = ChatOfficeRouteImport.update({
+  id: '/office',
+  path: '/office',
+  getParentRoute: () => ChatRoute,
+} as any)
+const ChatMailRoute = ChatMailRouteImport.update({
+  id: '/mail',
+  path: '/mail',
+  getParentRoute: () => ChatRoute,
+} as any)
 const ChatIssuesRoute = ChatIssuesRouteImport.update({
   id: '/issues',
   path: '/issues',
@@ -162,6 +180,8 @@ export interface FileRoutesByFullPath {
   '/settings': typeof SettingsRouteWithChildren
   '/usage': typeof UsageRoute
   '/issues': typeof ChatIssuesRoute
+  '/mail': typeof ChatMailRoute
+  '/office': typeof ChatOfficeRoute
   '/pull-requests': typeof ChatPullRequestsRoute
   '/workspace': typeof ChatWorkspaceRoute
   '/connect/callback': typeof ConnectCallbackRoute
@@ -174,6 +194,7 @@ export interface FileRoutesByFullPath {
   '/settings/general': typeof SettingsGeneralRoute
   '/settings/integrations': typeof SettingsIntegrationsRoute
   '/settings/keybindings': typeof SettingsKeybindingsRoute
+  '/settings/projects': typeof SettingsProjectsRoute
   '/settings/providers': typeof SettingsProvidersRoute
   '/settings/scheduled-chats': typeof SettingsScheduledChatsRoute
   '/settings/source-control': typeof SettingsSourceControlRoute
@@ -186,6 +207,8 @@ export interface FileRoutesByTo {
   '/settings': typeof SettingsRouteWithChildren
   '/usage': typeof UsageRoute
   '/issues': typeof ChatIssuesRoute
+  '/mail': typeof ChatMailRoute
+  '/office': typeof ChatOfficeRoute
   '/pull-requests': typeof ChatPullRequestsRoute
   '/workspace': typeof ChatWorkspaceRoute
   '/connect/callback': typeof ConnectCallbackRoute
@@ -198,6 +221,7 @@ export interface FileRoutesByTo {
   '/settings/general': typeof SettingsGeneralRoute
   '/settings/integrations': typeof SettingsIntegrationsRoute
   '/settings/keybindings': typeof SettingsKeybindingsRoute
+  '/settings/projects': typeof SettingsProjectsRoute
   '/settings/providers': typeof SettingsProvidersRoute
   '/settings/scheduled-chats': typeof SettingsScheduledChatsRoute
   '/settings/source-control': typeof SettingsSourceControlRoute
@@ -213,6 +237,8 @@ export interface FileRoutesById {
   '/settings': typeof SettingsRouteWithChildren
   '/usage': typeof UsageRoute
   '/_chat/issues': typeof ChatIssuesRoute
+  '/_chat/mail': typeof ChatMailRoute
+  '/_chat/office': typeof ChatOfficeRoute
   '/_chat/pull-requests': typeof ChatPullRequestsRoute
   '/_chat/workspace': typeof ChatWorkspaceRoute
   '/connect_/callback': typeof ConnectCallbackRoute
@@ -225,6 +251,7 @@ export interface FileRoutesById {
   '/settings/general': typeof SettingsGeneralRoute
   '/settings/integrations': typeof SettingsIntegrationsRoute
   '/settings/keybindings': typeof SettingsKeybindingsRoute
+  '/settings/projects': typeof SettingsProjectsRoute
   '/settings/providers': typeof SettingsProvidersRoute
   '/settings/scheduled-chats': typeof SettingsScheduledChatsRoute
   '/settings/source-control': typeof SettingsSourceControlRoute
@@ -241,6 +268,8 @@ export interface FileRouteTypes {
     | '/settings'
     | '/usage'
     | '/issues'
+    | '/mail'
+    | '/office'
     | '/pull-requests'
     | '/workspace'
     | '/connect/callback'
@@ -253,6 +282,7 @@ export interface FileRouteTypes {
     | '/settings/general'
     | '/settings/integrations'
     | '/settings/keybindings'
+    | '/settings/projects'
     | '/settings/providers'
     | '/settings/scheduled-chats'
     | '/settings/source-control'
@@ -265,6 +295,8 @@ export interface FileRouteTypes {
     | '/settings'
     | '/usage'
     | '/issues'
+    | '/mail'
+    | '/office'
     | '/pull-requests'
     | '/workspace'
     | '/connect/callback'
@@ -277,6 +309,7 @@ export interface FileRouteTypes {
     | '/settings/general'
     | '/settings/integrations'
     | '/settings/keybindings'
+    | '/settings/projects'
     | '/settings/providers'
     | '/settings/scheduled-chats'
     | '/settings/source-control'
@@ -291,6 +324,8 @@ export interface FileRouteTypes {
     | '/settings'
     | '/usage'
     | '/_chat/issues'
+    | '/_chat/mail'
+    | '/_chat/office'
     | '/_chat/pull-requests'
     | '/_chat/workspace'
     | '/connect_/callback'
@@ -303,6 +338,7 @@ export interface FileRouteTypes {
     | '/settings/general'
     | '/settings/integrations'
     | '/settings/keybindings'
+    | '/settings/projects'
     | '/settings/providers'
     | '/settings/scheduled-chats'
     | '/settings/source-control'
@@ -384,6 +420,13 @@ declare module '@tanstack/react-router' {
       path: '/providers'
       fullPath: '/settings/providers'
       preLoaderRoute: typeof SettingsProvidersRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/projects': {
+      id: '/settings/projects'
+      path: '/projects'
+      fullPath: '/settings/projects'
+      preLoaderRoute: typeof SettingsProjectsRouteImport
       parentRoute: typeof SettingsRoute
     }
     '/settings/keybindings': {
@@ -470,6 +513,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ChatPullRequestsRouteImport
       parentRoute: typeof ChatRoute
     }
+    '/_chat/office': {
+      id: '/_chat/office'
+      path: '/office'
+      fullPath: '/office'
+      preLoaderRoute: typeof ChatOfficeRouteImport
+      parentRoute: typeof ChatRoute
+    }
+    '/_chat/mail': {
+      id: '/_chat/mail'
+      path: '/mail'
+      fullPath: '/mail'
+      preLoaderRoute: typeof ChatMailRouteImport
+      parentRoute: typeof ChatRoute
+    }
     '/_chat/issues': {
       id: '/_chat/issues'
       path: '/issues'
@@ -496,6 +553,8 @@ declare module '@tanstack/react-router' {
 
 interface ChatRouteChildren {
   ChatIssuesRoute: typeof ChatIssuesRoute
+  ChatMailRoute: typeof ChatMailRoute
+  ChatOfficeRoute: typeof ChatOfficeRoute
   ChatPullRequestsRoute: typeof ChatPullRequestsRoute
   ChatWorkspaceRoute: typeof ChatWorkspaceRoute
   ChatIndexRoute: typeof ChatIndexRoute
@@ -505,6 +564,8 @@ interface ChatRouteChildren {
 
 const ChatRouteChildren: ChatRouteChildren = {
   ChatIssuesRoute: ChatIssuesRoute,
+  ChatMailRoute: ChatMailRoute,
+  ChatOfficeRoute: ChatOfficeRoute,
   ChatPullRequestsRoute: ChatPullRequestsRoute,
   ChatWorkspaceRoute: ChatWorkspaceRoute,
   ChatIndexRoute: ChatIndexRoute,
@@ -523,6 +584,7 @@ interface SettingsRouteChildren {
   SettingsGeneralRoute: typeof SettingsGeneralRoute
   SettingsIntegrationsRoute: typeof SettingsIntegrationsRoute
   SettingsKeybindingsRoute: typeof SettingsKeybindingsRoute
+  SettingsProjectsRoute: typeof SettingsProjectsRoute
   SettingsProvidersRoute: typeof SettingsProvidersRoute
   SettingsScheduledChatsRoute: typeof SettingsScheduledChatsRoute
   SettingsSourceControlRoute: typeof SettingsSourceControlRoute
@@ -537,6 +599,7 @@ const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsGeneralRoute: SettingsGeneralRoute,
   SettingsIntegrationsRoute: SettingsIntegrationsRoute,
   SettingsKeybindingsRoute: SettingsKeybindingsRoute,
+  SettingsProjectsRoute: SettingsProjectsRoute,
   SettingsProvidersRoute: SettingsProvidersRoute,
   SettingsScheduledChatsRoute: SettingsScheduledChatsRoute,
   SettingsSourceControlRoute: SettingsSourceControlRoute,

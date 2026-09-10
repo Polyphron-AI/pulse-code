@@ -41,3 +41,8 @@ export * from "./rpc.ts";
 export * from "./mcp.ts";
 
 export * from "./managedSkills.ts";
+export * from "./mail.ts";
+export * from "./mailPeople.ts";
+
+export * from "./providerUsageLimits.ts";
+export * from "./usageLimitSourceId.ts";

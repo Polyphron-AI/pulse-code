@@ -34,6 +34,8 @@ export default defineConfig({
       "dist-electron",
       "node_modules",
       "pnpm-lock.yaml",
+      "project/workspace.html",
+      "project/workspace.json",
       "*.tsbuildinfo",
       "**/routeTree.gen.ts",
       "apps/mobile/android/**",

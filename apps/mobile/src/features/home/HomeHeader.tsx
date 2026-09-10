@@ -50,6 +50,7 @@ export function HomeHeader(props: {
   readonly onThreadSortOrderChange: (sortOrder: SidebarThreadSortOrder) => void;
   readonly onOpenEnvironments: () => void;
   readonly onOpenIssues: () => void;
+  readonly onOpenMail?: () => void;
   readonly onOpenSettings: () => void;
   readonly onStartNewTask: () => void;
 }) {
@@ -262,6 +263,16 @@ function AndroidHomeHeader(props: HomeHeaderProps) {
             >
               <SymbolView name="circle.dotted" size={18} tintColor="#f97316" type="monochrome" />
             </Pressable>
+            {props.onOpenMail ? (
+              <Pressable
+                accessibilityLabel="Open Mail"
+                accessibilityRole="button"
+                onPress={props.onOpenMail}
+                className="size-11 items-center justify-center rounded-full bg-subtle"
+              >
+                <SymbolView name="envelope" size={18} tintColor={iconColor} type="monochrome" />
+              </Pressable>
+            ) : null}
             {/* Built identically to the filter button so the two circles
                 match exactly (ControlPill sizes via Tailwind classes and
                 resolves to a different box). */}
@@ -338,6 +349,18 @@ function IosHomeHeader(props: HomeHeaderProps) {
           unstable_headerRightItems:
             Platform.OS === "ios"
               ? () => [
+                  ...(props.onOpenMail
+                    ? [
+                        withNativeGlassHeaderItem({
+                          accessibilityLabel: "Open Mail",
+                          icon: { name: "envelope", type: "sfSymbol" } as const,
+                          identifier: "home-mail",
+                          label: "",
+                          onPress: props.onOpenMail,
+                          type: "button",
+                        }),
+                      ]
+                    : []),
                   withNativeGlassHeaderItem({
                     accessibilityLabel: "Open Issues",
                     icon: { name: "circle.dotted", type: "sfSymbol" } as const,

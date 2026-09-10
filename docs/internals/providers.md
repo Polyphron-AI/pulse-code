@@ -90,3 +90,15 @@ when a request opens (approval) or user input is requested, via
 [ingest]: ../../apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.ts
 [cmd]: ../../apps/server/src/orchestration/Layers/ProviderCommandReactor.ts
 [checkpoint]: ../../apps/server/src/orchestration/Layers/CheckpointReactor.ts
+
+## Grok ACP discovery and turns
+
+Grok status discovery runs the CLI version and model-list commands, then initializes ACP without authenticating or creating a session. A configured API key selects API-key authentication when a user starts a session; otherwise the adapter uses the CLI cached token. Provider-instance environment values, including OAuth attribution, remain environment-owned.
+
+The adapter passes reasoning effort through ACP model metadata, handles xAI prompt completion and planning extensions, and cancels with an ACP notification. Pulse queues ordinary follow-up turns; only an explicit steer interrupts the current prompt. Late results from a cancelled or replaced session cannot settle a newer turn.
+
+## Manual context compaction
+
+Adapters declare either native compaction or a slash command; an omitted declaration means unsupported. The provider service correlates completion with the requesting thread and instance, suppresses stale turn completions, and quarantines timed-out native compactions until the session restarts. The command reactor handles attachment-free `/compact` requests, prevents concurrent turns, and restores session readiness after completion or recoverable failure.
+
+Claude derives context usage from streamed assistant/result messages and compaction boundaries. It does not query SDK context usage after turns, because that fallback can make another model request. Post-compaction counts remain authoritative until fresh assistant usage arrives.

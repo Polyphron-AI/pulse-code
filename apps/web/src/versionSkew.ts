@@ -57,6 +57,20 @@ export function resolveServerSelfUpdateCapability(
   return serverConfig?.environment.capabilities.serverSelfUpdate ?? null;
 }
 
+export function resolveServerUpdateThreadContinuationCapability(
+  serverConfig: Pick<ServerConfig, "environment"> | null | undefined,
+): boolean {
+  return serverConfig?.environment.capabilities.serverUpdateThreadContinuation === true;
+}
+
+/** True when the desktop app supervising this server can be told to update
+    itself over RPC. Older desktop servers only get the manual instruction. */
+export function supportsDesktopAppUpdate(
+  serverConfig: Pick<ServerConfig, "environment"> | null | undefined,
+): boolean {
+  return serverConfig?.environment.capabilities.desktopAppUpdate === true;
+}
+
 /** The command to hand users whose server cannot update itself. */
 export function manualServerUpdateCommand(targetVersion: string): string {
   return `npx t3@${targetVersion}`;

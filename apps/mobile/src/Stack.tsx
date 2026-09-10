@@ -36,6 +36,10 @@ import { ConnectionsNewRouteScreen } from "./features/connection/ConnectionsNewR
 import { HomeRouteScreen } from "./features/home/HomeRouteScreen";
 import { IssueDetailRouteScreen } from "./features/issues/IssueDetailRouteScreen";
 import { IssuesRouteScreen } from "./features/issues/IssuesRouteScreen";
+import { MailRouteScreen } from "./features/mail/MailRouteScreen";
+import { MailSetupRouteScreen } from "./features/mail/MailSetupRouteScreen";
+import { MailMessageRouteScreen } from "./features/mail/MailMessageRouteScreen";
+import { MailComposeRouteScreen } from "./features/mail/MailComposeRouteScreen";
 import { AddProjectDestinationRoute } from "./features/projects/AddProjectDestinationRoute";
 import { AddProjectLocalRoute } from "./features/projects/AddProjectLocalRoute";
 import { AddProjectRepositoryRoute } from "./features/projects/AddProjectRepositoryRoute";
@@ -477,6 +481,23 @@ export const RootStack = createNativeStackNavigator({
         ...GLASS_HEADER_OPTIONS,
         title: "Issues",
       },
+    }),
+    Mail: createNativeStackScreen({
+      screen: MailRouteScreen,
+      linking: "mail",
+      options: { ...GLASS_HEADER_OPTIONS, title: "Mail · Alpha" },
+    }),
+    MailSetup: createNativeStackScreen({
+      screen: MailSetupRouteScreen,
+      options: { ...GLASS_HEADER_OPTIONS, title: "Mail account" },
+    }),
+    MailMessage: createNativeStackScreen({
+      screen: MailMessageRouteScreen,
+      options: { ...GLASS_HEADER_OPTIONS, title: "Message" },
+    }),
+    MailCompose: createNativeStackScreen({
+      screen: MailComposeRouteScreen,
+      options: { ...GLASS_HEADER_OPTIONS, title: "Compose" },
     }),
     IssueDetail: createNativeStackScreen({
       screen: IssueDetailRouteScreen,

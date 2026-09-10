@@ -170,7 +170,12 @@ export function SettingsRow({
       {...rowProps}
       ref={targetRef}
       tabIndex={rowProps.id ? -1 : rowProps.tabIndex}
-      className={cn("rounded-xl px-3 sm:px-4", children ? "pt-3 pb-1" : "py-3", className)}
+      data-slot="settings-row"
+      className={cn(
+        "rounded-xl px-3 sm:px-4 aria-disabled:opacity-50 aria-disabled:[&_*]:text-muted-foreground",
+        children ? "pt-3 pb-1" : "py-3",
+        className,
+      )}
     >
       <div className="flex flex-col gap-3 sm:grid sm:grid-cols-[minmax(0,1fr)_minmax(10rem,auto)] sm:items-center sm:gap-8">
         <div className="min-w-0 flex-1 space-y-1">
@@ -200,10 +205,12 @@ export function SettingsRow({
 
 export function SettingResetButton({
   label,
+  tooltip = "Reset to default",
   disabled = false,
   onClick,
 }: {
   label: string;
+  tooltip?: string;
   disabled?: boolean;
   onClick: () => void;
 }) {
@@ -225,7 +232,7 @@ export function SettingResetButton({
           </Button>
         }
       />
-      <TooltipPopup side="top">Reset to default</TooltipPopup>
+      <TooltipPopup side="top">{tooltip}</TooltipPopup>
     </Tooltip>
   );
 }
@@ -264,3 +271,5 @@ export function scrollToSettingsTarget(targetId: string): boolean {
   scrollAndFocusSettingsTarget(target);
   return true;
 }
+
+export const SETTINGS_PICKER_TRIGGER_CLASSNAME = "w-full sm:w-52";

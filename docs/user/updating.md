@@ -20,13 +20,23 @@ connection will disappear briefly and work that is still running may be interrup
 
 The update does not remove saved threads, settings, or project files.
 
+### Continue Threads After a Restart
+
+In **Settings** > **General** > **Continue threads after restart**, choose whether eligible active threads should continue automatically. On mobile, open **Settings** > **Environments**. The option is off by default and appears when a server supports it.
+
+Changing this preference applies it to every connected environment that supports restart continuation. Each row shows that environment's saved value. Offline environments keep their previous value; after reconnecting, change the switch again to apply your choice across connected environments. When shared preferences differ, use **Apply to all** on web or desktop, or **Apply shared preferences to all** on mobile. The mobile action uses the named connected environment as its source.
+
+When enabled, eligible active threads can continue after a server or machine restarts, including a supported server update. Scheduled work and threads waiting for approval may still need your attention. Turning the option off restores manual continuation on the connected supported environments.
+
+The desktop update remains available on the machine running the desktop app.
+
 ## Choose the Action You See
 
-| Action                     | What to do                                                                                                                                                                     |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Update server**          | Available for the Pulse Code Linux background service. Select the button and leave Pulse Code open while it prepares, tests, restarts, and reconnects.                         |
-| **Update the desktop app** | Open the Pulse Code desktop app on the machine that runs the server and install the app update there. Reopen it if needed.                                                     |
-| **Copy update command**    | Copy the command, open a terminal on the server machine, stop the current Pulse Code server, and relaunch it with the copied command and any startup options you normally use. |
+| Action                     | What to do                                                                                                                                                                                                                                                                                                                                                                             |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Update server**          | Available for the Pulse Code Linux background service and for servers run by a current Pulse Code desktop app. Select the button and leave Pulse Code open while it downloads, installs, restarts, and reconnects. For desktop-app servers this closes and relaunches the desktop app on that machine. If installation fails, the desktop app stays open and reconnects to its server. |
+| **Update the desktop app** | Shown for desktop apps that predate remote updates. Open the Pulse Code desktop app on the machine that runs the server and install the app update there. Reopen it if needed.                                                                                                                                                                                                         |
+| **Copy update command**    | Copy the command, open a terminal on the server machine, stop the current Pulse Code server, and relaunch it with the copied command and any startup options you normally use.                                                                                                                                                                                                         |
 
 The available action depends on how that server was started. Pulse Code does not update connected
 servers silently in the background.

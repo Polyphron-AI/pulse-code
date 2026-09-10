@@ -4,15 +4,19 @@ import * as Schema from "effect/Schema";
 import { PROVIDER_DISPLAY_NAMES } from "./model.ts";
 import { ProviderDriverKind, ProviderInstanceId } from "./providerInstance.ts";
 import {
+  ClaudeSettings,
   ClientSettingsSchema,
   ClientSettingsPatch,
   DEFAULT_SERVER_SETTINGS,
   OmpSettings,
+  defaultEnabledForDriver,
+  resolveProviderInstanceEnabled,
   ServerSettings,
   ServerSettingsPatch,
 } from "./settings.ts";
 
 const decodeClientSettings = Schema.decodeUnknownSync(ClientSettingsSchema);
+const encodeClientSettings = Schema.encodeSync(ClientSettingsSchema);
 const decodeClientSettingsPatch = Schema.decodeUnknownSync(ClientSettingsPatch);
 const decodeOmpSettings = Schema.decodeUnknownSync(OmpSettings);
 const decodeServerSettings = Schema.decodeUnknownSync(ServerSettings);
@@ -24,10 +28,12 @@ describe("OmpSettings", () => {
     expect(decodeOmpSettings({})).toEqual({
       enabled: true,
       binaryPath: "omp",
+      customModels: [],
     });
     expect(DEFAULT_SERVER_SETTINGS.providers.omp).toEqual({
       enabled: true,
       binaryPath: "omp",
+      customModels: [],
     });
   });
 
@@ -49,6 +55,21 @@ describe("OmpSettings", () => {
 
   it("publishes the shared Oh My Pi display name", () => {
     expect(PROVIDER_DISPLAY_NAMES[ProviderDriverKind.make("omp")]).toBe("Oh My Pi");
+  });
+});
+
+describe("ClientSettings load balancing", () => {
+  it("requires opt-in when settings are new or omit load balancing", () => {
+    expect(decodeClientSettings({}).loadBalancingEnabled).toBe(false);
+    expect(decodeClientSettings({ loadBalancingWeights: {} }).loadBalancingEnabled).toBe(false);
+  });
+
+  it.each([true, false])("preserves a saved choice of %s", (loadBalancingEnabled) => {
+    const settings = decodeClientSettings({ loadBalancingEnabled });
+    expect(encodeClientSettings(settings).loadBalancingEnabled).toBe(loadBalancingEnabled);
+    expect(decodeClientSettingsPatch({ loadBalancingEnabled }).loadBalancingEnabled).toBe(
+      loadBalancingEnabled,
+    );
   });
 });
 
@@ -227,6 +248,62 @@ describe("ServerSettings.providerInstances (slice-2 invariant)", () => {
   });
 });
 
+describe("provider enabled defaults", () => {
+  it("enables only the stable bindings by default", () => {
+    const decoded = decodeServerSettings({});
+    expect(decoded.providers.codex.enabled).toBe(true);
+    expect(decoded.providers.claudeAgent.enabled).toBe(true);
+    expect(decoded.providers.cursor.enabled).toBe(false);
+    expect(decoded.providers.grok.enabled).toBe(false);
+    expect(decoded.providers.opencode.enabled).toBe(false);
+  });
+
+  it("derives per-driver defaults from the settings schemas", () => {
+    expect(defaultEnabledForDriver(ProviderDriverKind.make("codex"))).toBe(true);
+    expect(defaultEnabledForDriver(ProviderDriverKind.make("omp"))).toBe(true);
+    expect(defaultEnabledForDriver(ProviderDriverKind.make("cursor"))).toBe(false);
+    expect(defaultEnabledForDriver(ProviderDriverKind.make("grok"))).toBe(false);
+    // Unknown fork drivers stay enabled; their own build decides otherwise.
+    expect(defaultEnabledForDriver(ProviderDriverKind.make("ollama"))).toBe(true);
+  });
+
+  it("keeps Cursor enabled when an existing user explicitly opted in", () => {
+    const cursor = ProviderDriverKind.make("cursor");
+    const cursorId = ProviderInstanceId.make("cursor");
+    const decoded = decodeServerSettings({
+      providers: { cursor: { enabled: true } },
+      providerInstances: {
+        [cursorId]: { driver: cursor, enabled: true, config: {} },
+      },
+    });
+
+    expect(decoded.providers.cursor.enabled).toBe(true);
+    expect(resolveProviderInstanceEnabled(decoded.providerInstances[cursorId]!)).toBe(true);
+  });
+
+  it("resolves instance enabled state with explicit false winning", () => {
+    const grok = ProviderDriverKind.make("grok");
+    const codex = ProviderDriverKind.make("codex");
+    // No flags anywhere: driver default applies.
+    expect(resolveProviderInstanceEnabled({ driver: grok, config: {} })).toBe(false);
+    expect(resolveProviderInstanceEnabled({ driver: codex, config: {} })).toBe(true);
+    // Envelope flag wins over the driver default.
+    expect(resolveProviderInstanceEnabled({ driver: grok, enabled: true, config: {} })).toBe(true);
+    expect(resolveProviderInstanceEnabled({ driver: codex, enabled: false, config: {} })).toBe(
+      false,
+    );
+    // Legacy in-config flag fills in when the envelope is silent.
+    expect(resolveProviderInstanceEnabled({ driver: grok, config: { enabled: true } })).toBe(true);
+    // Conflicting flags: the explicit false wins, whichever side it is on.
+    expect(
+      resolveProviderInstanceEnabled({ driver: grok, enabled: true, config: { enabled: false } }),
+    ).toBe(false);
+    expect(
+      resolveProviderInstanceEnabled({ driver: codex, enabled: false, config: { enabled: true } }),
+    ).toBe(false);
+  });
+});
+
 describe("ServerSettings worktree defaults", () => {
   it("defaults start-from-origin on for legacy configs", () => {
     expect(decodeServerSettings({}).newWorktreesStartFromOrigin).toBe(true);
@@ -355,5 +432,53 @@ describe("ServerSettingsPatch string normalization", () => {
     expect(encoded.addProjectBaseDirectory).toBe("~/Development");
     expect(encoded.providers?.codex?.binaryPath).toBe("/opt/homebrew/bin/codex");
     expect(encoded.providers?.codex?.launchArgs).toBe("--strict-config");
+  });
+});
+
+const decodeClaudeSettings = Schema.decodeUnknownSync(ClaudeSettings);
+
+describe("ClaudeSettings auto-compaction", () => {
+  it("uses Claude's default threshold when no override is configured", () => {
+    expect(decodeClaudeSettings({}).autoCompactWindow).toBe("");
+  });
+
+  it.each(["100000", "300000", "1000000"])(
+    "accepts a supported auto-compaction threshold: %s",
+    (value) => {
+      expect(decodeClaudeSettings({ autoCompactWindow: value }).autoCompactWindow).toBe(value);
+    },
+  );
+
+  it.each(["99999", "1000001", "300k", "invalid"])(
+    "rejects an unsupported auto-compaction threshold: %s",
+    (value) => {
+      expect(() => decodeClaudeSettings({ autoCompactWindow: value })).toThrow();
+    },
+  );
+
+  it("rejects an unsupported threshold at the settings patch boundary", () => {
+    expect(() =>
+      decodeServerSettingsPatch({ providers: { claudeAgent: { autoCompactWindow: "300k" } } }),
+    ).toThrow();
+    expect(
+      decodeServerSettingsPatch({ providers: { claudeAgent: { autoCompactWindow: "300000" } } }),
+    ).toBeDefined();
+  });
+});
+
+describe("custom model settings compatibility", () => {
+  it("accepts legacy strings and named descriptors for every Pulse provider", () => {
+    const customModels = [
+      "old-slug",
+      { slug: "new-slug", name: "Named model", capabilities: { optionDescriptors: [] } },
+    ];
+    for (const driver of ["codex", "claudeAgent", "cursor", "grok", "opencode", "omp"] as const) {
+      const settings = decodeServerSettings({ providers: { [driver]: { customModels } } });
+      expect(settings.providers[driver].customModels).toEqual(customModels);
+      expect(
+        decodeServerSettingsPatch({ providers: { [driver]: { customModels } } }).providers?.[driver]
+          ?.customModels,
+      ).toEqual(customModels);
+    }
   });
 });

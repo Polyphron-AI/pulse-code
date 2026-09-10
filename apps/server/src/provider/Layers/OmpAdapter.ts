@@ -867,6 +867,8 @@ export function makeOmpAdapter(ompSettings: OmpSettings, options?: OmpAdapterLiv
         const prompt: Array<EffectAcpSchema.ContentBlock> = [];
         if (input.input?.trim()) prompt.push({ type: "text", text: input.input.trim() });
         for (const attachment of input.attachments ?? []) {
+          // Generic files are delivered through ProviderService's bounded path lines.
+          if (attachment.type !== "image") continue;
           const attachmentPath = resolveAttachmentPath({
             attachmentsDir: serverConfig.attachmentsDir,
             attachment,

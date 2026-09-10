@@ -84,6 +84,8 @@ class FakeCodexRuntime implements CodexSessionRuntimeShape {
       }),
   );
 
+  public readonly compactThread = Effect.void;
+
   public readonly interruptTurnImpl = vi.fn(
     (_turnId?: TurnId): Promise<void> => Promise.resolve(undefined),
   );
@@ -310,6 +312,48 @@ const sessionErrorLayer = it.layer(
 );
 
 sessionErrorLayer("CodexAdapterLive session errors", (it) => {
+  it.effect("compacts the active Codex thread and emits compacted state", () =>
+    Effect.gen(function* () {
+      const adapter = yield* CodexAdapter;
+      const threadId = asThreadId("thread-compact");
+      yield* adapter.startSession({
+        provider: ProviderDriverKind.make("codex"),
+        threadId,
+        runtimeMode: "full-access",
+      });
+      const runtime = sessionRuntimeFactory.lastRuntime;
+      NodeAssert.ok(runtime);
+      const compactedEventFiber = yield* adapter.streamEvents.pipe(
+        Stream.filter((event) => event.type === "thread.state.changed"),
+        Stream.runHead,
+        Effect.forkChild,
+      );
+      NodeAssert.ok(adapter.compaction?.type === "native");
+      yield* adapter.compaction.start(threadId);
+      yield* runtime.emit({
+        id: asEventId("evt-compaction-item-completed"),
+        kind: "notification",
+        provider: ProviderDriverKind.make("codex"),
+        createdAt: "2026-01-01T00:00:00.000Z",
+        method: "item/completed",
+        threadId,
+        payload: {
+          completedAtMs: 1_778_000_000_000,
+          threadId: "provider-thread-1",
+          turnId: "provider-compact-turn",
+          item: {
+            id: "provider-compact-item",
+            type: "contextCompaction",
+          },
+        },
+      });
+      const event = Option.getOrThrow(yield* Fiber.join(compactedEventFiber));
+      NodeAssert.ok(event.type === "thread.state.changed");
+      NodeAssert.equal(event.payload.state, "compacted");
+      yield* adapter.stopSession(threadId);
+    }),
+  );
+
   it.effect("maps missing adapter sessions to ProviderAdapterSessionNotFoundError", () =>
     Effect.gen(function* () {
       const adapter = yield* CodexAdapter;
@@ -947,6 +991,286 @@ lifecycleLayer("CodexAdapterLive lifecycle", (it) => {
     }),
   );
 
+  it.effect("names the edited files in an apply-patch approval without a reason", () =>
+    Effect.gen(function* () {
+      const { adapter, runtime } = yield* startLifecycleRuntime();
+      const firstEventFiber = yield* Stream.runHead(adapter.streamEvents).pipe(Effect.forkChild);
+
+      yield* runtime.emit({
+        id: asEventId("evt-apply-patch"),
+        kind: "request",
+        provider: ProviderDriverKind.make("codex"),
+        threadId: asThreadId("thread-1"),
+        createdAt: "2026-08-24T00:00:00.000Z",
+        method: "applyPatchApproval",
+        requestKind: "file-change",
+        requestId: ApprovalRequestId.make("req-patch"),
+        turnId: asTurnId("turn-1"),
+        payload: {
+          callId: "call-1",
+          conversationId: "provider-thread-1",
+          fileChanges: {
+            "/tmp/removed.md": { type: "delete", content: "gone" },
+            "/tmp/added.ts": { type: "add", content: "export {};" },
+          },
+        },
+      } satisfies ProviderEvent);
+
+      const firstEvent = yield* Fiber.join(firstEventFiber);
+
+      NodeAssert.equal(firstEvent._tag, "Some");
+      if (firstEvent._tag !== "Some" || firstEvent.value.type !== "request.opened") {
+        return;
+      }
+      NodeAssert.equal(firstEvent.value.payload.requestType, "apply_patch_approval");
+      NodeAssert.equal(
+        firstEvent.value.payload.detail,
+        "add /tmp/added.ts\ndelete /tmp/removed.md",
+      );
+    }),
+  );
+
+  it.effect("keeps the reason when an apply-patch approval carries one", () =>
+    Effect.gen(function* () {
+      const { adapter, runtime } = yield* startLifecycleRuntime();
+      const firstEventFiber = yield* Stream.runHead(adapter.streamEvents).pipe(Effect.forkChild);
+
+      yield* runtime.emit({
+        id: asEventId("evt-apply-patch-reason"),
+        kind: "request",
+        provider: ProviderDriverKind.make("codex"),
+        threadId: asThreadId("thread-1"),
+        createdAt: "2026-08-24T00:00:00.000Z",
+        method: "applyPatchApproval",
+        requestKind: "file-change",
+        requestId: ApprovalRequestId.make("req-patch-reason"),
+        turnId: asTurnId("turn-1"),
+        payload: {
+          callId: "call-2",
+          conversationId: "provider-thread-1",
+          reason: "Needs to rewrite the changelog",
+          fileChanges: { "/tmp/CHANGELOG.md": { type: "add", content: "x" } },
+        },
+      } satisfies ProviderEvent);
+
+      const firstEvent = yield* Fiber.join(firstEventFiber);
+
+      NodeAssert.equal(firstEvent._tag, "Some");
+      if (firstEvent._tag !== "Some" || firstEvent.value.type !== "request.opened") {
+        return;
+      }
+      NodeAssert.equal(firstEvent.value.payload.detail, "Needs to rewrite the changelog");
+    }),
+  );
+
+  it.effect("falls back to the grant root for a file-change approval without a reason", () =>
+    Effect.gen(function* () {
+      const { adapter, runtime } = yield* startLifecycleRuntime();
+      const firstEventFiber = yield* Stream.runHead(adapter.streamEvents).pipe(Effect.forkChild);
+
+      yield* runtime.emit({
+        id: asEventId("evt-file-change"),
+        kind: "request",
+        provider: ProviderDriverKind.make("codex"),
+        threadId: asThreadId("thread-1"),
+        createdAt: "2026-08-24T00:00:00.000Z",
+        method: "item/fileChange/requestApproval",
+        requestKind: "file-change",
+        requestId: ApprovalRequestId.make("req-file-change"),
+        turnId: asTurnId("turn-1"),
+        payload: {
+          itemId: "item-1",
+          grantRoot: "/tmp/workspace",
+          startedAtMs: 0,
+          threadId: "provider-thread-1",
+          turnId: "turn-1",
+        },
+      } satisfies ProviderEvent);
+
+      const firstEvent = yield* Fiber.join(firstEventFiber);
+
+      NodeAssert.equal(firstEvent._tag, "Some");
+      if (firstEvent._tag !== "Some" || firstEvent.value.type !== "request.opened") {
+        return;
+      }
+      NodeAssert.equal(firstEvent.value.payload.requestType, "file_change_approval");
+      NodeAssert.equal(firstEvent.value.payload.detail, "/tmp/workspace");
+    }),
+  );
+
+  it.effect("prefers the edited files over a blank apply-patch reason", () =>
+    Effect.gen(function* () {
+      const { adapter, runtime } = yield* startLifecycleRuntime();
+      const firstEventFiber = yield* Stream.runHead(adapter.streamEvents).pipe(Effect.forkChild);
+
+      yield* runtime.emit({
+        id: asEventId("evt-apply-patch-blank"),
+        kind: "request",
+        provider: ProviderDriverKind.make("codex"),
+        threadId: asThreadId("thread-1"),
+        createdAt: "2026-08-24T00:00:00.000Z",
+        method: "applyPatchApproval",
+        requestKind: "file-change",
+        requestId: ApprovalRequestId.make("req-patch-blank"),
+        turnId: asTurnId("turn-1"),
+        payload: {
+          callId: "call-3",
+          conversationId: "provider-thread-1",
+          reason: "   ",
+          fileChanges: {
+            "/tmp/moved.ts": { type: "update", unified_diff: "@@", move_path: "/tmp/renamed.ts" },
+          },
+        },
+      } satisfies ProviderEvent);
+
+      const firstEvent = yield* Fiber.join(firstEventFiber);
+
+      NodeAssert.equal(firstEvent._tag, "Some");
+      if (firstEvent._tag !== "Some" || firstEvent.value.type !== "request.opened") {
+        return;
+      }
+      NodeAssert.equal(firstEvent.value.payload.detail, "update /tmp/moved.ts -> /tmp/renamed.ts");
+    }),
+  );
+
+  it.effect("caps the described files in an oversized apply-patch approval", () =>
+    Effect.gen(function* () {
+      const { adapter, runtime } = yield* startLifecycleRuntime();
+      const firstEventFiber = yield* Stream.runHead(adapter.streamEvents).pipe(Effect.forkChild);
+
+      const fileChanges = Object.fromEntries(
+        Array.from({ length: 25 }, (_unused, index) => [
+          `/tmp/file-${String(index).padStart(2, "0")}.ts`,
+          { type: "add", content: "x" },
+        ]),
+      );
+
+      yield* runtime.emit({
+        id: asEventId("evt-apply-patch-many"),
+        kind: "request",
+        provider: ProviderDriverKind.make("codex"),
+        threadId: asThreadId("thread-1"),
+        createdAt: "2026-08-24T00:00:00.000Z",
+        method: "applyPatchApproval",
+        requestKind: "file-change",
+        requestId: ApprovalRequestId.make("req-patch-many"),
+        turnId: asTurnId("turn-1"),
+        payload: { callId: "call-4", conversationId: "provider-thread-1", fileChanges },
+      } satisfies ProviderEvent);
+
+      const firstEvent = yield* Fiber.join(firstEventFiber);
+
+      NodeAssert.equal(firstEvent._tag, "Some");
+      if (firstEvent._tag !== "Some" || firstEvent.value.type !== "request.opened") {
+        return;
+      }
+      const detail = firstEvent.value.payload.detail ?? "";
+      NodeAssert.equal(detail.split("\n").length, 21);
+      NodeAssert.ok(detail.endsWith("+5 more"));
+    }),
+  );
+
+  it.effect("leaves an apply-patch approval without changes or a reason undetailed", () =>
+    Effect.gen(function* () {
+      const { adapter, runtime } = yield* startLifecycleRuntime();
+      const firstEventFiber = yield* Stream.runHead(adapter.streamEvents).pipe(Effect.forkChild);
+
+      yield* runtime.emit({
+        id: asEventId("evt-apply-patch-empty"),
+        kind: "request",
+        provider: ProviderDriverKind.make("codex"),
+        threadId: asThreadId("thread-1"),
+        createdAt: "2026-08-24T00:00:00.000Z",
+        method: "applyPatchApproval",
+        requestKind: "file-change",
+        requestId: ApprovalRequestId.make("req-patch-empty"),
+        turnId: asTurnId("turn-1"),
+        payload: { callId: "call-5", conversationId: "provider-thread-1", fileChanges: {} },
+      } satisfies ProviderEvent);
+
+      const firstEvent = yield* Fiber.join(firstEventFiber);
+
+      NodeAssert.equal(firstEvent._tag, "Some");
+      if (firstEvent._tag !== "Some" || firstEvent.value.type !== "request.opened") {
+        return;
+      }
+      NodeAssert.equal(firstEvent.value.payload.detail, undefined);
+    }),
+  );
+
+  it.effect("maps MCP elicitation requests into app access approvals", () =>
+    Effect.gen(function* () {
+      const { adapter, runtime } = yield* startLifecycleRuntime();
+      const firstEventFiber = yield* Stream.runHead(adapter.streamEvents).pipe(Effect.forkChild);
+
+      yield* runtime.emit({
+        id: asEventId("evt-mcp-elicitation"),
+        kind: "request",
+        provider: ProviderDriverKind.make("codex"),
+        threadId: asThreadId("thread-1"),
+        createdAt: "2026-08-24T00:00:00.000Z",
+        method: "mcpServer/elicitation/request",
+        requestKind: "mcp-elicitation",
+        requestId: ApprovalRequestId.make("req-safari"),
+        turnId: asTurnId("turn-1"),
+        payload: {
+          mode: "form",
+          message: "Allow ChatGPT to use Safari?",
+          serverName: "computer-use",
+          threadId: "provider-thread-1",
+          turnId: "turn-1",
+          _meta: { app_name: "Safari", persist: ["session", "always"] },
+          requestedSchema: { type: "object", properties: {} },
+        },
+      } satisfies ProviderEvent);
+
+      const firstEvent = yield* Fiber.join(firstEventFiber);
+
+      NodeAssert.equal(firstEvent._tag, "Some");
+      if (firstEvent._tag !== "Some" || firstEvent.value.type !== "request.opened") {
+        return;
+      }
+      NodeAssert.equal(firstEvent.value.payload.requestType, "mcp_elicitation_approval");
+      NodeAssert.equal(firstEvent.value.payload.appName, "Safari");
+      NodeAssert.equal(firstEvent.value.payload.detail, "Allow ChatGPT to use Safari?");
+      NodeAssert.deepStrictEqual(firstEvent.value.payload.options, [
+        { decision: "cancel", label: "Cancel" },
+        { decision: "decline", label: "Decline" },
+        { decision: "acceptForSession", label: "Always allow this session" },
+        { decision: "acceptAlways", label: "Always allow" },
+        { decision: "accept", label: "Approve" },
+      ]);
+    }),
+  );
+
+  it.effect("preserves MCP elicitation type when an app access request resolves", () =>
+    Effect.gen(function* () {
+      const { adapter, runtime } = yield* startLifecycleRuntime();
+      const firstEventFiber = yield* Stream.runHead(adapter.streamEvents).pipe(Effect.forkChild);
+
+      yield* runtime.emit({
+        id: asEventId("evt-mcp-elicitation-resolved"),
+        kind: "notification",
+        provider: ProviderDriverKind.make("codex"),
+        threadId: asThreadId("thread-1"),
+        createdAt: "2026-08-24T00:00:00.000Z",
+        method: "item/requestApproval/decision",
+        requestKind: "mcp-elicitation",
+        requestId: ApprovalRequestId.make("req-safari"),
+        payload: { decision: "acceptAlways" },
+      } satisfies ProviderEvent);
+
+      const firstEvent = yield* Fiber.join(firstEventFiber);
+
+      NodeAssert.equal(firstEvent._tag, "Some");
+      if (firstEvent._tag !== "Some" || firstEvent.value.type !== "request.resolved") {
+        return;
+      }
+      NodeAssert.equal(firstEvent.value.payload.requestType, "mcp_elicitation_approval");
+      NodeAssert.equal(firstEvent.value.payload.decision, "acceptAlways");
+    }),
+  );
+
   it.effect("preserves file-read request type when mapping serverRequest/resolved", () =>
     Effect.gen(function* () {
       const { adapter, runtime } = yield* startLifecycleRuntime();
@@ -1132,6 +1456,81 @@ lifecycleLayer("CodexAdapterLive lifecycle", (it) => {
           });
         }
       }),
+  );
+
+  it.effect("maps async agent questions without ending the turn", () =>
+    Effect.gen(function* () {
+      const { adapter, runtime } = yield* startLifecycleRuntime();
+      const eventsFiber = yield* Stream.runCollect(Stream.take(adapter.streamEvents, 2)).pipe(
+        Effect.forkChild,
+      );
+      yield* runtime.emit({
+        id: asEventId("evt-async-question"),
+        kind: "notification",
+        provider: ProviderDriverKind.make("codex"),
+        threadId: asThreadId("thread-1"),
+        createdAt: "2026-01-01T00:00:00.000Z",
+        method: "item/completed",
+        payload: {
+          completedAtMs: 0,
+          threadId: "thread-1",
+          turnId: "turn-1",
+          item: {
+            type: "agentMessage",
+            id: "async-question-1",
+            text: "Which package manager?\n- pnpm\n- npm\n\nWhat should it be named?",
+            phase: "final_answer",
+            delivery: "async",
+            questions: [
+              { title: "Which package manager?", options: ["pnpm", "npm"] },
+              { title: "What should it be named?" },
+            ],
+          },
+        },
+      });
+      yield* runtime.emit({
+        id: asEventId("evt-async-continued"),
+        kind: "notification",
+        provider: ProviderDriverKind.make("codex"),
+        threadId: asThreadId("thread-1"),
+        createdAt: "2026-01-01T00:00:01.000Z",
+        method: "item/agentMessage/delta",
+        payload: {
+          threadId: "thread-1",
+          turnId: "turn-1",
+          itemId: "message-2",
+          delta: "I will keep working.",
+        },
+      });
+      const events = Array.from(yield* Fiber.join(eventsFiber));
+      NodeAssert.equal(events[0]?.type, "user-input.requested");
+      NodeAssert.equal(events[0]?.requestId, "codex-async:thread-1:async-question-1");
+      NodeAssert.deepEqual(events[0]?.payload, {
+        responseMode: "message",
+        questions: [
+          {
+            id: "0",
+            header: "Question",
+            question: "Which package manager?",
+            options: [
+              { label: "pnpm", description: "" },
+              { label: "npm", description: "" },
+            ],
+            allowCustomAnswer: true,
+            multiSelect: false,
+          },
+          {
+            id: "1",
+            header: "Question",
+            question: "What should it be named?",
+            options: [],
+            allowCustomAnswer: true,
+            multiSelect: false,
+          },
+        ],
+      });
+      NodeAssert.equal(events[1]?.type, "content.delta");
+    }),
   );
 
   it.effect("unwraps Codex token usage payloads for context window events", () =>

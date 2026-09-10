@@ -171,6 +171,7 @@ export default defineConfig(() => {
       }),
       tailwindcss(),
     ],
+    worker: { format: "es" as const },
     optimizeDeps: {
       include: [
         "@clerk/clerk-js",

@@ -34,12 +34,25 @@ When you set this field, Pulse Code points Claude Code at that directory with th
 `CLAUDE_CONFIG_DIR` environment variable. It does not change `HOME`, so your system keychain and
 the rest of your environment stay as they are.
 
+## Usage Limits
+
+When Claude runs out of subscription usage during a turn, Pulse Code shows the limit and the
+remaining wait when Claude provides a reset time. Claude can hold the turn until that window
+reopens, so it may still show as working. Wait for the reset, or stop the turn and continue later.
+The warning's timestamp shows when the displayed wait started.
+
+Expired-login errors identify the Claude account configuration that needs signing in again.
+
 ## Where Claude Skills Are Loaded
 
-Pulse Code looks for Claude skills in the Claude config directory's `skills` folder, then
-`<workspace>/.agents/skills`, then `<workspace>/.claude/skills`.
+Claude skills come from the configured Claude directory and `.claude/skills` folders in the
+workspace and its repository ancestors. User skills take precedence when names overlap.
+Claude's enabled plugin skills and `skillOverrides` settings are respected, including managed
+administrator settings. Skills stored only in `.agents/skills` are not native Claude commands.
 
-If the same skill name exists in more than one folder, the later folder wins.
+Composer skill picks run through Claude's native slash command, including picks embedded in a
+longer prompt or sent with images. Skills marked `user-invocable: false` are reserved for Claude
+and are hidden from composer picks.
 
 ## I Want Work And Personal Claude Accounts
 
@@ -215,3 +228,9 @@ If the preset needs different Claude files, give it a different `CLAUDE_CONFIG_D
 different API keys, base URLs, or router settings, use Environment variables.
 
 Do not put environment variable assignments in `Launch arguments`.
+
+## Reduce Context Usage
+
+In Settings, open your Claude provider and set **Auto-compact after** to a token count between `100000` and `1000000`. For example, `300000` compacts the conversation into a summary once it reaches about 300,000 tokens, without changing the model context window. Leave the field empty to keep Claude Code defaults.
+
+When Claude asks whether to compact an older session, you can compact and continue, keep the full history, or skip future resume prompts. This question appears through the usual approval interface on web, desktop, and mobile.

@@ -443,6 +443,260 @@ describe("MessagesTimeline", () => {
     expect(onAnchorReady).toHaveBeenCalledWith(secondEntry.message.id, 1);
   });
 
+  it("gives browser documents separate preview and download controls", () => {
+    const entry = {
+      ...buildUserTimelineEntry("Read the report."),
+      message: {
+        ...buildUserTimelineEntry("Read the report.").message,
+        attachments: [
+          {
+            type: "file" as const,
+            id: "attachment-report-pdf",
+            name: "report.pdf",
+            mimeType: "application/pdf",
+            sizeBytes: 42,
+            previewUrl: "https://environment.test/api/assets/report.pdf",
+          },
+        ],
+      },
+    };
+
+    const markup = renderToStaticMarkup(
+      <MessagesTimeline {...buildProps()} timelineEntries={[entry]} />,
+    );
+
+    expect(markup).toContain('aria-label="Preview report.pdf"');
+    expect(markup).toContain('aria-label="Download report.pdf"');
+    expect(markup).not.toContain('download="report.pdf"');
+    expect(markup).not.toContain('alt="report.pdf"');
+  });
+
+  it("renders a video-only message with native playback controls", () => {
+    const entry = {
+      ...buildUserTimelineEntry("Uploading the demo."),
+      message: {
+        ...buildUserTimelineEntry("Uploading the demo.").message,
+        attachments: [
+          {
+            type: "file" as const,
+            id: "optimistic-demo-mp4",
+            name: "pending-demo.mp4",
+            mimeType: "video/mp4",
+            sizeBytes: 42,
+            downloadable: false,
+            previewUrl: "blob:local-video",
+          },
+        ],
+      },
+    };
+
+    const markup = renderToStaticMarkup(
+      <MessagesTimeline {...buildProps()} timelineEntries={[entry]} />,
+    );
+
+    expect(markup).toContain("<video");
+    expect(markup).toContain('controls=""');
+    expect(markup).toContain('aria-label="pending-demo.mp4"');
+  });
+  it("shows the filename while an optimistic video is unavailable", () => {
+    const entry = {
+      ...buildUserTimelineEntry("Uploading the demo."),
+      message: {
+        ...buildUserTimelineEntry("Uploading the demo.").message,
+        attachments: [
+          {
+            type: "file" as const,
+            id: "optimistic-demo-mp4",
+            name: "pending-demo.mp4",
+            mimeType: "video/mp4",
+            sizeBytes: 42,
+            downloadable: false,
+          },
+        ],
+      },
+    };
+
+    const markup = renderToStaticMarkup(
+      <MessagesTimeline {...buildProps()} timelineEntries={[entry]} />,
+    );
+
+    expect(markup).not.toContain("<video");
+    expect(markup).toContain(">pending-demo.mp4</div>");
+  });
+  it("renders an ordinary file download button without creating its URL in advance", () => {
+    const entry = {
+      ...buildUserTimelineEntry("Read the report."),
+      message: {
+        ...buildUserTimelineEntry("Read the report.").message,
+        attachments: [
+          {
+            type: "file" as const,
+            id: "attachment-report-pdf",
+            name: "archive.zip",
+            mimeType: "application/zip",
+            sizeBytes: 42,
+          },
+        ],
+      },
+    };
+
+    const markup = renderToStaticMarkup(
+      <MessagesTimeline {...buildProps()} timelineEntries={[entry]} />,
+    );
+
+    expect(markup).toContain(
+      '<button type="button" aria-label="Download archive.zip" class="flex min-w-0 cursor-pointer items-center gap-2 rounded-md py-1 text-left text-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70">',
+    );
+    expect(markup).not.toContain("<a href=");
+  });
+
+  it("does not download an optimistic file before the server supplies its attachment ID", () => {
+    const entry = {
+      ...buildUserTimelineEntry("Read the report."),
+      message: {
+        ...buildUserTimelineEntry("Read the report.").message,
+        attachments: [
+          {
+            type: "file" as const,
+            id: "composer-local-report",
+            name: "report.pdf",
+            mimeType: "application/pdf",
+            sizeBytes: 42,
+            downloadable: false,
+          },
+        ],
+      },
+    };
+
+    const markup = renderToStaticMarkup(
+      <MessagesTimeline {...buildProps()} timelineEntries={[entry]} />,
+    );
+
+    expect(markup).toContain("report.pdf");
+    expect(markup).not.toContain('aria-label="Download report.pdf"');
+  });
+
+  it("renders unknown attachment types as inert rows instead of crashing", () => {
+    const entry = {
+      ...buildUserTimelineEntry("Play the recording."),
+      message: {
+        ...buildUserTimelineEntry("Play the recording.").message,
+        attachments: [
+          {
+            // A newer server can introduce attachment types this build does
+            // not know. They ride the open contract member.
+            type: "recording",
+            id: "attachment-voice-memo",
+            name: "voice-memo.ogg",
+            mimeType: "audio/ogg",
+            sizeBytes: 42,
+          },
+        ],
+      },
+    };
+
+    const markup = renderToStaticMarkup(
+      <MessagesTimeline {...buildProps()} timelineEntries={[entry]} />,
+    );
+
+    expect(markup).toContain("voice-memo.ogg");
+    expect(markup).not.toContain('aria-label="Download voice-memo.ogg"');
+    expect(markup).not.toContain('alt="voice-memo.ogg"');
+    expect(markup).not.toContain("<a href=");
+  });
+
+  it("keeps reserved end space when tool work starts while reading history", () => {
+    const turnId = TurnId.make("turn-with-active-tool");
+    const firstEntry = buildUserTimelineEntry("Run the command.");
+    const markup = renderToStaticMarkup(
+      <MessagesTimeline
+        {...buildProps()}
+        isWorking
+        activeTurnStartedAt={MESSAGE_CREATED_AT}
+        latestTurn={{
+          turnId,
+          state: "running",
+          startedAt: MESSAGE_CREATED_AT,
+          completedAt: null,
+        }}
+        runningTurnId={turnId}
+        anchorMessageId={firstEntry.message.id}
+        liveFollowEnabled={false}
+        timelineEntries={[
+          firstEntry,
+          {
+            id: "entry-active-tool",
+            kind: "work",
+            createdAt: MESSAGE_CREATED_AT,
+            entry: {
+              id: "work-active-tool",
+              createdAt: MESSAGE_CREATED_AT,
+              turnId,
+              label: "Run command",
+              tone: "tool",
+              itemType: "command_execution",
+              command: "git status",
+              toolLifecycleStatus: "inProgress",
+            },
+          },
+        ]}
+      />,
+    );
+
+    expect(markup).toContain('data-anchor-index="0"');
+    expect(markup).not.toContain('data-maintain-scroll-at-end="enabled"');
+  });
+
+  it("hands end-following back to the list once the send anchor is released", () => {
+    const firstEntry = buildUserTimelineEntry("First prompt.");
+    const secondEntry = {
+      ...buildUserTimelineEntry("Newest prompt."),
+      id: "entry-2",
+      message: {
+        ...buildUserTimelineEntry("Newest prompt.").message,
+        id: MessageId.make("message-2"),
+      },
+    };
+    const timelineEntries = [firstEntry, secondEntry];
+
+    // While the send anchor holds the end space open, ChatView owns streaming
+    // scrolls and LegendList must not re-pin behind it.
+    expect(
+      renderToStaticMarkup(
+        <MessagesTimeline
+          {...buildProps()}
+          anchorMessageId={firstEntry.message.id}
+          timelineEntries={timelineEntries}
+        />,
+      ),
+    ).not.toContain('data-maintain-scroll-at-end="enabled"');
+
+    // Dropping the anchor is what actually gives end-following back, so
+    // returning to the live edge has to release it — re-enabling live follow
+    // alone leaves nothing pinned to the stream.
+    expect(
+      renderToStaticMarkup(
+        <MessagesTimeline
+          {...buildProps()}
+          anchorMessageId={null}
+          timelineEntries={timelineEntries}
+        />,
+      ),
+    ).toContain('data-maintain-scroll-at-end="enabled"');
+
+    // Reading history still wins over both.
+    expect(
+      renderToStaticMarkup(
+        <MessagesTimeline
+          {...buildProps()}
+          anchorMessageId={null}
+          liveFollowEnabled={false}
+          timelineEntries={timelineEntries}
+        />,
+      ),
+    ).not.toContain('data-maintain-scroll-at-end="enabled"');
+  });
+
   it("renders collapse controls for long user messages", () => {
     const markup = renderToStaticMarkup(
       <MessagesTimeline
@@ -688,7 +942,7 @@ describe("MessagesTimeline", () => {
             entry: {
               id: "work-1",
               createdAt: "2026-03-17T19:12:28.000Z",
-              label: "Context compacted",
+              label: "Compacted context 899K → 19K tokens",
               tone: "info",
             },
           },
@@ -696,8 +950,7 @@ describe("MessagesTimeline", () => {
       />,
     );
 
-    expect(markup).toContain("Context compacted");
-    expect(markup).toContain("Work Log");
+    expect(markup).toContain("Compacted context 899K → 19K tokens");
   });
 
   it("formats changed file paths from the workspace root", () => {

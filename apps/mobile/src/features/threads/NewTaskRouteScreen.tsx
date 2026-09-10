@@ -102,8 +102,8 @@ export function NewTaskRouteScreen({ route }: StaticScreenProps<NewTaskRoutePara
     ? incomingShare.attachments.length === 0
       ? "Choose a project for what you shared"
       : incomingShare.attachments.length === 1
-        ? "Choose a project for the image you shared"
-        : `Choose a project for the ${incomingShare.attachments.length} images you shared`
+        ? `Choose a project for the ${incomingShare.attachments[0]?.type === "image" ? "image" : "file"} you shared`
+        : `Choose a project for the ${incomingShare.attachments.length} ${incomingShare.attachments.every((attachment) => attachment.type === "image") ? "images" : "files"} you shared`
     : null;
   const screenTitle = incomingShare ? "Start a task" : "Choose project";
   const projectEmptyState = deriveProjectEmptyState(catalogState);
@@ -288,6 +288,7 @@ export function NewTaskRouteScreen({ route }: StaticScreenProps<NewTaskRoutePara
                       <ProjectFavicon
                         environmentId={scope.representative.environmentId}
                         faviconPath={scope.representative.faviconPath}
+                        projectIcon={scope.representative.projectIcon}
                         size={20}
                         projectTitle={scope.title}
                         workspaceRoot={scope.representative.workspaceRoot}

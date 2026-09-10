@@ -25,6 +25,7 @@ import { useAtomCommand } from "../state/use-atom-command";
 import {
   readEnvironmentSupportsPinning,
   readEnvironmentSupportsSettlement,
+  readEnvironmentSupportsAutoSettlement,
   readEnvironmentSupportsSnooze,
   readEnvironmentSupportsTitleRegeneration,
   readThreadShell,
@@ -130,6 +131,7 @@ export function useThreadActionMenu(input: {
           isSettled:
             supports.settlement &&
             effectiveSettled(thread, {
+              serverAutoSettlement: readEnvironmentSupportsAutoSettlement(threadRef.environmentId),
               // Minute-quantized like useNowMinute, so this classification
               // can never disagree with the sidebar partition or ChatView's
               // parked-thread banner within the same minute.

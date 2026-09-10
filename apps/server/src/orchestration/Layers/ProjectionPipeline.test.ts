@@ -1,4 +1,5 @@
 import {
+  ApprovalRequestId,
   CheckpointRef,
   CommandId,
   CorrelationId,
@@ -246,6 +247,48 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
       yield* sql`DROP TRIGGER count_thread_shell_updates`;
       yield* sql`DROP TABLE thread_shell_updates`;
 
+      // Replayed order events must survive later lifecycle upserts, whose
+      // complete SQL row writes otherwise risk dropping the placement.
+      const orderUpdatedAt = "2026-01-01T00:00:00.200Z";
+      const orderEvents = [
+        { type: "thread.meta-updated", payload: { activeOrderKey: "gm" } },
+        { type: "thread.pinned", payload: { pinnedAt: now, pinOrderKey: "m" } },
+        {
+          type: "thread.snoozed",
+          payload: { snoozedAt: now, snoozedUntil: "2026-01-02T00:00:00.000Z" },
+        },
+        { type: "thread.unsnoozed", payload: { reason: "user" } },
+        { type: "thread.unpinned", payload: {} },
+        { type: "thread.meta-updated", payload: { title: "Renamed" } },
+      ] as const;
+      for (const [index, event] of orderEvents.entries()) {
+        yield* eventStore.append({
+          type: event.type,
+          eventId: EventId.make(`evt-active-order-${index}`),
+          aggregateKind: "thread",
+          aggregateId: ThreadId.make("thread-1"),
+          occurredAt: "2026-01-01T00:00:00.500Z",
+          commandId: CommandId.make(`cmd-active-order-${index}`),
+          causationEventId: null,
+          correlationId: null,
+          metadata: {},
+          payload: {
+            ...event.payload,
+            threadId: ThreadId.make("thread-1"),
+            updatedAt: orderUpdatedAt,
+          },
+        });
+        yield* projectionPipeline.bootstrap;
+        const rows = yield* sql<{
+          readonly activeOrderKey: string | null;
+          readonly updatedAt: string;
+        }>`
+          SELECT active_order_key AS "activeOrderKey", updated_at AS "updatedAt"
+          FROM projection_threads WHERE thread_id = 'thread-1'
+        `;
+        assert.deepEqual(rows, [{ activeOrderKey: "gm", updatedAt: orderUpdatedAt }]);
+      }
+
       // Settled lifecycle through the DB pipeline: thread.settled writes the
       // override + timestamp, thread.unsettled(user) flips to the active pin.
       yield* eventStore.append({
@@ -269,15 +312,24 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
       const settledRows = yield* sql<{
         readonly settledOverride: string | null;
         readonly settledAt: string | null;
+        readonly unsettledAt: string | null;
+        readonly activeOrderKey: string | null;
       }>`
         SELECT
           settled_override AS "settledOverride",
-          settled_at AS "settledAt"
+          settled_at AS "settledAt",
+          unsettled_at AS "unsettledAt",
+          active_order_key AS "activeOrderKey"
         FROM projection_threads
         WHERE thread_id = 'thread-1'
       `;
       assert.deepEqual(settledRows, [
-        { settledOverride: "settled", settledAt: "2026-01-01T00:00:01.000Z" },
+        {
+          settledOverride: "settled",
+          settledAt: "2026-01-01T00:00:01.000Z",
+          unsettledAt: null,
+          activeOrderKey: null,
+        },
       ]);
 
       yield* eventStore.append({
@@ -301,14 +353,27 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
       const unsettledRows = yield* sql<{
         readonly settledOverride: string | null;
         readonly settledAt: string | null;
+        readonly unsettledAt: string | null;
+        readonly activeOrderKey: string | null;
       }>`
         SELECT
           settled_override AS "settledOverride",
-          settled_at AS "settledAt"
+          settled_at AS "settledAt",
+          unsettled_at AS "unsettledAt",
+          active_order_key AS "activeOrderKey"
         FROM projection_threads
         WHERE thread_id = 'thread-1'
       `;
-      assert.deepEqual(unsettledRows, [{ settledOverride: "active", settledAt: null }]);
+      // The un-settle stamps the active-list re-entry time so clients can
+      // surface the thread at the top of the list.
+      assert.deepEqual(unsettledRows, [
+        {
+          settledOverride: "active",
+          settledAt: null,
+          unsettledAt: "2026-01-01T00:00:02.000Z",
+          activeOrderKey: null,
+        },
+      ]);
     }),
   );
 });
@@ -870,6 +935,7 @@ it.layer(
       const now = "2026-01-01T00:00:00.000Z";
       const threadId = ThreadId.make("Thread Revert.Files");
       const keepAttachmentId = "thread-revert-files-00000000-0000-4000-8000-000000000001";
+      const keepFileAttachmentId = "thread-revert-files-00000000-0000-4000-8000-000000000004-pdf";
       const removeAttachmentId = "thread-revert-files-00000000-0000-4000-8000-000000000002";
       const otherThreadAttachmentId =
         "thread-revert-files-extra-00000000-0000-4000-8000-000000000003";
@@ -971,6 +1037,13 @@ it.layer(
               mimeType: "image/png",
               sizeBytes: 5,
             },
+            {
+              type: "file",
+              id: keepFileAttachmentId,
+              name: "keep.pdf",
+              mimeType: "application/pdf",
+              sizeBytes: 5,
+            },
           ],
           turnId: TurnId.make("turn-keep"),
           streaming: false,
@@ -1033,9 +1106,11 @@ it.layer(
       });
 
       const keepPath = path.join(attachmentsDir, `${keepAttachmentId}.png`);
+      const keepFilePath = path.join(attachmentsDir, `${keepFileAttachmentId}.pdf`);
       const removePath = path.join(attachmentsDir, `${removeAttachmentId}.png`);
       yield* fileSystem.makeDirectory(attachmentsDir, { recursive: true });
       yield* fileSystem.writeFileString(keepPath, "keep");
+      yield* fileSystem.writeFileString(keepFilePath, "keep");
       yield* fileSystem.writeFileString(removePath, "remove");
       const otherThreadPath = path.join(attachmentsDir, `${otherThreadAttachmentId}.png`);
       yield* fileSystem.writeFileString(otherThreadPath, "other");
@@ -1060,6 +1135,7 @@ it.layer(
       });
 
       assert.isTrue(yield* exists(keepPath));
+      assert.isTrue(yield* exists(keepFilePath));
       assert.isFalse(yield* exists(removePath));
       assert.isTrue(yield* exists(otherThreadPath));
     }),
@@ -1079,6 +1155,7 @@ it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-projection-atta
         const now = "2026-01-01T00:00:00.000Z";
         const threadId = ThreadId.make("Thread Delete.Files");
         const attachmentId = "thread-delete-files-00000000-0000-4000-8000-000000000001";
+        const fileAttachmentId = "thread-delete-files-00000000-0000-4000-8000-000000000003-pdf";
         const otherThreadAttachmentId =
           "thread-delete-files-extra-00000000-0000-4000-8000-000000000002";
 
@@ -1157,6 +1234,13 @@ it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-projection-atta
                 mimeType: "image/png",
                 sizeBytes: 5,
               },
+              {
+                type: "file",
+                id: fileAttachmentId,
+                name: "delete.pdf",
+                mimeType: "application/pdf",
+                sizeBytes: 6,
+              },
             ],
             turnId: null,
             streaming: false,
@@ -1166,14 +1250,17 @@ it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-projection-atta
         });
 
         const threadAttachmentPath = path.join(attachmentsDir, `${attachmentId}.png`);
+        const threadFileAttachmentPath = path.join(attachmentsDir, `${fileAttachmentId}.pdf`);
         const otherThreadAttachmentPath = path.join(
           attachmentsDir,
           `${otherThreadAttachmentId}.png`,
         );
         yield* fileSystem.makeDirectory(attachmentsDir, { recursive: true });
         yield* fileSystem.writeFileString(threadAttachmentPath, "delete");
+        yield* fileSystem.writeFileString(threadFileAttachmentPath, "delete");
         yield* fileSystem.writeFileString(otherThreadAttachmentPath, "other-thread");
         assert.isTrue(yield* exists(threadAttachmentPath));
+        assert.isTrue(yield* exists(threadFileAttachmentPath));
         assert.isTrue(yield* exists(otherThreadAttachmentPath));
 
         yield* appendAndProject({
@@ -1193,6 +1280,7 @@ it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-projection-atta
         });
 
         assert.isFalse(yield* exists(threadAttachmentPath));
+        assert.isFalse(yield* exists(threadFileAttachmentPath));
         assert.isTrue(yield* exists(otherThreadAttachmentPath));
       }),
     );
@@ -2222,6 +2310,45 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
         },
       });
 
+      yield* appendAndProject({
+        type: "thread.activity-appended",
+        eventId: EventId.make("evt-stale-user-input-replayed"),
+        aggregateKind: "thread",
+        aggregateId: ThreadId.make("thread-stale-user-input"),
+        occurredAt: "2026-02-26T12:35:04.000Z",
+        commandId: CommandId.make("cmd-stale-user-input-replayed"),
+        causationEventId: null,
+        correlationId: CorrelationId.make("cmd-stale-user-input-replayed"),
+        metadata: {},
+        payload: {
+          threadId: ThreadId.make("thread-stale-user-input"),
+          activity: {
+            id: EventId.make("activity-stale-user-input-requested"),
+            tone: "info",
+            kind: "user-input.requested",
+            summary: "User input requested",
+            payload: {
+              requestId: "user-input-request-stale-1",
+              questions: [
+                {
+                  id: "sandbox_mode",
+                  header: "Sandbox",
+                  question: "Which mode should be used?",
+                  options: [
+                    {
+                      label: "workspace-write",
+                      description: "Allow workspace writes only",
+                    },
+                  ],
+                },
+              ],
+            },
+            turnId: null,
+            createdAt: "2026-02-26T12:35:04.000Z",
+          },
+        },
+      });
+
       const threadRows = yield* sql<{
         readonly pendingUserInputCount: number;
       }>`
@@ -2233,7 +2360,7 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
     }),
   );
 
-  it.effect("ignores non-stale provider approval response failures", () =>
+  it.effect("restores pending approvals when a provider reply fails", () =>
     Effect.gen(function* () {
       const projectionPipeline = yield* OrchestrationProjectionPipeline;
       const eventStore = yield* OrchestrationEventStore;
@@ -2315,6 +2442,24 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
             turnId: null,
             createdAt: "2026-02-26T12:45:02.000Z",
           },
+        },
+      });
+
+      yield* appendAndProject({
+        type: "thread.approval-response-requested",
+        eventId: EventId.make("evt-nonstale-approval-response"),
+        aggregateKind: "thread",
+        aggregateId: ThreadId.make("thread-nonstale-approval"),
+        occurredAt: "2026-02-26T12:45:02.500Z",
+        commandId: CommandId.make("cmd-nonstale-approval-response"),
+        causationEventId: null,
+        correlationId: CorrelationId.make("cmd-nonstale-approval-response"),
+        metadata: {},
+        payload: {
+          threadId: ThreadId.make("thread-nonstale-approval"),
+          requestId: ApprovalRequestId.make("approval-request-nonstale-existing"),
+          decision: "accept",
+          createdAt: "2026-02-26T12:45:02.500Z",
         },
       });
 
@@ -2410,6 +2555,67 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
         WHERE thread_id = 'thread-nonstale-approval'
       `;
       assert.deepEqual(threadRows, [{ pendingApprovalCount: 1 }]);
+
+      yield* appendAndProject({
+        type: "thread.activity-appended",
+        eventId: EventId.make("evt-nonstale-approval-resolved"),
+        aggregateKind: "thread",
+        aggregateId: ThreadId.make("thread-nonstale-approval"),
+        occurredAt: "2026-02-26T12:45:05.000Z",
+        commandId: CommandId.make("cmd-nonstale-approval-resolved"),
+        causationEventId: null,
+        correlationId: CorrelationId.make("cmd-nonstale-approval-resolved"),
+        metadata: {},
+        payload: {
+          threadId: ThreadId.make("thread-nonstale-approval"),
+          activity: {
+            id: EventId.make("activity-nonstale-approval-resolved"),
+            tone: "approval",
+            kind: "approval.resolved",
+            summary: "Approval resolved",
+            payload: {
+              requestId: "approval-request-nonstale-existing",
+              decision: "accept",
+            },
+            turnId: null,
+            createdAt: "2026-02-26T12:45:05.000Z",
+          },
+        },
+      });
+
+      yield* appendAndProject({
+        type: "thread.activity-appended",
+        eventId: EventId.make("evt-nonstale-approval-late-failure"),
+        aggregateKind: "thread",
+        aggregateId: ThreadId.make("thread-nonstale-approval"),
+        occurredAt: "2026-02-26T12:45:06.000Z",
+        commandId: CommandId.make("cmd-nonstale-approval-late-failure"),
+        causationEventId: null,
+        correlationId: CorrelationId.make("cmd-nonstale-approval-late-failure"),
+        metadata: {},
+        payload: {
+          threadId: ThreadId.make("thread-nonstale-approval"),
+          activity: {
+            id: EventId.make("activity-nonstale-approval-late-failure"),
+            tone: "error",
+            kind: "provider.approval.respond.failed",
+            summary: "Provider approval response failed",
+            payload: {
+              requestId: "approval-request-nonstale-existing",
+              detail: "Provider timed out while responding to approval request",
+            },
+            turnId: null,
+            createdAt: "2026-02-26T12:45:06.000Z",
+          },
+        },
+      });
+
+      const resolvedThreadRows = yield* sql<{ readonly pendingApprovalCount: number }>`
+        SELECT pending_approval_count AS "pendingApprovalCount"
+        FROM projection_threads
+        WHERE thread_id = 'thread-nonstale-approval'
+      `;
+      assert.deepEqual(resolvedThreadRows, [{ pendingApprovalCount: 0 }]);
     }),
   );
 
@@ -2685,6 +2891,69 @@ it.layer(makeProjectionPipelinePrefixedTestLayer("t3-pending-turn-terminal-test-
         assert.deepEqual(pendingRows, []);
       }),
     );
+
+    it.effect("only clears the compact request that produced the compaction activity", () =>
+      Effect.gen(function* () {
+        const projectionPipeline = yield* OrchestrationProjectionPipeline;
+        const eventStore = yield* OrchestrationEventStore;
+        const sql = yield* SqlClient.SqlClient;
+        const threadId = ThreadId.make("thread-compaction-correlation");
+
+        for (const [index, messageId] of ["compact-request", "new-message"].entries()) {
+          const createdAt = `2026-02-26T15:00:0${index}.000Z`;
+          yield* eventStore.append({
+            type: "thread.turn-start-requested",
+            eventId: EventId.make(`evt-compaction-pending-${index}`),
+            aggregateKind: "thread",
+            aggregateId: threadId,
+            occurredAt: createdAt,
+            commandId: CommandId.make(`cmd-compaction-pending-${index}`),
+            causationEventId: null,
+            correlationId: CorrelationId.make(`cmd-compaction-pending-${index}`),
+            metadata: {},
+            payload: {
+              threadId,
+              messageId: MessageId.make(messageId),
+              runtimeMode: "full-access",
+              createdAt,
+            },
+          });
+        }
+        yield* eventStore.append({
+          type: "thread.activity-appended",
+          eventId: EventId.make("evt-compaction-stale"),
+          aggregateKind: "thread",
+          aggregateId: threadId,
+          occurredAt: "2026-02-26T15:00:02.000Z",
+          commandId: CommandId.make("cmd-compaction-stale"),
+          causationEventId: null,
+          correlationId: CorrelationId.make("cmd-compaction-stale"),
+          metadata: {},
+          payload: {
+            threadId,
+            activity: {
+              id: EventId.make("activity-compaction-stale"),
+              tone: "info",
+              kind: "context-compaction",
+              summary: "Context compacted",
+              payload: { requestId: "compact-request" },
+              turnId: null,
+              createdAt: "2026-02-26T15:00:02.000Z",
+            },
+          },
+        });
+        yield* projectionPipeline.bootstrap;
+
+        const pendingRows = yield* sql<{ readonly messageId: string }>`
+          SELECT pending_message_id AS "messageId"
+          FROM projection_turns
+          WHERE thread_id = ${threadId}
+            AND turn_id IS NULL
+            AND state = 'pending'
+        `;
+        assert.deepEqual(pendingRows, [{ messageId: "new-message" }]);
+      }),
+    );
   },
 );
 
@@ -2912,17 +3181,20 @@ engineLayer("OrchestrationProjectionPipeline via engine dispatch", (it) => {
           model: "gpt-5",
         },
         faviconPath: "brand/icon.svg",
+        projectIcon: { kind: "emoji", emoji: "🚀" },
       });
 
       const projectRows = yield* sql<{
         readonly scriptsJson: string;
         readonly defaultModelSelection: string;
         readonly faviconPath: string | null;
+        readonly projectIcon: string | null;
       }>`
         SELECT
           scripts_json AS "scriptsJson",
           default_model_selection_json AS "defaultModelSelection",
-          favicon_path AS "faviconPath"
+          favicon_path AS "faviconPath",
+          project_icon_json AS "projectIcon"
         FROM projection_projects
         WHERE project_id = 'project-scripts'
       `;
@@ -2932,8 +3204,19 @@ engineLayer("OrchestrationProjectionPipeline via engine dispatch", (it) => {
             '[{"id":"script-1","name":"Build","command":"bun run build","icon":"build","runOnWorktreeCreate":false}]',
           defaultModelSelection: '{"instanceId":"codex","model":"gpt-5"}',
           faviconPath: "brand/icon.svg",
+          projectIcon: '{"kind":"emoji","emoji":"🚀"}',
         },
       ]);
+      yield* engine.dispatch({
+        type: "project.meta.update",
+        commandId: CommandId.make("reset-project-icon"),
+        projectId: ProjectId.make("project-scripts"),
+        projectIcon: null,
+      });
+      const cleared = yield* sql<{ readonly projectIcon: string | null }>`
+        SELECT project_icon_json AS "projectIcon" FROM projection_projects WHERE project_id = 'project-scripts'
+      `;
+      assert.deepEqual(cleared, [{ projectIcon: null }]);
     }),
   );
 });

@@ -1,4 +1,10 @@
-import { WS_METHODS, type PullRequestDiffInput } from "@t3tools/contracts";
+import {
+  WS_METHODS,
+  type PullRequestDetail,
+  type PullRequestDiffInput,
+  type PullRequestSummary,
+  type VcsStatusResult,
+} from "@t3tools/contracts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -20,6 +26,60 @@ export { PullRequestDiffLoader, pullRequestDiffLoaderLayer } from "./pullRequest
 export class EnvironmentHttpConnectionNotReadyError extends Data.TaggedError(
   "EnvironmentHttpConnectionNotReadyError",
 )<{ readonly message: string }> {}
+
+export const LINKED_PULL_REQUEST_IDLE_TTL_MS = 5_000;
+
+/** Refresh only the live fields a linked thread renders. */
+export function createLinkedPullRequestSummaryAtomFamily<R, E>(
+  runtime: Atom.AtomRuntime<EnvironmentRegistry | R, E>,
+) {
+  return createEnvironmentRpcQueryAtomFamily(runtime, {
+    label: "environment-data:pull-requests:linked-summary",
+    tag: WS_METHODS.pullRequestsSummary,
+    staleTimeMs: 60_000,
+    refreshIntervalMs: 60_000,
+    idleTtlMs: LINKED_PULL_REQUEST_IDLE_TTL_MS,
+  });
+}
+
+/** Older servers expose detail but do not expose summary reads. */
+export function createLinkedPullRequestDetailAtomFamily<R, E>(
+  runtime: Atom.AtomRuntime<EnvironmentRegistry | R, E>,
+) {
+  return createEnvironmentRpcQueryAtomFamily(runtime, {
+    label: "environment-data:pull-requests:linked-detail",
+    tag: WS_METHODS.pullRequestsDetail,
+    staleTimeMs: 60_000,
+    refreshIntervalMs: 60_000,
+    idleTtlMs: LINKED_PULL_REQUEST_IDLE_TTL_MS,
+  });
+}
+
+export function newestPullRequestSummary(
+  current: PullRequestSummary | null,
+  observed: PullRequestSummary | null,
+): PullRequestSummary | null {
+  if (current === null) return observed;
+  if (observed === null) return current;
+  if (current.state === "merged" && observed.state !== "merged") return current;
+  if (observed.state === "merged" && current.state !== "merged") return observed;
+  return Date.parse(observed.updatedAt) >= Date.parse(current.updatedAt) ? observed : current;
+}
+
+export function pullRequestDetailToVcsStatus(
+  detail: PullRequestDetail | PullRequestSummary,
+): NonNullable<VcsStatusResult["pr"]> {
+  return {
+    number: detail.number,
+    title: detail.title,
+    url: detail.url,
+    baseRef: detail.baseBranch,
+    headRef: detail.headBranch,
+    state: detail.state,
+    ...(detail.isDraft === undefined ? {} : { isDraft: detail.isDraft }),
+    updatedAt: detail.updatedAt,
+  };
+}
 
 /**
  * Every read shells out to the GitHub CLI, so results are reused for a short while and

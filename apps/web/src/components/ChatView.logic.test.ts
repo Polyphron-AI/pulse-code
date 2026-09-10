@@ -30,7 +30,9 @@ import {
   resolveSendEnvMode,
   scheduleEnvironmentReconnectWarning,
   startNewThreadForProject,
+  shouldRetargetThreadPullRequestPanel,
   shouldShowBranchMismatchBanner,
+  shouldShowPlanFollowUpPrompt,
   shouldWriteThreadErrorToCurrentServerThread,
 } from "./ChatView.logic";
 
@@ -427,6 +429,31 @@ describe("shouldShowBranchMismatchBanner", () => {
   });
 });
 
+describe("shouldShowPlanFollowUpPrompt", () => {
+  const base = {
+    pendingUserInputCount: 0,
+    interactionMode: "plan" as const,
+    latestTurnSettled: true,
+    hasActionableProposedPlan: true,
+    hasComposerAttachments: false,
+  };
+
+  it("shows plan actions for a settled actionable plan without attachments", () => {
+    expect(shouldShowPlanFollowUpPrompt(base)).toBe(true);
+  });
+
+  it("hides plan actions while the composer has staged attachments", () => {
+    expect(shouldShowPlanFollowUpPrompt({ ...base, hasComposerAttachments: true })).toBe(false);
+  });
+
+  it("preserves the existing plan follow-up gates", () => {
+    expect(shouldShowPlanFollowUpPrompt({ ...base, pendingUserInputCount: 1 })).toBe(false);
+    expect(shouldShowPlanFollowUpPrompt({ ...base, interactionMode: "default" })).toBe(false);
+    expect(shouldShowPlanFollowUpPrompt({ ...base, latestTurnSettled: false })).toBe(false);
+    expect(shouldShowPlanFollowUpPrompt({ ...base, hasActionableProposedPlan: false })).toBe(false);
+  });
+});
+
 describe("session branch mismatch dismissal", () => {
   it("tracks dismissed keys and treats other keys as active", () => {
     expect(isBranchMismatchDismissedForSession("t1:a:b")).toBe(false);
@@ -714,6 +741,70 @@ describe("hasServerAcknowledgedLocalDispatch", () => {
 
     expect(hasServerAcknowledgedLocalDispatch({ ...common, hasPendingApproval: true })).toBe(true);
     expect(hasServerAcknowledgedLocalDispatch({ ...common, hasPendingUserInput: true })).toBe(true);
+    expect(
+      hasServerAcknowledgedLocalDispatch({
+        ...common,
+        latestTurnStartFailureId: "turn-start-failure-1",
+      }),
+    ).toBe(true);
     expect(hasServerAcknowledgedLocalDispatch({ ...common, threadError: "failed" })).toBe(true);
+  });
+
+  it("acknowledges only a new turn-start failure", () => {
+    const localDispatch = {
+      ...createLocalDispatchSnapshot(makeThread()),
+      latestTurnStartFailureId: "turn-start-failure-old",
+    };
+    const common = {
+      localDispatch,
+      phase: "ready" as const,
+      latestTurn: null,
+      latestUserMessageId: localDispatch.latestUserMessageId,
+      session: null,
+      hasPendingApproval: false,
+      hasPendingUserInput: false,
+      threadError: null,
+    };
+
+    expect(
+      hasServerAcknowledgedLocalDispatch({
+        ...common,
+        latestTurnStartFailureId: "turn-start-failure-old",
+      }),
+    ).toBe(false);
+    expect(
+      hasServerAcknowledgedLocalDispatch({
+        ...common,
+        latestTurnStartFailureId: "turn-start-failure-new",
+      }),
+    ).toBe(true);
+  });
+});
+
+describe("server replacement pull request panels", () => {
+  it("follows only the previously linked PR and respects manual panel choices", () => {
+    const previous = {
+      projectId: ProjectId.make("project-1"),
+      repository: "Owner/Repo",
+      number: 1,
+      url: "https://example.com/1",
+    };
+    const current = { ...previous, number: 2, url: "https://example.com/2" };
+    const surface = {
+      id: "pull-request:1" as const,
+      kind: "pull-request" as const,
+      projectId: previous.projectId,
+      repository: "owner/repo",
+      number: 1,
+    };
+    expect(shouldRetargetThreadPullRequestPanel(previous, current, surface)).toBe(true);
+    expect(shouldRetargetThreadPullRequestPanel(previous, current, { ...surface, number: 3 })).toBe(
+      false,
+    );
+    expect(shouldRetargetThreadPullRequestPanel(previous, previous, surface)).toBe(false);
+    expect(shouldRetargetThreadPullRequestPanel(previous, null, surface)).toBe(false);
+    expect(
+      shouldRetargetThreadPullRequestPanel(previous, current, { id: "diff", kind: "diff" }),
+    ).toBe(false);
   });
 });

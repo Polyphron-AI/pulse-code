@@ -1,4 +1,26 @@
-import { describe, expect, it } from "vite-plus/test";
+import { EnvironmentId } from "@t3tools/contracts";
+import { describe, expect, it, vi } from "vite-plus/test";
+
+vi.mock("@effect/atom-react", () => ({ useAtomValue: () => null }));
+vi.mock("../hooks/useTheme", () => ({ useTheme: () => ({ resolvedTheme: "dark" }) }));
+vi.mock("../state/use-atom-query-runner", () => ({ useAtomQueryRunner: () => vi.fn() }));
+vi.mock("../state/use-atom-command", () => ({ useAtomCommand: () => vi.fn() }));
+vi.mock("../state/session", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../state/session")>()),
+  usePreparedConnection: () => ({ _tag: "Loading" }),
+}));
+vi.mock("../state/entities", () => ({
+  readThreadShell: () => null,
+  useActiveEnvironmentId: () => EnvironmentId.make("env-windows"),
+  useProjects: () => [],
+}));
+vi.mock("../editorPreferences", () => ({ useOpenInPreferredEditor: () => vi.fn() }));
+vi.mock("~/lib/openPullRequestLink", () => ({
+  findProjectForChangeRequest: () => undefined,
+  matchesLinkedPullRequestUrl: () => false,
+  parseChangeRequestUrl: () => null,
+  useOpenChangeRequestLink: () => vi.fn(),
+}));
 
 import { orderedListGutterStyle } from "./ChatMarkdown";
 

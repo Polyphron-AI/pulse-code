@@ -20,6 +20,7 @@ import {
   terminalStatusFromRunningIds,
   ThreadStatusLabel,
   ThreadWorktreeIndicator,
+  useLinkedThreadPullRequest,
 } from "./ThreadStatusIndicators";
 import { ProjectFavicon } from "./ProjectFavicon";
 import { useAtomValue } from "@effect/atom-react";
@@ -74,6 +75,7 @@ import { isDesktopLocalConnectionTarget } from "../connection/desktopLocal";
 import { useDesktopLocalBootstraps } from "../connection/useDesktopLocalBootstraps";
 import { isElectron } from "../env";
 import { useOpenPrLink } from "../lib/openPullRequestLink";
+import { releaseProjectDraftUploads } from "../lib/composerDraftUploads";
 import { isTerminalFocused } from "../lib/terminalFocus";
 import { isMacPlatform } from "../lib/utils";
 import {
@@ -414,7 +416,10 @@ export const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThr
   const threadProjectCwd = threadProject?.workspaceRoot ?? null;
   const gitCwd = thread.worktreePath ?? threadProjectCwd ?? props.projectCwd;
   const gitStatus = useEnvironmentQuery(
-    thread.branch != null && gitCwd !== null
+    thread.branchPullRequest === undefined &&
+      thread.linkedPullRequest == null &&
+      thread.branch != null &&
+      gitCwd !== null
       ? vcsEnvironment.status({
           environmentId: thread.environmentId,
           input: { cwd: gitCwd },
@@ -455,11 +460,19 @@ export const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThr
       lastVisitedAt,
     },
   });
-  const pr = resolveThreadPr({
-    threadBranch: thread.branch,
-    gitStatus: gitStatus.data,
-  });
-  const prStatus = prStatusIndicator(pr, gitStatus.data?.sourceControlProvider);
+  const linkedPullRequestStatus = useLinkedThreadPullRequest(
+    thread.environmentId,
+    thread.linkedPullRequest ?? thread.branchPullRequest,
+    thread.branchPullRequest !== undefined,
+  );
+  const pr =
+    thread.branchPullRequest === undefined && thread.linkedPullRequest == null
+      ? resolveThreadPr({ threadBranch: thread.branch, gitStatus: gitStatus.data })
+      : (linkedPullRequestStatus?.pr ?? null);
+  const prStatus = prStatusIndicator(
+    pr,
+    linkedPullRequestStatus?.sourceControlProvider ?? gitStatus.data?.sourceControlProvider,
+  );
   const terminalStatus = terminalStatusFromRunningIds(runningTerminalIds);
   const isConfirmingArchive = confirmingArchiveThreadKey === threadKey && !isThreadRunning;
   const threadMetaClassName = isConfirmingArchive
@@ -1461,6 +1474,15 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         return result;
       }
       const draftStore = useComposerDraftStore.getState();
+      releaseProjectDraftUploads(
+        memberProjectRef,
+        sidebarThreads
+          .filter(
+            (thread) =>
+              thread.environmentId === member.environmentId && thread.projectId === member.id,
+          )
+          .map((thread) => scopeThreadRef(thread.environmentId, thread.id)),
+      );
       const projectDraftThread = draftStore.getDraftThreadByProjectRef(memberProjectRef);
       if (projectDraftThread) {
         draftStore.clearDraftThread(projectDraftThread.draftId);
@@ -1468,7 +1490,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       draftStore.clearProjectDraftThreadId(memberProjectRef);
       return result;
     },
-    [deleteProject],
+    [deleteProject, sidebarThreads],
   );
 
   const handleRemoveProject = useCallback(
@@ -2283,11 +2305,15 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
               }`}
             />
           )}
-          <ProjectFavicon
-            environmentId={project.environmentId}
-            cwd={project.workspaceRoot}
-            faviconPath={project.faviconPath}
-          />
+          <span className="flex shrink-0">
+            <ProjectFavicon
+              environmentId={project.environmentId}
+              cwd={project.workspaceRoot}
+              projectName={project.displayName}
+              faviconPath={project.faviconPath}
+              projectIcon={project.projectIcon}
+            />
+          </span>
           <span className="flex min-w-0 flex-1 items-center gap-2">
             <span className="truncate text-sm font-medium text-sidebar-foreground/90">
               {project.displayName}

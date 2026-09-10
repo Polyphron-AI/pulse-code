@@ -30,8 +30,10 @@ export type ExecutionEnvironmentPlatform = typeof ExecutionEnvironmentPlatform.T
 
 /** How a server can replace itself with another version when asked over RPC.
     New servers only advertise the stable launcher-backed "boot-service" path;
-    "respawn" remains decodable for compatibility with older servers. */
-export const ServerSelfUpdateMethod = Schema.Literals(["boot-service", "respawn"]);
+    "respawn" remains decodable for compatibility with older servers.
+    "desktop-app" means the supervising desktop app updated and relaunched
+    itself, bringing the server back with it. */
+export const ServerSelfUpdateMethod = Schema.Literals(["boot-service", "respawn", "desktop-app"]);
 export type ServerSelfUpdateMethod = typeof ServerSelfUpdateMethod.Type;
 
 /** What update path a client should offer for a server: one of the RPC
@@ -46,8 +48,21 @@ export const ServerSelfUpdateCapability = Schema.Literals([
 export type ServerSelfUpdateCapability = typeof ServerSelfUpdateCapability.Type;
 
 export const ExecutionEnvironmentCapabilities = Schema.Struct({
+  /** Streams configured quota sources when a client opts in. */
+  usageLimitSources: Schema.optionalKey(Schema.Boolean),
+  /** Alpha mail RPCs exist; actual activation and account readiness come from mail.getStatus. */
+  mail: Schema.optionalKey(Schema.Boolean),
+  mailPeople: Schema.optionalKey(Schema.Boolean),
   repositoryIdentity: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   connectionProbe: Schema.optionalKey(Schema.Boolean),
+  /** Missing on older servers, which still accept inline image attachments. */
+  attachmentUploads: Schema.optionalKey(Schema.Boolean),
+  /** Missing on servers that only accept image attachments. */
+  fileAttachments: Schema.optionalKey(
+    Schema.Struct({
+      maxUploadBytes: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+    }),
+  ),
   /** Server exposes the pull-request list, detail, activity, diff, and mutation APIs. Absent on
       servers from before the pull-request workspace shipped, so clients must not probe them. */
   pullRequests: Schema.optionalKey(Schema.Boolean),
@@ -61,6 +76,10 @@ export const ExecutionEnvironmentCapabilities = Schema.Struct({
       pre-settlement servers, so clients treat missing as unsupported and
       never send the commands under version skew. */
   threadSettlement: Schema.optionalKey(Schema.Boolean),
+  /** Server persists the opt-in for continuing interrupted threads after restarts. */
+  threadRestartContinuation: Schema.optionalKey(Schema.Boolean),
+  /** Server evaluates merge and inactivity settlement without a client. */
+  threadAutoSettlement: Schema.optionalKey(Schema.Boolean),
   /** Server understands thread.snooze / thread.unsnooze commands. Same
       version-skew contract as threadSettlement. */
   threadSnooze: Schema.optionalKey(Schema.Boolean),
@@ -70,9 +89,13 @@ export const ExecutionEnvironmentCapabilities = Schema.Struct({
   /** Server understands thread.pin.reorder (and orderKey on thread.pin).
       Same version-skew contract as threadSettlement. */
   threadPinReorder: Schema.optionalKey(Schema.Boolean),
+  /** Server persists manual Active order through thread.active.reorder. */
+  threadActiveReorder: Schema.optionalKey(Schema.Boolean),
   /** Server understands regenerateTitle on thread.meta.update. Absent on
       older servers, so clients hide the action instead of sending it. */
   threadTitleRegeneration: Schema.optionalKey(Schema.Boolean),
+  /** Server persists a pull request reference on thread.meta.update. */
+  threadPullRequestLinking: Schema.optionalKey(Schema.Boolean),
   /** The update path clients should offer for this server. Absent on
       servers that must be relaunched manually (dev checkouts, Windows
       foreground runs, pre-update servers). */
@@ -80,12 +103,20 @@ export const ExecutionEnvironmentCapabilities = Schema.Struct({
   /** Server can stream self-update progress before acknowledging the
       restart. Clients fall back to server.updateServer when absent. */
   serverSelfUpdateProgress: Schema.optionalKey(Schema.Boolean),
+  /** Server can durably mark running provider turns before a self-update and
+      continue them after the replacement process starts. */
+  serverUpdateThreadContinuation: Schema.optionalKey(Schema.Boolean),
   /** Agent-activity publishes (push notifications and Live Activities)
       currently leave this environment: the publish opt-in is enabled and the
       relay link credentials exist. Clients skip seeding a Live Activity when
       this is false — no update would ever repaint it. Absent on older
       servers, which may still publish, so only an explicit false skips. */
   agentActivityPublishing: Schema.optionalKey(Schema.Boolean),
+  /** The desktop app supervising this server can be driven over RPC:
+      server.updateServer runs its check -> download -> relaunch. Absent on
+      desktop servers whose app predates the remote trigger, where clients
+      must keep telling the user to update the app on that machine. */
+  desktopAppUpdate: Schema.optionalKey(Schema.Boolean),
 });
 export type ExecutionEnvironmentCapabilities = typeof ExecutionEnvironmentCapabilities.Type;
 
