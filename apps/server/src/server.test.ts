@@ -31,6 +31,7 @@ import {
   ORCHESTRATION_WS_METHODS,
   type PreviewEvent,
   ProjectId,
+  ScheduleId,
   type ProviderAuthState,
   ProviderDriverKind,
   ProviderInstanceId,
@@ -8390,6 +8391,96 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       assert.equal(replayLimit, 50);
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
+
+  for (const mode of ["live", "replay", "resync"] as const) {
+    for (const schedules of [undefined, false, true]) {
+      it.effect(`subscribeShell schedule negotiation ${mode} ${String(schedules)}`, () =>
+        Effect.gen(function* () {
+          const liveEvents = yield* PubSub.unbounded<OrchestrationEvent>();
+          const ready = yield* Deferred.make<void>();
+          let head = mode === "live" ? 0 : 1;
+          const event = {
+            sequence: 1,
+            eventId: EventId.make("schedule-wire-1"),
+            aggregateKind: "schedule",
+            aggregateId: ScheduleId.make("schedule-wire"),
+            occurredAt: "2026-01-01T00:00:00.000Z",
+            commandId: null,
+            causationEventId: null,
+            correlationId: null,
+            metadata: {},
+            type: "project.schedule.deleted",
+            payload: {} as never,
+          } satisfies OrchestrationEvent;
+          yield* buildAppUnderTest({
+            layers: {
+              orchestrationEngine: {
+                streamDomainEvents: Stream.fromPubSub(liveEvents),
+                latestSequence: Effect.sync(() => head),
+                readEvents: () => Stream.make(event),
+              },
+              projectionSnapshotQuery: {
+                getShellSnapshot: () =>
+                  Effect.sync(() => ({
+                    snapshotSequence: head,
+                    projects: [],
+                    threads: [],
+                    updatedAt: event.occurredAt,
+                  })),
+              },
+            },
+          });
+          const wsUrl = yield* getWsServerUrl("/ws");
+          const items = yield* Effect.scoped(
+            Effect.gen(function* () {
+              const fiber = yield* withWsRpcClient(wsUrl, (client) =>
+                client[ORCHESTRATION_WS_METHODS.subscribeShell]({
+                  ...(mode === "live" ? {} : { afterSequence: mode === "resync" ? 2 : 0 }),
+                  ...(schedules === undefined ? {} : { schedules }),
+                  requestCompletionMarker: true,
+                }).pipe(
+                  Stream.tap((item) =>
+                    item.kind === "synchronized"
+                      ? Deferred.succeed(ready, undefined).pipe(Effect.ignore)
+                      : Effect.void,
+                  ),
+                  Stream.takeUntil((item) =>
+                    schedules === true && mode !== "resync"
+                      ? item.kind === "schedule-removed"
+                      : item.kind === "snapshot" && item.snapshot.snapshotSequence === 1,
+                  ),
+                  Stream.runCollect,
+                ),
+              ).pipe(Effect.forkScoped);
+              if (mode === "live") {
+                yield* Deferred.await(ready);
+                head = 1;
+                yield* PubSub.publish(liveEvents, event);
+              }
+              return yield* Fiber.join(fiber);
+            }),
+          );
+          const last = items.at(-1);
+          if (schedules === true && mode !== "resync") {
+            assert.equal(last?.kind, "schedule-removed");
+            if (last?.kind === "schedule-removed") assert.equal(last.sequence, 1);
+          } else {
+            assert.equal(last?.kind, "snapshot");
+            if (last?.kind === "snapshot") {
+              assert.equal(last.snapshot.snapshotSequence, 1);
+              if (schedules === true) assert.deepEqual(last.snapshot.schedules, []);
+              else assert.isUndefined(last.snapshot.schedules);
+            }
+            assert.isFalse(
+              items.some(
+                (item) => item.kind === "schedule-upserted" || item.kind === "schedule-removed",
+              ),
+            );
+          }
+        }).pipe(Effect.provide(NodeHttpServer.layerTest), TestClock.withLive),
+      );
+    }
+  }
 
   it.effect("subscribeShell coalesces live bursts after the synchronization marker", () =>
     Effect.gen(function* () {

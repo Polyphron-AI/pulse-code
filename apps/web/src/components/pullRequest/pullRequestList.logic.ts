@@ -8,12 +8,24 @@ import {
   resolvePullRequestAuthorFilter,
 } from "@t3tools/contracts";
 import type {
+  PullRequestActor,
+  PullRequestLabel,
   PullRequestDiffStat,
   PullRequestInvolvement,
   PullRequestListCursors,
   PullRequestListFilters,
   PullRequestListState,
 } from "@t3tools/contracts";
+
+export interface PullRequestAuthorFacet {
+  readonly actor: PullRequestActor;
+  readonly count: number;
+  readonly mergedCount: number;
+}
+
+export interface PullRequestLabelFacet extends PullRequestLabel {
+  readonly count: number;
+}
 
 /**
  * A listed change request with the environment that read it. Nothing on a row says which machine
@@ -825,4 +837,52 @@ export function rankPullRequestsByMergeReadiness<Entry extends PullRequestListEn
     const bySize = left.additions + left.deletions - (right.additions + right.deletions);
     return bySize !== 0 ? bySize : right.updatedAt.localeCompare(left.updatedAt);
   });
+}
+
+export function collectPullRequestListFacets(
+  entries: ReadonlyArray<PullRequestListEntry>,
+  state: PullRequestListState,
+) {
+  const authors = new Map<string, PullRequestAuthorFacet>();
+  const labels = new Map<string, PullRequestLabelFacet>();
+  const uniqueEntries = new Map(entries.map((entry) => [pullRequestEntryKey(entry), entry]));
+  for (const entry of uniqueEntries.values()) {
+    const inState = state === "all" || entry.state === state;
+    if (entry.author !== null) {
+      const key = normalize(entry.author.login);
+      if (key !== null) {
+        const held = authors.get(key);
+        authors.set(key, {
+          actor: held?.actor ?? entry.author,
+          count: (held?.count ?? 0) + Number(inState),
+          mergedCount: (held?.mergedCount ?? 0) + Number(entry.state === "merged"),
+        });
+      }
+    }
+    if (!inState) continue;
+    for (const label of entry.labels) {
+      const key = normalize(label.name);
+      if (key === null) continue;
+      const held = labels.get(key);
+      labels.set(key, {
+        ...label,
+        name: held?.name ?? label.name,
+        color: held?.color ?? label.color,
+        count: (held?.count ?? 0) + 1,
+      });
+    }
+  }
+  return {
+    authors: [...authors.values()]
+      .filter((author) => author.count > 0)
+      .toSorted(
+        (left, right) =>
+          right.mergedCount - left.mergedCount ||
+          right.count - left.count ||
+          left.actor.login.localeCompare(right.actor.login),
+      ),
+    labels: [...labels.values()].toSorted(
+      (left, right) => right.count - left.count || left.name.localeCompare(right.name),
+    ),
+  };
 }
