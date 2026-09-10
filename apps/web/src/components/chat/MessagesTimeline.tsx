@@ -1,3 +1,4 @@
+import { workEntryViewedImagePath } from "@t3tools/client-runtime/work-log/tool-presentation";
 import type { ToolActivityIcon } from "@t3tools/contracts";
 import { toolActivityFaviconUrl } from "@t3tools/shared/favicon";
 import {
@@ -2543,6 +2544,8 @@ const PlainWorkEntryRow = memo(function PlainWorkEntryRow(props: {
 }) {
   const { workEntry, workspaceRoot } = props;
   const activity = use(TimelineRowActivityCtx);
+  const ctx = use(TimelineRowCtx);
+  const viewedImagePath = workEntryViewedImagePath(workEntry);
   const [expanded, setExpanded] = useState(false);
   const iconConfig = workToneIcon(workEntry.tone);
   const showWarningIndicator = workEntry.sourceActivityKind === "runtime.warning";
@@ -2684,6 +2687,15 @@ const PlainWorkEntryRow = memo(function PlainWorkEntryRow(props: {
           </div>
         </div>
       </div>
+      {viewedImagePath ? (
+        <div className="ms-7 max-w-lg" onClick={stopRowToggle} onPointerDown={stopRowToggle}>
+          <ChatMarkdown
+            text={`![Viewed image](<${encodeURI(viewedImagePath.replace(/\\/g, "/")).replace(/>/g, "%3E")}>)`}
+            cwd={ctx.markdownCwd}
+            threadRef={ctx.threadRef ?? undefined}
+          />
+        </div>
+      ) : null}
       {expanded && canExpand && expandedBody ? (
         <div
           className="mt-1 ms-7 cursor-default border-s border-border/45 ps-3 pt-0.5"

@@ -1,3 +1,7 @@
+import {
+  latestWorkspaceMutationId,
+  useWorkspaceMutationRefresh,
+} from "../hooks/useWorkspaceMutationRefresh";
 import { writeTextToClipboard } from "../hooks/useCopyToClipboard";
 import { derivePendingRequests } from "@t3tools/client-runtime/pending-requests";
 import { useLoadBalancedEnvironment } from "../hooks/useLoadBalancedEnvironment";
@@ -2488,6 +2492,13 @@ function ChatViewContent(props: ChatViewProps) {
     conversationProviderStatus.supportsConversationRollback !== false;
   const phase = derivePhase(activeThread?.session ?? null);
   const threadActivities = activeThread?.activities ?? EMPTY_ACTIVITIES;
+  const latestCheckpointCompletedAt = activeThread?.checkpoints.at(-1)?.completedAt ?? null;
+  const workspaceMutationId = useMemo(() => {
+    const activityId = latestWorkspaceMutationId(threadActivities);
+    return activityId === null && latestCheckpointCompletedAt === null
+      ? null
+      : JSON.stringify([activityId, latestCheckpointCompletedAt]);
+  }, [threadActivities, latestCheckpointCompletedAt]);
   const activeContextWindow = useMemo(
     () => deriveLatestContextWindowSnapshot(threadActivities),
     [threadActivities],
@@ -2967,6 +2978,12 @@ function ChatViewContent(props: ChatViewProps) {
           input: { cwd: gitStatusCwd },
         }),
   );
+  useWorkspaceMutationRefresh({
+    enabled: gitStatusCwd !== null,
+    mutationId: workspaceMutationId,
+    refresh: gitStatusQuery.refresh,
+    resourceKey: JSON.stringify([activeThreadKey, gitStatusCwd]),
+  });
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
   const availableEditors = useAtomValue(primaryServerAvailableEditorsAtom);
   const manualCompactionProviderAvailable = useMemo(
@@ -7394,6 +7411,7 @@ function ChatViewContent(props: ChatViewProps) {
     ) : renderedRightPanelSurface?.kind === "diff" ? (
       <Suspense fallback={null}>
         <DiffPanel
+          workspaceMutationId={workspaceMutationId}
           key={`${activeThreadKey}:${diffPanelGitStatusResolutionKey}`}
           mode="embedded"
           composerDraftTarget={composerDraftTarget}
@@ -7465,6 +7483,11 @@ function ChatViewContent(props: ChatViewProps) {
         (renderedRightPanelSurface.kind === "file" && renderedRightPanelSurface.attachment)) ? (
       <Suspense fallback={null}>
         <FilePreviewPanel
+          workspaceMutationId={workspaceMutationId}
+          selectedFilePending={
+            renderedRightPanelSurface.kind === "file" &&
+            pendingFileSurfaceIds.has(renderedRightPanelSurface.id)
+          }
           key={`${activeThread.environmentId}:${
             renderedRightPanelSurface.kind === "file" && renderedRightPanelSurface.attachment
               ? `attachment:${renderedRightPanelSurface.attachment.id}`

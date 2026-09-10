@@ -1,6 +1,10 @@
 import { describe, expect, it } from "@effect/vitest";
 
-import { extractToolActivityPresentation, summarizeToolSources } from "./toolPresentation.ts";
+import {
+  workEntryViewedImagePath,
+  extractToolActivityPresentation,
+  summarizeToolSources,
+} from "./toolPresentation.ts";
 
 describe("extractToolActivityPresentation", () => {
   it("reads provider-neutral presentation fields", () => {
@@ -104,4 +108,32 @@ it("summarizes sources once without combining unrelated integrations", () => {
     ]),
   ).toBe("Used Chrome and Finder");
   expect(summarizeToolSources([{}])).toBeUndefined();
+});
+
+describe("viewed image tools", () => {
+  it("recognizes explicit image and read tools only", () => {
+    expect(workEntryViewedImagePath({ itemType: "image_view", detail: " /tmp/image.png " })).toBe(
+      "/tmp/image.png",
+    );
+    expect(
+      workEntryViewedImagePath({ requestKind: "file-read", detail: "C:\\work\\photo.webp" }),
+    ).toBe("C:\\work\\photo.webp");
+    expect(
+      workEntryViewedImagePath({
+        itemType: "dynamic_tool_call",
+        toolTitle: "Read file",
+        detail: "photo.jpg",
+      }),
+    ).toBe("photo.jpg");
+    expect(
+      workEntryViewedImagePath({ itemType: "command_execution", detail: "photo.png" }),
+    ).toBeNull();
+    expect(
+      workEntryViewedImagePath({ itemType: "image_view", detail: "photo.png\nother.png" }),
+    ).toBeNull();
+    expect(workEntryViewedImagePath({ itemType: "image_view", detail: "script.ts" })).toBeNull();
+    expect(
+      workEntryViewedImagePath({ itemType: "image_view", detail: "https://example.com/photo.png" }),
+    ).toBeNull();
+  });
 });

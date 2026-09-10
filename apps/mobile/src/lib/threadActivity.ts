@@ -1,3 +1,4 @@
+import { workEntryViewedImagePath } from "@t3tools/client-runtime/work-log/tool-presentation";
 import {
   derivePendingRequests,
   requestKindFromRequestType,
@@ -29,6 +30,7 @@ export interface PendingUserInputDraftAnswer {
 }
 
 export interface ThreadFeedActivity {
+  readonly viewedImagePath?: string | null;
   readonly toolIcon?: import("@t3tools/contracts").ToolActivityIcon;
   readonly toolSource?: import("@t3tools/contracts").ToolActivitySource;
   readonly activityKind?: string;
@@ -1483,6 +1485,7 @@ export function buildThreadFeed(
             turnId: entry.turnId,
             activity: {
               activityKind: entry.activityKind,
+              viewedImagePath: workEntryViewedImagePath(entry),
               ...(entry.toolIcon ? { toolIcon: entry.toolIcon } : {}),
               ...(entry.toolSource ? { toolSource: entry.toolSource } : {}),
               id: entry.id,

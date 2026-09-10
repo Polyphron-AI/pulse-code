@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { Image } from "expo-image";
 import type { EnvironmentId, ToolActivityIcon } from "@t3tools/contracts";
 import { toolActivityFaviconUrl } from "@t3tools/shared/favicon";
@@ -126,6 +126,7 @@ export function collapsedWorkLogHeight(
     WORK_LOG_BOTTOM_MARGIN +
     (onlyToolRows ? 0 : headerHeight) +
     rows.length * WORK_ROW_HEIGHT +
+    rows.filter((row) => row.viewedImagePath).length * 220 +
     (rows.length - 1) * WORK_ROW_GAP
   );
 }
@@ -169,6 +170,7 @@ function ToolActivityIconView(props: {
 }
 
 export function ThreadWorkLog(props: {
+  readonly renderViewedImage?: (path: string) => ReactNode;
   readonly environmentId: EnvironmentId;
   readonly activities: ReadonlyArray<ThreadFeedActivity>;
   readonly copiedRowId: string | null;
@@ -296,6 +298,7 @@ export function ThreadWorkLog(props: {
                 </View>
               </Pressable>
 
+              {row.viewedImagePath ? props.renderViewedImage?.(row.viewedImagePath) : null}
               {fullDetail ? (
                 <View className="ml-7 border-l border-neutral-300/60 pb-1 pl-3 pt-0.5 dark:border-white/[0.12]">
                   <ScrollView

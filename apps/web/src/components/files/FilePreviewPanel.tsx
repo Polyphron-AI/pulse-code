@@ -1,3 +1,4 @@
+import { useWorkspaceMutationRefresh } from "~/hooks/useWorkspaceMutationRefresh";
 import { isAbsolutePath } from "~/terminal-links";
 import { fileBreadcrumbs } from "./filePath";
 import type {
@@ -77,6 +78,8 @@ import {
 } from "./projectFilesQueryState";
 
 interface FilePreviewPanelProps {
+  workspaceMutationId?: string | null;
+  selectedFilePending?: boolean;
   environmentId: EnvironmentId;
   cwd: string;
   projectName: string;
@@ -140,6 +143,7 @@ const FILE_LINK_REVEAL_UNSAFE_CSS = `
 type FilePostRender = NonNullable<FileOptions<unknown>["onPostRender"]>;
 
 function WorkspaceImagePreview(props: {
+  readonly workspaceMutationId: string | null;
   readonly environmentId: EnvironmentId;
   readonly threadRef: ScopedThreadRef;
   readonly absolutePath: string;
@@ -156,7 +160,10 @@ function WorkspaceImagePreview(props: {
   );
   const assetUrl = useAssetUrlState(props.environmentId, resource);
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
-  const revisionSuffix = "";
+  const revisionSuffix =
+    props.workspaceMutationId === null
+      ? ""
+      : `${assetUrl._tag === "Success" && assetUrl.url.includes("?") ? "&" : "?"}workspace-revision=${encodeURIComponent(props.workspaceMutationId)}`;
   const imageUrl = assetUrl._tag === "Success" ? `${assetUrl.url}${revisionSuffix}` : null;
   const actionsSource: MediaActionSource = {
     kind: "image",
@@ -166,7 +173,7 @@ function WorkspaceImagePreview(props: {
     asset: { environmentId: props.environmentId, resource },
   };
 
-  if (assetUrl._tag === "Failure" || (assetUrl._tag === "Success" && failedUrl === assetUrl.url)) {
+  if (assetUrl._tag === "Failure" || (assetUrl._tag === "Success" && failedUrl === imageUrl)) {
     return (
       <MediaActions source={actionsSource}>
         <div className="flex min-h-0 flex-1 items-center justify-center px-6 text-center text-xs leading-relaxed text-destructive">
@@ -266,6 +273,7 @@ function AttachmentBrowserPreview(props: {
  * host file outside it is served on its own.
  */
 function WorkspaceBrowserPreview(props: {
+  readonly workspaceMutationId: string | null;
   readonly environmentId: EnvironmentId;
   readonly threadRef: ScopedThreadRef;
   readonly absolutePath: string;
@@ -283,7 +291,10 @@ function WorkspaceBrowserPreview(props: {
     [insideWorkspace, props.threadRef.threadId, props.absolutePath],
   );
   const assetUrl = useAssetUrlState(props.environmentId, resource);
-  const revisionSuffix = "";
+  const revisionSuffix =
+    props.workspaceMutationId === null
+      ? ""
+      : `${assetUrl._tag === "Success" && assetUrl.url.includes("?") ? "&" : "?"}workspace-revision=${encodeURIComponent(props.workspaceMutationId)}`;
 
   if (assetUrl._tag === "Failure") {
     return (
@@ -309,6 +320,7 @@ function WorkspaceBrowserPreview(props: {
 }
 
 function WorkspaceVideoPreview(props: {
+  readonly workspaceMutationId: string | null;
   readonly environmentId: EnvironmentId;
   readonly threadRef: ScopedThreadRef;
   readonly absolutePath: string;
@@ -325,7 +337,17 @@ function WorkspaceVideoPreview(props: {
   );
   const assetUrl = useAssetUrlState(props.environmentId, resource);
   const refreshAssetUrl = useAssetUrlRefresh(props.environmentId, resource);
-  const revisionSuffix = "";
+  useWorkspaceMutationRefresh({
+    mutationId: props.workspaceMutationId,
+    resourceKey: JSON.stringify([props.environmentId, resource]),
+    refresh: () => {
+      void refreshAssetUrl().catch(() => undefined);
+    },
+  });
+  const revisionSuffix =
+    props.workspaceMutationId === null
+      ? ""
+      : `${assetUrl._tag === "Success" && assetUrl.url.includes("?") ? "&" : "?"}workspace-revision=${encodeURIComponent(props.workspaceMutationId)}`;
   const latestUrl = assetUrl._tag === "Success" ? `${assetUrl.url}${revisionSuffix}` : null;
 
   return (
@@ -334,6 +356,7 @@ function WorkspaceVideoPreview(props: {
         src={latestUrl}
         sourceFailed={assetUrl._tag === "Failure"}
         label={props.name}
+        revision={props.workspaceMutationId}
         preload="metadata"
         className="flex h-full min-h-0 w-full max-w-5xl items-center justify-center"
         onRetry={refreshAssetUrl}
@@ -909,6 +932,8 @@ function initialExplorerOpen(): boolean {
 }
 
 export default function FilePreviewPanel({
+  workspaceMutationId = null,
+  selectedFilePending = false,
   environmentId,
   cwd,
   projectName,
@@ -949,6 +974,17 @@ export default function FilePreviewPanel({
     relativePath,
     attachment === undefined && !isMedia && !isPdf,
   );
+  useWorkspaceMutationRefresh({
+    enabled:
+      relativePath !== null &&
+      attachment === undefined &&
+      !isMedia &&
+      !isPdf &&
+      !selectedFilePending,
+    mutationId: workspaceMutationId,
+    resourceKey: JSON.stringify([environmentId, cwd, relativePath]),
+    refresh: file.refresh,
+  });
   const [renderBrowserFilePreferred, setRenderBrowserFilePreferred] = useState(true);
   const [explorerOpen, setExplorerOpen] = useState(initialExplorerOpen);
   const showExplorer = shouldShowFileExplorer({
@@ -1193,6 +1229,7 @@ export default function FilePreviewPanel({
             <AttachmentBrowserPreview environmentId={environmentId} attachment={attachment} />
           ) : relativePath && isVideo && absolutePath ? (
             <WorkspaceVideoPreview
+              workspaceMutationId={workspaceMutationId}
               key={`${environmentId}:${threadRef.threadId}:${absolutePath}`}
               environmentId={environmentId}
               threadRef={threadRef}
@@ -1202,6 +1239,7 @@ export default function FilePreviewPanel({
             />
           ) : relativePath && isImage && absolutePath ? (
             <WorkspaceImagePreview
+              workspaceMutationId={workspaceMutationId}
               key={absolutePath}
               environmentId={environmentId}
               threadRef={threadRef}
@@ -1211,6 +1249,7 @@ export default function FilePreviewPanel({
             />
           ) : relativePath && renderBrowserFile && absolutePath ? (
             <WorkspaceBrowserPreview
+              workspaceMutationId={workspaceMutationId}
               environmentId={environmentId}
               threadRef={threadRef}
               absolutePath={absolutePath}
@@ -1288,6 +1327,7 @@ export default function FilePreviewPanel({
             )}
           >
             <FileBrowserPanel
+              workspaceMutationId={workspaceMutationId}
               key={`${environmentId}:${cwd}`}
               environmentId={environmentId}
               cwd={cwd}

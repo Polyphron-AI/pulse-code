@@ -1592,6 +1592,9 @@ function renderFeedEntry(
     <ThreadWorkLog
       environmentId={props.environmentId}
       activities={entry.activities}
+      renderViewedImage={(href) =>
+        props.renderMarkdownImage({ href, alt: "Viewed image", title: null })
+      }
       copiedRowId={props.copiedRowId}
       expandedRows={props.expandedWorkRows}
       iconSubtleColor={iconSubtleColor}

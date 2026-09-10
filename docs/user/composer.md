@@ -124,3 +124,9 @@ readable and Pulse Code shows a warning.
 
 Mobile shows the full saved quote and its comment in sent messages. It does not offer
 **Cite in composer** or navigation to a quote's source.
+
+## Images read by agents
+
+When an agent reads an image, its tool result can show an image preview. The preview loads from the connected environment and supports the same viewing actions as images in messages.
+
+Open file previews, the file tree, Git status, and working-tree diffs refresh after agent commands or file changes. A file with a pending edit waits until the edit finishes before refreshing.

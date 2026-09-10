@@ -1,3 +1,4 @@
+import { useWorkspaceMutationRefresh } from "../hooks/useWorkspaceMutationRefresh";
 import { useAtomValue } from "@effect/atom-react";
 import type { FileDiffContentsLoader } from "@pierre/diffs";
 import { useParams } from "@tanstack/react-router";
@@ -87,6 +88,7 @@ interface CollapsedDiffFilesState {
 const EMPTY_COLLAPSED_DIFF_FILE_KEYS: ReadonlySet<string> = new Set();
 
 interface DiffPanelProps {
+  workspaceMutationId?: string | null;
   mode?: DiffPanelMode;
   composerDraftTarget: ScopedThreadRef | DraftId;
   initialGitScope: "branch" | "unstaged";
@@ -95,6 +97,7 @@ interface DiffPanelProps {
 export { DiffWorkerPoolProvider } from "./DiffWorkerPoolProvider";
 
 export default function DiffPanel({
+  workspaceMutationId = null,
   mode = "inline",
   composerDraftTarget,
   initialGitScope: initialGitScopeProp,
@@ -308,6 +311,12 @@ export default function DiffPanel({
     lastCompletedTurnRefreshRef.current = current;
   }, [activeThreadRefreshKey, canRefreshGitDiff, latestTurn?.turnId, refreshBranchDiffPreview]);
 
+  useWorkspaceMutationRefresh({
+    enabled: canRefreshGitDiff,
+    mutationId: workspaceMutationId,
+    refresh: refreshBranchDiffPreview,
+    resourceKey: `diff:${activeThreadRefreshKey ?? ""}`,
+  });
   const selectedGitSource = branchDiffPreview.data?.sources.find(
     (source) => source.kind === (selectedGitScope === "unstaged" ? "working-tree" : "branch-range"),
   );

@@ -1,3 +1,5 @@
+import { classifyMarkdownImageSource } from "../markdownImages.ts";
+import { isWorkspaceImagePreviewPath } from "@t3tools/shared/filePreview";
 import type {
   ToolActivityIcon,
   ToolActivityNativeAppReference,
@@ -139,4 +141,26 @@ export function summarizeToolSources(
       ? names.join(" and ")
       : `${names.slice(0, -1).join(", ")}, and ${names.at(-1)}`;
   return `Used ${label}${values.every((source) => source.kind === "integration") ? (sources.size === 1 ? " integration" : " integrations") : ""}`;
+}
+
+/** A single image path reported by a read tool, never arbitrary tool output. */
+export function workEntryViewedImagePath(entry: {
+  readonly itemType?: string;
+  readonly requestKind?: string;
+  readonly toolTitle?: string;
+  readonly detail?: string;
+}): string | null {
+  const readsFile =
+    entry.requestKind === "file-read" ||
+    entry.itemType === "image_view" ||
+    (entry.itemType === "dynamic_tool_call" &&
+      entry.toolTitle?.trim().toLowerCase() === "read file");
+  const detail = entry.detail?.trim();
+  return readsFile &&
+    detail &&
+    !/[\r\n]/.test(detail) &&
+    isWorkspaceImagePreviewPath(detail) &&
+    classifyMarkdownImageSource(detail, ".")._tag === "WorkspaceFile"
+    ? detail
+    : null;
 }
