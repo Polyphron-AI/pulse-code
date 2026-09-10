@@ -2059,7 +2059,7 @@ function ChatMarkdown({
       NonNullable<ReturnType<typeof resolveMarkdownFileLinkMeta>>
     >();
     for (const href of extractMarkdownLinkHrefs(text)) {
-      const normalizedHref = normalizeMarkdownLinkHrefKey(href, cwd);
+      const normalizedHref = normalizeMarkdownLinkHrefKey(href, imageBaseDir ?? cwd);
       if (metaByHref.has(normalizedHref)) continue;
       const meta = resolveMarkdownFileLinkMeta(normalizedHref, cwd, imageBaseDir ?? cwd);
       if (meta) {
@@ -2092,8 +2092,9 @@ function ChatMarkdown({
         ? href
         : key === "src"
           ? (rewriteMarkdownFileUriHref(href) ?? defaultUrlTransform(href))
-          : (resolveMarkdownFileLinkTarget(href, cwd) ?? defaultUrlTransform(href)),
-    [cwd],
+          : (resolveMarkdownFileLinkTarget(href, cwd, imageBaseDir ?? cwd) ??
+            defaultUrlTransform(href)),
+    [cwd, imageBaseDir],
   );
   // Re-emit highlighted content as markdown so copying out of the rendered
   // view keeps links, emphasis, lists, and code fences intact.
@@ -2431,7 +2432,7 @@ function ChatMarkdown({
       a({ node, href, children, title: _title, ...props }) {
         const citation = href ? parseAssistantCitationHref(href) : null;
         if (citation) return <AssistantCitationChip citation={citation} />;
-        const normalizedHref = href ? normalizeMarkdownLinkHrefKey(href, cwd) : "";
+        const normalizedHref = href ? normalizeMarkdownLinkHrefKey(href, imageBaseDir ?? cwd) : "";
         const fileLinkMeta = normalizedHref
           ? (markdownFileLinkMetaByHref.get(normalizedHref) ??
             resolveMarkdownFileLinkMeta(normalizedHref, cwd, imageBaseDir ?? cwd))
