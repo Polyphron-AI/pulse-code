@@ -57,6 +57,12 @@ import * as ProviderEventLoggers from "./ProviderEventLoggers.ts";
 import * as AnalyticsService from "../../telemetry/AnalyticsService.ts";
 import * as McpProviderSession from "../../mcp/McpProviderSession.ts";
 import * as McpSessionRegistry from "../../mcp/McpSessionRegistry.ts";
+import type { McpCapability } from "../../mcp/McpInvocationContext.ts";
+import {
+  writeWardenCliIdentity,
+  removeWardenCliIdentity,
+  WardenCliIdentityError,
+} from "../../mcp/WardenCliIdentity.ts";
 import * as ServerSettings from "../../serverSettings.ts";
 const isModelSelection = Schema.is(ModelSelection);
 
@@ -248,39 +254,82 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
    * "off" silently becoming "on" would violate the user's stated choice,
    * whereas the reverse costs an agent one toolset and is visible immediately.
    */
-  const agentBrowserAccessEnabled = serverSettings.getSettings.pipe(
-    Effect.map((settings) => settings.enableAgentBrowserAccess),
+  const agentMcpCapabilities = serverSettings.getSettings.pipe(
+    Effect.map(
+      (settings) =>
+        new Set<McpCapability>([
+          ...(settings.enableAgentBrowserAccess ? ["preview" as const] : []),
+          ...(settings.enableAgentWardenAccess ? ["warden" as const] : []),
+        ]),
+    ),
     Effect.catch((cause) =>
-      Effect.logWarning(
-        "Could not read server settings; withholding agent browser access for this session.",
-        { cause },
-      ).pipe(Effect.as(false)),
+      Effect.logWarning("Could not read server settings; withholding agent MCP access.", {
+        cause,
+      }).pipe(Effect.as(new Set<McpCapability>())),
     ),
   );
 
   const prepareMcpSession = (threadId: ThreadId, providerInstanceId: ProviderInstanceId) =>
     Effect.gen(function* () {
-      if (!(yield* agentBrowserAccessEnabled)) {
-        // Revoke as well as clear. Every other prepare path reaches
-        // `issueActiveMcpCredential`, which revokes the thread first, so
-        // skipping it here would leave a previously issued bearer token valid
-        // against `/mcp` for the rest of its liveness window — and later turns
-        // would keep refreshing it. A session restart (runtime mode, cwd,
-        // model) re-prepares without stopping, so it relies on this.
+      const previous = McpProviderSession.readMcpProviderSession(threadId);
+      if (previous?.wardenCliConfigFile) {
+        yield* revokeMcpCredential(threadId);
+        yield* Effect.tryPromise(() => removeWardenCliIdentity(previous.wardenCliConfigFile)).pipe(
+          Effect.ignore,
+        );
+      }
+      const capabilities = yield* agentMcpCapabilities;
+      if (capabilities.size === 0) {
         yield* revokeMcpCredential(threadId);
         yield* Effect.sync(() => McpProviderSession.clearMcpProviderSession(threadId));
         return undefined;
       }
-      const credential = yield* issueMcpCredential({ threadId, providerInstanceId });
+      const credential = yield* issueMcpCredential({ threadId, providerInstanceId, capabilities });
       if (credential) {
-        yield* Effect.sync(() => McpProviderSession.setMcpProviderSession(credential.config));
+        let wardenCliConfigFile: string | undefined;
+        if (capabilities.has("warden")) {
+          const cli = yield* McpSessionRegistry.issueActiveWardenCliCredential({
+            threadId,
+            providerInstanceId,
+          });
+          if (cli) {
+            wardenCliConfigFile = yield* Effect.tryPromise({
+              try: () => writeWardenCliIdentity(serverConfig.secretsDir, cli.config),
+              catch: () => new WardenCliIdentityError({}),
+            }).pipe(
+              Effect.catch(() =>
+                McpSessionRegistry.revokeActiveMcpProviderSession(
+                  cli.config.providerSessionId,
+                ).pipe(
+                  Effect.andThen(
+                    Effect.logWarning(
+                      "Warden CLI handoff is unavailable; its credential was revoked.",
+                    ),
+                  ),
+                  Effect.as(undefined),
+                ),
+              ),
+            );
+          }
+        }
+        yield* Effect.sync(() =>
+          McpProviderSession.setMcpProviderSession({
+            ...credential.config,
+            ...(wardenCliConfigFile ? { wardenCliConfigFile } : {}),
+          }),
+        );
       }
       return credential;
     });
   const clearMcpSession = (threadId: ThreadId) =>
-    McpSessionRegistry.revokeActiveMcpThread(threadId).pipe(
-      Effect.tap(() => Effect.sync(() => McpProviderSession.clearMcpProviderSession(threadId))),
-    );
+    Effect.gen(function* () {
+      yield* McpSessionRegistry.revokeActiveMcpThread(threadId);
+      const session = McpProviderSession.readMcpProviderSession(threadId);
+      yield* Effect.tryPromise(() => removeWardenCliIdentity(session?.wardenCliConfigFile)).pipe(
+        Effect.ignore,
+      );
+      McpProviderSession.clearMcpProviderSession(threadId);
+    });
 
   const publishRuntimeEvent = (event: ProviderRuntimeEvent): Effect.Effect<void> =>
     Effect.succeed(event).pipe(
@@ -348,7 +397,25 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         increment(providerRuntimeEventsTotal, {
           provider: canonicalEvent.provider,
           eventType: canonicalEvent.type,
-        }).pipe(Effect.andThen(publishRuntimeEvent(canonicalEvent))),
+        }).pipe(
+          Effect.andThen(
+            canonicalEvent.type === "turn.completed" || canonicalEvent.type === "session.exited"
+              ? McpSessionRegistry.endActiveWardenTurn(
+                  canonicalEvent.threadId,
+                  source.instanceId,
+                  canonicalEvent.type === "session.exited" ? undefined : canonicalEvent.turnId,
+                )
+              : Effect.void,
+          ),
+          Effect.andThen(
+            canonicalEvent.type === "session.exited" &&
+              McpProviderSession.readMcpProviderSession(canonicalEvent.threadId)
+                ?.providerInstanceId === source.instanceId
+              ? clearMcpSession(canonicalEvent.threadId)
+              : Effect.void,
+          ),
+          Effect.andThen(publishRuntimeEvent(canonicalEvent)),
+        ),
       ),
     );
 
@@ -784,7 +851,21 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
       // rather than issuing a new one: sessions that go a long time between
       // browser tool calls used to lose the toolkit outright.
       yield* McpSessionRegistry.touchActiveMcpThread(input.threadId);
-      const turn = yield* routed.adapter.sendTurn(input);
+      const attemptId = yield* McpSessionRegistry.beginActiveWardenAttempt(
+        input.threadId,
+        routed.instanceId,
+      );
+      const turn = yield* routed.adapter
+        .sendTurn(input)
+        .pipe(
+          Effect.onError(() =>
+            attemptId
+              ? McpSessionRegistry.endActiveWardenAttempt(input.threadId, attemptId)
+              : Effect.void,
+          ),
+        );
+      if (attemptId)
+        yield* McpSessionRegistry.bindActiveWardenAttempt(input.threadId, attemptId, turn.turnId);
       yield* directory.upsert({
         threadId: input.threadId,
         provider: routed.adapter.provider,
@@ -847,6 +928,11 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
           "provider.thread_id": input.threadId,
           "provider.turn_id": input.turnId,
         });
+        yield* McpSessionRegistry.endActiveWardenTurn(
+          routed.threadId,
+          routed.instanceId,
+          input.turnId,
+        );
         yield* routed.adapter.interruptTurn(routed.threadId, input.turnId);
         yield* analytics.record("provider.turn.interrupted", {
           provider: routed.adapter.provider,
@@ -955,10 +1041,10 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
           "provider.kind": routed.adapter.provider,
           "provider.thread_id": input.threadId,
         });
+        yield* clearMcpSession(input.threadId);
         if (routed.isActive) {
           yield* routed.adapter.stopSession(routed.threadId);
         }
-        yield* clearMcpSession(input.threadId);
         yield* directory.upsert({
           threadId: input.threadId,
           provider: routed.adapter.provider,
@@ -1118,6 +1204,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
   });
 
   const runStopAll = Effect.fn("runStopAll")(function* () {
+    yield* McpSessionRegistry.revokeAllActiveMcpCredentials();
     const threadIds = yield* directory.listThreadIds();
     const currentAdapters = yield* getAdapterEntries;
     const activeSessions = yield* Effect.forEach(currentAdapters, ([instanceId, adapter]) =>
@@ -1140,6 +1227,11 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     ).pipe(Effect.asVoid);
     yield* Effect.forEach(currentAdapters, ([, adapter]) => adapter.stopAll()).pipe(Effect.asVoid);
     yield* McpSessionRegistry.revokeAllActiveMcpCredentials();
+    yield* Effect.forEach(McpProviderSession.listMcpProviderSessions(), (session) =>
+      Effect.tryPromise(() => removeWardenCliIdentity(session.wardenCliConfigFile)).pipe(
+        Effect.ignore,
+      ),
+    );
     McpProviderSession.clearAllMcpProviderSessions();
     const bindings = yield* directory.listBindings().pipe(Effect.orElseSucceed(() => []));
     yield* Effect.forEach(bindings, (binding) =>

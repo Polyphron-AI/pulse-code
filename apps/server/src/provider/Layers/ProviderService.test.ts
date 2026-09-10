@@ -2,6 +2,7 @@
 import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
+import * as McpProviderSession from "../../mcp/McpProviderSession.ts";
 
 import type {
   ProviderApprovalDecision,
@@ -1962,7 +1963,11 @@ validation.layer("ProviderServiceLive validation", (it) => {
 describe("agent browser access", () => {
   const revokedThreads: Array<ThreadId> = [];
 
-  const startSessionWith = (enableAgentBrowserAccess: boolean, threadId: ThreadId) =>
+  const startSessionWith = (
+    enableAgentBrowserAccess: boolean,
+    threadId: ThreadId,
+    enableAgentWardenAccess = false,
+  ) =>
     Effect.gen(function* () {
       const issued: Array<ThreadId> = [];
       const codex = makeFakeCodexAdapter();
@@ -1979,6 +1984,10 @@ describe("agent browser access", () => {
       const providerLayer = makeProviderServiceLive({
         issueMcpCredential: (request) =>
           Effect.sync(() => {
+            assert.deepEqual(Array.from(request.capabilities ?? []), [
+              ...(enableAgentBrowserAccess ? ["preview"] : []),
+              ...(enableAgentWardenAccess ? ["warden"] : []),
+            ]);
             issued.push(request.threadId);
             return undefined;
           }),
@@ -1986,7 +1995,12 @@ describe("agent browser access", () => {
       }).pipe(
         Layer.provide(providerAdapterLayer),
         Layer.provide(directoryLayer),
-        Layer.provide(ServerSettings.ServerSettingsService.layerTest({ enableAgentBrowserAccess })),
+        Layer.provide(
+          ServerSettings.ServerSettingsService.layerTest({
+            enableAgentBrowserAccess,
+            enableAgentWardenAccess,
+          }),
+        ),
         Layer.provide(serverConfigTestLayer),
         Layer.provide(AnalyticsService.layerTest),
         Layer.provide(
@@ -2009,6 +2023,39 @@ describe("agent browser access", () => {
 
       return issued;
     });
+
+  it.effect("requests a Warden-only MCP credential with browser access disabled", () =>
+    Effect.gen(function* () {
+      const threadId = asThreadId("thread-warden-only");
+      assert.deepEqual(yield* startSessionWith(false, threadId, true), [threadId]);
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("removes a previous CLI handoff when agent access is disabled", () =>
+    Effect.gen(function* () {
+      const root = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "warden-cleanup-test-"));
+      const file = NodePath.join(root, "identity.json");
+      const threadId = asThreadId("thread-warden-cleanup");
+      NodeFS.writeFileSync(file, "synthetic expired identity");
+      McpProviderSession.setMcpProviderSession({
+        environmentId: EnvironmentId.make("environment-test"),
+        threadId,
+        providerInstanceId: codexInstanceId,
+        providerSessionId: "session-test",
+        endpoint: "http://localhost/mcp",
+        authorizationHeader: "Bearer SYNTHETIC",
+        wardenCliConfigFile: file,
+      });
+      try {
+        yield* startSessionWith(false, threadId);
+        assert.equal(NodeFS.existsSync(file), false);
+        assert.equal(McpProviderSession.readMcpProviderSession(threadId), undefined);
+      } finally {
+        McpProviderSession.clearMcpProviderSession(threadId);
+        NodeFS.rmSync(root, { recursive: true, force: true });
+      }
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
 
   // Credential issuance is the observable that matters: it is the only place a
   // credential is minted, and `/mcp` accepts nothing else, so withholding it is
