@@ -200,6 +200,83 @@ describe("resolveThreadListV2Status", () => {
   });
 });
 
+describe("queued messages keep a settled thread active", () => {
+  const threads = [
+    makeThread({ id: ThreadId.make("active"), title: "Active" }),
+    makeThread({ id: ThreadId.make("settled"), title: "Settled", settledOverride: "settled" }),
+    makeThread({
+      id: ThreadId.make("settled-queued"),
+      title: "Settled with outbox",
+      settledOverride: "settled",
+    }),
+  ];
+  const queuedThreadKeys = new Set([`${environmentId}:settled-queued`]);
+
+  it("lists the thread in the active block instead of the settled shelf", () => {
+    const layout = buildThreadListV2Items({
+      threads,
+      environmentId: null,
+      searchQuery: "",
+      now: NOW,
+      queuedThreadKeys,
+    });
+    expect(layout.items.map((item) => [item.thread.id, item.variant] as const)).toEqual([
+      ["active", "card"],
+      ["settled-queued", "card"],
+      ["settled", "slim"],
+    ]);
+    expect(layout.settledCount).toBe(1);
+  });
+
+  it("returns delivered work to the settled shelf and scopes queue membership by environment", () => {
+    const other = EnvironmentId.make("other-environment");
+    const scopedThreads = [
+      ...threads,
+      makeThread({
+        id: ThreadId.make("settled-queued"),
+        environmentId: other,
+        title: "Same id elsewhere",
+        settledOverride: "settled",
+      }),
+    ];
+    const layout = buildThreadListV2Items({
+      threads: scopedThreads,
+      environmentId: null,
+      searchQuery: "",
+      now: NOW,
+      queuedThreadKeys,
+      settledShelfExpanded: false,
+    });
+    expect(layout.items.map((item) => `${item.thread.environmentId}:${item.thread.id}`)).toEqual([
+      `${environmentId}:active`,
+      `${environmentId}:settled-queued`,
+    ]);
+    const delivered = buildThreadListV2Items({
+      threads: scopedThreads,
+      environmentId: null,
+      searchQuery: "",
+      now: NOW,
+      queuedThreadKeys: new Set(),
+      settledShelfExpanded: false,
+    });
+    expect(delivered.items.map((item) => item.thread.id)).toEqual(["active"]);
+    expect(delivered.settledCount).toBe(3);
+  });
+
+  it("includes it in the reorderable active section", () => {
+    expect(
+      getThreadListV2OrderedSection({ threads, section: "active", now: NOW, queuedThreadKeys }).map(
+        (thread) => thread.id,
+      ),
+    ).toEqual(["active", "settled-queued"]);
+    expect(
+      getThreadListV2OrderedSection({ threads, section: "active", now: NOW }).map(
+        (thread) => thread.id,
+      ),
+    ).toEqual(["active"]);
+  });
+});
+
 describe("resolveThreadListV2SwipeActions", () => {
   it("offers settle and snooze for an active snoozable thread", () => {
     expect(

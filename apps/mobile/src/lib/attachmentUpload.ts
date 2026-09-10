@@ -18,8 +18,13 @@ import { appAtomRegistry } from "../state/atom-registry";
 import { assetEnvironment } from "../state/assets";
 import { attachmentEnvironment } from "../state/attachments";
 import { environmentSession } from "../state/session";
+import { retainComposerAttachmentFileForPreview } from "../state/use-composer-drafts";
 import { resolveOwnedComposerAttachmentFileUri } from "./composerAttachmentFiles";
-import { toUploadChatImageAttachments, type DraftComposerAttachment } from "./composerImages";
+import {
+  isFileBackedComposerAttachment,
+  type DraftComposerAttachment,
+  type DraftComposerImageAttachment,
+} from "./composerImages";
 
 /**
  * This module owns the server side of a composer attachment's lifecycle.
@@ -145,6 +150,48 @@ export type PrepareTurnAttachmentsResult =
   | PreparedTurnAttachments
   | { readonly status: "abandoned" };
 
+/**
+ * Wire shape for startTurn on servers without attachment uploads: pure inline
+ * uploads without client draft id / previewUri. File-backed images read their
+ * base64 from disk lazily, only when this legacy path is actually taken.
+ */
+async function toUploadChatImageAttachments(
+  attachments: ReadonlyArray<DraftComposerImageAttachment>,
+): Promise<ReadonlyArray<UploadChatImageAttachment>> {
+  return Promise.all(
+    attachments.map(async (attachment) => ({
+      type: attachment.type,
+      name: attachment.name,
+      mimeType: attachment.mimeType,
+      sizeBytes: attachment.sizeBytes,
+      dataUrl: await composerImageAttachmentDataUrl(attachment),
+    })),
+  );
+}
+
+/** Inline bytes for one image: legacy drafts carry them, file-backed ones read them from disk. */
+async function composerImageAttachmentDataUrl(
+  attachment: DraftComposerImageAttachment,
+): Promise<string> {
+  if (attachment.dataUrl !== undefined) {
+    return attachment.dataUrl;
+  }
+  if (!isFileBackedComposerAttachment(attachment)) {
+    throw new Error(`'${attachment.name}' is no longer available. Attach the image again.`);
+  }
+  const release = retainComposerAttachmentFileForPreview(attachment);
+  try {
+    const { File, Paths } = await import("expo-file-system");
+    const uri =
+      resolveOwnedComposerAttachmentFileUri(attachment.fileUri, Paths.document.uri) ??
+      attachment.fileUri;
+    const base64 = await new File(uri).base64();
+    return `data:${attachment.mimeType};base64,${base64}`;
+  } finally {
+    release();
+  }
+}
+
 async function uploadFileBytes(
   attachment: Extract<DraftComposerAttachment, { readonly type: "file" }>,
   url: string,
@@ -174,12 +221,14 @@ async function uploadFileBytes(
  * the pending uploads this call minted, so the owner cannot leak them.
  */
 export async function prepareTurnAttachments(input: {
+  readonly signal?: AbortSignal;
   readonly environmentId: EnvironmentId;
   readonly attachments: ReadonlyArray<DraftComposerAttachment>;
   readonly persistUploadedReferences?: (
     draftAttachments: ReadonlyArray<DraftComposerAttachment>,
   ) => Promise<"persisted" | "abandon">;
 }): Promise<PrepareTurnAttachmentsResult> {
+  if (input.signal?.aborted) return { status: "abandoned" };
   const { environmentId } = input;
   const files = input.attachments.filter((attachment) => attachment.type === "file");
   const ready = (
@@ -195,13 +244,16 @@ export async function prepareTurnAttachments(input: {
   });
 
   if (files.length === 0) {
-    return ready(
-      toUploadChatImageAttachments(
+    try {
+      const imageAttachments = await toUploadChatImageAttachments(
         input.attachments.filter((attachment) => attachment.type === "image"),
-      ),
-      [],
-      input.attachments,
-    );
+      );
+      if (input.signal?.aborted) return { status: "abandoned" };
+      return ready(imageAttachments, [], input.attachments);
+    } catch (error) {
+      if (input.signal?.aborted) return { status: "abandoned" };
+      throw error;
+    }
   }
 
   const connection = appAtomRegistry.get(
@@ -217,7 +269,11 @@ export async function prepareTurnAttachments(input: {
   try {
     for (const attachment of input.attachments) {
       if (attachment.type === "image") {
-        uploadedAttachments.push(...toUploadChatImageAttachments([attachment]));
+        uploadedAttachments.push(...(await toUploadChatImageAttachments([attachment])));
+        if (input.signal?.aborted) {
+          await releasePendingAttachmentUploads(environmentId, createdAttachmentIds);
+          return { status: "abandoned" };
+        }
         continue;
       }
 
@@ -313,6 +369,7 @@ export async function prepareTurnAttachments(input: {
     return ready(uploadedAttachments, pendingAttachmentIds, draftAttachments);
   } catch (error) {
     await releaseCreatedUploadsQuietly(environmentId, createdAttachmentIds);
+    if (input.signal?.aborted) return { status: "abandoned" };
     throw error;
   }
 }

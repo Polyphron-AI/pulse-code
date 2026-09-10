@@ -181,3 +181,17 @@ Required coverage includes:
 [supervisor]: ../../packages/client-runtime/src/connection/supervisor.ts
 [session]: ../../packages/client-runtime/src/rpc/session.ts
 [client]: ../../packages/client-runtime/src/rpc/client.ts
+
+## HTTP authorization
+
+RPC sessions authenticate at socket upgrade, while HTTP requests need current
+credentials from the
+[authorization service](../../packages/client-runtime/src/authorization/service.ts).
+Replacing a healthy socket for HTTP renewal would interrupt conversations and
+change the transport generation without a transport failure. Credential expiry
+does not close the socket, and refresh failure belongs to the HTTP operation.
+
+Session listings must retain unrevoked connected sessions after credential expiry
+so an open connection does not disappear from connection management. This does
+not extend the credential's lifetime. New HTTP requests and socket upgrades still
+require valid credentials.

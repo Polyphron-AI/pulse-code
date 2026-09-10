@@ -1,3 +1,10 @@
+import { EnvironmentId } from "@t3tools/contracts";
+import { TokenStore } from "@t3tools/client-runtime/authorization";
+import {
+  RelayConnectionTarget,
+  BearerConnectionCredential,
+} from "@t3tools/client-runtime/connection";
+import { putRemoteDpopTokenInCatalog } from "@t3tools/client-runtime/platform";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { vi } from "vite-plus/test";
@@ -129,3 +136,47 @@ describe("mobile connection catalog storage", () => {
     }),
   );
 });
+
+const refreshEnvironmentId = EnvironmentId.make("refresh-environment");
+const refreshToken = new TokenStore.RemoteDpopAccessToken({
+  environmentId: refreshEnvironmentId,
+  accountId: "synthetic-account",
+  label: "Refresh environment",
+  endpoint: {
+    httpBaseUrl: "https://refresh.example.test",
+    wsBaseUrl: "wss://refresh.example.test",
+    providerKind: "cloudflare_tunnel",
+  },
+  accessToken: "rotated-synthetic-token",
+  expiresAtEpochMs: 1_000_000,
+  dpopThumbprint: "synthetic-thumbprint",
+});
+const refreshCatalog = {
+  schemaVersion: 1 as const,
+  targets: [
+    new RelayConnectionTarget({
+      environmentId: refreshEnvironmentId,
+      label: "Refresh environment",
+    }),
+  ],
+  profiles: [],
+  credentials: [
+    {
+      connectionId: "paired-connection",
+      credential: new BearerConnectionCredential({ token: "unrelated-synthetic-secret" }),
+    },
+  ],
+  remoteDpopTokens: [],
+};
+
+it.effect("persists a refreshed token without replacing other secure-store secrets", () =>
+  Effect.gen(function* () {
+    const memory = makeStorage({ [CONNECTION_CATALOG_KEY]: JSON.stringify(refreshCatalog) });
+    const catalog = yield* make().pipe(Effect.provideService(MobileSecureStorage, memory.storage));
+    yield* catalog.update((document) => putRemoteDpopTokenInCatalog(document, refreshToken));
+    const reopened = yield* make().pipe(Effect.provideService(MobileSecureStorage, memory.storage));
+    const restored = yield* reopened.read;
+    expect(restored.credentials).toEqual(refreshCatalog.credentials);
+    expect(restored.remoteDpopTokens).toEqual([refreshToken]);
+  }),
+);

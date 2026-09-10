@@ -146,3 +146,7 @@ When you submit a task while connected, its thread opens with your prompt while 
 ## Composer drawers
 
 Approvals, questions, and ready plans appear in a drawer attached to the composer. Approval details stay readable alongside the provider's available actions. Running task plans have a Tasks control that expands their steps and completed-step durations; closing the drawer keeps the progress control, while dismissing it hides tasks for that turn. Stashed prompts open in an attached drawer and remain accessible from the composer controls.
+
+On mobile, an existing thread with a queued message shows an upload-tray indicator and remains visible while waiting to send. Once the message is delivered, the thread returns to its normal list position.
+
+To start another task on a thread's branch, open that thread's menu and choose **New thread on branch**. Pulse prepares the checkout before opening the new task. If local changes prevent checkout, they stay in place and the task is not started.

@@ -222,6 +222,7 @@ it.layer(NodeServices.layer)("AgentSessionImporter", (it) => {
           dispatch: (command) => Effect.sync(() => ({ sequence: commands.push(command) })),
           readEvents: () => Stream.empty,
           streamDomainEvents: Stream.empty,
+          subscribeDomainEvents: Effect.succeed(Stream.empty),
           currentReadModel: Effect.die("unused"),
           latestSequence: Effect.succeed(0),
         });
@@ -325,6 +326,7 @@ it.layer(NodeServices.layer)("AgentSessionImporter", (it) => {
           dispatch: () => Effect.die("must not dispatch for a scanner skip"),
           readEvents: () => Stream.empty,
           streamDomainEvents: Stream.empty,
+          subscribeDomainEvents: Effect.succeed(Stream.empty),
           currentReadModel: Effect.die("unused"),
           latestSequence: Effect.succeed(0),
         });
@@ -388,6 +390,7 @@ it.layer(NodeServices.layer)("AgentSessionImporter", (it) => {
           },
           readEvents: () => Stream.empty,
           streamDomainEvents: Stream.empty,
+          subscribeDomainEvents: Effect.succeed(Stream.empty),
           currentReadModel: Effect.die("unused"),
           latestSequence: Effect.succeed(0),
         });
@@ -457,6 +460,7 @@ it.layer(NodeServices.layer)("AgentSessionImporter", (it) => {
           dispatch: () => Effect.die("must not replay history or settle active work"),
           readEvents: () => Stream.empty,
           streamDomainEvents: Stream.empty,
+          subscribeDomainEvents: Effect.succeed(Stream.empty),
           currentReadModel: Effect.die("unused"),
           latestSequence: Effect.succeed(0),
         });
@@ -493,6 +497,7 @@ it.layer(NodeServices.layer)("AgentSessionImporter", (it) => {
           dispatch: (command) => Effect.sync(() => ({ sequence: commands.push(command) })),
           readEvents: () => Stream.empty,
           streamDomainEvents: Stream.empty,
+          subscribeDomainEvents: Effect.succeed(Stream.empty),
           currentReadModel: Effect.die("unused"),
           latestSequence: Effect.succeed(0),
         });

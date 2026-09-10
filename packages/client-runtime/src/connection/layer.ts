@@ -11,9 +11,7 @@ import * as RelayEnvironmentDiscovery from "../relay/discovery.ts";
 import * as RemoteEnvironmentAuthorization from "../authorization/service.ts";
 import * as RpcSession from "../rpc/session.ts";
 
-const resolverLayer = ConnectionResolver.layer.pipe(
-  Layer.provide(RemoteEnvironmentAuthorization.layer),
-);
+const resolverLayer = ConnectionResolver.layer;
 
 const driverLayer = ConnectionDriver.layer.pipe(
   Layer.provide(Layer.mergeAll(resolverLayer, RpcSession.layer)),
@@ -41,4 +39,7 @@ const connectionStartupLayer = Layer.effectDiscard(
   }).pipe(Effect.withSpan("clientRuntime.connection.application.start")),
 );
 
-export const layer = connectionStartupLayer.pipe(Layer.provideMerge(connectionServicesLayer));
+export const layer = connectionStartupLayer.pipe(
+  Layer.provideMerge(connectionServicesLayer),
+  Layer.provideMerge(RemoteEnvironmentAuthorization.layer),
+);
