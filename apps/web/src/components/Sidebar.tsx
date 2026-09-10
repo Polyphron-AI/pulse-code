@@ -2103,6 +2103,7 @@ export default function Sidebar() {
     snoozeThread,
     unsnoozeThread,
     pinThread,
+    unpinThread,
     confirmAndUnpinThread,
     reorderPinnedThread,
     reorderActiveThread,
