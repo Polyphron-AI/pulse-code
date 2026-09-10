@@ -53,6 +53,10 @@ Enter `/compact` in an idle thread to summarize its context before continuing. C
 
 ## Compaction controls
 
+On web and desktop, the circular context window indicator is off by default. Restore it under
+**Settings → General → Legacy features → Context window indicator**. This only changes the
+indicator's visibility; context tracking, usage information and `/compact` remain available.
+
 Send `/compact` in an existing conversation to reduce its context when the connected provider supports it. On web and desktop, the context meter also offers **Compact context**; send or clear your draft first. On mobile, choose `/compact` from the command menu. Compaction runs without attachments, shows **Compacting…** while active, and leaves a separate result in the conversation. Unsupported providers do not offer the command.
 
 ## Custom models

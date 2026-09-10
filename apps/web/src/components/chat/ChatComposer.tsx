@@ -4079,7 +4079,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     ) : null
                   }
                   compact={isComposerPrimaryActionsCompact}
-                  activeContextWindow={displayedContextWindow}
+                  activeContextWindow={
+                    settings.contextWindowMeterEnabled ? displayedContextWindow : null
+                  }
                   activeThreadModelDisplayName={activeThreadModelDisplayName}
                   pendingAction={pendingPrimaryAction}
                   isRunning={phase === "running"}

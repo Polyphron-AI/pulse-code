@@ -241,6 +241,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     to: "/settings/general",
   },
   {
+    id: "legacy-context-window-indicator",
+    title: "Context window indicator (legacy)",
+    to: "/settings/general",
+    searchTerms: ["composer meter usage tokens circle old"],
+  },
+  {
     id: "legacy-token-streaming",
     title: "Stream token by token (legacy)",
     to: "/settings/general",
