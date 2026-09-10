@@ -1,3 +1,10 @@
+import { EnvironmentId } from "@t3tools/contracts";
+import { TokenStore } from "@t3tools/client-runtime/authorization";
+import {
+  RelayConnectionTarget,
+  BearerConnectionCredential,
+} from "@t3tools/client-runtime/connection";
+import { putRemoteDpopTokenInCatalog } from "@t3tools/client-runtime/platform";
 import { ConnectionTransientError } from "@t3tools/client-runtime/connection";
 import { ConnectionCatalogDocument } from "@t3tools/client-runtime/platform";
 import { describe, expect, it } from "@effect/vitest";
@@ -15,6 +22,7 @@ const emptyCatalog = {
   remoteDpopTokens: [],
 } as const;
 const decodeCatalog = Schema.decodeUnknownSync(Schema.fromJsonString(ConnectionCatalogDocument));
+const encodeCatalog = Schema.encodeEffect(Schema.fromJsonString(ConnectionCatalogDocument));
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -75,3 +83,54 @@ describe("makeCatalogBackend", () => {
     }),
   );
 });
+
+const refreshEnvironmentId = EnvironmentId.make("refresh-environment");
+const refreshToken = new TokenStore.RemoteDpopAccessToken({
+  environmentId: refreshEnvironmentId,
+  accountId: "synthetic-account",
+  label: "Refresh environment",
+  endpoint: {
+    httpBaseUrl: "https://refresh.example.test",
+    wsBaseUrl: "wss://refresh.example.test",
+    providerKind: "cloudflare_tunnel",
+  },
+  accessToken: "rotated-synthetic-token",
+  expiresAtEpochMs: 1_000_000,
+  dpopThumbprint: "synthetic-thumbprint",
+});
+const refreshCatalog = {
+  schemaVersion: 1 as const,
+  targets: [
+    new RelayConnectionTarget({
+      environmentId: refreshEnvironmentId,
+      label: "Refresh environment",
+    }),
+  ],
+  profiles: [],
+  credentials: [
+    {
+      connectionId: "paired-connection",
+      credential: new BearerConnectionCredential({ token: "unrelated-synthetic-secret" }),
+    },
+  ],
+  remoteDpopTokens: [],
+};
+
+it.effect("persists a refreshed token without replacing other stored secrets", () =>
+  Effect.gen(function* () {
+    let persisted = yield* encodeCatalog(refreshCatalog);
+    const backend = {
+      read: Effect.sync(() => persisted),
+      write: (raw: string) =>
+        Effect.sync(() => {
+          persisted = raw;
+        }),
+    };
+    const catalog = yield* makeCatalogStore(backend);
+    yield* catalog.update((document) => putRemoteDpopTokenInCatalog(document, refreshToken));
+    const reopened = yield* makeCatalogStore(backend);
+    const restored = yield* reopened.read;
+    expect(restored.credentials).toEqual(refreshCatalog.credentials);
+    expect(restored.remoteDpopTokens).toEqual([refreshToken]);
+  }),
+);

@@ -249,3 +249,7 @@ If a client falls too far behind, Pulse ends that live subscription instead of r
 - Anyone with a valid pairing credential can create a session until that credential expires or is revoked.
 - Hosted pairing links keep the credential in the URL hash so it is not sent to the hosted app server, but it can still be exposed through browser history, screenshots, logs, or copy/paste.
 - Use `t3 auth` to revoke credentials or sessions you no longer trust.
+
+## Credential renewal
+
+Pulse Connect renews access credentials when needed without disconnecting a healthy connection. Pull request diffs and provider settings keep working after the previous credential expires. A failed renewal affects that request; it does not disconnect an otherwise healthy conversation. A session with an open connection stays listed after its access credential expires.
