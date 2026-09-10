@@ -8,4 +8,10 @@ The source's acquired domain-event subscription is retained: ProviderCommandReac
 
 Focused tests cover rollback after projection and receipt failure, cleanup after successful retry, later attachment references, and immediate dispatch while activation is pending. Pulse-specific schedule/import/startup mocks implement the acquired subscription service member. Tests use disposable synthetic files and in-memory databases only.
 
-Relay restart backoff (b90898077) and terminal history byte bounds (cf9729d5e plus 3bbbc1d9f) remain separate followup batches.
+## Relay restart backoff
+
+Source b90898077 now bounds crash-loop restarts. The first rapid exit restarts immediately, then delays begin at one second and double to a sixty-second cap. Thirty seconds of stable uptime resets the delay. The delay is outside the reconciliation semaphore, so disabling or changing the endpoint preempts it; the supervisor checks connector identity and desired configuration before restarting. Existing token redaction and connector shutdown ownership remain intact.
+
+Eleven focused tests use fake child handles, Deferred signals and TestClock. They cover rapid failures, stable-uptime reset and a config change during backoff without a duplicate restart. No real relay process or network connection is used.
+
+Terminal history byte bounds (cf9729d5e plus 3bbbc1d9f) remain a separate followup batch.
