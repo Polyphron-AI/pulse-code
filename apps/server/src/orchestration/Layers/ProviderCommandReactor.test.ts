@@ -27,6 +27,8 @@ import { serializeAssistantCitation } from "@t3tools/shared/assistantCitations";
 import * as Effect from "effect/Effect";
 import * as Deferred from "effect/Deferred";
 import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import * as TestClock from "effect/testing/TestClock";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as PubSub from "effect/PubSub";
@@ -166,6 +168,7 @@ describe("ProviderCommandReactor", () => {
   });
 
   async function createHarness(input?: {
+    readonly clock?: Clock.Clock;
     readonly onTurnSent?: () => Effect.Effect<void>;
     readonly beforeReadySessionDispatch?: () => Effect.Effect<void>;
     readonly compactThreadEffect?: () => Effect.Effect<void, ProviderAdapterRequestError>;
@@ -465,7 +468,9 @@ describe("ProviderCommandReactor", () => {
       Layer.provideMerge(ServerConfig.layerTest(process.cwd(), baseDir)),
       Layer.provideMerge(NodeServices.layer),
     );
-    runtime = ManagedRuntime.make(layer);
+    runtime = ManagedRuntime.make(
+      input?.clock ? layer.pipe(Layer.provide(Layer.succeed(Clock.Clock, input.clock))) : layer,
+    );
 
     const engine = await runtime.runPromise(Effect.service(OrchestrationEngineService));
     const snapshotQuery = await runtime.runPromise(Effect.service(ProjectionSnapshotQuery));
@@ -739,6 +744,18 @@ describe("ProviderCommandReactor", () => {
   effectIt.effect("rejects compaction without conversation history", () =>
     Effect.gen(function* () {
       const harness = yield* Effect.promise(() => createHarness());
+      const events = yield* harness.engine.subscribeDomainEvents;
+      const rejected = yield* events.pipe(
+        Stream.filter(
+          (event) =>
+            event.type === "thread.activity-appended" &&
+            event.payload.activity.kind === "provider.turn.start.failed" &&
+            event.aggregateId === ThreadId.make("thread-1"),
+        ),
+        Stream.take(1),
+        Stream.runDrain,
+        Effect.forkScoped,
+      );
       yield* harness.engine.dispatch({
         type: "thread.turn.start",
         commandId: CommandId.make("compact-empty"),
@@ -753,6 +770,7 @@ describe("ProviderCommandReactor", () => {
         runtimeMode: "approval-required",
         createdAt: "2026-01-01T00:00:00.000Z",
       });
+      yield* Fiber.join(rejected);
       yield* Effect.promise(() => harness.drain());
       expect(harness.compactThread).not.toHaveBeenCalled();
       expect(harness.sendTurn).not.toHaveBeenCalled();
@@ -1014,6 +1032,67 @@ describe("ProviderCommandReactor", () => {
       thread = readModel.threads.find((entry) => entry.id === ThreadId.make("thread-1"));
       expect(thread?.session?.status).toBe("starting");
       expect(thread?.session?.lastError).toBeNull();
+    }),
+  );
+
+  effectIt.effect("retries automatic title generation twice with exponential backoff", () =>
+    Effect.gen(function* () {
+      const clock = yield* Clock.Clock;
+      const harness = yield* Effect.promise(() => createHarness({ clock }));
+      const first = yield* Deferred.make<void>();
+      const second = yield* Deferred.make<void>();
+      let attempts = 0;
+      harness.generateThreadTitle.mockReturnValue(
+        Effect.suspend(() => {
+          attempts += 1;
+          if (attempts === 3) return Effect.succeed({ title: "Recovered title" });
+          return Deferred.succeed(attempts === 1 ? first : second, undefined).pipe(
+            Effect.andThen(
+              Effect.fail(
+                new TextGenerationError({
+                  operation: "generateThreadTitle",
+                  detail: "Transient synthetic failure",
+                }),
+              ),
+            ),
+          );
+        }),
+      );
+      const events = yield* harness.engine.subscribeDomainEvents;
+      const renamed = yield* events.pipe(
+        Stream.filter(
+          (event) =>
+            event.type === "thread.meta-updated" && event.payload.title === "Recovered title",
+        ),
+        Stream.take(1),
+        Stream.runDrain,
+        Effect.forkScoped,
+      );
+      yield* harness.engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.make("title-retry"),
+        titleSeed: "Thread",
+        threadId: ThreadId.make("thread-1"),
+        message: {
+          messageId: asMessageId("title-retry"),
+          role: "user",
+          text: "Investigate retries",
+          attachments: [],
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        createdAt: "2026-01-01T00:00:00.000Z",
+      });
+      yield* Deferred.await(first);
+      expect(attempts).toBe(1);
+      yield* TestClock.adjust("2 seconds");
+      yield* Deferred.await(second);
+      expect(attempts).toBe(2);
+      yield* TestClock.adjust("4 seconds");
+      yield* Fiber.join(renamed);
+      expect(attempts).toBe(3);
+      const snapshot = yield* Effect.promise(() => harness.readModel());
+      expect(snapshot.threads[0]?.title).toBe("Recovered title");
     }),
   );
 
