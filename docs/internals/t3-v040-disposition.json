@@ -1,6 +1,6 @@
 {
   "target": "09e8de9c655ae85410bf6b00446f272a01da81c7",
-  "assessedHead": "80672e34408018914fff561f262eb36dbf586ff8",
+  "assessedHead": "5b3f672b606071cd7372314163b615e636348d60",
   "scope": "Source commit inventory; pending rows require semantic review.",
   "statusDefinitions": {
     "ported-reviewed": "See compatibility ledgers for adaptations and tests.",
@@ -10,9 +10,9 @@
   },
   "counts": {
     "target-files-identical": 6,
-    "needs-disposition": 900,
-    "ported-reviewed": 137,
-    "partially-ported": 11
+    "needs-disposition": 890,
+    "ported-reviewed": 146,
+    "partially-ported": 12
   },
   "commits": [
     {
@@ -67,9 +67,9 @@
     {
       "source": "3a02c9cf1d6767cad60e5056cb5b722931f6cc5d",
       "subject": "feat(desktop): mute a browser tab (#7252)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/desktop", "apps/web", "packages/contracts"],
-      "differingTargetPaths": 14
+      "differingTargetPaths": 12
     },
     {
       "source": "bcfd485869a5eb9e97c6d281ac839c1cd7c1bd99",
@@ -110,7 +110,7 @@
         "packages/client-runtime",
         "packages/contracts"
       ],
-      "differingTargetPaths": 17
+      "differingTargetPaths": 16
     },
     {
       "source": "324ddda3146d54cc7195a67ef5506e93674085ba",
@@ -1151,7 +1151,7 @@
       "subject": "fix(grok): bound cumulative tool output updates (#7279)",
       "status": "needs-disposition",
       "domains": ["apps/server"],
-      "differingTargetPaths": 3
+      "differingTargetPaths": 2
     },
     {
       "source": "e6d487e4f5d3cd049dbb373c7ca74192302443ae",
@@ -1319,7 +1319,7 @@
         "packages/contracts",
         "packages/shared"
       ],
-      "differingTargetPaths": 29
+      "differingTargetPaths": 28
     },
     {
       "source": "230c5d4a5cc31656de3d46719e7f4d2a13369991",
@@ -1582,7 +1582,7 @@
       "subject": "fix(opencode): handle child approvals, stops, and model catalogs (#8480)",
       "status": "needs-disposition",
       "domains": ["apps/mobile", "apps/server", "apps/web", "docs"],
-      "differingTargetPaths": 35
+      "differingTargetPaths": 34
     },
     {
       "source": "0bbecfabf189349b16ad2d7e6558a95a98a3b196",
@@ -1912,7 +1912,7 @@
     {
       "source": "9072aa1fd711170af425bf6a1a2828d0d54bbfa6",
       "subject": "fix(server): stop overpricing cached Claude tokens (#8806)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server"],
       "differingTargetPaths": 4
     },
@@ -2285,7 +2285,7 @@
         "packages/effect-acp",
         "packages/effect-codex-app-server"
       ],
-      "differingTargetPaths": 19
+      "differingTargetPaths": 17
     },
     {
       "source": "8f1ef8b9eb72ac6cd8510364608e01dc7febf9c1",
@@ -2377,7 +2377,7 @@
         "packages/contracts",
         "packages/shared"
       ],
-      "differingTargetPaths": 11
+      "differingTargetPaths": 9
     },
     {
       "source": "261380f91f764673c7fcefcb6a3f775526dbb776",
@@ -2513,7 +2513,7 @@
     {
       "source": "04efa7907e9ec207e2d6af459ce3b2ffd55f6107",
       "subject": "feat(cli): open projects in the running desktop app (#8824)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": [
         "apps/desktop",
         "apps/server",
@@ -2522,7 +2522,7 @@
         "packages/contracts",
         "packages/shared"
       ],
-      "differingTargetPaths": 26
+      "differingTargetPaths": 17
     },
     {
       "source": "b21d87243ea637fbb6fb50667e9a8547e1b6c4e8",
@@ -2550,7 +2550,7 @@
         "pnpm-lock.yaml",
         "scripts"
       ],
-      "differingTargetPaths": 103
+      "differingTargetPaths": 102
     },
     {
       "source": "98725df00a729ba226ae8610a3488e5b9168029f",
@@ -2669,7 +2669,7 @@
       "subject": "fix(grok): health check, model selection, and stop all work against the real CLI (#9154)",
       "status": "ported-reviewed",
       "domains": ["apps/server", "docs", "packages/contracts", "packages/effect-acp"],
-      "differingTargetPaths": 13
+      "differingTargetPaths": 11
     },
     {
       "source": "80c708a1fa8986bce0b2d1ba4d35e79d9e4094ba",
@@ -2810,7 +2810,7 @@
       "subject": "fix(contracts): accept legacy pull request checkout results (#8238)",
       "status": "ported-reviewed",
       "domains": ["packages/contracts"],
-      "differingTargetPaths": 1
+      "differingTargetPaths": 0
     },
     {
       "source": "b8262b41228e03b2e1e14b701be449034349c8ba",
@@ -2994,7 +2994,7 @@
         "packages/client-runtime",
         "packages/contracts"
       ],
-      "differingTargetPaths": 25
+      "differingTargetPaths": 23
     },
     {
       "source": "14f15cfed48bc7519e8e5eeac03f483f4b11ef3a",
@@ -3232,7 +3232,7 @@
       "subject": "fix(pull-requests): missing features & better behaviour (#9188)",
       "status": "partially-ported",
       "domains": ["apps/server", "apps/web", "docs", "packages/contracts"],
-      "differingTargetPaths": 26,
+      "differingTargetPaths": 25,
       "remaining": "PR actions, workflow approvals, check status, auto-merge strategy and head repository identity integrated with focused tests. Source-wide list/filter/sidebar refinements remain outside this batch."
     },
     {
@@ -3303,9 +3303,9 @@
     {
       "source": "0fbb94248581aaefda36e4f8a40ec2c6455c779a",
       "subject": "feat(environments): draw each environment as the machine it runs on (#9299)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/mobile", "apps/server", "apps/web", "docs", "packages/contracts"],
-      "differingTargetPaths": 32
+      "differingTargetPaths": 27
     },
     {
       "source": "9ebbeda5a03fd8fce7be147b65ea396e50721c68",
@@ -3318,7 +3318,7 @@
         "packages/client-runtime",
         "packages/contracts"
       ],
-      "differingTargetPaths": 16
+      "differingTargetPaths": 15
     },
     {
       "source": "31eeb443305a4e11c8b20a7c8ff2b3f5e841eb0f",
@@ -3518,9 +3518,9 @@
     {
       "source": "b5f4e8137b3cbd657fbe2b698f9db4e321acbc3d",
       "subject": "feat(web): suggest ssh hosts in a dropdown under the host field (#9171)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/desktop", "apps/web", "packages/contracts"],
-      "differingTargetPaths": 9
+      "differingTargetPaths": 6
     },
     {
       "source": "d4bd8923ad8cab346a854967015b06d9e5cd77f7",
@@ -3616,7 +3616,7 @@
     {
       "source": "06336460c9988f29c71e839c4c9c840c4552e077",
       "subject": "feat(providers): add Google Antigravity via the official ACP agent (#9348)",
-      "status": "needs-disposition",
+      "status": "partially-ported",
       "domains": [
         "AGENTS.md",
         "README.md",
@@ -3629,7 +3629,8 @@
         "packages/effect-acp",
         "pnpm-lock.yaml"
       ],
-      "differingTargetPaths": 164
+      "differingTargetPaths": 138,
+      "remaining": "Antigravity contracts, ACP adapter, setup, account model selection, web composer and mobile send gates integrated with focused tests and client typechecks. Real provider installation/login/turn acceptance remains unverified; analytics-only source behavior intentionally omitted."
     },
     {
       "source": "2aa907b1969237efdaced29612fb46ba51be7041",
@@ -3902,7 +3903,7 @@
       "subject": "feat(desktop): import browser cookies into a profile (#7255)",
       "status": "ported-reviewed",
       "domains": ["apps/desktop", "apps/web", "packages/contracts", "pnpm-lock.yaml", "scripts"],
-      "differingTargetPaths": 18
+      "differingTargetPaths": 17
     },
     {
       "source": "ff5843410d44796676b06627788d94354849c4d7",
@@ -3924,7 +3925,7 @@
         "packages/contracts",
         "scripts"
       ],
-      "differingTargetPaths": 11
+      "differingTargetPaths": 10
     },
     {
       "source": "f25e4428961982e3935300cfd3c78f7d0fac4ee9",
@@ -4341,7 +4342,7 @@
     {
       "source": "caab2fdbac041ac2e851ad4fa3ac4a40a1d4a8f6",
       "subject": "fix(web): render draft PRs in gray (#9537)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": [
         "apps/mobile",
         "apps/server",
@@ -4350,7 +4351,7 @@
         "packages/contracts",
         "scripts"
       ],
-      "differingTargetPaths": 30
+      "differingTargetPaths": 27
     },
     {
       "source": "f1e90e388b86fe4b007a55c0e685a1fa878115e6",
@@ -4729,7 +4730,7 @@
       "subject": "fix(mobile): remove provider setup (#9721)",
       "status": "needs-disposition",
       "domains": ["apps/mobile", "docs"],
-      "differingTargetPaths": 15
+      "differingTargetPaths": 19
     },
     {
       "source": "5eab021a5185e492b6b021f83564143d5263e8a6",
@@ -5091,7 +5092,7 @@
     {
       "source": "394e8470c89927a06575e08c434006b2320f1781",
       "subject": "feat(usage): support custom model prices (#9774)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": [
         "apps/server",
         "apps/web",
@@ -5100,7 +5101,7 @@
         "packages/contracts",
         "packages/shared"
       ],
-      "differingTargetPaths": 22
+      "differingTargetPaths": 19
     },
     {
       "source": "91c66ac43ddad4f8697887009746f4de11736cb9",
@@ -6445,14 +6446,14 @@
     {
       "source": "e2e6ce6a29451e9fac612ab83f7a104b6d6475a3",
       "subject": "feat(server): report image dimensions with signed asset URLs (#10198)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": [
         "apps/server",
         "packages/client-runtime",
         "packages/contracts",
         "packages/shared"
       ],
-      "differingTargetPaths": 8
+      "differingTargetPaths": 6
     },
     {
       "source": "7451d17a69ff7585f302933beeae1037d2c708a8",
@@ -6628,7 +6629,7 @@
       "subject": "fix(server): settle threads using actual pull request terminal timestamps (#9934)",
       "status": "ported-reviewed",
       "domains": ["apps/server", "apps/web", "packages/contracts"],
-      "differingTargetPaths": 26
+      "differingTargetPaths": 24
     },
     {
       "source": "eee05575ebd514db36f61d7eb05d2258a10c96bd",
@@ -7021,7 +7022,7 @@
       "subject": "fix(threads): keep completed requests closed across clients (#10123)",
       "status": "ported-reviewed",
       "domains": ["apps/mobile", "apps/web", "packages/client-runtime"],
-      "differingTargetPaths": 9
+      "differingTargetPaths": 8
     },
     {
       "source": "e4e9fa9a0b1a77e393ab6cffd75ec22dbb258bdc",
@@ -7055,9 +7056,9 @@
     {
       "source": "72cb638a8a6656d0b89899d9d62afaed0c2f7e5f",
       "subject": "fix(web): show Tux icon for WSL environments (#8511)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/mobile", "apps/server", "apps/web", "packages/contracts"],
-      "differingTargetPaths": 11
+      "differingTargetPaths": 8
     },
     {
       "source": "64fafbdfcf91d3c44b533f5b8febbe8d6b19d482",
@@ -7373,7 +7374,7 @@
         "packages/client-runtime",
         "packages/contracts"
       ],
-      "differingTargetPaths": 17
+      "differingTargetPaths": 16
     },
     {
       "source": "a12589dc0bec60b498e72bdd2190871ee6b5c80d",
