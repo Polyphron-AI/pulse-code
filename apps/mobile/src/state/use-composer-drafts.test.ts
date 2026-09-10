@@ -895,11 +895,10 @@ describe("mobile composer drafts", () => {
     const targetKey = "new-task:environment-2:project-2";
     const uploadedElsewhere: DraftComposerAttachment = {
       id: "image-1",
-      type: "image",
+      type: "file",
       name: "screen.png",
       mimeType: "image/png",
       sizeBytes: 1,
-      previewUri: "file:///drafts/screen.png",
       fileUri: "file:///drafts/screen.png",
       uploadedAttachmentId: "upload-1",
       uploadEnvironmentId: EnvironmentId.make("environment-1"),
@@ -920,11 +919,10 @@ describe("mobile composer drafts", () => {
     expect(next[targetKey]?.attachments).toEqual([
       {
         id: "image-1",
-        type: "image",
+        type: "file",
         name: "screen.png",
         mimeType: "image/png",
         sizeBytes: 1,
-        previewUri: "file:///drafts/screen.png",
         fileUri: "file:///drafts/screen.png",
       },
       uploadedOnTarget,

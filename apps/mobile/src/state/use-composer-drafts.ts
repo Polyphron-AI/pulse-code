@@ -669,6 +669,7 @@ export function copyComposerDraftContentState(
       ? targetScope.slice(0, separator)
       : null;
   const attachments = source.attachments.map((attachment) =>
+    attachment.type === "file" &&
     attachment.uploadEnvironmentId !== undefined &&
     attachment.uploadEnvironmentId !== targetEnvironmentId
       ? stripAttachmentUploadReference(attachment)
@@ -688,6 +689,7 @@ export function copyComposerDraftContentState(
 function stripAttachmentUploadReference(
   attachment: DraftComposerAttachment,
 ): DraftComposerAttachment {
+  if (attachment.type !== "file") return attachment;
   const { uploadedAttachmentId: _id, uploadEnvironmentId: _environmentId, ...rest } = attachment;
   return rest;
 }

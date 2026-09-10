@@ -165,3 +165,15 @@ describe("resolveDraftProjectSelection", () => {
     });
   });
 });
+
+describe("Windows environment project matching", () => {
+  it("matches a workspace basename across Windows and POSIX machines", () => {
+    const source = makeProject("source", "windows", {
+      title: "Local",
+      workspaceRoot: "C:\\work\\repo",
+    });
+    const other = makeProject("other", "linux", { title: "Other", workspaceRoot: "/work/other" });
+    const target = makeProject("target", "linux", { title: "Remote", workspaceRoot: "/work/repo" });
+    expect(resolveEnvironmentProjectMatch([other, target], source)).toBe(target);
+  });
+});
