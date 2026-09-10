@@ -73,6 +73,7 @@ describe("Antigravity process environment", () => {
       PYTHONUNBUFFERED: "0",
       ELECTRON_RUN_AS_NODE: "0",
       CUSTOM_SETTING: "keep-this",
+      PULSE_WARDEN_IDENTITY_FILE: "/synthetic/warden-identity.json",
     };
     const original = { ...baseEnv };
     const spawn = buildAntigravityAcpSpawnInput({
@@ -92,6 +93,7 @@ describe("Antigravity process environment", () => {
         HOME: "/home/developer",
         PATH: "/usr/bin",
         CUSTOM_SETTING: "keep-this",
+        PULSE_WARDEN_IDENTITY_FILE: "/synthetic/warden-identity.json",
         GEMINI_HOME: profile.geminiHome,
         AGY_ACP_FORCE_FILE_STORAGE: "1",
         ANTIGRAVITY_HARNESS_PATH: "/release/harness",

@@ -121,7 +121,9 @@ export const AntigravityDriver: ProviderDriver<AntigravitySettings, AntigravityD
         );
 
       const makeRuntime = Effect.fn("AntigravityDriver.makeRuntime")(function* (
-        input: Omit<AntigravityAcpRuntimeInput, "spawn" | "childProcessSpawner">,
+        input: Omit<AntigravityAcpRuntimeInput, "spawn" | "childProcessSpawner"> & {
+          readonly wardenCliIdentityFile?: string;
+        },
       ): Effect.fn.Return<
         AcpSessionRuntime["Service"],
         AcpError | ProviderSetupError,
@@ -163,7 +165,10 @@ export const AntigravityDriver: ProviderDriver<AntigravitySettings, AntigravityD
             installation: executable,
             profile,
             cwd: input.cwd,
-            baseEnv: processEnvironment,
+            baseEnv: {
+              ...processEnvironment,
+              PULSE_WARDEN_IDENTITY_FILE: input.wardenCliIdentityFile,
+            },
             auth,
           }),
         }).pipe(Effect.provideService(Crypto.Crypto, crypto));

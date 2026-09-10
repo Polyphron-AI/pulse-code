@@ -121,7 +121,10 @@ function mapAntigravityError(threadId: ThreadId, method: string, cause: EffectAc
 export interface AntigravityAdapterOptions {
   readonly instanceId: ProviderInstanceId;
   readonly makeRuntime: (
-    input: Omit<AntigravityAcpRuntimeInput, "spawn" | "childProcessSpawner" | "onAuthorizationUrl">,
+    input: Omit<
+      AntigravityAcpRuntimeInput,
+      "spawn" | "childProcessSpawner" | "onAuthorizationUrl"
+    > & { readonly wardenCliIdentityFile?: string },
   ) => Effect.Effect<Runtime, EffectAcpErrors.AcpError | ProviderSetupError, Scope.Scope>;
   readonly withProcess: AntigravityAuth["withProcess"];
   readonly onSessionStarted?: (
@@ -658,6 +661,9 @@ export const makeAntigravityAdapter = Effect.fn("makeAntigravityAdapter")(functi
               // leaf directory holding only uploads.
               const runtime = yield* options.makeRuntime({
                 cwd,
+                ...(mcp?.wardenCliConfigFile
+                  ? { wardenCliIdentityFile: mcp.wardenCliConfigFile }
+                  : {}),
                 clientInfo: { name: "t3-code", version: "0.0.0" },
                 clientFileSystem: true,
                 additionalDirectories: [serverConfig.attachmentsDir],

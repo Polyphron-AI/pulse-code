@@ -206,3 +206,7 @@ ships T3 Code already matching it.
 [24]: ./overview.md
 [25]: ../../apps/server/src/environmentTheme.ts
 [26]: ../user/environment-theme.md
+
+## Warden use
+
+A Warden use is a digest-bound authorization record held by the owning Go broker. It binds one saved query to a trusted Pulse turn, reviewed policy and credential versions, resource and expiry. Approval and execution are separate steps; a committed reservation cannot be replayed. See [the runtime contract](../../prd/warden/grafana-runtime.md).

@@ -4,6 +4,8 @@ import * as ExternalMcp from "../../mcp/ExternalMcp.ts";
 import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
+import * as McpProviderSession from "../../mcp/McpProviderSession.ts";
+import * as McpSessionRegistry from "../../mcp/McpSessionRegistry.ts";
 
 import type {
   ProviderApprovalDecision,
@@ -2338,6 +2340,43 @@ routing.layer("ProviderServiceLive routing", (it) => {
 
 const fanout = makeProviderServiceLayer();
 fanout.layer("ProviderServiceLive fanout", (it) => {
+  it.effect("ends the Warden attempt before publishing an aborted turn", () =>
+    Effect.gen(function* () {
+      const provider = yield* ProviderService.ProviderService;
+      const threadId = asThreadId("thread-warden-aborted");
+      const turnId = asTurnId("turn-warden-aborted");
+      const ended: Array<readonly [ThreadId, ProviderInstanceId, string | undefined]> = [];
+      const spy = vi
+        .spyOn(McpSessionRegistry, "endActiveWardenTurn")
+        .mockImplementation((thread, instance, turn) =>
+          Effect.sync(() => {
+            ended.push([thread, instance, turn]);
+          }),
+        );
+      try {
+        yield* fanout.codex.awaitSubscription;
+        const receipt = yield* provider.streamEvents.pipe(
+          Stream.filter((event) => event.threadId === threadId),
+          Stream.take(1),
+          Stream.runCollect,
+          Effect.forkChild({ startImmediately: true }),
+        );
+        fanout.codex.emit({
+          type: "turn.aborted",
+          eventId: asEventId("evt-warden-aborted"),
+          provider: CODEX_DRIVER,
+          createdAt: "2026-01-01T00:00:00.000Z",
+          threadId,
+          turnId,
+          payload: { reason: "interrupted" },
+        });
+        yield* Fiber.join(receipt);
+        assert.deepEqual(ended, [[threadId, codexInstanceId, turnId]]);
+      } finally {
+        spy.mockRestore();
+      }
+    }),
+  );
   it.effect("preserves normalized turn usage and legacy omission through canonical fanout", () =>
     Effect.gen(function* () {
       const provider = yield* ProviderService.ProviderService;
@@ -2969,6 +3008,7 @@ describe("agent browser access", () => {
     enableAgentBrowserAccess: boolean,
     threadId: ThreadId,
     projectOverride?: boolean,
+    enableAgentWardenAccess = false,
   ) =>
     Effect.gen(function* () {
       const issued: Array<ThreadId> = [];
@@ -3029,6 +3069,10 @@ describe("agent browser access", () => {
       const providerLayer = makeProviderServiceLive({
         issueMcpCredential: (request) =>
           Effect.sync(() => {
+            assert.deepEqual(Array.from(request.capabilities ?? []), [
+              ...((projectOverride ?? enableAgentBrowserAccess) ? ["preview"] : []),
+              ...(enableAgentWardenAccess ? ["warden"] : []),
+            ]);
             issued.push(request.threadId);
             return undefined;
           }),
@@ -3042,6 +3086,7 @@ describe("agent browser access", () => {
             enableAgentBrowserAccess,
             projectAgentBrowserAccessOverrides:
               projectOverride === undefined ? {} : { [projectId]: projectOverride },
+            enableAgentWardenAccess,
           }),
         ),
         Layer.provide(serverConfigTestLayer),
@@ -3066,6 +3111,39 @@ describe("agent browser access", () => {
 
       return issued;
     });
+
+  it.effect("requests a Warden-only MCP credential with browser access disabled", () =>
+    Effect.gen(function* () {
+      const threadId = asThreadId("thread-warden-only");
+      assert.deepEqual(yield* startSessionWith(false, threadId, undefined, true), [threadId]);
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("removes a previous CLI handoff when agent access is disabled", () =>
+    Effect.gen(function* () {
+      const root = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "warden-cleanup-test-"));
+      const file = NodePath.join(root, "identity.json");
+      const threadId = asThreadId("thread-warden-cleanup");
+      NodeFS.writeFileSync(file, "synthetic expired identity");
+      McpProviderSession.setMcpProviderSession({
+        environmentId: EnvironmentId.make("environment-test"),
+        threadId,
+        providerInstanceId: codexInstanceId,
+        providerSessionId: "session-test",
+        endpoint: "http://localhost/mcp",
+        authorizationHeader: "Bearer SYNTHETIC",
+        wardenCliConfigFile: file,
+      });
+      try {
+        yield* startSessionWith(false, threadId);
+        assert.equal(NodeFS.existsSync(file), false);
+        assert.equal(McpProviderSession.readMcpProviderSession(threadId), undefined);
+      } finally {
+        McpProviderSession.clearMcpProviderSession(threadId);
+        NodeFS.rmSync(root, { recursive: true, force: true });
+      }
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
 
   // Credential issuance is the observable that matters: it is the only place a
   // credential is minted, and `/mcp` accepts nothing else, so withholding it is
@@ -3115,7 +3193,7 @@ describe("agent browser access", () => {
   it.effect("requests an MCP credential when the project overrides browser access to on", () =>
     Effect.gen(function* () {
       const threadId = asThreadId("thread-project-browser-on");
-      const issued = yield* startSessionWith(false, threadId, true);
+      const issued = yield* startSessionWith(false, threadId, undefined, true);
       assert.deepEqual(issued, [threadId]);
     }).pipe(Effect.provide(NodeServices.layer)),
   );

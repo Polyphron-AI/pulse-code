@@ -1,4 +1,5 @@
 // @effect-diagnostics nodeBuiltinImport:off
+import * as ExternalMcp from "../../mcp/ExternalMcp.ts";
 import * as NodeAssert from "node:assert/strict";
 import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
@@ -435,6 +436,53 @@ sessionErrorLayer("CodexAdapterLive session errors", (it) => {
       const runtime = runtimeFactory.lastRuntime;
       NodeAssert.ok(runtime);
       NodeAssert.equal(runtime.options.launchArgs, "--strict-config --enable foo");
+    }).pipe(Effect.provide(layer));
+  });
+
+  it.effect("clears inherited Warden identity with external MCP and no managed session", () => {
+    const runtimeFactory = makeRuntimeFactory();
+    const layer = Layer.effect(
+      CodexAdapter,
+      Effect.gen(function* () {
+        const codexConfig = decodeCodexSettings({ launchArgs: "--strict-config --enable foo" });
+        return yield* makeCodexAdapter(codexConfig, {
+          makeRuntime: runtimeFactory.factory,
+          environment: { PULSE_WARDEN_IDENTITY_FILE: "/stale/identity.json" },
+        });
+      }),
+    ).pipe(
+      Layer.provideMerge(ServerConfig.layerTest(process.cwd(), process.cwd())),
+      Layer.provideMerge(ServerSettingsService.layerTest()),
+      Layer.provideMerge(providerSessionDirectoryTestLayer),
+      Layer.provideMerge(NodeServices.layer),
+    );
+
+    return Effect.gen(function* () {
+      const adapter = yield* CodexAdapter;
+      const threadId = asThreadId("sess-external-warden");
+      ExternalMcp.setExternalMcp(threadId, {
+        logs: {
+          type: "http",
+          url: "https://synthetic.invalid/mcp",
+          headers: { Authorization: "Bearer SYNTHETIC" },
+        },
+      });
+      try {
+        yield* adapter.startSession({
+          provider: ProviderDriverKind.make("codex"),
+          threadId,
+          runtimeMode: "full-access",
+        });
+
+        const runtime = runtimeFactory.lastRuntime;
+        NodeAssert.ok(runtime);
+        NodeAssert.equal(runtime.options.environment?.PULSE_WARDEN_IDENTITY_FILE, undefined);
+        NodeAssert.ok(
+          runtime.options.appServerArgs?.some((arg) => arg.includes("synthetic.invalid")),
+        );
+      } finally {
+        ExternalMcp.clearExternalMcp(threadId);
+      }
     }).pipe(Effect.provide(layer));
   });
 

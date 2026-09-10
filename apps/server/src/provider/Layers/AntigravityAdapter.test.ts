@@ -1,8 +1,10 @@
+import * as McpProviderSession from "../../mcp/McpProviderSession.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it } from "@effect/vitest";
 import {
   AntigravitySettings,
   ApprovalRequestId,
+  EnvironmentId,
   ProviderInstanceId,
   ThreadId,
   type ProviderRuntimeEvent,
@@ -281,6 +283,40 @@ const layer = ServerConfig.layerTest(process.cwd(), {
 }).pipe(Layer.provideMerge(NodeServices.layer));
 
 it.layer(layer)("AntigravityAdapter", (it) => {
+  it.effect("passes only the current session CLI identity to the owned runtime", () =>
+    Effect.gen(function* () {
+      const h = yield* makeHarness();
+      McpProviderSession.setMcpProviderSession({
+        environmentId: EnvironmentId.make("warden-test"),
+        threadId,
+        providerInstanceId: instanceId,
+        providerSessionId: "warden-test-session",
+        endpoint: "http://localhost/mcp",
+        authorizationHeader: "Bearer SYNTHETIC",
+        wardenCliConfigFile: "/synthetic/warden-identity.json",
+      });
+      try {
+        yield* h.adapter.startSession({
+          threadId,
+          cwd: process.cwd(),
+          runtimeMode: "approval-required",
+        });
+        expect(h.launches.at(-1)?.wardenCliIdentityFile).toBe("/synthetic/warden-identity.json");
+        expect(h.launches.at(-1)?.mcpServers).toHaveLength(1);
+        yield* h.adapter.stopSession(threadId);
+        McpProviderSession.clearMcpProviderSession(threadId);
+        yield* h.adapter.startSession({
+          threadId,
+          cwd: process.cwd(),
+          runtimeMode: "approval-required",
+        });
+        expect(h.launches.at(-1)?.wardenCliIdentityFile).toBeUndefined();
+        expect(h.launches.at(-1)?.mcpServers).toEqual([]);
+      } finally {
+        McpProviderSession.clearMcpProviderSession(threadId);
+      }
+    }),
+  );
   it.effect(
     "runs native auth, resume, models, commands, and streaming through the ACP transport",
     () =>
