@@ -1356,6 +1356,22 @@ export const make = Effect.gen(function* () {
     if (headContext.headBranch.length === 0) {
       return false;
     }
+    // Git keeps upstream configuration after a host deletes the merged head branch.
+    // That configuration still proves this branch was published.
+    const [configuredRemote, configuredMerge] = yield* Effect.all(
+      [
+        gitCore.readConfigValue(cwd, `branch.${headContext.headBranch}.remote`),
+        gitCore.readConfigValue(cwd, `branch.${headContext.headBranch}.merge`),
+      ],
+      { concurrency: "unbounded" },
+    ).pipe(Effect.orElseSucceed(() => [null, null] as const));
+    if (
+      configuredRemote &&
+      configuredRemote !== "." &&
+      configuredMerge?.startsWith("refs/heads/")
+    ) {
+      return false;
+    }
     const matchesRef = (pattern: string) =>
       gitCore
         .execute({
