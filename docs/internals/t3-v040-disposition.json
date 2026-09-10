@@ -1,6 +1,6 @@
 {
   "target": "09e8de9c655ae85410bf6b00446f272a01da81c7",
-  "assessedHead": "cdb236d96dc18882213e4d5cb70ac2cf4bee453b",
+  "assessedHead": "cd25876d32b60fb78d5e2cf82eb632ec3f324012",
   "scope": "Source commit inventory; pending rows require semantic review.",
   "statusDefinitions": {
     "ported-reviewed": "See compatibility ledgers for adaptations and tests.",
@@ -10,9 +10,9 @@
   },
   "counts": {
     "target-files-identical": 6,
-    "needs-disposition": 838,
-    "ported-reviewed": 198,
-    "partially-ported": 12
+    "needs-disposition": 830,
+    "ported-reviewed": 207,
+    "partially-ported": 11
   },
   "commits": [
     {
@@ -69,7 +69,7 @@
       "subject": "feat(desktop): mute a browser tab (#7252)",
       "status": "ported-reviewed",
       "domains": ["apps/desktop", "apps/web", "packages/contracts"],
-      "differingTargetPaths": 12
+      "differingTargetPaths": 11
     },
     {
       "source": "bcfd485869a5eb9e97c6d281ac839c1cd7c1bd99",
@@ -1414,9 +1414,10 @@
     {
       "source": "2fbe313096b54a3422e101ed1bcc3589f6cf371c",
       "subject": "fix(desktop): allow preview automation in agent-created threads (#8483)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/desktop", "packages/contracts"],
-      "differingTargetPaths": 4
+      "differingTargetPaths": 2,
+      "adaptation": "Desktop-only long runtime tab identifier codec integrated in 5932b788e; public preview identifier bounds unchanged."
     },
     {
       "source": "c8aba2587d56edbf3b7872987719a12b42031f48",
@@ -1879,7 +1880,7 @@
       "subject": "feat(mobile): pick, share, and receive files in threads (#8237)",
       "status": "ported-reviewed",
       "domains": ["apps/mobile", "docs", "patches", "pnpm-lock.yaml", "pnpm-workspace.yaml"],
-      "differingTargetPaths": 34
+      "differingTargetPaths": 33
     },
     {
       "source": "6e324b9bbfc72e694c3c16abeb59716c37fc02d5",
@@ -2026,7 +2027,7 @@
       "subject": "fix(preview): improve browser recording quality (#8839)",
       "status": "ported-reviewed",
       "domains": ["apps/desktop", "apps/web", "packages/contracts"],
-      "differingTargetPaths": 15
+      "differingTargetPaths": 14
     },
     {
       "source": "e9c4775e8738381140af4e5248507b15fc1cd491",
@@ -2152,7 +2153,7 @@
       "subject": "feat(mobile): add native image and PDF previews (#8959)",
       "status": "needs-disposition",
       "domains": ["apps/mobile", "docs"],
-      "differingTargetPaths": 14
+      "differingTargetPaths": 11
     },
     {
       "source": "41adccc83e819c286dcdf32cd8b5f55af8bb0b49",
@@ -2201,7 +2202,7 @@
       "subject": "feat(mobile): upload attachments while composing (#8978)",
       "status": "needs-disposition",
       "domains": ["apps/mobile", "docs"],
-      "differingTargetPaths": 23
+      "differingTargetPaths": 22
     },
     {
       "source": "9ecfc07a8b3acadd1612665b6e24425f625480de",
@@ -2235,10 +2236,10 @@
     {
       "source": "d35c71d1b975660ec6a71bbceb6aa7dfd0e8c3d5",
       "subject": "feat(web): add pull request list filters (#8809)",
-      "status": "partially-ported",
+      "status": "ported-reviewed",
       "domains": ["apps/web", "docs"],
       "differingTargetPaths": 7,
-      "remaining": "Author/label filter controls, normalized URLs, persisted scope and query semantics integrated. Facet suggestions/counts, label colors and sticky title refinements remain outside the adapted slice."
+      "adaptation": "Author/label controls, persisted URLs, scoped on-demand facet requests, loaded counts and row label metadata integrated through cd25876d3. Pulse retains Apply/Clear controls and sticky-title geometry; selected PR context stays independent."
     },
     {
       "source": "ff93aba61dc1f7839713580bc8ee08da2a395f9a",
@@ -2406,7 +2407,7 @@
       "subject": "fix(preview): restore recording and macOS rendering after Electron 43 (#9001)",
       "status": "ported-reviewed",
       "domains": ["apps/desktop", "apps/web", "packages/contracts"],
-      "differingTargetPaths": 9
+      "differingTargetPaths": 8
     },
     {
       "source": "9d1879b142a2f5d01383357646a4679d1a2bd202",
@@ -2508,7 +2509,7 @@
         "packages/shared",
         "pnpm-lock.yaml"
       ],
-      "differingTargetPaths": 48,
+      "differingTargetPaths": 47,
       "remaining": "Shared/backend and web/mobile/desktop media viewers, tool-result image rendering and automatic workspace mutation refresh integrated with focused tests. Native playback acceptance pending."
     },
     {
@@ -2783,7 +2784,7 @@
         "packages/contracts",
         "packages/shared"
       ],
-      "differingTargetPaths": 28
+      "differingTargetPaths": 26
     },
     {
       "source": "941acb4f919bcef337d4d9e1623101bdc30d3616",
@@ -3142,7 +3143,7 @@
       "subject": "feat(desktop): browser profiles for the preview browser (#7254)",
       "status": "ported-reviewed",
       "domains": ["apps/desktop", "apps/server", "apps/web", "packages/contracts"],
-      "differingTargetPaths": 32
+      "differingTargetPaths": 30
     },
     {
       "source": "ca63d42d670837b918081d1fc1ebada553814b4c",
@@ -3332,7 +3333,7 @@
       "subject": "refactor(media): unify file and media previews across clients (#9253)",
       "status": "needs-disposition",
       "domains": ["apps/mobile", "apps/web", "docs", "packages/client-runtime"],
-      "differingTargetPaths": 27
+      "differingTargetPaths": 26
     },
     {
       "source": "ec44bc56f598be16ffbc22ed0e4e095447043844",
@@ -3903,7 +3904,7 @@
       "subject": "feat(desktop): import browser cookies into a profile (#7255)",
       "status": "ported-reviewed",
       "domains": ["apps/desktop", "apps/web", "packages/contracts", "pnpm-lock.yaml", "scripts"],
-      "differingTargetPaths": 17
+      "differingTargetPaths": 15
     },
     {
       "source": "ff5843410d44796676b06627788d94354849c4d7",
@@ -4135,7 +4136,7 @@
       "subject": "feat(providers): add context compaction command (#9293)",
       "status": "ported-reviewed",
       "domains": ["apps/mobile", "apps/server", "apps/web", "docs", "packages/contracts"],
-      "differingTargetPaths": 52
+      "differingTargetPaths": 51
     },
     {
       "source": "5989de44a24888dab02854477ea1d0f50ac3a4a6",
@@ -4637,9 +4638,10 @@
     {
       "source": "3bbbc1d9fd8b3d649c60ba0137c7dae93a6aab3f",
       "subject": "perf(server): stop rebuilding terminal history per chunk (#9703)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server", "docs"],
-      "differingTargetPaths": 3
+      "differingTargetPaths": 3,
+      "adaptation": "Terminal byte/chunk history bounds integrated in 1f8cc75c5 with Pulse line limits and Unicode boundaries preserved."
     },
     {
       "source": "dffb4cd3b16dc6f41aced99922950ee3083082c6",
@@ -4742,9 +4744,10 @@
     {
       "source": "c4353bc6b972fa527579b530f01cc8744b2407d2",
       "subject": "fix(mobile): read file-backed image drafts before enabling them (#9713)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/mobile"],
-      "differingTargetPaths": 18
+      "differingTargetPaths": 12,
+      "adaptation": "File-backed image readers integrated in a0649184b; Pulse inline writers/current outbox retained without importing unrelated upload queue or cloud archive."
     },
     {
       "source": "50bfca43d76ced00f5d67cfbab8bc44c50eb0e53",
@@ -4819,9 +4822,10 @@
     {
       "source": "cf9729d5ee9660c08556e823080d3bb19648ed28",
       "subject": "perf(server): bound terminal history by bytes (#9748)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server", "docs"],
-      "differingTargetPaths": 4
+      "differingTargetPaths": 4,
+      "adaptation": "Coalesced history persistence and bounded current/legacy restore integrated in 1f8cc75c5."
     },
     {
       "source": "a76b898b3aa4fd4081104b06a3b2c942bd4fecb7",
@@ -5407,9 +5411,10 @@
     {
       "source": "363cde4114c2186c496ed97cafba4a8737ea5585",
       "subject": "fix(connect): refresh HTTP credentials without reconnecting (#9594)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/mobile", "apps/server", "apps/web", "docs", "packages/client-runtime"],
-      "differingTargetPaths": 30
+      "differingTargetPaths": 22,
+      "adaptation": "Request-time single-flight token renewal, one credential rejection retry, account/key/session guards, persisted-secret preservation and connected-expired-session listing integrated in d872cd739. Pulse shared connection layer and generic auth error retained."
     },
     {
       "source": "b01771c2383bbcdf154b8c4e9f1a7d5e3867e2d0",
@@ -6452,7 +6457,7 @@
         "packages/contracts",
         "packages/shared"
       ],
-      "differingTargetPaths": 6
+      "differingTargetPaths": 5
     },
     {
       "source": "7451d17a69ff7585f302933beeae1037d2c708a8",
@@ -6634,9 +6639,10 @@
     {
       "source": "eee05575ebd514db36f61d7eb05d2258a10c96bd",
       "subject": "fix(clients): persist project icons across reloads and reconnects (#10138)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/mobile", "apps/web", "packages/client-runtime", "packages/shared"],
-      "differingTargetPaths": 20
+      "differingTargetPaths": 10,
+      "adaptation": "Project favicon metadata/bytes survive reload and reconnect in d1fcb1105; signed URL rotation, removals and scoped cache clearing verified."
     },
     {
       "source": "b438447f67b6b61bbe6f564d8b78fd90702117c5",
@@ -7086,7 +7092,7 @@
       "subject": "feat(mobile): arrange active threads from both thread lists (#9730)",
       "status": "ported-reviewed",
       "domains": ["apps/mobile"],
-      "differingTargetPaths": 11
+      "differingTargetPaths": 10
     },
     {
       "source": "4023d93bce3f610349fbf38e991f737c1c5e0c98",
@@ -7114,14 +7120,14 @@
       "subject": "feat(mobile): show new-task drafts alongside pending tasks in the thread list (#10260)",
       "status": "ported-reviewed",
       "domains": ["apps/mobile"],
-      "differingTargetPaths": 11
+      "differingTargetPaths": 10
     },
     {
       "source": "8e129a0dfb35ac2c03a7320245b5bfb976f5d3bf",
       "subject": "feat(mobile): allow several new-task drafts per project (#10327)",
       "status": "ported-reviewed",
       "domains": ["apps/mobile"],
-      "differingTargetPaths": 13
+      "differingTargetPaths": 12
     },
     {
       "source": "98469159dd9e162a9c2f5cc4bbb2fbe89b3c4f67",
@@ -7316,9 +7322,10 @@
     {
       "source": "d6aa179ad2afe0424e1410cbafbb119bbd5f7809",
       "subject": "feat(mobile): show when an existing thread has a message waiting in the outbox (#10405)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/mobile"],
-      "differingTargetPaths": 14
+      "differingTargetPaths": 11,
+      "adaptation": "Existing-thread outbox indicators integrated in 1b7c5115a with scoped identity, delivery reversal and Pulse pin/snooze behavior retained."
     },
     {
       "source": "95139254ba98fb8ad12a001ebcbc9d4b833ead19",
@@ -7596,9 +7603,10 @@
     {
       "source": "7dda0b1c0a95603f1954b81a9fee699be92668f0",
       "subject": "feat(mobile): start a new thread on an existing branch (#10359)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/mobile"],
-      "differingTargetPaths": 12
+      "differingTargetPaths": 9,
+      "adaptation": "Existing-branch mobile task creation integrated in ad938a51c with stale request protection and existing outbox ownership."
     },
     {
       "source": "062987b2fb0ef48cc7776d654931bd9f3bcf1f9f",
