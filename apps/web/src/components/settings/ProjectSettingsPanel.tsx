@@ -126,6 +126,7 @@ export const PROJECT_GROUPING_MODE_LABELS: Record<SidebarProjectGroupingMode, st
 
 /** Logical project groups for the settings page, sorted by display name. */
 export function useSettingsProjectGroups(): SidebarProjectSnapshot[] {
+  const primaryEnvironmentId = usePrimaryEnvironmentId();
   const projects = useProjects();
   const projectGroupingSettings = useClientSettings(selectProjectGroupingSettings);
   const { environments } = useEnvironments();
@@ -161,7 +162,6 @@ export function ProjectSettingsPanel({
 }) {
   const groups = useSettingsProjectGroups();
   const navigate = useNavigate();
-  const primaryEnvironmentId = usePrimaryEnvironmentId();
 
   const selected = groups.find((group) => group.projectKey === projectKey) ?? null;
   const members = useMemo(
