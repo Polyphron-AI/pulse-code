@@ -4,7 +4,7 @@ Source d8bc6831c fixes the confirmed legacy script menu crash. Existing IDs rema
 
 The remaining reviewed candidates are distinct:
 
-- 6a2608292: Claude assistant snapshots can precede task_started; authoritative subagent model metadata needs a bounded pending map. This is the next separately tested fix.
+- 6a2608292: Claude assistant snapshots can precede task_started; authoritative subagent model metadata is now retained in a bounded pending map and consumed on task registration. Synthetic tests cover snapshot-first ordering, emitted start/progress metadata, preserved effort, and oldest-entry eviction at 64 entries. The test uses the existing synthetic model capability fixture instead of assuming a historical model catalog entry.
 - b17cc3d1b: the existing durable request lookup covers only part of the optimization. Internal reactor thread-detail reads still load general activity payloads and shell summary refresh reads all activities. Add filtered/empty activity reads and narrow lifecycle queries in a separate performance batch.
 - fc262f1a2: automatic thread title generation still attempts once, then logs failures. Source retries twice with exponential delays while retaining the user-title guard. This is reliability follow-up, not a wire decoder gap.
 - 6349a0e68: Antigravity session/new -32603 after authentication still reports sign-in failure. Source distinguishes session/model initialization failure without exposing payloads. This is a diagnostic follow-up, not an authentication transport failure.
