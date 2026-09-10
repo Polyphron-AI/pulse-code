@@ -2265,7 +2265,16 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
           cwd: input.cwd ?? process.cwd(),
           binaryPath: codexConfig.binaryPath,
           launchArgs: resolveCodexLaunchArgs(codexConfig.launchArgs, options?.environment),
-          ...(options?.environment ? { environment: options.environment } : {}),
+          ...(options?.environment ||
+          mcpSession?.wardenCliConfigFile ||
+          process.env.PULSE_WARDEN_IDENTITY_FILE
+            ? {
+                environment: McpProviderSession.withWardenCliEnvironment(
+                  options?.environment ?? process.env,
+                  mcpSession,
+                ),
+              }
+            : {}),
           ...(codexConfig.homePath ? { homePath: codexConfig.homePath } : {}),
           ...(isCodexResumeCursorSchema(input.resumeCursor)
             ? { resumeCursor: input.resumeCursor }
@@ -2278,7 +2287,10 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
           ...(mcpSession
             ? {
                 environment: {
-                  ...(options?.environment ?? process.env),
+                  ...McpProviderSession.withWardenCliEnvironment(
+                    options?.environment ?? process.env,
+                    mcpSession,
+                  ),
                   T3_MCP_BEARER_TOKEN: mcpSession.authorizationHeader.replace(/^Bearer\s+/, ""),
                 },
                 appServerArgs: [

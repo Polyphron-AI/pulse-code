@@ -681,3 +681,16 @@ describe("ClientSettings proactive panels", () => {
     );
   });
 });
+
+it("requires an independent explicit Warden opt-in", () => {
+  expect(decodeServerSettings({}).enableAgentWardenAccess).toBe(false);
+  const settings = decodeServerSettings({
+    enableAgentBrowserAccess: false,
+    enableAgentWardenAccess: true,
+  });
+  expect(settings.enableAgentWardenAccess).toBe(true);
+  expect(settings.enableAgentBrowserAccess).toBe(false);
+  expect(decodeServerSettingsPatch({ enableAgentWardenAccess: false })).toMatchObject({
+    enableAgentWardenAccess: false,
+  });
+});
