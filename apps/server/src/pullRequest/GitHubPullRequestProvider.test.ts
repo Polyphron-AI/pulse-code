@@ -294,7 +294,7 @@ describe("gitHubViewerPermissions", () => {
               mergeCapabilities: { merge: true, squash: true, rebase: true },
             }),
           getViewerAccess: () =>
-            Effect.succeed({ canWrite: true, canUpdate: true, didAuthor: false }),
+            Effect.succeed({ canWrite: true, canTriage: true, canUpdate: true, didAuthor: false }),
         }),
       ),
     ),
@@ -358,7 +358,7 @@ it.effect("does not classify same-repository gates as fork workflow approvals", 
             mergeCapabilities: { merge: true, squash: true, rebase: true },
           }),
         getViewerAccess: () =>
-          Effect.succeed({ canWrite: true, canUpdate: true, didAuthor: false }),
+          Effect.succeed({ canWrite: true, canTriage: true, canUpdate: true, didAuthor: false }),
       }),
     ),
   ),
@@ -405,7 +405,7 @@ it.effect("keeps an unsafe workflow approval scope visible as unknown", () =>
             mergeCapabilities: { merge: true, squash: true, rebase: true },
           }),
         getViewerAccess: () =>
-          Effect.succeed({ canWrite: true, canUpdate: true, didAuthor: false }),
+          Effect.succeed({ canWrite: true, canTriage: true, canUpdate: true, didAuthor: false }),
       }),
     ),
   ),
@@ -444,7 +444,7 @@ it.effect("propagates workflow discovery rate limits", () =>
             mergeCapabilities: { merge: true, squash: true, rebase: true },
           }),
         getViewerAccess: () =>
-          Effect.succeed({ canWrite: true, canUpdate: true, didAuthor: false }),
+          Effect.succeed({ canWrite: true, canTriage: true, canUpdate: true, didAuthor: false }),
       }),
     ),
   ),
