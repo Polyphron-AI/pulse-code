@@ -7,7 +7,6 @@ import type { DailyTotals, HourlyTotals } from "@t3tools/shared/usageMerge";
 
 import { isElectron } from "../../env";
 import { cn } from "../../lib/utils";
-import { usePrimaryEnvironmentId } from "../../state/environments";
 import { useUsage, type EnvironmentUsageStatus } from "../../state/usage";
 import { useAtomCommand } from "../../state/use-atom-command";
 import {
@@ -59,8 +58,17 @@ export function UsagePage() {
   const [breakdown, setBreakdown] = useState<"model" | "time">("model");
   const { days: windowDays, window } = windowSelection;
   const isPast24Hours = windowDays === 1;
-  const { merged, environments, isPending, isPartial, refresh } = useUsage(window);
-  const primaryEnvironmentId = usePrimaryEnvironmentId();
+  const [selectedEnvironmentIds, setSelectedEnvironmentIds] =
+    useState<ReadonlySet<EnvironmentId> | null>(null);
+  const {
+    merged,
+    environments: allEnvironments,
+    selectedEnvironments: environments,
+    isPending,
+    isPartial,
+    refresh,
+  } = useUsage(window, selectedEnvironmentIds);
+  const { environments: connectedEnvironments } = useEnvironments();
   const refreshProviders = useAtomCommand(serverEnvironment.refreshProviders, {
     reportFailure: false,
   });
@@ -110,12 +118,14 @@ export function UsagePage() {
     });
   };
   const refreshWindow = () => {
-    // On Limits the button re-probes every provider (and usage-limit source)
-    // on the primary environment; the live snapshots then flow in over the
-    // config stream, so nothing else needs to move.
     if (showingLimits) {
-      if (primaryEnvironmentId) {
-        void refreshProviders({ environmentId: primaryEnvironmentId, input: {} });
+      for (const environment of connectedEnvironments) {
+        if (
+          environment.connection.phase === "connected" &&
+          (selectedEnvironmentIds === null || selectedEnvironmentIds.has(environment.environmentId))
+        ) {
+          void refreshProviders({ environmentId: environment.environmentId, input: {} });
+        }
       }
       return;
     }
@@ -223,10 +233,55 @@ export function UsagePage() {
               </div>
             </div>
 
-            {!showingLimits && <PlanUsageSection />}
+            {allEnvironments.length > 1 && (
+              <div className="flex flex-wrap gap-2" role="group" aria-label="Usage environments">
+                <Button
+                  size="sm"
+                  variant={selectedEnvironmentIds === null ? "secondary" : "outline"}
+                  aria-pressed={selectedEnvironmentIds === null}
+                  onClick={() => setSelectedEnvironmentIds(null)}
+                >
+                  All environments
+                </Button>
+                {allEnvironments.map((environment) => (
+                  <Button
+                    key={environment.environmentId}
+                    size="sm"
+                    variant={
+                      selectedEnvironmentIds === null ||
+                      selectedEnvironmentIds.has(environment.environmentId)
+                        ? "secondary"
+                        : "outline"
+                    }
+                    aria-pressed={
+                      selectedEnvironmentIds === null ||
+                      selectedEnvironmentIds.has(environment.environmentId)
+                    }
+                    onClick={() =>
+                      setSelectedEnvironmentIds((current) => {
+                        const next = new Set(
+                          allEnvironments
+                            .filter((entry) => current === null || current.has(entry.environmentId))
+                            .map((entry) => entry.environmentId),
+                        );
+                        if (next.has(environment.environmentId))
+                          next.delete(environment.environmentId);
+                        else next.add(environment.environmentId);
+                        return allEnvironments.every((entry) => next.has(entry.environmentId))
+                          ? null
+                          : next;
+                      })
+                    }
+                  >
+                    {environment.label}
+                  </Button>
+                ))}
+              </div>
+            )}
+            {!showingLimits && <PlanUsageSection selectedEnvironmentIds={selectedEnvironmentIds} />}
 
             {showingLimits ? (
-              <UsageLimitsSection />
+              <UsageLimitsSection selectedEnvironmentIds={selectedEnvironmentIds} />
             ) : settling ? (
               <>
                 {environments.length > 1 ? <UsageDeviceStrip environments={environments} /> : null}
@@ -505,8 +560,16 @@ export function UsagePage() {
  * Only Codex and Claude ever report plan usage; the section (and each
  * environment block) disappears entirely when nothing carries it.
  */
-function PlanUsageSection() {
-  const { environments } = useEnvironments();
+function PlanUsageSection({
+  selectedEnvironmentIds,
+}: {
+  readonly selectedEnvironmentIds: ReadonlySet<EnvironmentId> | null;
+}) {
+  const { environments: allEnvironments } = useEnvironments();
+  const environments = allEnvironments.filter(
+    (environment) =>
+      selectedEnvironmentIds === null || selectedEnvironmentIds.has(environment.environmentId),
+  );
   return (
     <>
       {environments.map((environment) => (

@@ -1,3 +1,4 @@
+import { UsageProviderSettings } from "./UsageProviderSettings";
 import { useAtomValue } from "@effect/atom-react";
 import { connectionStatusText } from "@t3tools/client-runtime/connection";
 import { safeErrorLogAttributes } from "@t3tools/client-runtime/errors";
@@ -895,6 +896,14 @@ export function EnvironmentProviderSettings({
           })}
         </div>
       </SettingsSection>
+
+      <UsageProviderSettings
+        key={environmentId}
+        environmentId={environmentId}
+        environmentLabel={environmentLabel}
+        sources={settings.usageLimitSources}
+        readOnly={readOnly}
+      />
 
       {isAddInstanceDialogOpen ? (
         <AddProviderInstanceDialog
