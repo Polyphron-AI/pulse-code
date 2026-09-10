@@ -95,6 +95,7 @@ export function ThreadDictationButton({
     <div className="relative flex justify-end">
       <Button
         type="button"
+        data-composer-voice
         size="icon-sm"
         variant={recording ? "destructive" : "ghost"}
         disabled={pending || (disabled && !recording)}
