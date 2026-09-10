@@ -14,4 +14,4 @@ Pause notices, per-turn deduplication, overage exemptions, bounded reset waits a
 
 ## Separate identity dependency
 
-The audit also found the item.updated projection missing runtime itemId as toolCallId (source b2e2ccfdb), despite started/completed projections retaining it. This is a separate coalescing/lifecycle dependency and is tracked for its own focused correction.
+The audit also found the item.updated projection missing runtime itemId as toolCallId (source b2e2ccfdb), despite started/completed projections retaining it. The separate correction restores the update identity and proves that ingested same-call updates coalesce while parallel calls and completion boundaries remain distinct. Anonymous updates still receive no invented identity.
