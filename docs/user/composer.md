@@ -150,3 +150,5 @@ Approvals, questions, and ready plans appear in a drawer attached to the compose
 On mobile, an existing thread with a queued message shows an upload-tray indicator and remains visible while waiting to send. Once the message is delivered, the thread returns to its normal list position.
 
 To start another task on a thread's branch, open that thread's menu and choose **New thread on branch**. Pulse prepares the checkout before opening the new task. If local changes prevent checkout, they stay in place and the task is not started.
+
+Mobile keeps unsent Pulse Connect drafts and queued messages on the device when you sign out. Signing back into the same account restores them; another account does not receive that work. If the local backup fails, Pulse keeps the work and reports the cleanup failure so it can be retried.
