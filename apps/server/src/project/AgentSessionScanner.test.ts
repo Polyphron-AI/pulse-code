@@ -535,13 +535,21 @@ it.layer(NodeServices.layer)("AgentSessionScanner", (it) => {
         const simulatedFileSystem = FileSystem.FileSystem.of({
           ...fileSystem,
           stat: (filePath) =>
-            fileSystem.stat(
-              filePath === upperWorkspace
-                ? backingUpper
-                : filePath === lowerWorkspace
-                  ? backingLower
-                  : filePath,
-            ),
+            fileSystem
+              .stat(
+                filePath === upperWorkspace
+                  ? backingUpper
+                  : filePath === lowerWorkspace
+                    ? backingLower
+                    : filePath,
+              )
+              .pipe(
+                Effect.map((info) =>
+                  filePath === upperWorkspace || filePath === lowerWorkspace
+                    ? { ...info, ino: Option.some(filePath === upperWorkspace ? 1 : 2) }
+                    : info,
+                ),
+              ),
         });
         const result = yield* runScan({ claudeHomePath, codexHomePath }).pipe(
           Effect.provideService(FileSystem.FileSystem, simulatedFileSystem),
