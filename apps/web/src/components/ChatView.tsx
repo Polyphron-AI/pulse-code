@@ -5460,7 +5460,7 @@ function ChatViewContent(props: ChatViewProps) {
       if (command === "thread.settle") {
         event.preventDefault();
         event.stopPropagation();
-        if (!isServerThread || !activeThreadRef || !supportsSettlement) return;
+        if (event.repeat || !isServerThread || !activeThreadRef || !supportsSettlement) return;
         if (activeThreadSettled) {
           void handleUnsettleActiveThread();
           return;
@@ -5483,7 +5483,7 @@ function ChatViewContent(props: ChatViewProps) {
       if (command === "thread.pin") {
         event.preventDefault();
         event.stopPropagation();
-        if (!isServerThread || !activeThreadRef || !supportsPinning) return;
+        if (event.repeat || !isServerThread || !activeThreadRef || !supportsPinning) return;
         const pinned = activeThreadPinned;
         void (pinned ? unpinThread(activeThreadRef) : pinThread(activeThreadRef)).then((result) => {
           if (result._tag !== "Failure" || isAtomCommandInterrupted(result)) return;
