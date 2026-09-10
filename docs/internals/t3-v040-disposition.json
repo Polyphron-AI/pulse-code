@@ -1,6 +1,6 @@
 {
   "target": "09e8de9c655ae85410bf6b00446f272a01da81c7",
-  "assessedHead": "8eb5ab63d72bcf4c985842614b93d8e39c38a93c",
+  "assessedHead": "5a12b7e1ef3de05e33ad4e363dd751dce72ebabe",
   "scope": "Source commit inventory; pending rows require semantic review.",
   "statusDefinitions": {
     "ported-reviewed": "See compatibility ledgers for adaptations and tests.",
@@ -9,10 +9,10 @@
     "needs-disposition": "Path differences alone do not establish a missing feature or incompatibility."
   },
   "counts": {
-    "needs-disposition": 960,
-    "ported-reviewed": 82,
-    "partially-ported": 9,
-    "target-files-identical": 3
+    "needs-disposition": 941,
+    "ported-reviewed": 99,
+    "partially-ported": 10,
+    "target-files-identical": 4
   },
   "commits": [
     {
@@ -691,7 +691,7 @@
       "subject": "fix: render workspace images in chat markdown (#6433)",
       "status": "needs-disposition",
       "domains": ["apps/mobile", "apps/web", "packages/client-runtime"],
-      "differingTargetPaths": 12
+      "differingTargetPaths": 11
     },
     {
       "source": "6c693baecf75454cac96d1ae3f78afc73f2cbe53",
@@ -719,7 +719,7 @@
       "subject": "fix(mobile): preserve markdown image dimensions (#7940)",
       "status": "needs-disposition",
       "domains": ["apps/mobile"],
-      "differingTargetPaths": 3
+      "differingTargetPaths": 1
     },
     {
       "source": "4e169df1dd12e0ed960dcb310e9460897759a55e",
@@ -1879,7 +1879,7 @@
       "subject": "feat(mobile): pick, share, and receive files in threads (#8237)",
       "status": "ported-reviewed",
       "domains": ["apps/mobile", "docs", "patches", "pnpm-lock.yaml", "pnpm-workspace.yaml"],
-      "differingTargetPaths": 37
+      "differingTargetPaths": 34
     },
     {
       "source": "6e324b9bbfc72e694c3c16abeb59716c37fc02d5",
@@ -2131,7 +2131,7 @@
         "packages/shared",
         "pnpm-lock.yaml"
       ],
-      "differingTargetPaths": 32
+      "differingTargetPaths": 16
     },
     {
       "source": "f47e74004af232f0e3df8dc10093601d1c2c3ea3",
@@ -2152,7 +2152,7 @@
       "subject": "feat(mobile): add native image and PDF previews (#8959)",
       "status": "needs-disposition",
       "domains": ["apps/mobile", "docs"],
-      "differingTargetPaths": 24
+      "differingTargetPaths": 14
     },
     {
       "source": "41adccc83e819c286dcdf32cd8b5f55af8bb0b49",
@@ -2368,7 +2368,7 @@
     {
       "source": "2d156a83b96ebf2e4a9c6017251baad357ae6ab1",
       "subject": "feat(shortcuts): copy active thread reference (#8994)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": [
         "apps/mobile",
         "apps/server",
@@ -2377,7 +2377,7 @@
         "packages/contracts",
         "packages/shared"
       ],
-      "differingTargetPaths": 20
+      "differingTargetPaths": 12
     },
     {
       "source": "261380f91f764673c7fcefcb6a3f775526dbb776",
@@ -2495,7 +2495,7 @@
     {
       "source": "beae2147a9487ec47ac992319f2216914b4cb62d",
       "subject": "fix(media): preview host files and stream videos across clients (#9023)",
-      "status": "needs-disposition",
+      "status": "partially-ported",
       "domains": [
         "apps/desktop",
         "apps/mobile",
@@ -2507,7 +2507,8 @@
         "packages/shared",
         "pnpm-lock.yaml"
       ],
-      "differingTargetPaths": 65
+      "differingTargetPaths": 48,
+      "remaining": "Shared/backend and web/mobile/desktop media viewers integrated; tool-result viewedImage rendering and automatic workspace mutation refresh remain. Native playback acceptance pending."
     },
     {
       "source": "04efa7907e9ec207e2d6af459ce3b2ffd55f6107",
@@ -2617,9 +2618,9 @@
     {
       "source": "5014e5fcdd6e5f4a53d0fea4cbecba733821a854",
       "subject": "fix(desktop): show newest changes in nightly previews (#9138)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/desktop", "apps/web", "docs", "packages/contracts"],
-      "differingTargetPaths": 17
+      "differingTargetPaths": 15
     },
     {
       "source": "8efd4e95fcb08478c9c6e8eee384bfca559f62cc",
@@ -2697,7 +2698,7 @@
       "subject": "test(server): measure shell, second client, and reconnect transfer (#9157)",
       "status": "needs-disposition",
       "domains": ["apps/server"],
-      "differingTargetPaths": 6
+      "differingTargetPaths": 5
     },
     {
       "source": "0e1570bde5b64458449a45989f1b56d6fd651883",
@@ -3005,10 +3006,9 @@
     {
       "source": "5b7d72aad14ed37e8e5e4c02a6d49814bfe528ac",
       "subject": "feat(updates): continue active threads across server restarts (#9167)",
-      "status": "partially-ported",
+      "status": "ported-reviewed",
       "domains": ["apps/desktop", "apps/server", "apps/web", "docs", "packages/contracts"],
-      "differingTargetPaths": 26,
-      "remaining": "Boot-service handoff and remote desktop updater integrated; desktop update-specific thread continuation remains unadvertised."
+      "differingTargetPaths": 26
     },
     {
       "source": "7e9d5a7efa70f92f91d960a4f50243ba44d805da",
@@ -3266,9 +3266,10 @@
     {
       "source": "77512998485718eb1b6c336e20f196eb40a6a32f",
       "subject": "feat(web): preview document attachments in the file viewer (#9292)",
-      "status": "needs-disposition",
+      "status": "partially-ported",
       "domains": ["apps/server", "apps/web", "docs", "packages/contracts"],
-      "differingTargetPaths": 14
+      "differingTargetPaths": 14,
+      "remaining": "Backend and web/mobile/desktop document previews integrated; native acceptance pending, and host documents outside a workspace remain rejected."
     },
     {
       "source": "e94603adfac7d8734f9af01e33f67e776daf482d",
@@ -3330,7 +3331,7 @@
       "subject": "refactor(media): unify file and media previews across clients (#9253)",
       "status": "needs-disposition",
       "domains": ["apps/mobile", "apps/web", "docs", "packages/client-runtime"],
-      "differingTargetPaths": 42
+      "differingTargetPaths": 27
     },
     {
       "source": "ec44bc56f598be16ffbc22ed0e4e095447043844",
@@ -4045,7 +4046,7 @@
     {
       "source": "19d8ab2ae9fc562ee7b216a0d72903fbfafa9572",
       "subject": "feat(usage): show Codex and Claude subscription limits on a Limits tab (#9507)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": [
         "apps/mobile",
         "apps/server",
@@ -4055,7 +4056,7 @@
         "packages/contracts",
         "packages/shared"
       ],
-      "differingTargetPaths": 52
+      "differingTargetPaths": 39
     },
     {
       "source": "343db2c328af56fe0fa7672f3af055550832689b",
@@ -4186,7 +4187,7 @@
     {
       "source": "1641b4aba58ab495cad7a9800b173af3416e16dd",
       "subject": "feat(usage): redeem Codex reset credits from the Limits tab (#9534)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": [
         "apps/mobile",
         "apps/server",
@@ -4194,7 +4195,7 @@
         "packages/client-runtime",
         "packages/contracts"
       ],
-      "differingTargetPaths": 18
+      "differingTargetPaths": 11
     },
     {
       "source": "4e547318b60031eb546d8cf2b84ad9fa0785a87a",
@@ -4299,7 +4300,7 @@
       "subject": "fix(usage): deduplicate CLI proxy subscription accounts (#9584)",
       "status": "needs-disposition",
       "domains": ["apps/mobile", "apps/web", "docs", "packages/shared"],
-      "differingTargetPaths": 5
+      "differingTargetPaths": 1
     },
     {
       "source": "07891e9569c88457516b44c08c820471762969e8",
@@ -4355,7 +4356,7 @@
       "subject": "refactor(web): move usage provider controls to settings (#9599)",
       "status": "needs-disposition",
       "domains": ["apps/mobile", "apps/web", "docs"],
-      "differingTargetPaths": 9
+      "differingTargetPaths": 6
     },
     {
       "source": "00f8b7c28056188e3c5630160806a0afe51c9010",
@@ -4958,7 +4959,7 @@
       "subject": "test: skip symlink fixtures where the host cannot create symlinks (#9566)",
       "status": "needs-disposition",
       "domains": ["apps/desktop", "apps/server", "packages/shared", "scripts"],
-      "differingTargetPaths": 20
+      "differingTargetPaths": 19
     },
     {
       "source": "5c6c1d67d82bb81bddaee6d83e54e8aecd96ec7d",
@@ -5063,7 +5064,7 @@
       "subject": "feat(mobile): split the usage page into Usage and Limits tabs (#9775)",
       "status": "needs-disposition",
       "domains": ["apps/mobile", "docs"],
-      "differingTargetPaths": 3
+      "differingTargetPaths": 2
     },
     {
       "source": "935917f50a2d9ccdd772464de140c187ca80bb0b",
@@ -5386,7 +5387,7 @@
       "subject": "fix(web): render and filter usage as environments respond (#9860)",
       "status": "needs-disposition",
       "domains": ["apps/web", "docs", "packages/shared"],
-      "differingTargetPaths": 7
+      "differingTargetPaths": 6
     },
     {
       "source": "84b99f3fb7bbc759fcbb589d031920e76edf4746",
@@ -5419,9 +5420,9 @@
     {
       "source": "a0eb23993a3bacf96d618918f43ea18f2da72390",
       "subject": "fix(web): prioritize open panel pull request when copying (#9877)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/web", "packages/shared"],
-      "differingTargetPaths": 5
+      "differingTargetPaths": 3
     },
     {
       "source": "9cb40178a53cca279c67a9079afab3cddf6b6ddb",
@@ -6259,7 +6260,7 @@
     {
       "source": "09aac71563c66a4f65f6fbe701aa9596cb677767",
       "subject": "feat(web): first-run welcome wizard with agent setup and project import (#5362)",
-      "status": "needs-disposition",
+      "status": "partially-ported",
       "domains": [
         "apps/desktop",
         "apps/server",
@@ -6269,7 +6270,8 @@
         "packages/contracts",
         "packages/shared"
       ],
-      "differingTargetPaths": 122
+      "differingTargetPaths": 113,
+      "remaining": "Local session scanner/importer, bootstrap completion, session-bound welcome, and provider terminal foundations integrated. First-run onboarding UI is in progress; browser-profile import remains separate."
     },
     {
       "source": "2271a27dad1205b403a66af01461f856986e5064",
@@ -6470,7 +6472,7 @@
       "subject": "refactor(shared): remove unused runtime helpers and exports (#10166)",
       "status": "needs-disposition",
       "domains": ["apps/web", "packages/shared"],
-      "differingTargetPaths": 13
+      "differingTargetPaths": 12
     },
     {
       "source": "dbfd5173131deb1a7ad2a9438b8941ade43f9a89",
@@ -6580,7 +6582,7 @@
     {
       "source": "183c3433091c30a19117ee733832b1c44a6af074",
       "subject": "feat: show provider usage limits with /usage-limits (#9875)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": [
         "apps/mobile",
         "apps/server",
@@ -6590,7 +6592,7 @@
         "packages/contracts",
         "packages/shared"
       ],
-      "differingTargetPaths": 23
+      "differingTargetPaths": 18
     },
     {
       "source": "585ce2c2ab396e4c3c5ffcfc422449c07896ddf9",
@@ -6604,7 +6606,7 @@
       "subject": "feat(usage): show remaining quota instead of used (#9889)",
       "status": "needs-disposition",
       "domains": ["apps/mobile", "apps/web", "docs", "packages/shared"],
-      "differingTargetPaths": 5
+      "differingTargetPaths": 1
     },
     {
       "source": "f12d39359f0f76a64ff2d77959c5baf821df15be",
@@ -6864,14 +6866,14 @@
       "subject": "feat(usage): pool subscription limits per provider across accounts and environments (#10300)",
       "status": "needs-disposition",
       "domains": ["apps/server", "apps/web", "docs", "packages/shared"],
-      "differingTargetPaths": 8
+      "differingTargetPaths": 2
     },
     {
       "source": "00d6109cbb1a13712d7347701969870aee83252d",
       "subject": "chore(web): remove usage limits demo fixtures (#10330)",
       "status": "needs-disposition",
       "domains": ["apps/web"],
-      "differingTargetPaths": 2
+      "differingTargetPaths": 1
     },
     {
       "source": "127efae4401cf2cc0fcd7ec7c5b2e2c037fe4151",
@@ -6920,7 +6922,7 @@
       "subject": "feat(mobile): pool usage limits across selected environments (#10334)",
       "status": "needs-disposition",
       "domains": ["apps/mobile", "docs", "packages/shared"],
-      "differingTargetPaths": 11
+      "differingTargetPaths": 7
     },
     {
       "source": "7544d3d2c8e0145018d9adb7a1a650333b75362a",
@@ -7037,7 +7039,7 @@
     {
       "source": "223ff4490f764a74ff911589e97b9bbcd595fee8",
       "subject": "fix(server): link thread PRs without an open client (#10101)",
-      "status": "partially-ported",
+      "status": "ported-reviewed",
       "domains": [
         "apps/mobile",
         "apps/server",
@@ -7047,8 +7049,7 @@
         "packages/contracts",
         "packages/shared"
       ],
-      "differingTargetPaths": 48,
-      "remaining": "Branch associations, summaries and open-PR client flows integrated with Pulse migration 50; copy-reference actions still require the shared thread-reference prerequisite."
+      "differingTargetPaths": 45
     },
     {
       "source": "72cb638a8a6656d0b89899d9d62afaed0c2f7e5f",
@@ -7088,14 +7089,14 @@
     {
       "source": "4023d93bce3f610349fbf38e991f737c1c5e0c98",
       "subject": "feat(web): drag threads across sections with consistent motion (#9731)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/web", "docs", "packages/client-runtime"],
       "differingTargetPaths": 8
     },
     {
       "source": "9a47c7bd40522977c7df022a5b64759aae7b58e0",
       "subject": "feat(web): simplify sidebar drag destination cues (#9750)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/web", "docs"],
       "differingTargetPaths": 2
     },
@@ -7179,9 +7180,9 @@
     {
       "source": "f1a08116f9c6f98d933d53fa897be3d8e3ac1e03",
       "subject": "fix(server): preserve Codex reset credits during usage updates (#10308)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server"],
-      "differingTargetPaths": 2
+      "differingTargetPaths": 0
     },
     {
       "source": "e15ffb9c0f73425dd9a1965070f01a07c9065761",
@@ -7263,7 +7264,7 @@
     {
       "source": "0a89364f153f7ba890ae4dedd33d16675d73744f",
       "subject": "fix(usage): read and redeem hub reset credits through CLIProxyAPI (#10395)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": [
         "apps/mobile",
         "apps/server",
@@ -7273,7 +7274,7 @@
         "packages/contracts",
         "packages/shared"
       ],
-      "differingTargetPaths": 18
+      "differingTargetPaths": 8
     },
     {
       "source": "79394154dfe1e6373534995022f53ffdcf293e55",
@@ -7341,7 +7342,7 @@
     {
       "source": "5b0c923ea3413c038f32ac4c523ae96863443f9f",
       "subject": "feat(web): name the drop action while dragging sidebar threads (#10378)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/web", "docs"],
       "differingTargetPaths": 6
     },
@@ -7467,9 +7468,9 @@
     {
       "source": "1c1d38fcd40252f91a3ea9056a7323135d3452dd",
       "subject": "fix(codex): keep Spark limits from replacing the main allowance (#10458)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server"],
-      "differingTargetPaths": 3
+      "differingTargetPaths": 1
     },
     {
       "source": "7e03dcfe5d405626a94037e19a18f9950162b3ea",
@@ -7488,7 +7489,7 @@
     {
       "source": "4e969f3731aaa590889d74274b3b6dced6d86291",
       "subject": "fix(web): keep sidebar drag dividers clear and gestures smooth (#10453)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/web"],
       "differingTargetPaths": 2
     },
@@ -7509,7 +7510,7 @@
     {
       "source": "490eb17d31d3037930d0e6b549393e9dbcebde60",
       "subject": "fix(web): clarify sidebar drag dividers and empty targets (#10464)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/web"],
       "differingTargetPaths": 1
     },
@@ -7523,9 +7524,9 @@
     {
       "source": "6abdf37a50ce6c1c9fabc499f4d0e159a6182d90",
       "subject": "fix(shared): redeem reset credits through the hub when it holds the account (#10462)",
-      "status": "needs-disposition",
+      "status": "target-files-identical",
       "domains": ["packages/shared"],
-      "differingTargetPaths": 2
+      "differingTargetPaths": 0
     },
     {
       "source": "e1230d6031bc55a21668818d0b585d8887b88579",
@@ -7824,7 +7825,7 @@
     {
       "source": "09e8de9c655ae85410bf6b00446f272a01da81c7",
       "subject": "Add stop thread keybinding command (#4308)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/web", "docs", "packages/contracts"],
       "differingTargetPaths": 8
     }
