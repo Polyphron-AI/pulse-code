@@ -1,6 +1,6 @@
 {
   "target": "09e8de9c655ae85410bf6b00446f272a01da81c7",
-  "assessedHead": "5c96f42183178b1fc2bb3be3efa273fb92ade8c4",
+  "assessedHead": "af666bb523d9309e0334babf5fd3206482ff700b",
   "scope": "Source commit inventory; pending rows require semantic review.",
   "statusDefinitions": {
     "ported-reviewed": "See compatibility ledgers for adaptations and tests.",
@@ -10,9 +10,9 @@
   },
   "counts": {
     "target-files-identical": 6,
-    "needs-disposition": 826,
-    "ported-reviewed": 210,
-    "partially-ported": 12
+    "needs-disposition": 822,
+    "ported-reviewed": 216,
+    "partially-ported": 10
   },
   "commits": [
     {
@@ -914,7 +914,7 @@
       "subject": "feat(web): upload image attachments before sending (#8048)",
       "status": "ported-reviewed",
       "domains": ["apps/server", "apps/web", "docs", "packages/contracts"],
-      "differingTargetPaths": 23
+      "differingTargetPaths": 22
     },
     {
       "source": "58ba5594439c984b08d13b6d4efb5407adb06943",
@@ -1477,7 +1477,7 @@
       "subject": "feat(server): accept PDF, ZIP, and other file uploads up to 50MB (#8235)",
       "status": "ported-reviewed",
       "domains": ["apps/mobile", "apps/server", "apps/web", "docs", "packages/contracts"],
-      "differingTargetPaths": 29
+      "differingTargetPaths": 28
     },
     {
       "source": "4c51b4c9b6a85d96a22e0df41d5cfd2d8fc9901d",
@@ -1773,9 +1773,10 @@
     {
       "source": "fc262f1a28d8305951c751f2486da6ca72e6c1d1",
       "subject": "fix(server): retry automatic thread title generation (#8087)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server"],
-      "differingTargetPaths": 2
+      "differingTargetPaths": 2,
+      "adaptation": "Automatic first-turn title generation retries after 2 and 4 seconds in 6bd0e9c67; four focused tests include TestClock and persisted title receipt. Existing title edits remain protected."
     },
     {
       "source": "ebb9b9fda03d33a81cad3ce7f4d1106adba3044b",
@@ -1881,7 +1882,7 @@
       "subject": "feat(mobile): pick, share, and receive files in threads (#8237)",
       "status": "ported-reviewed",
       "domains": ["apps/mobile", "docs", "patches", "pnpm-lock.yaml", "pnpm-workspace.yaml"],
-      "differingTargetPaths": 33
+      "differingTargetPaths": 31
     },
     {
       "source": "6e324b9bbfc72e694c3c16abeb59716c37fc02d5",
@@ -2110,9 +2111,10 @@
     {
       "source": "4a9d2d0ced2a2b899dbee9e4a5162fd83f81edb8",
       "subject": "chore(deps): bump Electron to 43.4.1 (#8626)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/desktop", "pnpm-lock.yaml"],
-      "differingTargetPaths": 4
+      "differingTargetPaths": 4,
+      "adaptation": "Electron 43.4.1 integrated in 347b9d5d4 with desktop types, 128 focused tests and isolated no-window protocol/media-handler smoke proof. Native capture, packaged upgrade and installer acceptance remain unverified."
     },
     {
       "source": "ef84bc9873a6c4565fbeb64dce3f552570e95a2d",
@@ -2201,10 +2203,10 @@
     {
       "source": "9bc7a56848eb7c7546605e54ff02c6abea176f96",
       "subject": "feat(mobile): upload attachments while composing (#8978)",
-      "status": "partially-ported",
+      "status": "ported-reviewed",
       "domains": ["apps/mobile", "docs"],
-      "differingTargetPaths": 20,
-      "remaining": "Account-owned local relay draft/outbox archives integrated in 1e557395f with 74 focused tests, mobile types and lint. Durable backup precedes environment removal; restore/account isolation and attachment ownership preserved. Background attachment-upload queue remains outside this slice; no real account acceptance."
+      "differingTargetPaths": 16,
+      "adaptation": "Account-owned draft/outbox archives in 1e557395f plus functional background upload worker in 26ddd86ad. Upload slice passes 181 focused tests and mobile types; Pulse inline writers and version 4 outbox retained. Native synthetic attachment reached the server and persisted across cold restart without duplicate upload; offline queue/removal acceptance remains in progress."
     },
     {
       "source": "9ecfc07a8b3acadd1612665b6e24425f625480de",
@@ -2230,10 +2232,10 @@
     {
       "source": "b17cc3d1bf0f4a5deee6dd6a470e36970b864a9b",
       "subject": "perf(server): reduce frequency of full tool call output being loaded into memory from db (#8988)",
-      "status": "partially-ported",
+      "status": "ported-reviewed",
       "domains": ["apps/server"],
       "differingTargetPaths": 10,
-      "remaining": "Durable request lifecycle lookup is integrated. Broader internal filtered activity reads and narrow shell-summary lifecycle SQL remain outside frozen 5c96f4218; assigned as a separate batch."
+      "adaptation": "Internal no-activity/task-kind SQL reads and lifecycle shell summaries integrated in 8018d7dd0; 132 focused tests. Pulse compaction inference and public snapshots preserved."
     },
     {
       "source": "d35c71d1b975660ec6a71bbceb6aa7dfd0e8c3d5",
@@ -2511,7 +2513,7 @@
         "packages/shared",
         "pnpm-lock.yaml"
       ],
-      "differingTargetPaths": 47,
+      "differingTargetPaths": 44,
       "remaining": "Shared/backend and web/mobile/desktop media viewers, tool-result image rendering and automatic workspace mutation refresh integrated with focused tests. Native playback acceptance pending."
     },
     {
@@ -2728,7 +2730,7 @@
     {
       "source": "f46a709ee487e1e6e04423fcb7032a26eb103129",
       "subject": "feat(files): open markdown, HTML, and PDF files outside the workspace (#9140)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": [
         "apps/mobile",
         "apps/server",
@@ -2737,7 +2739,8 @@
         "packages/contracts",
         "packages/shared"
       ],
-      "differingTargetPaths": 25
+      "differingTargetPaths": 20,
+      "adaptation": "Host Markdown/HTML/PDF previews integrated in 8f38c69ef with 152 focused tests; exact-file assets and workspace write boundaries retained. af666bb52 fixes relative sibling links with 81 focused tests; isolated browser read-only Markdown/sibling navigation passed without page errors."
     },
     {
       "source": "d937e30759ceae421bf3cc1b84414de4b67df76c",
@@ -3272,8 +3275,8 @@
       "subject": "feat(web): preview document attachments in the file viewer (#9292)",
       "status": "partially-ported",
       "domains": ["apps/server", "apps/web", "docs", "packages/contracts"],
-      "differingTargetPaths": 14,
-      "remaining": "Backend and web/mobile/desktop document previews integrated; native acceptance pending, and host documents outside a workspace remain rejected."
+      "differingTargetPaths": 13,
+      "remaining": "Backend and web/mobile/desktop document previews integrated; native acceptance pending. Host documents outside a workspace are supported separately by f46a709ee in 8f38c69ef."
     },
     {
       "source": "e94603adfac7d8734f9af01e33f67e776daf482d",
@@ -3495,7 +3498,7 @@
         "packages/contracts",
         "packages/shared"
       ],
-      "differingTargetPaths": 30
+      "differingTargetPaths": 29
     },
     {
       "source": "48ba76bc26337f23d1f0991bbac51f996a3333dc",
@@ -4748,8 +4751,8 @@
       "subject": "fix(mobile): read file-backed image drafts before enabling them (#9713)",
       "status": "ported-reviewed",
       "domains": ["apps/mobile"],
-      "differingTargetPaths": 12,
-      "adaptation": "File-backed image readers integrated in a0649184b; Pulse inline writers/current outbox retained without importing unrelated upload queue or cloud archive."
+      "differingTargetPaths": 10,
+      "adaptation": "File-backed image readers integrated in a0649184b; Pulse inline writers/current outbox retained. Separate account archives and background upload ownership subsequently integrated through 26ddd86ad."
     },
     {
       "source": "50bfca43d76ced00f5d67cfbab8bc44c50eb0e53",
@@ -5324,7 +5327,8 @@
       "subject": "fix: restore UX after performance improvements (#9799)",
       "status": "ported-reviewed",
       "domains": [".github", "apps/marketing", "apps/mobile", "apps/server", "apps/web"],
-      "differingTargetPaths": 29
+      "differingTargetPaths": 28,
+      "adaptation": "Reference-aware upload cleanup includes drafts, outbox and account archives in 26ddd86ad; reused upload IDs and delivery compare-and-set ownership preserved."
     },
     {
       "source": "57a6b70e24221f00c9a161f1e5b6b2ddd753bc8f",
@@ -6460,7 +6464,7 @@
         "packages/contracts",
         "packages/shared"
       ],
-      "differingTargetPaths": 5
+      "differingTargetPaths": 4
     },
     {
       "source": "7451d17a69ff7585f302933beeae1037d2c708a8",
@@ -7130,7 +7134,7 @@
       "subject": "feat(mobile): allow several new-task drafts per project (#10327)",
       "status": "ported-reviewed",
       "domains": ["apps/mobile"],
-      "differingTargetPaths": 12
+      "differingTargetPaths": 10
     },
     {
       "source": "98469159dd9e162a9c2f5cc4bbb2fbe89b3c4f67",
@@ -7318,9 +7322,10 @@
     {
       "source": "66a24d6c1a008430eebd855cd5640607d5aef38c",
       "subject": "feat(mobile): queue a message while its attachment is still uploading (#10404)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/mobile"],
-      "differingTargetPaths": 5
+      "differingTargetPaths": 3,
+      "adaptation": "Both mobile composers can queue during upload in 26ddd86ad, retaining persist-first outbox and pending-task recovery. Included in 181 focused tests; no real provider turn claimed."
     },
     {
       "source": "d6aa179ad2afe0424e1410cbafbb119bbd5f7809",
