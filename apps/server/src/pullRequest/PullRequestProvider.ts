@@ -69,6 +69,7 @@ export interface ProviderChangeRequest {
   readonly url: string;
   readonly author: PullRequestActor | null;
   readonly headBranch: string;
+  readonly headRepositoryNameWithOwner?: string | null;
   readonly baseBranch: string;
   readonly state: PullRequestState;
   readonly isDraft: boolean;
@@ -181,6 +182,10 @@ export interface ProviderChangeRequestDetail extends ProviderChangeRequest {
   readonly behindBy?: number;
   /** Absent from a host that does not report whether it is armed to merge this on its own. */
   readonly autoMergeEnabled?: boolean;
+  /** The strategy stored with an armed auto-merge, where the host reports it. */
+  readonly autoMergeMethod?: PullRequestMergeMethod;
+  /** Workflow runs on this head commit that still need a maintainer's approval. */
+  readonly workflowApprovalsRequired?: number;
 }
 
 /** The conversation-shaped half of a detail, loaded after the core can already render. */
