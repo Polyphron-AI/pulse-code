@@ -861,7 +861,9 @@ export const WINDOWS_SERVER_ASAR_IGNORE_GLOBS = [
   "**/node_modules/.bin",
   "**/node_modules/.bin/**",
 ] as const;
-export const WINDOWS_PACKAGED_PAYLOAD_FILE_LIMIT = 80;
+// Browser import adds seven unpacked keyring loader/native files to the
+// existing 80-file budget. Keep the guard bounded as dependencies change.
+export const WINDOWS_PACKAGED_PAYLOAD_FILE_LIMIT = 87;
 export const WINDOWS_SERVER_RESOURCE_SOURCE_DIR = "apps/desktop/prod-resources/windows-server";
 export const WINDOWS_SERVER_EXTRA_RESOURCES = [
   {
