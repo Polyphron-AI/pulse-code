@@ -13,6 +13,7 @@ import type {
   ThreadId,
   TurnId,
 } from "@t3tools/contracts";
+import { renderAssistantCitationsAsText } from "@t3tools/shared/assistantCitations";
 import { resolveAssetUrl } from "@t3tools/client-runtime/state/assets";
 import { formatAttachmentSize } from "@t3tools/client-runtime/state/attachments";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
@@ -1430,6 +1431,7 @@ function renderFeedEntry(
   if (entry.type === "message") {
     const { message } = entry;
     const isUser = message.role === "user";
+    const renderedText = renderAssistantCitationsAsText(message.text);
     const styles = isUser ? markdownStyles.user : markdownStyles.assistant;
     const timestampLabel = formatMessageTime(isUser ? message.createdAt : message.updatedAt);
     const attachments = (message.attachments ?? []).filter(
@@ -1441,7 +1443,7 @@ function renderFeedEntry(
     // children during the unclamped pass and never moves them once the width
     // is clamped, so the paragraphs around the block end up drawn on top of
     // each other. Pinning the width removes that pass.
-    const hasWideBlock = hasWideMarkdownBlock(message.text, WIDE_MARKDOWN_BLOCK_OPTIONS);
+    const hasWideBlock = hasWideMarkdownBlock(renderedText, WIDE_MARKDOWN_BLOCK_OPTIONS);
     const assistantTurnStillInProgress =
       message.role === "assistant" &&
       props.unsettledTurnId !== null &&
@@ -1473,7 +1475,7 @@ function renderFeedEntry(
           >
             {message.text.trim().length > 0 ? (
               <UserMessageContent
-                text={message.text}
+                text={renderedText}
                 markdownStyles={styles}
                 reviewCommentColors={props.reviewCommentColors}
                 skills={props.skills}
@@ -1537,7 +1539,7 @@ function renderFeedEntry(
       >
         {message.text.trim().length > 0 ? (
           <AssistantMarkdownContent
-            text={message.text}
+            text={renderedText}
             renderImage={props.renderMarkdownImage}
             settled={!assistantTurnStillInProgress && !message.streaming}
             markdownStyles={styles}

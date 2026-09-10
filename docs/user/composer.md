@@ -98,3 +98,29 @@ In desktop **Settings ? Integrations ? Browser**, set **Open links in** to your 
 Hold Command or Ctrl while clicking a chat link to open it in your default browser. Terminal links already use a modifier to activate, so they follow the saved preference. Links to a known pull request still open its review panel. Media previews keep their existing behavior.
 
 Your default browser is selected initially. Web clients without an integrated browser and mobile continue using their normal external link behavior. If an in-app open fails, Pulse Code tries your default browser; cancelling an in-app open does not open another browser.
+
+## Quote an assistant response
+
+On web and desktop, select text in an assistant response, then choose **Cite in composer** from the
+menu that appears when you release the selection. This inserts an inline quote chip at your cursor
+and opens an optional comment bubble beside the selected text; press `Enter` or choose **Save** to
+attach the comment, or leave it blank and save to keep just the quote. Use `Command/Ctrl+Enter`
+to save the comment and send the message. Cancelling a newly inserted quote removes it; cancelling
+an edit keeps the existing quote and comment. You can type before and after the
+chip, such as a quote followed by "what do you mean?". A selection must stay within one response
+and fit in 8,000 characters.
+
+The chip shows your comment when it has one, or a short quote preview otherwise. Use the pencil
+button to add or change the comment, and the remove button to delete the quote and its comment from
+the draft. Copying, reloading, and restoring a [stashed prompt](#prompt-stash) keep each comment
+with its quote, and sending tells the agent which words were quoted and which comment you wrote.
+The quoted text and comment count toward the message limit.
+
+Select a chip in the composer or a sent message to open the source thread, scroll to the response,
+and highlight the quoted passage — including in older history. The
+highlight pulses, holds for a moment, then fades on its own; press `Escape` to stop the navigation
+or clear it early. If the source is unavailable or its text has changed, the saved quote stays
+readable and Pulse Code shows a warning.
+
+Mobile shows the full saved quote and its comment in sent messages. It does not offer
+**Cite in composer** or navigation to a quote's source.
