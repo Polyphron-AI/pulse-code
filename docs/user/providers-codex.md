@@ -139,3 +139,7 @@ Use a totally separate `CODEX_HOME path` only when you want a separate Codex wor
 
 That means separate sessions and less account switching inside old threads. Most dual-account users
 should use the shared-home plus shadow-home setup instead.
+
+## Child Agents
+
+Child agents show their model and effort when Codex supplies them. These details remain visible as the child starts work, reports progress, or becomes idle. Reading an idle child's result leaves it idle; its status changes to running when Codex reports new work.

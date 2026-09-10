@@ -13,3 +13,7 @@ The source ProviderService changes maintain analytics-only turn metadata and rec
 Initial adapter verification passed 273 of 276 tests, including the new usage cases and all OpenCode cases. One existing malformed Claude rate-limit test exposed normalization before the missing-info guard; this batch moves the guard before normalization. Two existing Codex child-task tests exposed absent model metadata mapping and idle-child reactivation. The unchanged `mapCollabAgentEvent` block in baseline `6c729b2c7` contains both gaps; the token-usage patch does not modify that function. A separate lifecycle follow-up addresses them without weakening the existing tests.
 
 Final batch checks: Claude 124 tests, OpenCode 108 tests, Codex 42 passing usage/other tests with the two documented lifecycle failures, ProviderService 47 tests, contracts 12 tests. Server and contracts typechecks and scoped lint pass. All fixtures are synthetic; no live provider calls or history were used.
+
+## Codex lifecycle follow-up
+
+The separate follow-up restores the missing child mapping from `49f6241dd` and its idle-status prerequisite `4e00471d1`. Model and effort are trimmed and included across child lifecycle/progress patches; metadata-only events do not change status. Parent interaction alone cannot prove that an idle child resumed. All 44 Codex adapter tests now pass, including the two unchanged regressions. The token-usage state and existing child identity/parent links remain intact.
