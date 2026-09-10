@@ -22,6 +22,8 @@ import {
   ExternalLauncherCommandNotFoundError,
   OrchestrationThreadDetailSnapshot,
   type OrchestrationThreadStreamItem,
+  type OrchestrationShellStreamItem,
+  type OrchestrationThreadActivity,
   type OrchestrationThreadShell,
   TerminalNotRunningError,
   type OrchestrationCommand,
@@ -36,6 +38,7 @@ import {
   ProviderSetupError,
   ResolvedKeybindingRule,
   ThreadId,
+  TurnId,
   WS_METHODS,
   WsRpcGroup,
   EditorId,
@@ -256,6 +259,43 @@ const providerSetupInstance: ProviderInstance = {
   },
 };
 
+const makeLiveToolActivityEvent = (
+  sequence: number,
+  kind: "tool.updated" | "tool.completed" = "tool.updated",
+  options: {
+    readonly toolCallId?: string;
+    readonly title?: string;
+    readonly path?: string;
+  } = {},
+): Extract<OrchestrationEvent, { type: "thread.activity-appended" }> => {
+  const { toolCallId = "call-edit", title = "Editing app.ts", path = "src/app.ts" } = options;
+  const activity: OrchestrationThreadActivity = {
+    id: EventId.make(`activity-${sequence}`),
+    tone: "tool",
+    kind,
+    summary: title,
+    payload: {
+      itemType: "file_change",
+      title,
+      data: { toolCallId, path },
+    },
+    turnId: TurnId.make("turn-edit"),
+    createdAt: "2026-01-01T00:00:01.000Z",
+  };
+  return {
+    sequence,
+    eventId: EventId.make(`event-tool-${sequence}`),
+    aggregateKind: "thread",
+    aggregateId: defaultThreadId,
+    occurredAt: "2026-01-01T00:00:01.000Z",
+    commandId: null,
+    causationEventId: null,
+    correlationId: null,
+    metadata: {},
+    type: "thread.activity-appended",
+    payload: { threadId: defaultThreadId, activity },
+  };
+};
 const testEnvironmentDescriptor = {
   environmentId: EnvironmentId.make("environment-test"),
   label: "Test environment",
@@ -1158,6 +1198,32 @@ const withWsRpcClient = <A, E, R>(
   f: (client: WsRpcClient) => Effect.Effect<A, E, R>,
   onMessage?: (message: string) => void,
 ) => makeWsRpcClient.pipe(Effect.flatMap(f), Effect.provide(wsRpcProtocolLayer(wsUrl, onMessage)));
+
+const withFirstWsAckHeld = (
+  wsUrl: string,
+  held: Deferred.Deferred<void>,
+  release: Deferred.Deferred<void>,
+) => {
+  let holdNextAck = true;
+  return Layer.effect(RpcClient.Protocol)(
+    Effect.map(RpcClient.Protocol, (protocol) =>
+      RpcClient.Protocol.of({
+        ...protocol,
+        send: (clientId, request, transferables) => {
+          const send = protocol.send(clientId, request, transferables);
+          if (request._tag !== "Ack" || !holdNextAck) {
+            return send;
+          }
+          holdNextAck = false;
+          return Deferred.succeed(held, undefined).pipe(
+            Effect.andThen(Deferred.await(release)),
+            Effect.andThen(send),
+          );
+        },
+      }),
+    ),
+  ).pipe(Layer.provide(wsRpcProtocolLayer(wsUrl)));
+};
 
 const appendSessionCookieToWsUrl = (url: string, sessionCookieHeader: string) => {
   const isAbsoluteUrl = /^[a-zA-Z][a-zA-Z\d+.-]*:/.test(url);
@@ -7319,6 +7385,304 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
+  for (const subscription of ["thread", "shell"] as const) {
+    it.effect("delivers large raw tool results through the " + subscription + " stream", () =>
+      Effect.gen(function* () {
+        const eventThreadId =
+          subscription === "thread" ? defaultThreadId : ThreadId.make("other-live-thread");
+        const thread = makeDefaultOrchestrationReadModel().threads[0]!;
+        const baseEvent = makeLiveToolActivityEvent(2, "tool.completed");
+        const event: OrchestrationEvent = {
+          ...baseEvent,
+          aggregateId: eventThreadId,
+          payload: {
+            threadId: eventThreadId,
+            activity: {
+              ...baseEvent.payload.activity,
+              summary: "Build complete",
+              payload: {
+                itemType: "command_execution",
+                toolCallId: "call-build",
+                status: "completed",
+                title: "Build complete",
+                data: {
+                  item: {
+                    command: "build",
+                    aggregatedOutput: "Build complete\n" + "x".repeat(9 * 1024 * 1024),
+                  },
+                },
+              },
+            },
+          },
+        };
+        yield* buildAppUnderTest({
+          layers: {
+            orchestrationEngine: {
+              streamDomainEvents: Stream.concat(Stream.make(event), Stream.never),
+            },
+            projectionSnapshotQuery: {
+              getThreadDetailSnapshot: () =>
+                Effect.succeed(Option.some({ snapshotSequence: 1, thread })),
+              getThreadShellById: (threadId) =>
+                Effect.succeed(
+                  Option.some({
+                    ...makeDefaultOrchestrationThreadShell(),
+                    id: threadId,
+                    title: "Build complete",
+                  }),
+                ),
+            },
+          },
+        });
+
+        const wsUrl = yield* getWsServerUrl("/ws");
+        const items =
+          subscription === "thread"
+            ? yield* Effect.scoped(
+                withWsRpcClient(wsUrl, (client) =>
+                  client[ORCHESTRATION_WS_METHODS.subscribeThread]({
+                    threadId: defaultThreadId,
+                    requestCompletionMarker: true,
+                  }).pipe(
+                    Stream.takeUntil((item) => item.kind === "synchronized"),
+                    Stream.runCollect,
+                  ),
+                ),
+              )
+            : yield* Effect.scoped(
+                withWsRpcClient(wsUrl, (client) =>
+                  client[ORCHESTRATION_WS_METHODS.subscribeShell]({
+                    requestCompletionMarker: true,
+                  }).pipe(
+                    Stream.takeUntil((item) => item.kind === "synchronized"),
+                    Stream.runCollect,
+                  ),
+                ),
+              );
+
+        assert.equal(items[0]?.kind, "snapshot");
+        const update = items[1];
+        if (subscription === "thread") {
+          assertTrue(update?.kind === "event" && update.event.type === "thread.activity-appended");
+          assert.equal(update.event.sequence, 2);
+          assert.deepEqual(update.event.payload.activity.payload, {
+            itemType: "command_execution",
+            toolCallId: "call-build",
+            status: "completed",
+            title: "Build complete",
+            data: { item: { command: "build", aggregatedOutput: "Build complete" } },
+          });
+        } else {
+          assertTrue(update?.kind === "thread-upserted");
+          assert.equal(update.sequence, 2);
+          assert.equal(update.thread.id, eventThreadId);
+          assert.equal(update.thread.title, "Build complete");
+        }
+        assert.deepEqual(items[2], { kind: "synchronized" });
+      }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    );
+  }
+
+  it.effect("coalesces buffered live tool updates to the latest state", () =>
+    Effect.gen(function* () {
+      const thread = makeDefaultOrchestrationReadModel().threads[0]!;
+      const liveEvents = yield* PubSub.unbounded<OrchestrationEvent>();
+
+      yield* buildAppUnderTest({
+        layers: {
+          orchestrationEngine: {
+            streamDomainEvents: Stream.fromPubSub(liveEvents),
+          },
+          projectionSnapshotQuery: {
+            getThreadDetailSnapshot: () =>
+              Effect.gen(function* () {
+                yield* Effect.sleep("25 millis");
+                yield* PubSub.publishAll(liveEvents, [
+                  makeLiveToolActivityEvent(2),
+                  makeLiveToolActivityEvent(3),
+                  makeLiveToolActivityEvent(4),
+                ]);
+                return Option.some({ snapshotSequence: 1, thread });
+              }),
+          },
+        },
+      });
+
+      const wsUrl = yield* getWsServerUrl("/ws");
+      const items = yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) =>
+          client[ORCHESTRATION_WS_METHODS.subscribeThread]({
+            threadId: defaultThreadId,
+          }).pipe(Stream.take(2), Stream.runCollect),
+        ),
+      ).pipe(Effect.timeout("2 seconds"));
+
+      assert.equal(items[0]?.kind, "snapshot");
+      assert.equal(items[1]?.kind, "event");
+      assert.equal(items[1]?.kind === "event" ? items[1].event.sequence : null, 4);
+    }).pipe(Effect.provide(NodeHttpServer.layerTest), TestClock.withLive),
+  );
+
+  it.effect("flushes more than one tool chunk before the synchronization marker", () =>
+    Effect.gen(function* () {
+      const thread = makeDefaultOrchestrationReadModel().threads[0]!;
+      const liveEvents = yield* PubSub.unbounded<OrchestrationEvent>();
+
+      yield* buildAppUnderTest({
+        layers: {
+          orchestrationEngine: {
+            streamDomainEvents: Stream.fromPubSub(liveEvents),
+          },
+          projectionSnapshotQuery: {
+            getThreadDetailSnapshot: () =>
+              Effect.gen(function* () {
+                yield* Effect.sleep("25 millis");
+                yield* PubSub.publishAll(liveEvents, [
+                  ...Array.from({ length: 512 }, (_, index) =>
+                    makeLiveToolActivityEvent(index + 2),
+                  ),
+                  makeLiveToolActivityEvent(514, "tool.updated", {
+                    toolCallId: "call-read",
+                    title: "Reading server.test.ts",
+                    path: "apps/server/src/server.test.ts",
+                  }),
+                ]);
+                return Option.some({ snapshotSequence: 1, thread });
+              }),
+          },
+        },
+      });
+
+      const wsUrl = yield* getWsServerUrl("/ws");
+      const items = yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) =>
+          client[ORCHESTRATION_WS_METHODS.subscribeThread]({
+            threadId: defaultThreadId,
+            requestCompletionMarker: true,
+          }).pipe(Stream.take(4), Stream.runCollect),
+        ),
+      ).pipe(Effect.timeout("2 seconds"));
+
+      assert.equal(items[0]?.kind, "snapshot");
+      assert.deepEqual(
+        items.slice(1, 3).map((item) => {
+          assert.equal(item?.kind, "event");
+          if (item?.kind !== "event" || item.event.type !== "thread.activity-appended") {
+            return null;
+          }
+          return {
+            sequence: item.event.sequence,
+            summary: item.event.payload.activity.summary,
+            payload: item.event.payload.activity.payload,
+          };
+        }),
+        [
+          {
+            sequence: 513,
+            summary: "Editing app.ts",
+            payload: {
+              itemType: "file_change",
+              title: "Editing app.ts",
+              data: {
+                files: [{ path: "src/app.ts" }],
+                toolCallId: "call-edit",
+              },
+            },
+          },
+          {
+            sequence: 514,
+            summary: "Reading server.test.ts",
+            payload: {
+              itemType: "file_change",
+              title: "Reading server.test.ts",
+              data: {
+                files: [{ path: "apps/server/src/server.test.ts" }],
+                toolCallId: "call-read",
+              },
+            },
+          },
+        ],
+      );
+      assert.deepEqual(items[3], { kind: "synchronized" });
+    }).pipe(Effect.provide(NodeHttpServer.layerTest), TestClock.withLive),
+  );
+
+  it.effect("flushes a tool update before an interleaved message", () =>
+    Effect.gen(function* () {
+      const thread = makeDefaultOrchestrationReadModel().threads[0]!;
+      const liveEvents = yield* PubSub.unbounded<OrchestrationEvent>();
+      const messageEvent = {
+        sequence: 3,
+        eventId: EventId.make("event-interleaved-message"),
+        aggregateKind: "thread",
+        aggregateId: defaultThreadId,
+        occurredAt: "2026-01-01T00:00:02.000Z",
+        commandId: null,
+        causationEventId: null,
+        correlationId: null,
+        metadata: {},
+        type: "thread.message-sent",
+        payload: {
+          threadId: defaultThreadId,
+          messageId: MessageId.make("message-interleaved"),
+          role: "assistant",
+          text: "Still working",
+          turnId: TurnId.make("turn-edit"),
+          streaming: false,
+          createdAt: "2026-01-01T00:00:02.000Z",
+          updatedAt: "2026-01-01T00:00:02.000Z",
+        },
+      } satisfies Extract<OrchestrationEvent, { type: "thread.message-sent" }>;
+
+      yield* buildAppUnderTest({
+        layers: {
+          orchestrationEngine: {
+            streamDomainEvents: Stream.fromPubSub(liveEvents),
+          },
+          projectionSnapshotQuery: {
+            getThreadDetailSnapshot: () =>
+              Effect.gen(function* () {
+                yield* Effect.sleep("25 millis");
+                yield* PubSub.publishAll(liveEvents, [
+                  makeLiveToolActivityEvent(2),
+                  messageEvent,
+                  makeLiveToolActivityEvent(4, "tool.completed"),
+                ]);
+                return Option.some({ snapshotSequence: 1, thread });
+              }),
+          },
+        },
+      });
+
+      const wsUrl = yield* getWsServerUrl("/ws");
+      const items = yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) =>
+          client[ORCHESTRATION_WS_METHODS.subscribeThread]({
+            threadId: defaultThreadId,
+          }).pipe(Stream.take(4), Stream.runCollect),
+        ),
+      ).pipe(Effect.timeout("2 seconds"));
+
+      assert.equal(items[0]?.kind, "snapshot");
+      assert.deepEqual(
+        items
+          .slice(1)
+          .map((item) => (item.kind === "event" ? [item.event.sequence, item.event.type] : null)),
+        [
+          [2, "thread.activity-appended"],
+          [3, "thread.message-sent"],
+          [4, "thread.activity-appended"],
+        ],
+      );
+      assert.equal(
+        items[3]?.kind === "event" && items[3].event.type === "thread.activity-appended"
+          ? items[3].event.payload.activity.kind
+          : null,
+        "tool.completed",
+      );
+    }).pipe(Effect.provide(NodeHttpServer.layerTest), TestClock.withLive),
+  );
+
   it.effect("subscribeThread sends a fresh snapshot instead of replaying a large gap", () =>
     Effect.gen(function* () {
       let readEventsCalls = 0;
@@ -7363,6 +7727,273 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       assert.equal(second?.kind, "synchronized");
       assert.equal(readEventsCalls, 0);
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
+  it.effect(
+    "stops an overflowing thread producer without an ACK and replays the missing events",
+    () =>
+      Effect.gen(function* () {
+        const liveEvents = yield* PubSub.unbounded<OrchestrationEvent>();
+        const attached = yield* Deferred.make<void>();
+        const detached = yield* Deferred.make<void>();
+        const ackHeld = yield* Deferred.make<void>();
+        const releaseAck = yield* Deferred.make<void>();
+        const firstApplied = yield* Deferred.make<void>();
+        const replayStarted = yield* Deferred.make<void>();
+        const replayCalls: Array<{ afterSequence: number; limit: number | undefined }> = [];
+        let headSequence = 0;
+        let snapshotCalls = 0;
+        const message = (sequence: number, text: string) =>
+          ({
+            sequence,
+            eventId: EventId.make(`slow-thread-${sequence}`),
+            aggregateKind: "thread",
+            aggregateId: defaultThreadId,
+            occurredAt: "2026-01-01T00:00:01.000Z",
+            commandId: null,
+            causationEventId: null,
+            correlationId: null,
+            metadata: {},
+            type: "thread.message-sent",
+            payload: {
+              threadId: defaultThreadId,
+              messageId: MessageId.make(`slow-message-${sequence}`),
+              role: "assistant",
+              text,
+              turnId: TurnId.make("turn-edit"),
+              streaming: false,
+              createdAt: "2026-01-01T00:00:01.000Z",
+              updatedAt: "2026-01-01T00:00:01.000Z",
+            },
+          }) satisfies OrchestrationEvent;
+        const events = [
+          message(1, "a".repeat(4 * 1024 * 1024)),
+          message(2, "b".repeat(4 * 1024 * 1024)),
+          makeLiveToolActivityEvent(3, "tool.completed"),
+          message(4, "Finished"),
+        ] as const;
+
+        yield* buildAppUnderTest({
+          layers: {
+            orchestrationEngine: {
+              latestSequence: Effect.sync(() => headSequence),
+              streamDomainEvents: Stream.unwrap(
+                Effect.gen(function* () {
+                  const subscription = yield* PubSub.subscribe(liveEvents);
+                  yield* Deferred.succeed(attached, undefined);
+                  return Stream.fromSubscription(subscription);
+                }),
+              ).pipe(Stream.ensuring(Deferred.succeed(detached, undefined))),
+              readEvents: (afterSequence, limit) => {
+                replayCalls.push({ afterSequence, limit });
+                const range = events.filter(
+                  (event) => event.sequence > afterSequence && event.sequence <= headSequence,
+                );
+                return Stream.concat(
+                  Stream.fromEffect(Deferred.succeed(replayStarted, undefined)).pipe(Stream.drain),
+                  Stream.fromIterable(range),
+                );
+              },
+            },
+            projectionSnapshotQuery: {
+              getThreadDetailSnapshot: () =>
+                Effect.sync(() => {
+                  snapshotCalls += 1;
+                  return Option.none();
+                }),
+              getEventReplayStats: ({ fromSequenceExclusive, toSequenceInclusive }) => {
+                const range = events.filter(
+                  (event) =>
+                    event.sequence > fromSequenceExclusive && event.sequence <= toSequenceInclusive,
+                );
+                return Effect.succeed({
+                  eventCount: range.length,
+                  payloadBytes: range.reduce(
+                    (bytes, event) => bytes + Buffer.byteLength(jsonRequestBody(event.payload)),
+                    0,
+                  ),
+                });
+              },
+            },
+          },
+        });
+
+        const wsUrl = yield* getWsServerUrl("/ws");
+        yield* makeWsRpcClient.pipe(
+          Effect.flatMap((client) =>
+            Effect.gen(function* () {
+              let cursor = 0;
+              const received: number[] = [];
+              const attempt = yield* client[ORCHESTRATION_WS_METHODS.subscribeThread]({
+                threadId: defaultThreadId,
+                afterSequence: cursor,
+              }).pipe(
+                Stream.tap((item) => {
+                  if (item.kind !== "event") return Effect.void;
+                  cursor = item.event.sequence;
+                  received.push(cursor);
+                  return Deferred.succeed(firstApplied, undefined);
+                }),
+                Stream.runDrain,
+                Effect.result,
+                Effect.forkScoped,
+              );
+              yield* Deferred.await(attached);
+              yield* Deferred.await(replayStarted);
+              headSequence = 1;
+              yield* PubSub.publish(liveEvents, events[0]!);
+              yield* Deferred.await(ackHeld);
+              yield* Deferred.await(firstApplied);
+              headSequence = 4;
+              yield* PubSub.publishAll(liveEvents, events.slice(1));
+
+              // This must finish while the server is still waiting for the first
+              // batch's ACK. A failed output queue alone would leave PubSub live.
+              yield* Deferred.await(detached);
+              assert.equal(yield* PubSub.size(liveEvents), 0);
+              assert.deepEqual(received, [1]);
+              yield* Deferred.succeed(releaseAck, undefined);
+              const result = yield* Fiber.join(attempt);
+              assertTrue(result._tag === "Failure");
+              assert.equal(result.failure._tag, "OrchestrationGetSnapshotError");
+
+              const recovered = yield* client[ORCHESTRATION_WS_METHODS.subscribeThread]({
+                threadId: defaultThreadId,
+                afterSequence: cursor,
+                requestCompletionMarker: true,
+              }).pipe(
+                Stream.takeUntil((item) => item.kind === "synchronized"),
+                Stream.runCollect,
+              );
+              assert.deepEqual(
+                recovered.map((item) => (item.kind === "event" ? item.event.sequence : item.kind)),
+                [2, 3, 4, "synchronized"],
+              );
+              const first = recovered[0];
+              assertTrue(first?.kind === "event" && first.event.type === "thread.message-sent");
+              assert.equal(first.event.payload.text, events[1]!.payload.text);
+              const completed = recovered[1];
+              assertTrue(
+                completed?.kind === "event" && completed.event.type === "thread.activity-appended",
+              );
+              assert.equal(completed.event.payload.activity.kind, "tool.completed");
+              assert.deepEqual(replayCalls, [
+                { afterSequence: 0, limit: 0 },
+                { afterSequence: 1, limit: 3 },
+              ]);
+              assert.equal(snapshotCalls, 0);
+            }),
+          ),
+          Effect.provide(withFirstWsAckHeld(wsUrl, ackHeld, releaseAck)),
+        );
+      }).pipe(Effect.scoped, Effect.provide(NodeHttpServer.layerTest)),
+  );
+
+  it.effect("stops an overflowing shell producer without an ACK and recovers deleted entries", () =>
+    Effect.gen(function* () {
+      const liveEvents = yield* PubSub.unbounded<OrchestrationEvent>();
+      const detached = yield* Deferred.make<void>();
+      const ackHeld = yield* Deferred.make<void>();
+      const releaseAck = yield* Deferred.make<void>();
+      let headSequence = 1;
+      let snapshotCalls = 0;
+      let replayCalls = 0;
+      const thread = makeDefaultOrchestrationThreadShell();
+      const project = makeDefaultOrchestrationReadModel().projects[0]!;
+      const events: OrchestrationEvent[] = Array.from({ length: 1_001 }, (_, index) =>
+        makeLiveToolActivityEvent(index + 2, "tool.completed"),
+      );
+      events.push(
+        {
+          ...events[0]!,
+          sequence: 1_003,
+          type: "thread.archived",
+          payload: {
+            threadId: defaultThreadId,
+            archivedAt: "2026-01-01T00:00:02.000Z",
+            updatedAt: "2026-01-01T00:00:02.000Z",
+          },
+        },
+        {
+          ...events[0]!,
+          sequence: 1_004,
+          aggregateKind: "project",
+          aggregateId: defaultProjectId,
+          type: "project.deleted",
+          payload: { projectId: defaultProjectId, deletedAt: "2026-01-01T00:00:02.000Z" },
+        },
+      );
+      yield* buildAppUnderTest({
+        layers: {
+          orchestrationEngine: {
+            latestSequence: Effect.sync(() => headSequence),
+            streamDomainEvents: Stream.fromPubSub(liveEvents).pipe(
+              Stream.ensuring(Deferred.succeed(detached, undefined)),
+            ),
+            readEvents: () => {
+              replayCalls += 1;
+              return Stream.empty;
+            },
+          },
+          projectionSnapshotQuery: {
+            getShellSnapshot: () =>
+              Effect.sync(() => {
+                snapshotCalls += 1;
+                return {
+                  snapshotSequence: headSequence,
+                  projects: headSequence === 1 ? [project] : [],
+                  threads: headSequence === 1 ? [thread] : [],
+                  updatedAt: "2026-01-01T00:00:02.000Z",
+                };
+              }),
+          },
+        },
+      });
+      const wsUrl = yield* getWsServerUrl("/ws");
+      yield* makeWsRpcClient.pipe(
+        Effect.flatMap((client) =>
+          Effect.gen(function* () {
+            const received: OrchestrationShellStreamItem[] = [];
+            const attempt = yield* client[ORCHESTRATION_WS_METHODS.subscribeShell]({}).pipe(
+              Stream.tap((item) => Effect.sync(() => received.push(item))),
+              Stream.runDrain,
+              Effect.result,
+              Effect.forkScoped,
+            );
+            yield* Deferred.await(ackHeld);
+            headSequence = 1_004;
+            yield* PubSub.publishAll(liveEvents, events);
+            yield* Deferred.await(detached);
+            assert.equal(yield* PubSub.size(liveEvents), 0);
+            yield* Deferred.succeed(releaseAck, undefined);
+            const result = yield* Fiber.join(attempt);
+            assertTrue(result._tag === "Failure");
+            assert.equal(result.failure._tag, "OrchestrationGetSnapshotError");
+            assert.equal(received.length, 1);
+            const initial = received[0];
+            assertTrue(initial?.kind === "snapshot");
+            assert.equal(initial.snapshot.threads.length, 1);
+
+            const recovered = yield* client[ORCHESTRATION_WS_METHODS.subscribeShell]({
+              afterSequence: initial.snapshot.snapshotSequence,
+              requestCompletionMarker: true,
+            }).pipe(
+              Stream.takeUntil((item) => item.kind === "synchronized"),
+              Stream.runCollect,
+            );
+            const snapshot = recovered[0];
+            assertTrue(snapshot?.kind === "snapshot");
+            assert.equal(snapshot.snapshot.snapshotSequence, 1_004);
+            assert.deepEqual(snapshot.snapshot.projects, []);
+            assert.deepEqual(snapshot.snapshot.threads, []);
+            assert.deepEqual(recovered[1], { kind: "synchronized" });
+            assert.equal(snapshotCalls, 2);
+            assert.equal(replayCalls, 0);
+          }),
+        ),
+        Effect.provide(withFirstWsAckHeld(wsUrl, ackHeld, releaseAck)),
+      );
+    }).pipe(Effect.scoped, Effect.provide(NodeHttpServer.layerTest)),
   );
 
   it.effect("subscribeThread replaces a cursor ahead of the authoritative head", () =>
