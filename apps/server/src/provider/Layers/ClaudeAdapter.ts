@@ -488,7 +488,7 @@ const CLAUDE_USAGE_LIMIT_MAX_WAIT_MS = 30 * 24 * 60 * 60 * 1000;
 function describeClaudeUsageLimit(
   info: SDKRateLimitInfo,
   nowMs: number,
-  names: { readonly overageIncluded?: string },
+  names: ClaudeScopedLimitNames,
 ): string {
   const label =
     info.rateLimitType === "seven_day_overage_included" && names.overageIncluded
@@ -3828,7 +3828,11 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         }
         if (!context.announcedUsageLimits.keys.has(limitKey)) {
           context.announcedUsageLimits.keys.add(limitKey);
-          const notice = describeClaudeUsageLimit(rateLimitInfo, Date.parse(stamp.createdAt), {});
+          const notice = describeClaudeUsageLimit(
+            rateLimitInfo,
+            Date.parse(stamp.createdAt),
+            names,
+          );
           yield* emitRuntimeWarning(context, notice, rateLimitInfo);
         }
       }

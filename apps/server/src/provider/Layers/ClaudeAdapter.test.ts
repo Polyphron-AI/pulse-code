@@ -1232,72 +1232,88 @@ describe("ClaudeAdapterLive", () => {
     );
   });
 
-  it.effect("places overage-included rate-limit events on the bucket the probe named", () => {
-    const scopedLimitNames = Ref.makeUnsafe<ClaudeScopedLimitNames>({ overageIncluded: undefined });
-    const harness = makeHarness({ scopedLimitNames });
-    const rateLimitEvent = (utilization: number): SDKMessage =>
-      ({
-        type: "rate_limit_event",
-        rate_limit_info: {
-          status: "allowed",
-          rateLimitType: "seven_day_overage_included",
-          utilization,
-        },
-        uuid: `rate-limit-${utilization}`,
-        session_id: "sdk-session-1",
-      }) as unknown as SDKMessage;
-    const resultMessage = (uuid: string): SDKMessage =>
-      ({
-        type: "result",
-        subtype: "success",
-        is_error: false,
-        errors: [],
-        num_turns: 1,
-        session_id: "sdk-session-1",
-        uuid,
-      }) as unknown as SDKMessage;
-    const limitsUpdates = (events: Iterable<ProviderRuntimeEvent>) =>
-      Array.from(events).flatMap((event) =>
-        event.type === "account.rate-limits.updated" && event.payload.limits
-          ? [event.payload.limits]
-          : [],
-      );
-    return Effect.gen(function* () {
-      const adapter = yield* ClaudeAdapter;
-      const session = yield* adapter.startSession({
-        threadId: THREAD_ID,
-        provider: ProviderDriverKind.make("claudeAgent"),
-        runtimeMode: "full-access",
+  it.effect.each(["allowed", "rejected"] as const)(
+    "uses the probed model name for %s usage limits and pause notices",
+    (status) => {
+      const scopedLimitNames = Ref.makeUnsafe<ClaudeScopedLimitNames>({
+        overageIncluded: undefined,
       });
+      const harness = makeHarness({ scopedLimitNames });
+      const rateLimitEvent = (utilization: number): SDKMessage =>
+        ({
+          type: "rate_limit_event",
+          rate_limit_info: {
+            status,
+            rateLimitType: "seven_day_overage_included",
+            utilization,
+          },
+          uuid: `rate-limit-${utilization}`,
+          session_id: "sdk-session-1",
+        }) as unknown as SDKMessage;
+      const resultMessage = (uuid: string): SDKMessage =>
+        ({
+          type: "result",
+          subtype: "success",
+          is_error: false,
+          errors: [],
+          num_turns: 1,
+          session_id: "sdk-session-1",
+          uuid,
+        }) as unknown as SDKMessage;
+      const limitsUpdates = (events: Iterable<ProviderRuntimeEvent>) =>
+        Array.from(events).flatMap((event) =>
+          event.type === "account.rate-limits.updated" && event.payload.limits
+            ? [event.payload.limits]
+            : [],
+        );
+      return Effect.gen(function* () {
+        const adapter = yield* ClaudeAdapter;
+        const session = yield* adapter.startSession({
+          threadId: THREAD_ID,
+          provider: ProviderDriverKind.make("claudeAgent"),
+          runtimeMode: "full-access",
+        });
 
-      // The status probe reads `get_usage` and records the model it saw.
-      yield* Ref.set(scopedLimitNames, { overageIncluded: "Fable" });
-      const secondTurnFiber = yield* adapter.streamEvents.pipe(
-        Stream.takeUntil((event) => event.type === "turn.completed"),
-        Stream.runCollect,
-        Effect.forkChild,
+        // The status probe reads `get_usage` and records the model it saw.
+        yield* Ref.set(scopedLimitNames, { overageIncluded: "Fable" });
+        const secondTurnFiber = yield* adapter.streamEvents.pipe(
+          Stream.takeUntil((event) => event.type === "turn.completed"),
+          Stream.runCollect,
+          Effect.forkChild,
+        );
+        yield* adapter.sendTurn({ threadId: session.threadId, input: "again", attachments: [] });
+        harness.query.emit(rateLimitEvent(0.4));
+        harness.query.emit(resultMessage("result-2"));
+        const events = yield* Fiber.join(secondTurnFiber);
+        assert.deepStrictEqual(limitsUpdates(events), [
+          {
+            windows: [
+              {
+                id: "seven_day_fable",
+                kind: "weekly",
+                label: "Weekly · Fable",
+                usedPercent: 40,
+                windowDurationMins: 10_080,
+              },
+            ],
+          },
+        ]);
+        assert.deepStrictEqual(
+          Array.from(events).flatMap((event) =>
+            event.type === "runtime.warning" ? [event.payload.message] : [],
+          ),
+          status === "rejected"
+            ? [
+                "Claude usage limit reached. This turn is paused until the 7-day Fable limit resets.",
+              ]
+            : [],
+        );
+      }).pipe(
+        Effect.provideService(Random.Random, makeDeterministicRandomService()),
+        Effect.provide(harness.layer),
       );
-      yield* adapter.sendTurn({ threadId: session.threadId, input: "again", attachments: [] });
-      harness.query.emit(rateLimitEvent(0.4));
-      harness.query.emit(resultMessage("result-2"));
-      assert.deepStrictEqual(limitsUpdates(yield* Fiber.join(secondTurnFiber)), [
-        {
-          windows: [
-            {
-              id: "seven_day_fable",
-              kind: "weekly",
-              label: "Weekly · Fable",
-              usedPercent: 40,
-              windowDurationMins: 10_080,
-            },
-          ],
-        },
-      ]);
-    }).pipe(
-      Effect.provideService(Random.Random, makeDeterministicRandomService()),
-      Effect.provide(harness.layer),
-    );
-  });
+    },
+  );
 
   it.effect("does not emit turn.completed for a result with no active turn", () => {
     const harness = makeHarness();
