@@ -10,6 +10,7 @@ import {
   getProviderOptionCurrentValue,
   getProviderOptionDescriptors,
   isClaudeUltrathinkPrompt,
+  resolveSelectableModel,
 } from "@t3tools/shared/model";
 import type { ReactNode } from "react";
 
@@ -54,6 +55,13 @@ export function getComposerPromptInjectionState(prompt: string): ComposerPromptI
 
 export function getComposerProviderState(input: ComposerProviderStateInput): ComposerProviderState {
   const { provider, model, models, modelOptions, promptInjectionState = "none" } = input;
+  if (provider === "opencode" && resolveSelectableModel(provider, model, models) === null) {
+    return {
+      provider,
+      promptEffort: null,
+      modelOptionsForDispatch: modelOptions?.length ? modelOptions : undefined,
+    };
+  }
   const caps = getProviderModelCapabilities(models, model, provider);
   const descriptors = getProviderOptionDescriptors({ caps, selections: modelOptions });
   const primarySelectDescriptor = descriptors.find(

@@ -410,7 +410,6 @@ export function useComposerCommandMenu({
     pathSearch.entries,
     selectedProviderStatus,
     skills,
-    slashCommands,
     trigger,
     offersUsageLimits,
   ]);
@@ -430,16 +429,19 @@ export function useComposerCommandMenu({
         onUsageLimits();
         return;
       }
-
       const result = resolveComposerCommandSelection({
         draftMessage,
         trigger,
         item,
-        allowInteractionMode: onUpdateInteractionMode !== undefined,
+        allowInteractionMode:
+          onUpdateInteractionMode !== undefined &&
+          selectedProviderStatus?.showInteractionModeToggle !== false,
       });
-      if (result.interactionMode !== null) onUpdateInteractionMode?.(result.interactionMode);
       setSelection({ start: result.cursor, end: result.cursor });
       onChangeDraftMessage(result.text);
+      if (result.interactionMode !== null) {
+        onUpdateInteractionMode?.(result.interactionMode);
+      }
     },
     [
       draftMessage,

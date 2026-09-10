@@ -31,6 +31,32 @@ describe("ComposerPendingApprovalActions", () => {
     expect(markup).not.toContain("Always allow this session");
     expect(markup).not.toContain("Cancel turn");
   });
+
+  it("marks an option that carries a provider warning", () => {
+    const markup = renderToStaticMarkup(
+      <ComposerPendingApprovalActions
+        requestId={ApprovalRequestId.make("approval-1")}
+        isResponding={false}
+        options={[
+          { decision: "accept", label: "Allow once" },
+          {
+            decision: "acceptForSession",
+            label: "Allow for this thread",
+            warning: "Untrusted files could re-run this action without asking.",
+          },
+          { decision: "decline", label: "Deny" },
+        ]}
+        onRespondToApproval={async () => undefined}
+      />,
+    );
+
+    expect(markup).toContain(
+      'aria-description="Untrusted files could re-run this action without asking."',
+    );
+    expect(markup).toContain("text-warning");
+    expect(markup).toContain("Allow for this thread");
+  });
+
   it("disables every choice while a response is pending", () => {
     const buttons = render(options, true).match(/<button[^>]*>/g) ?? [];
     expect(buttons).toHaveLength(options.length);

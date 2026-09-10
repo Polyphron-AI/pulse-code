@@ -26,3 +26,7 @@ Managed installation uses the release manifest bundled with Pulse Code. An expli
 Disabling an instance keeps its saved sign-in. Signing out removes that instance's saved credentials. Removing the managed installation removes the shared executable and keeps sign-in profiles, thread history, and workspace files. Disable the instances using it and cancel active installation before removal.
 
 Use **Refresh provider status** on web or desktop to explicitly check account access and discover available models. Automatic status checks verify the installation without opening a model discovery session.
+
+## Questions and approvals
+
+Antigravity can offer a fixed set of answers. Choose one of the displayed options; these questions do not accept custom text. Approval choices can include a warning supplied by the provider. On web or desktop, hover or focus the warning icon to read it; mobile displays the warning beside the choice.
