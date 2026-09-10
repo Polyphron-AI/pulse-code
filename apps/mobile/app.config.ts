@@ -191,6 +191,9 @@ const config: ExpoConfig = {
     // showcase capture build requires full screen (see infoPlist below).
     requireFullScreen: isShowcaseCaptureBuild,
     bundleIdentifier: iosBundleIdentifier,
+    entitlements: {
+      "keychain-access-groups": [`$(AppIdentifierPrefix)${iosBundleIdentifier}`],
+    },
     // Pin code signing to the T3 Tools team so non-interactive `expo run:ios`
     // does not fall back to a personal team (which cannot sign app groups,
     // Sign in with Apple, or push notification entitlements).
