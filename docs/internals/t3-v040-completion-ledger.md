@@ -4,6 +4,20 @@ Target: `09e8de9c655ae85410bf6b00446f272a01da81c7`. The [source disposition inve
 
 The target changes 2,389 paths from the declared baseline: 728 web, 507 server, 454 mobile, 155 client runtime, 132 desktop, 81 marketing, 73 shared, and 48 contracts. These counts describe source scope, not missing features. The audit inspected migration sources, all changed contract filenames, provider history, native dependency/configuration diffs, and selected implementations. It did not independently verify every path.
 
+## Final client-check checkpoint at `c5c2c439d`
+
+Integration is at `c5c2c439d3c0844db99fbffddcd5d3a47df93714`. The fixed target, declared baseline and source inventory remain unchanged; the inventory still assesses `af666bb52`. Implementation disposition and acceptance remain separate, and full V40 compatibility is not claimed.
+
+The primary agent completed isolated browser host-document read-only and relative-link checks, Office/download preservation and the single voice-control check with `PAGE_ERRORS=[]`. The prepared preview passed 124 focused seam tests and four surface typechecks. Android's synthetic 47-byte background attachment retained one server asset across cold restart. Offline **Queue task / Sends on reconnect** state also survived cold restart; the named pending item was deleted through the UI and its absence confirmed before restarting the backend. No provider turn was sent during these checks.
+
+The earlier Git status stream diagnostic is not a compatibility blocker. Read-only investigation found harmless cancellation noise: cancelling an Effect beta.103 subscription produces `Cause.Done`; a late exit follows the interrupt after the RPC client has removed the request entry. The client ignores that absent-entry exit before decoding it. The fixed target uses the same stream path, both browser preservation markers passed, and no production change was required.
+
+Preview `.7` source is `b17319db69a5733f35c5aff3bfca8a71e18aa669`. It was built and then repackaged with the WSL prebuild, containing 83 native-package files and 36 native binaries. Final package verification passed: **179,571,141 bytes**, SHA-256 `c689b569bce5e436b87a31ad9e2fbe5a28d97e9e7c9be264163d2cf4c70aa573`, Authenticode status **NotSigned**. The artifact directory is `.worktrees/upstream-claude-20260909/.t3/preview-release/v40-20260910-7-wsl`. Electron 43.4.1, the WSL binary hash marker, Office/Talk dependencies, server version, Talk hello/status/list/shutdown and resource protocol 3 checks all passed. It remains **unpublished**, with publication approval pending. The older `.6` artifact remains unchanged.
+
+The Linux x64 `node-pty` 1.1.0 prebuild is 79,968 bytes, SHA-256 `0934354174ea1bb78a6e1f89b4e9d48e4167bd470157508ef0ee0bd0fa4ad7f5`. It was built from the exact package sources using the CI recipe; real synthetic PTY marker/exit checks passed under Linux Node 20 and 22. It requires glibc 2.34 or newer. This establishes the binary's scoped PTY behavior, not full packaged WSL server acceptance.
+
+Installed desktop updates/rollback, full WSL backend startup, real provider login/turns, native recording/audio/media/sidecars and every remote/relay combination remain acceptance limits. No publication or blanket native acceptance is implied by the completed isolated checks.
+
 ## Current integration through `af666bb52`
 
 The fixed target and declared baseline are unchanged. The refreshed inventory assesses `af666bb523d9309e0334babf5fd3206482ff700b`: **216 ported-reviewed, 10 partially-ported, six target-files-identical and 822 needs-disposition** rows, totaling the original 1,054 sources. These counts describe disposition, not a compatibility percentage. Earlier sections retain historical checkpoint evidence; their pending lists are superseded by the closures below.
