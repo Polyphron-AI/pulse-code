@@ -26,6 +26,7 @@ import { createModelSelection } from "@t3tools/shared/model";
 import { it, assert, describe, vi } from "@effect/vitest";
 
 import * as Effect from "effect/Effect";
+import * as Deferred from "effect/Deferred";
 import * as Schema from "effect/Schema";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
@@ -99,6 +100,7 @@ function makeFakeCodexAdapter(
 ) {
   const sessions = new Map<ThreadId, ProviderSession>();
   const runtimeEventPubSub = Effect.runSync(PubSub.unbounded<ProviderRuntimeEvent>());
+  const subscriptionReady = Deferred.makeUnsafe<void>();
 
   const startSession = vi.fn((input: ProviderSessionStartInput) =>
     Effect.sync(() => {
@@ -250,12 +252,18 @@ function makeFakeCodexAdapter(
     rollbackThread,
     stopAll,
     get streamEvents() {
-      return Stream.fromPubSub(runtimeEventPubSub);
+      return Stream.unwrap(
+        Effect.gen(function* () {
+          const subscription = yield* PubSub.subscribe(runtimeEventPubSub);
+          yield* Deferred.succeed(subscriptionReady, undefined);
+          return Stream.fromSubscription(subscription);
+        }),
+      );
     },
   };
 
   const emit = (event: LegacyProviderRuntimeEvent): void => {
-    Effect.runSync(PubSub.publish(runtimeEventPubSub, event as unknown as ProviderRuntimeEvent));
+    PubSub.publishUnsafe(runtimeEventPubSub, event as unknown as ProviderRuntimeEvent);
   };
 
   const updateSession = (
@@ -271,6 +279,7 @@ function makeFakeCodexAdapter(
 
   return {
     adapter,
+    awaitSubscription: Deferred.await(subscriptionReady),
     emit,
     updateSession,
     startSession,
@@ -2301,6 +2310,66 @@ routing.layer("ProviderServiceLive routing", (it) => {
 
 const fanout = makeProviderServiceLayer();
 fanout.layer("ProviderServiceLive fanout", (it) => {
+  it.effect("preserves normalized turn usage and legacy omission through canonical fanout", () =>
+    Effect.gen(function* () {
+      const provider = yield* ProviderService.ProviderService;
+      const threadId = asThreadId("thread-token-usage");
+      yield* fanout.codex.awaitSubscription;
+      yield* provider.startSession(threadId, {
+        provider: CODEX_DRIVER,
+        providerInstanceId: codexInstanceId,
+        threadId,
+        runtimeMode: "full-access",
+      });
+      const nextEvent = yield* Stream.toPull(
+        provider.streamEvents.pipe(Stream.filter((event) => event.threadId === threadId)),
+      );
+      const payloads = [
+        {
+          state: "completed",
+          tokenUsage: {
+            usageScope: "main_agent",
+            usageStatus: "complete",
+            inputTokens: 30,
+            outputTokens: 8,
+            cachedInputTokens: 10,
+            reasoningTokens: 3,
+            hasSubagents: true,
+          },
+        },
+        {
+          reason: "interrupted",
+          tokenUsage: {
+            usageScope: "main_agent",
+            usageStatus: "partial",
+            inputTokens: 12,
+            hasSubagents: false,
+          },
+        },
+        {
+          state: "failed",
+          tokenUsage: { usageScope: "main_agent", usageStatus: "unavailable", hasSubagents: false },
+        },
+        { state: "completed", usage: { input_tokens: 7 }, totalCostUsd: 0.01 },
+      ] as const;
+      for (const [index, payload] of payloads.entries()) {
+        const receipt = yield* nextEvent.pipe(Effect.forkChild({ startImmediately: true }));
+        fanout.codex.emit({
+          type: "reason" in payload ? "turn.aborted" : "turn.completed",
+          eventId: asEventId(`evt-token-usage-${index}`),
+          provider: CODEX_DRIVER,
+          createdAt: "2026-01-01T00:00:00.000Z",
+          threadId,
+          turnId: asTurnId(`turn-token-usage-${index}`),
+          payload,
+        });
+        const received = yield* Fiber.join(receipt);
+        assert.deepEqual(received[0]?.payload, payload);
+        assert.equal(received[0]?.providerInstanceId, codexInstanceId);
+      }
+    }),
+  );
+
   it.effect("fans out adapter turn completion events", () =>
     Effect.gen(function* () {
       const provider = yield* ProviderService.ProviderService;
