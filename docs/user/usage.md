@@ -1,8 +1,12 @@
 # Review usage
 
-The Usage page combines Codex and Claude Code activity from your selected environments. Cost and
+The Usage page combines Codex, Claude Code, and Grok Build activity from your selected environments. Cost and
 Tokens show API-equivalent token costs, processed tokens, cache savings, and model breakdowns.
 Subscription billing is separate from the token cost shown here.
+
+Grok costs use the provider's reported amount when available, or model token rates otherwise.
+Grok session logs are read from GROK_HOME, falling back to ~/.grok. Only usage update logs are
+scanned. Older connected environments still contribute their Codex and Claude totals.
 
 ## Cost history
 
