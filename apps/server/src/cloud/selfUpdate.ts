@@ -12,6 +12,7 @@ import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Ref from "effect/Ref";
+import * as HashSet from "effect/HashSet";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
@@ -50,20 +51,22 @@ export class ServerSelfUpdate extends Context.Service<
     ) => Effect.Effect<ServerSelfUpdateResult, ServerSelfUpdateError>;
     readonly commitDesktopUpdate: (
       requestId: string,
+      onHandoffAccepted?: () => Effect.Effect<void>,
     ) => Effect.Effect<never, ServerSelfUpdateError>;
   }
 >()("t3/cloud/selfUpdate/ServerSelfUpdate") {}
 
 export const withRunningThreadContinuation = Effect.fn(
   "cloud.server_self_update.withRunningThreadContinuation",
-)((input: {
+)(function* (input: {
   readonly mode: ServerConfig.RuntimeMode;
   readonly selfUpdate: ServerSelfUpdate["Service"];
   readonly prepare: Effect.Effect<ReadonlyArray<ThreadId>, ServerSelfUpdateError>;
   readonly clear: (
     threadIds: ReadonlyArray<ThreadId>,
   ) => Effect.Effect<void, ServerSelfUpdateError>;
-}) => {
+}) {
+  const desktopContinuationTokens = yield* Ref.make(HashSet.empty<string>());
   const clearOnError = <A>(
     effect: Effect.Effect<A, ServerSelfUpdateError>,
     threadIds: () => ReadonlyArray<ThreadId>,
@@ -86,35 +89,76 @@ export const withRunningThreadContinuation = Effect.fn(
     let handoffAccepted = false;
     let continuationThreadIds: ReadonlyArray<ThreadId> = [];
     return clearOnError(
-      input.selfUpdate.update(
-        request,
-        (stage) =>
-          (request.continueRunningThreads === true &&
-          input.mode !== "desktop" &&
-          stage === "installing" &&
-          !prepared
-            ? input.prepare.pipe(
-                Effect.tap((threadIds) =>
-                  Effect.sync(() => {
-                    prepared = true;
-                    continuationThreadIds = threadIds;
-                  }),
-                ),
-                Effect.asVoid,
-              )
-            : Effect.void
-          ).pipe(Effect.andThen(reportProgress(stage))),
-        () =>
-          Effect.sync(() => {
-            handoffAccepted = true;
-          }),
-      ),
+      input.selfUpdate
+        .update(
+          request,
+          (stage) =>
+            (request.continueRunningThreads === true &&
+            input.mode !== "desktop" &&
+            stage === "installing" &&
+            !prepared
+              ? input.prepare.pipe(
+                  Effect.tap((threadIds) =>
+                    Effect.sync(() => {
+                      prepared = true;
+                      continuationThreadIds = threadIds;
+                    }),
+                  ),
+                  Effect.asVoid,
+                )
+              : Effect.void
+            ).pipe(Effect.andThen(reportProgress(stage))),
+          () =>
+            Effect.sync(() => {
+              handoffAccepted = true;
+            }),
+        )
+        .pipe(
+          Effect.tap((result) =>
+            result.method === "desktop-app" &&
+            result.desktopUpdateToken !== undefined &&
+            request.continueRunningThreads === true
+              ? Ref.update(desktopContinuationTokens, HashSet.add(result.desktopUpdateToken))
+              : Effect.void,
+          ),
+        ),
       () => continuationThreadIds,
       () => handoffAccepted,
     );
   };
 
-  return Effect.succeed(ServerSelfUpdate.of({ ...input.selfUpdate, update }));
+  return ServerSelfUpdate.of({
+    ...input.selfUpdate,
+    update,
+    commitDesktopUpdate: (requestId) =>
+      Effect.gen(function* () {
+        const shouldContinue = yield* Ref.modify(desktopContinuationTokens, (tokens) => [
+          HashSet.has(tokens, requestId),
+          HashSet.remove(tokens, requestId),
+        ]);
+        let handoffAccepted = false;
+        let continuationThreadIds: ReadonlyArray<ThreadId> = [];
+        return yield* clearOnError(
+          Effect.gen(function* () {
+            continuationThreadIds = shouldContinue ? yield* input.prepare : [];
+            return yield* input.selfUpdate.commitDesktopUpdate(requestId, () =>
+              Effect.sync(() => {
+                handoffAccepted = true;
+              }),
+            );
+          }),
+          () => continuationThreadIds,
+          () => handoffAccepted,
+        ).pipe(
+          Effect.catchCause((cause) =>
+            (shouldContinue && !handoffAccepted
+              ? Ref.update(desktopContinuationTokens, HashSet.add(requestId))
+              : Effect.void
+            ).pipe(Effect.andThen(Effect.failCause(cause))),
+          ),
+        );
+      }),
+  });
 });
 
 export const make = Effect.fn("cloud.server_self_update.make")(function* () {
@@ -273,7 +317,8 @@ export const make = Effect.fn("cloud.server_self_update.make")(function* () {
 
   return ServerSelfUpdate.of({
     update,
-    commitDesktopUpdate: (requestId) => desktopAppUpdate.commit(requestId),
+    commitDesktopUpdate: (requestId, onHandoffAccepted) =>
+      desktopAppUpdate.commit(requestId, onHandoffAccepted),
   });
 });
 

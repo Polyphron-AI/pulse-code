@@ -178,7 +178,9 @@ export const make = Effect.gen(function* () {
         ? { serverSelfUpdateProgress: true }
         : {}),
       ...(desktopAppUpdate ? { desktopAppUpdate: true } : {}),
-      ...(serverSelfUpdate === "boot-service" ? { serverUpdateThreadContinuation: true } : {}),
+      ...(serverSelfUpdate === "boot-service" || desktopAppUpdate
+        ? { serverUpdateThreadContinuation: true }
+        : {}),
     },
   };
 

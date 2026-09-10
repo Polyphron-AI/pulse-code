@@ -216,10 +216,18 @@ it.layer(NodeServices.layer)("desktop app update", (it) => {
         ],
       });
       const prepared = yield* service.run(() => Effect.void);
+      let handoffAccepted = false;
 
       expect(
-        (yield* service.commit(prepared.desktopUpdateToken ?? "missing").pipe(Effect.flip)).reason,
+        (yield* service
+          .commit(prepared.desktopUpdateToken ?? "missing", () =>
+            Effect.sync(() => {
+              handoffAccepted = true;
+            }),
+          )
+          .pipe(Effect.flip)).reason,
       ).toBe("installer refused");
+      expect(handoffAccepted).toBe(true);
     }),
   );
 
