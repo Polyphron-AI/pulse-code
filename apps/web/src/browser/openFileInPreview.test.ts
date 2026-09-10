@@ -17,6 +17,11 @@ vi.mock("~/previewStateStore", () => ({
 vi.mock("~/rightPanelStore", () => ({
   useRightPanelStore: { getState: () => ({ openBrowser: vi.fn() }) },
 }));
+vi.mock("./browserDefaults", () => ({
+  resolveBrowserDefaults: async () => ({ viewport: { mode: "fill" }, profileId: "default" }),
+  browserDefaultOpenViewport: (defaults: { viewport: unknown }) => defaults.viewport,
+  browserDefaultOpenProfileId: (defaults: { profileId: string }) => defaults.profileId,
+}));
 import { rememberPreviewUrl } from "~/previewStateStore";
 import { openFileInPreview } from "./openFileInPreview";
 
@@ -27,6 +32,31 @@ const threadRef = {
 const messageId = MessageId.make("message");
 
 describe("saved output preview", () => {
+  it.each([
+    ["F:/workspace/report.html", "workspace-file"],
+    ["F:/outside/report.pdf", "media-file"],
+  ])("opens %s with its own asset boundary", async (filePath, tag) => {
+    const createAssetUrl = vi.fn(async () =>
+      AsyncResult.success({ relativeUrl: "/api/assets/document", expiresAt: 3600000 }),
+    );
+    const openPreview = vi.fn(async () =>
+      AsyncResult.success({ tabId: "tab" } as PreviewSessionSnapshot),
+    );
+    await openFileInPreview({
+      threadRef,
+      filePath,
+      workspaceRoot: "F:/workspace",
+      httpBaseUrl: "https://remote.example",
+      createAssetUrl,
+      openPreview,
+    });
+    expect(createAssetUrl).toHaveBeenCalledWith({
+      environmentId: threadRef.environmentId,
+      input: { resource: { _tag: tag, threadId: threadRef.threadId, path: filePath } },
+    });
+    expect(openPreview).toHaveBeenCalledOnce();
+  });
+
   it("resolves the owning message afresh on each open and does not remember signed credentials", async () => {
     let token = 0;
     const createAssetUrl = vi.fn(async () =>
@@ -42,6 +72,7 @@ describe("saved output preview", () => {
       threadRef,
       messageId,
       filePath: "F:/Output Files/report.html",
+      workspaceRoot: "F:/workspace",
       httpBaseUrl: "https://remote.example",
       createAssetUrl,
       openPreview,
@@ -77,6 +108,7 @@ describe("saved output preview", () => {
       threadRef,
       messageId,
       filePath: "/tmp/report.pdf",
+      workspaceRoot: "/workspace",
       httpBaseUrl: "https://remote.example",
       createAssetUrl,
       openPreview,
