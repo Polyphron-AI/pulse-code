@@ -9,6 +9,7 @@ import * as PubSub from "effect/PubSub";
 import * as Stream from "effect/Stream";
 import type * as Scope from "effect/Scope";
 import * as Schema from "effect/Schema";
+import * as SubscriptionRef from "effect/SubscriptionRef";
 import {
   PullRequestOperationError,
   PullRequestUnavailableError,
@@ -41,6 +42,8 @@ import {
   type PullRequestReviewVerdict,
   type PullRequestReviewerCandidateList,
   type PullRequestReviewerRequestInput,
+  type PullRequestLabelCandidateList,
+  type PullRequestLabelChangeInput,
   type PullRequestSubmitReviewInput,
   type PullRequestSummary,
   type PullRequestThreadReplyInput,
@@ -154,6 +157,8 @@ export class PullRequestService extends Context.Service<
       input: PullRequestRef,
       options?: { readonly recoverTransientFailure?: boolean },
     ) => Effect.Effect<PullRequestSummary, PullRequestError>;
+    readonly subscribeRefreshes: Stream.Stream<number>;
+    readonly refreshAfterTurn: Effect.Effect<void>;
     readonly detail: (input: PullRequestRef) => Effect.Effect<PullRequestDetail, PullRequestError>;
     readonly activity: (
       input: PullRequestRef,
@@ -190,6 +195,12 @@ export class PullRequestService extends Context.Service<
     ) => Effect.Effect<PullRequestReviewerCandidateList, PullRequestError>;
     readonly requestReviewers: (
       input: PullRequestReviewerRequestInput,
+    ) => Effect.Effect<void, PullRequestError>;
+    readonly labelCandidates: (
+      input: PullRequestRef,
+    ) => Effect.Effect<PullRequestLabelCandidateList, PullRequestError>;
+    readonly setLabels: (
+      input: PullRequestLabelChangeInput,
     ) => Effect.Effect<void, PullRequestError>;
     readonly invalidate: (input: PullRequestInvalidateInput) => Effect.Effect<void>;
   }
@@ -234,6 +245,7 @@ const ACTION_ACCESS_REFUSALS: Record<PullRequestAction, string> = {
  * sentence is only ever the answer where a host said no.
  */
 const REVIEWER_REQUEST_REFUSAL = "You need write access on this repository to ask for a review.";
+const LABEL_CHANGE_REFUSAL = "You need triage access on this repository to change its labels.";
 
 /** A project this page can read: its remote is on a host with an implementation. */
 interface SupportedProject {
@@ -494,6 +506,10 @@ function withRateLimitBackoff(
     submitReview: interactive("submitReview", api.submitReview),
     listReviewerCandidates: interactive("listReviewerCandidates", api.listReviewerCandidates),
     setReviewerRequest: interactive("setReviewerRequest", api.setReviewerRequest),
+    ...(api.listLabelCandidates === undefined
+      ? {}
+      : { listLabelCandidates: interactive("listLabelCandidates", api.listLabelCandidates) }),
+    ...(api.setLabels === undefined ? {} : { setLabels: interactive("setLabels", api.setLabels) }),
     replyToThread: interactive("replyToThread", api.replyToThread),
     setReaction: interactive("setReaction", api.setReaction),
     setThreadResolution: interactive("setThreadResolution", api.setThreadResolution),
@@ -526,6 +542,7 @@ export function repositoryIdentityOf(project: OrchestrationProjectShell): string
 
 export const make = Effect.gen(function* () {
   const mergedPullRequests = yield* PubSub.unbounded<PullRequestMergeEvent>();
+  const pullRequestRefreshes = yield* SubscriptionRef.make(0);
   const registry = yield* PullRequestProviderRegistry;
   const projections = yield* ProjectionSnapshotQuery.ProjectionSnapshotQuery;
   const sourceControlProviders = yield* SourceControlProviderRegistry.SourceControlProviderRegistry;
@@ -1869,6 +1886,78 @@ export const make = Effect.gen(function* () {
     );
 
   /**
+   * The labels, like the reviewer candidates, are wanted only by somebody about to change them,
+   * so the same permission guards the list and the change.
+   */
+  const labelCandidates: PullRequestService["Service"]["labelCandidates"] = (input) =>
+    requireProject(input).pipe(
+      Effect.flatMap((project): Effect.Effect<PullRequestLabelCandidateList, PullRequestError> => {
+        const list = project.api.listLabelCandidates;
+        if (project.api.capabilities.labels !== true || list === undefined) {
+          return Effect.fail(
+            new PullRequestOperationError({
+              operation: "labelCandidates",
+              detail: "This host cannot change the labels on a change request.",
+            }),
+          );
+        }
+        return viewerPermissionsOf(project, input, "labelCandidates").pipe(
+          Effect.flatMap(
+            (viewer): Effect.Effect<PullRequestLabelCandidateList, PullRequestError> =>
+              viewer.labels === false
+                ? Effect.fail(
+                    new PullRequestOperationError({
+                      operation: "labelCandidates",
+                      detail: LABEL_CHANGE_REFUSAL,
+                    }),
+                  )
+                : list({
+                    cwd: project.project.workspaceRoot,
+                    repository: project.repository,
+                    host: project.host,
+                    number: input.number,
+                  }).pipe(Effect.mapError(toPullRequestError("labelCandidates"))),
+          ),
+        );
+      }),
+    );
+
+  const setLabels: PullRequestService["Service"]["setLabels"] = (input) =>
+    requireProject(input).pipe(
+      Effect.flatMap((project): Effect.Effect<void, PullRequestError> => {
+        const change = project.api.setLabels;
+        if (project.api.capabilities.labels !== true || change === undefined) {
+          return Effect.fail(
+            new PullRequestOperationError({
+              operation: "setLabels",
+              detail: "This host cannot change the labels on a change request.",
+            }),
+          );
+        }
+        return viewerPermissionsOf(project, input, "setLabels").pipe(
+          Effect.flatMap(
+            (viewer): Effect.Effect<void, PullRequestError> =>
+              viewer.labels === false
+                ? Effect.fail(
+                    new PullRequestOperationError({
+                      operation: "setLabels",
+                      detail: LABEL_CHANGE_REFUSAL,
+                    }),
+                  )
+                : change({
+                    cwd: project.project.workspaceRoot,
+                    repository: project.repository,
+                    host: project.host,
+                    number: input.number,
+                    labels: input.labels,
+                    applied: input.applied,
+                  }).pipe(Effect.mapError(toPullRequestError("setLabels"))),
+          ),
+        );
+      }),
+    );
+
+  /**
    * The line counts for rows already on the page, which the listing left out because on GitHub
    * they cost more than everything else on the row put together.
    *
@@ -2063,10 +2152,12 @@ export const make = Effect.gen(function* () {
   // scope re-entering `refEpochs` after eviction can never mint a key an old entry still has.
   let epochCounter = 0;
   let listingsEpoch = 0;
+  let turnRefreshEpoch = 0;
   const refEpochs = new Map<string, number>();
   const REF_EPOCH_CAPACITY = 2_048;
   const refScope = (ref: PullRequestRef) => `${ref.projectId} ${ref.repository} ${ref.number}`;
-  const refEpoch = (ref: PullRequestRef) => refEpochs.get(refScope(ref)) ?? 0;
+  const refEpoch = (ref: PullRequestRef) =>
+    Math.max(turnRefreshEpoch, refEpochs.get(refScope(ref)) ?? 0);
   const refCacheKey = (ref: PullRequestRef) =>
     JSON.stringify([refEpoch(ref), ref.projectId, ref.repository, ref.number]);
   const bumpRefEpoch = (ref: PullRequestRef) => {
@@ -2354,6 +2445,11 @@ export const make = Effect.gen(function* () {
     }).pipe(Effect.andThen(Cache.invalidateAll(viewerFlights)));
   };
 
+  const refreshAfterTurn: PullRequestService["Service"]["refreshAfterTurn"] = Effect.suspend(() => {
+    turnRefreshEpoch = listingsEpoch = ++epochCounter;
+    return SubscriptionRef.set(pullRequestRefreshes, turnRefreshEpoch);
+  });
+
   // A mutation's own client re-reads right after it, and every other client's next read must
   // see the action too — so a write forgets the change request it touched and the listings its
   // state change reorders, for everyone, without any client asking.
@@ -2401,6 +2497,10 @@ export const make = Effect.gen(function* () {
     list,
     listStats,
     summary,
+    subscribeRefreshes: SubscriptionRef.changes(pullRequestRefreshes).pipe(
+      Stream.filter((revision) => revision > 0),
+    ),
+    refreshAfterTurn,
     detail,
     activity,
     threadComments,
@@ -2417,6 +2517,8 @@ export const make = Effect.gen(function* () {
     // The candidate list is deliberately read fresh per menu-open, so it stays uncached.
     reviewerCandidates,
     requestReviewers: invalidatedByMutation(requestReviewers),
+    labelCandidates,
+    setLabels: invalidatedByMutation(setLabels),
     invalidate,
   });
 });

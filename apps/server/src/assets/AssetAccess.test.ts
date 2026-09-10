@@ -27,6 +27,7 @@ import { assetFileResponse } from "../http.ts";
 import { ASSET_ROUTE_PREFIX, issueAssetUrl, resolveAsset } from "./AssetAccess.ts";
 import { saveSessionOutput } from "./sessionOutputStore.ts";
 import { assetRouteLayer } from "../http.ts";
+import * as NativeAppIconResolver from "./NativeAppIconResolver.ts";
 import { openMediaFile } from "./MediaFile.ts";
 
 vi.mock("node:fs/promises", async (importOriginal) => {
@@ -45,6 +46,7 @@ const testLayer = Layer.mergeAll(
     Layer.provide(WorkspacePaths.layer),
     Layer.provide(T3ProjectFileLoader.layer),
   ),
+  NativeAppIconResolver.layer.pipe(Layer.provide(configLayer)),
   ServerSecretStore.layer.pipe(Layer.provide(configLayer)),
 ).pipe(Layer.provideMerge(NodeServices.layer));
 
@@ -197,6 +199,30 @@ describe("AssetAccess", () => {
         expect(yield* resolveAsset(token, `../${name}`)).toBeNull();
         expect(yield* resolveAsset(`${token}tampered`, name)).toBeNull();
       }
+    }).pipe(Effect.provide(testLayer)),
+  );
+
+  it.effect("reports pixel dimensions from an image header and nothing for other files", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-media-dimensions-" });
+      const png = Uint8Array.from([
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52, 0, 0,
+        0x06, 0x40, 0, 0, 0x03, 0x84,
+      ]);
+      yield* fs.writeFile(path.join(root, "shot.png"), png);
+      yield* fs.writeFileString(path.join(root, "clip.mp4"), "video");
+      yield* fs.writeFileString(path.join(root, "broken.png"), "not a png");
+      const issue = (name: string) =>
+        issueAssetUrl({
+          resource: { _tag: "media-file", threadId: ThreadId.make("thread-1"), path: name },
+          workspaceRoot: root,
+        });
+
+      expect((yield* issue("shot.png")).imageDimensions).toEqual({ width: 1600, height: 900 });
+      expect((yield* issue("clip.mp4")).imageDimensions).toBeUndefined();
+      expect((yield* issue("broken.png")).imageDimensions).toBeUndefined();
     }).pipe(Effect.provide(testLayer)),
   );
 
@@ -696,6 +722,21 @@ describe("AssetAccess", () => {
       });
     }).pipe(Effect.provide(testLayer)),
   );
+  it.effect("issues signed native application icon capabilities", () =>
+    Effect.gen(function* () {
+      const result = yield* issueAssetUrl({
+        resource: {
+          _tag: "native-app-icon",
+          app: { _tag: "app-id", appId: "com.example.Editor" },
+        },
+      });
+
+      expect(result.relativeUrl).toMatch(
+        new RegExp(`^${ASSET_ROUTE_PREFIX}/[^/]+/native-app-icon\\.png$`, "u"),
+      );
+      expect(result.expiresAt).toBeGreaterThan(0);
+    }).pipe(Effect.provide(testLayer)),
+  );
 
   it.effect("serves document attachments inline when a viewer requests it", () =>
     Effect.gen(function* () {
@@ -833,6 +874,44 @@ describe("AssetAccess", () => {
 
       expect(result.sourcePath?.replaceAll("\\", "/")).toBe("brand/custom.svg");
       expect(result.relativeUrl).toMatch(/\/v[0-9a-f]{64}-custom\.svg$/);
+    }).pipe(Effect.provide(testLayer)),
+  );
+
+  it.effect("issues an exact capability for a saved favicon outside the workspace", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fileSystem.makeTempDirectoryScoped({
+        prefix: "t3-asset-favicon-workspace-",
+      });
+      const pictures = yield* fileSystem.makeTempDirectoryScoped({
+        prefix: "t3-asset-favicon-pictures-",
+      });
+      const externalPath = path.join(pictures, "custom.png");
+      const siblingPath = path.join(pictures, "sibling.png");
+      yield* fileSystem.writeFile(externalPath, new Uint8Array([1, 2, 3]));
+      yield* fileSystem.writeFile(siblingPath, new Uint8Array([4, 5, 6]));
+      const canonicalPath = yield* fileSystem.realPath(externalPath);
+      const canonicalSiblingPath = yield* fileSystem.realPath(siblingPath);
+
+      const result = yield* issueAssetUrl({
+        resource: { _tag: "project-favicon", cwd: root },
+        projectFaviconPath: externalPath,
+      });
+      const suffix = result.relativeUrl.slice(`${ASSET_ROUTE_PREFIX}/`.length);
+      const separatorIndex = suffix.indexOf("/");
+
+      expect(result.sourcePath).toBe(externalPath);
+      expect(result.relativeUrl).toMatch(/\/v[0-9a-f]{64}-custom\.png$/);
+      expect(
+        yield* resolveAsset(suffix.slice(0, separatorIndex), suffix.slice(separatorIndex + 1)),
+      ).toEqual({ kind: "file", path: canonicalPath });
+      const tamperedSuffixResult = yield* resolveAsset(
+        suffix.slice(0, separatorIndex),
+        "sibling.png",
+      );
+      expect(tamperedSuffixResult).toEqual({ kind: "file", path: canonicalPath });
+      expect(tamperedSuffixResult).not.toEqual({ kind: "file", path: canonicalSiblingPath });
     }).pipe(Effect.provide(testLayer)),
   );
 

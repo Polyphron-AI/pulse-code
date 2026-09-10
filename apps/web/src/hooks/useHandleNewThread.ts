@@ -28,7 +28,7 @@ import {
   selectProjectGroupingSettings,
 } from "../logicalProject";
 import { resolveDefaultThreadEnvMode } from "@t3tools/shared/threadEnvMode";
-import { readThreadShell, useProjects, useThread } from "../state/entities";
+import { readProjects, readThreadShell, useProjects, useThread } from "../state/entities";
 import { resolveNewDraftStartFromOrigin } from "../lib/chatThreadActions";
 import { readT3ProjectFileDefaultThreadEnvMode } from "../lib/t3ProjectFileDefaults";
 import { environmentServerConfigsAtom, primaryServerSettingsAtom } from "../state/server";
@@ -58,7 +58,6 @@ function pickExplicitWorkspaceOptions(options: NewThreadWorkspaceOptions | undef
 }
 
 export function useNewThreadHandler() {
-  const projects = useProjects();
   const environmentServerConfigs = useAtomValue(environmentServerConfigsAtom);
   const primaryServerSettings = useAtomValue(primaryServerSettingsAtom);
   const projectGroupingSettings = useClientSettings(selectProjectGroupingSettings);
@@ -97,6 +96,7 @@ export function useNewThreadHandler() {
     ): Promise<{ draftId: DraftId; threadId: ThreadId } | null> => {
       const targetServerSettings =
         environmentServerConfigs.get(projectRef.environmentId)?.settings ?? DEFAULT_SERVER_SETTINGS;
+      const projects = readProjects();
       const {
         getComposerDraft,
         getDraftSessionByLogicalProjectKey,
@@ -480,7 +480,6 @@ export function useNewThreadHandler() {
       getCurrentRouteTarget,
       primaryServerSettings,
       projectGroupingSettings,
-      projects,
       router,
     ],
   );

@@ -1,4 +1,5 @@
 import {
+  ANTIGRAVITY_DEFAULT_MODEL,
   type ProviderInstanceId,
   type ProviderDriverKind,
   type ResolvedKeybindingsConfig,
@@ -9,7 +10,7 @@ import { buttonVariants } from "../ui/button";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { cn } from "~/lib/utils";
-import { ModelPickerContent } from "./ModelPickerContent";
+import { ModelPickerContent, resolveModelPickerSelectedModel } from "./ModelPickerContent";
 import { ProviderInstanceIcon } from "./ProviderInstanceIcon";
 import {
   ModelEsque,
@@ -41,6 +42,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
   triggerClassName?: string;
   triggerAriaLabel?: string;
   onOpenChange?: (open: boolean) => void;
+  onOpenProviderSetup?: (instanceId: ProviderInstanceId) => void;
   getModelDisabledReason?: (instanceId: ProviderInstanceId, model: string) => string | null;
   onInstanceModelChange: (instanceId: ProviderInstanceId, model: string) => void;
 }) {
@@ -58,15 +60,24 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
 
   const activeInstanceId = props.activeInstanceId;
   const selectedInstanceOptions = props.modelOptionsByInstance.get(activeInstanceId) ?? [];
-  // If the current slug belongs to a different instance (for example after
-  // a provider switch or disable), prefer the active instance's first
-  // option so the trigger icon and label stay in sync instead of showing
-  // a stale foreign slug.
+  // Account-specific catalogs must keep the selected model label while unavailable.
   const selectedModel =
-    selectedInstanceOptions.find((option) => option.slug === props.model) ??
-    selectedInstanceOptions[0];
-  const triggerTitle = selectedModel ? getTriggerDisplayModelName(selectedModel) : props.model;
-  const triggerLabel = selectedModel ? getTriggerDisplayModelLabel(selectedModel) : props.model;
+    resolveModelPickerSelectedModel({
+      driverKind: activeEntry?.driverKind,
+      model: props.model,
+      options: selectedInstanceOptions,
+    }) ??
+    (activeEntry?.driverKind === "opencode" || activeEntry?.driverKind === "antigravity"
+      ? undefined
+      : selectedInstanceOptions[0]);
+  const triggerTitle = selectedModel
+    ? getTriggerDisplayModelName(selectedModel)
+    : props.model === ANTIGRAVITY_DEFAULT_MODEL
+      ? "Choose model"
+      : props.model || "Choose model";
+  const triggerLabel = selectedModel
+    ? `${getTriggerDisplayModelLabel(selectedModel)}${selectedModel.isUnavailable ? " (Unavailable)" : ""}`
+    : triggerTitle;
   const showInstanceBadge =
     activeEntry !== null && shouldShowInstanceBadge(activeEntry, props.instanceEntries);
 
@@ -166,7 +177,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
               showBadge={showInstanceBadge}
               className="size-4"
               iconClassName={cn("size-4", props.activeProviderIconClassName)}
-              indicatorBackground="var(--input)"
+              indicatorBackground="var(--contrast-input)"
               badgeClassName={cn(
                 "right-[-0.125rem] bottom-[-0.125rem] h-3 min-w-3",
                 "px-0.5 text-[7px]",
@@ -199,6 +210,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
           modelOptionsByInstance={props.modelOptionsByInstance}
           terminalOpen={props.terminalOpen ?? false}
           onRequestClose={() => setIsMenuOpen(false)}
+          {...(props.onOpenProviderSetup ? { onOpenProviderSetup: props.onOpenProviderSetup } : {})}
           {...(props.getModelDisabledReason
             ? { getModelDisabledReason: props.getModelDisabledReason }
             : {})}

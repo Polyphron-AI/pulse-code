@@ -32,6 +32,7 @@ function toChangeRequest(summary: GitHubCli.GitHubPullRequestSummary): ChangeReq
     state: summary.state ?? "open",
     closedAt: summary.closedAt ?? null,
     mergedAt: summary.mergedAt ?? null,
+    ...(summary.isDraft === true ? { isDraft: true } : {}),
     updatedAt:
       summary.updatedAt === undefined
         ? Option.none()
@@ -145,7 +146,7 @@ export const make = Effect.gen(function* () {
             "--limit",
             String(input.limit ?? 20),
             "--json",
-            "number,title,url,baseRefName,headRefName,state,mergedAt,closedAt,updatedAt,isCrossRepository,headRepository,headRepositoryOwner",
+            "number,title,url,baseRefName,headRefName,state,isDraft,mergedAt,closedAt,updatedAt,isCrossRepository,headRepository,headRepositoryOwner",
           ],
         })
         .pipe(

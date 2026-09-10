@@ -53,6 +53,7 @@ export function getPreviewPanelMaxWidth(viewportWidth: number, containerWidth?: 
 export function PreviewPanelShell(props: {
   mode: PreviewPanelMode;
   maximized?: boolean;
+  open?: boolean;
   /**
    * Overrides the localStorage key used to persist the panel width. Callers
    * embedding this shell for a different surface (e.g. the pull requests
@@ -66,6 +67,8 @@ export function PreviewPanelShell(props: {
 }) {
   const useDragRegion = isElectron && props.mode !== "sheet" && props.mode !== "embedded";
   const isInline = props.mode === "inline";
+  const collapsible = isInline && props.open !== undefined;
+  const open = props.open ?? true;
   const hostRef = useRef<HTMLDivElement | null>(null);
   // Only inline non-maximized mode applies `width`/`maxWidth`; skip the
   // container measurement (and its re-renders) everywhere else.
@@ -77,10 +80,31 @@ export function PreviewPanelShell(props: {
     maxWidth,
     edge: "left",
   });
-
+  const previousLayoutRef = useRef({ open, width });
+  useLayoutEffect(() => {
+    const previous = previousLayoutRef.current;
+    previousLayoutRef.current = { open, width };
+    if (!collapsible || previous.open !== open || previous.width === width) return;
+    const host = hostRef.current;
+    if (!host?.closest("[data-panel-animations=true]")) return;
+    host.style.setProperty("transition-duration", "0ms");
+    let restoreFrame = 0;
+    const paintFrame = window.requestAnimationFrame(() => {
+      restoreFrame = window.requestAnimationFrame(() => {
+        host.style.removeProperty("transition-duration");
+      });
+    });
+    return () => {
+      window.cancelAnimationFrame(paintFrame);
+      window.cancelAnimationFrame(restoreFrame);
+      host.style.removeProperty("transition-duration");
+    };
+  }, [collapsible, open, width]);
   return (
     <div
       ref={hostRef}
+      inert={collapsible && !open}
+      aria-hidden={collapsible && !open}
       className={cn(
         "relative flex h-full min-h-0 min-w-0 max-w-full flex-col self-stretch bg-background",
         isInline
@@ -88,10 +112,17 @@ export function PreviewPanelShell(props: {
             ? "flex-1 border-l border-border"
             : "w-full shrink-0 border-l border-border md:w-[var(--preview-panel-width)]"
           : "w-full",
+        collapsible &&
+          "[[data-panel-animations=true]_&]:transition-[width] [[data-panel-animations=true]_&]:[transition-duration:var(--panel-animation-duration)] [[data-panel-animations=true]_&]:ease-out",
+        collapsible && open && "[[data-panel-animations=true]_&]:starting:w-0!",
+        collapsible && !open && "pointer-events-none",
       )}
       style={
         isInline && !props.maximized
-          ? ({ "--preview-panel-width": `${width}px` } as CSSProperties)
+          ? ({
+              "--preview-panel-width": `${collapsible && !open ? 0 : width}px`,
+              ...(collapsible && !open ? { width: "0px" } : {}),
+            } as CSSProperties)
           : undefined
       }
       data-preview-panel-mode={props.mode}
@@ -100,8 +131,19 @@ export function PreviewPanelShell(props: {
       {isInline && !props.maximized ? (
         <RightPanelResizeHandle className="hidden md:block" handlers={handlers} />
       ) : null}
-      {useDragRegion ? <div className="electron-drag-region h-0 w-full" aria-hidden /> : null}
-      {props.children}
+      <div className={cn("h-full min-h-0 w-full", collapsible && "overflow-clip")}>
+        <div
+          className="flex h-full min-h-0 min-w-0 flex-col md:w-[var(--preview-content-width)]"
+          style={
+            collapsible && !props.maximized
+              ? ({ "--preview-content-width": `calc(${width}px - 1px)` } as CSSProperties)
+              : undefined
+          }
+        >
+          {useDragRegion ? <div className="electron-drag-region h-0 w-full" aria-hidden /> : null}
+          {props.children}
+        </div>
+      </div>
     </div>
   );
 }

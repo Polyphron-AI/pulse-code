@@ -31,6 +31,8 @@ export const ChangeRequest = Schema.Struct({
   state: ChangeRequestState,
   closedAt: Schema.optional(Schema.NullOr(Schema.String)),
   mergedAt: Schema.optional(Schema.NullOr(Schema.String)),
+  /** Present when the provider can tell that an open change request is still a draft. */
+  isDraft: Schema.optional(Schema.Boolean),
   updatedAt: Schema.Option(Schema.DateTimeUtc),
   isCrossRepository: Schema.optional(Schema.Boolean),
   headRepositoryNameWithOwner: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),

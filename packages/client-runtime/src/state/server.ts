@@ -359,10 +359,21 @@ export function applyServerConfigProjection(
   event: ServerConfigStreamEvent,
 ): Option.Option<ServerConfigProjection> {
   switch (event.type) {
-    case "snapshot":
+    case "snapshot": {
+      // A snapshot never carries published themes -- the theme stream owns
+      // them -- so taking it wholesale would clear the set on every reconnect
+      // and repaint anyone wearing one until the follow-up event landed.
+      // Only from a server that still streams them. Reconnecting to one that
+      // predates the feature must drop the set rather than leave a palette on
+      // screen that nothing will ever update again.
+      const carried =
+        event.config.environment.capabilities.environmentThemes === true && Option.isSome(current)
+          ? current.value.config.environmentThemes
+          : undefined;
       return Option.some({
         config: {
           ...event.config,
+          ...(carried === undefined ? {} : { environmentThemes: carried }),
           ...(event.config.environment.capabilities.usageLimitSources === true &&
           Option.isSome(current) &&
           current.value.config.usageLimitSources !== undefined
@@ -370,8 +381,9 @@ export function applyServerConfigProjection(
             : {}),
         },
         latestEvent: event,
-        source: "live",
+        source: "live" as const,
       });
+    }
     case "keybindingsUpdated":
       return Option.map(current, (projection) => ({
         config: {
@@ -409,6 +421,15 @@ export function applyServerConfigProjection(
         latestEvent: event,
         source: "live",
       }));
+    case "environmentThemesUpdated":
+      return Option.map(current, (projection) => ({
+        config: {
+          ...projection.config,
+          environmentThemes: event.payload.themes.length > 0 ? event.payload.themes : undefined,
+        },
+        latestEvent: event,
+        source: "live",
+      }));
   }
 }
 
@@ -426,7 +447,14 @@ const cachedConfigSnapshotEvent = (config: ServerConfig): ServerConfigStreamEven
   config,
 });
 
+function withoutEnvironmentThemes(config: ServerConfig): ServerConfig {
+  if (config.environmentThemes === undefined) return config;
+  const { environmentThemes: _ephemeral, ...rest } = config;
+  return rest;
+}
+
 export interface ServerConfigSubscriptionOptions {
+  readonly environmentThemes?: boolean;
   readonly usageLimitSources?: boolean;
   readonly usageLimitsCommand?: boolean;
 }
@@ -449,8 +477,10 @@ export const makeEnvironmentServerConfigState = Effect.fn("EnvironmentServerConf
     );
     const state = yield* SubscriptionRef.make<Option.Option<ServerConfigProjection>>(
       Option.map(cachedConfig, (config) => ({
-        config: withoutUsageLimitSources(config),
-        latestEvent: cachedConfigSnapshotEvent(withoutUsageLimitSources(config)),
+        config: withoutEnvironmentThemes(withoutUsageLimitSources(config)),
+        latestEvent: cachedConfigSnapshotEvent(
+          withoutEnvironmentThemes(withoutUsageLimitSources(config)),
+        ),
         source: "cache" as const,
       })),
     );
@@ -460,18 +490,20 @@ export const makeEnvironmentServerConfigState = Effect.fn("EnvironmentServerConf
     const persist = Effect.fn("EnvironmentServerConfigState.persist")(function* (
       config: ServerConfig,
     ) {
-      return yield* cache.saveServerConfig(environmentId, withoutUsageLimitSources(config)).pipe(
-        Effect.as(true),
-        Effect.catch((error) =>
-          Effect.logWarning("Could not persist cached server configuration.").pipe(
-            Effect.annotateLogs({
-              environmentId,
-              ...safeErrorLogAttributes(error),
-            }),
-            Effect.as(false),
+      return yield* cache
+        .saveServerConfig(environmentId, withoutEnvironmentThemes(withoutUsageLimitSources(config)))
+        .pipe(
+          Effect.as(true),
+          Effect.catch((error) =>
+            Effect.logWarning("Could not persist cached server configuration.").pipe(
+              Effect.annotateLogs({
+                environmentId,
+                ...safeErrorLogAttributes(error),
+              }),
+              Effect.as(false),
+            ),
           ),
-        ),
-      );
+        );
     });
 
     const persistPending = Effect.fn("EnvironmentServerConfigState.persistPending")(function* (
@@ -494,6 +526,7 @@ export const makeEnvironmentServerConfigState = Effect.fn("EnvironmentServerConf
     yield* subscribe(WS_METHODS.subscribeServerConfig, {
       ...(subscription.usageLimitSources === true ? { usageLimitSources: true } : {}),
       ...(subscription.usageLimitsCommand === true ? { usageLimitsCommand: true } : {}),
+      ...(subscription.environmentThemes === true ? { environmentThemes: true } : {}),
     }).pipe(
       Stream.runForEach((event) =>
         Effect.gen(function* () {
@@ -685,6 +718,12 @@ export function createServerEnvironmentAtoms<R, E>(
     /** Whether this surface renders quota from configured usage-limit sources. */
     readonly usageLimitSources?: boolean;
     readonly usageLimitsCommand?: boolean;
+    /**
+     * Whether this surface renders themes the environment publishes. Mobile
+     * keeps its own appearance settings, so it neither asks for the stream nor
+     * receives the payload.
+     */
+    readonly environmentThemes?: boolean;
   },
 ) {
   const configScheduler = createAtomCommandScheduler();
@@ -698,6 +737,7 @@ export function createServerEnvironmentAtoms<R, E>(
     runtime
       .atom(
         serverConfigStateChanges(environmentId, {
+          ...(options.environmentThemes === true ? { environmentThemes: true } : {}),
           ...(options.usageLimitSources === true ? { usageLimitSources: true } : {}),
           ...(options.usageLimitsCommand === true ? { usageLimitsCommand: true } : {}),
         }),
@@ -971,6 +1011,27 @@ export function createServerEnvironmentAtoms<R, E>(
       Atom.withLabel(`environment-data:server:settings:${environmentId}`),
     ),
   );
+  const usagePricesAtom = Atom.family((environmentId: EnvironmentId) =>
+    Atom.make((get) => {
+      const overrides = get(settingsValueAtom(environmentId))?.usagePriceOverrides ?? {};
+      // Only changed prices should trigger another transcript scan. Settings
+      // snapshots can recreate the same mapping in a different property order.
+      return JSON.stringify(
+        Object.keys(overrides)
+          .sort()
+          .map((model) => {
+            const price = overrides[model]!;
+            return [
+              model,
+              price.inputCostPerMillionTokens,
+              price.outputCostPerMillionTokens,
+              price.cacheReadCostPerMillionTokens,
+              price.cacheWriteCostPerMillionTokens,
+            ];
+          }),
+      );
+    }).pipe(Atom.withLabel(`environment-data:server:usage-prices:${environmentId}`)),
+  );
   const providersValueAtom = Atom.family((environmentId: EnvironmentId) =>
     Atom.make((get) => get(configValueAtom(environmentId))?.providers ?? null).pipe(
       Atom.withLabel(`environment-data:server:providers:${environmentId}`),
@@ -1003,6 +1064,52 @@ export function createServerEnvironmentAtoms<R, E>(
     updateStateAtom,
     settingsValueAtom,
     providersValueAtom,
+    providerAuthState: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
+      label: "environment-data:provider:auth-state",
+      tag: WS_METHODS.providerAuthSubscribe,
+      idleTtlMs: 0,
+    }),
+    startProviderAuth: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:provider:auth-start",
+      tag: WS_METHODS.providerAuthStart,
+      concurrency: {
+        mode: "singleFlight",
+        key: ({ environmentId, input }) => JSON.stringify([environmentId, input.instanceId]),
+      },
+    }),
+    completeProviderAuth: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:provider:auth-complete",
+      tag: WS_METHODS.providerAuthComplete,
+    }),
+    cancelProviderAuth: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:provider:auth-cancel",
+      tag: WS_METHODS.providerAuthCancel,
+    }),
+    logoutProviderAuth: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:provider:auth-logout",
+      tag: WS_METHODS.providerAuthLogout,
+    }),
+    providerInstallState: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
+      label: "environment-data:provider:install-state",
+      tag: WS_METHODS.providerInstallSubscribe,
+      idleTtlMs: 0,
+    }),
+    startProviderInstall: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:provider:install-start",
+      tag: WS_METHODS.providerInstallStart,
+      concurrency: {
+        mode: "singleFlight",
+        key: ({ environmentId }) => environmentId,
+      },
+    }),
+    cancelProviderInstall: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:provider:install-cancel",
+      tag: WS_METHODS.providerInstallCancel,
+    }),
+    removeProviderInstallation: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:provider:install-remove",
+      tag: WS_METHODS.providerInstallRemove,
+    }),
     traceDiagnostics: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "environment-data:server:trace-diagnostics",
       tag: WS_METHODS.serverGetTraceDiagnostics,
@@ -1037,6 +1144,7 @@ export function createServerEnvironmentAtoms<R, E>(
       label: "environment-data:server:usage-summary",
       tag: WS_METHODS.serverGetUsageSummary,
       staleTimeMs: 60_000,
+      refreshTrigger: ({ environmentId }) => usagePricesAtom(environmentId),
     }),
     configProjection,
     welcome,
@@ -1055,7 +1163,12 @@ export function createServerEnvironmentAtoms<R, E>(
       concurrency: {
         mode: "singleFlight",
         key: ({ environmentId, input }) =>
-          JSON.stringify([environmentId, input.instanceId ?? null, input.cwd ?? null]),
+          JSON.stringify([
+            environmentId,
+            input.instanceId ?? null,
+            input.cwd ?? null,
+            input.refreshModels ?? false,
+          ]),
       },
     }),
     updateProvider: createEnvironmentRpcCommand(runtime, {
@@ -1086,6 +1199,14 @@ export function createServerEnvironmentAtoms<R, E>(
     signalProcess: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:signal-process",
       tag: WS_METHODS.serverSignalProcess,
+    }),
+    refreshUsageRates: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:refresh-usage-rates",
+      tag: WS_METHODS.serverRefreshUsageRates,
+      concurrency: {
+        mode: "singleFlight",
+        key: ({ environmentId }) => environmentId,
+      },
     }),
     retryResourceTelemetry: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:retry-resource-telemetry",

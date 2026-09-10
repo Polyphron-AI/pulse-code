@@ -1,3 +1,4 @@
+import { useWorkspaceMutationRefresh } from "~/hooks/useWorkspaceMutationRefresh";
 import type {
   ContextMenuItem as TreeContextMenuItem,
   ContextMenuOpenContext as TreeContextMenuOpenContext,
@@ -30,6 +31,7 @@ import {
 import { useProjectEntriesQuery } from "./projectFilesQueryState";
 
 interface FileBrowserPanelProps {
+  workspaceMutationId?: string | null;
   environmentId: EnvironmentId;
   cwd: string;
   projectName: string;
@@ -106,6 +108,7 @@ function FileSearchField(props: {
 }
 
 export default function FileBrowserPanel({
+  workspaceMutationId = null,
   environmentId,
   cwd,
   projectName,
@@ -117,6 +120,11 @@ export default function FileBrowserPanel({
   const composerRef = useComposerHandleContext();
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const entriesQuery = useProjectEntriesQuery(environmentId, cwd);
+  useWorkspaceMutationRefresh({
+    mutationId: workspaceMutationId,
+    resourceKey: JSON.stringify([environmentId, cwd]),
+    refresh: entriesQuery.refresh,
+  });
   const entries = entriesQuery.data?.entries ?? [];
   const entryKinds = useMemo(
     () => new Map(entries.map((entry) => [entry.path, entry.kind] as const)),
@@ -404,7 +412,7 @@ export default function FileBrowserPanel({
           className="min-h-0 flex-1 overflow-hidden"
           style={{
             colorScheme: resolvedTheme,
-            ["--trees-fg-override" as string]: "var(--foreground)",
+            ["--trees-fg-override" as string]: "var(--contrast-foreground)",
           }}
         />
       )}

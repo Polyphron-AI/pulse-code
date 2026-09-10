@@ -83,6 +83,10 @@
       "types": "./src/toolActivity.ts",
       "import": "./src/toolActivity.ts"
     },
+    "./favicon": {
+      "types": "./src/favicon.ts",
+      "import": "./src/favicon.ts"
+    },
     "./Struct": {
       "types": "./src/Struct.ts",
       "import": "./src/Struct.ts"
@@ -183,6 +187,10 @@
       "types": "./src/composerInlineTokens.ts",
       "import": "./src/composerInlineTokens.ts"
     },
+    "./assistantCitations": {
+      "types": "./src/assistantCitations.ts",
+      "import": "./src/assistantCitations.ts"
+    },
     "./terminalLabels": {
       "types": "./src/terminalLabels.ts",
       "import": "./src/terminalLabels.ts"
@@ -206,6 +214,10 @@
     "./filePreview": {
       "types": "./src/filePreview.ts",
       "import": "./src/filePreview.ts"
+    },
+    "./imageDimensions": {
+      "types": "./src/imageDimensions.ts",
+      "import": "./src/imageDimensions.ts"
     },
     "./chatList": {
       "types": "./src/chatList.ts",
@@ -242,6 +254,10 @@
     "./usageLimits": {
       "types": "./src/usageLimits.ts",
       "import": "./src/usageLimits.ts"
+    },
+    "./desktopAppControl": {
+      "types": "./src/desktopAppControl.ts",
+      "import": "./src/desktopAppControl.ts"
     },
     "./claudeCompaction": {
       "types": "./src/claudeCompaction.ts",

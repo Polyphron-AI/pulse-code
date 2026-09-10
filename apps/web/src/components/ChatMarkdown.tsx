@@ -60,6 +60,8 @@ import { defaultUrlTransform } from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import remarkBreaks from "remark-breaks";
+import { parseAssistantCitationHref } from "@t3tools/shared/assistantCitations";
+import { AssistantCitationChip } from "./chat/AssistantCitationChip";
 import remarkGfm from "remark-gfm";
 import { remarkGithubAlerts } from "../markdown-github-alerts";
 import { renderSkillInlineMarkdownChildren } from "./chat/SkillInlineText";
@@ -74,6 +76,10 @@ import { resolveProtocolRelativeMediaUrl } from "./media/mediaContent";
 import { CHAT_FILE_TAG_CHIP_CLASS_NAME, FileTagChipContent } from "./chat/FileTagChip";
 import { PierreEntryIcon } from "./chat/PierreEntryIcon";
 import {
+  revealInFileExplorerLabelForKind,
+  revealInFileExplorerLabelForOs,
+} from "./preview/fileExplorerLabel";
+import {
   resolveExternalWebLinkHost,
   showExternalLinkContextMenu,
 } from "./chat/externalLinkContextMenu";
@@ -85,14 +91,19 @@ import { ScrollArea } from "./ui/scroll-area";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "./ui/menu";
 import { stackedThreadToast, toastManager } from "./ui/toast";
 import { recordVisitForThread } from "../browserHistoryStore";
-import { useOpenInPreferredEditor } from "../editorPreferences";
+import {
+  PreferredEditorEnvironmentRequiredError,
+  useOpenInPreferredEditor,
+  usePreferredEditor,
+} from "../editorPreferences";
+import { openInEditorMenuLabel } from "../editorLabels";
 import { resolveDiffThemeName, type DiffThemeName } from "../lib/diffRendering";
 import { fnv1a32 } from "../lib/diffRendering";
 import { LRUCache } from "../lib/lruCache";
 import { getSyntaxHighlighterPromise } from "../lib/syntaxHighlighting";
 import { RenderErrorBoundary } from "./RenderErrorBoundary";
 import { useTheme } from "../hooks/useTheme";
-import { getClientSettings } from "../hooks/useSettings";
+import { getClientSettings, useClientSettings } from "../hooks/useSettings";
 import {
   chatMarkdownClipboardPayload,
   serializeTableElementToCsv,
@@ -108,14 +119,17 @@ import {
   resolveMarkdownFileLinkTarget,
   rewriteMarkdownFileUriHref,
   shouldOpenMarkdownFileLinkInBrowserByDefault,
+  shouldOpenMarkdownFileLinkInEditor,
   type MarkdownFileLinkMeta,
 } from "../markdown-links";
 import { readLocalApi } from "../localApi";
 import { useAssetUrlRefresh, useAssetUrlState } from "../assets/assetUrls";
 import { cn } from "../lib/utils";
+import { useRemoteOpenResolution, type RemoteOpenMode } from "../remoteOpen";
 import { useRightPanelStore } from "../rightPanelStore";
 import { readThreadShell, useProjects } from "../state/entities";
 import { serverEnvironment } from "../state/server";
+import { shellEnvironment } from "../state/shell";
 import { assetEnvironment } from "../state/assets";
 import { usePreparedConnection } from "../state/session";
 import { previewEnvironment } from "../state/preview";
@@ -137,6 +151,7 @@ import {
 } from "~/lib/openPullRequestLink";
 import { writeTextToClipboard } from "../hooks/useCopyToClipboard";
 import { isPreviewSupportedInRuntime } from "../previewStateStore";
+import { resolvePathLinkTarget } from "../terminal-links";
 import {
   isBrowserPreviewFile,
   openFileInPreview,
@@ -144,12 +159,14 @@ import {
   BrowserPreviewUnavailableError,
 } from "../browser/openFileInPreview";
 import { MermaidDiagram } from "./MermaidDiagram";
+import { resolveLinkTarget } from "../browser/browserLinkTarget";
 
 interface ChatMarkdownProps {
   text: string;
   messageId?: MessageId | undefined;
   cwd: string | undefined;
   threadRef?: ScopedThreadRef | undefined;
+  /** Environment that owns non-thread markdown, such as a pull request panel. */
   environmentId?: EnvironmentId | undefined;
   onTaskListChange?: ((input: { markerOffset: number; checked: boolean }) => void) | undefined;
   isStreaming?: boolean;
@@ -191,9 +208,18 @@ export function shouldUseMarkdownFileBrowserPrimaryAction(input: {
   );
 }
 
+export function canUseMarkdownFileShellActions(
+  environmentId: EnvironmentId | null,
+  remoteOpenMode: RemoteOpenMode,
+  isRemoteOpenResolved: boolean,
+): boolean {
+  return environmentId !== null && isRemoteOpenResolved && remoteOpenMode === "local-exec";
+}
+
 const EMPTY_MARKDOWN_SKILLS: ReadonlyArray<Pick<ServerProviderSkill, "name" | "displayName">> = [];
 
 const CODE_FENCE_LANGUAGE_REGEX = /(?:^|\s)language-([^\s]+)/;
+const WINDOWS_DRIVE_PATH_REGEX = /^[A-Za-z]:[\\/]/;
 const MAX_HIGHLIGHT_CACHE_ENTRIES = 500;
 const MAX_HIGHLIGHT_CACHE_MEMORY_BYTES = 50 * 1024 * 1024;
 
@@ -283,7 +309,7 @@ const CHAT_MARKDOWN_SANITIZE_SCHEMA = {
   },
   protocols: {
     ...defaultSchema.protocols,
-    href: [...(defaultSchema.protocols?.href ?? []), "file"],
+    href: [...(defaultSchema.protocols?.href ?? []), "file", "t3-citation"],
     src: [...(defaultSchema.protocols?.src ?? []), "file"],
   },
 } satisfies Parameters<typeof rehypeSanitize>[0];
@@ -293,7 +319,7 @@ const CHAT_MARKDOWN_REMARK_PLUGINS = [
   remarkGithubAlerts,
   remarkNormalizeListItemIndentation,
   remarkPreserveCodeMeta,
-  remarkTagInlineCode,
+  remarkNormalizeLinksAndTagInlineCode,
 ] satisfies NonNullable<ReactMarkdownOptions["remarkPlugins"]>;
 
 const CHAT_MARKDOWN_REMARK_PLUGINS_WITH_BREAKS = [
@@ -302,7 +328,7 @@ const CHAT_MARKDOWN_REMARK_PLUGINS_WITH_BREAKS = [
   remarkNormalizeListItemIndentation,
   remarkBreaks,
   remarkPreserveCodeMeta,
-  remarkTagInlineCode,
+  remarkNormalizeLinksAndTagInlineCode,
 ] satisfies NonNullable<ReactMarkdownOptions["remarkPlugins"]>;
 
 const CHAT_MARKDOWN_REHYPE_PLUGINS = [
@@ -388,6 +414,7 @@ function extractPreCodeMeta(node: unknown): string | undefined {
 type MarkdownAstNode = {
   type?: string;
   meta?: unknown;
+  url?: string;
   data?: {
     hProperties?: Record<string, unknown>;
   };
@@ -414,15 +441,20 @@ function remarkPreserveCodeMeta() {
 }
 
 /**
- * Fenced code also lands on the `code` component, and inline vs block is no
- * longer distinguishable there once both render `<code>` — so inline spans are
- * tagged on the mdast, where the distinction still exists. Code inside a link
- * label stays untagged: linkifying it would nest an anchor inside the link's
- * anchor and steal its clicks.
+ * Preserve Windows drive links as allowed `file:` URLs before sanitization.
+ * The same traversal tags inline code while it can still be distinguished
+ * from fenced code. Code inside links stays untagged to avoid nested anchors.
  */
-function remarkTagInlineCode() {
+function remarkNormalizeLinksAndTagInlineCode() {
   return (tree: MarkdownAstNode) => {
     const visit = (node: MarkdownAstNode, insideLink: boolean) => {
+      if (
+        (node.type === "link" || node.type === "definition") &&
+        typeof node.url === "string" &&
+        WINDOWS_DRIVE_PATH_REGEX.test(node.url)
+      ) {
+        node.url = `file:///${node.url.replaceAll("\\", "/")}`;
+      }
       if (node.type === "inlineCode" && !insideLink) {
         node.data = {
           ...node.data,
@@ -919,9 +951,10 @@ interface MarkdownFileLinkProps {
   copyMarkdown: string;
   theme: "light" | "dark";
   threadRef?: ScopedThreadRef | undefined;
-  onOpen: (targetPath: string) => Promise<AtomCommandResult<unknown, unknown>>;
+  onOpen?: ((targetPath: string) => Promise<AtomCommandResult<unknown, unknown>>) | undefined;
   onOpenInPanel: (workspaceRelativePath: string, line: number | undefined) => void;
   onDownload?: (() => Promise<void>) | undefined;
+  openInEditorMenuLabel: string;
   onOpenInBrowser?: (() => Promise<AtomCommandResult<unknown, unknown>>) | undefined;
   onOpenMedia?: (() => void) | undefined;
   onReveal?: (() => Promise<AtomCommandResult<unknown, unknown>>) | undefined;
@@ -931,8 +964,8 @@ interface MarkdownFileLinkProps {
   className?: string | undefined;
 }
 
-const MARKDOWN_FILE_LINK_CLASS_NAME =
-  "chat-markdown-file-link cursor-pointer transition-colors hover:bg-accent/70";
+const MARKDOWN_FILE_CHIP_CLASS_NAME = "chat-markdown-file-link";
+const MARKDOWN_FILE_LINK_CLASS_NAME = `${MARKDOWN_FILE_CHIP_CLASS_NAME} cursor-pointer transition-colors hover:bg-accent/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70`;
 
 function pathParentSegments(path: string): string[] {
   const normalized = path.replaceAll("\\", "/");
@@ -943,14 +976,12 @@ function pathParentSegments(path: string): string[] {
 function buildFileLinkParentSuffixByPath(filePaths: ReadonlyArray<string>): Map<string, string> {
   const groups = new Map<string, Set<string>>();
   for (const filePath of filePaths) {
-    const pathSegments = filePath
-      .replaceAll("\\", "/")
-      .split("/")
-      .filter((segment) => segment.length > 0);
+    const normalizedPath = filePath.replaceAll("\\", "/");
+    const pathSegments = normalizedPath.split("/").filter((segment) => segment.length > 0);
     const basename = pathSegments[pathSegments.length - 1];
     if (!basename) continue;
     const group = groups.get(basename) ?? new Set<string>();
-    group.add(filePath);
+    group.add(normalizedPath);
     groups.set(basename, group);
   }
 
@@ -1012,7 +1043,8 @@ function extractInlineCodeSpans(text: string): string[] {
 function normalizeMarkdownLinkHrefKey(href: string, cwd?: string): string {
   const normalizedHref = normalizeMarkdownLinkDestination(href);
   const rewrittenHref = rewriteMarkdownFileUriHref(normalizedHref) ?? normalizedHref;
-  return resolveMarkdownFileLinkTarget(rewrittenHref, cwd) ?? rewrittenHref;
+  const target = resolveMarkdownFileLinkTarget(rewrittenHref, cwd) ?? rewrittenHref;
+  return WINDOWS_DRIVE_PATH_REGEX.test(target) ? target.replaceAll("\\", "/") : target;
 }
 
 const MARKDOWN_LINK_FAVICON_CLASS_NAME = "block size-full shrink-0 select-none";
@@ -1484,6 +1516,7 @@ const MarkdownFileLink = memo(function MarkdownFileLink({
   threadRef,
   onOpen,
   onOpenInPanel,
+  openInEditorMenuLabel,
   onOpenInBrowser,
   onDownload,
   onOpenMedia,
@@ -1517,6 +1550,9 @@ const MarkdownFileLink = memo(function MarkdownFileLink({
   }, [onDownload]);
   const downloadFile = useWorkspaceFileDownload(threadRef);
   const handleOpenInEditor = useCallback(() => {
+    if (!onOpen) {
+      return;
+    }
     void (async () => {
       try {
         const result = await onOpen(targetPath);
@@ -1604,6 +1640,44 @@ const MarkdownFileLink = memo(function MarkdownFileLink({
     })();
   }, [onOpenInBrowser, targetPath]);
 
+  const handleRevealInFileManager = useCallback(() => {
+    if (!onReveal) {
+      return;
+    }
+    void (async () => {
+      try {
+        const result = await onReveal();
+        if (result._tag === "Success" || isAtomCommandInterrupted(result)) {
+          return;
+        }
+        reportMarkdownActionFailure(
+          { operation: "reveal-file-in-file-manager", target: targetPath },
+          result.cause,
+        );
+        const error = squashAtomCommandFailure(result);
+        toastManager.add(
+          stackedThreadToast({
+            type: "error",
+            title: "Unable to reveal file",
+            description: error instanceof Error ? error.message : "An error occurred.",
+          }),
+        );
+      } catch (cause) {
+        reportMarkdownActionFailure(
+          { operation: "reveal-file-in-file-manager", target: targetPath },
+          cause,
+        );
+        toastManager.add(
+          stackedThreadToast({
+            type: "error",
+            title: "Unable to reveal file",
+            description: cause instanceof Error ? cause.message : "An error occurred.",
+          }),
+        );
+      }
+    })();
+  }, [onReveal, targetPath]);
+
   const handleCopy = useCallback(
     (value: string, title: string) => {
       if (typeof window === "undefined" || !navigator.clipboard?.writeText) {
@@ -1643,11 +1717,8 @@ const MarkdownFileLink = memo(function MarkdownFileLink({
     [targetPath],
   );
 
-  const handleContextMenu = useCallback(
-    async (event: ReactMouseEvent<HTMLAnchorElement>) => {
-      event.preventDefault();
-      event.stopPropagation();
-
+  const showFileContextMenu = useCallback(
+    async (position: { x: number; y: number }) => {
       const api = readLocalApi();
       if (!api) return;
 
@@ -1656,15 +1727,16 @@ const MarkdownFileLink = memo(function MarkdownFileLink({
           [
             ...(onDownload ? [{ id: "download-saved", label: "Download saved output" }] : []),
             ...(onOpenMedia ? ([{ id: "preview-media", label: "Preview media" }] as const) : []),
-            { id: "open", label: "Open in editor" },
+            ...(onOpen ? ([{ id: "open", label: openInEditorMenuLabel }] as const) : []),
             ...(threadRef ? [{ id: "download", label: "Download file" }] : []),
             ...(onOpenInBrowser
               ? ([{ id: "open-in-browser", label: "Open in integrated browser" }] as const)
               : []),
+            ...(onReveal && revealLabel ? ([{ id: "reveal", label: revealLabel }] as const) : []),
             { id: "copy-relative", label: "Copy relative path" },
             { id: "copy-full", label: "Copy full path" },
           ] as const,
-          { x: event.clientX, y: event.clientY },
+          position,
         );
 
         if (clicked === "download-saved") {
@@ -1685,6 +1757,10 @@ const MarkdownFileLink = memo(function MarkdownFileLink({
         }
         if (clicked === "open-in-browser") {
           handleOpenInBrowser();
+          return;
+        }
+        if (clicked === "reveal") {
+          handleRevealInFileManager();
           return;
         }
         if (clicked === "copy-relative") {
@@ -1708,16 +1784,34 @@ const MarkdownFileLink = memo(function MarkdownFileLink({
       handleOpenInBrowser,
       handleOpenInEditor,
       onDownload,
-      onOpenInBrowser,
       targetPath,
       downloadFile,
       iconPath,
       threadRef,
-      onOpenMedia,
+      handleRevealInFileManager,
+      onOpenInBrowser,
       onOpen,
       onReveal,
+      openInEditorMenuLabel,
+      onOpenMedia,
       revealLabel,
     ],
+  );
+
+  const handleContextMenu = useCallback(
+    (event: ReactMouseEvent<HTMLElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const position =
+        event.clientX === 0 && event.clientY === 0
+          ? (() => {
+              const bounds = event.currentTarget.getBoundingClientRect();
+              return { x: bounds.left, y: bounds.bottom };
+            })()
+          : { x: event.clientX, y: event.clientY };
+      void showFileContextMenu(position);
+    },
+    [showFileContextMenu],
   );
 
   const canOpenInEditor = onOpen !== undefined;
@@ -1741,34 +1835,57 @@ const MarkdownFileLink = memo(function MarkdownFileLink({
       <Tooltip>
         <TooltipTrigger
           render={
-            <a
-              href={href}
-              className={cn(
-                CHAT_FILE_TAG_CHIP_CLASS_NAME,
-                MARKDOWN_FILE_LINK_CLASS_NAME,
-                className,
-              )}
-              data-markdown-copy={copyMarkdown}
-              onClick={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                if (useBrowserPrimaryAction) {
-                  handleOpenInBrowser();
-                  return;
-                }
-                if (hasPrimaryAction) handleOpenInFilePreview();
-              }}
-              onContextMenu={handleContextMenu}
-            >
-              <FileTagChipContent path={iconPath} label={label} theme={theme} selectable />
-            </a>
+            hasPrimaryAction ? (
+              <a
+                href={href}
+                className={cn(
+                  CHAT_FILE_TAG_CHIP_CLASS_NAME,
+                  MARKDOWN_FILE_LINK_CLASS_NAME,
+                  className,
+                )}
+                data-markdown-copy={copyMarkdown}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  if (onOpen && shouldOpenMarkdownFileLinkInEditor(event)) {
+                    handleOpenInEditor();
+                    return;
+                  }
+                  if (useBrowserPrimaryAction) {
+                    handleOpenInBrowser();
+                    return;
+                  }
+                  handleOpenInFilePreview();
+                }}
+                onContextMenu={handleContextMenu}
+              >
+                <FileTagChipContent path={iconPath} label={label} theme={theme} selectable />
+              </a>
+            ) : (
+              <button
+                type="button"
+                aria-label={`File options for ${label}`}
+                aria-haspopup="menu"
+                className={cn(
+                  CHAT_FILE_TAG_CHIP_CLASS_NAME,
+                  MARKDOWN_FILE_LINK_CLASS_NAME,
+                  "select-text",
+                  className,
+                )}
+                data-markdown-copy={copyMarkdown}
+                onClick={handleContextMenu}
+                onContextMenu={handleContextMenu}
+              >
+                <FileTagChipContent path={iconPath} label={label} theme={theme} selectable />
+              </button>
+            )
           }
         />
         <TooltipPopup
           side="top"
           className="max-w-[min(40rem,calc(100vw-2rem))] font-mono text-[11px] leading-tight"
         >
-          <div className="overflow-x-auto whitespace-nowrap [scrollbar-color:color-mix(in_srgb,var(--border)_78%,transparent)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[color-mix(in_srgb,var(--border)_78%,transparent)] [&::-webkit-scrollbar-track]:bg-transparent">
+          <div className="overflow-x-auto whitespace-nowrap [scrollbar-color:color-mix(in_srgb,var(--contrast-border)_78%,transparent)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[color-mix(in_srgb,var(--contrast-border)_78%,transparent)] [&::-webkit-scrollbar-track]:bg-transparent">
             {displayPath}
           </div>
         </TooltipPopup>
@@ -1805,6 +1922,7 @@ function areMarkdownFileLinkPropsEqual(
     previous.threadRef === next.threadRef &&
     previous.onOpen === next.onOpen &&
     previous.onOpenInPanel === next.onOpenInPanel &&
+    previous.openInEditorMenuLabel === next.openInEditorMenuLabel &&
     previous.onOpenInBrowser === next.onOpenInBrowser &&
     previous.onDownload === next.onDownload &&
     previous.onOpenMedia === next.onOpenMedia &&
@@ -1819,6 +1937,7 @@ function ChatMarkdown({
   messageId,
   cwd,
   threadRef,
+  environmentId: explicitEnvironmentId,
   onTaskListChange,
   isStreaming = false,
   skills = EMPTY_MARKDOWN_SKILLS,
@@ -1827,7 +1946,6 @@ function ChatMarkdown({
   parseRawHtml = true,
   imageBaseDir,
   onImageExpand,
-  environmentId: explicitEnvironmentId,
 }: ChatMarkdownProps) {
   const { resolvedTheme } = useTheme();
   const [localMediaPreview, setLocalMediaPreview] = useState<ExpandedImagePreview | null>(null);
@@ -1852,6 +1970,12 @@ function ChatMarkdown({
     reportFailure: false,
   });
   const environmentId = threadRef?.environmentId ?? explicitEnvironmentId ?? null;
+  const remoteOpen = useRemoteOpenResolution(environmentId);
+  const canUseShellActions = canUseMarkdownFileShellActions(
+    environmentId,
+    remoteOpen.state.mode,
+    remoteOpen.isResolved,
+  );
   const preparedConnection = usePreparedConnection(environmentId);
   const openMarkdownMedia = useCallback(
     (source: string, resolvedFilePath?: string) => {
@@ -1893,9 +2017,36 @@ function ChatMarkdown({
     serverEnvironment.configValueAtom(threadRef?.environmentId ?? environmentId),
   );
   const projects = useProjects();
-  const openInPreferredEditor = useOpenInPreferredEditor(
-    environmentId,
-    serverConfig?.availableEditors ?? [],
+  const availableEditors = serverConfig?.availableEditors ?? [];
+  const [preferredEditor] = usePreferredEditor(availableEditors);
+  const preferredEditorMenuLabel = openInEditorMenuLabel(preferredEditor);
+  const openInPreferredEditor = useOpenInPreferredEditor(environmentId, availableEditors);
+  const openInEditor = useAtomCommand(shellEnvironment.openInEditor, {
+    reportFailure: false,
+  });
+  const revealInFileManagerLabel =
+    environmentId !== null &&
+    serverConfig?.shellRevealInFileManager === true &&
+    serverConfig.availableEditors.includes("file-manager")
+      ? serverConfig.shellRevealInFileManagerKind === undefined
+        ? revealInFileExplorerLabelForOs(serverConfig.environment.platform.os)
+        : revealInFileExplorerLabelForKind(serverConfig.shellRevealInFileManagerKind)
+      : undefined;
+  const revealFileInFileManager = useCallback(
+    (filePath: string) => {
+      if (environmentId === null) {
+        return Promise.resolve(
+          AsyncResult.failure<void, PreferredEditorEnvironmentRequiredError>(
+            Cause.fail(new PreferredEditorEnvironmentRequiredError({ targetPath: filePath })),
+          ),
+        );
+      }
+      return openInEditor({
+        environmentId,
+        input: { cwd: filePath, editor: "file-manager", reveal: true },
+      });
+    },
+    [environmentId, openInEditor],
   );
   const diffThemeName = resolveDiffThemeName(resolvedTheme);
   const markdownFileLinkMetaByHref = useMemo(() => {
@@ -1933,7 +2084,7 @@ function ChatMarkdown({
   }, [inlineCodeFileLinkMetaByText, markdownFileLinkMetaByHref]);
   const markdownUrlTransform = useCallback(
     (href: string, key: string) =>
-      isWindowsDrivePathHref(href)
+      parseAssistantCitationHref(href) || isWindowsDrivePathHref(href)
         ? href
         : key === "src"
           ? (rewriteMarkdownFileUriHref(href) ?? defaultUrlTransform(href))
@@ -1952,6 +2103,10 @@ function ChatMarkdown({
     event.clipboardData.setData("text/html", payload.html);
   }, []);
   const openChangeRequestLink = useOpenChangeRequestLink(threadRef);
+  // Subscribed rather than read at click time: the anchor has to decide
+  // synchronously whether to intercept its `_blank`, and a subscription is what
+  // makes a persisted "app" apply once settings hydrate after launch.
+  const linkTargetPreference = useClientSettings((settings) => settings.browserLinkTarget);
   const resolveThreadPullRequest = useCallback(
     (href: string): ThreadLinkedPullRequest | null => {
       if (
@@ -2067,6 +2222,26 @@ function ChatMarkdown({
     },
     [createAssetUrl, messageId, preparedConnection, threadRef],
   );
+  const findWorkspaceBasenameMatch = useCallback(
+    async (workspaceRelativePath: string) => {
+      if (!cwd || environmentId === null || !needsWorkspaceBasenameLookup(workspaceRelativePath)) {
+        return null;
+      }
+      const result = await searchProjectEntries({
+        environmentId,
+        input: {
+          cwd,
+          query: workspaceRelativePath,
+          limit: WORKSPACE_BASENAME_LOOKUP_LIMIT,
+          kind: "file",
+        },
+      });
+      return result._tag === "Success"
+        ? pickWorkspaceBasenameMatch(workspaceRelativePath, result.value.entries)
+        : null;
+    },
+    [cwd, environmentId, searchProjectEntries],
+  );
   // A bare filename resolves to the workspace root, which is rarely where the
   // file is, so ask the index before opening.
   const openFileInPanel = useCallback(
@@ -2082,24 +2257,23 @@ function ChatMarkdown({
         return;
       }
       void (async () => {
-        const result = await searchProjectEntries({
-          environmentId: threadRef.environmentId,
-          input: {
-            cwd,
-            query: workspaceRelativePath,
-            limit: WORKSPACE_BASENAME_LOOKUP_LIMIT,
-            kind: "file",
-          },
-        });
-        const match =
-          result._tag === "Success"
-            ? pickWorkspaceBasenameMatch(workspaceRelativePath, result.value.entries)
-            : null;
+        const match = await findWorkspaceBasenameMatch(workspaceRelativePath);
         if (!isLatestLookup()) return;
         openAt(match ?? workspaceRelativePath);
       })();
     },
-    [cwd, searchProjectEntries, threadRef],
+    [cwd, findWorkspaceBasenameMatch, threadRef],
+  );
+  const revealMarkdownFileInFileManager = useCallback(
+    async (fileLinkMeta: MarkdownFileLinkMeta) => {
+      const workspaceRelativePath = fileLinkMeta.workspaceRelativePath;
+      const match = workspaceRelativePath
+        ? await findWorkspaceBasenameMatch(workspaceRelativePath)
+        : null;
+      const filePath = match && cwd ? resolvePathLinkTarget(match, cwd) : fileLinkMeta.filePath;
+      return revealFileInFileManager(filePath);
+    },
+    [cwd, findWorkspaceBasenameMatch, revealFileInFileManager],
   );
   /* eslint-disable react/no-unstable-nested-components -- ReactMarkdown requires component
    * renderers that close over this message's metadata. useMemo keeps them stable until that
@@ -2111,7 +2285,9 @@ function ChatMarkdown({
       className?: string,
       mediaSource?: string,
     ) => {
-      const parentSuffix = fileLinkParentSuffixByPath.get(fileLinkMeta.filePath);
+      const parentSuffix = fileLinkParentSuffixByPath.get(
+        fileLinkMeta.filePath.replaceAll("\\", "/"),
+      );
       const labelParts = [fileLinkMeta.basename];
       if (typeof parentSuffix === "string" && parentSuffix.length > 0) {
         labelParts.push(parentSuffix);
@@ -2144,13 +2320,20 @@ function ChatMarkdown({
               ? () => downloadOutput(fileLinkMeta.filePath)
               : undefined
           }
-          onOpen={openInPreferredEditor}
+          {...(canUseShellActions ? { onOpen: openInPreferredEditor } : {})}
           onOpenInPanel={openFileInPanel}
           onOpenMedia={
             threadRef && canPreviewMedia
               ? () => openMarkdownMedia(mediaPath, fileLinkMeta.filePath)
               : undefined
           }
+          openInEditorMenuLabel={preferredEditorMenuLabel}
+          onReveal={
+            canUseShellActions && revealInFileManagerLabel !== undefined
+              ? () => revealMarkdownFileInFileManager(fileLinkMeta)
+              : undefined
+          }
+          revealLabel={revealInFileManagerLabel}
           onOpenInBrowser={
             threadRef &&
             isPreviewSupportedInRuntime() &&
@@ -2236,8 +2419,13 @@ function ChatMarkdown({
         );
       },
       a({ node, href, children, title: _title, ...props }) {
+        const citation = href ? parseAssistantCitationHref(href) : null;
+        if (citation) return <AssistantCitationChip citation={citation} />;
         const normalizedHref = href ? normalizeMarkdownLinkHrefKey(href, cwd) : "";
-        const fileLinkMeta = normalizedHref ? markdownFileLinkMetaByHref.get(normalizedHref) : null;
+        const fileLinkMeta = normalizedHref
+          ? (markdownFileLinkMetaByHref.get(normalizedHref) ??
+            resolveMarkdownFileLinkMeta(normalizedHref, cwd))
+          : null;
         if (!fileLinkMeta) {
           const faviconHost = resolveExternalWebLinkHost(href);
           const isSameDocumentLink = href?.startsWith("#") ?? false;
@@ -2272,9 +2460,35 @@ function ChatMarkdown({
                 }
                 // A link to a change request in a workspace project opens beside the
                 // conversation instead of in a browser: it is the thing being talked about, and
-                // the panel it opens offers the browser as one of its actions. Anything else is
-                // an ordinary link and keeps the `_blank` the shell already handles.
-                if (href) openChangeRequestLink(event, href);
+                // the panel it opens offers the browser as one of its actions.
+                if (!href || openChangeRequestLink(event, href)) return;
+                // Anything else follows the "Open links in" setting. The system browser
+                // keeps the `_blank` the shell already handles; the in-app browser needs
+                // the click intercepted here. A modifier click is the way out of the
+                // in-app default, so it is left to the shell too.
+                if (
+                  event.defaultPrevented ||
+                  resolveLinkTarget({
+                    url: href,
+                    event,
+                    preference: linkTargetPreference,
+                    canOpenInApp: canOpenInPreview,
+                  }) !== "app"
+                ) {
+                  return;
+                }
+                event.preventDefault();
+                event.stopPropagation();
+                // The click was taken from the shell, so an in-app open that fails
+                // hands the link to the system browser instead of dropping it.
+                void openExternalLinkInPreview(href).then((result) => {
+                  if (result._tag === "Success" || isAtomCommandInterrupted(result)) return;
+                  reportMarkdownActionFailure(
+                    { operation: "open-link-in-preview", target: href },
+                    result.cause,
+                  );
+                  void readLocalApi()?.shell.openExternal(href);
+                });
               }}
               onContextMenu={(event) => {
                 if (!href || !faviconHost) return;
@@ -2515,6 +2729,7 @@ function ChatMarkdown({
       },
     };
   }, [
+    canUseShellActions,
     cwd,
     diffThemeName,
     downloadOutput,
@@ -2523,6 +2738,7 @@ function ChatMarkdown({
     inlineCodeFileLinkMetaByText,
     imageBaseDir,
     isStreaming,
+    linkTargetPreference,
     markdownFileLinkMetaByHref,
     onTaskListChange,
     onImageExpand,
@@ -2533,8 +2749,11 @@ function ChatMarkdown({
     openChangeRequestLink,
     openExternalLinkInPreview,
     openMarkdownFileInPreview,
+    preferredEditorMenuLabel,
     resolveThreadPullRequest,
     resolvedTheme,
+    revealMarkdownFileInFileManager,
+    revealInFileManagerLabel,
     skills,
     text,
     threadRef,

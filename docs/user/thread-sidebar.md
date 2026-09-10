@@ -1,8 +1,11 @@
 # Organizing threads
 
 Pin a thread from its context menu to keep it in the pinned section above your active work.
-Pinned threads are shown independently of their project, including when you connect to more than
-one environment.
+`mod+shift+p` pins or unpins the thread you have open. Pinned threads are shown independently of
+their project, including when you connect to more than one environment.
+
+To require confirmation before unpinning, enable **Settings → General → Unpin confirmation**. The
+confirmation applies to the sidebar controls, thread menus, and the `mod+shift+p` shortcut.
 
 When you un-settle a thread, it returns to the top of the active list so you can find it right
 away. Its original creation time does not change. Other threads keep their positions.
@@ -17,6 +20,28 @@ other connected devices.
 If reordering is unavailable for one environment, update the Pulse Code server running in that
 environment. Older servers can still pin and unpin threads, but do not understand synced ordering;
 their pinned threads keep the default newest-first order below the ones you have arranged.
+
+## Environment icons
+
+When you are connected to more than one environment, every thread that lives somewhere other than
+the machine you are on wears a small icon for that machine at the end of its row: a server, a cloud
+VM, a desktop, a laptop, a Mac mini, or a Mac Studio. In the hosted web app and the mobile app,
+where every environment is remote, each row wears its machine so you can tell them apart at a
+glance. The same icon appears in the thread tooltip, the "Run on" picker, the pull request server
+filter, and the environment lists under **Settings → Connections**.
+
+Servers pick the icon themselves from the hardware they run on. A Mac reports its model, a Linux
+machine reports its chassis type and whether it is a virtual machine, and anything without a usable
+signal shows a generic server. To override it, open **Settings → Connections** and choose an icon
+for that environment; **Automatic** goes back to what the server detected. The choice is stored on
+that server, so every device that connects to it sees the same icon.
+
+## Panel motion
+
+The main sidebar, right panel, and terminal drawer open and close immediately by default. Under
+**Settings → Appearance → Motion**, move the **Panel animations** slider above 0 ms to add motion.
+The duration can be set up to 400 ms. Clicking the preview replays all three panel transitions; at
+0 ms, it snaps between the same open and closed states.
 
 ## Environment artwork
 

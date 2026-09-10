@@ -76,6 +76,7 @@ import { stackedThreadToast, toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { AddProviderInstanceDialog } from "./AddProviderInstanceDialog";
 import { ProviderInstanceCard } from "./ProviderInstanceCard";
+import { ProviderSetupSection, readAntigravityAuthMethod } from "./ProviderSetupSection";
 import { DRIVER_OPTIONS, getDriverOption } from "./providerDriverMeta";
 import { searchableSetting } from "./settingsSearch";
 import {
@@ -192,7 +193,26 @@ function EnvironmentUnavailableRow({
   );
 }
 
-export function ProviderSettingsPanel() {
+interface ProviderSettingsTarget {
+  readonly environmentId?: EnvironmentId;
+  readonly instanceId?: ProviderInstanceId;
+}
+
+function configuredBinaryPath(config: unknown): string {
+  if (config === null || typeof config !== "object" || !("binaryPath" in config)) return "";
+  return typeof config.binaryPath === "string" ? config.binaryPath.trim() : "";
+}
+
+export function ProviderSettingsPanel(target: ProviderSettingsTarget) {
+  return (
+    <ProviderSettingsPanelContent
+      key={`${target.environmentId ?? ""}:${target.instanceId ?? ""}`}
+      {...target}
+    />
+  );
+}
+
+function ProviderSettingsPanelContent(target: ProviderSettingsTarget) {
   const { environments, isReady } = useEnvironments();
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const options = useMemo(
@@ -203,13 +223,15 @@ export function ProviderSettingsPanel() {
   // device that drops out of the catalog falls back without erasing the pick —
   // if it reappears (e.g. after a reconnect) the selection is restored.
   const [selectedEnvironmentId, setSelectedEnvironmentId] = useState<EnvironmentId | null>(
-    primaryEnvironmentId,
+    target.environmentId ?? primaryEnvironmentId,
   );
-  const effectiveEnvironmentId = resolveSelectedProviderEnvironmentId(
-    options,
-    selectedEnvironmentId,
-    primaryEnvironmentId,
-  );
+  const targetEnvironmentMissing =
+    target.environmentId !== undefined &&
+    selectedEnvironmentId === target.environmentId &&
+    !options.some((item) => item.environmentId === target.environmentId);
+  const effectiveEnvironmentId = targetEnvironmentMissing
+    ? target.environmentId
+    : resolveSelectedProviderEnvironmentId(options, selectedEnvironmentId, primaryEnvironmentId);
   const selectedEnvironment =
     options.find((environment) => environment.environmentId === effectiveEnvironmentId) ?? null;
   const onlyPrimaryDevice =
@@ -217,6 +239,14 @@ export function ProviderSettingsPanel() {
 
   return (
     <SettingsPageContainer>
+      {targetEnvironmentMissing ? (
+        <SettingsSection title="Devices">
+          <SettingsRow
+            title="Device unavailable"
+            description="Reconnect this device to set up its provider, or select another device."
+          />
+        </SettingsSection>
+      ) : null}
       {!onlyPrimaryDevice ? (
         <SettingsSection title="Devices">
           {options.length === 0 ? (
@@ -277,7 +307,13 @@ export function ProviderSettingsPanel() {
 
       {selectedEnvironment ? (
         <SelectedEnvironmentProviderSettings
-          key={selectedEnvironment.environmentId}
+          key={`${selectedEnvironment.environmentId}:${target.instanceId ?? ""}`}
+          targetInstanceId={
+            target.environmentId === undefined ||
+            selectedEnvironment.environmentId === target.environmentId
+              ? target.instanceId
+              : undefined
+          }
           environment={selectedEnvironment}
         />
       ) : null}
@@ -286,26 +322,46 @@ export function ProviderSettingsPanel() {
 }
 
 function SelectedEnvironmentProviderSettings({
+  targetInstanceId,
   environment,
 }: {
   readonly environment: EnvironmentPresentation;
+  readonly targetInstanceId?: ProviderInstanceId | undefined;
 }) {
   const isPrimary = environment.entry.target._tag === "PrimaryConnectionTarget";
   if (isPrimary) {
     // The desktop app owns its primary server outright; a browser session
     // checks the scopes its cookie session was granted.
     if (isElectron) {
-      return <AccessGatedProviderSettings environment={environment} operateAccess="granted" />;
+      return (
+        <AccessGatedProviderSettings
+          targetInstanceId={targetInstanceId}
+          environment={environment}
+          operateAccess="granted"
+        />
+      );
     }
-    return <PrimarySessionGatedProviderSettings environment={environment} />;
+    return (
+      <PrimarySessionGatedProviderSettings
+        targetInstanceId={targetInstanceId}
+        environment={environment}
+      />
+    );
   }
-  return <RemoteSessionGatedProviderSettings environment={environment} />;
+  return (
+    <RemoteSessionGatedProviderSettings
+      targetInstanceId={targetInstanceId}
+      environment={environment}
+    />
+  );
 }
 
 function PrimarySessionGatedProviderSettings({
+  targetInstanceId,
   environment,
 }: {
   readonly environment: EnvironmentPresentation;
+  readonly targetInstanceId?: ProviderInstanceId | undefined;
 }) {
   const primarySessionState = usePrimarySessionState();
   const operateAccess = resolvePrimaryOperateAccess({
@@ -315,13 +371,21 @@ function PrimarySessionGatedProviderSettings({
     isPending: primarySessionState.isPending,
     hasError: primarySessionState.error !== null,
   });
-  return <AccessGatedProviderSettings environment={environment} operateAccess={operateAccess} />;
+  return (
+    <AccessGatedProviderSettings
+      targetInstanceId={targetInstanceId}
+      environment={environment}
+      operateAccess={operateAccess}
+    />
+  );
 }
 
 function RemoteSessionGatedProviderSettings({
+  targetInstanceId,
   environment,
 }: {
   readonly environment: EnvironmentPresentation;
+  readonly targetInstanceId?: ProviderInstanceId | undefined;
 }) {
   const sessionState = useEnvironmentSessionState(environment.environmentId);
   const operateAccess = resolveRemoteOperateAccess({
@@ -329,14 +393,22 @@ function RemoteSessionGatedProviderSettings({
     isPending: sessionState.isPending,
     hasError: sessionState.hasError,
   });
-  return <AccessGatedProviderSettings environment={environment} operateAccess={operateAccess} />;
+  return (
+    <AccessGatedProviderSettings
+      targetInstanceId={targetInstanceId}
+      environment={environment}
+      operateAccess={operateAccess}
+    />
+  );
 }
 
 function AccessGatedProviderSettings({
+  targetInstanceId,
   environment,
   operateAccess,
 }: {
   readonly environment: EnvironmentPresentation;
+  readonly targetInstanceId?: ProviderInstanceId | undefined;
   readonly operateAccess: ProviderOperateAccess;
 }) {
   const access = classifyProviderEnvironmentAccess({
@@ -349,6 +421,7 @@ function AccessGatedProviderSettings({
   }
   return (
     <EnvironmentProviderSettings
+      targetInstanceId={targetInstanceId}
       environmentId={environment.environmentId}
       environmentLabel={environment.label}
       readOnly={access.kind === "read-only"}
@@ -357,11 +430,13 @@ function AccessGatedProviderSettings({
 }
 
 export function EnvironmentProviderSettings({
+  targetInstanceId,
   environmentId,
   environmentLabel,
   readOnly = false,
 }: {
   readonly environmentId: EnvironmentId;
+  readonly targetInstanceId?: ProviderInstanceId | undefined;
   readonly environmentLabel: string;
   /**
    * Render the full provider layout, greyed out and inert, when this session's
@@ -386,7 +461,9 @@ export function EnvironmentProviderSettings({
   const [updatingProviderDrivers, setUpdatingProviderDrivers] = useState<
     ReadonlySet<ProviderDriverKind>
   >(() => new Set());
-  const [openInstanceDetails, setOpenInstanceDetails] = useState<Record<string, boolean>>({});
+  const [openInstanceDetails, setOpenInstanceDetails] = useState<Record<string, boolean>>(() =>
+    targetInstanceId ? { [targetInstanceId]: true } : {},
+  );
   const refreshingRef = useRef(false);
   const updatingDriversRef = useRef<Set<ProviderDriverKind>>(new Set());
 
@@ -431,7 +508,7 @@ export function EnvironmentProviderSettings({
     void (async () => {
       const result = await refreshServerProviders({
         environmentId,
-        input: {},
+        input: { refreshModels: true },
       });
       refreshingRef.current = false;
       setIsRefreshingProviders(false);
@@ -796,6 +873,13 @@ export function EnvironmentProviderSettings({
             }
           />
 
+          {targetInstanceId !== undefined &&
+          !rows.some((row) => row.instanceId === targetInstanceId) ? (
+            <SettingsRow
+              title="Provider unavailable"
+              description="This provider instance is no longer available on this device."
+            />
+          ) : null}
           {rows.map((row) => {
             const driverOption = getDriverOption(row.driver);
             const liveProvider = serverProviders.find(
@@ -842,6 +926,23 @@ export function EnvironmentProviderSettings({
                 instance={row.instance}
                 driverOption={driverOption}
                 liveProvider={liveProvider}
+                setup={
+                  row.driver === "antigravity" ? (
+                    <ProviderSetupSection
+                      environmentId={environmentId}
+                      environmentLabel={environmentLabel}
+                      instanceId={row.instanceId}
+                      provider={liveProvider}
+                      binaryPath={configuredBinaryPath(row.instance.config)}
+                      authMethod={readAntigravityAuthMethod(row.instance.config)}
+                      enabled={resolveProviderInstanceEnabled(row.instance)}
+                      readOnly={readOnly}
+                      onEnable={() =>
+                        updateProviderInstance(row, { ...row.instance, enabled: true })
+                      }
+                    />
+                  ) : null
+                }
                 isExpanded={openInstanceDetails[row.instanceId] ?? false}
                 onExpandedChange={(open) =>
                   setOpenInstanceDetails((existing) => ({

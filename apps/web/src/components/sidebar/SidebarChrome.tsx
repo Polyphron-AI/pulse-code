@@ -1,4 +1,5 @@
 import { WorkspaceSpaceSelector } from "../workspace/WorkspaceSpaceSelector";
+import { readPullRequestListPreferences } from "../pullRequest/pullRequestListPreferences";
 import {
   ArrowLeftIcon,
   ChartNoAxesColumnIcon,
@@ -169,7 +170,7 @@ export const SidebarChromeFooter = memo(function SidebarChromeFooter() {
   }, [isMobile, setOpenMobile]);
   const handlePullRequestsClick = useCallback(() => {
     closeMobileSidebar();
-    void navigate({ to: "/pull-requests", search: { involvement: "all", state: "open" } });
+    void navigate({ to: "/pull-requests", search: readPullRequestListPreferences() });
   }, [closeMobileSidebar, navigate]);
   const handleIssuesClick = useCallback(() => {
     closeMobileSidebar();

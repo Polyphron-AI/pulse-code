@@ -118,11 +118,15 @@ function provider(): ServerProvider {
 
 function renderPanel(options?: {
   readonly readOnly?: boolean;
+  readonly targetInstanceId?: ProviderInstanceId;
 }): ReactElement<Record<string, unknown>> {
   hooks.beginRender();
   return EnvironmentProviderSettings({
     environmentId,
     environmentLabel: "Remote device",
+    ...(options?.targetInstanceId === undefined
+      ? {}
+      : { targetInstanceId: options.targetInstanceId }),
     ...(options?.readOnly === undefined ? {} : { readOnly: options.readOnly }),
   }) as ReactElement<Record<string, unknown>>;
 }
@@ -150,6 +154,27 @@ describe("EnvironmentProviderSettings routing", () => {
     expect(settingsState.updateEnvironmentIds).toEqual([environmentId]);
   });
 
+  it("expands only the requested provider account", () => {
+    settingsState.value = {
+      ...DEFAULT_UNIFIED_SETTINGS,
+      providerInstances: {
+        [customId]: { driver: ProviderDriverKind.make("codex"), enabled: true },
+      },
+    };
+    atoms.providers = [provider()];
+    const panel = renderPanel({ targetInstanceId: customId });
+    expect(
+      visitElements(panel, (element) => element.props.isExpanded === true)?.props.instanceId,
+    ).toBe(customId);
+  });
+
+  it("does not open a different account when a targeted provider was removed", () => {
+    atoms.providers = [provider()];
+    const panel = renderPanel({ targetInstanceId: customId });
+    expect(visitElements(panel, (element) => element.props.isExpanded === true)).toBeNull();
+    expect(settingsState.updateSettings).not.toHaveBeenCalled();
+  });
+
   it("routes refresh and provider update commands to the selected environment", async () => {
     atoms.providers = [provider()];
     const panel = renderPanel();
@@ -161,7 +186,10 @@ describe("EnvironmentProviderSettings routing", () => {
     (refreshButton?.props.onClick as (() => void) | undefined)?.();
     await flushPromises();
 
-    expect(commands.refresh).toHaveBeenCalledWith({ environmentId, input: {} });
+    expect(commands.refresh).toHaveBeenCalledWith({
+      environmentId,
+      input: { refreshModels: true },
+    });
 
     const providerCard = visitElements(
       panel,

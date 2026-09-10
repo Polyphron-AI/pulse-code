@@ -33,9 +33,9 @@ interface StatePresentation {
 }
 
 /**
- * How a pull request's state reads on this page. Open, closed and merged use the same ink as
- * the thread badge in `ThreadStatusIndicators`, so one pull request cannot look like two
- * different things in two places; draft and conflicts are states that badge never shows.
+ * How a pull request's state reads on this page. Open, closed, merged, and draft use the same
+ * ink as the thread badge in `ThreadStatusIndicators`, so one pull request cannot look like two
+ * different things in two places.
  *
  * Draft outranks conflicts: a draft is not heading for a merge yet, so conflicts only surface
  * once it is real work.
@@ -242,7 +242,7 @@ const REVIEW_OUTCOME_PRESENTATION = {
     toneClassName: "text-muted-foreground/70",
     ringClassName: "ring-2 ring-muted-foreground/60",
     staleRingClassName:
-      "ring-2 ring-[color-mix(in_srgb,var(--muted-foreground)_30%,var(--background))]",
+      "ring-2 ring-[color-mix(in_srgb,var(--contrast-muted-foreground)_30%,var(--background))]",
     badgeVariant: "outline",
   },
 } as const satisfies Record<

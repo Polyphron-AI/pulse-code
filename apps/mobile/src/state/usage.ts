@@ -16,6 +16,7 @@ import {
   type UsageSummary,
   type UsageSummaryInput,
 } from "@t3tools/contracts";
+import { runAtomCommand } from "@t3tools/client-runtime/state/runtime";
 import { mergeUsage, type EnvironmentUsage, type MergedUsage } from "@t3tools/shared/usageMerge";
 import * as Option from "effect/Option";
 import { AsyncResult, Atom } from "effect/unstable/reactivity";
@@ -116,11 +117,21 @@ export function useUsage(
   const refresh = useCallback(
     async (nextInput?: UsageSummaryInput) => {
       const input = nextInput ?? (JSON.parse(windowKey) as UsageSummaryInput);
-      for (const environment of selectedEnvironments) {
-        appAtomRegistry.refresh(
-          serverEnvironment.usageSummary({ environmentId: environment.environmentId, input }),
-        );
-      }
+      await Promise.all(
+        selectedEnvironments.map(async ({ environmentId }) => {
+          const query = serverEnvironment.usageSummary({ environmentId, input });
+          try {
+            await runAtomCommand(
+              appAtomRegistry,
+              serverEnvironment.refreshUsageRates,
+              { environmentId, input: {} },
+              { reportFailure: false },
+            );
+          } finally {
+            appAtomRegistry.refresh(query);
+          }
+        }),
+      );
     },
     [selectedEnvironments, windowKey],
   );

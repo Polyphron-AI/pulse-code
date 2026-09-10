@@ -31,6 +31,7 @@ import {
   type ProviderRuntimeEvent,
   type ProviderSession,
 } from "@t3tools/contracts";
+import { expandAssistantCitationsForProvider } from "@t3tools/shared/assistantCitations";
 import { causeErrorTag } from "@t3tools/shared/observability";
 import * as Deferred from "effect/Deferred";
 import { resolveProjectAgentBrowserAccess } from "@t3tools/shared/serverSettings";
@@ -793,6 +794,26 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
           );
         }
         const persistedBinding = Option.getOrUndefined(yield* directory.getBinding(threadId));
+        if (
+          persistedBinding?.provider === resolvedProvider &&
+          persistedBinding.providerInstanceId !== resolvedInstanceId &&
+          (input.resumeCursor != null || persistedBinding.resumeCursor != null)
+        ) {
+          const previousInstanceId = yield* requireBindingInstanceId(
+            "ProviderService.startSession",
+            persistedBinding,
+          );
+          const previousInfo = yield* registry.getInstanceInfo(previousInstanceId);
+          if (
+            previousInfo.continuationIdentity.continuationKey !==
+            instanceInfo.continuationIdentity.continuationKey
+          ) {
+            return yield* toValidationError(
+              "ProviderService.startSession",
+              `Thread '${threadId}' cannot switch from instance '${previousInstanceId}' to '${resolvedInstanceId}' because their provider resume state is incompatible.`,
+            );
+          }
+        }
         const effectiveResumeCursor =
           input.resumeCursor ??
           (persistedBinding?.providerInstanceId === resolvedInstanceId
@@ -904,6 +925,16 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
       );
     }
 
+    const inputTextWithCitations =
+      parsed.input === undefined ? undefined : expandAssistantCitationsForProvider(parsed.input);
+    if (inputTextWithCitations !== parsed.input) {
+      yield* decodeInputOrValidationError({
+        operation: "ProviderService.sendTurn",
+        schema: ProviderSendTurnInput.fields.input,
+        payload: inputTextWithCitations,
+      });
+    }
+
     // Every attachment gets an on-disk path in the prompt so the model's tools
     // can dereference the actual file. All attachments then go to the adapter,
     // and each adapter decides what its provider ingests natively: OpenCode
@@ -921,8 +952,8 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     });
     const inputTextWithAttachmentPaths =
       attachmentPathLines.length === 0
-        ? parsed.input
-        : [parsed.input, attachmentPathLines.join("\n")]
+        ? inputTextWithCitations
+        : [inputTextWithCitations, attachmentPathLines.join("\n")]
             .filter((part): part is string => typeof part === "string" && part.length > 0)
             .join("\n\n");
 
@@ -1468,6 +1499,21 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
   const getInstanceInfo: ProviderServiceMethod<"getInstanceInfo"> = (instanceId) =>
     registry.getInstanceInfo(instanceId);
 
+  const assertConversationRollbackSupported: ProviderServiceMethod<"assertConversationRollbackSupported"> =
+    Effect.fn("assertConversationRollbackSupported")(function* (threadId) {
+      const routed = yield* resolveRoutableSession({
+        threadId,
+        operation: "ProviderService.assertConversationRollbackSupported",
+        allowRecovery: false,
+      });
+      if (routed.adapter.capabilities.supportsConversationRollback === false) {
+        return yield* toValidationError(
+          "ProviderService.assertConversationRollbackSupported",
+          `Provider '${routed.adapter.provider}' does not support conversation rewind.`,
+        );
+      }
+    });
+
   const rollbackConversation: ProviderServiceMethod<"rollbackConversation"> = Effect.fn(
     "rollbackConversation",
   )(function* (rawInput) {
@@ -1481,6 +1527,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     }
     let metricProvider = "unknown";
     return yield* Effect.gen(function* () {
+      yield* assertConversationRollbackSupported(input.threadId);
       const routed = yield* resolveRoutableSession({
         threadId: input.threadId,
         operation: "ProviderService.rollbackConversation",
@@ -1588,6 +1635,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     listSessions,
     getCapabilities,
     getInstanceInfo,
+    assertConversationRollbackSupported,
     rollbackConversation,
     // Each access creates a fresh PubSub subscription so that multiple
     // consumers (ProviderRuntimeIngestion, CheckpointReactor, etc.) each

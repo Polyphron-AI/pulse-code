@@ -96,9 +96,20 @@ export const SETTINGS_SEARCH_ITEMS = [
     targetId: "appearance",
   },
   {
+    // Prefixed because the slider control already owns the `appearance-contrast` id.
+    id: "setting-appearance-contrast",
+    title: "Contrast",
+    to: "/settings/appearance",
+  },
+  {
     // Prefixed because the slider control already owns the `glass-opacity` id.
     id: "setting-glass-opacity",
     title: "Glass opacity",
+    to: "/settings/appearance",
+  },
+  {
+    id: "panel-animations",
+    title: "Panel animations",
     to: "/settings/appearance",
   },
   {
@@ -167,6 +178,30 @@ export const SETTINGS_SEARCH_ITEMS = [
     id: "hide-whitespace-changes",
     title: "Hide whitespace changes",
     to: "/settings/general",
+    searchTerms: ["diff ignore spaces edits default"],
+  },
+  {
+    id: "diff-layout",
+    title: "Diff layout",
+    to: "/settings/general",
+    searchTerms: ["stacked split side by side unified inline view"],
+  },
+  {
+    id: "proactive-panels",
+    title: "Proactive panels",
+    to: "/settings/general",
+    searchTerms: ["automatically open diff pull request pr right panel agent completion"],
+  },
+  {
+    id: "skills-in-slash-menu",
+    title: "Show skills in slash menu",
+    to: "/settings/general",
+  },
+  {
+    id: "composer-collapse",
+    title: "Collapse composer on scroll",
+    to: "/settings/general",
+    searchTerms: ["composer rest resting scroll wheel conversation timeline shrink minimize"],
   },
   {
     id: "provider-update-checks",
@@ -192,6 +227,11 @@ export const SETTINGS_SEARCH_ITEMS = [
     id: "scheduled-chats",
     title: "Scheduled chats",
     to: "/settings/scheduled-chats",
+  },
+  {
+    id: "unpin-confirmation",
+    title: "Unpin confirmation",
+    to: "/settings/general",
   },
   {
     id: "archive-confirmation",
@@ -231,6 +271,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     to: "/settings/general",
   },
   {
+    id: "legacy-context-window-indicator",
+    title: "Context window indicator (legacy)",
+    to: "/settings/general",
+    searchTerms: ["composer meter usage tokens circle old"],
+  },
+  {
     id: "legacy-token-streaming",
     title: "Stream token by token (legacy)",
     to: "/settings/general",
@@ -249,6 +295,9 @@ export const SETTINGS_SEARCH_ITEMS = [
     id: "providers",
     title: "Providers",
     to: "/settings/providers",
+    searchTerms: [
+      "Antigravity Google sign in sign out install authentication api key models codex claude cursor grok opencode omp Oh My Pi",
+    ],
   },
   {
     id: "agent-browser-access",
@@ -286,6 +335,18 @@ export const SETTINGS_SEARCH_ITEMS = [
     targetId: "browser",
   },
   {
+    id: "browser-recording-frame-rate",
+    title: "Browser recording frame rate",
+    to: "/settings/integrations",
+    targetId: "browser",
+  },
+  {
+    id: "browser-link-target",
+    title: "Open links in",
+    to: "/settings/integrations",
+    searchTerms: ["links default browser in-app browser external open", "external links"],
+  },
+  {
     id: "browser-auto-show-floating-preview",
     title: "Auto-show floating preview",
     to: "/settings/integrations",
@@ -313,6 +374,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     id: "source-control",
     title: "Source control",
     to: "/settings/source-control",
+  },
+  {
+    id: "environment-icon",
+    title: "Environment icon",
+    to: "/settings/connections",
+    searchTerms: ["machine glyph sidebar mac mini studio laptop desktop server cloud vm"],
   },
   {
     id: "remote-environments",

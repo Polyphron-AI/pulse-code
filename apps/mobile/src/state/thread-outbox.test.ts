@@ -1,14 +1,48 @@
 import { describe, expect, it } from "@effect/vitest";
-import { OrchestrationDispatchCommandError } from "@t3tools/contracts";
+import { EnvironmentNotRegisteredError } from "@t3tools/client-runtime/connection";
+import { isTransportConnectionErrorMessage } from "@t3tools/client-runtime/errors";
+import { EnvironmentRpcUnavailableError } from "@t3tools/client-runtime/rpc";
 import {
   CommandId,
+  EnvironmentAuthorizationError,
   EnvironmentId,
   MessageId,
+  OrchestrationDispatchCommandError,
   ProjectId,
   ProviderInstanceId,
   ThreadId,
 } from "@t3tools/contracts";
 import { AtomRegistry } from "effect/unstable/reactivity";
+import * as RpcClientError from "effect/unstable/rpc/RpcClientError";
+import * as Socket from "effect/unstable/socket/Socket";
+import { onTestFinished, vi } from "vite-plus/test";
+
+const outboxFiles = vi.hoisted(() => new Map<string, string | Error>());
+
+vi.mock("expo-file-system", () => {
+  class File {
+    constructor(readonly name: string) {}
+
+    async text(): Promise<string> {
+      const contents = outboxFiles.get(this.name);
+      if (contents instanceof Error) throw contents;
+      if (contents === undefined) throw new Error("Missing file");
+      return contents;
+    }
+  }
+
+  return {
+    File,
+    Directory: class {
+      create() {}
+
+      list() {
+        return Array.from(outboxFiles.keys(), (name) => new File(name));
+      }
+    },
+    Paths: { document: "/documents" },
+  };
+});
 
 import {
   decodeQueuedThreadMessage,
@@ -25,7 +59,7 @@ import {
   type QueuedThreadMessage,
 } from "./thread-outbox-model";
 import { createThreadOutboxManager, ThreadOutboxManagerError } from "./thread-outbox-manager";
-import type { ThreadOutboxStorage } from "./thread-outbox-storage";
+import { expoThreadOutboxStorage, type ThreadOutboxStorage } from "./thread-outbox-storage";
 
 function queuedMessage(input: {
   readonly environmentId?: string;
@@ -45,6 +79,72 @@ function queuedMessage(input: {
 }
 
 describe("thread outbox", () => {
+  it.each(["read", "json", "schema"] as const)(
+    "does not load a partial outbox after a record %s failure",
+    async (failure) => {
+      onTestFinished(() => outboxFiles.clear());
+      const first = queuedMessage({
+        messageId: "message-1",
+        createdAt: "2026-06-08T10:00:01.000Z",
+      });
+      const second = queuedMessage({
+        messageId: "message-2",
+        createdAt: "2026-06-08T10:00:02.000Z",
+      });
+      outboxFiles.set("message-1.json", JSON.stringify(encodeQueuedThreadMessage(first)));
+      outboxFiles.set(
+        "message-2.json",
+        failure === "read"
+          ? new Error("storage unavailable")
+          : failure === "json"
+            ? "{"
+            : JSON.stringify({ ...second, schemaVersion: 999 }),
+      );
+
+      await expect(expoThreadOutboxStorage.load()).rejects.toMatchObject({
+        operation: "read-message",
+        fileName: "message-2.json",
+      });
+
+      outboxFiles.set("message-2.json", JSON.stringify(encodeQueuedThreadMessage(second)));
+      await expect(expoThreadOutboxStorage.load()).resolves.toEqual([first, second]);
+    },
+  );
+
+  it("preserves queued messages when environment cleanup cannot read the outbox", async () => {
+    const registry = AtomRegistry.make();
+    onTestFinished(() => registry.dispose());
+    const message = queuedMessage({
+      messageId: "message-1",
+      createdAt: "2026-06-08T10:00:01.000Z",
+    });
+    const stored = new Map<MessageId, QueuedThreadMessage>();
+    const manager = createThreadOutboxManager({
+      registry,
+      warn: () => {},
+      storage: {
+        load: async () => {
+          throw new Error("storage unavailable");
+        },
+        write: async (entry) => {
+          stored.set(entry.messageId, entry);
+        },
+        remove: async (entry) => {
+          stored.delete(entry.messageId);
+        },
+      },
+    });
+    await manager.enqueue(message);
+
+    await expect(manager.clearEnvironment(message.environmentId)).rejects.toMatchObject({
+      operation: "clear-environment-load",
+    });
+    expect([...stored.values()]).toEqual([message]);
+    expect(registry.get(manager.queuedMessagesByThreadKeyAtom)).toEqual({
+      "environment-1:thread-1": [message],
+    });
+  });
+
   it("groups messages by scoped thread and preserves creation order", () => {
     const later = queuedMessage({
       messageId: "message-2",
@@ -149,6 +249,62 @@ describe("thread outbox", () => {
         options: [{ id: "reasoningEffort", value: "xhigh" }],
       }),
     ).toBe(false);
+  });
+
+  it("normalizes queued plan mode against the queued provider, not the current thread", () => {
+    const codex = { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5.6-sol" };
+    const antigravity = {
+      instanceId: ProviderInstanceId.make("google-personal"),
+      model: "gemini-test-thinking",
+      options: [{ id: "native-option", value: "keep-this-choice" }],
+    };
+    const providers = [
+      { instanceId: codex.instanceId, showInteractionModeToggle: true },
+      { instanceId: antigravity.instanceId, showInteractionModeToggle: false },
+    ];
+    const message = {
+      ...queuedMessage({ messageId: "queued-plan", createdAt: "2026-09-02T10:00:00.000Z" }),
+      text: "/plan inspect the project",
+      modelSelection: antigravity,
+      interactionMode: "plan",
+    } satisfies QueuedThreadMessage;
+
+    expect(
+      resolveQueuedThreadSettings(
+        message,
+        { modelSelection: codex, runtimeMode: "approval-required", interactionMode: "plan" },
+        providers,
+      ),
+    ).toEqual({
+      modelSelection: antigravity,
+      runtimeMode: "approval-required",
+      interactionMode: "default",
+    });
+    expect(
+      resolveQueuedThreadSettings(
+        { ...message, modelSelection: codex },
+        {
+          modelSelection: antigravity,
+          runtimeMode: "approval-required",
+          interactionMode: "default",
+        },
+        providers,
+      ).interactionMode,
+    ).toBe("plan");
+  });
+
+  it("normalizes a legacy queued message that inherits unsupported plan mode", () => {
+    const modelSelection = {
+      instanceId: ProviderInstanceId.make("google-personal"),
+      model: "gemini-test-thinking",
+    };
+    expect(
+      resolveQueuedThreadSettings(
+        queuedMessage({ messageId: "legacy-plan", createdAt: "2026-09-02T10:00:00.000Z" }),
+        { modelSelection, runtimeMode: "approval-required", interactionMode: "plan" },
+        [{ instanceId: modelSelection.instanceId, showInteractionModeToggle: false }],
+      ).interactionMode,
+    ).toBe("default");
   });
 
   it("backs off queued delivery retries and caps them at sixteen seconds", () => {
@@ -939,12 +1095,19 @@ describe("thread outbox", () => {
     ).toEqual({ step: "send" });
   });
 
-  it("sends a message without file attachments before the server config loads", () => {
+  it("waits for provider capabilities before sending text-only queued messages", () => {
     expect(
       resolveThreadOutboxDispatchStep({
         deliveryAction: "send",
         fileAttachments: [],
         serverConfig: null,
+      }),
+    ).toEqual({ step: "retry" });
+    expect(
+      resolveThreadOutboxDispatchStep({
+        deliveryAction: "send",
+        fileAttachments: [],
+        serverConfig: { maxFileUploadBytes: undefined },
       }),
     ).toEqual({ step: "send" });
   });
@@ -1104,6 +1267,62 @@ describe("thread outbox", () => {
       }),
     ).toBe(true);
     expect(shouldRetryThreadOutboxDelivery(new Error("Thread no longer exists"))).toBe(false);
+    expect(
+      shouldRetryThreadOutboxDelivery(
+        new OrchestrationDispatchCommandError({ message: "Thread no longer exists" }),
+      ),
+    ).toBe(false);
+    expect(
+      shouldRetryThreadOutboxDelivery(
+        new EnvironmentAuthorizationError({
+          message: "Missing scope",
+          requiredScope: "orchestration:operate",
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  // A pending task created offline drains the moment the phone reconnects,
+  // which is exactly when the socket is most likely to drop again. Every way a
+  // request can fail in flight must retry; a restore turns the pending task
+  // into a draft and it disappears from the list.
+  it("retries every in-flight transport failure by tag, not by message text", () => {
+    const socketReasons = [
+      new Socket.SocketReadError({ cause: new Error("The network connection was lost.") }),
+      new Socket.SocketWriteError({ cause: new Error("Broken pipe") }),
+      new Socket.SocketCloseError({ code: 1006 }),
+      new Socket.SocketOpenError({ kind: "Timeout", cause: new Error("timeout") }),
+    ];
+    for (const reason of socketReasons) {
+      const error = new RpcClientError.RpcClientError({ reason });
+      expect(isTransportConnectionErrorMessage(error.message)).toBe(
+        reason._tag === "SocketCloseError" || reason._tag === "SocketOpenError",
+      );
+      expect(shouldRetryThreadOutboxDelivery(error)).toBe(true);
+    }
+    expect(
+      shouldRetryThreadOutboxDelivery(
+        new RpcClientError.RpcClientError({
+          reason: new RpcClientError.RpcClientDefect({
+            message: "Error decoding message",
+            cause: new Error("Unexpected end of JSON input"),
+          }),
+        }),
+      ),
+    ).toBe(true);
+    expect(
+      shouldRetryThreadOutboxDelivery(
+        new EnvironmentRpcUnavailableError({
+          environmentId: "environment-1",
+          message: "Home is not connected.",
+        }),
+      ),
+    ).toBe(true);
+    expect(
+      shouldRetryThreadOutboxDelivery(
+        new EnvironmentNotRegisteredError({ environmentId: EnvironmentId.make("environment-1") }),
+      ),
+    ).toBe(true);
   });
 
   it("retains queued messages when settings synchronization fails before startTurn", () => {

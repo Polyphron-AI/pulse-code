@@ -1,3 +1,4 @@
+import { useWorkspaceMutationRefresh } from "../hooks/useWorkspaceMutationRefresh";
 import { useAtomValue } from "@effect/atom-react";
 import type { FileDiffContentsLoader } from "@pierre/diffs";
 import { useParams } from "@tanstack/react-router";
@@ -41,7 +42,7 @@ import { areAllDiffFilesCollapsed, toggleAllDiffFiles } from "../lib/diffCollaps
 import { useTurnDiffSummaries } from "../hooks/useTurnDiffSummaries";
 import { useProject, useThread } from "../state/entities";
 import { resolveThreadRouteRef } from "../threadRoutes";
-import { useClientSettings } from "../hooks/useSettings";
+import { useClientSettings, useUpdateClientSettings } from "../hooks/useSettings";
 import { formatShortTimestamp } from "../timestampFormat";
 import { DiffPanelLoadingState, DiffPanelShell, type DiffPanelMode } from "./DiffPanelShell";
 import { DiffStatLabel } from "./chat/DiffStatLabel";
@@ -87,6 +88,7 @@ interface CollapsedDiffFilesState {
 const EMPTY_COLLAPSED_DIFF_FILE_KEYS: ReadonlySet<string> = new Set();
 
 interface DiffPanelProps {
+  workspaceMutationId?: string | null;
   mode?: DiffPanelMode;
   composerDraftTarget: ScopedThreadRef | DraftId;
   initialGitScope: "branch" | "unstaged";
@@ -95,6 +97,7 @@ interface DiffPanelProps {
 export { DiffWorkerPoolProvider } from "./DiffWorkerPoolProvider";
 
 export default function DiffPanel({
+  workspaceMutationId = null,
   mode = "inline",
   composerDraftTarget,
   initialGitScope: initialGitScopeProp,
@@ -102,8 +105,8 @@ export default function DiffPanel({
   const { resolvedTheme } = useTheme();
   const settings = useClientSettings();
   const [initialGitScope] = useState(initialGitScopeProp);
-  const diffRenderMode = useDiffPanelStore((state) => state.diffRenderMode);
-  const setDiffRenderMode = useDiffPanelStore((state) => state.setDiffRenderMode);
+  const diffLayout = settings.diffLayout;
+  const updateClientSettings = useUpdateClientSettings();
   const [wordWrap, setWordWrap] = useState(settings.wordWrap);
   const [diffIgnoreWhitespace, setDiffIgnoreWhitespace] = useState(settings.diffIgnoreWhitespace);
   const [baseRefQuery, setBaseRefQuery] = useState("");
@@ -308,6 +311,12 @@ export default function DiffPanel({
     lastCompletedTurnRefreshRef.current = current;
   }, [activeThreadRefreshKey, canRefreshGitDiff, latestTurn?.turnId, refreshBranchDiffPreview]);
 
+  useWorkspaceMutationRefresh({
+    enabled: canRefreshGitDiff,
+    mutationId: workspaceMutationId,
+    refresh: refreshBranchDiffPreview,
+    resourceKey: `diff:${activeThreadRefreshKey ?? ""}`,
+  });
   const selectedGitSource = branchDiffPreview.data?.sources.find(
     (source) => source.kind === (selectedGitScope === "unstaged" ? "working-tree" : "branch-range"),
   );
@@ -768,11 +777,11 @@ export default function DiffPanel({
         <ToggleGroup
           className="shrink-0 gap-1"
           size="sm"
-          value={[diffRenderMode]}
+          value={[diffLayout]}
           onValueChange={(value) => {
             const next = value[0];
             if (next === "stacked" || next === "split") {
-              setDiffRenderMode(next);
+              updateClientSettings({ diffLayout: next });
             }
           }}
         >
@@ -956,7 +965,7 @@ export default function DiffPanel({
                     );
                   }}
                   options={{
-                    diffStyle: diffRenderMode === "split" ? "split" : "unified",
+                    diffStyle: diffLayout === "split" ? "split" : "unified",
                     lineDiffType: "none",
                     overflow: wordWrap ? "wrap" : "scroll",
                     theme: resolveDiffThemeName(resolvedTheme),

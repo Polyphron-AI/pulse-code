@@ -28,6 +28,22 @@ Log in with Codex normally:
 codex login
 ```
 
+## Browser and computer activity
+
+Browser and Computer Use calls show their user-facing task title when Codex provides one. Activity rows show an icon for every call. Website calls use the active page's favicon when it is
+available, and desktop app calls use the app's native icon on macOS when available. Other hosts use
+a generic fallback glyph.
+
+Collapsed activity groups are summarized by source, such as `Used Chrome integration`, instead of
+showing the underlying tool name. Website favicons and native app icons keep their original colors;
+integrations that provide separate light and dark logos use the logo for the current appearance.
+
+## Approve access to other apps
+
+When a Codex tool needs access to an app such as Safari, Pulse Code shows the app name and asks for
+approval. You can approve, decline, or cancel the request from the desktop app, web app, or mobile
+app. Some tools also offer approval for the current session or permanent approval.
+
 ## I Want Work And Personal Codex Accounts
 
 Use one real Codex home and one shadow home.
@@ -139,3 +155,7 @@ Use a totally separate `CODEX_HOME path` only when you want a separate Codex wor
 
 That means separate sessions and less account switching inside old threads. Most dual-account users
 should use the shared-home plus shadow-home setup instead.
+
+## Child Agents
+
+Child agents show their model and effort when Codex supplies them. These details remain visible as the child starts work, reports progress, or becomes idle. Reading an idle child's result leaves it idle; its status changes to running when Codex reports new work.

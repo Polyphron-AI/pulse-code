@@ -1,11 +1,51 @@
-import { describe, expect, it } from "@effect/vitest";
-import { ProviderDriverKind } from "@t3tools/contracts";
+import { describe, expect, it, assert } from "@effect/vitest";
+import { ProviderDriverKind, type ServerProviderModel } from "@t3tools/contracts";
 import {
+  applyManifestDefault,
+  type ModelManifestData,
   BUNDLED_MODEL_MANIFEST,
   classifyModels,
   decodeModelManifest,
   resolveProviderCatalog,
 } from "./ModelManifest.ts";
+
+const model = (overrides: Partial<ServerProviderModel>): ServerProviderModel => ({
+  slug: "gpt-test",
+  name: "GPT Test",
+  isCustom: false,
+  capabilities: null,
+  ...overrides,
+});
+
+describe("applyManifestDefault", () => {
+  it("moves the default flag and its aliases to the manifest's chat default", () => {
+    const driver = ProviderDriverKind.make("antigravity");
+    const manifest: ModelManifestData = {
+      version: 1,
+      currentModels: {},
+      providers: {
+        antigravity: {
+          defaults: { chat: "gemini-new" },
+          profiles: {},
+          models: [{ slug: "gemini-new", name: "New", status: "current" }],
+        },
+      },
+    };
+    const models = [
+      model({ slug: "gemini-old", isDefault: true, aliases: ["antigravity-default"] }),
+      model({ slug: "gemini-new" }),
+    ];
+    assert.deepStrictEqual(applyManifestDefault(models, manifest, driver), [
+      model({ slug: "gemini-old" }),
+      model({ slug: "gemini-new", isDefault: true, aliases: ["antigravity-default"] }),
+    ]);
+    // The account does not offer the manifest default: keep the runtime's choice.
+    assert.deepStrictEqual(
+      applyManifestDefault(models.slice(0, 1), manifest, driver),
+      models.slice(0, 1),
+    );
+  });
+});
 
 const fixture = () => ({
   version: 1,

@@ -1,5 +1,6 @@
 import { BookmarkIcon, FileIcon, XIcon } from "lucide-react";
-import { memo, useEffect, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
+import { assistantCitationsToPlainText } from "@t3tools/shared/assistantCitations";
 
 import { formatRelativeTimeLabel } from "../../timestampFormat";
 import { cn } from "~/lib/utils";
@@ -15,7 +16,7 @@ function missingImageCount(entry: PromptStashEntry): number {
 }
 
 function stashEntrySnippet(entry: PromptStashEntry): string {
-  const trimmed = entry.prompt.trim().replace(/\s+/g, " ");
+  const trimmed = assistantCitationsToPlainText(entry.prompt).trim().replace(/\s+/g, " ");
   if (trimmed.length > 0) {
     return trimmed.length > SNIPPET_MAX_CHARS ? `${trimmed.slice(0, SNIPPET_MAX_CHARS)}…` : trimmed;
   }
@@ -42,9 +43,26 @@ export const ComposerStashMenu = memo(function ComposerStashMenu(props: {
   onClose: () => void;
 }) {
   const { entries, onRestore, onDelete, onClose } = props;
+  const drawerRef = useRef<HTMLDivElement>(null);
   const [highlightedId, setHighlightedId] = useState<string | null>(entries[0]?.id ?? null);
 
   const highlightedEntry = entries.find((entry) => entry.id === highlightedId) ?? entries[0];
+
+  useEffect(() => {
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      const drawer = drawerRef.current;
+      if (
+        (drawer && event.composedPath().includes(drawer)) ||
+        (event.target instanceof Element &&
+          event.target.closest('[data-prompt-stash-badge="true"]'))
+      ) {
+        return;
+      }
+      onClose();
+    };
+    document.addEventListener("pointerdown", closeOnOutsidePointer, true);
+    return () => document.removeEventListener("pointerdown", closeOnOutsidePointer, true);
+  }, [onClose]);
 
   useEffect(() => {
     if (entries.length === 0) return;
@@ -97,7 +115,22 @@ export const ComposerStashMenu = memo(function ComposerStashMenu(props: {
 
   return (
     <Command autoHighlight={false} mode="none">
-      <div className="dropdown-glass relative w-full overflow-hidden rounded-[20px] shadow-[0_16px_40px_-18px_rgb(0_0_0/55%)] dark:shadow-[0_18px_44px_-18px_rgb(0_0_0/80%)]">
+      <div
+        ref={drawerRef}
+        className="chat-composer-drawer-surface chat-composer-drawer-attached relative w-full overflow-hidden"
+        data-composer-stash-drawer="true"
+      >
+        <div className="flex h-7 items-center justify-end px-2 pt-1">
+          <Button
+            variant="ghost-muted"
+            size="icon-micro"
+            aria-label="Close stash"
+            onPointerDown={(event) => event.preventDefault()}
+            onClick={onClose}
+          >
+            <XIcon className="size-3" />
+          </Button>
+        </div>
         <CommandList className="max-h-72">
           <CommandGroup>
             <CommandGroupLabel className="flex items-center gap-1.5 px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-secondary-label">
@@ -168,7 +201,7 @@ export const ComposerStashMenu = memo(function ComposerStashMenu(props: {
                   <Button
                     variant="ghost"
                     size="icon-xs"
-                    className="shrink-0 opacity-0 transition-opacity group-hover/stash:opacity-100"
+                    className="shrink-0 opacity-0 transition-opacity pointer-coarse:opacity-100 group-hover/stash:opacity-100 group-focus-within/stash:opacity-100 focus-visible:opacity-100"
                     aria-label="Delete stashed prompt"
                     onClick={(event) => {
                       event.stopPropagation();

@@ -7,6 +7,7 @@ import {
   PROVIDER_SEND_TURN_SUPPORTED_IMAGE_MIME_TYPES,
   ProjectFaviconPath,
 } from "./orchestration.ts";
+import { ToolActivityNativeAppReference } from "./providerRuntime.ts";
 
 const ASSET_PATH_MAX_LENGTH = 1024;
 
@@ -44,6 +45,9 @@ export const AssetResource = Schema.Union([
     // project projection before it issues the signed URL.
     path: Schema.optional(ProjectFaviconPath),
   }),
+  Schema.TaggedStruct("native-app-icon", {
+    app: ToolActivityNativeAppReference,
+  }),
 ]);
 export type AssetResource = typeof AssetResource.Type;
 
@@ -52,6 +56,12 @@ export const AssetCreateUrlInput = Schema.Struct({
 });
 export type AssetCreateUrlInput = typeof AssetCreateUrlInput.Type;
 
+export const AssetImageDimensions = Schema.Struct({
+  width: NonNegativeInt.check(Schema.isGreaterThanOrEqualTo(1)),
+  height: NonNegativeInt.check(Schema.isGreaterThanOrEqualTo(1)),
+});
+export type AssetImageDimensions = typeof AssetImageDimensions.Type;
+
 export const AssetCreateUrlResult = Schema.Struct({
   downloadName: Schema.optional(Schema.String),
   relativeUrl: TrimmedNonEmptyString.check(Schema.isMaxLength(4096)),
@@ -59,6 +69,8 @@ export const AssetCreateUrlResult = Schema.Struct({
   sourcePath: Schema.optional(
     TrimmedNonEmptyString.check(Schema.isMaxLength(ASSET_PATH_MAX_LENGTH)),
   ),
+  /** Pixel size read from the image header, so a client can reserve the exact box before the bytes arrive. */
+  imageDimensions: Schema.optional(AssetImageDimensions),
 });
 export type AssetCreateUrlResult = typeof AssetCreateUrlResult.Type;
 

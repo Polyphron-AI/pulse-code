@@ -1,3 +1,4 @@
+import { summarizeToolSources } from "@t3tools/client-runtime/work-log/tool-presentation";
 import * as Equal from "effect/Equal";
 import {
   formatDuration,
@@ -180,6 +181,7 @@ export type MessagesTimelineRow =
       hiddenCount: number;
       expanded: boolean;
       onlyToolEntries: boolean;
+      sourceSummary?: string;
     }
   | {
       kind: "turn-fold";
@@ -580,6 +582,9 @@ export function deriveMessagesTimelineRows(input: {
               createdAt: timelineEntry.createdAt,
               groupId,
               hiddenCount: hiddenEntries.length,
+              ...(summarizeToolSources(visibleGroupedEntries)
+                ? { sourceSummary: summarizeToolSources(visibleGroupedEntries)! }
+                : {}),
               expanded,
               onlyToolEntries: visibleGroupedEntries.every((entry) =>
                 workLogEntryIsToolLike(entry),
@@ -716,7 +721,8 @@ function isRowUnchanged(a: MessagesTimelineRow, b: MessagesTimelineRow): boolean
         a.groupId === bw.groupId &&
         a.hiddenCount === bw.hiddenCount &&
         a.expanded === bw.expanded &&
-        a.onlyToolEntries === bw.onlyToolEntries
+        a.onlyToolEntries === bw.onlyToolEntries &&
+        a.sourceSummary === bw.sourceSummary
       );
     }
 

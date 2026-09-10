@@ -26,6 +26,8 @@ import {
   CommandId,
   type DiscoveredLocalServerList,
   EventId,
+  type EditorId,
+  type FileManagerRevealKind,
   type OrchestrationClientOrigin,
   type OrchestrationCommand,
   type GitActionProgressEvent,
@@ -34,13 +36,12 @@ import {
   type OrchestrationEvent,
   type OrchestrationShellStreamEvent,
   type OrchestrationShellStreamItem,
-  type OrchestrationThreadStreamItem,
   OrchestrationGetFullThreadDiffError,
   OrchestrationGetSnapshotError,
   OrchestrationSearchThreadsError,
   OrchestrationGetTurnDiffError,
   ORCHESTRATION_WS_METHODS,
-  type ProjectId,
+  ProjectId,
   type ProjectEntriesFailure,
   type ProjectFileFailure,
   type ProjectFileOperation,
@@ -49,6 +50,7 @@ import {
   ProjectSearchContentsError,
   ProjectSearchEntriesError,
   ProjectWriteFileError,
+  ProviderSetupError,
   RelayClientInstallFailedError,
   type RelayClientInstallProgressEvent,
   ServerSelfUpdateError,
@@ -76,12 +78,15 @@ import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 
 import * as CheckpointDiffQuery from "./checkpointing/CheckpointDiffQuery.ts";
 import * as ServerConfig from "./config.ts";
+import * as EnvironmentTheme from "./environmentTheme.ts";
 import * as Keybindings from "./keybindings.ts";
 import * as ExternalLauncher from "./process/externalLauncher.ts";
 import {
   projectActivityEvent,
   projectThreadDetailSnapshot,
 } from "./orchestration/ActivityPayloadProjection.ts";
+import { makeThreadLiveEventCoalescer } from "./orchestration/ThreadLiveEventCoalescer.ts";
+import { makeLiveStreamBudget, type RetainedLiveItem } from "./orchestration/LiveStreamBudget.ts";
 import {
   cleanupFailedUploadedAttachments,
   normalizeDispatchCommand,
@@ -96,6 +101,8 @@ import {
 import * as ProviderRegistry from "./provider/Services/ProviderRegistry.ts";
 import * as ProviderSessionDirectory from "./provider/Services/ProviderSessionDirectory.ts";
 import * as ProviderMaintenanceRunner from "./provider/providerMaintenanceRunner.ts";
+import { ProviderAuthService } from "./provider/Services/ProviderAuthService.ts";
+import { makeProviderInstallation } from "./provider/providerInstallation.ts";
 import * as ServerSelfUpdate from "./cloud/selfUpdate.ts";
 import * as ServerLifecycleEvents from "./serverLifecycleEvents.ts";
 import * as ServerRuntimeStartup from "./serverRuntimeStartup.ts";
@@ -158,15 +165,24 @@ import * as RelayClient from "@t3tools/shared/relayClient";
 const isOrchestrationDispatchCommandError = Schema.is(OrchestrationDispatchCommandError);
 
 const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
-const EDITOR_DISCOVERY_TIMEOUT = Duration.seconds(5);
+const CONFIG_DISCOVERY_TIMEOUT = Duration.seconds(5);
+
+const resolveDiscoveryForConfig = <A, E, R>(
+  discovery: Effect.Effect<A, E, R>,
+  onTimeout: () => A,
+) =>
+  discovery.pipe(
+    Effect.timeoutOption(CONFIG_DISCOVERY_TIMEOUT),
+    Effect.map(Option.getOrElse(onTimeout)),
+  );
 
 export const resolveAvailableEditorsForConfig = <A, E, R>(
   discovery: Effect.Effect<ReadonlyArray<A>, E, R>,
-) =>
-  discovery.pipe(
-    Effect.timeoutOption(EDITOR_DISCOVERY_TIMEOUT),
-    Effect.map(Option.getOrElse(() => [])),
-  );
+) => resolveDiscoveryForConfig(discovery, () => []);
+
+export const resolveFileManagerRevealKindForConfig = <E, R>(
+  discovery: Effect.Effect<FileManagerRevealKind | undefined, E, R>,
+) => resolveDiscoveryForConfig(discovery, () => undefined);
 
 function unexpectedCompatibilityError(error: never): never {
   throw new Error(`Unhandled compatibility error: ${String(error)}`);
@@ -456,6 +472,7 @@ const makeWsRpcLayer = (
       const keybindings = yield* Keybindings.Keybindings;
       const usageLimitSources = yield* UsageLimitSources.UsageLimitSources;
       const resetCreditInstances = yield* ProviderInstanceRegistry;
+      const environmentTheme = yield* EnvironmentTheme.EnvironmentThemeService;
       const externalLauncher = yield* ExternalLauncher.ExternalLauncher;
       const remoteOpenTargets = yield* RemoteOpenTargets.RemoteOpenTargets;
       const gitWorkflow = yield* GitWorkflowService.GitWorkflowService;
@@ -468,6 +485,9 @@ const makeWsRpcLayer = (
       const providerRegistry = yield* ProviderRegistry.ProviderRegistry;
       const providerSessionDirectory = yield* ProviderSessionDirectory.ProviderSessionDirectory;
       const providerMaintenanceRunner = yield* ProviderMaintenanceRunner.ProviderMaintenanceRunner;
+      const providerAuth = yield* ProviderAuthService;
+      const providerInstances = yield* ProviderInstanceRegistry;
+      const providerInstallation = yield* makeProviderInstallation();
       const serverUpdate = yield* ServerSelfUpdate.ServerSelfUpdate;
       const config = yield* ServerConfig.ServerConfig;
       const lifecycleEvents = yield* ServerLifecycleEvents.ServerLifecycleEvents;
@@ -691,19 +711,33 @@ const makeWsRpcLayer = (
             });
       };
 
+      // Shell updates refetch the aggregate. Message and tool bodies are not needed.
+      const toShellEvent = ({
+        type,
+        aggregateKind,
+        aggregateId,
+        sequence,
+      }: OrchestrationEvent) => ({
+        type,
+        aggregateKind,
+        aggregateId,
+        sequence,
+      });
+      type ShellEvent = ReturnType<typeof toShellEvent>;
+
       const toShellStreamEvent = (
-        event: OrchestrationEvent,
+        event: ShellEvent,
       ): Effect.Effect<Option.Option<OrchestrationShellStreamEvent>, never, never> => {
         switch (event.type) {
           case "project.created":
           case "project.meta-updated":
-            return projectUpsertOrRemove(event.payload.projectId, event.sequence);
+            return projectUpsertOrRemove(ProjectId.make(event.aggregateId), event.sequence);
           case "project.deleted":
             return Effect.succeed(
               Option.some({
                 kind: "project-removed" as const,
                 sequence: event.sequence,
-                projectId: event.payload.projectId,
+                projectId: ProjectId.make(event.aggregateId),
               }),
             );
           case "thread.deleted":
@@ -712,11 +746,11 @@ const makeWsRpcLayer = (
               Option.some({
                 kind: "thread-removed" as const,
                 sequence: event.sequence,
-                threadId: event.payload.threadId,
+                threadId: ThreadId.make(event.aggregateId),
               }),
             );
           case "thread.unarchived":
-            return threadUpsertOrRemove(event.payload.threadId, event.sequence);
+            return threadUpsertOrRemove(ThreadId.make(event.aggregateId), event.sequence);
           default:
             if (event.aggregateKind === "schedule") {
               return orchestrationEngine.currentReadModel.pipe(
@@ -843,13 +877,13 @@ const makeWsRpcLayer = (
       // item. The refetch runs with bounded concurrency (order-preserving).
       const SHELL_REFETCH_CONCURRENCY = 8;
       const coalesceShellEvents = (
-        events: ReadonlyArray<OrchestrationEvent>,
+        events: ReadonlyArray<ShellEvent>,
       ): Effect.Effect<ReadonlyArray<OrchestrationShellStreamEvent>, never, never> =>
         Effect.gen(function* () {
           if (events.length === 0) {
             return [];
           }
-          const latestByAggregate = new Map<string, OrchestrationEvent>();
+          const latestByAggregate = new Map<string, ShellEvent>();
           for (const event of events) {
             latestByAggregate.set(`${event.aggregateKind}:${event.aggregateId}`, event);
           }
@@ -872,16 +906,17 @@ const makeWsRpcLayer = (
         stream: Stream.Stream<OrchestrationEvent, E, R>,
       ): Stream.Stream<OrchestrationShellStreamEvent, E, R> =>
         stream.pipe(
+          Stream.map(toShellEvent),
           Stream.groupedWithin(SHELL_COALESCE_MAX_CHUNK, SHELL_COALESCE_WINDOW),
           Stream.mapEffect(coalesceShellEvents),
           Stream.flatMap((items) => Stream.fromIterable(items)),
         );
 
       type ShellLiveInput =
-        | { readonly kind: "event"; readonly event: OrchestrationEvent }
+        | { readonly kind: "event"; readonly event: ShellEvent }
         | { readonly kind: "synchronized" };
 
-      // A completion marker is queued alongside raw live events so it cannot
+      // A completion marker is queued alongside live event metadata so it cannot
       // overtake an event still waiting in the coalescing window. Split each
       // batch at markers and coalesce only the event segments on either side.
       const coalesceShellLiveInputs = (
@@ -889,7 +924,7 @@ const makeWsRpcLayer = (
       ): Effect.Effect<ReadonlyArray<OrchestrationShellStreamItem>, never, never> =>
         Effect.gen(function* () {
           const output: Array<OrchestrationShellStreamItem> = [];
-          let pendingEvents: Array<OrchestrationEvent> = [];
+          let pendingEvents: Array<ShellEvent> = [];
 
           for (const input of inputs) {
             if (input.kind === "event") {
@@ -905,15 +940,6 @@ const makeWsRpcLayer = (
           output.push(...(yield* coalesceShellEvents(pendingEvents)));
           return output;
         });
-
-      const coalesceShellLiveStream = <E, R>(
-        stream: Stream.Stream<ShellLiveInput, E, R>,
-      ): Stream.Stream<OrchestrationShellStreamItem, E, R> =>
-        stream.pipe(
-          Stream.groupedWithin(SHELL_COALESCE_MAX_CHUNK, SHELL_COALESCE_WINDOW),
-          Stream.mapEffect(coalesceShellLiveInputs),
-          Stream.flatMap((items) => Stream.fromIterable(items)),
-        );
 
       const dispatchBootstrapTurnStart = (
         command: Extract<OrchestrationCommand, { type: "thread.turn.start" }>,
@@ -1179,6 +1205,14 @@ const makeWsRpcLayer = (
         );
         const environment = yield* serverEnvironment.getDescriptor;
         const auth = yield* serverAuth.getDescriptor();
+        const availableEditors: ReadonlyArray<EditorId> = yield* resolveAvailableEditorsForConfig(
+          externalLauncher.resolveAvailableEditors(),
+        );
+        const fileManagerRevealKind = availableEditors.includes("file-manager")
+          ? yield* resolveFileManagerRevealKindForConfig(
+              externalLauncher.resolveFileManagerRevealKind(),
+            )
+          : undefined;
 
         return {
           environment,
@@ -1188,9 +1222,7 @@ const makeWsRpcLayer = (
           keybindings: keybindingsConfig.keybindings,
           issues: keybindingsConfig.issues,
           providers,
-          availableEditors: yield* resolveAvailableEditorsForConfig(
-            externalLauncher.resolveAvailableEditors(),
-          ),
+          availableEditors,
           // Same discovery-with-timeout treatment as editors: a slow probe
           // must not stall server.getConfig, so it degrades to no targets.
           remoteOpenTargets: yield* resolveAvailableEditorsForConfig(
@@ -1208,6 +1240,12 @@ const makeWsRpcLayer = (
           },
           settings,
           shellResumeCompletionMarker: true,
+          ...(fileManagerRevealKind === undefined
+            ? {}
+            : {
+                shellRevealInFileManager: true,
+                shellRevealInFileManagerKind: fileManagerRevealKind,
+              }),
           threadResumeCompletionMarker: true,
           threadSnapshotPagination: true,
         };
@@ -1388,16 +1426,56 @@ const makeWsRpcLayer = (
               // sequence but the live subscription is not attached yet). Every
               // path below emits from this same buffered live tail. Overlapping
               // events are deduped by sequence on the client.
-              const liveBuffer = yield* Queue.unbounded<ShellLiveInput>();
+              const liveBudget = yield* makeLiveStreamBudget();
+              const liveBuffer = yield* Queue.unbounded<
+                RetainedLiveItem<ShellLiveInput>,
+                OrchestrationGetSnapshotError
+              >();
+              let liveBufferClosed = false;
+              const closeLiveBuffer = (error?: OrchestrationGetSnapshotError) =>
+                Effect.gen(function* () {
+                  if (liveBufferClosed) {
+                    return;
+                  }
+                  liveBufferClosed = true;
+                  liveBudget.release(yield* Queue.clear(liveBuffer).pipe(Effect.orDie));
+                  if (error) {
+                    yield* Queue.fail(liveBuffer, error);
+                  }
+                  yield* Queue.shutdown(liveBuffer);
+                });
+              yield* Effect.addFinalizer(() => closeLiveBuffer());
+              yield* liveBudget.failed.pipe(
+                Effect.catchTags({ OrchestrationGetSnapshotError: closeLiveBuffer }),
+                Effect.forkScoped,
+              );
               yield* Effect.forkScoped(
                 orchestrationEngine.streamDomainEvents.pipe(
+                  Stream.map(toShellEvent),
                   Stream.runForEach((event) =>
-                    Queue.offer(liveBuffer, { kind: "event" as const, event }),
+                    liveBudget.retain({ kind: "event" as const, event }, event).pipe(
+                      Effect.flatMap((item) => Queue.offer(liveBuffer, item)),
+                      Effect.uninterruptible,
+                    ),
                   ),
+                  // Stop the PubSub consumer even if RPC delivery is waiting
+                  // for an ACK and never pulls the failed buffer again.
+                  Effect.raceFirst(liveBudget.failed),
+                  Effect.catchTags({ OrchestrationGetSnapshotError: () => Effect.void }),
                 ),
                 { startImmediately: true },
               );
-              const bufferedLiveStream = coalesceShellLiveStream(Stream.fromQueue(liveBuffer));
+              const coalesceRetainedInputs = (
+                items: ReadonlyArray<RetainedLiveItem<ShellLiveInput>>,
+              ) =>
+                coalesceShellLiveInputs(items.map((item) => item.value)).pipe(
+                  Effect.flatMap((output) => liveBudget.replace(items, output)),
+                );
+              const bufferedLiveStream = Stream.fromQueue(liveBuffer).pipe(
+                Stream.groupedWithin(SHELL_COALESCE_MAX_CHUNK, SHELL_COALESCE_WINDOW),
+                Stream.mapEffect(coalesceRetainedInputs),
+                Stream.flatMap((items) => Stream.fromIterable(items)),
+              );
 
               const loadSnapshot = projectionSnapshotQuery.getShellSnapshot().pipe(
                 Effect.zipWith(orchestrationEngine.currentReadModel, attachActiveSchedules),
@@ -1416,18 +1494,21 @@ const makeWsRpcLayer = (
               // Offer the completion marker into the same queue as live events.
               // Anything buffered while snapshot/replay work was in flight is
               // therefore delivered before the client is told it is synchronized.
-              const synchronizedThenLive =
+              const synchronizedThenLive = liveBudget.deliver(
                 input.requestCompletionMarker === true
                   ? Stream.concat(
                       Stream.fromEffect(
-                        Queue.offer(liveBuffer, { kind: "synchronized" as const }).pipe(
+                        liveBudget.retain({ kind: "synchronized" as const }).pipe(
+                          Effect.flatMap((item) => Queue.offer(liveBuffer, item)),
+                          Effect.uninterruptible,
                           Effect.andThen(Queue.takeAll(liveBuffer)),
-                          Effect.flatMap(coalesceShellLiveInputs),
+                          Effect.flatMap(coalesceRetainedInputs),
                         ),
                       ).pipe(Stream.flatMap((items) => Stream.fromIterable(items))),
                       bufferedLiveStream,
                     )
-                  : bufferedLiveStream;
+                  : bufferedLiveStream,
+              );
 
               // When the client already holds a shell snapshot (cached, or loaded
               // over HTTP) it passes that snapshot's sequence, and we resume by
@@ -1517,17 +1598,22 @@ const makeWsRpcLayer = (
                 Stream.filter(isThisThreadDetailEvent),
                 Stream.map((event) => ({
                   kind: "event" as const,
-                  event: projectActivityEvent(event),
+                  event,
                 })),
               );
 
               // Attach live delivery before reading either replay or snapshot state.
               // Otherwise an event published while the snapshot is loading is lost.
-              const liveBuffer = yield* Queue.unbounded<OrchestrationThreadStreamItem>();
+              const liveBuffer = yield* makeThreadLiveEventCoalescer();
               yield* Effect.forkScoped(
-                liveStream.pipe(Stream.runForEach((item) => Queue.offer(liveBuffer, item))),
+                liveStream.pipe(
+                  Stream.runForEachArray(liveBuffer.offerAll),
+                  Effect.raceFirst(liveBuffer.failed),
+                  Effect.catchTags({ OrchestrationGetSnapshotError: () => Effect.void }),
+                ),
+                { startImmediately: true },
               );
-              const bufferedLiveStream = Stream.fromQueue(liveBuffer);
+              const bufferedLiveStream = liveBuffer.stream;
 
               // When the client already loaded the snapshot over HTTP it passes
               // that snapshot's sequence, and we resume the live subscription by
@@ -1576,11 +1662,10 @@ const makeWsRpcLayer = (
                     );
                   const afterCatchUp =
                     input.requestCompletionMarker === true
-                      ? Stream.concat(
-                          Stream.fromEffect(
-                            Queue.offer(liveBuffer, { kind: "synchronized" as const }),
-                          ).pipe(Stream.drain),
-                          bufferedLiveStream,
+                      ? Stream.unwrap(
+                          liveBuffer
+                            .offer({ kind: "synchronized" as const })
+                            .pipe(Effect.as(bufferedLiveStream)),
                         )
                       : bufferedLiveStream;
                   return Stream.concat(catchUpStream, afterCatchUp);
@@ -1618,11 +1703,10 @@ const makeWsRpcLayer = (
 
               const afterSnapshot =
                 input.requestCompletionMarker === true
-                  ? Stream.concat(
-                      Stream.fromEffect(
-                        Queue.offer(liveBuffer, { kind: "synchronized" as const }),
-                      ).pipe(Stream.drain),
-                      bufferedLiveStream,
+                  ? Stream.unwrap(
+                      liveBuffer
+                        .offer({ kind: "synchronized" as const })
+                        .pipe(Effect.as(bufferedLiveStream)),
                     )
                   : bufferedLiveStream;
               return Stream.concat(
@@ -1646,15 +1730,44 @@ const makeWsRpcLayer = (
         [WS_METHODS.serverRefreshProviders]: (input) =>
           observeRpcEffect(
             WS_METHODS.serverRefreshProviders,
-            (input.cwd !== undefined && input.instanceId !== undefined
-              ? providerRegistry.refreshWorkspaceSnapshot({
-                  instanceId: input.instanceId,
-                  cwd: input.cwd,
-                })
-              : input.instanceId !== undefined
-                ? providerRegistry.refreshInstance(input.instanceId)
-                : providerRegistry.refresh()
-            ).pipe(Effect.map((providers) => ({ providers }))),
+            Effect.gen(function* () {
+              let providers = yield* input.cwd !== undefined && input.instanceId !== undefined
+                ? providerRegistry.refreshWorkspaceSnapshot({
+                    instanceId: input.instanceId,
+                    cwd: input.cwd,
+                  })
+                : input.instanceId !== undefined
+                  ? providerRegistry.refreshInstance(input.instanceId)
+                  : providerRegistry.refresh();
+              if (input.refreshModels) {
+                const instances = yield* providerInstances.listInstances;
+                for (const instance of instances) {
+                  if (
+                    !instance.refreshModels ||
+                    (input.instanceId !== undefined && input.instanceId !== instance.instanceId) ||
+                    !providers.some(
+                      (provider) =>
+                        provider.instanceId === instance.instanceId &&
+                        provider.enabled &&
+                        provider.installed,
+                    )
+                  )
+                    continue;
+                  yield* instance.refreshModels().pipe(
+                    Effect.mapError(
+                      (error) =>
+                        new ProviderSetupError({
+                          instanceId: instance.instanceId,
+                          operation: "refresh-models",
+                          detail: error.detail,
+                        }),
+                    ),
+                  );
+                  providers = yield* providerRegistry.refreshInstance(instance.instanceId);
+                }
+              }
+              return { providers };
+            }),
             { "rpc.aggregate": "server" },
           ),
         [WS_METHODS.providerConsumeResetCredit]: (input) =>
@@ -1694,6 +1807,52 @@ const makeWsRpcLayer = (
               "rpc.aggregate": "server",
             },
           ),
+        [WS_METHODS.providerAuthStart]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.providerAuthStart,
+            providerAuth.start(input, currentSessionId),
+            { "rpc.aggregate": "provider" },
+          ),
+        [WS_METHODS.providerAuthComplete]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.providerAuthComplete,
+            providerAuth.complete(input, currentSessionId),
+            { "rpc.aggregate": "provider" },
+          ),
+        [WS_METHODS.providerAuthCancel]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.providerAuthCancel,
+            providerAuth.cancel(input, currentSessionId),
+            { "rpc.aggregate": "provider" },
+          ),
+        [WS_METHODS.providerAuthLogout]: (input) =>
+          observeRpcEffect(WS_METHODS.providerAuthLogout, providerAuth.logout(input), {
+            "rpc.aggregate": "provider",
+          }),
+        [WS_METHODS.providerAuthSubscribe]: (input) =>
+          observeRpcStream(
+            WS_METHODS.providerAuthSubscribe,
+            providerAuth.subscribe(input, currentSessionId),
+            { "rpc.aggregate": "provider" },
+          ),
+        [WS_METHODS.providerInstallStart]: (input) =>
+          observeRpcEffect(WS_METHODS.providerInstallStart, providerInstallation.start(input), {
+            "rpc.aggregate": "provider",
+          }),
+        [WS_METHODS.providerInstallCancel]: (input) =>
+          observeRpcEffect(WS_METHODS.providerInstallCancel, providerInstallation.cancel(input), {
+            "rpc.aggregate": "provider",
+          }),
+        [WS_METHODS.providerInstallSubscribe]: (input) =>
+          observeRpcStream(
+            WS_METHODS.providerInstallSubscribe,
+            providerInstallation.subscribe(input),
+            { "rpc.aggregate": "provider" },
+          ),
+        [WS_METHODS.providerInstallRemove]: (input) =>
+          observeRpcEffect(WS_METHODS.providerInstallRemove, providerInstallation.remove(input), {
+            "rpc.aggregate": "provider",
+          }),
         [WS_METHODS.serverUpdateServer]: (input) =>
           observeRpcEffect(WS_METHODS.serverUpdateServer, serverUpdate.update(input), {
             "rpc.aggregate": "server",
@@ -1814,6 +1973,10 @@ const makeWsRpcLayer = (
           ),
         [WS_METHODS.serverGetUsageSummary]: (input) =>
           observeRpcEffect(WS_METHODS.serverGetUsageSummary, usage.readSummary(input), {
+            "rpc.aggregate": "server",
+          }),
+        [WS_METHODS.serverRefreshUsageRates]: (_input) =>
+          observeRpcEffect(WS_METHODS.serverRefreshUsageRates, usage.refreshRates, {
             "rpc.aggregate": "server",
           }),
         [WS_METHODS.serverRetryResourceTelemetry]: (_input) =>
@@ -1963,6 +2126,12 @@ const makeWsRpcLayer = (
           observeRpcEffect(WS_METHODS.pullRequestsInvalidate, pullRequests.invalidate(input), {
             "rpc.aggregate": "pull-requests",
           }),
+        [WS_METHODS.pullRequestsSubscribeRefreshes]: () =>
+          observeRpcStream(
+            WS_METHODS.pullRequestsSubscribeRefreshes,
+            pullRequests.subscribeRefreshes,
+            { "rpc.aggregate": "pull-requests" },
+          ),
         [WS_METHODS.pullRequestsReviewerCandidates]: (input) =>
           observeRpcEffect(
             WS_METHODS.pullRequestsReviewerCandidates,
@@ -2091,6 +2260,16 @@ const makeWsRpcLayer = (
             integrationContext.confirmIssueStatusAction(input),
             { "rpc.aggregate": "integrations" },
           ),
+        [WS_METHODS.pullRequestsLabelCandidates]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.pullRequestsLabelCandidates,
+            pullRequests.labelCandidates(input),
+            { "rpc.aggregate": "pull-requests" },
+          ),
+        [WS_METHODS.pullRequestsSetLabels]: (input) =>
+          observeRpcEffect(WS_METHODS.pullRequestsSetLabels, pullRequests.setLabels(input), {
+            "rpc.aggregate": "pull-requests",
+          }),
         [WS_METHODS.sourceControlLookupRepository]: (input) =>
           observeRpcEffect(
             WS_METHODS.sourceControlLookupRepository,
@@ -2259,7 +2438,10 @@ const makeWsRpcLayer = (
                 const savedOutput = yield* saveMessageOutput(input.resource);
                 return yield* issueAssetUrl({ resource: input.resource, savedOutput });
               }
-              if (input.resource._tag === "attachment") {
+              if (
+                input.resource._tag === "attachment" ||
+                input.resource._tag === "native-app-icon"
+              ) {
                 return yield* issueAssetUrl({ resource: input.resource });
               }
               if (input.resource._tag === "project-favicon") {
@@ -2637,6 +2819,23 @@ const makeWsRpcLayer = (
                       })),
                     )
                   : Stream.empty;
+              // The only source of published themes: the stream emits the
+              // current set before any change, so the snapshot carrying it too
+              // would just send every client the same array twice per connect.
+              // Gated on the subscriber's capability flag because an
+              // already-shipped client decodes this stream against the old
+              // event union and its whole config subscription dies on an
+              // unknown member.
+              const environmentThemeUpdates =
+                input.environmentThemes === true
+                  ? environmentTheme.streamChanges.pipe(
+                      Stream.map((themes) => ({
+                        version: 1 as const,
+                        type: "environmentThemesUpdated" as const,
+                        payload: { themes },
+                      })),
+                    )
+                  : Stream.empty;
               const settingsUpdates = settingsChanges.pipe(
                 Stream.map((settings) => ServerSettings.redactServerSettingsForClient(settings)),
                 Stream.map((settings) => ({
@@ -2654,7 +2853,10 @@ const makeWsRpcLayer = (
                 keybindingsUpdates,
                 Stream.merge(
                   providerStatuses,
-                  Stream.merge(settingsUpdates, usageLimitSourceUpdates),
+                  Stream.merge(
+                    Stream.merge(settingsUpdates, usageLimitSourceUpdates),
+                    environmentThemeUpdates,
+                  ),
                 ),
               );
 

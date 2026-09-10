@@ -191,6 +191,10 @@
       "types": "./src/markdownImages.ts",
       "default": "./src/markdownImages.ts"
     },
+    "./work-log/tool-presentation": {
+      "types": "./src/work-log/toolPresentation.ts",
+      "default": "./src/work-log/toolPresentation.ts"
+    },
     "./mediaReference": {
       "types": "./src/mediaReference.ts",
       "default": "./src/mediaReference.ts"

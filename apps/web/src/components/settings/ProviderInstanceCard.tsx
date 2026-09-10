@@ -347,6 +347,7 @@ interface ProviderInstanceCardProps {
    * omit it.
    */
   readonly headerAction?: ReactNode | undefined;
+  readonly setup?: ReactNode;
   readonly hiddenModels: ReadonlyArray<string>;
   readonly favoriteModels: ReadonlyArray<string>;
   readonly modelOrder: ReadonlyArray<string>;
@@ -389,6 +390,7 @@ export function ProviderInstanceCard({
   onUpdate,
   onDelete,
   headerAction,
+  setup,
   hiddenModels,
   favoriteModels,
   modelOrder,
@@ -447,7 +449,8 @@ export function ProviderInstanceCard({
     ? instance.driver
     : null;
 
-  const customModels = readConfigCustomModels(instance.config);
+  const customModels =
+    instance.driver === "antigravity" ? [] : readConfigCustomModels(instance.config);
   // Server-returned models may lag behind settings writes. Treat probe
   // models as the source for built-ins only; custom rows come directly
   // from the current instance config so add/remove reflects immediately.
@@ -736,6 +739,7 @@ export function ProviderInstanceCard({
 
       <Collapsible open={isExpanded} onOpenChange={onExpandedChange}>
         <CollapsibleContent>
+          {setup ? <div className="border-b border-border/60 px-4 py-3">{setup}</div> : null}
           <div className="space-y-5 px-3 pb-4 pt-2 sm:px-4">
             <div>
               <label htmlFor={`provider-instance-${instanceId}-display-name`} className="block">

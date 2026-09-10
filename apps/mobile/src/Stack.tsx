@@ -64,6 +64,7 @@ import { SettingsLegalRouteScreen } from "./features/settings/SettingsLegalRoute
 import { SettingsProjectGroupingRouteScreen } from "./features/settings/SettingsProjectGroupingRouteScreen";
 import { SettingsScheduledChatsRouteScreen } from "./features/settings/SettingsScheduledChatsRouteScreen";
 import { UsageLimitAccountScreen } from "./features/usage/UsageLimitsPooled";
+import { SettingsProviderSetupRouteScreen } from "./features/settings/SettingsProviderSetupRouteScreen";
 import { UsageRouteScreen } from "./features/usage/UsageRouteScreen";
 import { SettingsRouteScreen } from "./features/settings/SettingsRouteScreen";
 import { ShowcaseCaptureCoordinator } from "./features/showcase/ShowcaseCaptureCoordinator";
@@ -176,6 +177,13 @@ const SettingsContentStack = createNativeStackNavigator({
       linking: "scheduled-chats",
       options: {
         title: "Scheduled chats",
+      },
+    }),
+    SettingsProviderSetup: createNativeStackScreen({
+      screen: SettingsProviderSetupRouteScreen,
+      linking: "providers/:environmentId/:instanceId",
+      options: {
+        title: "Antigravity",
       },
     }),
     SettingsArchive: createNativeStackScreen({

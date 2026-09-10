@@ -12,7 +12,7 @@ import { LegendList } from "@legendapp/list/react-native";
 import type { MenuAction } from "@react-native-menu/menu";
 import { useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/unstable/reactivity";
-import type { EnvironmentId } from "@t3tools/contracts";
+import { type EnvironmentId, resolveEnvironmentMachineKind } from "@t3tools/contracts";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { LayoutChangeEvent, NativeScrollEvent, NativeSyntheticEvent } from "react-native";
 import { Platform, Pressable, StyleSheet, TextInput, View } from "react-native";
@@ -354,7 +354,7 @@ function ThreadNavigationSidebarPane(
         ? pendingTasks
         : pendingTasks.filter((pendingTask) =>
             selectedProjectRefs.has(
-              scopedProjectKey(pendingTask.message.environmentId, pendingTask.creation.projectId),
+              scopedProjectKey(pendingTask.environmentId, pendingTask.projectId),
             ),
           ),
     [pendingTasks, selectedProjectRefs],
@@ -584,6 +584,16 @@ function ThreadNavigationSidebarPane(
     nowMinute,
     snoozeWakeTick,
   ]);
+  const machineByEnvironmentId = useMemo(
+    () =>
+      new Map(
+        [...serverConfigs].map(
+          ([environmentId, config]) =>
+            [environmentId, resolveEnvironmentMachineKind(config)] as const,
+        ),
+      ),
+    [serverConfigs],
+  );
   const threadListV2Layout = useMemo(() => {
     if (!threadListV2Enabled)
       return {
@@ -659,10 +669,10 @@ function ThreadNavigationSidebarPane(
     const v2PendingTasks = pendingTasks.filter(
       (pendingTask) =>
         (options.selectedEnvironmentId === null ||
-          pendingTask.message.environmentId === options.selectedEnvironmentId) &&
+          pendingTask.environmentId === options.selectedEnvironmentId) &&
         (selectedProjectRefs === null ||
           selectedProjectRefs.has(
-            scopedProjectKey(pendingTask.message.environmentId, pendingTask.creation.projectId),
+            scopedProjectKey(pendingTask.environmentId, pendingTask.projectId),
           )) &&
         (v2SearchQuery.length === 0 ||
           pendingTask.title.toLocaleLowerCase().includes(v2SearchQuery)),
@@ -959,8 +969,8 @@ function ThreadNavigationSidebarPane(
       switch (item.type) {
         case "v2-pending": {
           const pendingScopeKey = scopedProjectKey(
-            item.pendingTask.message.environmentId,
-            item.pendingTask.creation.projectId,
+            item.pendingTask.environmentId,
+            item.pendingTask.projectId,
           );
           return (
             <ThreadListV2PendingRow
@@ -969,10 +979,10 @@ function ThreadNavigationSidebarPane(
               projectTitle={projectTitleByProjectKey.get(pendingScopeKey)}
               environmentLabel={
                 Object.keys(savedConnectionsById).length > 1
-                  ? (savedConnectionsById[item.pendingTask.message.environmentId]
-                      ?.environmentLabel ?? null)
+                  ? (savedConnectionsById[item.pendingTask.environmentId]?.environmentLabel ?? null)
                   : null
               }
+              environmentMachine={machineByEnvironmentId.get(item.pendingTask.environmentId)}
               pane="sidebar"
               showPendingDivider={item.showPendingDivider}
               onSelectPendingTask={openPendingTask}
@@ -1011,6 +1021,7 @@ function ThreadNavigationSidebarPane(
                   ? (savedConnectionsById[thread.environmentId]?.environmentLabel ?? null)
                   : null
               }
+              environmentMachine={machineByEnvironmentId.get(thread.environmentId)}
               searchMatch={threadSearchMatchByKey.get(
                 threadSearchMatchKey({
                   environmentId: thread.environmentId,
@@ -1109,9 +1120,9 @@ function ThreadNavigationSidebarPane(
               variant="sidebar"
               pendingTask={item.pendingTask}
               environmentLabel={
-                savedConnectionsById[item.pendingTask.message.environmentId]?.environmentLabel ??
-                null
+                savedConnectionsById[item.pendingTask.environmentId]?.environmentLabel ?? null
               }
+              environmentMachine={machineByEnvironmentId.get(item.pendingTask.environmentId)}
               isLast={item.isLast}
               onSelectPendingTask={openPendingTask}
               onDeletePendingTask={confirmDeletePendingTask}
@@ -1126,6 +1137,7 @@ function ThreadNavigationSidebarPane(
               environmentLabel={
                 savedConnectionsById[thread.environmentId]?.environmentLabel ?? null
               }
+              environmentMachine={machineByEnvironmentId.get(thread.environmentId)}
               projectCwd={
                 projectCwdByKey.get(scopedProjectKey(thread.environmentId, thread.projectId)) ??
                 null
@@ -1177,6 +1189,7 @@ function ThreadNavigationSidebarPane(
       handleSwipeableClose,
       handleSwipeableWillOpen,
       moveThread,
+      machineByEnvironmentId,
       openPendingTask,
       pinReorderEnvironmentIds,
       pinThread,

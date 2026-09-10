@@ -10,8 +10,8 @@ import { type MouseEvent, useCallback } from "react";
 
 import { pullRequestHostOf, type SourceControlProviderKind } from "@t3tools/contracts";
 
+import { useOpenLink } from "../browser/useOpenLink";
 import { stackedThreadToast, toastManager } from "../components/ui/toast";
-import { readLocalApi } from "../localApi";
 import { useRightPanelStore } from "../rightPanelStore";
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 
@@ -274,6 +274,7 @@ export function useOpenChangeRequestLink(
 
 export function useOpenPrLink(threadRef?: ScopedThreadRef) {
   const openChangeRequest = useOpenChangeRequestLink(threadRef);
+  const openLink = useOpenLink(threadRef);
   return useCallback(
     (event: MouseEvent<HTMLElement>, prUrl: string, targetThreadRef?: ScopedThreadRef) => {
       event.stopPropagation();
@@ -288,16 +289,9 @@ export function useOpenPrLink(threadRef?: ScopedThreadRef) {
       event.preventDefault();
       if (!openInBrowser && openChangeRequest(event, prUrl, targetThreadRef)) return true;
 
-      const api = readLocalApi();
-      if (!api) {
-        toastManager.add({
-          type: "error",
-          title: "Link opening is unavailable.",
-        });
-        return false;
-      }
-
-      void openPullRequestLink(api.shell, prUrl).catch((error) => {
+      // No project to show it in, so it is an ordinary link and follows the
+      // "Open links in" setting; the modifier still forces the system browser.
+      void openLink(prUrl, { event, threadRef: targetThreadRef }).catch((error: unknown) => {
         console.error(error);
         toastManager.add(
           stackedThreadToast({
@@ -309,6 +303,6 @@ export function useOpenPrLink(threadRef?: ScopedThreadRef) {
       });
       return false;
     },
-    [openChangeRequest],
+    [openChangeRequest, openLink],
   );
 }

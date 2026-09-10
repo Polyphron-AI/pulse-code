@@ -1,3 +1,4 @@
+import { workEntryViewedImagePath } from "@t3tools/client-runtime/work-log/tool-presentation";
 import {
   derivePendingRequests,
   requestKindFromRequestType,
@@ -13,6 +14,10 @@ import type {
   UserInputQuestion,
 } from "@t3tools/contracts";
 import { formatDuration } from "@t3tools/shared/orchestrationTiming";
+import {
+  extractToolActivityPresentation,
+  summarizeToolSources,
+} from "@t3tools/client-runtime/work-log/tool-presentation";
 
 import * as Arr from "effect/Array";
 import * as Order from "effect/Order";
@@ -20,11 +25,14 @@ import * as Order from "effect/Order";
 export type { PendingApproval, PendingUserInput } from "@t3tools/client-runtime/pending-requests";
 
 export interface PendingUserInputDraftAnswer {
-  readonly selectedOptionLabels?: ReadonlyArray<string>;
+  readonly selectedOptionValues?: ReadonlyArray<string>;
   readonly customAnswer?: string;
 }
 
 export interface ThreadFeedActivity {
+  readonly viewedImagePath?: string | null;
+  readonly toolIcon?: import("@t3tools/contracts").ToolActivityIcon;
+  readonly toolSource?: import("@t3tools/contracts").ToolActivitySource;
   readonly activityKind?: string;
   readonly id: string;
   readonly createdAt: string;
@@ -37,8 +45,10 @@ export interface ThreadFeedActivity {
   readonly icon:
     | "agent"
     | "alert"
+    | "browser"
     | "check"
     | "command"
+    | "computer"
     | "edit"
     | "eye"
     | "globe"
@@ -66,6 +76,9 @@ interface WorkLogEntry {
   changedFiles?: ReadonlyArray<string>;
   tone: "thinking" | "tool" | "info" | "error";
   toolTitle?: string;
+  toolSurface?: import("@t3tools/contracts").ToolActivitySurface;
+  toolIcon?: import("@t3tools/contracts").ToolActivityIcon;
+  toolSource?: import("@t3tools/contracts").ToolActivitySource;
   itemType?: ToolLifecycleItemType;
   requestKind?: PendingApproval["requestKind"];
   toolLifecycleStatus?: WorkLogToolLifecycleStatus;
@@ -117,6 +130,7 @@ export type ThreadFeedEntry =
       readonly hiddenCount: number;
       readonly expanded: boolean;
       readonly onlyToolActivities: boolean;
+      readonly sourceSummary?: string;
     }
   | {
       readonly type: "turn-fold";
@@ -148,30 +162,53 @@ function normalizeDraftAnswer(value: string | undefined): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
-function normalizeSelectedOptionLabels(
+function resolvePendingUserInputOptionValue(
+  question: UserInputQuestion,
+  value: string,
+): string | null {
+  if (question.options.some((option) => option.value === value)) {
+    return value;
+  }
+
+  const label = value.trim();
+  return label.length > 0 &&
+    question.options.some((option) => option.value === undefined && option.label.trim() === label)
+    ? label
+    : null;
+}
+
+function normalizeSelectedOptionValues(
+  question: UserInputQuestion,
   value: ReadonlyArray<string> | undefined,
 ): ReadonlyArray<string> {
   if (!Array.isArray(value)) {
     return [];
   }
 
-  return Array.from(new Set(value.filter((entry) => entry.length > 0)));
+  return Array.from(
+    new Set(
+      value
+        .map((entry) => resolvePendingUserInputOptionValue(question, entry))
+        .filter((entry): entry is string => entry !== null),
+    ),
+  );
 }
 
 function resolvePendingUserInputAnswer(
   question: UserInputQuestion,
   draft: PendingUserInputDraftAnswer | undefined,
 ): string | ReadonlyArray<string> | null {
-  const customAnswer = normalizeDraftAnswer(draft?.customAnswer);
-  if (customAnswer && question.allowCustomAnswer !== false) {
+  const customAnswer =
+    question.allowCustomAnswer === false ? null : normalizeDraftAnswer(draft?.customAnswer);
+  if (customAnswer) {
     return customAnswer;
   }
 
-  const selectedOptionLabels = normalizeSelectedOptionLabels(draft?.selectedOptionLabels);
+  const selectedOptionValues = normalizeSelectedOptionValues(question, draft?.selectedOptionValues);
   if (question.multiSelect) {
-    return selectedOptionLabels.length > 0 ? selectedOptionLabels : null;
+    return selectedOptionValues.length > 0 ? selectedOptionValues : null;
   }
-  return selectedOptionLabels[0] ?? null;
+  return selectedOptionValues[0] ?? null;
 }
 
 /** Codex children settle via task.updated (idle/failed/interrupted), never
@@ -236,7 +273,16 @@ function deriveWorkLogEntries(
 ): DerivedWorkLogEntry[] {
   const ordered = Arr.sort(activities, activityOrder);
   const entries: DerivedWorkLogEntry[] = [];
+  const toolPresentations = new Map<string, ReturnType<typeof extractToolActivityPresentation>>();
   for (const activity of ordered) {
+    const payload = asRecord(activity.payload);
+    const toolCallId = typeof payload?.toolCallId === "string" ? payload.toolCallId : undefined;
+    const presentationKey = toolCallId ? `${activity.turnId ?? ""}:${toolCallId}` : undefined;
+    const presentation = {
+      ...(presentationKey ? toolPresentations.get(presentationKey) : {}),
+      ...extractToolActivityPresentation(payload),
+    };
+    if (presentationKey) toolPresentations.set(presentationKey, presentation);
     if (activity.kind === "tool.started") continue;
     if (activity.kind === "task.started") continue;
     // Terminal bypassed updates pass: Codex children's only terminal signal.
@@ -246,7 +292,7 @@ function deriveWorkLogEntries(
     if (activity.summary === "Checkpoint captured") continue;
     if (isPlanBoundaryToolActivity(activity)) continue;
     if (isAgentInternalActivity(activity)) continue;
-    entries.push(toDerivedWorkLogEntry(activity));
+    entries.push({ ...toDerivedWorkLogEntry(activity), ...presentation });
   }
   return collapseDerivedWorkLogEntries(entries);
 }
@@ -271,6 +317,7 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
   const commandPreview = extractToolCommand(payload);
   const changedFiles = extractChangedFiles(payload);
   const title = extractToolTitle(payload);
+  const toolPresentation = extractToolActivityPresentation(payload);
   // task.updated included: terminal bypassed updates (Codex children's only
   // terminal signal) must carry task identity so they collapse per child
   // instead of stacking anonymous "Task idle" rows.
@@ -332,6 +379,15 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
   }
   if (title) {
     entry.toolTitle = title;
+  }
+  if (toolPresentation.toolSurface) {
+    entry.toolSurface = toolPresentation.toolSurface;
+  }
+  if (toolPresentation.toolIcon) {
+    entry.toolIcon = toolPresentation.toolIcon;
+  }
+  if (toolPresentation.toolSource) {
+    entry.toolSource = toolPresentation.toolSource;
   }
   if (itemType === "mcp_tool_call") {
     const data = asRecord(payload?.data);
@@ -417,6 +473,9 @@ function mergeDerivedWorkLogEntries(
   const command = next.command ?? previous.command;
   const rawCommand = next.rawCommand ?? previous.rawCommand;
   const toolTitle = next.toolTitle ?? previous.toolTitle;
+  const toolSurface = next.toolSurface ?? previous.toolSurface;
+  const toolIcon = next.toolIcon ?? previous.toolIcon;
+  const toolSource = next.toolSource ?? previous.toolSource;
   const itemType = next.itemType ?? previous.itemType;
   const requestKind = next.requestKind ?? previous.requestKind;
   const collapseKey = next.collapseKey ?? previous.collapseKey;
@@ -430,6 +489,9 @@ function mergeDerivedWorkLogEntries(
     ...(rawCommand ? { rawCommand } : {}),
     ...(changedFiles.length > 0 ? { changedFiles } : {}),
     ...(toolTitle ? { toolTitle } : {}),
+    ...(toolSurface ? { toolSurface } : {}),
+    ...(toolIcon ? { toolIcon } : {}),
+    ...(toolSource ? { toolSource } : {}),
     ...(itemType ? { itemType } : {}),
     ...(requestKind ? { requestKind } : {}),
     ...(collapseKey ? { collapseKey } : {}),
@@ -548,6 +610,7 @@ function workEntryIcon(entry: DerivedWorkLogEntry): ThreadFeedActivity["icon"] {
     return "message";
   }
   if (entry.activityKind === "runtime.warning") return "warning";
+  if (entry.toolSurface) return entry.toolSurface;
   if (entry.requestKind === "command") return "command";
   if (entry.requestKind === "file-read") return "eye";
   if (entry.requestKind === "file-change") return "edit";
@@ -1277,6 +1340,9 @@ function appendPresentedFeedEntry(
     hiddenCount,
     expanded,
     onlyToolActivities: activities.every((activity) => activity.toolLike),
+    ...(summarizeToolSources(activities)
+      ? { sourceSummary: summarizeToolSources(activities)! }
+      : {}),
   });
 }
 
@@ -1288,54 +1354,72 @@ export function derivePendingUserInputs(activities: ReadonlyArray<OrchestrationT
 }
 
 export function setPendingUserInputCustomAnswer(
+  question: UserInputQuestion,
   draft: PendingUserInputDraftAnswer | undefined,
   customAnswer: string,
 ): PendingUserInputDraftAnswer {
-  const selectedOptionLabels =
+  if (question.allowCustomAnswer === false) {
+    return draft ?? {};
+  }
+
+  const selectedOptionValues =
     customAnswer.trim().length > 0
       ? undefined
-      : normalizeSelectedOptionLabels(draft?.selectedOptionLabels);
+      : normalizeSelectedOptionValues(question, draft?.selectedOptionValues);
   return {
     customAnswer,
-    ...(selectedOptionLabels && selectedOptionLabels.length > 0 ? { selectedOptionLabels } : {}),
+    ...(selectedOptionValues && selectedOptionValues.length > 0 ? { selectedOptionValues } : {}),
   };
 }
 
 export function isPendingUserInputOptionSelected(
+  question: UserInputQuestion,
   draft: PendingUserInputDraftAnswer | undefined,
-  optionLabel: string,
+  optionValue: string,
 ): boolean {
-  if (normalizeDraftAnswer(draft?.customAnswer)) {
+  if (question.allowCustomAnswer !== false && normalizeDraftAnswer(draft?.customAnswer)) {
     return false;
   }
 
-  return normalizeSelectedOptionLabels(draft?.selectedOptionLabels).includes(optionLabel);
+  const resolvedOptionValue = resolvePendingUserInputOptionValue(question, optionValue);
+  return (
+    resolvedOptionValue !== null &&
+    normalizeSelectedOptionValues(question, draft?.selectedOptionValues).includes(
+      resolvedOptionValue,
+    )
+  );
 }
 
 export function togglePendingUserInputOptionSelection(
   question: UserInputQuestion,
   draft: PendingUserInputDraftAnswer | undefined,
-  optionLabel: string,
+  optionValue: string,
 ): PendingUserInputDraftAnswer {
-  const normalizedOptionLabel = optionLabel;
+  const resolvedOptionValue = resolvePendingUserInputOptionValue(question, optionValue);
+  if (resolvedOptionValue === null) {
+    return draft ?? {};
+  }
 
   if (question.multiSelect) {
-    const selectedOptionLabels = normalizeSelectedOptionLabels(draft?.selectedOptionLabels);
-    const nextSelectedOptionLabels = selectedOptionLabels.includes(normalizedOptionLabel)
-      ? selectedOptionLabels.filter((label) => label !== normalizedOptionLabel)
-      : [...selectedOptionLabels, normalizedOptionLabel];
+    const selectedOptionValues = normalizeSelectedOptionValues(
+      question,
+      draft?.selectedOptionValues,
+    );
+    const nextSelectedOptionValues = selectedOptionValues.includes(resolvedOptionValue)
+      ? selectedOptionValues.filter((value) => value !== resolvedOptionValue)
+      : [...selectedOptionValues, resolvedOptionValue];
 
     return {
       customAnswer: "",
-      ...(nextSelectedOptionLabels.length > 0
-        ? { selectedOptionLabels: nextSelectedOptionLabels }
+      ...(nextSelectedOptionValues.length > 0
+        ? { selectedOptionValues: nextSelectedOptionValues }
         : {}),
     };
   }
 
   return {
     customAnswer: "",
-    selectedOptionLabels: [normalizedOptionLabel],
+    selectedOptionValues: [resolvedOptionValue],
   };
 }
 
@@ -1347,7 +1431,7 @@ export function buildPendingUserInputAnswers(
 
   for (const question of questions) {
     const answer = resolvePendingUserInputAnswer(question, draftAnswers[question.id]);
-    if (!answer) {
+    if (answer === null) {
       return null;
     }
     answers[question.id] = answer;
@@ -1401,6 +1485,9 @@ export function buildThreadFeed(
             turnId: entry.turnId,
             activity: {
               activityKind: entry.activityKind,
+              viewedImagePath: workEntryViewedImagePath(entry),
+              ...(entry.toolIcon ? { toolIcon: entry.toolIcon } : {}),
+              ...(entry.toolSource ? { toolSource: entry.toolSource } : {}),
               id: entry.id,
               createdAt: entry.createdAt,
               turnId: entry.turnId,

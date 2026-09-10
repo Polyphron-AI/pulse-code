@@ -17,6 +17,26 @@ npx t3@latest
 This starts the Pulse Code server on your machine and opens the local web app. Use
 `npx t3@latest --help` for the full CLI reference.
 
+## Open a project in the desktop app
+
+With the Pulse CLI installed and the Pulse Code desktop app running on the same machine, open the current directory with:
+
+```bash
+pulse app
+```
+
+Pass a path to open another directory:
+
+```bash
+pulse app ../my-project
+```
+
+The command adds the directory as a project when needed, focuses the desktop app, and opens a new
+thread. It does not launch the desktop app, open a browser, or start a Pulse Code server. A background
+server does not count as the desktop app. The command also rejects SSH sessions because a remote
+shell cannot focus a local desktop window. The CLI package and the running desktop app must both
+include `pulse app` support.
+
 ## Desktop App
 
 Pulse Code desktop is an independently installable downstream product. It uses its own application

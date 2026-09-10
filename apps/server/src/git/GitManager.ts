@@ -171,6 +171,7 @@ interface PullRequestInfo extends OpenPrInfo, PullRequestHeadRemoteInfo {
   state: "open" | "closed" | "merged";
   closedAt?: string | null;
   mergedAt?: string | null;
+  isDraft?: boolean;
   updatedAt: Option.Option<DateTime.Utc>;
 }
 
@@ -425,6 +426,7 @@ function toPullRequestInfo(summary: ChangeRequest): PullRequestInfo {
     state: summary.state ?? "open",
     closedAt: summary.closedAt ?? null,
     mergedAt: summary.mergedAt ?? null,
+    ...(summary.isDraft === true ? { isDraft: true } : {}),
     updatedAt: summary.updatedAt,
     ...(summary.isCrossRepository !== undefined
       ? { isCrossRepository: summary.isCrossRepository }
@@ -579,6 +581,8 @@ function toStatusPr(pr: PullRequestInfo): {
   baseRef: string;
   headRef: string;
   state: "open" | "closed" | "merged";
+  isDraft?: boolean;
+  updatedAt: string | null;
 } {
   return {
     number: pr.number,
@@ -587,6 +591,11 @@ function toStatusPr(pr: PullRequestInfo): {
     baseRef: pr.baseRefName,
     headRef: pr.headRefName,
     state: pr.state,
+    ...(pr.isDraft === true ? { isDraft: true } : {}),
+    updatedAt: Option.match(pr.updatedAt, {
+      onNone: () => null,
+      onSome: (updatedAt) => DateTime.formatIso(updatedAt),
+    }),
   };
 }
 
@@ -1347,6 +1356,22 @@ export const make = Effect.gen(function* () {
     if (headContext.headBranch.length === 0) {
       return false;
     }
+    // Git keeps upstream configuration after a host deletes the merged head branch.
+    // That configuration still proves this branch was published.
+    const [configuredRemote, configuredMerge] = yield* Effect.all(
+      [
+        gitCore.readConfigValue(cwd, `branch.${headContext.headBranch}.remote`),
+        gitCore.readConfigValue(cwd, `branch.${headContext.headBranch}.merge`),
+      ],
+      { concurrency: "unbounded" },
+    ).pipe(Effect.orElseSucceed(() => [null, null] as const));
+    if (
+      configuredRemote &&
+      configuredRemote !== "." &&
+      configuredMerge?.startsWith("refs/heads/")
+    ) {
+      return false;
+    }
     const matchesRef = (pattern: string) =>
       gitCore
         .execute({
@@ -1391,11 +1416,7 @@ export const make = Effect.gen(function* () {
       );
       if (firstPullRequest) {
         return {
-          number: firstPullRequest.number,
-          title: firstPullRequest.title,
-          url: firstPullRequest.url,
-          baseRefName: firstPullRequest.baseRefName,
-          headRefName: firstPullRequest.headRefName,
+          ...firstPullRequest,
           state: "open",
           updatedAt: Option.none(),
         } satisfies PullRequestInfo;

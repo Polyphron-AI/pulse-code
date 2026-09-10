@@ -236,6 +236,12 @@ works for a server that was wiped or is no longer reachable. Device-local connec
 controls remain in **Settings** → **Connections** on web and desktop or **Settings** →
 **Environments** on mobile.
 
+## Slow connections
+
+Repeated progress updates for the same tool call may be combined before delivery. Messages, completed tool results, and synchronization boundaries keep their order.
+
+If a client falls too far behind, Pulse ends that live subscription instead of retaining an unlimited backlog. Reconnecting catches up from saved events or a fresh snapshot; the environment?s thread history is preserved.
+
 ## Security Notes
 
 - Treat pairing URLs and pairing tokens like passwords.

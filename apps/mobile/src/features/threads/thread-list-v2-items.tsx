@@ -3,6 +3,7 @@ import type {
   EnvironmentThreadShell,
 } from "@t3tools/client-runtime/state/shell";
 import type { EnvironmentThreadSearchMatch } from "@t3tools/client-runtime/state/thread-search";
+import type { EnvironmentMachineKind } from "@t3tools/contracts";
 import { canSnooze, resolveSnoozePresets } from "@t3tools/client-runtime/state/thread-settled";
 import { resolveSettledThreadTimestamp } from "@t3tools/client-runtime/state/thread-sort";
 import type { MenuAction } from "@react-native-menu/menu";
@@ -13,6 +14,7 @@ import type { SwipeableMethods } from "react-native-gesture-handler/ReanimatedSw
 import { SymbolView } from "../../components/AppSymbol";
 import { AppText as Text } from "../../components/AppText";
 import { ControlPillMenu } from "../../components/ControlPill";
+import { EnvironmentMachineSymbol } from "../../components/EnvironmentMachineSymbol";
 import { ProjectFavicon } from "../../components/ProjectFavicon";
 import { ProviderIcon } from "../../components/ProviderIcon";
 import { cn } from "../../lib/cn";
@@ -189,20 +191,26 @@ const PENDING_TASK_MENU_ACTIONS: MenuAction[] = [
   { id: "delete", title: "Delete", image: "trash", attributes: { destructive: true } },
 ];
 
+const DRAFT_TASK_MENU_ACTIONS: MenuAction[] = [
+  { id: "delete", title: "Discard", image: "trash", attributes: { destructive: true } },
+];
+
 /**
- * A queued new task, in the same idiom as an active v2 row: it is work the
- * user wrote, so it reads like the threads it will become. "Queued" takes
- * the status slot — the state is the one thing that differs — and stays
- * uncolored because nothing is asked of the user; the environment is simply
- * not reachable yet.
+ * Unsent work, in the same idiom as an active v2 row: it is work the user
+ * wrote, so it reads like the thread it will become. The status slot says
+ * what happens next, not where the item sits: "Sends on reconnect" stays
+ * uncolored because nothing is asked of the user; "Draft" takes the amber the
+ * web sidebar uses for drafts, because this one waits on the user.
  */
 export const ThreadListV2PendingRow = memo(function ThreadListV2PendingRow(props: {
   readonly pendingTask: PendingNewTask;
   readonly project: EnvironmentProject | null;
   readonly projectTitle?: string;
   readonly environmentLabel: string | null;
+  /** Drawn beside the label; ignored while the label is null. */
+  readonly environmentMachine?: EnvironmentMachineKind;
   readonly pane?: "screen" | "sidebar";
-  /** Draws the "Pending" divider above the first queued row. */
+  /** Draws the "Unsent" divider above the first draft or queued row. */
   readonly showPendingDivider: boolean;
   /** Keeps row hairlines inside a section; section headers draw their own rule. */
   readonly showTrailingDivider?: boolean;
@@ -213,9 +221,9 @@ export const ThreadListV2PendingRow = memo(function ThreadListV2PendingRow(props
   const drawerColor = useThemeColor("--color-drawer");
   const pressedBackgroundColor = useThemeColor("--color-subtle");
   const sidebarPane = props.pane === "sidebar";
-  const projectTitle =
-    props.projectTitle ?? props.project?.title ?? pendingTask.creation.projectTitle ?? "";
-  const branch = pendingTask.creation.branch;
+  const isDraft = pendingTask.kind === "draft";
+  const projectTitle = props.projectTitle ?? props.project?.title ?? pendingTask.projectTitle ?? "";
+  const branch = pendingTask.branch;
 
   const handleMenuAction = useCallback(
     ({ nativeEvent }: { readonly nativeEvent: { readonly event: string } }) => {
@@ -229,7 +237,7 @@ export const ThreadListV2PendingRow = memo(function ThreadListV2PendingRow(props
       <View className="flex-row items-center gap-1.5">
         {props.project ? (
           <ProjectFavicon
-            environmentId={pendingTask.message.environmentId}
+            environmentId={pendingTask.environmentId}
             faviconPath={props.project.faviconPath}
             projectIcon={props.project.projectIcon}
             size={15}
@@ -240,7 +248,14 @@ export const ThreadListV2PendingRow = memo(function ThreadListV2PendingRow(props
         <Text className="flex-1 text-sm font-t3-medium text-foreground-muted" numberOfLines={1}>
           {projectTitle}
         </Text>
-        <Text className="text-xs text-foreground-tertiary">Queued</Text>
+        {isDraft ? (
+          <View className="flex-row items-center gap-1">
+            <SymbolView name="square.and.pencil" size={10} tintColor="#b45309" type="monochrome" />
+            <Text className="text-xs text-amber-700 dark:text-amber-300">Draft</Text>
+          </View>
+        ) : (
+          <Text className="text-xs text-foreground-tertiary">Sends on reconnect</Text>
+        )}
       </View>
       {/* One line, unlike the two an active row allows: a queued title is
           derived from the whole prompt rather than written as a title, so the
@@ -249,17 +264,26 @@ export const ThreadListV2PendingRow = memo(function ThreadListV2PendingRow(props
         {pendingTask.title}
       </Text>
       {branch || props.environmentLabel ? (
-        <Text className="mt-1 text-xs text-foreground-muted" numberOfLines={1}>
-          {branch ? (
-            <Text className="text-xs text-foreground-muted" style={{ fontFamily: MONO_FONT }}>
-              {branch}
-            </Text>
+        <View className="mt-1 flex-row items-center gap-1">
+          <Text className="shrink text-xs text-foreground-muted" numberOfLines={1}>
+            {branch ? (
+              <Text className="text-xs text-foreground-muted" style={{ fontFamily: MONO_FONT }}>
+                {branch}
+              </Text>
+            ) : null}
+            {branch && props.environmentLabel ? "  ·  " : null}
+            {props.environmentLabel ? (
+              <Text className="text-xs text-foreground-tertiary">{props.environmentLabel}</Text>
+            ) : null}
+          </Text>
+          {props.environmentLabel && props.environmentMachine ? (
+            <EnvironmentMachineSymbol
+              kind={props.environmentMachine}
+              size={11}
+              tintColorClassName="accent-foreground-tertiary"
+            />
           ) : null}
-          {branch && props.environmentLabel ? "  ·  " : null}
-          {props.environmentLabel ? (
-            <Text className="text-xs text-foreground-tertiary">{props.environmentLabel}</Text>
-          ) : null}
-        </Text>
+        </View>
       ) : null}
     </>
   );
@@ -267,15 +291,19 @@ export const ThreadListV2PendingRow = memo(function ThreadListV2PendingRow(props
   return (
     <>
       {props.showPendingDivider ? (
-        <ThreadListV2SectionDivider label="Pending" pane={props.pane} />
+        <ThreadListV2SectionDivider label="Unsent" pane={props.pane} />
       ) : null}
       <ControlPillMenu
-        actions={PENDING_TASK_MENU_ACTIONS}
+        actions={isDraft ? DRAFT_TASK_MENU_ACTIONS : PENDING_TASK_MENU_ACTIONS}
         onPressAction={handleMenuAction}
         shouldOpenOnLongPress
       >
         <Pressable
-          accessibilityHint="Opens the queued task for editing"
+          accessibilityHint={
+            isDraft
+              ? "Opens the draft in the new task composer"
+              : "Sends when the environment reconnects. Opens the task for editing"
+          }
           accessibilityLabel={pendingTask.title}
           accessibilityRole="button"
           onPress={() => onSelectPendingTask(pendingTask)}
@@ -327,6 +355,9 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
       the web sidebar's remote-environment cloud icon, but as text since
       phones have no hover tooltips. */
   readonly environmentLabel: string | null;
+  /** Drawn after the label so the machine reads at a glance; ignored while
+      the label is null. */
+  readonly environmentMachine?: EnvironmentMachineKind;
   /** Hosting surface. "screen" (default) renders the compact Home idiom:
       flat edge-to-edge rows on the screen background with inset hairlines.
       "sidebar" renders the iPad split-view idiom: rounded rows blending
@@ -782,6 +813,15 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
         ) : (
           <View className="flex-1" />
         )}
+        {status !== "failed" && props.environmentLabel && props.environmentMachine ? (
+          <EnvironmentMachineSymbol
+            kind={props.environmentMachine}
+            size={11}
+            tintColorClassName={
+              selected ? "accent-user-bubble-foreground-muted" : "accent-foreground-tertiary"
+            }
+          />
+        ) : null}
         {pr ? (
           <Text
             accessibilityLabel={pr.accessibilityLabel}

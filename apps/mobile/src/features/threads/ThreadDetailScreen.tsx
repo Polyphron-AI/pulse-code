@@ -1,3 +1,4 @@
+import { AppText as Text } from "../../components/AppText";
 import { resolveProviderSkillsForCwd } from "@t3tools/client-runtime/providerSkills";
 import { type EnvironmentConnectionPhase } from "@t3tools/client-runtime/connection";
 import type { EnvironmentThreadStatus } from "@t3tools/client-runtime/state/threads";
@@ -31,6 +32,7 @@ import {
 } from "react";
 import { isLiquidGlassSupported, LiquidGlassView } from "@callstack/liquid-glass";
 import {
+  Alert,
   AppState,
   Keyboard,
   Platform,
@@ -61,6 +63,8 @@ import type { StatusTone } from "../../components/StatusPill";
 import type { DraftComposerAttachment } from "../../lib/composerImages";
 import { CHAT_CONTENT_MAX_WIDTH, type LayoutVariant } from "../../lib/layout";
 import { IOS_NAV_BAR_HEIGHT } from "../../lib/layoutMetrics";
+import { editPendingThreadMessage } from "../../state/edit-pending-thread-message";
+import type { QueuedThreadMessage } from "../../state/thread-outbox-model";
 import { scopedThreadKey } from "../../lib/scopedEntities";
 import type {
   PendingApproval,
@@ -71,6 +75,7 @@ import type {
 import { PendingApprovalCard } from "./PendingApprovalCard";
 import { ComposerUsageLimits } from "./ComposerUsageLimits";
 import { PendingUserInputCard } from "./PendingUserInputCard";
+import { ThreadCreationFailedCard } from "./ThreadCreationFailedCard";
 import {
   derivePendingUserInputMaxHeight,
   ESTIMATED_KEYBOARD_HEIGHT,
@@ -93,6 +98,15 @@ export interface ThreadDetailScreenProps {
   readonly selectedThreadFeed: ReadonlyArray<ThreadFeedEntry>;
   readonly activeWorkStartedAt: string | null;
   readonly isCompacting: boolean;
+  /**
+   * The server has not created this thread yet. "preparing" runs while the
+   * queued creation is delivered (a worktree may be checking out); "failed"
+   * is a rejected creation whose content went back to the project draft.
+   */
+  readonly creationState:
+    | { readonly kind: "preparing"; readonly preparingWorktree: boolean }
+    | { readonly kind: "failed"; readonly reason: string; readonly onEditTask: () => void }
+    | null;
   readonly activePendingApproval: PendingApproval | null;
   readonly respondingApprovalId: ApprovalRequestId | null;
   readonly activePendingUserInput: PendingUserInput | null;
@@ -110,6 +124,8 @@ export interface ThreadDetailScreenProps {
   readonly projectWorkspaceRoot: string | null;
   readonly threadCwd: string | null;
   readonly selectedThreadQueueCount: number;
+  readonly queuedMessages: ReadonlyArray<QueuedThreadMessage>;
+  readonly dispatchingMessageId: MessageId | null;
   readonly serverConfig: T3ServerConfig | null;
   readonly layoutVariant?: LayoutVariant;
   readonly usesAutomaticContentInsets?: boolean;
@@ -133,7 +149,7 @@ export interface ThreadDetailScreenProps {
   readonly onSelectUserInputOption: (
     requestId: ApprovalRequestId,
     question: UserInputQuestion,
-    label: string,
+    value: string,
   ) => void;
   readonly onChangeUserInputCustomAnswer: (
     requestId: ApprovalRequestId,
@@ -548,7 +564,10 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
       anchorMessageId === null ||
       lastScrolledAnchorMessageIdRef.current === anchorMessageId ||
       contentPresentationKind !== "ready" ||
-      !selectedThreadFeed.some((entry) => entry.type === "message" && entry.id === anchorMessageId)
+      (!selectedThreadFeed.some(
+        (entry) => entry.type === "message" && entry.id === anchorMessageId,
+      ) &&
+        !props.queuedMessages.some((message) => message.messageId === anchorMessageId))
     ) {
       return;
     }
@@ -590,6 +609,7 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
     anchorMessageId,
     freeze,
     contentPresentationKind,
+    props.queuedMessages,
     selectedThreadFeed,
     scrollMessageToEnd,
     selectedThreadKey,
@@ -607,6 +627,22 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
     composerEditorRef.current?.blur();
     return messageId;
   }, [clearUsageLimitsFor, props.onSendMessage, selectedThreadKey]);
+
+  const handleEditPendingMessage = useCallback(async (message: QueuedThreadMessage) => {
+    try {
+      if (
+        (await editPendingThreadMessage(message)) &&
+        selectedThreadKeyRef.current === scopedThreadKey(message.environmentId, message.threadId)
+      ) {
+        composerEditorRef.current?.focus();
+      }
+    } catch (error) {
+      Alert.alert(
+        "Could not edit message",
+        error instanceof Error ? error.message : "Please try again.",
+      );
+    }
+  }, []);
 
   const collapseComposer = useCallback(() => {
     composerEditorRef.current?.blur();
@@ -669,6 +705,9 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
             threadId={props.selectedThread.id}
             workspaceRoot={props.threadCwd}
             feed={props.selectedThreadFeed}
+            queuedMessages={props.queuedMessages}
+            dispatchingMessageId={props.dispatchingMessageId}
+            onEditPendingMessage={handleEditPendingMessage}
             contentPresentation={props.contentPresentation}
             agentLabel={agentLabel}
             latestTurn={props.selectedThread.latestTurn}
@@ -803,10 +842,33 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
               ) : null}
             </View>
 
+            {props.creationState?.kind === "failed" ? (
+              <View className="px-4 pb-3">
+                <ThreadCreationFailedCard
+                  reason={props.creationState.reason}
+                  onEditTask={props.creationState.onEditTask}
+                />
+              </View>
+            ) : props.creationState?.kind === "preparing" ? (
+              <View className="px-4 pb-3">
+                <Text accessibilityLiveRegion="polite" className="text-sm text-foreground-muted">
+                  {props.creationState.preparingWorktree ? "Preparing worktree?" : "Starting task?"}
+                </Text>
+              </View>
+            ) : null}
             {/* Hidden (not unmounted) while a user-input request owns the
                 composer slot, so composer drafts and editor state survive. */}
-            <View style={activeUserInputRequestId !== null ? { display: "none" } : undefined}>
+            <View
+              style={
+                activeUserInputRequestId !== null || props.creationState?.kind === "failed"
+                  ? { display: "none" }
+                  : undefined
+              }
+            >
               <ThreadComposer
+                sendBlockedReason={
+                  props.creationState !== null ? "This task is still starting" : null
+                }
                 editorRef={composerEditorRef}
                 draftMessage={props.draftMessage}
                 draftAttachments={props.draftAttachments}

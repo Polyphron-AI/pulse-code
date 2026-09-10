@@ -1,13 +1,14 @@
 import { scopedThreadKey, scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
-import type {
-  EnvironmentId,
-  PullRequestAction,
-  PullRequestMergeMethod,
-  PullRequestUpdateMethod,
-  PullRequestRef,
-  PullRequestState,
-  ScopedThreadRef,
+import {
+  type EnvironmentId,
+  type PullRequestAction,
+  type PullRequestMergeMethod,
+  type PullRequestUpdateMethod,
+  type PullRequestRef,
+  type PullRequestState,
+  resolveEnvironmentMachineKind,
+  type ScopedThreadRef,
 } from "@t3tools/contracts";
 import {
   ArrowDownUpIcon,
@@ -34,7 +35,6 @@ import {
   PlayIcon,
   RefreshCwIcon,
   RotateCcwIcon,
-  ServerIcon,
   TriangleAlertIcon,
 } from "lucide-react";
 import {
@@ -60,7 +60,11 @@ import { useProjects } from "~/state/entities";
 import { useEnvironments } from "~/state/environments";
 import { useEnvironmentQuery } from "~/state/query";
 import { useLiveRefresh } from "~/hooks/useLiveRefresh";
-import { pullRequestEnvironment, useSharedPullRequestSummary } from "~/state/pullRequests";
+import {
+  pullRequestEnvironment,
+  usePullRequestTurnRefresh,
+  useSharedPullRequestSummary,
+} from "~/state/pullRequests";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { formatRelativeTimeLabel } from "~/timestampFormat";
 
@@ -73,6 +77,7 @@ import {
   AlertDialogPopup,
   AlertDialogTitle,
 } from "../ui/alert-dialog";
+import { EnvironmentMachineIcon } from "../EnvironmentMachineIcon";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -254,7 +259,10 @@ function ActOnEnvironmentPicker({
             {/* The radio item lays its children out as one block, so the icon and the label
                 need their own row to share a line. */}
             <span className="flex min-w-0 items-center gap-2">
-              <ServerIcon className="size-3.5 shrink-0" />
+              <EnvironmentMachineIcon
+                kind={environment.machine ?? "server"}
+                className="size-3.5 shrink-0"
+              />
               <span className="truncate">{environment.label}</span>
             </span>
           </MenuRadioItem>
@@ -361,6 +369,7 @@ function PullRequestBaseFreshnessWarning({
 
 export function PullRequestDetailPanel({
   environmentId,
+  threadRef = null,
   reference,
   refreshToken: forcedRefreshToken = 0,
   onActed,
@@ -371,6 +380,13 @@ export function PullRequestDetailPanel({
   composerDraftTarget,
 }: {
   environmentId: EnvironmentId;
+  /**
+   * The thread this panel sits beside, if any. Links that are not the pull
+   * request itself (check details, host permalinks) can open in that thread's
+   * in-app browser when the user has asked for it; the page has no thread, so
+   * there they always go to the system browser.
+   */
+  threadRef?: ScopedThreadRef | null;
   reference: PullRequestRef;
   /**
    * Bumped by whatever holds the panel when a reader asks for everything on screen to be read
@@ -502,6 +518,7 @@ export function PullRequestDetailPanel({
     pullRequestEnvironment.activity({ environmentId, input: reference }),
   );
   const sharedSummary = useSharedPullRequestSummary(environmentId, reference, detailQuery.data);
+  const turnRefresh = usePullRequestTurnRefresh(environmentId);
   const coreDetail = useMemo(
     () =>
       detailQuery.data === null || sharedSummary === null || sharedSummary === detailQuery.data
@@ -549,6 +566,8 @@ export function PullRequestDetailPanel({
     detailQuery.refresh();
     activityQuery.refresh();
   }, [activityQuery.refresh, detailQuery.refresh]);
+  const [refreshToken, setRefreshToken] = useState(0);
+  const codeRefreshToken = refreshToken + (turnRefresh ?? 0);
   const activityRevision = useRef<{ readonly key: string; readonly updatedAt: string } | null>(
     null,
   );
@@ -574,15 +593,18 @@ export function PullRequestDetailPanel({
   // revision effect above reads it only after this same pull request reports a change. Keyed by
   // the pull request rather than by the panel, because this one panel shows a different pull
   // request every time it is opened.
-  useLiveRefresh(detailQuery.refresh, {
-    key: `pull-request:${reference.projectId}:${reference.repository}#${reference.number}`,
-  });
+  useLiveRefresh(
+    () => {
+      detailQuery.refresh();
+      setRefreshToken((token) => token + 1);
+    },
+    { key: `pull-request:${reference.projectId}:${reference.repository}#${reference.number}` },
+  );
   // The button, on the other hand, goes around the server's cache rather than through it: it is
   // the answer for a reader who can see that what they are looking at is behind. The
   // invalidation goes first so the re-reads miss that cache; if it fails, the reads still run
   // and at worst answer from it.
   const invalidate = useAtomCommand(pullRequestEnvironment.invalidate, { reportFailure: false });
-  const [refreshToken, setRefreshToken] = useState(0);
   const refreshFromHost = useCallback(async () => {
     await invalidate({ environmentId, input: { reference } });
     refreshDetail();
@@ -621,7 +643,11 @@ export function PullRequestDetailPanel({
         ? resolvePickableEnvironments(
             { environmentId, projectId: reference.projectId },
             projects,
-            environments,
+            environments.map((environment) => ({
+              environmentId: environment.environmentId,
+              label: environment.label,
+              machine: resolveEnvironmentMachineKind(environment.serverConfig),
+            })),
           )
         : [],
     [context, environmentId, environments, projects, reference.projectId],
@@ -1149,7 +1175,7 @@ export function PullRequestDetailPanel({
     !conflicting &&
     allowedMergeMethods.length > 1;
   // The pull request number carries this state in the overview and the right-panel tab mirrors
-  // it. Conflicts keep their own row below: an open pull request remains green there.
+  // it. Conflicts take the action slot while they need a person, but do not change the PR state.
   const statePresentation = detail
     ? resolvePullRequestState({ state: detail.state, isDraft: detail.isDraft })
     : null;
@@ -1272,7 +1298,11 @@ export function PullRequestDetailPanel({
                 ) : checksSummary ? (
                   <span className="flex shrink-0 items-center gap-1 text-[10px] text-muted-foreground">
                     {detail && checksState !== null ? (
-                      <PullRequestChecksPopover checks={detail.checks} checksState={checksState} />
+                      <PullRequestChecksPopover
+                        checks={detail.checks}
+                        checksState={checksState}
+                        threadRef={threadRef}
+                      />
                     ) : null}
                     {checksSummary}
                   </span>
@@ -1904,7 +1934,11 @@ export function PullRequestDetailPanel({
                     {/* The rollup icon opens the checks behind the summary; with none reported
                         there is nothing to open, so the plain glyph stays. */}
                     {detail && checksState !== null ? (
-                      <PullRequestChecksPopover checks={detail.checks} checksState={checksState} />
+                      <PullRequestChecksPopover
+                        checks={detail.checks}
+                        checksState={checksState}
+                        threadRef={threadRef}
+                      />
                     ) : (
                       <CircleDotIcon aria-hidden className="size-3.5" />
                     )}
@@ -2046,6 +2080,7 @@ export function PullRequestDetailPanel({
               <div className={cn("absolute inset-0", tab !== "summary" && "invisible")}>
                 <PullRequestSummaryTab
                   environmentId={environmentId}
+                  threadRef={threadRef}
                   reference={reference}
                   detail={detail}
                   activityPending={activityPending}
@@ -2073,6 +2108,7 @@ export function PullRequestDetailPanel({
                   <PullRequestTimelineTab
                     detail={detail}
                     environmentId={environmentId}
+                    threadRef={threadRef}
                     reference={reference}
                     order={timelineOrder}
                     onOpenCommit={openCommit}
@@ -2095,7 +2131,7 @@ export function PullRequestDetailPanel({
                     fixFindingLabel={handoffLabels.fixFinding}
                     onFixFinding={startFixFinding}
                     onRefresh={refreshDetail}
-                    refreshToken={refreshToken}
+                    refreshToken={codeRefreshToken}
                   />
                 </Suspense>
               </div>

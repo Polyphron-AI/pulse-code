@@ -28,13 +28,7 @@ import {
   type ViewStyle,
 } from "react-native";
 import { FilePreviewModal, type FilePreviewSource } from "../../components/FilePreviewModal";
-import Animated, {
-  FadeIn,
-  FadeInDown,
-  FadeOut,
-  FadeOutDown,
-  LinearTransition,
-} from "react-native-reanimated";
+import Animated, { FadeIn, FadeOut, LinearTransition } from "react-native-reanimated";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { useThemeColor } from "../../lib/useThemeColor";
 import { themeColorWithAlpha } from "../../lib/mobileTheme";
@@ -62,7 +56,11 @@ import type {
   DraftComposerAttachment,
   DraftComposerFileAttachment,
 } from "../../lib/composerImages";
-import { buildModelOptions, groupByProvider } from "../../lib/modelOptions";
+import {
+  buildModelOptions,
+  groupByProvider,
+  isModelSelectionUnavailable,
+} from "../../lib/modelOptions";
 import { useScaledTextRole } from "../settings/appearance/useScaledTextRole";
 import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
 import type { RemoteClientConnectionState } from "../../lib/connection";
@@ -110,6 +108,8 @@ export interface ThreadComposerProps {
   readonly queueCount: number;
   readonly environmentId: EnvironmentId;
   readonly projectCwd: string | null;
+  /** Why sending is blocked right now (shown as the send button's label), or null. */
+  readonly sendBlockedReason?: string | null;
   readonly editorRef?: RefObject<ComposerEditorHandle | null>;
   readonly onChangeDraftMessage: (value: string) => void;
   readonly onPickDraftImages: () => Promise<void>;
@@ -247,12 +247,7 @@ const ComposerConnectionStatusPill = memo(function ComposerConnectionStatusPill(
   const indicatorColor = useThemeColor("--color-icon-muted");
 
   return (
-    <Animated.View
-      className="absolute inset-x-0 bottom-full items-center pb-2"
-      entering={FadeInDown.duration(180)}
-      exiting={FadeOutDown.duration(140)}
-      pointerEvents="box-none"
-    >
+    <View className="absolute inset-x-0 bottom-full items-center pb-2" pointerEvents="box-none">
       <Pressable
         accessibilityRole="button"
         onPress={props.onPress}
@@ -270,7 +265,7 @@ const ComposerConnectionStatusPill = memo(function ComposerConnectionStatusPill(
           {props.status.label}
         </Text>
       </Pressable>
-    </Animated.View>
+    </View>
   );
 });
 
@@ -299,7 +294,10 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
   // Opening and presentation count as active so the composer stays expanded
   // while focus moves between its native editor and the settings picker.
   const isExpanded = isFocused || settingsSheetPresentation.isActive;
-  const canSend = hasContent;
+  const modelUnavailable =
+    props.connectionState === "connected" &&
+    isModelSelectionUnavailable(props.serverConfig, props.selectedThread.modelSelection);
+  const canSend = hasContent && !modelUnavailable && !props.sendBlockedReason;
 
   // Notify the parent from the derived value, not focus events: the parent
   // sizes the feed inset from this, and blur-during-sheet would otherwise
@@ -417,7 +415,10 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
     hasThread: true,
     hasCompactableConversation: props.hasCompactableConversation,
     onChangeDraftMessage: props.onChangeDraftMessage,
-    onUpdateInteractionMode: props.onUpdateInteractionMode,
+    onUpdateInteractionMode:
+      selectedProviderStatus?.showInteractionModeToggle === false
+        ? undefined
+        : props.onUpdateInteractionMode,
     offersUsageLimits: usageLimitsOffered,
     onUsageLimits:
       usageLimitsOffered && props.draftAttachments.length === 0 ? openUsageLimits : undefined,
@@ -491,6 +492,8 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
   const settingsRouteSession = useMemo<ExistingThreadSettingsRouteSession>(
     () => ({
       ownerId: settingsOwnerId,
+      environmentId: props.environmentId,
+      providerInstanceId: currentModelSelection.instanceId,
       providerGroups: threadProviderGroups,
       selectedModel: currentModelSelection,
       onSelectModel: (option) => props.onUpdateModelSelection(option.selection),
@@ -595,6 +598,12 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
             status={connectionStatus}
             onPress={props.onReconnectEnvironment}
           />
+        ) : null}
+
+        {modelUnavailable ? (
+          <Pressable accessibilityRole="button" className="px-3 py-2" onPress={openSettings}>
+            <Text className="text-xs text-foreground">Model unavailable. Open model settings.</Text>
+          </Pressable>
         ) : null}
 
         <ComposerSurface
@@ -753,7 +762,7 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
                 ) : null}
               </ComposerToolbarScroller>
               <ComposerToolbarButton
-                accessibilityLabel={sendLabel}
+                accessibilityLabel={props.sendBlockedReason ?? sendLabel}
                 icon="arrow.up"
                 variant="primary"
                 disabled={!canSend}
@@ -763,16 +772,6 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
             </ComposerToolbarRow>
           ) : null}
         </ComposerSurface>
-
-        {/* Queue count */}
-        {props.queueCount > 0 ? (
-          <Animated.View entering={FadeIn.duration(180)} exiting={FadeOut.duration(120)}>
-            <Text className="pt-2 text-xs text-foreground-muted">
-              {props.queueCount} queued message{props.queueCount === 1 ? "" : "s"} will send
-              automatically.
-            </Text>
-          </Animated.View>
-        ) : null}
       </Animated.View>
 
       <VideoPreviewModal source={previewVideo} onRequestClose={closePreview} />

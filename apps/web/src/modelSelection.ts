@@ -1,4 +1,5 @@
 import {
+  ANTIGRAVITY_DEFAULT_MODEL,
   DEFAULT_TEXT_GENERATION_MODEL,
   DEFAULT_TEXT_GENERATION_MODEL_BY_PROVIDER,
   defaultInstanceIdForDriver,
@@ -10,6 +11,7 @@ import {
 import {
   type CustomModelDefinition,
   readCustomModelEntries,
+  normalizeCustomModelSlug,
   createModelSelection,
   resolveSelectableModel,
 } from "@t3tools/shared/model";
@@ -23,7 +25,11 @@ import {
   resolveSelectableProvider,
 } from "./providerModels";
 import { ModelEsque } from "./components/chat/providerIconUtils";
-import { type ProviderInstanceEntry, deriveProviderInstanceEntries } from "./providerInstances";
+import {
+  type ProviderInstanceEntry,
+  deriveProviderInstanceEntries,
+  NO_PROVIDER_MODEL_SELECTION,
+} from "./providerInstances";
 import { sortModelsForProviderInstance } from "./modelOrdering";
 
 const MAX_CUSTOM_MODEL_COUNT = 32;
@@ -51,6 +57,7 @@ function readInstanceCustomModels(
   instanceId: ProviderInstanceId,
   driverKind: ProviderDriverKind,
 ): ReadonlyArray<CustomModelDefinition> {
+  if (driverKind === "antigravity") return [];
   const instance = settings.providerInstances?.[instanceId];
   const config = instance?.config;
   if (config !== null && typeof config === "object") {
@@ -83,6 +90,28 @@ export interface AppModelOption {
   isCustom: boolean;
   isDefault?: boolean;
   isLegacy?: boolean;
+  isUnavailable?: boolean;
+}
+
+function appendUnavailableDynamicModelSelection(
+  options: AppModelOption[],
+  rawModels: ReadonlyArray<ServerProvider["models"][number]>,
+  provider: ProviderDriverKind,
+  selectedModel: string | null | undefined,
+  hiddenModels: ReadonlyArray<string>,
+): AppModelOption[] {
+  if (provider !== "opencode" && provider !== "antigravity") return options;
+  const slug = normalizeCustomModelSlug(selectedModel);
+  if (!slug) return options;
+  if (provider === "antigravity" && slug === ANTIGRAVITY_DEFAULT_MODEL) return options;
+
+  // A model that exists in the raw catalog can be absent from `options`
+  // because the user hid it. Keep that preference authoritative.
+  if (resolveSelectableModel(provider, slug, rawModels) !== null) return options;
+  if (hiddenModels.includes(slug)) return options;
+  if (options.some((option) => option.slug === slug)) return options;
+
+  return [...options, { slug, name: slug, isCustom: false, isUnavailable: true }];
 }
 
 function toAppModelOption(model: ServerProvider["models"][number]): AppModelOption {
@@ -156,9 +185,10 @@ export function getAppModelOptions(
   settings: UnifiedSettings,
   providers: ReadonlyArray<ServerProvider>,
   provider: ProviderDriverKind,
-  _selectedModel?: string | null,
+  selectedModel?: string | null,
 ): AppModelOption[] {
-  const options: AppModelOption[] = getProviderModels(providers, provider).map(toAppModelOption);
+  const rawModels = getProviderModels(providers, provider);
+  const options: AppModelOption[] = rawModels.map(toAppModelOption);
   const seen = new Set(options.map((option) => option.slug));
   const builtInModelSlugs = new Set(
     Arr.filterMap(getProviderModels(providers, provider), (model) =>
@@ -178,9 +208,13 @@ export function getAppModelOptions(
     options.push({ slug: entry.slug, name: entry.name, isCustom: true });
   }
 
-  return applyInstanceModelPreferences(
-    options,
-    readInstanceModelPreferences(settings, defaultInstanceId),
+  const preferences = readInstanceModelPreferences(settings, defaultInstanceId);
+  return appendUnavailableDynamicModelSelection(
+    applyInstanceModelPreferences(options, preferences),
+    rawModels,
+    provider,
+    selectedModel,
+    preferences.hiddenModels,
   );
 }
 
@@ -198,6 +232,7 @@ export function getAppModelOptions(
 export function getAppModelOptionsForInstance(
   settings: UnifiedSettings,
   entry: ProviderInstanceEntry,
+  selectedModel?: string | null,
 ): AppModelOption[] {
   const options: AppModelOption[] = entry.models.map(toAppModelOption);
   const seen = new Set(options.map((option) => option.slug));
@@ -214,9 +249,13 @@ export function getAppModelOptionsForInstance(
     options.push({ slug: entry.slug, name: entry.name, isCustom: true });
   }
 
-  return applyInstanceModelPreferences(
-    options,
-    readInstanceModelPreferences(settings, entry.instanceId),
+  const preferences = readInstanceModelPreferences(settings, entry.instanceId);
+  return appendUnavailableDynamicModelSelection(
+    applyInstanceModelPreferences(options, preferences),
+    entry.models,
+    entry.driverKind,
+    selectedModel,
+    preferences.hiddenModels,
   );
 }
 
@@ -239,20 +278,37 @@ export function resolveAppModelSelectionForInstance(
   settings: UnifiedSettings,
   providers: ReadonlyArray<ServerProvider>,
   selectedModel: string | null | undefined,
+  resolutionOptions?: { readonly preserveUnavailableSelection?: boolean },
 ): string | null {
   const entry = deriveProviderInstanceEntries(providers).find(
     (candidate) => candidate.instanceId === instanceId,
   );
   if (!entry) return null;
-  const options = getAppModelOptionsForInstance(settings, entry);
-  return (
-    resolveSelectableModel(entry.driverKind, selectedModel, options) ??
-    options.find((option) => option.isDefault)?.slug ??
-    options[0]?.slug ??
-    entry.models.find((model) => model.isDefault)?.slug ??
-    entry.models[0]?.slug ??
-    null
+  const options = getAppModelOptionsForInstance(
+    settings,
+    entry,
+    resolutionOptions?.preserveUnavailableSelection ? selectedModel : null,
   );
+  const resolvedSelection = resolveSelectableModel(entry.driverKind, selectedModel, options);
+  if (resolvedSelection) {
+    return resolvedSelection;
+  }
+  if (
+    resolutionOptions?.preserveUnavailableSelection &&
+    (entry.driverKind === "opencode" || entry.driverKind === "antigravity")
+  ) {
+    const unavailableSelection = normalizeCustomModelSlug(selectedModel);
+    const hiddenModels = readInstanceModelPreferences(settings, entry.instanceId).hiddenModels;
+    if (
+      unavailableSelection &&
+      !hiddenModels.includes(unavailableSelection) &&
+      resolveSelectableModel(entry.driverKind, selectedModel, entry.models) === null &&
+      (entry.driverKind !== "antigravity" || unavailableSelection !== ANTIGRAVITY_DEFAULT_MODEL)
+    ) {
+      return unavailableSelection;
+    }
+  }
+  return options.find((option) => option.isDefault)?.slug ?? options[0]?.slug ?? null;
 }
 
 /**
@@ -263,12 +319,19 @@ export function resolveAppModelSelectionForInstance(
 export function getCustomModelOptionsByInstance(
   settings: UnifiedSettings,
   providers: ReadonlyArray<ServerProvider>,
-  _selectedInstanceId?: ProviderInstanceId | null,
-  _selectedModel?: string | null,
+  selectedInstanceId?: ProviderInstanceId | null,
+  selectedModel?: string | null,
 ): ReadonlyMap<ProviderInstanceId, ReadonlyArray<ModelEsque>> {
   const out = new Map<ProviderInstanceId, ReadonlyArray<ModelEsque>>();
   for (const entry of deriveProviderInstanceEntries(providers)) {
-    out.set(entry.instanceId, getAppModelOptionsForInstance(settings, entry));
+    out.set(
+      entry.instanceId,
+      getAppModelOptionsForInstance(
+        settings,
+        entry,
+        entry.instanceId === selectedInstanceId ? selectedModel : null,
+      ),
+    );
   }
   return out;
 }
@@ -281,7 +344,10 @@ export function resolveAppModelSelectionState(
     instanceId: DEFAULT_TEXT_GENERATION_INSTANCE_ID,
     model: DEFAULT_TEXT_GENERATION_MODEL,
   };
-  const entries = deriveProviderInstanceEntries(providers);
+  const supportedProviders = providers.filter(
+    (provider) => provider.supportsTextGeneration !== false,
+  );
+  const entries = deriveProviderInstanceEntries(supportedProviders);
   const selectedEntry = entries.find(
     (entry) => entry.instanceId === selection.instanceId && entry.enabled && entry.isAvailable,
   );
@@ -292,7 +358,12 @@ export function resolveAppModelSelectionState(
     // don't carry over the old instance's model — use the fallback instance's default.
     const selectedModel = selectedEntry ? selection.model : null;
     const model =
-      resolveAppModelSelectionForInstance(entry.instanceId, settings, providers, selectedModel) ??
+      resolveAppModelSelectionForInstance(
+        entry.instanceId,
+        settings,
+        supportedProviders,
+        selectedModel,
+      ) ??
       entry.models[0]?.slug ??
       DEFAULT_TEXT_GENERATION_MODEL_BY_PROVIDER[entry.driverKind];
     if (!model) {
@@ -309,19 +380,5 @@ export function resolveAppModelSelectionState(
     return createModelSelection(entry.instanceId, model, modelOptionsForDispatch);
   }
 
-  const provider = resolveSelectableProvider(providers, null);
-  const keptSelectedProvider = false;
-
-  // When the provider changed due to fallback (e.g. selected provider was disabled),
-  // don't carry over the old provider's model — use the fallback provider's default.
-  const selectedModel = keptSelectedProvider ? selection.model : null;
-  const model = resolveAppModelSelection(provider, settings, providers, selectedModel);
-  const { modelOptionsForDispatch } = getComposerProviderState({
-    provider,
-    model,
-    models: getProviderModels(providers, provider),
-    modelOptions: keptSelectedProvider ? selection.options : undefined,
-  });
-
-  return createModelSelection(defaultInstanceIdForDriver(provider), model, modelOptionsForDispatch);
+  return NO_PROVIDER_MODEL_SELECTION;
 }

@@ -1,5 +1,13 @@
 # V40 contract compatibility audit, 10 September 2026
 
+## Follow-up at `189b422b2`
+
+The findings below describe the original checkpoint. Subsequent integration covers quit modes, CLI surface metadata, legacy PR checkout defaults, PR actions/labels/draft state, Grok v5 usage, deleted bootstrap recovery, turn token usage, custom prices and explicit rate refresh, environment themes/machine icons, browser profiles/import/muting/activation, file reveal, image dimensions, and keybinding commands. Reset-credit RPC errors now accept both Pulse's existing error and V40's setup error. Theme subscription seam tests verify opt-in delivery and no theme-stream subscription for legacy clients. See the completion ledger for tested scopes and limitations.
+
+Native tool icons/source metadata, assistant citations, browser link targets, contrast, panel motion, proactive panels, and final composer-scroll behavior remain separate work. Integration of optional fields does not establish real provider, installed desktop update, or native media acceptance. The baseline remains unchanged.
+
+## Original audit
+
 This is a read-only semantic review of the 48 `packages/contracts` paths changed from declared baseline `a87f691bd` to fixed target `09e8de9c6`, compared against integrator `33065a21a`. It does not establish full V40 compatibility. It compares schema fields, literals, defaults, RPC registration, and source commits, not just filenames. No live server, installer, provider, or browser was exercised.
 
 The completion ledger and prior correctness/protocol ledgers were read. Their broad pending groups remain pending; the findings below refine them into actionable contract gaps. Subsequent ready work is accounted for separately: nightly contract `3598fdcf2`, desktop `30e483738`, web `6c74a5bdd`; setup/import agent `31227320a` covers welcome bootstrap fields and provider-aware terminal inputs/errors. Do not reimplement those as new findings.

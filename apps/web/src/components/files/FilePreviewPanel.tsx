@@ -1,3 +1,4 @@
+import { useWorkspaceMutationRefresh } from "~/hooks/useWorkspaceMutationRefresh";
 import { isAbsolutePath } from "~/terminal-links";
 import { fileBreadcrumbs } from "./filePath";
 import type {
@@ -48,7 +49,6 @@ import { buildFileReviewComment } from "~/reviewCommentContext";
 import { assetEnvironment } from "~/state/assets";
 import { useEnvironmentHttpBaseUrl, usePrimaryEnvironmentId } from "~/state/environments";
 import { previewEnvironment } from "~/state/preview";
-import { projectEnvironment } from "~/state/projects";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { useAtomQueryRunner } from "~/state/use-atom-query-runner";
 
@@ -72,15 +72,16 @@ import {
   setMarkdownTaskChecked,
   shouldShowFileExplorer,
 } from "./filePreviewMode";
-import { FileSaveCoordinator } from "./fileSaveCoordinator";
+import { useFileSaveCoordinator } from "./useFileSaveCoordinator";
 import {
-  confirmProjectFileQueryData,
   getOptimisticProjectFileQueryData,
   setProjectFileQueryData,
   useProjectFileQuery,
 } from "./projectFilesQueryState";
 
 interface FilePreviewPanelProps {
+  workspaceMutationId?: string | null;
+  selectedFilePending?: boolean;
   environmentId: EnvironmentId;
   cwd: string;
   projectName: string;
@@ -98,7 +99,6 @@ interface FilePreviewPanelProps {
 
 const FILE_EXPLORER_STORAGE_KEY = "t3code.fileExplorerOpen";
 const RENDER_MARKDOWN_STORAGE_KEY = "t3code.renderMarkdown";
-const FILE_SAVE_DEBOUNCE_MS = 500;
 const FILE_LINK_REVEAL_ATTRIBUTE = "data-file-link-reveal";
 const FILE_LINK_REVEAL_UNSAFE_CSS = `
   ${DIFF_SURFACE_THEME_UNSAFE_CSS}
@@ -145,6 +145,7 @@ const FILE_LINK_REVEAL_UNSAFE_CSS = `
 type FilePostRender = NonNullable<FileOptions<unknown>["onPostRender"]>;
 
 function WorkspaceImagePreview(props: {
+  readonly workspaceMutationId: string | null;
   readonly environmentId: EnvironmentId;
   readonly threadRef: ScopedThreadRef;
   readonly absolutePath: string;
@@ -161,7 +162,10 @@ function WorkspaceImagePreview(props: {
   );
   const assetUrl = useAssetUrlState(props.environmentId, resource);
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
-  const revisionSuffix = "";
+  const revisionSuffix =
+    props.workspaceMutationId === null
+      ? ""
+      : `${assetUrl._tag === "Success" && assetUrl.url.includes("?") ? "&" : "?"}workspace-revision=${encodeURIComponent(props.workspaceMutationId)}`;
   const imageUrl = assetUrl._tag === "Success" ? `${assetUrl.url}${revisionSuffix}` : null;
   const actionsSource: MediaActionSource = {
     kind: "image",
@@ -171,7 +175,7 @@ function WorkspaceImagePreview(props: {
     asset: { environmentId: props.environmentId, resource },
   };
 
-  if (assetUrl._tag === "Failure" || (assetUrl._tag === "Success" && failedUrl === assetUrl.url)) {
+  if (assetUrl._tag === "Failure" || (assetUrl._tag === "Success" && failedUrl === imageUrl)) {
     return (
       <MediaActions source={actionsSource}>
         <div className="flex min-h-0 flex-1 items-center justify-center px-6 text-center text-xs leading-relaxed text-destructive">
@@ -271,6 +275,7 @@ function AttachmentBrowserPreview(props: {
  * host file outside it is served on its own.
  */
 function WorkspaceBrowserPreview(props: {
+  readonly workspaceMutationId: string | null;
   readonly environmentId: EnvironmentId;
   readonly threadRef: ScopedThreadRef;
   readonly absolutePath: string;
@@ -288,7 +293,10 @@ function WorkspaceBrowserPreview(props: {
     [insideWorkspace, props.threadRef.threadId, props.absolutePath],
   );
   const assetUrl = useAssetUrlState(props.environmentId, resource);
-  const revisionSuffix = "";
+  const revisionSuffix =
+    props.workspaceMutationId === null
+      ? ""
+      : `${assetUrl._tag === "Success" && assetUrl.url.includes("?") ? "&" : "?"}workspace-revision=${encodeURIComponent(props.workspaceMutationId)}`;
 
   if (assetUrl._tag === "Failure") {
     return (
@@ -314,6 +322,7 @@ function WorkspaceBrowserPreview(props: {
 }
 
 function WorkspaceVideoPreview(props: {
+  readonly workspaceMutationId: string | null;
   readonly environmentId: EnvironmentId;
   readonly threadRef: ScopedThreadRef;
   readonly absolutePath: string;
@@ -330,7 +339,17 @@ function WorkspaceVideoPreview(props: {
   );
   const assetUrl = useAssetUrlState(props.environmentId, resource);
   const refreshAssetUrl = useAssetUrlRefresh(props.environmentId, resource);
-  const revisionSuffix = "";
+  useWorkspaceMutationRefresh({
+    mutationId: props.workspaceMutationId,
+    resourceKey: JSON.stringify([props.environmentId, resource]),
+    refresh: () => {
+      void refreshAssetUrl().catch(() => undefined);
+    },
+  });
+  const revisionSuffix =
+    props.workspaceMutationId === null
+      ? ""
+      : `${assetUrl._tag === "Success" && assetUrl.url.includes("?") ? "&" : "?"}workspace-revision=${encodeURIComponent(props.workspaceMutationId)}`;
   const latestUrl = assetUrl._tag === "Success" ? `${assetUrl.url}${revisionSuffix}` : null;
 
   return (
@@ -339,6 +358,7 @@ function WorkspaceVideoPreview(props: {
         src={latestUrl}
         sourceFailed={assetUrl._tag === "Failure"}
         label={props.name}
+        revision={props.workspaceMutationId}
         preload="metadata"
         className="flex h-full min-h-0 w-full max-w-5xl items-center justify-center"
         onRetry={refreshAssetUrl}
@@ -587,37 +607,6 @@ interface EditableFileSurfaceProps {
 interface FileSelectionOverride {
   revealRequestId: number;
   range: SelectedLineRange | null;
-}
-
-function useFileSaveCoordinator({
-  environmentId,
-  cwd,
-  relativePath,
-  onPendingChange,
-}: Pick<
-  EditableFileSurfaceProps,
-  "environmentId" | "cwd" | "relativePath" | "onPendingChange"
->): FileSaveCoordinator {
-  const writeFile = useAtomCommand(projectEnvironment.writeFile);
-  const coordinator = useMemo(
-    () =>
-      new FileSaveCoordinator({
-        debounceMs: FILE_SAVE_DEBOUNCE_MS,
-        onPendingChange: (pending) => onPendingChange(relativePath, pending),
-        persist: (nextContents) =>
-          writeFile({
-            environmentId,
-            input: { cwd, relativePath, contents: nextContents },
-          }),
-        onConfirmed: (confirmedContents) => {
-          confirmProjectFileQueryData(environmentId, cwd, relativePath, confirmedContents);
-        },
-      }),
-    [cwd, environmentId, onPendingChange, relativePath, writeFile],
-  );
-
-  useEffect(() => () => coordinator.dispose(), [coordinator]);
-  return coordinator;
 }
 
 function EditableFileSurface({
@@ -945,6 +934,8 @@ function initialExplorerOpen(): boolean {
 }
 
 export default function FilePreviewPanel({
+  workspaceMutationId = null,
+  selectedFilePending = false,
   environmentId,
   cwd,
   projectName,
@@ -987,6 +978,17 @@ export default function FilePreviewPanel({
     relativePath,
     attachment === undefined && !isMedia && !isPdf && !downloadOnly,
   );
+  useWorkspaceMutationRefresh({
+    enabled:
+      relativePath !== null &&
+      attachment === undefined &&
+      !isMedia &&
+      !isPdf &&
+      !selectedFilePending,
+    mutationId: workspaceMutationId,
+    resourceKey: JSON.stringify([environmentId, cwd, relativePath]),
+    refresh: file.refresh,
+  });
   const [renderBrowserFilePreferred, setRenderBrowserFilePreferred] = useState(true);
   const [explorerOpen, setExplorerOpen] = useState(initialExplorerOpen);
   const showExplorer = shouldShowFileExplorer({
@@ -1240,6 +1242,7 @@ export default function FilePreviewPanel({
             <AttachmentBrowserPreview environmentId={environmentId} attachment={attachment} />
           ) : relativePath && isVideo && absolutePath ? (
             <WorkspaceVideoPreview
+              workspaceMutationId={workspaceMutationId}
               key={`${environmentId}:${threadRef.threadId}:${absolutePath}`}
               environmentId={environmentId}
               threadRef={threadRef}
@@ -1260,6 +1263,7 @@ export default function FilePreviewPanel({
             </div>
           ) : relativePath && isImage && absolutePath ? (
             <WorkspaceImagePreview
+              workspaceMutationId={workspaceMutationId}
               key={absolutePath}
               environmentId={environmentId}
               threadRef={threadRef}
@@ -1269,6 +1273,7 @@ export default function FilePreviewPanel({
             />
           ) : relativePath && renderBrowserFile && absolutePath ? (
             <WorkspaceBrowserPreview
+              workspaceMutationId={workspaceMutationId}
               environmentId={environmentId}
               threadRef={threadRef}
               absolutePath={absolutePath}
@@ -1346,6 +1351,7 @@ export default function FilePreviewPanel({
             )}
           >
             <FileBrowserPanel
+              workspaceMutationId={workspaceMutationId}
               key={`${environmentId}:${cwd}`}
               environmentId={environmentId}
               cwd={cwd}

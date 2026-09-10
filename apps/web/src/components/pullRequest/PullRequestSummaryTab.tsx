@@ -1,9 +1,11 @@
+import { pullRequestLabelColor } from "./pullRequestList.logic";
 import type {
   EnvironmentId,
   PullRequestActor,
   PullRequestComment,
   PullRequestDetailView,
   PullRequestRef,
+  ScopedThreadRef,
 } from "@t3tools/contracts";
 import {
   ArrowDownUpIcon,
@@ -23,7 +25,7 @@ import { useRef, useState, type ReactNode } from "react";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { pullRequestEnvironment } from "~/state/pullRequests";
 import { cn } from "~/lib/utils";
-import { readLocalApi } from "~/localApi";
+import { useOpenLink } from "~/browser/useOpenLink";
 import { formatRelativeTimeLabel } from "~/timestampFormat";
 
 import { Button } from "../ui/button";
@@ -41,6 +43,7 @@ import {
   pullRequestReviewOutcomeRingClassName,
   pullRequestReviewOutcomeStaleLabel,
 } from "./pullRequestPresentation";
+import { PullRequestLabelPicker } from "./PullRequestLabelPicker";
 import { PullRequestReviewerPicker } from "./PullRequestReviewerPicker";
 import { PullRequestActivityUnavailableState } from "./PullRequestActivityUnavailableState";
 import {
@@ -64,12 +67,6 @@ import { sectionCollapseAnchorScrollTop } from "./pullRequestSummaryScroll.logic
 /** One reviewer, however a host happens to have cased their login this time. */
 function reviewerKey(login: string): string {
   return login.toLowerCase();
-}
-
-/** A host colour only when it is one, so a malformed value falls back to the neutral dot. */
-function labelDotColor(color: string | null): string | null {
-  const hex = color?.trim().replace(/^#/, "") ?? "";
-  return /^[0-9a-fA-F]{6}$/.test(hex) ? `#${hex}` : null;
 }
 
 /** The avatar carries the attribution alone; who it is arrives on hover, like the reviewer row. */
@@ -96,6 +93,8 @@ function reviewStateLabel(state: string): string {
 /** What every remark in the conversation needs to be rewritten where it sits. */
 interface CommentEditing {
   readonly cwd: string;
+  readonly environmentId: EnvironmentId;
+  readonly threadRef: ScopedThreadRef | null;
   readonly canEdit: (comment: PullRequestComment) => boolean;
   readonly editingId: string | null;
   readonly saving: boolean;
@@ -122,6 +121,8 @@ function CommentBody({
         className={className}
         value={comment.body}
         cwd={editing.cwd}
+        environmentId={editing.environmentId}
+        threadRef={editing.threadRef}
         label="Edit comment"
         saving={editing.saving}
         onSave={(body) => editing.onSave(comment, body)}
@@ -131,7 +132,13 @@ function CommentBody({
   }
   return (
     <div className={cn("flex items-start gap-1", className)}>
-      <PullRequestMarkdown className="min-w-0 flex-1" text={comment.body} cwd={editing.cwd} />
+      <PullRequestMarkdown
+        className="min-w-0 flex-1"
+        text={comment.body}
+        cwd={editing.cwd}
+        environmentId={editing.environmentId}
+        threadRef={editing.threadRef}
+      />
       {editing.canEdit(comment) ? (
         <Button
           size="icon-xs"
@@ -420,6 +427,7 @@ const COMMENT_PAGE = 30;
 
 export function PullRequestSummaryTab({
   environmentId,
+  threadRef,
   reference,
   detail,
   activityPending,
@@ -433,6 +441,7 @@ export function PullRequestSummaryTab({
   onRefresh,
 }: {
   environmentId: EnvironmentId;
+  threadRef: ScopedThreadRef | null;
   reference: PullRequestRef;
   detail: PullRequestDetailView;
   activityPending: boolean;
@@ -505,8 +514,12 @@ export function PullRequestSummaryTab({
     ),
   );
 
+  const openLink = useOpenLink(threadRef);
   const openCheck = (url: string) => {
-    void readLocalApi()?.shell.openExternal(url);
+    void openLink(url).catch((error: unknown) => {
+      console.error(error);
+      toastManager.add({ type: "error", title: "Unable to open check details" });
+    });
   };
 
   const update = useAtomCommand(pullRequestEnvironment.update, { reportFailure: false });
@@ -543,6 +556,8 @@ export function PullRequestSummaryTab({
 
   const commentEditing: CommentEditing = {
     cwd: detail.workspaceRoot,
+    environmentId,
+    threadRef,
     canEdit: (comment) => canEditPullRequestComment(detail, comment),
     editingId: editingCommentId,
     saving: commentSaving,
@@ -661,25 +676,39 @@ export function PullRequestSummaryTab({
               ) : null}
             </span>
           </MetaRow>
-          {detail.labels.length > 0 ? (
+          {/* The row is shown empty only where a label could be put on it from here; on a host
+              with none to offer, an empty row is a row about nothing. */}
+          {detail.labels.length > 0 || detail.capabilities.labels === true ? (
             <MetaRow icon={<TagIcon className="size-3.5" />} label="Labels">
               <span className="flex min-w-0 flex-wrap items-center gap-1">
-                {detail.labels.map((label) => {
-                  const dot = labelDotColor(label.color);
-                  return (
-                    <span
-                      key={label.name}
-                      className="inline-flex max-w-48 items-center gap-1.5 rounded-full border border-border/70 bg-muted/40 py-0.5 pl-1.5 pr-2 text-xs"
-                    >
+                {detail.labels.length === 0 ? (
+                  <span className="text-muted-foreground">None</span>
+                ) : (
+                  detail.labels.map((label) => {
+                    const dot = pullRequestLabelColor(label.color);
+                    return (
                       <span
-                        aria-hidden
-                        className="size-2 shrink-0 rounded-full bg-muted-foreground"
-                        {...(dot ? { style: { backgroundColor: dot } } : {})}
-                      />
-                      <span className="truncate">{label.name}</span>
-                    </span>
-                  );
-                })}
+                        key={label.name}
+                        className="inline-flex max-w-48 items-center gap-1.5 rounded-full border border-border/70 bg-muted/40 py-0.5 pl-1.5 pr-2 text-xs"
+                      >
+                        <span
+                          aria-hidden
+                          className="size-2 shrink-0 rounded-full bg-muted-foreground"
+                          {...(dot ? { style: { backgroundColor: dot } } : {})}
+                        />
+                        <span className="truncate">{label.name}</span>
+                      </span>
+                    );
+                  })
+                )}
+                {detail.capabilities.labels === true ? (
+                  <PullRequestLabelPicker
+                    environmentId={environmentId}
+                    reference={reference}
+                    allowed={detail.viewerPermissions.labels !== false}
+                    onChanged={onRefresh}
+                  />
+                ) : null}
               </span>
             </MetaRow>
           ) : null}
@@ -703,6 +732,8 @@ export function PullRequestSummaryTab({
               allowEmpty
               value={detail.body}
               cwd={detail.workspaceRoot}
+              environmentId={environmentId}
+              threadRef={threadRef}
               label="Pull request description"
               placeholder="Describe this pull request"
               saving={bodySaving}
@@ -715,6 +746,8 @@ export function PullRequestSummaryTab({
                 className="min-w-0 flex-1"
                 text={detail.body.trim().length > 0 ? detail.body : "_No description provided._"}
                 cwd={detail.workspaceRoot}
+                environmentId={environmentId}
+                threadRef={threadRef}
               />
               {canEditPullRequestChangeRequest(detail) ? (
                 <Button

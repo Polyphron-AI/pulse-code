@@ -144,6 +144,7 @@ function mergeModelSelectionOptionsById(input: {
   return [...merged.entries()].map(([id, value]) => ({ id, value }));
 }
 
+/** Upsert each patched entry; `null` removes it. Entries the patch omits are untouched. */
 function mergeSettingsEntries<Value>(
   current: Readonly<Record<string, Value>>,
   patch: Readonly<Record<string, Value | null>>,
@@ -173,6 +174,7 @@ export function applyServerSettingsPatch(
     projectAgentBrowserAccessOverrides: projectAgentBrowserAccessOverridesPatch,
     projectAutoPullOverrides: projectAutoPullOverridesPatch,
     usageLimitSources: usageLimitSourcesPatch,
+    usagePriceOverrides: usagePriceOverridesPatch,
     ...patchForMerge
   } = patch;
   const currentBackgroundActivity = normalizeServerBackgroundActivitySettings(current);
@@ -265,6 +267,14 @@ export function applyServerSettingsPatch(
           usageLimitSources: mergeSettingsEntries(
             current.usageLimitSources,
             usageLimitSourcesPatch,
+          ),
+        }
+      : {}),
+    ...(usagePriceOverridesPatch !== undefined
+      ? {
+          usagePriceOverrides: mergeSettingsEntries(
+            current.usagePriceOverrides,
+            usagePriceOverridesPatch,
           ),
         }
       : {}),

@@ -1,0 +1,17 @@
+# Antigravity client compatibility
+
+Source `06336460c` adds provider authentication and managed installation across clients. The first client batch ports the shared RPC operations and subscriptions, web setup controls, mobile setup route and connection entry points, provider metadata, and authentication-method form controls.
+
+Pulse retains its expandable provider cards, custom model objects, OMP provider, scheduled chats, usage routes, and adaptive mobile themes. Setup links retain the environment and provider instance; a missing target never opens another account. Read-only connections cannot initiate setup, and older environments without setup capabilities show an update explanation.
+
+The second batch adds model availability and interaction-mode helpers, preserves missing selections in drafts, and adds provider warnings and fixed-choice answer handling to both clients. Pulse's shared pending-request parser already preserved option values and custom-answer rules, so the upstream duplicate parsers were not introduced. Custom model objects remain stored, while Antigravity's picker options come only from the account catalog. The required OpenCode catalog-gap option preservation is included without replacing Pulse's other provider traits behavior.
+
+The third batch connects web model-picker and settings setup entry points, shows unavailable account models without making them selectable, and filters unsupported text-generation providers. Pulse's existing provider sidebar and custom model editor remain; the sidebar permits opening a setup page for an unavailable account without permitting dispatch to that account.
+
+The fourth batch wires mobile composer/setup, model refresh, and queued-send capabilities. Queue dispatch waits for config and rechecks the live catalog after attachments finish; unavailable Antigravity selections restore for editing. Existing pending-task bootstrap retry identities and compare-and-swap ownership remain intact. Refresh deduplication is environment-scoped. Pulse scheduled-chat model settings receive their environment, and account-scoped aliases resolve before availability checks.
+
+The fifth batch completes web chat setup links and send/rollback capability wiring. ChatView and ChatComposer resolve the same account and use its live model catalog and interaction-mode capabilities. Providers without conversation rollback receive no rewind action. Pulse already hid custom-text editing for fixed-choice questions; the batch adds guards at prompt mutation boundaries while retaining the existing composer layout, dictation, attachment handling, compaction, usage panels, and busy-send behavior.
+
+Client portions of source `06336460c` are covered by these five batches. The source's alternate composer resting layout and duplicate native-question parsers are not applicable to Pulse. Backend/contracts are delivered separately. Web and desktop share the web implementation; mobile uses its setup route and queued dispatch checks. Setup keeps the owning environment and account across local, remote, and tunnel connections. Existing providers retain their controls unless their reported capabilities disable them.
+
+Validation: setup batch 44 focused tests; picker batch 50; mobile dispatch batch 91; final web composer batch 119. Model and answer helper regressions passed after the catalog-gap fix. Scoped web/mobile typechecks and changed-file lint passed. The primary integrator owns the authorized browser and emulator pass after backend and client integration.

@@ -107,7 +107,10 @@ import {
   SettingsRow,
   SettingsSection,
 } from "./settingsLayout";
-import { ProjectFaviconPickerDialog } from "./ProjectFaviconPickerDialog";
+import {
+  canPickExternalProjectFavicon,
+  ProjectFaviconPickerDialog,
+} from "./ProjectFaviconPickerDialog";
 
 const ProjectIconPickerDialog = lazy(() =>
   import("./ProjectIconPickerDialog").then((module) => ({
@@ -123,9 +126,9 @@ export const PROJECT_GROUPING_MODE_LABELS: Record<SidebarProjectGroupingMode, st
 
 /** Logical project groups for the settings page, sorted by display name. */
 export function useSettingsProjectGroups(): SidebarProjectSnapshot[] {
+  const primaryEnvironmentId = usePrimaryEnvironmentId();
   const projects = useProjects();
   const projectGroupingSettings = useClientSettings(selectProjectGroupingSettings);
-  const primaryEnvironmentId = usePrimaryEnvironmentId();
   const { environments } = useEnvironments();
   const environmentLabelById = useMemo(
     () =>
@@ -382,6 +385,7 @@ function ProjectDetail({
   hasOtherMembers: boolean;
 }) {
   const navigate = useNavigate();
+  const primaryEnvironmentId = usePrimaryEnvironmentId();
   const { environments } = useEnvironments();
   const environmentById = useMemo(
     () => new Map(environments.map((environment) => [environment.environmentId, environment])),
@@ -391,6 +395,16 @@ function ProjectDetail({
     group.memberProjects.find(
       (member) => environmentById.get(member.environmentId)?.serverConfig != null,
     ) ?? group.memberProjects[0]!;
+  const pickProjectFavicon =
+    typeof window !== "undefined" &&
+    group.memberProjects.every(
+      (member) =>
+        member.environmentId === primaryEnvironmentId &&
+        canPickExternalProjectFavicon(member.workspaceRoot, navigator.platform),
+    )
+      ? window.desktopBridge?.pickProjectFavicon
+      : undefined;
+
   // Provider instances and model options belong to the environment that runs
   // the project's threads. The hosted app has no primary environment, so
   // reading them from there would show "No providers available" everywhere.
@@ -989,6 +1003,12 @@ function ProjectDetail({
                     modelOptionsByInstance={modelOptionsByInstance}
                     triggerVariant="outline"
                     triggerClassName="min-w-0 max-w-none shrink-0 text-foreground/90 hover:text-foreground"
+                    onOpenProviderSetup={(instanceId) => {
+                      void navigate({
+                        to: "/settings/providers",
+                        search: { environmentId: representative.environmentId, instanceId },
+                      });
+                    }}
                     onInstanceModelChange={(instanceId, model) => {
                       setDefaultModel(createModelSelection(instanceId, model));
                     }}
@@ -1381,6 +1401,9 @@ function ProjectDetail({
         cwd={representative.workspaceRoot}
         environmentId={representative.environmentId}
         onOpenChange={setFaviconPickerOpen}
+        {...(pickProjectFavicon
+          ? { onPickExternal: () => pickProjectFavicon(representative.workspaceRoot) }
+          : {})}
         onSelect={(path) => void setProjectIcon({ faviconPath: path, projectIcon: null })}
         open={faviconPickerOpen}
         projectName={group.displayName}

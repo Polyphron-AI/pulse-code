@@ -107,6 +107,10 @@ import type {
   SourceControlRepositoryInfo,
   SourceControlRepositoryLookupInput,
 } from "./sourceControl.ts";
+import type {
+  DesktopAppActivationRequest,
+  DesktopAppActivationResponse,
+} from "./desktopAppActivation.ts";
 
 export interface ContextMenuItem<T extends string = string> {
   id: T;
@@ -596,6 +600,19 @@ export interface DesktopPreviewTabState {
   /** Whether this tab is currently mirrored into a desktop picture-in-picture window. */
   pictureInPicture: boolean;
   colorScheme: DesktopPreviewColorScheme;
+  /**
+   * Whether the user has silenced this tab. Per tab rather than per origin, so
+   * two tabs on the same site mute independently. Survives navigation and
+   * webview swaps, but is dropped when the tab closes.
+   */
+  audioMuted: boolean;
+  /**
+   * Whether the guest is currently emitting audio. Observed from Chromium, and
+   * independent of {@link audioMuted}: a muted tab that is playing still reports
+   * `true`, which is what lets the tab strip distinguish "muted and making
+   * sound" from "muted and silent".
+   */
+  audible: boolean;
   controller: "human" | "agent" | "none";
   favicon?: DesktopPreviewFavicon;
   updatedAt: string;
@@ -635,6 +652,8 @@ export const DesktopPreviewTabStateSchema: Schema.Codec<DesktopPreviewTabState> 
   zoomFactor: Schema.Number,
   pictureInPicture: Schema.Boolean,
   colorScheme: DesktopPreviewColorSchemeSchema,
+  audioMuted: Schema.Boolean,
+  audible: Schema.Boolean,
   controller: Schema.Literals(["human", "agent", "none"]),
   favicon: Schema.optionalKey(DesktopPreviewFaviconSchema),
   updatedAt: Schema.String,
@@ -1047,6 +1066,11 @@ export const DesktopPreviewSetColorSchemeInputSchema = Schema.Struct({
   colorScheme: DesktopPreviewColorSchemeSchema,
 });
 
+export const DesktopPreviewSetAudioMutedInputSchema = Schema.Struct({
+  tabId: DesktopPreviewTabIdSchema,
+  audioMuted: Schema.Boolean,
+});
+
 export const DesktopPreviewAnnotationThemeInputSchema = Schema.Struct({
   theme: DesktopPreviewAnnotationThemeSchema,
 });
@@ -1140,6 +1164,8 @@ export interface DesktopBridge {
   setConnectionCatalog?: (catalog: string) => Promise<boolean>;
   clearConnectionCatalog?: () => Promise<void>;
   discoverSshHosts: () => Promise<readonly DesktopDiscoveredSshHost[]>;
+  /** Resolves a suggested SSH alias before populating the connection form. */
+  resolveSshHost: (alias: string) => Promise<DesktopSshEnvironmentTarget>;
   ensureSshEnvironment: (
     target: DesktopSshEnvironmentTarget,
     options?: { issuePairingToken?: boolean },
@@ -1169,6 +1195,8 @@ export interface DesktopBridge {
   setWslDistro: (distro: string | null) => Promise<DesktopWslState>;
   setWslOnly: (enabled: boolean) => Promise<DesktopWslState>;
   pickFolder: (options?: PickFolderOptions) => Promise<string | null>;
+  /** Optional while older desktop shells can host a newer web client. */
+  pickProjectFavicon?: (initialPath?: string) => Promise<string | null>;
   /**
    * Multi-select JSON file picker that opens in the VS Code extensions
    * directory when one exists. Optional: older desktop builds lack it, and
@@ -1214,12 +1242,21 @@ export interface DesktopBridge {
   listUpdateVersions: () => Promise<DesktopUpdateVersionListResult>;
   rollbackToVersion: (version: string) => Promise<DesktopUpdateActionResult>;
   onUpdateState: (listener: (state: DesktopUpdateState) => void) => () => void;
+  /** Present when the desktop shell accepts `t3 app` activation requests. */
+  appActivation?: {
+    setReady: (ready: boolean) => Promise<void>;
+    complete: (response: DesktopAppActivationResponse) => Promise<void>;
+    onRequest: (listener: (request: DesktopAppActivationRequest) => void) => () => void;
+  };
   /**
    * Desktop-only preview surface. Present iff the renderer is hosted by the
    * Electron desktop build; web builds have `preview === undefined`.
    */
   preview?: DesktopPreviewBridge;
 }
+
+/** Renderer callback invoked by Electron with a fresh user gesture before display-media capture. */
+export const DESKTOP_PREVIEW_RECORDING_CAPTURE_TRIGGER = "__t3DesktopPreviewRecordingCapture";
 
 export interface DesktopPreviewBridge {
   createTab: (tabId: string, defaults?: DesktopPreviewTabDefaults) => Promise<void>;
@@ -1239,6 +1276,12 @@ export interface DesktopPreviewBridge {
    * override). Persists per tab and is re-applied across webview swaps.
    */
   setColorScheme: (tabId: string, colorScheme: DesktopPreviewColorScheme) => Promise<void>;
+  /**
+   * Silence the tab's audio output. Persists per tab and is re-applied across
+   * webview swaps, but is dropped when the tab closes. Muting a silent tab is
+   * allowed; it simply takes effect once the page plays something.
+   */
+  setAudioMuted: (tabId: string, audioMuted: boolean) => Promise<void>;
   /** Open the guest webview's DevTools (detached). */
   openDevTools: (tabId: string) => Promise<void>;
   /** Drop cookies + storage data for the preview partition (all tabs). */

@@ -16,12 +16,24 @@ import * as Cause from "effect/Cause";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { scopedProjectKey, scopedThreadKey } from "../lib/scopedEntities";
+import { scopedThreadKey } from "../lib/scopedEntities";
 import { buildProjectThreadStartTurnInput } from "../lib/projectThreadStartTurn";
 import { prepareTurnAttachments, type PreparedTurnAttachments } from "../lib/attachmentUpload";
 import { randomHex } from "../lib/uuid";
+import { isModelSelectionUnavailable } from "../lib/modelOptions";
+import {
+  retainAcknowledgedThreadMessage,
+  forgetAcknowledgedThreadMessage,
+} from "./acknowledged-thread-messages";
 import { appAtomRegistry } from "./atom-registry";
+import { restoredNewTaskDraftKey } from "./new-task-draft-key";
 import { useProjects, useServerConfigs, useThreadShells } from "./entities";
+import {
+  clearPendingThreadCreationOutcome,
+  pendingThreadCreationOutcomesAtom,
+  recordPendingThreadCreationOutcome,
+} from "./pending-thread-creation";
+import { serverEnvironment } from "./server";
 import {
   confirmThreadOutboxMessageQueued,
   ensureThreadOutboxLoaded,
@@ -182,6 +194,13 @@ export async function completeQueuedMessageDelivery(
     return "edited";
   }
   try {
+    // The editor may have taken the entry while startTurn was in flight; its
+    // unsaved edits have not bumped the revision yet, so the CAS alone would
+    // let removal win and the editor would lose them once it saves.
+    if (appAtomRegistry.get(editingQueuedMessageIdsAtom)[queuedMessage.messageId]) {
+      return "edited";
+    }
+    retainAcknowledgedThreadMessage(queuedMessage);
     // Removal also releases the message's local attachment files.
     const removed = await removeThreadOutboxMessage(
       queuedMessage,
@@ -189,6 +208,7 @@ export async function completeQueuedMessageDelivery(
       () => !appAtomRegistry.get(editingQueuedMessageIdsAtom)[queuedMessage.messageId],
     );
     if (!removed) {
+      forgetAcknowledgedThreadMessage(queuedMessage);
       console.warn(
         "[thread-outbox] delivered message was edited before cleanup; keeping the newer message",
         {
@@ -201,6 +221,7 @@ export async function completeQueuedMessageDelivery(
     }
     return "removed";
   } catch (error) {
+    forgetAcknowledgedThreadMessage(queuedMessage);
     console.warn("[thread-outbox] failed to remove delivered queued message", {
       environmentId: queuedMessage.environmentId,
       threadId: queuedMessage.threadId,
@@ -350,6 +371,7 @@ export async function restoreRejectedQueuedMessage(
 
     let mergedDraft: ComposerDraft;
     try {
+      stampRecoveryDraftProject(queuedMessage, draftKey);
       await mergeComposerDraftContent(draftKey, {
         text: queuedMessage.text,
         attachments: queuedMessage.attachments,
@@ -411,6 +433,15 @@ export async function restoreRejectedQueuedMessage(
     // The queued message is gone; from here the draft owns the content and
     // must never be rolled back.
     rollback = null;
+    if (queuedMessage.creation) {
+      // The thread screen for this creation is likely open; it reads the
+      // outcome to offer reopening the restored draft.
+      recordPendingThreadCreationOutcome({
+        kind: "failed",
+        message: queuedMessage,
+        reason: message,
+      });
+    }
     setPendingConnectionError(message);
     return "restored";
   } catch (error) {
@@ -432,10 +463,29 @@ export async function restoreRejectedQueuedMessage(
   }
 }
 
+/**
+ * A rejected creation becomes its own new-task draft rather than merging into
+ * whatever the user is typing for that project. The key derives from the
+ * message id so a retry after a mid-recovery failure lands on the same draft
+ * instead of minting another.
+ */
 function recoveryDraftKey(queuedMessage: QueuedThreadMessage): string {
   return queuedMessage.creation
-    ? `new-task:${scopedProjectKey(queuedMessage.environmentId, queuedMessage.creation.projectId)}`
+    ? restoredNewTaskDraftKey(queuedMessage.messageId)
     : scopedThreadKey(queuedMessage.environmentId, queuedMessage.threadId);
+}
+
+function stampRecoveryDraftProject(queuedMessage: QueuedThreadMessage, draftKey: string): void {
+  if (!queuedMessage.creation) {
+    return;
+  }
+  updateComposerDraftSettings(draftKey, {
+    project: {
+      environmentId: queuedMessage.environmentId,
+      projectId: queuedMessage.creation.projectId,
+      createdAt: queuedMessage.createdAt,
+    },
+  });
 }
 
 async function preserveUploadedAttachmentsForEditor(
@@ -496,6 +546,7 @@ export function useThreadOutboxDrain(): void {
   const queuedMessagesByThreadKey = useThreadOutboxMessages();
   const shellStatuses = useThreadOutboxShellStatuses();
   const threads = useThreadShells();
+  const creationOutcomes = useAtomValue(pendingThreadCreationOutcomesAtom);
   const projects = useProjects();
   const serverConfigs = useServerConfigs();
   const { connectedEnvironments } = useRemoteConnectionStatus();
@@ -614,7 +665,17 @@ export function useThreadOutboxDrain(): void {
 
   const sendQueuedMessage = useCallback(
     async (queuedMessage: QueuedThreadMessage, thread: EnvironmentThreadShell) => {
-      const settings = resolveQueuedThreadSettings(queuedMessage, thread);
+      const serverConfig = appAtomRegistry.get(
+        serverEnvironment.configValueAtom(queuedMessage.environmentId),
+      );
+      if (!serverConfig) return false;
+      const settings = resolveQueuedThreadSettings(queuedMessage, thread, serverConfig.providers);
+      if (isModelSelectionUnavailable(serverConfig, settings.modelSelection)) {
+        return restoreQueuedMessage(
+          queuedMessage,
+          "Antigravity model unavailable. Open model settings to finish setup or choose another model.",
+        );
+      }
       const { reportFailure } = makeDeliveryHelpers(queuedMessage);
 
       if (!modelSelectionsEqual(settings.modelSelection, thread.modelSelection)) {
@@ -695,6 +756,21 @@ export function useThreadOutboxDrain(): void {
       if (!isQueuedMessagePayloadCurrent(persistedMessage, deliveryRevision)) {
         return true;
       }
+      const currentConfig = appAtomRegistry.get(
+        serverEnvironment.configValueAtom(queuedMessage.environmentId),
+      );
+      if (!currentConfig) return false;
+      if (isModelSelectionUnavailable(currentConfig, settings.modelSelection)) {
+        return restoreQueuedMessage(
+          persistedMessage,
+          "Antigravity model unavailable. Open model settings to finish setup or choose another model.",
+        );
+      }
+      const sendSettings = resolveQueuedThreadSettings(
+        queuedMessage,
+        settings,
+        currentConfig.providers,
+      );
       const deliveryResult = await startTurn({
         environmentId: queuedMessage.environmentId,
         input: {
@@ -706,9 +782,9 @@ export function useThreadOutboxDrain(): void {
             text: queuedMessage.text,
             attachments: prepared.attachments,
           },
-          modelSelection: settings.modelSelection,
-          runtimeMode: settings.runtimeMode,
-          interactionMode: settings.interactionMode,
+          modelSelection: sendSettings.modelSelection,
+          runtimeMode: sendSettings.runtimeMode,
+          interactionMode: sendSettings.interactionMode,
           busyBehavior: queuedMessage.busyBehavior ?? "queue",
           createdAt: queuedMessage.createdAt,
         },
@@ -754,6 +830,25 @@ export function useThreadOutboxDrain(): void {
       if (modelSelection === undefined) {
         return false;
       }
+      const serverConfig = appAtomRegistry.get(
+        serverEnvironment.configValueAtom(queuedMessage.environmentId),
+      );
+      if (!serverConfig) return false;
+      const settings = resolveQueuedThreadSettings(
+        queuedMessage,
+        {
+          modelSelection,
+          runtimeMode: DEFAULT_RUNTIME_MODE,
+          interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        },
+        serverConfig.providers,
+      );
+      if (isModelSelectionUnavailable(serverConfig, settings.modelSelection)) {
+        return restoreQueuedMessage(
+          queuedMessage,
+          "Antigravity model unavailable. Open model settings to finish setup or choose another model.",
+        );
+      }
       let prepared: PreparedTurnAttachments;
       let persistedMessage: QueuedThreadMessage;
       let deliveryRevision: number;
@@ -785,6 +880,21 @@ export function useThreadOutboxDrain(): void {
       if (!isQueuedMessagePayloadCurrent(persistedMessage, deliveryRevision)) {
         return true;
       }
+      const currentConfig = appAtomRegistry.get(
+        serverEnvironment.configValueAtom(queuedMessage.environmentId),
+      );
+      if (!currentConfig) return false;
+      if (isModelSelectionUnavailable(currentConfig, settings.modelSelection)) {
+        return restoreQueuedMessage(
+          persistedMessage,
+          "Antigravity model unavailable. Open model settings to finish setup or choose another model.",
+        );
+      }
+      const sendSettings = resolveQueuedThreadSettings(
+        queuedMessage,
+        settings,
+        currentConfig.providers,
+      );
       const deliveryResult = await startTurn({
         environmentId: queuedMessage.environmentId,
         input: buildProjectThreadStartTurnInput({
@@ -797,9 +907,9 @@ export function useThreadOutboxDrain(): void {
           text: queuedMessage.text.trim(),
           attachments: queuedMessage.attachments,
           uploadedAttachments: prepared.attachments,
-          modelSelection,
-          runtimeMode: queuedMessage.runtimeMode ?? DEFAULT_RUNTIME_MODE,
-          interactionMode: queuedMessage.interactionMode ?? DEFAULT_PROVIDER_INTERACTION_MODE,
+          modelSelection: sendSettings.modelSelection,
+          runtimeMode: sendSettings.runtimeMode,
+          interactionMode: sendSettings.interactionMode,
           workspaceMode: creation.workspaceMode,
           branch: creation.branch,
           worktreePath: creation.worktreePath,
@@ -815,6 +925,9 @@ export function useThreadOutboxDrain(): void {
       if (failure?.action === "restore") {
         return restoreQueuedMessage(persistedMessage, failure.message);
       }
+      // Recorded before the queue entry goes so the thread screen never sees a
+      // gap between the queued creation and the server's shell.
+      recordPendingThreadCreationOutcome({ kind: "delivered", message: persistedMessage });
       const outcome = await completeQueuedMessageDelivery(persistedMessage, deliveryRevision);
       if (outcome === "edited") {
         if (appAtomRegistry.get(editingQueuedMessageIdsAtom)[queuedMessage.messageId]) {
@@ -837,6 +950,30 @@ export function useThreadOutboxDrain(): void {
     },
     [makeDeliveryHelpers, restoreQueuedMessage, startTurn],
   );
+
+  // A creation outcome bridges setup until the server's shell has a turn.
+  // Drop it once that happens so the map cannot grow for a whole session; a
+  // failed outcome stays until its thread screen consumes it.
+  // Subscribed, not read once: the shell often lands before the outcome is
+  // recorded, and a non-reactive read would leave that entry uncollected
+  // because `threads` never changes again.
+  useEffect(() => {
+    for (const [threadKey, outcome] of Object.entries(creationOutcomes)) {
+      if (
+        outcome.kind === "delivered" &&
+        threads.some(
+          (thread) =>
+            scopedThreadKey(thread.environmentId, thread.id) === threadKey &&
+            (thread.latestTurn !== null ||
+              thread.session?.status === "error" ||
+              thread.session?.status === "stopped" ||
+              thread.session?.status === "interrupted"),
+        )
+      ) {
+        clearPendingThreadCreationOutcome(threadKey);
+      }
+    }
+  }, [creationOutcomes, threads]);
 
   useEffect(() => {
     if (dispatchingQueuedMessageId !== null) {
@@ -922,8 +1059,8 @@ export function useThreadOutboxDrain(): void {
         threadBusy: thread?.session?.status === "running" || thread?.session?.status === "starting",
         busyBehavior: nextQueuedMessage.busyBehavior,
       });
-      // The delivery action resolves first; the file-capability gate applies
-      // only to a message that will send. Gating earlier would restore a
+      // The delivery action resolves first; capability checks apply only to
+      // a message that will send. Checking earlier would restore a
       // creation whose startTurn already made the thread as a duplicate draft
       // instead of removing it.
       const serverConfig = serverConfigs.get(nextQueuedMessage.environmentId);

@@ -1,5 +1,12 @@
+import {
+  pullRequestListPreferences,
+  readPullRequestListSort,
+  writePullRequestListPreferences,
+  type PullRequestListPreferencePatch,
+  type PullRequestListSort,
+} from "../components/pullRequest/pullRequestListPreferences";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
-import { pullRequestHostOf, ThreadId } from "@t3tools/contracts";
+import { pullRequestHostOf, resolveEnvironmentMachineKind, ThreadId } from "@t3tools/contracts";
 import type {
   EnvironmentId,
   ProjectId,
@@ -11,12 +18,11 @@ import type {
   PullRequestListState,
   SourceControlProviderKind,
 } from "@t3tools/contracts";
+import { useAtomValue } from "@effect/atom-react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import {
   ChevronDownIcon,
   EyeIcon,
-  MonitorIcon,
-  ServerIcon,
   GitMergeIcon,
   GitPullRequestClosedIcon,
   GitPullRequestIcon,
@@ -26,7 +32,15 @@ import {
   RefreshCwIcon,
   SearchIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 
 import {
   filterPullRequestsByInvolvement,
@@ -41,6 +55,8 @@ import {
   pullRequestEntryKey,
   pullRequestEntryViewer,
   rankPullRequestMatches,
+  rankPullRequestsByMergeReadiness,
+  pullRequestDiffStatKey,
   pullRequestEnvironmentSetKey,
   readPullRequestListSnapshot,
   resolveProjectScope,
@@ -55,6 +71,7 @@ import {
   type PullRequestPartitionsSnapshot,
 } from "../components/pullRequest/pullRequestList.logic";
 import { assignProjectsToEnvironments } from "../components/pullRequest/pullRequestProjectAssignment.logic";
+import { environmentMachineIcon } from "../components/EnvironmentMachineIcon";
 import { PullRequestDetailPanel } from "../components/pullRequest/PullRequestDetailPanel";
 import {
   PullRequestFiltersMenu,
@@ -74,12 +91,16 @@ import {
   WorkspaceBreadcrumbItem,
   WorkspaceBreadcrumbSeparator,
 } from "../components/WorkspaceBreadcrumb";
+import { isCommandPaletteOpen } from "../commandPaletteBus";
+import { resolveShortcutCommand } from "../keybindings";
+import { isTerminalFocused } from "../lib/terminalFocus";
 import { PanelLayoutControls } from "../components/chat/PanelLayoutControls";
 import { Button } from "../components/ui/button";
 import { Menu, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "../components/ui/menu";
 import { SidebarInset } from "../components/ui/sidebar";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../components/ui/tooltip";
 import { useLiveRefresh } from "../hooks/useLiveRefresh";
+import { usePanelAnimationSettings, usePanelPresence } from "../panelAnimations";
 import {
   selectActiveRightPanelSurface,
   selectSelectedRightPanelSurface,
@@ -95,14 +116,17 @@ import {
   pullRequestEnvironment,
   usePullRequestList,
   usePullRequestListStats,
+  usePullRequestTurnRefreshes,
   type EnvironmentQueryTarget,
 } from "../state/pullRequests";
 import { useAtomCommand } from "../state/use-atom-command";
 import { cn } from "~/lib/utils";
+import { primaryServerKeybindingsAtom } from "~/state/server";
 import { getSourceControlPresentationForKind } from "~/sourceControlPresentation";
 import { COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS } from "~/workspaceTitlebar";
 
 export interface PullRequestsSearch {
+  readonly sort?: PullRequestListSort;
   readonly involvement: PullRequestInvolvement;
   readonly state: PullRequestListState;
   /**
@@ -182,6 +206,7 @@ const EMPTY_PENDING_SURFACES = new Set<string>();
 
 export const Route = createFileRoute("/_chat/pull-requests")({
   validateSearch: (raw: Record<string, unknown>): PullRequestsSearch => ({
+    ...(readPullRequestListSort(raw.sort) ? { sort: readPullRequestListSort(raw.sort)! } : {}),
     involvement:
       raw.involvement === "reviewing" || raw.involvement === "authored" ? raw.involvement : "all",
     state:
@@ -220,7 +245,9 @@ export const Route = createFileRoute("/_chat/pull-requests")({
 
 function PullRequestsRouteView() {
   const search = Route.useSearch();
+  const sort = search.sort ?? "ready";
   const navigate = useNavigate({ from: Route.fullPath });
+  const keybindings = useAtomValue(primaryServerKeybindingsAtom);
   const { environments } = useEnvironments();
   // Every connected environment that has said it can list pull requests. Sorted, so the query
   // keys, the scope key and the stored snapshot all read the same whichever order the
@@ -382,10 +409,29 @@ function PullRequestsRouteView() {
   const selectedPullRequestSurface =
     selectedRightPanelSurface?.kind === "pull-request" ? selectedRightPanelSurface : null;
   const activePullRequestSurface = rightPanelState.isOpen ? selectedPullRequestSurface : null;
+  const { active: panelAnimationsActive, durationMs: panelAnimationDurationMs } =
+    usePanelAnimationSettings();
+  const rightPanelPresenceValue = useMemo(
+    () => ({
+      activeSurface: selectedPullRequestSurface,
+      surfaces: rightPanelState.surfaces,
+    }),
+    [rightPanelState.surfaces, selectedPullRequestSurface],
+  );
+  const rightPanelPresence = usePanelPresence(
+    rightPanelState.isOpen && selectedPullRequestSurface !== null,
+    rightPanelPresenceValue,
+    panelAnimationsActive,
+    rightPanelRef === null ? null : PULL_REQUESTS_PANEL_ID,
+    panelAnimationDurationMs,
+  );
+  const rightPanelPresent = rightPanelPresence.present;
+  const renderedPullRequestSurface = rightPanelPresence.value?.activeSurface ?? null;
+  const renderedRightPanelSurfaces = rightPanelPresence.value?.surfaces ?? [];
   // The open tab names its own server; a link that arrived before any tab was opened names it
   // through the project it selected.
   const panelEnvironmentId =
-    (activePullRequestSurface?.environmentId as EnvironmentId | undefined) ??
+    (renderedPullRequestSurface?.environmentId as EnvironmentId | undefined) ??
     selectedProject?.environmentId ??
     null;
   const [pullRequestTabStatuses, setPullRequestTabStatuses] = useState<
@@ -416,6 +462,7 @@ function PullRequestsRouteView() {
           return {
             involvement: next.involvement ?? previous.involvement,
             state: next.state ?? previous.state,
+            ...(next.sort && next.sort !== "ready" ? { sort: next.sort } : {}),
             ...(next.repository ? { repository: next.repository } : {}),
             ...(next.number ? { number: next.number } : {}),
             ...(next.projectId ? { projectId: next.projectId } : {}),
@@ -436,22 +483,33 @@ function PullRequestsRouteView() {
     [navigate],
   );
 
-  // Changing what the list contains must not leave a selection from the previous view open.
-  // The project filter is untouched: it is the user's scope, not part of the selection.
   const clearedSelection = {
     repository: undefined,
     number: undefined,
     selectedProjectId: undefined,
     selectedEnvironmentId: undefined,
   };
-  const updateListScope = (patch: {
-    [Key in keyof PullRequestsSearch]?: PullRequestsSearch[Key] | undefined;
-  }) => {
-    if (rightPanelRef !== null) {
-      // Hide the old selection while retaining peer PR tabs for parallel reviews.
-      useRightPanelStore.getState().close(rightPanelRef);
-    }
-    updateSearch({ ...patch, ...clearedSelection });
+  // Filtering the list leaves the independently selected review surface open.
+  const updateListScope = (patch: PullRequestListPreferencePatch) => {
+    writePullRequestListPreferences(
+      pullRequestListPreferences({
+        ...search,
+        ...patch,
+        involvement: patch.involvement ?? search.involvement,
+        state: patch.state ?? search.state,
+      }),
+    );
+    updateSearch({
+      ...patch,
+      // Legacy links borrow the list scope until their selection resolves. Pin that
+      // identity before changing filters so another server/project cannot replace it.
+      ...(search.repository && search.number && selectedProject
+        ? {
+            selectedProjectId: selectedProject.id,
+            selectedEnvironmentId: selectedProject.environmentId,
+          }
+        : {}),
+    });
   };
 
   // Searching asks the hosts, which takes a round trip, so the text is held for a moment before
@@ -547,6 +605,12 @@ function PullRequestsRouteView() {
         .join("|"),
     [environmentQueries],
   );
+  const turnRefreshes = usePullRequestTurnRefreshes(
+    environmentQueries.map(({ environmentId }) => environmentId),
+  );
+  const turnRefreshToken = turnRefreshes
+    .map(([environmentId, revision]) => `${environmentId}:${revision}`)
+    .join("|");
   // Page size is view state, not a URL concern: a shared link should open the first page.
   const scopeKey = `${environmentKey}:${assignmentKey}:${search.state}:${search.involvement}:${scopedProjectId ?? ""}:${search.host ?? ""}:${search.draft ?? ""}:${search.review ?? ""}:${search.checks ?? ""}`;
   const filterKey = `${scopeKey}:${sentQuery}`;
@@ -976,6 +1040,18 @@ function PullRequestsRouteView() {
     });
   };
 
+  const appliedTurnRefreshToken = useRef("");
+  const refreshAfterTurn = useEffectEvent(() => {
+    if (sentCursors !== null) refreshList();
+  });
+  useEffect(() => {
+    if (turnRefreshToken.length === 0 || appliedTurnRefreshToken.current === turnRefreshToken) {
+      return;
+    }
+    appliedTurnRefreshToken.current = turnRefreshToken;
+    refreshAfterTurn();
+  }, [turnRefreshToken]);
+
   // The list goes stale the same way the detail does: somebody opens a pull request, a check
   // finishes, a branch is merged. So it reads again on the way back to the window, and once a
   // minute while somebody is reading it. Those reads go through the server's cache and stop
@@ -1181,6 +1257,36 @@ function PullRequestsRouteView() {
     setStatsByRow((previous) => mergePullRequestDiffStats(previous, stats));
   }, [statsQuery.stats]);
 
+  const sortedGroups = useMemo(() => {
+    const enriched = groups.map((group) => ({
+      ...group,
+      entries: group.entries.map((entry) => withDiffStat(entry, statsByRow)),
+    }));
+    if (sort === "updated" || (sort === "ready" && typedParsed.text.length > 0)) return enriched;
+    const rows = enriched.flatMap((group) => group.entries);
+    const hasSize = (entry: (typeof rows)[number]) =>
+      entry.additions + entry.deletions > 0 || statsByRow.has(pullRequestDiffStatKey(entry));
+    const sorted =
+      sort === "ready"
+        ? rankPullRequestsByMergeReadiness(rows, hasSize)
+        : rows.toSorted((left, right) => {
+            if (sort === "largest" || sort === "smallest") {
+              const measured = Number(hasSize(right)) - Number(hasSize(left));
+              if (measured !== 0) return measured;
+              const size = left.additions + left.deletions - right.additions - right.deletions;
+              return size === 0
+                ? right.updatedAt.localeCompare(left.updatedAt)
+                : sort === "largest"
+                  ? -size
+                  : size;
+            }
+            return sort === "oldest"
+              ? left.createdAt.localeCompare(right.createdAt)
+              : right.createdAt.localeCompare(left.createdAt);
+          });
+    return [{ key: "others" as const, label: "", entries: sorted }];
+  }, [groups, sort, statsByRow, typedParsed.text]);
+
   const linkedSelection = useMemo(
     () =>
       search.repository && search.number && selectedProject
@@ -1297,7 +1403,7 @@ function PullRequestsRouteView() {
     <PullRequestSearchInput
       value={search.q ?? ""}
       busy={typedQuery.length > 0 && (!querySettled || showingCarried)}
-      onChange={(query) => updateSearch({ q: query || undefined })}
+      onChange={(query) => updateListScope({ q: query || undefined })}
     />
   );
   const panelToggleControls = (
@@ -1363,12 +1469,12 @@ function PullRequestsRouteView() {
           searching={typedQuery.length > 0 && (!querySettled || showingCarried)}
           canLoadMore={listData?.truncated === true && (canContinue || pageSize < MAX_PAGE_SIZE)}
           loadingMore={loadingMore}
-          onClearQuery={() => updateSearch({ q: undefined })}
+          onClearQuery={() => updateListScope({ q: undefined })}
           onLoadMore={loadMore}
         />
       ) : (
         <div className="space-y-3">
-          {groups.map((group) => (
+          {sortedGroups.map((group) => (
             <div key={group.key} className="space-y-0.5">
               {group.label ? (
                 <h2 className="px-3 pb-0.5 text-xs font-medium text-muted-foreground/70">
@@ -1447,47 +1553,94 @@ function PullRequestsRouteView() {
       };
     }),
   ];
-  // The same shape the host pills take, so the two groups read as one control. A local
-  // connection wears the screen it is on; every other server wears a server.
+  // The same shape the host pills take, so the two groups read as one control. Each server
+  // wears the machine it runs on.
   const serverMenuOptions: ReadonlyArray<PullRequestFilterOption<string>> = [
     { value: "", label: "All servers", Icon: LayersIcon },
     ...capableEnvironments.map((environment) => ({
       value: environment.environmentId,
       label: environment.label,
-      Icon: environment.displayUrl === null ? MonitorIcon : ServerIcon,
+      Icon: environmentMachineIcon(resolveEnvironmentMachineKind(environment.serverConfig)),
     })),
   ];
   const filtersMenu = (
-    <PullRequestFiltersMenu
-      state={search.state}
-      stateOptions={STATE_TABS}
-      onState={(state) => updateListScope({ state })}
-      involvement={search.involvement}
-      involvementOptions={INVOLVEMENT_TABS}
-      onInvolvement={(involvement) => updateListScope({ involvement })}
-      filters={menuFilters}
-      onFilters={(next) =>
-        updateListScope({ draft: next.draft, review: next.review, checks: next.checks })
-      }
-      host={search.host}
-      hostOptions={hostMenuOptions}
-      onHost={(host) => updateListScope({ host })}
-      server={scopedEnvironmentId ?? undefined}
-      serverOptions={serverMenuOptions}
-      // Narrowing to one server drops a project scope belonging to another, which would
-      // otherwise narrow the list to nothing with no visible filter to explain it.
-      onServer={(server) => updateListScope({ environmentId: server, projectId: undefined })}
-      projects={scopedProjects}
-      projectId={scopedProjectId}
-      projectEnvironmentId={scopedProject?.environmentId}
-      unavailable={unavailableProjects}
-      // The environment comes along with the project it belongs to, so a duplicate id on
-      // another server never gets narrowed to by mistake; picking "All projects" leaves the
-      // server scope as it was rather than clearing it.
-      onProject={(projectId, environmentId) =>
-        updateListScope(environmentId === undefined ? { projectId } : { projectId, environmentId })
-      }
-    />
+    <>
+      <Menu>
+        <MenuTrigger
+          render={
+            <Button variant="outline" size="sm" aria-label="Sort pull requests">
+              {sort === "ready"
+                ? "Merge readiness"
+                : sort === "updated"
+                  ? "Recently updated"
+                  : sort === "newest"
+                    ? "Newest"
+                    : sort === "oldest"
+                      ? "Oldest"
+                      : sort === "largest"
+                        ? "Largest"
+                        : "Smallest"}
+            </Button>
+          }
+        />
+        <MenuPopup>
+          <MenuRadioGroup
+            value={sort}
+            onValueChange={(value) => {
+              const next = readPullRequestListSort(value);
+              if (next) updateListScope({ sort: next });
+            }}
+          >
+            {(
+              [
+                ["ready", "Merge readiness"],
+                ["updated", "Recently updated"],
+                ["newest", "Newest"],
+                ["oldest", "Oldest"],
+                ["largest", "Largest"],
+                ["smallest", "Smallest"],
+              ] as const
+            ).map(([value, label]) => (
+              <MenuRadioItem key={value} value={value}>
+                {label}
+              </MenuRadioItem>
+            ))}
+          </MenuRadioGroup>
+        </MenuPopup>
+      </Menu>
+      <PullRequestFiltersMenu
+        state={search.state}
+        stateOptions={STATE_TABS}
+        onState={(state) => updateListScope({ state })}
+        involvement={search.involvement}
+        involvementOptions={INVOLVEMENT_TABS}
+        onInvolvement={(involvement) => updateListScope({ involvement })}
+        filters={menuFilters}
+        onFilters={(next) =>
+          updateListScope({ draft: next.draft, review: next.review, checks: next.checks })
+        }
+        host={search.host}
+        hostOptions={hostMenuOptions}
+        onHost={(host) => updateListScope({ host })}
+        server={scopedEnvironmentId ?? undefined}
+        serverOptions={serverMenuOptions}
+        // Narrowing to one server drops a project scope belonging to another, which would
+        // otherwise narrow the list to nothing with no visible filter to explain it.
+        onServer={(server) => updateListScope({ environmentId: server, projectId: undefined })}
+        projects={scopedProjects}
+        projectId={scopedProjectId}
+        projectEnvironmentId={scopedProject?.environmentId}
+        unavailable={unavailableProjects}
+        // The environment comes along with the project it belongs to, so a duplicate id on
+        // another server never gets narrowed to by mistake; picking "All projects" leaves the
+        // server scope as it was rather than clearing it.
+        onProject={(projectId, environmentId) =>
+          updateListScope(
+            environmentId === undefined ? { projectId } : { projectId, environmentId },
+          )
+        }
+      />
+    </>
   );
   const columnProps = {
     refreshing,
@@ -1507,8 +1660,20 @@ function PullRequestsRouteView() {
       // mounted at the fixed titlebar inset in both states so it cannot move
       // on toggle, and this spacer keeps refresh from sliding underneath it
       // (sized per header padding so refresh ends a normal gap short of it).
-      !pullRequestsSupported || rightPanelState.isOpen ? null : (
-        <span aria-hidden className="w-7 shrink-0 sm:w-5" />
+      !pullRequestsSupported ? null : (
+        <span
+          aria-hidden
+          className={cn(
+            "shrink-0",
+            rightPanelState.isOpen ? "-ml-3 w-0" : "w-7 sm:w-5",
+            panelAnimationsActive && "transition-[width,margin] ease-out",
+          )}
+          style={
+            panelAnimationsActive
+              ? { transitionDuration: `${panelAnimationDurationMs}ms` }
+              : undefined
+          }
+        />
       ),
     rightPanelOpen: rightPanelState.isOpen,
     listBody,
@@ -1548,22 +1713,43 @@ function PullRequestsRouteView() {
     selectSurfaceInUrl(null);
   };
 
+  // This page has no ChatView, so the shared panel handles `rightPanel.close`
+  // itself. With nothing open the event falls through to its native meaning.
+  const closeActiveSurfaceFromShortcut = useEffectEvent((event: KeyboardEvent) => {
+    if (activePullRequestSurface === null) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (!event.repeat) closeSurface(activePullRequestSurface);
+  });
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || isCommandPaletteOpen()) return;
+      const command = resolveShortcutCommand(event, keybindings, {
+        context: { terminalFocus: isTerminalFocused() },
+      });
+      if (command === "rightPanel.close") closeActiveSurfaceFromShortcut(event);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [keybindings]);
+
   return (
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground">
       <div className="relative flex min-h-0 flex-1">
         {pullRequestsSupported ? openPanelControls : null}
         <PullRequestsColumn {...columnProps} />
 
-        {rightPanelState.isOpen && activePullRequestSurface && panelEnvironmentId !== null ? (
+        {rightPanelPresent && renderedPullRequestSurface && panelEnvironmentId !== null ? (
           <RightPanelTabs
             mode="inline"
+            open={rightPanelState.isOpen}
             widthStorageKey="t3code:pull-request-panel-width"
             // Default to roughly half the viewport: the PR list needs more
             // room than a chat, so the 540px chat-preview default squashes
             // it. SSR has no window, so fall back to a reasonable width.
             defaultWidth={typeof window === "undefined" ? 640 : Math.floor(window.innerWidth / 2)}
-            surfaces={rightPanelState.surfaces}
-            activeSurfaceId={activePullRequestSurface.id}
+            surfaces={renderedRightPanelSurfaces}
+            activeSurfaceId={renderedPullRequestSurface.id}
             pendingSurfaceIds={EMPTY_PENDING_SURFACES}
             previewSessions={EMPTY_PREVIEW_SESSIONS}
             desktopByTabId={EMPTY_PREVIEW_DESKTOP_STATE}
@@ -1601,12 +1787,12 @@ function PullRequestsRouteView() {
             pullRequestStatuses={pullRequestTabStatuses}
           >
             <PullRequestDetailPanel
-              key={activePullRequestSurface.id}
+              key={renderedPullRequestSurface.id}
               environmentId={panelEnvironmentId}
               reference={{
-                projectId: activePullRequestSurface.projectId as ProjectId,
-                repository: activePullRequestSurface.repository,
-                number: activePullRequestSurface.number,
+                projectId: renderedPullRequestSurface.projectId as ProjectId,
+                repository: renderedPullRequestSurface.repository,
+                number: renderedPullRequestSurface.number,
               }}
               refreshToken={detailRefreshToken}
               // Merging, closing or reopening changes the row this panel was opened from, so

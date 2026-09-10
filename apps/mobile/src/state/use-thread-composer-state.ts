@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo } from "react";
 
 import {
   CommandId,
+  DEFAULT_PROVIDER_INTERACTION_MODE,
   MessageId,
   PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
   type EnvironmentId,
@@ -18,6 +19,8 @@ import { safeErrorLogAttributes } from "@t3tools/client-runtime/errors";
 import { deriveActiveWorkStartedAt } from "@t3tools/shared/orchestrationTiming";
 
 import { makeQueuedMessageMetadata } from "../lib/commandMetadata";
+import { isModelSelectionUnavailable } from "../lib/modelOptions";
+import { resolveProviderInteractionMode } from "../features/threads/legacy-plan-mode";
 import {
   convertPastedImagesToAttachments,
   pasteComposerClipboard,
@@ -27,7 +30,10 @@ import {
 import type { DraftComposerImageAttachment } from "../lib/composerImages";
 import { scopedThreadKey } from "../lib/scopedEntities";
 import { buildThreadFeed } from "../lib/threadActivity";
+import { acknowledgedThreadMessagesAtom } from "./acknowledged-thread-messages";
+import { appendPendingThreadMessages } from "../features/threads/pending-thread-feed";
 import { appAtomRegistry } from "../state/atom-registry";
+import { pendingThreadCreationMessage } from "./pending-thread-creation";
 import {
   appendComposerDraftAttachments,
   appendComposerDraftText,
@@ -88,9 +94,14 @@ export function useThreadDraftForThread(input: {
 }
 
 export function useThreadComposerState() {
-  const { selectedThread: selectedThreadShell, selectedEnvironmentRuntime } = useThreadSelection();
+  const {
+    selectedThread: selectedThreadShell,
+    selectedThreadCreation,
+    selectedEnvironmentRuntime,
+  } = useThreadSelection();
   const selectedThreadDetail = useSelectedThreadDetail();
   const composerDrafts = useAtomValue(composerDraftsAtom);
+  const acknowledgedMessages = useAtomValue(acknowledgedThreadMessagesAtom);
   const queuedMessagesByThreadKey = useThreadOutboxMessages();
   const dispatchingQueuedMessageId = useAtomValue(dispatchingQueuedMessageIdAtom);
   const preferences = useAtomValue(mobilePreferencesAtom);
@@ -105,14 +116,66 @@ export function useThreadComposerState() {
   const selectedThreadKey = selectedThreadShell
     ? scopedThreadKey(selectedThreadShell.environmentId, selectedThreadShell.id)
     : null;
+  // The creation entry is the thread itself (rendered as the first message),
+  // not a follow-up waiting behind it.
   const selectedThreadQueuedMessages = useMemo(
-    () => (selectedThreadKey ? (queuedMessagesByThreadKey[selectedThreadKey] ?? []) : []),
+    () =>
+      selectedThreadKey
+        ? (queuedMessagesByThreadKey[selectedThreadKey] ?? []).filter(
+            (message) => message.creation === undefined,
+          )
+        : [],
     [queuedMessagesByThreadKey, selectedThreadKey],
   );
-  const selectedThreadFeed = useMemo(
-    () => (selectedThreadDetail ? buildThreadFeed(selectedThreadDetail) : []),
-    [selectedThreadDetail],
-  );
+  const selectedThreadMessages = selectedThreadDetail?.messages;
+  const pendingCreationMessage = selectedThreadCreation?.message ?? null;
+  const selectedThreadFeed = useMemo(() => {
+    const base = selectedThreadDetail;
+    const loadedMessages = base?.messages ?? [];
+    const messages =
+      pendingCreationMessage &&
+      !loadedMessages.some((message) => message.id === pendingCreationMessage.messageId)
+        ? [...loadedMessages, pendingThreadCreationMessage(pendingCreationMessage)]
+        : loadedMessages;
+    const feed = base
+      ? buildThreadFeed({ ...base, messages })
+      : pendingCreationMessage
+        ? [
+            {
+              type: "message" as const,
+              id: pendingCreationMessage.messageId,
+              createdAt: pendingCreationMessage.createdAt,
+              message: pendingThreadCreationMessage(pendingCreationMessage),
+            },
+          ]
+        : [];
+    const pendingAcknowledgments = acknowledgedMessages.filter(
+      (message) =>
+        scopedThreadKey(message.environmentId, message.threadId) === selectedThreadKey &&
+        !selectedThreadQueuedMessages.some((queued) => queued.messageId === message.messageId),
+    );
+    if (pendingAcknowledgments.length === 0) return feed;
+    return appendPendingThreadMessages(feed, feed, pendingAcknowledgments).map((entry) =>
+      entry.pendingMessage ? { ...entry, acknowledged: true } : entry,
+    );
+  }, [
+    selectedThreadDetail,
+    pendingCreationMessage,
+    selectedThreadKey,
+    selectedThreadQueuedMessages,
+    acknowledgedMessages,
+  ]);
+  useEffect(() => {
+    const echoedIds = new Set(selectedThreadMessages?.map((message) => message.id));
+    if (acknowledgedMessages.some((message) => echoedIds.has(message.messageId))) {
+      appAtomRegistry.set(
+        acknowledgedThreadMessagesAtom,
+        appAtomRegistry
+          .get(acknowledgedThreadMessagesAtom)
+          .filter((message) => !echoedIds.has(message.messageId)),
+      );
+    }
+  }, [acknowledgedMessages, selectedThreadMessages]);
 
   const selectedDraft = selectedThreadKey ? composerDrafts[selectedThreadKey] : null;
   const draftMessage = selectedDraft?.text ?? "";
@@ -121,7 +184,15 @@ export function useThreadComposerState() {
   const selectedThread = selectedThreadDetail ?? selectedThreadShell;
   const modelSelection = selectedDraft?.modelSelection ?? selectedThread?.modelSelection ?? null;
   const runtimeMode = selectedDraft?.runtimeMode ?? selectedThread?.runtimeMode ?? null;
-  const interactionMode = selectedDraft?.interactionMode ?? selectedThread?.interactionMode ?? null;
+  const selectedProvider = selectedEnvironmentRuntime?.serverConfig?.providers.find(
+    (provider) => provider.instanceId === modelSelection?.instanceId,
+  );
+  const interactionMode = selectedThread
+    ? resolveProviderInteractionMode(
+        selectedProvider,
+        selectedDraft?.interactionMode ?? selectedThread.interactionMode,
+      )
+    : null;
 
   const selectedThreadSessionActivity = useMemo(() => {
     const selectedThread = selectedThreadDetail ?? selectedThreadShell;
@@ -177,6 +248,13 @@ export function useThreadComposerState() {
     if (!selectedThreadShell) {
       return null;
     }
+    // The server has not created this thread yet. Queuing a follow-up against
+    // its id would strand the message: if the creation is rejected the thread
+    // never appears and the drain drops the orphan. The composer disables its
+    // send button too; this guard also covers the editor's submit key.
+    if (selectedThreadCreation !== null) {
+      return null;
+    }
 
     const threadKey = scopedThreadKey(selectedThreadShell.environmentId, selectedThreadShell.id);
     const draft = getComposerDraftSnapshot(threadKey);
@@ -198,6 +276,21 @@ export function useThreadComposerState() {
       return null;
     }
 
+    const modelSelection = draft.modelSelection ?? thread.modelSelection;
+    const serverConfig = selectedEnvironmentRuntime?.serverConfig;
+    if (
+      selectedEnvironmentRuntime?.connectionState === "connected" &&
+      isModelSelectionUnavailable(serverConfig, modelSelection)
+    ) {
+      Alert.alert(
+        "Antigravity model unavailable",
+        "Open model settings to finish setup or choose another model.",
+      );
+      return null;
+    }
+    const provider = serverConfig?.providers.find(
+      (entry) => entry.instanceId === modelSelection.instanceId,
+    );
     const metadata = makeQueuedMessageMetadata();
     const messageId = MessageId.make(metadata.messageId);
     // Enqueue publishes the queued atom synchronously (the durable write
@@ -212,9 +305,12 @@ export function useThreadComposerState() {
       commandId: CommandId.make(metadata.commandId),
       text,
       attachments,
-      modelSelection: draft.modelSelection ?? thread.modelSelection,
+      modelSelection,
       runtimeMode: draft.runtimeMode ?? thread.runtimeMode,
-      interactionMode: draft.interactionMode ?? thread.interactionMode,
+      interactionMode: resolveProviderInteractionMode(
+        provider,
+        draft.interactionMode ?? thread.interactionMode,
+      ),
       busyBehavior: composerBusyBehavior,
       createdAt: metadata.createdAt,
     });
@@ -239,7 +335,13 @@ export function useThreadComposerState() {
       },
     );
     return messageId;
-  }, [composerBusyBehavior, selectedThreadDetail, selectedThreadShell]);
+  }, [
+    composerBusyBehavior,
+    selectedThreadCreation,
+    selectedEnvironmentRuntime,
+    selectedThreadDetail,
+    selectedThreadShell,
+  ]);
 
   const onChangeDraftMessage = useCallback(
     (value: string) => {
@@ -375,9 +477,17 @@ export function useThreadComposerState() {
       if (!selectedThreadKey) {
         return;
       }
-      updateComposerDraftSettings(selectedThreadKey, { modelSelection: value });
+      const provider = selectedEnvironmentRuntime?.serverConfig?.providers.find(
+        (candidate) => candidate.instanceId === value.instanceId,
+      );
+      updateComposerDraftSettings(selectedThreadKey, {
+        modelSelection: value,
+        ...(provider?.showInteractionModeToggle === false
+          ? { interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE }
+          : {}),
+      });
     },
-    [selectedThreadKey],
+    [selectedEnvironmentRuntime?.serverConfig, selectedThreadKey],
   );
 
   const onUpdateRuntimeMode = useCallback(
@@ -395,14 +505,24 @@ export function useThreadComposerState() {
       if (!selectedThreadKey) {
         return;
       }
-      updateComposerDraftSettings(selectedThreadKey, { interactionMode: value });
+      const modelSelection =
+        getComposerDraftSnapshot(selectedThreadKey).modelSelection ??
+        selectedThread?.modelSelection;
+      const provider = selectedEnvironmentRuntime?.serverConfig?.providers.find(
+        (candidate) => candidate.instanceId === modelSelection?.instanceId,
+      );
+      updateComposerDraftSettings(selectedThreadKey, {
+        interactionMode: resolveProviderInteractionMode(provider, value),
+      });
     },
-    [selectedThreadKey],
+    [selectedEnvironmentRuntime?.serverConfig, selectedThread?.modelSelection, selectedThreadKey],
   );
 
   return {
     selectedThreadFeed,
     selectedThreadQueueCount,
+    selectedThreadQueuedMessages,
+    dispatchingQueuedMessageId,
     activeWorkStartedAt,
     isCompacting,
     draftMessage,

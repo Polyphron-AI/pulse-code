@@ -29,6 +29,8 @@ Pulse Code works with the platforms your team already uses:
 
 ### Manage Code Reviews Without Context Switching
 
+Draft pull requests show a gray draft indicator in the sidebar on desktop, web, and mobile. Pull request lists and reviews refresh after an agent turn finishes.
+
 **Create pull requests while you work**
 
 - Push a branch and create a pull request from the Git actions controls in the toolbar
@@ -41,6 +43,8 @@ Pulse Code works with the platforms your team already uses:
 - Open several reviews from the **Pull requests** page as tabs in the right panel
 - While working in a thread, open linked reviews in the same compact right-panel tabs without
   leaving the conversation
+- Enable **Settings → General → Proactive panels** to open a newly linked review automatically and
+  switch to the completed turn's diff when agent work finishes
 - Open the review directly in your browser with one click
 - Command-click (Control-click on Windows and Linux) a pull request number in the sidebar to open it in your browser instead of in Pulse Code
 - Check out a teammate's branch to review code locally
@@ -61,6 +65,8 @@ Actions depend on the hosting provider and your permissions. These controls are 
 - Rewrite your own comments the same way, wherever they are shown
 - Works on GitHub, GitLab, and Bitbucket. Azure DevOps takes a new title and description; its
   comments stay read-only here, as they already were
+- On GitHub, put a label on a pull request or take one off from the **Labels** row of the review.
+  Changing labels needs triage access or better on the repository
 
 ### Know Your Setup at a Glance
 
@@ -157,3 +163,5 @@ Control settings**.
 - [GitHub CLI](https://cli.github.com/)
 - [GitLab CLI](https://gitlab.com/gitlab-org/cli)
 - [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/)
+
+The pull request list remembers its filters and sort order when reopened from the sidebar. Filtering or sorting keeps the selected review panel open. Merge readiness is the default browse order: approved passing work comes first, followed by passing work, other open work, finished work, and conflicts. Smaller measured changes come first within each tier. Text searches keep relevance order unless you choose another sort.

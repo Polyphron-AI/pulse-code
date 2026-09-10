@@ -4,7 +4,9 @@ import {
   type ProviderApprovalDecision,
 } from "@t3tools/contracts";
 import { memo } from "react";
+import { TriangleAlertIcon } from "lucide-react";
 import { Button } from "../ui/button";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 
 interface ComposerPendingApprovalActionsProps {
   requestId: ApprovalRequestId;
@@ -31,26 +33,42 @@ export const ComposerPendingApprovalActions = memo(function ComposerPendingAppro
 }: ComposerPendingApprovalActionsProps) {
   return (
     <>
-      {options.map((option) => (
-        <Button
-          key={option.decision}
-          size="sm"
-          className="h-auto min-h-8 max-w-full whitespace-normal [overflow-wrap:anywhere]"
-          variant={
-            option.decision === "accept"
-              ? "default"
-              : option.decision === "decline"
-                ? "destructive-outline"
-                : option.decision === "cancel"
-                  ? "ghost"
-                  : "outline"
-          }
-          disabled={isResponding}
-          onClick={() => void onRespondToApproval(requestId, option.decision)}
-        >
-          {option.label}
-        </Button>
-      ))}
+      {options.map((option) => {
+        const button = (
+          <Button
+            key={option.decision}
+            size="sm"
+            className="h-auto min-h-8 max-w-full whitespace-normal [overflow-wrap:anywhere]"
+            variant={
+              option.decision === "accept"
+                ? "default"
+                : option.decision === "decline"
+                  ? "destructive-outline"
+                  : option.decision === "cancel"
+                    ? "ghost"
+                    : "outline"
+            }
+            aria-description={option.warning}
+            disabled={isResponding}
+            onClick={() => void onRespondToApproval(requestId, option.decision)}
+          >
+            {option.warning ? <TriangleAlertIcon className="size-3 shrink-0 text-warning" /> : null}
+            {option.label}
+          </Button>
+        );
+        // A provider caution, such as a prompt injection warning on "allow
+        // always", rides along as a tooltip so the row stays one line.
+        return option.warning ? (
+          <Tooltip key={option.decision}>
+            <TooltipTrigger render={button} />
+            <TooltipPopup side="top" className="max-w-72 text-xs leading-snug">
+              {option.warning}
+            </TooltipPopup>
+          </Tooltip>
+        ) : (
+          button
+        );
+      })}
     </>
   );
 });

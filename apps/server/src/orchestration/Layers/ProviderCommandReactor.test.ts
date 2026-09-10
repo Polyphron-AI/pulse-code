@@ -9,18 +9,21 @@ import {
   ProviderSession,
   ProviderDriverKind,
   ProviderInstanceId,
+  ProviderSetupError,
 } from "@t3tools/contracts";
 import { createModelSelection } from "@t3tools/shared/model";
 import {
   ApprovalRequestId,
   CommandId,
   DEFAULT_PROVIDER_INTERACTION_MODE,
+  EnvironmentId,
   EventId,
   MessageId,
   ProjectId,
   ThreadId,
   TurnId,
 } from "@t3tools/contracts";
+import { serializeAssistantCitation } from "@t3tools/shared/assistantCitations";
 import * as Effect from "effect/Effect";
 import * as Deferred from "effect/Deferred";
 import * as Exit from "effect/Exit";
@@ -29,6 +32,7 @@ import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as PubSub from "effect/PubSub";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { it as effectIt } from "@effect/vitest";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
@@ -42,6 +46,7 @@ import {
   ProviderService,
   type ProviderServiceShape,
 } from "../../provider/Services/ProviderService.ts";
+import { ProviderAuthService } from "../../provider/Services/ProviderAuthService.ts";
 import { makeProviderRegistryLayer } from "../../provider/testUtils/providerRegistryMock.ts";
 import { TextGeneration, type TextGenerationShape } from "../../textGeneration/TextGeneration.ts";
 import * as RepositoryIdentityResolver from "../../project/RepositoryIdentityResolver.ts";
@@ -69,6 +74,19 @@ const asApprovalRequestId = (value: string): ApprovalRequestId => ApprovalReques
 const asMessageId = (value: string): MessageId => MessageId.make(value);
 const asTurnId = (value: string): TurnId => TurnId.make(value);
 
+const assistantQuoteText = "Retain the reconnect backoff.";
+const assistantCitation = {
+  version: 1 as const,
+  environmentId: EnvironmentId.make("source-environment"),
+  threadId: ThreadId.make("source-thread"),
+  messageId: asMessageId("source-message"),
+  text: assistantQuoteText,
+  start: 0,
+  end: assistantQuoteText.length,
+  prefix: "",
+  suffix: "",
+};
+
 const deriveServerPathsSync = (baseDir: string, devUrl: URL | undefined) =>
   Effect.runSync(deriveServerPaths(baseDir, devUrl).pipe(Effect.provide(NodeServices.layer)));
 
@@ -93,7 +111,10 @@ async function waitFor(
 
 describe("ProviderCommandReactor", () => {
   let runtime: ManagedRuntime.ManagedRuntime<
-    OrchestrationEngineService | ProviderCommandReactor | ProjectionSnapshotQuery,
+    | OrchestrationEngineService
+    | ProviderCommandReactor
+    | ProjectionSnapshotQuery
+    | SqlClient.SqlClient,
     unknown
   > | null = null;
   let scope: Scope.Closeable | null = null;
@@ -157,6 +178,7 @@ describe("ProviderCommandReactor", () => {
       session: ProviderSession,
     ) => Effect.Effect<ProviderSession, ProviderAdapterRequestError>;
     readonly stopSessionEffect?: () => Effect.Effect<void>;
+    readonly tryHandlePromptCommandEffect?: ProviderAuthService["Service"]["tryHandlePromptCommand"];
   }) {
     const now = "2026-01-01T00:00:00.000Z";
     const baseDir =
@@ -165,6 +187,9 @@ describe("ProviderCommandReactor", () => {
     const { stateDir } = deriveServerPathsSync(baseDir, undefined);
     createdStateDirs.add(stateDir);
     const runtimeEventPubSub = Effect.runSync(PubSub.unbounded<ProviderRuntimeEvent>());
+    const tryHandlePromptCommand = vi.fn<ProviderAuthService["Service"]["tryHandlePromptCommand"]>(
+      input?.tryHandlePromptCommandEffect ?? (() => Effect.succeed(false)),
+    );
     let nextSessionIndex = 1;
     const runtimeSessions: Array<ProviderSession> = [];
     const modelSelection = input?.threadModelSelection ?? {
@@ -327,10 +352,17 @@ describe("ProviderCommandReactor", () => {
         Effect.succeed({
           sessionModelSwitch: input?.sessionModelSwitch ?? "in-session",
         }),
+      assertConversationRollbackSupported: () => unsupported(),
       getInstanceInfo: (instanceId) => {
         const raw = String(instanceId);
         const driverKind = ProviderDriverKind.make(
-          raw.startsWith("claude") ? "claudeAgent" : raw.startsWith("codex") ? "codex" : raw,
+          raw.startsWith("claude")
+            ? "claudeAgent"
+            : raw.startsWith("codex")
+              ? "codex"
+              : raw.startsWith("antigravity")
+                ? "antigravity"
+                : raw,
         );
         return Effect.succeed({
           instanceId,
@@ -403,6 +435,7 @@ describe("ProviderCommandReactor", () => {
       Layer.provideMerge(reactorOrchestrationLayer),
       Layer.provideMerge(projectionSnapshotLayer),
       Layer.provideMerge(Layer.succeed(ProviderService, service)),
+      Layer.provide(Layer.mock(ProviderAuthService, { tryHandlePromptCommand })),
       Layer.provideMerge(makeProviderRegistryLayer(providerSnapshots as never)),
       Layer.provideMerge(
         Layer.mock(GitWorkflowService.GitWorkflowService)({
@@ -425,6 +458,7 @@ describe("ProviderCommandReactor", () => {
         }),
       ),
       Layer.provideMerge(ServerSettingsService.layerTest()),
+      Layer.provideMerge(SqlitePersistenceMemory),
       Layer.provideMerge(ServerConfig.layerTest(process.cwd(), baseDir)),
       Layer.provideMerge(NodeServices.layer),
     );
@@ -505,6 +539,18 @@ describe("ProviderCommandReactor", () => {
       engine,
       readModel: () => Effect.runPromise(snapshotQuery.getSnapshot()),
       compactThread,
+      readPendingTurnStarts: () =>
+        runtime!.runPromise(
+          Effect.gen(function* () {
+            const sql = yield* SqlClient.SqlClient;
+            return yield* sql<{ readonly threadId: string }>`
+              SELECT thread_id AS "threadId"
+              FROM projection_turns
+              WHERE turn_id IS NULL AND state = 'pending'
+            `;
+          }),
+        ),
+      tryHandlePromptCommand,
       startSession,
       sendTurn,
       interruptTurn,
@@ -524,6 +570,161 @@ describe("ProviderCommandReactor", () => {
       },
     };
   }
+
+  effectIt.effect.each(["new", "ready", "stopped"] as const)(
+    "handles sign-out for a %s thread before worktree repair, text helpers, or startup",
+    (sessionStatus) =>
+      Effect.gen(function* () {
+        const instanceId = ProviderInstanceId.make("antigravity-personal");
+        const handled = yield* Deferred.make<void>();
+        const harness = yield* Effect.promise(() =>
+          createHarness({
+            ...(sessionStatus === "new"
+              ? {}
+              : {
+                  threadModelSelection: { instanceId, model: "gemini-3.1-pro" },
+                }),
+            tryHandlePromptCommandEffect: () =>
+              Deferred.succeed(handled, undefined).pipe(Effect.as(true)),
+          }),
+        );
+        const threadId = ThreadId.make("thread-1");
+        const createdAt = "2026-01-01T00:00:00.000Z";
+        if (sessionStatus !== "new") {
+          yield* harness.engine.dispatch({
+            type: "thread.session.set",
+            commandId: CommandId.make("cmd-sign-out-bound-session"),
+            threadId,
+            session: {
+              threadId,
+              providerInstanceId: instanceId,
+              providerName: "antigravity",
+              status: sessionStatus,
+              runtimeMode: "approval-required",
+              activeTurnId: null,
+              lastError: null,
+              updatedAt: createdAt,
+            },
+            createdAt,
+          });
+        }
+        yield* harness.engine.dispatch({
+          type: "thread.meta.update",
+          commandId: CommandId.make("cmd-sign-out-worktree"),
+          threadId,
+          title: "New thread",
+          branch: "t3code/1234abcd",
+          worktreePath: NodePath.join(harness.stateDir, "missing-worktree"),
+        });
+
+        yield* harness.engine.dispatch({
+          type: "thread.turn.start",
+          commandId: CommandId.make("cmd-provider-sign-out"),
+          threadId,
+          message: {
+            messageId: MessageId.make("message-provider-sign-out"),
+            role: "user",
+            text: "/logout",
+            attachments: [],
+          },
+          modelSelection: {
+            instanceId:
+              sessionStatus === "new" ? instanceId : ProviderInstanceId.make("antigravity-other"),
+            model: "gemini-3.1-pro",
+          },
+          interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+          runtimeMode: "approval-required",
+          createdAt,
+        });
+        yield* Deferred.await(handled);
+        yield* Effect.promise(() => harness.drain());
+
+        const thread = (yield* Effect.promise(() => harness.readModel())).threads.find(
+          (entry) => entry.id === threadId,
+        );
+        expect(thread?.session).toMatchObject({
+          status: "stopped",
+          providerName: "antigravity",
+          providerInstanceId: instanceId,
+          activeTurnId: null,
+          lastError: null,
+        });
+        expect(thread?.messages.map((message) => message.text)).toEqual(["/logout"]);
+        expect(thread?.activities).toContainEqual(
+          expect.objectContaining({ kind: "provider.auth.signed-out", tone: "info", turnId: null }),
+        );
+        expect(yield* Effect.promise(() => harness.readPendingTurnStarts())).toEqual([]);
+        expect(harness.tryHandlePromptCommand).toHaveBeenCalledWith({
+          instanceId,
+          text: "/logout",
+          hasAttachments: false,
+        });
+        expect(harness.generateThreadTitle).not.toHaveBeenCalled();
+        expect(harness.generateBranchName).not.toHaveBeenCalled();
+        expect(harness.startSession).not.toHaveBeenCalled();
+        expect(harness.sendTurn).not.toHaveBeenCalled();
+      }),
+  );
+
+  effectIt.effect("clears a failed sign-out request without sending it as a prompt", () =>
+    Effect.gen(function* () {
+      const instanceId = ProviderInstanceId.make("antigravity-personal");
+      const handled = yield* Deferred.make<void>();
+      const harness = yield* Effect.promise(() =>
+        createHarness({
+          threadModelSelection: { instanceId, model: "gemini-3.1-pro" },
+          tryHandlePromptCommandEffect: () =>
+            Deferred.succeed(handled, undefined).pipe(
+              Effect.andThen(
+                Effect.fail(
+                  new ProviderSetupError({
+                    instanceId,
+                    operation: "logout",
+                    detail: "The provider could not sign out. Try again.",
+                  }),
+                ),
+              ),
+            ),
+        }),
+      );
+      const threadId = ThreadId.make("thread-1");
+
+      yield* harness.engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.make("cmd-provider-sign-out-failed"),
+        threadId,
+        message: {
+          messageId: MessageId.make("message-provider-sign-out-failed"),
+          role: "user",
+          text: "/logout",
+          attachments: [],
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        createdAt: "2026-01-01T00:00:00.000Z",
+      });
+      yield* Deferred.await(handled);
+      yield* Effect.promise(() => harness.drain());
+
+      const thread = (yield* Effect.promise(() => harness.readModel())).threads.find(
+        (entry) => entry.id === threadId,
+      );
+      expect(thread?.session).toMatchObject({
+        status: "error",
+        activeTurnId: null,
+        lastError: expect.stringContaining("The provider could not sign out. Try again."),
+      });
+      expect(thread?.activities).toContainEqual(
+        expect.objectContaining({ kind: "provider.turn.start.failed", tone: "error" }),
+      );
+      expect(
+        thread?.activities.some((activity) => activity.kind === "provider.auth.signed-out"),
+      ).toBe(false);
+      expect(yield* Effect.promise(() => harness.readPendingTurnStarts())).toEqual([]);
+      expect(harness.startSession).not.toHaveBeenCalled();
+      expect(harness.sendTurn).not.toHaveBeenCalled();
+    }),
+  );
 
   effectIt.effect("rejects compaction without conversation history", () =>
     Effect.gen(function* () {
@@ -899,7 +1100,13 @@ describe("ProviderCommandReactor", () => {
   it("pins the first user message when regeneration context is truncated", async () => {
     const harness = await createHarness();
     const now = "2026-01-01T00:00:00.000Z";
-    const firstUserMessage = `Review subagent monitoring risks. ${"Opening context. ".repeat(200)}`;
+    const quoteText = "界".repeat(1_000);
+    const citation = serializeAssistantCitation({
+      ...assistantCitation,
+      text: quoteText,
+      end: quoteText.length,
+    });
+    const firstUserMessage = `Review subagent monitoring risks. ${citation} ${"Opening context. ".repeat(200)}`;
     const recentUserMessage = `LATEST FINDING: ${"implementation detail ".repeat(320)}`;
     harness.generateThreadTitle.mockReturnValue(
       Effect.succeed({ title: "Review subagent monitoring risks" }),
@@ -1002,7 +1209,8 @@ describe("ProviderCommandReactor", () => {
       throw new Error("Expected a title generation input");
     }
     const message = input.message;
-    expect(message.startsWith("USER:\nReview subagent monitoring risks.")).toBe(true);
+    expect(message.startsWith(`USER:\nReview subagent monitoring risks. ${quoteText} `)).toBe(true);
+    expect(message).not.toContain("t3-citation://");
     expect(message).toContain("[First user message truncated]");
     expect(message).toContain("[Earlier content truncated]");
     expect(message).toContain("image.png");
@@ -1011,6 +1219,14 @@ describe("ProviderCommandReactor", () => {
       "opening-context-image",
       "recent-context-image",
     ]);
+    const readModel = await harness.readModel();
+    expect(
+      readModel.threads
+        .find((entry) => entry.id === ThreadId.make("thread-1"))
+        ?.messages.find(
+          (entry) => entry.id === asMessageId("user-message-before-long-title-regeneration"),
+        )?.text,
+    ).toBe(firstUserMessage);
   });
 
   it("clears title regeneration state left pending across reactor startup", async () => {
@@ -1514,13 +1730,14 @@ describe("ProviderCommandReactor", () => {
     const harness = await createHarness();
     const now = "2026-01-01T00:00:00.000Z";
     const seededTitle = "Fix reconnect spinner on resume";
+    const prompt = `[effort:high]\\n\\nFix reconnect spinner on resume ${serializeAssistantCitation(assistantCitation)}`;
     harness.generateThreadTitle.mockReturnValue(
       Effect.succeed({
         title: "Reconnect spinner resume bug",
       }),
     );
 
-    await Effect.runPromise(
+    await harness.runEffect(
       harness.engine.dispatch({
         type: "thread.meta.update",
         commandId: CommandId.make("cmd-thread-title-formatted-seed"),
@@ -1529,7 +1746,19 @@ describe("ProviderCommandReactor", () => {
       }),
     );
 
-    await Effect.runPromise(
+    const titleUpdated = await harness.runEffect(
+      harness.engine.streamDomainEvents.pipe(
+        Stream.filter(
+          (event) =>
+            event.type === "thread.meta-updated" &&
+            event.payload.title === "Reconnect spinner resume bug",
+        ),
+        Stream.take(1),
+        Stream.toPull,
+        Scope.provide(scope!),
+      ),
+    );
+    await harness.runEffect(
       harness.engine.dispatch({
         type: "thread.turn.start",
         commandId: CommandId.make("cmd-turn-start-title-formatted"),
@@ -1537,7 +1766,7 @@ describe("ProviderCommandReactor", () => {
         message: {
           messageId: asMessageId("user-message-title-formatted"),
           role: "user",
-          text: "[effort:high]\\n\\nFix reconnect spinner on resume",
+          text: prompt,
           attachments: [],
         },
         titleSeed: seededTitle,
@@ -1547,25 +1776,34 @@ describe("ProviderCommandReactor", () => {
       }),
     );
 
-    await waitFor(() => harness.generateThreadTitle.mock.calls.length === 1);
-    await waitFor(async () => {
-      const readModel = await harness.readModel();
-      return (
-        readModel.threads.find((entry) => entry.id === ThreadId.make("thread-1"))?.title ===
-        "Reconnect spinner resume bug"
-      );
-    });
+    await harness.runEffect(titleUpdated);
+    await harness.drain();
 
+    expect(harness.generateThreadTitle.mock.calls[0]?.[0].message).toBe(
+      `[effort:high]\\n\\nFix reconnect spinner on resume ${assistantQuoteText}`,
+    );
+    expect(harness.generateThreadTitle.mock.calls[0]?.[0].message).not.toContain("t3-citation://");
     const readModel = await harness.readModel();
     const thread = readModel.threads.find((entry) => entry.id === ThreadId.make("thread-1"));
     expect(thread?.title).toBe("Reconnect spinner resume bug");
+    expect(
+      thread?.messages.find((entry) => entry.id === asMessageId("user-message-title-formatted"))
+        ?.text,
+    ).toBe(prompt);
+    expect(harness.sendTurn.mock.calls[0]?.[0]).toMatchObject({ input: prompt });
   });
 
   it("generates a worktree branch name for the first turn", async () => {
     const harness = await createHarness();
     const now = "2026-01-01T00:00:00.000Z";
+    const prompt = `Add a safer reconnect backoff. ${serializeAssistantCitation(assistantCitation)}`;
+    const statusRefreshed = await harness.runEffect(Deferred.make<void>());
+    const refreshStatus = harness.refreshStatus.getMockImplementation()!;
+    harness.refreshStatus.mockImplementation((cwd) =>
+      refreshStatus(cwd).pipe(Effect.tap(() => Deferred.succeed(statusRefreshed, undefined))),
+    );
 
-    await Effect.runPromise(
+    await harness.runEffect(
       harness.engine.dispatch({
         type: "thread.meta.update",
         commandId: CommandId.make("cmd-thread-branch"),
@@ -1590,7 +1828,7 @@ describe("ProviderCommandReactor", () => {
       }),
     );
 
-    await Effect.runPromise(
+    await harness.runEffect(
       harness.engine.dispatch({
         type: "thread.turn.start",
         commandId: CommandId.make("cmd-turn-start-branch-model"),
@@ -1598,7 +1836,7 @@ describe("ProviderCommandReactor", () => {
         message: {
           messageId: asMessageId("user-message-branch-model"),
           role: "user",
-          text: "Add a safer reconnect backoff.",
+          text: prompt,
           attachments: [],
         },
         interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
@@ -1607,12 +1845,19 @@ describe("ProviderCommandReactor", () => {
       }),
     );
 
-    await waitFor(() => harness.generateBranchName.mock.calls.length === 1);
-    await waitFor(() => harness.refreshStatus.mock.calls.length === 1);
-    expect(harness.generateBranchName.mock.calls[0]?.[0]).toMatchObject({
-      message: "Add a safer reconnect backoff.",
-    });
+    await harness.runEffect(Deferred.await(statusRefreshed));
+    await harness.drain();
+    expect(harness.generateBranchName.mock.calls[0]?.[0].message).toBe(
+      `Add a safer reconnect backoff. ${assistantQuoteText}`,
+    );
+    expect(harness.generateBranchName.mock.calls[0]?.[0].message).not.toContain("t3-citation://");
     expect(harness.refreshStatus.mock.calls[0]?.[0]).toBe("/tmp/provider-project-worktree");
+    const readModel = await harness.readModel();
+    expect(
+      readModel.threads
+        .find((entry) => entry.id === ThreadId.make("thread-1"))
+        ?.messages.find((entry) => entry.id === asMessageId("user-message-branch-model"))?.text,
+    ).toBe(prompt);
   });
 
   it("forwards codex model options through session start and turn send", async () => {

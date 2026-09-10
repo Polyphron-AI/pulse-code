@@ -1,3 +1,4 @@
+import { extractToolActivityPresentation } from "@t3tools/client-runtime/work-log/tool-presentation";
 import {
   derivePendingRequests,
   requestKindFromRequestType,
@@ -55,6 +56,12 @@ export const PROVIDER_OPTIONS: Array<{
     available: true,
     pickerSidebarBadge: "new",
   },
+  {
+    value: ProviderDriverKind.make("antigravity"),
+    label: "Antigravity",
+    available: true,
+    pickerSidebarBadge: "new",
+  },
 ];
 
 export type WorkLogToolLifecycleStatus =
@@ -75,6 +82,9 @@ export interface WorkLogEntry {
   changedFiles?: ReadonlyArray<string>;
   tone: "thinking" | "tool" | "info" | "error";
   toolTitle?: string;
+  toolSurface?: import("@t3tools/contracts").ToolActivitySurface;
+  toolIcon?: import("@t3tools/contracts").ToolActivityIcon;
+  toolSource?: import("@t3tools/contracts").ToolActivitySource;
   toolData?: unknown;
   itemType?: ToolLifecycleItemType;
   requestKind?: PendingApproval["requestKind"];
@@ -115,6 +125,7 @@ export interface ActivePlanState {
   turnId: TurnId | null;
   explanation?: string | null;
   steps: Array<{
+    durationMs?: number;
     step: string;
     status: "pending" | "inProgress" | "completed";
   }>;
@@ -391,6 +402,64 @@ function planStateFromActivity(activity: OrchestrationThreadActivity): ActivePla
   };
 }
 
+function addPlanStepDurations(
+  plan: ActivePlanState,
+  activities: ReadonlyArray<OrchestrationThreadActivity>,
+): ActivePlanState {
+  const timings = new Map<string, { completedAt?: number; startedAt?: number }>();
+  let planStartedAt: number | undefined;
+
+  const keyedSteps = (steps: ActivePlanState["steps"]) => {
+    const occurrences = new Map<string, number>();
+    return steps.map((step) => {
+      const occurrence = occurrences.get(step.step) ?? 0;
+      occurrences.set(step.step, occurrence + 1);
+      return { key: `${step.step}:${occurrence}`, step };
+    });
+  };
+
+  for (const activity of activities) {
+    const snapshot = planStateFromActivity(activity);
+    const activityAt = Date.parse(activity.createdAt);
+    if (!snapshot || Number.isNaN(activityAt)) continue;
+    planStartedAt ??= activityAt;
+
+    for (const { key, step } of keyedSteps(snapshot.steps)) {
+      const timing = timings.get(key) ?? {};
+      if (step.status === "inProgress" && timing.startedAt === undefined) {
+        timing.startedAt = activityAt;
+      }
+      if (step.status === "completed" && timing.completedAt === undefined) {
+        timing.completedAt = activityAt;
+      }
+      timings.set(key, timing);
+    }
+  }
+
+  const durationByKey = new Map<string, number>();
+  let previousCompletedAt = planStartedAt;
+  for (const [key, timing] of [...timings.entries()].toSorted(
+    (left, right) => (left[1].completedAt ?? Infinity) - (right[1].completedAt ?? Infinity),
+  )) {
+    const completedAt = timing.completedAt;
+    const startedAt = timing.startedAt ?? previousCompletedAt;
+    if (completedAt === undefined) continue;
+    if (startedAt !== undefined && completedAt > startedAt) {
+      durationByKey.set(key, completedAt - startedAt);
+    }
+    previousCompletedAt = completedAt;
+  }
+
+  return {
+    ...plan,
+    steps: keyedSteps(plan.steps).map(({ key, step }) => {
+      if (step.status !== "completed") return step;
+      const durationMs = durationByKey.get(key);
+      return durationMs === undefined ? step : { ...step, durationMs };
+    }),
+  };
+}
+
 export function deriveActivePlanState(
   activities: ReadonlyArray<OrchestrationThreadActivity>,
   latestTurnId: TurnId | undefined,
@@ -408,7 +477,15 @@ export function deriveActivePlanState(
   if (!latest) {
     return null;
   }
-  return planStateFromActivity(latest);
+  const plan = planStateFromActivity(latest);
+  if (!plan) return null;
+  const matchingActivities = allPlanActivities.filter(
+    (activity) => activity.turnId === latest.turnId,
+  );
+  const latestClearIndex = matchingActivities.findLastIndex(
+    (activity) => planStateFromActivity(activity) === null,
+  );
+  return addPlanStepDurations(plan, matchingActivities.slice(latestClearIndex + 1));
 }
 
 export interface TurnPlanEntry {
@@ -429,7 +506,10 @@ export function deriveTurnPlans(
   activities: ReadonlyArray<OrchestrationThreadActivity>,
 ): TurnPlanEntry[] {
   const ordered = [...activities].toSorted(compareActivitiesByOrder);
-  const byTurn = new Map<string, TurnPlanEntry>();
+  const byTurn = new Map<
+    string,
+    { activities: OrchestrationThreadActivity[]; entry: TurnPlanEntry }
+  >();
   for (const activity of ordered) {
     if (activity.kind !== "turn.plan.updated") {
       continue;
@@ -444,17 +524,24 @@ export function deriveTurnPlans(
     }
     const existing = byTurn.get(key);
     if (existing) {
-      existing.plan = plan;
+      existing.entry.plan = plan;
+      existing.activities.push(activity);
     } else {
       byTurn.set(key, {
-        id: `turn-plan:${key}`,
-        createdAt: activity.createdAt,
-        turnId: activity.turnId,
-        plan,
+        activities: [activity],
+        entry: {
+          id: `turn-plan:${key}`,
+          createdAt: activity.createdAt,
+          turnId: activity.turnId,
+          plan,
+        },
       });
     }
   }
-  return [...byTurn.values()];
+  return [...byTurn.values()].map(({ activities: planActivities, entry }) => ({
+    ...entry,
+    plan: addPlanStepDurations(entry.plan, planActivities),
+  }));
 }
 
 export function findLatestProposedPlan(
@@ -559,7 +646,16 @@ export function deriveWorkLogEntries(
 ): WorkLogEntry[] {
   const ordered = [...activities].toSorted(compareActivitiesByOrder);
   const entries: DerivedWorkLogEntry[] = [];
+  const toolPresentations = new Map<string, ReturnType<typeof extractToolActivityPresentation>>();
   for (const activity of ordered) {
+    const payload = asRecord(activity.payload);
+    const toolCallId = typeof payload?.toolCallId === "string" ? payload.toolCallId : undefined;
+    const presentationKey = toolCallId ? `${activity.turnId ?? ""}:${toolCallId}` : undefined;
+    const presentation = {
+      ...(presentationKey ? toolPresentations.get(presentationKey) : {}),
+      ...extractToolActivityPresentation(payload),
+    };
+    if (presentationKey) toolPresentations.set(presentationKey, presentation);
     if (activity.kind === "tool.started") continue;
     // Agent task.started rows are CTA seeds: they carry the true spawn turn,
     // which is the batch key (completions of background subagents arrive
@@ -572,7 +668,7 @@ export function deriveWorkLogEntries(
     if (activity.summary === "Checkpoint captured") continue;
     if (isPlanBoundaryToolActivity(activity)) continue;
     if (isAgentInternalActivity(activity)) continue;
-    entries.push(toDerivedWorkLogEntry(activity));
+    entries.push({ ...toDerivedWorkLogEntry(activity), ...presentation });
   }
   return collapseDerivedWorkLogEntries(entries).map((entry) => {
     const { activityKind, collapseKey: _collapseKey, ...rest } = entry;
@@ -619,6 +715,7 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
   const commandPreview = extractToolCommand(payload);
   const changedFiles = extractChangedFiles(payload);
   const title = extractToolTitle(payload);
+  const toolPresentation = extractToolActivityPresentation(payload);
   const isTaskActivity =
     activity.kind === "task.started" ||
     activity.kind === "task.progress" ||
@@ -673,6 +770,15 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
   }
   if (title) {
     entry.toolTitle = title;
+  }
+  if (toolPresentation.toolSurface) {
+    entry.toolSurface = toolPresentation.toolSurface;
+  }
+  if (toolPresentation.toolIcon) {
+    entry.toolIcon = toolPresentation.toolIcon;
+  }
+  if (toolPresentation.toolSource) {
+    entry.toolSource = toolPresentation.toolSource;
   }
   if (itemType === "mcp_tool_call") {
     const data = asRecord(payload?.data);
@@ -849,6 +955,9 @@ function mergeDerivedWorkLogEntries(
   const command = next.command ?? previous.command;
   const rawCommand = next.rawCommand ?? previous.rawCommand;
   const toolTitle = next.toolTitle ?? previous.toolTitle;
+  const toolSurface = next.toolSurface ?? previous.toolSurface;
+  const toolIcon = next.toolIcon ?? previous.toolIcon;
+  const toolSource = next.toolSource ?? previous.toolSource;
   const itemType = next.itemType ?? previous.itemType;
   const requestKind = next.requestKind ?? previous.requestKind;
   const collapseKey = next.collapseKey ?? previous.collapseKey;
@@ -863,6 +972,9 @@ function mergeDerivedWorkLogEntries(
     ...(rawCommand ? { rawCommand } : {}),
     ...(changedFiles.length > 0 ? { changedFiles } : {}),
     ...(toolTitle ? { toolTitle } : {}),
+    ...(toolSurface ? { toolSurface } : {}),
+    ...(toolIcon ? { toolIcon } : {}),
+    ...(toolSource ? { toolSource } : {}),
     ...(itemType ? { itemType } : {}),
     ...(requestKind ? { requestKind } : {}),
     ...(collapseKey ? { collapseKey } : {}),

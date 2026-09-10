@@ -54,6 +54,7 @@ describe("searchSettings", () => {
   it("matches normalized title substrings", () => {
     expect(searchSettings("  WORD   WRAP  ", ITEMS).map((item) => item.id)).toEqual(["word-wrap"]);
     expect(searchSettings("glass").map((item) => item.id)).toEqual(["setting-glass-opacity"]);
+    expect(searchSettings("panel animations").map((item) => item.id)).toEqual(["panel-animations"]);
     expect(searchSettings("xyzzy")).toEqual([]);
   });
 
@@ -64,6 +65,18 @@ describe("searchSettings", () => {
     ]);
   });
 
+  it("lists thread confirmations in panel order", () => {
+    expect(searchSettings("confirmation").map((item) => item.id)).toEqual([
+      "unpin-confirmation",
+      "archive-confirmation",
+      "delete-confirmation",
+    ]);
+  });
+
+  it("finds Antigravity setup by provider and sign-in terms", () => {
+    expect(searchSettings("Antigravity")[0]?.id).toBe("providers");
+    expect(searchSettings("Google sign in")[0]?.id).toBe("providers");
+  });
   it("returns no results for an empty query", () => {
     expect(searchSettings("   ", ITEMS)).toEqual([]);
   });
@@ -104,6 +117,22 @@ describe("searchSettings", () => {
       to: "/settings/integrations",
       targetId: "browser-profiles",
     });
+  });
+
+  it("routes browser recording quality to integrations", () => {
+    expect(searchSettings("recording frame rate")[0]).toMatchObject({
+      id: "browser-recording-frame-rate",
+      to: "/settings/integrations",
+      targetId: "browser",
+    });
+  });
+
+  it("routes where links open to integrations", () => {
+    expect(searchSettings("open links in")[0]).toMatchObject({
+      id: "browser-link-target",
+      to: "/settings/integrations",
+    });
+    expect(searchSettings("external links")[0]).toMatchObject({ id: "browser-link-target" });
   });
 });
 

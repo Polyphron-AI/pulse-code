@@ -104,6 +104,26 @@ describe("ClientSettings composer busy behavior", () => {
   });
 });
 
+describe("ClientSettings browser recording frame rate", () => {
+  it("defaults to 30 fps", () => {
+    expect(decodeClientSettings({}).browserRecordingFrameRate).toBe(30);
+  });
+
+  it.each([30, 60])("accepts a supported frame rate: %s", (frameRate) => {
+    expect(
+      decodeClientSettings({ browserRecordingFrameRate: frameRate }).browserRecordingFrameRate,
+    ).toBe(frameRate);
+    expect(
+      decodeClientSettingsPatch({ browserRecordingFrameRate: frameRate }).browserRecordingFrameRate,
+    ).toBe(frameRate);
+  });
+
+  it.each([24, 59, 120])("rejects an unsupported frame rate: %s", (frameRate) => {
+    expect(() => decodeClientSettings({ browserRecordingFrameRate: frameRate })).toThrow();
+    expect(() => decodeClientSettingsPatch({ browserRecordingFrameRate: frameRate })).toThrow();
+  });
+});
+
 describe("ClientSettings glass opacity", () => {
   it("defaults to a readable translucent surface", () => {
     expect(decodeClientSettings({}).glassOpacity).toBe(80);
@@ -117,6 +137,38 @@ describe("ClientSettings glass opacity", () => {
   it.each([40, 75, 100])("accepts a glass opacity within the supported range: %s", (value) => {
     expect(decodeClientSettings({ glassOpacity: value }).glassOpacity).toBe(value);
     expect(decodeClientSettingsPatch({ glassOpacity: value }).glassOpacity).toBe(value);
+  });
+});
+
+describe("ClientSettings appearance contrast", () => {
+  it("defaults to the theme's original contrast", () => {
+    expect(decodeClientSettings({}).appearanceContrast).toBe(100);
+  });
+
+  it.each([49, 201, 92.5])("rejects an invalid appearance contrast: %s", (value) => {
+    expect(() => decodeClientSettings({ appearanceContrast: value })).toThrow();
+    expect(() => decodeClientSettingsPatch({ appearanceContrast: value })).toThrow();
+  });
+
+  it.each([50, 100, 150, 200])("accepts an appearance contrast in range: %s", (value) => {
+    expect(decodeClientSettings({ appearanceContrast: value }).appearanceContrast).toBe(value);
+    expect(decodeClientSettingsPatch({ appearanceContrast: value }).appearanceContrast).toBe(value);
+  });
+});
+
+describe("ClientSettings panel animations", () => {
+  it("defaults to instant changes", () => {
+    expect(decodeClientSettings({}).panelAnimationDurationMs).toBe(0);
+  });
+
+  it.each([0, 400])("accepts a panel animation duration: %s", (value) => {
+    expect(decodeClientSettingsPatch({ panelAnimationDurationMs: value })).toEqual({
+      panelAnimationDurationMs: value,
+    });
+  });
+
+  it.each([-1, 401, 150.5])("rejects an invalid panel animation duration: %s", (value) => {
+    expect(() => decodeClientSettingsPatch({ panelAnimationDurationMs: value })).toThrow();
   });
 });
 
@@ -135,6 +187,45 @@ describe("ClientSettings environment identification", () => {
   it("rejects unsupported presentation modes", () => {
     expect(() => decodeClientSettings({ environmentIdentificationMode: "badge" })).toThrow();
     expect(() => decodeClientSettingsPatch({ environmentIdentificationMode: "badge" })).toThrow();
+  });
+});
+
+describe("ClientSettings skill menu", () => {
+  it("defaults skills on and preserves an explicit opt-out", () => {
+    expect(decodeClientSettings({}).showSkillsInSlashMenu).toBe(true);
+    expect(decodeClientSettings({ showSkillsInSlashMenu: false }).showSkillsInSlashMenu).toBe(
+      false,
+    );
+    expect(decodeClientSettingsPatch({ showSkillsInSlashMenu: false }).showSkillsInSlashMenu).toBe(
+      false,
+    );
+  });
+});
+
+describe("ClientSettings context window meter", () => {
+  it("defaults off and preserves an explicit legacy opt-in", () => {
+    expect(decodeClientSettings({}).contextWindowMeterEnabled).toBe(false);
+    expect(
+      decodeClientSettings({ contextWindowMeterEnabled: true }).contextWindowMeterEnabled,
+    ).toBe(true);
+    expect(
+      decodeClientSettingsPatch({ contextWindowMeterEnabled: true }).contextWindowMeterEnabled,
+    ).toBe(true);
+  });
+});
+
+describe("ClientSettings composer collapse", () => {
+  it("collapses on scroll by default and accepts opting out", () => {
+    expect(decodeClientSettings({}).composerCollapseOnScroll).toBe(true);
+    expect(
+      decodeClientSettingsPatch({ composerCollapseOnScroll: false }).composerCollapseOnScroll,
+    ).toBe(false);
+  });
+
+  it("drops the retired blur trigger key", () => {
+    const decoded = decodeClientSettings({ composerCollapseOnBlur: false });
+    expect(decoded.composerCollapseOnScroll).toBe(true);
+    expect(decoded).not.toHaveProperty("composerCollapseOnBlur");
   });
 });
 
@@ -161,6 +252,12 @@ describe("ClientSettings sidebar", () => {
     expect(decodeClientSettingsPatch({ legacySidebarEnabled: true }).legacySidebarEnabled).toBe(
       true,
     );
+  });
+
+  it("keeps unpin confirmation opt-in and patchable", () => {
+    expect(decodeClientSettings({}).confirmThreadUnpin).toBe(false);
+    expect(decodeClientSettingsPatch({ confirmThreadUnpin: true }).confirmThreadUnpin).toBe(true);
+    expect(() => decodeClientSettingsPatch({ confirmThreadUnpin: "yes" })).toThrow();
   });
 
   it("allows auto-settle by inactivity to be disabled", () => {
@@ -480,5 +577,107 @@ describe("custom model settings compatibility", () => {
           ?.customModels,
       ).toEqual(customModels);
     }
+  });
+});
+
+describe("ServerSettings usage price overrides", () => {
+  const prices = { inputCostPerMillionTokens: 2, outputCostPerMillionTokens: 8 };
+
+  it("defaults to automatic pricing and round-trips arbitrary model IDs", () => {
+    expect(decodeServerSettings({}).usagePriceOverrides).toEqual({});
+    const settings = decodeServerSettings({
+      usagePriceOverrides: { "  vendor/example-model  ": prices },
+    });
+    expect(encodeServerSettings(settings).usagePriceOverrides).toEqual({
+      "vendor/example-model": prices,
+    });
+  });
+
+  it("accepts zero rates, optional cache rates, and per-model deletion", () => {
+    const overrides = {
+      "example-model": {
+        inputCostPerMillionTokens: 0,
+        outputCostPerMillionTokens: 0,
+        cacheReadCostPerMillionTokens: 0.5,
+        cacheWriteCostPerMillionTokens: 3,
+      },
+      "removed-model": null,
+    };
+    expect(
+      decodeServerSettingsPatch({ usagePriceOverrides: overrides }).usagePriceOverrides,
+    ).toEqual(overrides);
+  });
+
+  it.each([
+    "inputCostPerMillionTokens",
+    "outputCostPerMillionTokens",
+    "cacheReadCostPerMillionTokens",
+    "cacheWriteCostPerMillionTokens",
+  ])("rejects invalid %s rates at the settings boundary", (field) => {
+    for (const value of [-1, Number.NaN, Number.POSITIVE_INFINITY, "2"]) {
+      const usagePriceOverrides = { "example-model": { ...prices, [field]: value } };
+      expect(() => decodeServerSettings({ usagePriceOverrides })).toThrow();
+      expect(() => decodeServerSettingsPatch({ usagePriceOverrides })).toThrow();
+    }
+  });
+
+  it("rejects empty model IDs and incomplete input/output pricing", () => {
+    for (const usagePriceOverrides of [
+      { " ": prices },
+      { "example-model": { inputCostPerMillionTokens: 2 } },
+      { "example-model": { outputCostPerMillionTokens: 8 } },
+    ]) {
+      expect(() => decodeServerSettingsPatch({ usagePriceOverrides })).toThrow();
+    }
+  });
+});
+
+describe("ServerSettings environment icon", () => {
+  it("defaults to null", () => {
+    expect(decodeServerSettings({}).environmentIcon).toBeNull();
+  });
+
+  it("keeps a kind this build knows", () => {
+    expect(decodeServerSettings({ environmentIcon: "mac-mini" }).environmentIcon).toBe("mac-mini");
+    expect(decodeServerSettings({ environmentIcon: "linux" }).environmentIcon).toBe("linux");
+  });
+
+  it("decodes a kind from a newer server as null instead of failing the snapshot", () => {
+    expect(decodeServerSettings({ environmentIcon: "toaster" }).environmentIcon).toBeNull();
+  });
+
+  it("round-trips through encode", () => {
+    const settings = decodeServerSettings({ environmentIcon: "laptop" });
+    expect(encodeServerSettings(settings).environmentIcon).toBe("laptop");
+
+    const linuxSettings = decodeServerSettings({ environmentIcon: "linux" });
+    expect(encodeServerSettings(linuxSettings).environmentIcon).toBe("linux");
+  });
+});
+
+describe("ClientSettings browser link target", () => {
+  it("keeps older settings on the system browser", () => {
+    expect(decodeClientSettings({}).browserLinkTarget).toBe("system");
+  });
+  it.each(["system", "app"])("round trips the %s preference and patch", (browserLinkTarget) => {
+    expect(
+      encodeClientSettings(decodeClientSettings({ browserLinkTarget })).browserLinkTarget,
+    ).toBe(browserLinkTarget);
+    expect(decodeClientSettingsPatch({ browserLinkTarget }).browserLinkTarget).toBe(
+      browserLinkTarget,
+    );
+  });
+  it("rejects unsupported targets", () => {
+    expect(() => decodeClientSettings({ browserLinkTarget: "remote" })).toThrow();
+    expect(() => decodeClientSettingsPatch({ browserLinkTarget: "remote" })).toThrow();
+  });
+});
+
+describe("ClientSettings proactive panels", () => {
+  it("is opt-in and accepts client-local updates", () => {
+    expect(decodeClientSettings({}).proactivePanelsEnabled).toBe(false);
+    expect(decodeClientSettingsPatch({ proactivePanelsEnabled: true }).proactivePanelsEnabled).toBe(
+      true,
+    );
   });
 });
