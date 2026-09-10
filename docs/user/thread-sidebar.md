@@ -1,5 +1,7 @@
 # Organizing threads
 
+On web and desktop, selecting a thread while the app is opening keeps that thread selected, even if the initial project settings finish loading later. **New Thread** still opens a draft when you choose it.
+
 Pin a thread from its context menu to keep it in the pinned section above your active work.
 `mod+shift+p` pins or unpins the thread you have open. Pinned threads are shown independently of
 their project, including when you connect to more than one environment.
