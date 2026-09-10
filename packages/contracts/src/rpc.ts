@@ -557,6 +557,7 @@ export const WsProviderConsumeResetCreditRpc = Rpc.make(WS_METHODS.providerConsu
   success: ProviderConsumeResetCreditResult,
   error: Schema.Union([
     ProviderResetCreditError,
+    ProviderSetupError,
     UsageLimitSourceError,
     EnvironmentAuthorizationError,
   ]),

@@ -2,7 +2,26 @@ import { describe, expect, it } from "vite-plus/test";
 import * as Exit from "effect/Exit";
 import * as Schema from "effect/Schema";
 
-import { WsSubscribeServerConfigRpc } from "./rpc.ts";
+import { WsProviderConsumeResetCreditRpc, WsSubscribeServerConfigRpc } from "./rpc.ts";
+
+describe("reset credit error compatibility", () => {
+  it("accepts a V40 setup error without dropping the legacy Pulse error", () => {
+    const decode = Schema.decodeUnknownSync(WsProviderConsumeResetCreditRpc.errorSchema);
+    const setupError = {
+      _tag: "ProviderSetupError",
+      instanceId: "codex",
+      operation: "consumeResetCredit",
+      detail: "No reset credit is available.",
+    };
+    expect(decode(setupError)).toMatchObject(setupError);
+    const legacyError = {
+      _tag: "ProviderResetCreditError",
+      instanceId: "codex",
+      detail: "No reset credit is available.",
+    };
+    expect(decode(legacyError)).toMatchObject(legacyError);
+  });
+});
 
 /**
  * The client always sends `environmentThemes`, including to servers built
