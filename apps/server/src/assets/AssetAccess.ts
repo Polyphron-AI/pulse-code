@@ -15,9 +15,9 @@ import {
   ToolActivityNativeAppReference,
 } from "@t3tools/contracts";
 import {
+  hostPreviewMimeTypeFromExtension,
   isWorkspaceImagePreviewPath,
   isWorkspacePreviewEntryPath,
-  mediaMimeTypeFromExtension,
   WORKSPACE_BROWSER_PREVIEW_EXTENSIONS,
   WORKSPACE_IMAGE_PREVIEW_EXTENSIONS,
 } from "@t3tools/shared/filePreview";
@@ -326,7 +326,7 @@ export const issueAssetUrl = Effect.fn("AssetAccess.issueAssetUrl")(function* (i
       if (!canonicalFile) {
         return yield* new AssetWorkspaceAssetNotFoundError({ resource: input.resource });
       }
-      if (mediaMimeTypeFromExtension(path.extname(canonicalFile)) === null) {
+      if (hostPreviewMimeTypeFromExtension(path.extname(canonicalFile)) === null) {
         return yield* new AssetPreviewTypeValidationError({ resource: input.resource });
       }
       const wantsDimensions = HEADER_IMAGE_EXTENSIONS.has(
@@ -755,7 +755,7 @@ export const resolveAsset = Effect.fn("AssetAccess.resolveAsset")(function* (
       Effect.orElseSucceed(() => null),
     );
     if (canonicalFile !== claims.filePath) return null;
-    const mimeType = mediaMimeTypeFromExtension(path.extname(canonicalFile));
+    const mimeType = hostPreviewMimeTypeFromExtension(path.extname(canonicalFile));
     if (!mimeType) return null;
     const file = yield* openMediaFile(canonicalFile, claims).pipe(
       Effect.tapError((cause) =>

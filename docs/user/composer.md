@@ -152,3 +152,5 @@ On mobile, an existing thread with a queued message shows an upload-tray indicat
 To start another task on a thread's branch, open that thread's menu and choose **New thread on branch**. Pulse prepares the checkout before opening the new task. If local changes prevent checkout, they stay in place and the task is not started.
 
 Mobile keeps unsent Pulse Connect drafts and queued messages on the device when you sign out. Signing back into the same account restores them; another account does not receive that work. If the local backup fails, Pulse keeps the work and reports the cleanup failure so it can be retried.
+
+Files linked by an agent can also live outside the workspace. Markdown opens read-only with links relative to its own directory. HTML and PDF host files open in the file viewer. These paths belong to the connected environment, so remote files stay on that host.

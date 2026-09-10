@@ -1,6 +1,6 @@
 {
   "target": "09e8de9c655ae85410bf6b00446f272a01da81c7",
-  "assessedHead": "cd25876d32b60fb78d5e2cf82eb632ec3f324012",
+  "assessedHead": "5c96f42183178b1fc2bb3be3efa273fb92ade8c4",
   "scope": "Source commit inventory; pending rows require semantic review.",
   "statusDefinitions": {
     "ported-reviewed": "See compatibility ledgers for adaptations and tests.",
@@ -10,9 +10,9 @@
   },
   "counts": {
     "target-files-identical": 6,
-    "needs-disposition": 830,
-    "ported-reviewed": 207,
-    "partially-ported": 11
+    "needs-disposition": 826,
+    "ported-reviewed": 210,
+    "partially-ported": 12
   },
   "commits": [
     {
@@ -996,9 +996,10 @@
     {
       "source": "6a2608292dd7ba01516112c276e475e6b64e4e2c",
       "subject": "fix(server): keep the authoritative subagent model when snapshots race task_started (#7583)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server"],
-      "differingTargetPaths": 2
+      "differingTargetPaths": 2,
+      "adaptation": "Claude snapshot-before-task registration model metadata retained in a 64-entry pending map in 5c96f4218; 6 focused tests cover ordering, effort and oldest-entry eviction; server types pass."
     },
     {
       "source": "04df98db4c90790fb5171426894baa3bca57a935",
@@ -2200,9 +2201,10 @@
     {
       "source": "9bc7a56848eb7c7546605e54ff02c6abea176f96",
       "subject": "feat(mobile): upload attachments while composing (#8978)",
-      "status": "needs-disposition",
+      "status": "partially-ported",
       "domains": ["apps/mobile", "docs"],
-      "differingTargetPaths": 22
+      "differingTargetPaths": 20,
+      "remaining": "Account-owned local relay draft/outbox archives integrated in 1e557395f with 74 focused tests, mobile types and lint. Durable backup precedes environment removal; restore/account isolation and attachment ownership preserved. Background attachment-upload queue remains outside this slice; no real account acceptance."
     },
     {
       "source": "9ecfc07a8b3acadd1612665b6e24425f625480de",
@@ -2231,7 +2233,7 @@
       "status": "partially-ported",
       "domains": ["apps/server"],
       "differingTargetPaths": 10,
-      "remaining": "Durable request lifecycle lookup only; broader source changes still require disposition."
+      "remaining": "Durable request lifecycle lookup is integrated. Broader internal filtered activity reads and narrow shell-summary lifecycle SQL remain outside frozen 5c96f4218; assigned as a separate batch."
     },
     {
       "source": "d35c71d1b975660ec6a71bbceb6aa7dfd0e8c3d5",
@@ -6415,9 +6417,10 @@
     {
       "source": "6349a0e68a958cc51b7b5198683c1d1db88b8d28",
       "subject": "fix(antigravity): distinguish session initialization auth failures (#9919)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server"],
-      "differingTargetPaths": 2
+      "differingTargetPaths": 2,
+      "adaptation": "Antigravity post-authentication session initialization failures use a distinct safe diagnostic in a6b99dcd3; 14 focused tests passed."
     },
     {
       "source": "0d8a91a25a35618c7cae1e02791e491afa1f0a00",
@@ -7582,9 +7585,10 @@
     {
       "source": "d8bc6831cd822b294d875364cf3aa0a17c999258",
       "subject": "fix(projects): prevent invalid script IDs from crashing threads (#10019)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server", "apps/web"],
-      "differingTargetPaths": 8
+      "differingTargetPaths": 5,
+      "adaptation": "Legacy script IDs remain runnable/editable/removable without invalid shortcut construction; newly introduced settings IDs validate before persistence. Integrated 09b23c434 with 38 focused tests and web/server types."
     },
     {
       "source": "bc3dc2694b5d15613ef610d693d18ebd904b0d56",

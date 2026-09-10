@@ -55,6 +55,8 @@ import { captureMessageOutputs } from "../../assets/SessionOutputs.ts";
 
 const providerTurnKey = (threadId: ThreadId, turnId: TurnId) => `${threadId}:${turnId}`;
 const providerTaskKey = (threadId: ThreadId, taskId: string) => `${threadId}:${taskId}`;
+const TASK_TITLE_ACTIVITY_KINDS = ["task.started", "task.progress"] as const;
+const COMPACTION_ACTIVITY_KINDS = ["context-compaction", "context-window.updated"] as const;
 
 // Fallback when the in-memory description cache no longer has the task name
 // (server restart, session-exit sweep, TTL/capacity eviction): earlier
@@ -1014,9 +1016,12 @@ const make = Effect.gen(function* () {
       ),
     );
 
-  const resolveThreadDetail = Effect.fn("resolveThreadDetail")(function* (threadId: ThreadId) {
+  const resolveThreadDetail = Effect.fn("resolveThreadDetail")(function* (
+    threadId: ThreadId,
+    activityKinds: ReadonlyArray<string> = [],
+  ) {
     return yield* projectionSnapshotQuery
-      .getThreadDetailById(threadId)
+      .getThreadDetailById(threadId, { activityKinds })
       .pipe(Effect.map(Option.getOrUndefined));
   });
 
@@ -2153,7 +2158,7 @@ const make = Effect.gen(function* () {
       if (event.type === "task.completed") {
         taskTitle = yield* lookupTaskDescription(thread.id, event.payload.taskId);
         if (!taskTitle) {
-          const threadDetail = yield* getLoadedThreadDetail();
+          const threadDetail = yield* resolveThreadDetail(thread.id, TASK_TITLE_ACTIVITY_KINDS);
           taskTitle = findTaskTitleInActivities(threadDetail?.activities, event.payload.taskId);
         }
       }
@@ -2192,7 +2197,7 @@ const make = Effect.gen(function* () {
         (activityEvent.payload.beforeTokens === undefined ||
           activityEvent.payload.afterTokens === undefined)
       ) {
-        const threadDetail = yield* resolveThreadDetail(thread.id);
+        const threadDetail = yield* resolveThreadDetail(thread.id, COMPACTION_ACTIVITY_KINDS);
         const tokenCounts = compactedTokenCountsFromActivities(threadDetail?.activities);
         if (tokenCounts) {
           activityEvent = {
