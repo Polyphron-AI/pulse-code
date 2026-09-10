@@ -13,6 +13,36 @@ import {
 } from "./modelOptions";
 
 describe("mobile model options", () => {
+  it("resolves Antigravity aliases within the selected account before availability checks", () => {
+    const selection = {
+      instanceId: ProviderInstanceId.make("google_work"),
+      model: "account-default",
+    };
+    const config = {
+      providers: [
+        {
+          instanceId: selection.instanceId,
+          driver: "antigravity",
+          enabled: true,
+          installed: true,
+          auth: { status: "authenticated" },
+          models: [
+            {
+              slug: "account-model",
+              name: "Account model",
+              aliases: ["account-default"],
+              capabilities: null,
+            },
+          ],
+        },
+      ],
+    } as unknown as ServerConfig;
+    expect(resolveSelectableModelSelection(config, selection)?.model).toBe("account-model");
+    expect(isModelSelectionUnavailable(config, selection)).toBe(false);
+    expect(isModelSelectionUnavailable(config, { ...selection, model: "removed-model" })).toBe(
+      true,
+    );
+  });
   it("uses the shared Oh My Pi label when the server omits a display name", () => {
     const config = {
       providers: [

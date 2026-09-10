@@ -604,6 +604,7 @@ export function SettingsScheduledChatsRouteScreen() {
   const settingsRouteSession = useMemo<ExistingThreadSettingsRouteSession>(
     () => ({
       ownerId: settingsOwnerId,
+      environmentId: selectedEnvironmentId,
       title: "Agent settings",
       providerGroups,
       selectedModel,
@@ -618,7 +619,13 @@ export function SettingsScheduledChatsRouteScreen() {
         }));
       },
     }),
-    [providerGroups, providerOptionDescriptors, selectedModel, settingsOwnerId],
+    [
+      providerGroups,
+      providerOptionDescriptors,
+      selectedModel,
+      settingsOwnerId,
+      selectedEnvironmentId,
+    ],
   );
   const openAgentSettings = useCallback(() => {
     if (selectedModel === null) return;

@@ -62,7 +62,11 @@ import type {
   DraftComposerAttachment,
   DraftComposerFileAttachment,
 } from "../../lib/composerImages";
-import { buildModelOptions, groupByProvider } from "../../lib/modelOptions";
+import {
+  buildModelOptions,
+  groupByProvider,
+  isModelSelectionUnavailable,
+} from "../../lib/modelOptions";
 import { useScaledTextRole } from "../settings/appearance/useScaledTextRole";
 import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
 import type { RemoteClientConnectionState } from "../../lib/connection";
@@ -299,7 +303,10 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
   // Opening and presentation count as active so the composer stays expanded
   // while focus moves between its native editor and the settings picker.
   const isExpanded = isFocused || settingsSheetPresentation.isActive;
-  const canSend = hasContent;
+  const modelUnavailable =
+    props.connectionState === "connected" &&
+    isModelSelectionUnavailable(props.serverConfig, props.selectedThread.modelSelection);
+  const canSend = hasContent && !modelUnavailable;
 
   // Notify the parent from the derived value, not focus events: the parent
   // sizes the feed inset from this, and blur-during-sheet would otherwise
@@ -417,7 +424,10 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
     hasThread: true,
     hasCompactableConversation: props.hasCompactableConversation,
     onChangeDraftMessage: props.onChangeDraftMessage,
-    onUpdateInteractionMode: props.onUpdateInteractionMode,
+    onUpdateInteractionMode:
+      selectedProviderStatus?.showInteractionModeToggle === false
+        ? undefined
+        : props.onUpdateInteractionMode,
     offersUsageLimits: usageLimitsOffered,
     onUsageLimits:
       usageLimitsOffered && props.draftAttachments.length === 0 ? openUsageLimits : undefined,
@@ -491,6 +501,8 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
   const settingsRouteSession = useMemo<ExistingThreadSettingsRouteSession>(
     () => ({
       ownerId: settingsOwnerId,
+      environmentId: props.environmentId,
+      providerInstanceId: currentModelSelection.instanceId,
       providerGroups: threadProviderGroups,
       selectedModel: currentModelSelection,
       onSelectModel: (option) => props.onUpdateModelSelection(option.selection),
@@ -595,6 +607,12 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
             status={connectionStatus}
             onPress={props.onReconnectEnvironment}
           />
+        ) : null}
+
+        {modelUnavailable ? (
+          <Pressable accessibilityRole="button" className="px-3 py-2" onPress={openSettings}>
+            <Text className="text-xs text-foreground">Model unavailable. Open model settings.</Text>
+          </Pressable>
         ) : null}
 
         <ComposerSurface

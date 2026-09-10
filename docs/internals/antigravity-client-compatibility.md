@@ -8,6 +8,8 @@ The second batch adds model availability and interaction-mode helpers, preserves
 
 The third batch connects web model-picker and settings setup entry points, shows unavailable account models without making them selectable, and filters unsupported text-generation providers. Pulse's existing provider sidebar and custom model editor remain; the sidebar permits opening a setup page for an unavailable account without permitting dispatch to that account.
 
-These batches do not complete the source commit. Chat composer setup entry points, send/rollback capability gates, mobile model-picker refresh actions, and outbox wiring remain in the next client batch. The backend and provider contracts are coordinated separately.
+The fourth batch wires mobile composer/setup, model refresh, and queued-send capabilities. Queue dispatch waits for config and rechecks the live catalog after attachments finish; unavailable Antigravity selections restore for editing. Existing pending-task bootstrap retry identities and compare-and-swap ownership remain intact. Refresh deduplication is environment-scoped. Pulse scheduled-chat model settings receive their environment, and account-scoped aliases resolve before availability checks.
+
+These batches do not complete the source commit. Web chat composer setup entry points and send/rollback capability wiring remain in the next client batch. The backend and provider contracts are coordinated separately.
 
 Validation: focused setup, permissions, target-account, clipboard, and external URL tests; scoped web and mobile typechecks. The primary integrator owns the authorized browser and emulator pass.

@@ -27,6 +27,8 @@ Disabling an instance keeps its saved sign-in. Signing out removes that instance
 
 Use **Refresh provider status** on web or desktop to explicitly check account access and discover available models. Automatic status checks verify the installation without opening a model discovery session.
 
+On mobile, open the thread's model settings and choose **Refresh models**. The same picker offers provider setup. If an Antigravity model becomes unavailable, Pulse Code keeps the selected model and asks you to finish setup or choose another one. Queued messages return for editing instead of silently switching models.
+
 ## Questions and approvals
 
 Antigravity can offer a fixed set of answers. Choose one of the displayed options; these questions do not accept custom text. Approval choices can include a warning supplied by the provider. On web or desktop, hover or focus the warning icon to read it; mobile displays the warning beside the choice.

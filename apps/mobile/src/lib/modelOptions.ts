@@ -92,7 +92,7 @@ export function isModelSelectionUnavailable(
       !provider.installed ||
       provider.auth.status === "unauthenticated" ||
       provider.availability === "unavailable" ||
-      !provider.models.some((model) => model.slug === selection.model))
+      resolveSelectableModel(provider.driver, selection.model, provider.models) === null)
   );
 }
 
@@ -114,7 +114,7 @@ export function resolveSelectableModelSelection(
   const driver =
     provider?.driver ?? config.settings?.providerInstances[selection.instanceId]?.driver;
   if (driver === "antigravity") {
-    return selection;
+    return resolveSelectionAlias(selection, provider);
   }
   return provider &&
     provider.enabled &&
