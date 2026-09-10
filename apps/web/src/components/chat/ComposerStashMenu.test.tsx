@@ -44,6 +44,9 @@ describe("ComposerStashMenu", () => {
     expect(markup).toContain('data-composer-stash-drawer="true"');
     expect(markup).toContain("chat-composer-drawer-attached");
     expect(markup).toContain("(2 attachments)");
+    expect(markup).toContain('aria-label="Close stash"');
+    expect(markup).toContain("focus-visible:opacity-100");
+    expect(markup).toContain("pointer-coarse:opacity-100");
     expect(markup).toContain("size-3.5 text-secondary-label");
     expect(markup).not.toContain("(2 files)");
   });
