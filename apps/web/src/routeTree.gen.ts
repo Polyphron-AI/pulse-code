@@ -179,10 +179,10 @@ export interface FileRoutesByFullPath {
   '/pair': typeof PairRoute
   '/settings': typeof SettingsRouteWithChildren
   '/usage': typeof UsageRoute
+  '/welcome': typeof WelcomeRoute
   '/issues': typeof ChatIssuesRoute
   '/mail': typeof ChatMailRoute
   '/office': typeof ChatOfficeRoute
-  '/welcome': typeof WelcomeRoute
   '/pull-requests': typeof ChatPullRequestsRoute
   '/workspace': typeof ChatWorkspaceRoute
   '/connect/callback': typeof ConnectCallbackRoute
@@ -206,10 +206,10 @@ export interface FileRoutesByTo {
   '/pair': typeof PairRoute
   '/settings': typeof SettingsRouteWithChildren
   '/usage': typeof UsageRoute
+  '/welcome': typeof WelcomeRoute
   '/issues': typeof ChatIssuesRoute
   '/mail': typeof ChatMailRoute
   '/office': typeof ChatOfficeRoute
-  '/welcome': typeof WelcomeRoute
   '/pull-requests': typeof ChatPullRequestsRoute
   '/workspace': typeof ChatWorkspaceRoute
   '/connect/callback': typeof ConnectCallbackRoute
@@ -236,10 +236,10 @@ export interface FileRoutesById {
   '/pair': typeof PairRoute
   '/settings': typeof SettingsRouteWithChildren
   '/usage': typeof UsageRoute
+  '/welcome': typeof WelcomeRoute
   '/_chat/issues': typeof ChatIssuesRoute
   '/_chat/mail': typeof ChatMailRoute
   '/_chat/office': typeof ChatOfficeRoute
-  '/welcome': typeof WelcomeRoute
   '/_chat/pull-requests': typeof ChatPullRequestsRoute
   '/_chat/workspace': typeof ChatWorkspaceRoute
   '/connect_/callback': typeof ConnectCallbackRoute
@@ -267,10 +267,10 @@ export interface FileRouteTypes {
     | '/pair'
     | '/settings'
     | '/usage'
+    | '/welcome'
     | '/issues'
     | '/mail'
     | '/office'
-    | '/welcome'
     | '/pull-requests'
     | '/workspace'
     | '/connect/callback'
@@ -294,10 +294,10 @@ export interface FileRouteTypes {
     | '/pair'
     | '/settings'
     | '/usage'
+    | '/welcome'
     | '/issues'
     | '/mail'
     | '/office'
-    | '/welcome'
     | '/pull-requests'
     | '/workspace'
     | '/connect/callback'
@@ -323,10 +323,10 @@ export interface FileRouteTypes {
     | '/pair'
     | '/settings'
     | '/usage'
+    | '/welcome'
     | '/_chat/issues'
     | '/_chat/mail'
     | '/_chat/office'
-    | '/welcome'
     | '/_chat/pull-requests'
     | '/_chat/workspace'
     | '/connect_/callback'
