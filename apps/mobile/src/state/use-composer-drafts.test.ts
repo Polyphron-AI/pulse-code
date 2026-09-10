@@ -121,6 +121,12 @@ import {
   undoComposerDraftMergeState,
   resetComposerDraftsLoadState,
   waitForComposerDraftsLoaded,
+  archiveCloudComposerDrafts,
+  restoreCloudComposerDrafts,
+  removeDeliveredCloudQueuedMessage,
+  composerCloudDraftsAtom,
+  decodePersistedComposerState,
+  clearComposerDraftsEnvironment,
 } from "./use-composer-drafts";
 
 const DRAFT: ComposerDraft = {
@@ -130,6 +136,7 @@ const DRAFT: ComposerDraft = {
 
 afterEach(() => {
   resetComposerDraftsLoadState();
+  appAtomRegistry.set(composerCloudDraftsAtom, { accountId: null, signedOut: {} });
   composerDraftFileMocks.setReadError(null);
   composerDraftFileMocks.setDocument({ schemaVersion: 1, drafts: {} });
   vi.useRealTimers();
@@ -143,6 +150,234 @@ afterEach(() => {
 });
 
 describe("mobile composer drafts", () => {
+  it("refuses destructive cleanup when legacy saved work has no known account owner", async () => {
+    const load = vi.spyOn(threadOutboxManager, "load").mockResolvedValue(true);
+    onTestFinished(() => load.mockRestore());
+    await waitForComposerDraftsLoaded();
+    appAtomRegistry.set(composerDraftsAtom, { "relay:thread": DRAFT });
+    await expect(
+      archiveCloudComposerDrafts(null, new Set([EnvironmentId.make("relay")])),
+    ).rejects.toThrow("no known account owner");
+    expect(getComposerDraftSnapshot("relay:thread")).toEqual(DRAFT);
+  });
+
+  it("reconciles late delivery against an archived snapshot without deleting newer edits", async () => {
+    const load = vi.spyOn(threadOutboxManager, "load").mockResolvedValue(true);
+    onTestFinished(() => load.mockRestore());
+    await waitForComposerDraftsLoaded();
+    const environmentId = EnvironmentId.make("relay");
+    const message = {
+      environmentId,
+      threadId: ThreadId.make("thread"),
+      messageId: MessageId.make("message"),
+      commandId: CommandId.make("command"),
+      text: "Original",
+      attachments: [],
+      createdAt: "2026-09-10T00:00:00.000Z",
+    };
+    appAtomRegistry.set(threadOutboxManager.queuedMessagesByThreadKeyAtom, { relay: [message] });
+    appAtomRegistry.set(composerDraftsAtom, {
+      "pending-task:message": { text: "New unsaved edits", attachments: [] },
+    });
+    await archiveCloudComposerDrafts("account-a", new Set([environmentId]));
+    await removeDeliveredCloudQueuedMessage(message);
+    expect(
+      appAtomRegistry.get(composerCloudDraftsAtom).signedOut["account-a"]?.queuedMessages,
+    ).toEqual([message]);
+    const cloud = appAtomRegistry.get(composerCloudDraftsAtom);
+    appAtomRegistry.set(composerCloudDraftsAtom, {
+      ...cloud,
+      signedOut: {
+        ...cloud.signedOut,
+        "account-a": { drafts: {}, queuedMessages: [message] },
+      },
+    });
+    await removeDeliveredCloudQueuedMessage(message);
+    expect(
+      decodePersistedComposerState(JSON.parse(composerDraftFileMocks.getDocument())).cloudDrafts
+        .signedOut["account-a"]?.queuedMessages,
+    ).toEqual([]);
+  });
+
+  it("preserves colliding message IDs from separate environments and keeps the archive after restore failure", async () => {
+    const load = vi.spyOn(threadOutboxManager, "load").mockResolvedValue(true);
+    onTestFinished(() => load.mockRestore());
+    await waitForComposerDraftsLoaded();
+    const first = {
+      environmentId: EnvironmentId.make("relay-one"),
+      threadId: ThreadId.make("thread"),
+      messageId: MessageId.make("same-id"),
+      commandId: CommandId.make("command-one"),
+      text: "First",
+      attachments: [],
+      createdAt: "2026-09-10T00:00:00.000Z",
+    };
+    const second = {
+      ...first,
+      environmentId: EnvironmentId.make("relay-two"),
+      commandId: CommandId.make("command-two"),
+      text: "Second",
+    };
+    appAtomRegistry.set(threadOutboxManager.queuedMessagesByThreadKeyAtom, {
+      first: [first],
+      second: [second],
+    });
+    await archiveCloudComposerDrafts(
+      "account-a",
+      new Set([first.environmentId, second.environmentId]),
+    );
+    appAtomRegistry.set(threadOutboxManager.queuedMessagesByThreadKeyAtom, { first: [first] });
+    const enqueue = vi
+      .spyOn(threadOutboxManager, "enqueue")
+      .mockRejectedValueOnce(new Error("disk full"));
+    onTestFinished(() => enqueue.mockRestore());
+    await expect(restoreCloudComposerDrafts("account-a")).rejects.toThrow("disk full");
+    expect(enqueue).toHaveBeenCalledWith(second);
+    expect(
+      appAtomRegistry.get(composerCloudDraftsAtom).signedOut["account-a"]?.queuedMessages,
+    ).toEqual([first, second]);
+    enqueue.mockResolvedValueOnce();
+    await restoreCloudComposerDrafts("account-a");
+    expect(appAtomRegistry.get(composerCloudDraftsAtom).signedOut["account-a"]).toBeUndefined();
+  });
+
+  it("serializes restoration with late delivery so it cannot restore an already acknowledged message", async () => {
+    const load = vi.spyOn(threadOutboxManager, "load").mockResolvedValue(true);
+    onTestFinished(() => load.mockRestore());
+    await waitForComposerDraftsLoaded();
+    const message = {
+      environmentId: EnvironmentId.make("relay"),
+      threadId: ThreadId.make("thread"),
+      messageId: MessageId.make("message"),
+      commandId: CommandId.make("command"),
+      text: "Sent",
+      attachments: [],
+      createdAt: "2026-09-10T00:00:00.000Z",
+    };
+    appAtomRegistry.set(threadOutboxManager.queuedMessagesByThreadKeyAtom, { relay: [message] });
+    await archiveCloudComposerDrafts("account-a", new Set([message.environmentId]));
+    appAtomRegistry.set(threadOutboxManager.queuedMessagesByThreadKeyAtom, {});
+    const enqueue = vi.spyOn(threadOutboxManager, "enqueue").mockResolvedValue();
+    onTestFinished(() => enqueue.mockRestore());
+    await Promise.all([
+      removeDeliveredCloudQueuedMessage(message),
+      restoreCloudComposerDrafts("account-a"),
+    ]);
+    expect(enqueue).not.toHaveBeenCalled();
+  });
+
+  it.each(["file", "image"] as const)(
+    "keeps signed-out %s attachments through cleanup and restart, and restores only the owning account",
+    async (type) => {
+      const load = vi.spyOn(threadOutboxManager, "load").mockResolvedValue(true);
+      onTestFinished(() => load.mockRestore());
+      await waitForComposerDraftsLoaded();
+      const environmentId = EnvironmentId.make("cloud-environment");
+      const key = `${environmentId}:thread-1`;
+      const name = type === "image" ? "notes.png" : "notes.pdf";
+      const metadata = {
+        id: "local-notes",
+        name,
+        mimeType: type === "image" ? "image/png" : "application/pdf",
+        sizeBytes: 42,
+        fileUri: `file:///documents/t3-composer-attachments/${name}`,
+      };
+      const file =
+        type === "image"
+          ? { ...metadata, type, previewUri: metadata.fileUri }
+          : { ...metadata, type };
+      const queued = {
+        environmentId,
+        threadId: ThreadId.make("thread-2"),
+        messageId: MessageId.make("queued-1"),
+        commandId: CommandId.make("command-1"),
+        text: "Send later",
+        attachments: [file],
+        createdAt: "2026-08-31T12:00:00.000Z",
+      };
+      appAtomRegistry.set(composerDraftsAtom, {
+        [key]: { text: "Unsent notes", attachments: [file] },
+        "direct-environment:thread-1": DRAFT,
+        "pending-task:queued-1": { text: "Edited queued task", attachments: [file] },
+      });
+      appAtomRegistry.set(threadOutboxManager.queuedMessagesByThreadKeyAtom, { queued: [queued] });
+      await archiveCloudComposerDrafts("account-a", new Set([environmentId]));
+      expect(appAtomRegistry.get(composerDraftsAtom)).toEqual({
+        "direct-environment:thread-1": DRAFT,
+      });
+      // The registry can remove the active outbox and drafts after the backup lands.
+      appAtomRegistry.set(threadOutboxManager.queuedMessagesByThreadKeyAtom, {});
+      await clearComposerDraftsEnvironment(environmentId);
+      await releaseUnusedComposerAttachmentFiles([file]);
+      expect(composerAttachmentCleanupMocks.remove).not.toHaveBeenCalled();
+      expect(composerAttachmentCleanupMocks.releaseUploads).not.toHaveBeenCalled();
+
+      appAtomRegistry.set(composerDraftsAtom, {});
+      appAtomRegistry.set(composerCloudDraftsAtom, { accountId: null, signedOut: {} });
+      resetComposerDraftsLoadState();
+      await waitForComposerDraftsLoaded();
+      await restoreCloudComposerDrafts("account-b");
+      expect(getComposerDraftSnapshot(key).attachments).toEqual([]);
+      expect(appAtomRegistry.get(threadOutboxManager.queuedMessagesByThreadKeyAtom)).toEqual({});
+      const enqueue = vi.spyOn(threadOutboxManager, "enqueue").mockResolvedValue();
+      onTestFinished(() => enqueue.mockRestore());
+      await restoreCloudComposerDrafts("account-a");
+      expect(getComposerDraftSnapshot(key)).toEqual({ text: "Unsent notes", attachments: [file] });
+      expect(getComposerDraftSnapshot("pending-task:queued-1").text).toBe("Edited queued task");
+      expect(enqueue).toHaveBeenCalledExactlyOnceWith(queued);
+      expect(appAtomRegistry.get(composerCloudDraftsAtom).signedOut).toEqual({});
+      const persisted = decodePersistedComposerState(
+        JSON.parse(composerDraftFileMocks.getDocument()),
+      );
+      expect(persisted.drafts[key]?.attachments).toEqual([file]);
+      expect(persisted.cloudDrafts.accountId).toBe("account-a");
+    },
+  );
+
+  it("fails sign-out preservation before cleanup if a durable backup cannot be written", async () => {
+    const load = vi.spyOn(threadOutboxManager, "load").mockResolvedValue(true);
+    onTestFinished(() => load.mockRestore());
+    await waitForComposerDraftsLoaded();
+    appAtomRegistry.set(composerDraftsAtom, { "environment-1:thread-1": DRAFT });
+    composerDraftFileMocks.setWriteError(new Error("Storage is full"));
+    await expect(
+      archiveCloudComposerDrafts("account-a", new Set([EnvironmentId.make("environment-1")])),
+    ).rejects.toThrow();
+    expect(
+      appAtomRegistry.get(composerCloudDraftsAtom).signedOut["account-a"]?.drafts[
+        "environment-1:thread-1"
+      ],
+    ).toEqual(DRAFT);
+    expect(composerAttachmentCleanupMocks.remove).not.toHaveBeenCalled();
+    composerDraftFileMocks.setWriteError(null);
+    await archiveCloudComposerDrafts(null, new Set([EnvironmentId.make("environment-1")]));
+    expect(
+      decodePersistedComposerState(JSON.parse(composerDraftFileMocks.getDocument())).cloudDrafts
+        .signedOut["account-a"]?.drafts["environment-1:thread-1"],
+    ).toEqual(DRAFT);
+  });
+
+  it("migrates archived signed-out new-task drafts the same way as live ones", () => {
+    const decoded = decodePersistedComposerState({
+      schemaVersion: 1,
+      drafts: {},
+      cloudAccountId: "account-1",
+      signedOutDrafts: {
+        "account-1": {
+          drafts: { "new-task:environment-1:project-1": { text: "archived", attachments: [] } },
+          queuedMessages: [],
+        },
+      },
+    });
+    const archived = Object.entries(decoded.cloudDrafts.signedOut["account-1"]?.drafts ?? {});
+    expect(archived).toHaveLength(1);
+    expect(archived[0]?.[0]).toMatch(/^new-task:[0-9a-z]+-[0-9a-z]+$/);
+    expect(archived[0]?.[1]).toMatchObject({
+      text: "archived",
+      project: { environmentId: "environment-1", projectId: "project-1" },
+    });
+  });
+
   it("hydrates file-backed image records without rewriting them as inline images", async () => {
     const image = {
       id: "image-reader",

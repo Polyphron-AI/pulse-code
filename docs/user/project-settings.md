@@ -35,3 +35,7 @@ Pull failures do not prevent the server from starting.
 On mobile, open **Settings** and use **Project automatic pull**. Each switch controls the named environment's checkout. Older servers hide the option until updated. Turn it off to stop automatic pulls.
 
 On mobile, Settings > Project icons offers common icons, colors, emoji, and an automatic reset for each connected project. Icons saved on another device appear in the thread lists, archive, and new-task picker. Mobile uses native equivalents for common icons and a colored folder for other icon names; web and desktop offer the full icon catalog.
+
+## Older project scripts
+
+Scripts saved with older identifiers remain available to run, edit, or delete. If an identifier cannot support a keyboard shortcut, the script menu omits its shortcut. Newly added scripts use identifiers compatible with shortcuts.
