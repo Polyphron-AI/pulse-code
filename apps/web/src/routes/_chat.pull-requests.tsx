@@ -499,7 +499,17 @@ function PullRequestsRouteView() {
         state: patch.state ?? search.state,
       }),
     );
-    updateSearch(patch);
+    updateSearch({
+      ...patch,
+      // Legacy links borrow the list scope until their selection resolves. Pin that
+      // identity before changing filters so another server/project cannot replace it.
+      ...(search.repository && search.number && selectedProject
+        ? {
+            selectedProjectId: selectedProject.id,
+            selectedEnvironmentId: selectedProject.environmentId,
+          }
+        : {}),
+    });
   };
 
   // Searching asks the hosts, which takes a round trip, so the text is held for a moment before
