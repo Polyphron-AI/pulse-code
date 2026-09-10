@@ -20,7 +20,10 @@ let enabled: boolean;
 let overflows: boolean;
 let atEnd: boolean;
 let now: number;
-const getTimelineNode = () => timeline as unknown as HTMLElement;
+let timelineReady: boolean;
+let animationFrames: Map<number, FrameRequestCallback>;
+let nextFrameId: number;
+const getTimelineNode = () => (timelineReady ? (timeline as unknown as HTMLElement) : null);
 const timelineOverflows = () => overflows;
 const isAtLogicalEnd = () => atEnd;
 function Probe() {
@@ -48,6 +51,15 @@ beforeEach(async () => {
   overflows = true;
   atEnd = false;
   now = 0;
+  timelineReady = true;
+  animationFrames = new Map();
+  nextFrameId = 0;
+  vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+    const id = ++nextFrameId;
+    animationFrames.set(id, callback);
+    return id;
+  });
+  vi.stubGlobal("cancelAnimationFrame", (id: number) => animationFrames.delete(id));
   timeline = new Timeline();
   vi.spyOn(performance, "now").mockImplementation(() => now);
   const document = { nodeType: 9, addEventListener() {}, removeEventListener() {} };
@@ -75,6 +87,47 @@ afterEach(async () => {
 });
 
 describe("composer timeline scroll collapse", () => {
+  it("attaches when the timeline becomes available after the first effect", async () => {
+    enabled = false;
+    await act(() => root.render(<Probe />));
+    timelineReady = false;
+    enabled = true;
+    await act(() => root.render(<Probe />));
+    timelineReady = true;
+    await act(() => {
+      const pending = [...animationFrames.values()];
+      animationFrames.clear();
+      pending.forEach((callback) => callback(now));
+    });
+    await wheel();
+    expect(state.collapsed).toBe(true);
+  });
+
+  it("cancels pending attachment when disabled and bounds readiness retries", async () => {
+    enabled = false;
+    await act(() => root.render(<Probe />));
+    timelineReady = false;
+    enabled = true;
+    await act(() => root.render(<Probe />));
+    expect(animationFrames.size).toBe(1);
+    enabled = false;
+    await act(() => root.render(<Probe />));
+    expect(animationFrames.size).toBe(0);
+    enabled = true;
+    await act(() => root.render(<Probe />));
+    for (let index = 0; index < 12; index += 1) {
+      await act(() => {
+        const pending = [...animationFrames.values()];
+        animationFrames.clear();
+        pending.forEach((callback) => callback(now));
+      });
+    }
+    expect(animationFrames.size).toBe(0);
+    timelineReady = true;
+    await wheel();
+    expect(state.collapsed).toBe(false);
+  });
+
   it("collapses on a real timeline gesture and restores without focus at the end", async () => {
     await wheel();
     expect(state.collapsed).toBe(true);
