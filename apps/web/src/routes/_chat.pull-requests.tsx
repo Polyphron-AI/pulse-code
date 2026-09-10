@@ -1,3 +1,10 @@
+import {
+  pullRequestListPreferences,
+  readPullRequestListSort,
+  writePullRequestListPreferences,
+  type PullRequestListPreferencePatch,
+  type PullRequestListSort,
+} from "../components/pullRequest/pullRequestListPreferences";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { pullRequestHostOf, resolveEnvironmentMachineKind, ThreadId } from "@t3tools/contracts";
 import type {
@@ -48,6 +55,8 @@ import {
   pullRequestEntryKey,
   pullRequestEntryViewer,
   rankPullRequestMatches,
+  rankPullRequestsByMergeReadiness,
+  pullRequestDiffStatKey,
   pullRequestEnvironmentSetKey,
   readPullRequestListSnapshot,
   resolveProjectScope,
@@ -117,6 +126,7 @@ import { getSourceControlPresentationForKind } from "~/sourceControlPresentation
 import { COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS } from "~/workspaceTitlebar";
 
 export interface PullRequestsSearch {
+  readonly sort?: PullRequestListSort;
   readonly involvement: PullRequestInvolvement;
   readonly state: PullRequestListState;
   /**
@@ -196,6 +206,7 @@ const EMPTY_PENDING_SURFACES = new Set<string>();
 
 export const Route = createFileRoute("/_chat/pull-requests")({
   validateSearch: (raw: Record<string, unknown>): PullRequestsSearch => ({
+    ...(readPullRequestListSort(raw.sort) ? { sort: readPullRequestListSort(raw.sort)! } : {}),
     involvement:
       raw.involvement === "reviewing" || raw.involvement === "authored" ? raw.involvement : "all",
     state:
@@ -234,6 +245,7 @@ export const Route = createFileRoute("/_chat/pull-requests")({
 
 function PullRequestsRouteView() {
   const search = Route.useSearch();
+  const sort = search.sort ?? "ready";
   const navigate = useNavigate({ from: Route.fullPath });
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
   const { environments } = useEnvironments();
@@ -450,6 +462,7 @@ function PullRequestsRouteView() {
           return {
             involvement: next.involvement ?? previous.involvement,
             state: next.state ?? previous.state,
+            ...(next.sort && next.sort !== "ready" ? { sort: next.sort } : {}),
             ...(next.repository ? { repository: next.repository } : {}),
             ...(next.number ? { number: next.number } : {}),
             ...(next.projectId ? { projectId: next.projectId } : {}),
@@ -470,22 +483,23 @@ function PullRequestsRouteView() {
     [navigate],
   );
 
-  // Changing what the list contains must not leave a selection from the previous view open.
-  // The project filter is untouched: it is the user's scope, not part of the selection.
   const clearedSelection = {
     repository: undefined,
     number: undefined,
     selectedProjectId: undefined,
     selectedEnvironmentId: undefined,
   };
-  const updateListScope = (patch: {
-    [Key in keyof PullRequestsSearch]?: PullRequestsSearch[Key] | undefined;
-  }) => {
-    if (rightPanelRef !== null) {
-      // Hide the old selection while retaining peer PR tabs for parallel reviews.
-      useRightPanelStore.getState().close(rightPanelRef);
-    }
-    updateSearch({ ...patch, ...clearedSelection });
+  // Filtering the list leaves the independently selected review surface open.
+  const updateListScope = (patch: PullRequestListPreferencePatch) => {
+    writePullRequestListPreferences(
+      pullRequestListPreferences({
+        ...search,
+        ...patch,
+        involvement: patch.involvement ?? search.involvement,
+        state: patch.state ?? search.state,
+      }),
+    );
+    updateSearch(patch);
   };
 
   // Searching asks the hosts, which takes a round trip, so the text is held for a moment before
@@ -1233,6 +1247,36 @@ function PullRequestsRouteView() {
     setStatsByRow((previous) => mergePullRequestDiffStats(previous, stats));
   }, [statsQuery.stats]);
 
+  const sortedGroups = useMemo(() => {
+    const enriched = groups.map((group) => ({
+      ...group,
+      entries: group.entries.map((entry) => withDiffStat(entry, statsByRow)),
+    }));
+    if (sort === "updated" || (sort === "ready" && typedParsed.text.length > 0)) return enriched;
+    const rows = enriched.flatMap((group) => group.entries);
+    const hasSize = (entry: (typeof rows)[number]) =>
+      entry.additions + entry.deletions > 0 || statsByRow.has(pullRequestDiffStatKey(entry));
+    const sorted =
+      sort === "ready"
+        ? rankPullRequestsByMergeReadiness(rows, hasSize)
+        : rows.toSorted((left, right) => {
+            if (sort === "largest" || sort === "smallest") {
+              const measured = Number(hasSize(right)) - Number(hasSize(left));
+              if (measured !== 0) return measured;
+              const size = left.additions + left.deletions - right.additions - right.deletions;
+              return size === 0
+                ? right.updatedAt.localeCompare(left.updatedAt)
+                : sort === "largest"
+                  ? -size
+                  : size;
+            }
+            return sort === "oldest"
+              ? left.createdAt.localeCompare(right.createdAt)
+              : right.createdAt.localeCompare(left.createdAt);
+          });
+    return [{ key: "others" as const, label: "", entries: sorted }];
+  }, [groups, sort, statsByRow, typedParsed.text]);
+
   const linkedSelection = useMemo(
     () =>
       search.repository && search.number && selectedProject
@@ -1349,7 +1393,7 @@ function PullRequestsRouteView() {
     <PullRequestSearchInput
       value={search.q ?? ""}
       busy={typedQuery.length > 0 && (!querySettled || showingCarried)}
-      onChange={(query) => updateSearch({ q: query || undefined })}
+      onChange={(query) => updateListScope({ q: query || undefined })}
     />
   );
   const panelToggleControls = (
@@ -1415,12 +1459,12 @@ function PullRequestsRouteView() {
           searching={typedQuery.length > 0 && (!querySettled || showingCarried)}
           canLoadMore={listData?.truncated === true && (canContinue || pageSize < MAX_PAGE_SIZE)}
           loadingMore={loadingMore}
-          onClearQuery={() => updateSearch({ q: undefined })}
+          onClearQuery={() => updateListScope({ q: undefined })}
           onLoadMore={loadMore}
         />
       ) : (
         <div className="space-y-3">
-          {groups.map((group) => (
+          {sortedGroups.map((group) => (
             <div key={group.key} className="space-y-0.5">
               {group.label ? (
                 <h2 className="px-3 pb-0.5 text-xs font-medium text-muted-foreground/70">
@@ -1510,36 +1554,83 @@ function PullRequestsRouteView() {
     })),
   ];
   const filtersMenu = (
-    <PullRequestFiltersMenu
-      state={search.state}
-      stateOptions={STATE_TABS}
-      onState={(state) => updateListScope({ state })}
-      involvement={search.involvement}
-      involvementOptions={INVOLVEMENT_TABS}
-      onInvolvement={(involvement) => updateListScope({ involvement })}
-      filters={menuFilters}
-      onFilters={(next) =>
-        updateListScope({ draft: next.draft, review: next.review, checks: next.checks })
-      }
-      host={search.host}
-      hostOptions={hostMenuOptions}
-      onHost={(host) => updateListScope({ host })}
-      server={scopedEnvironmentId ?? undefined}
-      serverOptions={serverMenuOptions}
-      // Narrowing to one server drops a project scope belonging to another, which would
-      // otherwise narrow the list to nothing with no visible filter to explain it.
-      onServer={(server) => updateListScope({ environmentId: server, projectId: undefined })}
-      projects={scopedProjects}
-      projectId={scopedProjectId}
-      projectEnvironmentId={scopedProject?.environmentId}
-      unavailable={unavailableProjects}
-      // The environment comes along with the project it belongs to, so a duplicate id on
-      // another server never gets narrowed to by mistake; picking "All projects" leaves the
-      // server scope as it was rather than clearing it.
-      onProject={(projectId, environmentId) =>
-        updateListScope(environmentId === undefined ? { projectId } : { projectId, environmentId })
-      }
-    />
+    <>
+      <Menu>
+        <MenuTrigger
+          render={
+            <Button variant="outline" size="sm" aria-label="Sort pull requests">
+              {sort === "ready"
+                ? "Merge readiness"
+                : sort === "updated"
+                  ? "Recently updated"
+                  : sort === "newest"
+                    ? "Newest"
+                    : sort === "oldest"
+                      ? "Oldest"
+                      : sort === "largest"
+                        ? "Largest"
+                        : "Smallest"}
+            </Button>
+          }
+        />
+        <MenuPopup>
+          <MenuRadioGroup
+            value={sort}
+            onValueChange={(value) => {
+              const next = readPullRequestListSort(value);
+              if (next) updateListScope({ sort: next });
+            }}
+          >
+            {(
+              [
+                ["ready", "Merge readiness"],
+                ["updated", "Recently updated"],
+                ["newest", "Newest"],
+                ["oldest", "Oldest"],
+                ["largest", "Largest"],
+                ["smallest", "Smallest"],
+              ] as const
+            ).map(([value, label]) => (
+              <MenuRadioItem key={value} value={value}>
+                {label}
+              </MenuRadioItem>
+            ))}
+          </MenuRadioGroup>
+        </MenuPopup>
+      </Menu>
+      <PullRequestFiltersMenu
+        state={search.state}
+        stateOptions={STATE_TABS}
+        onState={(state) => updateListScope({ state })}
+        involvement={search.involvement}
+        involvementOptions={INVOLVEMENT_TABS}
+        onInvolvement={(involvement) => updateListScope({ involvement })}
+        filters={menuFilters}
+        onFilters={(next) =>
+          updateListScope({ draft: next.draft, review: next.review, checks: next.checks })
+        }
+        host={search.host}
+        hostOptions={hostMenuOptions}
+        onHost={(host) => updateListScope({ host })}
+        server={scopedEnvironmentId ?? undefined}
+        serverOptions={serverMenuOptions}
+        // Narrowing to one server drops a project scope belonging to another, which would
+        // otherwise narrow the list to nothing with no visible filter to explain it.
+        onServer={(server) => updateListScope({ environmentId: server, projectId: undefined })}
+        projects={scopedProjects}
+        projectId={scopedProjectId}
+        projectEnvironmentId={scopedProject?.environmentId}
+        unavailable={unavailableProjects}
+        // The environment comes along with the project it belongs to, so a duplicate id on
+        // another server never gets narrowed to by mistake; picking "All projects" leaves the
+        // server scope as it was rather than clearing it.
+        onProject={(projectId, environmentId) =>
+          updateListScope(
+            environmentId === undefined ? { projectId } : { projectId, environmentId },
+          )
+        }
+      />
+    </>
   );
   const columnProps = {
     refreshing,

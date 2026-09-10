@@ -433,13 +433,16 @@ export function mergePullRequestDiffStats(
   if (stats.length === 0) return previous;
   const next = new Map(previous);
   for (const stat of stats) {
-    next.set(diffStatKey(stat), { additions: stat.additions, deletions: stat.deletions });
+    next.set(pullRequestDiffStatKey(stat), {
+      additions: stat.additions,
+      deletions: stat.deletions,
+    });
   }
   return next;
 }
 
 /** A project id only names a project within its own environment, so the key carries both. */
-const diffStatKey = (row: {
+export const pullRequestDiffStatKey = (row: {
   readonly environmentId: string;
   readonly projectId: string;
   readonly number: number;
@@ -792,7 +795,7 @@ export function withDiffStat<
   statsByRow: ReadonlyMap<string, { readonly additions: number; readonly deletions: number }>,
 ): Entry {
   if (entry.additions !== 0 || entry.deletions !== 0) return entry;
-  const stat = statsByRow.get(diffStatKey(entry));
+  const stat = statsByRow.get(pullRequestDiffStatKey(entry));
   return stat === undefined ? entry : { ...entry, ...stat };
 }
 
@@ -800,4 +803,26 @@ export function withDiffStat<
 export function pullRequestLabelColor(color: string | null): string | null {
   const hex = color?.trim().replace(/^#/, "") ?? "";
   return /^[0-9a-fA-F]{6}$/.test(hex) ? `#${hex}` : null;
+}
+
+export function rankPullRequestsByMergeReadiness<Entry extends PullRequestListEntry>(
+  entries: ReadonlyArray<Entry>,
+  hasMeasuredSize: (entry: Entry) => boolean = (entry) => entry.additions + entry.deletions > 0,
+): ReadonlyArray<Entry> {
+  const tier = (entry: Entry) => {
+    if (entry.mergeability === "conflicting") return 4;
+    if (entry.state !== "open") return 3;
+    if (entry.isDraft) return 2;
+    if (entry.checksState === "passing" && entry.reviewDecision === "approved") return 0;
+    if (entry.checksState === "passing") return 1;
+    return 2;
+  };
+  return entries.toSorted((left, right) => {
+    const byTier = tier(left) - tier(right);
+    if (byTier !== 0) return byTier;
+    const byMeasurement = Number(hasMeasuredSize(right)) - Number(hasMeasuredSize(left));
+    if (byMeasurement !== 0) return byMeasurement;
+    const bySize = left.additions + left.deletions - (right.additions + right.deletions);
+    return bySize !== 0 ? bySize : right.updatedAt.localeCompare(left.updatedAt);
+  });
 }

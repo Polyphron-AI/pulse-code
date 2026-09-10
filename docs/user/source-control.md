@@ -163,3 +163,5 @@ Control settings**.
 - [GitHub CLI](https://cli.github.com/)
 - [GitLab CLI](https://gitlab.com/gitlab-org/cli)
 - [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/)
+
+The pull request list remembers its filters and sort order when reopened from the sidebar. Filtering or sorting keeps the selected review panel open. Merge readiness is the default browse order: approved passing work comes first, followed by passing work, other open work, finished work, and conflicts. Smaller measured changes come first within each tier. Text searches keep relevance order unless you choose another sort.
