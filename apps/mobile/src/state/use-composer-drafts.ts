@@ -660,7 +660,14 @@ export function copyComposerDraftContentState(
   // bytes (the upload worker re-sends them to the new key's environment) but
   // drops the old stamp, so it cannot pin the source environment's pending
   // upload alive from the copy.
-  const targetEnvironmentId = composerDraftEnvironmentId(targetDraftKey, []);
+  const targetScope = targetDraftKey.startsWith("new-task:")
+    ? targetDraftKey.slice("new-task:".length)
+    : targetDraftKey;
+  const separator = targetScope.lastIndexOf(":");
+  const targetEnvironmentId =
+    !targetDraftKey.startsWith("pending-task:") && separator > 0
+      ? targetScope.slice(0, separator)
+      : null;
   const attachments = source.attachments.map((attachment) =>
     attachment.uploadEnvironmentId !== undefined &&
     attachment.uploadEnvironmentId !== targetEnvironmentId

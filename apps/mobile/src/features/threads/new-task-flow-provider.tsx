@@ -623,7 +623,14 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
         selectedProjectDraftKey?.startsWith("new-task:") &&
         selectedProjectDraftKey !== nextDraftKey
       ) {
-        void copyComposerDraftContentIfEmpty(selectedProjectDraftKey, nextDraftKey);
+        void copyComposerDraftContentIfEmpty(selectedProjectDraftKey, nextDraftKey).catch(
+          (error) => {
+            console.warn(
+              "[new-task] could not copy the saved draft to the selected project",
+              error,
+            );
+          },
+        );
       }
     },
     [selectedProjectDraftKey],
