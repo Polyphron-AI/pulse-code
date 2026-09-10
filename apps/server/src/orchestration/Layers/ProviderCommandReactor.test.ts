@@ -744,6 +744,18 @@ describe("ProviderCommandReactor", () => {
   effectIt.effect("rejects compaction without conversation history", () =>
     Effect.gen(function* () {
       const harness = yield* Effect.promise(() => createHarness());
+      const events = yield* harness.engine.subscribeDomainEvents;
+      const rejected = yield* events.pipe(
+        Stream.filter(
+          (event) =>
+            event.type === "thread.activity-appended" &&
+            event.payload.activity.kind === "provider.turn.start.failed" &&
+            event.aggregateId === ThreadId.make("thread-1"),
+        ),
+        Stream.take(1),
+        Stream.runDrain,
+        Effect.forkScoped,
+      );
       yield* harness.engine.dispatch({
         type: "thread.turn.start",
         commandId: CommandId.make("compact-empty"),
@@ -758,6 +770,7 @@ describe("ProviderCommandReactor", () => {
         runtimeMode: "approval-required",
         createdAt: "2026-01-01T00:00:00.000Z",
       });
+      yield* Fiber.join(rejected);
       yield* Effect.promise(() => harness.drain());
       expect(harness.compactThread).not.toHaveBeenCalled();
       expect(harness.sendTurn).not.toHaveBeenCalled();
