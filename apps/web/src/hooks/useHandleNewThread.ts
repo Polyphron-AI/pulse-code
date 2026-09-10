@@ -76,6 +76,8 @@ export function useNewThreadHandler() {
         envMode?: DraftThreadEnvMode;
         startFromOrigin?: boolean;
         replace?: boolean;
+        /** Cancel automatic landing work if navigation changes while defaults load. */
+        cancelOnNavigation?: boolean;
         /**
          * Exact model and prompt to install before draft navigation. This is
          * intentionally per-draft and never updates sticky provider defaults.
@@ -94,6 +96,9 @@ export function useNewThreadHandler() {
       // prepared checkout, a task to write — addresses that one rather than looking the project
       // up again and finding whichever draft it happens to hold.
     ): Promise<{ draftId: DraftId; threadId: ThreadId } | null> => {
+      const startingLocation = router.latestLocation;
+      const navigationChanged = () =>
+        options?.cancelOnNavigation === true && router.latestLocation !== startingLocation;
       const targetServerSettings =
         environmentServerConfigs.get(projectRef.environmentId)?.settings ?? DEFAULT_SERVER_SETTINGS;
       const projects = readProjects();
@@ -267,6 +272,7 @@ export function useNewThreadHandler() {
             workspaceContext = pickExplicitWorkspaceOptions(options);
           } else if (!isDraftAlreadyOpen) {
             const defaultEnvMode = await resolveDefaultEnvMode();
+            if (navigationChanged()) return null;
             // The await yields. If the draft was opened (a concurrent
             // invocation's navigation landed), promoted to a real thread,
             // remapped away (a concurrent invocation registered a fresh
@@ -396,6 +402,7 @@ export function useNewThreadHandler() {
       const createdAt = new Date().toISOString();
       return (async () => {
         const initialEnvMode = options?.envMode ?? (await resolveDefaultEnvMode());
+        if (navigationChanged()) return null;
         // The await yields, so a concurrent invocation may have registered a
         // draft for this logical project in the meantime. Registering ours
         // too would evict that draft while its navigation is in flight —
