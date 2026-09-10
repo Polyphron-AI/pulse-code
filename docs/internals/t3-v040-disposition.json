@@ -1,6 +1,6 @@
 {
   "target": "09e8de9c655ae85410bf6b00446f272a01da81c7",
-  "assessedHead": "1f9a93d7b91af64146cc0b8725f7357721767d72",
+  "assessedHead": "cdb236d96dc18882213e4d5cb70ac2cf4bee453b",
   "scope": "Source commit inventory; pending rows require semantic review.",
   "statusDefinitions": {
     "ported-reviewed": "See compatibility ledgers for adaptations and tests.",
@@ -10,9 +10,9 @@
   },
   "counts": {
     "target-files-identical": 6,
-    "needs-disposition": 852,
-    "ported-reviewed": 182,
-    "partially-ported": 14
+    "needs-disposition": 838,
+    "ported-reviewed": 198,
+    "partially-ported": 12
   },
   "commits": [
     {
@@ -276,14 +276,14 @@
     {
       "source": "792a1404f6d25838597f8f31b0af144dc1beee12",
       "subject": "feat(web): attach composer state drawers (#7150)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/mobile", "apps/web", "packages/client-runtime"],
-      "differingTargetPaths": 30
+      "differingTargetPaths": 32
     },
     {
       "source": "b2e2ccfdb462c45a8de394ff9ff0f58a4a689900",
       "subject": "fix(server): preserve tool lifecycle identity (#7151)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server"],
       "differingTargetPaths": 4
     },
@@ -613,9 +613,9 @@
     {
       "source": "035058a23e651ea5f407c9ab73cf5329cc40c102",
       "subject": "fix(mobile): stop a directly-saved backend from hiding its T3 Connect environment (#7086)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/mobile"],
-      "differingTargetPaths": 3
+      "differingTargetPaths": 1
     },
     {
       "source": "11f051373e79b38fa16f3ec1af825f5164907c1b",
@@ -1508,7 +1508,7 @@
     {
       "source": "acb599d2dc5b28d5bad82fa2a280ac2abe771ec9",
       "subject": "fix(mobile): show OpenCode model sources in picker (#8573)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/mobile", "docs"],
       "differingTargetPaths": 5
     },
@@ -1540,7 +1540,7 @@
         "packages/contracts",
         "packages/shared"
       ],
-      "differingTargetPaths": 24
+      "differingTargetPaths": 23
     },
     {
       "source": "48c176b3cfda7a714c10f18a12d398528ff4c2f9",
@@ -1575,7 +1575,7 @@
       "subject": "fix(web): keep long task drawers usable on small screens (#8313)",
       "status": "needs-disposition",
       "domains": ["apps/web"],
-      "differingTargetPaths": 1
+      "differingTargetPaths": 2
     },
     {
       "source": "cb49e5d7201ef6bcb288bf447785bbd374e8644d",
@@ -1787,7 +1787,7 @@
       "subject": "fix(web): four composer spacing defects (#8090)",
       "status": "needs-disposition",
       "domains": ["apps/web"],
-      "differingTargetPaths": 5
+      "differingTargetPaths": 6
     },
     {
       "source": "72c44a847c0a76f33b0d21f47548125b7032ec35",
@@ -1808,7 +1808,7 @@
       "subject": "fix(web): unify activity logs and composer banners (#8693)",
       "status": "needs-disposition",
       "domains": ["apps/web"],
-      "differingTargetPaths": 31
+      "differingTargetPaths": 33
     },
     {
       "source": "1f8ed54add4133ac39effceded8fc1fff12d8e03",
@@ -1831,7 +1831,7 @@
       "subject": "revert(web): restore previous composer banners (#8733)",
       "status": "needs-disposition",
       "domains": ["apps/web"],
-      "differingTargetPaths": 31
+      "differingTargetPaths": 33
     },
     {
       "source": "2daff8c25adf701fddd062ae93b94cc57d420ec2",
@@ -2005,7 +2005,7 @@
       "subject": "fix(web): restore unified activity logs and composer banners (#8734)",
       "status": "needs-disposition",
       "domains": ["apps/web"],
-      "differingTargetPaths": 31
+      "differingTargetPaths": 33
     },
     {
       "source": "9842518c9a0af14fb3a3e90993692a6e34032682",
@@ -2213,9 +2213,9 @@
     {
       "source": "c78ae50a5a5fdf8f42d0aaa0103b26ee836f0cfc",
       "subject": "fix(server): isolate remote web session cookies (#8085)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server", "docs"],
-      "differingTargetPaths": 18
+      "differingTargetPaths": 13
     },
     {
       "source": "42a8fd5103b4af57b16be721a9864ca3a5c18c5b",
@@ -2235,9 +2235,10 @@
     {
       "source": "d35c71d1b975660ec6a71bbceb6aa7dfd0e8c3d5",
       "subject": "feat(web): add pull request list filters (#8809)",
-      "status": "needs-disposition",
+      "status": "partially-ported",
       "domains": ["apps/web", "docs"],
-      "differingTargetPaths": 7
+      "differingTargetPaths": 7,
+      "remaining": "Author/label filter controls, normalized URLs, persisted scope and query semantics integrated. Facet suggestions/counts, label colors and sticky title refinements remain outside the adapted slice."
     },
     {
       "source": "ff93aba61dc1f7839713580bc8ee08da2a395f9a",
@@ -2639,9 +2640,9 @@
     {
       "source": "716069f40f000887cb01685099a16e19d9194307",
       "subject": "fix(server): keep attachments until the command commits (#7941)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server", "docs"],
-      "differingTargetPaths": 13
+      "differingTargetPaths": 11
     },
     {
       "source": "d0b19b32e01d7abc8829c01353d759fed3d304ed",
@@ -3230,10 +3231,9 @@
     {
       "source": "443b4ebfe83fcfe64c34b09ecb5a5fffdebb85c7",
       "subject": "fix(pull-requests): missing features & better behaviour (#9188)",
-      "status": "partially-ported",
+      "status": "ported-reviewed",
       "domains": ["apps/server", "apps/web", "docs", "packages/contracts"],
-      "differingTargetPaths": 24,
-      "remaining": "PR actions, workflow approvals, check status, auto-merge strategy, head repository identity, persisted list filters/sidebar destination and readiness sorting integrated with focused tests. Broader source-wide refinements still require final semantic review."
+      "differingTargetPaths": 24
     },
     {
       "source": "15fea6c5f40331c8325f33bd08b2dcbf924e935a",
@@ -3887,7 +3887,7 @@
     {
       "source": "ef4cc6085e24d6309252412c6dab5482ac11a09f",
       "subject": "fix(mobile): resolve Antigravity provider icon and normalize driver matching (#9495)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/mobile"],
       "differingTargetPaths": 2
     },
@@ -4015,7 +4015,7 @@
         "packages/client-runtime",
         "packages/contracts"
       ],
-      "differingTargetPaths": 7
+      "differingTargetPaths": 6
     },
     {
       "source": "e3723e06b5b154a3e0ede55c02e2cabc5301d3bf",
@@ -4077,9 +4077,9 @@
     {
       "source": "b90898077e60290a1eb7bea4224f325fd3bb1595",
       "subject": "fix(server): back off relay client restarts after rapid exits (#8788)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server"],
-      "differingTargetPaths": 2
+      "differingTargetPaths": 0
     },
     {
       "source": "75ab5ab3fb6ad35117da754644c404a31b2fed84",
@@ -4475,10 +4475,9 @@
     {
       "source": "01f3e50eca5102ccd881de6f942a98fe6a518ad4",
       "subject": "fix(server): unblock OpenCode approvals and stop (#9653)",
-      "status": "partially-ported",
+      "status": "ported-reviewed",
       "domains": ["apps/mobile", "apps/server", "apps/web", "docs", "packages/client-runtime"],
-      "differingTargetPaths": 14,
-      "remaining": "OpenCode adapter/runtime, abort ingestion and projection portions integrated; remaining client activity presentation needs review."
+      "differingTargetPaths": 14
     },
     {
       "source": "caa8a0db98f9d32e98a1645caa7f7dd37b14f187",
@@ -5310,10 +5309,9 @@
     {
       "source": "940e8233c227a186044078e99e45e1933eb525e4",
       "subject": "fix(claude): surface usage-limit pauses in the thread (#7165)",
-      "status": "partially-ported",
+      "status": "ported-reviewed",
       "domains": ["apps/server", "docs"],
-      "differingTargetPaths": 3,
-      "remaining": "Usage pause behavior integrated; normalized account Limits and probed model-window names remain."
+      "differingTargetPaths": 3
     },
     {
       "source": "ce4712d5b04fb998f79fe132245289191147e5d5",
@@ -7114,16 +7112,16 @@
     {
       "source": "c0bf35466c8aa1862572dfa84b51b6fe30fc82d6",
       "subject": "feat(mobile): show new-task drafts alongside pending tasks in the thread list (#10260)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/mobile"],
-      "differingTargetPaths": 12
+      "differingTargetPaths": 11
     },
     {
       "source": "8e129a0dfb35ac2c03a7320245b5bfb976f5d3bf",
       "subject": "feat(mobile): allow several new-task drafts per project (#10327)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/mobile"],
-      "differingTargetPaths": 15
+      "differingTargetPaths": 13
     },
     {
       "source": "98469159dd9e162a9c2f5cc4bbb2fbe89b3c4f67",
@@ -7535,9 +7533,9 @@
     {
       "source": "e1230d6031bc55a21668818d0b585d8887b88579",
       "subject": "fix(mobile): keep pending messages in the chat timeline (#10449)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/mobile"],
-      "differingTargetPaths": 12
+      "differingTargetPaths": 9
     },
     {
       "source": "bb5748bfac0fbeffe690875fa485a5cbe7b99132",
@@ -7563,9 +7561,9 @@
     {
       "source": "5b68b2c8e1e971e4ee6956157a1698646ef52a55",
       "subject": "feat(mobile): open the thread screen as soon as a new task is submitted (#10435)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/mobile", "packages/shared"],
-      "differingTargetPaths": 21
+      "differingTargetPaths": 17
     },
     {
       "source": "7376536b23e8db0d1b09054bbc0b919cf0c85405",
@@ -7808,7 +7806,7 @@
     {
       "source": "02443335b155e46248f96d80e037603abc742a61",
       "subject": "fix(mobile): configure iOS Keychain access group (#3665)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/mobile"],
       "differingTargetPaths": 1
     },
