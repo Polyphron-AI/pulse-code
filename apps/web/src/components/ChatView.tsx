@@ -219,6 +219,7 @@ import { useNowMinute } from "../hooks/useNowMinute";
 import { useNewThreadHandler } from "../hooks/useHandleNewThread";
 import { useOpenPanelPullRequestUrl } from "../hooks/useOpenPanelPullRequestUrl";
 import { resolveAppModelSelectionForInstance } from "../modelSelection";
+import { isPreviewFocused } from "../lib/previewFocus";
 import { getTerminalFocusOwner } from "../lib/terminalFocus";
 import { preventRepeatedTerminalCloseShortcut } from "../lib/terminalCloseShortcut";
 import { resolveNewDraftStartFromOrigin } from "../lib/chatThreadActions";
@@ -334,6 +335,7 @@ import {
   buildExpiredTerminalContextToastCopy,
   buildLocalDraftThread,
   buildLoadingThreadFromShell,
+  buildRunningThreadTurnInterruptInput,
   buildThreadTurnInterruptInput,
   collectUserMessageBlobPreviewUrls,
   createLocalDispatchSnapshot,
@@ -3274,6 +3276,27 @@ function ChatViewContent(props: ChatViewProps) {
     [activeServerThread, draftId, routeThreadKey, routeThreadRef],
   );
 
+  const interruptContextRef = useRef({ activeThread, phase, setThreadError });
+  interruptContextRef.current = { activeThread, phase, setThreadError };
+  const onInterrupt = useCallback(async () => {
+    const { activeThread, phase, setThreadError } = interruptContextRef.current;
+    const input = buildRunningThreadTurnInterruptInput(activeThread, phase);
+    if (!input || !activeThread) return;
+    const result = await interruptThreadTurn({
+      environmentId: activeThread.environmentId,
+      input,
+    });
+    if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+      const error = squashAtomCommandFailure(result);
+      setThreadError(
+        activeThread.id,
+        error instanceof Error ? error.message : "Failed to interrupt the current turn.",
+      );
+    }
+  }, [interruptThreadTurn]);
+  const canInterruptRunningThread =
+    buildRunningThreadTurnInterruptInput(activeThread, phase) !== null;
+
   const focusComposer = useCallback(() => {
     composerRef.current?.focusAtEnd();
   }, [composerRef]);
@@ -5398,6 +5421,8 @@ function ChatViewContent(props: ChatViewProps) {
       const shortcutContext = {
         terminalFocus: terminalFocusOwner !== null,
         terminalOpen: Boolean(terminalUiState.terminalOpen),
+        previewFocus: isPreviewFocused(),
+        previewOpen: previewPanelOpen,
         modelPickerOpen: composerRef.current?.isModelPickerOpen() ?? false,
       };
 
@@ -5514,6 +5539,16 @@ function ChatViewContent(props: ChatViewProps) {
         return;
       }
 
+      if (command === "thread.stop") {
+        // An unavailable command should not shadow contextual shortcuts such as Escape to close a dialog.
+        if (!canInterruptRunningThread) return;
+        event.preventDefault();
+        event.stopPropagation();
+        if (event.repeat) return;
+        void onInterrupt();
+        return;
+      }
+
       const scriptId = projectScriptIdFromCommand(command);
       if (!scriptId || !activeProject) return;
       const script = activeProjectScripts.find((entry) => entry.id === scriptId);
@@ -5529,6 +5564,7 @@ function ChatViewContent(props: ChatViewProps) {
     activeRightPanelSurface,
     activeProjectScripts,
     addTerminalSurface,
+    canInterruptRunningThread,
     terminalUiState.terminalOpen,
     terminalUiState.activeTerminalId,
     activeThreadId,
@@ -5540,8 +5576,10 @@ function ChatViewContent(props: ChatViewProps) {
     splitTerminal,
     splitPanelTerminal,
     keybindings,
+    onInterrupt,
     onToggleDiff,
     copyActiveThreadReference,
+    previewPanelOpen,
     toggleRightPanel,
     toggleRightPanelMaximized,
     toggleTerminalVisibility,
@@ -6247,21 +6285,6 @@ function ChatViewContent(props: ChatViewProps) {
         currentThreadKey === activeThreadKey ? null : currentThreadKey,
       );
       resetLocalDispatch();
-    }
-  };
-
-  const onInterrupt = async () => {
-    if (!activeThread) return;
-    const result = await interruptThreadTurn({
-      environmentId,
-      input: buildThreadTurnInterruptInput(activeThread),
-    });
-    if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
-      const error = squashAtomCommandFailure(result);
-      setThreadError(
-        activeThread.id,
-        error instanceof Error ? error.message : "Failed to interrupt the current turn.",
-      );
     }
   };
 
