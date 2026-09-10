@@ -13,7 +13,9 @@ To choose a different icon or emoji:
    an emoji.
 
 To use an image from the project instead, select **Choose file**, search for an image, and select
-it.
+it. For a local project in the desktop app, the file picker also offers **Open in Finder** or
+**Open in Explorer** to choose an image outside the project. That image stays on the host machine;
+connected clients display it through the host. Remote projects use the project file search.
 
 Pulse Code supports SVG, PNG, ICO, JPEG, GIF, AVIF, and WebP files. The selected path applies to
 each checkout in the project group and appears on your connected clients.
