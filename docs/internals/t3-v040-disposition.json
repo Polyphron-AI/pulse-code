@@ -1,6 +1,6 @@
 {
   "target": "09e8de9c655ae85410bf6b00446f272a01da81c7",
-  "assessedHead": "cb9f7fec26f71c17619b04456d9686f1da5a7da3",
+  "assessedHead": "80672e34408018914fff561f262eb36dbf586ff8",
   "scope": "Source commit inventory; pending rows require semantic review.",
   "statusDefinitions": {
     "ported-reviewed": "See compatibility ledgers for adaptations and tests.",
@@ -10,8 +10,8 @@
   },
   "counts": {
     "target-files-identical": 6,
-    "needs-disposition": 923,
-    "ported-reviewed": 114,
+    "needs-disposition": 900,
+    "ported-reviewed": 137,
     "partially-ported": 11
   },
   "commits": [
@@ -159,7 +159,7 @@
       "subject": "feat(server): run the background service on macOS via launchd (#6286)",
       "status": "needs-disposition",
       "domains": ["apps/server", "docs", "packages/shared"],
-      "differingTargetPaths": 11
+      "differingTargetPaths": 10
     },
     {
       "source": "8bbbab50514910040d2a4fa2be5021c83134afcf",
@@ -318,10 +318,9 @@
     {
       "source": "8824f8f24f8b81fd6aed6f228a57a1d4013d01d9",
       "subject": "fix(web): retry failed thread bootstraps with a fresh id (#7664)",
-      "status": "partially-ported",
+      "status": "ported-reviewed",
       "domains": ["apps/server", "apps/web", "packages/client-runtime", "packages/contracts"],
-      "differingTargetPaths": 6,
-      "remaining": "Server cleanup disposition and fresh web retry identities integrated and focused-tested. Pulse mobile pending-task identity recovery remains in progress."
+      "differingTargetPaths": 6
     },
     {
       "source": "21e80a06364898b8ecffad8aeddcb5634170260b",
@@ -593,9 +592,9 @@
     {
       "source": "44e4a7071d84c95f4d273cc3c6c9682166502745",
       "subject": "feat(desktop): choose external project icons (#7823)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/desktop", "apps/server", "apps/web", "packages/contracts"],
-      "differingTargetPaths": 19
+      "differingTargetPaths": 14
     },
     {
       "source": "592c5983c14d248aa3cfddb8e6c7372f12cd1ab6",
@@ -1102,9 +1101,9 @@
     {
       "source": "143341b0bc4e3e81066ab2cd86ddd199574bfd83",
       "subject": "feat(web): settle and restore threads with a keyboard shortcut (#8089)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server", "apps/web", "docs", "packages/contracts", "packages/shared"],
-      "differingTargetPaths": 7
+      "differingTargetPaths": 6
     },
     {
       "source": "63eb0429f49fad5f8722407ea971e3199e6c4514",
@@ -1481,9 +1480,9 @@
     {
       "source": "4c51b4c9b6a85d96a22e0df41d5cfd2d8fc9901d",
       "subject": "feat(web): toggle thread pin from the keyboard",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server", "apps/web", "docs", "packages/contracts", "packages/shared"],
-      "differingTargetPaths": 6
+      "differingTargetPaths": 5
     },
     {
       "source": "9257bd860a44ce2a324c917ca66a1a81e73607bd",
@@ -1560,9 +1559,9 @@
     {
       "source": "ff1761012af46ceb5f1ecc9b2be00aae288a1691",
       "subject": "fix(desktop): stop hidden previews draining battery (#8567)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/web"],
-      "differingTargetPaths": 9
+      "differingTargetPaths": 5
     },
     {
       "source": "0e2905eb783fd2385f358a95f0b25bbf07ff7122",
@@ -1624,7 +1623,7 @@
     {
       "source": "22c311ddecfbab2e541a374a46f2df87d4fc6305",
       "subject": "feat(web): add toggleable confirmation before unpinning a thread (#7313)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/desktop", "apps/web", "docs", "packages/contracts"],
       "differingTargetPaths": 12
     },
@@ -2025,7 +2024,7 @@
     {
       "source": "3958111057c10c10350dd9c20ec2a2df00f504be",
       "subject": "fix(preview): improve browser recording quality (#8839)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/desktop", "apps/web", "packages/contracts"],
       "differingTargetPaths": 15
     },
@@ -2060,7 +2059,7 @@
     {
       "source": "2921050c698fb195e2f5590b7cfab8fdfe0ec729",
       "subject": "fix(contracts): accept CLI event origins (#8905)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server", "packages/contracts"],
       "differingTargetPaths": 2
     },
@@ -2378,7 +2377,7 @@
         "packages/contracts",
         "packages/shared"
       ],
-      "differingTargetPaths": 12
+      "differingTargetPaths": 11
     },
     {
       "source": "261380f91f764673c7fcefcb6a3f775526dbb776",
@@ -2404,14 +2403,14 @@
     {
       "source": "ef7014d851f56bb037a9da963095ffd883c7fa08",
       "subject": "fix(preview): restore recording and macOS rendering after Electron 43 (#9001)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/desktop", "apps/web", "packages/contracts"],
-      "differingTargetPaths": 11
+      "differingTargetPaths": 9
     },
     {
       "source": "9d1879b142a2f5d01383357646a4679d1a2bd202",
       "subject": "feat(desktop): add configurable quit shortcut confirmation (#9076)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/desktop", "apps/web", "packages/contracts"],
       "differingTargetPaths": 9
     },
@@ -2762,7 +2761,7 @@
       "subject": "feat(pull-requests): copy provider checkout commands (#9086)",
       "status": "needs-disposition",
       "domains": ["apps/server", "apps/web", "packages/contracts"],
-      "differingTargetPaths": 9
+      "differingTargetPaths": 7
     },
     {
       "source": "2ab7973fe06eecf8b0a0d1da8481d926fca1ee1b",
@@ -3140,16 +3139,16 @@
     {
       "source": "134d51096ea0d00a53a499e8f0c87e31fafb0006",
       "subject": "feat(desktop): browser profiles for the preview browser (#7254)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/desktop", "apps/server", "apps/web", "packages/contracts"],
-      "differingTargetPaths": 40
+      "differingTargetPaths": 33
     },
     {
       "source": "ca63d42d670837b918081d1fc1ebada553814b4c",
       "subject": "refactor(shared): move the node:sqlite Effect SQL client into shared (#7272)",
       "status": "needs-disposition",
       "domains": ["apps/server", "packages/shared"],
-      "differingTargetPaths": 20
+      "differingTargetPaths": 19
     },
     {
       "source": "91c8d4771ccb503a9dde65190b87db642df0a6ea",
@@ -3196,7 +3195,7 @@
     {
       "source": "064392ffc7fc58fcc3018fd2ba2df33fbb21f1de",
       "subject": "fix(web): offer browser profiles from the empty-panel launcher (#9279)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/web"],
       "differingTargetPaths": 1
     },
@@ -3231,9 +3230,10 @@
     {
       "source": "443b4ebfe83fcfe64c34b09ecb5a5fffdebb85c7",
       "subject": "fix(pull-requests): missing features & better behaviour (#9188)",
-      "status": "needs-disposition",
+      "status": "partially-ported",
       "domains": ["apps/server", "apps/web", "docs", "packages/contracts"],
-      "differingTargetPaths": 34
+      "differingTargetPaths": 26,
+      "remaining": "PR actions, workflow approvals, check status, auto-merge strategy and head repository identity integrated with focused tests. Source-wide list/filter/sidebar refinements remain outside this batch."
     },
     {
       "source": "15fea6c5f40331c8325f33bd08b2dcbf924e935a",
@@ -3310,7 +3310,7 @@
     {
       "source": "9ebbeda5a03fd8fce7be147b65ea396e50721c68",
       "subject": "feat(web): apply and remove labels from the pull request tab (#9313)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": [
         "apps/server",
         "apps/web",
@@ -3318,7 +3318,7 @@
         "packages/client-runtime",
         "packages/contracts"
       ],
-      "differingTargetPaths": 19
+      "differingTargetPaths": 16
     },
     {
       "source": "31eeb443305a4e11c8b20a7c8ff2b3f5e841eb0f",
@@ -3388,9 +3388,9 @@
     {
       "source": "9409dd20a9fbce491d49d09c79b289d8fb8bfe3e",
       "subject": "fix(web): make the diff layout toggle a persisted setting (#9326)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/desktop", "apps/web", "packages/contracts"],
-      "differingTargetPaths": 9
+      "differingTargetPaths": 6
     },
     {
       "source": "3b2de9da1c8763602e283e8d14b41b5d57a9d0c7",
@@ -3525,9 +3525,9 @@
     {
       "source": "d4bd8923ad8cab346a854967015b06d9e5cd77f7",
       "subject": "feat(web): mod+w closes the active right panel tab before the window (#9363)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server", "apps/web", "docs", "packages/contracts", "packages/shared"],
-      "differingTargetPaths": 7
+      "differingTargetPaths": 6
     },
     {
       "source": "5eb4f452ee0fcde7b5bbc93d62de9118b70a33b2",
@@ -3655,9 +3655,9 @@
     {
       "source": "19c97ea56d30b3a2de31a060f8f47d6b7404b78f",
       "subject": "fix(web): unlock the composer when preview capture fails (#9127)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/desktop", "apps/web", "packages/contracts"],
-      "differingTargetPaths": 8
+      "differingTargetPaths": 6
     },
     {
       "source": "1e051873094c0c75cd35fef89c90461c22cce76b",
@@ -3858,9 +3858,9 @@
     {
       "source": "12e8997e58dbca8f1bd8c63b67d662eb69cf0e0d",
       "subject": "fix(web): keep agent browser preview visible (#9484)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/web", "packages/contracts"],
-      "differingTargetPaths": 19
+      "differingTargetPaths": 11
     },
     {
       "source": "409bc4fa6f3bb9869052bdba4244b30606457f20",
@@ -3900,21 +3900,21 @@
     {
       "source": "39449e53e31a56103192aa7905e89fc92c977a4a",
       "subject": "feat(desktop): import browser cookies into a profile (#7255)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/desktop", "apps/web", "packages/contracts", "pnpm-lock.yaml", "scripts"],
-      "differingTargetPaths": 27
+      "differingTargetPaths": 18
     },
     {
       "source": "ff5843410d44796676b06627788d94354849c4d7",
       "subject": "feat(desktop): import from Chrome, Edge, Brave, Vivaldi, Opera, Arc and Firefox (#7260)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/desktop", "docs", "packages/contracts", "packages/shared"],
-      "differingTargetPaths": 13
+      "differingTargetPaths": 3
     },
     {
       "source": "498ab9c399d5e8c3097a286be14d03238e071ac1",
       "subject": "feat(desktop): resolve Chromium cookie keys on Linux (#7261)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": [
         ".github",
         "apps/desktop",
@@ -3924,7 +3924,7 @@
         "packages/contracts",
         "scripts"
       ],
-      "differingTargetPaths": 27
+      "differingTargetPaths": 11
     },
     {
       "source": "f25e4428961982e3935300cfd3c78f7d0fac4ee9",
@@ -3957,9 +3957,9 @@
     {
       "source": "3653cb22ffb30bf133fecc30c955941fe267cf1c",
       "subject": "fix(desktop): address the browser import review left over from the stack (#9516)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/desktop", "apps/web", "native/browser-secret", "scripts"],
-      "differingTargetPaths": 9
+      "differingTargetPaths": 4
     },
     {
       "source": "f8a14b28ff80a92d8f4df9a9aa53bfacb8195199",
@@ -4334,7 +4334,7 @@
     {
       "source": "5cc369b7eb882dbea8d5ad21ba688c73a0058748",
       "subject": "fix(pull-requests): refresh data after thread turns (#9496)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server", "apps/web", "packages/client-runtime", "packages/contracts"],
       "differingTargetPaths": 15
     },
@@ -4960,7 +4960,7 @@
       "subject": "test: skip symlink fixtures where the host cannot create symlinks (#9566)",
       "status": "needs-disposition",
       "domains": ["apps/desktop", "apps/server", "packages/shared", "scripts"],
-      "differingTargetPaths": 19
+      "differingTargetPaths": 17
     },
     {
       "source": "5c6c1d67d82bb81bddaee6d83e54e8aecd96ec7d",
@@ -4974,7 +4974,7 @@
       "subject": "test(desktop): make path fixtures and timeouts host-portable (#9568)",
       "status": "needs-disposition",
       "domains": ["apps/desktop"],
-      "differingTargetPaths": 6
+      "differingTargetPaths": 5
     },
     {
       "source": "f083f520fbde1e1bf4332399df47b45c2bd99722",
@@ -5217,9 +5217,9 @@
     {
       "source": "ed2bdbb278c4fedf6ce79d4925908b759f7fd992",
       "subject": "feat(desktop): import cookies from Safari (#7262)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/desktop", "apps/web", "docs", "packages/contracts"],
-      "differingTargetPaths": 22
+      "differingTargetPaths": 14
     },
     {
       "source": "8faf031c2dac4f147c43fe32e326b76678c20c94",
@@ -6271,7 +6271,7 @@
         "packages/contracts",
         "packages/shared"
       ],
-      "differingTargetPaths": 96,
+      "differingTargetPaths": 95,
       "remaining": "Local session scanner/importer, bootstrap completion, session-bound welcome, provider terminals and shared first-run onboarding integrated with synthetic tests. Browser-profile import remains separate; integrated wizard acceptance pending."
     },
     {
