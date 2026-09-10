@@ -51,7 +51,14 @@ import {
   replaceTextRange,
   shouldSubmitComposerOnEnter,
 } from "../../composer-logic";
-import { deriveComposerSendState, readFileAsDataUrl } from "../ChatView.logic";
+import {
+  deriveComposerSendState,
+  getAntigravitySendBlockReason,
+  readFileAsDataUrl,
+  resolveComposerInteractionMode,
+  resolveComposerProviderSelection,
+} from "../ChatView.logic";
+import { hasProviderSetup } from "./ProviderStatusBanner";
 import {
   dataTransferHasComposerMention,
   makeComposerMentionDragHandlers,
@@ -285,13 +292,10 @@ import {
   XIcon,
 } from "lucide-react";
 import { proposedPlanTitle } from "../../proposedPlan";
-import { getProviderInteractionModeToggle } from "../../providerModels";
 import {
   applyProviderInstanceSettings,
   deriveProviderInstanceEntries,
   NO_PROVIDER_MODEL_SELECTION,
-  resolveProviderDriverKindForInstanceSelection,
-  resolveSelectableProviderInstanceEntry,
   sortProviderInstanceEntries,
   type ProviderInstanceEntry,
 } from "../../providerInstances";
@@ -586,6 +590,8 @@ export interface ChatComposerHandle {
     selectedProvider: ProviderDriverKind;
     selectedModel: string;
     selectedProviderModels: ReadonlyArray<ServerProvider["models"][number]>;
+    interactionMode: ProviderInteractionMode;
+    interactionModeEnabled: boolean;
   };
   /** Validate the fully composed text immediately before a provider turn starts. */
   validateProviderInput: (providerInput: string) => boolean;
@@ -704,6 +710,7 @@ export interface ChatComposerProps {
   ) => void;
 
   onProviderModelSelect: (instanceId: ProviderInstanceId, model: string) => void;
+  onOpenProviderSetup: (instanceId: ProviderInstanceId) => void;
   getModelDisabledReason: (instanceId: ProviderInstanceId, model: string) => string | null;
   toggleInteractionMode: () => void;
   handleRuntimeModeChange: (mode: RuntimeMode) => void;
@@ -754,7 +761,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     showPlanFollowUpPrompt,
     activeProposedPlan,
     runtimeMode,
-    interactionMode,
+    interactionMode: requestedInteractionMode,
     lockedProvider,
     providerStatuses,
     activeProjectDefaultModelSelection,
@@ -784,6 +791,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     onPreviousActivePendingUserInputQuestion,
     onChangeActivePendingUserInputCustomAnswer,
     onProviderModelSelect,
+    onOpenProviderSetup,
     getModelDisabledReason,
     toggleInteractionMode,
     handleRuntimeModeChange,
@@ -835,9 +843,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
             environmentId,
           })
       : null);
-  const sendDisabledReason =
-    externalSendDisabledReason ?? (activePendingProgress ? null : attachmentBlockReason);
-  const isSendDisabled = sendDisabledReason !== null;
 
   const setComposerDraftPrompt = useComposerDraftStore((store) => store.setPrompt);
   const addComposerDraftImage = useComposerDraftStore((store) => store.addImage);
@@ -965,104 +970,36 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     [providerStatuses, settings],
   );
   const selectedProviderByThreadId = composerDraft.activeProvider ?? null;
-  const threadProvider =
-    activeThread?.session?.providerInstanceId ??
-    activeThreadModelSelection?.instanceId ??
-    activeProjectDefaultModelSelection?.instanceId ??
-    null;
-  const explicitSelectedInstanceId = selectedProviderByThreadId ?? threadProvider;
-
-  const unlockedSelectedProvider =
-    resolveProviderDriverKindForInstanceSelection(
-      providerInstanceEntries,
-      providerStatuses,
-      explicitSelectedInstanceId,
-    ) ??
-    providerInstanceEntries[0]?.driverKind ??
-    ProviderDriverKind.make("unconfigured");
-  const requestedDriverKind: ProviderDriverKind = lockedProvider ?? unlockedSelectedProvider;
-  const lockedContinuationGroupKey = useMemo((): string | null => {
-    if (!lockedProvider || !activeThread) return null;
-    const lockedInstanceId =
-      activeThread.session?.providerInstanceId ?? activeThreadModelSelection?.instanceId;
-    if (!lockedInstanceId) return null;
-    return (
-      providerInstanceEntries.find((entry) => entry.instanceId === lockedInstanceId)
-        ?.continuationGroupKey ?? null
-    );
-  }, [
-    activeThread,
-    activeThreadModelSelection?.instanceId,
-    lockedProvider,
-    providerInstanceEntries,
-  ]);
-
-  // Resolve which configured instance the composer is currently targeting.
-  // Priority:
-  //   1. The composer draft's `activeProvider` — the user's unsaved pick
-  //      from the model picker (must win, otherwise the UI appears to
-  //      ignore picker selections).
-  //   2. Thread's persisted instance id (server-side saved selection).
-  //   3. Project default's instance id.
-  //   4. First enabled entry matching the current driver kind.
-  //   5. First enabled entry overall / default instance for the kind.
-  //
-  const selectedInstanceId = useMemo<ProviderInstanceId>(() => {
-    const candidates: Array<string | null | undefined> = [
-      composerDraft.activeProvider,
+  const {
+    selectedProviderEntry,
+    requestedDriverKind,
+    lockedContinuationGroupKey,
+    unavailableProviderInstanceId,
+  } = useMemo(
+    () =>
+      resolveComposerProviderSelection({
+        entries: providerInstanceEntries,
+        candidateInstanceIds: [
+          selectedProviderByThreadId,
+          activeThread?.session?.providerInstanceId,
+          activeThreadModelSelection?.instanceId,
+          activeProjectDefaultModelSelection?.instanceId,
+        ],
+        lockedProvider,
+        lockedInstanceId:
+          activeThread?.session?.providerInstanceId ?? activeThreadModelSelection?.instanceId,
+      }),
+    [
+      activeProjectDefaultModelSelection?.instanceId,
       activeThread?.session?.providerInstanceId,
       activeThreadModelSelection?.instanceId,
-      activeProjectDefaultModelSelection?.instanceId,
-    ];
-    for (const candidate of candidates) {
-      if (!candidate) continue;
-      const match = providerInstanceEntries.find(
-        (entry) => entry.instanceId === candidate && entry.enabled && entry.isAvailable,
-      );
-      if (match) {
-        // When locked to a specific driver kind, ignore persisted instance
-        // ids from a different kind or continuation group.
-        if (lockedProvider && match.driverKind !== lockedProvider) continue;
-        if (
-          lockedContinuationGroupKey &&
-          match.continuationGroupKey !== lockedContinuationGroupKey
-        ) {
-          continue;
-        }
-        return match.instanceId;
-      }
-    }
-    const compatibleEntries = providerInstanceEntries.filter(
-      (entry) =>
-        (!lockedProvider || entry.driverKind === lockedProvider) &&
-        (!lockedContinuationGroupKey || entry.continuationGroupKey === lockedContinuationGroupKey),
-    );
-    const requestedDriverEntries = compatibleEntries.filter(
-      (entry) => entry.driverKind === requestedDriverKind,
-    );
-    return (
-      resolveSelectableProviderInstanceEntry(requestedDriverEntries, undefined)?.instanceId ??
-      resolveSelectableProviderInstanceEntry(compatibleEntries, undefined)?.instanceId ??
-      NO_PROVIDER_MODEL_SELECTION.instanceId
-    );
-  }, [
-    activeProjectDefaultModelSelection?.instanceId,
-    activeThread?.session?.providerInstanceId,
-    activeThreadModelSelection?.instanceId,
-    composerDraft.activeProvider,
-    lockedContinuationGroupKey,
-    lockedProvider,
-    providerInstanceEntries,
-    requestedDriverKind,
-  ]);
-
-  // Resolve the active instance's snapshot by `instanceId` so a custom
-  // instance gets its own slash commands, skills, and model list — not
-  // the first snapshot for the same driver kind.
-  const selectedProviderEntry = useMemo(
-    () => providerInstanceEntries.find((entry) => entry.instanceId === selectedInstanceId),
-    [providerInstanceEntries, selectedInstanceId],
+      selectedProviderByThreadId,
+      lockedProvider,
+      providerInstanceEntries,
+    ],
   );
+  const selectedInstanceId =
+    selectedProviderEntry?.instanceId ?? NO_PROVIDER_MODEL_SELECTION.instanceId;
   const compactCommandAvailable = providerSupportsManualCompaction(selectedProviderEntry);
   const displayedContextWindow = withConfiguredCompactionThreshold(
     activeContextWindow,
@@ -1073,6 +1010,12 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       : undefined,
   );
   const noProviderAvailable = selectedProviderEntry === undefined;
+  const providerSetupInstanceId = noProviderAvailable
+    ? (unavailableProviderInstanceId ??
+      (lockedProvider === null
+        ? providerInstanceEntries.find((entry) => hasProviderSetup(entry.snapshot))?.instanceId
+        : undefined))
+    : undefined;
   const environmentUnavailableReason =
     environmentUnavailable !== null
       ? "Environment disconnected"
@@ -1098,6 +1041,14 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     projectModelSelection: activeProjectDefaultModelSelection,
     settings,
   });
+  const providerSendBlockReason = getAntigravitySendBlockReason(
+    selectedProviderEntry?.snapshot,
+    selectedModel,
+  );
+  const sendDisabledReason =
+    externalSendDisabledReason ??
+    (activePendingProgress ? null : (attachmentBlockReason ?? providerSendBlockReason));
+  const isSendDisabled = sendDisabledReason !== null;
   const selectedProviderStatus = useMemo(
     () => selectedProviderEntry?.snapshot ?? null,
     [selectedProviderEntry],
@@ -1192,17 +1143,11 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
 
   const selectedPromptEffort = composerProviderState.promptEffort;
   const selectedModelOptionsForDispatch = composerProviderState.modelOptionsForDispatch;
-  // Plan mode is a legacy feature behind Settings → Beta. With the flag off,
-  // ChatView forces the effective mode to "default", so hiding the toggle
-  // can't trap anyone in plan mode.
-  const planModeUiEnabled = settings.planModeEnabled;
-  const composerProviderControls = useMemo(
-    () => ({
-      showInteractionModeToggle:
-        planModeUiEnabled && getProviderInteractionModeToggle(providerStatuses, selectedProvider),
-    }),
-    [planModeUiEnabled, providerStatuses, selectedProvider],
-  );
+  const { enabled: planModeUiEnabled, interactionMode } = resolveComposerInteractionMode({
+    planModeEnabled: settings.planModeEnabled,
+    provider: selectedProviderStatus,
+    interactionMode: requestedInteractionMode,
+  });
   const selectedModelSelection = useMemo<ModelSelection>(
     () => createModelSelection(selectedInstanceId, selectedModel, selectedModelOptionsForDispatch),
     [selectedInstanceId, selectedModel, selectedModelOptionsForDispatch],
@@ -1917,6 +1862,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       terminalContextIds: string[],
     ) => {
       if (activePendingProgress?.activeQuestion && pendingUserInputs.length > 0) {
+        if (activePendingProgress.activeQuestion.allowCustomAnswer === false) return;
         setComposerCursor(nextCursor);
         setComposerTrigger(
           cursorAdjacentToMention ? null : detectComposerTrigger(nextPrompt, expandedCursor),
@@ -1965,6 +1911,11 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       replacement: string,
       options?: { expectedText?: string; focusEditorAfterReplace?: boolean },
     ): boolean => {
+      if (
+        activePendingUserInput &&
+        activePendingProgress?.activeQuestion?.allowCustomAnswer === false
+      )
+        return false;
       const currentText = promptRef.current;
       const safeStart = Math.max(0, Math.min(currentText.length, rangeStart));
       const safeEnd = Math.max(safeStart, Math.min(currentText.length, rangeEnd));
@@ -2077,6 +2028,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           }
           return;
         }
+        if (!planModeUiEnabled) return;
         void handleInteractionModeChange(item.command === "plan" ? "plan" : "default");
         const applied = applyPromptReplacement(trigger.rangeStart, trigger.rangeEnd, "", {
           expectedText: snapshot.value.slice(trigger.rangeStart, trigger.rangeEnd),
@@ -2138,6 +2090,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       applyPromptReplacement,
       handleInteractionModeChange,
       onUsageLimitsCommand,
+      planModeUiEnabled,
       resolveActiveComposerTrigger,
     ],
   );
@@ -3328,10 +3281,12 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         selectedPromptEffort,
         selectedModelOptionsForDispatch,
         selectedModelSelection,
-        providerAvailable: !noProviderAvailable,
+        providerAvailable: !noProviderAvailable && providerSendBlockReason === null,
         selectedProvider,
         selectedModel,
         selectedProviderModels,
+        interactionMode,
+        interactionModeEnabled: planModeUiEnabled,
       }),
       validateProviderInput: (providerInput: string) => {
         const validationMessage = getComposerSubmissionValidationMessage({
@@ -3370,6 +3325,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       selectedModelOptionsForDispatch,
       selectedModelSelection,
       noProviderAvailable,
+      providerSendBlockReason,
+      interactionMode,
+      planModeUiEnabled,
       selectedPromptEffort,
       selectedProvider,
       selectedProviderModels,
@@ -4026,12 +3984,15 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     type="button"
                     size="sm"
                     variant="ghost"
-                    disabled
+                    disabled={!providerSetupInstanceId}
+                    onClick={() => {
+                      if (providerSetupInstanceId) onOpenProviderSetup(providerSetupInstanceId);
+                    }}
                     data-chat-provider-unavailable="true"
                     className="shrink-0 gap-2 px-2 text-secondary-label sm:px-3"
                   >
                     <CircleAlertIcon className="size-4" />
-                    No provider available
+                    {providerSetupInstanceId ? "Open provider settings" : "No provider available"}
                   </Button>
                 ) : (
                   <ProviderModelPicker
@@ -4057,6 +4018,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     }}
                     getModelDisabledReason={getModelDisabledReason}
                     onInstanceModelChange={onProviderModelSelect}
+                    onOpenProviderSetup={onOpenProviderSetup}
                   />
                 )}
 
@@ -4064,7 +4026,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   <CompactComposerControlsMenu
                     interactionMode={interactionMode}
                     runtimeMode={runtimeMode}
-                    showInteractionModeToggle={composerProviderControls.showInteractionModeToggle}
+                    showInteractionModeToggle={planModeUiEnabled}
                     traitsMenuContent={providerTraitsMenuContent}
                     onToggleInteractionMode={toggleInteractionMode}
                     onRuntimeModeChange={handleRuntimeModeChange}
@@ -4078,7 +4040,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                       </>
                     ) : null}
                     <ComposerFooterModeControls
-                      showInteractionModeToggle={composerProviderControls.showInteractionModeToggle}
+                      showInteractionModeToggle={planModeUiEnabled}
                       interactionMode={interactionMode}
                       runtimeMode={runtimeMode}
                       onToggleInteractionMode={toggleInteractionMode}

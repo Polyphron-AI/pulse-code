@@ -32,3 +32,7 @@ On mobile, open the thread's model settings and choose **Refresh models**. The s
 ## Questions and approvals
 
 Antigravity can offer a fixed set of answers. Choose one of the displayed options; these questions do not accept custom text. Approval choices can include a warning supplied by the provider. On web or desktop, hover or focus the warning icon to read it; mobile displays the warning beside the choice.
+
+## Conversation controls
+
+Pulse Code uses the interaction modes reported by the selected provider. Providers with native mode controls do not show the legacy Plan toggle. When a provider cannot restore conversation history, Pulse Code hides conversation rewind. Start a new thread when you need a fresh conversation.
