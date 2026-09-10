@@ -4,6 +4,18 @@ Target: `09e8de9c655ae85410bf6b00446f272a01da81c7`. The [source disposition inve
 
 The target changes 2,389 paths from the declared baseline: 728 web, 507 server, 454 mobile, 155 client runtime, 132 desktop, 81 marketing, 73 shared, and 48 contracts. These counts describe source scope, not missing features. The audit inspected migration sources, all changed contract filenames, provider history, native dependency/configuration diffs, and selected implementations. It did not independently verify every path.
 
+## Published V40 and Warden preview `.8`
+
+[Pulse preview 20260910.8](https://github.com/Polyphron-AI/pulse-code/releases/tag/pulse-preview-20260910.8) is published as a prerelease from `0662eb65014be8a08840f46dc5005754cf9a7767`. The integration branch through `ce0ddb3758e46ab6d4b958297344954e16cc514d`, preview branch and exact source tag were pushed together. GitHub's latest stable release remains `v0.0.37`.
+
+This adds Warden contracts `49e841c33` and runtime `7260c2897`, with V40 aborted-turn cleanup and Antigravity handoff adaptations. The preview merge preserves external MCP configuration and managed skills. Warden is off by default and requires catalog version 3 plus a separately configured compatible broker and enrollment; older catalogs are rejected. See [integration and activation limits](v40-warden-integration.md).
+
+The final preview passed 307 focused Warden/settings/MCP/provider/skill tests, including an explicitly enabled cross-repository synthetic Go broker and CLI parity test. Server, web, mobile and desktop typechecks passed. Chromium verified Warden default-off, enable/reload and reset/reload after waiting for environment synchronization, plus saved-output download bytes, Office/Code switching and the single dictation control, with no page errors. The initial browser attempt clicked before synchronization and was corrected in the test helper; it did not require a production change.
+
+The unsigned Windows x64 installer is **179,542,624 bytes**, SHA-256 `a0e5c34367dd7027e77e707fb7aec81cbb9e046cf51a701137b4454575b75b98`. Exact source/version, Warden payload, Electron 43.4.1, Office/Talk dependencies, Talk/resource-monitor protocols and the matching WSL prebuild passed package verification. All seven uploaded GitHub asset sizes and SHA-256 digests match their local files. The release is published, not a draft, and is not marked latest stable.
+
+The fixed V40 target and source inventory remain unchanged. Full V40 compatibility, installed-app updates, full WSL server acceptance, live Warden/provider/Grafana flows, Warden remote/tunnel behavior, Windows credential-directory ACL review, native media playback and iOS acceptance remain incomplete. Source Warden PR CI is not green on existing scheduler formatting and two unchanged client-runtime timeouts; scoped checks do not establish full-suite acceptance.
+
 ## Final client-check checkpoint at `c5c2c439d`
 
 Integration is at `c5c2c439d3c0844db99fbffddcd5d3a47df93714`. The fixed target, declared baseline and source inventory remain unchanged; the inventory still assesses `af666bb52`. Implementation disposition and acceptance remain separate, and full V40 compatibility is not claimed.
