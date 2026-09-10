@@ -37,6 +37,7 @@ import { applyServerSettingsPatch } from "@t3tools/shared/serverSettings";
 import { checkCodexProviderStatus, type CodexAppServerProviderSnapshot } from "./CodexProvider.ts";
 import { checkClaudeProviderStatus } from "./ClaudeProvider.ts";
 import * as BackgroundPolicy from "../../background/BackgroundPolicy.ts";
+import { AntigravityInstallation } from "../AntigravityInstallation.ts";
 import * as OpenCodeRuntime from "../opencodeRuntime.ts";
 import * as ProviderEventLoggers from "./ProviderEventLoggers.ts";
 import { ProviderInstanceRegistryHydrationLive } from "./ProviderInstanceRegistryHydration.ts";
@@ -967,6 +968,119 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
         assert.deepStrictEqual(afterFailure.models, [authoritativeProvider.models[0]!]);
       });
 
+      describe("Antigravity model inventories", () => {
+        const previousProvider = {
+          instanceId: ProviderInstanceId.make("antigravity-personal"),
+          driver: ProviderDriverKind.make("antigravity"),
+          status: "ready",
+          enabled: true,
+          installed: true,
+          auth: { status: "authenticated" },
+          checkedAt: "2026-09-02T00:00:00.000Z",
+          version: "0.1.3",
+          models: [
+            {
+              slug: "gemini-3.1-pro-high",
+              name: "Gemini 3.1 Pro High",
+              isCustom: false,
+              capabilities: null,
+            },
+            {
+              slug: "gemini-3-flash",
+              name: "Gemini 3 Flash",
+              isCustom: false,
+              capabilities: null,
+            },
+          ],
+          slashCommands: [],
+          skills: [],
+        } as const satisfies ServerProvider;
+
+        it("removes unavailable models after a successful refresh", () => {
+          for (const status of ["ready", "warning"] as const) {
+            const refreshedProvider = {
+              ...previousProvider,
+              status,
+              checkedAt: "2026-09-02T00:01:00.000Z",
+              models: [previousProvider.models[1]],
+            } satisfies ServerProvider;
+            const afterRefresh = mergeProviderSnapshot(previousProvider, refreshedProvider);
+
+            assert.deepStrictEqual(afterRefresh.models, refreshedProvider.models);
+
+            const afterFailure = mergeProviderSnapshot(afterRefresh, {
+              ...refreshedProvider,
+              status: "error",
+              auth: { status: "unknown" },
+              models: [],
+            });
+            assert.deepStrictEqual(afterFailure.models, refreshedProvider.models);
+          }
+        });
+
+        it("keeps cached models during health checks and temporary failures", () => {
+          for (const installed of [false, true]) {
+            const pendingProvider = {
+              ...previousProvider,
+              status: "warning",
+              installed,
+              auth: { status: "unknown" },
+              checkedAt: "2026-09-02T00:01:00.000Z",
+              version: installed ? previousProvider.version : null,
+              models: [],
+            } satisfies ServerProvider;
+
+            assert.deepStrictEqual(
+              mergeProviderSnapshot(previousProvider, pendingProvider).models,
+              previousProvider.models,
+            );
+          }
+
+          for (const authStatus of ["unknown", "authenticated"] as const) {
+            const failedProvider = {
+              ...previousProvider,
+              status: "error",
+              auth: { status: authStatus },
+              checkedAt: "2026-09-02T00:02:00.000Z",
+              models: [],
+            } satisfies ServerProvider;
+
+            assert.deepStrictEqual(
+              mergeProviderSnapshot(previousProvider, failedProvider).models,
+              previousProvider.models,
+            );
+          }
+        });
+
+        it("clears models after sign-out, disable, uninstall, or an empty successful refresh", () => {
+          const emptyProvider = {
+            ...previousProvider,
+            checkedAt: "2026-09-02T00:01:00.000Z",
+            models: [],
+          } satisfies ServerProvider;
+          const clearedProviders = [
+            { ...emptyProvider, status: "warning", auth: { status: "unauthenticated" } },
+            { ...emptyProvider, status: "error", auth: { status: "unauthenticated" } },
+            { ...emptyProvider, status: "disabled", enabled: false },
+            { ...emptyProvider, status: "error", enabled: false },
+            { ...emptyProvider, status: "error", installed: false, auth: { status: "unknown" } },
+            emptyProvider,
+          ] satisfies ReadonlyArray<ServerProvider>;
+
+          for (const provider of clearedProviders) {
+            const afterRemoval = mergeProviderSnapshot(previousProvider, provider);
+            assert.deepStrictEqual(afterRemoval.models, []);
+
+            const afterFailure = mergeProviderSnapshot(afterRemoval, {
+              ...emptyProvider,
+              status: "error",
+              auth: { status: "unknown" },
+            });
+            assert.deepStrictEqual(afterFailure.models, []);
+          }
+        });
+      });
+
       it("fills missing capabilities from the previous provider snapshot", () => {
         const previousProvider = {
           instanceId: ProviderInstanceId.make("cursor"),
@@ -1605,6 +1719,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
           yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
           const providerRegistryLayer = ProviderRegistryLive.pipe(
             Layer.provideMerge(ProviderInstanceRegistryHydrationLive),
+            Layer.provideMerge(AntigravityInstallation.layer),
             Layer.provideMerge(
               Layer.succeed(ServerSettingsModule.ServerSettingsService, serverSettings),
             ),
@@ -1670,21 +1785,17 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
         }),
       );
 
-      // Guards the second half of the reported bug: changing
-      // `providers.codex.binaryPath` in settings must tear down the live
-      // instance and rebuild it so a fresh probe runs with the new binary.
-      // This test drives the real settings stream → registry reconcile →
-      // aggregator sync pipeline and asserts that `getProviders` reflects
-      // the new background probe's outcome.
-      //
+      // A binary path change must rebuild Codex and publish its new probe result.
       it.effect("re-probes when settings change the codex binaryPath", () =>
         Effect.gen(function* () {
           const firstMissing = `t3code_codex_first_`;
           const secondMissing = `t3code_codex_second_`;
           const rebuiltMarker = "registry-rebuilt-marker";
           const spawnedCommands: Array<string> = [];
-          const secondProbeSettled = yield* Deferred.make<void>();
-          const serverSettings = yield* makeMutableServerSettingsService(
+          const secondProbeStarted = yield* Deferred.make<void>();
+          const releaseSecondProbe = yield* Deferred.make<void>();
+          const allowLazySettingsStream = yield* Deferred.make<void>();
+          const mutableServerSettings = yield* makeMutableServerSettingsService(
             decodeServerSettings(
               deepMerge(encodedDefaultServerSettings, {
                 providers: {
@@ -1697,10 +1808,19 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
               }),
             ),
           );
+          const serverSettings = {
+            ...mutableServerSettings,
+            streamChanges: Stream.unwrap(
+              Deferred.await(allowLazySettingsStream).pipe(
+                Effect.as(mutableServerSettings.streamChanges),
+              ),
+            ),
+          } satisfies ServerSettingsModule.ServerSettingsService["Service"];
           const scope = yield* Scope.make();
           yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
           const providerRegistryLayer = ProviderRegistryLive.pipe(
             Layer.provideMerge(ProviderInstanceRegistryHydrationLive),
+            Layer.provideMerge(AntigravityInstallation.layer),
             Layer.provideMerge(
               Layer.succeed(ServerSettingsModule.ServerSettingsService, serverSettings),
             ),
@@ -1720,15 +1840,17 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
             Layer.provideMerge(OpenCodeRuntime.OpenCodeRuntimeLive),
             Layer.updateService(ChildProcessSpawner.ChildProcessSpawner, (spawner) =>
               ChildProcessSpawner.make((command) => {
-                const executable = (command as { readonly command: string }).command;
+                if (command._tag !== "StandardCommand") return spawner.spawn(command);
                 spawnedCommands.push(
-                  /(?:^|[\\/])omp(?:\.exe)?$/i.test(executable) ? "omp" : executable,
+                  /(?:^|[\\/])omp(?:\.exe)?$/i.test(command.command) ? "omp" : command.command,
                 );
-                return executable === secondMissing
-                  ? spawner
-                      .spawn(command)
-                      .pipe(Effect.onExit(() => Deferred.succeed(secondProbeSettled, undefined)))
-                  : spawner.spawn(command);
+                const beforeSpawn =
+                  command.command === secondMissing
+                    ? Deferred.succeed(secondProbeStarted, undefined).pipe(
+                        Effect.andThen(Deferred.await(releaseSecondProbe)),
+                      )
+                    : Effect.void;
+                return beforeSpawn.pipe(Effect.andThen(spawner.spawn(command)));
               }),
             ),
             Layer.provideMerge(NodeServices.layer),
@@ -1740,36 +1862,33 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
 
           yield* Effect.gen(function* () {
             const registry = yield* ProviderRegistry.ProviderRegistry;
-            // Boot-time probe: the default codex instance is enabled with
-            // `firstMissing`, so the real spawner yields ENOENT and the
-            // snapshot should be `status: "error"`.
-            let initialProviders = yield* registry.getProviders;
-            for (
-              let attempts = 0;
-              attempts < 50 &&
-              initialProviders.find((provider) => provider.instanceId === "codex")?.status !==
-                "error";
-              attempts += 1
-            ) {
-              yield* TestClock.adjust("10 millis");
-              yield* Effect.yieldNow;
-              initialProviders = yield* registry.getProviders;
-            }
-            const initialCodex = initialProviders.find(
+            const codexSnapshots = registry.streamChanges.pipe(
+              Stream.map((providers) =>
+                providers.find((provider) => provider.instanceId === "codex"),
+              ),
+              Stream.filter((provider): provider is ServerProvider => provider !== undefined),
+            );
+            const firstError = yield* Stream.toPull(
+              codexSnapshots.pipe(Stream.filter((provider) => provider.status === "error")),
+            );
+            const currentCodex = (yield* registry.getProviders).find(
               (provider) => provider.instanceId === "codex",
             );
+            const initialCodex =
+              currentCodex?.status === "error" ? currentCodex : (yield* firstError)[0];
             assert.strictEqual(initialCodex?.status, "error");
             assert.strictEqual(initialCodex?.installed, false);
             assert.deepStrictEqual(spawnedCommands, [firstMissing, "omp"]);
 
-            // Drive a settings change. The Hydration layer's
-            // `SettingsWatcherLive` consumes this via `streamChanges`,
-            // calls `reconcile`, which rebuilds the codex instance (the
-            // envelope changed because `binaryPath` differs → `entryEqual`
-            // is false). The registry's `Stream.runForEach(
-            // instanceRegistry.streamChanges, () => syncLiveSources)`
-            // fires `syncLiveSources`, which subscribes and launches a fresh
-            // background refresh on the rebuilt instance.
+            const rebuiltError = yield* Stream.toPull(
+              codexSnapshots.pipe(
+                Stream.filter(
+                  (provider) =>
+                    provider.status === "error" &&
+                    provider.models.some((model) => model.slug === rebuiltMarker),
+                ),
+              ),
+            );
             yield* serverSettings.updateSettings({
               providers: {
                 codex: {
@@ -1779,29 +1898,14 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
                 },
               },
             });
+            // Start the lazy stream only after publishing. A watcher that did
+            // not subscribe before forking has already lost this update.
+            yield* Deferred.succeed(allowLazySettingsStream, undefined);
 
-            // Wait until the rebuilt probe's spawn has settled, then wait for
-            // the aggregator to publish that probe's distinct result. The
-            // pending rebuilt snapshot can already contain the model marker,
-            // so `status: "error"` is part of the completion predicate.
-            yield* Deferred.await(secondProbeSettled);
-            let refreshed = yield* registry.getProviders;
-            for (
-              let attempts = 0;
-              attempts < 200 &&
-              !refreshed.some(
-                (provider) =>
-                  provider.instanceId === "codex" &&
-                  provider.status === "error" &&
-                  provider.models.some((model) => model.slug === rebuiltMarker),
-              );
-              attempts += 1
-            ) {
-              yield* Effect.sleep("10 millis").pipe(TestClock.withLive);
-              refreshed = yield* registry.getProviders;
-            }
-
-            const reprobedCodex = refreshed.find((provider) => provider.instanceId === "codex");
+            // Wait for the replacement executable, then observe its distinct catalog result.
+            yield* Deferred.await(secondProbeStarted);
+            yield* Deferred.succeed(releaseSecondProbe, undefined);
+            const [reprobedCodex] = yield* rebuiltError;
             assert.deepStrictEqual(
               spawnedCommands.filter((command) => command !== "omp"),
               [firstMissing, secondMissing],
@@ -1843,6 +1947,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
           yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
           const providerRegistryLayer = ProviderRegistryLive.pipe(
             Layer.provideMerge(ProviderInstanceRegistryHydrationLive),
+            Layer.provideMerge(AntigravityInstallation.layer),
             Layer.provideMerge(
               Layer.succeed(ServerSettingsModule.ServerSettingsService, serverSettings),
             ),
@@ -1903,6 +2008,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
             yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
             const providerRegistryLayer = ProviderRegistryLive.pipe(
               Layer.provideMerge(ProviderInstanceRegistryHydrationLive),
+              Layer.provideMerge(AntigravityInstallation.layer),
               Layer.provideMerge(
                 Layer.succeed(ServerSettingsModule.ServerSettingsService, serverSettings),
               ),
@@ -1960,6 +2066,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
               );
 
               assert.deepStrictEqual(providers.map((provider) => provider.instanceId).toSorted(), [
+                "antigravity",
                 "claudeAgent",
                 "codex",
                 "cursor",
