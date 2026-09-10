@@ -227,10 +227,6 @@ export function readProject(ref: ScopedProjectRef): EnvironmentProject | null {
   return appAtomRegistry.get(environmentProjects.projectAtom(ref));
 }
 
-export function readProjects(): ReadonlyArray<EnvironmentProject> {
-  return appAtomRegistry.get(environmentProjects.projectsAtom);
-}
-
 /** Resolves when the project event reaches the live client store. */
 export function waitForProject(
   ref: ScopedProjectRef,
