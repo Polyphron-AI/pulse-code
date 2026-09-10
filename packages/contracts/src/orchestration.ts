@@ -647,6 +647,8 @@ export const OrchestrationShellStreamItem = Schema.Union([
 export type OrchestrationShellStreamItem = typeof OrchestrationShellStreamItem.Type;
 
 export const OrchestrationSubscribeShellInput = Schema.Struct({
+  /** Opt in to Pulse schedule snapshots and event variants. Older servers ignore this field. */
+  schedules: Schema.optionalKey(Schema.Boolean),
   /**
    * When provided, the server skips the initial full shell snapshot and instead
    * replays shell events after this sequence before streaming live events.

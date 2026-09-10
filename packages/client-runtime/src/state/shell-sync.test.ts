@@ -258,12 +258,14 @@ describe("environment shell synchronization", () => {
       const subscribeInputs = yield* Queue.unbounded<{
         readonly afterSequence?: number;
         readonly requestCompletionMarker?: boolean;
+        readonly schedules?: boolean;
       }>();
       const loaderCalls = yield* Ref.make(0);
       const client = {
         [ORCHESTRATION_WS_METHODS.subscribeShell]: (input: {
           readonly afterSequence?: number;
           readonly requestCompletionMarker?: boolean;
+          readonly schedules?: boolean;
         }) =>
           Stream.unwrap(
             Queue.offer(subscribeInputs, input).pipe(Effect.as(Stream.fromQueue(events))),
@@ -312,6 +314,7 @@ describe("environment shell synchronization", () => {
       const subscribeInput = yield* Queue.take(subscribeInputs);
       expect(subscribeInput.afterSequence).toBeUndefined();
       expect(subscribeInput.requestCompletionMarker).toBe(true);
+      expect(subscribeInput.schedules).toBe(true);
       expect(yield* Ref.get(loaderCalls)).toBe(1);
       const synchronizing = yield* SubscriptionRef.get(shellState);
       expect(synchronizing.status).toBe("synchronizing");
@@ -332,6 +335,7 @@ describe("environment shell synchronization", () => {
       const resumedInput = yield* Queue.take(subscribeInputs);
       expect(resumedInput.afterSequence).toBe(resetSnapshot.snapshotSequence);
       expect(resumedInput.requestCompletionMarker).toBe(true);
+      expect(resumedInput.schedules).toBe(true);
       expect(yield* Ref.get(loaderCalls)).toBe(1);
     }),
   );

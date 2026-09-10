@@ -118,6 +118,7 @@ import * as WorkspaceFileSystem from "./workspace/WorkspaceFileSystem.ts";
 import { readWorkflowScript } from "./orchestration/workflowScriptQuery.ts";
 import {
   attachActiveSchedules,
+  makeScheduleCompatibleShellBatch,
   scheduleShellStreamEvent,
 } from "./orchestration/shellScheduleProjection.ts";
 import * as WorkspacePaths from "./workspace/WorkspacePaths.ts";
@@ -1464,20 +1465,10 @@ const makeWsRpcLayer = (
                 ),
                 { startImmediately: true },
               );
-              const coalesceRetainedInputs = (
-                items: ReadonlyArray<RetainedLiveItem<ShellLiveInput>>,
-              ) =>
-                coalesceShellLiveInputs(items.map((item) => item.value)).pipe(
-                  Effect.flatMap((output) => liveBudget.replace(items, output)),
-                );
-              const bufferedLiveStream = Stream.fromQueue(liveBuffer).pipe(
-                Stream.groupedWithin(SHELL_COALESCE_MAX_CHUNK, SHELL_COALESCE_WINDOW),
-                Stream.mapEffect(coalesceRetainedInputs),
-                Stream.flatMap((items) => Stream.fromIterable(items)),
-              );
-
               const loadSnapshot = projectionSnapshotQuery.getShellSnapshot().pipe(
-                Effect.zipWith(orchestrationEngine.currentReadModel, attachActiveSchedules),
+                Effect.zipWith(orchestrationEngine.currentReadModel, (snapshot, model) =>
+                  input.schedules === true ? attachActiveSchedules(snapshot, model) : snapshot,
+                ),
                 Effect.tapError((cause) =>
                   Effect.logError("orchestration shell snapshot load failed", { cause }),
                 ),
@@ -1488,6 +1479,22 @@ const makeWsRpcLayer = (
                       cause,
                     }),
                 ),
+              );
+              const compatibleBatch = makeScheduleCompatibleShellBatch(
+                input.schedules === true,
+                loadSnapshot,
+              );
+              const coalesceRetainedInputs = (
+                items: ReadonlyArray<RetainedLiveItem<ShellLiveInput>>,
+              ) =>
+                coalesceShellLiveInputs(items.map((item) => item.value)).pipe(
+                  Effect.flatMap(compatibleBatch),
+                  Effect.flatMap((output) => liveBudget.replace(items, output)),
+                );
+              const bufferedLiveStream = Stream.fromQueue(liveBuffer).pipe(
+                Stream.groupedWithin(SHELL_COALESCE_MAX_CHUNK, SHELL_COALESCE_WINDOW),
+                Stream.mapEffect(coalesceRetainedInputs),
+                Stream.flatMap((items) => Stream.fromIterable(items)),
               );
 
               // Offer the completion marker into the same queue as live events.
@@ -1545,6 +1552,8 @@ const makeWsRpcLayer = (
                   // buffer indefinitely while waiting for an empty page.
                   orchestrationEngine.readEvents(afterSequence, replayGap),
                 ).pipe(
+                  Stream.mapEffect((item) => compatibleBatch([item])),
+                  Stream.flatMap((items) => Stream.fromIterable(items)),
                   Stream.mapError(
                     (cause) =>
                       new OrchestrationGetSnapshotError({
