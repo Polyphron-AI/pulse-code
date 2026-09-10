@@ -46,6 +46,7 @@ const clientSettings: ClientSettings = {
   glassOpacity: 80,
   onboardingCompletedAt: null,
   planModeEnabled: false,
+  showSkillsInSlashMenu: false,
   providerModelPreferences: {},
   sidebarAutoSettleAfterDays: 3,
   sidebarAutoSettleOnMerge: true,

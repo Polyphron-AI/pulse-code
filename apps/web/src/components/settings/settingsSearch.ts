@@ -169,6 +169,11 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["stacked split side by side unified inline view"],
   },
   {
+    id: "skills-in-slash-menu",
+    title: "Show skills in slash menu",
+    to: "/settings/general",
+  },
+  {
     id: "provider-update-checks",
     title: "Provider update checks",
     to: "/settings/general",

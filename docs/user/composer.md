@@ -35,6 +35,15 @@ They refresh after a provider is reconfigured. Skills disabled by the provider o
 agent are hidden from composer picks. Use `$` to find a skill, or `/` to browse skills alongside
 provider commands. Native provider commands must start the message.
 
+On web and desktop, skill rows show a source badge such as Repo, Personal, Project, or App. The
+slash menu includes skills by default. Turn off **Show skills in slash menu** in **Settings →
+General** to keep it command-only. Skills remain available through `$`.
+
+Slash skill results show `/skill:Skill Name` and insert the same `$name` token as the `$` menu.
+Search by either the display name or original skill name. When a skill is visible, its matching
+native provider command is hidden to avoid duplicates. Turning off slash-menu skills restores that
+native command.
+
 Mobile offers these menus in existing threads and while composing a new task. Switching drafts
 moves the text selection to the end of the newly selected draft.
 

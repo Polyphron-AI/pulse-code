@@ -158,6 +158,18 @@ describe("ClientSettings environment identification", () => {
   });
 });
 
+describe("ClientSettings skill menu", () => {
+  it("defaults skills on and preserves an explicit opt-out", () => {
+    expect(decodeClientSettings({}).showSkillsInSlashMenu).toBe(true);
+    expect(decodeClientSettings({ showSkillsInSlashMenu: false }).showSkillsInSlashMenu).toBe(
+      false,
+    );
+    expect(decodeClientSettingsPatch({ showSkillsInSlashMenu: false }).showSkillsInSlashMenu).toBe(
+      false,
+    );
+  });
+});
+
 describe("ClientSettings sidebar", () => {
   it("defaults to the current sidebar with automatic merge and inactivity settling", () => {
     const settings = decodeClientSettings({});

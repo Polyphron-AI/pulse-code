@@ -4,12 +4,23 @@ import {
   type ServerProviderSkill,
   type ServerProviderSlashCommand,
 } from "@t3tools/contracts";
-import { BotIcon } from "lucide-react";
+import {
+  BlocksIcon,
+  BotIcon,
+  FolderIcon,
+  PackageIcon,
+  SettingsIcon,
+  UserRoundIcon,
+} from "lucide-react";
+import {
+  formatProviderSkillDisplayName,
+  resolveProviderSkillSourceKind,
+} from "@t3tools/client-runtime/providerSkills";
 import { memo, useLayoutEffect, useMemo, useRef } from "react";
 
 import { type ComposerSlashCommand, type ComposerTriggerKind } from "../../composer-logic";
-import { formatProviderSkillInstallSource } from "~/providerSkillPresentation";
 import { cn } from "~/lib/utils";
+import { Badge } from "../ui/badge";
 import {
   Command,
   CommandGroup,
@@ -92,6 +103,7 @@ function groupCommandItems(
 
   const builtInItems = items.filter((item) => item.type === "slash-command");
   const providerItems = items.filter((item) => item.type === "provider-slash-command");
+  const skillItems = items.filter((item) => item.type === "skill");
 
   const groups: ComposerCommandGroup[] = [];
   if (builtInItems.length > 0) {
@@ -99,6 +111,9 @@ function groupCommandItems(
   }
   if (providerItems.length > 0) {
     groups.push({ id: "provider", label: "Provider", items: providerItems });
+  }
+  if (skillItems.length > 0) {
+    groups.push({ id: "skills", label: "Skills", items: skillItems });
   }
   return groups;
 }
@@ -158,6 +173,7 @@ export const ComposerCommandMenu = memo(function ComposerCommandMenu(props: {
                     <ComposerCommandMenuItem
                       key={item.id}
                       item={item}
+                      triggerKind={props.triggerKind}
                       resolvedTheme={props.resolvedTheme}
                       isActive={props.activeItemId === item.id}
                       onHighlight={props.onHighlightedItemChange}
@@ -201,13 +217,17 @@ export const ComposerCommandMenu = memo(function ComposerCommandMenu(props: {
 
 const ComposerCommandMenuItem = memo(function ComposerCommandMenuItem(props: {
   item: ComposerCommandItem;
+  triggerKind: ComposerTriggerKind | null;
   resolvedTheme: "light" | "dark";
   isActive: boolean;
   onHighlight: (itemId: string | null) => void;
   onSelect: (item: ComposerCommandItem) => void;
 }) {
-  const skillSourceLabel =
-    props.item.type === "skill" ? formatProviderSkillInstallSource(props.item.skill) : null;
+  const skillSource =
+    props.item.type === "skill"
+      ? SKILL_SOURCES[resolveProviderSkillSourceKind(props.item.skill)]
+      : null;
+  const SourceIcon = skillSource?.icon;
 
   return (
     <CommandItem
@@ -242,20 +262,37 @@ const ComposerCommandMenuItem = memo(function ComposerCommandMenuItem(props: {
           <SkillGlyph className="size-3.5" />
         </span>
       ) : null}
-      {props.item.type === "skill" ? (
-        <span className="inline-flex size-4 shrink-0 items-center justify-center text-icon-muted">
-          <SkillGlyph className="size-3.5" />
-        </span>
-      ) : null}
       <span className="flex min-w-0 flex-1 items-center gap-2">
-        <span className="shrink-0">{props.item.label}</span>
-        <span className="min-w-0 flex-1 truncate text-secondary-label text-xs">
+        <span className="min-w-0 max-w-[45%] shrink-0 truncate font-sans text-xs font-medium">
+          {props.item.type === "skill" && props.triggerKind === "slash-command" ? (
+            <>
+              <span className="text-secondary-label">/skill:</span>
+              {formatProviderSkillDisplayName(props.item.skill)}
+            </>
+          ) : (
+            props.item.label
+          )}
+        </span>
+        <span className="min-w-0 max-w-[48ch] flex-1 truncate text-left text-secondary-label text-xs">
           {props.item.description}
         </span>
       </span>
-      {skillSourceLabel ? (
-        <span className="shrink-0 pl-2 text-secondary-label text-xs">{skillSourceLabel}</span>
+      {skillSource && SourceIcon ? (
+        <Badge className="ms-auto shrink-0" variant="secondary">
+          <SourceIcon aria-hidden="true" className="text-current" />
+          {skillSource.label}
+          {props.triggerKind === "skill" ? " Skill" : null}
+        </Badge>
       ) : null}
     </CommandItem>
   );
 });
+
+const SKILL_SOURCES = {
+  app: { icon: BlocksIcon, label: "App" },
+  repo: { icon: FolderIcon, label: "Repo" },
+  project: { icon: FolderIcon, label: "Project" },
+  personal: { icon: UserRoundIcon, label: "Personal" },
+  system: { icon: SettingsIcon, label: "System" },
+  other: { icon: PackageIcon, label: "Provider" },
+};
