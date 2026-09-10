@@ -4,7 +4,21 @@ Target: `09e8de9c655ae85410bf6b00446f272a01da81c7`. The [source disposition inve
 
 The target changes 2,389 paths from the declared baseline: 728 web, 507 server, 454 mobile, 155 client runtime, 132 desktop, 81 marketing, 73 shared, and 48 contracts. These counts describe source scope, not missing features. The audit inspected migration sources, all changed contract filenames, provider history, native dependency/configuration diffs, and selected implementations. It did not independently verify every path.
 
-## Integrated checkpoint through `cd25876d3`
+## Frozen `.6` compatibility checkpoint through `5c96f4218`
+
+The compatibility input for the next `.6` preview is frozen at `5c96f42183178b1fc2bb3be3efa273fb92ade8c4`. This is a source checkpoint, not a built or published release. The fixed V40 target and declared upstream baseline are unchanged. The inventory contains 210 ported-reviewed, 12 partially-ported, six target-files-identical and 826 needs-disposition rows across the original 1,054 source commits. These counts are dispositions, not a compatibility percentage.
+
+- **Legacy project scripts:** `09b23c434` implements `d8bc6831c`. Existing script IDs remain runnable, editable and removable even when they cannot support a shortcut; new settings IDs validate before persistence. All 38 focused backend/web tests, server/web types and scoped lint passed. Native scripts already use saved IDs directly. See [the bounded backend review](t3-v040-backend-final-review-2026-09-10.md).
+- **Claude subagent model ordering:** `5c96f4218` implements `6a2608292`. An assistant snapshot that precedes task registration retains its authoritative model in a 64-entry pending map. Six focused adapter tests cover event ordering, effort and oldest-entry eviction; server types and scoped lint passed.
+- **Antigravity diagnostics:** `a6b99dcd3` implements `6349a0e68`. A post-authentication session/model initialization failure receives a distinct safe message. Fourteen focused tests passed. This does not establish successful real-provider installation, login or turns.
+- **Mobile account-owned unsent work:** `1e557395f` adapts the archive slice of `9bc7a5684`. Drafts and queued messages are durably backed up before removing relay environments and restored only for their owning account. Backup failure prevents destructive cleanup; late delivery and concurrent edits preserve ownership. All 74 focused tests, mobile types and scoped lint passed. Background attachment uploads are not part of this slice. See [mobile relay draft preservation](v40-mobile-cloud-draft-archive.md).
+- **Prepared-preview verification:** `618cc17fa` contains compatibility through `9480709d4` and preserves the existing Office, Talk and download work. Root reports passing isolated browser checks for download behavior, Office and a single voice control, plus 46 focused seam tests and web types. These checks apply to that prepared preview, which predates the frozen script, diagnostic, archive and Claude changes above. They are not installation, packaging or publication evidence for `.6`.
+
+Remaining work is explicit: the background attachment-upload queue from `9bc7a5684` and queue-while-uploading follow-up `66a24d6c1`; host document previews outside a workspace from `775129984`; broader internal activity-read optimization from `b17cc3d1b`; and automatic title retries from `fc262f1a2`. The latter performance, retry and external-document batches are separate from this frozen input. Pulse retains its inline image writers, file-backed readers and current outbox ownership until a coordinated upload change is verified.
+
+The `.6` preview merge, artifact build, installer acceptance and publication are not claimed here. Earlier isolated Chromium/Android checks cover their recorded paths only; real provider login/turns, installed desktop updates, native media playback and every remote/relay combination remain unverified. No full V40 compatibility claim is made. Test counts overlap earlier and integrated suites and must not be added as unique totals.
+
+## Earlier checkpoint through `cd25876d3`
 
 This checkpoint includes `b50173ab8` plus the PR facet follow-up `d2e6a14d7`, integrated as `cd25876d3`. The fixed target and declared upstream baseline are unchanged. The inventory now has 207 ported-reviewed, 11 partially-ported, six target-files-identical and 830 needs-disposition rows across the original 1,054 sources. These are source dispositions, not a compatibility percentage.
 
