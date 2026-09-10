@@ -394,6 +394,21 @@ const makeSplashScenario = (createOutcomes: readonly (Electron.BrowserWindow | n
   });
 
 describe("DesktopWindow", () => {
+  it("leaves fullscreen before concealing a pending quit and ignores destroyed windows", () => {
+    const window = {
+      isDestroyed: vi.fn(() => false),
+      isFullScreen: vi.fn(() => true),
+      setFullScreen: vi.fn(),
+      setOpacity: vi.fn(),
+    };
+    DesktopWindow.concealPendingQuitWindow(window);
+    assert.deepEqual(window.setFullScreen.mock.calls, [[false]]);
+    assert.deepEqual(window.setOpacity.mock.calls, [[0]]);
+    window.isDestroyed.mockReturnValue(true);
+    window.setOpacity.mockClear();
+    DesktopWindow.concealPendingQuitWindow(window);
+    assert.equal(window.setOpacity.mock.calls.length, 0);
+  });
   it("restores bounds only when the window fits within a connected display", () => {
     const persistedBounds = { x: 2040, y: 80, width: 1320, height: 880 };
     const displays = [

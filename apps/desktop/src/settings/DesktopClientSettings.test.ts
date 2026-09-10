@@ -22,7 +22,7 @@ const clientSettings: ClientSettings = {
   browserDefaultAppearance: "dark",
   browserAutoShowFloatingPreview: false,
   composerBusyBehavior: "queue",
-  confirmQuit: true,
+  confirmQuit: "hold",
   confirmThreadArchive: true,
   confirmThreadDelete: false,
   dismissedProviderUpdateNotificationKeys: [],
