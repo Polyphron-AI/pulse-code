@@ -189,6 +189,8 @@ export function ComposerAttachmentStrip(props: ComposerAttachmentStripProps) {
               onPressVideo={props.onPressVideo}
             />
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Remove ${attachment.name}`}
               className="absolute h-[22px] w-[22px] items-center justify-center rounded-[11px] bg-black/55"
               style={{
                 top: removeButtonPlacement === "gutter" ? 0 : 4,
