@@ -1,3 +1,8 @@
+import {
+  composerAttachmentUploadBlockReason,
+  composerAttachmentsStillUploading,
+  composerAttachmentUploadsAtom,
+} from "../../state/composer-attachment-uploads";
 import { useComposerCommandMenu } from "./use-composer-command-menu";
 import { useAtomValue } from "@effect/atom-react";
 import type {
@@ -297,7 +302,20 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
   const modelUnavailable =
     props.connectionState === "connected" &&
     isModelSelectionUnavailable(props.serverConfig, props.selectedThread.modelSelection);
-  const canSend = hasContent && !modelUnavailable && !props.sendBlockedReason;
+  const uploadStates = useAtomValue(composerAttachmentUploadsAtom);
+  const uploadInput = {
+    environmentId: props.environmentId,
+    attachments: props.draftAttachments,
+    serverConfig: props.serverConfig,
+    states: uploadStates,
+  };
+  const attachmentBlockReason = composerAttachmentUploadBlockReason({
+    ...uploadInput,
+    connected: props.connectionState === "connected",
+  });
+  const attachmentsUploading = composerAttachmentsStillUploading(uploadInput);
+  const canSend =
+    hasContent && !modelUnavailable && !props.sendBlockedReason && attachmentBlockReason === null;
 
   // Notify the parent from the derived value, not focus events: the parent
   // sizes the feed inset from this, and blur-during-sheet would otherwise
@@ -356,7 +374,7 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
     ? composerBusyBehavior === "steer"
       ? "Steer"
       : "Queue"
-    : props.connectionState !== "connected" || props.queueCount > 0
+    : props.connectionState !== "connected" || props.queueCount > 0 || attachmentsUploading
       ? "Queue"
       : "Send";
   const currentModelSelection = props.selectedThread.modelSelection;
@@ -637,6 +655,7 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
               exiting={FadeOut.duration(120)}
             >
               <ComposerAttachmentStrip
+                environmentId={props.environmentId}
                 attachments={props.draftAttachments}
                 onRemove={props.onRemoveDraftImage}
                 onPressPreview={onPressPreview}
@@ -686,6 +705,7 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
             <View className="flex-row gap-1 pl-1">
               {props.draftAttachments.slice(0, 3).map((attachment) => (
                 <ComposerAttachmentThumbnail
+                  environmentId={props.environmentId}
                   key={attachment.id}
                   attachment={attachment}
                   size={30}
@@ -762,7 +782,7 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
                 ) : null}
               </ComposerToolbarScroller>
               <ComposerToolbarButton
-                accessibilityLabel={props.sendBlockedReason ?? sendLabel}
+                accessibilityLabel={props.sendBlockedReason ?? attachmentBlockReason ?? sendLabel}
                 icon="arrow.up"
                 variant="primary"
                 disabled={!canSend}

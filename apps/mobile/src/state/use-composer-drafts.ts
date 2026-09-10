@@ -1,3 +1,4 @@
+import { composerDraftEnvironmentId } from "../lib/composerAttachmentUploadQueue";
 import { useAtomValue } from "@effect/atom-react";
 import {
   EnvironmentId as EnvironmentIdSchema,
@@ -436,7 +437,6 @@ function isComposerAttachmentUploadReferenced(
   return [...drafts, ...queuedMessages, ...signedOutAttachmentOwners()].some((owner) =>
     owner.attachments.some(
       (attachment) =>
-        attachment.type === "file" &&
         attachment.uploadEnvironmentId === environmentId &&
         attachment.uploadedAttachmentId === attachmentId,
     ),
@@ -454,7 +454,6 @@ export async function releaseUnusedComposerAttachmentFiles(
   const uploadCandidates = new Map<EnvironmentId, Set<string>>();
   for (const attachment of attachments) {
     if (
-      attachment.type !== "file" ||
       attachment.uploadEnvironmentId === undefined ||
       attachment.uploadedAttachmentId === undefined
     ) {
@@ -464,7 +463,7 @@ export async function releaseUnusedComposerAttachmentFiles(
     ids.add(attachment.uploadedAttachmentId);
     uploadCandidates.set(attachment.uploadEnvironmentId, ids);
   }
-  if (candidates.size === 0) {
+  if (candidates.size === 0 && uploadCandidates.size === 0) {
     return;
   }
 
@@ -552,7 +551,12 @@ export async function releaseUnusedComposerAttachmentFiles(
 export function scheduleUnusedComposerAttachmentCleanup(
   attachments: ReadonlyArray<DraftComposerAttachment>,
 ): void {
-  if (!attachments.some((attachment) => attachment.fileUri !== undefined)) {
+  if (
+    !attachments.some(
+      (attachment) =>
+        attachment.fileUri !== undefined || attachment.uploadedAttachmentId !== undefined,
+    )
+  ) {
     return;
   }
   void releaseUnusedComposerAttachmentFiles(attachments).catch((error) => {
@@ -602,31 +606,6 @@ export async function waitForComposerDraftsLoaded(): Promise<void> {
       });
   }
   await loadPromise;
-}
-
-function composerDraftEnvironmentId(
-  draftKey: string,
-  queuedMessages: ReadonlyArray<{
-    readonly messageId: string;
-    readonly environmentId: EnvironmentId;
-  }>,
-  draft?: { readonly project?: { readonly environmentId: EnvironmentId } },
-): EnvironmentId | null {
-  if (draftKey.startsWith("pending-task:")) {
-    return (
-      queuedMessages.find((message) => `pending-task:${message.messageId}` === draftKey)
-        ?.environmentId ?? null
-    );
-  }
-  if (draftKey.startsWith("new-task:")) {
-    if (draft?.project) {
-      return draft.project.environmentId;
-    }
-    const legacy = parseLegacyNewTaskDraftKey(draftKey);
-    return legacy === null ? null : EnvironmentIdSchema.make(legacy.environmentId);
-  }
-  const separator = draftKey.lastIndexOf(":");
-  return separator > 0 ? EnvironmentIdSchema.make(draftKey.slice(0, separator)) : null;
 }
 
 export async function getComposerCloudAccountId(): Promise<string | null> {
@@ -1049,7 +1028,6 @@ export function copyComposerDraftContentState(
       ? targetScope.slice(0, separator)
       : null;
   const attachments = source.attachments.map((attachment) =>
-    attachment.type === "file" &&
     attachment.uploadEnvironmentId !== undefined &&
     attachment.uploadEnvironmentId !== targetEnvironmentId
       ? stripAttachmentUploadReference(attachment)
@@ -1069,7 +1047,6 @@ export function copyComposerDraftContentState(
 function stripAttachmentUploadReference(
   attachment: DraftComposerAttachment,
 ): DraftComposerAttachment {
-  if (attachment.type !== "file") return attachment;
   const { uploadedAttachmentId: _id, uploadEnvironmentId: _environmentId, ...rest } = attachment;
   return rest;
 }
@@ -1380,7 +1357,6 @@ export function retargetNewTaskDraft(
     // but drops the old stamp, so it cannot pin the source environment's
     // pending upload alive from the moved draft.
     const attachments = retained.attachments.map((attachment) =>
-      attachment.type === "file" &&
       attachment.uploadEnvironmentId !== undefined &&
       attachment.uploadEnvironmentId !== project.environmentId
         ? stripAttachmentUploadReference(attachment)
@@ -1443,4 +1419,78 @@ export function useComposerDraft(draftKey: string | null): ComposerDraft {
     ensureComposerDraftsLoaded();
   }, []);
   return draftKey ? normalizeDraft(drafts[draftKey]) : EMPTY_DRAFT;
+}
+
+/** Stamps a finished upload without overwriting text, removals, or newer attachments. */
+export function setComposerDraftAttachmentUpload(
+  draftKey: string,
+  attachment: DraftComposerAttachment,
+): boolean {
+  let previous: DraftComposerAttachment | undefined;
+  updateComposerDrafts((current) => {
+    const draft = current[draftKey];
+    previous = draft?.attachments.find((candidate) => candidate.id === attachment.id);
+    if (!draft || !previous) return current;
+    if (
+      previous.uploadedAttachmentId === attachment.uploadedAttachmentId &&
+      previous.uploadEnvironmentId === attachment.uploadEnvironmentId
+    )
+      return current;
+    return {
+      ...current,
+      [draftKey]: {
+        ...draft,
+        attachments: draft.attachments.map((candidate) =>
+          candidate.id === attachment.id
+            ? {
+                ...candidate,
+                uploadedAttachmentId: attachment.uploadedAttachmentId,
+                uploadEnvironmentId: attachment.uploadEnvironmentId,
+              }
+            : candidate,
+        ),
+      },
+    };
+  });
+  if (previous) scheduleUnusedComposerAttachmentCleanup([previous]);
+  return previous !== undefined;
+}
+
+/** Commits an early upload only while the same account and draft still own its bytes. */
+export async function persistComposerAttachmentUpload(input: {
+  readonly accountId: string | null;
+  readonly environmentId: EnvironmentId;
+  readonly original: DraftComposerAttachment;
+  readonly uploaded: DraftComposerAttachment;
+  readonly signal: AbortSignal;
+}): Promise<"persisted" | "abandon"> {
+  if (
+    input.signal.aborted ||
+    appAtomRegistry.get(composerCloudDraftsAtom).accountId !== input.accountId
+  )
+    return "abandon";
+  const queued = Object.values(
+    appAtomRegistry.get(threadOutboxManager.queuedMessagesByThreadKeyAtom),
+  ).flat();
+  let retained = false;
+  for (const [key, draft] of Object.entries(appAtomRegistry.get(composerDraftsAtom))) {
+    if (composerDraftEnvironmentId(key, queued, draft) !== input.environmentId) continue;
+    const candidate = draft.attachments.find((attachment) => attachment.id === input.original.id);
+    if (
+      !candidate ||
+      candidate.type !== input.original.type ||
+      candidate.name !== input.original.name ||
+      candidate.mimeType !== input.original.mimeType ||
+      candidate.sizeBytes !== input.original.sizeBytes ||
+      candidate.fileUri !== input.original.fileUri ||
+      (candidate.type === "image" &&
+        input.original.type === "image" &&
+        candidate.dataUrl !== input.original.dataUrl)
+    )
+      continue;
+    retained = setComposerDraftAttachmentUpload(key, input.uploaded) || retained;
+  }
+  if (!retained) return "abandon";
+  await flushComposerDrafts();
+  return "persisted";
 }

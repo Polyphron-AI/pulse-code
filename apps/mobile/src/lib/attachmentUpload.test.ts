@@ -61,7 +61,18 @@ vi.mock("./uuid", () => ({
 
 vi.mock("expo-file-system", () => ({
   File: class {
-    constructor(readonly uri: string) {}
+    readonly uri: string;
+    exists = true;
+    constructor(uri: string, name?: string) {
+      this.uri = name ? `${uri}/${name}` : uri;
+    }
+    create() {}
+    write(bytes: string, options: unknown) {
+      mocks.writeFile(this.uri, bytes, options);
+    }
+    delete() {
+      mocks.deleteFile(this.uri);
+    }
 
     async base64() {
       return mocks.readBase64(this.uri);
@@ -72,6 +83,7 @@ vi.mock("expo-file-system", () => ({
     }
   },
   Paths: {
+    cache: "file:///cache",
     get document() {
       return { uri: mocks.documentUri };
     },
@@ -285,17 +297,45 @@ describe("prepareTurnAttachments", () => {
     },
   );
 
+  it("uploads a file-backed image from its owned copy without staging base64", async () => {
+    const prepared = await prepareTurnAttachments({
+      environmentId,
+      attachments: [fileBackedImage],
+      supportsImageUploads: true,
+    });
+
+    expect(mocks.upload).toHaveBeenCalledWith(
+      fileBackedImage.fileUri,
+      "https://environment.example/api/attachments/upload/signed",
+      expect.objectContaining({ headers: { "Content-Type": "image/png" } }),
+    );
+    expect(mocks.readBase64).not.toHaveBeenCalled();
+    expect(mocks.writeFile).not.toHaveBeenCalled();
+    expect(mocks.deleteFile).not.toHaveBeenCalled();
+    expect(prepared.status).toBe("ready");
+    if (prepared.status !== "ready") return;
+    expect(prepared.attachments).toEqual([
+      {
+        type: "image",
+        id: MINTED_ID,
+        name: "photo.png",
+        mimeType: "image/png",
+        sizeBytes: 3,
+      },
+    ]);
+  });
+
   it("uploads generic file bytes directly and keeps mixed attachment order", async () => {
     const prepared = await prepareTurnAttachments({ environmentId, attachments: [file, image] });
 
     expect(mocks.upload).toHaveBeenCalledWith(
       "file:///documents/report.pdf",
       "https://environment.example/api/attachments/upload/signed",
-      {
+      expect.objectContaining({
         httpMethod: "POST",
         uploadType: 0,
         headers: { "Content-Type": "application/pdf" },
-      },
+      }),
     );
     expect(prepared.status).toBe("ready");
     if (prepared.status !== "ready") return;
@@ -445,6 +485,123 @@ describe("prepareTurnAttachments", () => {
     expect(prepared.status).toBe("ready");
     if (prepared.status !== "ready") return;
     expect(prepared.pendingAttachmentIds).toEqual([MINTED_ID]);
+  });
+
+  it("uploads image bytes over HTTP while retaining the durable offline image", async () => {
+    const persisted = vi.fn(async () => "persisted" as const);
+    const prepared = await prepareTurnAttachments({
+      environmentId,
+      attachments: [image],
+      supportsImageUploads: true,
+      persistUploadedReferences: persisted,
+    });
+    expect(mocks.writeFile).toHaveBeenCalledWith("file:///cache/t3-upload-uuid", "YWJj", {
+      encoding: "base64",
+    });
+    expect(mocks.upload).toHaveBeenCalledWith(
+      "file:///cache/t3-upload-uuid",
+      "https://environment.example/api/attachments/upload/signed",
+      expect.objectContaining({ headers: { "Content-Type": "image/png" } }),
+    );
+    expect(mocks.deleteFile).toHaveBeenCalledExactlyOnceWith("file:///cache/t3-upload-uuid");
+    expect(prepared.status).toBe("ready");
+    if (prepared.status !== "ready") return;
+    expect(prepared.attachments).toEqual([
+      {
+        type: "image",
+        id: MINTED_ID,
+        name: image.name,
+        mimeType: image.mimeType,
+        sizeBytes: image.sizeBytes,
+      },
+    ]);
+    expect(prepared.draftAttachments).toEqual([
+      { ...image, uploadedAttachmentId: MINTED_ID, uploadEnvironmentId: environmentId },
+    ]);
+    expect(persisted).toHaveBeenCalledWith(prepared.draftAttachments);
+  });
+
+  it("reuses an uploaded image and reuploads its local bytes after server expiry", async () => {
+    const saved = {
+      ...image,
+      uploadedAttachmentId: "saved-image",
+      uploadEnvironmentId: environmentId,
+    };
+    const reused = await prepareTurnAttachments({
+      environmentId,
+      attachments: [saved],
+      supportsImageUploads: true,
+    });
+    expect(reused.status === "ready" && reused.attachments[0]).toEqual({
+      type: "image",
+      id: "saved-image",
+      name: image.name,
+      mimeType: image.mimeType,
+      sizeBytes: image.sizeBytes,
+    });
+    expect(mocks.upload).not.toHaveBeenCalled();
+    mocks.executeAtomQuery.mockResolvedValueOnce({
+      _tag: "Failure",
+      error: { _tag: "AssetAttachmentNotFoundError" },
+    });
+    const restored = await prepareTurnAttachments({
+      environmentId,
+      attachments: [saved],
+      supportsImageUploads: true,
+    });
+    expect(restored.status === "ready" && restored.draftAttachments[0]).toEqual({
+      ...saved,
+      uploadedAttachmentId: MINTED_ID,
+    });
+    expect(mocks.writeFile).toHaveBeenCalledWith("file:///cache/t3-upload-uuid", "YWJj", {
+      encoding: "base64",
+    });
+  });
+
+  it("does not reuse an image upload from another environment", async () => {
+    const prepared = await prepareTurnAttachments({
+      environmentId,
+      attachments: [
+        {
+          ...image,
+          uploadedAttachmentId: "other-image",
+          uploadEnvironmentId: EnvironmentId.make("other"),
+        },
+      ],
+      supportsImageUploads: true,
+    });
+    expect(mocks.executeAtomQuery).not.toHaveBeenCalled();
+    expect(mocks.upload).toHaveBeenCalledOnce();
+    expect(prepared.status === "ready" && prepared.draftAttachments[0]?.uploadEnvironmentId).toBe(
+      environmentId,
+    );
+  });
+
+  it("aborts an active transfer without dropping local bytes or stamping a partial upload", async () => {
+    const started = Promise.withResolvers<void>();
+    const controller = new AbortController();
+    const persist = vi.fn(async () => "persisted" as const);
+    mocks.upload.mockImplementation(
+      (_uri: string, _url: string, options: { signal: AbortSignal }) =>
+        new Promise((_, reject) => {
+          options.signal.addEventListener("abort", () => reject(new Error("cancelled")), {
+            once: true,
+          });
+          started.resolve();
+        }),
+    );
+    const preparing = prepareTurnAttachments({
+      environmentId,
+      attachments: [file],
+      signal: controller.signal,
+      persistUploadedReferences: persist,
+    });
+    await started.promise;
+    controller.abort();
+    expect(await preparing).toEqual({ status: "abandoned" });
+    expect(persist).not.toHaveBeenCalled();
+    expect(mocks.deleteFile).not.toHaveBeenCalled();
+    expect(removeCallsFor(MINTED_ID)).toBe(1);
   });
 
   it("removes pending uploads when the native HTTP request fails", async () => {

@@ -103,6 +103,8 @@ import {
   clearComposerDraftContent,
   ComposerDraftPersistenceError,
   composerDraftsAtom,
+  setComposerDraftAttachmentUpload,
+  persistComposerAttachmentUpload,
   decodePersistedComposerDrafts,
   createNewTaskDraft,
   type ComposerDraft,
@@ -150,6 +152,64 @@ afterEach(() => {
 });
 
 describe("mobile composer drafts", () => {
+  it("retains offline image bytes and newer edits when an early upload finishes", async () => {
+    const key = "environment-1:thread-1";
+    const image = {
+      id: "photo",
+      type: "image" as const,
+      name: "photo.png",
+      mimeType: "image/png",
+      sizeBytes: 3,
+      dataUrl: "data:image/png;base64,YWJj",
+      previewUri: "file:///photo.png",
+    };
+    const second = { ...image, id: "second", name: "second.png" };
+    const uploaded = {
+      ...image,
+      uploadedAttachmentId: "pending-photo",
+      uploadEnvironmentId: EnvironmentId.make("environment-1"),
+    };
+    composerDraftFileMocks.setDocument({ schemaVersion: 1, drafts: {} });
+    appendComposerDraftAttachments(key, [image]);
+    setComposerDraftText(key, "Edited while uploading");
+    appendComposerDraftAttachments(key, [second]);
+    expect(setComposerDraftAttachmentUpload(key, uploaded)).toBe(true);
+    await flushComposerDrafts();
+
+    appAtomRegistry.set(composerDraftsAtom, {});
+    resetComposerDraftsLoadState();
+    await waitForComposerDraftsLoaded();
+    expect(getComposerDraftSnapshot(key)).toMatchObject({
+      text: "Edited while uploading",
+      attachments: [uploaded, second],
+    });
+    expect(setComposerDraftAttachmentUpload(key, { ...uploaded, id: "removed-photo" })).toBe(false);
+    expect(getComposerDraftSnapshot(key).attachments).toHaveLength(2);
+  });
+
+  it("cleans up an unreferenced image upload even when there is no local file URI", async () => {
+    const outboxLoad = vi.spyOn(threadOutboxManager, "load").mockResolvedValue(true);
+    onTestFinished(() => outboxLoad.mockRestore());
+    const environmentId = EnvironmentId.make("environment-1");
+    await releaseUnusedComposerAttachmentFiles([
+      {
+        id: "photo",
+        type: "image",
+        name: "photo.png",
+        mimeType: "image/png",
+        sizeBytes: 3,
+        dataUrl: "data:image/png;base64,YWJj",
+        previewUri: "file:///photo.png",
+        uploadedAttachmentId: "pending-photo",
+        uploadEnvironmentId: environmentId,
+      },
+    ]);
+    expect(composerAttachmentCleanupMocks.releaseUploads).toHaveBeenCalledWith(environmentId, [
+      "pending-photo",
+    ]);
+    expect(composerAttachmentCleanupMocks.remove).not.toHaveBeenCalled();
+  });
+
   it("refuses destructive cleanup when legacy saved work has no known account owner", async () => {
     const load = vi.spyOn(threadOutboxManager, "load").mockResolvedValue(true);
     onTestFinished(() => load.mockRestore());
@@ -1641,5 +1701,121 @@ describe("mobile composer drafts", () => {
       "environment-1:thread-1": { text: "Persisted draft", attachments: [file] },
     });
     expect(composerAttachmentCleanupMocks.remove).not.toHaveBeenCalled();
+  });
+});
+
+describe("background image upload ownership", () => {
+  const environmentId = EnvironmentId.make("relay");
+  const original = {
+    id: "image",
+    type: "image" as const,
+    name: "image.png",
+    mimeType: "image/png",
+    sizeBytes: 3,
+    dataUrl: "data:image/png;base64,YWJj",
+    previewUri: "file:///image.png",
+  };
+  const uploaded = {
+    ...original,
+    uploadedAttachmentId: "pending-image",
+    uploadEnvironmentId: environmentId,
+  };
+  const persist = (signal = new AbortController().signal) =>
+    persistComposerAttachmentUpload({
+      accountId: "owner",
+      environmentId,
+      original,
+      uploaded,
+      signal,
+    });
+
+  it("rejects a late upload after an account switch even with the same environment and draft IDs", async () => {
+    await waitForComposerDraftsLoaded();
+    appAtomRegistry.set(composerCloudDraftsAtom, { accountId: "different", signedOut: {} });
+    appAtomRegistry.set(composerDraftsAtom, {
+      "relay:thread": { text: "Other account", attachments: [original] },
+    });
+    expect(await persist()).toBe("abandon");
+    expect(getComposerDraftSnapshot("relay:thread").attachments).toEqual([original]);
+  });
+
+  it("does not stamp cancelled work or changed bytes reusing an attachment ID", async () => {
+    await waitForComposerDraftsLoaded();
+    appAtomRegistry.set(composerCloudDraftsAtom, { accountId: "owner", signedOut: {} });
+    const changed = { ...original, dataUrl: "data:image/png;base64,ZGVm" };
+    appAtomRegistry.set(composerDraftsAtom, {
+      "relay:thread": { text: "Edited", attachments: [changed] },
+    });
+    expect(await persist()).toBe("abandon");
+    appAtomRegistry.set(composerDraftsAtom, {
+      "relay:thread": { text: "Edited", attachments: [original] },
+    });
+    const controller = new AbortController();
+    controller.abort();
+    expect(await persist(controller.signal)).toBe("abandon");
+    expect(getComposerDraftSnapshot("relay:thread").attachments).toEqual([original]);
+  });
+
+  it("stamps matching drafts only in the owning environment and persists before reporting ready", async () => {
+    await waitForComposerDraftsLoaded();
+    appAtomRegistry.set(composerCloudDraftsAtom, { accountId: "owner", signedOut: {} });
+    appAtomRegistry.set(composerDraftsAtom, {
+      "relay:thread": { text: "New text", attachments: [original] },
+      "relay:second": { text: "Copied", attachments: [original] },
+      "other:thread": { text: "Other environment", attachments: [original] },
+    });
+    expect(await persist()).toBe("persisted");
+    const stored = JSON.parse(composerDraftFileMocks.getDocument());
+    expect(stored.drafts["relay:thread"]).toEqual({ text: "New text", attachments: [uploaded] });
+    expect(stored.drafts["relay:second"].attachments).toEqual([uploaded]);
+    expect(stored.drafts["other:thread"].attachments).toEqual([original]);
+  });
+
+  it("surfaces a failed durable stamp so the queue cannot report ready", async () => {
+    await waitForComposerDraftsLoaded();
+    appAtomRegistry.set(composerCloudDraftsAtom, { accountId: "owner", signedOut: {} });
+    appAtomRegistry.set(composerDraftsAtom, {
+      "relay:thread": { text: "Keep", attachments: [original] },
+    });
+    composerDraftFileMocks.setWriteError(new Error("disk full"));
+    try {
+      await expect(persist()).rejects.toThrow(ComposerDraftPersistenceError);
+    } finally {
+      composerDraftFileMocks.setWriteError(null);
+      await flushComposerDrafts();
+    }
+    expect(getComposerDraftSnapshot("relay:thread").text).toBe("Keep");
+  });
+
+  it("drops image upload stamps when a new task moves to another environment", () => {
+    const key = createNewTaskDraft({ environmentId, projectId: ProjectId.make("project") });
+    appendComposerDraftAttachments(key, [uploaded]);
+    retargetNewTaskDraft(key, {
+      environmentId: EnvironmentId.make("other"),
+      projectId: ProjectId.make("project"),
+    });
+    expect(getComposerDraftSnapshot(key).attachments).toEqual([original]);
+  });
+
+  it("retains an inline image upload owned by an archived account", async () => {
+    const load = vi.spyOn(threadOutboxManager, "load").mockResolvedValue(true);
+    onTestFinished(() => load.mockRestore());
+    await waitForComposerDraftsLoaded();
+    appAtomRegistry.set(composerCloudDraftsAtom, {
+      accountId: "other",
+      signedOut: {
+        owner: {
+          drafts: { "relay:thread": { text: "Saved", attachments: [uploaded] } },
+          queuedMessages: [],
+        },
+      },
+    });
+    await releaseUnusedComposerAttachmentFiles([uploaded]);
+    expect(composerAttachmentCleanupMocks.releaseUploads).not.toHaveBeenCalled();
+    appAtomRegistry.set(composerCloudDraftsAtom, { accountId: "other", signedOut: {} });
+    await releaseUnusedComposerAttachmentFiles([uploaded]);
+    expect(composerAttachmentCleanupMocks.releaseUploads).toHaveBeenCalledWith(environmentId, [
+      "pending-image",
+    ]);
   });
 });
