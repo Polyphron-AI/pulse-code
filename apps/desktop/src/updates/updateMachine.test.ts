@@ -10,6 +10,7 @@ import {
   reduceDesktopUpdateStateOnDownloadStart,
   reduceDesktopUpdateStateOnInstallFailure,
   reduceDesktopUpdateStateOnNoUpdate,
+  reduceDesktopUpdateStateOnRollbackStart,
   reduceDesktopUpdateStateOnUpdateAvailable,
 } from "./updateMachine.ts";
 
@@ -20,6 +21,45 @@ const runtimeInfo = {
 } as const;
 
 describe("updateMachine", () => {
+  it("preserves downloaded notes on recheck and clears counts for another release or rollback", () => {
+    const releaseNotes = [{ version: "1.1.0", items: ["Latest fix"], totalItems: 12 }];
+    const available = reduceDesktopUpdateStateOnUpdateAvailable(
+      createInitialDesktopUpdateState("1.0.0", runtimeInfo, "latest"),
+      "1.1.0",
+      "checked",
+      releaseNotes,
+      3,
+    );
+    const downloaded = reduceDesktopUpdateStateOnDownloadComplete(available, "1.1.0");
+    const checking = reduceDesktopUpdateStateOnCheckStart(downloaded, "rechecked");
+    const sameRelease = reduceDesktopUpdateStateOnUpdateAvailable(checking, "1.1.0", "rechecked");
+    expect(sameRelease).toMatchObject({
+      status: "downloaded",
+      downloadedVersion: "1.1.0",
+      downloadPercent: 100,
+      releaseNotes,
+      omittedReleaseCount: 3,
+    });
+    const differentRelease = reduceDesktopUpdateStateOnUpdateAvailable(
+      sameRelease,
+      "1.2.0",
+      "rechecked",
+    );
+    expect(differentRelease).toMatchObject({
+      status: "available",
+      downloadedVersion: null,
+      releaseNotes: [],
+      omittedReleaseCount: 0,
+    });
+    expect(reduceDesktopUpdateStateOnRollbackStart(sameRelease, "0.9.0")).toMatchObject({
+      rollbackVersion: "0.9.0",
+      releaseNotes: [],
+      omittedReleaseCount: 0,
+    });
+    expect(reduceDesktopUpdateStateOnNoUpdate(sameRelease, "rechecked").omittedReleaseCount).toBe(
+      0,
+    );
+  });
   it("clears transient errors when a check starts", () => {
     const state = reduceDesktopUpdateStateOnCheckStart(
       {
@@ -122,6 +162,7 @@ describe("updateMachine", () => {
       {
         version: "1.1.0",
         items: ["feat: add update release notes"],
+        totalItems: 1,
       },
     ];
     const available = reduceDesktopUpdateStateOnUpdateAvailable(
@@ -154,7 +195,7 @@ describe("updateMachine", () => {
         enabled: true,
         status: "available",
         availableVersion: "1.1.0-nightly.1",
-        releaseNotes: [{ version: "1.1.0-nightly.1", items: ["feat: old note"] }],
+        releaseNotes: [{ version: "1.1.0-nightly.1", items: ["feat: old note"], totalItems: 1 }],
       },
       "2026-03-04T00:00:00.000Z",
     );

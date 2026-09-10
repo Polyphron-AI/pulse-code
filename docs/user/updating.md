@@ -15,6 +15,8 @@ update the server, and the version difference remains visible in Connections.
 
 ## Before You Update
 
+Desktop update previews show the newest changes first within each release. Long previews show how many changes or releases are hidden; open the release notes for the full list.
+
 Let active agent work and terminal commands finish first. Updating restarts the server, so the
 connection will disappear briefly and work that is still running may be interrupted.
 
