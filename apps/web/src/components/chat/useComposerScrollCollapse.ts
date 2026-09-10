@@ -47,8 +47,15 @@ export function useComposerScrollCollapse(input: {
       }
       const canCollapse = () => input.timelineOverflows?.() === true;
       const atEnd = () => input.isAtLogicalEnd?.() === true;
+      let restoreFrame: number | null = null;
       const handleScroll = () => {
-        if (atEnd() || !canCollapse()) restore();
+        if (restoreFrame !== null) return;
+        // LegendList updates its logical scroll position on the animation frame.
+        // Reading it in the native scroll event can still report the old end.
+        restoreFrame = requestAnimationFrame(() => {
+          restoreFrame = null;
+          if (atEnd() || !canCollapse()) restore();
+        });
       };
       const handleWheel = (event: WheelEvent) => {
         if (event.ctrlKey || !(event.target instanceof Element)) return;
@@ -112,6 +119,7 @@ export function useComposerScrollCollapse(input: {
         typeof ResizeObserver === "undefined" ? null : new ResizeObserver(handleScroll);
       resizeObserver?.observe(timeline);
       removeListeners = () => {
+        if (restoreFrame !== null) cancelAnimationFrame(restoreFrame);
         resizeObserver?.disconnect();
         timeline.removeEventListener("wheel", handleWheel);
         timeline.removeEventListener("scroll", handleScroll);

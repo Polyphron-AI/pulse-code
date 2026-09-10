@@ -46,6 +46,13 @@ async function wheel(extra: Record<string, unknown> = {}) {
     timeline.dispatchEvent(event);
   });
 }
+async function flushAnimationFrames() {
+  await act(() => {
+    const pending = [...animationFrames.values()];
+    animationFrames.clear();
+    pending.forEach((callback) => callback(now));
+  });
+}
 beforeEach(async () => {
   enabled = true;
   overflows = true;
@@ -128,6 +135,37 @@ describe("composer timeline scroll collapse", () => {
     expect(state.collapsed).toBe(false);
   });
 
+  it("waits for the virtual list state before restoring after scroll", async () => {
+    atEnd = true;
+    await act(() => {
+      const event = new Event("wheel");
+      Object.assign(event, { deltaX: 0, deltaY: -30, deltaMode: 0, ctrlKey: false });
+      timeline.dispatchEvent(event);
+      timeline.dispatchEvent(new Event("scroll"));
+      // LegendList publishes its updated logical position on the next frame.
+      atEnd = false;
+    });
+    await act(() => {
+      const pending = [...animationFrames.values()];
+      animationFrames.clear();
+      pending.forEach((callback) => callback(now));
+    });
+    expect(state.collapsed).toBe(true);
+  });
+
+  it("coalesces restore checks and cancels them when disabled", async () => {
+    await wheel();
+    await act(() => {
+      timeline.dispatchEvent(new Event("scroll"));
+      timeline.dispatchEvent(new Event("scroll"));
+    });
+    expect(animationFrames.size).toBe(1);
+    enabled = false;
+    await act(() => root.render(<Probe />));
+    expect(animationFrames.size).toBe(0);
+    expect(state.collapsed).toBe(false);
+  });
+
   it("collapses on a real timeline gesture and restores without focus at the end", async () => {
     await wheel();
     expect(state.collapsed).toBe(true);
@@ -135,6 +173,7 @@ describe("composer timeline scroll collapse", () => {
     await act(() => {
       timeline.dispatchEvent(new Event("scroll"));
     });
+    await flushAnimationFrames();
     expect(state.collapsed).toBe(false);
   });
   it("honors opt-out and refuses short timelines, zoom and horizontal gestures", async () => {
@@ -191,6 +230,7 @@ describe("composer timeline scroll collapse", () => {
     await act(() => {
       timeline.dispatchEvent(new Event("scroll"));
     });
+    await flushAnimationFrames();
     expect(state.collapsed).toBe(false);
   });
 });

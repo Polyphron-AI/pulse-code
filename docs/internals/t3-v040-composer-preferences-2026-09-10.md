@@ -27,3 +27,7 @@ The preference defaults on, can be disabled immediately, is searchable, and part
 ## Delayed timeline attachment
 
 The scroll-collapse effect now retries a missing LegendList scroll node for up to twelve animation frames, matching timeline manual-navigation readiness. Pending retries are cancelled on disable, thread change, or unmount; an attached listener is removed on cleanup. A regression reproduced the prior failure with the node absent on first effect and present on the next frame. Gesture and real-content overflow guards are unchanged. This fixes a demonstrated listener lifetime gap. The initial integrated browser attempt was separately found to target an update toast over the timeline; that targeting issue is not evidence of a production scroll-collapse failure.
+
+## Logical-end timing
+
+A later integrated check confirmed both timeline wheel listeners were attached, all collapse gates were enabled, and the gesture reached the correct node. LegendList coalesces native scroll events onto an animation frame, so the composer's immediate native scroll callback could read the previous logical-end state and restore before its collapsed state was rendered. Restoration checks now coalesce onto one cancellable frame after the list's scroll update. Wheel thresholds, nested scrolling, boundary eligibility and short-content guards are unchanged. A failing stale-state ordering regression now passes; actual end restoration, coalescing and cleanup are covered as well.
