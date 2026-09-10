@@ -282,3 +282,25 @@ describe("ChatMarkdown Windows file links", () => {
     expect(html).not.toContain("chat-markdown-file-link");
   });
 });
+
+describe("Markdown document sibling links", () => {
+  it.each([
+    ["/workspace/project", "/tmp/host-documents"],
+    ["C:/workspace/project", "C:/temp/host-documents"],
+    ["/workspace/project", "/workspace/project/docs"],
+  ])("anchors links to the document directory %s to %s", (cwd, imageBaseDir) => {
+    for (const parseRawHtml of [false, true]) {
+      const html = renderToStaticMarkup(
+        <ChatMarkdown
+          cwd={cwd}
+          imageBaseDir={imageBaseDir}
+          environmentId={EnvironmentId.make("host-docs")}
+          parseRawHtml={parseRawHtml}
+          text={"[Sibling note](sibling.md) and [Reference][note]\n\n[note]: sibling.md"}
+        />,
+      );
+      expect(html.match(new RegExp(`href="${imageBaseDir}/sibling.md"`, "g"))).toHaveLength(2);
+      expect(html).not.toContain(`href="${cwd}/sibling.md"`);
+    }
+  });
+});
