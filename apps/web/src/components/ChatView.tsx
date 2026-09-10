@@ -2567,6 +2567,25 @@ function ChatViewContent(props: ChatViewProps) {
     () => deriveActivePlanState(threadActivities, activeLatestTurn?.turnId ?? undefined),
     [activeLatestTurn?.turnId, threadActivities],
   );
+  const activeComposerTaskSteps =
+    activePlan && activePlan.turnId === activeLatestTurn?.turnId && !latestTurnSettled
+      ? activePlan.steps
+      : null;
+  const activeComposerTasksProgress = useMemo(() => {
+    const current =
+      activeComposerTaskSteps?.find((step) => step.status === "inProgress") ??
+      activeComposerTaskSteps?.find((step) => step.status === "pending") ??
+      activeComposerTaskSteps?.at(-1);
+    return current && activeComposerTaskSteps
+      ? {
+          step: current.step,
+          completedSteps: activeComposerTaskSteps.filter((step) => step.status === "completed")
+            .length,
+          totalSteps: activeComposerTaskSteps.length,
+        }
+      : null;
+  }, [activeComposerTaskSteps]);
+
   // Current step for the in-chat working row: only for the running turn's own
   // plan (deriveActivePlanState falls back to older turns' plans, which must
   // not label fresh work). Falls back to the first pending step so an
@@ -7806,6 +7825,8 @@ function ChatViewContent(props: ChatViewProps) {
                             respondingRequestIds={respondingRequestIds}
                             showPlanFollowUpPrompt={showPlanFollowUpPrompt}
                             activeProposedPlan={activeProposedPlan}
+                            activeTasksProgress={activeComposerTasksProgress}
+                            activeTaskSteps={activeComposerTaskSteps}
                             runtimeMode={runtimeMode}
                             interactionMode={interactionMode}
                             lockedProvider={lockedProvider}

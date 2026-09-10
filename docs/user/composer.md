@@ -138,3 +138,7 @@ Skill and command suggestions attach to the top of the composer and follow it wh
 Mobile keeps unfinished new-task drafts beside pending tasks in the thread list. You can keep several drafts for one project, reopen a draft, or discard it. Switching environments carries the current draft to the corresponding project without sending it.
 
 When you submit a task while connected, its thread opens with your prompt while setup runs. If setup fails, **Edit task** reopens the saved draft. Offline submissions stay queued until the environment reconnects. Queued follow-up messages remain visible in the conversation; you can edit one before delivery starts.
+
+## Composer drawers
+
+Approvals, questions, and ready plans appear in a drawer attached to the composer. Approval details stay readable alongside the provider's available actions. Running task plans have a Tasks control that expands their steps and completed-step durations; closing the drawer keeps the progress control, while dismissing it hides tasks for that turn. Stashed prompts open in an attached drawer and remain accessible from the composer controls.
