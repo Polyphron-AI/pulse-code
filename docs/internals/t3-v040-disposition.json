@@ -1,6 +1,6 @@
 {
   "target": "09e8de9c655ae85410bf6b00446f272a01da81c7",
-  "assessedHead": "5b3f672b606071cd7372314163b615e636348d60",
+  "assessedHead": "189b422b2b9d9484b44c8df9091f1a9a4dc58611",
   "scope": "Source commit inventory; pending rows require semantic review.",
   "statusDefinitions": {
     "ported-reviewed": "See compatibility ledgers for adaptations and tests.",
@@ -10,9 +10,9 @@
   },
   "counts": {
     "target-files-identical": 6,
-    "needs-disposition": 890,
-    "ported-reviewed": 146,
-    "partially-ported": 12
+    "needs-disposition": 877,
+    "ported-reviewed": 157,
+    "partially-ported": 14
   },
   "commits": [
     {
@@ -606,9 +606,9 @@
     {
       "source": "421088c27367da227d922ce999c1637416a6d0f4",
       "subject": "fix(search): oversized thread queries no longer crash clients (#6633)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["packages/client-runtime"],
-      "differingTargetPaths": 2
+      "differingTargetPaths": 0
     },
     {
       "source": "035058a23e651ea5f407c9ab73cf5329cc40c102",
@@ -815,7 +815,7 @@
     {
       "source": "9da0fab08e0ee444affdfb4916e294c579158bb6",
       "subject": "feat(web): redesign skills in `$` menu and in `/` menu (#8009)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": [
         "apps/desktop",
         "apps/web",
@@ -914,7 +914,7 @@
       "subject": "feat(web): upload image attachments before sending (#8048)",
       "status": "ported-reviewed",
       "domains": ["apps/server", "apps/web", "docs", "packages/contracts"],
-      "differingTargetPaths": 24
+      "differingTargetPaths": 23
     },
     {
       "source": "58ba5594439c984b08d13b6d4efb5407adb06943",
@@ -1066,7 +1066,7 @@
     {
       "source": "a09f92171186677796ccdc28148406c7491601ce",
       "subject": "fix(web): make Windows file links clickable in chat (#8081)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/web"],
       "differingTargetPaths": 2
     },
@@ -1226,9 +1226,9 @@
     {
       "source": "082e6ea521861fff37b90fcd789b5eaa5ef5d6a6",
       "subject": "feat(web): reveal chat file chips in the system file manager (#7140)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": [".macroscope", "apps/server", "apps/web", "packages/contracts"],
-      "differingTargetPaths": 22
+      "differingTargetPaths": 17
     },
     {
       "source": "994372ba43810e64027c537231da200988faa7ca",
@@ -1736,7 +1736,7 @@
     {
       "source": "c1c2d5401de5a352cf6722959de076c3da63d233",
       "subject": "feat: let an environment publish themes as a file (#8569)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": [
         "apps/server",
         "apps/web",
@@ -1745,7 +1745,7 @@
         "packages/contracts",
         "packages/shared"
       ],
-      "differingTargetPaths": 31
+      "differingTargetPaths": 26
     },
     {
       "source": "5e63aea2df03e8ccc5c8a56cee4c067ecbd3d703",
@@ -2937,9 +2937,9 @@
     {
       "source": "d2042d288eaf7aaf7feda85eb7d1a6f546302c12",
       "subject": "fix(web): avoid stale file writes on close (#8630)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/web"],
-      "differingTargetPaths": 2
+      "differingTargetPaths": 0
     },
     {
       "source": "4116db9807cb37b49d3db35c7a45301f5e851b01",
@@ -2972,7 +2972,7 @@
     {
       "source": "a19f01fc19d209d9962c4bb66372ed9e03e320a9",
       "subject": "feat(web): make context window indicator opt-in (#9190)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/desktop", "apps/web", "packages/contracts"],
       "differingTargetPaths": 6
     },
@@ -3642,7 +3642,7 @@
     {
       "source": "2b745efe57cddc1753d3007d081c64bd20e3ab79",
       "subject": "fix(usage): price new models without waiting a day for the rate table (#9202)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": [
         "apps/mobile",
         "apps/server",
@@ -4175,7 +4175,7 @@
     {
       "source": "617edab6539ee6573055dc9fc45fdeacdb12f673",
       "subject": "fix(server): reveal normalized paths in File Explorer (#9551)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server"],
       "differingTargetPaths": 2
     },
@@ -4602,9 +4602,10 @@
     {
       "source": "1587f248dd81ed45e214d476451ebf16dbfadb1a",
       "subject": "feat(server): measure provider turn token usage (#9132)",
-      "status": "needs-disposition",
+      "status": "partially-ported",
       "domains": ["apps/server", "docs", "packages/contracts"],
-      "differingTargetPaths": 14
+      "differingTargetPaths": 14,
+      "remaining": "Normalized complete/partial/unavailable token usage integrated and tested across Claude, Codex, OpenCode and canonical service forwarding. Pulse raw usage and OMP retained. Source analytics-only measurement/transmission deliberately omitted."
     },
     {
       "source": "4ee2a9d046a0986451c703c9221bb32ba53540bb",
@@ -4912,7 +4913,7 @@
       "subject": "docs: focus user guides on features and workflows (#9756)",
       "status": "needs-disposition",
       "domains": ["README.md", "docs"],
-      "differingTargetPaths": 21
+      "differingTargetPaths": 22
     },
     {
       "source": "cd713679bbe06c435823bafc48e5bcfa3266a9aa",
@@ -5057,7 +5058,7 @@
     {
       "source": "b7d6e65021b021207424c56cb32d6d711fd875fb",
       "subject": "fix(contracts): include tool.denied in runtime event types (#9770)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["packages/contracts"],
       "differingTargetPaths": 2
     },
@@ -5415,9 +5416,9 @@
     {
       "source": "b01771c2383bbcdf154b8c4e9f1a7d5e3867e2d0",
       "subject": "fix(web): keep file autosaves active after effect replay (#9878)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/web"],
-      "differingTargetPaths": 3
+      "differingTargetPaths": 1
     },
     {
       "source": "a0eb23993a3bacf96d618918f43ea18f2da72390",
@@ -6620,9 +6621,10 @@
     {
       "source": "bd16b86d50c1df49afeb7c0a7568a4908ade4048",
       "subject": "fix(client-runtime): report terminated thread loads (#10216)",
-      "status": "needs-disposition",
+      "status": "partially-ported",
       "domains": ["packages/client-runtime"],
-      "differingTargetPaths": 4
+      "differingTargetPaths": 4,
+      "remaining": "Terminated HTTP/thread loads and typed recovery reporting integrated with 42 focused tests. Pulse always-active lifecycle retained; unrelated upstream idle-retention and warm-live rewrite not imported."
     },
     {
       "source": "050690d1bc048c1f94096c17a1c9231c3ad61a83",

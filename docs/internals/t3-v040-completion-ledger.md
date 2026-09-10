@@ -4,7 +4,13 @@ Target: `09e8de9c655ae85410bf6b00446f272a01da81c7`. The [source disposition inve
 
 The target changes 2,389 paths from the declared baseline: 728 web, 507 server, 454 mobile, 155 client runtime, 132 desktop, 81 marketing, 73 shared, and 48 contracts. These counts describe source scope, not missing features. The audit inspected migration sources, all changed contract filenames, provider history, native dependency/configuration diffs, and selected implementations. It did not independently verify every path.
 
-## Integrated checkpoint through `0bb876d37`
+## Integrated checkpoint through `189b422b2`
+
+- `bc7d484af` adds explicit rate refresh with a one-minute fetch floor, retaining custom prices and selected-environment rescans. Eleven synthetic usage tests pass. `3bead9b18` adds terminated thread-load reporting while preserving Pulse's current lifecycle and retry behavior; 42 focused tests pass. `f05a2ed50` adds environment theme publishing and opt-in adoption. Five integrated server stream tests pass, including old-client gating and settings snapshot race coverage. `7b91bfa7f` accepts both reset-credit error formats; four contract compatibility tests pass.
+- `fa882ba40` and `30dd5cb09` restore skill-menu settings/source badges and the opt-in context indicator. Pulse compaction and usage widgets remain. The skill preference passed a disposable Chromium toggle/reload/reverse check with no page errors. `189b422b2` adds environment-scoped file reveal and Windows drive/reference-link fixes; agent validation passed 143 tests with nine POSIX-only fixtures skipped on Windows. Actual file-manager launch was not tested.
+- Integrated server types pass through environment themes/rate refresh; mobile types pass through the skill-menu checkpoint; web types pass through the preceding correctness/machine batch. Later client batches still require final integration checks. The built `.5` artifact remains unchanged and unpublished, and does not include these follow-on commits.
+
+## Earlier checkpoint through `0bb876d37`
 
 - Follow-on commits `8eb44cb59`, `04d3395d8`, and `5b3f672b6` add optional image dimensions in signed asset responses and environment machine/WSL metadata. Header/asset regressions passed 34 tests; integrated machine/icon regressions passed 17 tests. `954ee7e87` adds normalized complete, partial, and unavailable turn token usage while preserving legacy raw usage and omitting analytics-only transmission. Its agent checks passed 333 cases; two pre-existing Codex child-agent lifecycle mismatches are being addressed separately.
 - The integrated Chromium composer/attachment regression passed after restarting the disposable backend at `0bb876d37`, with no page errors. This is not real Antigravity provider acceptance.
