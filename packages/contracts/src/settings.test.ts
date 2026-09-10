@@ -357,3 +357,16 @@ describe("ServerSettingsPatch string normalization", () => {
     expect(encoded.providers?.codex?.launchArgs).toBe("--strict-config");
   });
 });
+
+it("requires an independent explicit Warden opt-in", () => {
+  expect(decodeServerSettings({}).enableAgentWardenAccess).toBe(false);
+  const settings = decodeServerSettings({
+    enableAgentBrowserAccess: false,
+    enableAgentWardenAccess: true,
+  });
+  expect(settings.enableAgentWardenAccess).toBe(true);
+  expect(settings.enableAgentBrowserAccess).toBe(false);
+  expect(decodeServerSettingsPatch({ enableAgentWardenAccess: false })).toMatchObject({
+    enableAgentWardenAccess: false,
+  });
+});

@@ -14,6 +14,7 @@ import * as McpProviderSession from "./McpProviderSession.ts";
 export interface McpCredentialRequest {
   readonly threadId: ThreadId;
   readonly providerInstanceId: ProviderInstanceId;
+  readonly capabilities?: ReadonlySet<McpInvocationContext.McpCapability>;
 }
 
 export interface McpIssuedCredential {
@@ -31,6 +32,21 @@ export interface McpSessionRegistryShape {
    * credential even when it goes a long time without touching an MCP tool.
    */
   readonly touch: (threadId: ThreadId) => Effect.Effect<void>;
+  readonly beginAttempt: (
+    threadId: ThreadId,
+    providerInstanceId: ProviderInstanceId,
+  ) => Effect.Effect<string | undefined>;
+  readonly bindAttempt: (
+    threadId: ThreadId,
+    attemptId: string,
+    turnId: string,
+  ) => Effect.Effect<void>;
+  readonly endAttempt: (threadId: ThreadId, attemptId: string) => Effect.Effect<void>;
+  readonly endTurn: (
+    threadId: ThreadId,
+    providerInstanceId: ProviderInstanceId,
+    turnId?: string,
+  ) => Effect.Effect<void>;
   readonly revokeProviderSession: (providerSessionId: string) => Effect.Effect<void>;
   readonly revokeThread: (threadId: ThreadId) => Effect.Effect<void>;
   readonly revokeAll: Effect.Effect<void>;
@@ -45,6 +61,11 @@ interface CredentialRecord {
   readonly tokenHash: string;
   readonly scope: McpInvocationContext.McpInvocationScope;
   readonly lastAliveAt: number;
+  readonly attempt?: {
+    readonly id: string;
+    readonly controller: AbortController;
+    readonly turnId?: string;
+  };
 }
 
 interface RegistryState {
@@ -110,9 +131,11 @@ const makeWithOptions = Effect.fn("McpSessionRegistry.make")(function* (
 
   const pruneDead = (records: ReadonlyMap<string, CredentialRecord>, timestamp: number) => {
     const next = new Map(
-      Array.from(records).filter(
-        ([, record]) => timestamp - record.lastAliveAt <= livenessWindowMs,
-      ),
+      Array.from(records).filter(([, record]) => {
+        if (timestamp - record.lastAliveAt <= livenessWindowMs) return true;
+        record.attempt?.controller.abort();
+        return false;
+      }),
     );
     return next.size === records.size ? records : next;
   };
@@ -128,7 +151,7 @@ const makeWithOptions = Effect.fn("McpSessionRegistry.make")(function* (
         threadId: ThreadId.make(request.threadId),
         providerSessionId,
         providerInstanceId: ProviderInstanceId.make(request.providerInstanceId),
-        capabilities: new Set(["preview"]),
+        capabilities: new Set(request.capabilities ?? ["preview"]),
         issuedAt,
       };
       yield* SynchronizedRef.update(state, ({ records }) => {
@@ -160,7 +183,20 @@ const makeWithOptions = Effect.fn("McpSessionRegistry.make")(function* (
         if (!record) return [undefined, { records: current }] as const;
         const next = new Map(current);
         next.set(tokenHash, { ...record, lastAliveAt: timestamp });
-        return [record.scope, { records: next }] as const;
+        return [
+          {
+            ...record.scope,
+            ...(record.attempt
+              ? {
+                  wardenAttempt: {
+                    id: record.attempt.id,
+                    signal: record.attempt.controller.signal,
+                  },
+                }
+              : {}),
+          },
+          { records: next },
+        ] as const;
       });
     },
   );
@@ -183,13 +219,73 @@ const makeWithOptions = Effect.fn("McpSessionRegistry.make")(function* (
 
   const revokeWhere = (predicate: (record: CredentialRecord) => boolean) =>
     SynchronizedRef.update(state, ({ records }) => ({
-      records: new Map(Array.from(records).filter(([, record]) => !predicate(record))),
+      records: new Map(
+        Array.from(records).filter(([, record]) => {
+          if (!predicate(record)) return true;
+          record.attempt?.controller.abort();
+          return false;
+        }),
+      ),
     }));
+
+  const updateAttempts = (update: (record: CredentialRecord) => CredentialRecord) =>
+    SynchronizedRef.update(state, ({ records }) => ({
+      records: new Map(Array.from(records, ([key, record]) => [key, update(record)])),
+    }));
+  const clearAttempt = (record: CredentialRecord): CredentialRecord => {
+    record.attempt?.controller.abort();
+    const { attempt: _attempt, ...rest } = record;
+    return rest;
+  };
+  const beginAttempt: McpSessionRegistryShape["beginAttempt"] = Effect.fn(
+    "McpSessionRegistry.beginAttempt",
+  )(function* (threadId, providerInstanceId) {
+    const id = yield* crypto.randomUUIDv4.pipe(Effect.orDie);
+    let activated = false;
+    yield* updateAttempts((record) => {
+      if (
+        record.scope.threadId !== threadId ||
+        record.scope.providerInstanceId !== providerInstanceId ||
+        !record.scope.capabilities.has("warden")
+      )
+        return record;
+      activated = true;
+      record.attempt?.controller.abort();
+      return { ...record, attempt: { id, controller: new AbortController() } };
+    });
+    return activated ? id : undefined;
+  });
+  const bindAttempt: McpSessionRegistryShape["bindAttempt"] = (threadId, attemptId, turnId) =>
+    updateAttempts((record) =>
+      record.scope.threadId === threadId && record.attempt?.id === attemptId
+        ? { ...record, attempt: { ...record.attempt, turnId } }
+        : record,
+    );
+  const endAttempt: McpSessionRegistryShape["endAttempt"] = (threadId, attemptId) =>
+    updateAttempts((record) =>
+      record.scope.threadId === threadId && record.attempt?.id === attemptId
+        ? clearAttempt(record)
+        : record,
+    );
+  const endTurn: McpSessionRegistryShape["endTurn"] = (threadId, providerInstanceId, turnId) =>
+    updateAttempts((record) =>
+      record.scope.threadId === threadId &&
+      record.scope.providerInstanceId === providerInstanceId &&
+      (turnId === undefined ||
+        record.attempt?.turnId === undefined ||
+        record.attempt.turnId === turnId)
+        ? clearAttempt(record)
+        : record,
+    );
 
   return McpSessionRegistry.of({
     issue,
     resolve,
     touch,
+    beginAttempt,
+    bindAttempt,
+    endAttempt,
+    endTurn,
     revokeProviderSession: Effect.fn("McpSessionRegistry.revokeProviderSession")(
       function* (providerSessionId) {
         yield* revokeWhere((record) => record.scope.providerSessionId === providerSessionId);
@@ -198,7 +294,7 @@ const makeWithOptions = Effect.fn("McpSessionRegistry.make")(function* (
     revokeThread: Effect.fn("McpSessionRegistry.revokeThread")(function* (threadId) {
       yield* revokeWhere((record) => record.scope.threadId === threadId);
     }),
-    revokeAll: SynchronizedRef.set(state, { records: new Map() }),
+    revokeAll: revokeWhere(() => true),
   });
 });
 
@@ -248,3 +344,37 @@ export const revokeAllActiveMcpCredentials = (): Effect.Effect<void> =>
 export const __testing = {
   make: makeWithOptions,
 };
+
+export const beginActiveWardenAttempt = (
+  threadId: ThreadId,
+  providerInstanceId: ProviderInstanceId,
+) =>
+  activeMcpSessionRegistry
+    ? activeMcpSessionRegistry.beginAttempt(threadId, providerInstanceId)
+    : Effect.succeed<string | undefined>(undefined);
+export const bindActiveWardenAttempt = (threadId: ThreadId, attemptId: string, turnId: string) =>
+  activeMcpSessionRegistry
+    ? activeMcpSessionRegistry.bindAttempt(threadId, attemptId, turnId)
+    : Effect.void;
+export const endActiveWardenAttempt = (threadId: ThreadId, attemptId: string) =>
+  activeMcpSessionRegistry ? activeMcpSessionRegistry.endAttempt(threadId, attemptId) : Effect.void;
+export const endActiveWardenTurn = (
+  threadId: ThreadId,
+  providerInstanceId: ProviderInstanceId,
+  turnId?: string,
+) =>
+  activeMcpSessionRegistry
+    ? activeMcpSessionRegistry.endTurn(threadId, providerInstanceId, turnId)
+    : Effect.void;
+
+/** Separate CLI credential carries no preview capability and does not replace the MCP credential. */
+export const issueActiveWardenCliCredential = (
+  request: McpCredentialRequest,
+): Effect.Effect<McpIssuedCredential | undefined> =>
+  activeMcpSessionRegistry
+    ? activeMcpSessionRegistry.issue({ ...request, capabilities: new Set(["warden"]) })
+    : Effect.succeed(undefined);
+export const revokeActiveMcpProviderSession = (providerSessionId: string) =>
+  activeMcpSessionRegistry
+    ? activeMcpSessionRegistry.revokeProviderSession(providerSessionId)
+    : Effect.void;

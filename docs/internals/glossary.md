@@ -188,3 +188,7 @@ The file patch and changed-file summary for one turn. It is usually computed in 
 [22]: ../../apps/server/src/checkpointing/Utils.ts
 [23]: ../../apps/server/src/checkpointing/Diffs.ts
 [24]: ./overview.md
+
+## Warden use
+
+A Warden use is a digest-bound authorization record held by the owning Go broker. It binds one saved query to a trusted Pulse turn, reviewed policy and credential versions, resource and expiry. Approval and execution are separate steps; a committed reservation cannot be replayed. See [the runtime contract](../../prd/warden/grafana-runtime.md).

@@ -1,6 +1,6 @@
 # Saved-query read binding v1
 
-Status: implemented validation and canonical serialization, pending runtime adoption. This is the first request-contract increment for the Grafana-first Warden proof. It does not implement approval, policy evaluation, execution, MCP tools, CLI commands, or database changes. See [MCP/CLI requirements](mcp-cli.md) and the [branch reconciliation](reconciliation-2026-09-10.md).
+Status: validation and canonical serialization implemented and adopted by the opt-in [Grafana runtime](grafana-runtime.md). This document specifies the shared request binding; the runtime document records approval, policy, execution, MCP/CLI and migration behavior with its remaining release gates. See [MCP/CLI requirements](mcp-cli.md) and the [branch reconciliation](reconciliation-2026-09-10.md).
 
 ## Inputs and ownership
 

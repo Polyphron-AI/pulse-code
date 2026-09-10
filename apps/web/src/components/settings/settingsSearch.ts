@@ -225,6 +225,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     to: "/settings/providers",
   },
   {
+    id: "agent-warden-access",
+    title: "Agent Warden access",
+    to: "/settings/integrations",
+    targetId: "warden",
+  },
+  {
     id: "agent-browser-access",
     title: "Agent browser access",
     to: "/settings/integrations",

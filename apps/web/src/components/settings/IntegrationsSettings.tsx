@@ -378,6 +378,39 @@ function BrowserAppearanceSetting({ disabled }: { readonly disabled: boolean }) 
   );
 }
 
+function AgentWardenAccessSetting() {
+  const settings = usePrimarySettings();
+  const updateSettings = useUpdatePrimarySettings();
+  return (
+    <SettingsRow
+      {...searchableSetting("agent-warden-access")}
+      description="Let agents request saved Grafana reads through Pulse Warden. Each read follows the broker's access policy and approval requirements."
+      status="Enable for new agent sessions. Turning off blocks new Warden calls immediately; an in-flight read may still finish."
+      resetAction={
+        settings.enableAgentWardenAccess !== DEFAULT_UNIFIED_SETTINGS.enableAgentWardenAccess ? (
+          <SettingResetButton
+            label="agent Warden access"
+            onClick={() =>
+              updateSettings({
+                enableAgentWardenAccess: DEFAULT_UNIFIED_SETTINGS.enableAgentWardenAccess,
+              })
+            }
+          />
+        ) : null
+      }
+      control={
+        <Switch
+          checked={settings.enableAgentWardenAccess}
+          onCheckedChange={(checked) =>
+            updateSettings({ enableAgentWardenAccess: Boolean(checked) })
+          }
+          aria-label="Allow agent Warden access"
+        />
+      }
+    />
+  );
+}
+
 function AgentBrowserAccessSetting() {
   const settings = usePrimarySettings();
   const updateSettings = useUpdatePrimarySettings();
@@ -956,6 +989,9 @@ export function IntegrationsSettingsPanel() {
     <SettingsPageContainer>
       <MailAlphaSetting />
       <PulseIssuesIntegration />
+      <SettingsSection id="warden" title="Pulse Warden">
+        <AgentWardenAccessSetting />
+      </SettingsSection>
       <SettingsSection id="browser" title="Browser">
         {/* Server-authoritative, so it stays editable on every client and sits
             outside the block covering the desktop-only defaults. */}
