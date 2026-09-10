@@ -14,4 +14,10 @@ Source b90898077 now bounds crash-loop restarts. The first rapid exit restarts i
 
 Eleven focused tests use fake child handles, Deferred signals and TestClock. They cover rapid failures, stable-uptime reset and a config change during backoff without a duplicate restart. No real relay process or network connection is used.
 
-Terminal history byte bounds (cf9729d5e plus 3bbbc1d9f) remain a separate followup batch.
+## Bounded terminal history
+
+Sources 3bbbc1d9f and cf9729d5e retain at most 5,000 lines and 8 MiB of UTF-8 history using incremental chunks. Snapshots and coalesced persistence materialize text only when needed. Current and legacy history restore reads only the bounded file tail, handles short reads and UTF-8 boundaries, and closes the file before rewriting it.
+
+All live output events remain complete; only retained scrollback drops its oldest text at either limit. Pulse environment-aware terminal launch and restart resolution, process polling, labels, and clear/restart behavior remain intact. The existing restart wrapper required manual adaptation because upstream inlined that operation.
+
+The complete 79-test terminal manager suite passes with synthetic PTY handles and disposable files, including long partial lines, split surrogate pairs, line/byte bounds, restored tails, short reads, closed-file rewrites, and full live output. Server typecheck and scoped lint validate the internal history representation change. This server behavior applies equally to web, desktop and mobile and does not change their wire contracts.
