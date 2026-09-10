@@ -1,6 +1,6 @@
 {
   "target": "09e8de9c655ae85410bf6b00446f272a01da81c7",
-  "assessedHead": "189b422b2b9d9484b44c8df9091f1a9a4dc58611",
+  "assessedHead": "1f9a93d7b91af64146cc0b8725f7357721767d72",
   "scope": "Source commit inventory; pending rows require semantic review.",
   "statusDefinitions": {
     "ported-reviewed": "See compatibility ledgers for adaptations and tests.",
@@ -10,8 +10,8 @@
   },
   "counts": {
     "target-files-identical": 6,
-    "needs-disposition": 877,
-    "ported-reviewed": 157,
+    "needs-disposition": 852,
+    "ported-reviewed": 182,
     "partially-ported": 14
   },
   "commits": [
@@ -703,9 +703,9 @@
     {
       "source": "6e9c57f7ba9eab9e987da7a660664a1df683e9cf",
       "subject": "feat(web): add appearance contrast control (#7906)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": [".macroscope", "apps/desktop", "apps/web", "packages/contracts"],
-      "differingTargetPaths": 26
+      "differingTargetPaths": 22
     },
     {
       "source": "4e00471d1ab340b46742565bb6ce6462160b4d0c",
@@ -1228,7 +1228,7 @@
       "subject": "feat(web): reveal chat file chips in the system file manager (#7140)",
       "status": "ported-reviewed",
       "domains": [".macroscope", "apps/server", "apps/web", "packages/contracts"],
-      "differingTargetPaths": 17
+      "differingTargetPaths": 16
     },
     {
       "source": "994372ba43810e64027c537231da200988faa7ca",
@@ -1277,7 +1277,7 @@
         "packages/client-runtime",
         "packages/contracts"
       ],
-      "differingTargetPaths": 17
+      "differingTargetPaths": 16
     },
     {
       "source": "a3a8cbd60539b4af4de8f96c892dbd07a2b6c041",
@@ -1717,7 +1717,7 @@
       "subject": "feat(web): attach PDFs, ZIPs, and other files to a turn (#8236)",
       "status": "ported-reviewed",
       "domains": ["apps/web", "docs", "packages/client-runtime"],
-      "differingTargetPaths": 23
+      "differingTargetPaths": 22
     },
     {
       "source": "d22709f759ced90b0ae7b7cb73d7ad22c2ce962b",
@@ -1926,9 +1926,9 @@
     {
       "source": "e09b88b6a51bb7e4309498f01c2f36bf5ada43f4",
       "subject": "fix(web): keep right panel synced with agent edits (#8803)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/web"],
-      "differingTargetPaths": 7
+      "differingTargetPaths": 6
     },
     {
       "source": "c1e70b5f8c93428c1fe7af62f24ee6ff2bffff6e",
@@ -2297,9 +2297,9 @@
     {
       "source": "7e4ce3bbb16c3cfa1ea756de917d8f9398e5999e",
       "subject": "perf(server): cut chatty tool-update frames by 90% (#8368)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server"],
-      "differingTargetPaths": 5
+      "differingTargetPaths": 3
     },
     {
       "source": "f32f9a2f41342bf8a1a109d6ebe9b70044c5311b",
@@ -2508,7 +2508,7 @@
         "pnpm-lock.yaml"
       ],
       "differingTargetPaths": 48,
-      "remaining": "Shared/backend and web/mobile/desktop media viewers integrated; tool-result viewedImage rendering and automatic workspace mutation refresh remain. Native playback acceptance pending."
+      "remaining": "Shared/backend and web/mobile/desktop media viewers, tool-result image rendering and automatic workspace mutation refresh integrated with focused tests. Native playback acceptance pending."
     },
     {
       "source": "04efa7907e9ec207e2d6af459ce3b2ffd55f6107",
@@ -2773,7 +2773,7 @@
     {
       "source": "e7deb2aaf4d4d089618dc0c8f393fa0b8b6c77e9",
       "subject": "feat(web): cite assistant responses with inline citations (#9146)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": [
         "apps/mobile",
         "apps/server",
@@ -2782,7 +2782,7 @@
         "packages/contracts",
         "packages/shared"
       ],
-      "differingTargetPaths": 49
+      "differingTargetPaths": 28
     },
     {
       "source": "941acb4f919bcef337d4d9e1623101bdc30d3616",
@@ -3141,7 +3141,7 @@
       "subject": "feat(desktop): browser profiles for the preview browser (#7254)",
       "status": "ported-reviewed",
       "domains": ["apps/desktop", "apps/server", "apps/web", "packages/contracts"],
-      "differingTargetPaths": 33
+      "differingTargetPaths": 32
     },
     {
       "source": "ca63d42d670837b918081d1fc1ebada553814b4c",
@@ -3153,9 +3153,9 @@
     {
       "source": "91c8d4771ccb503a9dde65190b87db642df0a6ea",
       "subject": "feat(web): add opt-in panel animations (#8830)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/desktop", "apps/web", "docs", "packages/contracts"],
-      "differingTargetPaths": 20
+      "differingTargetPaths": 18
     },
     {
       "source": "ba3cb0773859334fe9f75016295bb3893c9e6044",
@@ -3181,7 +3181,7 @@
     {
       "source": "fb93902ee24d4ba380508df33d25478d3baf7a72",
       "subject": "feat(web): add proactive panels (#9276)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/desktop", "apps/web", "docs", "packages/contracts"],
       "differingTargetPaths": 9
     },
@@ -3232,8 +3232,8 @@
       "subject": "fix(pull-requests): missing features & better behaviour (#9188)",
       "status": "partially-ported",
       "domains": ["apps/server", "apps/web", "docs", "packages/contracts"],
-      "differingTargetPaths": 25,
-      "remaining": "PR actions, workflow approvals, check status, auto-merge strategy and head repository identity integrated with focused tests. Source-wide list/filter/sidebar refinements remain outside this batch."
+      "differingTargetPaths": 24,
+      "remaining": "PR actions, workflow approvals, check status, auto-merge strategy, head repository identity, persisted list filters/sidebar destination and readiness sorting integrated with focused tests. Broader source-wide refinements still require final semantic review."
     },
     {
       "source": "15fea6c5f40331c8325f33bd08b2dcbf924e935a",
@@ -3447,9 +3447,9 @@
     {
       "source": "18062da9425909a0a92bce0b692c9de6fbba56ee",
       "subject": "feat(web): choose whether links open in the default browser or in T3 Code (#9339)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/desktop", "apps/web", "packages/contracts"],
-      "differingTargetPaths": 24
+      "differingTargetPaths": 21
     },
     {
       "source": "6a5a18cb1bc9ea878afa1146950439b5d4744110",
@@ -3482,7 +3482,7 @@
     {
       "source": "6cf0c6ea55d281f65c80502ec1871b0adf472025",
       "subject": "feat: display native app and browser icons in work logs (#9093)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": [
         "apps/mobile",
         "apps/server",
@@ -3492,7 +3492,7 @@
         "packages/contracts",
         "packages/shared"
       ],
-      "differingTargetPaths": 32
+      "differingTargetPaths": 30
     },
     {
       "source": "48ba76bc26337f23d1f0991bbac51f996a3333dc",
@@ -3576,7 +3576,7 @@
       "subject": "fix(web): collapse the resting composer (#7855)",
       "status": "needs-disposition",
       "domains": ["apps/web", "docs"],
-      "differingTargetPaths": 32
+      "differingTargetPaths": 30
     },
     {
       "source": "4b26132d2c740ff344ef3fae7ae62e9765759e29",
@@ -3677,9 +3677,9 @@
     {
       "source": "77e35c561259733d880ab62a43aad0894d301d9b",
       "subject": "fix(web): send cited messages with Cmd+Enter (#9307)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/web"],
-      "differingTargetPaths": 5
+      "differingTargetPaths": 3
     },
     {
       "source": "098bf5329727fcd7d973bf842e6b4d50d6e7b924",
@@ -3810,7 +3810,7 @@
     {
       "source": "03728361aa7beb9c13da320097450e6fe65aac3e",
       "subject": "feat(web): let users turn off composer collapse on blur and scroll (#9469)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/desktop", "apps/web", "docs", "packages/contracts"],
       "differingTargetPaths": 9
     },
@@ -3861,7 +3861,7 @@
       "subject": "fix(web): keep agent browser preview visible (#9484)",
       "status": "ported-reviewed",
       "domains": ["apps/web", "packages/contracts"],
-      "differingTargetPaths": 11
+      "differingTargetPaths": 10
     },
     {
       "source": "409bc4fa6f3bb9869052bdba4244b30606457f20",
@@ -3993,7 +3993,7 @@
     {
       "source": "9c9ae3dc0e94a957d9c4a61bb211caf914828054",
       "subject": "fix(server): keep events during thread subscription startup (#9521)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server"],
       "differingTargetPaths": 2
     },
@@ -4666,7 +4666,7 @@
     {
       "source": "7839140e5e93d3f401d7eb45b86cf1a234eb3609",
       "subject": "fix(mobile): preserve saved work after storage read failures (#9710)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/mobile"],
       "differingTargetPaths": 5
     },
@@ -4701,9 +4701,9 @@
     {
       "source": "108f295cc3672716c3cb8291ce487846df5ce098",
       "subject": "fix(server): bound slow-client event buffers (#9715)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server"],
-      "differingTargetPaths": 6
+      "differingTargetPaths": 2
     },
     {
       "source": "8ccb933a8aae461b616b199ab287164c3311a755",
@@ -5318,9 +5318,9 @@
     {
       "source": "ce4712d5b04fb998f79fe132245289191147e5d5",
       "subject": "fix: restore UX after performance improvements (#9799)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": [".github", "apps/marketing", "apps/mobile", "apps/server", "apps/web"],
-      "differingTargetPaths": 31
+      "differingTargetPaths": 29
     },
     {
       "source": "57a6b70e24221f00c9a161f1e5b6b2ddd753bc8f",
@@ -5493,9 +5493,9 @@
     {
       "source": "7a089b2b2449c5c146e1a7d554a31e6d55924d3f",
       "subject": "fix(server): capture turn checkpoints after all edits finish (#9841)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server", "packages/client-runtime"],
-      "differingTargetPaths": 7
+      "differingTargetPaths": 6
     },
     {
       "source": "2fa5ef4c7bf3aafabe98392d25be7eb86847ce8f",
@@ -6273,7 +6273,7 @@
         "packages/contracts",
         "packages/shared"
       ],
-      "differingTargetPaths": 95,
+      "differingTargetPaths": 94,
       "remaining": "Local session scanner/importer, bootstrap completion, session-bound welcome, provider terminals and shared first-run onboarding integrated with synthetic tests. Browser-profile import remains separate; integrated wizard acceptance pending."
     },
     {
@@ -6426,7 +6426,7 @@
     {
       "source": "4ca71463a289e7b96b5776b6f6bbdecefe4757e4",
       "subject": "fix(opencode): revert from the first removed assistant message (#9924)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server"],
       "differingTargetPaths": 2
     },
@@ -6650,7 +6650,7 @@
     {
       "source": "bfba7781681eaa03eb465ce3d9a4ec07bf952b78",
       "subject": "fix(mobile): keep the new-task draft when switching environment (#10247)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/mobile"],
       "differingTargetPaths": 5
     },
@@ -7001,14 +7001,14 @@
     {
       "source": "62f568b88b58e1e7cf422c21ee2e08f10977b714",
       "subject": "fix(server): skip disabled provider instances for text generation fallback (#10346)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server"],
       "differingTargetPaths": 2
     },
     {
       "source": "e0adcc8a24db604c522282edea2823e3ef7a2bc6",
       "subject": "fix(server): capture checkpoints before refreshing PR status (#10347)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/server"],
       "differingTargetPaths": 2
     },
@@ -7053,7 +7053,7 @@
         "packages/contracts",
         "packages/shared"
       ],
-      "differingTargetPaths": 45
+      "differingTargetPaths": 44
     },
     {
       "source": "72cb638a8a6656d0b89899d9d62afaed0c2f7e5f",
@@ -7081,7 +7081,7 @@
       "subject": "feat(threads): persist manual active thread order (#9729)",
       "status": "ported-reviewed",
       "domains": ["apps/server", "packages/client-runtime", "packages/contracts"],
-      "differingTargetPaths": 22
+      "differingTargetPaths": 21
     },
     {
       "source": "6766e682ac1a0aa33020358ba98707f4f8fee467",
@@ -7095,7 +7095,7 @@
       "subject": "feat(web): drag threads across sections with consistent motion (#9731)",
       "status": "ported-reviewed",
       "domains": ["apps/web", "docs", "packages/client-runtime"],
-      "differingTargetPaths": 8
+      "differingTargetPaths": 6
     },
     {
       "source": "9a47c7bd40522977c7df022a5b64759aae7b58e0",
@@ -7107,7 +7107,7 @@
     {
       "source": "36c48a6b7c03c9a9adbc3e55d4d9ae77eae6f816",
       "subject": "fix(mobile): keep pending tasks queued when a send fails in flight (#10245)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/mobile"],
       "differingTargetPaths": 2
     },
@@ -7177,9 +7177,9 @@
     {
       "source": "9c96ac25804de9f38cd19c57976fe73573efa005",
       "subject": "fix(web): keep settings inputs focused during IME composition (#10262)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/web"],
-      "differingTargetPaths": 1
+      "differingTargetPaths": 0
     },
     {
       "source": "f1a08116f9c6f98d933d53fa897be3d8e3ac1e03",
@@ -7348,14 +7348,14 @@
       "subject": "feat(web): name the drop action while dragging sidebar threads (#10378)",
       "status": "ported-reviewed",
       "domains": ["apps/web", "docs"],
-      "differingTargetPaths": 6
+      "differingTargetPaths": 4
     },
     {
       "source": "252df7742047af8a1b859dc652b2f40b639d16b3",
       "subject": "perf(web): keep the sidebar responsive during bulk thread updates (#10413)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/web", "packages/client-runtime"],
-      "differingTargetPaths": 5
+      "differingTargetPaths": 3
     },
     {
       "source": "ec36176e4f25fac7e3c380f6a4b646116e4ccf3d",
@@ -7381,7 +7381,7 @@
     {
       "source": "a12589dc0bec60b498e72bdd2190871ee6b5c80d",
       "subject": "fix(web): stop collapsing the composer when it loses focus (#10437)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/desktop", "apps/web", "packages/contracts"],
       "differingTargetPaths": 11
     },
@@ -7430,9 +7430,9 @@
     {
       "source": "a07715c09e2f2b82555ca4221904fd806c770f8e",
       "subject": "fix(web): preserve multiline composer drafts during timeline scrolling (#10444)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/web"],
-      "differingTargetPaths": 10
+      "differingTargetPaths": 6
     },
     {
       "source": "52b2bf77a941740b4d979f3f4cae1c2851c14a69",
@@ -7675,9 +7675,9 @@
     {
       "source": "fe07ffe7c0bf1858ba4d1cd1ce0a67b10802a747",
       "subject": "fix(web): remove inserted citations on cancel (#10518)",
-      "status": "needs-disposition",
+      "status": "ported-reviewed",
       "domains": ["apps/web"],
-      "differingTargetPaths": 2
+      "differingTargetPaths": 1
     },
     {
       "source": "357b8d5217cd62826767b6ce6d7c47915f2777d2",
