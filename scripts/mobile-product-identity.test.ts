@@ -1,22 +1,32 @@
 import { afterEach, expect, it, vi } from "vite-plus/test";
-import { MOBILE_PRODUCT_IDENTITIES } from "../packages/shared/src/productIdentity";
 
 afterEach(() => {
   vi.unstubAllEnvs();
   vi.resetModules();
 });
 
-it.each(["development", "preview", "production"] as const)(
+it.each([
+  ["development", "Pulse Code Dev", "-dev", ".dev"],
+  ["preview", "Pulse Code Preview", "-preview", ".preview"],
+  ["production", "Pulse Code", "", ""],
+] as const)(
   "composes the %s mobile identity into Expo configuration",
-  async (variant) => {
+  async (variant, name, schemeSuffix, idSuffix) => {
     vi.stubEnv("APP_VARIANT", variant);
     vi.stubEnv("PULSE_CODE_IOS_PERSONAL_TEAM", "0");
     vi.stubEnv("T3CODE_IOS_PERSONAL_TEAM", "0");
-    const { default: config } = await import("../apps/mobile/app.config");
-    const expected = MOBILE_PRODUCT_IDENTITIES[variant];
-    expect(config.name).toBe(expected.appName);
-    expect(config.scheme).toEqual(expected.schemes);
-    expect(config.ios?.bundleIdentifier).toBe(expected.iosBundleIdentifier);
-    expect(config.android?.package).toBe(expected.androidPackage);
+    // Expo config uses bundler module semantics, not this scripts project's NodeNext mode.
+    const { default: config } = await vi.importActual<{
+      default: {
+        name: string;
+        scheme: readonly string[];
+        ios?: { bundleIdentifier?: string };
+        android?: { package?: string };
+      };
+    }>("../apps/mobile/app.config.ts");
+    expect(config.name).toBe(name);
+    expect(config.scheme).toEqual([`pulsecode${schemeSuffix}`, `t3code${schemeSuffix}`]);
+    expect(config.ios?.bundleIdentifier).toBe(`com.t3tools.t3code${idSuffix}`);
+    expect(config.android?.package).toBe(`com.t3tools.t3code${idSuffix}`);
   },
 );
