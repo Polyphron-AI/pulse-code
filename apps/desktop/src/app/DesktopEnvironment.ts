@@ -5,6 +5,7 @@ import type {
   DesktopRuntimeInfo,
 } from "@t3tools/contracts";
 import * as Config from "effect/Config";
+import { PRODUCT_IDENTITY } from "@t3tools/shared/productIdentity";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -84,7 +85,7 @@ export class DesktopEnvironment extends Context.Service<
   }
 >()("@t3tools/desktop/app/DesktopEnvironment") {}
 
-const APP_BASE_NAME = "Pulse Code";
+const APP_BASE_NAME = PRODUCT_IDENTITY.baseName;
 
 function resolveDesktopAppStageLabel(input: {
   readonly isDevelopment: boolean;
@@ -104,9 +105,11 @@ function resolveDesktopAppBranding(input: {
   const stageLabel = resolveDesktopAppStageLabel(input);
   const preview = input.appVersion.includes("-pulse-preview.");
   return {
-    baseName: preview ? "Pulse" : APP_BASE_NAME,
+    baseName: preview ? PRODUCT_IDENTITY.desktopPreviewBaseName : APP_BASE_NAME,
     stageLabel,
-    displayName: preview ? "Pulse Preview" : `${APP_BASE_NAME} (${stageLabel})`,
+    displayName: preview
+      ? PRODUCT_IDENTITY.desktopPreviewDisplayName
+      : `${APP_BASE_NAME} (${stageLabel})`,
   };
 }
 

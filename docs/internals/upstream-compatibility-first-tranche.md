@@ -37,3 +37,39 @@ the same representative changes against this baseline and the refactored revisio
 Break-even sync count is implementation hours divided by observed hours saved per
 sync; leave it unknown until measured. Never advance an upstream baseline just
 because source is equal or an inventory entry exists.
+
+## First slice delivered
+
+| Hotspot                        | Baseline lines | Refactored lines | Net reduction |
+| ------------------------------ | -------------: | ---------------: | ------------: |
+| Mobile app configuration       |            386 |              375 |            11 |
+| Web provider settings metadata |            114 |               63 |            51 |
+| Chat provider icon utilities   |             75 |               56 |            19 |
+| SettingsPanels                 |           3163 |             3119 |            44 |
+| ChatComposer                   |           4369 |             4361 |             8 |
+
+Reproduce with `node scripts/measure-upstream-locality.mjs`. Total: 133 lines
+removed from these files, with extracted implementation retained in focused modules.
+The web icon map and settings presentation now share one definition. Chat does not
+import provider settings schemas. Dictation send text has one definition instead
+of three inline copies.
+
+Server driver registration remains unchanged: it already has an explicit static
+registry and only one Pulse-only entry (OMP). A wrapper around that entry would
+not yet justify another abstraction. Settings schema/default/search contribution
+composition and identity values outside runtime branding/mobile builds remain
+follow-up work. No upstream baseline has been advanced.
+
+Focused verification: web settings, provider presentation, branding and dictation;
+shared identity values; desktop environment branding; mobile Expo configuration.
+Web, desktop and mobile package typechecks pass. Desktop reports existing Effect
+suggestions, not errors. Targeted lint and whitespace checks pass.
+
+Surface review: web and desktop share the extracted settings/composer paths; mobile
+changes only build identity composition. No provider behavior, wire contracts,
+remote connection behavior, keybindings, reset semantics or capture lifecycle was
+changed. No live database, background agent, release or browser was started.
+
+Actual merge-conflict reduction, resolution hours saved and break-even sync count
+remain unmeasured. This slice establishes locality and regression coverage for a
+future matched upstream replay; it does not demonstrate a compatibility percentage.

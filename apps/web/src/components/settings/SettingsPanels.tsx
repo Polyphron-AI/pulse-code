@@ -5,7 +5,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import {
   type BackgroundActivityProfile,
-  type ComposerBusyBehavior,
   type DesktopUpdateChannel,
   type DesktopUpdateState,
   type DesktopUpdateVersion,
@@ -146,17 +145,13 @@ import {
   useSettingsSearchTargetId,
 } from "./settingsLayout";
 import { searchableSetting } from "./settingsSearch";
+import { ComposerBehaviorSettings } from "./ComposerBehaviorSettings";
 import { ProjectFavicon } from "../ProjectFavicon";
 
 const ENVIRONMENT_IDENTIFICATION_LABELS: Record<EnvironmentIdentificationMode, string> = {
   artwork: "Artwork",
   pill: "Version pill",
   none: "None",
-};
-
-const COMPOSER_BUSY_BEHAVIOR_LABELS: Record<ComposerBusyBehavior, string> = {
-  queue: "Queue",
-  steer: "Steer",
 };
 
 const TIMESTAMP_FORMAT_LABELS = {
@@ -1958,46 +1953,7 @@ export function GeneralSettingsPanel() {
   return (
     <SettingsPageContainer>
       <SettingsSection title="General">
-        <SettingsRow
-          {...searchableSetting("messages-while-working")}
-          description="Queue starts a follow-up turn. Steer adjusts the turn already in progress."
-          resetAction={
-            settings.composerBusyBehavior !== DEFAULT_UNIFIED_SETTINGS.composerBusyBehavior ? (
-              <SettingResetButton
-                label="messages while working"
-                onClick={() =>
-                  updateSettings({
-                    composerBusyBehavior: DEFAULT_UNIFIED_SETTINGS.composerBusyBehavior,
-                  })
-                }
-              />
-            ) : null
-          }
-          control={
-            <Select
-              value={settings.composerBusyBehavior}
-              onValueChange={(value) => {
-                if (value === "queue" || value === "steer") {
-                  updateSettings({ composerBusyBehavior: value });
-                }
-              }}
-            >
-              <SelectTrigger className="w-full sm:w-40" aria-label="Messages while working">
-                <SelectValue>
-                  {COMPOSER_BUSY_BEHAVIOR_LABELS[settings.composerBusyBehavior]}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectPopup align="end" alignItemWithTrigger={false}>
-                <SelectItem hideIndicator value="queue">
-                  {COMPOSER_BUSY_BEHAVIOR_LABELS.queue}
-                </SelectItem>
-                <SelectItem hideIndicator value="steer">
-                  {COMPOSER_BUSY_BEHAVIOR_LABELS.steer}
-                </SelectItem>
-              </SelectPopup>
-            </Select>
-          }
-        />
+        <ComposerBehaviorSettings />
 
         <SettingsRow
           {...searchableSetting("project-grouping")}
