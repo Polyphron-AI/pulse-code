@@ -3,6 +3,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./productIdentity": {
+      "types": "./src/productIdentity.ts",
+      "import": "./src/productIdentity.ts"
+    },
     "./voiceShortcut": {
       "types": "./src/voiceShortcut.ts",
       "import": "./src/voiceShortcut.ts"

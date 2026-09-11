@@ -9,17 +9,7 @@ import {
   ProviderDriverKind,
 } from "@t3tools/contracts";
 import type * as Schema from "effect/Schema";
-import {
-  AntigravityIcon,
-  ClaudeAI,
-  CursorIcon,
-  GrokIcon,
-  type Icon,
-  OpenAI,
-  OpenCodeIcon,
-  PiAgentIcon,
-} from "../Icons";
-
+import { PROVIDER_PRESENTATIONS, type ProviderPresentation } from "../providerPresentation";
 type ProviderSettingsSchema = {
   readonly fields: Readonly<Record<string, Schema.Top>>;
 } & Schema.Top;
@@ -30,69 +20,28 @@ type ProviderSettingsSchema = {
  * field annotations plus provider-level presentation metadata, then renders
  * settings generically.
  */
-export interface ProviderClientDefinition {
-  readonly value: ProviderDriverKind;
-  readonly label: string;
-  readonly icon: Icon;
+export interface ProviderClientDefinition extends ProviderPresentation {
   readonly settingsSchema: ProviderSettingsSchema;
-  /**
-   * Optional short label rendered as a `variant="warning"` badge next to
-   * the instance title. Used to flag drivers that still ship under an
-   * early-access or preview gate — the flag is a property of the driver
-   * kind (not a specific instance), so every instance of that driver —
-   * built-in default or custom — advertises the same marker.
-   */
-  readonly badgeLabel?: string;
 }
 
-export const PROVIDER_CLIENT_DEFINITIONS: readonly ProviderClientDefinition[] = [
-  {
-    value: ProviderDriverKind.make("codex"),
-    label: "Codex",
-    icon: OpenAI,
-    settingsSchema: CodexSettings,
-  },
-  {
-    value: ProviderDriverKind.make("claudeAgent"),
-    label: "Claude",
-    icon: ClaudeAI,
-    settingsSchema: ClaudeSettings,
-  },
-  {
-    value: ProviderDriverKind.make("cursor"),
-    label: "Cursor",
-    icon: CursorIcon,
-    badgeLabel: "Early Access",
-    settingsSchema: CursorSettings,
-  },
-  {
-    value: ProviderDriverKind.make("grok"),
-    label: "Grok",
-    icon: GrokIcon,
-    badgeLabel: "Early Access",
-    settingsSchema: GrokSettings,
-  },
-  {
-    value: ProviderDriverKind.make("opencode"),
-    label: "OpenCode",
-    icon: OpenCodeIcon,
-    settingsSchema: OpenCodeSettings,
-  },
-  {
-    value: ProviderDriverKind.make("omp"),
-    label: "Oh My Pi",
-    icon: PiAgentIcon,
-    badgeLabel: "Early Access",
-    settingsSchema: OmpSettings,
-  },
-  {
-    value: ProviderDriverKind.make("antigravity"),
-    label: "Antigravity",
-    icon: AntigravityIcon,
-    settingsSchema: AntigravitySettings,
-  },
-];
+const SETTINGS_SCHEMAS: Readonly<Record<string, ProviderSettingsSchema>> = {
+  codex: CodexSettings,
+  claudeAgent: ClaudeSettings,
+  cursor: CursorSettings,
+  grok: GrokSettings,
+  opencode: OpenCodeSettings,
+  omp: OmpSettings,
+  antigravity: AntigravitySettings,
+};
 
+export const PROVIDER_CLIENT_DEFINITIONS: readonly ProviderClientDefinition[] =
+  PROVIDER_PRESENTATIONS.map((presentation) => {
+    const settingsSchema = SETTINGS_SCHEMAS[presentation.value];
+    if (!settingsSchema) {
+      throw new Error(`Missing settings schema for provider ${presentation.value}`);
+    }
+    return { ...presentation, settingsSchema };
+  });
 export const PROVIDER_CLIENT_DEFINITION_BY_VALUE: Partial<
   Record<ProviderDriverKind, ProviderClientDefinition>
 > = Object.fromEntries(

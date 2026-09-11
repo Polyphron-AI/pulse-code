@@ -153,7 +153,8 @@ import { type ComposerCommandItem, ComposerCommandMenu } from "./ComposerCommand
 import { ComposerPendingApprovalActions } from "./ComposerPendingApprovalActions";
 import { CompactComposerControlsMenu } from "./CompactComposerControlsMenu";
 import { ComposerPrimaryActions } from "./ComposerPrimaryActions";
-import { voiceCapture } from "../../voice/voiceCapture";
+import { useComposerDictation } from "../../voice/useComposerDictation";
+import { dictationInsertion } from "../../voice/composerDictation";
 import { ComposerPendingApprovalPanel } from "./ComposerPendingApprovalPanel";
 import { ComposerPendingUserInputPanel } from "./ComposerPendingUserInputPanel";
 import { ComposerPlanFollowUpBanner } from "./ComposerPlanFollowUpBanner";
@@ -841,7 +842,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     setThreadError,
     onExpandImage,
   } = props;
-  const [dictationBusy, setDictationBusy] = useState(false);
+  const dictation = useComposerDictation();
   const footerAttachmentInputRef = useRef<HTMLInputElement>(null);
 
   // ------------------------------------------------------------------
@@ -1094,7 +1095,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const sendDisabledReason =
     externalSendDisabledReason ??
     (activePendingProgress ? null : (attachmentBlockReason ?? providerSendBlockReason));
-  const isSendDisabled = sendDisabledReason !== null || dictationBusy;
+  const isSendDisabled = sendDisabledReason !== null || dictation.busy;
   const selectedProviderStatus = useMemo(
     () => selectedProviderEntry?.snapshot ?? null,
     [selectedProviderEntry],
@@ -2307,7 +2308,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
 
   const submitComposer = useCallback(
     (event?: { preventDefault: () => void }) => {
-      if (!["idle", "error"].includes(voiceCapture.getSnapshot().phase)) {
+      if (dictation.isCaptureActive()) {
         event?.preventDefault();
         return;
       }
@@ -2350,6 +2351,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       activeThreadId,
       activePendingProgress,
       blurMobileComposerAfterSend,
+      dictation,
       isSendDisabled,
       noProviderAvailable,
       onSend,
@@ -3693,9 +3695,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                       showPlanFollowUpPrompt={false}
                       promptHasText={false}
                       isSendBusy={isSendBusy}
-                      sendDisabledReason={
-                        dictationBusy ? "Finish dictation before sending." : sendDisabledReason
-                      }
+                      sendDisabledReason={dictation.sendDisabledReason(sendDisabledReason)}
                       isConnecting={isConnecting}
                       isEnvironmentUnavailable={
                         environmentUnavailable !== null ||
@@ -4152,9 +4152,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     showPlanFollowUpPrompt={false}
                     promptHasText={false}
                     isSendBusy={isSendBusy}
-                    sendDisabledReason={
-                      dictationBusy ? "Finish dictation before sending." : sendDisabledReason
-                    }
+                    sendDisabledReason={dictation.sendDisabledReason(sendDisabledReason)}
                     isConnecting={isConnecting}
                     isEnvironmentUnavailable={
                       environmentUnavailable !== null ||
@@ -4310,14 +4308,10 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                 <ThreadDictationButton
                   key={`${environmentId}:${activeThreadId ?? (typeof composerDraftTarget === "string" ? composerDraftTarget : composerDraftTarget.threadId)}`}
                   disabled={pendingUserInputs.length > 0 || isSendBusy}
-                  onBusyChange={setDictationBusy}
+                  onBusyChange={dictation.onBusyChange}
                   onTranscript={(text) => {
-                    const length = promptRef.current.length;
-                    applyPromptReplacement(
-                      length,
-                      length,
-                      `${length && !/\s$/.test(promptRef.current) ? " " : ""}${text}`,
-                    );
+                    const insertion = dictationInsertion(promptRef.current, text);
+                    applyPromptReplacement(insertion.start, insertion.end, insertion.text);
                   }}
                 />
                 <div className="flex items-center gap-2">
@@ -4335,9 +4329,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     }
                     promptHasText={prompt.trim().length > 0}
                     isSendBusy={isSendBusy}
-                    sendDisabledReason={
-                      dictationBusy ? "Finish dictation before sending." : sendDisabledReason
-                    }
+                    sendDisabledReason={dictation.sendDisabledReason(sendDisabledReason)}
                     isConnecting={isConnecting}
                     isEnvironmentUnavailable={
                       environmentUnavailable !== null ||
