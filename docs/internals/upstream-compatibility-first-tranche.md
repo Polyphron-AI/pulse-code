@@ -1,5 +1,14 @@
 # Upstream compatibility: first tranche
 
+## Stable backport
+
+This branch applies the refactor to current main at `e0b4486d40ae4a8bd08034ab46bdd39fb24f31a4`.
+The measurements and preview verification below describe the original preview slice.
+Stable retains its six providers and unchanged ChatComposer. Antigravity and the
+preview-only dictation modules are deliberately excluded. No V40 or Warden history
+is imported. For stable locality measurements, pass the main baseline above to the
+measurement script instead of using its preview default.
+
 Approved scope: identity configuration, provider presentation, a settings contribution,
 and a bounded composer extraction. This is a behavior-preserving first slice, not a
 claim that the whole fork is compatible with an upstream release.
