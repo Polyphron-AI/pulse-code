@@ -5,7 +5,11 @@ import type {
   DesktopRuntimeInfo,
 } from "@t3tools/contracts";
 import * as Config from "effect/Config";
-import { PRODUCT_IDENTITY } from "@t3tools/shared/productIdentity";
+import {
+  PRODUCT_IDENTITY,
+  DESKTOP_PRODUCT_IDENTITY,
+  isPulsePreviewVersion,
+} from "@t3tools/shared/productIdentity";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -103,7 +107,7 @@ function resolveDesktopAppBranding(input: {
   readonly appVersion: string;
 }): DesktopAppBranding {
   const stageLabel = resolveDesktopAppStageLabel(input);
-  const preview = input.appVersion.includes("-pulse-preview.");
+  const preview = isPulsePreviewVersion(input.appVersion);
   return {
     baseName: preview ? PRODUCT_IDENTITY.desktopPreviewBaseName : APP_BASE_NAME,
     stageLabel,
@@ -159,9 +163,9 @@ const make = Effect.fn("desktop.environment.make")(function* (
       : input.platform === "darwin"
         ? path.join(homeDirectory, "Library", "Application Support")
         : Option.getOrElse(config.xdgConfigHome, () => path.join(homeDirectory, ".config"));
-  const preview = input.appVersion.includes("-pulse-preview.");
+  const preview = isPulsePreviewVersion(input.appVersion);
   const effectiveHome = preview
-    ? Option.some(path.join(homeDirectory, ".pulse-preview"))
+    ? Option.some(path.join(homeDirectory, DESKTOP_PRODUCT_IDENTITY.previewHomeDirectory))
     : config.t3Home;
   const baseDir = resolveDesktopBaseDir({
     homeDirectory,
@@ -185,7 +189,11 @@ const make = Effect.fn("desktop.environment.make")(function* (
     joinPath: path.join,
     t3Home: effectiveHome,
   });
-  const userDataDirName = preview ? "pulse-preview" : isDevelopment ? "pulsecode-dev" : "pulsecode";
+  const userDataDirName = preview
+    ? DESKTOP_PRODUCT_IDENTITY.previewDataDirectory
+    : isDevelopment
+      ? DESKTOP_PRODUCT_IDENTITY.developmentDataDirectory
+      : DESKTOP_PRODUCT_IDENTITY.dataDirectory;
   const linuxApplicationsDir = path.join(
     Option.getOrElse(config.xdgDataHome, () => path.join(homeDirectory, ".local", "share")),
     "applications",
@@ -230,9 +238,11 @@ const make = Effect.fn("desktop.environment.make")(function* (
     branding,
     displayName,
     appUserModelId: preview
-      ? "ai.polyphron.pulse.preview"
+      ? DESKTOP_PRODUCT_IDENTITY.previewAppId
       : Option.getOrElse(config.appUserModelIdOverride, () =>
-          isDevelopment ? "ai.polyphron.pulsecode.dev" : "ai.polyphron.pulsecode",
+          isDevelopment
+            ? DESKTOP_PRODUCT_IDENTITY.developmentAppId
+            : DESKTOP_PRODUCT_IDENTITY.appId,
         ),
     linuxDesktopEntryName: isDevelopment ? "pulsecode-dev.desktop" : "pulsecode.desktop",
     linuxWmClass: isDevelopment ? "pulsecode-dev" : "pulsecode",

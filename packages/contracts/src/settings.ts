@@ -18,13 +18,10 @@ import {
   DEFAULT_TEXT_GENERATION_REASONING_EFFORT,
   ProviderOptionSelections,
 } from "./model.ts";
-import {
-  ComposerBusyBehavior,
-  DEFAULT_COMPOSER_BUSY_BEHAVIOR,
-  ModelSelection,
-  ProjectScript,
-} from "./orchestration.ts";
+import { ModelSelection, ProjectScript } from "./orchestration.ts";
 import { BrowserProfile, BrowserProfileId, DEFAULT_BROWSER_PROFILE_ID } from "./browserProfile.ts";
+import { PulseClientSettingsSchema, PulseClientSettingsPatch } from "./pulseClientSettings.ts";
+export type { PulseClientSettings } from "./pulseClientSettings.ts";
 import {
   DEFAULT_PREVIEW_APPEARANCE,
   DEFAULT_PREVIEW_ZOOM_FACTOR,
@@ -216,14 +213,9 @@ export const LoadBalancingWeights = Schema.Record(
 );
 
 export const ClientSettingsSchema = Schema.Struct({
+  ...PulseClientSettingsSchema.fields,
   loadBalancingEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   loadBalancingWeights: LoadBalancingWeights.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
-  voiceShortcut: Schema.String.pipe(Schema.withDecodingDefault(Effect.succeed("ctrl+shift+space"))),
-  voiceGlobalShortcutEnabled: Schema.Boolean.pipe(
-    Schema.withDecodingDefault(Effect.succeed(false)),
-  ),
-  voiceHoverEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
-  mailAlphaEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   appearanceContrast: AppearanceContrast.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_APPEARANCE_CONTRAST)),
   ),
@@ -279,9 +271,6 @@ export const ClientSettingsSchema = Schema.Struct({
   ),
   confirmThreadArchive: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   confirmThreadDelete: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
-  composerBusyBehavior: ComposerBusyBehavior.pipe(
-    Schema.withDecodingDefault(Effect.succeed(DEFAULT_COMPOSER_BUSY_BEHAVIOR)),
-  ),
   confirmThreadUnpin: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   dismissedProviderUpdateNotificationKeys: Schema.Array(TrimmedNonEmptyString).pipe(
     Schema.withDecodingDefault(Effect.succeed([])),
@@ -1282,12 +1271,9 @@ export const ServerSettingsPatch = Schema.Struct({
 export type ServerSettingsPatch = typeof ServerSettingsPatch.Type;
 
 export const ClientSettingsPatch = Schema.Struct({
+  ...PulseClientSettingsPatch.fields,
   loadBalancingEnabled: Schema.optionalKey(Schema.Boolean),
   loadBalancingWeights: Schema.optionalKey(LoadBalancingWeights),
-  voiceShortcut: Schema.optionalKey(Schema.String),
-  voiceGlobalShortcutEnabled: Schema.optionalKey(Schema.Boolean),
-  voiceHoverEnabled: Schema.optionalKey(Schema.Boolean),
-  mailAlphaEnabled: Schema.optionalKey(Schema.Boolean),
   appearanceContrast: Schema.optionalKey(AppearanceContrast),
   panelAnimationDurationMs: Schema.optionalKey(PanelAnimationDurationMs),
   browserDefaultViewport: Schema.optionalKey(PreviewViewportSetting),
@@ -1301,7 +1287,6 @@ export const ClientSettingsPatch = Schema.Struct({
   browserDefaultProfileId: Schema.optionalKey(BrowserProfileId),
   confirmThreadArchive: Schema.optionalKey(Schema.Boolean),
   confirmThreadDelete: Schema.optionalKey(Schema.Boolean),
-  composerBusyBehavior: Schema.optionalKey(ComposerBusyBehavior),
   confirmThreadUnpin: Schema.optionalKey(Schema.Boolean),
   diffIgnoreWhitespace: Schema.optionalKey(Schema.Boolean),
   diffLayout: Schema.optionalKey(DiffLayout),

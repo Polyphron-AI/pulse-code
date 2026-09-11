@@ -12,6 +12,12 @@ import {
   type DirectoryRecord,
 } from "@electron/asar";
 
+import {
+  DESKTOP_PRODUCT_IDENTITY,
+  isPulsePreviewVersion,
+  resolveDesktopReleaseIdentity,
+  resolveProductUpdateChannel,
+} from "@t3tools/shared/productIdentity";
 import { fromYaml } from "@t3tools/shared/schemaYaml";
 import { HostProcessArchitecture, HostProcessPlatform } from "@t3tools/shared/hostProcess";
 import { clerkFrontendApiHostnameFromPublishableKey } from "@t3tools/shared/relayAuth";
@@ -54,10 +60,10 @@ import { Command, Flag } from "effect/unstable/cli";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
 const LINUX_ICON_SIZES = [16, 22, 24, 32, 48, 64, 128, 256, 512] as const;
-export const DESKTOP_APP_ID = "ai.polyphron.pulsecode";
-export const DESKTOP_EXECUTABLE_NAME = "pulsecode";
+export const DESKTOP_APP_ID = DESKTOP_PRODUCT_IDENTITY.appId;
+export const DESKTOP_EXECUTABLE_NAME = DESKTOP_PRODUCT_IDENTITY.executableName;
 export const WINDOWS_DESKTOP_EXECUTABLE_FILE_NAME = `${DESKTOP_EXECUTABLE_NAME}.exe`;
-export const DESKTOP_PROTOCOL_SCHEMES = ["pulsecode", "pulsecode-dev"] as const;
+export const DESKTOP_PROTOCOL_SCHEMES = DESKTOP_PRODUCT_IDENTITY.protocolSchemes;
 const APPLE_TEAM_ID_PATTERN = /^[A-Z0-9]{10}$/u;
 
 const BuildPlatform = Schema.Literals(["mac", "linux", "win"]);
@@ -2151,7 +2157,7 @@ export const resolveGitHubPublishConfig = Effect.fn("resolveGitHubPublishConfig"
 });
 
 export function resolveDesktopUpdateChannel(version: string): "latest" | "nightly" {
-  return /-nightly\.\d{8}\.\d+$/.test(version) ? "nightly" : "latest";
+  return resolveProductUpdateChannel(version);
 }
 
 export function resolveDesktopWebAssetBrand(version: string): WebAssetBrand {
@@ -2192,10 +2198,7 @@ export function resolvePackageManagerUserAgent(packageManager: string): string {
 }
 
 export function resolveDesktopProductName(version: string): string {
-  if (version.includes("-pulse-preview.")) return "Pulse Preview";
-  return resolveDesktopUpdateChannel(version) === "nightly"
-    ? "Pulse Code (Nightly)"
-    : (desktopPackageJson.productName ?? "Pulse Code");
+  return resolveDesktopReleaseIdentity(version, desktopPackageJson.productName).productName;
 }
 
 export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
@@ -2213,11 +2216,7 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
     | undefined,
 ) {
   const buildConfig: Record<string, unknown> = {
-    appId: version.includes("-pulse-preview.") ? "ai.polyphron.pulse.preview" : DESKTOP_APP_ID,
-    productName: resolveDesktopProductName(version),
-    artifactName: version.includes("-pulse-preview.")
-      ? "Pulse-Preview-${version}-${arch}.${ext}"
-      : "Pulse-Code-${version}-${arch}.${ext}",
+    ...resolveDesktopReleaseIdentity(version, desktopPackageJson.productName),
     electronLanguages: [...DESKTOP_ELECTRON_LANGUAGES],
     files: [...DESKTOP_FILE_EXCLUSIONS],
     directories: {
@@ -2241,7 +2240,7 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
   };
   const updateChannel = resolveDesktopUpdateChannel(version);
   const publishConfig = yield* resolveGitHubPublishConfig(updateChannel);
-  if (version.includes("-pulse-preview.")) {
+  if (isPulsePreviewVersion(version)) {
     buildConfig.publish = [];
   } else if (publishConfig) {
     buildConfig.publish = [publishConfig];
@@ -2333,7 +2332,7 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
     const winConfig: Record<string, unknown> = {
       target: [target],
       executableName: DESKTOP_EXECUTABLE_NAME,
-      protocols: version.includes("-pulse-preview.")
+      protocols: isPulsePreviewVersion(version)
         ? []
         : [{ name: "Pulse Code", schemes: [...DESKTOP_PROTOCOL_SCHEMES] }],
       icon: "icon.ico",
@@ -3058,7 +3057,7 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
     const officeOAuth = officeOAuthConfigurationFromEnvironment(loadRepoEnv({ repoRoot }));
     yield* fs.writeFileString(
       path.join(stageProdResourcesDir, "office-oauth.json"),
-      JSON.stringify(officeOAuth),
+      yield* encodeJsonString(officeOAuth),
     );
   }
 
@@ -3301,16 +3300,12 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
   if (windowsPayload && options.keepStage) {
     yield* fs.writeFileString(
       path.join(options.outputDir, "packaged-payload.json"),
-      JSON.stringify(
-        {
-          schemaVersion: 1,
-          ...windowsPayload,
-          stageAppDir,
-          version: appVersion,
-        },
-        null,
-        2,
-      ),
+      yield* encodeJsonString({
+        schemaVersion: 1,
+        ...windowsPayload,
+        stageAppDir,
+        version: appVersion,
+      }),
     );
   }
 

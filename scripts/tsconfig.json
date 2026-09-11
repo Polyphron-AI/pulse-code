@@ -5,5 +5,10 @@
     "types": ["node"],
     "lib": ["ESNext", "esnext.disposable"]
   },
-  "include": ["**/*.ts"]
+  "include": [
+    "**/*.ts",
+    "../apps/desktop/src/office/OfficeOAuth.ts",
+    "../apps/desktop/src/office/OfficeOAuthConfig.ts",
+    "../apps/desktop/src/office/OfficeErrors.ts"
+  ]
 }

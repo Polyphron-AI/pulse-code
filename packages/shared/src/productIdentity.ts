@@ -5,6 +5,46 @@ export const PRODUCT_IDENTITY = {
   desktopPreviewDisplayName: "Pulse Preview",
 } as const;
 
+export const DESKTOP_PRODUCT_IDENTITY = {
+  appId: "ai.polyphron.pulsecode",
+  developmentAppId: "ai.polyphron.pulsecode.dev",
+  previewAppId: "ai.polyphron.pulse.preview",
+  executableName: "pulsecode",
+  dataDirectory: "pulsecode",
+  developmentDataDirectory: "pulsecode-dev",
+  previewDataDirectory: "pulse-preview",
+  previewHomeDirectory: ".pulse-preview",
+  protocolSchemes: ["pulsecode", "pulsecode-dev"],
+  artifactName: "Pulse-Code-${version}-${arch}.${ext}",
+  previewArtifactName: "Pulse-Preview-${version}-${arch}.${ext}",
+} as const;
+
+export function isPulsePreviewVersion(version: string) {
+  return version.includes("-pulse-preview.");
+}
+
+export function resolveProductUpdateChannel(version: string): "latest" | "nightly" {
+  return /-nightly\.\d{8}\.\d+$/.test(version) ? "nightly" : "latest";
+}
+
+export function resolveDesktopReleaseIdentity(
+  version: string,
+  productName: string = PRODUCT_IDENTITY.baseName,
+) {
+  const preview = isPulsePreviewVersion(version);
+  return {
+    appId: preview ? DESKTOP_PRODUCT_IDENTITY.previewAppId : DESKTOP_PRODUCT_IDENTITY.appId,
+    artifactName: preview
+      ? DESKTOP_PRODUCT_IDENTITY.previewArtifactName
+      : DESKTOP_PRODUCT_IDENTITY.artifactName,
+    productName: preview
+      ? PRODUCT_IDENTITY.desktopPreviewDisplayName
+      : resolveProductUpdateChannel(version) === "nightly"
+        ? `${PRODUCT_IDENTITY.baseName} (Nightly)`
+        : productName,
+  };
+}
+
 // Existing store IDs and legacy deep links are compatibility contracts, not branding.
 export const MOBILE_PRODUCT_IDENTITIES = {
   development: {

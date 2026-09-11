@@ -1,4 +1,5 @@
 import { isElectron } from "~/env";
+import { PULSE_SETTINGS_SEARCH } from "./pulseSettingsSearch";
 
 export type SettingsPath =
   | "/settings/dictation"
@@ -49,11 +50,7 @@ export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
  * here once instead of separately in the panel and the index.
  */
 export const SETTINGS_SEARCH_ITEMS = [
-  {
-    id: "dictation",
-    title: "Dictation, microphone, shortcut, Parakeet and meeting transcription",
-    to: "/settings/dictation",
-  },
+  PULSE_SETTINGS_SEARCH.dictation,
   {
     id: "usage-providers",
     title: "Usage providers",
@@ -65,16 +62,8 @@ export const SETTINGS_SEARCH_ITEMS = [
     title: "Continue threads after server or machine restart",
     to: "/settings/general",
   },
-  {
-    id: "voice-capture",
-    title: "Voice capture, Parakeet, microphone, shortcut and hover mode",
-    to: "/settings/general",
-  },
-  {
-    id: "mail-alpha",
-    title: "Show Mail alpha on this device",
-    to: "/settings/integrations",
-  },
+  PULSE_SETTINGS_SEARCH.voice,
+  PULSE_SETTINGS_SEARCH.mail,
   {
     id: "project-defaults",
     title: "Project defaults and overrides",
@@ -149,11 +138,7 @@ export const SETTINGS_SEARCH_ITEMS = [
     title: "Word wrap",
     to: "/settings/appearance",
   },
-  {
-    id: "messages-while-working",
-    title: "Messages while working",
-    to: "/settings/general",
-  },
+  PULSE_SETTINGS_SEARCH.composer,
   {
     id: "project-grouping",
     title: "Project grouping",
