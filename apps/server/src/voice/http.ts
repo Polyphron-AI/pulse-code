@@ -264,6 +264,7 @@ const removeApiKeyRoute = HttpRouter.add(
     yield* secrets.remove(GROQ_DICTATION_API_KEY_SECRET);
     return HttpServerResponse.empty({ status: 204, headers: { "Cache-Control": "no-store" } });
   }).pipe(
+    Effect.catchIf(HttpServerResponse.isHttpServerResponse, Effect.succeed),
     Effect.catchTags({
       EnvironmentAuthInvalidError: HttpServerRespondable.toResponse,
       EnvironmentInternalError: HttpServerRespondable.toResponse,

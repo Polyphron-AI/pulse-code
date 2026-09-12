@@ -135,6 +135,15 @@ describe("pulse dictation HTTP routes", () => {
           body: body(),
         });
         expect(foreign.status).toBe(403);
+        const foreignSet = yield* client.post(PULSE_DICTATION_GROQ_API_KEY_SET_PATH, {
+          headers: { cookie, origin: "https://attacker.example" },
+          body: HttpBody.jsonUnsafe({ apiKey: "must-not-be-stored" }),
+        });
+        expect(foreignSet.status).toBe(403);
+        const foreignRemove = yield* client.post(PULSE_DICTATION_GROQ_API_KEY_REMOVE_PATH, {
+          headers: { cookie, origin: "https://attacker.example" },
+        });
+        expect(foreignRemove.status).toBe(403);
         const conflictingOrigin = yield* client.post(PULSE_DICTATION_TRANSCRIPTIONS_PATH, {
           headers: {
             cookie,
