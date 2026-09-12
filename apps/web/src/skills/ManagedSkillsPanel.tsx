@@ -9,7 +9,7 @@ import {
   Trash2Icon,
   UploadIcon,
 } from "lucide-react";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import {
   AlertDialog,
@@ -37,34 +37,75 @@ import { Label } from "../components/ui/label";
 import { groupManagedSkills, readSkillFiles, shortRevision } from "./managedSkills";
 
 export interface ManagedSkillsPanelProps {
+  readonly environmentKey: string;
   readonly skills: ReadonlyArray<PulseSkillRecord>;
-  readonly mutate: (mutation: PulseSkillMutation) => Promise<ReadonlyArray<PulseSkillRecord>>;
+  readonly mutate: (
+    environmentKey: string,
+    mutation: PulseSkillMutation,
+  ) => Promise<ReadonlyArray<PulseSkillRecord>>;
   readonly disabled?: boolean;
 }
+
+type MutationResult = { readonly ok: true } | { readonly ok: false; readonly error: string };
 
 function message(error: unknown): string {
   return error instanceof Error ? error.message : "The skill operation failed.";
 }
 
-export function ManagedSkillsPanel({ skills, mutate, disabled = false }: ManagedSkillsPanelProps) {
+export function ManagedSkillsPanel({
+  environmentKey,
+  skills,
+  mutate,
+  disabled = false,
+}: ManagedSkillsPanelProps) {
   const [uploadOpen, setUploadOpen] = useState(false);
   const [gitTarget, setGitTarget] = useState<PulseSkillRecord | "new" | null>(null);
   const [removing, setRemoving] = useState<PulseSkillRecord | null>(null);
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const environmentRef = useRef(environmentKey);
+  const disabledRef = useRef(disabled);
+  const generationRef = useRef(0);
+  if (environmentRef.current !== environmentKey) {
+    environmentRef.current = environmentKey;
+    generationRef.current += 1;
+  }
+  disabledRef.current = disabled;
   const groups = groupManagedSkills(skills);
 
-  const run = async (key: string, mutation: PulseSkillMutation) => {
-    setPending(key);
+  useEffect(() => {
+    generationRef.current += 1;
+    setUploadOpen(false);
+    setGitTarget(null);
+    setRemoving(null);
+    setPending(null);
+    setError(null);
+  }, [disabled, environmentKey]);
+
+  const run = async (pendingKey: string, mutation: PulseSkillMutation): Promise<MutationResult> => {
+    if (disabledRef.current) return { ok: false, error: "Managed skills are read-only." };
+    const key = environmentKey;
+    const generation = generationRef.current;
+    setPending(pendingKey);
     setError(null);
     try {
-      await mutate(mutation);
-      return true;
+      await mutate(key, mutation);
+      if (
+        generation !== generationRef.current ||
+        key !== environmentRef.current ||
+        disabledRef.current
+      ) {
+        return { ok: false, error: "The environment changed before this operation finished." };
+      }
+      return { ok: true };
     } catch (cause) {
-      setError(message(cause));
-      return false;
+      const operationError = message(cause);
+      if (generation === generationRef.current && key === environmentRef.current) {
+        setError(operationError);
+      }
+      return { ok: false, error: operationError };
     } finally {
-      setPending(null);
+      if (generation === generationRef.current && key === environmentRef.current) setPending(null);
     }
   };
 
@@ -83,12 +124,20 @@ export function ManagedSkillsPanel({ skills, mutate, disabled = false }: Managed
             size="sm"
             variant="outline"
             disabled={disabled}
-            onClick={() => setUploadOpen(true)}
+            onClick={() => {
+              if (!disabled) setUploadOpen(true);
+            }}
           >
             <UploadIcon />
             Upload
           </Button>
-          <Button size="sm" disabled={disabled} onClick={() => setGitTarget("new")}>
+          <Button
+            size="sm"
+            disabled={disabled}
+            onClick={() => {
+              if (!disabled) setGitTarget("new");
+            }}
+          >
             <GithubIcon />
             Import from GitHub
           </Button>
@@ -139,8 +188,12 @@ export function ManagedSkillsPanel({ skills, mutate, disabled = false }: Managed
                     disabled={disabled || pending !== null}
                     pending={pending === skill.id}
                     onRun={(mutation) => run(skill.id, mutation)}
-                    onLink={() => setGitTarget(skill)}
-                    onRemove={() => setRemoving(skill)}
+                    onLink={() => {
+                      if (!disabled) setGitTarget(skill);
+                    }}
+                    onRemove={() => {
+                      if (!disabled) setRemoving(skill);
+                    }}
                   />
                 ))}
               </div>
@@ -150,18 +203,22 @@ export function ManagedSkillsPanel({ skills, mutate, disabled = false }: Managed
       )}
 
       <UploadSkillDialog
-        open={uploadOpen}
-        busy={pending === "upload"}
+        open={!disabled && uploadOpen}
+        disabled={disabled}
         onOpenChange={setUploadOpen}
         onImport={(id, files) => run("upload", { operation: "import-upload", id, files })}
       />
       <GitHubSkillDialog
-        target={gitTarget}
+        target={disabled ? null : gitTarget}
         busy={pending === "github"}
+        disabled={disabled}
         onOpenChange={(open) => !open && setGitTarget(null)}
         onImport={(mutation) => run("github", mutation)}
       />
-      <AlertDialog open={removing !== null} onOpenChange={(open) => !open && setRemoving(null)}>
+      <AlertDialog
+        open={!disabled && removing !== null}
+        onOpenChange={(open) => !open && setRemoving(null)}
+      >
         <AlertDialogPopup>
           <AlertDialogHeader>
             <AlertDialogTitle>Remove {removing?.name}?</AlertDialogTitle>
@@ -174,12 +231,12 @@ export function ManagedSkillsPanel({ skills, mutate, disabled = false }: Managed
             <AlertDialogClose render={<Button variant="outline" />}>Cancel</AlertDialogClose>
             <Button
               variant="destructive"
-              disabled={!removing || pending !== null}
+              disabled={disabled || !removing || pending !== null}
               onClick={() => {
-                if (!removing) return;
+                if (disabled || !removing) return;
                 const skill = removing;
-                void run(skill.id, { operation: "remove", id: skill.id }).then((ok) => {
-                  if (ok) setRemoving(null);
+                void run(skill.id, { operation: "remove", id: skill.id }).then((result) => {
+                  if (result.ok) setRemoving(null);
                 });
               }}
             >
@@ -203,7 +260,7 @@ function SkillRow({
   readonly skill: PulseSkillRecord;
   readonly disabled: boolean;
   readonly pending: boolean;
-  readonly onRun: (mutation: PulseSkillMutation) => Promise<boolean>;
+  readonly onRun: (mutation: PulseSkillMutation) => Promise<MutationResult>;
   readonly onLink: () => void;
   readonly onRemove: () => void;
 }) {
@@ -298,36 +355,58 @@ function SkillRow({
 
 function UploadSkillDialog({
   open,
-  busy,
+  disabled,
   onOpenChange,
   onImport,
 }: {
   readonly open: boolean;
-  readonly busy: boolean;
+  readonly disabled: boolean;
   readonly onOpenChange: (open: boolean) => void;
   readonly onImport: (
     id: string,
     files: Array<{ path: string; base64: string }>,
-  ) => Promise<boolean>;
+  ) => Promise<MutationResult>;
 }) {
   const fieldId = useId();
   const [id, setId] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+  const controllerRef = useRef<AbortController | null>(null);
   const reset = () => {
+    controllerRef.current?.abort();
+    controllerRef.current = null;
     setId("");
     setFiles([]);
     setError(null);
+    setPending(false);
   };
+  useEffect(() => {
+    if (!open || disabled) reset();
+  }, [disabled, open]);
   const save = async () => {
+    if (disabled || pending) return;
+    const controller = new AbortController();
+    controllerRef.current?.abort();
+    controllerRef.current = controller;
+    setPending(true);
+    setError(null);
     try {
-      const upload = await readSkillFiles(files);
-      if (await onImport(id.trim(), upload)) {
+      const upload = await readSkillFiles(files, controller.signal);
+      controller.signal.throwIfAborted();
+      const result = await onImport(id.trim(), upload);
+      controller.signal.throwIfAborted();
+      if (result.ok) {
         reset();
         onOpenChange(false);
-      }
+      } else setError(result.error);
     } catch (cause) {
-      setError(message(cause));
+      if (!controller.signal.aborted) setError(message(cause));
+    } finally {
+      if (controllerRef.current === controller) {
+        controllerRef.current = null;
+        setPending(false);
+      }
     }
   };
   return (
@@ -335,7 +414,7 @@ function UploadSkillDialog({
       open={open}
       onOpenChange={(next) => {
         if (!next) reset();
-        onOpenChange(next);
+        onOpenChange(disabled ? false : next);
       }}
     >
       <DialogPopup className="max-w-md">
@@ -352,6 +431,7 @@ function UploadSkillDialog({
               <Input
                 id={`${fieldId}-id`}
                 value={id}
+                disabled={disabled || pending}
                 placeholder="code-review"
                 onChange={(event) => setId(event.target.value.toLowerCase())}
                 autoFocus
@@ -368,6 +448,7 @@ function UploadSkillDialog({
                 type="file"
                 accept=".zip,.md,.txt,.json,.yaml,.yml"
                 multiple
+                disabled={disabled || pending}
                 onChange={(event) => setFiles([...(event.currentTarget.files ?? [])])}
               />
               {files.length ? (
@@ -384,14 +465,23 @@ function UploadSkillDialog({
           </div>
         </DialogPanel>
         <DialogFooter variant="bare">
-          <Button variant="outline" disabled={busy} onClick={() => onOpenChange(false)}>
+          <Button
+            variant="outline"
+            disabled={disabled}
+            onClick={() => {
+              reset();
+              onOpenChange(false);
+            }}
+          >
             Cancel
           </Button>
           <Button
-            disabled={busy || !/^[a-z][a-z0-9-]{0,63}$/.test(id) || files.length === 0}
+            disabled={
+              disabled || pending || !/^[a-z][a-z0-9-]{0,63}$/.test(id) || files.length === 0
+            }
             onClick={() => void save()}
           >
-            {busy ? "Uploading…" : "Upload skill"}
+            {pending ? "Uploading…" : "Upload skill"}
           </Button>
         </DialogFooter>
       </DialogPopup>
@@ -402,13 +492,15 @@ function UploadSkillDialog({
 function GitHubSkillDialog({
   target,
   busy,
+  disabled,
   onOpenChange,
   onImport,
 }: {
   readonly target: PulseSkillRecord | "new" | null;
   readonly busy: boolean;
+  readonly disabled: boolean;
   readonly onOpenChange: (open: boolean) => void;
-  readonly onImport: (mutation: PulseSkillMutation) => Promise<boolean>;
+  readonly onImport: (mutation: PulseSkillMutation) => Promise<MutationResult>;
 }) {
   const fieldId = useId();
   const [id, setId] = useState("");
@@ -416,13 +508,6 @@ function GitHubSkillDialog({
   const [ref, setRef] = useState("main");
   const [directory, setDirectory] = useState("");
   const [keepUpdated, setKeepUpdated] = useState(false);
-  useEffect(() => {
-    if (!target || target === "new" || target.source.type !== "github") return;
-    setRepository(target.source.repository);
-    setRef(target.source.ref);
-    setDirectory(target.source.directory);
-    setKeepUpdated(target.updatePolicy === "keep-updated");
-  }, [target]);
   const reset = () => {
     setId("");
     setRepository("");
@@ -430,8 +515,19 @@ function GitHubSkillDialog({
     setDirectory("");
     setKeepUpdated(false);
   };
+  useEffect(() => {
+    if (!target || disabled) {
+      reset();
+      return;
+    }
+    if (target === "new" || target.source.type !== "github") return;
+    setRepository(target.source.repository);
+    setRef(target.source.ref);
+    setDirectory(target.source.directory);
+    setKeepUpdated(target.updatePolicy === "keep-updated");
+  }, [disabled, target]);
   const save = async () => {
-    if (!target) return;
+    if (disabled || !target) return;
     const source = {
       type: "github" as const,
       repository: repository.trim(),
@@ -452,7 +548,7 @@ function GitHubSkillDialog({
             source,
             updatePolicy: keepUpdated ? "keep-updated" : "pinned",
           };
-    if (await onImport(mutation)) {
+    if ((await onImport(mutation)).ok) {
       reset();
       onOpenChange(false);
     }
@@ -467,7 +563,7 @@ function GitHubSkillDialog({
       open={target !== null}
       onOpenChange={(next) => {
         if (!next) reset();
-        onOpenChange(next);
+        onOpenChange(disabled ? false : next);
       }}
     >
       <DialogPopup className="max-w-md">
@@ -487,6 +583,7 @@ function GitHubSkillDialog({
                 <Input
                   id={`${fieldId}-git-id`}
                   value={id}
+                  disabled={disabled || busy}
                   placeholder="code-review"
                   onChange={(event) => setId(event.target.value.toLowerCase())}
                   autoFocus
@@ -498,6 +595,7 @@ function GitHubSkillDialog({
               <Input
                 id={`${fieldId}-repository`}
                 value={repository}
+                disabled={disabled || busy}
                 placeholder="owner/repository"
                 onChange={(event) => setRepository(event.target.value)}
                 autoFocus={target !== "new"}
@@ -509,6 +607,7 @@ function GitHubSkillDialog({
                 <Input
                   id={`${fieldId}-ref`}
                   value={ref}
+                  disabled={disabled || busy}
                   onChange={(event) => setRef(event.target.value)}
                 />
               </div>
@@ -517,6 +616,7 @@ function GitHubSkillDialog({
                 <Input
                   id={`${fieldId}-directory`}
                   value={directory}
+                  disabled={disabled || busy}
                   placeholder="skills/review"
                   onChange={(event) => setDirectory(event.target.value)}
                 />
@@ -528,6 +628,7 @@ function GitHubSkillDialog({
                 <Button
                   type="button"
                   variant={!keepUpdated ? "secondary" : "outline"}
+                  disabled={disabled || busy}
                   onClick={() => setKeepUpdated(false)}
                 >
                   Pin version
@@ -535,6 +636,8 @@ function GitHubSkillDialog({
                 <Button
                   type="button"
                   variant={keepUpdated ? "secondary" : "outline"}
+
+                  disabled={disabled || busy}
                   onClick={() => setKeepUpdated(true)}
                 >
                   Keep updated
@@ -549,10 +652,10 @@ function GitHubSkillDialog({
           </div>
         </DialogPanel>
         <DialogFooter variant="bare">
-          <Button variant="outline" disabled={busy} onClick={() => onOpenChange(false)}>
+          <Button variant="outline" disabled={disabled || busy} onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button disabled={busy || !valid} onClick={() => void save()}>
+          <Button disabled={disabled || busy || !valid} onClick={() => void save()}>
             {busy ? "Validating…" : target === "new" ? "Import skill" : "Link skill"}
           </Button>
         </DialogFooter>
