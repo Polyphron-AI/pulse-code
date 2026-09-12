@@ -9,7 +9,7 @@ import {
   Trash2Icon,
   UploadIcon,
 } from "lucide-react";
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 
 import {
   AlertDialog,
@@ -271,6 +271,9 @@ function SkillRow({
               >
                 {keepUpdated ? "Pin version" : "Keep updated"}
               </Button>
+              <Button size="xs" variant="ghost" disabled={disabled} onClick={onLink}>
+                Source
+              </Button>
             </>
           ) : (
             <Button size="xs" variant="outline" disabled={disabled} onClick={onLink}>
@@ -413,6 +416,13 @@ function GitHubSkillDialog({
   const [ref, setRef] = useState("main");
   const [directory, setDirectory] = useState("");
   const [keepUpdated, setKeepUpdated] = useState(false);
+  useEffect(() => {
+    if (!target || target === "new" || target.source.type !== "github") return;
+    setRepository(target.source.repository);
+    setRef(target.source.ref);
+    setDirectory(target.source.directory);
+    setKeepUpdated(target.updatePolicy === "keep-updated");
+  }, [target]);
   const reset = () => {
     setId("");
     setRepository("");
