@@ -5,6 +5,7 @@ import {
   type PulseDictationBackend,
   type PulseDictationCapture,
   type PulseDictationRecording,
+  type PulseDictationStart,
 } from "./pulseDictation";
 
 type Deferred<T> = {
@@ -24,6 +25,14 @@ function deferred<T>(): Deferred<T> {
 }
 
 const audioFixture = new Uint8Array([82, 73, 70, 70]);
+
+const asyncDeliveryIsRejected: PulseDictationStart = {
+  backend: "parakeet",
+  draftIdentity: "compile-only",
+  // @ts-expect-error Draft insertion must complete synchronously.
+  deliver: async () => {},
+};
+void asyncDeliveryIsRejected;
 
 function setup() {
   const prepared = deferred<void>();
@@ -126,6 +135,9 @@ describe("PulseDictationController", () => {
     await beginRecording(test, "parakeet");
     const stopped = test.controller.stop();
 
+    test.cancelRecording.mockImplementation(() => {
+      throw new Error("Cleanup also failed");
+    });
     test.stopped.reject(new Error("Recorder failed to finish"));
     await stopped;
 
@@ -134,6 +146,74 @@ describe("PulseDictationController", () => {
       phase: "error",
       message: "Recorder failed to finish",
     });
+  });
+
+  it("isolates listener failures and notifies a stable listener snapshot", async () => {
+    const test = setup();
+    const notified = vi.fn();
+    const lateListener = vi.fn();
+    test.controller.subscribe(() => {
+      test.controller.subscribe(lateListener);
+      throw new Error("Broken view subscriber");
+    });
+    test.controller.subscribe(notified);
+
+    const started = test.controller.start({
+      backend: "parakeet",
+      draftIdentity: "draft-a",
+      deliver: vi.fn(),
+    });
+
+    expect(notified).toHaveBeenCalledOnce();
+    expect(lateListener).not.toHaveBeenCalled();
+    expect(test.capture.prepare).toHaveBeenCalledOnce();
+    test.prepared.reject(new Error("Microphone denied"));
+    await started;
+    expect(test.controller.getSnapshot()).toEqual({
+      phase: "error",
+      message: "Microphone denied",
+    });
+  });
+
+  it("does not prepare capture after a preparing listener cancels reentrantly", async () => {
+    const test = setup();
+    test.controller.subscribe(() => {
+      if (test.controller.getSnapshot().phase === "preparing") test.controller.cancel();
+    });
+
+    await test.controller.start({
+      backend: "parakeet",
+      draftIdentity: "draft-a",
+      deliver: vi.fn(),
+    });
+
+    expect(test.capture.prepare).not.toHaveBeenCalled();
+    expect(test.controller.getSnapshot()).toEqual({ phase: "idle" });
+  });
+
+  it("does not stop capture after a transcribing listener cancels reentrantly", async () => {
+    const test = setup();
+    await beginRecording(test, "parakeet");
+    test.controller.subscribe(() => {
+      if (test.controller.getSnapshot().phase === "transcribing") test.controller.cancel();
+    });
+
+    await test.controller.stop();
+
+    expect(test.recording.stop).not.toHaveBeenCalled();
+    expect(test.cancelRecording).toHaveBeenCalledOnce();
+    expect(test.controller.getSnapshot()).toEqual({ phase: "idle" });
+  });
+
+  it("reaches idle even when recording cleanup throws during cancel", async () => {
+    const test = setup();
+    await beginRecording(test, "parakeet");
+    test.cancelRecording.mockImplementation(() => {
+      throw new Error("Adapter cleanup failed");
+    });
+
+    expect(() => test.controller.cancel()).not.toThrow();
+    expect(test.controller.getSnapshot()).toEqual({ phase: "idle" });
   });
 
   it("snapshots backend, draft identity, and delivery when starting", async () => {

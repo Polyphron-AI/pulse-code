@@ -26,7 +26,8 @@ export interface PulseDictationTranscriber<Audio> {
 export interface PulseDictationStart {
   backend: PulseDictationBackend;
   draftIdentity: string;
-  deliver(text: string): void;
+  /** Inserts into the originating draft synchronously. It must not start deferred delivery. */
+  deliver(text: string): undefined;
 }
 
 export interface PulseDictationDependencies<Audio> {
@@ -81,6 +82,7 @@ export class PulseDictationController<Audio> {
     this.#setState({ phase: "preparing", backend: origin.backend });
 
     try {
+      if (!this.#isCurrent(run, origin.draftIdentity)) return;
       await this.#dependencies.capture.prepare(abortController.signal);
       if (!this.#isCurrent(run, origin.draftIdentity)) return;
 
@@ -116,6 +118,7 @@ export class PulseDictationController<Audio> {
     this.#setState({ phase: "transcribing", backend: request.backend });
 
     try {
+      if (!this.#isCurrent(run, request.draftIdentity)) return;
       const audio = await recording.stop(signal);
       if (!this.#isCurrent(run, request.draftIdentity)) return;
       this.#recording = null;
@@ -131,11 +134,13 @@ export class PulseDictationController<Audio> {
 
   cancel(): void {
     this.#run += 1;
-    this.#abortController?.abort();
+    const abortController = this.#abortController;
+    const recording = this.#recording;
     this.#abortController = null;
-    this.#recording?.cancel();
     this.#recording = null;
     this.#request = null;
+    abortController?.abort();
+    this.#cancelRecording(recording);
     this.#setState({ phase: "idle" });
   }
 
@@ -152,10 +157,11 @@ export class PulseDictationController<Audio> {
 
   #failIfCurrent(run: number, error: unknown): void {
     if (run !== this.#run) return;
+    const recording = this.#recording;
     this.#abortController = null;
-    this.#recording?.cancel();
     this.#recording = null;
     this.#request = null;
+    this.#cancelRecording(recording);
     this.#setState({
       phase: "error",
       message: error instanceof Error ? error.message : "Dictation failed.",
@@ -171,6 +177,20 @@ export class PulseDictationController<Audio> {
       return;
     }
     this.#state = state;
-    for (const listener of this.#listeners) listener();
+    for (const listener of [...this.#listeners]) {
+      try {
+        listener();
+      } catch {
+        // A view subscriber cannot own or interrupt the capture lifecycle.
+      }
+    }
+  }
+
+  #cancelRecording(recording: PulseDictationRecording<Audio> | null): void {
+    try {
+      recording?.cancel();
+    } catch {
+      // Cancellation is best effort; references are detached before adapter cleanup runs.
+    }
   }
 }
