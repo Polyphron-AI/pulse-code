@@ -380,6 +380,11 @@ export class ManagedSkillStore {
     }
   }
 
+  async syncIfKeepUpdated(record: ManagedSkillRecord): Promise<ManagedSkillRecord> {
+    if (record.updatePolicy !== "keep-updated") return record;
+    return this.sync(record);
+  }
+
   async catalog(
     records: ReadonlyArray<ManagedSkillRecord>,
   ): Promise<ManagedSkillCatalogDescriptor[]> {
@@ -473,7 +478,8 @@ export class ManagedSkillStore {
     if (!entry.isDirectory() || entry.isSymbolicLink()) {
       throw new Error("Managed skill revision path is not a regular directory.");
     }
-    const discovered: SkillUploadFile[] = [];
+    const discovered: Array<{ readonly path: string; readonly filePath: string }> = [];
+    let totalBytes = 0;
     const visit = async (directory: string, prefix = ""): Promise<void> => {
       for (const child of await NodeFSP.readdir(directory, { withFileTypes: true })) {
         const relative = prefix ? `${prefix}/${child.name}` : child.name;
@@ -483,15 +489,27 @@ export class ManagedSkillStore {
           throw new Error("Managed skill revisions cannot contain links.");
         if (child.isDirectory()) await visit(path, relative);
         else if (child.isFile()) {
-          discovered.push({
-            path: relative,
-            base64: (await NodeFSP.readFile(path)).toString("base64"),
-          });
+          const size = (await NodeFSP.stat(path)).size;
+          discovered.push({ path: relative, filePath: path });
+          totalBytes += size;
+          if (discovered.length > MAX_FILES) {
+            throw new Error(`A skill must contain 1 to ${MAX_FILES} files.`);
+          }
+          if (size > MAX_FILE_BYTES || totalBytes > MAX_TOTAL_BYTES) {
+            throw new Error("Skills are limited to 8 MB total and 1 MB per file.");
+          }
         } else throw new Error("Managed skill revisions can contain only files and directories.");
       }
     };
     await visit(destination);
-    const actual = validateSkillFiles(discovered);
+    const actual = validateSkillFiles(
+      await Promise.all(
+        discovered.map(async (file) => ({
+          path: file.path,
+          base64: (await NodeFSP.readFile(file.filePath)).toString("base64"),
+        })),
+      ),
+    );
     if (actual.revision !== expectedRevision) {
       throw new Error("Existing managed skill revision does not match its content hash.");
     }

@@ -182,7 +182,7 @@ describe("managed skill imports", () => {
           directory: "skills/review",
         });
         const previous = store.setUpdatePolicy(linked, "keep-updated");
-        const next = await store.sync(previous);
+        const next = await store.syncIfKeepUpdated(previous);
         expect(next.revision).toBe(previous.revision);
         expect(next.source).toEqual(previous.source);
         expect(next.updatePolicy).toBe("keep-updated");
@@ -192,6 +192,62 @@ describe("managed skill imports", () => {
         throw new Error("GitHub sign-in expired");
       },
     );
+  });
+
+  it("skips automatic sync for pinned skills while allowing explicit sync", async () => {
+    let requests = 0;
+    await withStore(
+      async (store) => {
+        const upload = await store.importUpload("review", files());
+        const pinned = store.linkGitHub(upload, {
+          type: "github",
+          repository: "team/private",
+          ref: "main",
+          directory: "skills/review",
+        });
+
+        expect(await store.syncIfKeepUpdated(pinned)).toBe(pinned);
+        expect(requests).toBe(0);
+
+        const explicit = await store.sync(pinned);
+        expect(requests).toBe(1);
+        expect(explicit.error).toContain("manual sync failed");
+      },
+      async () => {
+        requests += 1;
+        throw new Error("manual sync failed");
+      },
+    );
+  });
+
+  it("rejects oversized stored revisions from metadata before reading file bodies", async () => {
+    await withStore(async (store) => {
+      const record = await store.importUpload("review", files());
+      const revision = store.revisionPath(record.revision);
+      for (let index = 0; index < 127; index += 1) {
+        await NodeFSP.writeFile(NodePath.join(revision, `extra-${index}.txt`), "");
+      }
+      await expect(store.catalog([record])).rejects.toThrow(/1 to 128 files/);
+    });
+  });
+
+  it("rejects stored revisions that exceed per-file or total byte limits", async () => {
+    await withStore(async (store) => {
+      const record = await store.importUpload("review", files());
+      const revision = store.revisionPath(record.revision);
+      const oversized = NodePath.join(revision, "oversized.bin");
+      await NodeFSP.writeFile(oversized, "");
+      await NodeFSP.truncate(oversized, 1024 * 1024 + 1);
+      await expect(store.catalog([record])).rejects.toThrow(/limited/);
+
+      await NodeFSP.rm(oversized);
+      for (let index = 0; index < 8; index += 1) {
+        const path = NodePath.join(revision, `total-${index}.bin`);
+        await NodeFSP.writeFile(path, "");
+        await NodeFSP.truncate(path, 1024 * 1024);
+      }
+      await expect(store.catalog([record])).rejects.toThrow(/limited/);
+    });
   });
 
   it("catalogs only store-derived canonical paths and preserves restrictions", async () => {
