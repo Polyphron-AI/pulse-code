@@ -8,6 +8,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as PlatformError from "effect/PlatformError";
 
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as ServerConfig from "../config.ts";
@@ -22,6 +23,26 @@ const pulseLayer = PulseMcpConfig.layer.pipe(
 const testLayer = Layer.mergeAll(configLayer, secretLayer, pulseLayer).pipe(
   Layer.provideMerge(NodeServices.layer),
 );
+
+const fileSystemFailure = (method: string, path: string) =>
+  PlatformError.systemError({
+    _tag: "PermissionDenied",
+    module: "FileSystem",
+    method,
+    pathOrDescriptor: path,
+    description: `Injected ${method} failure.`,
+  });
+
+const layerWithPulseFileSystem = (fileSystem: FileSystem.FileSystem) => {
+  const pulse = PulseMcpConfig.layer.pipe(
+    Layer.provide(secretLayer),
+    Layer.provide(configLayer),
+    Layer.provide(Layer.succeed(FileSystem.FileSystem, fileSystem)),
+  );
+  return Layer.mergeAll(configLayer, secretLayer, pulse).pipe(
+    Layer.provideMerge(NodeServices.layer),
+  );
+};
 
 const readiness = {
   supportsProvider: (provider: string) => provider === "codex" || provider === "claudeAgent",
@@ -394,5 +415,131 @@ describe("PulseMcpConfigService", () => {
         }),
       ).pipe(Effect.provide(gatedLayer));
     }),
+  );
+
+  it.effect("treats rename as the commit point when post-rename chmod fails", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const failing = FileSystem.FileSystem.of({
+        ...fileSystem,
+        chmod: (path, mode) =>
+          String(path).endsWith("pulse-mcp.json")
+            ? Effect.fail(fileSystemFailure("chmod", String(path)))
+            : fileSystem.chmod(path, mode),
+      });
+
+      yield* Effect.gen(function* () {
+        const service = yield* PulseMcpConfig.PulseMcpConfigService;
+        yield* service.upsertConnection({
+          id: "committed",
+          name: "Committed",
+          config: {
+            transport: "http",
+            url: "https://example.test",
+            headers: { Authorization: { type: "secret", value: "still-present" } },
+          },
+        });
+        yield* service.setProviderDefault(ProviderInstanceId.make("codex_commit"), ["committed"]);
+        const prepared = yield* service.prepareTurn(
+          {
+            turnId: "turn-commit",
+            provider: "codex",
+            providerInstanceId: ProviderInstanceId.make("codex_commit"),
+            threadId: ThreadId.make("thread-commit"),
+          },
+          readiness,
+        );
+        expect(prepared.connections[0]?.config).toMatchObject({
+          headers: { Authorization: "still-present" },
+        });
+      }).pipe(Effect.provide(layerWithPulseFileSystem(failing)));
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("finishes publishing config when interrupted after secret creation", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const renameStarted = yield* Deferred.make<void>();
+      const releaseRename = yield* Deferred.make<void>();
+      const gated = FileSystem.FileSystem.of({
+        ...fileSystem,
+        rename: (from, to) =>
+          String(to).endsWith("pulse-mcp.json")
+            ? Deferred.succeed(renameStarted, undefined).pipe(
+                Effect.flatMap(() => Deferred.await(releaseRename)),
+                Effect.flatMap(() => fileSystem.rename(from, to)),
+              )
+            : fileSystem.rename(from, to),
+      });
+
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const service = yield* PulseMcpConfig.PulseMcpConfigService;
+          const publishing = yield* Effect.forkChild(
+            service.upsertConnection({
+              id: "interrupted",
+              name: "Interrupted",
+              config: {
+                transport: "http",
+                url: "https://example.test",
+                headers: { Authorization: { type: "secret", value: "published" } },
+              },
+            }),
+          );
+          yield* Deferred.await(renameStarted);
+          const interrupting = yield* Effect.forkChild(Fiber.interrupt(publishing));
+          yield* Deferred.succeed(releaseRename, undefined);
+          yield* Fiber.join(interrupting);
+          expect((yield* service.listConnections).map(({ id }) => id)).toContain("interrupted");
+          const providerInstanceId = ProviderInstanceId.make("codex_interrupted");
+          yield* service.setProviderDefault(providerInstanceId, ["interrupted"]);
+          const prepared = yield* service.prepareTurn(
+            {
+              turnId: "turn-interrupted",
+              provider: "codex",
+              providerInstanceId,
+              threadId: ThreadId.make("thread-interrupted"),
+            },
+            readiness,
+          );
+          expect(prepared.connections[0]?.config).toMatchObject({
+            headers: { Authorization: "published" },
+          });
+        }),
+      ).pipe(Effect.provide(layerWithPulseFileSystem(gated)));
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("removes a newly created secret when config rename fails before commit", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const failing = FileSystem.FileSystem.of({
+        ...fileSystem,
+        rename: (from, to) =>
+          String(to).endsWith("pulse-mcp.json")
+            ? Effect.fail(fileSystemFailure("rename", `${String(from)} -> ${String(to)}`))
+            : fileSystem.rename(from, to),
+      });
+
+      yield* Effect.gen(function* () {
+        const service = yield* PulseMcpConfig.PulseMcpConfigService;
+        const config = yield* ServerConfig.ServerConfig;
+        const result = yield* Effect.exit(
+          service.upsertConnection({
+            id: "not_committed",
+            name: "Not committed",
+            config: {
+              transport: "http",
+              url: "https://example.test",
+              headers: { Authorization: { type: "secret", value: "remove-me" } },
+            },
+          }),
+        );
+        expect(result._tag).toBe("Failure");
+        expect(yield* service.listConnections).toEqual([]);
+        const secretFiles = yield* fileSystem.readDirectory(config.secretsDir);
+        expect(secretFiles.filter((name) => name.startsWith("pulse-mcp-connection-"))).toEqual([]);
+      }).pipe(Effect.provide(layerWithPulseFileSystem(failing)));
+    }).pipe(Effect.provide(NodeServices.layer)),
   );
 });

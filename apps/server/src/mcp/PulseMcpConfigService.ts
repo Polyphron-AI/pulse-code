@@ -439,17 +439,19 @@ const make = Effect.gen(function* () {
         }),
       ).pipe(
         Effect.flatMap(() => fs.rename(temporaryPath, configPath)),
-        Effect.tap(() => fs.chmod(configPath, 0o600)),
-        Effect.tap(() =>
-          Effect.scoped(
-            fs.open(config.stateDir, { flag: "r" }).pipe(Effect.flatMap((dir) => dir.sync)),
-          ).pipe(Effect.catch(() => Effect.void)),
-        ),
         Effect.catch((cause) =>
           fs.remove(temporaryPath).pipe(
             Effect.ignore,
             Effect.flatMap(() => Effect.fail(cause)),
           ),
+        ),
+        // Rename is the commit point. Durability/permission maintenance after it
+        // must never report a failed write and roll back secrets now referenced.
+        Effect.tap(() => fs.chmod(configPath, 0o600).pipe(Effect.catch(() => Effect.void))),
+        Effect.tap(() =>
+          Effect.scoped(
+            fs.open(config.stateDir, { flag: "r" }).pipe(Effect.flatMap((dir) => dir.sync)),
+          ).pipe(Effect.catch(() => Effect.void)),
         ),
       );
     }).pipe(
@@ -596,21 +598,24 @@ const make = Effect.gen(function* () {
                           ).flatMap((value) =>
                             value.type === "secret-ref" ? [value.secretRef] : [],
                           );
-                    if (Object.keys(secretValues).length > 0) {
-                      yield* storeNewSecret(reference, secretValues);
-                    }
                     const nextState = {
                       ...state,
                       connections: { ...state.connections, [input.id]: connection },
                     };
-                    yield* persist(nextState).pipe(
-                      Effect.catch((cause) =>
-                        (Object.keys(secretValues).length > 0
-                          ? secrets.remove(reference)
-                          : Effect.void
-                        ).pipe(
-                          Effect.ignore,
-                          Effect.flatMap(() => Effect.fail(cause)),
+                    yield* Effect.uninterruptibleMask(() =>
+                      (Object.keys(secretValues).length > 0
+                        ? storeNewSecret(reference, secretValues)
+                        : Effect.void
+                      ).pipe(
+                        Effect.flatMap(() => persist(nextState)),
+                        Effect.catch((cause) =>
+                          (Object.keys(secretValues).length > 0
+                            ? secrets.remove(reference)
+                            : Effect.void
+                          ).pipe(
+                            Effect.ignore,
+                            Effect.flatMap(() => Effect.fail(cause)),
+                          ),
                         ),
                       ),
                     );
