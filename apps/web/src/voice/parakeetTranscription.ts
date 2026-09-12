@@ -30,6 +30,7 @@ export class ParakeetTranscriber implements PulseDictationTranscriber<Blob> {
   readonly #createWorker: () => Worker;
   readonly #decode: (audio: Blob) => Promise<Float32Array>;
   #worker: Worker | null = null;
+  #ready = false;
   #nextId = 0;
   readonly #pending = new Map<number, Pending>();
 
@@ -44,16 +45,21 @@ export class ParakeetTranscriber implements PulseDictationTranscriber<Blob> {
 
   async setup(signal: AbortSignal): Promise<void> {
     await this.#request("setup", undefined, signal);
+    this.#ready = true;
   }
 
   async transcribe(audio: Blob, signal: AbortSignal): Promise<string> {
     if (signal.aborted) throw signal.reason;
+    if (!this.#ready) {
+      throw new Error("Set up the Parakeet model before using local dictation.");
+    }
     const pcm = await this.#decode(audio);
     if (signal.aborted) throw signal.reason;
     return this.#request("transcribe", pcm, signal);
   }
 
   reset(): void {
+    this.#ready = false;
     this.#worker?.terminate();
     this.#worker = null;
     for (const item of this.#pending.values()) item.reject(new Error("Parakeet cancelled."));
