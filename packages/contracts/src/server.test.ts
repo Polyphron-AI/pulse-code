@@ -16,6 +16,24 @@ const decodeServerProviders = Schema.decodeUnknownSync(ServerProviders);
 const decodeUpsertKeybindingResult = Schema.decodeUnknownSync(ServerUpsertKeybindingResult);
 const decodeAvailableEditors = Schema.decodeUnknownSync(ServerConfig.fields.availableEditors);
 
+describe("Pulse capability compatibility", () => {
+  const decode = Schema.decodeUnknownSync(
+    Schema.Struct({
+      pulseCapabilities: ServerConfig.fields.pulseCapabilities,
+    }),
+  );
+  it("accepts upstream configurations with no Pulse capabilities", () => {
+    expect(decode({})).toEqual({});
+    expect(decode({ pulseCapabilities: {} })).toEqual({ pulseCapabilities: {} });
+  });
+  it("retains known flags while ignoring future capabilities", () => {
+    expect(decode({ pulseCapabilities: { managedSkills: true, futureFeature: true } })).toEqual({
+      pulseCapabilities: { managedSkills: true },
+    });
+    expect(() => decode({ pulseCapabilities: { managedSkills: "true" } })).toThrow();
+  });
+});
+
 const baseProviderSnapshot = {
   instanceId: "codex",
   driver: "codex",

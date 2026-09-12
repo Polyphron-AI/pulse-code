@@ -1284,6 +1284,7 @@ const makeWsRpcLayer = (
             },
             settings,
             shellResumeCompletionMarker: true,
+            pulseCapabilities: { managedSkills: true },
             ...(fileManagerRevealKind === undefined
               ? {}
               : {

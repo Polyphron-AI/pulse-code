@@ -543,6 +543,13 @@ export function environmentThemeFileHasColors(file: EnvironmentThemeFile): boole
 }
 
 export const ServerConfig = Schema.Struct({
+  /** Pulse clients send extension requests only when this environment advertises support. */
+  pulseCapabilities: Schema.optionalKey(
+    Schema.Struct({
+      managedSkills: Schema.optionalKey(Schema.Boolean),
+      mcpManagement: Schema.optionalKey(Schema.Boolean),
+    }),
+  ),
   environment: ExecutionEnvironmentDescriptor,
   auth: ServerAuthDescriptor,
   cwd: TrimmedNonEmptyString,
