@@ -377,7 +377,7 @@
       "Capture actual client versions and unsupported cases; no blanket future-client guarantee."
     ]
   },
-  "nextAction": "Begin isolated identity/state implementation, then sequence skills/MCP configuration integration. Use inspected upstream composer/settings composition; review actual new controls on desktop and mobile web after integration. Deferred roles remain out of scope.",
+  "nextAction": "Sol implements the managed-skill foundation in its isolated worktree. Root discusses MCP failure behavior and reviews the frozen skills batch before integration; shared contract/settings changes remain sequenced.",
   "decisionPolicy": {
     "pending": "Recommendations are proposals, not approval to implement.",
     "inherit": "Retain upstream behavior; port only a demonstrated missing Pulse behavior.",
@@ -436,5 +436,16 @@
       "Place microphone at the composer's top-right, away from Send/Stop at bottom-right; retain attachment beside Send/Stop and reserve draft text clearance for the microphone.",
       "Provide direct settings access to managed skills/MCP; mobile provider runtime settings are a long column."
     ]
+  },
+  "mcpBehaviorProposal": "docs/internals/pulse-next-mcp-behavior.md",
+  "activeImplementationBatch": {
+    "id": "managed-skills-foundation",
+    "state": "assigned",
+    "agent": "sol_managed_skills_foundation",
+    "branch": "feat/pulse-next-managed-skills",
+    "baseRevision": "da4addd056bebc3b47a1a5d822ba849fb6c305d8",
+    "scope": "Immutable managed skill store and trusted catalog, decoupled from upstream ServerSettings. No callable UI until provider dispatch is verified.",
+    "review": "Required before integration",
+    "remaining": "Catalog/wire identity preservation, provider dispatch, picker integration and real client checks remain separate dependent batches."
   }
 }
