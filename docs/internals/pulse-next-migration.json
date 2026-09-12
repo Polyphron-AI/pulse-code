@@ -424,7 +424,7 @@
     ],
     "findings": [
       "User superseded overflow proposal: keep Model, Effort, Access, Skills and MCP visible in order, wrapping on mobile.",
-      "Place microphone directly above Send/Stop; retain attachment beside the action stack.",
+      "Place microphone at the composer's top-right, away from Send/Stop at bottom-right; retain attachment beside Send/Stop and reserve draft text clearance for the microphone.",
       "Provide direct settings access to managed skills/MCP; mobile provider runtime settings are a long column."
     ]
   }
