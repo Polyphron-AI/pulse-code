@@ -180,7 +180,8 @@ describe("pulse dictation HTTP routes", () => {
       }),
     ).pipe(
       Effect.provide(
-        Layer.mergeAll(realAuthLayer, NodeHttpServer.layerTest).pipe(
+        realAuthLayer.pipe(
+          Layer.provideMerge(NodeHttpServer.layerTest),
           Layer.provideMerge(NodeServices.layer),
         ),
       ),
