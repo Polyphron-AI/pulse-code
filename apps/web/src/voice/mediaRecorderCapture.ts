@@ -8,6 +8,7 @@ export const PULSE_DICTATION_MIME_TYPES = [
 ] as const;
 
 export type PulseRecordedAudio = Blob;
+export const PULSE_DICTATION_MAX_CAPTURE_BYTES = 25 * 1024 * 1024;
 
 interface MediaRecorderCapturePlatform {
   getUserMedia(constraints: MediaStreamConstraints): Promise<MediaStream>;
@@ -72,8 +73,10 @@ export class MediaRecorderCapture implements PulseDictationCapture<PulseRecorded
     }
 
     const chunks: Blob[] = [];
+    let capturedBytes = 0;
     let cancelled = false;
     let settled = false;
+    let released = false;
     let resolveStopped!: (audio: Blob) => void;
     let rejectStopped!: (error: Error) => void;
     const stopped = new Promise<Blob>((resolve, reject) => {
@@ -81,15 +84,36 @@ export class MediaRecorderCapture implements PulseDictationCapture<PulseRecorded
       rejectStopped = reject;
     });
     void stopped.catch(() => undefined);
-    const release = () => stopTracks(stream);
-    recorder.addEventListener("dataavailable", (event) => {
-      if (event.data.size > 0) chunks.push(event.data);
-    });
-    recorder.addEventListener("error", () => {
+    const release = () => {
+      if (released) return;
+      released = true;
+      signal.removeEventListener("abort", abortRecording);
+      stopTracks(stream);
+    };
+    const fail = (error: Error) => {
       if (settled) return;
       settled = true;
       release();
-      rejectStopped(new Error("Microphone recording failed."));
+      rejectStopped(error);
+    };
+    const abortRecording = (reason: unknown = signal.reason) => {
+      cancelled = true;
+      fail(reason instanceof Error ? reason : new Error("Recording cancelled."));
+      if (recorder.state !== "inactive") recorder.stop();
+    };
+    recorder.addEventListener("dataavailable", (event) => {
+      if (settled || event.data.size === 0) return;
+      capturedBytes += event.data.size;
+      if (capturedBytes > PULSE_DICTATION_MAX_CAPTURE_BYTES) {
+        fail(new Error("The recording exceeds the 25 MiB capture limit."));
+        if (recorder.state !== "inactive") recorder.stop();
+        return;
+      }
+      chunks.push(event.data);
+    });
+    recorder.addEventListener("error", () => {
+      fail(new Error("Microphone recording failed."));
+      if (recorder.state !== "inactive") recorder.stop();
     });
     recorder.addEventListener("stop", () => {
       if (settled) return;
@@ -104,6 +128,8 @@ export class MediaRecorderCapture implements PulseDictationCapture<PulseRecorded
 
     try {
       recorder.start(1_000);
+      signal.addEventListener("abort", abortRecording, { once: true });
+      if (signal.aborted) abortRecording();
     } catch (error) {
       release();
       throw error;
@@ -112,17 +138,20 @@ export class MediaRecorderCapture implements PulseDictationCapture<PulseRecorded
     return {
       stop: async (stopSignal) => {
         if (stopSignal.aborted) {
-          cancelled = true;
-          if (recorder.state !== "inactive") recorder.stop();
+          abortRecording();
           throw stopSignal.reason;
         }
+        const abortStop = () => abortRecording(stopSignal.reason);
+        stopSignal.addEventListener("abort", abortStop, { once: true });
         if (recorder.state !== "inactive") recorder.stop();
-        return stopped;
+        try {
+          return await stopped;
+        } finally {
+          stopSignal.removeEventListener("abort", abortStop);
+        }
       },
       cancel: () => {
-        cancelled = true;
-        if (recorder.state !== "inactive") recorder.stop();
-        else release();
+        abortRecording();
       },
     };
   }
