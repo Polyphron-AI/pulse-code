@@ -355,7 +355,7 @@
       "Capture actual client versions and unsupported cases; no blanket future-client guarantee."
     ]
   },
-  "nextAction": "Finalize skills/MCP details and minimal dictation module design, then review desktop/mobile-web UI changes. Do not implement roles, cookbook, unattended permissions or other deferred additions.",
+  "nextAction": "Review proposed skills/MCP defaults, Parakeet-local/Groq-explicit routing and minimal UI in pulse-next-launch-design.md. Once approved, compare actual baseline UI and begin isolated implementation. No runtime work yet.",
   "decisionPolicy": {
     "pending": "Recommendations are proposals, not approval to implement.",
     "inherit": "Retain upstream behavior; port only a demonstrated missing Pulse behavior.",
@@ -380,15 +380,16 @@
     }
   ],
   "openDecisions": [
-    "Settle launch skill/MCP content and management details.",
-    "Approve minimal module packaging and dictation execution/credential handling per platform.",
-    "Demonstrate any attachment-preview gaps before including enhancements.",
-    "Compare minimal desktop and mobile-web changes against T3 before runtime implementation."
+    "Approve proposed skills/MCP management defaults; no bundled third-party content selected.",
+    "Approve local Parakeet where verified and explicit Groq through the connected environment; no silent cloud fallback.",
+    "Approve minimal module/UI proposal, then inspect actual desktop/mobile-web baseline.",
+    "Demonstrate any attachment-preview gap before including enhancements."
   ],
   "decisionHistory": [
     {
       "date": "2026-09-12",
       "summary": "User narrowed launch to skills, MCP, cross-platform Parakeet/Groq dictation and demonstrated attachment-preview gaps. Luna, Argo, watchdog, SOP cookbook and remaining optional features move to later. Orca/OMP remain excluded."
     }
-  ]
+  ],
+  "designProposal": "docs/internals/pulse-next-launch-design.md"
 }
