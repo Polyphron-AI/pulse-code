@@ -17,11 +17,15 @@ export const featureSuites = [
   { id: "managed-skills-panel", file: "apps/web/src/skills/ManagedSkillsPanel.test.tsx" },
   { id: "managed-skills-rpc", file: "apps/server/src/skills/ManagedSkillRpc.test.ts" },
   { id: "managed-skills-contracts", file: "packages/contracts/src/pulseSkills.test.ts" },
+  { id: "managed-skills-settings", file: "apps/web/src/skills/ManagedSkillsSettings.test.tsx" },
+  { id: "mcp-contracts", file: "packages/contracts/src/pulseMcp.test.ts" },
+  { id: "mcp-rpc", file: "apps/server/src/mcp/PulseMcpRpc.test.ts" },
+  { id: "dictation-http", file: "apps/server/src/voice/http.test.ts" },
   { id: "rpc-authorization", file: "apps/server/src/auth/RpcAuthorization.test.ts" },
   {
     id: "managed-skills-websocket",
     file: "apps/server/src/server.test.ts",
-    testNamePattern: "managed skill",
+    testNamePattern: "managed skill|Pulse MCP|Pulse dictation",
   },
 ];
 
@@ -54,9 +58,9 @@ export function runFeatureSuites(root, run, exists = existsSync) {
     releaseEligible: false,
     suites,
     remaining: [
-      "Skills invocation and management integration",
+      "Skills provider invocation and composer integration",
       "MCP provider and composer integration",
-      "Dictation capture and backend integration",
+      "Dictation settings, authenticated client transport and composer integration",
       "Packaged-app and Windows verification",
     ],
   };

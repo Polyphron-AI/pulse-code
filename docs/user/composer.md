@@ -109,6 +109,17 @@ Provider commands must start the message to run. T3 Code commands such as
 Send `/compact` in an existing conversation to reduce context usage when the
 provider supports it. Web and desktop also offer compaction from the context meter.
 
+### Manage skill files
+
+On web and desktop, open **Settings → Integrations → Skills** and choose an
+environment. Upload a skill folder or ZIP, or import a skill directory from GitHub.
+GitHub imports can be pinned or kept updated; uploaded skills can later be linked
+to GitHub.
+
+Removing an entry removes its managed files from that environment, not its
+provider-native or workspace skills. This panel currently manages stored files
+only: managed skills cannot yet be selected or invoked from the composer.
+
 ## Images and videos in messages
 
 Select an image or video attachment or link to preview it. Playback support depends

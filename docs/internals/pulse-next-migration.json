@@ -410,21 +410,39 @@
     {
       "id": "skills-settings-mount",
       "branch": "feat/pulse-next-skills-settings",
-      "state": "implementing",
+      "state": "integrated",
+      "integratedRevisions": ["b03ff7ab0", "1ae3e591d"],
+      "verification": "Independent Sol review; focused settings tests and web typecheck passed. Real isolated browser upload persisted after reload; desktop and 390px mobile-web checks had no horizontal overflow or page errors. Native mobile and packaged desktop remain unverified.",
+      "remaining": "Provider invocation and composer selection remain a dependent batch.",
       "dependsOn": ["1d6daf64c"],
       "acceptance": "Explicit environment selection; capability-gated RPC; read-only management; stale environment results ignored; no claim of provider invocation yet."
     },
     {
       "id": "dictation-authenticated-http",
       "branch": "feat/pulse-next-dictation-http",
-      "state": "implementing",
+      "state": "integrated",
+      "integratedRevisions": [
+        "d97786c9f",
+        "dd558dd1f",
+        "b9ee9c0cb",
+        "229215fc8",
+        "4f6f4cebb",
+        "cb405d97a"
+      ],
+      "verification": "Independent Sol review; authenticated route tests and real composed-server synthetic key set/status/remove passed. No real microphone, model download or Groq API request.",
+      "compatibilityLearning": "HttpRouter.add captures request service requirements: supply handler-only dependencies through typed router middleware, not an outer Layer.provide. POST key action endpoints preserve existing CORS methods. Secrets remain environment-owned, outside upstream ServerSettings.",
+      "remaining": "Authenticated client transport, settings and composer microphone; packaged and physical-device checks.",
       "dependsOn": ["558792ae4"],
       "acceptance": "Authenticate and authorize before body parsing; bounded multipart upload; environment-owned Groq secret status/set/remove; synthetic transcriber tests only."
     },
     {
       "id": "mcp-management-rpc",
       "branch": "feat/pulse-next-mcp-rpc",
-      "state": "implementing",
+      "state": "integrated",
+      "integratedRevisions": ["53a47f74a", "4190f69d5", "9bee2c128", "651a3b8ad", "3d2abd796"],
+      "verification": "Independent Sol review; real WebSocket management and read-only authorization checks passed, including secret redaction, retention and absent versus empty overrides.",
+      "compatibilityLearning": "Keep Pulse RPCs prefixed and config separate; share one environment service/semaphore across connections. Atomic rename is the publication commit point, so best-effort post-publication failures must not roll back referenced secrets.",
+      "remaining": "Settings UI, provider session configuration and composer pause/retry/continue.",
       "dependsOn": ["558792ae4"],
       "acceptance": "Bounded typed management operations; redacted secrets with explicit retention; saved defaults and thread overrides; root integrates shared RPC and authorization after review."
     }

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { featureTestArgs, runFeatureSuites } from "./features.mjs";
+import { featureSuites, featureTestArgs, runFeatureSuites } from "./features.mjs";
 
 test("host tests exclude prepared upstream candidate worktrees", () => {
   const args = featureTestArgs("/fixture", {
@@ -21,11 +21,10 @@ test("missing features block without attempting a runner", () => {
   assert.ok(report.suites.every((suite) => suite.state === "missing"));
 });
 test("integrated websocket suite runs only its named Pulse cases", () => {
-  const args = featureTestArgs("/fixture", {
-    file: "apps/server/src/server.test.ts",
-    testNamePattern: "managed skill",
-  });
-  assert.equal(args[args.indexOf("-t") + 1], "managed skill");
+  const suite = featureSuites.find((suite) => suite.file === "apps/server/src/server.test.ts");
+  assert.ok(suite);
+  const args = featureTestArgs("/fixture", suite);
+  assert.equal(args[args.indexOf("-t") + 1], "managed skill|Pulse MCP|Pulse dictation");
 });
 test("one failed test blocks the combined foundation result", () => {
   const report = runFeatureSuites(
