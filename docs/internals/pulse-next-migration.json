@@ -3,6 +3,20 @@
   "project": "Pulse Next",
   "updatedAt": "2026-09-12",
   "status": "defaults-approved-baseline-inspected",
+  "upstreamAutomation": {
+    "decision": "approved-by-user",
+    "implementation": "local-release-check-and-source-preparation-only",
+    "trigger": "hourly Windows scheduled task, interactive user, no AI",
+    "verification": "blocked until Pulse acceptance suites and disposable installer runner exist",
+    "installPolicy": "never replace running installation with an unverified candidate; installation requires confirmation",
+    "runbook": "docs/operations/pulse-next-updates.md",
+    "remaining": [
+      "Integrate Pulse launch features and targeted compatibility tests",
+      "Separate application identity, signing and update feed",
+      "Build and install packaged candidate in a disposable VM",
+      "Verify upgrade data compatibility and recovery"
+    ]
+  },
   "branch": "experiment/pulse-next-v040",
   "upstreamBase": "09e8de9c655ae85410bf6b00446f272a01da81c7",
   "sourceSnapshots": {
