@@ -376,16 +376,17 @@
       "Capture actual client versions and unsupported cases; no blanket future-client guarantee."
     ]
   },
-  "nextAction": "Finish reviewed managed-skills settings UI, then sequence selected-environment client wiring, provider invocation, MCP management/preflight integration and dictation upload/settings/composer integration. Services and dictation adapters are independently reviewed and integrated. Packaged/VM verification remains blocked until usable features exist.",
+  "nextAction": "Mount the reviewed skills panel using selected-environment authenticated client wiring, then sequence provider invocation, MCP management/preflight integration and dictation upload/settings/composer integration. Services, isolated skills panel and dictation adapters are independently reviewed and integrated. Packaged/VM verification remains blocked until usable features exist.",
   "parallelIntegrationBatches": [
     {
       "id": "skills-library-and-settings",
       "branch": "feat/pulse-next-skills-integration",
-      "state": "service-and-rpc-integrated-ui-review-fixes-in-progress",
+      "state": "service-rpc-and-isolated-panel-integrated",
       "integratedServiceRevision": "93336e92d",
       "integratedRpcRevision": "b40a6fe75",
-      "pendingPanelRevisions": ["c5c8e386d", "5fd73514b"],
-      "remaining": "Finish cancellation/read-only/environment-switch and bounded ZIP UI fixes, mount settings panel, preserve identity through provider invocation and picker. RPC uses existing read/operate scopes and one route-lifetime library writer; two real WebSocket tests verify persistence and denied read-only mutation."
+      "reviewedPanelRevision": "8dc4394d6",
+      "integratedPanelRevision": "59cc7b2e6",
+      "remaining": "Mount settings panel through captured environment-specific clients, preserve identity through provider invocation and picker. Panel is not yet user-reachable. RPC uses existing read/operate scopes and one route-lifetime library writer; two real WebSocket tests verify persistence and denied read-only mutation."
     },
     {
       "id": "mcp-durable-connections",

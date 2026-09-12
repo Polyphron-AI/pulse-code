@@ -13,6 +13,8 @@ export const featureSuites = [
   { id: "dictation-groq", file: "apps/server/src/voice/groqTranscription.test.ts" },
   { id: "dictation-parakeet", file: "apps/web/src/voice/parakeetTranscription.test.ts" },
   { id: "managed-skills-library", file: "apps/server/src/skills/ManagedSkillLibrary.test.ts" },
+  { id: "managed-skills-import", file: "apps/web/src/skills/managedSkills.test.ts" },
+  { id: "managed-skills-panel", file: "apps/web/src/skills/ManagedSkillsPanel.test.tsx" },
   { id: "managed-skills-rpc", file: "apps/server/src/skills/ManagedSkillRpc.test.ts" },
   { id: "managed-skills-contracts", file: "packages/contracts/src/pulseSkills.test.ts" },
   { id: "rpc-authorization", file: "apps/server/src/auth/RpcAuthorization.test.ts" },

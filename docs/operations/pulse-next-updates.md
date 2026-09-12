@@ -34,7 +34,7 @@ task upstream:test
 task upstream:features
 ```
 
-`upstream:features` runs the integrated skills store, library, RPC bridge and
+`upstream:features` runs the integrated skills store, library, import/panel, RPC bridge and
 contracts tests, RPC authorization and targeted WebSocket tests, MCP preflight and
 connection persistence, dictation lifecycle, browser capture, Groq and Parakeet
 adapter suites. Prepared source
