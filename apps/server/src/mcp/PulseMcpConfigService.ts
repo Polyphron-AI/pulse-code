@@ -453,6 +453,22 @@ const make = Effect.gen(function* () {
       ),
     );
 
+  const syncDirectoryBestEffort = (directory: string) =>
+    Effect.scoped(
+      fs.open(directory, { flag: "r" }).pipe(Effect.flatMap((handle) => handle.sync)),
+    ).pipe(
+      // Windows does not support directory fsync. The unique secret file itself is synced by create.
+      Effect.catch(() => Effect.void),
+    );
+
+  const storeNewSecret = (reference: string, values: Readonly<Record<string, string>>) =>
+    secrets.create(reference, textEncoder.encode(JSON.stringify(values))).pipe(
+      Effect.flatMap(() => syncDirectoryBestEffort(config.secretsDir)),
+      Effect.mapError(
+        (cause) => new PulseMcpConfigError("write-secret", "Failed to store MCP secrets.", cause),
+      ),
+    );
+
   const toStoredValues = (
     values: Readonly<Record<string, PulseMcpValueInput>>,
     reference: string,
@@ -527,18 +543,7 @@ const make = Effect.gen(function* () {
                             value.type === "secret-ref" ? [value.secretRef] : [],
                           );
                     if (Object.keys(secretValues).length > 0) {
-                      yield* secrets
-                        .set(reference, textEncoder.encode(JSON.stringify(secretValues)))
-                        .pipe(
-                          Effect.mapError(
-                            (cause) =>
-                              new PulseMcpConfigError(
-                                "write-secret",
-                                "Failed to store MCP secrets.",
-                                cause,
-                              ),
-                          ),
-                        );
+                      yield* storeNewSecret(reference, secretValues);
                     }
                     const nextState = {
                       ...state,
@@ -597,18 +602,7 @@ const make = Effect.gen(function* () {
               threadOverrides: cleanSelections(state.threadOverrides),
             });
             yield* Effect.forEach(new Set(references), (reference) =>
-              secrets
-                .remove(reference)
-                .pipe(
-                  Effect.mapError(
-                    (cause) =>
-                      new PulseMcpConfigError(
-                        "remove-secret",
-                        "Failed to remove MCP secrets.",
-                        cause,
-                      ),
-                  ),
-                ),
+              secrets.remove(reference).pipe(Effect.ignore),
             );
           }),
         ),
@@ -722,32 +716,44 @@ const make = Effect.gen(function* () {
   });
 
   const prepareTurn: PulseMcpConfigServiceShape["prepareTurn"] = (input, dependencies) =>
-    load.pipe(
-      Effect.flatMap((state) => {
-        const defaults = state.providerDefaults[input.providerInstanceId] ?? [];
-        const override = state.threadOverrides[input.threadId];
-        const turnInput: PulseMcpTurnInput = {
-          turnId: input.turnId,
-          provider: input.provider,
-          defaultConnectionIds: defaults,
-          ...(override !== undefined ? { threadConnectionIds: override } : {}),
-        };
-        const selected = override ?? defaults;
-        return Effect.forEach(selected, (id) => {
-          const connection = state.connections[id];
-          return connection === undefined
-            ? Effect.fail(new PulseMcpConfigError("prepare", `Unknown MCP connection '${id}'.`))
-            : resolveConnection(connection);
-        }).pipe(
-          Effect.map((connections) =>
-            Object.freeze({
-              connections: Object.freeze(connections),
-              preflight: makePulseMcpTurnPreflight(dependencies, turnInput),
-            }),
-          ),
-        );
-      }),
-    );
+    lock
+      .withPermits(1)(
+        load.pipe(
+          Effect.flatMap((state) => {
+            const defaults = state.providerDefaults[input.providerInstanceId] ?? [];
+            const override = state.threadOverrides[input.threadId];
+            const turnInput: PulseMcpTurnInput = {
+              turnId: input.turnId,
+              provider: input.provider,
+              defaultConnectionIds: defaults,
+              ...(override !== undefined ? { threadConnectionIds: override } : {}),
+            };
+            const selected = override ?? defaults;
+            return Effect.forEach(selected, (id) => {
+              const connection = state.connections[id];
+              return connection === undefined
+                ? Effect.fail(new PulseMcpConfigError("prepare", `Unknown MCP connection '${id}'.`))
+                : resolveConnection(connection);
+            }).pipe(
+              Effect.map(
+                (connections) =>
+                  [Object.freeze(connections), turnInput] satisfies readonly [
+                    readonly PulseMcpResolvedConnection[],
+                    PulseMcpTurnInput,
+                  ],
+              ),
+            );
+          }),
+        ),
+      )
+      .pipe(
+        Effect.map(([connections, turnInput]) =>
+          Object.freeze({
+            connections,
+            preflight: makePulseMcpTurnPreflight(dependencies, turnInput),
+          }),
+        ),
+      );
 
   return PulseMcpConfigService.of({
     listConnections: load.pipe(
