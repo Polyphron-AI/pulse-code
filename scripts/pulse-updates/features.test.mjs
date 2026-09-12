@@ -20,6 +20,13 @@ test("missing features block without attempting a runner", () => {
   assert.equal(report.state, "blocked");
   assert.ok(report.suites.every((suite) => suite.state === "missing"));
 });
+test("integrated websocket suite runs only its named Pulse cases", () => {
+  const args = featureTestArgs("/fixture", {
+    file: "apps/server/src/server.test.ts",
+    testNamePattern: "managed skill",
+  });
+  assert.equal(args[args.indexOf("-t") + 1], "managed skill");
+});
 test("one failed test blocks the combined foundation result", () => {
   const report = runFeatureSuites(
     "/fixture",
