@@ -1,4 +1,4 @@
-version: '3'
+version: "3"
 
 tasks:
   upstream:check:
@@ -20,4 +20,8 @@ tasks:
   upstream:test:
     desc: Test the release pipeline without network, providers or installations
     cmds:
-      - node --test scripts/pulse-updates/pipeline.test.mjs
+      - node --test scripts/pulse-updates/pipeline.test.mjs scripts/pulse-updates/features.test.mjs
+  upstream:features:
+    desc: Run integrated Pulse foundation tests; missing suites block the result
+    cmds:
+      - node scripts/pulse-updates/features.mjs

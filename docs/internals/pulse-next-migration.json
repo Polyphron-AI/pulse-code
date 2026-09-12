@@ -81,10 +81,7 @@
       "mcpFailurePolicy": {
         "decision": "confirmed-by-user",
         "onSelectedConnectionFailure": "Pause sending and identify the failed selected connections.",
-        "actions": [
-          "Retry",
-          "Continue without it"
-        ],
+        "actions": ["Retry", "Continue without it"],
         "continueScope": "Explicitly omit the failed connection for this turn only; preserve saved selection and provider defaults.",
         "retry": "Retry preparation without submitting duplicate turns.",
         "draft": "Preserve the draft while resolving the connection failure.",
@@ -113,22 +110,11 @@
         "Do not automatically download models, select a paid API or switch from local to remote transcription.",
         "Additional speech backends are later additions, not a launch requirement."
       ],
-      "platforms": [
-        "Windows",
-        "macOS",
-        "Linux",
-        "mobile web"
-      ],
-      "transcriptionOptions": [
-        "Parakeet",
-        "Groq API"
-      ],
+      "platforms": ["Windows", "macOS", "Linux", "mobile web"],
+      "transcriptionOptions": ["Parakeet", "Groq API"],
       "platformEvidence": {
         "source": "pulseReviewed",
-        "evidence": [
-          "docs/user/managed-skills.md",
-          "docs/user/voice-capture.md"
-        ]
+        "evidence": ["docs/user/managed-skills.md", "docs/user/voice-capture.md"]
       },
       "acceptanceGaps": [
         "Verify capture and transcription on each target; legacy source does not prove cross-platform support.",
@@ -188,10 +174,7 @@
         "apps/server/src/orchestration/Layers/AssistantReactor.test.ts"
       ],
       "intent": "Retain Luna as the assistant thread role, not mail discovery.",
-      "dependencies": [
-        "role-foundation",
-        "skills-mcp"
-      ],
+      "dependencies": ["role-foundation", "skills-mcp"],
       "reason": "User explicitly moved this feature to a later addition; not a launch dependency."
     },
     {
@@ -206,11 +189,7 @@
         "apps/server/src/mcp/toolkits/manager/handlers.ts"
       ],
       "intent": "Retain a viable Argo manager for coding missions and child threads without requiring Orca or OMP.",
-      "dependencies": [
-        "role-foundation",
-        "skills-mcp",
-        "sop-cookbook"
-      ],
+      "dependencies": ["role-foundation", "skills-mcp", "sop-cookbook"],
       "acceptanceGap": "Trace and remove actual Orca/OMP dependencies; do not assume hiding navigation is sufficient.",
       "reason": "User explicitly moved this feature to a later addition; not a launch dependency."
     },
@@ -225,9 +204,7 @@
         "packages/client-runtime/src/state/watchdog.ts"
       ],
       "intent": "Retain the thread watchdog role with explicit scope and approval policy.",
-      "dependencies": [
-        "role-foundation"
-      ],
+      "dependencies": ["role-foundation"],
       "acceptanceGap": "Validate action provenance and prevent silent automatic activation or approval.",
       "reason": "User explicitly moved this feature to a later addition; not a launch dependency."
     },
@@ -251,9 +228,7 @@
     {
       "id": "role-foundation",
       "state": "design-proposed",
-      "dependencies": [
-        "identity-isolation"
-      ],
+      "dependencies": ["identity-isolation"],
       "intent": "Use ordinary upstream threads and providers, with Pulse role policy, provenance, opt-in, cancellation, budgets and durable role state behind a small tested interface.",
       "rules": [
         "Roles are policies, not replacement provider runtimes.",
@@ -334,9 +309,7 @@
       "decision": "defer",
       "estimatedEffort": "Unknown pending adapter audit",
       "source": "pulseReviewed",
-      "evidence": [
-        "docs/user/providers-antigravity.md"
-      ],
+      "evidence": ["docs/user/providers-antigravity.md"],
       "compatibilityNote": "Documentation is candidate evidence, not implementation acceptance.",
       "reason": "User selected the remaining optional features for later addition.",
       "futureDecision": "Is any extra provider, such as Antigravity, launch-critical?"
@@ -466,12 +439,26 @@
   "mcpBehaviorProposal": "docs/internals/pulse-next-mcp-behavior.md",
   "activeImplementationBatch": {
     "id": "managed-skills-foundation",
-    "state": "assigned",
-    "agent": "sol_managed_skills_foundation",
+    "state": "review-fixes-in-progress",
+    "agent": "sol_skills_fixes",
     "branch": "feat/pulse-next-managed-skills",
     "baseRevision": "da4addd056bebc3b47a1a5d822ba849fb6c305d8",
     "scope": "Immutable managed skill store and trusted catalog, decoupled from upstream ServerSettings. No callable UI until provider dispatch is verified.",
-    "review": "Required before integration",
+    "review": "18 tests passed; fix GitHub dot-segment validation and bounded revision reads before integration",
     "remaining": "Catalog/wire identity preservation, provider dispatch, picker integration and real client checks remain separate dependent batches."
-  }
+  },
+  "parallelFoundationBatches": [
+    {
+      "id": "dictation-lifecycle",
+      "branch": "feat/pulse-next-dictation",
+      "state": "implementing",
+      "scope": "Isolated lifecycle and deterministic tests; capture/backend/composer integration follows"
+    },
+    {
+      "id": "mcp-preflight",
+      "branch": "feat/pulse-next-mcp",
+      "state": "implementing",
+      "scope": "Selection and preflight decisions with tests; provider/settings/composer integration follows"
+    }
+  ]
 }

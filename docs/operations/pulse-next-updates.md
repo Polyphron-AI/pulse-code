@@ -31,7 +31,15 @@ task upstream:prepare
 task upstream:candidate
 task upstream:status
 task upstream:test
+task upstream:features
 ```
+
+`upstream:features` runs only the integrated skills-store, MCP-preflight and
+dictation-lifecycle suites. Missing suites, runner failures and timeouts block its
+result. Logs and the platform/revision-stamped report live in
+`.t3/upstream-updates/features/`. Passing these module tests is not a release gate
+pass: real provider/UI integration and packaged-app tests remain required. No
+microphone, external provider or model API is used by these fixture-based suites.
 
 Only committed changes enter a candidate. The ledger's `upstreamBase` must be an
 ancestor of both the checked-out Pulse commit and the upstream release. An older
