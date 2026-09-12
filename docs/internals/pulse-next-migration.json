@@ -1,0 +1,203 @@
+{
+  "schemaVersion": 1,
+  "project": "Pulse Next",
+  "updatedAt": "2026-09-12",
+  "status": "scope-recorded-design-under-discussion",
+  "branch": "experiment/pulse-next-v040",
+  "upstreamBase": "09e8de9c655ae85410bf6b00446f272a01da81c7",
+  "sourceSnapshots": {
+    "pulseDevelop": "353e62727b3f5927e71ad54c73caee2ea3183057",
+    "pulseReviewed": "7b4dcead3b891800a4700fff1f698941dd7da018"
+  },
+  "authority": {
+    "scope": "User requested a coding-only launch ledger and architecture discussion before visual review or implementation.",
+    "architectureApproved": false,
+    "runtimeMigrationStarted": false,
+    "publicationAuthorized": false
+  },
+  "launchBundles": [
+    {
+      "id": "luna",
+      "decision": "include",
+      "state": "not-ported",
+      "source": "pulseDevelop",
+      "evidence": [
+        "packages/contracts/src/assistant.ts",
+        "apps/server/src/orchestration/Layers/AssistantReactor.ts",
+        "apps/server/src/orchestration/Layers/AssistantReactor.test.ts"
+      ],
+      "intent": "Retain Luna as the assistant thread role, not mail discovery.",
+      "dependencies": [
+        "role-foundation",
+        "skills-mcp"
+      ]
+    },
+    {
+      "id": "argo",
+      "decision": "include",
+      "state": "not-ported",
+      "source": "pulseDevelop",
+      "evidence": [
+        "packages/contracts/src/manager.ts",
+        "apps/server/src/orchestration/Layers/ManagerReactor.ts",
+        "apps/server/src/orchestration/Layers/ManagerReactor.test.ts",
+        "apps/server/src/mcp/toolkits/manager/handlers.ts"
+      ],
+      "intent": "Retain a viable Argo manager for coding missions and child threads without requiring Orca or OMP.",
+      "dependencies": [
+        "role-foundation",
+        "skills-mcp",
+        "sop-cookbook"
+      ],
+      "acceptanceGap": "Trace and remove actual Orca/OMP dependencies; do not assume hiding navigation is sufficient."
+    },
+    {
+      "id": "watchdog",
+      "decision": "include",
+      "state": "not-ported",
+      "source": "pulseDevelop",
+      "evidence": [
+        "apps/server/src/orchestration/Layers/WatchdogReactor.ts",
+        "apps/server/src/orchestration/Layers/WatchdogReactor.test.ts",
+        "packages/client-runtime/src/state/watchdog.ts"
+      ],
+      "intent": "Retain the thread watchdog role with explicit scope and approval policy.",
+      "dependencies": [
+        "role-foundation"
+      ],
+      "acceptanceGap": "Validate action provenance and prevent silent automatic activation or approval."
+    },
+    {
+      "id": "sop-cookbook",
+      "decision": "include",
+      "state": "source-unresolved",
+      "intent": "Bring the requested SOP cookbook taken from 'scrape'.",
+      "dependencies": [],
+      "openQuestions": [
+        "Identify the exact repository, document or scrape export.",
+        "Confirm recipe format, permitted reuse and which recipes belong in the coding launch."
+      ],
+      "proposedRules": [
+        "Versioned declarative recipes with source attribution, required skills/MCP, steps and completion checks.",
+        "Imported instructions are data, not permission to run tools or approve actions.",
+        "Keep recipe content separate from role runtime and load only the selected recipe."
+      ]
+    },
+    {
+      "id": "skills-mcp",
+      "decision": "include",
+      "state": "inventory-needed",
+      "intent": "Launch with skills and MCP support; inventory exact launch content separately from infrastructure.",
+      "dependencies": [],
+      "proposedRules": [
+        "Reuse upstream/provider discovery, configuration, authentication and execution where sufficient.",
+        "Keep Pulse-owned skill content and MCP tools separate from upstream infrastructure.",
+        "Report support per provider and environment; never imply every provider supports every tool.",
+        "No automatic installation, credential import or bulk prompt injection."
+      ],
+      "openQuestions": [
+        "Which skills and MCP servers must ship or be configured at launch?"
+      ]
+    },
+    {
+      "id": "voice-dictation",
+      "decision": "include",
+      "state": "not-ported",
+      "source": "pulseDevelop",
+      "evidence": [
+        "apps/desktop/src/voice/VoiceDesktop.ts",
+        "apps/desktop/src/voice/VoiceDesktop.test.ts",
+        "apps/web/src/voice/VoiceController.ts",
+        "apps/web/src/voice/VoiceController.test.ts"
+      ],
+      "intent": "Dictate into the coding composer without requiring Office or Talk workspaces.",
+      "dependencies": [],
+      "proposedRules": [
+        "Reuse existing upstream dictation where available.",
+        "Separate platform capture/transcription adapters from composer text insertion.",
+        "Do not automatically submit dictated text.",
+        "Retain native mobile dictation supplied by its released client; evaluate responsive-web capture separately."
+      ]
+    }
+  ],
+  "prerequisites": [
+    {
+      "id": "identity-isolation",
+      "state": "not-started",
+      "intent": "Isolate experiment home, identity, credentials and update ownership before running or installing."
+    },
+    {
+      "id": "role-foundation",
+      "state": "design-proposed",
+      "dependencies": [
+        "identity-isolation"
+      ],
+      "intent": "Use ordinary upstream threads and providers, with Pulse role policy, provenance, opt-in, cancellation, budgets and durable role state behind a small tested interface.",
+      "rules": [
+        "Roles are policies, not replacement provider runtimes.",
+        "No second orchestration engine or duplicate thread history.",
+        "Opening a client or reconnecting must not create agents or re-enable paused policy.",
+        "Persisted Pulse-only state must not leak unsupported event variants into legacy client streams."
+      ]
+    }
+  ],
+  "excluded": [
+    {
+      "id": "orca",
+      "reason": "Explicitly excluded by user. Argo must not depend on the Orca workspace."
+    },
+    {
+      "id": "omp",
+      "reason": "Explicitly excluded by user. Exact implementation dependencies still require tracing."
+    },
+    {
+      "id": "office-mail-people-talk-workspaces",
+      "reason": "Outside the requested coding-only launch. Dictation remains in scope."
+    }
+  ],
+  "deferred": [
+    {
+      "id": "pr-filter-pilot",
+      "reason": "Superseded as the first feature slice by the narrowed role/skills/MCP/dictation scope."
+    },
+    {
+      "id": "standalone-scheduling-handoff-and-other-pulse-extras",
+      "reason": "Not selected for launch; include only a proven dependency or a later explicit choice."
+    }
+  ],
+  "proposedArchitecture": {
+    "choice": "Upstream-first source tree with cohesive Pulse-owned modules and a small explicit integration patch set.",
+    "alternatives": [
+      "Direct edits throughout upstream: simpler initially, more recurring conflict sites.",
+      "Separate companion process/application: stronger source isolation, but duplicates lifecycle/auth/state and complicates cross-client integration."
+    ],
+    "rules": [
+      "Preserve upstream file paths and ownership.",
+      "Prefer modules inside existing packages; create new packages only for real dependency or reuse needs.",
+      "Sequence shared contracts and runtime integration before independent UI work.",
+      "Extract a seam only to remove recurring conflicts or isolate important behavior for tests.",
+      "Track every upstream integration edit and its compatibility test.",
+      "Do not promise zero upstream edits or automatic forward compatibility."
+    ]
+  },
+  "clientCompatibility": {
+    "webDesktop": "Pulse-owned controls composed into existing thread, composer and settings patterns; no redesign decided.",
+    "releasedMobile": "No assumption that we can ship new native screens or fields. Preserve tested upstream thread behavior; unsupported Pulse management stays in responsive web.",
+    "responsiveWeb": "Proposed complete Pulse control path on phones, including visibility and stop/pause controls.",
+    "wireRules": [
+      "Keep the baseline protocol compatible with pinned client fixtures.",
+      "Do not assume optional fields or unknown union variants decode safely.",
+      "Pulse extension messages require explicit compatible-client opt-in; otherwise keep them off shared streams.",
+      "Capabilities default to unsupported when absent; authorization is enforced on the server.",
+      "Reuse environment authentication and routing, including remote/relay/tunnel; no localhost assumptions."
+    ],
+    "gates": [
+      "Pinned upstream mobile client with Pulse server.",
+      "Pulse web/desktop with baseline upstream server, with Pulse controls unavailable.",
+      "Pulse web/desktop with Pulse server.",
+      "Reconnect, multi-environment switching, pause/cancel and permission enforcement.",
+      "Capture actual client versions and unsupported cases; no blanket future-client guarantee."
+    ]
+  },
+  "nextAction": "Discuss and approve module packaging, identify 'scrape', and settle launch skill/MCP inventory. Then compare T3 and proposed minimal Pulse UI on desktop and mobile web. No runtime port or visual redesign yet."
+}
