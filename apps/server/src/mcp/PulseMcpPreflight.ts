@@ -25,11 +25,6 @@ export interface PulseMcpTurnSnapshot {
 
 export type PulseMcpPreflightDirective =
   | {
-      readonly type: "ready";
-      readonly snapshot: PulseMcpTurnSnapshot;
-      readonly readiness: Readonly<Record<string, "available" | "unknown">>;
-    }
-  | {
       readonly type: "submit";
       readonly snapshot: PulseMcpTurnSnapshot;
       readonly readiness: Readonly<Record<string, "available" | "unknown">>;
@@ -75,6 +70,10 @@ export const makePulseMcpTurnPreflight = (
   let finalized = false;
   let pauseReason: "unsupported-provider" | "connection-failed" | undefined;
   let failedConnectionIds: readonly string[] = [];
+  let latestFailures: Readonly<Record<string, string>> = Object.freeze(Object.create(null));
+  let latestReadiness: Readonly<Record<string, "available" | "unknown">> = Object.freeze(
+    Object.create(null),
+  );
   let queue = Promise.resolve();
 
   const serialize = <A>(operation: () => Promise<A>): Promise<A> => {
@@ -86,7 +85,7 @@ export const makePulseMcpTurnPreflight = (
     return result;
   };
 
-  const evaluate = async (submitWhenReady: boolean): Promise<PulseMcpPreflightDirective> => {
+  const evaluate = async (): Promise<PulseMcpPreflightDirective> => {
     if (
       snapshot.selectedConnectionIds.length > 0 &&
       !dependencies.supportsProvider(snapshot.provider)
@@ -121,6 +120,8 @@ export const makePulseMcpTurnPreflight = (
       if (result.status === "failed") failures[connectionId] = result.reason;
       else readiness[connectionId] = result.status;
     }
+    latestFailures = Object.freeze(failures);
+    latestReadiness = Object.freeze(readiness);
     failedConnectionIds = Object.freeze(Object.keys(failures));
     if (failedConnectionIds.length > 0) {
       pauseReason = "connection-failed";
@@ -128,22 +129,18 @@ export const makePulseMcpTurnPreflight = (
         type: "pause",
         snapshot,
         reason: "connection-failed",
-        failures: Object.freeze(failures),
+        failures: latestFailures,
       };
     }
     pauseReason = undefined;
-    if (submitWhenReady) finalized = true;
-    return {
-      type: submitWhenReady ? "submit" : "ready",
-      snapshot,
-      readiness: Object.freeze(readiness),
-    };
+    finalized = true;
+    return { type: "submit", snapshot, readiness: latestReadiness };
   };
 
   const start = async (): Promise<PulseMcpPreflightDirective> => {
     if (startRequested) return { type: "no-op", reason: "duplicate-action" };
     startRequested = true;
-    return serialize(() => evaluate(true));
+    return serialize(evaluate);
   };
 
   const act = async (action: PulseMcpPreflightAction): Promise<PulseMcpPreflightDirective> => {
@@ -153,7 +150,7 @@ export const makePulseMcpTurnPreflight = (
       if (finalized || !startRequested) return { type: "no-op", reason: "turn-finalized" };
       if (action.type === "retry") {
         if (pauseReason !== "connection-failed") return { type: "no-op", reason: "turn-finalized" };
-        return evaluate(false);
+        return evaluate();
       }
       if (action.type === "fix-connection") {
         if (pauseReason === undefined) return { type: "no-op", reason: "turn-finalized" };
@@ -161,7 +158,7 @@ export const makePulseMcpTurnPreflight = (
           type: "pause",
           snapshot,
           reason: pauseReason,
-          failures: Object.freeze(Object.create(null) as Record<string, string>),
+          failures: latestFailures,
         };
       }
       if (pauseReason !== "connection-failed") {
@@ -179,7 +176,7 @@ export const makePulseMcpTurnPreflight = (
       return {
         type: "submit",
         snapshot: reducedSnapshot,
-        readiness: Object.freeze(Object.create(null) as Record<string, "available" | "unknown">),
+        readiness: latestReadiness,
       };
     });
   };

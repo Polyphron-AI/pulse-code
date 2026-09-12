@@ -103,7 +103,7 @@ describe("Pulse MCP turn preflight decisions", () => {
     });
   });
 
-  it("pauses on a selected failure and retry reevaluates without submitting", async () => {
+  it("pauses on a selected failure and a successful Retry emits exactly one submit directive", async () => {
     const checkConnection = vi
       .fn<(id: string) => Promise<McpConnectionReadiness>>()
       .mockResolvedValueOnce({ status: "failed", reason: "sign-in required" })
@@ -117,7 +117,11 @@ describe("Pulse MCP turn preflight decisions", () => {
       reason: "connection-failed",
       failures: { docs: "sign-in required" },
     });
-    expect(await preflight.act({ id: "retry-1", type: "retry" })).toMatchObject({ type: "ready" });
+    expect(await preflight.act({ id: "retry-1", type: "retry" })).toMatchObject({ type: "submit" });
+    expect(await preflight.act({ id: "retry-2", type: "retry" })).toEqual({
+      type: "no-op",
+      reason: "turn-finalized",
+    });
     expect(checkConnection).toHaveBeenCalledTimes(2);
   });
 
@@ -135,6 +139,42 @@ describe("Pulse MCP turn preflight decisions", () => {
     expect(await preflight.act({ id: "continue-2", type: "continue-without-failed" })).toEqual({
       type: "no-op",
       reason: "turn-finalized",
+    });
+  });
+
+  it("preserves available and unknown readiness when continuing without failed connections", async () => {
+    const preflight = makePulseMcpTurnPreflight(
+      makeDependencies({
+        docs: { status: "failed", reason: "offline" },
+        issues: { status: "available" },
+        native: { status: "unknown" },
+      }),
+      {
+        turnId: "turn-1",
+        provider: "cursor",
+        defaultConnectionIds: ["docs", "issues", "native"],
+      },
+    );
+    await preflight.start();
+    expect(
+      await preflight.act({ id: "continue-1", type: "continue-without-failed" }),
+    ).toMatchObject({
+      type: "submit",
+      snapshot: { selectedConnectionIds: ["issues", "native"] },
+      readiness: { issues: "available", native: "unknown" },
+    });
+  });
+
+  it("preserves known failure reasons while directing the user to fix a connection", async () => {
+    const preflight = makePulseMcpTurnPreflight(
+      makeDependencies({ docs: { status: "failed", reason: "sign-in required" } }),
+      { turnId: "turn-1", provider: "codex", defaultConnectionIds: ["docs"] },
+    );
+    await preflight.start();
+    expect(await preflight.act({ id: "fix-1", type: "fix-connection" })).toMatchObject({
+      type: "pause",
+      reason: "connection-failed",
+      failures: { docs: "sign-in required" },
     });
   });
 
@@ -177,6 +217,33 @@ describe("Pulse MCP turn preflight decisions", () => {
     expect(await starting).toMatchObject({ type: "pause" });
     expect(await firstContinue).toMatchObject({ type: "submit" });
     expect(await secondContinue).toEqual({ type: "no-op", reason: "turn-finalized" });
+  });
+
+  it("allows only one submit when Retry and Continue race", async () => {
+    let releaseRetry!: (value: McpConnectionReadiness) => void;
+    const checkConnection = vi
+      .fn<(id: string) => Promise<McpConnectionReadiness>>()
+      .mockResolvedValueOnce({ status: "failed", reason: "offline" })
+      .mockImplementationOnce(
+        () =>
+          new Promise<McpConnectionReadiness>((resolve) => {
+            releaseRetry = resolve;
+          }),
+      );
+    const preflight = makePulseMcpTurnPreflight(
+      { supportsProvider: () => true, checkConnection },
+      { turnId: "turn-1", provider: "codex", defaultConnectionIds: ["docs"] },
+    );
+    await preflight.start();
+
+    const retrying = preflight.act({ id: "retry-1", type: "retry" });
+    const continuing = preflight.act({ id: "continue-1", type: "continue-without-failed" });
+    await Promise.resolve();
+    releaseRetry({ status: "available" });
+    const decisions = await Promise.all([retrying, continuing]);
+
+    expect(decisions.filter((decision) => decision.type === "submit")).toHaveLength(1);
+    expect(decisions).toContainEqual({ type: "no-op", reason: "turn-finalized" });
   });
 
   it("does not let Continue bypass an unsupported provider", async () => {
