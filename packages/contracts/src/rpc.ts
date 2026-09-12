@@ -2,6 +2,7 @@ import * as Schema from "effect/Schema";
 import * as Rpc from "effect/unstable/rpc/Rpc";
 import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 import { PULSE_SKILLS_METHODS, PulseSkillsRpcs } from "./pulseSkills.ts";
+import { PULSE_MCP_METHODS, PulseMcpRpcs } from "./pulseMcp.ts";
 import { NonNegativeInt, TrimmedNonEmptyString } from "./baseSchemas.ts";
 import {
   ProviderAuthCancelInput,
@@ -237,6 +238,14 @@ import {
 import { VcsError } from "./vcs.ts";
 
 export const WS_METHODS = {
+  pulseMcpList: PULSE_MCP_METHODS.list,
+  pulseMcpUpsert: PULSE_MCP_METHODS.upsert,
+  pulseMcpRemove: PULSE_MCP_METHODS.remove,
+  pulseMcpGetProviderDefault: PULSE_MCP_METHODS.getProviderDefault,
+  pulseMcpSetProviderDefault: PULSE_MCP_METHODS.setProviderDefault,
+  pulseMcpGetThreadOverride: PULSE_MCP_METHODS.getThreadOverride,
+  pulseMcpSetThreadOverride: PULSE_MCP_METHODS.setThreadOverride,
+  pulseMcpResetThreadOverride: PULSE_MCP_METHODS.resetThreadOverride,
   ...PULSE_SKILLS_METHODS,
   // Project registry methods
   projectsList: "projects.list",
@@ -1184,6 +1193,7 @@ const WsSubscribeResourceTelemetryRpc = Rpc.make(WS_METHODS.subscribeResourceTel
 });
 
 export const WsRpcGroup = RpcGroup.make(
+  ...PulseMcpRpcs,
   ...PulseSkillsRpcs,
   WsServerProbeRpc,
   WsServerGetConfigRpc,

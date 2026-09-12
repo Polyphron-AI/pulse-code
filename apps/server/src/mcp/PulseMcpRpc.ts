@@ -1,7 +1,4 @@
-import {
-  PulseMcpError,
-  type PulseMcpConnectionInput,
-} from "../../../../packages/contracts/src/pulseMcp.ts";
+import { PulseMcpError, type PulseMcpConnectionInput } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 
 import type {

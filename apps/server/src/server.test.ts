@@ -4856,6 +4856,91 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
+  it.effect("manages Pulse MCP connections without exposing secrets over websocket", () =>
+    Effect.gen(function* () {
+      yield* buildAppUnderTest();
+      const wsUrl = yield* getWsServerUrl("/ws");
+      yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) =>
+          Effect.gen(function* () {
+            const config = yield* client[WS_METHODS.serverGetConfig]({});
+            assert.equal(config.pulseCapabilities?.mcpManagement, true);
+            const connection = yield* client[WS_METHODS.pulseMcpUpsert]({
+              id: "fixture",
+              name: "Fixture",
+              config: {
+                transport: "http",
+                url: "https://example.test/mcp",
+                headers: { Authorization: { type: "secret", value: "fixture-secret" } },
+              },
+            });
+            assert.notInclude(JSON.stringify(connection), "fixture-secret");
+            assert.notInclude(JSON.stringify(connection), "secretRef");
+            const retained = yield* client[WS_METHODS.pulseMcpUpsert]({
+              id: "fixture",
+              name: "Renamed",
+              config: {
+                transport: "http",
+                url: "https://example.test/mcp",
+                headers: { Authorization: { type: "retain-secret" } },
+              },
+            });
+            assert.equal(retained.name, "Renamed");
+            assert.deepEqual(
+              yield* client[WS_METHODS.pulseMcpGetThreadOverride]({ threadId: defaultThreadId }),
+              {},
+            );
+            yield* client[WS_METHODS.pulseMcpSetThreadOverride]({
+              threadId: defaultThreadId,
+              connectionIds: [],
+            });
+            assert.deepEqual(
+              yield* client[WS_METHODS.pulseMcpGetThreadOverride]({ threadId: defaultThreadId }),
+              { connectionIds: [] },
+            );
+            yield* client[WS_METHODS.pulseMcpResetThreadOverride]({ threadId: defaultThreadId });
+            assert.deepEqual(
+              yield* client[WS_METHODS.pulseMcpGetThreadOverride]({ threadId: defaultThreadId }),
+              {},
+            );
+            yield* client[WS_METHODS.pulseMcpRemove]({ id: "fixture" });
+            assert.deepEqual(yield* client[WS_METHODS.pulseMcpList]({}), []);
+          }),
+        ),
+      );
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
+  it.effect("rejects Pulse MCP mutation from a read-only websocket session", () =>
+    Effect.gen(function* () {
+      yield* buildAppUnderTest();
+      const { body } = yield* exchangeAccessToken(defaultDesktopBootstrapToken, {
+        scope: "orchestration:read",
+      });
+      const ticketResponse = yield* HttpClient.post("/api/auth/websocket-ticket", {
+        headers: { authorization: `Bearer ${body.access_token ?? ""}` },
+      });
+      const ticket = (yield* ticketResponse.json) as { readonly ticket: string };
+      const wsUrl = `${yield* getWsServerUrl("/ws", { authenticated: false })}?wsTicket=${encodeURIComponent(ticket.ticket)}`;
+      yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) =>
+          Effect.gen(function* () {
+            assert.deepEqual(yield* client[WS_METHODS.pulseMcpList]({}), []);
+            const error = yield* Effect.flip(
+              client[WS_METHODS.pulseMcpSetThreadOverride]({
+                threadId: defaultThreadId,
+                connectionIds: [],
+              }),
+            );
+            assert.equal(error._tag, "EnvironmentAuthorizationError");
+            if (error._tag === "EnvironmentAuthorizationError")
+              assert.equal(error.requiredScope, "orchestration:operate");
+          }),
+        ),
+      );
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
   it.effect("persists managed skills across authenticated websocket connections", () =>
     Effect.gen(function* () {
       yield* buildAppUnderTest();

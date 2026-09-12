@@ -78,6 +78,8 @@ import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 
 import * as CheckpointDiffQuery from "./checkpointing/CheckpointDiffQuery.ts";
 import * as ServerConfig from "./config.ts";
+import * as PulseMcpConfig from "./mcp/PulseMcpConfigService.ts";
+import { pulseMcpHandlers } from "./mcp/PulseMcpRpc.ts";
 import {
   ManagedSkills,
   managedSkillHandlers,
@@ -534,6 +536,7 @@ const makeWsRpcLayer = (
       const serverUpdate = yield* ServerSelfUpdate.ServerSelfUpdate;
       const config = yield* ServerConfig.ServerConfig;
       const pulseSkills = managedSkillHandlers(yield* ManagedSkills);
+      const pulseMcp = pulseMcpHandlers(yield* PulseMcpConfig.PulseMcpConfigService);
       const lifecycleEvents = yield* ServerLifecycleEvents.ServerLifecycleEvents;
       const serverSettings = yield* ServerSettings.ServerSettingsService;
       const startup = yield* ServerRuntimeStartup.ServerRuntimeStartup;
@@ -1284,7 +1287,7 @@ const makeWsRpcLayer = (
             },
             settings,
             shellResumeCompletionMarker: true,
-            pulseCapabilities: { managedSkills: true },
+            pulseCapabilities: { managedSkills: true, mcpManagement: true },
             ...(fileManagerRevealKind === undefined
               ? {}
               : {
@@ -1774,6 +1777,48 @@ const makeWsRpcLayer = (
           observeRpcEffect(WS_METHODS.pulseSkillsList, pulseSkills.list(), {
             "rpc.aggregate": "pulse.skills",
           }),
+        [WS_METHODS.pulseMcpList]: () =>
+          observeRpcEffect(WS_METHODS.pulseMcpList, pulseMcp.list(), {
+            "rpc.aggregate": "pulse.mcp",
+          }),
+        [WS_METHODS.pulseMcpUpsert]: (input) =>
+          observeRpcEffect(WS_METHODS.pulseMcpUpsert, pulseMcp.upsert(input), {
+            "rpc.aggregate": "pulse.mcp",
+          }),
+        [WS_METHODS.pulseMcpRemove]: (input) =>
+          observeRpcEffect(WS_METHODS.pulseMcpRemove, pulseMcp.remove(input), {
+            "rpc.aggregate": "pulse.mcp",
+          }),
+        [WS_METHODS.pulseMcpGetProviderDefault]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.pulseMcpGetProviderDefault,
+            pulseMcp.getProviderDefault(input),
+            { "rpc.aggregate": "pulse.mcp" },
+          ),
+        [WS_METHODS.pulseMcpSetProviderDefault]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.pulseMcpSetProviderDefault,
+            pulseMcp.setProviderDefault(input),
+            { "rpc.aggregate": "pulse.mcp" },
+          ),
+        [WS_METHODS.pulseMcpGetThreadOverride]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.pulseMcpGetThreadOverride,
+            pulseMcp.getThreadOverride(input),
+            { "rpc.aggregate": "pulse.mcp" },
+          ),
+        [WS_METHODS.pulseMcpSetThreadOverride]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.pulseMcpSetThreadOverride,
+            pulseMcp.setThreadOverride(input),
+            { "rpc.aggregate": "pulse.mcp" },
+          ),
+        [WS_METHODS.pulseMcpResetThreadOverride]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.pulseMcpResetThreadOverride,
+            pulseMcp.resetThreadOverride(input),
+            { "rpc.aggregate": "pulse.mcp" },
+          ),
         [WS_METHODS.pulseSkillsMutate]: (input) =>
           observeRpcEffect(WS_METHODS.pulseSkillsMutate, pulseSkills.mutate(input), {
             "rpc.aggregate": "pulse.skills",
@@ -2916,6 +2961,7 @@ const makeWsRpcLayer = (
 export const websocketRpcRouteLayer = Layer.unwrap(
   Effect.gen(function* () {
     const managedSkills = yield* ManagedSkills;
+    const pulseMcpConfig = yield* PulseMcpConfig.PulseMcpConfigService;
     const previewAutomationBroker = yield* PreviewAutomationBroker.PreviewAutomationBroker;
     const baseServerSelfUpdate = yield* ServerSelfUpdate.ServerSelfUpdate;
     const config = yield* ServerConfig.ServerConfig;
@@ -2979,6 +3025,7 @@ export const websocketRpcRouteLayer = Layer.unwrap(
             ).pipe(
               Layer.provideMerge(RpcSerialization.layerJson),
               Layer.provide(Layer.succeed(ManagedSkills, managedSkills)),
+              Layer.provide(Layer.succeed(PulseMcpConfig.PulseMcpConfigService, pulseMcpConfig)),
               Layer.provide(AgentSessionScanner.layer),
               Layer.provide(ProviderMaintenanceRunner.layer),
               Layer.provide(Layer.succeed(ServerSelfUpdate.ServerSelfUpdate, serverSelfUpdate)),
@@ -3021,4 +3068,4 @@ export const websocketRpcRouteLayer = Layer.unwrap(
       ),
     );
   }),
-).pipe(Layer.provide(managedSkillsLayer));
+).pipe(Layer.provide(managedSkillsLayer), Layer.provide(PulseMcpConfig.layer));
