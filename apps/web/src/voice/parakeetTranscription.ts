@@ -25,12 +25,13 @@ async function decodeToMono16Khz(audio: Blob): Promise<Float32Array> {
   }
 }
 
-/** Lazy local transcription. Only setup() or transcribe() creates the worker and loads the model. */
+/** Lazy local transcription. setup() creates the worker and loads the model explicitly. */
 export class ParakeetTranscriber implements PulseDictationTranscriber<Blob> {
   readonly #createWorker: () => Worker;
   readonly #decode: (audio: Blob) => Promise<Float32Array>;
   #worker: Worker | null = null;
-  #ready = false;
+  #generation = 0;
+  #readyGeneration: number | null = null;
   #nextId = 0;
   readonly #pending = new Map<number, Pending>();
 
@@ -44,22 +45,29 @@ export class ParakeetTranscriber implements PulseDictationTranscriber<Blob> {
   }
 
   async setup(signal: AbortSignal): Promise<void> {
+    const generation = this.#generation;
     await this.#request("setup", undefined, signal);
-    this.#ready = true;
+    if (generation !== this.#generation) throw new Error("Parakeet setup was cancelled.");
+    this.#readyGeneration = generation;
   }
 
   async transcribe(audio: Blob, signal: AbortSignal): Promise<string> {
     if (signal.aborted) throw signal.reason;
-    if (!this.#ready) {
+    const generation = this.#generation;
+    if (this.#readyGeneration !== generation) {
       throw new Error("Set up the Parakeet model before using local dictation.");
     }
     const pcm = await this.#decode(audio);
     if (signal.aborted) throw signal.reason;
+    if (generation !== this.#generation || this.#readyGeneration !== generation) {
+      throw new Error("Parakeet setup is no longer available.");
+    }
     return this.#request("transcribe", pcm, signal);
   }
 
   reset(): void {
-    this.#ready = false;
+    this.#generation += 1;
+    this.#readyGeneration = null;
     this.#worker?.terminate();
     this.#worker = null;
     for (const item of this.#pending.values()) item.reject(new Error("Parakeet cancelled."));
@@ -77,6 +85,8 @@ export class ParakeetTranscriber implements PulseDictationTranscriber<Blob> {
       else item.resolve(event.data.text ?? "");
     });
     worker.addEventListener("error", () => {
+      this.#generation += 1;
+      this.#readyGeneration = null;
       for (const item of this.#pending.values()) {
         item.reject(
           new Error("Parakeet could not start. Check the connection and available memory."),

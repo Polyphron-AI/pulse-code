@@ -8,6 +8,17 @@ class FakeWorker extends EventTarget {
   reply(data: object) {
     this.dispatchEvent(new MessageEvent("message", { data }));
   }
+  fail() {
+    this.dispatchEvent(new Event("error"));
+  }
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
 }
 
 describe("ParakeetTranscriber", () => {
@@ -81,6 +92,65 @@ describe("ParakeetTranscriber", () => {
     await setup;
     transcriber.reset();
 
+    await expect(
+      transcriber.transcribe(new Blob([new Uint8Array([1])]), new AbortController().signal),
+    ).rejects.toThrow("Set up the Parakeet model");
+    expect(createWorker).toHaveBeenCalledOnce();
+    expect(decode).not.toHaveBeenCalled();
+  });
+
+  it("does not create a new worker when reset happens during audio decoding", async () => {
+    const worker = new FakeWorker();
+    const createWorker = vi.fn(() => worker as unknown as Worker);
+    const decoded = deferred<Float32Array>();
+    const transcriber = new ParakeetTranscriber(createWorker, () => decoded.promise);
+    const setup = transcriber.setup(new AbortController().signal);
+    worker.reply({ id: 1, text: "" });
+    await setup;
+
+    const pending = transcriber.transcribe(
+      new Blob([new Uint8Array([1])]),
+      new AbortController().signal,
+    );
+    transcriber.reset();
+    decoded.resolve(new Float32Array([1]));
+
+    await expect(pending).rejects.toThrow("no longer available");
+    expect(createWorker).toHaveBeenCalledOnce();
+    expect(worker.postMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it("clears readiness when the prepared worker fails", async () => {
+    const firstWorker = new FakeWorker();
+    const secondWorker = new FakeWorker();
+    const createWorker = vi
+      .fn<() => Worker>()
+      .mockReturnValueOnce(firstWorker as unknown as Worker)
+      .mockReturnValueOnce(secondWorker as unknown as Worker);
+    const decode = vi.fn(async () => new Float32Array([1]));
+    const transcriber = new ParakeetTranscriber(createWorker, decode);
+    const setup = transcriber.setup(new AbortController().signal);
+    firstWorker.reply({ id: 1, text: "" });
+    await setup;
+    firstWorker.fail();
+
+    await expect(
+      transcriber.transcribe(new Blob([new Uint8Array([1])]), new AbortController().signal),
+    ).rejects.toThrow("Set up the Parakeet model");
+    expect(createWorker).toHaveBeenCalledOnce();
+    expect(decode).not.toHaveBeenCalled();
+  });
+
+  it("does not restore readiness from a setup completion invalidated by reset", async () => {
+    const worker = new FakeWorker();
+    const createWorker = vi.fn(() => worker as unknown as Worker);
+    const decode = vi.fn(async () => new Float32Array([1]));
+    const transcriber = new ParakeetTranscriber(createWorker, decode);
+    const setup = transcriber.setup(new AbortController().signal);
+    worker.reply({ id: 1, text: "" });
+    transcriber.reset();
+
+    await expect(setup).rejects.toThrow("setup was cancelled");
     await expect(
       transcriber.transcribe(new Blob([new Uint8Array([1])]), new AbortController().signal),
     ).rejects.toThrow("Set up the Parakeet model");
