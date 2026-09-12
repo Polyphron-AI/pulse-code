@@ -1,6 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { runFeatureSuites } from "./features.mjs";
+import { featureTestArgs, runFeatureSuites } from "./features.mjs";
+
+test("host tests exclude prepared upstream candidate worktrees", () => {
+  const args = featureTestArgs("/fixture", {
+    file: "apps/server/src/skills/ManagedSkillRpc.test.ts",
+  });
+  assert.deepEqual(args.slice(-2), ["--exclude", "**/.t3/**"]);
+});
 
 test("missing features block without attempting a runner", () => {
   const report = runFeatureSuites(

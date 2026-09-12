@@ -34,8 +34,10 @@ task upstream:test
 task upstream:features
 ```
 
-`upstream:features` runs only the integrated skills-store, MCP-preflight and
-dictation-lifecycle suites. Missing suites, runner failures and timeouts block its
+`upstream:features` runs the integrated skills store, library, RPC bridge and
+contracts tests, RPC authorization tests, MCP preflight and dictation lifecycle
+suites. Prepared source worktrees under `.t3` are excluded from host test discovery.
+Missing suites, runner failures and timeouts block its
 result. Logs and the platform/revision-stamped report live in
 `.t3/upstream-updates/features/`. Passing these module tests is not a release gate
 pass: real provider/UI integration and packaged-app tests remain required. No

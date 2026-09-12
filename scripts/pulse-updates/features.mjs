@@ -8,7 +8,23 @@ export const featureSuites = [
   { id: "managed-skills", file: "apps/server/src/skills/ManagedSkillStore.test.ts" },
   { id: "mcp-preflight", file: "apps/server/src/mcp/PulseMcpPreflight.test.ts" },
   { id: "dictation-lifecycle", file: "apps/web/src/voice/pulseDictation.test.ts" },
+  { id: "managed-skills-library", file: "apps/server/src/skills/ManagedSkillLibrary.test.ts" },
+  { id: "managed-skills-rpc", file: "apps/server/src/skills/ManagedSkillRpc.test.ts" },
+  { id: "managed-skills-contracts", file: "packages/contracts/src/pulseSkills.test.ts" },
+  { id: "rpc-authorization", file: "apps/server/src/auth/RpcAuthorization.test.ts" },
 ];
+
+export function featureTestArgs(root, suite) {
+  // Prepared upstream candidates live under .t3 and must not enter the host test run.
+  return [
+    join(root, "node_modules/vite-plus/bin/vp"),
+    "test",
+    "run",
+    suite.file,
+    "--exclude",
+    "**/.t3/**",
+  ];
+}
 
 export function runFeatureSuites(root, run, exists = existsSync) {
   const suites = featureSuites.map((suite) => {
@@ -39,18 +55,14 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const directory = join(root, ".t3", "upstream-updates", "features");
   mkdirSync(directory, { recursive: true });
   const report = runFeatureSuites(root, (suite) => {
-    const result = spawnSync(
-      process.execPath,
-      [join(root, "node_modules/vite-plus/bin/vp"), "test", "run", suite.file],
-      {
-        cwd: root,
-        encoding: "utf8",
-        windowsHide: true,
-        timeout: 180_000,
-        maxBuffer: 8 * 1024 * 1024,
-        env: { ...process.env, CI: "true" },
-      },
-    );
+    const result = spawnSync(process.execPath, featureTestArgs(root, suite), {
+      cwd: root,
+      encoding: "utf8",
+      windowsHide: true,
+      timeout: 180_000,
+      maxBuffer: 8 * 1024 * 1024,
+      env: { ...process.env, CI: "true" },
+    });
     writeFileSync(
       join(directory, `${suite.id}.log`),
       `${result.stdout ?? ""}\n${result.stderr ?? ""}\n${result.error?.message ?? ""}`,

@@ -376,7 +376,32 @@
       "Capture actual client versions and unsupported cases; no blanket future-client guarantee."
     ]
   },
-  "nextAction": "Sol implements the managed-skill foundation in its isolated worktree. Root discusses MCP failure behavior and reviews the frozen skills batch before integration; shared contract/settings changes remain sequenced.",
+  "nextAction": "Parallel Sol agents fix reviewed skills and MCP persistence defects and dictation adapter lifecycle/setup defects in separate worktrees. Root sequences authenticated transport and settings/provider/composer integration. Review frozen fixes before merging; packaged/VM verification remains blocked until usable features exist.",
+  "parallelIntegrationBatches": [
+    {
+      "id": "skills-library-and-settings",
+      "branch": "feat/pulse-next-skills-integration",
+      "state": "review-fixes-in-progress",
+      "integratedServiceRevision": "662e7b8b5",
+      "integratedRpcRevision": "b40a6fe75",
+      "pendingPanelRevisions": ["c5c8e386d", "5fd73514b"],
+      "remaining": "Reject corrupt revision history, preserve immutable revision metadata, mount settings panel, preserve identity through provider invocation and picker. RPC uses existing read/operate scopes and one route-lifetime library writer."
+    },
+    {
+      "id": "mcp-durable-connections",
+      "branch": "feat/pulse-next-mcp-integration",
+      "state": "review-fixes-in-progress",
+      "reviewedRevision": "67181d759",
+      "remaining": "Validate full persisted state and secret ownership; crash-safe secret/config publication. Then authenticated management, provider session configuration and composer pause/retry/continue integration."
+    },
+    {
+      "id": "dictation-concrete-adapters",
+      "branch": "feat/pulse-next-dictation-adapters",
+      "state": "review-fixes-in-progress",
+      "reviewedRevisions": ["d9cd56398", "0edbe1c1b", "1cd3e6a91"],
+      "remaining": "Align ONNX runtime with Parakeet; require explicit setup before model load; harden recorder cancellation and response bounds. Then authenticated environment upload, protected Groq key, settings and composer."
+    }
+  ],
   "decisionPolicy": {
     "pending": "Recommendations are proposals, not approval to implement.",
     "inherit": "Retain upstream behavior; port only a demonstrated missing Pulse behavior.",
