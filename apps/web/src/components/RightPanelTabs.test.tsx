@@ -79,6 +79,8 @@ function renderTabs(first: DesktopPreviewFavicon | null, second?: DesktopPreview
       onAddDiff={() => undefined}
       onAddFiles={() => undefined}
       onAddAgents={() => undefined}
+      onAddAssistants={() => undefined}
+      onAddWatchdog={() => undefined}
       liveAgentCount={0}
       browserAvailable
       terminalAvailable={false}

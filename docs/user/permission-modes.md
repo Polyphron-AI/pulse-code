@@ -45,3 +45,29 @@ labels above describe what you get; the exact per-provider translation is intern
 change.
 
 Mobile offers the same four modes with the same labels and descriptions.
+
+## Watchdog
+
+A watchdog is a second agent that sits on one thread and answers on your behalf. When the thread
+stops for a permission approval or a question, the watchdog reads your rules and either responds
+or hands the thread back to you. It is the way to leave a **Supervised** thread running while you
+are away without approving everything in advance.
+
+Turn it on from the eye button in the thread header, from the thread's right-click menu in the
+sidebar, or from the command palette with "Toggle watchdog". The Watchdog tab in the right panel
+holds the rules: plain sentences such as "Approve safe read-only commands. Ask me before anything
+that deletes files or pushes." You can also give the watchdog its own model; leave it on the
+default text model if you have no preference. Rules save when you click away from the box.
+
+Threads with a watchdog show an eye marker in the sidebar, and the panel counts how many times the
+watchdog has stepped in.
+
+**Watchdog stuck** means the watchdog reached something your rules do not cover and stopped rather
+than guess. The thread waits for you, the sidebar marker turns amber, and the Watchdog tab shows
+the reason it gave. Press **Take action** to clear the escalation and put the cursor back in the
+composer so you can answer the agent yourself. The watchdog stays on and picks up again from the
+next question.
+
+On mobile the watchdog works the same way, minus the model picker: tap the eye in the thread header
+to switch it on or off, press and hold it to edit the rules, and use the **Take action** button on
+the "Watchdog stuck" banner in the thread.

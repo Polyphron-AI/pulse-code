@@ -1685,6 +1685,10 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
           ...(isCodexResumeCursorSchema(input.resumeCursor)
             ? { resumeCursor: input.resumeCursor }
             : {}),
+          // `input.allowedTools` is not supported here: Codex has no per-session tool
+          // allow-list. An assistant thread on this provider runs under
+          // approval-required instead, so every write is gated by the user.
+          // See docs/plans/2026-09-11-agent-roles-design.md section 1.
           runtimeMode: input.runtimeMode,
           ...(input.modelSelection?.instanceId === boundInstanceId
             ? { model: input.modelSelection.model }

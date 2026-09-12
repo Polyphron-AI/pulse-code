@@ -3,6 +3,8 @@
 > For maintainers. Using Pulse Code? See [docs/user](../user/).
 
 This document covers the unified release workflow for stable and nightly desktop releases.
+Unsigned Windows preview builds (tags `pulse-preview-*`) follow a separate manual flow, documented in
+[Pulse Preview installer](./pulse-preview-installer.md).
 
 ## What the workflow does
 

@@ -97,6 +97,15 @@ function redactProviderEnvironmentVariable(
   };
 }
 
+const VOICE_TRANSCRIPTION_API_KEY_SECRET = "voice-transcription-api-key";
+
+function redactVoiceSettings(voice: ServerSettings["voice"]): ServerSettings["voice"] {
+  return {
+    ...voice,
+    transcription: { ...voice.transcription, apiKey: "" },
+  };
+}
+
 export function redactServerSettingsForClient(settings: ServerSettings): ServerSettings {
   const providerInstances = Object.fromEntries(
     Object.entries(settings.providerInstances).map(([instanceId, instance]) => [
@@ -109,7 +118,7 @@ export function redactServerSettingsForClient(settings: ServerSettings): ServerS
         : instance,
     ]),
   );
-  return { ...settings, providerInstances };
+  return { ...settings, providerInstances, voice: redactVoiceSettings(settings.voice) };
 }
 
 export class ServerSettingsService extends Context.Service<
@@ -352,9 +361,90 @@ const make = Effect.gen(function* () {
           environment,
         } satisfies ProviderInstanceConfig;
       }
+      const voice = yield* materializeVoiceApiKey(settings.voice);
       return {
         ...settings,
         providerInstances: providerInstances as ServerSettings["providerInstances"],
+        voice,
+      };
+    });
+
+  const materializeVoiceApiKey = (
+    voice: ServerSettings["voice"],
+  ): Effect.Effect<ServerSettings["voice"], ServerSettingsError> =>
+    Effect.gen(function* () {
+      if (!voice.transcription.apiKeyRedacted) return voice;
+      const secret = yield* secretStore
+        .get(VOICE_TRANSCRIPTION_API_KEY_SECRET)
+        .pipe(
+          Effect.mapError(
+            (cause) => new ServerSettingsError({ settingsPath, operation: "read-secret", cause }),
+          ),
+        );
+      return {
+        ...voice,
+        transcription: {
+          ...voice.transcription,
+          apiKey: Option.isSome(secret) ? textDecoder.decode(secret.value) : "",
+        },
+      };
+    });
+
+  /**
+   * The settings file never holds the transcription API key. A non-empty key in
+   * a patch moves into the secret store; an empty key clears it. Anything else
+   * keeps whatever is stored.
+   */
+  const persistVoiceApiKey = (
+    current: ServerSettings,
+    patch: ServerSettingsPatch,
+    next: ServerSettings,
+  ): Effect.Effect<ServerSettings, ServerSettingsError> =>
+    Effect.gen(function* () {
+      const patchedKey = patch.voice?.transcription?.apiKey;
+      if (patchedKey === undefined) {
+        return {
+          ...next,
+          voice: {
+            ...next.voice,
+            transcription: {
+              ...next.voice.transcription,
+              apiKey: "",
+              apiKeyRedacted: current.voice.transcription.apiKeyRedacted,
+            },
+          },
+        };
+      }
+      const trimmed = patchedKey.trim();
+      if (trimmed.length > 0) {
+        yield* secretStore
+          .set(VOICE_TRANSCRIPTION_API_KEY_SECRET, textEncoder.encode(trimmed))
+          .pipe(
+            Effect.mapError(
+              (cause) =>
+                new ServerSettingsError({ settingsPath, operation: "write-secret", cause }),
+            ),
+          );
+      } else {
+        yield* secretStore
+          .remove(VOICE_TRANSCRIPTION_API_KEY_SECRET)
+          .pipe(
+            Effect.mapError(
+              (cause) =>
+                new ServerSettingsError({ settingsPath, operation: "remove-secret", cause }),
+            ),
+          );
+      }
+      return {
+        ...next,
+        voice: {
+          ...next.voice,
+          transcription: {
+            ...next.voice.transcription,
+            apiKey: "",
+            apiKeyRedacted: trimmed.length > 0,
+          },
+        },
       };
     });
 
@@ -592,7 +682,7 @@ const make = Effect.gen(function* () {
           const current = yield* getSettingsFromCache;
           const nextPersisted = yield* persistProviderEnvironmentSecrets(
             current,
-            applyServerSettingsPatch(current, patch),
+            yield* persistVoiceApiKey(current, patch, applyServerSettingsPatch(current, patch)),
           );
           const next = yield* normalizeServerSettings(nextPersisted);
           yield* writeSettingsAtomically(next);

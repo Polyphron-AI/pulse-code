@@ -7,6 +7,8 @@ import {
   ClientSettingsSchema,
   ClientSettingsPatch,
   DEFAULT_SERVER_SETTINGS,
+  DEFAULT_VOICE_TRANSCRIPTION_BASE_URL,
+  DEFAULT_VOICE_TRANSCRIPTION_MODEL,
   OmpSettings,
   ServerSettings,
   ServerSettingsPatch,
@@ -49,6 +51,31 @@ describe("OmpSettings", () => {
 
   it("publishes the shared Oh My Pi display name", () => {
     expect(PROVIDER_DISPLAY_NAMES[ProviderDriverKind.make("omp")]).toBe("Oh My Pi");
+  });
+});
+
+describe("VoiceSettings", () => {
+  it("defaults to Parakeet on the server", () => {
+    const decoded = decodeServerSettings({});
+    expect(decoded.voice.transcription).toEqual({
+      provider: "parakeet",
+      model: "",
+      baseUrl: "",
+      apiKey: "",
+      apiKeyRedacted: false,
+    });
+    expect(DEFAULT_VOICE_TRANSCRIPTION_MODEL.groq).toBe("whisper-large-v3-turbo");
+    expect(DEFAULT_VOICE_TRANSCRIPTION_BASE_URL.groq).toBe("https://api.groq.com/openai/v1");
+  });
+
+  it("accepts a provider switch in a server patch", () => {
+    const patch = decodeServerSettingsPatch({
+      voice: { transcription: { provider: "groq", model: "  whisper-large-v3-turbo " } },
+    });
+    expect(patch.voice?.transcription).toEqual({
+      provider: "groq",
+      model: "whisper-large-v3-turbo",
+    });
   });
 });
 

@@ -15,6 +15,8 @@ export type ThreadActionMenuId =
   | "snooze"
   | `snooze:${string}`
   | "unsnooze"
+  | "watchdog-on"
+  | "watchdog-off"
   | "rename"
   | "regenerate-title"
   | "mark-unread"
@@ -31,6 +33,8 @@ export interface ThreadActionMenuState {
   readonly isSnoozed: boolean;
   readonly canSnoozeNow: boolean;
   readonly isRegeneratingTitle: boolean;
+  /** Per-thread watchdog switch; the thread header and panel show the same state. */
+  readonly watchdogEnabled: boolean;
   /** Archive rejects a thread with an active turn, so disable it here rather than let the action fail. */
   readonly isRunning: boolean;
   readonly supports: {
@@ -91,6 +95,9 @@ export function buildThreadActionMenuItems(
               },
         ]
       : []),
+    state.watchdogEnabled
+      ? { id: "watchdog-off" as const, label: "Turn watchdog off" }
+      : { id: "watchdog-on" as const, label: "Turn watchdog on" },
     { id: "rename", label: "Rename thread" },
     ...(state.supports.titleRegeneration
       ? [

@@ -289,6 +289,7 @@ export function applyThreadDetailEvent(
         ...(event.payload.attachments !== undefined
           ? { attachments: event.payload.attachments }
           : {}),
+        ...(event.payload.authoredBy !== undefined ? { authoredBy: event.payload.authoredBy } : {}),
         turnId: event.payload.turnId,
         streaming: event.payload.streaming,
         createdAt: event.payload.createdAt,
@@ -366,6 +367,16 @@ export function applyThreadDetailEvent(
             )
           : thread.checkpoints;
 
+      // A human reply clears a stuck watchdog: reset the intervention count
+      // and any escalation so the banner goes away.
+      const isUserAuthored =
+        event.payload.role === "user" &&
+        (event.payload.authoredBy === undefined || event.payload.authoredBy === "user");
+      const watchdogReset =
+        isUserAuthored && thread.watchdog != null
+          ? { watchdog: { ...thread.watchdog, interventions: 0, escalatedAt: null } }
+          : {};
+
       return {
         kind: "updated",
         thread: {
@@ -374,6 +385,7 @@ export function applyThreadDetailEvent(
           checkpoints,
           latestTurn,
           updatedAt: event.occurredAt,
+          ...watchdogReset,
         },
       };
     }
@@ -591,6 +603,12 @@ export function applyThreadDetailEvent(
         thread: { ...thread, activities, updatedAt: event.occurredAt },
       };
     }
+
+    case "thread.watchdog-updated":
+      return {
+        kind: "updated",
+        thread: { ...thread, watchdog: event.payload.watchdog, updatedAt: event.occurredAt },
+      };
 
     // ── Events that don't mutate thread state directly ──────────────
     case "thread.approval-response-requested":

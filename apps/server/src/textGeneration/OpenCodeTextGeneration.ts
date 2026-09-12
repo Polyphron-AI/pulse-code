@@ -22,13 +22,17 @@ import {
   buildBranchNamePrompt,
   buildCommitMessagePrompt,
   buildPrContentPrompt,
+  buildThreadHandoffSummaryPrompt,
   buildThreadTitlePrompt,
+  buildWatchdogDecisionPrompt,
 } from "./TextGenerationPrompts.ts";
 import * as TextGeneration from "./TextGeneration.ts";
 import {
   sanitizeCommitSubject,
   sanitizePrTitle,
+  sanitizeThreadHandoffSummary,
   sanitizeThreadTitle,
+  sanitizeWatchdogDecision,
 } from "./TextGenerationUtils.ts";
 import * as OpenCodeRuntime from "../provider/opencodeRuntime.ts";
 
@@ -39,6 +43,8 @@ const OpenCodeTextGenerationOperation = Schema.Literals([
   "generatePrContent",
   "generateBranchName",
   "generateThreadTitle",
+  "generateThreadHandoffSummary",
+  "generateWatchdogDecision",
 ]);
 
 type OpenCodeTextGenerationOperation = typeof OpenCodeTextGenerationOperation.Type;
@@ -253,7 +259,9 @@ export const makeOpenCodeTextGeneration = Effect.fn("makeOpenCodeTextGeneration"
       | "generateCommitMessage"
       | "generatePrContent"
       | "generateBranchName"
-      | "generateThreadTitle";
+      | "generateThreadTitle"
+      | "generateThreadHandoffSummary"
+      | "generateWatchdogDecision";
   }) =>
     sharedServerMutex.withPermit(
       Effect.gen(function* () {
@@ -615,10 +623,52 @@ export const makeOpenCodeTextGeneration = Effect.fn("makeOpenCodeTextGeneration"
       };
     });
 
+  const generateThreadHandoffSummary: TextGeneration.TextGeneration["Service"]["generateThreadHandoffSummary"] =
+    Effect.fn("OpenCodeTextGeneration.generateThreadHandoffSummary")(function* (input) {
+      const { prompt, outputSchema } = buildThreadHandoffSummaryPrompt({
+        transcript: input.transcript,
+        sourceLabel: input.sourceLabel,
+      });
+      const generated = yield* runOpenCodeJson({
+        operation: "generateThreadHandoffSummary",
+        cwd: input.cwd,
+        prompt,
+        outputSchemaJson: outputSchema,
+        modelSelection: input.modelSelection,
+      });
+
+      return {
+        summary: sanitizeThreadHandoffSummary(generated.summary),
+      };
+    });
+
+  const generateWatchdogDecision: TextGeneration.TextGeneration["Service"]["generateWatchdogDecision"] =
+    Effect.fn("OpenCodeTextGeneration.generateWatchdogDecision")(function* (input) {
+      const { prompt, outputSchema } = buildWatchdogDecisionPrompt({
+        rules: input.rules,
+        pendingRequest: input.pendingRequest,
+      });
+      const generated = yield* runOpenCodeJson({
+        operation: "generateWatchdogDecision",
+        cwd: input.cwd,
+        prompt,
+        outputSchemaJson: outputSchema,
+        modelSelection: input.modelSelection,
+      });
+
+      return {
+        decision: sanitizeWatchdogDecision(generated.decision),
+        answer: generated.answer,
+        reason: generated.reason,
+      };
+    });
+
   return {
     generateCommitMessage,
     generatePrContent,
     generateBranchName,
     generateThreadTitle,
+    generateThreadHandoffSummary,
+    generateWatchdogDecision,
   } satisfies TextGeneration.TextGeneration["Service"];
 });

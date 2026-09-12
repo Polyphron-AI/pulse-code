@@ -273,4 +273,63 @@ it.layer(CursorTextGenerationTestLayer)("CursorTextGeneration", (it) => {
         }),
     );
   });
+
+  it.effect("summarizes a thread handoff through Cursor ACP text generation", () => {
+    const requestLogDir = NodeFS.mkdtempSync(
+      NodePath.join(NodeOS.tmpdir(), "t3code-cursor-text-handoff-log-"),
+    );
+    const requestLogPath = NodePath.join(requestLogDir, "requests.ndjson");
+
+    return withFakeAcpAgent(
+      {
+        T3_ACP_REQUEST_LOG_PATH: requestLogPath,
+        T3_ACP_PROMPT_RESPONSE_TEXT: JSON.stringify({
+          summary: "  ## Objective\nFix reconnect flow.  ",
+        }),
+      },
+      (textGeneration) =>
+        Effect.gen(function* () {
+          const generated = yield* textGeneration.generateThreadHandoffSummary({
+            cwd: process.cwd(),
+            transcript: "User: fix the reconnect flow after restart.",
+            sourceLabel: "Codex (gpt-5)",
+            modelSelection: {
+              instanceId: ProviderInstanceId.make("cursor"),
+              model: "composer-2",
+            },
+          });
+
+          expect(generated.summary).toBe("## Objective\nFix reconnect flow.");
+
+          const requests = NodeFS.readFileSync(requestLogPath, "utf8")
+            .trim()
+            .split("\n")
+            .filter((line) => line.length > 0)
+            .map(
+              (line) => JSON.parse(line) as { method?: string; params?: Record<string, unknown> },
+            );
+
+          const promptText = requests.find((request) => request.method === "session/prompt")?.params
+            ?.prompt;
+          expect(promptText).toEqual(
+            expect.arrayContaining([
+              expect.objectContaining({
+                type: "text",
+                text: expect.stringContaining("User: fix the reconnect flow after restart."),
+              }),
+            ]),
+          );
+          expect(promptText).toEqual(
+            expect.arrayContaining([
+              expect.objectContaining({
+                type: "text",
+                text: expect.stringContaining("Codex (gpt-5)"),
+              }),
+            ]),
+          );
+
+          NodeFS.rmSync(requestLogDir, { recursive: true, force: true });
+        }),
+    );
+  });
 });

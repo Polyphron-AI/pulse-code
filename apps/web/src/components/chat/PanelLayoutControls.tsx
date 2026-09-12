@@ -1,4 +1,11 @@
-import { Maximize2Icon, Minimize2Icon, PanelBottomIcon, PanelRightIcon } from "lucide-react";
+import type { WatchdogMarker } from "@t3tools/client-runtime/state/watchdog";
+import {
+  EyeIcon,
+  Maximize2Icon,
+  Minimize2Icon,
+  PanelBottomIcon,
+  PanelRightIcon,
+} from "lucide-react";
 import { memo } from "react";
 
 import { Toggle } from "../ui/toggle";
@@ -14,8 +21,11 @@ interface PanelLayoutControlsProps {
   rightPanelShortcutLabel: string | null;
   /** Running + waiting subagents in this thread; badges the right panel toggle. */
   liveAgentCount: number;
+  /** Omitted on surfaces with no thread (drafts): the control is hidden. */
+  watchdog?: WatchdogMarker;
   onToggleTerminal: () => void;
   onToggleRightPanel: () => void;
+  onToggleWatchdog?: () => void;
 }
 
 export const PanelLayoutControls = memo(function PanelLayoutControls({
@@ -27,14 +37,44 @@ export const PanelLayoutControls = memo(function PanelLayoutControls({
   rightPanelOpen,
   rightPanelShortcutLabel,
   liveAgentCount,
+  watchdog,
   onToggleTerminal,
   onToggleRightPanel,
+  onToggleWatchdog,
 }: PanelLayoutControlsProps) {
+  const watchdogOn = watchdog === "on" || watchdog === "stuck";
   return (
     <div
       className="flex h-full shrink-0 items-center gap-1 [-webkit-app-region:no-drag]"
       data-panel-layout-controls
     >
+      {watchdog !== undefined && onToggleWatchdog ? (
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Toggle
+                className="relative shrink-0 [-webkit-app-region:no-drag]"
+                pressed={watchdogOn}
+                onPressedChange={onToggleWatchdog}
+                aria-label={watchdogOn ? "Watchdog on" : "Watchdog off"}
+                variant="ghost"
+                size="sm"
+              >
+                <EyeIcon className="size-4" />
+                {watchdog === "stuck" ? (
+                  <span
+                    aria-hidden
+                    className="absolute top-0.5 right-0.5 size-1.5 rounded-full bg-warning"
+                  />
+                ) : null}
+              </Toggle>
+            }
+          />
+          <TooltipPopup side="bottom">
+            {watchdog === "stuck" ? "Watchdog stuck" : watchdogOn ? "Watchdog on" : "Watchdog off"}
+          </TooltipPopup>
+        </Tooltip>
+      ) : null}
       {showTerminalControl ? (
         <Tooltip>
           <TooltipTrigger
@@ -68,7 +108,7 @@ export const PanelLayoutControls = memo(function PanelLayoutControls({
               onPressedChange={onToggleRightPanel}
               aria-label={
                 liveAgentCount > 0
-                  ? `Toggle right panel, ${liveAgentCount} ${liveAgentCount === 1 ? "agent" : "agents"} working`
+                  ? `Toggle right panel, ${liveAgentCount} ${liveAgentCount === 1 ? "subagent" : "subagents"} working`
                   : "Toggle right panel"
               }
               variant="ghost"
@@ -91,7 +131,7 @@ export const PanelLayoutControls = memo(function PanelLayoutControls({
           {rightPanelAvailable
             ? `Toggle right panel${rightPanelShortcutLabel ? ` (${rightPanelShortcutLabel})` : ""}${
                 liveAgentCount > 0
-                  ? ` · ${liveAgentCount} ${liveAgentCount === 1 ? "agent" : "agents"} working`
+                  ? ` · ${liveAgentCount} ${liveAgentCount === 1 ? "subagent" : "subagents"} working`
                   : ""
               }`
             : "Right panel is unavailable"}

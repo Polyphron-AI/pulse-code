@@ -101,6 +101,8 @@ projectionRepositoriesLayer("Projection repositories", (it) => {
         pendingApprovalCount: 0,
         pendingUserInputCount: 0,
         hasActionableProposedPlan: 0,
+        watchdog: null,
+        allowedTools: null,
         deletedAt: null,
       });
 
@@ -164,6 +166,8 @@ projectionRepositoriesLayer("Projection repositories", (it) => {
         pendingApprovalCount: 0,
         pendingUserInputCount: 0,
         hasActionableProposedPlan: 0,
+        watchdog: null,
+        allowedTools: null,
         deletedAt: null,
       });
 

@@ -233,4 +233,53 @@ it.layer(GrokTextGenerationTestLayer)("GrokTextGeneration", (it) => {
         }),
     ),
   );
+
+  it.effect("summarizes a thread handoff and forwards the transcript and source label", () => {
+    const requestLogDir = NodeFS.mkdtempSync(
+      NodePath.join(NodeOS.tmpdir(), "t3code-grok-text-handoff-log-"),
+    );
+    const requestLogPath = NodePath.join(requestLogDir, "requests.ndjson");
+
+    return withFakeAcpGrok(
+      {
+        T3_ACP_REQUEST_LOG_PATH: requestLogPath,
+        T3_ACP_PROMPT_RESPONSE_TEXT: JSON.stringify({
+          summary: "  ## Objective\nFix reconnect flow.  ",
+        }),
+      },
+      (textGeneration) =>
+        Effect.gen(function* () {
+          const generated = yield* textGeneration.generateThreadHandoffSummary({
+            cwd: process.cwd(),
+            transcript: "User: fix the reconnect flow after restart.",
+            sourceLabel: "Codex (gpt-5)",
+            modelSelection: createModelSelection(ProviderInstanceId.make("grok"), "grok-mock-alt"),
+          });
+
+          expect(generated.summary).toBe("## Objective\nFix reconnect flow.");
+
+          const requests = readJsonRpcRequests(requestLogPath);
+          const promptText = requests.find((request) => request.method === "session/prompt")?.params
+            ?.prompt;
+          expect(promptText).toEqual(
+            expect.arrayContaining([
+              expect.objectContaining({
+                type: "text",
+                text: expect.stringContaining("User: fix the reconnect flow after restart."),
+              }),
+            ]),
+          );
+          expect(promptText).toEqual(
+            expect.arrayContaining([
+              expect.objectContaining({
+                type: "text",
+                text: expect.stringContaining("Codex (gpt-5)"),
+              }),
+            ]),
+          );
+
+          NodeFS.rmSync(requestLogDir, { recursive: true, force: true });
+        }),
+    );
+  });
 });

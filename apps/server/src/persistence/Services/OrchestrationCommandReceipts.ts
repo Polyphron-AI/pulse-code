@@ -7,12 +7,14 @@
  * @module OrchestrationCommandReceiptRepository
  */
 import {
+  AssistantId,
   CommandId,
   IsoDateTime,
   NonNegativeInt,
   OrchestrationAggregateKind,
   OrchestrationCommandReceiptStatus,
   ProjectId,
+  ManagerId,
   ScheduleId,
   ThreadId,
 } from "@t3tools/contracts";
@@ -26,7 +28,7 @@ import type { OrchestrationCommandReceiptRepositoryError } from "../Errors.ts";
 export const OrchestrationCommandReceipt = Schema.Struct({
   commandId: CommandId,
   aggregateKind: OrchestrationAggregateKind,
-  aggregateId: Schema.Union([ProjectId, ThreadId, ScheduleId]),
+  aggregateId: Schema.Union([ProjectId, ThreadId, ScheduleId, ManagerId, AssistantId]),
   acceptedAt: IsoDateTime,
   resultSequence: NonNegativeInt,
   status: OrchestrationCommandReceiptStatus,

@@ -1577,6 +1577,8 @@ function PullRequestsRouteView() {
             onAddPullRequest={() => undefined}
             onAddIssue={() => undefined}
             onAddAgents={() => undefined}
+            onAddAssistants={() => undefined}
+            onAddWatchdog={() => undefined}
             browserAvailable={false}
             terminalAvailable={false}
             diffAvailable={false}

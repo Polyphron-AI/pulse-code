@@ -77,6 +77,7 @@ app. Your projects, threads, and settings are kept.
 
 There are two ways to start a rollback:
 
+- **Settings** → **About** shows your Pulse Code version and, next to it, the T3 Code release it is based on (Pulse Code tracks the open-source T3 Code project and pulls in its fixes).
 - **Settings** → **About** → **Roll back**: pick a previous version from the list and select
   **Roll back**.
 - **Help** → **Roll Back to Previous Version...** in the app menu: offers the most recent previous

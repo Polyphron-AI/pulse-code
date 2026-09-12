@@ -269,6 +269,17 @@ function threadTitleInput(message: string) {
   };
 }
 
+function threadHandoffInput(transcript: string, sourceLabel: string) {
+  return {
+    cwd: "C:\\repository-that-must-not-be-used",
+    transcript,
+    sourceLabel,
+    modelSelection: createModelSelection(ProviderInstanceId.make("omp_work"), "openai/gpt-5", [
+      { id: "reasoning", value: "high" },
+    ]),
+  };
+}
+
 describe("OmpTextGeneration", () => {
   it.effect("does not re-inherit ambient auth or config state in the real ACP child", () =>
     withFixture((fixture) =>
@@ -443,6 +454,33 @@ describe("OmpTextGeneration", () => {
         ]);
         const promptIndex = requests.findIndex((request) => request.method === "session/prompt");
         expect(configured.every(({ index }) => index < promptIndex)).toBe(true);
+      }),
+    ).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("summarizes a thread handoff and forwards the transcript and source label", () =>
+    withFixture((fixture) =>
+      Effect.gen(function* () {
+        const textGeneration = yield* makeTextGeneration(fixture, {
+          T3_ACP_PROMPT_RESPONSE_TEXT: encodeUnknownJson({
+            summary: "  ## Objective\nFix reconnect flow.  ",
+          }),
+        });
+
+        const generated = yield* textGeneration.generateThreadHandoffSummary(
+          threadHandoffInput("User: fix the reconnect flow after restart.", "Codex (gpt-5)"),
+        );
+
+        expect(generated).toEqual({ summary: "## Objective\nFix reconnect flow." });
+
+        const requests = readLines(fixture.requestLogPath, decodeLoggedRequest);
+        const promptRequest = requests.find((request) => request.method === "session/prompt");
+        const promptParams = promptRequest?.params as
+          | { prompt?: ReadonlyArray<{ type?: string; text?: string }> }
+          | undefined;
+        const promptText = promptParams?.prompt?.[0]?.text ?? "";
+        expect(promptText).toContain("User: fix the reconnect flow after restart.");
+        expect(promptText).toContain("Codex (gpt-5)");
       }),
     ).pipe(Effect.provide(NodeServices.layer)),
   );

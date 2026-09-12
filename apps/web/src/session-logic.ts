@@ -832,6 +832,14 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
       : null
     : extractToolDetail(payload, title ?? activity.summary);
   const toolCallId = isTaskActivity ? null : extractToolCallId(payload);
+  // The escalation activity carries only "Watchdog escalated" as its summary;
+  // the reason the user needs lives in the payload.
+  const watchdogReason =
+    activity.kind === "watchdog.escalated" &&
+    typeof payload?.reason === "string" &&
+    payload.reason.trim().length > 0
+      ? payload.reason
+      : null;
   const entry: DerivedWorkLogEntry = {
     id: activity.id,
     createdAt: activity.createdAt,
@@ -847,7 +855,9 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
   };
   const itemType = extractWorkLogItemType(payload);
   const requestKind = extractWorkLogRequestKind(payload);
-  if (detail) {
+  if (watchdogReason) {
+    entry.detail = watchdogReason;
+  } else if (detail) {
     entry.detail = detail;
   }
   if (commandPreview.command) {

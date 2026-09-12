@@ -25,13 +25,17 @@ import {
   buildBranchNamePrompt,
   buildCommitMessagePrompt,
   buildPrContentPrompt,
+  buildThreadHandoffSummaryPrompt,
   buildThreadTitlePrompt,
+  buildWatchdogDecisionPrompt,
 } from "./TextGenerationPrompts.ts";
 import {
   normalizeCliError,
   sanitizeCommitSubject,
   sanitizePrTitle,
+  sanitizeThreadHandoffSummary,
   sanitizeThreadTitle,
+  sanitizeWatchdogDecision,
   toJsonSchemaObject,
 } from "./TextGenerationUtils.ts";
 import { getModelSelectionStringOptionValue } from "@t3tools/shared/model";
@@ -101,7 +105,9 @@ export const makeCodexTextGeneration = Effect.fn("makeCodexTextGeneration")(func
       | "generateCommitMessage"
       | "generatePrContent"
       | "generateBranchName"
-      | "generateThreadTitle",
+      | "generateThreadTitle"
+      | "generateThreadHandoffSummary"
+      | "generateWatchdogDecision",
     value: unknown,
   ): Effect.Effect<string, TextGenerationError> =>
     encodeJsonString(value).pipe(
@@ -120,7 +126,9 @@ export const makeCodexTextGeneration = Effect.fn("makeCodexTextGeneration")(func
       | "generateCommitMessage"
       | "generatePrContent"
       | "generateBranchName"
-      | "generateThreadTitle",
+      | "generateThreadTitle"
+      | "generateThreadHandoffSummary"
+      | "generateWatchdogDecision",
     attachments: TextGeneration.BranchNameGenerationInput["attachments"],
   ): Effect.fn.Return<MaterializedImageAttachments, TextGenerationError> {
     if (!attachments || attachments.length === 0) {
@@ -162,7 +170,9 @@ export const makeCodexTextGeneration = Effect.fn("makeCodexTextGeneration")(func
       | "generateCommitMessage"
       | "generatePrContent"
       | "generateBranchName"
-      | "generateThreadTitle";
+      | "generateThreadTitle"
+      | "generateThreadHandoffSummary"
+      | "generateWatchdogDecision";
     cwd: string;
     prompt: string;
     outputSchemaJson: S;
@@ -405,10 +415,54 @@ export const makeCodexTextGeneration = Effect.fn("makeCodexTextGeneration")(func
       } satisfies TextGeneration.ThreadTitleGenerationResult;
     });
 
+  const generateThreadHandoffSummary: TextGeneration.TextGeneration["Service"]["generateThreadHandoffSummary"] =
+    Effect.fn("CodexTextGeneration.generateThreadHandoffSummary")(function* (input) {
+      const { prompt, outputSchema } = buildThreadHandoffSummaryPrompt({
+        transcript: input.transcript,
+        sourceLabel: input.sourceLabel,
+      });
+
+      const generated = yield* runCodexJson({
+        operation: "generateThreadHandoffSummary",
+        cwd: input.cwd,
+        prompt,
+        outputSchemaJson: outputSchema,
+        modelSelection: input.modelSelection,
+      });
+
+      return {
+        summary: sanitizeThreadHandoffSummary(generated.summary),
+      };
+    });
+
+  const generateWatchdogDecision: TextGeneration.TextGeneration["Service"]["generateWatchdogDecision"] =
+    Effect.fn("CodexTextGeneration.generateWatchdogDecision")(function* (input) {
+      const { prompt, outputSchema } = buildWatchdogDecisionPrompt({
+        rules: input.rules,
+        pendingRequest: input.pendingRequest,
+      });
+
+      const generated = yield* runCodexJson({
+        operation: "generateWatchdogDecision",
+        cwd: input.cwd,
+        prompt,
+        outputSchemaJson: outputSchema,
+        modelSelection: input.modelSelection,
+      });
+
+      return {
+        decision: sanitizeWatchdogDecision(generated.decision),
+        answer: generated.answer,
+        reason: generated.reason,
+      };
+    });
+
   return {
     generateCommitMessage,
     generatePrContent,
     generateBranchName,
     generateThreadTitle,
+    generateThreadHandoffSummary,
+    generateWatchdogDecision,
   } satisfies TextGeneration.TextGeneration["Service"];
 });

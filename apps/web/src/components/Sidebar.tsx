@@ -35,6 +35,7 @@ import type { TimestampFormat } from "@t3tools/contracts/settings";
 import {
   AlarmClockIcon,
   CalendarClockIcon,
+  EyeIcon,
   AlarmClockOffIcon,
   CheckIcon,
   ChevronDownIcon,
@@ -128,6 +129,7 @@ import { formatRelativeTimeLabel, parseTimestampDate } from "../timestampFormat"
 import type { SidebarThreadSummary } from "../types";
 import { cn } from "~/lib/utils";
 import { buildThreadActionMenuItems } from "./threadActionMenu.logic";
+import { useThreadWatchdogToggle } from "../hooks/useThreadWatchdog";
 import {
   buildBulkTitleRegenerationContextMenuItem,
   buildSidebarScheduleRows,
@@ -144,6 +146,7 @@ import {
   resolveSidebarThreadStatus,
   searchSidebarThreadsByTitle,
   searchSidebarScheduleRows,
+  sidebarWatchdogMarker,
   shouldShowSidebarThread,
   shouldCreateNewThreadInCurrentProject,
   resolveWorkingStartedAt,
@@ -190,6 +193,8 @@ import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Menu, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "./ui/menu";
 import { SidebarContent, SidebarGroup, SidebarMenuButton, useSidebar } from "./ui/sidebar";
+import { SidebarAssistantEntry } from "./sidebar/SidebarAssistantEntry";
+import { SidebarManagerSection } from "./sidebar/SidebarManagerSection";
 import { SidebarChromeFooter, SidebarChromeHeader } from "./sidebar/SidebarChrome";
 import { Popover, PopoverPopup, PopoverTrigger } from "./ui/popover";
 import { Tooltip, TooltipPopup, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
@@ -1170,6 +1175,18 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
     <CalendarClockIcon className="size-3.5 shrink-0 text-primary/70" aria-label="Scheduled chat" />
   ) : null;
 
+  const watchdogState = sidebarWatchdogMarker(thread);
+  const watchdogMarkerIcon =
+    watchdogState === "none" ? null : (
+      <EyeIcon
+        className={cn(
+          "size-3.5 shrink-0",
+          watchdogState === "stuck" ? "text-warning" : "text-primary/70",
+        )}
+        aria-label={watchdogState === "stuck" ? "Watchdog stuck" : "Watchdog on"}
+      />
+    );
+
   // A real link so cmd/ctrl+click and middle-click open the host in the
   // browser. A plain click still opens Pulse Code's pull request view.
   const prBadge =
@@ -1247,6 +1264,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
             </span>
             {title}
             {scheduledMarker}
+            {watchdogMarkerIcon}
             {terminalStatusIcon}
             {isRegeneratingTitle ? (
               <span role="status" className="sr-only">
@@ -1537,6 +1555,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
             <div className="mt-1 flex min-w-0">
               {title}
               {scheduledMarker}
+              {watchdogMarkerIcon}
               {isRegeneratingTitle ? (
                 <span role="status" className="sr-only">
                   Regenerating title
@@ -1824,6 +1843,7 @@ export default function Sidebar() {
   const updateThreadMetadata = useAtomCommand(threadEnvironment.updateMetadata, {
     reportFailure: false,
   });
+  const toggleWatchdog = useThreadWatchdogToggle();
   const { copyToClipboard: copyPathToClipboard } = useCopyToClipboard<{ path: string }>({
     onCopy: ({ path }) => {
       toastManager.add({
@@ -3266,6 +3286,7 @@ export default function Sidebar() {
               isSnoozed,
               canSnoozeNow: canSnooze(thread, { now: new Date().toISOString() }),
               isRegeneratingTitle,
+              watchdogEnabled: thread.watchdog?.enabled === true,
               isRunning:
                 thread.session?.status === "running" && thread.session.activeTurnId != null,
               supports: {
@@ -3326,6 +3347,11 @@ export default function Sidebar() {
           case "unpin":
             attemptUnpin(threadRef);
             return;
+          case "watchdog-on":
+          case "watchdog-off": {
+            void toggleWatchdog(threadRef, thread.watchdog, clicked.value === "watchdog-on");
+            return;
+          }
           case "rename":
             startThreadRename(threadRef, thread.title);
             return;
@@ -3961,6 +3987,15 @@ export default function Sidebar() {
                 ))}
               </ul>
             </>
+          ) : null}
+          {!isSearchingThreads && sidebarMode === "projects" ? <SidebarAssistantEntry /> : null}
+          {!isSearchingThreads && sidebarMode === "projects" ? (
+            <SidebarManagerSection
+              threads={threads}
+              activeThreadKey={routeThreadKey}
+              onOpenThread={navigateToThread}
+              newManagerEnvironmentId={primaryEnvironmentId}
+            />
           ) : null}
           {!isSearchingThreads && sidebarMode === "projects" ? (
             <TooltipProvider

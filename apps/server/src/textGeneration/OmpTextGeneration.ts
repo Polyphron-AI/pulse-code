@@ -21,12 +21,16 @@ import {
   buildBranchNamePrompt,
   buildCommitMessagePrompt,
   buildPrContentPrompt,
+  buildThreadHandoffSummaryPrompt,
   buildThreadTitlePrompt,
+  buildWatchdogDecisionPrompt,
 } from "./TextGenerationPrompts.ts";
 import {
   sanitizeCommitSubject,
   sanitizePrTitle,
+  sanitizeThreadHandoffSummary,
   sanitizeThreadTitle,
+  sanitizeWatchdogDecision,
 } from "./TextGenerationUtils.ts";
 
 export const OMP_TEXT_GENERATION_TIMEOUT_MS = 180_000;
@@ -37,7 +41,9 @@ type OmpTextGenerationOperation =
   | "generateCommitMessage"
   | "generatePrContent"
   | "generateBranchName"
-  | "generateThreadTitle";
+  | "generateThreadTitle"
+  | "generateThreadHandoffSummary"
+  | "generateWatchdogDecision";
 
 type OmpTextGenerationSettings = Pick<OmpSettings, "binaryPath">;
 
@@ -295,10 +301,48 @@ export const makeOmpTextGeneration = Effect.fn("makeOmpTextGeneration")(function
       } satisfies TextGeneration.ThreadTitleGenerationResult;
     });
 
+  const generateThreadHandoffSummary: TextGeneration.TextGeneration["Service"]["generateThreadHandoffSummary"] =
+    Effect.fn("OmpTextGeneration.generateThreadHandoffSummary")(function* (input) {
+      const { prompt, outputSchema } = buildThreadHandoffSummaryPrompt({
+        transcript: input.transcript,
+        sourceLabel: input.sourceLabel,
+      });
+      const generated = yield* runOmpJson({
+        operation: "generateThreadHandoffSummary",
+        prompt,
+        outputSchemaJson: outputSchema,
+        modelSelection: input.modelSelection,
+      });
+      return {
+        summary: sanitizeThreadHandoffSummary(generated.summary),
+      } satisfies TextGeneration.ThreadHandoffSummaryGenerationResult;
+    });
+
+  const generateWatchdogDecision: TextGeneration.TextGeneration["Service"]["generateWatchdogDecision"] =
+    Effect.fn("OmpTextGeneration.generateWatchdogDecision")(function* (input) {
+      const { prompt, outputSchema } = buildWatchdogDecisionPrompt({
+        rules: input.rules,
+        pendingRequest: input.pendingRequest,
+      });
+      const generated = yield* runOmpJson({
+        operation: "generateWatchdogDecision",
+        prompt,
+        outputSchemaJson: outputSchema,
+        modelSelection: input.modelSelection,
+      });
+      return {
+        decision: sanitizeWatchdogDecision(generated.decision),
+        answer: generated.answer,
+        reason: generated.reason,
+      } satisfies TextGeneration.WatchdogDecisionGenerationResult;
+    });
+
   return {
     generateCommitMessage,
     generatePrContent,
     generateBranchName,
     generateThreadTitle,
+    generateThreadHandoffSummary,
+    generateWatchdogDecision,
   } satisfies TextGeneration.TextGeneration["Service"];
 });

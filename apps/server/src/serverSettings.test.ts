@@ -205,6 +205,42 @@ it.layer(NodeServices.layer)("server settings", (it) => {
     }).pipe(Effect.provide(makeServerSettingsLayer())),
   );
 
+  it.effect("stores the voice transcription API key as a secret and redacts it for clients", () =>
+    Effect.gen(function* () {
+      const serverConfig = yield* ServerConfig.ServerConfig;
+      const fileSystem = yield* FileSystem.FileSystem;
+      const serverSettings = yield* ServerSettingsModule.ServerSettingsService;
+
+      const updated = yield* serverSettings.updateSettings({
+        voice: { transcription: { provider: "groq", apiKey: "  gsk_test_key  " } },
+      });
+      assert.strictEqual(updated.voice.transcription.provider, "groq");
+      assert.strictEqual(updated.voice.transcription.apiKey, "gsk_test_key");
+      assert.strictEqual(updated.voice.transcription.apiKeyRedacted, true);
+
+      const onDisk = yield* fileSystem.readFileString(serverConfig.settingsPath);
+      assert.notInclude(onDisk, "gsk_test_key");
+
+      const redacted = ServerSettingsModule.redactServerSettingsForClient(updated);
+      assert.strictEqual(redacted.voice.transcription.apiKey, "");
+      assert.strictEqual(redacted.voice.transcription.apiKeyRedacted, true);
+
+      // Patching other fields keeps the stored key.
+      const modelOnly = yield* serverSettings.updateSettings({
+        voice: { transcription: { model: "whisper-large-v3" } },
+      });
+      assert.strictEqual(modelOnly.voice.transcription.model, "whisper-large-v3");
+      assert.strictEqual(modelOnly.voice.transcription.apiKey, "gsk_test_key");
+
+      // An empty key clears the secret.
+      const cleared = yield* serverSettings.updateSettings({
+        voice: { transcription: { apiKey: "" } },
+      });
+      assert.strictEqual(cleared.voice.transcription.apiKey, "");
+      assert.strictEqual(cleared.voice.transcription.apiKeyRedacted, false);
+    }).pipe(Effect.provide(makeServerSettingsLayer())),
+  );
+
   it.effect("buffers changes after a subscription is acquired but before it is consumed", () =>
     Effect.scoped(
       Effect.gen(function* () {

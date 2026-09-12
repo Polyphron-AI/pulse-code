@@ -23,6 +23,8 @@ export const RIGHT_PANEL_KINDS = [
   "pull-request",
   "issue",
   "agents",
+  "assistants",
+  "watchdog",
 ] as const;
 export type RightPanelKind = (typeof RIGHT_PANEL_KINDS)[number];
 
@@ -73,7 +75,10 @@ export type RightPanelSurface =
       pulseProjectId: string;
       issueId: string;
     }
-  | { id: "agents"; kind: "agents" };
+  /** Provider-native subagent fleet for the thread. Kind stays "agents" for stored-state stability; the label is "Subagents". */
+  | { id: "agents"; kind: "agents" }
+  | { id: "assistants"; kind: "assistants" }
+  | { id: "watchdog"; kind: "watchdog" };
 
 const RIGHT_PANEL_STORAGE_KEY = "t3code:right-panel-state:v2";
 // v9 removed the "plan" surface kind (plans render inline in the transcript).
@@ -160,6 +165,10 @@ const singletonSurface = (
       return { id: "files", kind };
     case "agents":
       return { id: "agents", kind };
+    case "assistants":
+      return { id: "assistants", kind };
+    case "watchdog":
+      return { id: "watchdog", kind };
   }
 };
 

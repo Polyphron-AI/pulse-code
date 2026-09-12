@@ -63,6 +63,14 @@ export function sanitizeThreadTitle(raw: string): string {
   return `${normalized.slice(0, 47).trimEnd()}...`;
 }
 
+/** Normalise a raw watchdog decision string to one of the four known values, defaulting to "escalate". */
+export function sanitizeWatchdogDecision(raw: string): string {
+  const normalized = raw.trim().toLowerCase();
+  return normalized === "approve" || normalized === "deny" || normalized === "answer"
+    ? normalized
+    : "escalate";
+}
+
 /** CLI name to human-readable label, e.g. "codex" → "Codex CLI (`codex`)" */
 function cliLabel(cliName: string): string {
   const capitalized = cliName.charAt(0).toUpperCase() + cliName.slice(1);
@@ -109,4 +117,17 @@ export function normalizeCliError(
     detail: fallback,
     cause: error,
   });
+}
+
+/** Cap on the generated handoff summary, roughly 4k tokens. Anything beyond
+    it is cut rather than sent to the new model as an oversized prompt. */
+export const THREAD_HANDOFF_SUMMARY_MAX_CHARS = 16_000;
+
+/** Trim a generated handoff summary and cut it to the size cap. Returns an
+    empty string when the model produced nothing usable, so callers can fall
+    back to the deterministic digest. */
+export function sanitizeThreadHandoffSummary(raw: string): string {
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) return "";
+  return limitSection(trimmed, THREAD_HANDOFF_SUMMARY_MAX_CHARS);
 }

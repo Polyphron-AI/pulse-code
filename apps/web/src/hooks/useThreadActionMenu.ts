@@ -35,6 +35,7 @@ import { useCopyToClipboard } from "./useCopyToClipboard";
 import { useNewThreadHandler } from "./useHandleNewThread";
 import { useClientSettings } from "./useSettings";
 import { useThreadActions } from "./useThreadActions";
+import { useThreadWatchdogToggle } from "./useThreadWatchdog";
 
 function failureToast(title: string, error: unknown) {
   toastManager.add(
@@ -78,6 +79,7 @@ export function useThreadActionMenu(input: {
   const updateThreadMetadata = useAtomCommand(threadEnvironment.updateMetadata, {
     reportFailure: false,
   });
+  const toggleWatchdog = useThreadWatchdogToggle();
   const handleNewThread = useNewThreadHandler();
   const markThreadUnread = useUiStateStore((s) => s.markThreadUnread);
   const autoSettleAfterDays = useClientSettings((s) => s.sidebarAutoSettleAfterDays);
@@ -141,6 +143,7 @@ export function useThreadActionMenu(input: {
           isSnoozed: supports.snooze && effectiveSnoozed(thread, { now: now.toISOString() }),
           canSnoozeNow: canSnooze(thread, { now: now.toISOString() }),
           isRegeneratingTitle,
+          watchdogEnabled: thread.watchdog?.enabled === true,
           isRunning: thread.session?.status === "running" && thread.session.activeTurnId != null,
           supports,
           snoozePresets,
@@ -217,6 +220,12 @@ export function useThreadActionMenu(input: {
             return;
           case "unpin":
             await reportFailure("Failed to unpin thread", () => unpinThread(threadRef));
+            return;
+          case "watchdog-on":
+          case "watchdog-off":
+            await reportFailure("Failed to update watchdog", () =>
+              toggleWatchdog(threadRef, thread.watchdog, action === "watchdog-on"),
+            );
             return;
           case "rename":
             onStartRename();

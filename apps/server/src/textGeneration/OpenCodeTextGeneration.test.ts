@@ -20,6 +20,7 @@ const runtimeMock = {
     promptUrls: [] as string[],
     authHeaders: [] as Array<string | null>,
     closeCalls: [] as string[],
+    promptRequests: [] as Array<{ parts?: Array<{ type?: string; text?: string }> }>,
     sessionCreateError: undefined as unknown,
     sessionResult: undefined as { data?: { id: string } } | undefined,
     promptRequestError: undefined as unknown,
@@ -32,6 +33,7 @@ const runtimeMock = {
     this.state.promptUrls.length = 0;
     this.state.authHeaders.length = 0;
     this.state.closeCalls.length = 0;
+    this.state.promptRequests.length = 0;
     this.state.sessionCreateError = undefined;
     this.state.sessionResult = undefined;
     this.state.promptRequestError = undefined;
@@ -73,8 +75,9 @@ const OpenCodeRuntimeTestDouble: OpenCodeRuntime.OpenCodeRuntimeShape = {
           }
           return runtimeMock.state.sessionResult ?? { data: { id: `${baseUrl}/session` } };
         },
-        prompt: async () => {
+        prompt: async (request: { parts?: Array<{ type?: string; text?: string }> }) => {
           runtimeMock.state.promptUrls.push(baseUrl);
+          runtimeMock.state.promptRequests.push(request);
           runtimeMock.state.authHeaders.push(
             serverPassword ? `Basic ${btoa(`opencode:${serverPassword}`)}` : null,
           );
@@ -410,6 +413,36 @@ it.layer(OpenCodeTextGenerationTestLayer)("OpenCodeTextGeneration", (it) => {
           providerMessage: "Model did not produce structured output",
         });
         expect(error.cause).not.toHaveProperty("cause");
+      }),
+    ),
+  );
+
+  it.effect("summarizes a thread handoff and forwards the transcript and source label", () =>
+    withOpenCodeTextGeneration(DEFAULT_OPENCODE_SETTINGS, (textGeneration) =>
+      Effect.gen(function* () {
+        runtimeMock.state.promptResult = {
+          data: {
+            parts: [
+              {
+                type: "text",
+                text: '{"summary":"  ## Objective\\nFix reconnect flow.  "}',
+              },
+            ],
+          },
+        };
+
+        const generated = yield* textGeneration.generateThreadHandoffSummary({
+          cwd: process.cwd(),
+          transcript: "User: fix the reconnect flow after restart.",
+          sourceLabel: "Codex (gpt-5)",
+          modelSelection: DEFAULT_TEST_MODEL_SELECTION,
+        });
+
+        expect(generated).toEqual({ summary: "## Objective\nFix reconnect flow." });
+
+        const promptText = runtimeMock.state.promptRequests[0]?.parts?.[0]?.text ?? "";
+        expect(promptText).toContain("User: fix the reconnect flow after restart.");
+        expect(promptText).toContain("Codex (gpt-5)");
       }),
     ),
   );

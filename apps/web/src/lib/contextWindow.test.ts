@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vite-plus/test";
-import { EventId, type OrchestrationThreadActivity, TurnId } from "@t3tools/contracts";
+import {
+  EventId,
+  THREAD_HANDOFF_ACTIVITY_KIND,
+  type OrchestrationThreadActivity,
+  TurnId,
+} from "@t3tools/contracts";
 
 import { deriveLatestContextWindowSnapshot, formatContextWindowTokens } from "./contextWindow";
 
@@ -66,6 +71,36 @@ describe("contextWindow", () => {
     expect(formatContextWindowTokens(1400)).toBe("1.4k");
     expect(formatContextWindowTokens(14_000)).toBe("14k");
     expect(formatContextWindowTokens(258_000)).toBe("258k");
+  });
+
+  it("clears the snapshot when the only context-window update predates a handoff", () => {
+    const snapshot = deriveLatestContextWindowSnapshot([
+      makeActivity("activity-1", "context-window.updated", {
+        usedTokens: 14_000,
+        maxTokens: 258_000,
+      }),
+      makeActivity("activity-2", THREAD_HANDOFF_ACTIVITY_KIND, {}),
+    ]);
+
+    expect(snapshot).toBeNull();
+  });
+
+  it("prefers a context-window update reported after the handoff", () => {
+    const snapshot = deriveLatestContextWindowSnapshot([
+      makeActivity("activity-1", "context-window.updated", {
+        usedTokens: 14_000,
+        maxTokens: 258_000,
+      }),
+      makeActivity("activity-2", THREAD_HANDOFF_ACTIVITY_KIND, {}),
+      makeActivity("activity-3", "context-window.updated", {
+        usedTokens: 500,
+        maxTokens: 100_000,
+      }),
+    ]);
+
+    expect(snapshot).not.toBeNull();
+    expect(snapshot?.usedTokens).toBe(500);
+    expect(snapshot?.maxTokens).toBe(100_000);
   });
 
   it("includes total processed tokens when available", () => {

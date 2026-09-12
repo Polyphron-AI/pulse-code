@@ -1,4 +1,8 @@
-import type { OrchestrationThreadActivity, ThreadTokenUsageSnapshot } from "@t3tools/contracts";
+import {
+  THREAD_HANDOFF_ACTIVITY_KIND,
+  type OrchestrationThreadActivity,
+  type ThreadTokenUsageSnapshot,
+} from "@t3tools/contracts";
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
@@ -50,7 +54,18 @@ export function formatProviderDisplayName(provider: string | null | undefined): 
 export function deriveLatestContextWindowSnapshot(
   activities: ReadonlyArray<OrchestrationThreadActivity>,
 ): ContextWindowSnapshot | null {
+  // A handoff switches the thread to a different provider, so any
+  // context-window.updated activity recorded before it belongs to the old
+  // provider and must not surface as the current meter value.
+  let latestHandoffIndex = -1;
   for (let index = activities.length - 1; index >= 0; index -= 1) {
+    if (activities[index]?.kind === THREAD_HANDOFF_ACTIVITY_KIND) {
+      latestHandoffIndex = index;
+      break;
+    }
+  }
+
+  for (let index = activities.length - 1; index >= 0 && index >= latestHandoffIndex; index -= 1) {
     const activity = activities[index];
     if (!activity || activity.kind !== "context-window.updated") {
       continue;

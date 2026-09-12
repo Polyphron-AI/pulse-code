@@ -41,6 +41,7 @@ import {
   type ProviderInstanceEntry,
 } from "../../providerInstances";
 import { providerModelKey, sortProviderModelItems } from "../../modelOrdering";
+import { classifyThreadModelPick, THREAD_HANDOFF_PICK_TOOLTIP } from "./threadHandoff.logic";
 
 type ModelPickerItem = {
   slug: string;
@@ -92,6 +93,14 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
   onRequestClose?: () => void;
   getModelDisabledReason?: (instanceId: ProviderInstanceId, model: string) => string | null;
   onInstanceModelChange: (instanceId: ProviderInstanceId, model: string) => void;
+  /**
+   * Server capability flag: when true, a locked thread no longer hides or
+   * disables models outside the active continuation group — they stay
+   * selectable and route to `onRequestHandoff` instead of `onInstanceModelChange`.
+   */
+  threadHandoffEnabled?: boolean;
+  /** Called instead of `onInstanceModelChange` for a handoff-classified pick. */
+  onRequestHandoff?: (instanceId: ProviderInstanceId, model: string) => void;
 }) {
   const {
     keybindings: providedKeybindings,
@@ -99,6 +108,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
     instanceEntries,
     getModelDisabledReason,
     onInstanceModelChange,
+    onRequestHandoff,
   } = props;
   const [searchQuery, setSearchQuery] = useState("");
   const [showTopScrollFade, setShowTopScrollFade] = useState(false);
@@ -236,9 +246,14 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
   }, [modelOptionsByInstance, entryByInstanceId, readyInstanceSet]);
 
   const isLocked = props.lockedProvider !== null;
+  const isThreadHandoffEnabled = props.threadHandoffEnabled === true;
+  // Hard lock: today's "hide/disable anything outside the continuation
+  // group" behavior. Handoff mode keeps every enabled instance selectable,
+  // it just routes a mismatched pick through onRequestHandoff instead.
+  const isHardLocked = isLocked && !isThreadHandoffEnabled;
   const isSearching = searchQuery.trim().length > 0;
   const lockedDisabledInstanceIds = useMemo(() => {
-    if (!isLocked) {
+    if (!isHardLocked) {
       return undefined;
     }
     const disabled = new Set<ProviderInstanceId>();
@@ -248,10 +263,10 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
       }
     }
     return disabled;
-  }, [instanceEntries, isLocked, matchesLockedProvider]);
+  }, [instanceEntries, isHardLocked, matchesLockedProvider]);
   const sidebarInstanceEntries = useMemo(() => {
     const enabledEntries = instanceEntries.filter(isProviderInstancePickerVisible);
-    if (!isLocked) {
+    if (!isHardLocked) {
       return enabledEntries;
     }
     const available: ProviderInstanceEntry[] = [];
@@ -264,7 +279,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
       }
     }
     return [...available, ...disabled];
-  }, [instanceEntries, isLocked, matchesLockedProvider]);
+  }, [instanceEntries, isHardLocked, matchesLockedProvider]);
   const showSidebar = !isSearching && sidebarInstanceEntries.length > 0;
   const instanceOrder = useMemo(
     () => instanceEntries.map((entry) => entry.instanceId),
@@ -313,8 +328,9 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
 
       // When searching, we only respect locked provider (by driver kind),
       // ignoring sidebar selection so account-scoped searches can find a
-      // model before the user chooses a specific instance rail item.
-      if (props.lockedProvider !== null) {
+      // model before the user chooses a specific instance rail item. Handoff
+      // mode searches across every enabled instance, same as unlocked.
+      if (isHardLocked) {
         const lockedProviderMatches: Array<(typeof rankedMatches)[number]> = [];
         for (const rankedModel of rankedMatches) {
           if (matchesLockedProvider(rankedModel.model)) {
@@ -349,14 +365,10 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
         .map((rankedModel) => rankedModel.model);
     }
 
-    if (props.lockedProvider !== null) {
+    if (isHardLocked) {
       result = result.filter((m) => matchesLockedProvider(m));
-      if (selectedInstanceId === "favorites") {
-        result = result.filter((m) => favoritesSet.has(providerModelKey(m.instanceId, m.slug)));
-      } else {
-        result = result.filter((m) => m.instanceId === selectedInstanceId);
-      }
-    } else if (selectedInstanceId === "favorites") {
+    }
+    if (selectedInstanceId === "favorites") {
       result = result.filter((m) => favoritesSet.has(providerModelKey(m.instanceId, m.slug)));
     } else {
       result = result.filter((m) => m.instanceId === selectedInstanceId);
@@ -371,8 +383,8 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
     favoritesSet,
     flatModels,
     instanceOrder,
+    isHardLocked,
     matchesLockedProvider,
-    props.lockedProvider,
     searchQuery,
     selectedInstanceId,
   ]);
@@ -418,26 +430,49 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
 
   const handleModelSelect = useCallback(
     (modelSlug: string, instanceId: ProviderInstanceId) => {
-      if (getModelDisabledReason?.(instanceId, modelSlug)) {
+      const entry = entryByInstanceId.get(instanceId);
+      if (!entry) {
+        return;
+      }
+      const disabledReason = getModelDisabledReason?.(instanceId, modelSlug) ?? null;
+      const pickKind = classifyThreadModelPick({
+        isLocked,
+        threadHandoffEnabled: isThreadHandoffEnabled,
+        matchesLockedProvider: matchesLockedProvider(entry),
+        disabledReason,
+      });
+      if (pickKind === "disabled") {
         return;
       }
       const options = modelOptionsByInstance.get(instanceId);
       if (!options) {
         return;
       }
-      const entry = entryByInstanceId.get(instanceId);
-      if (!entry) {
-        return;
-      }
       // `resolveSelectableModel` uses the driver kind for normalization
       // (slug casing etc.). Custom instances share their driver's
       // normalization rules, so pass the driver kind here.
       const resolvedModel = resolveSelectableModel(entry.driverKind, modelSlug, options);
-      if (resolvedModel) {
-        onInstanceModelChange(instanceId, resolvedModel);
+      if (!resolvedModel) {
+        return;
       }
+      if (pickKind === "handoff") {
+        onRequestHandoff?.(instanceId, resolvedModel);
+        props.onRequestClose?.();
+        return;
+      }
+      onInstanceModelChange(instanceId, resolvedModel);
     },
-    [entryByInstanceId, getModelDisabledReason, modelOptionsByInstance, onInstanceModelChange],
+    [
+      entryByInstanceId,
+      getModelDisabledReason,
+      isLocked,
+      isThreadHandoffEnabled,
+      matchesLockedProvider,
+      modelOptionsByInstance,
+      onInstanceModelChange,
+      onRequestHandoff,
+      props.onRequestClose,
+    ],
   );
 
   const toggleFavorite = useCallback(
@@ -461,7 +496,13 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
     >();
     let selectableModelIndex = 0;
     for (const model of visibleModels) {
-      if (getModelDisabledReason?.(model.instanceId, model.slug)) {
+      const pickKind = classifyThreadModelPick({
+        isLocked,
+        threadHandoffEnabled: isThreadHandoffEnabled,
+        matchesLockedProvider: matchesLockedProvider(model),
+        disabledReason: getModelDisabledReason?.(model.instanceId, model.slug) ?? null,
+      });
+      if (pickKind === "disabled") {
         continue;
       }
       const jumpCommand = modelPickerJumpCommandForIndex(selectableModelIndex);
@@ -472,7 +513,13 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
       selectableModelIndex += 1;
     }
     return mapping;
-  }, [getModelDisabledReason, visibleModels]);
+  }, [
+    getModelDisabledReason,
+    isLocked,
+    isThreadHandoffEnabled,
+    matchesLockedProvider,
+    visibleModels,
+  ]);
   const modelJumpModelKeys = useMemo(
     () => [...modelJumpCommandByKey.keys()],
     [modelJumpCommandByKey],
@@ -747,8 +794,14 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
                     if (!model) {
                       return null;
                     }
-                    const disabledReason =
+                    const rawDisabledReason =
                       getModelDisabledReason?.(model.instanceId, model.slug) ?? null;
+                    const pickKind = classifyThreadModelPick({
+                      isLocked,
+                      threadHandoffEnabled: isThreadHandoffEnabled,
+                      matchesLockedProvider: matchesLockedProvider(model),
+                      disabledReason: rawDisabledReason,
+                    });
                     return (
                       <ModelListRow
                         key={modelKey}
@@ -769,7 +822,8 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
                         useTriggerLabel={false}
                         showNewBadge={isModelPickerNewModel(model.driverKind, model.slug)}
                         jumpLabel={modelJumpLabelByKey.get(modelKey) ?? null}
-                        disabledReason={disabledReason}
+                        disabledReason={pickKind === "disabled" ? rawDisabledReason : null}
+                        handoffTooltip={pickKind === "handoff" ? THREAD_HANDOFF_PICK_TOOLTIP : null}
                         onToggleFavorite={() => toggleFavorite(model.instanceId, model.slug)}
                       />
                     );

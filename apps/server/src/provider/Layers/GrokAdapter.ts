@@ -752,6 +752,10 @@ export function makeGrokAdapter(grokSettings: GrokSettings, options?: GrokAdapte
             provider: PROVIDER,
             providerInstanceId: boundInstanceId,
             status: "ready",
+            // `input.allowedTools` is not supported here: Grok has no per-session tool
+            // allow-list. An assistant thread on this provider runs under
+            // approval-required instead, so every write is gated by the user.
+            // See docs/plans/2026-09-11-agent-roles-design.md section 1.
             runtimeMode: input.runtimeMode,
             cwd,
             ...(boundModelId ? { model: resolveGrokAcpBaseModelId(boundModelId) } : {}),

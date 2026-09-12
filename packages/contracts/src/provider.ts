@@ -62,6 +62,11 @@ export const ProviderSessionStartInput = Schema.Struct({
   resumeCursor: Schema.optional(Schema.Unknown),
   approvalPolicy: Schema.optional(ProviderApprovalPolicy),
   sandboxMode: Schema.optional(ProviderSandboxMode),
+  /**
+   * Tool allow-list for this session, from the thread. Absent or null means
+   * the provider's own default. Adapters with no allow-list ignore it.
+   */
+  allowedTools: Schema.optional(Schema.NullOr(Schema.Array(Schema.String))),
   runtimeMode: RuntimeMode,
 });
 export type ProviderSessionStartInput = typeof ProviderSessionStartInput.Type;

@@ -4178,6 +4178,9 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
             }
           : {}),
         ...(permissionMode ? { permissionMode } : {}),
+        // Per-thread tool allow-list. Claude Code supports one natively, so
+        // this passes straight through; null or absent leaves every tool on.
+        ...(input.allowedTools ? { allowedTools: [...input.allowedTools] } : {}),
         ...(permissionMode === "bypassPermissions"
           ? { allowDangerouslySkipPermissions: true }
           : {}),

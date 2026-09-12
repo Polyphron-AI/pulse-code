@@ -9,6 +9,8 @@ import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
 
 import { projectThreadDetailSnapshot } from "./ActivityPayloadProjection.ts";
 import { normalizeDispatchCommand } from "./Normalizer.ts";
+import { attachActiveManagers } from "./shellManagerProjection.ts";
+import { attachActiveAssistants } from "./shellAssistantProjection.ts";
 import { attachActiveSchedules } from "./shellScheduleProjection.ts";
 import {
   annotateEnvironmentRequest,
@@ -59,7 +61,11 @@ export const orchestrationHttpApiLayer = HttpApiBuilder.group(
                 failEnvironmentInternal("orchestration_snapshot_failed", cause),
               ),
             );
-          return attachActiveSchedules(snapshot, yield* orchestrationEngine.currentReadModel);
+          const readModel = yield* orchestrationEngine.currentReadModel;
+          return attachActiveAssistants(
+            attachActiveManagers(attachActiveSchedules(snapshot, readModel), readModel),
+            readModel,
+          );
         }),
       )
       .handle(

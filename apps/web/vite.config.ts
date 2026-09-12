@@ -9,6 +9,7 @@ import { defineProject, type TestProjectInlineConfiguration } from "vite-plus/te
 import "vite-plus/test/config";
 import { defineConfig, type Connect, type Plugin } from "vite-plus";
 import pkg from "./package.json" with { type: "json" };
+import upstreamBaseline from "../../UPSTREAM.json" with { type: "json" };
 
 import { DEV_PROXIED_PATH_PREFIXES } from "@t3tools/shared/devProxy";
 
@@ -207,6 +208,8 @@ export default defineConfig(() => {
       "import.meta.env.VITE_HOSTED_APP_URL": JSON.stringify(configuredHostedAppUrl ?? ""),
       "import.meta.env.VITE_HOSTED_APP_CHANNEL": JSON.stringify(configuredHostedAppChannel),
       "import.meta.env.APP_VERSION": JSON.stringify(configuredAppVersion),
+      "import.meta.env.UPSTREAM_VERSION": JSON.stringify(upstreamBaseline.version),
+      "import.meta.env.UPSTREAM_COMMIT": JSON.stringify(upstreamBaseline.commit),
     },
     resolve: {
       tsconfigPaths: true,

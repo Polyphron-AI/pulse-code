@@ -1,5 +1,9 @@
 import type {
+  AssistantId,
+  ManagerId,
+  OrchestrationAssistant,
   OrchestrationCommand,
+  OrchestrationManager,
   OrchestrationProject,
   OrchestrationReadModel,
   OrchestrationSchedule,
@@ -224,4 +228,98 @@ export function requireNonNegativeInteger(input: {
       `${input.field} must be an integer greater than or equal to 0.`,
     ),
   );
+}
+
+export function findManagerById(
+  readModel: OrchestrationReadModel,
+  managerId: ManagerId,
+): OrchestrationManager | undefined {
+  return (readModel.managers ?? []).find((manager) => manager.id === managerId);
+}
+
+/** The manager must exist and not be soft-deleted. */
+export function requireActiveManager(input: {
+  readonly readModel: OrchestrationReadModel;
+  readonly command: OrchestrationCommand;
+  readonly managerId: ManagerId;
+}): Effect.Effect<OrchestrationManager, OrchestrationCommandInvariantError> {
+  const manager = findManagerById(input.readModel, input.managerId);
+  if (manager && manager.deletedAt === null) {
+    return Effect.succeed(manager);
+  }
+  return Effect.fail(
+    invariantError(
+      input.command.type,
+      `Manager '${input.managerId}' does not exist for command '${input.command.type}'.`,
+    ),
+  );
+}
+
+export function requireManagerAbsent(input: {
+  readonly readModel: OrchestrationReadModel;
+  readonly command: OrchestrationCommand;
+  readonly managerId: ManagerId;
+}): Effect.Effect<void, OrchestrationCommandInvariantError> {
+  if (!findManagerById(input.readModel, input.managerId)) {
+    return Effect.void;
+  }
+  return Effect.fail(
+    invariantError(
+      input.command.type,
+      `Manager '${input.managerId}' already exists and cannot be created twice.`,
+    ),
+  );
+}
+
+export function findAssistantById(
+  readModel: OrchestrationReadModel,
+  assistantId: AssistantId,
+): OrchestrationAssistant | undefined {
+  return (readModel.assistants ?? []).find((assistant) => assistant.id === assistantId);
+}
+
+export function requireAssistant(input: {
+  readonly readModel: OrchestrationReadModel;
+  readonly command: OrchestrationCommand;
+  readonly assistantId: AssistantId;
+}): Effect.Effect<OrchestrationAssistant, OrchestrationCommandInvariantError> {
+  const assistant = findAssistantById(input.readModel, input.assistantId);
+  if (assistant) {
+    return Effect.succeed(assistant);
+  }
+  return Effect.fail(
+    invariantError(
+      input.command.type,
+      `Assistant '${input.assistantId}' does not exist for command '${input.command.type}'.`,
+    ),
+  );
+}
+
+/**
+ * One assistant per environment for now, so a create is refused both when the
+ * same id already exists and when any other assistant does.
+ */
+export function requireNoAssistant(input: {
+  readonly readModel: OrchestrationReadModel;
+  readonly command: OrchestrationCommand;
+  readonly assistantId: AssistantId;
+}): Effect.Effect<void, OrchestrationCommandInvariantError> {
+  const existing = readModelAssistants(input.readModel);
+  if (existing.length === 0) {
+    return Effect.void;
+  }
+  return Effect.fail(
+    invariantError(
+      input.command.type,
+      existing.some((assistant) => assistant.id === input.assistantId)
+        ? `Assistant '${input.assistantId}' already exists and cannot be created twice.`
+        : `This environment already has an assistant ('${existing[0]?.id}'); only one is supported.`,
+    ),
+  );
+}
+
+function readModelAssistants(
+  readModel: OrchestrationReadModel,
+): ReadonlyArray<OrchestrationAssistant> {
+  return readModel.assistants ?? [];
 }

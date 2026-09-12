@@ -342,7 +342,37 @@ export function toOpenCodeFileParts(input: {
   return parts;
 }
 
-export function buildOpenCodePermissionRules(runtimeMode: RuntimeMode): PermissionRuleset {
+/**
+ * OpenCode has no tool allow-list, but it does have permission rules, so an
+ * allow-list is expressed as: deny everything that writes, allow the named
+ * read-only permissions, ask about the rest. This is what an assistant thread
+ * runs under.
+ */
+export function buildOpenCodePermissionRules(
+  runtimeMode: RuntimeMode,
+  allowedTools?: ReadonlyArray<string> | null,
+): PermissionRuleset {
+  if (allowedTools !== undefined && allowedTools !== null) {
+    const allowed = new Set(allowedTools.map((tool) => tool.toLowerCase()));
+    const rule = (permission: string) => ({
+      permission,
+      pattern: "*",
+      action: allowed.has(permission) ? ("allow" as const) : ("deny" as const),
+    });
+    return [
+      { permission: "*", pattern: "*", action: "deny" },
+      // Everything that can change the machine stays denied whatever the
+      // allow-list says, so a bad list cannot widen the assistant.
+      { permission: "bash", pattern: "*", action: "deny" },
+      { permission: "edit", pattern: "*", action: "deny" },
+      { permission: "external_directory", pattern: "*", action: "deny" },
+      rule("webfetch"),
+      rule("websearch"),
+      rule("codesearch"),
+      { permission: "doom_loop", pattern: "*", action: "deny" },
+      { permission: "question", pattern: "*", action: "allow" },
+    ];
+  }
   if (runtimeMode === "full-access") {
     return [{ permission: "*", pattern: "*", action: "allow" }];
   }

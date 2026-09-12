@@ -43,6 +43,8 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
   onOpenChange?: (open: boolean) => void;
   getModelDisabledReason?: (instanceId: ProviderInstanceId, model: string) => string | null;
   onInstanceModelChange: (instanceId: ProviderInstanceId, model: string) => void;
+  threadHandoffEnabled?: boolean;
+  onRequestHandoff?: (instanceId: ProviderInstanceId, model: string) => void;
 }) {
   const [uncontrolledIsMenuOpen, setUncontrolledIsMenuOpen] = useState(false);
   const isMenuOpen = props.open ?? uncontrolledIsMenuOpen;
@@ -131,6 +133,12 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
     setIsMenuOpen(false);
   };
 
+  const handleRequestHandoff = (instanceId: ProviderInstanceId, model: string) => {
+    if (props.disabled) return;
+    props.onRequestHandoff?.(instanceId, model);
+    setIsMenuOpen(false);
+  };
+
   return (
     <Popover
       open={isMenuOpen}
@@ -203,6 +211,8 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
             ? { getModelDisabledReason: props.getModelDisabledReason }
             : {})}
           onInstanceModelChange={handleInstanceModelChange}
+          threadHandoffEnabled={props.threadHandoffEnabled ?? false}
+          onRequestHandoff={handleRequestHandoff}
         />
       </PopoverPopup>
     </Popover>

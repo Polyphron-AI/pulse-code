@@ -455,4 +455,58 @@ it.layer(ClaudeTextGenerationTestLayer)("ClaudeTextGeneration", (it) => {
         }),
     ),
   );
+
+  it.effect("summarizes a thread handoff and includes the transcript in the prompt", () =>
+    withFakeClaudeEnv(
+      {
+        output: JSON.stringify({
+          structured_output: {
+            summary: "  ## Objective\nFix reconnect flow.  ",
+          },
+        }),
+        stdinMustContain: "User: fix the reconnect flow after restart.",
+      },
+      (textGeneration) =>
+        Effect.gen(function* () {
+          const generated = yield* textGeneration.generateThreadHandoffSummary({
+            cwd: process.cwd(),
+            transcript: "User: fix the reconnect flow after restart.",
+            sourceLabel: "Codex (gpt-5)",
+            modelSelection: {
+              instanceId: ProviderInstanceId.make("claudeAgent"),
+              model: "claude-sonnet-4-6",
+            },
+          });
+
+          expect(generated.summary).toBe("## Objective\nFix reconnect flow.");
+        }),
+    ),
+  );
+
+  it.effect("includes the source label in the thread handoff summary prompt", () =>
+    withFakeClaudeEnv(
+      {
+        output: JSON.stringify({
+          structured_output: {
+            summary: "## Objective\nFix reconnect flow.",
+          },
+        }),
+        stdinMustContain: "Codex (gpt-5)",
+      },
+      (textGeneration) =>
+        Effect.gen(function* () {
+          const generated = yield* textGeneration.generateThreadHandoffSummary({
+            cwd: process.cwd(),
+            transcript: "User: fix the reconnect flow after restart.",
+            sourceLabel: "Codex (gpt-5)",
+            modelSelection: {
+              instanceId: ProviderInstanceId.make("claudeAgent"),
+              model: "claude-sonnet-4-6",
+            },
+          });
+
+          expect(generated.summary).toBe("## Objective\nFix reconnect flow.");
+        }),
+    ),
+  );
 });

@@ -38,9 +38,11 @@ import {
   failEnvironmentInternal,
 } from "./auth/http.ts";
 import * as ServerEnvironment from "./environment/ServerEnvironment.ts";
+import * as VoiceTranscription from "./voice/VoiceTranscription.ts";
 import { browserApiCorsAllowedHeaders, browserApiCorsAllowedMethods } from "./httpCors.ts";
 
 const OTLP_TRACES_PROXY_PATH = "/api/observability/v1/traces";
+export const VOICE_TRANSCRIPTIONS_PATH = "/api/voice/transcriptions";
 const LOOPBACK_HOSTNAMES = new Set(["127.0.0.1", "::1", "localhost"]);
 const DESKTOP_RENDERER_ORIGINS = ["t3code://app", "t3code-dev://app"];
 const SVG_CONTENT_SECURITY_POLICY = "default-src 'none'; style-src 'unsafe-inline'; sandbox";
@@ -189,6 +191,56 @@ export const otlpTracesProxyRouteLayer = HttpRouter.add(
         ),
         Effect.orElseSucceed(() =>
           HttpServerResponse.text("Trace export failed.", { status: 502 }),
+        ),
+      );
+  }).pipe(
+    Effect.catchTags({
+      EnvironmentAuthInvalidError: HttpServerRespondable.toResponse,
+      EnvironmentInternalError: HttpServerRespondable.toResponse,
+      EnvironmentScopeRequiredError: HttpServerRespondable.toResponse,
+    }),
+  ),
+);
+
+/**
+ * Clients upload one dictated recording as the raw request body and get the
+ * transcript back. The server decides whether Parakeet or a hosted API does the
+ * work, so web and mobile never see provider credentials.
+ */
+export const voiceTranscriptionRouteLayer = HttpRouter.add(
+  "POST",
+  VOICE_TRANSCRIPTIONS_PATH,
+  Effect.gen(function* () {
+    yield* authenticateRawRouteWithScope(AuthOrchestrationOperateScope);
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const voice = yield* VoiceTranscription.VoiceTranscription;
+    const contentLength = Number(request.headers["content-length"] ?? "0");
+    if (contentLength > VoiceTranscription.MAX_VOICE_UPLOAD_BYTES) {
+      return HttpServerResponse.text("The recording is larger than 25 MB.", { status: 413 });
+    }
+    const body = yield* request.arrayBuffer.pipe(Effect.orElseSucceed(() => new ArrayBuffer(0)));
+    const language = new URL(request.url, "http://localhost").searchParams.get("language");
+    return yield* voice
+      .transcribe({
+        audio: new Uint8Array(body),
+        contentType: request.headers["content-type"] ?? "audio/wav",
+        language: language && language.length > 0 ? language : undefined,
+      })
+      .pipe(
+        Effect.map((result) => HttpServerResponse.jsonUnsafe(result)),
+        Effect.catchTag("VoiceTranscriptionError", (error) =>
+          Effect.logWarning("Voice transcription failed", {
+            reason: error.reason,
+            detail: error.detail,
+            cause: error.cause,
+          }).pipe(
+            Effect.as(
+              HttpServerResponse.jsonUnsafe(
+                { error: error.reason, message: error.detail },
+                { status: error.httpStatus },
+              ),
+            ),
+          ),
         ),
       );
   }).pipe(

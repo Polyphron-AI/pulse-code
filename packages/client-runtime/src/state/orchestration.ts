@@ -20,6 +20,7 @@ import {
 import {
   createAtomCommandScheduler,
   createEnvironmentCommand,
+  createEnvironmentRpcCommand,
   createEnvironmentRpcQueryAtomFamily,
 } from "./runtime.ts";
 
@@ -58,6 +59,19 @@ export function createOrchestrationEnvironmentAtoms<R, E>(
     archivedShellSnapshot: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "environment-data:orchestration:archived-shell-snapshot",
       tag: ORCHESTRATION_WS_METHODS.getArchivedShellSnapshot,
+    }),
+    // Digest preview for the "Switch provider" sheet. Generation can take a
+    // while, so the result is cached per (thread, destination) and never
+    // refetched behind the user's back while the sheet is open.
+    threadHandoffPreview: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:orchestration:thread-handoff-preview",
+      tag: ORCHESTRATION_WS_METHODS.previewThreadHandoff,
+      staleTimeMs: 300_000,
+      idleTtlMs: 60_000,
+    }),
+    switchThreadProvider: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:orchestration:switch-thread-provider",
+      tag: ORCHESTRATION_WS_METHODS.switchThreadProvider,
     }),
     createSchedule: createEnvironmentCommand(runtime, {
       label: "environment-data:commands:schedule:create",

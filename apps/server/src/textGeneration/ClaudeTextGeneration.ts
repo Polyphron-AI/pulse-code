@@ -24,13 +24,17 @@ import {
   buildBranchNamePrompt,
   buildCommitMessagePrompt,
   buildPrContentPrompt,
+  buildThreadHandoffSummaryPrompt,
   buildThreadTitlePrompt,
+  buildWatchdogDecisionPrompt,
 } from "./TextGenerationPrompts.ts";
 import {
   normalizeCliError,
   sanitizeCommitSubject,
   sanitizePrTitle,
+  sanitizeThreadHandoffSummary,
   sanitizeThreadTitle,
+  sanitizeWatchdogDecision,
   toJsonSchemaObject,
 } from "./TextGenerationUtils.ts";
 import {
@@ -87,7 +91,9 @@ export const makeClaudeTextGeneration = Effect.fn("makeClaudeTextGeneration")(fu
       | "generateCommitMessage"
       | "generatePrContent"
       | "generateBranchName"
-      | "generateThreadTitle",
+      | "generateThreadTitle"
+      | "generateThreadHandoffSummary"
+      | "generateWatchdogDecision",
     value: unknown,
     detail: string,
   ): Effect.Effect<string, TextGenerationError> =>
@@ -117,7 +123,9 @@ export const makeClaudeTextGeneration = Effect.fn("makeClaudeTextGeneration")(fu
       | "generateCommitMessage"
       | "generatePrContent"
       | "generateBranchName"
-      | "generateThreadTitle";
+      | "generateThreadTitle"
+      | "generateThreadHandoffSummary"
+      | "generateWatchdogDecision";
     cwd: string;
     prompt: string;
     outputSchemaJson: S;
@@ -375,10 +383,54 @@ export const makeClaudeTextGeneration = Effect.fn("makeClaudeTextGeneration")(fu
       };
     });
 
+  const generateThreadHandoffSummary: TextGeneration.TextGeneration["Service"]["generateThreadHandoffSummary"] =
+    Effect.fn("ClaudeTextGeneration.generateThreadHandoffSummary")(function* (input) {
+      const { prompt, outputSchema } = buildThreadHandoffSummaryPrompt({
+        transcript: input.transcript,
+        sourceLabel: input.sourceLabel,
+      });
+
+      const generated = yield* runClaudeJson({
+        operation: "generateThreadHandoffSummary",
+        cwd: input.cwd,
+        prompt,
+        outputSchemaJson: outputSchema,
+        modelSelection: input.modelSelection,
+      });
+
+      return {
+        summary: sanitizeThreadHandoffSummary(generated.summary),
+      };
+    });
+
+  const generateWatchdogDecision: TextGeneration.TextGeneration["Service"]["generateWatchdogDecision"] =
+    Effect.fn("ClaudeTextGeneration.generateWatchdogDecision")(function* (input) {
+      const { prompt, outputSchema } = buildWatchdogDecisionPrompt({
+        rules: input.rules,
+        pendingRequest: input.pendingRequest,
+      });
+
+      const generated = yield* runClaudeJson({
+        operation: "generateWatchdogDecision",
+        cwd: input.cwd,
+        prompt,
+        outputSchemaJson: outputSchema,
+        modelSelection: input.modelSelection,
+      });
+
+      return {
+        decision: sanitizeWatchdogDecision(generated.decision),
+        answer: generated.answer,
+        reason: generated.reason,
+      };
+    });
+
   return {
     generateCommitMessage,
     generatePrContent,
     generateBranchName,
     generateThreadTitle,
+    generateThreadHandoffSummary,
+    generateWatchdogDecision,
   } satisfies TextGeneration.TextGeneration["Service"];
 });

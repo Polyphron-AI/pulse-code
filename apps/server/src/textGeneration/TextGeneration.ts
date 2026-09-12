@@ -8,7 +8,13 @@ import * as ProviderInstanceRegistry from "../provider/Services/ProviderInstance
 import type { ProviderInstance } from "../provider/ProviderDriver.ts";
 import type { TextGenerationPolicy } from "./TextGenerationPolicy.ts";
 
-export type TextGenerationProvider = "codex" | "claudeAgent" | "cursor" | "grok" | "opencode";
+export type TextGenerationProvider =
+  | "codex"
+  | "claudeAgent"
+  | "cursor"
+  | "grok"
+  | "omp"
+  | "opencode";
 
 export interface CommitMessageGenerationInput {
   cwd: string;
@@ -73,6 +79,41 @@ export interface ThreadTitleGenerationResult {
   title: string;
 }
 
+export interface ThreadHandoffSummaryGenerationInput {
+  cwd: string;
+  /** Plain-text transcript of the messages being summarized, oldest first. */
+  transcript: string;
+  /** Human label of the provider and model that produced the transcript. */
+  sourceLabel: string;
+  /** What model and provider to use for generation. This is the destination
+      model of the switch, so the summary is written for its own consumption. */
+  modelSelection: ModelSelection;
+}
+
+export interface ThreadHandoffSummaryGenerationResult {
+  /** Markdown under the fixed handoff headings. */
+  summary: string;
+}
+
+export interface WatchdogDecisionGenerationInput {
+  cwd: string;
+  /** User-authored rules the watchdog must follow. */
+  rules: string;
+  /** Plain-text description of the pending approval or user-input gate. */
+  pendingRequest: string;
+  /** What model and provider to use for the decision. */
+  modelSelection: ModelSelection;
+}
+
+export interface WatchdogDecisionGenerationResult {
+  /** One of "approve" | "deny" | "answer" | "escalate", unvalidated model output. */
+  decision: string;
+  /** Answer text when decision is "answer"; empty otherwise. */
+  answer: string;
+  /** Reason text when decision is "escalate"; empty otherwise. */
+  reason: string;
+}
+
 export interface TextGenerationService {
   generateCommitMessage(
     input: CommitMessageGenerationInput,
@@ -80,6 +121,12 @@ export interface TextGenerationService {
   generatePrContent(input: PrContentGenerationInput): Promise<PrContentGenerationResult>;
   generateBranchName(input: BranchNameGenerationInput): Promise<BranchNameGenerationResult>;
   generateThreadTitle(input: ThreadTitleGenerationInput): Promise<ThreadTitleGenerationResult>;
+  generateThreadHandoffSummary(
+    input: ThreadHandoffSummaryGenerationInput,
+  ): Promise<ThreadHandoffSummaryGenerationResult>;
+  generateWatchdogDecision(
+    input: WatchdogDecisionGenerationInput,
+  ): Promise<WatchdogDecisionGenerationResult>;
 }
 
 /**
@@ -113,6 +160,16 @@ export class TextGeneration extends Context.Service<
     readonly generateThreadTitle: (
       input: ThreadTitleGenerationInput,
     ) => Effect.Effect<ThreadTitleGenerationResult, TextGenerationError>;
+
+    /** Summarize the omitted middle of a thread for a provider switch. */
+    readonly generateThreadHandoffSummary: (
+      input: ThreadHandoffSummaryGenerationInput,
+    ) => Effect.Effect<ThreadHandoffSummaryGenerationResult, TextGenerationError>;
+
+    /** Ask the model to decide a pending approval or user-input gate on the watchdog's behalf. */
+    readonly generateWatchdogDecision: (
+      input: WatchdogDecisionGenerationInput,
+    ) => Effect.Effect<WatchdogDecisionGenerationResult, TextGenerationError>;
   }
 >()("t3/textGeneration/TextGeneration") {}
 
@@ -123,7 +180,9 @@ type TextGenerationOp =
   | "generateCommitMessage"
   | "generatePrContent"
   | "generateBranchName"
-  | "generateThreadTitle";
+  | "generateThreadTitle"
+  | "generateThreadHandoffSummary"
+  | "generateWatchdogDecision";
 
 const resolveInstance = (
   registry: ProviderInstanceRegistry.ProviderInstanceRegistry["Service"],
@@ -162,6 +221,18 @@ export const makeTextGenerationFromRegistry = (
     generateThreadTitle: (input) =>
       resolveInstance(registry, "generateThreadTitle", input.modelSelection.instanceId).pipe(
         Effect.flatMap((textGeneration) => textGeneration.generateThreadTitle(input)),
+      ),
+    generateThreadHandoffSummary: (input) =>
+      resolveInstance(
+        registry,
+        "generateThreadHandoffSummary",
+        input.modelSelection.instanceId,
+      ).pipe(
+        Effect.flatMap((textGeneration) => textGeneration.generateThreadHandoffSummary(input)),
+      ),
+    generateWatchdogDecision: (input) =>
+      resolveInstance(registry, "generateWatchdogDecision", input.modelSelection.instanceId).pipe(
+        Effect.flatMap((textGeneration) => textGeneration.generateWatchdogDecision(input)),
       ),
   });
 

@@ -16,12 +16,16 @@ import {
   buildBranchNamePrompt,
   buildCommitMessagePrompt,
   buildPrContentPrompt,
+  buildThreadHandoffSummaryPrompt,
   buildThreadTitlePrompt,
+  buildWatchdogDecisionPrompt,
 } from "./TextGenerationPrompts.ts";
 import {
   sanitizeCommitSubject,
   sanitizePrTitle,
+  sanitizeThreadHandoffSummary,
   sanitizeThreadTitle,
+  sanitizeWatchdogDecision,
 } from "./TextGenerationUtils.ts";
 import {
   applyGrokAcpModelSelection,
@@ -52,7 +56,9 @@ export const makeGrokTextGeneration = Effect.fn("makeGrokTextGeneration")(functi
       | "generateCommitMessage"
       | "generatePrContent"
       | "generateBranchName"
-      | "generateThreadTitle";
+      | "generateThreadTitle"
+      | "generateThreadHandoffSummary"
+      | "generateWatchdogDecision";
     cwd: string;
     prompt: string;
     outputSchemaJson: S;
@@ -251,10 +257,54 @@ export const makeGrokTextGeneration = Effect.fn("makeGrokTextGeneration")(functi
       } satisfies TextGeneration.ThreadTitleGenerationResult;
     });
 
+  const generateThreadHandoffSummary: TextGeneration.TextGeneration["Service"]["generateThreadHandoffSummary"] =
+    Effect.fn("GrokTextGeneration.generateThreadHandoffSummary")(function* (input) {
+      const { prompt, outputSchema } = buildThreadHandoffSummaryPrompt({
+        transcript: input.transcript,
+        sourceLabel: input.sourceLabel,
+      });
+
+      const generated = yield* runGrokJson({
+        operation: "generateThreadHandoffSummary",
+        cwd: input.cwd,
+        prompt,
+        outputSchemaJson: outputSchema,
+        modelSelection: input.modelSelection,
+      });
+
+      return {
+        summary: sanitizeThreadHandoffSummary(generated.summary),
+      } satisfies TextGeneration.ThreadHandoffSummaryGenerationResult;
+    });
+
+  const generateWatchdogDecision: TextGeneration.TextGeneration["Service"]["generateWatchdogDecision"] =
+    Effect.fn("GrokTextGeneration.generateWatchdogDecision")(function* (input) {
+      const { prompt, outputSchema } = buildWatchdogDecisionPrompt({
+        rules: input.rules,
+        pendingRequest: input.pendingRequest,
+      });
+
+      const generated = yield* runGrokJson({
+        operation: "generateWatchdogDecision",
+        cwd: input.cwd,
+        prompt,
+        outputSchemaJson: outputSchema,
+        modelSelection: input.modelSelection,
+      });
+
+      return {
+        decision: sanitizeWatchdogDecision(generated.decision),
+        answer: generated.answer,
+        reason: generated.reason,
+      } satisfies TextGeneration.WatchdogDecisionGenerationResult;
+    });
+
   return {
     generateCommitMessage,
     generatePrContent,
     generateBranchName,
     generateThreadTitle,
+    generateThreadHandoffSummary,
+    generateWatchdogDecision,
   } satisfies TextGeneration.TextGeneration["Service"];
 });

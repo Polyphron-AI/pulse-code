@@ -15,6 +15,7 @@ import {
   ProviderInteractionMode,
   RuntimeMode,
   ThreadId,
+  ThreadWatchdog,
   TurnId,
 } from "@t3tools/contracts";
 import * as Option from "effect/Option";
@@ -50,6 +51,9 @@ export const ProjectionThread = Schema.Struct({
   pendingUserInputCount: NonNegativeInt,
   hasActionableProposedPlan: NonNegativeInt,
   deletedAt: Schema.NullOr(IsoDateTime),
+  watchdog: Schema.NullOr(ThreadWatchdog),
+  /** Provider tool allow-list; null means the provider default. */
+  allowedTools: Schema.NullOr(Schema.Array(Schema.String)),
 });
 export type ProjectionThread = typeof ProjectionThread.Type;
 

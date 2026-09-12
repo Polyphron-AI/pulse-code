@@ -71,6 +71,18 @@
       "types": "./src/state/git.ts",
       "default": "./src/state/git.ts"
     },
+    "./state/messages": {
+      "types": "./src/state/messages.ts",
+      "default": "./src/state/messages.ts"
+    },
+    "./state/assistants": {
+      "types": "./src/state/assistants.ts",
+      "default": "./src/state/assistants.ts"
+    },
+    "./state/managers": {
+      "types": "./src/state/managers.ts",
+      "default": "./src/state/managers.ts"
+    },
     "./state/models": {
       "types": "./src/state/models.ts",
       "default": "./src/state/models.ts"
@@ -158,6 +170,10 @@
     "./state/thread-search": {
       "types": "./src/state/threadSearch.ts",
       "default": "./src/state/threadSearch.ts"
+    },
+    "./state/watchdog": {
+      "types": "./src/state/watchdog.ts",
+      "default": "./src/state/watchdog.ts"
     },
     "./state/vcs": {
       "types": "./src/state/vcs.ts",

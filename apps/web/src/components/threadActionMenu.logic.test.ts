@@ -9,6 +9,7 @@ const baseState: ThreadActionMenuState = {
   isSnoozed: false,
   canSnoozeNow: true,
   isRegeneratingTitle: false,
+  watchdogEnabled: false,
   isRunning: false,
   supports: { settlement: true, snooze: true, pinning: true, titleRegeneration: true },
   snoozePresets: [
@@ -27,7 +28,15 @@ describe("buildThreadActionMenuItems", () => {
         ...baseState,
         supports: { settlement: false, snooze: false, pinning: false, titleRegeneration: false },
       }),
-    ).toEqual(["rename", "mark-unread", "copy-path", "copy-thread-id", "archive", "delete"]);
+    ).toEqual([
+      "watchdog-on",
+      "rename",
+      "mark-unread",
+      "copy-path",
+      "copy-thread-id",
+      "archive",
+      "delete",
+    ]);
   });
 
   it("includes branch items only for threads with a branch", () => {
@@ -87,5 +96,13 @@ describe("buildThreadActionMenuItems", () => {
       (item) => item.id === "archive",
     );
     expect(archiveItem?.disabled).toBe(true);
+  });
+
+  it("offers the watchdog switch in both directions", () => {
+    expect(ids(baseState)).toContain("watchdog-on");
+    expect(ids(baseState)).not.toContain("watchdog-off");
+    const on = ids({ ...baseState, watchdogEnabled: true });
+    expect(on).toContain("watchdog-off");
+    expect(on).not.toContain("watchdog-on");
   });
 });

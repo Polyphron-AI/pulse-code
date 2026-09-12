@@ -105,6 +105,7 @@ import { makeRoutesLayer } from "./server.ts";
 import { isThreadDetailEvent, resolveAvailableEditorsForConfig } from "./ws.ts";
 import * as CheckpointDiffQuery from "./checkpointing/CheckpointDiffQuery.ts";
 import * as GitManager from "./git/GitManager.ts";
+import * as TextGeneration from "./textGeneration/TextGeneration.ts";
 import * as Keybindings from "./keybindings.ts";
 import * as ExternalLauncher from "./process/externalLauncher.ts";
 import * as RemoteOpenTargets from "./environment/RemoteOpenTargets.ts";
@@ -151,6 +152,7 @@ import * as NativeTelemetryClient from "./resourceTelemetry/NativeTelemetryClien
 import * as ResourceAttribution from "./resourceTelemetry/ResourceAttribution.ts";
 import * as ResourceTelemetry from "./resourceTelemetry/ResourceTelemetry.ts";
 import * as UsageService from "./usage/UsageService.ts";
+import * as VoiceTranscription from "./voice/VoiceTranscription.ts";
 import * as Data from "effect/Data";
 
 import { makeOrchestrationIntegrationHarness } from "../integration/OrchestrationEngineHarness.integration.ts";
@@ -405,6 +407,7 @@ const buildAppUnderTest = (options?: {
     projectionSnapshotQuery?: Partial<ProjectionSnapshotQuery.ProjectionSnapshotQuery["Service"]>;
     checkpointDiffQuery?: Partial<CheckpointDiffQuery.CheckpointDiffQuery["Service"]>;
     browserTraceCollector?: Partial<BrowserTraceCollector.BrowserTraceCollector["Service"]>;
+    voiceTranscription?: Partial<VoiceTranscription.VoiceTranscription["Service"]>;
     serverLifecycleEvents?: Partial<ServerLifecycleEvents.ServerLifecycleEvents["Service"]>;
     serverRuntimeStartup?: Partial<ServerRuntimeStartup.ServerRuntimeStartup["Service"]>;
     serverEnvironment?: Partial<ServerEnvironment.ServerEnvironment["Service"]>;
@@ -723,7 +726,7 @@ const buildAppUnderTest = (options?: {
             }),
         }),
       ),
-      Layer.provide(gitManagerLayer),
+      Layer.provide(Layer.mergeAll(gitManagerLayer, Layer.mock(TextGeneration.TextGeneration)({}))),
       Layer.provide(gitVcsDriverLayer),
       Layer.provide(gitWorkflowLayer),
       Layer.provide(reviewLayer),
@@ -838,6 +841,18 @@ const buildAppUnderTest = (options?: {
         Layer.mock(BrowserTraceCollector.BrowserTraceCollector)({
           record: () => Effect.void,
           ...options?.layers?.browserTraceCollector,
+        }),
+      ),
+      Layer.provide(
+        Layer.mock(VoiceTranscription.VoiceTranscription)({
+          transcribe: () =>
+            Effect.fail(
+              new VoiceTranscription.VoiceTranscriptionError({
+                reason: "provider-unconfigured",
+                detail: "Voice transcription is not configured in this test.",
+              }),
+            ),
+          ...options?.layers?.voiceTranscription,
         }),
       ),
       Layer.provide(
@@ -4081,6 +4096,79 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
         assert.equal(response.environment.environmentId, testEnvironmentDescriptor.environmentId);
         assert.equal(response.auth.policy, "desktop-managed-local");
       }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
+  it.effect("transcribes uploaded voice recordings for authenticated clients", () =>
+    Effect.gen(function* () {
+      const uploads: Array<{ readonly bytes: number; readonly contentType: string }> = [];
+      yield* buildAppUnderTest({
+        layers: {
+          voiceTranscription: {
+            transcribe: (input) =>
+              Effect.sync(() => {
+                uploads.push({ bytes: input.audio.byteLength, contentType: input.contentType });
+                return { text: "hello from the server", provider: "parakeet", model: "test" };
+              }),
+          },
+        },
+      });
+
+      const audio = new Uint8Array([82, 73, 70, 70, 0, 0, 0, 0]);
+      const response = yield* HttpClient.post("/api/voice/transcriptions", {
+        headers: {
+          cookie: yield* getAuthenticatedSessionCookieHeader(),
+          "content-type": "audio/wav",
+          origin: "http://localhost:5733",
+        },
+        body: HttpBody.uint8Array(audio, "audio/wav"),
+      });
+
+      assert.equal(response.status, 200);
+      assert.deepEqual(yield* response.json, {
+        text: "hello from the server",
+        provider: "parakeet",
+        model: "test",
+      });
+      assert.deepEqual(uploads, [{ bytes: audio.byteLength, contentType: "audio/wav" }]);
+
+      const unauthenticated = yield* HttpClient.post("/api/voice/transcriptions", {
+        headers: { "content-type": "audio/wav" },
+        body: HttpBody.uint8Array(audio, "audio/wav"),
+      });
+      assert.equal(unauthenticated.status, 401);
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
+  it.effect("reports voice transcription failures with a status per reason", () =>
+    Effect.gen(function* () {
+      yield* buildAppUnderTest({
+        layers: {
+          voiceTranscription: {
+            transcribe: () =>
+              Effect.fail(
+                new VoiceTranscription.VoiceTranscriptionError({
+                  reason: "provider-unconfigured",
+                  detail: "Add the transcription API key in Settings.",
+                }),
+              ),
+          },
+        },
+      });
+
+      const response = yield* HttpClient.post("/api/voice/transcriptions", {
+        headers: {
+          cookie: yield* getAuthenticatedSessionCookieHeader(),
+          "content-type": "audio/wav",
+        },
+        body: HttpBody.uint8Array(new Uint8Array([1, 2, 3]), "audio/wav"),
+      });
+
+      assert.equal(response.status, 409);
+      assert.deepEqual(yield* response.json, {
+        error: "provider-unconfigured",
+        message: "Add the transcription API key in Settings.",
+      });
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
   it.effect("proxies browser OTLP trace exports through the server", () =>

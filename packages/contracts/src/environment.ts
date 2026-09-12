@@ -76,6 +76,10 @@ export const ExecutionEnvironmentCapabilities = Schema.Struct({
   /** Server understands regenerateTitle on thread.meta.update. Absent on
       older servers, so clients hide the action instead of sending it. */
   threadTitleRegeneration: Schema.optionalKey(Schema.Boolean),
+  /** Server exposes previewThreadHandoff and switchThreadProvider, so a thread
+      can move to a different provider in place. Absent on older servers, so
+      clients keep the provider picker locked after the first turn. */
+  threadHandoff: Schema.optionalKey(Schema.Boolean),
   /** The update path clients should offer for this server. Absent on
       servers that must be relaunched manually (dev checkouts, Windows
       foreground runs, pre-update servers). */
@@ -89,6 +93,10 @@ export const ExecutionEnvironmentCapabilities = Schema.Struct({
       this is false — no update would ever repaint it. Absent on older
       servers, which may still publish, so only an explicit false skips. */
   agentActivityPublishing: Schema.optionalKey(Schema.Boolean),
+  /** Server accepts dictated audio on `POST /api/voice/transcriptions` and
+      returns the transcript. Absent on older servers, so clients hide the
+      microphone instead of probing the route. */
+  voiceTranscription: Schema.optionalKey(Schema.Boolean),
 });
 export type ExecutionEnvironmentCapabilities = typeof ExecutionEnvironmentCapabilities.Type;
 
@@ -97,6 +105,10 @@ export const ExecutionEnvironmentDescriptor = Schema.Struct({
   label: TrimmedNonEmptyString,
   platform: ExecutionEnvironmentPlatform,
   serverVersion: TrimmedNonEmptyString,
+  /** The upstream T3 Code release this server's code was last synced
+      against (from UPSTREAM.json). Absent on servers built before the
+      baseline was tracked. */
+  upstreamVersion: Schema.optionalKey(TrimmedNonEmptyString),
   capabilities: ExecutionEnvironmentCapabilities,
 });
 export type ExecutionEnvironmentDescriptor = typeof ExecutionEnvironmentDescriptor.Type;

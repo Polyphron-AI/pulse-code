@@ -1,6 +1,6 @@
 import { type ProviderDriverKind, type ProviderInstanceId } from "@t3tools/contracts";
 import { memo } from "react";
-import { StarIcon } from "lucide-react";
+import { ArrowLeftRightIcon, StarIcon } from "lucide-react";
 import {
   getDisplayModelName,
   getTriggerDisplayModelLabel,
@@ -36,6 +36,13 @@ export const ModelListRow = memo(function ModelListRow(props: {
   showNewBadge?: boolean;
   jumpLabel?: string | null;
   disabledReason?: string | null;
+  /**
+   * Set when picking this row would hand the thread off to a different
+   * provider/model rather than changing the draft in place (thread handoff
+   * capability). Renders a small glyph with this text as its tooltip; the
+   * row stays selectable.
+   */
+  handoffTooltip?: string | null;
   onToggleFavorite: () => void;
 }) {
   const ProviderIcon = PROVIDER_ICON_BY_PROVIDER[props.driverKind] ?? null;
@@ -87,6 +94,21 @@ export const ModelListRow = memo(function ModelListRow(props: {
       </div>
 
       <div className="flex shrink-0 items-center gap-1.5">
+        {props.handoffTooltip ? (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <span className="flex size-3.5 shrink-0 items-center justify-center text-muted-foreground/70">
+                  <ArrowLeftRightIcon className="size-3" aria-hidden="true" />
+                </span>
+              }
+              aria-label={props.handoffTooltip}
+            />
+            <TooltipPopup side="left" align="center" className="max-w-64 text-balance leading-snug">
+              {props.handoffTooltip}
+            </TooltipPopup>
+          </Tooltip>
+        ) : null}
         {props.jumpLabel ? (
           <Kbd className="h-4 min-w-0 rounded-sm px-1.5 text-[10px]">{props.jumpLabel}</Kbd>
         ) : null}

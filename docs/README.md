@@ -12,6 +12,8 @@
 - [Customize a project icon](./user/project-settings.md)
 - [Mobile appearance](./user/mobile-appearance.md)
 - [Schedule daily chats](./user/scheduled-chats.md)
+- [Argo](./user/argo.md)
+- [Luna, your assistant](./user/luna.md)
 - [Remote access](./user/remote-access.md)
 - [Keeping app and server in sync](./user/updating.md)
 - [Source control integrations](./user/source-control.md)
@@ -51,6 +53,7 @@ policy in [CONTRIBUTING.md](../CONTRIBUTING.md); agent rules in [AGENTS.md](../A
 ### Runbooks
 
 - [Release](./operations/release.md)
+- [Pulse Preview installer](./operations/pulse-preview-installer.md)
 - [Upstream release monitoring](./operations/upstream-release-monitoring.md)
 - [Observability](./operations/observability.md)
 - [Relay observability](./operations/relay-observability.md)

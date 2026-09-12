@@ -25,3 +25,6 @@ export const APP_DISPLAY_NAME =
   injectedDesktopAppBranding?.displayName ??
   formatAppDisplayName({ baseName: APP_BASE_NAME, stageLabel: APP_STAGE_LABEL });
 export const APP_VERSION = import.meta.env.APP_VERSION || "0.0.0";
+/** Upstream T3 Code release this build was synced against (UPSTREAM.json). */
+export const UPSTREAM_VERSION = import.meta.env.UPSTREAM_VERSION || null;
+export const UPSTREAM_COMMIT = import.meta.env.UPSTREAM_COMMIT || null;

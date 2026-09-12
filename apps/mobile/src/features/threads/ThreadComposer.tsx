@@ -36,6 +36,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { useThemeColor } from "../../lib/useThemeColor";
+import { useVoiceDictation } from "./useVoiceDictation";
 import { themeColorWithAlpha } from "../../lib/mobileTheme";
 import { armAgentAwarenessLiveActivityForLocalWork } from "../agent-awareness/remoteRegistration";
 import { scopedThreadKey } from "../../lib/scopedEntities";
@@ -330,6 +331,21 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
     setIsFocused(false);
     onEditorFocusChange?.(false);
   }, [onEditorFocusChange]);
+  const voiceSupported =
+    props.serverConfig?.environment.capabilities.voiceTranscription === true &&
+    props.connectionState === "connected";
+  const appendDictation = useCallback(
+    (text: string) => {
+      const current = props.draftMessage;
+      const boundary = current.length === 0 || /\s$/.test(current) ? "" : " ";
+      props.onChangeDraftMessage(`${current}${boundary}${text}`);
+    },
+    [props.draftMessage, props.onChangeDraftMessage],
+  );
+  const dictation = useVoiceDictation({
+    environmentId: props.environmentId,
+    onText: appendDictation,
+  });
   const showStopAction =
     props.selectedThread.session?.status === "running" ||
     props.selectedThread.session?.status === "starting";
@@ -874,6 +890,23 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
                   onPress={() => void props.onPickDraftImages()}
                   showChevron={false}
                 />
+                {voiceSupported ? (
+                  <ComposerToolbarButton
+                    accessibilityLabel={
+                      dictation.phase === "recording"
+                        ? "Stop dictation"
+                        : dictation.phase === "transcribing"
+                          ? "Transcribing dictation"
+                          : "Dictate"
+                    }
+                    active={dictation.phase === "recording"}
+                    disabled={dictation.phase === "transcribing"}
+                    icon={dictation.phase === "recording" ? "stop.fill" : "mic"}
+                    onPress={dictation.toggle}
+                    showChevron={false}
+                    variant={dictation.phase === "recording" ? "danger" : "default"}
+                  />
+                ) : null}
                 <ComposerInlineControl
                   accessibilityLabel="Model and reasoning settings"
                   emphasized

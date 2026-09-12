@@ -3,11 +3,13 @@ import { getTerminalLabel } from "@t3tools/shared/terminalLabels";
 import {
   Bot,
   CircleDot,
+  Eye,
   FileDiff,
   Files,
   GitPullRequest,
   Globe2,
   Plus,
+  Sparkles,
   TerminalSquare,
   X,
 } from "lucide-react";
@@ -67,6 +69,8 @@ interface RightPanelTabsProps {
   onAddPullRequest: () => void;
   onAddIssue: () => void;
   onAddAgents: () => void;
+  onAddAssistants: () => void;
+  onAddWatchdog: () => void;
   browserAvailable: boolean;
   terminalAvailable: boolean;
   diffAvailable: boolean;
@@ -75,7 +79,7 @@ interface RightPanelTabsProps {
   issueAvailable: boolean;
   agentsAvailable: boolean;
   pullRequestStatuses?: Readonly<Record<string, PullRequestTabStatus>>;
-  /** Running + waiting subagents; badges the Agents card in the empty state. */
+  /** Running + waiting subagents; badges the Subagents card in the empty state. */
   liveAgentCount: number;
   children: ReactNode;
 }
@@ -95,7 +99,9 @@ const SURFACE_DISABLED_REASONS = {
   diff: "Diff is only available for server threads in Git repositories.",
   pullRequest: "This thread's branch has no pull request yet.",
   issue: "Issues require a mapped Pulse project.",
-  agents: "Agents are only available from a thread.",
+  agents: "Subagents are only available from a thread.",
+  assistants: "Assistants are only available from a thread.",
+  watchdog: "Watchdog is only available from a thread.",
 } as const;
 
 /** Overlays that must win over the launcher's letter shortcuts. */
@@ -119,6 +125,8 @@ const SURFACE_UNAVAILABLE_HINTS = {
   pullRequest: "No pull request on this branch yet.",
   issue: "Connect and map Pulse in Integrations.",
   agents: "Available from a thread.",
+  assistants: "Available from a thread.",
+  watchdog: "Available from a thread.",
 } as const;
 
 type TabContextMenuAction = "copy-path" | "close" | "close-others" | "close-to-right" | "close-all";
@@ -166,6 +174,8 @@ function RightPanelEmptyState(props: {
   onAddPullRequest: () => void;
   onAddIssue: () => void;
   onAddAgents: () => void;
+  onAddAssistants: () => void;
+  onAddWatchdog: () => void;
   browserAvailable: boolean;
   terminalAvailable: boolean;
   diffAvailable: boolean;
@@ -240,14 +250,34 @@ function RightPanelEmptyState(props: {
       badgeCount: 0,
     },
     {
-      label: "Agents",
-      description: "Follow subagents and workflows.",
+      label: "Subagents",
+      description: "Follow provider subagents and workflows.",
       icon: Bot,
-      shortcut: "A",
+      shortcut: "S",
       available: props.agentsAvailable,
       disabledReason: SURFACE_UNAVAILABLE_HINTS.agents,
       onClick: props.onAddAgents,
       badgeCount: props.liveAgentCount,
+    },
+    {
+      label: "Assistants",
+      description: "Named, read-mostly personas that propose work.",
+      icon: Sparkles,
+      shortcut: "A",
+      available: props.agentsAvailable,
+      disabledReason: SURFACE_UNAVAILABLE_HINTS.assistants,
+      onClick: props.onAddAssistants,
+      badgeCount: 0,
+    },
+    {
+      label: "Watchdog",
+      description: "Supervise this thread under your rules.",
+      icon: Eye,
+      shortcut: "W",
+      available: props.agentsAvailable,
+      disabledReason: SURFACE_UNAVAILABLE_HINTS.watchdog,
+      onClick: props.onAddWatchdog,
+      badgeCount: 0,
     },
   ] as const;
 
@@ -444,7 +474,11 @@ function surfaceTitle(
     case "issue":
       return surface.issueId;
     case "agents":
-      return "Agents";
+      return "Subagents";
+    case "assistants":
+      return "Assistants";
+    case "watchdog":
+      return "Watchdog";
     case "preview": {
       const snapshot = surface.resourceId ? sessions[surface.resourceId] : null;
       if (!snapshot || snapshot.navStatus._tag === "Idle") return "Browser";
@@ -532,6 +566,10 @@ function SurfaceIcon({
       return <CircleDot className="size-3 shrink-0 text-orange-500" />;
     case "agents":
       return <Bot className="size-3 shrink-0" />;
+    case "assistants":
+      return <Sparkles className="size-3 shrink-0" />;
+    case "watchdog":
+      return <Eye className="size-3 shrink-0" />;
   }
 }
 
@@ -770,7 +808,23 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
                     onClick={props.onAddAgents}
                   >
                     <Bot />
-                    Agents
+                    Subagents
+                  </SurfaceMenuItem>
+                  <SurfaceMenuItem
+                    available={props.agentsAvailable}
+                    disabledReason={SURFACE_DISABLED_REASONS.assistants}
+                    onClick={props.onAddAssistants}
+                  >
+                    <Sparkles />
+                    Assistants
+                  </SurfaceMenuItem>
+                  <SurfaceMenuItem
+                    available={props.agentsAvailable}
+                    disabledReason={SURFACE_DISABLED_REASONS.watchdog}
+                    onClick={props.onAddWatchdog}
+                  >
+                    <Eye />
+                    Watchdog
                   </SurfaceMenuItem>
                 </MenuPopup>
               </Menu>
@@ -789,6 +843,8 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
             onAddPullRequest={props.onAddPullRequest}
             onAddIssue={props.onAddIssue}
             onAddAgents={props.onAddAgents}
+            onAddAssistants={props.onAddAssistants}
+            onAddWatchdog={props.onAddWatchdog}
             browserAvailable={props.browserAvailable}
             terminalAvailable={props.terminalAvailable}
             diffAvailable={props.diffAvailable}

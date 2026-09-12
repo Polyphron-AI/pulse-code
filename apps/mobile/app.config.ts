@@ -306,6 +306,15 @@ const config: ExpoConfig = {
     ],
     ["expo-image-picker", { photosPermission: false, microphonePermission: false }],
     [
+      "react-native-audio-api",
+      {
+        iosMicrophonePermission: "Pulse Code uses the microphone to dictate messages.",
+        iosBackgroundMode: false,
+        androidPermissions: ["android.permission.RECORD_AUDIO"],
+        androidForegroundService: false,
+      },
+    ],
+    [
       "expo-splash-screen",
       {
         image: variant.assets.splashIcon,

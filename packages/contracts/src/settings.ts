@@ -549,6 +549,49 @@ export const ObservabilitySettings = Schema.Struct({
 });
 export type ObservabilitySettings = typeof ObservabilitySettings.Type;
 
+/**
+ * Where the server turns dictated audio into text. `parakeet` runs the bundled
+ * NVIDIA Parakeet model on the server itself; the hosted providers forward the
+ * recording to an OpenAI-compatible `/audio/transcriptions` endpoint.
+ */
+export const VoiceTranscriptionProvider = Schema.Literals(["parakeet", "groq", "openai", "custom"]);
+export type VoiceTranscriptionProvider = typeof VoiceTranscriptionProvider.Type;
+
+export const VoiceTranscriptionSettings = Schema.Struct({
+  provider: VoiceTranscriptionProvider.pipe(
+    Schema.withDecodingDefault(Effect.succeed("parakeet" as const)),
+  ),
+  /** Empty means the provider default (Groq `whisper-large-v3-turbo`, OpenAI `whisper-1`). */
+  model: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  /** Empty means the provider default. Required for `custom`. */
+  baseUrl: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  /**
+   * Persisted as an empty string with `apiKeyRedacted: true`; the real value
+   * lives in the server secret store and is filled in for the server only.
+   */
+  apiKey: Schema.String.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  apiKeyRedacted: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+});
+export type VoiceTranscriptionSettings = typeof VoiceTranscriptionSettings.Type;
+
+export const VoiceSettings = Schema.Struct({
+  transcription: VoiceTranscriptionSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
+});
+export type VoiceSettings = typeof VoiceSettings.Type;
+
+export const DEFAULT_VOICE_TRANSCRIPTION_MODEL: Record<VoiceTranscriptionProvider, string> = {
+  parakeet: "parakeet-tdt-0.6b-v3",
+  groq: "whisper-large-v3-turbo",
+  openai: "whisper-1",
+  custom: "",
+};
+export const DEFAULT_VOICE_TRANSCRIPTION_BASE_URL: Record<VoiceTranscriptionProvider, string> = {
+  parakeet: "",
+  groq: "https://api.groq.com/openai/v1",
+  openai: "https://api.openai.com/v1",
+  custom: "",
+};
+
 export const SourceControlWritingStyleMode = Schema.Literals([
   "repo_conventions",
   "conventional_commits",
@@ -696,6 +739,7 @@ export const ServerSettings = Schema.Struct({
     Schema.withDecodingDefault(Effect.succeed({})),
   ),
   observability: ObservabilitySettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
+  voice: VoiceSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
 });
 export type ServerSettings = typeof ServerSettings.Type;
 
@@ -826,6 +870,19 @@ export const ServerSettingsPatch = Schema.Struct({
     Schema.Struct({
       otlpTracesUrl: Schema.optionalKey(TrimmedString),
       otlpMetricsUrl: Schema.optionalKey(TrimmedString),
+    }),
+  ),
+  voice: Schema.optionalKey(
+    Schema.Struct({
+      transcription: Schema.optionalKey(
+        Schema.Struct({
+          provider: Schema.optionalKey(VoiceTranscriptionProvider),
+          model: Schema.optionalKey(TrimmedString),
+          baseUrl: Schema.optionalKey(TrimmedString),
+          // A non-empty value replaces the stored key; an empty string clears it.
+          apiKey: Schema.optionalKey(Schema.String),
+        }),
+      ),
     }),
   ),
   providers: Schema.optionalKey(

@@ -273,6 +273,25 @@ export function readEnvironmentSupportsPinReorder(environmentId: EnvironmentId):
   );
 }
 
+/** Whether the environment's server transcribes dictation uploads.
+    Same version-skew contract as settlement. */
+export function readEnvironmentSupportsVoiceTranscription(environmentId: EnvironmentId): boolean {
+  return (
+    appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)?.environment.capabilities
+      .voiceTranscription === true
+  );
+}
+
+export function useEnvironmentSupportsVoiceTranscription(
+  environmentId: EnvironmentId | null,
+): boolean {
+  const configs = useServerConfigs();
+  return (
+    environmentId !== null &&
+    configs.get(environmentId)?.environment.capabilities.voiceTranscription === true
+  );
+}
+
 export function readThreadDetail(ref: ScopedThreadRef): EnvironmentThread | null {
   return appAtomRegistry.get(environmentThreadDetails.detailAtom(ref));
 }

@@ -1,4 +1,5 @@
 import {
+  AssistantId,
   CommandId,
   EventId,
   IsoDateTime,
@@ -9,6 +10,7 @@ import {
   OrchestrationEventMetadata,
   OrchestrationEventType,
   ProjectId,
+  ManagerId,
   ScheduleId,
   ThreadId,
 } from "@t3tools/contracts";
@@ -36,7 +38,7 @@ const EventMetadataFromJsonString = Schema.fromJsonString(OrchestrationEventMeta
 const AppendEventRequestSchema = Schema.Struct({
   eventId: EventId,
   aggregateKind: OrchestrationAggregateKind,
-  streamId: Schema.Union([ProjectId, ThreadId, ScheduleId]),
+  streamId: Schema.Union([ProjectId, ThreadId, ScheduleId, ManagerId, AssistantId]),
   type: OrchestrationEventType,
   causationEventId: Schema.NullOr(EventId),
   correlationId: Schema.NullOr(CommandId),
@@ -52,7 +54,7 @@ const OrchestrationEventPersistedRowSchema = Schema.Struct({
   eventId: EventId,
   type: OrchestrationEventType,
   aggregateKind: OrchestrationAggregateKind,
-  aggregateId: Schema.Union([ProjectId, ThreadId, ScheduleId]),
+  aggregateId: Schema.Union([ProjectId, ThreadId, ScheduleId, ManagerId, AssistantId]),
   occurredAt: IsoDateTime,
   commandId: Schema.NullOr(CommandId),
   causationEventId: Schema.NullOr(EventId),

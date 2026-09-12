@@ -1,0 +1,9 @@
+{
+  "$comment": "Upstream baseline for Pulse Code. Every upstream commit up to `evaluatedThrough` has been pulled or consciously skipped. Update this file at the end of each sync and tag develop `t3/v<version>`. See docs/internals/upstream-sync.md.",
+  "repo": "pingdotgg/t3code",
+  "version": "0.0.33",
+  "commit": "a87f691bd",
+  "evaluatedThrough": "a87f691bd",
+  "syncedAt": "2026-08-18",
+  "skipped": []
+}

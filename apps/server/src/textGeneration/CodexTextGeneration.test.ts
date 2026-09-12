@@ -670,4 +670,48 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGeneration", (it) => {
         }),
     ),
   );
+
+  it.effect("summarizes a thread handoff and includes the transcript in the prompt", () =>
+    withFakeCodexEnv(
+      {
+        output: JSON.stringify({
+          summary: "  ## Objective\nFix reconnect flow.  ",
+        }),
+        stdinMustContain: "User: fix the reconnect flow after restart.",
+      },
+      (textGeneration) =>
+        Effect.gen(function* () {
+          const generated = yield* textGeneration.generateThreadHandoffSummary({
+            cwd: process.cwd(),
+            transcript: "User: fix the reconnect flow after restart.",
+            sourceLabel: "Claude (opus-4)",
+            modelSelection: DEFAULT_TEST_MODEL_SELECTION,
+          });
+
+          expect(generated.summary).toBe("## Objective\nFix reconnect flow.");
+        }),
+    ),
+  );
+
+  it.effect("includes the source label in the thread handoff summary prompt", () =>
+    withFakeCodexEnv(
+      {
+        output: JSON.stringify({
+          summary: "## Objective\nFix reconnect flow.",
+        }),
+        stdinMustContain: "Claude (opus-4)",
+      },
+      (textGeneration) =>
+        Effect.gen(function* () {
+          const generated = yield* textGeneration.generateThreadHandoffSummary({
+            cwd: process.cwd(),
+            transcript: "User: fix the reconnect flow after restart.",
+            sourceLabel: "Claude (opus-4)",
+            modelSelection: DEFAULT_TEST_MODEL_SELECTION,
+          });
+
+          expect(generated.summary).toBe("## Objective\nFix reconnect flow.");
+        }),
+    ),
+  );
 });

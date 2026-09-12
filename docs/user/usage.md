@@ -13,6 +13,11 @@ the 5-hour window and the weekly window — including how much is used and when 
 reading updates as agents work and reflects the provider's most recent report, so it can be a few
 minutes old between turns. Other providers don't report plan limits, so they don't appear here.
 
+When a thread stops because the provider reported a usage or rate limit, the error banner on the
+thread offers **Switch model**. It opens the same handoff flow as the model picker, so you can keep
+working in the same thread on another provider while the limit window resets. See
+[Switching models mid-thread](./composer.md#switching-models-mid-thread).
+
 ## Cost history
 
 Use **Past 24h** for an hourly chart covering the exact rolling 24-hour period. The **7 days**,

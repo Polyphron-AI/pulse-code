@@ -301,6 +301,98 @@ function threadTitlePromptSuffix(input: ThreadTitlePromptInput): string {
   return suffix;
 }
 
+// ---------------------------------------------------------------------------
+// Thread handoff summary
+// ---------------------------------------------------------------------------
+
+export const THREAD_HANDOFF_SUMMARY_HEADINGS = [
+  "Objective",
+  "Decisions and constraints",
+  "Completed work",
+  "In-progress work",
+  "Blockers and open questions",
+  "Relevant files",
+] as const;
+
+/** Upper bound on the transcript handed to the summarizer. Matches the digest
+    ceiling in threadHandoff.ts so the prompt never outgrows a CLI argument. */
+export const THREAD_HANDOFF_TRANSCRIPT_MAX_CHARS = 60_000;
+
+export interface ThreadHandoffSummaryPromptInput {
+  transcript: string;
+  sourceLabel: string;
+}
+
+/**
+ * Prompt for the destination model to summarize the part of a conversation it
+ * will not see verbatim. Summarization only: the model must not run tools or
+ * continue the task here, because this call happens before the switch is
+ * committed and its output is shown to the user for review.
+ */
+export function buildThreadHandoffSummaryPrompt(input: ThreadHandoffSummaryPromptInput) {
+  const transcript = limitSection(input.transcript, THREAD_HANDOFF_TRANSCRIPT_MAX_CHARS);
+  const prompt = [
+    "This is a summarization-only request. Do not call tools, do not read files, and do not continue the task.",
+    `A different model (${input.sourceLabel}) worked on the conversation below with a user. You are about to take over the same conversation, and this summary is the only record you will keep of these messages.`,
+    "Write a summary in Markdown using exactly these level-2 headings, in this order, and no others:",
+    ...THREAD_HANDOFF_SUMMARY_HEADINGS.map((heading) => `## ${heading}`),
+    "Rules:",
+    '- Under each heading write short bullets. Write "None." when a heading has nothing.',
+    "- Preserve exact identifiers: file paths, function names, commands, error text, version numbers.",
+    "- Record decisions the user made and constraints they stated, including things they rejected.",
+    "- Separate what was verified from what was only claimed.",
+    "- Do not invent work that is not in the transcript. Do not add advice.",
+    "- Keep the whole summary under 4,000 tokens.",
+    "Return a JSON object with a single key: summary.",
+    "",
+    "Conversation:",
+    transcript,
+  ].join("\n");
+  const outputSchema = Schema.Struct({
+    summary: Schema.String,
+  });
+
+  return { prompt, outputSchema };
+}
+
+// ---------------------------------------------------------------------------
+// Watchdog decision
+// ---------------------------------------------------------------------------
+
+export interface WatchdogDecisionPromptInput {
+  rules: string;
+  pendingRequest: string;
+}
+
+/**
+ * Prompt for the watchdog: decide a pending approval or user-input gate on
+ * the user's behalf, per user-written rules. The reactor parses the reply as
+ * one line of strict JSON and treats any parse failure as "escalate".
+ */
+export function buildWatchdogDecisionPrompt(input: WatchdogDecisionPromptInput) {
+  const rules = limitSection(input.rules, 4_000);
+  const pendingRequest = limitSection(input.pendingRequest, 4_000);
+  const prompt = [
+    "You supervise a coding agent thread on behalf of the user.",
+    `Rules from the user: ${rules}`,
+    "Decide the pending request below.",
+    'Reply with a JSON object: {"decision":"approve"|"deny"|"answer"|"escalate","answer":string,"reason":string}',
+    'Use "answer" (decision) only when the pending request is a question, and put your answer text in the "answer" field.',
+    'Use "escalate" when the rules do not clearly cover this request, and say why in "reason".',
+    'Leave "answer" and "reason" as empty strings when they do not apply.',
+    "",
+    "Pending request:",
+    pendingRequest,
+  ].join("\n");
+  const outputSchema = Schema.Struct({
+    decision: Schema.String,
+    answer: Schema.String,
+    reason: Schema.String,
+  });
+
+  return { prompt, outputSchema };
+}
+
 export function buildThreadTitlePrompt(input: ThreadTitlePromptInput) {
   let prompt: string;
   if (input.previousTitle === undefined) {

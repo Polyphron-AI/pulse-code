@@ -29,6 +29,15 @@ import {
   OrchestrationGetFullThreadDiffError,
   OrchestrationGetSnapshotError,
   OrchestrationSearchThreadsError,
+  OrchestrationPreviewThreadHandoffError,
+  OrchestrationSwitchThreadProviderError,
+  type OrchestrationThread,
+  type OrchestrationThreadHandoffDigest,
+  type OrchestrationThreadHandoffFailureReason,
+  type ModelSelection,
+  MessageId,
+  type ServerProvider,
+  THREAD_HANDOFF_ACTIVITY_KIND,
   OrchestrationGetTurnDiffError,
   ORCHESTRATION_WS_METHODS,
   type ProjectId,
@@ -48,6 +57,8 @@ import {
   FilesystemBrowseError,
   AssetWorkspaceContextNotFoundError,
   AssetWorkspaceContextResolutionError,
+  AssistantId,
+  ManagerId,
   RpcClientId,
   ScheduleId,
   EnvironmentAuthorizationError,
@@ -95,6 +106,14 @@ import * as WorkspaceEntries from "./workspace/WorkspaceEntries.ts";
 import * as WorkspaceFileSystem from "./workspace/WorkspaceFileSystem.ts";
 import { readWorkflowScript } from "./orchestration/workflowScriptQuery.ts";
 import {
+  attachActiveManagers,
+  managerShellStreamEvent,
+} from "./orchestration/shellManagerProjection.ts";
+import {
+  attachActiveAssistants,
+  assistantShellStreamEvent,
+} from "./orchestration/shellAssistantProjection.ts";
+import {
   attachActiveSchedules,
   scheduleShellStreamEvent,
 } from "./orchestration/shellScheduleProjection.ts";
@@ -102,6 +121,14 @@ import * as WorkspacePaths from "./workspace/WorkspacePaths.ts";
 import * as VcsStatusBroadcaster from "./vcs/VcsStatusBroadcaster.ts";
 import * as VcsProvisioningService from "./vcs/VcsProvisioningService.ts";
 import * as GitWorkflowService from "./git/GitWorkflowService.ts";
+import * as TextGeneration from "./textGeneration/TextGeneration.ts";
+import { resolveThreadWorkspaceCwd } from "./checkpointing/Utils.ts";
+import {
+  DEFAULT_THREAD_HANDOFF_INSTRUCTION,
+  planThreadHandoff,
+  renderThreadHandoffDigest,
+  renderThreadHandoffTranscript,
+} from "./orchestration/threadHandoff.ts";
 import * as ReviewService from "./review/ReviewService.ts";
 import * as ProjectSetupScriptRunner from "./project/ProjectSetupScriptRunner.ts";
 import * as ServerEnvironment from "./environment/ServerEnvironment.ts";
@@ -382,6 +409,7 @@ const makeWsRpcLayer = (
       const previewManager = yield* PreviewManager.PreviewManager;
       const portDiscovery = yield* PortScanner.PortDiscovery;
       const providerRegistry = yield* ProviderRegistry.ProviderRegistry;
+      const textGeneration = yield* TextGeneration.TextGeneration;
       const providerMaintenanceRunner = yield* ProviderMaintenanceRunner.ProviderMaintenanceRunner;
       const serverSelfUpdate = yield* ServerSelfUpdate.ServerSelfUpdate;
       const config = yield* ServerConfig.ServerConfig;
@@ -606,6 +634,31 @@ const makeWsRpcLayer = (
                     ),
                   ),
                 ),
+              );
+            }
+            if (event.aggregateKind === "manager") {
+              return orchestrationEngine.currentReadModel.pipe(
+                Effect.map((readModel) =>
+                  Option.some(
+                    managerShellStreamEvent(
+                      readModel,
+                      ManagerId.make(event.aggregateId),
+                      event.sequence,
+                    ),
+                  ),
+                ),
+              );
+            }
+            if (event.aggregateKind === "assistant") {
+              return orchestrationEngine.currentReadModel.pipe(
+                Effect.map((readModel) => {
+                  const shellEvent = assistantShellStreamEvent(
+                    readModel,
+                    AssistantId.make(event.aggregateId),
+                    event.sequence,
+                  );
+                  return shellEvent === null ? Option.none() : Option.some(shellEvent);
+                }),
               );
             }
             if (event.aggregateKind !== "thread") {
@@ -1030,6 +1083,223 @@ const makeWsRpcLayer = (
           );
       };
 
+      // ---------------------------------------------------------------------
+      // Thread handoff (switch a thread to another provider in place)
+      // ---------------------------------------------------------------------
+
+      const modelSelectionLabel = (
+        providers: ReadonlyArray<ServerProvider>,
+        selection: ModelSelection,
+      ): string => {
+        const provider = providers.find((entry) => entry.instanceId === selection.instanceId);
+        const providerLabel = provider?.displayName ?? String(selection.instanceId);
+        const modelLabel =
+          provider?.models.find((model) => model.slug === selection.model)?.name ?? selection.model;
+        return `${providerLabel} / ${modelLabel}`;
+      };
+
+      const readThreadForHandoff = <E>(
+        threadId: ThreadId,
+        toError: (input: {
+          message: string;
+          reason: OrchestrationThreadHandoffFailureReason;
+          cause?: unknown;
+        }) => E,
+      ): Effect.Effect<OrchestrationThread, E> =>
+        projectionSnapshotQuery.getThreadDetailById(threadId).pipe(
+          Effect.mapError((cause) =>
+            toError({ message: "Failed to read thread", reason: "thread-not-found", cause }),
+          ),
+          Effect.flatMap(
+            Option.match({
+              onNone: () =>
+                Effect.fail(
+                  toError({
+                    message: `Thread '${threadId}' was not found`,
+                    reason: "thread-not-found",
+                  }),
+                ),
+              onSome: Effect.succeed,
+            }),
+          ),
+        );
+
+      /**
+       * Build the digest the new model receives. The destination model writes
+       * the summary of the omitted middle; when it cannot (unsupported,
+       * failed, timed out) the deterministic fallback keeps the switch
+       * working and the digest says so via `basis`.
+       */
+      const buildThreadHandoffDigest = Effect.fn("buildThreadHandoffDigest")(function* (input: {
+        readonly thread: OrchestrationThread;
+        readonly toModelSelection: ModelSelection;
+      }) {
+        const providers = yield* providerRegistry.getProviders;
+        const sourceLabel = modelSelectionLabel(providers, input.thread.modelSelection);
+        const plan = planThreadHandoff({
+          messages: input.thread.messages,
+          checkpoints: input.thread.checkpoints,
+        });
+        if (plan.omitted.length === 0) {
+          return renderThreadHandoffDigest({ sourceLabel, plan, summary: null });
+        }
+        const project = yield* projectionSnapshotQuery
+          .getProjectShellById(input.thread.projectId)
+          .pipe(
+            Effect.map(Option.getOrUndefined),
+            Effect.orElseSucceed(() => undefined),
+          );
+        const cwd = resolveThreadWorkspaceCwd({
+          thread: input.thread,
+          projects: project ? [project] : [],
+        });
+        const summary =
+          cwd === undefined
+            ? null
+            : yield* textGeneration
+                .generateThreadHandoffSummary({
+                  cwd,
+                  transcript: renderThreadHandoffTranscript(plan.omitted),
+                  sourceLabel,
+                  modelSelection: input.toModelSelection,
+                })
+                .pipe(
+                  Effect.map((result) => result.summary),
+                  Effect.catchCause((cause) =>
+                    Effect.logWarning("thread handoff summary generation failed; using fallback", {
+                      threadId: input.thread.id,
+                      toInstanceId: input.toModelSelection.instanceId,
+                      cause,
+                    }).pipe(Effect.as(null)),
+                  ),
+                );
+        return renderThreadHandoffDigest({ sourceLabel, plan, summary });
+      });
+
+      const previewThreadHandoff = Effect.fn("previewThreadHandoff")(function* (input: {
+        readonly threadId: ThreadId;
+        readonly toModelSelection: ModelSelection;
+      }) {
+        const thread = yield* readThreadForHandoff(
+          input.threadId,
+          (error) => new OrchestrationPreviewThreadHandoffError(error),
+        );
+        const digest = yield* buildThreadHandoffDigest({
+          thread,
+          toModelSelection: input.toModelSelection,
+        });
+        return { digest };
+      });
+
+      /**
+       * Commit a provider switch: record the new selection, drop a boundary
+       * card into the timeline, then start a fresh-session turn whose prompt
+       * carries the digest. Refused while a turn is in flight; the client
+       * offers "stop, then switch" instead of the server guessing.
+       */
+      const switchThreadProvider = Effect.fn("switchThreadProvider")(function* (input: {
+        readonly threadId: ThreadId;
+        readonly toModelSelection: ModelSelection;
+        readonly nextInstruction?: string | undefined;
+        readonly digest?: OrchestrationThreadHandoffDigest | undefined;
+      }) {
+        const thread = yield* readThreadForHandoff(
+          input.threadId,
+          (error) => new OrchestrationSwitchThreadProviderError(error),
+        );
+        if (thread.session?.status === "running" || thread.session?.status === "starting") {
+          return yield* new OrchestrationSwitchThreadProviderError({
+            message: "Stop the current turn before switching provider",
+            reason: "thread-busy",
+          });
+        }
+        if (
+          thread.modelSelection.instanceId === input.toModelSelection.instanceId &&
+          thread.modelSelection.model === input.toModelSelection.model
+        ) {
+          return yield* new OrchestrationSwitchThreadProviderError({
+            message: "The thread already uses this model",
+            reason: "same-provider",
+          });
+        }
+        const digest =
+          input.digest ??
+          (yield* buildThreadHandoffDigest({ thread, toModelSelection: input.toModelSelection }));
+        const providers = yield* providerRegistry.getProviders;
+        const toLabel = modelSelectionLabel(providers, input.toModelSelection);
+        const createdAt = yield* nowIso;
+        const messageId = MessageId.make(yield* randomUUID.pipe(Effect.orDie));
+        const dispatchOrFail = <A, E>(
+          effect: Effect.Effect<A, E>,
+          message: string,
+        ): Effect.Effect<A, OrchestrationSwitchThreadProviderError> =>
+          effect.pipe(
+            Effect.mapError(
+              (cause) =>
+                new OrchestrationSwitchThreadProviderError({
+                  message,
+                  reason: "dispatch-failed",
+                  cause,
+                }),
+            ),
+          );
+
+        yield* dispatchOrFail(
+          orchestrationEngine.dispatch({
+            type: "thread.meta.update",
+            commandId: yield* serverCommandId("thread-handoff-meta").pipe(Effect.orDie),
+            threadId: thread.id,
+            modelSelection: input.toModelSelection,
+          }),
+          "Failed to record the new model on the thread",
+        );
+        yield* dispatchOrFail(
+          orchestrationEngine.dispatch({
+            type: "thread.activity.append",
+            commandId: yield* serverCommandId("thread-handoff-activity").pipe(Effect.orDie),
+            threadId: thread.id,
+            activity: {
+              id: yield* serverEventId.pipe(Effect.orDie),
+              tone: "info",
+              kind: THREAD_HANDOFF_ACTIVITY_KIND,
+              summary: `Switched to ${toLabel}`,
+              payload: {
+                fromModelSelection: thread.modelSelection,
+                toModelSelection: input.toModelSelection,
+                digest,
+              },
+              turnId: null,
+              createdAt,
+            },
+            createdAt,
+          }),
+          "Failed to record the provider switch",
+        );
+        yield* dispatchOrFail(
+          dispatchNormalizedCommand({
+            type: "thread.turn.start",
+            commandId: yield* serverCommandId("thread-handoff-turn").pipe(Effect.orDie),
+            threadId: thread.id,
+            message: {
+              messageId,
+              role: "user",
+              text: input.nextInstruction ?? DEFAULT_THREAD_HANDOFF_INSTRUCTION,
+              attachments: [],
+            },
+            modelSelection: input.toModelSelection,
+            runtimeMode: thread.runtimeMode,
+            interactionMode: thread.interactionMode,
+            sessionMode: "fresh",
+            promptPrefix: digest.text,
+            // A typed next instruction is the user's; the default filler is ours.
+            authoredBy: input.nextInstruction !== undefined ? "user" : "handoff",
+            createdAt,
+          }),
+          "Failed to start the first turn on the new provider",
+        );
+        return { threadId: thread.id, messageId, digest };
+      });
+
       const loadServerConfig = Effect.gen(function* () {
         const keybindingsConfig = yield* keybindings.loadConfigState;
         const providers = yield* providerRegistry.getProviders;
@@ -1246,6 +1516,22 @@ const makeWsRpcLayer = (
             ),
             { "rpc.aggregate": "orchestration" },
           ),
+        [ORCHESTRATION_WS_METHODS.previewThreadHandoff]: (input) =>
+          observeRpcEffect(
+            ORCHESTRATION_WS_METHODS.previewThreadHandoff,
+            previewThreadHandoff(input),
+            {
+              "rpc.aggregate": "orchestration",
+            },
+          ),
+        [ORCHESTRATION_WS_METHODS.switchThreadProvider]: (input) =>
+          observeRpcEffect(
+            ORCHESTRATION_WS_METHODS.switchThreadProvider,
+            switchThreadProvider(input),
+            {
+              "rpc.aggregate": "orchestration",
+            },
+          ),
         [ORCHESTRATION_WS_METHODS.subscribeShell]: (input) =>
           observeRpcStreamEffect(
             ORCHESTRATION_WS_METHODS.subscribeShell,
@@ -1273,7 +1559,12 @@ const makeWsRpcLayer = (
               const bufferedLiveStream = coalesceShellLiveStream(Stream.fromQueue(liveBuffer));
 
               const loadSnapshot = projectionSnapshotQuery.getShellSnapshot().pipe(
-                Effect.zipWith(orchestrationEngine.currentReadModel, attachActiveSchedules),
+                Effect.zipWith(orchestrationEngine.currentReadModel, (snapshot, readModel) =>
+                  attachActiveAssistants(
+                    attachActiveManagers(attachActiveSchedules(snapshot, readModel), readModel),
+                    readModel,
+                  ),
+                ),
                 Effect.tapError((cause) =>
                   Effect.logError("orchestration shell snapshot load failed", { cause }),
                 ),
