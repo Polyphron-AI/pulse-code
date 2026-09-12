@@ -125,6 +125,17 @@ describe("managed skill imports", () => {
       expect(store.setUpdatePolicy(linked, "keep-updated").updatePolicy).toBe("keep-updated");
       expect(() => store.setUpdatePolicy(upload, "keep-updated")).toThrow(/GitHub source/);
       expect(() =>
+        store.setUpdatePolicy(
+          store.linkGitHub(upload, {
+            type: "github",
+            repository: "team/private",
+            ref: "a".repeat(40),
+            directory: "skills/review",
+          }),
+          "keep-updated",
+        ),
+      ).toThrow(/fixed Git commit/);
+      expect(() =>
         store.linkGitHub(upload, {
           type: "github",
           repository: "team/private",
@@ -331,6 +342,31 @@ describe("GitHub import validation", () => {
             directory: "",
           }),
         ).rejects.toThrow(/managed skill id/);
+        expect(requested).toBe(false);
+      },
+      async () => {
+        requested = true;
+        return {};
+      },
+    );
+  });
+
+  it("rejects keep-updated imports pinned to a fixed commit before making a request", async () => {
+    let requested = false;
+    await withStore(
+      async (store) => {
+        await expect(
+          store.importGitHub(
+            "review",
+            {
+              type: "github",
+              repository: "team/repo",
+              ref: "a".repeat(40),
+              directory: "",
+            },
+            "keep-updated",
+          ),
+        ).rejects.toThrow(/fixed Git commit/);
         expect(requested).toBe(false);
       },
       async () => {

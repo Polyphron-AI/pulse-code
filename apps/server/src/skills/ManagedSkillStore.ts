@@ -240,6 +240,19 @@ function validateGitHubSource(source: GitHubSkillSource): GitHubSkillSource {
   return { ...source, ref: source.ref.trim(), directory };
 }
 
+function validateUpdatePolicy(
+  source: ManagedSkillSource,
+  updatePolicy: ManagedSkillUpdatePolicy,
+): void {
+  if (updatePolicy !== "keep-updated") return;
+  if (source.type !== "github") {
+    throw new Error("Keep-updated skills need a valid GitHub source.");
+  }
+  if (/^[a-f0-9]{40}$/i.test(source.ref)) {
+    throw new Error("Keep-updated skills cannot use a fixed Git commit.");
+  }
+}
+
 export async function downloadGitHubSkill(source: GitHubSkillSource, request: GitHubRequest) {
   const validatedSource = validateGitHubSource(source);
   const directory = validatedSource.directory;
@@ -337,6 +350,7 @@ export class ManagedSkillStore {
   ): Promise<ManagedSkillRecord> {
     const validatedId = validateManagedId(id);
     const validatedSource = validateGitHubSource(source);
+    validateUpdatePolicy(validatedSource, updatePolicy);
     const downloaded = await downloadGitHubSkill(validatedSource, this.request);
     return this.persist(
       validatedId,
@@ -359,9 +373,7 @@ export class ManagedSkillStore {
     record: ManagedSkillRecord,
     updatePolicy: ManagedSkillUpdatePolicy,
   ): ManagedSkillRecord {
-    if (updatePolicy === "keep-updated" && record.source.type !== "github") {
-      throw new Error("Keep-updated skills need a valid GitHub source.");
-    }
+    validateUpdatePolicy(record.source, updatePolicy);
     return { ...record, updatePolicy };
   }
 
