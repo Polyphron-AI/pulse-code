@@ -15,7 +15,7 @@ const Values = Schema.Record(
     Schema.Struct({ type: Schema.Literal("secret"), value: Value }),
     Schema.Struct({ type: Schema.Literal("retain-secret") }),
   ]),
-);
+).check(Schema.isMaxProperties(128));
 
 export const PulseMcpConnectionInput = Schema.Struct({
   id: ConnectionId,

@@ -53,4 +53,23 @@ describe("Pulse MCP contracts", () => {
       }),
     ).toThrow();
   });
+
+  it("bounds connection values at 128 entries", () => {
+    const input = (count: number) => ({
+      id: "bounded",
+      name: "Bounded",
+      config: {
+        transport: "stdio",
+        command: "mcp",
+        env: Object.fromEntries(
+          Array.from({ length: count }, (_, index) => [
+            `VALUE_${index}`,
+            { type: "literal", value: `${index}` },
+          ]),
+        ),
+      },
+    });
+    expect(() => Schema.decodeUnknownSync(PulseMcpConnectionInput)(input(128))).not.toThrow();
+    expect(() => Schema.decodeUnknownSync(PulseMcpConnectionInput)(input(129))).toThrow();
+  });
 });
