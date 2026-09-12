@@ -1,0 +1,234 @@
+// @effect-diagnostics nodeBuiltinImport:off - Filesystem boundary tests use disposable directories.
+import * as NodeFSP from "node:fs/promises";
+import * as NodeOS from "node:os";
+import * as NodePath from "node:path";
+
+import { describe, expect, it } from "vite-plus/test";
+
+import {
+  downloadGitHubSkill,
+  ManagedSkillStore,
+  validateSkillFiles,
+  validateSkillPath,
+  type GitHubRequest,
+} from "./ManagedSkillStore.ts";
+
+function files(body = "Review changes carefully.", metadata = "") {
+  return [
+    {
+      path: "SKILL.md",
+      base64: Buffer.from(
+        `---\nname: code-review\ndescription: Review code\n${metadata}---\n${body}`,
+      ).toString("base64"),
+    },
+    { path: "references/checklist.md", base64: Buffer.from("Check tests").toString("base64") },
+  ];
+}
+
+async function withStore(
+  run: (store: ManagedSkillStore, root: string) => Promise<void>,
+  request?: GitHubRequest,
+) {
+  const root = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "pulse-managed-skills-"));
+  try {
+    await run(new ManagedSkillStore(NodePath.join(root, "managed-skills"), request), root);
+  } finally {
+    await NodeFSP.rm(root, { recursive: true, force: true });
+  }
+}
+
+describe("managed skill validation", () => {
+  it.each([
+    "../escape",
+    "/absolute",
+    "C:/secret",
+    "scripts\\run",
+    "NUL.txt",
+    "dir/CON",
+    "x./y",
+    "x/.git/config",
+  ])("rejects unsafe archive path %s", (value) => {
+    expect(() => validateSkillPath(value)).toThrow();
+  });
+
+  it("validates frontmatter, duplicate paths and size limits", () => {
+    expect(() =>
+      validateSkillFiles([{ path: "SKILL.md", base64: Buffer.from("hello").toString("base64") }]),
+    ).toThrow(/frontmatter/);
+    expect(() => validateSkillFiles([...files(), { ...files()[0]!, path: "skill.md" }])).toThrow(
+      /Duplicate/,
+    );
+    expect(() =>
+      validateSkillFiles([
+        ...files(),
+        { path: "large.bin", base64: Buffer.alloc(1024 * 1024 + 1).toString("base64") },
+      ]),
+    ).toThrow(/limited/);
+  });
+
+  it("retains native invocation restrictions from YAML 1.1 boolean spellings", () => {
+    expect(
+      validateSkillFiles(files("Body", "disable-model-invocation: yes\nuser-invocable: no\n"))
+        .invocation,
+    ).toEqual({ userInvocationOnly: true, userInvocable: false });
+  });
+});
+
+describe("managed skill imports", () => {
+  it("stores uploaded revisions immutably and keeps the old revision on replacement", async () => {
+    await withStore(async (store) => {
+      const first = await store.importUpload("review", files());
+      const firstPath = NodePath.join(store.revisionPath(first.revision), "SKILL.md");
+      const replacement = await store.importUpload("review", files("New revision"), first);
+
+      expect(replacement.revision).not.toBe(first.revision);
+      expect(replacement.updatePolicy).toBe("pinned");
+      expect(await NodeFSP.readFile(firstPath, "utf8")).toContain("carefully");
+      expect(
+        await NodeFSP.readFile(
+          NodePath.join(store.revisionPath(replacement.revision), "SKILL.md"),
+          "utf8",
+        ),
+      ).toContain("New revision");
+    });
+  });
+
+  it("refuses a pre-existing revision directory unless its content matches", async () => {
+    await withStore(async (store) => {
+      const validated = validateSkillFiles(files());
+      const destination = store.revisionPath(validated.revision);
+      await NodeFSP.mkdir(destination, { recursive: true });
+      await NodeFSP.writeFile(NodePath.join(destination, "SKILL.md"), "tampered");
+      await expect(store.importUpload("review", files())).rejects.toThrow(
+        /frontmatter|content hash/,
+      );
+    });
+  });
+
+  it("links an upload to GitHub while remaining pinned until the user opts in", async () => {
+    await withStore(async (store) => {
+      const upload = await store.importUpload("review", files());
+      const linked = store.linkGitHub(upload, {
+        type: "github",
+        repository: "team/private",
+        ref: "main",
+        directory: "skills/review",
+      });
+      expect(linked.revision).toBe(upload.revision);
+      expect(linked.updatePolicy).toBe("pinned");
+      expect(store.setUpdatePolicy(linked, "keep-updated").updatePolicy).toBe("keep-updated");
+      expect(() => store.setUpdatePolicy(upload, "keep-updated")).toThrow(/GitHub source/);
+    });
+  });
+
+  it("stores the resolved commit and content hash for GitHub imports", async () => {
+    const sha = "a".repeat(40);
+    const requests: string[] = [];
+    await withStore(
+      async (store) => {
+        const imported = await store.importGitHub("review", {
+          type: "github",
+          repository: "team/private",
+          ref: "feature/skills",
+          directory: "skills/review",
+        });
+        expect(imported.resolvedCommit).toBe(sha);
+        expect(imported.revision).toMatch(/^[a-f0-9]{64}$/);
+        expect(imported.updatePolicy).toBe("pinned");
+      },
+      async (endpoint) => {
+        requests.push(endpoint);
+        if (endpoint.includes("/commits/")) return { sha };
+        if (endpoint.includes("/trees/")) {
+          return {
+            tree: files().map((file, index) => ({
+              path: `skills/review/${file.path}`,
+              type: "blob",
+              mode: "100644",
+              size: Buffer.from(file.base64, "base64").length,
+              sha: String(index + 1).repeat(40),
+            })),
+          };
+        }
+        const index = endpoint.endsWith("1".repeat(40)) ? 0 : 1;
+        return { encoding: "base64", content: files()[index]!.base64 };
+      },
+    );
+    expect(requests[0]).toBe("repos/team/private/commits/feature%2Fskills");
+  });
+
+  it("keeps the last valid revision and source after a sync failure", async () => {
+    await withStore(
+      async (store) => {
+        const upload = await store.importUpload("review", files());
+        const linked = store.linkGitHub(upload, {
+          type: "github",
+          repository: "team/private",
+          ref: "main",
+          directory: "skills/review",
+        });
+        const previous = store.setUpdatePolicy(linked, "keep-updated");
+        const next = await store.sync(previous);
+        expect(next.revision).toBe(previous.revision);
+        expect(next.source).toEqual(previous.source);
+        expect(next.updatePolicy).toBe("keep-updated");
+        expect(next.error).toContain("expired");
+      },
+      async () => {
+        throw new Error("GitHub sign-in expired");
+      },
+    );
+  });
+
+  it("catalogs only store-derived canonical paths and preserves restrictions", async () => {
+    await withStore(async (store) => {
+      const record = await store.importUpload(
+        "review",
+        files("Body", "disable-model-invocation: true\nuser-invocable: false\n"),
+      );
+      const [descriptor] = await store.catalog([record]);
+      expect(descriptor?.skillPath).toBe(
+        await NodeFSP.realpath(NodePath.join(store.revisionPath(record.revision), "SKILL.md")),
+      );
+      expect(descriptor?.invocation).toEqual({ userInvocationOnly: true, userInvocable: false });
+    });
+  });
+
+  it("rejects a revision symlink that escapes the managed root when supported", async () => {
+    await withStore(async (store, temporaryRoot) => {
+      const record = await store.importUpload("review", files());
+      const outside = NodePath.join(temporaryRoot, "outside");
+      await NodeFSP.mkdir(outside);
+      await NodeFSP.writeFile(
+        NodePath.join(outside, "SKILL.md"),
+        Buffer.from(files()[0]!.base64, "base64"),
+      );
+      const revisionPath = store.revisionPath(record.revision);
+      await NodeFSP.rm(revisionPath, { recursive: true });
+      try {
+        await NodeFSP.symlink(outside, revisionPath, "junction");
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code === "EPERM" || code === "EACCES" || code === "ENOTSUP") return;
+        throw error;
+      }
+      await expect(store.catalog([record])).rejects.toThrow(/escapes|regular directory/);
+    });
+  });
+});
+
+describe("GitHub import validation", () => {
+  it("rejects linked files and truncated trees before downloading blobs", async () => {
+    for (const tree of [
+      { truncated: true, tree: [] },
+      { tree: [{ path: "SKILL.md", type: "blob", mode: "120000", size: 50, sha: "a".repeat(40) }] },
+    ]) {
+      await expect(
+        downloadGitHubSkill(
+          { type: "github", repository: "team/repo", ref: "", directory: "" },
+          async (endpoint) => (endpoint.includes("commits") ? { sha: "a".repeat(40) } : tree),
+        ),
+      ).rejects.toThrow();
+    }
+  });
+});
