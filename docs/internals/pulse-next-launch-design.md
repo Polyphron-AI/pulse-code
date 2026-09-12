@@ -101,8 +101,8 @@ switcher, agent dashboard or new top-level workspace.
 
 | Location | Small Pulse addition |
 | --- | --- |
-| Composer on desktop/web | Skills and MCP selections near existing configuration; microphone beside existing send controls |
-| Narrow mobile web composer | Reuse the existing More composer controls entry for Skills/MCP selection; microphone remains reachable beside attachment/send actions |
+| Composer on desktop/web | Model, effort, access, Skills, MCP in that order; microphone directly above Send/Stop, attachment retained beside it |
+| Narrow mobile web composer | Keep all five selectors visible in the same reading order: model/effort/access then Skills/MCP; microphone directly above Send/Stop |
 | Existing settings | Managed skills, MCP connections and Dictation entries using existing settings composition |
 | Dictation settings | Backend, local model setup/status, or protected Groq configuration; explicit audio destination |
 | Active recording | Static status, elapsed time if useful, Stop and Cancel; no continuously animated waveform |
@@ -110,7 +110,9 @@ switcher, agent dashboard or new top-level workspace.
 The baseline was inspected in Chromium at 1280x800 and 390x844 on 2026-09-12.
 Desktop has model, effort and access controls on the left, attachment and send on
 the right. Mobile already collapses configuration into More composer controls.
-Reuse that entry instead of adding a second mobile Tools trigger. Provider settings
+The user's subsequent direction overrides the overflow proposal: keep Skills and
+MCP visible, wrapping in order on mobile, and place the microphone above Send/Stop.
+Provider settings
 stack into a long single column on mobile, so managed skills and MCP need direct
 settings navigation or anchors, not placement after all provider runtime fields.
 Keep the microphone separate from the send action and never replace its semantics.
