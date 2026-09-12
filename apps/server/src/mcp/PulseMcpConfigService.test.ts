@@ -2,8 +2,10 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { ProviderInstanceId, ThreadId } from "@t3tools/contracts";
 import { describe, expect, it } from "@effect/vitest";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 
@@ -303,5 +305,94 @@ describe("PulseMcpConfigService", () => {
       yield* service.removeConnection("github");
       expect(Option.isNone(yield* secretStore.get(thirdReference))).toBe(true);
     }).pipe(Effect.provide(testLayer)),
+  );
+
+  it.effect("holds rotation until a turn has materialized its selected secrets", () =>
+    Effect.gen(function* () {
+      const readStarted = yield* Deferred.make<void>();
+      const releaseRead = yield* Deferred.make<void>();
+      const rotationStored = yield* Deferred.make<void>();
+      const values = new Map<string, Uint8Array>();
+      let gateNextRead = false;
+      let rotationExpected = false;
+      const gatedSecrets = ServerSecretStore.ServerSecretStore.of({
+        get: (name) =>
+          Effect.gen(function* () {
+            if (gateNextRead) {
+              gateNextRead = false;
+              yield* Deferred.succeed(readStarted, undefined);
+              yield* Deferred.await(releaseRead);
+            }
+            const value = values.get(name);
+            return value === undefined ? Option.none() : Option.some(Uint8Array.from(value));
+          }),
+        set: (name, value) => Effect.sync(() => void values.set(name, Uint8Array.from(value))),
+        create: (name, value) =>
+          Effect.sync(() => void values.set(name, Uint8Array.from(value))).pipe(
+            Effect.tap(() =>
+              rotationExpected ? Deferred.succeed(rotationStored, undefined) : Effect.void,
+            ),
+          ),
+        getOrCreateRandom: (_name, bytes) => Effect.succeed(new Uint8Array(bytes)),
+        remove: (name) => Effect.sync(() => void values.delete(name)),
+      });
+      const gatedSecretLayer = Layer.succeed(ServerSecretStore.ServerSecretStore, gatedSecrets);
+      const gatedPulseLayer = PulseMcpConfig.layer.pipe(
+        Layer.provide(gatedSecretLayer),
+        Layer.provide(configLayer),
+      );
+      const gatedLayer = Layer.mergeAll(configLayer, gatedSecretLayer, gatedPulseLayer).pipe(
+        Layer.provideMerge(NodeServices.layer),
+      );
+
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const service = yield* PulseMcpConfig.PulseMcpConfigService;
+          const instanceId = ProviderInstanceId.make("codex_race");
+          yield* service.upsertConnection({
+            id: "github",
+            name: "GitHub",
+            config: {
+              transport: "http",
+              url: "https://example.test",
+              headers: { Authorization: { type: "secret", value: "first" } },
+            },
+          });
+          yield* service.setProviderDefault(instanceId, ["github"]);
+          gateNextRead = true;
+          const preparing = yield* Effect.forkChild(
+            service.prepareTurn(
+              {
+                turnId: "turn-race",
+                provider: "codex",
+                providerInstanceId: instanceId,
+                threadId: ThreadId.make("thread-race"),
+              },
+              readiness,
+            ),
+          );
+          yield* Deferred.await(readStarted);
+          rotationExpected = true;
+          const rotating = yield* Effect.forkChild(
+            service.upsertConnection({
+              id: "github",
+              name: "GitHub",
+              config: {
+                transport: "http",
+                url: "https://example.test",
+                headers: { Authorization: { type: "secret", value: "second" } },
+              },
+            }),
+          );
+          expect(Option.isNone(yield* Deferred.poll(rotationStored))).toBe(true);
+          yield* Deferred.succeed(releaseRead, undefined);
+          const prepared = yield* Fiber.join(preparing);
+          yield* Fiber.join(rotating);
+          expect(prepared.connections[0]?.config).toMatchObject({
+            headers: { Authorization: "first" },
+          });
+        }),
+      ).pipe(Effect.provide(gatedLayer));
+    }),
   );
 });
