@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "project": "Pulse Next",
   "updatedAt": "2026-09-12",
-  "status": "launch-scope-selected-packaging-pending",
+  "status": "defaults-approved-baseline-inspected",
   "branch": "experiment/pulse-next-v040",
   "upstreamBase": "09e8de9c655ae85410bf6b00446f272a01da81c7",
   "sourceSnapshots": {
@@ -11,9 +11,10 @@
   },
   "authority": {
     "scope": "User requested a coding-only launch ledger and architecture discussion before visual review or implementation.",
-    "architectureApproved": false,
+    "architectureApproved": true,
     "runtimeMigrationStarted": false,
-    "publicationAuthorized": false
+    "publicationAuthorized": false,
+    "defaultsApproved": true
   },
   "launchBundles": [
     {
@@ -367,7 +368,7 @@
       "Capture actual client versions and unsupported cases; no blanket future-client guarantee."
     ]
   },
-  "nextAction": "Review proposed skills/MCP defaults, Parakeet-local/Groq-explicit routing and minimal UI in pulse-next-launch-design.md. Once approved, compare actual baseline UI and begin isolated implementation. No runtime work yet.",
+  "nextAction": "Begin isolated identity/state implementation, then sequence skills/MCP configuration integration. Use inspected upstream composer/settings composition; review actual new controls on desktop and mobile web after integration. Deferred roles remain out of scope.",
   "decisionPolicy": {
     "pending": "Recommendations are proposals, not approval to implement.",
     "inherit": "Retain upstream behavior; port only a demonstrated missing Pulse behavior.",
@@ -392,16 +393,39 @@
     }
   ],
   "openDecisions": [
-    "Approve proposed skills/MCP management defaults; no bundled third-party content selected.",
-    "Approve local Parakeet where verified and explicit Groq through the connected environment; no silent cloud fallback.",
-    "Approve minimal module/UI proposal, then inspect actual desktop/mobile-web baseline.",
-    "Demonstrate any attachment-preview gap before including enhancements."
+    "Review actual desktop and mobile-web baseline and minimal Pulse additions.",
+    "Demonstrate attachment-preview gaps before selecting any enhancements.",
+    "Verify Parakeet and Groq acceptance across target platforms during implementation."
   ],
   "decisionHistory": [
     {
       "date": "2026-09-12",
       "summary": "User narrowed launch to skills, MCP, cross-platform Parakeet/Groq dictation and demonstrated attachment-preview gaps. Luna, Argo, watchdog, SOP cookbook and remaining optional features move to later. Orca/OMP remain excluded."
+    },
+    {
+      "date": "2026-09-12",
+      "summary": "User approved defaults, including GitHub-link prompting for Keep updated, and authorized moving to the visual comparison."
     }
   ],
-  "designProposal": "docs/internals/pulse-next-launch-design.md"
+  "designProposal": "docs/internals/pulse-next-launch-design.md",
+  "visualBaseline": {
+    "upstreamRevision": "09e8de9c655ae85410bf6b00446f272a01da81c7",
+    "inspected": [
+      "Chromium desktop 1280x800 new-thread composer",
+      "Chromium mobile-web viewport 390x844 new-thread composer",
+      "Provider settings at both sizes"
+    ],
+    "evidenceDirectory": ".t3/visual-evidence",
+    "evidenceCommitted": false,
+    "limitations": [
+      "Baseline only, no Pulse controls implemented or rendered.",
+      "Mobile viewport emulation is not physical-device or native-mobile verification.",
+      "Embedded browser snapshot/resize failed; headless Python Playwright supplied captures."
+    ],
+    "findings": [
+      "Reuse existing mobile More composer controls instead of adding a second Tools trigger.",
+      "Keep microphone separate from Send/Stop.",
+      "Provide direct settings access to managed skills/MCP; mobile provider runtime settings are a long column."
+    ]
+  }
 }

@@ -1,8 +1,8 @@
 # Pulse Next launch design proposal
 
-Status: proposed, not implemented or platform-verified. The feature ledger owns
-scope and approval state. This document records the proposed implementation and
-UI for review before runtime work.
+Status: defaults and module approach approved; visual comparison in progress.
+Not implemented or platform-verified. The feature ledger owns scope and approval
+state. The UI placements below still need comparison against the running baseline.
 
 ## Packaging
 
@@ -102,12 +102,24 @@ switcher, agent dashboard or new top-level workspace.
 | Location | Small Pulse addition |
 | --- | --- |
 | Composer on desktop/web | Skills and MCP selections near existing configuration; microphone beside existing send controls |
-| Narrow mobile web composer | Compact Tools action opens Skills/MCP controls in a sheet; microphone remains reachable |
+| Narrow mobile web composer | Reuse the existing More composer controls entry for Skills/MCP selection; microphone remains reachable beside attachment/send actions |
 | Existing settings | Managed skills, MCP connections and Dictation entries using existing settings composition |
 | Dictation settings | Backend, local model setup/status, or protected Groq configuration; explicit audio destination |
 | Active recording | Static status, elapsed time if useful, Stop and Cancel; no continuously animated waveform |
 
-The exact placement must be compared against the actual T3 baseline before coding.
+The baseline was inspected in Chromium at 1280x800 and 390x844 on 2026-09-12.
+Desktop has model, effort and access controls on the left, attachment and send on
+the right. Mobile already collapses configuration into More composer controls.
+Reuse that entry instead of adding a second mobile Tools trigger. Provider settings
+stack into a long single column on mobile, so managed skills and MCP need direct
+settings navigation or anchors, not placement after all provider runtime fields.
+Keep the microphone separate from the send action and never replace its semantics.
+
+Local baseline captures are in `.t3/visual-evidence/` and are not release evidence.
+They show the upstream UI before Pulse controls, not a completed before/after
+comparison. No native mobile app, device keyboard or recording flow was tested.
+Actual new controls still require a combined desktop/mobile-web render review.
+
 Reuse existing controls if they already cover the requirement. Check keyboard,
 touch, focus and screen-reader operation. Preserve draft, selection and undo when
 inserting transcription. Nothing may cover Send/Stop or steal its meaning.
