@@ -58,6 +58,32 @@ export function applyShellStreamEvent(
         ),
         snapshotSequence: event.sequence,
       };
+    case "manager-upserted": {
+      const managers = snapshot.managers ?? [];
+      const nextManagers = managers.some((manager) => manager.id === event.manager.id)
+        ? Arr.map(managers, (manager) =>
+            manager.id === event.manager.id ? event.manager : manager,
+          )
+        : Arr.append(managers, event.manager);
+      return { ...snapshot, managers: nextManagers, snapshotSequence: event.sequence };
+    }
+    case "assistant-upserted": {
+      // One assistant per environment, and it is never removed, so an upsert
+      // either replaces the record or is the first one.
+      const assistants = snapshot.assistants ?? [];
+      const nextAssistants = assistants.some((assistant) => assistant.id === event.assistant.id)
+        ? Arr.map(assistants, (assistant) =>
+            assistant.id === event.assistant.id ? event.assistant : assistant,
+          )
+        : Arr.append(assistants, event.assistant);
+      return { ...snapshot, assistants: nextAssistants, snapshotSequence: event.sequence };
+    }
+    case "manager-removed":
+      return {
+        ...snapshot,
+        managers: Arr.filter(snapshot.managers ?? [], (manager) => manager.id !== event.managerId),
+        snapshotSequence: event.sequence,
+      };
     default:
       return snapshot;
   }

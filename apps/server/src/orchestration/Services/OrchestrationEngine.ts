@@ -17,6 +17,7 @@ import type {
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
+import type * as Scope from "effect/Scope";
 import type * as Stream from "effect/Stream";
 
 import type { OrchestrationDispatchError } from "../Errors.ts";
@@ -60,6 +61,19 @@ export interface OrchestrationEngineShape {
    * This is a hot runtime stream (new events only), not a historical replay.
    */
   readonly streamDomainEvents: Stream.Stream<OrchestrationEvent>;
+
+  /**
+   * Subscribe to domain events, returning a stream backed by a subscription
+   * that is established synchronously (not lazily on first pull, unlike
+   * `streamDomainEvents`). Use this when a caller forks the consuming loop
+   * and must not miss an event published between the fork and the forked
+   * fiber's first tick.
+   */
+  readonly subscribeDomainEvents: Effect.Effect<
+    Stream.Stream<OrchestrationEvent>,
+    never,
+    Scope.Scope
+  >;
 
   /**
    * The latest sequence reflected in the engine's authoritative command read

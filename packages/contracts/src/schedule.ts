@@ -187,13 +187,16 @@ export const OrchestrationSchedule = Schema.Struct({
 export type OrchestrationSchedule = typeof OrchestrationSchedule.Type;
 
 /**
- * Who started a thread: an interactive user or a schedule
- * (`schedule:<scheduleId>`). Absent on persisted pre-schedule events, which
- * consumers must read as "user".
+ * Who started a thread: an interactive user, a schedule
+ * (`schedule:<scheduleId>`), a manager (`manager:<managerId>`), or an
+ * assistant (`assistant:<assistantId>`). Absent on
+ * persisted pre-schedule events, which consumers must read as "user".
  */
 export const ThreadOrigin = Schema.Union([
   Schema.Literal("user"),
   TrimmedNonEmptyString.check(Schema.isPattern(/^schedule:.+$/)),
+  TrimmedNonEmptyString.check(Schema.isPattern(/^manager:.+$/)),
+  TrimmedNonEmptyString.check(Schema.isPattern(/^assistant:.+$/)),
 ]);
 export type ThreadOrigin = typeof ThreadOrigin.Type;
 export const DEFAULT_THREAD_ORIGIN: ThreadOrigin = "user";
@@ -212,6 +215,10 @@ export function scheduleSkipIfDirty(
   schedule: Pick<OrchestrationSchedule, "scope" | "skipIfDirty">,
 ): boolean {
   return schedule.skipIfDirty ?? schedule.scope._tag === "environment";
+}
+
+export function isScheduleThreadOrigin(origin: ThreadOrigin): boolean {
+  return origin.startsWith("schedule:") && origin.length > "schedule:".length;
 }
 
 export function scheduleIdFromThreadOrigin(origin: ThreadOrigin): ScheduleId | null {

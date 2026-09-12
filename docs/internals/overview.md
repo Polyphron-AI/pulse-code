@@ -92,8 +92,35 @@ does not define turn end.
 
 Follow-up work runs asynchronously in queue-backed workers built on [`DrainableWorker`][worker]:
 [`ProviderRuntimeIngestion`][ingest] normalizes provider runtime streams into orchestration commands,
-[`ProviderCommandReactor`][cmd] dispatches provider calls in response to intent events, and
-[`CheckpointReactor`][checkpoint] captures and reverts workspace checkpoints.
+[`ProviderCommandReactor`][cmd] dispatches provider calls in response to intent events,
+[`CheckpointReactor`][checkpoint] captures and reverts workspace checkpoints, and
+[`WatchdogReactor`][watchdog] answers pending approval and user-input gates on threads with an
+enabled watchdog. It subscribes to `thread.activity-appended` events carrying an
+`approval.requested` or `user-input.requested` activity, the actual "gate opened" signal, asks
+`TextGeneration.generateWatchdogDecision` under the thread's rules, and dispatches
+`thread.approval.respond`, `thread.user-input.respond`, `thread.watchdog.record-intervention`, or
+`thread.watchdog.escalate`. It escalates outright once a thread's intervention count reaches
+`WATCHDOG_MAX_INTERVENTIONS`, without calling the model.
+
+[`ManagerReactor`][managerreactor] is not queue-backed: it sweeps every 30 seconds, like
+`ScheduleReactor`. Each sweep it runs one cycle for every watching manager (Argo) whose
+`intervalMinutes` has elapsed, ensuring the environment's system project through
+`project.ensure-system`, lazily creating and binding the manager's own `manager:<id>` thread,
+composing the cycle prompt in the pure [`managerCyclePrompt.ts`][managerprompt], and starting a
+turn authored by `schedule`. The manager acts through the MCP manager toolkit in
+[`src/mcp/toolkits/manager/`][managertoolkit] (`manager_list_children`, `manager_spawn_child`,
+`manager_message_child`, `manager_stop_child`, `manager_log`), whose handlers refuse any caller
+whose MCP session is not a manager's own thread.
+
+[`AssistantReactor`][assistantreactor] is event-driven rather than swept: it subscribes to
+domain events and reacts to `assistant.message-requested`. The first message ensures the system
+project, creates the assistant's thread under the `assistant:<id>` origin with the read-only
+`ASSISTANT_THREAD_ALLOWED_TOOLS` allow-list, binds it with `assistant.thread.bind`, and starts a
+turn authored by `user`; later messages reuse the bound thread, and a reset makes the next message
+open a new one. It publishes the `assistant.thread.ready` runtime receipt. The standing
+instructions reach the model through `assistantSystemPrompt`, composed in
+`buildSendTurnRequestForThread` alongside the trust wrapper, so the panel and the ordinary
+composer both get it.
 
 `DrainableWorker` pairs a transactional queue with a transactional count of outstanding items.
 `enqueue` atomically offers and increments; processing always decrements. `drain` retries until the
@@ -148,6 +175,11 @@ already dispatch.
 [worker]: ../../packages/shared/src/DrainableWorker.ts
 [ingest]: ../../apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.ts
 [cmd]: ../../apps/server/src/orchestration/Layers/ProviderCommandReactor.ts
+[watchdog]: ../../apps/server/src/orchestration/Layers/WatchdogReactor.ts
+[managerreactor]: ../../apps/server/src/orchestration/Layers/ManagerReactor.ts
+[assistantreactor]: ../../apps/server/src/orchestration/Layers/AssistantReactor.ts
+[managerprompt]: ../../apps/server/src/orchestration/managerCyclePrompt.ts
+[managertoolkit]: ../../apps/server/src/mcp/toolkits/manager/
 [checkpoint]: ../../apps/server/src/orchestration/Layers/CheckpointReactor.ts
 [receipts]: ../../apps/server/src/orchestration/Layers/RuntimeReceiptBus.ts
 [drivers]: ../../apps/server/src/provider/builtInDrivers.ts

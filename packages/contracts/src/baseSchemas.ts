@@ -87,3 +87,7 @@ export const CheckpointRef = makeEntityId("CheckpointRef");
 export type CheckpointRef = typeof CheckpointRef.Type;
 export const ScheduleId = makeEntityId("ScheduleId");
 export type ScheduleId = typeof ScheduleId.Type;
+export const ManagerId = makeEntityId("ManagerId");
+export type ManagerId = typeof ManagerId.Type;
+export const AssistantId = makeEntityId("AssistantId");
+export type AssistantId = typeof AssistantId.Type;

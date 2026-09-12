@@ -4,6 +4,8 @@ import * as SchemaIssue from "effect/SchemaIssue";
 import * as Struct from "effect/Struct";
 import { ModelSelection } from "./model.ts";
 export { ModelSelection } from "./model.ts";
+import { DEFAULT_RUNTIME_MODE, RuntimeMode } from "./runtimeMode.ts";
+export { DEFAULT_RUNTIME_MODE, RuntimeMode } from "./runtimeMode.ts";
 import { RepositoryIdentity, ThreadEnvMode } from "./environment.ts";
 import {
   ApprovalRequestId,
@@ -22,7 +24,39 @@ import {
   TurnId,
 } from "./baseSchemas.ts";
 import { ProviderInstanceId } from "./providerInstance.ts";
-import { ScheduleId } from "./baseSchemas.ts";
+import { AssistantId, ManagerId, ScheduleId } from "./baseSchemas.ts";
+import {
+  ManagerCreateCommand,
+  ManagerCreatedPayload,
+  ManagerCycleNowCommand,
+  ManagerCycleRecordCommand,
+  ManagerCycleRecordedPayload,
+  ManagerCycleRequestedPayload,
+  ManagerDeleteCommand,
+  ManagerDeletedPayload,
+  ManagerPauseCommand,
+  ManagerPausedPayload,
+  ManagerResumeCommand,
+  ManagerResumedPayload,
+  ManagerThreadBindCommand,
+  ManagerThreadBoundPayload,
+  ManagerUpdateCommand,
+  ManagerUpdatedPayload,
+  OrchestrationManager,
+} from "./manager.ts";
+import {
+  AssistantCreateCommand,
+  AssistantCreatedPayload,
+  AssistantMessageCommand,
+  AssistantMessageRequestedPayload,
+  AssistantResetCommand,
+  AssistantResetPayload,
+  AssistantThreadBindCommand,
+  AssistantThreadBoundPayload,
+  AssistantUpdateCommand,
+  AssistantUpdatedPayload,
+  OrchestrationAssistant,
+} from "./assistant.ts";
 import {
   OrchestrationSchedule,
   ProjectScheduleCreateCommand,
@@ -54,6 +88,8 @@ export const ORCHESTRATION_WS_METHODS = {
   getTurnDiff: "orchestration.getTurnDiff",
   getFullThreadDiff: "orchestration.getFullThreadDiff",
   searchThreads: "orchestration.searchThreads",
+  previewThreadHandoff: "orchestration.previewThreadHandoff",
+  switchThreadProvider: "orchestration.switchThreadProvider",
   getArchivedShellSnapshot: "orchestration.getArchivedShellSnapshot",
   subscribeShell: "orchestration.subscribeShell",
   subscribeThread: "orchestration.subscribeThread",
@@ -73,14 +109,6 @@ export const ProviderSandboxMode = Schema.Literals([
 ]);
 export type ProviderSandboxMode = typeof ProviderSandboxMode.Type;
 
-export const RuntimeMode = Schema.Literals([
-  "approval-required",
-  "auto-accept-edits",
-  "auto",
-  "full-access",
-]);
-export type RuntimeMode = typeof RuntimeMode.Type;
-export const DEFAULT_RUNTIME_MODE: RuntimeMode = "full-access";
 export const ProviderInteractionMode = Schema.Literals(["default", "plan"]);
 export type ProviderInteractionMode = typeof ProviderInteractionMode.Type;
 export const DEFAULT_PROVIDER_INTERACTION_MODE: ProviderInteractionMode = "default";
@@ -203,6 +231,12 @@ export const OrchestrationProject = Schema.Struct({
   // Optional on the wire so cached snapshots from older servers still decode.
   faviconPath: Schema.optional(Schema.NullOr(ProjectFaviconPath)),
   scripts: Schema.Array(ProjectScript),
+  /**
+   * The one environment-local project rooted at Pulse Code home, holding
+   * operational threads (managers, later assistants) rather than user work.
+   * Clients hide it from project lists. Absent/false on every user project.
+   */
+  system: Schema.optional(Schema.Boolean),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
   deletedAt: Schema.NullOr(IsoDateTime),
@@ -212,11 +246,25 @@ export type OrchestrationProject = typeof OrchestrationProject.Type;
 export const OrchestrationMessageRole = Schema.Literals(["user", "assistant", "system"]);
 export type OrchestrationMessageRole = typeof OrchestrationMessageRole.Type;
 
+/**
+ * Who authored a user-role message. The human at the keyboard is "user". Server
+ * producers mark their own prompts so the UI and any supervising agent role can
+ * treat relayed text as data rather than as an instruction from the person.
+ * Absent on the wire and in older persisted events means "user".
+ */
+export const MessageAuthor = Schema.Union([
+  Schema.Literals(["user", "schedule", "handoff", "assistant", "manager", "watchdog"]),
+  Schema.Struct({ kind: Schema.Literal("thread"), threadId: ThreadId }),
+]);
+export type MessageAuthor = typeof MessageAuthor.Type;
+export const DEFAULT_MESSAGE_AUTHOR: MessageAuthor = "user";
+
 export const OrchestrationMessage = Schema.Struct({
   id: MessageId,
   role: OrchestrationMessageRole,
   text: Schema.String,
   attachments: Schema.optional(Schema.Array(ChatAttachment)),
+  authoredBy: Schema.optional(MessageAuthor),
   turnId: Schema.NullOr(TurnId),
   streaming: Schema.Boolean,
   createdAt: IsoDateTime,
@@ -298,6 +346,23 @@ export const OrchestrationThreadActivityTone = Schema.Literals([
 ]);
 export type OrchestrationThreadActivityTone = typeof OrchestrationThreadActivityTone.Type;
 
+/**
+ * Per-thread watchdog configuration and state. A watchdog answers pending
+ * approval or user-input gates on the user's behalf under a rules string,
+ * escalating when it is unsure or stuck. `interventions` counts watchdog
+ * responses since the last user message or turn completion; `escalatedAt`
+ * non-null drives the "Watchdog stuck" banner. Skipped for manager-owned
+ * threads. Optional on OrchestrationThread so older snapshots still decode.
+ */
+export const ThreadWatchdog = Schema.Struct({
+  enabled: Schema.Boolean,
+  rules: Schema.String,
+  modelSelection: Schema.NullOr(ModelSelection),
+  escalatedAt: Schema.NullOr(IsoDateTime),
+  interventions: NonNegativeInt,
+});
+export type ThreadWatchdog = typeof ThreadWatchdog.Type;
+
 export const OrchestrationThreadActivity = Schema.Struct({
   id: EventId,
   tone: OrchestrationThreadActivityTone,
@@ -374,6 +439,14 @@ export const OrchestrationThread = Schema.Struct({
   // Who started the thread: "user" or "schedule:<scheduleId>". Optional so
   // payloads from pre-schedule servers still decode; absent means "user".
   origin: Schema.optional(ThreadOrigin),
+  // Per-thread watchdog config and state. Optional so payloads from
+  // pre-watchdog servers still decode; absent/null means no watchdog.
+  watchdog: Schema.optional(Schema.NullOr(ThreadWatchdog)),
+  // Tool allow-list for this thread's provider session. Null or absent means
+  // the provider's own default; a list narrows it to exactly those names.
+  // Adapters that have no allow-list ignore it. See
+  // packages/contracts/src/assistant.ts for the read-only set.
+  allowedTools: Schema.optional(Schema.NullOr(Schema.Array(Schema.String))),
   deletedAt: Schema.NullOr(IsoDateTime),
   messages: Schema.Array(OrchestrationMessage),
   proposedPlans: Schema.Array(OrchestrationProposedPlan).pipe(
@@ -392,6 +465,12 @@ export const OrchestrationReadModel = Schema.Struct({
   // Optional so snapshots from pre-schedule servers still decode; absent
   // means no schedules.
   schedules: Schema.optional(Schema.Array(OrchestrationSchedule)),
+  // Optional so snapshots from pre-manager servers still decode; absent
+  // means no managers.
+  managers: Schema.optional(Schema.Array(OrchestrationManager)),
+  // Optional so snapshots from pre-assistant servers still decode; absent
+  // means no assistants. At most one per environment today.
+  assistants: Schema.optional(Schema.Array(OrchestrationAssistant)),
   updatedAt: IsoDateTime,
 });
 export type OrchestrationReadModel = typeof OrchestrationReadModel.Type;
@@ -406,6 +485,8 @@ export const OrchestrationProjectShell = Schema.Struct({
   // Optional on the wire so cached snapshots from older servers still decode.
   faviconPath: Schema.optional(Schema.NullOr(ProjectFaviconPath)),
   scripts: Schema.Array(ProjectScript),
+  // Absent/false on every user project; see OrchestrationProject.system.
+  system: Schema.optional(Schema.Boolean),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
 });
@@ -437,6 +518,11 @@ export const OrchestrationThreadShell = Schema.Struct({
   titleRegeneration: Schema.optional(Schema.NullOr(ThreadTitleRegeneration)),
   // Who started the thread; optional for pre-schedule interop, absent = "user".
   origin: Schema.optional(ThreadOrigin),
+  // Per-thread watchdog config and state. Optional so payloads from
+  // pre-watchdog servers still decode; absent/null means no watchdog.
+  watchdog: Schema.optional(Schema.NullOr(ThreadWatchdog)),
+  // See OrchestrationThread.allowedTools.
+  allowedTools: Schema.optional(Schema.NullOr(Schema.Array(Schema.String))),
   session: Schema.NullOr(OrchestrationSession),
   latestUserMessageAt: Schema.NullOr(IsoDateTime),
   hasPendingApprovals: Schema.Boolean,
@@ -472,6 +558,11 @@ export const OrchestrationShellSnapshot = Schema.Struct({
   // Optional so cached snapshots from pre-schedule servers keep decoding.
   // Active schedules only; deleted schedules are omitted from the shell.
   schedules: Schema.optional(Schema.Array(OrchestrationSchedule)),
+  // Optional so cached snapshots from pre-manager servers keep decoding.
+  // Active managers only; deleted managers are omitted from the shell.
+  managers: Schema.optional(Schema.Array(OrchestrationManager)),
+  // Optional so cached snapshots from pre-assistant servers keep decoding.
+  assistants: Schema.optional(Schema.Array(OrchestrationAssistant)),
   updatedAt: IsoDateTime,
 });
 export type OrchestrationShellSnapshot = typeof OrchestrationShellSnapshot.Type;
@@ -506,6 +597,21 @@ export const OrchestrationShellStreamEvent = Schema.Union([
     kind: Schema.Literal("schedule-removed"),
     sequence: NonNegativeInt,
     scheduleId: ScheduleId,
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("manager-upserted"),
+    sequence: NonNegativeInt,
+    manager: OrchestrationManager,
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("manager-removed"),
+    sequence: NonNegativeInt,
+    managerId: ManagerId,
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("assistant-upserted"),
+    sequence: NonNegativeInt,
+    assistant: OrchestrationAssistant,
   }),
 ]);
 export type OrchestrationShellStreamEvent = typeof OrchestrationShellStreamEvent.Type;
@@ -625,6 +731,19 @@ export const ProjectCreateCommand = Schema.Struct({
   createdAt: IsoDateTime,
 });
 
+/**
+ * Server-only: create the environment's system project if it is not there
+ * yet. Idempotent, so the caller may dispatch it on every boot.
+ */
+const ProjectEnsureSystemCommand = Schema.Struct({
+  type: Schema.Literal("project.ensure-system"),
+  commandId: CommandId,
+  projectId: ProjectId,
+  title: TrimmedNonEmptyString,
+  workspaceRoot: TrimmedNonEmptyString,
+  createdAt: IsoDateTime,
+});
+
 const ProjectMetaUpdateCommand = Schema.Struct({
   type: Schema.Literal("project.meta.update"),
   commandId: CommandId,
@@ -660,6 +779,8 @@ const ThreadCreateCommand = Schema.Struct({
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
   // Absent means "user".
   origin: Schema.optional(ThreadOrigin),
+  // Null means the provider default; see OrchestrationThread.allowedTools.
+  allowedTools: Schema.optional(Schema.NullOr(Schema.Array(Schema.String))),
   createdAt: IsoDateTime,
 });
 
@@ -831,6 +952,13 @@ export const ThreadTurnStartCommand = Schema.Struct({
   // for this turn instead of resuming the thread's existing one. Used by
   // scheduled chats; absent means the default resume behavior.
   sessionMode: Schema.optional(Schema.Literal("fresh")),
+  // Server-owned text placed before the user's message in the prompt sent to
+  // the provider. The visible user message stays as the user typed it. Used
+  // by a provider switch to hand the conversation digest to the new model.
+  promptPrefix: Schema.optional(TrimmedNonEmptyString),
+  // Server-only. Clients cannot set this; the client command shape omits it so
+  // a human-typed message is always recorded as authored by the user.
+  authoredBy: Schema.optional(MessageAuthor),
   createdAt: IsoDateTime,
 });
 
@@ -880,6 +1008,16 @@ const ThreadUserInputRespondCommand = Schema.Struct({
   createdAt: IsoDateTime,
 });
 
+const ThreadWatchdogSetCommand = Schema.Struct({
+  type: Schema.Literal("thread.watchdog.set"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  enabled: Schema.Boolean,
+  rules: Schema.String,
+  modelSelection: Schema.NullOr(ModelSelection),
+  createdAt: IsoDateTime,
+});
+
 const ThreadCheckpointRevertCommand = Schema.Struct({
   type: Schema.Literal("thread.checkpoint.revert"),
   commandId: CommandId,
@@ -923,6 +1061,7 @@ const DispatchableClientOrchestrationCommand = Schema.Union([
   ThreadTurnInterruptCommand,
   ThreadApprovalRespondCommand,
   ThreadUserInputRespondCommand,
+  ThreadWatchdogSetCommand,
   ThreadCheckpointRevertCommand,
   ThreadSessionStopCommand,
   ProjectScheduleCreateCommand,
@@ -931,6 +1070,16 @@ const DispatchableClientOrchestrationCommand = Schema.Union([
   ProjectScheduleResumeCommand,
   ProjectScheduleDeleteCommand,
   ProjectScheduleRunCommand,
+  ManagerCreateCommand,
+  ManagerUpdateCommand,
+  ManagerPauseCommand,
+  ManagerResumeCommand,
+  ManagerCycleNowCommand,
+  ManagerDeleteCommand,
+  AssistantCreateCommand,
+  AssistantUpdateCommand,
+  AssistantResetCommand,
+  AssistantMessageCommand,
 ]);
 export type DispatchableClientOrchestrationCommand =
   typeof DispatchableClientOrchestrationCommand.Type;
@@ -957,6 +1106,7 @@ export const ClientOrchestrationCommand = Schema.Union([
   ThreadTurnInterruptCommand,
   ThreadApprovalRespondCommand,
   ThreadUserInputRespondCommand,
+  ThreadWatchdogSetCommand,
   ThreadCheckpointRevertCommand,
   ThreadSessionStopCommand,
   ProjectScheduleCreateCommand,
@@ -965,6 +1115,16 @@ export const ClientOrchestrationCommand = Schema.Union([
   ProjectScheduleResumeCommand,
   ProjectScheduleDeleteCommand,
   ProjectScheduleRunCommand,
+  ManagerCreateCommand,
+  ManagerUpdateCommand,
+  ManagerPauseCommand,
+  ManagerResumeCommand,
+  ManagerCycleNowCommand,
+  ManagerDeleteCommand,
+  AssistantCreateCommand,
+  AssistantUpdateCommand,
+  AssistantResetCommand,
+  AssistantMessageCommand,
 ]);
 export type ClientOrchestrationCommand = typeof ClientOrchestrationCommand.Type;
 
@@ -1025,6 +1185,21 @@ const ThreadActivityAppendCommand = Schema.Struct({
   createdAt: IsoDateTime,
 });
 
+const ThreadWatchdogRecordInterventionCommand = Schema.Struct({
+  type: Schema.Literal("thread.watchdog.record-intervention"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  createdAt: IsoDateTime,
+});
+
+const ThreadWatchdogEscalateCommand = Schema.Struct({
+  type: Schema.Literal("thread.watchdog.escalate"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  reason: Schema.String,
+  createdAt: IsoDateTime,
+});
+
 const ThreadRevertCompleteCommand = Schema.Struct({
   type: Schema.Literal("thread.revert.complete"),
   commandId: CommandId,
@@ -1048,6 +1223,8 @@ const InternalOrchestrationCommand = Schema.Union([
   ThreadProposedPlanUpsertCommand,
   ThreadTurnDiffCompleteCommand,
   ThreadActivityAppendCommand,
+  ThreadWatchdogRecordInterventionCommand,
+  ThreadWatchdogEscalateCommand,
   ThreadRevertCompleteCommand,
   ThreadTitleRegenerationCompleteCommand,
   // Occurrence lifecycle is server-only: the ScheduleReactor dispatches these.
@@ -1055,6 +1232,12 @@ const InternalOrchestrationCommand = Schema.Union([
   ScheduleOccurrenceCompleteCommand,
   ScheduleOccurrenceFailCommand,
   ScheduleOccurrenceSkipCommand,
+  // The system project and manager bookkeeping are server-only.
+  ProjectEnsureSystemCommand,
+  ManagerThreadBindCommand,
+  ManagerCycleRecordCommand,
+  // Assistant thread binding is server-only for the same reason.
+  AssistantThreadBindCommand,
 ]);
 export type InternalOrchestrationCommand = typeof InternalOrchestrationCommand.Type;
 
@@ -1094,6 +1277,7 @@ export const OrchestrationEventType = Schema.Literals([
   "thread.proposed-plan-upserted",
   "thread.turn-diff-completed",
   "thread.activity-appended",
+  "thread.watchdog-updated",
   "project.schedule.created",
   "project.schedule.updated",
   "project.schedule.paused",
@@ -1104,10 +1288,29 @@ export const OrchestrationEventType = Schema.Literals([
   "schedule.occurrence.completed",
   "schedule.occurrence.failed",
   "schedule.occurrence.skipped",
+  "manager.created",
+  "manager.updated",
+  "manager.paused",
+  "manager.resumed",
+  "manager.deleted",
+  "manager.thread-bound",
+  "manager.cycle-requested",
+  "manager.cycle-recorded",
+  "assistant.created",
+  "assistant.updated",
+  "assistant.reset",
+  "assistant.message-requested",
+  "assistant.thread-bound",
 ]);
 export type OrchestrationEventType = typeof OrchestrationEventType.Type;
 
-export const OrchestrationAggregateKind = Schema.Literals(["project", "thread", "schedule"]);
+export const OrchestrationAggregateKind = Schema.Literals([
+  "project",
+  "thread",
+  "schedule",
+  "manager",
+  "assistant",
+]);
 export type OrchestrationAggregateKind = typeof OrchestrationAggregateKind.Type;
 export const OrchestrationActorKind = Schema.Literals(["client", "server", "provider"]);
 
@@ -1120,6 +1323,8 @@ export const ProjectCreatedPayload = Schema.Struct({
   // Optional so persisted events from older servers still decode.
   faviconPath: Schema.optional(Schema.NullOr(ProjectFaviconPath)),
   scripts: Schema.Array(ProjectScript),
+  // Absent means a user project; only project.ensure-system sets it.
+  system: Schema.optional(Schema.Boolean),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
 });
@@ -1133,6 +1338,9 @@ export const ProjectMetaUpdatedPayload = Schema.Struct({
   defaultThreadEnvMode: Schema.optional(Schema.NullOr(ThreadEnvMode)),
   faviconPath: Schema.optional(Schema.NullOr(ProjectFaviconPath)),
   scripts: Schema.optional(Schema.Array(ProjectScript)),
+  // Server-only: set by project.ensure-system when it reconciles the system
+  // project. No client command can produce it.
+  system: Schema.optional(Schema.Boolean),
   updatedAt: IsoDateTime,
 });
 
@@ -1154,6 +1362,8 @@ export const ThreadCreatedPayload = Schema.Struct({
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
   // Optional so persisted pre-schedule events still decode; absent = "user".
   origin: Schema.optional(ThreadOrigin),
+  // See OrchestrationThread.allowedTools.
+  allowedTools: Schema.optional(Schema.NullOr(Schema.Array(Schema.String))),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
 });
@@ -1259,6 +1469,7 @@ export const ThreadMessageSentPayload = Schema.Struct({
   role: OrchestrationMessageRole,
   text: Schema.String,
   attachments: Schema.optional(Schema.Array(ChatAttachment)),
+  authoredBy: Schema.optional(MessageAuthor),
   turnId: Schema.NullOr(TurnId),
   streaming: Schema.Boolean,
   createdAt: IsoDateTime,
@@ -1279,6 +1490,8 @@ export const ThreadTurnStartRequestedPayload = Schema.Struct({
   // Mirrors ThreadTurnStartCommand.sessionMode; adapters read it to decide
   // whether to resume the existing provider session or start a fresh one.
   sessionMode: Schema.optional(Schema.Literal("fresh")),
+  // Mirrors ThreadTurnStartCommand.promptPrefix.
+  promptPrefix: Schema.optional(TrimmedNonEmptyString),
   createdAt: IsoDateTime,
 });
 
@@ -1344,6 +1557,11 @@ export const ThreadActivityAppendedPayload = Schema.Struct({
   activity: OrchestrationThreadActivity,
 });
 
+export const ThreadWatchdogUpdatedPayload = Schema.Struct({
+  threadId: ThreadId,
+  watchdog: ThreadWatchdog,
+});
+
 export const OrchestrationEventMetadata = Schema.Struct({
   providerTurnId: Schema.optional(TrimmedNonEmptyString),
   providerItemId: Schema.optional(ProviderItemId),
@@ -1357,7 +1575,7 @@ const EventBaseFields = {
   sequence: NonNegativeInt,
   eventId: EventId,
   aggregateKind: OrchestrationAggregateKind,
-  aggregateId: Schema.Union([ProjectId, ThreadId, ScheduleId]),
+  aggregateId: Schema.Union([ProjectId, ThreadId, ScheduleId, ManagerId, AssistantId]),
   occurredAt: IsoDateTime,
   commandId: Schema.NullOr(CommandId),
   causationEventId: Schema.NullOr(EventId),
@@ -1513,6 +1731,11 @@ export const OrchestrationEvent = Schema.Union([
   }),
   Schema.Struct({
     ...EventBaseFields,
+    type: Schema.Literal("thread.watchdog-updated"),
+    payload: ThreadWatchdogUpdatedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
     type: Schema.Literal("project.schedule.created"),
     payload: ProjectScheduleCreatedPayload,
   }),
@@ -1558,8 +1781,73 @@ export const OrchestrationEvent = Schema.Union([
   }),
   Schema.Struct({
     ...EventBaseFields,
+    type: Schema.Literal("manager.created"),
+    payload: ManagerCreatedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("manager.updated"),
+    payload: ManagerUpdatedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("manager.paused"),
+    payload: ManagerPausedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("manager.resumed"),
+    payload: ManagerResumedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("manager.deleted"),
+    payload: ManagerDeletedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("manager.thread-bound"),
+    payload: ManagerThreadBoundPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("manager.cycle-requested"),
+    payload: ManagerCycleRequestedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("manager.cycle-recorded"),
+    payload: ManagerCycleRecordedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
     type: Schema.Literal("schedule.occurrence.skipped"),
     payload: ScheduleOccurrenceSkippedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("assistant.created"),
+    payload: AssistantCreatedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("assistant.updated"),
+    payload: AssistantUpdatedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("assistant.reset"),
+    payload: AssistantResetPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("assistant.message-requested"),
+    payload: AssistantMessageRequestedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("assistant.thread-bound"),
+    payload: AssistantThreadBoundPayload,
   }),
 ]);
 export type OrchestrationEvent = typeof OrchestrationEvent.Type;
@@ -1690,6 +1978,79 @@ export const OrchestrationSearchThreadsResult = Schema.Struct({
 });
 export type OrchestrationSearchThreadsResult = typeof OrchestrationSearchThreadsResult.Type;
 
+/**
+ * Activity kind recorded on a thread when the user switches it to a different
+ * provider. The payload is OrchestrationThreadHandoffActivityPayload. The
+ * activity carries turnId null so a revert never prunes it, and clients render
+ * it as a boundary card rather than a tool row.
+ */
+export const THREAD_HANDOFF_ACTIVITY_KIND = "provider.handoff" as const;
+
+/** "verbatim": the whole conversation fit, nothing was summarized.
+    "generated": the destination model wrote the summary of omitted messages.
+    "fallback": a model summary was needed but unavailable, so the server
+    condensed the omitted messages deterministically. */
+export const OrchestrationThreadHandoffBasis = Schema.Literals([
+  "verbatim",
+  "generated",
+  "fallback",
+]);
+export type OrchestrationThreadHandoffBasis = typeof OrchestrationThreadHandoffBasis.Type;
+
+export const OrchestrationThreadHandoffDigest = Schema.Struct({
+  basis: OrchestrationThreadHandoffBasis,
+  /** Full text handed to the new model, prepended to the first turn's prompt. */
+  text: TrimmedNonEmptyString,
+  /** Visible messages in the thread when the digest was built. */
+  messageCount: NonNegativeInt,
+  /** Messages that were summarized rather than kept verbatim. */
+  omittedCount: NonNegativeInt,
+  /** Paths touched by checkpoints in this thread, deduped and capped. */
+  files: Schema.Array(TrimmedNonEmptyString),
+});
+export type OrchestrationThreadHandoffDigest = typeof OrchestrationThreadHandoffDigest.Type;
+
+export const OrchestrationThreadHandoffActivityPayload = Schema.Struct({
+  fromModelSelection: Schema.NullOr(ModelSelection),
+  toModelSelection: ModelSelection,
+  digest: OrchestrationThreadHandoffDigest,
+});
+export type OrchestrationThreadHandoffActivityPayload =
+  typeof OrchestrationThreadHandoffActivityPayload.Type;
+
+export const OrchestrationPreviewThreadHandoffInput = Schema.Struct({
+  threadId: ThreadId,
+  toModelSelection: ModelSelection,
+});
+export type OrchestrationPreviewThreadHandoffInput =
+  typeof OrchestrationPreviewThreadHandoffInput.Type;
+
+export const OrchestrationPreviewThreadHandoffResult = Schema.Struct({
+  digest: OrchestrationThreadHandoffDigest,
+});
+export type OrchestrationPreviewThreadHandoffResult =
+  typeof OrchestrationPreviewThreadHandoffResult.Type;
+
+export const OrchestrationSwitchThreadProviderInput = Schema.Struct({
+  threadId: ThreadId,
+  toModelSelection: ModelSelection,
+  /** First message to the new model. Defaults to a plain "continue" line. */
+  nextInstruction: Schema.optional(TrimmedNonEmptyString),
+  /** Digest the user already previewed and possibly edited. When absent the
+      server builds one as part of the switch. */
+  digest: Schema.optional(OrchestrationThreadHandoffDigest),
+});
+export type OrchestrationSwitchThreadProviderInput =
+  typeof OrchestrationSwitchThreadProviderInput.Type;
+
+export const OrchestrationSwitchThreadProviderResult = Schema.Struct({
+  threadId: ThreadId,
+  messageId: MessageId,
+  digest: OrchestrationThreadHandoffDigest,
+});
+export type OrchestrationSwitchThreadProviderResult =
+  typeof OrchestrationSwitchThreadProviderResult.Type;
+
 export const OrchestrationGetWorkflowScriptInput = Schema.Struct({
   threadId: ThreadId,
   /** Absolute path from the workflow's runHandles.scriptPath. The server
@@ -1759,6 +2120,14 @@ export const OrchestrationRpcSchemas = {
     input: OrchestrationSearchThreadsInput,
     output: OrchestrationSearchThreadsResult,
   },
+  previewThreadHandoff: {
+    input: OrchestrationPreviewThreadHandoffInput,
+    output: OrchestrationPreviewThreadHandoffResult,
+  },
+  switchThreadProvider: {
+    input: OrchestrationSwitchThreadProviderInput,
+    output: OrchestrationSwitchThreadProviderResult,
+  },
   getArchivedShellSnapshot: {
     input: Schema.Struct({}),
     output: OrchestrationShellSnapshot,
@@ -1809,6 +2178,36 @@ export class OrchestrationSearchThreadsError extends Schema.TaggedErrorClass<Orc
   "OrchestrationSearchThreadsError",
   {
     message: TrimmedNonEmptyString,
+    cause: Schema.optional(Schema.Defect()),
+  },
+) {}
+
+/** Why a handoff preview or provider switch was refused. Clients branch on it
+    for copy; anything else is a generic failure. */
+export const OrchestrationThreadHandoffFailureReason = Schema.Literals([
+  "thread-not-found",
+  "thread-busy",
+  "same-provider",
+  "generation-failed",
+  "dispatch-failed",
+]);
+export type OrchestrationThreadHandoffFailureReason =
+  typeof OrchestrationThreadHandoffFailureReason.Type;
+
+export class OrchestrationPreviewThreadHandoffError extends Schema.TaggedErrorClass<OrchestrationPreviewThreadHandoffError>()(
+  "OrchestrationPreviewThreadHandoffError",
+  {
+    message: TrimmedNonEmptyString,
+    reason: OrchestrationThreadHandoffFailureReason,
+    cause: Schema.optional(Schema.Defect()),
+  },
+) {}
+
+export class OrchestrationSwitchThreadProviderError extends Schema.TaggedErrorClass<OrchestrationSwitchThreadProviderError>()(
+  "OrchestrationSwitchThreadProviderError",
+  {
+    message: TrimmedNonEmptyString,
+    reason: OrchestrationThreadHandoffFailureReason,
     cause: Schema.optional(Schema.Defect()),
   },
 ) {}

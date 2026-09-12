@@ -696,6 +696,7 @@ const makeScheduleReactor = (options?: ScheduleReactorLiveOptions) =>
           runtimeMode: existingThread?.runtimeMode ?? DEFAULT_RUNTIME_MODE,
           interactionMode: existingThread?.interactionMode ?? DEFAULT_PROVIDER_INTERACTION_MODE,
           sessionMode: "fresh",
+          authoredBy: "schedule",
           createdAt: input.nowIso,
         });
       });

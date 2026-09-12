@@ -49,6 +49,7 @@ export type StartThreadTurnInput = CommandInput<"thread.turn.start">;
 export type InterruptThreadTurnInput = CommandInput<"thread.turn.interrupt">;
 export type RespondToThreadApprovalInput = CommandInput<"thread.approval.respond">;
 export type RespondToThreadUserInputInput = CommandInput<"thread.user-input.respond">;
+export type SetThreadWatchdogInput = CommandInput<"thread.watchdog.set">;
 export type RevertThreadCheckpointInput = CommandInput<"thread.checkpoint.revert">;
 export type StopThreadSessionInput = CommandInput<"thread.session.stop">;
 export type CreateProjectScheduleInput = CommandInput<"project.schedule.create">;
@@ -57,6 +58,16 @@ export type PauseProjectScheduleInput = CommandInput<"project.schedule.pause">;
 export type ResumeProjectScheduleInput = CommandInput<"project.schedule.resume">;
 export type DeleteProjectScheduleInput = CommandInput<"project.schedule.delete">;
 export type RunProjectScheduleInput = CommandInput<"project.schedule.run">;
+export type CreateManagerInput = CommandInput<"manager.create">;
+export type UpdateManagerInput = CommandInput<"manager.update">;
+export type PauseManagerInput = CommandInput<"manager.pause">;
+export type CycleNowManagerInput = CommandInput<"manager.cycle-now">;
+export type ResumeManagerInput = CommandInput<"manager.resume">;
+export type DeleteManagerInput = CommandInput<"manager.delete">;
+export type CreateAssistantInput = CommandInput<"assistant.create">;
+export type UpdateAssistantInput = CommandInput<"assistant.update">;
+export type ResetAssistantInput = CommandInput<"assistant.reset">;
+export type SendAssistantMessageInput = CommandInput<"assistant.message">;
 
 type DispatchTag = typeof ORCHESTRATION_WS_METHODS.dispatchCommand;
 type CommandEffect = Effect.Effect<
@@ -315,6 +326,23 @@ export const respondToThreadUserInput: (input: RespondToThreadUserInputInput) =>
     });
   });
 
+/**
+ * Writes the per-thread watchdog config. The server clears `escalatedAt` and
+ * `interventions` on every set, so re-sending the current values is also the
+ * "Take action" gesture that dismisses a stuck watchdog.
+ */
+export const setThreadWatchdog: (input: SetThreadWatchdogInput) => CommandEffect = Effect.fn(
+  "EnvironmentCommands.setThreadWatchdog",
+)(function* (input) {
+  const metadata = yield* timestampedCommandMetadata(input);
+  return yield* dispatch({
+    ...input,
+    type: "thread.watchdog.set",
+    commandId: metadata.commandId,
+    createdAt: metadata.createdAt,
+  });
+});
+
 export const revertThreadCheckpoint: (input: RevertThreadCheckpointInput) => CommandEffect =
   Effect.fn("EnvironmentCommands.revertThreadCheckpoint")(function* (input) {
     const metadata = yield* timestampedCommandMetadata(input);
@@ -395,5 +423,113 @@ export const runProjectSchedule: (input: RunProjectScheduleInput) => CommandEffe
     type: "project.schedule.run",
     commandId: metadata.commandId,
     createdAt: metadata.createdAt,
+  });
+});
+
+// Managers ship to users as Argo. Only the identifiers say manager.
+
+export const createManager: (input: CreateManagerInput) => CommandEffect = Effect.fn(
+  "EnvironmentCommands.createManager",
+)(function* (input) {
+  const metadata = yield* timestampedCommandMetadata(input);
+  return yield* dispatch({
+    ...input,
+    type: "manager.create",
+    commandId: metadata.commandId,
+    createdAt: metadata.createdAt,
+  });
+});
+
+export const updateManager: (input: UpdateManagerInput) => CommandEffect = Effect.fn(
+  "EnvironmentCommands.updateManager",
+)(function* (input) {
+  return yield* dispatch({
+    ...input,
+    type: "manager.update",
+    commandId: yield* commandId(input),
+  });
+});
+
+export const pauseManager: (input: PauseManagerInput) => CommandEffect = Effect.fn(
+  "EnvironmentCommands.pauseManager",
+)(function* (input) {
+  return yield* dispatch({
+    ...input,
+    type: "manager.pause",
+    commandId: yield* commandId(input),
+  });
+});
+
+export const cycleNowManager: (input: CycleNowManagerInput) => CommandEffect = Effect.fn(
+  "EnvironmentCommands.cycleNowManager",
+)(function* (input) {
+  return yield* dispatch({
+    ...input,
+    type: "manager.cycle-now",
+    commandId: yield* commandId(input),
+  });
+});
+
+export const resumeManager: (input: ResumeManagerInput) => CommandEffect = Effect.fn(
+  "EnvironmentCommands.resumeManager",
+)(function* (input) {
+  return yield* dispatch({
+    ...input,
+    type: "manager.resume",
+    commandId: yield* commandId(input),
+  });
+});
+
+export const deleteManager: (input: DeleteManagerInput) => CommandEffect = Effect.fn(
+  "EnvironmentCommands.deleteManager",
+)(function* (input) {
+  return yield* dispatch({
+    ...input,
+    type: "manager.delete",
+    commandId: yield* commandId(input),
+  });
+});
+
+// The assistant ships to users as Luna. Only the identifiers say assistant.
+
+export const createAssistant: (input: CreateAssistantInput) => CommandEffect = Effect.fn(
+  "EnvironmentCommands.createAssistant",
+)(function* (input) {
+  const metadata = yield* timestampedCommandMetadata(input);
+  return yield* dispatch({
+    ...input,
+    type: "assistant.create",
+    commandId: metadata.commandId,
+    createdAt: metadata.createdAt,
+  });
+});
+
+export const updateAssistant: (input: UpdateAssistantInput) => CommandEffect = Effect.fn(
+  "EnvironmentCommands.updateAssistant",
+)(function* (input) {
+  return yield* dispatch({
+    ...input,
+    type: "assistant.update",
+    commandId: yield* commandId(input),
+  });
+});
+
+export const resetAssistant: (input: ResetAssistantInput) => CommandEffect = Effect.fn(
+  "EnvironmentCommands.resetAssistant",
+)(function* (input) {
+  return yield* dispatch({
+    ...input,
+    type: "assistant.reset",
+    commandId: yield* commandId(input),
+  });
+});
+
+export const sendAssistantMessage: (input: SendAssistantMessageInput) => CommandEffect = Effect.fn(
+  "EnvironmentCommands.sendAssistantMessage",
+)(function* (input) {
+  return yield* dispatch({
+    ...input,
+    type: "assistant.message",
+    commandId: yield* commandId(input),
   });
 });

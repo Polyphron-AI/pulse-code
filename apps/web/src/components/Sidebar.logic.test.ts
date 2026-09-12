@@ -3,6 +3,8 @@ import {
   archiveSelectedThreadEntries,
   buildBulkTitleRegenerationContextMenuItem,
   buildMultiSelectThreadContextMenuItems,
+  buildSidebarManagerContextMenuItems,
+  buildSidebarManagerRows,
   buildSidebarScheduleRows,
   countActiveSidebarSchedules,
   createThreadJumpHintVisibilityController,
@@ -26,6 +28,7 @@ import {
   searchSidebarThreadsByTitle,
   searchSidebarScheduleRows,
   shouldShowSidebarThread,
+  sidebarWatchdogMarker,
   formatWorkingDurationLabel,
   shouldNavigateAfterProjectRemoval,
   shouldClearThreadSelectionOnMouseDown,
@@ -42,11 +45,13 @@ import {
 } from "./Sidebar.logic";
 import {
   EnvironmentId,
+  ManagerId,
   OrchestrationLatestTurn,
   ProjectId,
   ProviderInstanceId,
   ThreadId,
   ScheduleId,
+  managerThreadOrigin,
   type OrchestrationSchedule,
   type OrchestrationShellSnapshot,
 } from "@t3tools/contracts";
@@ -115,6 +120,52 @@ describe("scheduled sidebar projection", () => {
     expect(
       shouldShowSidebarThread({ thread: scheduled, mode: "scheduled", scopedProjectKeys: scope }),
     ).toBe(true);
+  });
+
+  it("marks sidebar rows for an enabled and for a stuck watchdog", () => {
+    const base = {
+      environmentId: localEnvironmentId,
+      projectId: ProjectId.make("project-1"),
+      archivedAt: null,
+      origin: "user",
+    } as EnvironmentThreadShell;
+    const withWatchdog = (watchdog: EnvironmentThreadShell["watchdog"]) =>
+      ({ ...base, watchdog }) as EnvironmentThreadShell;
+
+    expect(sidebarWatchdogMarker(base)).toBe("none");
+    expect(
+      sidebarWatchdogMarker(
+        withWatchdog({
+          enabled: false,
+          rules: "",
+          modelSelection: null,
+          escalatedAt: null,
+          interventions: 0,
+        }),
+      ),
+    ).toBe("none");
+    expect(
+      sidebarWatchdogMarker(
+        withWatchdog({
+          enabled: true,
+          rules: "",
+          modelSelection: null,
+          escalatedAt: null,
+          interventions: 2,
+        }),
+      ),
+    ).toBe("on");
+    expect(
+      sidebarWatchdogMarker(
+        withWatchdog({
+          enabled: true,
+          rules: "",
+          modelSelection: null,
+          escalatedAt: "2026-09-11T00:00:00.000Z",
+          interventions: 3,
+        }),
+      ),
+    ).toBe("stuck");
   });
 
   it("counts only non-deleted, unpaused schedule definitions", () => {
@@ -1822,5 +1873,140 @@ describe("sortLogicalProjectsForSidebar", () => {
         (project) => project.projectKey,
       ),
     ).toEqual(["logical-newer", "logical-older"]);
+  });
+});
+
+describe("Argo sidebar projection", () => {
+  const managerId = ManagerId.make("manager-1");
+  const managerThreadId = ThreadId.make("thread-manager");
+  const origin = managerThreadOrigin(managerId);
+
+  function environmentManager(overrides: Record<string, unknown> = {}) {
+    return {
+      id: managerId,
+      environmentId: localEnvironmentId,
+      name: "Nightly triage",
+      scope: { _tag: "environment", projectIds: [] },
+      mission: "Keep the queue empty.",
+      childModelSelection: null,
+      childRuntimeMode: DEFAULT_RUNTIME_MODE,
+      maxChildren: 8,
+      intervalMinutes: 30,
+      threadId: managerThreadId,
+      pausedAt: null,
+      lastCycleAt: null,
+      createdAt: "2026-09-11T00:00:00.000Z",
+      updatedAt: "2026-09-11T00:00:00.000Z",
+      deletedAt: null,
+      ...overrides,
+    } as never;
+  }
+
+  function managerThread(id: string, threadOrigin: string | null, archivedAt: string | null) {
+    return {
+      id: ThreadId.make(id),
+      environmentId: localEnvironmentId,
+      projectId: ProjectId.make("project-1"),
+      title: id === "child-1" ? " Fix the flaky test " : "",
+      origin: threadOrigin,
+      archivedAt,
+    } as never;
+  }
+
+  it("nests live children under their Argo and leaves the manager thread out", () => {
+    const rows = buildSidebarManagerRows({
+      managers: [environmentManager()],
+      threads: [
+        managerThread("thread-manager", origin, null),
+        managerThread("child-1", origin, null),
+        managerThread("child-2", origin, "2026-09-11T01:00:00.000Z"),
+        managerThread("unrelated", null, null),
+      ],
+    });
+
+    expect(rows).toMatchObject([
+      {
+        managerId,
+        threadId: managerThreadId,
+        name: "Nightly triage",
+        state: "watching",
+        stateLabel: "Watching",
+        pillAction: "pause",
+        defaultExpanded: true,
+      },
+    ]);
+    expect(rows[0]?.children).toMatchObject([{ threadId: "child-1", title: "Fix the flaky test" }]);
+  });
+
+  it("collapses a paused Argo and makes the no-mission pill open the thread", () => {
+    const rows = buildSidebarManagerRows({
+      managers: [
+        environmentManager({ pausedAt: "2026-09-11T01:00:00.000Z" }),
+        environmentManager({ id: ManagerId.make("manager-2"), name: "Alpha", mission: "  " }),
+        environmentManager({
+          id: ManagerId.make("manager-3"),
+          name: "Deleted",
+          deletedAt: "2026-09-11T02:00:00.000Z",
+        }),
+      ],
+      threads: [],
+    });
+
+    expect(rows.map((row) => row.name)).toEqual(["Alpha", "Nightly triage"]);
+    expect(rows[0]).toMatchObject({
+      state: "no-mission",
+      stateLabel: "No mission",
+      pillAction: "open",
+      defaultExpanded: true,
+    });
+    expect(rows[1]).toMatchObject({
+      state: "paused",
+      stateLabel: "Paused",
+      pillAction: "resume",
+      defaultExpanded: false,
+    });
+  });
+
+  it("offers the reverse of whatever the Argo is doing, plus a live Cycle now", () => {
+    expect(
+      buildSidebarManagerContextMenuItems({
+        state: "watching",
+        cycleNowState: "available",
+        cycleNowLabel: "Cycle now",
+      }),
+    ).toEqual([
+      { id: "cycle-now", label: "Cycle now", disabled: false },
+      { id: "pause", label: "Pause", disabled: false },
+      { id: "delete", label: "Delete", destructive: true },
+    ]);
+    expect(
+      buildSidebarManagerContextMenuItems({
+        state: "paused",
+        cycleNowState: "unavailable",
+        cycleNowLabel: "Cycle now",
+      }),
+    ).toEqual([
+      { id: "cycle-now", label: "Cycle now", disabled: true },
+      { id: "resume", label: "Resume" },
+      { id: "delete", label: "Delete", destructive: true },
+    ]);
+    expect(
+      buildSidebarManagerContextMenuItems({
+        state: "no-mission",
+        cycleNowState: "unavailable",
+        cycleNowLabel: "Cycle now",
+      }),
+    ).toMatchObject([
+      { id: "cycle-now", disabled: true },
+      { id: "pause", disabled: true },
+      { id: "delete" },
+    ]);
+    expect(
+      buildSidebarManagerContextMenuItems({
+        state: "watching",
+        cycleNowState: "queued",
+        cycleNowLabel: "Cycle queued",
+      })[0],
+    ).toEqual({ id: "cycle-now", label: "Cycle queued", disabled: true });
   });
 });

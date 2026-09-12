@@ -58,6 +58,8 @@ import {
 import { GitOverviewSheet } from "./git/GitOverviewSheet";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { useSelectedThreadGitActions } from "../../state/use-selected-thread-git-actions";
+import { useSetThreadWatchdog } from "./use-thread-watchdog";
+import { watchdogMarker } from "@t3tools/client-runtime/state/watchdog";
 import { useSelectedThreadGitState } from "../../state/use-selected-thread-git-state";
 import { useSelectedThreadRequests } from "../../state/use-selected-thread-requests";
 import { useSelectedThreadWorktree } from "../../state/use-selected-thread-worktree";
@@ -636,7 +638,56 @@ function ThreadRouteContent(
     onRunAction: gitActions.onRunSelectedThreadGitAction,
   };
   const threadCenterHeaderItems = useThreadGitCenterHeaderItems(threadGitControlProps);
-  const compactRightHeaderItems = useThreadGitRightHeaderItems(threadGitControlProps);
+  const gitRightHeaderItems = useThreadGitRightHeaderItems(threadGitControlProps);
+  const setThreadWatchdog = useSetThreadWatchdog();
+  const routeWatchdog = selectedThread?.watchdog ?? null;
+  const routeWatchdogState = watchdogMarker(routeWatchdog);
+  // Long-press the header eye to edit the rules; a plain tap flips the watchdog
+  // on or off without leaving the thread.
+  const handleToggleWatchdog = useCallback(() => {
+    if (!selectedThread) return;
+    void setThreadWatchdog(
+      {
+        environmentId: selectedThread.environmentId,
+        threadId: selectedThread.id,
+        watchdog: routeWatchdog,
+      },
+      { enabled: routeWatchdog?.enabled !== true },
+    );
+  }, [routeWatchdog, selectedThread, setThreadWatchdog]);
+  const handleOpenWatchdogRules = useCallback(
+    () => navigation.navigate("ThreadWatchdogSheet"),
+    [navigation],
+  );
+  const watchdogHeaderItem = useMemo(
+    () =>
+      withNativeGlassHeaderItem({
+        accessibilityLabel:
+          routeWatchdogState === "stuck"
+            ? "Watchdog stuck"
+            : routeWatchdogState === "on"
+              ? "Watchdog on"
+              : "Watchdog off",
+        icon: {
+          name:
+            routeWatchdogState === "stuck"
+              ? ("eye.trianglebadge.exclamationmark" as const)
+              : routeWatchdogState === "on"
+                ? ("eye" as const)
+                : ("eye.slash" as const),
+          type: "sfSymbol" as const,
+        },
+        identifier: "thread-right-watchdog",
+        onPress: handleToggleWatchdog,
+        onLongPress: handleOpenWatchdogRules,
+        type: "button" as const,
+      }),
+    [handleOpenWatchdogRules, handleToggleWatchdog, routeWatchdogState],
+  );
+  const compactRightHeaderItems = useMemo<NativeHeaderItems>(
+    () => [watchdogHeaderItem, ...gitRightHeaderItems],
+    [gitRightHeaderItems, watchdogHeaderItem],
+  );
   const splitLeftHeaderItems = useMemo<NativeHeaderItems>(
     () => [
       {
@@ -704,6 +755,11 @@ function ThreadRouteContent(
       });
     }
     actions.push({
+      accessibilityLabel: routeWatchdogState === "none" ? "Watchdog off" : "Watchdog on",
+      icon: "eye",
+      onPress: handleOpenWatchdogRules,
+    });
+    actions.push({
       accessibilityLabel: "Open git controls",
       icon: "point.topleft.down.curvedto.point.bottomright.up",
       onPress: handleOpenGitInspector,
@@ -718,6 +774,8 @@ function ThreadRouteContent(
     return actions;
   }, [
     fileInspector.supported,
+    handleOpenWatchdogRules,
+    routeWatchdogState,
     handleOpenFilesInspector,
     handleOpenTerminal,
     handleOpenGitInspector,

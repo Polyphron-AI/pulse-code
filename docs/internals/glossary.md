@@ -10,6 +10,7 @@ This is a living glossary for Pulse Code. It explains what common terms mean in 
 - [Thread timeline](#thread-timeline)
 - [Orchestration](#orchestration)
 - [Provider runtime](#provider-runtime)
+- [Agent roles](#agent-roles)
 - [Checkpointing](#checkpointing)
 - [Mail](#mail)
 
@@ -103,11 +104,15 @@ The live backend agent implementation and its event stream. The main service is 
 
 #### Provider
 
-The backend agent runtime that actually performs work. Five drivers ship built in: Codex, Claude, Cursor, Grok, and OpenCode. See [ProviderService.ts][14], [ProviderAdapter.ts][15], and [CodexAdapter.ts][17] as a representative adapter.
+The backend agent runtime that actually performs work. Six drivers ship built in: Codex, Claude, Cursor, Grok, OMP, and OpenCode. The list lives in `apps/server/src/provider/builtInDrivers.ts`. See [ProviderService.ts][14], [ProviderAdapter.ts][15], and [CodexAdapter.ts][17] as a representative adapter.
 
 #### Session
 
 The live provider-backed runtime attached to a thread. Session shape is in [the orchestration contracts][1], and lifecycle is managed in [ProviderService.ts][14].
+
+#### Handoff
+
+Switching a started thread to a model on another provider without leaving the thread. The server renders a plain-text **handoff digest** (recent messages verbatim, older messages summarized by the destination model, files touched) and starts a fresh session whose first prompt is the digest followed by the user's next instruction. The boundary is recorded as a `provider.handoff` activity with the digest in its payload. Pure digest logic lives in [threadHandoff.ts][25]; the RPC handlers are in `ws.ts`. Design: `docs/plans/2026-09-10-same-thread-model-switch-design.md`.
 
 #### Runtime mode
 
@@ -124,6 +129,44 @@ Controls how assistant text reaches the thread timeline. In [the contracts][1], 
 #### Snapshot
 
 A point-in-time view of state. The word is used in multiple layers, including orchestration, provider, and checkpointing. See [ProjectionSnapshotQuery.ts][10], [ProviderAdapter.ts][15], and [CheckpointStore.ts][19].
+
+### Agent roles
+
+Product vocabulary for the AI roles Pulse runs on top of provider sessions. A role is a policy (scope, tools, lifecycle) layered on a thread, never a runtime. Runtimes are always providers. These terms are adopted from the Scape model (managers, watchdogs, assistants) and are defined here so Office and Code use them consistently before code does.
+
+#### Agent
+
+Umbrella term for any AI role Pulse runs on a provider session. Prefer the specific role name below when one applies. When you mean the runtime, say provider or session.
+
+#### Assistant
+
+A named, persistent, read-mostly agent that proposes and never acts. It has a stable name, a standing role briefing, and a reset that clears history but keeps identity and settings. It gets no shell, browser, network, or destructive tools. Luna, the Office extraction persona, is the first assistant. The record, its commands, and its events live in [`packages/contracts/src/assistant.ts`][28]; the reactor that opens and binds the assistant's thread is `apps/server/src/orchestration/Layers/AssistantReactor.ts`, the thread origin is `assistant:<id>`, and the read-only tool list is `ASSISTANT_THREAD_ALLOWED_TOOLS`. User docs: `docs/user/luna.md`. Not to be confused with the `assistant` message role in [the contracts][1], which is the wire name for model-authored text and stays as is.
+
+#### Manager (Argo)
+
+An agent that owns a mission record, runs on a schedule, and spawns up to a fixed number of child threads in their own worktrees. Children are ordinary coding threads and cannot spawn children of their own (depth 1). A manager reports each cycle into a structured log record. The record, its commands, and its events live in [`packages/contracts/src/manager.ts`][26]; the reactor that runs cycles is `apps/server/src/orchestration/Layers/ManagerReactor.ts`, and the tools a cycle uses are the MCP manager toolkit in `apps/server/src/mcp/toolkits/manager/`.
+
+The product name is **Argo**, the Argo orchestrator. Users see Argo in the sidebar, fleet view, Office, palette, and docs. Code, contracts, and this glossary say manager (`ManagerId`, `manager:<id>` origin, `authoredBy: "manager"`). This keeps Argo apart from the orchestration layer (`apps/server/src/orchestration/`), which is plumbing and never an agent. Argo is our name; Scape's equivalent is Argus.
+
+#### Mission
+
+The prose brief a manager reads at the start of every cycle. One text field on the manager record. Records mentioned with `@` expand inline: notes and SOPs in full, everything else as a one-line pointer with its id. The token syntax `@[kind:id]`, the kind union, and the depth and size caps live in [`packages/contracts/src/mentions.ts`][27]; `apps/server/src/orchestration/missionMentions.ts` expands them against the read model and the reactor hands the result to `composeManagerCyclePrompt`. Design: `docs/plans/2026-09-11-agent-roles-design.md`.
+
+#### Cycle
+
+One timed run of a manager (Argo): read the mission, evaluate children, spawn or stop children, write one log row. Scape calls this a pulse. We do not, because Pulse is the product.
+
+#### Watchdog
+
+A per-thread supervisor that answers pending questions, approves permission gates, or escalates to the user under user-written rules. Skipped when a manager owns the thread. Server side lives in `apps/server/src/orchestration/Layers/WatchdogReactor.ts`; the thread carries a `watchdog` field and the client sets it with `thread.watchdog.set`.
+
+#### Subagent
+
+A provider-native child observed from the runtime stream, for example a Claude Code subagent. Pulse renders these in the Agents panel but does not define or persist them as records. See `apps/server/src/provider/Layers/ClaudeAdapter.ts` for the observation path.
+
+#### Worker
+
+Retired as a product word. Use it only for drain-queue implementation classes such as `DrainableWorker`.
 
 ### Checkpointing
 
@@ -188,3 +231,7 @@ The file patch and changed-file summary for one turn. It is usually computed in 
 [22]: ../../apps/server/src/checkpointing/Utils.ts
 [23]: ../../apps/server/src/checkpointing/Diffs.ts
 [24]: ./overview.md
+[25]: ../../apps/server/src/orchestration/threadHandoff.ts
+[26]: ../../packages/contracts/src/manager.ts
+[27]: ../../packages/contracts/src/mentions.ts
+[28]: ../../packages/contracts/src/assistant.ts

@@ -12,6 +12,7 @@ import * as HostPowerMonitor from "./background/HostPowerMonitor.ts";
 import * as ServerConfig from "./config.ts";
 import {
   otlpTracesProxyRouteLayer,
+  voiceTranscriptionRouteLayer,
   assetRouteLayer,
   serverEnvironmentHttpApiLayer,
   staticAndDevRouteLayer,
@@ -63,7 +64,10 @@ import { ProviderRuntimeIngestionLive } from "./orchestration/Layers/ProviderRun
 import { ProviderCommandReactorLive } from "./orchestration/Layers/ProviderCommandReactor.ts";
 import { CheckpointReactorLive } from "./orchestration/Layers/CheckpointReactor.ts";
 import { ThreadDeletionReactorLive } from "./orchestration/Layers/ThreadDeletionReactor.ts";
+import { WatchdogReactorLive } from "./orchestration/Layers/WatchdogReactor.ts";
 import { ScheduleReactorLive } from "./orchestration/Layers/ScheduleReactor.ts";
+import { ManagerReactorLive } from "./orchestration/Layers/ManagerReactor.ts";
+import { AssistantReactorLive } from "./orchestration/Layers/AssistantReactor.ts";
 import { ScheduleAuthProbeLive } from "./orchestration/Layers/ScheduleAuthProbe.ts";
 import { ScheduleHandoffGitLive } from "./orchestration/Layers/ScheduleHandoffGit.ts";
 import { ScheduleProviderInstancesLive } from "./orchestration/Layers/ScheduleProviderInstances.ts";
@@ -73,6 +77,7 @@ import { hasCloudPublicConfig } from "./cloud/publicConfig.ts";
 import { ProviderPlanUsageTrackerLive } from "./provider/Layers/ProviderPlanUsageTracker.ts";
 import { ProviderRegistryLive } from "./provider/Layers/ProviderRegistry.ts";
 import * as ServerSettings from "./serverSettings.ts";
+import * as VoiceTranscription from "./voice/VoiceTranscription.ts";
 import * as ProjectFaviconResolver from "./project/ProjectFaviconResolver.ts";
 import * as T3ProjectFileLoader from "./project/T3ProjectFileLoader.ts";
 import * as RepositoryIdentityResolver from "./project/RepositoryIdentityResolver.ts";
@@ -153,6 +158,9 @@ const PtyAdapterLive = Layer.unwrap(
 );
 
 const ServerSettingsLayerLive = ServerSettings.layer.pipe(Layer.provide(ServerSecretStore.layer));
+const VoiceTranscriptionLive = VoiceTranscription.layer.pipe(
+  Layer.provide(ServerSettingsLayerLive),
+);
 
 const NativeTelemetryLayerLive = NativeTelemetryClient.layer.pipe(
   Layer.provide(ResourceMonitorBinary.layer),
@@ -256,6 +264,9 @@ const ReactorLayerLive = Layer.empty.pipe(
   Layer.provideMerge(CheckpointReactorLive),
   Layer.provideMerge(ThreadDeletionReactorLive),
   Layer.provideMerge(ScheduleReactorLive),
+  Layer.provideMerge(WatchdogReactorLive),
+  Layer.provideMerge(ManagerReactorLive),
+  Layer.provideMerge(AssistantReactorLive),
   Layer.provideMerge(ScheduleAuthProbeLive),
   Layer.provideMerge(ScheduleHandoffGitLive),
   Layer.provideMerge(ScheduleWorkingTreeProbeLive),
@@ -480,6 +491,7 @@ export const makeRoutesLayer = Layer.mergeAll(
       Layer.provide(environmentAuthenticatedAuthLayer),
     ),
     otlpTracesProxyRouteLayer,
+    voiceTranscriptionRouteLayer,
     assetRouteLayer,
     staticAndDevRouteLayer,
     websocketRpcRouteLayer,
@@ -701,6 +713,7 @@ export const makeServerLayer = Layer.unwrap(
 
     return serverApplicationLayer.pipe(
       Layer.provideMerge(runtimeServicesLive),
+      Layer.provide(VoiceTranscriptionLive),
       Layer.provide(activationLayer),
       Layer.provideMerge(serverRelayBrokerTracingLayer),
       Layer.provideMerge(HttpServerLive),

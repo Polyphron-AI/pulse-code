@@ -1,3 +1,5 @@
+import { isManagerOwnThread, managerBadgeLabel } from "@t3tools/client-runtime/state/managers";
+import { useManagerForThread } from "./use-managers";
 import { useRecyclingState } from "@legendapp/list/react-native";
 import type {
   EnvironmentProject,
@@ -6,6 +8,8 @@ import type {
 import type { EnvironmentThreadSearchMatch } from "@t3tools/client-runtime/state/thread-search";
 import type { MenuAction } from "@react-native-menu/menu";
 import { SymbolView } from "../../components/AppSymbol";
+import { watchdogMarker } from "@t3tools/client-runtime/state/watchdog";
+import { useSetThreadWatchdog } from "./use-thread-watchdog";
 import { memo, useCallback, useMemo, type ComponentProps } from "react";
 import { Pressable, useWindowDimensions, View } from "react-native";
 import type { SwipeableMethods } from "react-native-gesture-handler/ReanimatedSwipeable";
@@ -457,13 +461,22 @@ export const ThreadListRow = memo(function ThreadListRow(props: {
   const { thread, onSelectThread, onArchiveThread, onDeleteThread, onRegenerateThreadTitle } =
     props;
   const status = resolveThreadStatus(thread);
+  const setWatchdog = useSetThreadWatchdog();
+  const watchdogStuckColor = useThemeColor("--color-danger-foreground");
+  const watchdogState = watchdogMarker(thread.watchdog);
   const pr = useThreadPr(thread, props.projectCwd);
   const timestamp = relativeTime(
     thread.latestUserMessageAt ?? thread.updatedAt ?? thread.createdAt,
   );
   const threadAccessibilityLabel = pr ? `${thread.title}, ${pr.accessibilityLabel}` : thread.title;
-  const subtitleParts = [props.environmentLabel, thread.branch].filter((part): part is string =>
-    Boolean(part),
+  // Children of an Argo say so, so a spawned thread is never a mystery row.
+  const owningManager = useManagerForThread(thread);
+  const argoBadge =
+    owningManager !== null && !isManagerOwnThread(owningManager, { id: thread.id })
+      ? managerBadgeLabel(owningManager)
+      : null;
+  const subtitleParts = [props.environmentLabel, thread.branch, argoBadge].filter(
+    (part): part is string => Boolean(part),
   );
 
   const backgroundColor = compact ? screenColor : drawerColor;
@@ -485,8 +498,14 @@ export const ThreadListRow = memo(function ThreadListRow(props: {
     () => onRegenerateThreadTitle(thread),
     [onRegenerateThreadTitle, thread],
   );
+  const watchdogEnabled = thread.watchdog?.enabled === true;
   const menuActions = useMemo<MenuAction[]>(
     () => [
+      {
+        id: watchdogEnabled ? "watchdog-off" : "watchdog-on",
+        title: watchdogEnabled ? "Turn watchdog off" : "Turn watchdog on",
+        image: watchdogEnabled ? "eye.slash" : "eye",
+      },
       THREAD_ROW_MENU_ACTIONS[0]!,
       ...buildThreadTitleRegenerationMenuItems({
         supported: props.titleRegenerationSupported,
@@ -494,7 +513,7 @@ export const ThreadListRow = memo(function ThreadListRow(props: {
       }),
       THREAD_ROW_MENU_ACTIONS[1]!,
     ],
-    [props.titleRegenerationSupported, thread.titleRegeneration],
+    [props.titleRegenerationSupported, thread.titleRegeneration, watchdogEnabled],
   );
   const primaryAction = useMemo(
     () => ({
@@ -510,8 +529,26 @@ export const ThreadListRow = memo(function ThreadListRow(props: {
       if (nativeEvent.event === "archive") handleArchive();
       if (nativeEvent.event === "regenerate-title") handleRegenerateTitle();
       if (nativeEvent.event === "delete") handleDelete();
+      if (nativeEvent.event === "watchdog-on" || nativeEvent.event === "watchdog-off") {
+        void setWatchdog(
+          {
+            environmentId: thread.environmentId,
+            threadId: thread.id,
+            watchdog: thread.watchdog,
+          },
+          { enabled: nativeEvent.event === "watchdog-on" },
+        );
+      }
     },
-    [handleArchive, handleDelete, handleRegenerateTitle],
+    [
+      handleArchive,
+      handleDelete,
+      handleRegenerateTitle,
+      setWatchdog,
+      thread.environmentId,
+      thread.id,
+      thread.watchdog,
+    ],
   );
 
   const statusPill = effectiveStatus ? (
@@ -521,6 +558,19 @@ export const ThreadListRow = memo(function ThreadListRow(props: {
       </Text>
     </View>
   ) : null;
+
+  // Sidebar/list echo of the thread header toggle: plain eye while the watchdog
+  // is watching, amber once it is stuck waiting on the user.
+  const watchdogMarkerIcon =
+    watchdogState === "none" ? null : (
+      <SymbolView
+        accessibilityLabel={watchdogState === "stuck" ? "Watchdog stuck" : "Watchdog on"}
+        name={watchdogState === "stuck" ? "eye.trianglebadge.exclamationmark" : "eye"}
+        size={13}
+        tintColor={watchdogState === "stuck" ? watchdogStuckColor : iconSubtleColor}
+        type="monochrome"
+      />
+    );
 
   const subtitleRow =
     subtitleParts.length > 0 || pr !== null ? (
@@ -595,6 +645,7 @@ export const ThreadListRow = memo(function ThreadListRow(props: {
                 {thread.title}
               </Text>
               <View className="flex-row items-center gap-2">
+                {watchdogMarkerIcon}
                 {statusPill}
                 <Text className="text-base tabular-nums text-foreground-tertiary">{timestamp}</Text>
                 <SymbolView
@@ -654,6 +705,7 @@ export const ThreadListRow = memo(function ThreadListRow(props: {
               {thread.title}
             </Text>
             <View className="flex-row items-center gap-2">
+              {watchdogMarkerIcon}
               {statusPill}
               <Text
                 className={cn(

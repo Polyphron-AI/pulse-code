@@ -78,6 +78,8 @@ import {
   ThreadComposer,
 } from "./ThreadComposer";
 import { ThreadFeed } from "./ThreadFeed";
+import { ArgoThreadBanner } from "./ArgoThreadBanner";
+import { ThreadWatchdogBanner } from "./ThreadWatchdogBanner";
 import type { ThreadContentPresentation } from "./threadContentPresentation";
 
 export interface ThreadDetailScreenProps {
@@ -669,6 +671,11 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
               </Animated.View>
             ) : null}
             <View className="w-full self-center" style={{ maxWidth: contentMaxWidth }}>
+              <ArgoThreadBanner thread={props.selectedThread} />
+              <ThreadWatchdogBanner
+                environmentId={props.environmentId}
+                thread={props.selectedThread}
+              />
               {props.activePendingApproval || props.activePendingUserInput ? (
                 <Animated.View
                   className="shrink-0 gap-3 px-4 pb-3"

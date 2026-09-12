@@ -3,6 +3,7 @@ import {
   EnvironmentId,
   ORCHESTRATION_WS_METHODS,
   ProjectId,
+  ManagerId,
   ScheduleId,
   ThreadId,
   type ClientOrchestrationCommand,
@@ -23,9 +24,15 @@ import * as EnvironmentSupervisor from "../connection/supervisor.ts";
 import * as RpcSession from "../rpc/session.ts";
 import type { WsRpcProtocolClient } from "../rpc/protocol.ts";
 import {
+  createManager,
+  cycleNowManager,
   createProjectSchedule,
   deleteProjectSchedule,
+  deleteManager,
+  pauseManager,
   pauseProjectSchedule,
+  resumeManager,
+  updateManager,
   resumeProjectSchedule,
   updateProjectSchedule,
   archiveThread,
@@ -232,6 +239,59 @@ describe("environment commands", () => {
         { type: "project.schedule.pause", commandId: "schedule-pause" },
         { type: "project.schedule.resume", commandId: "schedule-resume" },
         { type: "project.schedule.delete", commandId: "schedule-delete" },
+      ]);
+    }).pipe(Effect.provide(TEST_CRYPTO_LAYER)),
+  );
+  it.effect("dispatches the manager lifecycle commands", () =>
+    Effect.gen(function* () {
+      const dispatched: ClientOrchestrationCommand[] = [];
+      const supervisor = yield* makeSupervisor(dispatched);
+      const managerId = ManagerId.make("manager-1");
+
+      const provideSupervisor = <A, E, R>(
+        effect: Effect.Effect<A, E, EnvironmentSupervisor.EnvironmentSupervisor | R>,
+      ) => Effect.provideService(effect, EnvironmentSupervisor.EnvironmentSupervisor, supervisor);
+
+      yield* provideSupervisor(
+        createManager({
+          commandId: CommandId.make("manager-create"),
+          managerId,
+          name: "Nightly triage",
+          scope: { _tag: "environment", projectIds: [] },
+          createdAt: "2026-09-11T00:00:00.000Z",
+        }),
+      );
+      yield* provideSupervisor(
+        updateManager({
+          commandId: CommandId.make("manager-update"),
+          managerId,
+          mission: "Keep the queue empty.",
+        }),
+      );
+      yield* provideSupervisor(
+        pauseManager({ commandId: CommandId.make("manager-pause"), managerId }),
+      );
+      yield* provideSupervisor(
+        resumeManager({ commandId: CommandId.make("manager-resume"), managerId }),
+      );
+      yield* provideSupervisor(
+        cycleNowManager({ commandId: CommandId.make("manager-cycle-now"), managerId }),
+      );
+      yield* provideSupervisor(
+        deleteManager({
+          commandId: CommandId.make("manager-delete"),
+          managerId,
+          keepChildren: true,
+        }),
+      );
+
+      expect(dispatched.map(({ type, commandId }) => ({ type, commandId }))).toEqual([
+        { type: "manager.create", commandId: "manager-create" },
+        { type: "manager.update", commandId: "manager-update" },
+        { type: "manager.pause", commandId: "manager-pause" },
+        { type: "manager.resume", commandId: "manager-resume" },
+        { type: "manager.cycle-now", commandId: "manager-cycle-now" },
+        { type: "manager.delete", commandId: "manager-delete" },
       ]);
     }).pipe(Effect.provide(TEST_CRYPTO_LAYER)),
   );

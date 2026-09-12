@@ -48,6 +48,7 @@ We need to be on the same page with terminology. When communicating, use this la
 - **we, us, and maintainers** mean Theo, Julius and the people building Pulse Code. These are who you are talking to now.
 - **user** means the person using Pulse Code to direct coding agents.
 - **agent** means the coding agent a user runs inside Pulse Code. Depending on context, that may also include you.
+- **assistant**, **manager**, **watchdog**, and **subagent** are the named agent roles. Roles are policies on a thread, never runtimes. The manager role ships under the product name **Argo** (the Argo orchestrator); use **manager** in code and contracts, **Argo** in user-visible copy. **Orchestration** on its own always means the decider, projector, and reactor layer, never an agent. Definitions live in `docs/internals/glossary.md` under Agent roles. Do not use **worker** as a product word.
 - **provider** means the agent runtime or harness Pulse Code talks to, such as Codex, Claude, Cursor, or OpenCode.
 - **client** means the web, desktop, or mobile UI.
 - **environment** means one running Pulse Code server and the machine, filesystem, provider credentials, and state it owns.
@@ -108,6 +109,15 @@ An empty database is a bad test. Seed your worktree's `.t3` with a copy of real 
 - Backend behavior changes ship with focused tests for that behavior.
 - The server is event-sourced and its async flows emit typed receipts. Wait on receipts and worker drains, never on sleeps or polling. A test that needs a timeout to pass is wrong.
 - Upon request, user-visible frontend changes should get one integrated pass in a real client: `test-t3-app` for web, `test-t3-mobile` for mobile. The primary agent does this once after integrating. Subagents do not launch their own dev servers. Ask permission before doing computer use or spinning up browsers.
+
+## Pulse Office MVP permissions
+
+The user explicitly authorizes the following work for the Pulse Office people, connections, tasks, and feedback MVP, including its `pulse-mail` worktree. This records the user's permission; it does not override harness or tool approval requirements.
+
+- Implement and use Luna discovery through the user's configured, enabled Codex provider. For emails selected by the user for analysis, the request may include message headers, up to 24,000 characters of body text per message, and the relevant confirmed participant IDs, names, and email addresses. The user authorizes this data flow to that provider. Do not send attachments, credentials, unrelated files, or entire mailbox histories under this permission. Automatic background analysis requires an explicit account/source opt-in.
+- Start isolated development servers and use browser automation, screenshots, and Impeccable visual review to verify this MVP with synthetic mail, people, and task data. Keep test state in the worktree's disposable `.t3` directory. This is the explicit browser permission required by the Verifying and Additional tips sections; do not ask again for these scoped checks.
+- Preserve canonical identity review and user corrections. Extraction may propose connections and work; it may not silently confirm identities, assign work, resolve feedback, or send messages.
+- This permission does not authorize outbound email, calendar invitations, CRM writes, publication, or tests against the live Pulse database. Ask only when an action exceeds the scope above.
 
 ## Pull requests
 

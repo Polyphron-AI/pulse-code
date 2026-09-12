@@ -8,8 +8,11 @@ import { afterEach, describe, expect, it } from "vite-plus/test";
 import { CheckpointReactor } from "../Services/CheckpointReactor.ts";
 import { ProviderCommandReactor } from "../Services/ProviderCommandReactor.ts";
 import { ProviderRuntimeIngestionService } from "../Services/ProviderRuntimeIngestion.ts";
+import { ManagerReactor } from "../Services/ManagerReactor.ts";
+import { AssistantReactor } from "../Services/AssistantReactor.ts";
 import { ScheduleReactor } from "../Services/ScheduleReactor.ts";
 import { ThreadDeletionReactor } from "../Services/ThreadDeletionReactor.ts";
+import { WatchdogReactor } from "../Services/WatchdogReactor.ts";
 import { OrchestrationReactor } from "../Services/OrchestrationReactor.ts";
 import { makeOrchestrationReactor } from "./OrchestrationReactor.ts";
 import * as AgentAwarenessRelay from "../../relay/AgentAwarenessRelay.ts";
@@ -75,6 +78,33 @@ describe("OrchestrationReactor", () => {
           }),
         ),
         Layer.provideMerge(
+          Layer.succeed(WatchdogReactor, {
+            start: () => {
+              started.push("watchdog-reactor");
+              return Effect.void;
+            },
+            drain: Effect.void,
+          }),
+        ),
+        Layer.provideMerge(
+          Layer.succeed(ManagerReactor, {
+            start: () => {
+              started.push("manager-reactor");
+              return Effect.void;
+            },
+            sweepNow: Effect.void,
+          }),
+        ),
+        Layer.provideMerge(
+          Layer.succeed(AssistantReactor, {
+            start: () => {
+              started.push("assistant-reactor");
+              return Effect.void;
+            },
+            drain: Effect.void,
+          }),
+        ),
+        Layer.provideMerge(
           Layer.succeed(AgentAwarenessRelay.AgentAwarenessRelay, {
             publishThread: () => Effect.void,
             start: () => {
@@ -96,6 +126,9 @@ describe("OrchestrationReactor", () => {
       "checkpoint-reactor",
       "thread-deletion-reactor",
       "schedule-reactor",
+      "watchdog-reactor",
+      "manager-reactor",
+      "assistant-reactor",
       "agent-awareness-relay",
     ]);
 

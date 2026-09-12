@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { ProjectId, ProviderInstanceId, ScheduleId, ThreadId } from "@t3tools/contracts";
+import {
+  AssistantId,
+  ManagerId,
+  ProjectId,
+  ProviderInstanceId,
+  ScheduleId,
+  ThreadId,
+} from "@t3tools/contracts";
 import type { OrchestrationShellSnapshot, OrchestrationShellStreamEvent } from "@t3tools/contracts";
 
 import { applyShellStreamEvent } from "./shellReducer.ts";
@@ -60,6 +67,35 @@ const stubSchedule = {
   createdAt: "2026-04-01T00:00:00.000Z",
   updatedAt: "2026-04-01T00:00:00.000Z",
   deletedAt: null,
+} as const;
+
+const stubManager = {
+  id: ManagerId.make("manager-1"),
+  name: "Argo",
+  scope: { _tag: "project" as const, projectId: ProjectId.make("project-1") },
+  mission: "Keep the build green.",
+  childModelSelection: null,
+  childRuntimeMode: "auto-accept-edits" as const,
+  maxChildren: 8 as const,
+  intervalMinutes: 30 as const,
+  threadId: null,
+  pausedAt: null,
+  lastCycleAt: null,
+  cycleRequestedAt: null,
+  createdAt: "2026-04-01T00:00:00.000Z",
+  updatedAt: "2026-04-01T00:00:00.000Z",
+  deletedAt: null,
+} as const;
+
+const stubAssistant = {
+  id: AssistantId.make("assistant-1"),
+  name: "Luna",
+  avatar: null,
+  modelSelection: null,
+  instructions: "",
+  threadId: null,
+  createdAt: "2026-04-01T00:00:00.000Z",
+  updatedAt: "2026-04-01T00:00:00.000Z",
 } as const;
 
 describe("applyShellStreamEvent", () => {
@@ -216,6 +252,80 @@ describe("applyShellStreamEvent", () => {
       expect(updated.schedules?.[0]?.pausedAt).toBe("2026-04-01T01:00:00.000Z");
       expect(removed.schedules).toEqual([]);
       expect(removed.snapshotSequence).toBe(9);
+    });
+  });
+
+  describe("manager events", () => {
+    it("adds, updates, and removes a manager", () => {
+      const added = applyShellStreamEvent(baseSnapshot, {
+        kind: "manager-upserted",
+        sequence: 11,
+        manager: stubManager,
+      });
+      const updated = applyShellStreamEvent(added, {
+        kind: "manager-upserted",
+        sequence: 12,
+        manager: { ...stubManager, pausedAt: "2026-04-01T01:00:00.000Z" },
+      });
+      const removed = applyShellStreamEvent(updated, {
+        kind: "manager-removed",
+        sequence: 13,
+        managerId: stubManager.id,
+      });
+
+      expect(added.managers).toEqual([stubManager]);
+      expect(updated.managers).toHaveLength(1);
+      expect(updated.managers?.[0]?.pausedAt).toBe("2026-04-01T01:00:00.000Z");
+      expect(removed.managers).toEqual([]);
+      expect(removed.snapshotSequence).toBe(13);
+    });
+
+    it("ignores a stale manager event", () => {
+      const added = applyShellStreamEvent(baseSnapshot, {
+        kind: "manager-upserted",
+        sequence: 11,
+        manager: stubManager,
+      });
+      const stale = applyShellStreamEvent(added, {
+        kind: "manager-removed",
+        sequence: 5,
+        managerId: stubManager.id,
+      });
+      expect(stale).toBe(added);
+    });
+  });
+
+  describe("assistant events", () => {
+    it("adds and updates the assistant", () => {
+      const added = applyShellStreamEvent(baseSnapshot, {
+        kind: "assistant-upserted",
+        sequence: 21,
+        assistant: stubAssistant,
+      });
+      const updated = applyShellStreamEvent(added, {
+        kind: "assistant-upserted",
+        sequence: 22,
+        assistant: { ...stubAssistant, name: "Nova" },
+      });
+
+      expect(added.assistants).toEqual([stubAssistant]);
+      expect(updated.assistants).toHaveLength(1);
+      expect(updated.assistants?.[0]?.name).toBe("Nova");
+      expect(updated.snapshotSequence).toBe(22);
+    });
+
+    it("ignores a stale assistant event", () => {
+      const added = applyShellStreamEvent(baseSnapshot, {
+        kind: "assistant-upserted",
+        sequence: 21,
+        assistant: stubAssistant,
+      });
+      const stale = applyShellStreamEvent(added, {
+        kind: "assistant-upserted",
+        sequence: 5,
+        assistant: { ...stubAssistant, name: "Nova" },
+      });
+      expect(stale).toBe(added);
     });
   });
 

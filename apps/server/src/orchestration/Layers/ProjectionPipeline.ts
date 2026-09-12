@@ -520,6 +520,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             defaultModelSelection: event.payload.defaultModelSelection,
             defaultThreadEnvMode: null,
             faviconPath: event.payload.faviconPath ?? null,
+            system: event.payload.system ?? false,
             scripts: event.payload.scripts,
             createdAt: event.payload.createdAt,
             updatedAt: event.payload.updatedAt,
@@ -550,6 +551,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
               ? { faviconPath: event.payload.faviconPath }
               : {}),
             ...(event.payload.scripts !== undefined ? { scripts: event.payload.scripts } : {}),
+            ...(event.payload.system !== undefined ? { system: event.payload.system } : {}),
             updatedAt: event.payload.updatedAt,
           });
           return;
@@ -651,8 +653,25 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             pendingUserInputCount: 0,
             hasActionableProposedPlan: 0,
             deletedAt: null,
+            watchdog: null,
+            allowedTools: event.payload.allowedTools ?? null,
           });
           return;
+
+        case "thread.watchdog-updated": {
+          const existingRow = yield* projectionThreadRepository.getById({
+            threadId: event.payload.threadId,
+          });
+          if (Option.isNone(existingRow)) {
+            return;
+          }
+          yield* projectionThreadRepository.upsert({
+            ...existingRow.value,
+            watchdog: event.payload.watchdog,
+            updatedAt: event.occurredAt,
+          });
+          return;
+        }
 
         case "thread.archived": {
           const existingRow = yield* projectionThreadRepository.getById({
@@ -873,7 +892,38 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
           return;
         }
 
-        case "thread.message-sent":
+        case "thread.message-sent": {
+          const existingRow = yield* projectionThreadRepository.getById({
+            threadId: event.payload.threadId,
+          });
+          if (Option.isNone(existingRow)) {
+            return;
+          }
+          // A human reply clears a stuck watchdog, the same rule the in-memory
+          // projector applies. WatchdogReactor reads this row, so without the
+          // reset here an escalated watchdog would stay escalated forever and
+          // the intervention count would never return to zero.
+          const watchdog = existingRow.value.watchdog;
+          const isUserAuthored =
+            event.payload.role === "user" &&
+            (event.payload.authoredBy === undefined || event.payload.authoredBy === "user");
+          const needsWatchdogReset =
+            isUserAuthored &&
+            watchdog !== null &&
+            (watchdog.interventions !== 0 || watchdog.escalatedAt !== null);
+          yield* projectionThreadRepository.upsert({
+            ...existingRow.value,
+            ...(needsWatchdogReset && watchdog !== null
+              ? { watchdog: { ...watchdog, interventions: 0, escalatedAt: null } }
+              : {}),
+            updatedAt: event.occurredAt,
+          });
+          if (shouldRefreshThreadShellSummary(event)) {
+            yield* refreshThreadShellSummary(event.payload.threadId);
+          }
+          return;
+        }
+
         case "thread.proposed-plan-upserted":
         case "thread.activity-appended":
         case "thread.approval-response-requested":

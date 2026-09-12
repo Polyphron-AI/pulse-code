@@ -1,4 +1,6 @@
 import type {
+  AssistantId,
+  ManagerId,
   OrchestrationEvent,
   OrchestrationReadModel,
   ScheduleId,
@@ -6,7 +8,9 @@ import type {
   ThreadId,
 } from "@t3tools/contracts";
 import {
+  OrchestrationAssistant,
   OrchestrationCheckpointSummary,
+  OrchestrationManager,
   OrchestrationMessage,
   OrchestrationSchedule,
   OrchestrationSession,
@@ -22,6 +26,7 @@ import {
   ProjectDeletedPayload,
   ProjectMetaUpdatedPayload,
   ThreadActivityAppendedPayload,
+  ThreadWatchdogUpdatedPayload,
   ThreadArchivedPayload,
   ThreadCreatedPayload,
   ThreadDeletedPayload,
@@ -50,6 +55,18 @@ import {
   ScheduleOccurrenceCompletedPayload,
   ScheduleOccurrenceFailedPayload,
   ScheduleOccurrenceSkippedPayload,
+  ManagerCreatedPayload,
+  ManagerUpdatedPayload,
+  ManagerPausedPayload,
+  ManagerResumedPayload,
+  ManagerDeletedPayload,
+  ManagerThreadBoundPayload,
+  ManagerCycleRecordedPayload,
+  ManagerCycleRequestedPayload,
+  AssistantCreatedPayload,
+  AssistantUpdatedPayload,
+  AssistantResetPayload,
+  AssistantThreadBoundPayload,
 } from "./Schemas.ts";
 
 type ThreadPatch = Partial<Omit<OrchestrationThread, "id" | "projectId">>;
@@ -83,6 +100,26 @@ function settledTurnStateForSessionStatus(
     case "running":
       return null;
   }
+}
+
+function updateManager(
+  managers: ReadonlyArray<OrchestrationManager> | undefined,
+  managerId: ManagerId,
+  patch: Partial<Omit<OrchestrationManager, "id">>,
+): OrchestrationManager[] {
+  return (managers ?? []).map((manager) =>
+    manager.id === managerId ? { ...manager, ...patch } : manager,
+  );
+}
+
+function updateAssistant(
+  assistants: ReadonlyArray<OrchestrationAssistant> | undefined,
+  assistantId: AssistantId,
+  patch: Partial<Omit<OrchestrationAssistant, "id">>,
+): OrchestrationAssistant[] {
+  return (assistants ?? []).map((assistant) =>
+    assistant.id === assistantId ? { ...assistant, ...patch } : assistant,
+  );
 }
 
 function updateSchedule(
@@ -251,12 +288,26 @@ function compareThreadActivities(
   return left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id);
 }
 
+/**
+ * The environment's system project, the one project.ensure-system maintains.
+ * Undefined until that command has run. Clients hide it from project lists.
+ */
+export function systemProject(
+  readModel: OrchestrationReadModel,
+): OrchestrationReadModel["projects"][number] | undefined {
+  return readModel.projects.find(
+    (project) => project.system === true && project.deletedAt === null,
+  );
+}
+
 export function createEmptyReadModel(nowIso: string): OrchestrationReadModel {
   return {
     snapshotSequence: 0,
     projects: [],
     threads: [],
     schedules: [],
+    managers: [],
+    assistants: [],
     updatedAt: nowIso,
   };
 }
@@ -284,6 +335,7 @@ export function projectEvent(
             defaultThreadEnvMode: null,
             faviconPath: payload.faviconPath ?? null,
             scripts: payload.scripts,
+            system: payload.system ?? false,
             createdAt: payload.createdAt,
             updatedAt: payload.updatedAt,
             deletedAt: null,
@@ -322,6 +374,7 @@ export function projectEvent(
                     ? { faviconPath: payload.faviconPath }
                     : {}),
                   ...(payload.scripts !== undefined ? { scripts: payload.scripts } : {}),
+                  ...(payload.system !== undefined ? { system: payload.system } : {}),
                   updatedAt: payload.updatedAt,
                 }
               : project,
@@ -366,6 +419,8 @@ export function projectEvent(
             worktreePath: payload.worktreePath,
             // Absent on pre-schedule events; consumers read absent as "user".
             ...(payload.origin !== undefined ? { origin: payload.origin } : {}),
+            // Absent on pre-assistant events; absent means the provider default.
+            ...(payload.allowedTools !== undefined ? { allowedTools: payload.allowedTools } : {}),
             latestTurn: null,
             createdAt: payload.createdAt,
             updatedAt: payload.updatedAt,
@@ -577,6 +632,7 @@ export function projectEvent(
             role: payload.role,
             text: payload.text,
             ...(payload.attachments !== undefined ? { attachments: payload.attachments } : {}),
+            ...(payload.authoredBy !== undefined ? { authoredBy: payload.authoredBy } : {}),
             turnId: payload.turnId,
             streaming: payload.streaming,
             createdAt: payload.createdAt,
@@ -609,11 +665,28 @@ export function projectEvent(
           : [...thread.messages, message];
         const cappedMessages = messages.slice(-MAX_THREAD_MESSAGES);
 
+        // A human reply clears a stuck watchdog: reset the intervention
+        // count and any escalation so the banner goes away.
+        const isUserAuthored =
+          payload.role === "user" &&
+          (payload.authoredBy === undefined || payload.authoredBy === "user");
+        const watchdogReset =
+          isUserAuthored && thread.watchdog != null
+            ? {
+                watchdog: {
+                  ...thread.watchdog,
+                  interventions: 0,
+                  escalatedAt: null,
+                },
+              }
+            : {};
+
         return {
           ...nextBase,
           threads: updateThread(nextBase.threads, payload.threadId, {
             messages: cappedMessages,
             updatedAt: event.occurredAt,
+            ...watchdogReset,
           }),
         };
       });
@@ -868,6 +941,222 @@ export function projectEvent(
           };
         }),
       );
+
+    case "thread.watchdog-updated":
+      return decodeForEvent(
+        ThreadWatchdogUpdatedPayload,
+        event.payload,
+        event.type,
+        "payload",
+      ).pipe(
+        Effect.map((payload) => ({
+          ...nextBase,
+          threads: updateThread(nextBase.threads, payload.threadId, {
+            watchdog: payload.watchdog,
+            updatedAt: event.occurredAt,
+          }),
+        })),
+      );
+
+    case "manager.created":
+      return decodeForEvent(ManagerCreatedPayload, event.payload, event.type, "payload").pipe(
+        Effect.map((payload) => {
+          const managers = nextBase.managers ?? [];
+          const existing = managers.find((entry) => entry.id === payload.managerId);
+          const nextManager: OrchestrationManager = {
+            id: payload.managerId,
+            name: payload.name,
+            scope: payload.scope,
+            mission: payload.mission,
+            childModelSelection: payload.childModelSelection,
+            childRuntimeMode: payload.childRuntimeMode,
+            maxChildren: payload.maxChildren,
+            intervalMinutes: payload.intervalMinutes,
+            threadId: null,
+            pausedAt: null,
+            lastCycleAt: null,
+            cycleRequestedAt: null,
+            createdAt: payload.createdAt,
+            updatedAt: payload.updatedAt,
+            deletedAt: null,
+          };
+          return {
+            ...nextBase,
+            managers: existing
+              ? managers.map((entry) => (entry.id === payload.managerId ? nextManager : entry))
+              : [...managers, nextManager],
+          };
+        }),
+      );
+
+    case "manager.updated":
+      return decodeForEvent(ManagerUpdatedPayload, event.payload, event.type, "payload").pipe(
+        Effect.map((payload) => ({
+          ...nextBase,
+          managers: updateManager(nextBase.managers, payload.managerId, {
+            ...(payload.name !== undefined ? { name: payload.name } : {}),
+            ...(payload.scope !== undefined ? { scope: payload.scope } : {}),
+            ...(payload.mission !== undefined ? { mission: payload.mission } : {}),
+            ...(payload.childModelSelection !== undefined
+              ? { childModelSelection: payload.childModelSelection }
+              : {}),
+            ...(payload.childRuntimeMode !== undefined
+              ? { childRuntimeMode: payload.childRuntimeMode }
+              : {}),
+            ...(payload.maxChildren !== undefined ? { maxChildren: payload.maxChildren } : {}),
+            ...(payload.intervalMinutes !== undefined
+              ? { intervalMinutes: payload.intervalMinutes }
+              : {}),
+            updatedAt: payload.updatedAt,
+          }),
+        })),
+      );
+
+    case "manager.paused":
+      return decodeForEvent(ManagerPausedPayload, event.payload, event.type, "payload").pipe(
+        Effect.map((payload) => ({
+          ...nextBase,
+          managers: updateManager(nextBase.managers, payload.managerId, {
+            pausedAt: payload.pausedAt,
+            updatedAt: payload.updatedAt,
+          }),
+        })),
+      );
+
+    case "manager.resumed":
+      return decodeForEvent(ManagerResumedPayload, event.payload, event.type, "payload").pipe(
+        Effect.map((payload) => ({
+          ...nextBase,
+          managers: updateManager(nextBase.managers, payload.managerId, {
+            pausedAt: null,
+            updatedAt: payload.updatedAt,
+          }),
+        })),
+      );
+
+    case "manager.deleted":
+      return decodeForEvent(ManagerDeletedPayload, event.payload, event.type, "payload").pipe(
+        Effect.map((payload) => ({
+          ...nextBase,
+          // Soft-delete only the manager row. Children were already archived
+          // by the decider when keepChildren was false.
+          managers: updateManager(nextBase.managers, payload.managerId, {
+            deletedAt: payload.deletedAt,
+            updatedAt: payload.deletedAt,
+          }),
+        })),
+      );
+
+    case "manager.thread-bound":
+      return decodeForEvent(ManagerThreadBoundPayload, event.payload, event.type, "payload").pipe(
+        Effect.map((payload) => ({
+          ...nextBase,
+          managers: updateManager(nextBase.managers, payload.managerId, {
+            threadId: payload.threadId,
+            updatedAt: payload.updatedAt,
+          }),
+        })),
+      );
+
+    case "manager.cycle-requested":
+      return decodeForEvent(
+        ManagerCycleRequestedPayload,
+        event.payload,
+        event.type,
+        "payload",
+      ).pipe(
+        Effect.map((payload) => ({
+          ...nextBase,
+          managers: updateManager(nextBase.managers, payload.managerId, {
+            cycleRequestedAt: payload.requestedAt,
+            updatedAt: payload.updatedAt,
+          }),
+        })),
+      );
+
+    case "manager.cycle-recorded":
+      return decodeForEvent(ManagerCycleRecordedPayload, event.payload, event.type, "payload").pipe(
+        Effect.map((payload) => ({
+          ...nextBase,
+          managers: updateManager(nextBase.managers, payload.managerId, {
+            lastCycleAt: payload.occurredAt,
+            // A recorded cycle satisfies any pending "cycle now" request.
+            cycleRequestedAt: null,
+            updatedAt: payload.updatedAt,
+          }),
+        })),
+      );
+
+    case "assistant.created":
+      return decodeForEvent(AssistantCreatedPayload, event.payload, event.type, "payload").pipe(
+        Effect.map((payload) => {
+          const assistants = nextBase.assistants ?? [];
+          const nextAssistant: OrchestrationAssistant = {
+            id: payload.assistantId,
+            name: payload.name,
+            avatar: payload.avatar,
+            modelSelection: payload.modelSelection,
+            instructions: payload.instructions,
+            threadId: null,
+            createdAt: payload.createdAt,
+            updatedAt: payload.updatedAt,
+          };
+          const existing = assistants.some((entry) => entry.id === payload.assistantId);
+          return {
+            ...nextBase,
+            assistants: existing
+              ? assistants.map((entry) =>
+                  entry.id === payload.assistantId ? nextAssistant : entry,
+                )
+              : [...assistants, nextAssistant],
+          };
+        }),
+      );
+
+    case "assistant.updated":
+      return decodeForEvent(AssistantUpdatedPayload, event.payload, event.type, "payload").pipe(
+        Effect.map((payload) => ({
+          ...nextBase,
+          assistants: updateAssistant(nextBase.assistants, payload.assistantId, {
+            ...(payload.name !== undefined ? { name: payload.name } : {}),
+            ...(payload.avatar !== undefined ? { avatar: payload.avatar } : {}),
+            ...(payload.modelSelection !== undefined
+              ? { modelSelection: payload.modelSelection }
+              : {}),
+            ...(payload.instructions !== undefined ? { instructions: payload.instructions } : {}),
+            updatedAt: payload.updatedAt,
+          }),
+        })),
+      );
+
+    case "assistant.reset":
+      // The old thread was archived by the decider before this event; here the
+      // record just forgets it, so the next message opens a fresh one.
+      return decodeForEvent(AssistantResetPayload, event.payload, event.type, "payload").pipe(
+        Effect.map((payload) => ({
+          ...nextBase,
+          assistants: updateAssistant(nextBase.assistants, payload.assistantId, {
+            threadId: null,
+            updatedAt: payload.updatedAt,
+          }),
+        })),
+      );
+
+    case "assistant.thread-bound":
+      return decodeForEvent(AssistantThreadBoundPayload, event.payload, event.type, "payload").pipe(
+        Effect.map((payload) => ({
+          ...nextBase,
+          assistants: updateAssistant(nextBase.assistants, payload.assistantId, {
+            threadId: payload.threadId,
+            updatedAt: payload.updatedAt,
+          }),
+        })),
+      );
+
+    case "assistant.message-requested":
+      // Nothing to project: the reactor turns this into the thread bootstrap
+      // and the turn, each of which projects on its own.
+      return Effect.succeed(nextBase);
 
     case "project.schedule.created":
       return decodeForEvent(

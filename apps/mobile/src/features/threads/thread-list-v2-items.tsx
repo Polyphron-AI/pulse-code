@@ -10,6 +10,7 @@ import { Alert, Platform, Pressable, useWindowDimensions, View } from "react-nat
 import type { SwipeableMethods } from "react-native-gesture-handler/ReanimatedSwipeable";
 
 import { SymbolView } from "../../components/AppSymbol";
+import { watchdogMarker } from "@t3tools/client-runtime/state/watchdog";
 import { AppText as Text } from "../../components/AppText";
 import { ControlPillMenu } from "../../components/ControlPill";
 import { ProjectFavicon } from "../../components/ProjectFavicon";
@@ -410,6 +411,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
   const pressedBackgroundColor = useThemeColor("--color-subtle");
   const selectedBackgroundColor = useThemeColor("--color-user-bubble");
   const pinTintColor = useThemeColor("--color-foreground-muted");
+  const watchdogStuckColor = useThemeColor("--color-danger-foreground");
   const sidebarPane = props.pane === "sidebar";
   const selected = props.selected === true;
 
@@ -656,6 +658,8 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
       ? `Opens the thread. Swipe left to ${primaryAction.label.toLowerCase()}.`
       : `Opens the thread. Swipe left for ${primaryAction.label.toLowerCase()} and snooze actions.`;
 
+  const watchdogRowMarker = watchdogMarker(thread.watchdog);
+
   // The sidebar pane fills selected rows with the theme's message surface, so
   // every piece of row text must use that surface's paired foreground.
   const cardContent = (
@@ -682,6 +686,15 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
         {pinnedRow ? (
           <SymbolView name="pin" size={11} tintColor={pinTintColor} type="monochrome" />
         ) : null}
+        {watchdogRowMarker === "none" ? null : (
+          <SymbolView
+            accessibilityLabel={watchdogRowMarker === "stuck" ? "Watchdog stuck" : "Watchdog on"}
+            name={watchdogRowMarker === "stuck" ? "eye.trianglebadge.exclamationmark" : "eye"}
+            size={12}
+            tintColor={watchdogRowMarker === "stuck" ? watchdogStuckColor : pinTintColor}
+            type="monochrome"
+          />
+        )}
         <Text
           className={cn(
             "text-xs tabular-nums",

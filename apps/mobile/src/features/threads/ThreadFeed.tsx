@@ -2,6 +2,7 @@ import * as Haptics from "expo-haptics";
 import { KeyboardAwareLegendList } from "@legendapp/list/keyboard";
 import { type LegendListRef } from "@legendapp/list/react-native";
 import { environmentEndpointUrl } from "@t3tools/client-runtime/environment";
+import { messageAuthorLabel } from "@t3tools/client-runtime/state/messages";
 import type { EnvironmentId, MessageId, ThreadId, TurnId } from "@t3tools/contracts";
 import { CHAT_LIST_ANCHOR_OFFSET, resolveChatListAnchoredEndSpace } from "@t3tools/shared/chatList";
 import { formatElapsed } from "@t3tools/shared/orchestrationTiming";
@@ -889,11 +890,15 @@ function renderFeedEntry(
 
     if (isUser) {
       const enterAnimated = isFreshTimestamp(message.createdAt);
+      const authorLabel = messageAuthorLabel(message.authoredBy);
       return (
         <Animated.View
           className="mb-5 items-end"
           {...(enterAnimated ? { entering: FadeInUp.duration(220) } : {})}
         >
+          {authorLabel ? (
+            <Text className="mb-1 mr-1 text-[10px] text-foreground-muted">{authorLabel}</Text>
+          ) : null}
           <View
             className="min-w-0 gap-2 rounded-[20px] px-3.5 py-2.5"
             style={{

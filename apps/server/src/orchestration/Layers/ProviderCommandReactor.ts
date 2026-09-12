@@ -4,7 +4,9 @@ import {
   DEFAULT_COMPOSER_BUSY_BEHAVIOR,
   CommandId,
   EventId,
+  type MessageAuthor,
   type ModelSelection,
+  type ThreadOrigin,
   type OrchestrationEvent,
   ProviderDriverKind,
   type ProjectId,
@@ -42,6 +44,8 @@ import {
 } from "../Services/ProviderCommandReactor.ts";
 import { forkParked, ServerActivation } from "../../serverActivation.ts";
 import { canReplaceThreadTitle, DEFAULT_THREAD_TITLE } from "../threadTitles.ts";
+import { wrapPromptForTrust } from "../promptTrust.ts";
+import { assistantIdFromThreadOrigin, assistantSystemPrompt } from "@t3tools/contracts";
 import {
   resolveSourceControlWriterModelSelection,
   ServerSettingsService,
@@ -476,6 +480,10 @@ const make = Effect.gen(function* () {
     options?: {
       readonly modelSelection?: ModelSelection;
       readonly pendingTurnStart?: boolean;
+      // "fresh" means the caller already stopped the live session and wants a
+      // brand-new one, so the thread's previous provider no longer constrains
+      // which instance may serve it. This is the provider-switch path.
+      readonly sessionMode?: "fresh";
     },
   ) {
     const thread = yield* resolveThread(threadId);
@@ -485,6 +493,7 @@ const make = Effect.gen(function* () {
 
     const desiredRuntimeMode = thread.runtimeMode;
     const requestedModelSelection = options?.modelSelection;
+    const freshSession = options?.sessionMode === "fresh";
     const resolveActiveSession = (threadId: ThreadId) =>
       providerService
         .listSessions()
@@ -566,7 +575,7 @@ const make = Effect.gen(function* () {
         createdAt,
       });
     }
-    if (thread.session !== null) {
+    if (thread.session !== null && !freshSession) {
       yield* rejectStartedThreadModelChangeIfRequired({
         threadId,
         currentModelSelection:
@@ -582,6 +591,7 @@ const make = Effect.gen(function* () {
     }
     if (
       thread.session !== null &&
+      !freshSession &&
       requestedModelSelection !== undefined &&
       requestedModelSelection.instanceId !== currentInstanceId
     ) {
@@ -621,6 +631,9 @@ const make = Effect.gen(function* () {
         ...(thread.title ? { title: thread.title } : {}),
         modelSelection: desiredModelSelection,
         ...(input?.resumeCursor !== undefined ? { resumeCursor: input.resumeCursor } : {}),
+        // Null or absent means the provider default; the assistant's thread is
+        // the only caller that narrows this today.
+        ...(thread.allowedTools !== undefined ? { allowedTools: thread.allowedTools } : {}),
         runtimeMode: desiredRuntimeMode,
       });
 
@@ -725,6 +738,22 @@ const make = Effect.gen(function* () {
     return startedSession.threadId;
   });
 
+  /**
+   * The assistant's standing briefing, when this thread is an assistant's own
+   * thread. Undefined for every other thread, which is all of them today
+   * except Luna's.
+   */
+  const resolveAssistantPreface = Effect.fnUntraced(function* (origin: ThreadOrigin | undefined) {
+    if (origin === undefined) return undefined;
+    const assistantId = assistantIdFromThreadOrigin(origin);
+    if (assistantId === null) return undefined;
+    const readModel = yield* orchestrationEngine.currentReadModel;
+    const assistant = (readModel.assistants ?? []).find((entry) => entry.id === assistantId);
+    return assistant === undefined
+      ? undefined
+      : assistantSystemPrompt({ name: assistant.name, instructions: assistant.instructions });
+  });
+
   const buildSendTurnRequestForThread = Effect.fnUntraced(function* (input: {
     readonly threadId: ThreadId;
     readonly messageText: string;
@@ -732,6 +761,11 @@ const make = Effect.gen(function* () {
     readonly modelSelection?: ModelSelection;
     readonly interactionMode?: "default" | "plan";
     readonly sessionMode?: "fresh";
+    readonly promptPrefix?: string;
+    /** Who authored the message. Absent means the human at the keyboard. */
+    readonly authoredBy?: MessageAuthor;
+    /** The receiving thread's origin, for the manager trust check. */
+    readonly threadOrigin?: ThreadOrigin;
     readonly busyBehavior: ComposerBusyBehavior;
     readonly createdAt: string;
   }) {
@@ -753,12 +787,35 @@ const make = Effect.gen(function* () {
     }
     yield* ensureSessionForThread(input.threadId, input.createdAt, {
       ...(input.modelSelection !== undefined ? { modelSelection: input.modelSelection } : {}),
+      ...(input.sessionMode !== undefined ? { sessionMode: input.sessionMode } : {}),
       pendingTurnStart: true,
     });
     if (input.modelSelection !== undefined) {
       threadModelSelections.set(input.threadId, input.modelSelection);
     }
-    const normalizedInput = toNonEmptyProviderInput(input.messageText);
+    // Trust framing and the prefix are both server-owned context that goes to
+    // the provider only; the persisted user message stays as typed. This is
+    // the single place a turn's provider input is composed, so wrapping here
+    // covers every adapter at once.
+    const trustedMessageText = wrapPromptForTrust({
+      prompt: input.messageText,
+      ...(input.authoredBy !== undefined ? { authoredBy: input.authoredBy } : {}),
+      ...(input.threadOrigin !== undefined ? { threadOrigin: input.threadOrigin } : {}),
+    });
+    // The assistant has no per-thread system prompt to hang its briefing on,
+    // so the briefing rides in front of every turn on its thread. This is the
+    // one place a turn's provider input is composed, so it applies whether the
+    // text came from the assistant panel or the normal composer.
+    const assistantPreface = yield* resolveAssistantPreface(thread.origin);
+    // The prefix is server-owned context (a provider handoff digest).
+    const prefixes = [assistantPreface, input.promptPrefix].filter(
+      (part): part is string => part !== undefined && part.length > 0,
+    );
+    const normalizedInput = toNonEmptyProviderInput(
+      prefixes.length === 0
+        ? trustedMessageText
+        : `${prefixes.join("\n\n")}\n\n${trustedMessageText}`,
+    );
     const normalizedAttachments = input.attachments ?? [];
     const activeSession = yield* providerService
       .listSessions()
@@ -1167,6 +1224,22 @@ const make = Effect.gen(function* () {
         ),
       );
 
+    // Message provenance and thread origin live only on the in-memory read
+    // model; the SQL thread-detail projection carries neither. Both are read
+    // here so the trust wrapper can classify this turn's prompt.
+    const trust = yield* orchestrationEngine.currentReadModel.pipe(
+      Effect.map((model) => {
+        const modelThread = model.threads.find((entry) => entry.id === event.payload.threadId);
+        const modelMessage = modelThread?.messages.find(
+          (entry) => entry.id === event.payload.messageId,
+        );
+        return {
+          authoredBy: modelMessage?.authoredBy,
+          threadOrigin: modelThread?.origin,
+        };
+      }),
+    );
+
     const sendTurnRequest = yield* buildSendTurnRequestForThread({
       threadId: event.payload.threadId,
       messageText: message.text,
@@ -1175,10 +1248,15 @@ const make = Effect.gen(function* () {
         ? { modelSelection: event.payload.modelSelection }
         : {}),
       interactionMode: event.payload.interactionMode,
+      ...(trust.authoredBy !== undefined ? { authoredBy: trust.authoredBy } : {}),
+      ...(trust.threadOrigin !== undefined ? { threadOrigin: trust.threadOrigin } : {}),
       busyBehavior: event.payload.busyBehavior ?? DEFAULT_COMPOSER_BUSY_BEHAVIOR,
       createdAt: event.payload.createdAt,
       ...(event.payload.sessionMode !== undefined
         ? { sessionMode: event.payload.sessionMode }
+        : {}),
+      ...(event.payload.promptPrefix !== undefined
+        ? { promptPrefix: event.payload.promptPrefix }
         : {}),
     }).pipe(
       Effect.map(Option.some),

@@ -30,6 +30,8 @@ import { NativeStackScreenOptions } from "../../native/StackHeader";
 import { scopedProjectKey, scopedThreadKey } from "../../lib/scopedEntities";
 import { useThemeColor } from "../../lib/useThemeColor";
 import { useProjects, useThreadShells } from "../../state/entities";
+import { ArgoThreadListSection } from "./ArgoThreadListSection";
+import { AssistantThreadListEntry } from "./AssistantThreadListEntry";
 import { mobilePreferencesAtom } from "../../state/preferences";
 import { useThreadSearch } from "../../state/queries";
 import { useThreadListV2Enabled } from "./use-thread-list-v2-enabled";
@@ -1195,6 +1197,12 @@ function ThreadNavigationSidebarPane(
   );
   // Snoozed threads need no special case: the shelf header is a list row
   // even while collapsed.
+  const argoSection = (
+    <>
+      <AssistantThreadListEntry threads={threads} onSelectThread={handleSelectThread} />
+      <ArgoThreadListSection threads={threads} onSelectThread={handleSelectThread} />
+    </>
+  );
   const listEmpty = (
     <Text className="px-2 py-4 text-sm text-foreground-muted">
       {catalogState.isLoadingConnections
@@ -1272,6 +1280,7 @@ function ThreadNavigationSidebarPane(
                 scrollEventThrottle={16}
                 showsVerticalScrollIndicator={false}
                 style={styles.threadList}
+                ListHeaderComponent={argoSection}
                 ListEmptyComponent={listEmpty}
               />
             </GestureDetector>
@@ -1318,6 +1327,7 @@ function ThreadNavigationSidebarPane(
               scrollEventThrottle={16}
               showsVerticalScrollIndicator={false}
               style={styles.threadList}
+              ListHeaderComponent={argoSection}
               ListEmptyComponent={listEmpty}
             />
           </GestureDetector>

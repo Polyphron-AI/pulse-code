@@ -38,12 +38,15 @@ import {
   ArrowLeftIcon,
   BotIcon,
   CornerLeftUpIcon,
+  EyeIcon,
   FileSearchIcon,
   FolderIcon,
   FolderPlusIcon,
   LinkIcon,
   MessageSquareIcon,
   NetworkIcon,
+  RadarIcon,
+  SparklesIcon,
   PaletteIcon,
   SettingsIcon,
   SquarePenIcon,
@@ -75,7 +78,17 @@ import { projectEnvironment } from "../state/projects";
 import { useEnvironmentQuery } from "../state/query";
 import { sourceControlEnvironment } from "../state/sourceControl";
 import { useAtomCommand } from "../state/use-atom-command";
+import { useThreadWatchdogToggle } from "../hooks/useThreadWatchdog";
 import { useAtomQueryRunner } from "../state/use-atom-query-runner";
+import {
+  managerCycleNowLabel,
+  managerCycleNowState,
+  managerPillAction,
+} from "@t3tools/client-runtime/state/managers";
+import { openAssistantPanel } from "~/components/AssistantPanel";
+import { assistantPanelHeader } from "~/components/AssistantPanel.logic";
+import { useAssistant } from "~/hooks/useAssistants";
+import { useManagerActions, useManagerForThread } from "~/hooks/useManagers";
 import { useEnvironments, usePrimaryEnvironmentId } from "../state/environments";
 import { useProjects, useThreadShells } from "../state/entities";
 import { useThreadSearch } from "../state/queries";
@@ -580,6 +593,7 @@ function OpenCommandPaletteDialog(props: {
   const isActionsOnly = deferredQuery.startsWith(">");
   const [highlightedItemValue, setHighlightedItemValue] = useState<string | null>(null);
   const clientSettings = useClientSettings();
+  const toggleWatchdog = useThreadWatchdogToggle();
   const createProject = useAtomCommand(projectEnvironment.create, {
     reportFailure: false,
   });
@@ -598,6 +612,13 @@ function OpenCommandPaletteDialog(props: {
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const { activeDraftThread, activeThread, defaultProjectRef, handleNewThread } =
     useHandleNewThread();
+  const activeThreadManager = useManagerForThread(activeThread);
+  const assistantHeader = assistantPanelHeader(useAssistant());
+  const {
+    createManager: createArgo,
+    togglePause: toggleArgoPause,
+    cycleManagerNow: cycleArgoNow,
+  } = useManagerActions();
   const projects = useProjects();
   const projectOrder = useUiStateStore((store) => store.projectOrder);
   const threads = useThreadShells();
@@ -1477,6 +1498,74 @@ function OpenCommandPaletteDialog(props: {
     },
   });
 
+  actionItems.push({
+    kind: "action",
+    value: "action:open-assistant",
+    searchTerms: ["luna", "assistant", "ask", "panel", assistantHeader.name.toLowerCase()],
+    title: `Open ${assistantHeader.name}`,
+    description: "Ask the assistant about your projects",
+    icon: <SparklesIcon className={ITEM_ICON_CLASS} />,
+    run: async () => {
+      openAssistantPanel();
+    },
+  });
+
+  actionItems.push({
+    kind: "action",
+    value: "action:fleet-view",
+    searchTerms: ["fleet", "argo", "managers", "cycles", "overview"],
+    title: "Open fleet view",
+    description: "Every thread, filtered by Argo",
+    icon: <NetworkIcon className={ITEM_ICON_CLASS} />,
+    run: async () => {
+      await navigate({ to: "/workspace" });
+    },
+  });
+
+  if (primaryEnvironmentId !== null) {
+    actionItems.push({
+      kind: "action",
+      value: "action:new-argo",
+      searchTerms: ["argo", "manager", "orchestrate", "new"],
+      title: "New Argo",
+      description: "Create an Argo with no mission yet",
+      icon: <RadarIcon className={ITEM_ICON_CLASS} />,
+      run: async () => {
+        await createArgo(primaryEnvironmentId);
+      },
+    });
+  }
+
+  if (activeThreadManager !== null && managerPillAction(activeThreadManager) !== "open") {
+    const willPause = managerPillAction(activeThreadManager) === "pause";
+    actionItems.push({
+      kind: "action",
+      value: "action:toggle-argo",
+      searchTerms: ["argo", "pause", "resume", "manager"],
+      title: willPause ? "Pause Argo" : "Resume Argo",
+      description: activeThreadManager.name,
+      icon: <RadarIcon className={ITEM_ICON_CLASS} />,
+      run: async () => {
+        await toggleArgoPause(activeThreadManager);
+      },
+    });
+  }
+
+  if (activeThreadManager !== null && managerCycleNowState(activeThreadManager) !== "unavailable") {
+    const cycleState = managerCycleNowState(activeThreadManager);
+    actionItems.push({
+      kind: "action",
+      value: "action:cycle-argo-now",
+      searchTerms: ["argo", "cycle", "run", "now", "manager"],
+      title: cycleState === "queued" ? "Cycle Argo now (queued)" : "Cycle Argo now",
+      description: `${activeThreadManager.name} · ${managerCycleNowLabel(activeThreadManager)}`,
+      icon: <RadarIcon className={ITEM_ICON_CLASS} />,
+      run: async () => {
+        await cycleArgoNow(activeThreadManager);
+      },
+    });
+  }
+
   if (projects.length > 0) {
     const activeProjectTitle =
       projectPickerEntries.find((entry) => entry.isPreferred)?.group.displayName ??
@@ -1518,6 +1607,20 @@ function OpenCommandPaletteDialog(props: {
     const relatedThreadRef = activeThread
       ? scopeThreadRef(activeThread.environmentId, activeThread.id)
       : null;
+    if (activeThread && relatedThreadRef) {
+      const watchdogOn = activeThread.watchdog?.enabled === true;
+      actionItems.push({
+        kind: "action",
+        value: "action:toggle-watchdog",
+        searchTerms: ["watchdog", "supervise", "approve", "guard"],
+        title: watchdogOn ? "Turn watchdog off" : "Turn watchdog on",
+        description: activeThread.title,
+        icon: <EyeIcon className={ITEM_ICON_CLASS} />,
+        run: async () => {
+          await toggleWatchdog(relatedThreadRef, activeThread.watchdog, !watchdogOn);
+        },
+      });
+    }
     actionItems.push({
       kind: "action",
       value: relatedThreadRef ? "action:prepare-related-omp-thread" : "action:prepare-omp-thread",

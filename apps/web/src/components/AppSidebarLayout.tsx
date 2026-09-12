@@ -15,6 +15,7 @@ import { resolveShortcutCommand, shortcutLabelForCommand } from "../keybindings"
 import { cn, isMacPlatform } from "../lib/utils";
 import { primaryServerKeybindingsAtom } from "../state/server";
 import { useEnvironmentIdentificationMode, useLegacySidebarEnabled } from "../hooks/useSettings";
+import { AssistantPanel } from "./AssistantPanel";
 import LegacyThreadSidebar from "./LegacySidebar";
 import ThreadSidebar from "./Sidebar";
 import { SettingsSidebarNav } from "./settings/SettingsSidebarNav";
@@ -242,6 +243,7 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
         </Sidebar>
       )}
       {children}
+      <AssistantPanel />
       {!isOnOffice && <SidebarControl />}
     </SidebarProvider>
   );

@@ -1,6 +1,6 @@
 import { useAtomValue } from "@effect/atom-react";
 import { Link } from "@tanstack/react-router";
-import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
+import type { EnvironmentId, ManagerId, ThreadId } from "@t3tools/contracts";
 import {
   AlertTriangleIcon,
   ArrowUpRightIcon,
@@ -24,8 +24,10 @@ import {
   useAllEnvironmentShellsBootstrapped,
   useProjects,
   useServerConfigs,
+  useThreadActivities,
   useThreadShells,
 } from "../../state/entities";
+import { useManagers } from "~/hooks/useManagers";
 import { environmentShellSummaryAtom } from "../../state/shell";
 import { formatRelativeTimeLabel } from "../../timestampFormat";
 import { cn } from "~/lib/utils";
@@ -38,8 +40,12 @@ import { SidebarInset } from "../ui/sidebar";
 import { OmpThreadDialog } from "./OmpThreadDialog";
 import { deriveDispatchReadyOmpEntries } from "./OmpThreadDialog.logic";
 import {
+  buildWorkspaceArgoOptions,
+  buildWorkspaceCycleRows,
   buildWorkspaceOverview,
   filterWorkspaceRows,
+  filterWorkspaceRowsByArgo,
+  soleSelectedArgo,
   pageWorkspaceRows,
   workspaceCheckIn,
   workspaceProviderKey,
@@ -61,6 +67,7 @@ const FILTER_OPTIONS: ReadonlyArray<{
   { value: "attention", label: "Needs attention" },
   { value: "working", label: "Working" },
   { value: "omp", label: "OMP" },
+  { value: "argo", label: "Argo" },
 ];
 
 const STATUS_DOT_CLASS: Readonly<Record<WorkspaceThreadStatus, string>> = {
@@ -210,7 +217,7 @@ function DesktopLedger(props: {
 }) {
   return (
     <div className="overflow-x-auto rounded-2xl border border-border bg-card">
-      <table className="w-full min-w-[1180px] table-fixed border-collapse text-left">
+      <table className="w-full min-w-[1320px] table-fixed border-collapse text-left">
         <caption className="sr-only">
           Connected Pulse threads ordered by attention state, followed by last-known snapshots
         </caption>
@@ -224,6 +231,9 @@ function DesktopLedger(props: {
             </th>
             <th scope="col" className="w-48 px-4 py-3 font-medium">
               Project
+            </th>
+            <th scope="col" className="w-40 px-4 py-3 font-medium">
+              Argo
             </th>
             <th scope="col" className="w-48 px-4 py-3 font-medium">
               Provider
@@ -268,6 +278,11 @@ function DesktopLedger(props: {
               </td>
               <td className="min-w-0 px-4 py-3 align-middle">
                 <ThreadProjectLabel row={row} />
+              </td>
+              <td className="min-w-0 px-4 py-3 align-middle">
+                <span className="block truncate text-xs text-muted-foreground">
+                  {row.managerName ?? "—"}
+                </span>
               </td>
               <td className="min-w-0 px-4 py-3 align-middle">
                 <ThreadProviderLabel row={row} />
@@ -401,6 +416,10 @@ export function OrcaWorkspace(props: {
   const useDesktopLedger = useMediaQuery("2xl");
   useNowMinute();
   const [filter, setFilter] = useState<WorkspaceFilter>("all");
+  const managers = useManagers();
+  const [selectedArgoIds, setSelectedArgoIds] = useState<ReadonlySet<ManagerId>>(
+    () => new Set<ManagerId>(),
+  );
   const [query, setQuery] = useState("");
   const [visibleLimit, setVisibleLimit] = useState(LEDGER_PAGE_SIZE);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -467,13 +486,41 @@ export function OrcaWorkspace(props: {
         providerByKey,
         environmentLabelById,
         connectedEnvironmentIds,
+        managers,
       }),
-    [connectedEnvironmentIds, environmentLabelById, projects, providerByKey, threads],
+    [connectedEnvironmentIds, environmentLabelById, managers, projects, providerByKey, threads],
   );
   const filteredRows = useMemo(
-    () => filterWorkspaceRows(overview.rows, filter, query),
-    [filter, overview.rows, query],
+    () =>
+      filterWorkspaceRowsByArgo(filterWorkspaceRows(overview.rows, filter, query), selectedArgoIds),
+    [filter, overview.rows, query, selectedArgoIds],
   );
+  const argoOptions = useMemo(() => buildWorkspaceArgoOptions(managers), [managers]);
+  const soleArgo = soleSelectedArgo(argoOptions, selectedArgoIds);
+  // The cycle log only loads when a single Argo is selected, so the fleet
+  // view never pulls a transcript it is not about to render.
+  const argoCycleActivities = useThreadActivities(
+    soleArgo === null || soleArgo.threadId === null
+      ? null
+      : { environmentId: soleArgo.environmentId, threadId: soleArgo.threadId },
+  );
+  const argoCycleRows = useMemo(
+    () =>
+      buildWorkspaceCycleRows({
+        activities: argoCycleActivities,
+        threadTitleById: new Map(overview.rows.map((row) => [row.threadId, row.title] as const)),
+      }),
+    [argoCycleActivities, overview.rows],
+  );
+  const toggleArgo = (managerId: ManagerId) => {
+    setSelectedArgoIds((current) => {
+      const next = new Set(current);
+      if (next.has(managerId)) next.delete(managerId);
+      else next.add(managerId);
+      return next;
+    });
+    setVisibleLimit(LEDGER_PAGE_SIZE);
+  };
   const requestedSourceThread = useMemo(
     () =>
       props.requestedSourceRef === null
@@ -679,6 +726,39 @@ export function OrcaWorkspace(props: {
                 </div>
               </div>
 
+              {argoOptions.length > 0 ? (
+                <div
+                  className="flex flex-wrap items-center gap-1.5"
+                  role="group"
+                  aria-label="Filter by Argo"
+                >
+                  <span className="text-xs text-muted-foreground">Argo</span>
+                  {argoOptions.map((option) => (
+                    <Button
+                      key={option.managerId}
+                      size="xs"
+                      variant={selectedArgoIds.has(option.managerId) ? "secondary" : "ghost"}
+                      aria-pressed={selectedArgoIds.has(option.managerId)}
+                      onClick={() => toggleArgo(option.managerId)}
+                    >
+                      {option.name}
+                    </Button>
+                  ))}
+                  {selectedArgoIds.size > 0 ? (
+                    <Button
+                      size="xs"
+                      variant="ghost"
+                      onClick={() => {
+                        setSelectedArgoIds(new Set<ManagerId>());
+                        setVisibleLimit(LEDGER_PAGE_SIZE);
+                      }}
+                    >
+                      Clear
+                    </Button>
+                  ) : null}
+                </div>
+              ) : null}
+
               {isWorkspaceSyncing ? null : visibleRows.length > 0 ? (
                 <>
                   {useDesktopLedger ? (
@@ -710,6 +790,56 @@ export function OrcaWorkspace(props: {
                   </p>
                 </Card>
               )}
+
+              {soleArgo !== null ? (
+                <div className="overflow-x-auto rounded-2xl border border-border bg-card">
+                  <table className="w-full min-w-[720px] border-collapse text-left text-sm">
+                    <caption className="px-4 py-3 text-left text-sm font-medium">
+                      {soleArgo.name} cycles
+                    </caption>
+                    <thead className="border-y border-border bg-muted/35 text-xs font-medium text-muted-foreground">
+                      <tr>
+                        <th scope="col" className="w-40 px-4 py-2 font-medium">
+                          Time
+                        </th>
+                        <th scope="col" className="w-32 px-4 py-2 font-medium">
+                          Kind
+                        </th>
+                        <th scope="col" className="w-56 px-4 py-2 font-medium">
+                          Child
+                        </th>
+                        <th scope="col" className="px-4 py-2 font-medium">
+                          Summary
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/70">
+                      {argoCycleRows.length === 0 ? (
+                        <tr>
+                          <td colSpan={4} className="px-4 py-6 text-sm text-muted-foreground">
+                            No cycles recorded yet.
+                          </td>
+                        </tr>
+                      ) : (
+                        argoCycleRows.map((cycle) => (
+                          <tr key={cycle.key}>
+                            <td className="px-4 py-2 text-xs text-muted-foreground tabular-nums">
+                              {formatRelativeTimeLabel(cycle.occurredAt)}
+                            </td>
+                            <td className="px-4 py-2 text-xs">{cycle.kindLabel}</td>
+                            <td className="min-w-0 px-4 py-2 text-xs text-muted-foreground">
+                              <span className="block truncate">{cycle.childTitle || "—"}</span>
+                            </td>
+                            <td className="px-4 py-2 text-xs text-muted-foreground">
+                              {cycle.summary}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
             </section>
           </div>
         </main>

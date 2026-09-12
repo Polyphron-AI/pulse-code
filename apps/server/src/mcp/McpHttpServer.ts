@@ -13,6 +13,8 @@ import packageJson from "../../package.json" with { type: "json" };
 import * as McpInvocationContext from "./McpInvocationContext.ts";
 import * as McpSessionRegistry from "./McpSessionRegistry.ts";
 import * as PreviewAutomationBroker from "./PreviewAutomationBroker.ts";
+import { ManagerToolkitHandlersLive } from "./toolkits/manager/handlers.ts";
+import { ManagerToolkit } from "./toolkits/manager/tools.ts";
 import {
   PreviewSnapshotToolkitHandlersLive,
   PreviewStandardToolkitHandlersLive,
@@ -211,9 +213,17 @@ const PreviewSnapshotRegistrationLive = Layer.effectDiscard(registerPreviewSnaps
   Layer.provide(PreviewSnapshotToolkitHandlersLive),
 );
 
+// The MCP catalog is global, not per session, so the manager tools are
+// visible to every provider session. Each handler re-checks that its caller
+// is an Argo manager thread before it does anything.
+const ManagerToolkitRegistrationLive = McpServer.toolkit(ManagerToolkit).pipe(
+  Layer.provide(ManagerToolkitHandlersLive),
+);
+
 export const PreviewToolkitRegistrationLive = Layer.mergeAll(
   PreviewStandardToolkitRegistrationLive,
   PreviewSnapshotRegistrationLive,
+  ManagerToolkitRegistrationLive,
 );
 
 const McpTransportLive = McpServer.layerHttp({

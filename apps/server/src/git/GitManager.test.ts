@@ -295,6 +295,16 @@ function createTextGeneration(
       Effect.succeed({
         title: "Update workflow",
       }),
+    generateThreadHandoffSummary: () =>
+      Effect.succeed({
+        summary: "## Objective\nUpdate workflow.",
+      }),
+    generateWatchdogDecision: () =>
+      Effect.succeed({
+        decision: "escalate",
+        answer: "",
+        reason: "not configured for this test",
+      }),
     ...overrides,
   };
 
@@ -338,6 +348,28 @@ function createTextGeneration(
           (cause) =>
             new TextGenerationError({
               operation: "generateThreadTitle",
+              detail: "fake text generation failed",
+              ...(cause !== undefined ? { cause } : {}),
+            }),
+        ),
+      ),
+    generateThreadHandoffSummary: (input) =>
+      implementation.generateThreadHandoffSummary(input).pipe(
+        Effect.mapError(
+          (cause) =>
+            new TextGenerationError({
+              operation: "generateThreadHandoffSummary",
+              detail: "fake text generation failed",
+              ...(cause !== undefined ? { cause } : {}),
+            }),
+        ),
+      ),
+    generateWatchdogDecision: (input) =>
+      implementation.generateWatchdogDecision(input).pipe(
+        Effect.mapError(
+          (cause) =>
+            new TextGenerationError({
+              operation: "generateWatchdogDecision",
               detail: "fake text generation failed",
               ...(cause !== undefined ? { cause } : {}),
             }),

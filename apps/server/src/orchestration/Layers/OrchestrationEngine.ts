@@ -1,4 +1,6 @@
 import type {
+  AssistantId,
+  ManagerId,
   OrchestrationEvent,
   OrchestrationReadModel,
   ProjectId,
@@ -7,6 +9,7 @@ import type {
 } from "@t3tools/contracts";
 import { OrchestrationCommand } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
+import * as Channel from "effect/Channel";
 import * as Clock from "effect/Clock";
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
@@ -60,11 +63,12 @@ interface CommandEnvelope {
 }
 
 function commandToAggregateRef(command: OrchestrationCommand): {
-  readonly aggregateKind: "project" | "thread" | "schedule";
-  readonly aggregateId: ProjectId | ThreadId | ScheduleId;
+  readonly aggregateKind: "project" | "thread" | "schedule" | "manager" | "assistant";
+  readonly aggregateId: ProjectId | ThreadId | ScheduleId | ManagerId | AssistantId;
 } {
   switch (command.type) {
     case "project.create":
+    case "project.ensure-system":
     case "project.meta.update":
     case "project.delete":
       return {
@@ -84,6 +88,27 @@ function commandToAggregateRef(command: OrchestrationCommand): {
       return {
         aggregateKind: "schedule",
         aggregateId: command.scheduleId,
+      };
+    case "assistant.create":
+    case "assistant.update":
+    case "assistant.reset":
+    case "assistant.message":
+    case "assistant.thread.bind":
+      return {
+        aggregateKind: "assistant",
+        aggregateId: command.assistantId,
+      };
+    case "manager.create":
+    case "manager.update":
+    case "manager.pause":
+    case "manager.resume":
+    case "manager.delete":
+    case "manager.cycle-now":
+    case "manager.thread.bind":
+    case "manager.cycle.record":
+      return {
+        aggregateKind: "manager",
+        aggregateId: command.managerId,
       };
     default:
       return {
@@ -364,6 +389,12 @@ const makeOrchestrationEngine = Effect.gen(function* () {
     get streamDomainEvents(): OrchestrationEngineShape["streamDomainEvents"] {
       return Stream.fromPubSub(eventPubSub);
     },
+    // Subscribes synchronously (unlike `streamDomainEvents`, which subscribes
+    // lazily on first pull) so a caller that forks the consuming loop right
+    // after this resolves cannot miss an event published in between.
+    subscribeDomainEvents: Effect.map(PubSub.subscribe(eventPubSub), (subscription) =>
+      Stream.fromChannel(Channel.fromSubscriptionArray(subscription)),
+    ),
     // The command read model's snapshotSequence tracks the latest committed
     // event sequence (updated on the worker fiber). A plain property read is a
     // consistent, committed value — reassignment of `commandReadModel` is

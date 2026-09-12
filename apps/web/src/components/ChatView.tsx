@@ -155,6 +155,12 @@ import { IssueDetailPanel } from "./issues/IssueDetailPanel";
 import { ThreadIssueContext } from "./issues/ThreadIssueContext";
 import { RightPanelTabs, type PullRequestTabStatus } from "./RightPanelTabs";
 import { AgentsPanel } from "./AgentsPanel";
+import { AssistantsPanel } from "~/components/AssistantsPanel";
+import { WatchdogPanel } from "~/components/WatchdogPanel";
+import {
+  latestWatchdogEscalationReason,
+  watchdogMarker,
+} from "@t3tools/client-runtime/state/watchdog";
 import {
   deriveAgentPanelModel,
   foldSubagentActivities,
@@ -186,7 +192,12 @@ import { newDraftId, newMessageId, newThreadId } from "~/lib/utils";
 import { useBrowserHistoryStore } from "~/browserHistoryStore";
 import { registerFaviconProjectForThread } from "~/browserFaviconStore";
 import { getProviderModelCapabilities, resolveSelectableProvider } from "../providerModels";
-import { NO_PROVIDER_MODEL_SELECTION } from "../providerInstances";
+import {
+  NO_PROVIDER_MODEL_SELECTION,
+  applyProviderInstanceSettings,
+  deriveProviderInstanceEntries,
+  sortProviderInstanceEntries,
+} from "../providerInstances";
 import {
   useClientSettings,
   useClientSettingsHydrated,
@@ -255,10 +266,12 @@ import { environmentShell } from "../state/shell";
 import { ChatComposer, type ChatComposerHandle } from "./chat/ChatComposer";
 import { DraftHeroHeadline } from "./chat/DraftHeroHeadline";
 import { ExpandedImageDialog } from "./chat/ExpandedImageDialog";
+import { ThreadHandoffSheet } from "./chat/ThreadHandoffSheet";
 import { PullRequestThreadDialog } from "./PullRequestThreadDialog";
 import { MessagesTimeline } from "./chat/MessagesTimeline";
 import { resolveTimelineIsAtEnd } from "./chat/MessagesTimeline.logic";
 import { ChatHeader } from "./chat/ChatHeader";
+import { ArgoChildBadge, ArgoThreadHeader } from "./chat/ArgoThreadHeader";
 import { PanelLayoutControls, RightPanelMaximizeControl } from "./chat/PanelLayoutControls";
 import { type ExpandedImagePreview } from "./chat/ExpandedImagePreview";
 import { NoActiveThreadState } from "./NoActiveThreadState";
@@ -328,6 +341,8 @@ import {
   waitForStartedServerThread,
 } from "./ChatView.logic";
 import type { ThreadSyncPhase } from "../threadSync";
+import { isManagerOwnThread } from "@t3tools/client-runtime/state/managers";
+import { useManagerForThread } from "~/hooks/useManagers";
 import { useLocalStorage } from "~/hooks/useLocalStorage";
 import { useComposerHandleContext } from "../composerHandleContext";
 import { sanitizeThreadErrorMessage } from "~/rpc/transportError";
@@ -1244,6 +1259,9 @@ function ChatViewContent(props: ChatViewProps) {
     reportFailure: false,
   });
   const respondToThreadUserInput = useAtomCommand(threadEnvironment.respondToUserInput, {
+    reportFailure: false,
+  });
+  const setThreadWatchdog = useAtomCommand(threadEnvironment.setWatchdog, {
     reportFailure: false,
   });
   const revertThreadCheckpoint = useAtomCommand(threadEnvironment.revertCheckpoint, {
@@ -2223,6 +2241,12 @@ function ChatViewContent(props: ChatViewProps) {
   const selectedProvider: ProviderDriverKind = lockedProvider ?? unlockedSelectedProvider;
   const phase = derivePhase(activeThread?.session ?? null);
   const threadActivities = activeThread?.activities ?? EMPTY_ACTIVITIES;
+  const threadWatchdog = activeThread?.watchdog ?? null;
+  const watchdogState = watchdogMarker(threadWatchdog);
+  const watchdogEscalationReason = useMemo(
+    () => latestWatchdogEscalationReason(threadActivities),
+    [threadActivities],
+  );
   const workLogEntries = useMemo(() => deriveWorkLogEntries(threadActivities), [threadActivities]);
   const turnPlans = useMemo(() => deriveTurnPlans(threadActivities), [threadActivities]);
   // Native subagent fold: memoized by activity-list identity, shared by the
@@ -3307,6 +3331,51 @@ function ChatViewContent(props: ChatViewProps) {
     if (!activeThreadRef) return;
     useRightPanelStore.getState().open(activeThreadRef, "agents");
   }, [activeThreadRef]);
+  const addAssistantsSurface = useCallback(() => {
+    if (!activeThreadRef) return;
+    useRightPanelStore.getState().open(activeThreadRef, "assistants");
+  }, [activeThreadRef]);
+  const addWatchdogSurface = useCallback(() => {
+    if (!activeThreadRef) return;
+    useRightPanelStore.getState().open(activeThreadRef, "watchdog");
+  }, [activeThreadRef]);
+  // Every watchdog write goes through here. The server clears escalatedAt and
+  // the intervention count on any set, so re-sending the current values is the
+  // "Take action" gesture as well as a plain edit.
+  const saveWatchdog = useCallback(
+    (input: {
+      readonly enabled: boolean;
+      readonly rules: string;
+      readonly modelSelection: ModelSelection | null;
+    }) => {
+      if (!activeThreadRef) return;
+      void setThreadWatchdog({
+        environmentId: activeThreadRef.environmentId,
+        input: {
+          threadId: activeThreadRef.threadId,
+          enabled: input.enabled,
+          rules: input.rules,
+          modelSelection: input.modelSelection,
+        },
+      });
+    },
+    [activeThreadRef, setThreadWatchdog],
+  );
+  const toggleWatchdog = useCallback(() => {
+    saveWatchdog({
+      enabled: !(threadWatchdog?.enabled === true),
+      rules: threadWatchdog?.rules ?? "",
+      modelSelection: threadWatchdog?.modelSelection ?? null,
+    });
+  }, [saveWatchdog, threadWatchdog]);
+  const takeWatchdogAction = useCallback(() => {
+    saveWatchdog({
+      enabled: threadWatchdog?.enabled === true,
+      rules: threadWatchdog?.rules ?? "",
+      modelSelection: threadWatchdog?.modelSelection ?? null,
+    });
+    focusComposer();
+  }, [focusComposer, saveWatchdog, threadWatchdog]);
   const openIssuesWorkspace = useCallback(() => {
     if (!supportsIssues || !activeProject) return;
     void navigate({ to: "/issues", search: { projectId: activeProject.id, limit: 50 } });
@@ -4138,6 +4207,13 @@ function ChatViewContent(props: ChatViewProps) {
   // partition (same shell, same capability gate, same PR auto-settle input)
   // so the banner and the sidebar row never disagree.
   const activeThreadShell = useThreadShell(isServerThread ? activeThreadRef : null);
+  // Argo owns two kinds of thread: its own control thread, which gets the
+  // pinned header, and the children it spawns, which get a badge back to it.
+  const activeThreadManager = useManagerForThread(activeThreadShell);
+  const isArgoOwnThread =
+    activeThreadManager !== null &&
+    activeThread != null &&
+    isManagerOwnThread(activeThreadManager, { id: activeThread.id });
   const autoSettleAfterDays = useClientSettings((settings) => settings.sidebarAutoSettleAfterDays);
   const autoSettleOnMerge = useClientSettings((settings) => settings.sidebarAutoSettleOnMerge);
   const activeThreadPr = resolveDisplayedThreadPr({
@@ -4156,6 +4232,7 @@ function ChatViewContent(props: ChatViewProps) {
     supportsPullRequests && activeThreadPr !== null && threadRepository !== null;
   const supportsSettlement = serverConfig?.environment.capabilities.threadSettlement === true;
   const supportsSnooze = serverConfig?.environment.capabilities.threadSnooze === true;
+  const supportsThreadHandoff = serverConfig?.environment.capabilities.threadHandoff === true;
   const nowMinute = useNowMinute();
   const snoozeNow = new Date().toISOString();
   const activeThreadSnoozed =
@@ -4454,7 +4531,7 @@ function ChatViewContent(props: ChatViewProps) {
       ),
       title: working
         ? liveCount > 0
-          ? `${liveCount} ${liveCount === 1 ? "agent" : "agents"} working in the background`
+          ? `${liveCount} ${liveCount === 1 ? "subagent" : "subagents"} working in the background`
           : "Background work running"
         : "Monitoring in the background",
       actions: (
@@ -5927,6 +6004,23 @@ function ChatViewContent(props: ChatViewProps) {
     [activeThread, providerStatuses],
   );
 
+  const [threadHandoffRequest, setThreadHandoffRequest] = useState<{
+    instanceId: ProviderInstanceId;
+    model: string;
+  } | null>(null);
+
+  const onRequestThreadHandoff = useCallback((instanceId: ProviderInstanceId, model: string) => {
+    setThreadHandoffRequest({ instanceId, model });
+  }, []);
+
+  const threadHandoffInstanceEntries = useMemo(
+    () =>
+      sortProviderInstanceEntries(
+        applyProviderInstanceSettings(deriveProviderInstanceEntries(providerStatuses), settings),
+      ),
+    [providerStatuses, settings],
+  );
+
   const onProviderModelSelect = useCallback(
     (instanceId: ProviderInstanceId, model: string) => {
       if (!activeThread) return;
@@ -6094,6 +6188,7 @@ function ChatViewContent(props: ChatViewProps) {
       liveAgentCount={
         rightPanelOpen && activeRightPanelSurface?.kind === "agents" ? 0 : agentPanelModel.liveCount
       }
+      {...(isServerThread ? { watchdog: watchdogState, onToggleWatchdog: toggleWatchdog } : {})}
       onToggleTerminal={toggleTerminalVisibility}
       onToggleRightPanel={toggleRightPanel}
     />
@@ -6217,6 +6312,17 @@ function ChatViewContent(props: ChatViewProps) {
         model={agentPanelModel}
         environmentId={activeThreadRef?.environmentId ?? null}
         threadId={activeThreadRef?.threadId ?? null}
+      />
+    ) : activeRightPanelSurface?.kind === "assistants" ? (
+      <AssistantsPanel />
+    ) : activeRightPanelSurface?.kind === "watchdog" ? (
+      <WatchdogPanel
+        environmentId={activeThreadRef?.environmentId ?? null}
+        threadId={activeThreadRef?.threadId ?? null}
+        watchdog={threadWatchdog}
+        escalationReason={watchdogEscalationReason}
+        onSave={saveWatchdog}
+        onTakeAction={takeWatchdogAction}
       />
     ) : (activeRightPanelSurface?.kind === "files" || activeRightPanelSurface?.kind === "file") &&
       activeProject &&
@@ -6347,6 +6453,13 @@ function ChatViewContent(props: ChatViewProps) {
             </div>
             {/* Messages Wrapper */}
             <div className="relative flex min-h-0 flex-1 flex-col">
+              {activeThreadManager !== null ? (
+                isArgoOwnThread ? (
+                  <ArgoThreadHeader manager={activeThreadManager} />
+                ) : (
+                  <ArgoChildBadge manager={activeThreadManager} />
+                )
+              ) : null}
               {/* Messages — LegendList handles virtualization and scrolling internally */}
               <MessagesTimeline
                 agentPanelModel={agentPanelModel}
@@ -6535,6 +6648,8 @@ function ChatViewContent(props: ChatViewProps) {
                             }
                             onProviderModelSelect={onProviderModelSelect}
                             getModelDisabledReason={getModelDisabledReason}
+                            threadHandoffEnabled={supportsThreadHandoff}
+                            onRequestThreadHandoff={onRequestThreadHandoff}
                             toggleInteractionMode={toggleInteractionMode}
                             handleRuntimeModeChange={handleRuntimeModeChange}
                             handleInteractionModeChange={handleInteractionModeChange}
@@ -6695,6 +6810,8 @@ function ChatViewContent(props: ChatViewProps) {
           onAddPullRequest={addPullRequestSurface}
           onAddIssue={openIssuesWorkspace}
           onAddAgents={addAgentsSurface}
+          onAddAssistants={addAssistantsSurface}
+          onAddWatchdog={addWatchdogSurface}
           browserAvailable={isPreviewSupportedInRuntime()}
           terminalAvailable={activeProject !== null}
           diffAvailable={isServerThread && isGitRepo}
@@ -6736,6 +6853,8 @@ function ChatViewContent(props: ChatViewProps) {
             onAddPullRequest={addPullRequestSurface}
             onAddIssue={openIssuesWorkspace}
             onAddAgents={addAgentsSurface}
+            onAddAssistants={addAssistantsSurface}
+            onAddWatchdog={addWatchdogSurface}
             browserAvailable={isPreviewSupportedInRuntime()}
             terminalAvailable={activeProject !== null}
             diffAvailable={isServerThread && isGitRepo}
@@ -6758,6 +6877,29 @@ function ChatViewContent(props: ChatViewProps) {
           onClose={closeExpandedImage}
         />
       )}
+
+      {threadHandoffRequest && activeThread ? (
+        <ThreadHandoffSheet
+          open
+          onOpenChange={(nextOpen) => {
+            if (!nextOpen) setThreadHandoffRequest(null);
+          }}
+          environmentId={activeThread.environmentId}
+          threadId={activeThread.id}
+          instanceEntries={threadHandoffInstanceEntries}
+          fromModelSelection={activeThread.modelSelection}
+          toInstanceId={threadHandoffRequest.instanceId}
+          toModel={threadHandoffRequest.model}
+          sessionStatus={activeThread.session?.status ?? null}
+          onInterrupt={() => void onInterrupt()}
+          onSwitched={(instruction) => {
+            if (promptRef.current.trim() === instruction.trim()) {
+              promptRef.current = "";
+              clearComposerDraftContent(composerDraftTarget);
+            }
+          }}
+        />
+      ) : null}
     </div>
   );
 }

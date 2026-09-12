@@ -143,6 +143,7 @@ const makeTestBed = Effect.fn("makeTestBed")(function* (options?: {
     dispatch,
     readEvents: () => Stream.empty,
     streamDomainEvents: Stream.empty as Stream.Stream<OrchestrationEvent>,
+    subscribeDomainEvents: Effect.succeed(Stream.empty as Stream.Stream<OrchestrationEvent>),
     latestSequence: Ref.get(modelRef).pipe(Effect.map((model) => model.snapshotSequence)),
     currentReadModel: Ref.get(modelRef),
   };

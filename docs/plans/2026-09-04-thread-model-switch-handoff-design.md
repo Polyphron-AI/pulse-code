@@ -1,5 +1,7 @@
 # Mid-thread model and provider switching design
 
+> **Superseded 2026-09-10** by `2026-09-10-same-thread-model-switch-design.md`. The cross-provider outcome is now a same-thread handoff rather than a new linked thread. The digest shape, the destination-generates-the-summary rule, and the usage-limit entry point carry forward unchanged.
+
 ## Goal
 
 Let a user move a thread from one model to another at any point, including across providers, so that running out of usage on one subscription never strands the work. Same-provider changes stay in-session. Cross-provider changes settle the thread and continue it in a new, linked thread on the new provider with the conversation carried forward.

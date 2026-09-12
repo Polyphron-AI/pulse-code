@@ -1,5 +1,11 @@
 import {
+  DEFAULT_ASSISTANT_NAME,
   DEFAULT_COMPOSER_BUSY_BEHAVIOR,
+  DEFAULT_MANAGER_CHILD_RUNTIME_MODE,
+  DEFAULT_MANAGER_INTERVAL_MINUTES,
+  DEFAULT_MANAGER_MAX_CHILDREN,
+  managerThreadOrigin,
+  assistantThreadOrigin,
   DEFAULT_SCHEDULE_HANDOFF_PATH_TEMPLATE,
   DEFAULT_SCHEDULE_MAX_RUN_MINUTES,
   DEFAULT_SCHEDULE_MAX_TURN_MINUTES,
@@ -24,8 +30,12 @@ import type * as PlatformError from "effect/PlatformError";
 import { OrchestrationCommandInvariantError } from "./Errors.ts";
 import {
   listThreadsByProjectId,
+  requireActiveManager,
+  requireAssistant,
+  requireNoAssistant,
   requireActiveProjectWorkspaceRootAbsent,
   requireActiveSchedule,
+  requireManagerAbsent,
   requireProject,
   requireProjectAbsent,
   requireScheduleAbsent,
@@ -475,6 +485,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           branch: command.branch,
           worktreePath: command.worktreePath,
           ...(command.origin !== undefined ? { origin: command.origin } : {}),
+          ...(command.allowedTools !== undefined ? { allowedTools: command.allowedTools } : {}),
           createdAt: command.createdAt,
           updatedAt: command.createdAt,
         },
@@ -1065,6 +1076,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           role: "user",
           text: command.message.text,
           attachments: command.message.attachments,
+          ...(command.authoredBy !== undefined ? { authoredBy: command.authoredBy } : {}),
           turnId: null,
           streaming: false,
           createdAt: command.createdAt,
@@ -1092,6 +1104,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           busyBehavior: command.busyBehavior ?? DEFAULT_COMPOSER_BUSY_BEHAVIOR,
           ...(sourceProposedPlan !== undefined ? { sourceProposedPlan } : {}),
           ...(command.sessionMode !== undefined ? { sessionMode: command.sessionMode } : {}),
+          ...(command.promptPrefix !== undefined ? { promptPrefix: command.promptPrefix } : {}),
           createdAt: command.createdAt,
         },
       };
@@ -1206,6 +1219,98 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           requestId: command.requestId,
           answers: command.answers,
           createdAt: command.createdAt,
+        },
+      };
+    }
+
+    case "thread.watchdog.set": {
+      yield* requireThread({
+        readModel,
+        command,
+        threadId: command.threadId,
+      });
+      const occurredAt = yield* nowIso;
+      return {
+        ...(yield* withEventBase({
+          aggregateKind: "thread",
+          aggregateId: command.threadId,
+          occurredAt,
+          commandId: command.commandId,
+        })),
+        type: "thread.watchdog-updated",
+        payload: {
+          threadId: command.threadId,
+          watchdog: {
+            enabled: command.enabled,
+            rules: command.rules,
+            modelSelection: command.modelSelection,
+            escalatedAt: null,
+            interventions: 0,
+          },
+        },
+      };
+    }
+
+    case "thread.watchdog.record-intervention": {
+      const thread = yield* requireThread({
+        readModel,
+        command,
+        threadId: command.threadId,
+      });
+      const occurredAt = yield* nowIso;
+      const currentWatchdog = thread.watchdog ?? {
+        enabled: true,
+        rules: "",
+        modelSelection: null,
+        escalatedAt: null,
+        interventions: 0,
+      };
+      return {
+        ...(yield* withEventBase({
+          aggregateKind: "thread",
+          aggregateId: command.threadId,
+          occurredAt,
+          commandId: command.commandId,
+        })),
+        type: "thread.watchdog-updated",
+        payload: {
+          threadId: command.threadId,
+          watchdog: {
+            ...currentWatchdog,
+            interventions: currentWatchdog.interventions + 1,
+          },
+        },
+      };
+    }
+
+    case "thread.watchdog.escalate": {
+      const thread = yield* requireThread({
+        readModel,
+        command,
+        threadId: command.threadId,
+      });
+      const occurredAt = yield* nowIso;
+      const currentWatchdog = thread.watchdog ?? {
+        enabled: true,
+        rules: "",
+        modelSelection: null,
+        escalatedAt: null,
+        interventions: 0,
+      };
+      return {
+        ...(yield* withEventBase({
+          aggregateKind: "thread",
+          aggregateId: command.threadId,
+          occurredAt,
+          commandId: command.commandId,
+        })),
+        type: "thread.watchdog-updated",
+        payload: {
+          threadId: command.threadId,
+          watchdog: {
+            ...currentWatchdog,
+            escalatedAt: occurredAt,
+          },
         },
       };
     }
@@ -1500,6 +1605,509 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         },
       };
       return [unsettledEvent, activityAppendedEvent];
+    }
+
+    case "project.ensure-system": {
+      // One system project per environment, rooted at Pulse Code home. When
+      // one already exists we reconcile it instead of creating a second, so
+      // the caller may dispatch this on every boot.
+      const existingSystemProject = readModel.projects.find(
+        (project) => project.system === true && project.deletedAt === null,
+      );
+      if (existingSystemProject !== undefined) {
+        const occurredAt = yield* nowIso;
+        return {
+          ...(yield* withEventBase({
+            aggregateKind: "project",
+            aggregateId: existingSystemProject.id,
+            occurredAt,
+            commandId: command.commandId,
+          })),
+          type: "project.meta-updated",
+          payload: {
+            projectId: existingSystemProject.id,
+            title: command.title,
+            workspaceRoot: command.workspaceRoot,
+            system: true,
+            updatedAt: occurredAt,
+          },
+        };
+      }
+      yield* requireProjectAbsent({
+        readModel,
+        command,
+        projectId: command.projectId,
+      });
+      yield* requireActiveProjectWorkspaceRootAbsent({
+        readModel,
+        command,
+        workspaceRoot: command.workspaceRoot,
+        exceptProjectId: command.projectId,
+      });
+      return {
+        ...(yield* withEventBase({
+          aggregateKind: "project",
+          aggregateId: command.projectId,
+          occurredAt: command.createdAt,
+          commandId: command.commandId,
+        })),
+        type: "project.created",
+        payload: {
+          projectId: command.projectId,
+          title: command.title,
+          workspaceRoot: command.workspaceRoot,
+          defaultModelSelection: null,
+          faviconPath: null,
+          scripts: [],
+          system: true,
+          createdAt: command.createdAt,
+          updatedAt: command.createdAt,
+        },
+      };
+    }
+
+    case "manager.create": {
+      yield* requireManagerAbsent({
+        readModel,
+        command,
+        managerId: command.managerId,
+      });
+      for (const projectId of scheduleScopeProjectIds(command.scope)) {
+        yield* requireProject({ readModel, command, projectId });
+      }
+      return {
+        ...(yield* withEventBase({
+          aggregateKind: "manager",
+          aggregateId: command.managerId,
+          occurredAt: command.createdAt,
+          commandId: command.commandId,
+        })),
+        type: "manager.created",
+        payload: {
+          managerId: command.managerId,
+          name: command.name,
+          scope: command.scope,
+          mission: command.mission ?? "",
+          childModelSelection: command.childModelSelection ?? null,
+          childRuntimeMode: command.childRuntimeMode ?? DEFAULT_MANAGER_CHILD_RUNTIME_MODE,
+          maxChildren: command.maxChildren ?? DEFAULT_MANAGER_MAX_CHILDREN,
+          intervalMinutes: command.intervalMinutes ?? DEFAULT_MANAGER_INTERVAL_MINUTES,
+          createdAt: command.createdAt,
+          updatedAt: command.createdAt,
+        },
+      };
+    }
+
+    case "manager.update": {
+      yield* requireActiveManager({
+        readModel,
+        command,
+        managerId: command.managerId,
+      });
+      // Branded non-empty strings do not survive internally built command
+      // literals, so the name check lives here too.
+      if (command.name !== undefined && command.name.trim().length === 0) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: "name must not be empty",
+        });
+      }
+      if (command.scope !== undefined) {
+        for (const projectId of scheduleScopeProjectIds(command.scope)) {
+          yield* requireProject({ readModel, command, projectId });
+        }
+      }
+      const occurredAt = yield* nowIso;
+      return {
+        ...(yield* withEventBase({
+          aggregateKind: "manager",
+          aggregateId: command.managerId,
+          occurredAt,
+          commandId: command.commandId,
+        })),
+        type: "manager.updated",
+        payload: {
+          managerId: command.managerId,
+          ...(command.name !== undefined ? { name: command.name } : {}),
+          ...(command.scope !== undefined ? { scope: command.scope } : {}),
+          ...(command.mission !== undefined ? { mission: command.mission } : {}),
+          ...(command.childModelSelection !== undefined
+            ? { childModelSelection: command.childModelSelection }
+            : {}),
+          ...(command.childRuntimeMode !== undefined
+            ? { childRuntimeMode: command.childRuntimeMode }
+            : {}),
+          ...(command.maxChildren !== undefined ? { maxChildren: command.maxChildren } : {}),
+          ...(command.intervalMinutes !== undefined
+            ? { intervalMinutes: command.intervalMinutes }
+            : {}),
+          updatedAt: occurredAt,
+        },
+      };
+    }
+
+    case "manager.pause": {
+      const manager = yield* requireActiveManager({
+        readModel,
+        command,
+        managerId: command.managerId,
+      });
+      if (manager.pausedAt !== null) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: `Manager '${command.managerId}' is already paused.`,
+        });
+      }
+      const occurredAt = yield* nowIso;
+      return {
+        ...(yield* withEventBase({
+          aggregateKind: "manager",
+          aggregateId: command.managerId,
+          occurredAt,
+          commandId: command.commandId,
+        })),
+        type: "manager.paused",
+        payload: {
+          managerId: command.managerId,
+          pausedAt: occurredAt,
+          updatedAt: occurredAt,
+        },
+      };
+    }
+
+    case "manager.resume": {
+      const manager = yield* requireActiveManager({
+        readModel,
+        command,
+        managerId: command.managerId,
+      });
+      if (manager.pausedAt === null) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: `Manager '${command.managerId}' is not paused and cannot be resumed.`,
+        });
+      }
+      const occurredAt = yield* nowIso;
+      return {
+        ...(yield* withEventBase({
+          aggregateKind: "manager",
+          aggregateId: command.managerId,
+          occurredAt,
+          commandId: command.commandId,
+        })),
+        type: "manager.resumed",
+        payload: {
+          managerId: command.managerId,
+          updatedAt: occurredAt,
+        },
+      };
+    }
+
+    case "manager.delete": {
+      const managerToDelete = yield* requireActiveManager({
+        readModel,
+        command,
+        managerId: command.managerId,
+      });
+      // keepChildren leaves the children as ordinary threads; otherwise every
+      // live child is archived first, which also ends this recursion. The
+      // manager's own thread always goes: it is the deleted record's control
+      // surface, it lives in the hidden system project, and nothing left in
+      // the UI could reach it to archive it later.
+      const origin = managerThreadOrigin(command.managerId);
+      const liveManagerThreads = readModel.threads.filter(
+        (thread) =>
+          thread.origin === origin && thread.archivedAt === null && thread.deletedAt === null,
+      );
+      const liveChildren =
+        command.keepChildren === true
+          ? liveManagerThreads.filter((thread) => thread.id === managerToDelete.threadId)
+          : liveManagerThreads;
+      if (liveChildren.length > 0) {
+        return yield* decideCommandSequence({
+          readModel,
+          commands: [
+            ...liveChildren.map(
+              (thread): Extract<OrchestrationCommand, { type: "thread.archive" }> => ({
+                type: "thread.archive",
+                commandId: command.commandId,
+                threadId: thread.id,
+              }),
+            ),
+            command,
+          ],
+        });
+      }
+      const occurredAt = yield* nowIso;
+      return {
+        ...(yield* withEventBase({
+          aggregateKind: "manager",
+          aggregateId: command.managerId,
+          occurredAt,
+          commandId: command.commandId,
+        })),
+        type: "manager.deleted",
+        payload: {
+          managerId: command.managerId,
+          keepChildren: command.keepChildren,
+          deletedAt: occurredAt,
+        },
+      };
+    }
+
+    case "manager.cycle-now": {
+      yield* requireActiveManager({
+        readModel,
+        command,
+        managerId: command.managerId,
+      });
+      const occurredAt = yield* nowIso;
+      return {
+        ...(yield* withEventBase({
+          aggregateKind: "manager",
+          aggregateId: command.managerId,
+          occurredAt,
+          commandId: command.commandId,
+        })),
+        type: "manager.cycle-requested",
+        payload: {
+          managerId: command.managerId,
+          requestedAt: occurredAt,
+          updatedAt: occurredAt,
+        },
+      };
+    }
+
+    case "manager.thread.bind": {
+      yield* requireActiveManager({
+        readModel,
+        command,
+        managerId: command.managerId,
+      });
+      yield* requireThread({
+        readModel,
+        command,
+        threadId: command.threadId,
+      });
+      const occurredAt = yield* nowIso;
+      return {
+        ...(yield* withEventBase({
+          aggregateKind: "manager",
+          aggregateId: command.managerId,
+          occurredAt,
+          commandId: command.commandId,
+        })),
+        type: "manager.thread-bound",
+        payload: {
+          managerId: command.managerId,
+          threadId: command.threadId,
+          updatedAt: occurredAt,
+        },
+      };
+    }
+
+    case "manager.cycle.record": {
+      yield* requireActiveManager({
+        readModel,
+        command,
+        managerId: command.managerId,
+      });
+      return {
+        ...(yield* withEventBase({
+          aggregateKind: "manager",
+          aggregateId: command.managerId,
+          occurredAt: command.occurredAt,
+          commandId: command.commandId,
+        })),
+        type: "manager.cycle-recorded",
+        payload: {
+          managerId: command.managerId,
+          occurredAt: command.occurredAt,
+          updatedAt: command.occurredAt,
+        },
+      };
+    }
+
+    case "assistant.create": {
+      // One assistant per environment for now; the panel has room for one.
+      yield* requireNoAssistant({
+        readModel,
+        command,
+        assistantId: command.assistantId,
+      });
+      const name = (command.name ?? DEFAULT_ASSISTANT_NAME).trim();
+      if (name.length === 0) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: "name must not be empty",
+        });
+      }
+      return {
+        ...(yield* withEventBase({
+          aggregateKind: "assistant",
+          aggregateId: command.assistantId,
+          occurredAt: command.createdAt,
+          commandId: command.commandId,
+        })),
+        type: "assistant.created",
+        payload: {
+          assistantId: command.assistantId,
+          name,
+          avatar: command.avatar ?? null,
+          modelSelection: command.modelSelection ?? null,
+          instructions: command.instructions ?? "",
+          createdAt: command.createdAt,
+          updatedAt: command.createdAt,
+        },
+      };
+    }
+
+    case "assistant.update": {
+      yield* requireAssistant({
+        readModel,
+        command,
+        assistantId: command.assistantId,
+      });
+      if (command.name !== undefined && command.name.trim().length === 0) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: "name must not be empty",
+        });
+      }
+      const occurredAt = yield* nowIso;
+      return {
+        ...(yield* withEventBase({
+          aggregateKind: "assistant",
+          aggregateId: command.assistantId,
+          occurredAt,
+          commandId: command.commandId,
+        })),
+        type: "assistant.updated",
+        payload: {
+          assistantId: command.assistantId,
+          ...(command.name !== undefined ? { name: command.name.trim() } : {}),
+          ...(command.avatar !== undefined ? { avatar: command.avatar } : {}),
+          ...(command.modelSelection !== undefined
+            ? { modelSelection: command.modelSelection }
+            : {}),
+          ...(command.instructions !== undefined ? { instructions: command.instructions } : {}),
+          updatedAt: occurredAt,
+        },
+      };
+    }
+
+    case "assistant.reset": {
+      const assistant = yield* requireAssistant({
+        readModel,
+        command,
+        assistantId: command.assistantId,
+      });
+      // Reset keeps the history readable: the old thread is archived, not
+      // deleted, and the next message opens a fresh one.
+      const previous = assistant.threadId;
+      const liveThread =
+        previous === null
+          ? undefined
+          : readModel.threads.find(
+              (thread) =>
+                thread.id === previous && thread.archivedAt === null && thread.deletedAt === null,
+            );
+      if (liveThread !== undefined) {
+        return yield* decideCommandSequence({
+          readModel,
+          commands: [
+            {
+              type: "thread.archive",
+              commandId: command.commandId,
+              threadId: liveThread.id,
+            },
+            command,
+          ],
+        });
+      }
+      const occurredAt = yield* nowIso;
+      return {
+        ...(yield* withEventBase({
+          aggregateKind: "assistant",
+          aggregateId: command.assistantId,
+          occurredAt,
+          commandId: command.commandId,
+        })),
+        type: "assistant.reset",
+        payload: {
+          assistantId: command.assistantId,
+          previousThreadId: previous,
+          updatedAt: occurredAt,
+        },
+      };
+    }
+
+    case "assistant.message": {
+      yield* requireAssistant({
+        readModel,
+        command,
+        assistantId: command.assistantId,
+      });
+      if (command.text.trim().length === 0) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: "text must not be empty",
+        });
+      }
+      // The AssistantReactor turns this into the thread bootstrap and the
+      // turn: only the server knows the system project root and the
+      // environment's default model.
+      const occurredAt = yield* nowIso;
+      return {
+        ...(yield* withEventBase({
+          aggregateKind: "assistant",
+          aggregateId: command.assistantId,
+          occurredAt,
+          commandId: command.commandId,
+        })),
+        type: "assistant.message-requested",
+        payload: {
+          assistantId: command.assistantId,
+          text: command.text,
+          requestedAt: occurredAt,
+        },
+      };
+    }
+
+    case "assistant.thread.bind": {
+      yield* requireAssistant({
+        readModel,
+        command,
+        assistantId: command.assistantId,
+      });
+      const boundThread = yield* requireThread({
+        readModel,
+        command,
+        threadId: command.threadId,
+      });
+      // A bind must point at a thread the assistant reactor created, or the
+      // origin check every other assistant surface relies on is meaningless.
+      if (boundThread.origin !== assistantThreadOrigin(command.assistantId)) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: `Thread '${command.threadId}' does not carry origin '${assistantThreadOrigin(command.assistantId)}'.`,
+        });
+      }
+      const occurredAt = yield* nowIso;
+      return {
+        ...(yield* withEventBase({
+          aggregateKind: "assistant",
+          aggregateId: command.assistantId,
+          occurredAt,
+          commandId: command.commandId,
+        })),
+        type: "assistant.thread-bound",
+        payload: {
+          assistantId: command.assistantId,
+          threadId: command.threadId,
+          updatedAt: occurredAt,
+        },
+      };
     }
 
     case "project.schedule.create": {

@@ -82,10 +82,13 @@ export function createEnvironmentProjectAtoms(input: {
   }).pipe(Atom.withLabel("environment-project-refs"));
 
   let previousProjects: ReadonlyArray<EnvironmentProject> = [];
+  // The single project list every surface renders. System projects (Argo's
+  // environment-local workspace) are hidden here, and only here, so threads
+  // inside them still resolve their project through the index when opened.
   const projectsAtom = Atom.make((get) => {
     const next = get(projectRefsAtom).flatMap((ref) => {
       const project = get(projectAtomFamily(projectKey(ref)));
-      return project === null ? [] : [project];
+      return project === null || project.system === true ? [] : [project];
     });
     if (arrayElementsEqual(previousProjects, next)) {
       return previousProjects;

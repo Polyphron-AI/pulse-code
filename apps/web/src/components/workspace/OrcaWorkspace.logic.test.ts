@@ -1,6 +1,9 @@
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/models";
+import type { EnvironmentManager } from "@t3tools/client-runtime/state/managers";
 import {
   EnvironmentId,
+  ManagerId,
+  managerThreadOrigin,
   ProjectId,
   ProviderDriverKind,
   ProviderInstanceId,
@@ -10,8 +13,12 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
   buildSeniorCrewPrompt,
+  buildWorkspaceArgoOptions,
+  buildWorkspaceCycleRows,
   buildWorkspaceOverview,
   filterWorkspaceRows,
+  filterWorkspaceRowsByArgo,
+  soleSelectedArgo,
   pageWorkspaceRows,
   resolveWorkspaceThreadStatus,
   summarizeWorkspaceThreads,
@@ -308,7 +315,7 @@ describe("workspace summaries and crew brief", () => {
       failed: 0,
       ready: 0,
     });
-    expect(workspaceCheckIn({ ...counts, omp: 0 })).toBe(
+    expect(workspaceCheckIn({ ...counts, omp: 0, argo: 0 })).toBe(
       "1 thread needs your attention. 1 is moving.",
     );
   });
@@ -327,5 +334,118 @@ describe("workspace summaries and crew brief", () => {
     expect(prompt).toContain("Effectiveness");
     expect(prompt).toContain("reference only");
     expect(prompt).toContain("Make the workspace easier to scan.");
+  });
+});
+
+describe("fleet view Argo column", () => {
+  const managerId = ManagerId.make("manager-1");
+  const otherManagerId = ManagerId.make("manager-2");
+  const managerThreadId = ThreadId.make("thread-argo");
+
+  function argo(overrides: Partial<EnvironmentManager> = {}): EnvironmentManager {
+    return {
+      environmentId,
+      id: managerId,
+      name: "Nightly triage",
+      scope: { kind: "environment", projectIds: [] },
+      mission: "Keep the queue empty.",
+      childModelSelection: null,
+      childRuntimeMode: "auto-accept-edits",
+      maxChildren: 8,
+      intervalMinutes: 30,
+      threadId: managerThreadId,
+      pausedAt: null,
+      lastCycleAt: null,
+      createdAt: "2026-09-01T08:00:00.000Z",
+      updatedAt: "2026-09-01T08:00:00.000Z",
+      deletedAt: null,
+      ...overrides,
+    } as EnvironmentManager;
+  }
+
+  function overview(managers: ReadonlyArray<EnvironmentManager>) {
+    return buildWorkspaceOverview({
+      threads: [
+        thread("thread-argo", { origin: managerThreadOrigin(managerId) }),
+        thread("thread-child", { origin: managerThreadOrigin(managerId) }),
+        thread("thread-plain"),
+      ],
+      projects: [],
+      providerByKey: new Map(),
+      environmentLabelById: new Map([[environmentId, "Local"]]),
+      connectedEnvironmentIds,
+      managers,
+    });
+  }
+
+  it("names the owning Argo on every thread it owns, and counts them", () => {
+    const result = overview([argo()]);
+    const byId = new Map(result.rows.map((row) => [row.threadId, row] as const));
+
+    expect(byId.get(ThreadId.make("thread-child"))?.managerName).toBe("Nightly triage");
+    expect(byId.get(ThreadId.make("thread-argo"))?.managerId).toBe(managerId);
+    expect(byId.get(ThreadId.make("thread-plain"))?.managerName).toBeNull();
+    expect(result.counts.argo).toBe(2);
+  });
+
+  it("filters to Argo work, and then to a chosen Argo", () => {
+    const result = overview([argo()]);
+
+    expect(filterWorkspaceRows(result.rows, "argo", "").map((row) => row.threadId)).toEqual([
+      ThreadId.make("thread-argo"),
+      ThreadId.make("thread-child"),
+    ]);
+    expect(filterWorkspaceRowsByArgo(result.rows, new Set()).length).toBe(3);
+    expect(filterWorkspaceRowsByArgo(result.rows, new Set([otherManagerId])).length).toBe(0);
+    expect(filterWorkspaceRowsByArgo(result.rows, new Set([managerId])).length).toBe(2);
+    expect(filterWorkspaceRows(result.rows, "all", "nightly").length).toBe(2);
+  });
+
+  it("offers only live Argos, and opens the cycle log for exactly one", () => {
+    const options = buildWorkspaceArgoOptions([
+      argo({ id: otherManagerId, name: "Alpha" }),
+      argo(),
+      argo({
+        id: ManagerId.make("manager-3"),
+        name: "Gone",
+        deletedAt: "2026-09-02T00:00:00.000Z",
+      }),
+    ]);
+
+    expect(options.map((option) => option.name)).toEqual(["Alpha", "Nightly triage"]);
+    expect(soleSelectedArgo(options, new Set())).toBeNull();
+    expect(soleSelectedArgo(options, new Set([managerId, otherManagerId]))).toBeNull();
+    expect(soleSelectedArgo(options, new Set([managerId]))?.name).toBe("Nightly triage");
+  });
+
+  it("renders the cycle log newest first and names children by title", () => {
+    const rows = buildWorkspaceCycleRows({
+      activities: [
+        {
+          kind: "manager.cycle",
+          payload: {
+            kind: "spawned",
+            threadId: "thread-child",
+            summary: "Started #42",
+            occurredAt: "2026-09-01T10:00:00.000Z",
+          },
+        },
+        {
+          kind: "manager.cycle",
+          payload: {
+            kind: "idle",
+            summary: "Nothing to do",
+            occurredAt: "2026-09-01T11:00:00.000Z",
+          },
+        },
+        { kind: "message", payload: { kind: "spawned" } },
+      ],
+      threadTitleById: new Map([[ThreadId.make("thread-child"), "Fix the flake"]]),
+    });
+
+    expect(rows.map((row) => row.kindLabel)).toEqual(["Idle", "Spawned"]);
+    expect(rows[0]?.childTitle).toBe("");
+    expect(rows[1]?.childTitle).toBe("Fix the flake");
+    expect(rows[1]?.summary).toBe("Started #42");
   });
 });

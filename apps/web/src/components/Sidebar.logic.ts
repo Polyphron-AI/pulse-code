@@ -2,14 +2,28 @@ import * as React from "react";
 import type {
   ContextMenuItem,
   EnvironmentId,
+  ManagerId,
+  ManagerState,
   OrchestrationSchedule,
   ProjectId,
   ThreadId,
 } from "@t3tools/contracts";
+import {
+  managerChildren,
+  managerCycleNowLabel,
+  managerCycleNowState,
+  managerPillAction,
+  managerState,
+  managerStateLabel,
+  type EnvironmentManager,
+  type ManagerCycleNowState,
+  type ManagerPillAction,
+} from "@t3tools/client-runtime/state/managers";
 import type {
   EnvironmentProject,
   EnvironmentThreadShell,
 } from "@t3tools/client-runtime/state/models";
+import { watchdogMarker, type WatchdogMarker } from "@t3tools/client-runtime/state/watchdog";
 import type { SidebarProjectSortOrder, SidebarThreadSortOrder } from "@t3tools/contracts/settings";
 import {
   getThreadSortTimestamp,
@@ -79,6 +93,16 @@ export interface SidebarScheduleRow {
   readonly statusLabel: string;
   readonly paused: boolean;
   readonly updatedAt: string;
+}
+
+/**
+ * Watchdog state for a sidebar thread row. Kept next to the scheduled marker
+ * so both row decorations read from one place; the drawing lives in Sidebar.
+ */
+export function sidebarWatchdogMarker(
+  thread: Pick<EnvironmentThreadShell, "watchdog">,
+): WatchdogMarker {
+  return watchdogMarker(thread.watchdog);
 }
 
 export function isScheduledSidebarThread(thread: Pick<EnvironmentThreadShell, "origin">): boolean {
@@ -240,6 +264,96 @@ export function buildSidebarScheduleRows(input: {
       Date.parse(right.updatedAt) - Date.parse(left.updatedAt) ||
       left.projectLabel.localeCompare(right.projectLabel),
   );
+}
+
+/**
+ * One Argo row in the sidebar, with its live children nested underneath. The
+ * pill is the pause toggle, so the row carries the action it performs rather
+ * than making the component re-derive it.
+ */
+export interface SidebarManagerChildRow {
+  readonly key: string;
+  readonly environmentId: EnvironmentId;
+  readonly threadId: ThreadId;
+  readonly title: string;
+}
+
+export interface SidebarManagerRow {
+  readonly key: string;
+  readonly environmentId: EnvironmentId;
+  readonly managerId: ManagerId;
+  readonly threadId: ThreadId | null;
+  readonly name: string;
+  readonly state: ManagerState;
+  readonly stateLabel: string;
+  readonly pillAction: ManagerPillAction;
+  /** Paused Argos start collapsed: nothing is moving under them. */
+  readonly defaultExpanded: boolean;
+  /** Manual cycles are only offered to a watching Argo, and only one at a time. */
+  readonly cycleNowState: ManagerCycleNowState;
+  readonly cycleNowLabel: string;
+  readonly children: ReadonlyArray<SidebarManagerChildRow>;
+}
+
+export function buildSidebarManagerRows(input: {
+  readonly managers: ReadonlyArray<EnvironmentManager>;
+  readonly threads: ReadonlyArray<EnvironmentThreadShell>;
+}): ReadonlyArray<SidebarManagerRow> {
+  const rows = input.managers
+    .filter((manager) => manager.deletedAt === null)
+    .map((manager) => {
+      const state = managerState(manager);
+      const environmentThreads = input.threads.filter(
+        (thread) => thread.environmentId === manager.environmentId,
+      );
+      return {
+        key: `${manager.environmentId}:${manager.id}`,
+        environmentId: manager.environmentId,
+        managerId: manager.id,
+        threadId: manager.threadId,
+        name: manager.name,
+        state,
+        stateLabel: managerStateLabel(manager),
+        pillAction: managerPillAction(manager),
+        defaultExpanded: state !== "paused",
+        cycleNowState: managerCycleNowState(manager),
+        cycleNowLabel: managerCycleNowLabel(manager),
+        children: managerChildren(environmentThreads, manager.id, manager.threadId).map(
+          (thread) => ({
+            key: `${thread.environmentId}:${thread.id}`,
+            environmentId: thread.environmentId,
+            threadId: thread.id,
+            title: thread.title.trim() || "Untitled",
+          }),
+        ),
+      } satisfies SidebarManagerRow;
+    });
+  return rows.toSorted((left, right) => left.name.localeCompare(right.name));
+}
+
+export type SidebarManagerMenuAction = "cycle-now" | "pause" | "resume" | "delete";
+
+/**
+ * Row context menu. "Cycle now" only runs for a watching Argo, and reads
+ * "Cycle queued" once one has been asked for and not yet run.
+ */
+export function buildSidebarManagerContextMenuItems(
+  row: Pick<SidebarManagerRow, "state" | "cycleNowState" | "cycleNowLabel">,
+): readonly ContextMenuItem<SidebarManagerMenuAction>[] {
+  const items: ContextMenuItem<SidebarManagerMenuAction>[] = [
+    {
+      id: "cycle-now",
+      label: row.cycleNowLabel,
+      disabled: row.cycleNowState !== "available",
+    },
+  ];
+  if (row.state === "paused") {
+    items.push({ id: "resume", label: "Resume" });
+  } else {
+    items.push({ id: "pause", label: "Pause", disabled: row.state === "no-mission" });
+  }
+  items.push({ id: "delete", label: "Delete", destructive: true });
+  return items;
 }
 
 export function searchSidebarScheduleRows(

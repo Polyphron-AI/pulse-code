@@ -22,6 +22,7 @@ import {
   ThreadTurnDiffCompletedPayload as ContractsThreadTurnDiffCompletedPayloadSchema,
   ThreadRevertedPayload as ContractsThreadRevertedPayloadSchema,
   ThreadActivityAppendedPayload as ContractsThreadActivityAppendedPayloadSchema,
+  ThreadWatchdogUpdatedPayload as ContractsThreadWatchdogUpdatedPayloadSchema,
   ThreadTurnStartRequestedPayload as ContractsThreadTurnStartRequestedPayloadSchema,
   ThreadTurnInterruptRequestedPayload as ContractsThreadTurnInterruptRequestedPayloadSchema,
   ThreadApprovalResponseRequestedPayload as ContractsThreadApprovalResponseRequestedPayloadSchema,
@@ -37,6 +38,19 @@ import {
   ScheduleOccurrenceCompletedPayload as ContractsScheduleOccurrenceCompletedPayloadSchema,
   ScheduleOccurrenceFailedPayload as ContractsScheduleOccurrenceFailedPayloadSchema,
   ScheduleOccurrenceSkippedPayload as ContractsScheduleOccurrenceSkippedPayloadSchema,
+  ManagerCreatedPayload as ContractsManagerCreatedPayloadSchema,
+  ManagerUpdatedPayload as ContractsManagerUpdatedPayloadSchema,
+  ManagerPausedPayload as ContractsManagerPausedPayloadSchema,
+  ManagerResumedPayload as ContractsManagerResumedPayloadSchema,
+  ManagerDeletedPayload as ContractsManagerDeletedPayloadSchema,
+  ManagerThreadBoundPayload as ContractsManagerThreadBoundPayloadSchema,
+  ManagerCycleRecordedPayload as ContractsManagerCycleRecordedPayloadSchema,
+  ManagerCycleRequestedPayload as ContractsManagerCycleRequestedPayloadSchema,
+  AssistantCreatedPayload as ContractsAssistantCreatedPayloadSchema,
+  AssistantUpdatedPayload as ContractsAssistantUpdatedPayloadSchema,
+  AssistantResetPayload as ContractsAssistantResetPayloadSchema,
+  AssistantThreadBoundPayload as ContractsAssistantThreadBoundPayloadSchema,
+  AssistantMessageRequestedPayload as ContractsAssistantMessageRequestedPayloadSchema,
 } from "@t3tools/contracts";
 
 // Server-internal alias surface, backed by contract schemas as the source of truth.
@@ -65,6 +79,7 @@ export const ThreadSessionSetPayload = ContractsThreadSessionSetPayloadSchema;
 export const ThreadTurnDiffCompletedPayload = ContractsThreadTurnDiffCompletedPayloadSchema;
 export const ThreadRevertedPayload = ContractsThreadRevertedPayloadSchema;
 export const ThreadActivityAppendedPayload = ContractsThreadActivityAppendedPayloadSchema;
+export const ThreadWatchdogUpdatedPayload = ContractsThreadWatchdogUpdatedPayloadSchema;
 
 export const ThreadTurnStartRequestedPayload = ContractsThreadTurnStartRequestedPayloadSchema;
 export const ThreadTurnInterruptRequestedPayload =
@@ -85,3 +100,16 @@ export const ScheduleOccurrenceStartedPayload = ContractsScheduleOccurrenceStart
 export const ScheduleOccurrenceCompletedPayload = ContractsScheduleOccurrenceCompletedPayloadSchema;
 export const ScheduleOccurrenceFailedPayload = ContractsScheduleOccurrenceFailedPayloadSchema;
 export const ScheduleOccurrenceSkippedPayload = ContractsScheduleOccurrenceSkippedPayloadSchema;
+export const ManagerCreatedPayload = ContractsManagerCreatedPayloadSchema;
+export const ManagerUpdatedPayload = ContractsManagerUpdatedPayloadSchema;
+export const ManagerPausedPayload = ContractsManagerPausedPayloadSchema;
+export const ManagerResumedPayload = ContractsManagerResumedPayloadSchema;
+export const ManagerDeletedPayload = ContractsManagerDeletedPayloadSchema;
+export const ManagerThreadBoundPayload = ContractsManagerThreadBoundPayloadSchema;
+export const ManagerCycleRecordedPayload = ContractsManagerCycleRecordedPayloadSchema;
+export const ManagerCycleRequestedPayload = ContractsManagerCycleRequestedPayloadSchema;
+export const AssistantCreatedPayload = ContractsAssistantCreatedPayloadSchema;
+export const AssistantUpdatedPayload = ContractsAssistantUpdatedPayloadSchema;
+export const AssistantResetPayload = ContractsAssistantResetPayloadSchema;
+export const AssistantThreadBoundPayload = ContractsAssistantThreadBoundPayloadSchema;
+export const AssistantMessageRequestedPayload = ContractsAssistantMessageRequestedPayloadSchema;

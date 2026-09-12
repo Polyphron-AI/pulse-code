@@ -25,6 +25,7 @@ import {
   ModelSelection,
   ProjectId,
   ThreadId,
+  ThreadWatchdog,
 } from "@t3tools/contracts";
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
@@ -77,6 +78,8 @@ const ProjectionProjectDbRowSchema = ProjectionProject.mapFields(
   Struct.assign({
     defaultModelSelection: Schema.NullOr(Schema.fromJsonString(ModelSelection)),
     scripts: Schema.fromJsonString(Schema.Array(ProjectScript)),
+    // SQLite has no boolean; the column stores 0/1.
+    system: Schema.optional(Schema.Number),
   }),
 );
 const ProjectionThreadMessageDbRowSchema = ProjectionThreadMessage.mapFields(
@@ -89,6 +92,8 @@ const ProjectionThreadProposedPlanDbRowSchema = ProjectionThreadProposedPlan;
 const ProjectionThreadDbRowSchema = ProjectionThread.mapFields(
   Struct.assign({
     modelSelection: Schema.fromJsonString(ModelSelection),
+    watchdog: Schema.NullOr(Schema.fromJsonString(ThreadWatchdog)),
+    allowedTools: Schema.NullOr(Schema.fromJsonString(Schema.Array(Schema.String))),
   }),
 );
 const ProjectionThreadActivityDbRowSchema = ProjectionThreadActivity.mapFields(
@@ -322,6 +327,7 @@ function mapProjectShellRow(
     defaultModelSelection: row.defaultModelSelection,
     defaultThreadEnvMode: row.defaultThreadEnvMode,
     faviconPath: row.faviconPath ?? null,
+    system: row.system === 1,
     scripts: row.scripts,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -399,6 +405,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           default_model_selection_json AS "defaultModelSelection",
           default_thread_env_mode AS "defaultThreadEnvMode",
           favicon_path AS "faviconPath",
+          system,
           scripts_json AS "scripts",
           created_at AS "createdAt",
           updated_at AS "updatedAt",
@@ -438,7 +445,9 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           pending_approval_count AS "pendingApprovalCount",
           pending_user_input_count AS "pendingUserInputCount",
           has_actionable_proposed_plan AS "hasActionableProposedPlan",
-          deleted_at AS "deletedAt"
+          deleted_at AS "deletedAt",
+          watchdog_json AS "watchdog",
+          allowed_tools_json AS "allowedTools"
         FROM projection_threads
         ORDER BY created_at ASC, thread_id ASC
       `,
@@ -474,7 +483,9 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           pending_approval_count AS "pendingApprovalCount",
           pending_user_input_count AS "pendingUserInputCount",
           has_actionable_proposed_plan AS "hasActionableProposedPlan",
-          deleted_at AS "deletedAt"
+          deleted_at AS "deletedAt",
+          watchdog_json AS "watchdog",
+          allowed_tools_json AS "allowedTools"
         FROM projection_threads
         WHERE deleted_at IS NULL
           AND archived_at IS NULL
@@ -512,7 +523,9 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           pending_approval_count AS "pendingApprovalCount",
           pending_user_input_count AS "pendingUserInputCount",
           has_actionable_proposed_plan AS "hasActionableProposedPlan",
-          deleted_at AS "deletedAt"
+          deleted_at AS "deletedAt",
+          watchdog_json AS "watchdog",
+          allowed_tools_json AS "allowedTools"
         FROM projection_threads
         WHERE deleted_at IS NULL
           AND archived_at IS NOT NULL
@@ -854,6 +867,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           default_model_selection_json AS "defaultModelSelection",
           default_thread_env_mode AS "defaultThreadEnvMode",
           favicon_path AS "faviconPath",
+          system,
           scripts_json AS "scripts",
           created_at AS "createdAt",
           updated_at AS "updatedAt",
@@ -878,6 +892,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           default_model_selection_json AS "defaultModelSelection",
           default_thread_env_mode AS "defaultThreadEnvMode",
           favicon_path AS "faviconPath",
+          system,
           scripts_json AS "scripts",
           created_at AS "createdAt",
           updated_at AS "updatedAt",
@@ -954,7 +969,9 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           pending_approval_count AS "pendingApprovalCount",
           pending_user_input_count AS "pendingUserInputCount",
           has_actionable_proposed_plan AS "hasActionableProposedPlan",
-          deleted_at AS "deletedAt"
+          deleted_at AS "deletedAt",
+          watchdog_json AS "watchdog",
+          allowed_tools_json AS "allowedTools"
         FROM projection_threads
         WHERE thread_id = ${threadId}
           AND deleted_at IS NULL
@@ -1679,6 +1696,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
                 defaultModelSelection: row.defaultModelSelection,
                 defaultThreadEnvMode: row.defaultThreadEnvMode,
                 faviconPath: row.faviconPath ?? null,
+                system: row.system === 1,
                 scripts: row.scripts,
                 createdAt: row.createdAt,
                 updatedAt: row.updatedAt,
@@ -1706,6 +1724,8 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
                 pinOrderKey: row.pinOrderKey ?? null,
                 titleRegeneration: mapTitleRegeneration(row),
                 deletedAt: row.deletedAt,
+                watchdog: row.watchdog,
+                allowedTools: row.allowedTools,
                 messages: messagesByThread.get(row.threadId) ?? [],
                 proposedPlans: proposedPlansByThread.get(row.threadId) ?? [],
                 activities: activitiesByThread.get(row.threadId) ?? [],
@@ -1810,6 +1830,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
                   defaultModelSelection: row.defaultModelSelection,
                   defaultThreadEnvMode: row.defaultThreadEnvMode,
                   faviconPath: row.faviconPath ?? null,
+                  system: row.system === 1,
                   scripts: row.scripts,
                   createdAt: row.createdAt,
                   updatedAt: row.updatedAt,
@@ -2048,6 +2069,8 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
                       pinnedAt: row.pinnedAt,
                       pinOrderKey: row.pinOrderKey ?? null,
                       titleRegeneration: mapTitleRegeneration(row),
+                      watchdog: row.watchdog,
+                      allowedTools: row.allowedTools,
                       session: sessionByThread.get(row.threadId) ?? null,
                       latestUserMessageAt: row.latestUserMessageAt,
                       hasPendingApprovals: row.pendingApprovalCount > 0,
@@ -2193,6 +2216,8 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
                   pinnedAt: row.pinnedAt,
                   pinOrderKey: row.pinOrderKey ?? null,
                   titleRegeneration: mapTitleRegeneration(row),
+                  watchdog: row.watchdog,
+                  allowedTools: row.allowedTools,
                   session: sessionByThread.get(row.threadId) ?? null,
                   latestUserMessageAt: row.latestUserMessageAt,
                   hasPendingApprovals: row.pendingApprovalCount > 0,
@@ -2303,6 +2328,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
                     defaultModelSelection: option.value.defaultModelSelection,
                     defaultThreadEnvMode: option.value.defaultThreadEnvMode,
                     faviconPath: option.value.faviconPath ?? null,
+                    system: option.value.system === 1,
                     scripts: option.value.scripts,
                     createdAt: option.value.createdAt,
                     updatedAt: option.value.updatedAt,
@@ -2472,6 +2498,8 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
         pinnedAt: threadRow.value.pinnedAt,
         pinOrderKey: threadRow.value.pinOrderKey ?? null,
         titleRegeneration: mapTitleRegeneration(threadRow.value),
+        watchdog: threadRow.value.watchdog,
+        allowedTools: threadRow.value.allowedTools,
         session: Option.isSome(sessionRow) ? mapSessionRow(sessionRow.value) : null,
         latestUserMessageAt: threadRow.value.latestUserMessageAt,
         hasPendingApprovals: threadRow.value.pendingApprovalCount > 0,
@@ -2614,6 +2642,8 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
         pinOrderKey: threadRow.value.pinOrderKey ?? null,
         titleRegeneration: mapTitleRegeneration(threadRow.value),
         deletedAt: null,
+        watchdog: threadRow.value.watchdog,
+        allowedTools: threadRow.value.allowedTools,
         messages: messageRows.map((row) => {
           const message = {
             id: row.messageId,

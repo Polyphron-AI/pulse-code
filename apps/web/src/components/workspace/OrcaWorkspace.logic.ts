@@ -2,7 +2,20 @@ import type {
   EnvironmentProject,
   EnvironmentThreadShell,
 } from "@t3tools/client-runtime/state/models";
-import type { EnvironmentId, ProviderDriverKind, ProviderInstanceId } from "@t3tools/contracts";
+import {
+  MANAGER_CYCLE_KIND_LABELS,
+  managerCycleEntries,
+  managerForThread,
+  type EnvironmentManager,
+  type ManagerCycleKind,
+} from "@t3tools/client-runtime/state/managers";
+import type {
+  EnvironmentId,
+  ManagerId,
+  ProviderDriverKind,
+  ProviderInstanceId,
+  ThreadId,
+} from "@t3tools/contracts";
 
 export type WorkspaceThreadStatus =
   | "approval"
@@ -12,7 +25,7 @@ export type WorkspaceThreadStatus =
   | "failed"
   | "ready";
 
-export type WorkspaceFilter = "all" | "attention" | "working" | "omp";
+export type WorkspaceFilter = "all" | "attention" | "working" | "omp" | "argo";
 
 export interface WorkspaceProviderInfo {
   readonly driverKind: ProviderDriverKind;
@@ -37,6 +50,9 @@ export interface WorkspaceThreadRow {
   readonly updatedAt: string;
   readonly isOmp: boolean;
   readonly isEnvironmentConnected: boolean;
+  /** The Argo that owns this thread, if any. Children and control threads both. */
+  readonly managerId: ManagerId | null;
+  readonly managerName: string | null;
 }
 
 export interface WorkspaceCounts {
@@ -48,6 +64,7 @@ export interface WorkspaceCounts {
   readonly failed: number;
   readonly ready: number;
   readonly omp: number;
+  readonly argo: number;
 }
 
 export interface WorkspaceOverview {
@@ -145,13 +162,20 @@ export function buildWorkspaceOverview(input: {
   readonly providerByKey: ReadonlyMap<string, WorkspaceProviderInfo>;
   readonly environmentLabelById: ReadonlyMap<EnvironmentId, string>;
   readonly connectedEnvironmentIds: ReadonlySet<EnvironmentId>;
+  readonly managers?: ReadonlyArray<EnvironmentManager>;
 }): WorkspaceOverview {
+  const managerByKey = new Map(
+    (input.managers ?? []).map(
+      (manager) => [`${manager.environmentId}:${manager.id}`, manager] as const,
+    ),
+  );
   const projectByKey = new Map(
     input.projects.map(
       (project) => [projectKey(project.environmentId, project.id), project] as const,
     ),
   );
   let omp = 0;
+  let argo = 0;
 
   const rows = input.threads
     .filter((thread) => thread.archivedAt === null)
@@ -163,6 +187,12 @@ export function buildWorkspaceOverview(input: {
       const isEnvironmentConnected = input.connectedEnvironmentIds.has(thread.environmentId);
       if (isOmp) omp += 1;
       const project = projectByKey.get(projectKey(thread.environmentId, thread.projectId));
+      const managerId = managerForThread(thread);
+      const manager =
+        managerId === null
+          ? null
+          : (managerByKey.get(`${thread.environmentId}:${managerId}`) ?? null);
+      if (managerId !== null) argo += 1;
       return {
         key: `${thread.environmentId}:${thread.id}`,
         environmentId: thread.environmentId,
@@ -182,6 +212,8 @@ export function buildWorkspaceOverview(input: {
         updatedAt: thread.updatedAt,
         isOmp,
         isEnvironmentConnected,
+        managerId,
+        managerName: manager?.name ?? null,
       };
     })
     .sort((left, right) => {
@@ -197,7 +229,7 @@ export function buildWorkspaceOverview(input: {
   const summary = summarizeWorkspaceThreads(input.threads, input.connectedEnvironmentIds);
   return {
     rows,
-    counts: { ...summary, omp },
+    counts: { ...summary, omp, argo },
   };
 }
 
@@ -216,7 +248,8 @@ export function filterWorkspaceRows(
       (filter === "working" &&
         row.isEnvironmentConnected &&
         (row.status === "working" || row.status === "monitoring")) ||
-      (filter === "omp" && row.isOmp);
+      (filter === "omp" && row.isOmp) ||
+      (filter === "argo" && row.managerId !== null);
     if (!matchesFilter) return false;
     if (!normalizedQuery) return true;
     return [
@@ -226,6 +259,7 @@ export function filterWorkspaceRows(
       row.providerDisplayName,
       row.model,
       row.branch ?? "",
+      row.managerName ?? "",
     ].some((value) => value.toLocaleLowerCase().includes(normalizedQuery));
   });
 }
@@ -285,4 +319,85 @@ export function buildSeniorCrewPrompt(input: {
     : "";
 
   return `Work as a senior AI engineering crew with three explicit lenses:\n\n- Human UX: protect clarity, accessibility, and user control.\n- Efficiency: minimize latency, unnecessary work, and operational friction.\n- Effectiveness: verify that the result solves the stated problem and is testable.\n\nUse OMP's internal delegation when it materially improves the outcome. Keep one accountable implementation path, surface tradeoffs briefly, and verify the work before reporting completion.\n\nTask:\n${input.task.trim()}${source}`;
+}
+
+export interface WorkspaceArgoOption {
+  readonly managerId: ManagerId;
+  readonly name: string;
+  readonly environmentId: EnvironmentId;
+  readonly threadId: ThreadId | null;
+}
+
+/** The Argo filter list, sorted the way the sidebar sorts it. */
+export function buildWorkspaceArgoOptions(
+  managers: ReadonlyArray<EnvironmentManager>,
+): ReadonlyArray<WorkspaceArgoOption> {
+  return managers
+    .filter((manager) => manager.deletedAt === null)
+    .map((manager) => ({
+      managerId: manager.id,
+      name: manager.name,
+      environmentId: manager.environmentId,
+      threadId: manager.threadId,
+    }))
+    .sort((left, right) => left.name.localeCompare(right.name));
+}
+
+/** An empty selection means "every Argo", the same way the search box does. */
+export function filterWorkspaceRowsByArgo(
+  rows: ReadonlyArray<WorkspaceThreadRow>,
+  selected: ReadonlySet<ManagerId>,
+): ReadonlyArray<WorkspaceThreadRow> {
+  if (selected.size === 0) return rows;
+  return rows.filter((row) => row.managerId !== null && selected.has(row.managerId));
+}
+
+/** The cycle table only makes sense for one Argo at a time. */
+export function soleSelectedArgo(
+  options: ReadonlyArray<WorkspaceArgoOption>,
+  selected: ReadonlySet<ManagerId>,
+): WorkspaceArgoOption | null {
+  if (selected.size !== 1) return null;
+  const [managerId] = [...selected];
+  return options.find((option) => option.managerId === managerId) ?? null;
+}
+
+export interface WorkspaceCycleRow {
+  readonly key: string;
+  readonly occurredAt: string;
+  readonly kind: ManagerCycleKind;
+  readonly kindLabel: string;
+  readonly childTitle: string;
+  readonly summary: string;
+}
+
+/**
+ * Turns an Argo's `manager.cycle` activities into the fleet-view table,
+ * newest first, naming children by their thread title where we have one.
+ */
+export function buildWorkspaceCycleRows(input: {
+  readonly activities: ReadonlyArray<{
+    readonly kind: string;
+    readonly payload?: unknown;
+    readonly createdAt?: string | undefined;
+  }>;
+  readonly threadTitleById: ReadonlyMap<ThreadId, string>;
+}): ReadonlyArray<WorkspaceCycleRow> {
+  return managerCycleEntries(input.activities)
+    .map((entry, index): WorkspaceCycleRow => {
+      const title =
+        entry.threadId === null ? null : (input.threadTitleById.get(entry.threadId) ?? null);
+      return {
+        key: `${entry.occurredAt}:${index}`,
+        occurredAt: entry.occurredAt,
+        kind: entry.kind,
+        kindLabel: MANAGER_CYCLE_KIND_LABELS[entry.kind],
+        childTitle: title ?? (entry.threadId === null ? "" : entry.threadId),
+        summary: entry.summary,
+      };
+    })
+    .sort((left, right) => {
+      const delta = parseTimestamp(right.occurredAt) - parseTimestamp(left.occurredAt);
+      return delta !== 0 ? delta : left.key.localeCompare(right.key);
+    });
 }

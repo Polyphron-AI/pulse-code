@@ -14,7 +14,15 @@
  *
  * @module RuntimeReceiptBus
  */
-import { CheckpointRef, IsoDateTime, NonNegativeInt, ThreadId, TurnId } from "@t3tools/contracts";
+import {
+  AssistantId,
+  CheckpointRef,
+  IsoDateTime,
+  ManagerId,
+  NonNegativeInt,
+  ThreadId,
+  TurnId,
+} from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
@@ -49,9 +57,39 @@ export const TurnProcessingQuiescedReceipt = Schema.Struct({
 });
 export type TurnProcessingQuiescedReceipt = typeof TurnProcessingQuiescedReceipt.Type;
 
+export const WatchdogDecisionAppliedReceipt = Schema.Struct({
+  type: Schema.Literal("watchdog.decision.applied"),
+  threadId: ThreadId,
+  gateKind: Schema.Literals(["approval.requested", "user-input.requested"]),
+  decision: Schema.Literals(["approve", "deny", "answer", "escalate"]),
+  createdAt: IsoDateTime,
+});
+export type WatchdogDecisionAppliedReceipt = typeof WatchdogDecisionAppliedReceipt.Type;
+
+/** One manager cycle has started its turn on the manager's own thread. */
+export const ManagerCycleStartedReceipt = Schema.Struct({
+  type: Schema.Literal("manager.cycle.started"),
+  managerId: ManagerId,
+  threadId: ThreadId,
+  createdAt: IsoDateTime,
+});
+export type ManagerCycleStartedReceipt = typeof ManagerCycleStartedReceipt.Type;
+
+/** The assistant's thread exists, is bound, and its turn has been started. */
+export const AssistantThreadReadyReceipt = Schema.Struct({
+  type: Schema.Literal("assistant.thread.ready"),
+  assistantId: AssistantId,
+  threadId: ThreadId,
+  createdAt: IsoDateTime,
+});
+export type AssistantThreadReadyReceipt = typeof AssistantThreadReadyReceipt.Type;
+
 export const OrchestrationRuntimeReceipt = Schema.Union([
   CheckpointBaselineCapturedReceipt,
   CheckpointDiffFinalizedReceipt,
+  WatchdogDecisionAppliedReceipt,
+  ManagerCycleStartedReceipt,
+  AssistantThreadReadyReceipt,
   TurnProcessingQuiescedReceipt,
 ]);
 export type OrchestrationRuntimeReceipt = typeof OrchestrationRuntimeReceipt.Type;
