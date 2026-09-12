@@ -232,6 +232,58 @@ describe("managed skill imports", () => {
 });
 
 describe("GitHub import validation", () => {
+  it.each(["./repo", "../repo", "team/.", "team/.."])(
+    "rejects dot repository segments before making a request: %s",
+    async (repository) => {
+      let requested = false;
+      await expect(
+        downloadGitHubSkill(
+          { type: "github", repository, ref: "main", directory: "" },
+          async () => {
+            requested = true;
+            return {};
+          },
+        ),
+      ).rejects.toThrow(/owner\/repository/);
+      expect(requested).toBe(false);
+    },
+  );
+
+  it("builds GitHub API endpoints from separately encoded repository segments", async () => {
+    const requests: string[] = [];
+    await expect(
+      downloadGitHubSkill(
+        { type: "github", repository: "team.name/repo_name", ref: "main", directory: "" },
+        async (endpoint) => {
+          requests.push(endpoint);
+          return {};
+        },
+      ),
+    ).rejects.toThrow(/commit revision/);
+    expect(requests).toEqual(["repos/team.name/repo_name/commits/main"]);
+  });
+
+  it("rejects invalid managed ids before making a GitHub request", async () => {
+    let requested = false;
+    await withStore(
+      async (store) => {
+        await expect(
+          store.importGitHub("../review", {
+            type: "github",
+            repository: "team/repo",
+            ref: "main",
+            directory: "",
+          }),
+        ).rejects.toThrow(/managed skill id/);
+        expect(requested).toBe(false);
+      },
+      async () => {
+        requested = true;
+        return {};
+      },
+    );
+  });
+
   it("rejects linked files and truncated trees before downloading blobs", async () => {
     for (const tree of [
       { truncated: true, tree: [] },

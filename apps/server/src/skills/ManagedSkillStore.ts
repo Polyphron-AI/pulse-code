@@ -230,6 +230,10 @@ function validateGitHubSource(source: GitHubSkillSource): GitHubSkillSource {
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(source.repository)) {
     throw new Error("Use a GitHub owner/repository.");
   }
+  const [owner, repository] = source.repository.split("/");
+  if (owner === "." || owner === ".." || repository === "." || repository === "..") {
+    throw new Error("Use a GitHub owner/repository.");
+  }
   if (source.ref.length > 200) throw new Error("GitHub refs are limited to 200 characters.");
   const directory = source.directory.trim().replace(/^\/+|\/+$/g, "");
   if (directory) validateSkillPath(directory);
@@ -239,7 +243,8 @@ function validateGitHubSource(source: GitHubSkillSource): GitHubSkillSource {
 export async function downloadGitHubSkill(source: GitHubSkillSource, request: GitHubRequest) {
   const validatedSource = validateGitHubSource(source);
   const directory = validatedSource.directory;
-  const base = `repos/${validatedSource.repository}`;
+  const [owner, repository] = validatedSource.repository.split("/");
+  const base = `repos/${encodeURIComponent(owner!)}/${encodeURIComponent(repository!)}`;
   const commit = object(
     await request(`${base}/commits/${encodeURIComponent(validatedSource.ref || "HEAD")}`),
   ).sha;
@@ -330,10 +335,11 @@ export class ManagedSkillStore {
     updatePolicy: ManagedSkillUpdatePolicy = "pinned",
     previous?: ManagedSkillRecord,
   ): Promise<ManagedSkillRecord> {
+    const validatedId = validateManagedId(id);
     const validatedSource = validateGitHubSource(source);
     const downloaded = await downloadGitHubSkill(validatedSource, this.request);
     return this.persist(
-      validateManagedId(id),
+      validatedId,
       validateSkillFiles(downloaded.files),
       validatedSource,
       previous,
