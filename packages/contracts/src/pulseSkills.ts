@@ -28,6 +28,8 @@ export const PulseSkillRecord = Schema.Struct({
   error: Schema.optional(Schema.String),
 });
 
+export type PulseSkillRecord = typeof PulseSkillRecord.Type;
+
 export const PulseSkillMutation = Schema.Union([
   Schema.Struct({
     operation: Schema.Literal("import-upload"),
