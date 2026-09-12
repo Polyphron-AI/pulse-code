@@ -27,10 +27,23 @@ Module names above describe ownership, not a mandate to create new npm packages.
 
 ## Proposed skills and MCP defaults
 
-Retain file/ZIP/GitHub skill imports and immutable revisions. Start with no bundled
-third-party content selected. Users import the skills they need. Default remote
-update checks to manual; automatic checks require explicit opt-in. Preserve
-provider defaults and per-thread overrides, with changes effective next turn.
+Retain file/ZIP and Git-linked skill imports with immutable revisions. Uploaded
+skills stay pinned to the uploaded content until explicitly replaced; they have
+no automatic-update control. For a Git-linked skill, offer **Pin version** or
+**Keep updated**. Pin version retains the resolved commit and content revision.
+Keep updated follows the selected repository branch/ref, validates each update,
+and makes a successful new revision available to subsequent turns. A fixed commit
+cannot track updates; selecting Keep updated requires a tracking branch/ref.
+Failed checks or invalid updates retain the last valid revision and show an error.
+An active turn retains its selected immutable revision. Switching back to Pin
+version freezes the current revision. Show the source, tracking ref and installed
+revision so the selected policy is visible. Git hosting support beyond the current
+GitHub importer still needs assessment; this policy does not imply support for
+every Git host or authentication method.
+
+Start with no bundled third-party content selected. Users import the skills they
+need and explicitly choose the Git update policy. Preserve provider defaults and
+per-thread overrides, with changes effective next turn.
 Do not disable native or workspace skills through the managed-skills selector.
 
 Retain environment-owned HTTP and local-command MCP configurations, protected

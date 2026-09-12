@@ -30,10 +30,19 @@
       ],
       "openQuestions": [
         "Which exact skills and MCP servers are required?",
-        "Retain file/ZIP/GitHub skill imports and pinned revisions?",
-        "Should skill update checks be manual or explicitly opted-in automatic checks?",
+        "Which Git hosts and authentication methods beyond the existing GitHub importer are required?",
         "Retain provider defaults and per-thread overrides for skills and MCP?"
       ],
+      "updatePolicy": {
+        "decision": "confirmed-by-user",
+        "upload": "Pinned to uploaded content until explicitly replaced; no keep-updated option.",
+        "gitLinked": "User chooses Pin version or Keep updated.",
+        "pin": "Retain the resolved commit and immutable content revision; switching from Keep updated freezes the current revision.",
+        "keepUpdated": "Follow a selected tracking branch/ref, validate updates and apply successful revisions to subsequent turns.",
+        "failure": "Retain the last valid revision and show update errors.",
+        "activeTurn": "Retain the selected immutable revision for the duration of the turn.",
+        "hostSupport": "Existing source supports GitHub imports; other Git hosts require assessment."
+      },
       "source": "pulseReviewed",
       "evidence": [
         "apps/server/src/skills/ManagedSkillStore.ts",
