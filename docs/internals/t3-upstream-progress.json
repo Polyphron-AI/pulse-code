@@ -1,0 +1,486 @@
+{
+  "$schema": "t3-upstream-progress.schema.json",
+  "schemaVersion": 1,
+  "campaignId": "t3-v040-domain-import",
+  "title": "T3 v0.0.40 upstream domain import",
+  "checkpointDate": "2026-09-12",
+  "pinnedTarget": "09e8de9c655ae85410bf6b00446f272a01da81c7",
+  "links": {
+    "playbook": "t3-upstream-import-playbook.md",
+    "batchPlan": "../plans/2026-09-12-v40-dependency-batches.md",
+    "ledger": "t3-v040-disposition.json"
+  },
+  "checkpoint": {
+    "integrationBranch": "trial/compatibility-sequential",
+    "documentationBaseRevision": "7b4dcead3b891800a4700fff1f698941dd7da018",
+    "implementationBranch": "sync/v040-pr29",
+    "implementationRevision": "7b4dcead3b891800a4700fff1f698941dd7da018",
+    "previewBranch": "release/pulse-preview-v040-batch7-20260910",
+    "previewRevision": "033e25463ec0b92fa9efdb92fe68e96c8e2b8fb3",
+    "ledgerRevision": "96bc578b95feccf2321bdcf4d2c6ba4d724378bf"
+  },
+  "notices": [
+    "This checkpoint publishes documentation only. It does not integrate compatibility code, the canonical ledger, or the upstream release baseline into develop.",
+    "Batch source hashes identify coverage obligations. Their status remains authoritative only in the canonical ledger at the recorded ledger revision.",
+    "The historical classifier is not a progress report and must not be regenerated from this file.",
+    "Local commits are unavailable to other clones until someone explicitly pushes them. Stable promotion, publishing, and deployment remain outside this campaign.",
+    "Before resuming, inspect the named Git revisions and current review evidence. Do not assume an agent or isolated environment is still running."
+  ],
+  "batches": [
+    {
+      "id": "terminal-rendering-streaming",
+      "title": "Terminal rendering and streaming",
+      "state": "integrated",
+      "sourceHashes": [
+        "21e80a06364898b8ecffad8aeddcb5634170260b",
+        "592c5983c14d248aa3cfddb8e6c7372f12cd1ab6",
+        "883e1a3cd9d70f6906a8eb1458a7a05d1d9e0d55",
+        "da7e46d08e85bcb07ecd78721a40f7b612fac2f2",
+        "5eab021a5185e492b6b021f83564143d5263e8a6",
+        "fec606f9ae524277ef1f6886e614f32d9e15e36e",
+        "07fb04dc63694876b531a7bb5492a72b8282009d",
+        "6615d3d70ba399c4b274d17f19487d94afac17ed"
+      ],
+      "executionAfterBatchIds": [],
+      "truePrerequisites": [
+        {
+          "kind": "source",
+          "reference": "18f6d034897d9cc5429dcb88c6a9795d183f1687",
+          "satisfaction": "satisfied",
+          "description": "Shift encoding was reviewed before this batch."
+        },
+        {
+          "kind": "source",
+          "reference": "c3e37094e04de71accf497c6110c5305223e0090",
+          "satisfaction": "satisfied",
+          "description": "Large-grapheme safety was reviewed before this batch."
+        },
+        {
+          "kind": "source",
+          "reference": "cccd7e3c885065e925f559c5708378cdb3b51eb3",
+          "satisfaction": "satisfied",
+          "description": "Snapshot allocation was reviewed before this batch."
+        },
+        {
+          "kind": "pulse-revision",
+          "reference": "3bbbc1d9fd8b3d649c60ba0137c7dae93a6aab3f",
+          "satisfaction": "satisfied",
+          "description": "Incremental server terminal history was already present."
+        },
+        {
+          "kind": "pulse-revision",
+          "reference": "cf9729d5ee9660c08556e823080d3bb19648ed28",
+          "satisfaction": "satisfied",
+          "description": "Byte-bounded server terminal history was already present."
+        }
+      ],
+      "baseRevision": "0fd57e436e0a9c7211edf3b1468d8a2854c757bb",
+      "headRevision": "95e694aff549ef6948f5454fe4df1cc48a7a2f84",
+      "branch": "trial/compatibility-sequential",
+      "evidence": [
+        {
+          "path": "v40-terminal-domain-review-2026-09-12.md",
+          "summary": "Combined implementation, preservation, review, and integration evidence."
+        }
+      ],
+      "review": {
+        "status": "approved",
+        "revision": "95e694aff549ef6948f5454fe4df1cc48a7a2f84",
+        "reviewer": "independent Sol",
+        "evidencePath": "v40-terminal-domain-review-2026-09-12.md",
+        "summary": "Independent review approved the eight selected obligations and Pulse preservation."
+      },
+      "integration": {
+        "status": "integrated",
+        "revision": "0df9f0b0109dcc858c934c40e85f5bacd77fe53b",
+        "evidencePath": "v40-terminal-domain-review-2026-09-12.md",
+        "summary": "Integrated locally; the canonical ledger was closed in revision 686ec389947e33e361b9b8e50138e2aa23be4881."
+      },
+      "verification": [
+        {
+          "command": "vp test run src/terminal/ghostty src/terminal-links.test.ts src/state/terminalSessions.test.ts --project unit",
+          "result": "passed",
+          "details": "Seven web files and 102 tests passed after repair."
+        },
+        {
+          "command": "vp test run packages/client-runtime/src/state/terminalSession.test.ts",
+          "result": "passed",
+          "details": "Eighteen client-runtime tests passed."
+        },
+        {
+          "command": "vp test run terminalMenu.test.ts terminalBufferReplay.test.ts terminalLaunchContext.test.ts",
+          "result": "passed",
+          "details": "Three mobile files and 19 tests passed."
+        },
+        {
+          "command": "package-scoped web, mobile, and client-runtime typechecks; changed-file lint",
+          "result": "passed-with-warnings",
+          "details": "Typechecks and lint passed. Client-runtime reported one non-failing Effect suggestion in unchanged relay/discovery.ts."
+        }
+      ],
+      "preservationRequirements": [
+        "Keep Pulse's shared multi-click interval, environment-scoped terminal targets, bounded retained history, persistence ordering, and local, relay, and tunnel PTY routing.",
+        "Hidden terminals must keep parsing and answering VT queries, then render current state on reveal without hidden autofocus.",
+        "Preserve terminal metadata ordering, stable ties, subscription lifetimes, collectability, and mobile buffer replay."
+      ],
+      "excludedChanges": [
+        "Close confirmation, focus hints, panel grouping, mobile clipboard and GhosttyKit, and true-color behavior remain separate."
+      ],
+      "blockers": [],
+      "nextAction": "Use this integrated revision and ledger checkpoint when evaluating dependencies for the next active batch."
+    },
+    {
+      "id": "favicon-host-classification",
+      "title": "Shared host classification and favicon behavior",
+      "state": "integrated",
+      "sourceHashes": [
+        "b6f72681da394369274121c4d1216f5d64a7a4bb",
+        "3e544f8cda371dc565c806508a9ab38b80c96ff7",
+        "748fe0f8b68b7951df6797d4c22d2ca01314a3dc"
+      ],
+      "executionAfterBatchIds": ["terminal-rendering-streaming"],
+      "truePrerequisites": [],
+      "baseRevision": "686ec389947e33e361b9b8e50138e2aa23be4881",
+      "headRevision": "d612517ec98fb6be5e0d95969d7acfa165b93d29",
+      "branch": "sync/v040-next-ten",
+      "evidence": [
+        {
+          "path": "v40-favicon-domain-review-2026-09-12.md",
+          "summary": "Implementation evidence and independent combined approval."
+        }
+      ],
+      "review": {
+        "status": "approved",
+        "revision": "d612517ec98fb6be5e0d95969d7acfa165b93d29",
+        "reviewer": "sol_favicon_combined_review",
+        "evidencePath": "v40-favicon-domain-review-2026-09-12.md#independent-combined-review",
+        "summary": "Independent Sol review approved the frozen revision with no code findings."
+      },
+      "integration": {
+        "status": "integrated",
+        "revision": "a291b1775f92b2a8352ea0c64fc734599139d5f6",
+        "evidencePath": "v40-favicon-domain-review-2026-09-12.md",
+        "summary": "Integrated without application/package changes from the approved head; ledger three rows closed at 1e1b5121a."
+      },
+      "verification": [
+        {
+          "command": "vp test run packages/shared/src/hostClassification.test.ts packages/shared/src/favicon.test.ts apps/web/src/browser/browserTargetResolver.test.ts apps/web/src/lib/favicon.test.ts apps/web/src/components/ChatMarkdown.test.tsx apps/web/src/components/ChatMarkdown.workspace-images.test.tsx apps/web/src/components/preview/PreviewFaviconIcon.test.tsx apps/mobile/src/features/threads/MarkdownExternalLink.test.tsx",
+          "result": "passed",
+          "details": "Eight files and 121 tests passed in implementation and independent review."
+        },
+        {
+          "command": "vp run --filter @t3tools/shared --filter @t3tools/web --filter @t3tools/mobile typecheck",
+          "result": "passed",
+          "details": "Shared, web, and mobile typechecks passed."
+        },
+        {
+          "command": "changed-file vp lint",
+          "result": "passed-with-warnings",
+          "details": "No errors. Two pre-existing ThreadFeed.tsx warnings remained: an unused workspace-path import and an array-index key."
+        }
+      ],
+      "preservationRequirements": [
+        "Keep resolver compatibility exports, Pulse environment routing, and private, Tailscale, mapped-IPv6, and reserved-host handling.",
+        "Keep explicit and themed provider icons, project favicon persistence, existing shape behavior, and Pulse markdown and link actions.",
+        "Mobile must suppress private-host requests and reset failed-host state when the host changes."
+      ],
+      "excludedChanges": [
+        "Do not replace whole ThreadFeed or ChatMarkdown files.",
+        "No contract, migration, provider adapter, server, native shell, release, or live data change belongs to this batch."
+      ],
+      "blockers": [
+        "Mounted React lifecycle and native-client acceptance remain separate release gates."
+      ],
+      "nextAction": "Retain reviewed host classification and Pulse favicon policies during later imports."
+    },
+    {
+      "id": "shared-utility-interfaces",
+      "title": "Shared command lookup and utility interfaces",
+      "state": "integrated",
+      "sourceHashes": [
+        "c3caceade14ccda0686db0031aca79d7d38a71d0",
+        "1568b3fd083e198a08bb12353820c1ef99fb3420",
+        "aca2afc0b5400e4cf88c42d59b214240833ed9cd",
+        "c6410d37d7ff1bdb65b38f0e9c30da392a4de804",
+        "da1bebbb11701b58ebdde5ee019f3aeef3d42b27",
+        "1584076d7651278863f7ee90f5bf70c2aba981b3",
+        "cb58dfd6453171a88183fc7bf1587bae6929c0e4",
+        "86f079964b9c3d2a087907d2ef8273c3dbcb960b",
+        "2c301fd0c4fc58c1612be47c3856fa4ad547429d"
+      ],
+      "executionAfterBatchIds": ["favicon-host-classification"],
+      "truePrerequisites": [
+        {
+          "kind": "source",
+          "reference": "1108be0fc862d5a95374bf0b96518a20e6351025",
+          "satisfaction": "satisfied",
+          "description": "Only relayClient Windows guards integrated; 1108be0f is partially-ported in ledger, other four files remain unadopted."
+        }
+      ],
+      "baseRevision": "1e1b5121a199c875e4a101519e1fbba8ef858fe0",
+      "headRevision": "38b32a7055c682c1dae300fe89e342a621198938",
+      "branch": "sync/v040-next-ten",
+      "evidence": [
+        {
+          "path": "../plans/2026-09-12-v40-dependency-batches.md#shared-command-lookup-and-utility-interfaces-nine-sources",
+          "summary": "Ordered sources, preservation requirements, exclusions, and scoped proof plan revalidated against d612517ec98fb6be5e0d95969d7acfa165b93d29."
+        },
+        {
+          "path": "v40-utilities-domain-review-2026-09-12.md",
+          "summary": "Frozen implementation and focused verification evidence on the implementation branch."
+        }
+      ],
+      "review": {
+        "status": "approved",
+        "revision": "38b32a7055c682c1dae300fe89e342a621198938",
+        "reviewer": "sol_desktop_predicates",
+        "evidencePath": "v40-utilities-domain-review-2026-09-12.md#independent-review-and-integration",
+        "summary": "Independent review approved all nine source obligations; only relayClient Windows guards from 1108be0f are adopted."
+      },
+      "integration": {
+        "status": "integrated",
+        "revision": "aec09f4977e0ad54f9475f1e0bc700a2a84cd8d9",
+        "evidencePath": "v40-utilities-domain-review-2026-09-12.md#independent-review-and-integration",
+        "summary": "Clean integration; nine sources closed and the relayClient-only portion of 1108be0f recorded as partial at 96bc578b9."
+      },
+      "verification": [
+        {
+          "command": "Eight focused shared test files; shared typecheck; changed-file lint",
+          "result": "passed-with-warnings",
+          "details": "Eight files, 101 active tests and four Windows-host POSIX skips; shared typecheck and changed-file lint passed."
+        }
+      ],
+      "preservationRequirements": [
+        "Preserve first-entry PATH precedence, quoting, case-sensitive Windows directory variants, executable extensions, caching, and login-shell capture.",
+        "Preserve Pulse settings and model fields, PULSE_CODE_CLOUDFLARED_PATH precedence, legacy fallback, and branded errors.",
+        "Preserve explicit mcpServers replacement in applyServerSettingsPatch and keep parseStandaloneComposerSlashCommand.",
+        "Add an active injected-win32 installation regression that rejects --version, accepts version, and proves validation and activation without downloading cloudflared.",
+        "The four skipped POSIX executable-bit success cases on Windows do not verify the cloudflared fix by themselves."
+      ],
+      "excludedChanges": [
+        "Broad cleanup source 0671e34279d42faf69fccfd46ceae305ccfa7c6d remains excluded.",
+        "Do not copy the whole target settings file or remove Pulse's explicit mcpServers replacement."
+      ],
+      "blockers": [],
+      "nextAction": "Preserve reviewed shared behavior when preparing the PR batch."
+    },
+    {
+      "id": "pr-browsing-freshness",
+      "title": "PR browsing, detail, and read freshness",
+      "state": "in-progress",
+      "sourceHashes": [
+        "26af903b9bec7f8da56bb5f545d9980d08d418e1",
+        "a850895f6833b99d90fc6c50192b5eaa4966d5c7",
+        "229b05df042f896bbb44660c8524ffe222b85b8d",
+        "7068e86f76e908c77ff04d1a684840257eab3a8a",
+        "ebb9b9fda03d33a81cad3ce7f4d1106adba3044b",
+        "cefec32d6fc5d14f03e110ebdde534bdbcc9b62b",
+        "e9c4775e8738381140af4e5248507b15fc1cd491",
+        "42a8fd5103b4af57b16be721a9864ca3a5c18c5b",
+        "3c73fa7ce02b7ee6b2904ec58e47c06262aebf5d",
+        "9fdafdf114a88bd7309883b4578e74cbe786d04d",
+        "0681d854994ec0ceed0562ae74549ccf8ef2ec41",
+        "57a66608b918d673eeec7e6c94ea5906b756fcd0",
+        "1eb36b45ef7aa5c028380afb7266bcabf258a55e",
+        "2a3cfe456375fd34b906f849b04706109dc74170",
+        "0bc59bbae391ee45ab3a7cfb2dc703c8b27e5772",
+        "48ba76bc26337f23d1f0991bbac51f996a3333dc",
+        "645d58547d282eb2aaf6c48e5907625fc112386a",
+        "493fbb58870c912b9cb2ba6c2f1dae938877a59a",
+        "373be93e68bf3d32207471b27e976ac84bff806a",
+        "0869ad648b67a286d7a47af878f1d256d0ff689f",
+        "95103905f5f045523994213bf76bfb14acc31b27",
+        "a76b898b3aa4fd4081104b06a3b2c942bd4fecb7",
+        "91c66ac43ddad4f8697887009746f4de11736cb9",
+        "110bbe6b55d684627a2481aebfd7c1ae3396011c",
+        "931d41f933b2536f699975412169f5318e6adad5",
+        "e5a87e8b9ca9db21e0291ddbd54438c5fe56b277",
+        "ea0487cc9adf9f51c865fe39128102afc532bcfc",
+        "ba873b8181c3741603a365e75785457064a52ffd",
+        "4e59b06b84fdfa36f78b4fc9079dff88b4ff3dc4"
+      ],
+      "executionAfterBatchIds": ["shared-utility-interfaces"],
+      "truePrerequisites": [],
+      "baseRevision": "7b4dcead3b891800a4700fff1f698941dd7da018",
+      "headRevision": null,
+      "branch": "sync/v040-pr29",
+      "evidence": [
+        {
+          "path": "../plans/2026-09-12-v40-dependency-batches.md#pr-browsing-detail-and-read-freshness-29-sources",
+          "summary": "Frozen source order and current preservation plan."
+        }
+      ],
+      "review": {
+        "status": "not-requested",
+        "revision": null,
+        "reviewer": null,
+        "evidencePath": null,
+        "summary": "Implementation started in its isolated worktree; independent combined review follows code freeze."
+      },
+      "integration": {
+        "status": "not-started",
+        "revision": null,
+        "evidencePath": null,
+        "summary": "No implementation exists to integrate."
+      },
+      "verification": [
+        {
+          "command": "focused web PR, shared PR state, server PullRequestService/provider, and contracts pullRequest tests; affected package checks",
+          "result": "not-run",
+          "details": "Add saved-filter navigation, scoped facet, ranking tie, and stale in-flight preservation cases as needed."
+        }
+      ],
+      "preservationRequirements": [
+        "Preserve named filters, author and label preferences, environment-scoped facets, Pulse merge-ready ranking, workflow and revert actions, documents and media, browser preference, and thread links.",
+        "Apply the optional checkout contract field across its provider and client consumers."
+      ],
+      "excludedChanges": [
+        "Exclude settlement and event-store changes, visibility leases, relay renewal, mixed usage and settlement, diff-tree and highlighter changes, global loading restyles, segmented controls, and broad export cleanup.",
+        "Do not overwrite the whole PullRequestService."
+      ],
+      "blockers": [],
+      "nextAction": "Run focused baseline checks and import the 29 ordered sources, restore Pulse behavior against the final batch state, then freeze for independent review."
+    },
+    {
+      "id": "settings-provider-editor",
+      "title": "Settings navigation and provider editor",
+      "state": "planned",
+      "sourceHashes": [
+        "fda740ad7b28334a6c579d801db22ad8f5914b5f",
+        "36f4314ab768dca3fc20af6ac25e7011b4b0447f",
+        "07f8027d9a542f72b12db927caceebb2c9c72aa7",
+        "549201fcfd3baa6cf92f09e5d868c536c80d2d55",
+        "e2d4d12a81516b55abbecdc64794971f781cacd8",
+        "f276e632c5a7952655e2455aef3b86c08164b988",
+        "be218ac768d809087bfcea4d8f15c431f0d70e16",
+        "5e63aea2df03e8ccc5c8a56cee4c067ecbd3d703",
+        "c50b0b4ef8d61ffe3de1cfa6249f906709f7da1f",
+        "ff93aba61dc1f7839713580bc8ee08da2a395f9a",
+        "a1a2bb1cd9f000f53fbeae752ed5c38f152eadf2",
+        "6effe0a2fab1bcd48315485b580419377451c757",
+        "b59b7d0af9536a2d61ddfcf8d33420b890b2faca",
+        "829c3db94830fc70b5754513b8a370f7301ca213",
+        "343db2c328af56fe0fa7672f3af055550832689b",
+        "d7884ce90b9845e6e8aa737dfe02062b91b11c91",
+        "2b10398cca3fa74a7c2187c8d9c23ba789333f5b",
+        "082cab224624eb3a6cd494df3719c59014fb0c99",
+        "8357eef14cbd5ed063e4a64404c33d1bfbc78446",
+        "764946502390845919d974490bc85e87b788c996",
+        "2e61301b1325e30cb9464e193299a7e469f7ec08",
+        "4d3907f63d71644e1918d76cd104b036535a1173",
+        "896fe82f2f191eb8ac0fd620e19c25dd48253592",
+        "07d2497db89014ccd71aa077fc809aff47e4af91",
+        "bc8584bf8e967ecc1cd215d42bd7a47faf51a862",
+        "009c13fade9dde2fe7eed068c72c579172f12e60",
+        "54441e63d824d4df11d031fc4811d1af9077e67f",
+        "3be90ced4462f3943b198c10eba55d32563b87b0",
+        "a9fc4dc2b010db7979dee9d11c94580fee62b44d",
+        "45387700bf49401fd9de4f2db36575e50f9649eb"
+      ],
+      "executionAfterBatchIds": ["pr-browsing-freshness"],
+      "truePrerequisites": [
+        {
+          "kind": "source",
+          "reference": "ce8ca5bb3d005d8653d1b09c1e7c9e02d3ef8ae4",
+          "satisfaction": "candidate-not-adopted",
+          "description": "Before009c13fa, adopt only core keybindings terminalFocus guard and regression. Full source sidebar hook wiring/test remain separate; record partial if only these two files are adopted."
+        }
+      ],
+      "baseRevision": null,
+      "headRevision": null,
+      "branch": null,
+      "evidence": [
+        {
+          "path": "../plans/2026-09-12-v40-dependency-batches.md#settings-navigation-and-provider-editor-30-sources",
+          "summary": "Frozen source order and current preservation plan."
+        }
+      ],
+      "review": {
+        "status": "not-requested",
+        "revision": null,
+        "reviewer": null,
+        "evidencePath": null,
+        "summary": "Implementation has not started."
+      },
+      "integration": {
+        "status": "not-started",
+        "revision": null,
+        "evidencePath": null,
+        "summary": "No implementation exists to integrate."
+      },
+      "verification": [
+        {
+          "command": "focused command-palette, settings, keybinding, provider-instance, provider-model, readiness, shared project operations, and mobile environment tests; web, shared runtime, and mobile typechecks",
+          "result": "not-run",
+          "details": "Retain pulseSettingsSearch coverage and add missing-environment, readonly, enabled-state, and instance-targeted setup cases."
+        }
+      ],
+      "preservationRequirements": [
+        "Retain Pulse Office, Talk, scheduler, ORCA and other commands, pulseSettingsSearch, Pulse Connect wording, configured provider paths, explicit model choices, MCP defaults, managed skills, and usage controls.",
+        "Preserve requested environment and provider instance ownership, visibly unavailable missing environments, readonly remote, hosted pairing, and desktop-local gates.",
+        "Apply clone defaults and machine icons across mobile and shared consumers, and keyboard changes across every touched caller."
+      ],
+      "excludedChanges": [
+        "Exclude shared-preference sync, auto-settle defaults, usage-control relocation, installer ownership, global loading and notice restyles, segmented controls, mobile Uniwind, and broad export cleanup.",
+        "Do not replace whole ChatView, SettingsPanels, or CommandPalette files."
+      ],
+      "blockers": [
+        "PR batch must clear review and integration before overlapping settings implementation.",
+        "Revalidate the bounded terminal-focus prerequisite at the actual post-PR base."
+      ],
+      "nextAction": "After PR browsing is reviewed and integrated, freeze the actual base revision and revalidate provider, navigation, shared, mobile, and keyboard dependencies before implementation."
+    },
+    {
+      "id": "desktop-error-predicates",
+      "title": "Desktop test-only error predicates",
+      "state": "integrated",
+      "sourceHashes": [
+        "a9caf7b7089afb6f1b3b888ea404b75b8f9e88e1",
+        "56a2f42b8ce27f5deefaa85a02ae9c1d3b61f309"
+      ],
+      "executionAfterBatchIds": [],
+      "truePrerequisites": [],
+      "baseRevision": "445757f83a4761568492d92a8192daba83a3f70c",
+      "headRevision": "f33904878a20b949199a5b5d5cab9d5826f6b649",
+      "branch": "sync/v040-desktop-predicates",
+      "evidence": [
+        {
+          "path": "../plans/2026-09-12-v40-dependency-batches.md#independent-desktop-error-predicates-two-sources",
+          "summary": "Astra verified no shared-file or dependency overlap with utilities9; separate worktree."
+        },
+        {
+          "path": "v40-desktop-predicates-review-2026-09-12.md",
+          "summary": "Frozen implementation and focused verification evidence on the implementation branch."
+        }
+      ],
+      "review": {
+        "status": "approved",
+        "revision": "f33904878a20b949199a5b5d5cab9d5826f6b649",
+        "reviewer": "sol_utilities9",
+        "evidencePath": "v40-desktop-predicates-review-2026-09-12.md#independent-review-and-integration",
+        "summary": "No code findings; corrected assertion count from 20 to 18 in a docs-only commit."
+      },
+      "integration": {
+        "status": "integrated",
+        "revision": "c6eb78b475db40d0022ec75b379ad32cba759536",
+        "evidencePath": "v40-desktop-predicates-review-2026-09-12.md#independent-review-and-integration",
+        "summary": "Clean reviewed integration; two source rows closed in ff3ad9680."
+      },
+      "verification": [
+        {
+          "command": "Eight focused desktop test files; desktop typecheck; changed-file lint",
+          "result": "passed-with-warnings",
+          "details": "Baseline and final eight files, 56 tests passed; desktop types passed with five existing suggestions; changed-file lint passed."
+        }
+      ],
+      "preservationRequirements": [
+        "Preserve error classes, payloads and cause chains; Pulse window identity, update channels and server exposure behavior."
+      ],
+      "excludedChanges": [
+        "No shared contracts, settings, runtime modules or native behavior changes. No generic abstraction."
+      ],
+      "blockers": [],
+      "nextAction": "No further work in this bounded batch; preserve existing desktop behavior during later imports."
+    }
+  ]
+}
