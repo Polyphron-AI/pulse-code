@@ -28,9 +28,14 @@ Module names above describe ownership, not a mandate to create new npm packages.
 ## Proposed skills and MCP defaults
 
 Retain file/ZIP and Git-linked skill imports with immutable revisions. Uploaded
-skills stay pinned to the uploaded content until explicitly replaced; they have
-no automatic-update control. For a Git-linked skill, offer **Pin version** or
-**Keep updated**. Pin version retains the resolved commit and content revision.
+skills stay pinned to the uploaded content until explicitly replaced or linked
+to an update source. Offer **Pin version** and **Keep updated** for every skill.
+Selecting Keep updated without a GitHub source prompts for a GitHub link and,
+where needed, the skill directory and tracking branch/ref. Validate repository
+access and the selected skill before enabling updates. Cancelling the prompt or
+failing validation leaves the current content and pinned policy unchanged. A
+skill with a valid saved source reuses it without prompting for the link again.
+Pin version retains the resolved commit and content revision.
 Keep updated follows the selected repository branch/ref, validates each update,
 and makes a successful new revision available to subsequent turns. A fixed commit
 cannot track updates; selecting Keep updated requires a tracking branch/ref.

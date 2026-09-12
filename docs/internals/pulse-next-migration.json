@@ -35,10 +35,13 @@
       ],
       "updatePolicy": {
         "decision": "confirmed-by-user",
-        "upload": "Pinned to uploaded content until explicitly replaced; no keep-updated option.",
+        "upload": "Pinned to uploaded content until explicitly replaced or successfully linked through Keep updated.",
         "gitLinked": "User chooses Pin version or Keep updated.",
         "pin": "Retain the resolved commit and immutable content revision; switching from Keep updated freezes the current revision.",
         "keepUpdated": "Follow a selected tracking branch/ref, validate updates and apply successful revisions to subsequent turns.",
+        "missingSource": "Selecting Keep updated without a GitHub source prompts for a GitHub link and, where needed, skill directory and tracking branch/ref. Validate access and skill content before enabling updates.",
+        "cancelSourceSetup": "Cancel or validation failure leaves the existing content and pinned policy unchanged.",
+        "existingSource": "Reuse a valid saved GitHub source without prompting for its link again.",
         "failure": "Retain the last valid revision and show update errors.",
         "activeTurn": "Retain the selected immutable revision for the duration of the turn.",
         "hostSupport": "Existing source supports GitHub imports; other Git hosts require assessment."
