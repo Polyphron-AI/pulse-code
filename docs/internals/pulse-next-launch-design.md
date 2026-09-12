@@ -119,6 +119,13 @@ stack into a long single column on mobile, so managed skills and MCP need direct
 settings navigation or anchors, not placement after all provider runtime fields.
 Keep the microphone separate from the send action and never replace its semantics.
 
+Skills and MCP dropdowns show per-thread on/off selections and update the trigger's
+selected count immediately. Label their effect as next-turn selection, not tool
+health or an already-running turn change. The interactive mockup uses a 140 ms
+dropdown reveal and a 120 ms switch transition; reduced motion removes sliding.
+Example entries in `.t3/visual-evidence/skills-mcp-toggle-demo.webm` are local mock
+state only. Keyboard Escape closes the dropdown. No backend activation is shown.
+
 Local baseline captures are in `.t3/visual-evidence/` and are not release evidence.
 They show the upstream UI before Pulse controls, not a completed before/after
 comparison. No native mobile app, device keyboard or recording flow was tested.
