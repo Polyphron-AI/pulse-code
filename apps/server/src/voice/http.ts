@@ -77,6 +77,16 @@ export const pulseDictationTranscriberLayer = Layer.effect(
   }),
 );
 
+const pulseDictationTranscriberMiddlewareLayer = HttpRouter.middleware<{
+  provides: PulseDictationTranscriber;
+}>()(
+  Effect.map(
+    PulseDictationTranscriber,
+    (transcriber) => (httpEffect) =>
+      Effect.provideService(httpEffect, PulseDictationTranscriber, transcriber),
+  ),
+).layer;
+
 const authenticateWithScope = (
   scope: typeof AuthOrchestrationReadScope | typeof AuthOrchestrationOperateScope,
   unsafe = false,
@@ -276,9 +286,18 @@ const removeApiKeyRoute = HttpRouter.add(
   ),
 );
 
-export const pulseDictationRouteLayer = Layer.mergeAll(
-  transcriptionRoute,
-  apiKeyStatusRoute,
-  setApiKeyRoute,
-  removeApiKeyRoute,
+export const makePulseDictationRouteLayer = <E, R>(
+  transcriberLayer: Layer.Layer<PulseDictationTranscriber, E, R>,
+) =>
+  Layer.mergeAll(
+    transcriptionRoute.pipe(
+      Layer.provide(pulseDictationTranscriberMiddlewareLayer.pipe(Layer.provide(transcriberLayer))),
+    ),
+    apiKeyStatusRoute,
+    setApiKeyRoute,
+    removeApiKeyRoute,
+  );
+
+export const pulseDictationRouteLayer = makePulseDictationRouteLayer(
+  pulseDictationTranscriberLayer,
 );

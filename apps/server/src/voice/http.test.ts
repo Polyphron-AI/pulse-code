@@ -21,7 +21,7 @@ import { SqlitePersistenceMemory } from "../persistence/Layers/Sqlite.ts";
 import * as SessionStore from "../auth/SessionStore.ts";
 import {
   PulseDictationTranscriber,
-  pulseDictationRouteLayer,
+  makePulseDictationRouteLayer,
   type PulseDictationTranscriberService,
 } from "./http.ts";
 
@@ -62,11 +62,12 @@ const withRoutes = <A, E, R>(
 ) =>
   Effect.scoped(
     Effect.gen(function* () {
-      yield* pulseDictationRouteLayer.pipe(
+      yield* makePulseDictationRouteLayer(
+        Layer.succeed(PulseDictationTranscriber, transcriber),
+      ).pipe(
         HttpRouter.serve,
         Layer.provide(authLayer(scopes)),
         Layer.provide(configLayer),
-        Layer.provide(Layer.succeed(PulseDictationTranscriber, transcriber)),
         Layer.provide(Layer.succeed(ServerSecretStore.ServerSecretStore, makeSecretStore())),
         Layer.build,
       );
@@ -117,11 +118,10 @@ describe("pulse dictation HTTP routes", () => {
           devAllowedOrigins: [],
         } as unknown as ServerConfig.ServerConfig["Service"]);
 
-        yield* pulseDictationRouteLayer.pipe(
+        yield* makePulseDictationRouteLayer(Layer.succeed(PulseDictationTranscriber, fake)).pipe(
           HttpRouter.serve,
           Layer.provide(Layer.succeed(EnvironmentAuth.EnvironmentAuth, serverAuth)),
           Layer.provide(routeConfig),
-          Layer.provide(Layer.succeed(PulseDictationTranscriber, fake)),
           Layer.provide(Layer.succeed(ServerSecretStore.ServerSecretStore, makeSecretStore())),
           Layer.build,
         );
