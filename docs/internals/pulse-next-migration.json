@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "project": "Pulse Next",
   "updatedAt": "2026-09-12",
-  "status": "defaults-approved-baseline-inspected",
+  "status": "launch-module-foundations-integrated",
   "upstreamAutomation": {
     "decision": "approved-by-user",
     "implementation": "local-release-check-and-source-preparation-only",
@@ -439,25 +439,29 @@
   "mcpBehaviorProposal": "docs/internals/pulse-next-mcp-behavior.md",
   "activeImplementationBatch": {
     "id": "managed-skills-foundation",
-    "state": "review-fixes-in-progress",
+    "state": "foundation-integrated",
     "agent": "sol_skills_fixes",
     "branch": "feat/pulse-next-managed-skills",
     "baseRevision": "da4addd056bebc3b47a1a5d822ba849fb6c305d8",
     "scope": "Immutable managed skill store and trusted catalog, decoupled from upstream ServerSettings. No callable UI until provider dispatch is verified.",
-    "review": "18 tests passed; fix GitHub dot-segment validation and bounded revision reads before integration",
+    "review": "Independent Sol re-review approved 3a9ff5143; 28 tests passed again on integration branch. Integration tip cb0b220a4.",
     "remaining": "Catalog/wire identity preservation, provider dispatch, picker integration and real client checks remain separate dependent batches."
   },
   "parallelFoundationBatches": [
     {
       "id": "dictation-lifecycle",
       "branch": "feat/pulse-next-dictation",
-      "state": "implementing",
+      "state": "foundation-integrated",
+      "reviewedRevision": "ec57d6f75",
+      "focusedTests": 12,
       "scope": "Isolated lifecycle and deterministic tests; capture/backend/composer integration follows"
     },
     {
       "id": "mcp-preflight",
       "branch": "feat/pulse-next-mcp",
-      "state": "implementing",
+      "state": "foundation-integrated",
+      "reviewedRevision": "45ad163ae",
+      "focusedTests": 14,
       "scope": "Selection and preflight decisions with tests; provider/settings/composer integration follows"
     }
   ]

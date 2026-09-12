@@ -1,8 +1,10 @@
 # Pulse Next launch design proposal
 
-Status: defaults and module approach approved; visual comparison in progress.
-Not implemented or platform-verified. The feature ledger owns scope and approval
-state. The UI placements below still need comparison against the running baseline.
+Status: defaults and module approach approved. The managed skill store, MCP
+preflight decisions and dictation lifecycle foundations are integrated with
+focused tests. Provider/backend adapters, configuration and UI wiring are not
+implemented or platform-verified. The feature ledger owns scope and approval
+state; layout mockups are not production behavior.
 
 ## Packaging
 
@@ -99,13 +101,13 @@ an implicit fallback requiring another runtime.
 Keep T3 navigation, thread list, message feed and composer structure. No Office
 switcher, agent dashboard or new top-level workspace.
 
-| Location | Small Pulse addition |
-| --- | --- |
-| Composer on desktop/web | Model, effort, access, Skills, MCP in that order; microphone in the composer's top-right corner, Send/Stop and attachment at bottom-right |
+| Location                   | Small Pulse addition                                                                                                                                           |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Composer on desktop/web    | Model, effort, access, Skills, MCP in that order; microphone in the composer's top-right corner, Send/Stop and attachment at bottom-right                      |
 | Narrow mobile web composer | Keep all five selectors visible in the same reading order: model/effort/access then Skills/MCP; microphone top-right, separated from Send/Stop at bottom-right |
-| Existing settings | Managed skills, MCP connections and Dictation entries using existing settings composition |
-| Dictation settings | Backend, local model setup/status, or protected Groq configuration; explicit audio destination |
-| Active recording | Static status, elapsed time if useful, Stop and Cancel; no continuously animated waveform |
+| Existing settings          | Managed skills, MCP connections and Dictation entries using existing settings composition                                                                      |
+| Dictation settings         | Backend, local model setup/status, or protected Groq configuration; explicit audio destination                                                                 |
+| Active recording           | Static status, elapsed time if useful, Stop and Cancel; no continuously animated waveform                                                                      |
 
 The baseline was inspected in Chromium at 1280x800 and 390x844 on 2026-09-12.
 Desktop has model, effort and access controls on the left, attachment and send on

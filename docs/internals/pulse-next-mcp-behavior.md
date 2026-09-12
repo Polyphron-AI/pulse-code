@@ -1,7 +1,9 @@
 # MCP behavior proposal
 
 Status: launch defaults and connection-failure handling approved. Remaining details
-are the implementation proposal. No MCP runtime changes are implemented.
+are the implementation proposal. The isolated preflight decision module is
+implemented and tested; provider execution, persistence and composer integration
+are not yet wired.
 
 ## Ownership and selection
 
