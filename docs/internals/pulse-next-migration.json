@@ -423,8 +423,8 @@
       "Embedded browser snapshot/resize failed; headless Python Playwright supplied captures."
     ],
     "findings": [
-      "Reuse existing mobile More composer controls instead of adding a second Tools trigger.",
-      "Keep microphone separate from Send/Stop.",
+      "User superseded overflow proposal: keep Model, Effort, Access, Skills and MCP visible in order, wrapping on mobile.",
+      "Place microphone directly above Send/Stop; retain attachment beside the action stack.",
       "Provide direct settings access to managed skills/MCP; mobile provider runtime settings are a long column."
     ]
   }
