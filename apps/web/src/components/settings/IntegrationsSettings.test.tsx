@@ -20,7 +20,9 @@ vi.mock("../../env", () => ({ isElectron: true }));
 vi.mock("../../state/environments", () => ({
   useEnvironments: () => ({ environments: [], isReady: true }),
   usePrimaryEnvironment: () => null,
+  usePrimaryEnvironmentId: () => null,
 }));
+vi.mock("../../skills/ManagedSkillsSettings", () => ({ ManagedSkillsSettings: () => null }));
 vi.mock("../../hooks/useSettings", () => ({
   PRIMARY_SETTINGS_UNAVAILABLE_MESSAGE: "Connect to an environment",
   useClientSettings: (selector: (settings: typeof DEFAULT_CLIENT_SETTINGS) => unknown) =>

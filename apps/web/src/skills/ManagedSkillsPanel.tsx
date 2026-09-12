@@ -223,8 +223,7 @@ export function ManagedSkillsPanel({
           <AlertDialogHeader>
             <AlertDialogTitle>Remove {removing?.name}?</AlertDialogTitle>
             <AlertDialogDescription>
-              It will no longer be available for new turns. A turn that already started keeps its
-              selected revision.
+              This removes the managed skill files from this environment.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
