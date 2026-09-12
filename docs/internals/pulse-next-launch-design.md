@@ -126,6 +126,23 @@ dropdown reveal and a 120 ms switch transition; reduced motion removes sliding.
 Example entries in `.t3/visual-evidence/skills-mcp-toggle-demo.webm` are local mock
 state only. Keyboard Escape closes the dropdown. No backend activation is shown.
 
+Group Git-linked skills by repository in the Skills dropdown. Each group has an
+expand/collapse control, a repository label and an enabled/total count that remains
+visible when collapsed. Individual skills retain their own toggles; collapsing a
+group never changes selection. This lets users expand a collection such as Matt
+Pollock's skills, choose the skills needed, then collapse it to manage other
+collections. Group by repository identity, not author display name; multiple
+repositories from one author remain distinct. Show branch/ref and skill path
+inside the group where needed to distinguish imports. Uploaded skills without a
+linked repository appear in an Uploaded skills group.
+
+Keep collapse state local to the client, separate from per-thread skill selection.
+Repository groups use keyboard-accessible disclosure controls with aria-expanded.
+Search exposes matching skills within their groups without discarding the user's
+previous collapse choices when the search is cleared. No bulk activation is
+implied by expanding a repository. The exact Matt Pollock repository remains to
+be supplied before importing any real content.
+
 Local baseline captures are in `.t3/visual-evidence/` and are not release evidence.
 They show the upstream UI before Pulse controls, not a completed before/after
 comparison. No native mobile app, device keyboard or recording flow was tested.

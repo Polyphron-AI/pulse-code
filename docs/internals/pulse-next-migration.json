@@ -54,7 +54,16 @@
         "apps/web/src/components/settings/McpSettingsPanel.tsx",
         "docs/user/managed-skills.md",
         "docs/user/mcp-connections.md"
-      ]
+      ],
+      "repositoryGrouping": {
+        "decision": "confirmed-by-user",
+        "groupBy": "GitHub repository identity, not author display name",
+        "controls": "Expand/collapse each repository; toggle individual skills; retain enabled/total counts when collapsed",
+        "selection": "Collapse/expand never changes activation",
+        "unlinked": "Separate Uploaded skills group",
+        "search": "Expose matches while searching; restore previous collapse choices when cleared",
+        "example": "Matt Pollock skills collection; exact repository not supplied, no import authorized"
+      }
     },
     {
       "id": "voice-dictation",
