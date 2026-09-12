@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vite-plus/test";
 import {
   GROQ_TRANSCRIPTION_ENDPOINT,
   GROQ_TRANSCRIPTION_MAX_AUDIO_BYTES,
+  GROQ_TRANSCRIPTION_MAX_RESPONSE_BYTES,
   createGroqTranscriber,
 } from "./groqTranscription.ts";
 
@@ -75,8 +76,56 @@ describe("createGroqTranscriber", () => {
     const abort = new AbortController();
     const pending = transcriber.transcribe(audio, abort.signal);
     await Promise.resolve();
+    await Promise.resolve();
     expect(fetch).toHaveBeenCalledOnce();
     abort.abort(reason);
     await expect(pending).rejects.toBe(reason);
+  });
+
+  it("does not fetch when the caller aborts during API key lookup", async () => {
+    let resolveKey!: (key: string) => void;
+    const getApiKey = vi.fn(
+      () =>
+        new Promise<string>((resolve) => {
+          resolveKey = resolve;
+        }),
+    );
+    const fetch = vi.fn();
+    const transcriber = createGroqTranscriber({ fetch, getApiKey });
+    const abort = new AbortController();
+    const reason = new Error("environment changed");
+    const pending = transcriber.transcribe(audio, abort.signal);
+    abort.abort(reason);
+    resolveKey("late-key");
+
+    await expect(pending).rejects.toBe(reason);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("bounds the entire request with a fixed timeout", async () => {
+    vi.useFakeTimers();
+    try {
+      const fetch = vi.fn(() => new Promise<Response>(() => undefined));
+      const transcriber = createGroqTranscriber({
+        fetch,
+        getApiKey: async () => "key",
+        timeoutMs: 50,
+      });
+      const pending = transcriber.transcribe(audio, new AbortController().signal);
+      const rejected = expect(pending).rejects.toThrow("timed out");
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(50);
+      await rejected;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("rejects oversized successful responses without parsing them", async () => {
+    const response = new Response(new Uint8Array(GROQ_TRANSCRIPTION_MAX_RESPONSE_BYTES + 1));
+    const test = setup(response);
+    await expect(test.transcriber.transcribe(audio, new AbortController().signal)).rejects.toThrow(
+      "oversized transcription response",
+    );
   });
 });
