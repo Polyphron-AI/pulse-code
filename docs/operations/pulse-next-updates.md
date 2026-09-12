@@ -35,8 +35,10 @@ task upstream:features
 ```
 
 `upstream:features` runs the integrated skills store, library, RPC bridge and
-contracts tests, RPC authorization tests, MCP preflight and dictation lifecycle
-suites. Prepared source worktrees under `.t3` are excluded from host test discovery.
+contracts tests, RPC authorization and targeted WebSocket tests, MCP preflight and
+connection persistence, dictation lifecycle, browser capture, Groq and Parakeet
+adapter suites. Prepared source
+worktrees under `.t3` are excluded from host test discovery.
 Missing suites, runner failures and timeouts block its
 result. Logs and the platform/revision-stamped report live in
 `.t3/upstream-updates/features/`. Passing these module tests is not a release gate

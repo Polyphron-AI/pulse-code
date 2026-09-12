@@ -7,7 +7,11 @@ import { git, writeJson } from "./pipeline.mjs";
 export const featureSuites = [
   { id: "managed-skills", file: "apps/server/src/skills/ManagedSkillStore.test.ts" },
   { id: "mcp-preflight", file: "apps/server/src/mcp/PulseMcpPreflight.test.ts" },
+  { id: "mcp-connections", file: "apps/server/src/mcp/PulseMcpConfigService.test.ts" },
   { id: "dictation-lifecycle", file: "apps/web/src/voice/pulseDictation.test.ts" },
+  { id: "dictation-capture", file: "apps/web/src/voice/mediaRecorderCapture.test.ts" },
+  { id: "dictation-groq", file: "apps/server/src/voice/groqTranscription.test.ts" },
+  { id: "dictation-parakeet", file: "apps/web/src/voice/parakeetTranscription.test.ts" },
   { id: "managed-skills-library", file: "apps/server/src/skills/ManagedSkillLibrary.test.ts" },
   { id: "managed-skills-rpc", file: "apps/server/src/skills/ManagedSkillRpc.test.ts" },
   { id: "managed-skills-contracts", file: "packages/contracts/src/pulseSkills.test.ts" },
