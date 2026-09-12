@@ -1,0 +1,23 @@
+version: '3'
+
+tasks:
+  upstream:check:
+    desc: Check the latest stable T3 release without preparing a candidate
+    cmds:
+      - node scripts/pulse-updates/run.mjs check
+  upstream:prepare:
+    desc: Prepare an isolated candidate; never install dependencies or launch it
+    cmds:
+      - node scripts/pulse-updates/run.mjs prepare
+  upstream:candidate:
+    desc: Check and prepare, then enforce the Pulse release verification gate
+    cmds:
+      - node scripts/pulse-updates/run.mjs candidate
+  upstream:status:
+    desc: Show the last local release-check result
+    cmds:
+      - node scripts/pulse-updates/run.mjs status
+  upstream:test:
+    desc: Test the release pipeline without network, providers or installations
+    cmds:
+      - node --test scripts/pulse-updates/pipeline.test.mjs
