@@ -15,6 +15,8 @@ const mocks = vi.hoisted(() => ({
   queryData: new Map<string, ReadonlyArray<unknown>>(),
   emptyQueryData: [] as ReadonlyArray<unknown>,
   configSource: "live" as "cache" | "live",
+  configManagedSkills: true,
+  sessionPending: false,
   scopes: ["orchestration:read", "orchestration:operate"] as ReadonlyArray<string>,
 }));
 
@@ -23,7 +25,7 @@ vi.mock("@effect/atom-react", () => ({
     _tag: "Success",
     value: {
       source: mocks.configSource,
-      config: { pulseCapabilities: { managedSkills: true } },
+      config: { pulseCapabilities: { managedSkills: mocks.configManagedSkills } },
     },
     waiting: false,
   }),
@@ -36,7 +38,7 @@ vi.mock("../state/environments", () => ({
 vi.mock("../state/session", () => ({
   useEnvironmentSessionState: () => ({
     data: { authenticated: true, scopes: mocks.scopes },
-    isPending: false,
+    isPending: mocks.sessionPending,
     hasError: false,
   }),
 }));
@@ -104,6 +106,8 @@ beforeEach(() => {
   mocks.mutate.mockReset();
   mocks.queryData.clear();
   mocks.configSource = "live";
+  mocks.configManagedSkills = true;
+  mocks.sessionPending = false;
   mocks.scopes = [AuthOrchestrationReadScope, AuthOrchestrationOperateScope];
 });
 
@@ -130,6 +134,7 @@ async function renderSettings() {
 describe("ManagedSkillsSettings", () => {
   it("does not probe the skills RPC on an upstream environment", async () => {
     mocks.environments = [environment("upstream", false)];
+    mocks.configManagedSkills = false;
 
     await renderSettings();
 
@@ -186,5 +191,45 @@ describe("ManagedSkillsSettings", () => {
     expect(JSON.stringify(renderer!.toJSON())).toContain(
       "Waiting for current managed skills support",
     );
+  });
+
+  it("replaces a cached capability with an explicit unsupported live state", async () => {
+    mocks.environments = [environment("primary", true)];
+    mocks.primaryEnvironmentId = "primary";
+    mocks.configSource = "cache";
+
+    await renderSettings();
+    expect(mocks.list).not.toHaveBeenCalled();
+
+    mocks.configSource = "live";
+    mocks.configManagedSkills = false;
+    await act(() => renderer!.update(<ManagedSkillsSettings />));
+
+    expect(mocks.list).not.toHaveBeenCalled();
+    expect(JSON.stringify(renderer!.toJSON())).toContain(
+      "Managed skills are not supported by this environment",
+    );
+  });
+
+  it("drops stale operate scopes during reconnect and restores fresh read-only access", async () => {
+    mocks.environments = [environment("primary", true)];
+    mocks.primaryEnvironmentId = "primary";
+
+    await renderSettings();
+    expect(JSON.stringify(renderer!.toJSON())).toContain('"primary"," ","editable"');
+
+    mocks.list.mockClear();
+    mocks.sessionPending = true;
+    await act(() => renderer!.update(<ManagedSkillsSettings />));
+
+    expect(mocks.list).not.toHaveBeenCalled();
+    expect(JSON.stringify(renderer!.toJSON())).toContain("Checking access");
+
+    mocks.sessionPending = false;
+    mocks.scopes = [AuthOrchestrationReadScope];
+    await act(() => renderer!.update(<ManagedSkillsSettings />));
+
+    expect(mocks.list).toHaveBeenCalledWith({ environmentId: "primary", input: {} });
+    expect(JSON.stringify(renderer!.toJSON())).toContain('"primary"," ","read only"');
   });
 });

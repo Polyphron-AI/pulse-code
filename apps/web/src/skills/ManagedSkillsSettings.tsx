@@ -7,7 +7,7 @@ import {
   type PulseSkillMutation,
   type PulseSkillRecord,
 } from "@t3tools/contracts";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as Option from "effect/Option";
 import { AsyncResult } from "effect/unstable/reactivity";
 
@@ -45,15 +45,8 @@ export function ManagedSkillsSettings() {
   const { environments, isReady } = useEnvironments();
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const [selectedEnvironmentId, setSelectedEnvironmentId] = useState<EnvironmentId | null>(null);
-  const availableEnvironments = useMemo(
-    () =>
-      environments.filter(
-        (environment) => environment.serverConfig?.pulseCapabilities?.managedSkills === true,
-      ),
-    [environments],
-  );
   const environmentId = resolveManagedSkillsEnvironmentId(
-    availableEnvironments.map((environment) => environment.environmentId),
+    environments.map((environment) => environment.environmentId),
     selectedEnvironmentId,
     primaryEnvironmentId,
   );
@@ -71,7 +64,7 @@ export function ManagedSkillsSettings() {
     <ManagedSkillsEnvironment
       key={environmentId}
       environmentId={environmentId}
-      environments={availableEnvironments}
+      environments={environments}
       primaryEnvironmentId={primaryEnvironmentId}
       onEnvironmentChange={setSelectedEnvironmentId}
     />
@@ -93,11 +86,12 @@ function ManagedSkillsEnvironment({
     serverEnvironment.configProjection({ environmentId, input: {} }),
   );
   const configProjection = Option.getOrNull(AsyncResult.value(configResult));
+  const liveConfigReady = configProjection?.source === "live";
   const liveSupportsManagedSkills =
-    configProjection?.source === "live" &&
-    configProjection.config.pulseCapabilities?.managedSkills === true;
+    liveConfigReady && configProjection.config.pulseCapabilities?.managedSkills === true;
   const session = useEnvironmentSessionState(environmentId);
-  const scopes = session.data?.authenticated === true ? session.data.scopes : undefined;
+  const sessionFresh = !session.isPending && session.data?.authenticated === true;
+  const scopes = sessionFresh && session.data ? session.data.scopes : undefined;
   const canRead = scopes?.includes(AuthOrchestrationReadScope) === true;
   const canOperate = scopes?.includes(AuthOrchestrationOperateScope) === true;
   const list = useEnvironmentQuery(
@@ -105,6 +99,13 @@ function ManagedSkillsEnvironment({
   );
   const mutate = useAtomCommand(mutateManagedSkill, { reportFailure: false });
   const [skills, setSkills] = useState<ReadonlyArray<PulseSkillRecord>>([]);
+  const accessGenerationRef = useRef(0);
+  const accessKeyRef = useRef("");
+  const accessKey = `${liveSupportsManagedSkills}:${sessionFresh}:${canRead}:${canOperate}`;
+  if (accessKeyRef.current !== accessKey) {
+    accessKeyRef.current = accessKey;
+    accessGenerationRef.current += 1;
+  }
 
   useEffect(() => {
     if (list.data) setSkills(list.data);
@@ -114,8 +115,14 @@ function ManagedSkillsEnvironment({
     capturedEnvironmentId: string,
     mutation: PulseSkillMutation,
   ): Promise<ReadonlyArray<PulseSkillRecord>> => {
-    if (capturedEnvironmentId !== environmentId) throw new Error("The environment changed.");
+    if (capturedEnvironmentId !== environmentId || !liveSupportsManagedSkills || !canOperate) {
+      throw new Error("Managed skills access changed.");
+    }
+    const accessGeneration = accessGenerationRef.current;
     const result = await mutate({ environmentId, input: mutation });
+    if (accessGeneration !== accessGenerationRef.current) {
+      throw new Error("Managed skills access changed before the operation finished.");
+    }
     if (result._tag === "Failure") throw squashAtomCommandFailure(result);
     setSkills(result.value);
     return result.value;
@@ -154,11 +161,15 @@ function ManagedSkillsEnvironment({
         </Select>
       </div>
 
-      {!liveSupportsManagedSkills ? (
+      {!liveConfigReady ? (
         <p className="text-sm text-muted-foreground">
           Waiting for current managed skills support from this environment.
         </p>
-      ) : session.isPending && session.data === null ? (
+      ) : !liveSupportsManagedSkills ? (
+        <p className="text-sm text-muted-foreground">
+          Managed skills are not supported by this environment.
+        </p>
+      ) : session.isPending ? (
         <p className="text-sm text-muted-foreground">Checking access…</p>
       ) : !canRead ? (
         <p className="text-sm text-muted-foreground">
