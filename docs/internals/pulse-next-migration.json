@@ -63,6 +63,18 @@
         "unlinked": "Separate Uploaded skills group",
         "search": "Expose matches while searching; restore previous collapse choices when cleared",
         "example": "Matt Pollock skills collection; exact repository not supplied, no import authorized"
+      },
+      "mcpFailurePolicy": {
+        "decision": "confirmed-by-user",
+        "onSelectedConnectionFailure": "Pause sending and identify the failed selected connections.",
+        "actions": [
+          "Retry",
+          "Continue without it"
+        ],
+        "continueScope": "Explicitly omit the failed connection for this turn only; preserve saved selection and provider defaults.",
+        "retry": "Retry preparation without submitting duplicate turns.",
+        "draft": "Preserve the draft while resolving the connection failure.",
+        "limitation": "Unknown provider-reported readiness is not a confirmed connection failure and must not be labelled available."
       }
     },
     {

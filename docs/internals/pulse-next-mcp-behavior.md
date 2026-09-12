@@ -1,7 +1,7 @@
 # MCP behavior proposal
 
-Status: proposal for discussion. Existing launch defaults remain approved; failure
-handling below still needs a user decision. No MCP runtime changes are implemented.
+Status: launch defaults and connection-failure handling approved. Remaining details
+are the implementation proposal. No MCP runtime changes are implemented.
 
 ## Ownership and selection
 
@@ -41,7 +41,7 @@ different tools. Switching a toggle does not execute a tool or bypass approval.
 Disabling a connection is not an emergency cancellation of an in-flight tool call;
 Stop retains its existing upstream meaning. Show this distinction when a turn runs.
 
-Proposed failure policy: when a selected connection cannot be applied, stop before
+Approved failure policy: when a selected connection cannot be applied, stop before
 sending and offer Retry, Fix connection or Continue without it for this turn.
 That last action requires an explicit choice and must not silently change saved
 defaults. If the provider cannot report per-connection readiness, show Unknown
