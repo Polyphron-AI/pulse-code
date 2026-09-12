@@ -226,16 +226,22 @@ export const githubRequest: GitHubRequest = async (endpoint) => {
   }
 };
 
-export async function downloadGitHubSkill(source: GitHubSkillSource, request: GitHubRequest) {
+function validateGitHubSource(source: GitHubSkillSource): GitHubSkillSource {
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(source.repository)) {
     throw new Error("Use a GitHub owner/repository.");
   }
   if (source.ref.length > 200) throw new Error("GitHub refs are limited to 200 characters.");
   const directory = source.directory.trim().replace(/^\/+|\/+$/g, "");
   if (directory) validateSkillPath(directory);
-  const base = `repos/${source.repository}`;
+  return { ...source, ref: source.ref.trim(), directory };
+}
+
+export async function downloadGitHubSkill(source: GitHubSkillSource, request: GitHubRequest) {
+  const validatedSource = validateGitHubSource(source);
+  const directory = validatedSource.directory;
+  const base = `repos/${validatedSource.repository}`;
   const commit = object(
-    await request(`${base}/commits/${encodeURIComponent(source.ref.trim() || "HEAD")}`),
+    await request(`${base}/commits/${encodeURIComponent(validatedSource.ref || "HEAD")}`),
   ).sha;
   if (typeof commit !== "string" || !/^[a-f0-9]{40}$/.test(commit)) {
     throw new Error("GitHub did not return a commit revision.");
@@ -324,11 +330,12 @@ export class ManagedSkillStore {
     updatePolicy: ManagedSkillUpdatePolicy = "pinned",
     previous?: ManagedSkillRecord,
   ): Promise<ManagedSkillRecord> {
-    const downloaded = await downloadGitHubSkill(source, this.request);
+    const validatedSource = validateGitHubSource(source);
+    const downloaded = await downloadGitHubSkill(validatedSource, this.request);
     return this.persist(
       validateManagedId(id),
       validateSkillFiles(downloaded.files),
-      source,
+      validatedSource,
       previous,
       updatePolicy,
       downloaded.commit,
@@ -337,13 +344,9 @@ export class ManagedSkillStore {
 
   linkGitHub(record: ManagedSkillRecord, source: GitHubSkillSource): ManagedSkillRecord {
     validateManagedId(record.id);
-    if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(source.repository)) {
-      throw new Error("Use a GitHub owner/repository.");
-    }
-    if (source.directory.trim())
-      validateSkillPath(source.directory.trim().replace(/^\/+|\/+$/g, ""));
+    const validatedSource = validateGitHubSource(source);
     const { error: _error, resolvedCommit: _resolvedCommit, ...current } = record;
-    return { ...current, source, updatePolicy: "pinned" };
+    return { ...current, source: validatedSource, updatePolicy: "pinned" };
   }
 
   setUpdatePolicy(

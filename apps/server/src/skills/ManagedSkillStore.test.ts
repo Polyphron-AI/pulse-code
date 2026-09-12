@@ -111,13 +111,27 @@ describe("managed skill imports", () => {
       const linked = store.linkGitHub(upload, {
         type: "github",
         repository: "team/private",
+        ref: " main ",
+        directory: "/skills/review/",
+      });
+      expect(linked.revision).toBe(upload.revision);
+      expect(linked.source).toEqual({
+        type: "github",
+        repository: "team/private",
         ref: "main",
         directory: "skills/review",
       });
-      expect(linked.revision).toBe(upload.revision);
       expect(linked.updatePolicy).toBe("pinned");
       expect(store.setUpdatePolicy(linked, "keep-updated").updatePolicy).toBe("keep-updated");
       expect(() => store.setUpdatePolicy(upload, "keep-updated")).toThrow(/GitHub source/);
+      expect(() =>
+        store.linkGitHub(upload, {
+          type: "github",
+          repository: "team/private",
+          ref: "x".repeat(201),
+          directory: "skills/review",
+        }),
+      ).toThrow(/200/);
     });
   });
 
