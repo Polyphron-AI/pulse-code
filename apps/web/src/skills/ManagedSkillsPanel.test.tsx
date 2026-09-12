@@ -1,7 +1,21 @@
 import type { PulseSkillRecord } from "@t3tools/contracts";
-import { act } from "react";
+import { act, type ReactNode } from "react";
 import { create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+
+vi.mock("../components/ui/dialog", () => {
+  const Part = ({ children }: { children?: ReactNode }) => <div>{children}</div>;
+  const Dialog = ({ children }: { children?: ReactNode; open?: boolean }) => <div>{children}</div>;
+  return {
+    Dialog,
+    DialogDescription: Part,
+    DialogFooter: Part,
+    DialogHeader: Part,
+    DialogPanel: Part,
+    DialogPopup: Part,
+    DialogTitle: Part,
+  };
+});
 
 import { AlertDialog } from "../components/ui/alert-dialog";
 import { Button } from "../components/ui/button";
@@ -84,5 +98,47 @@ describe("ManagedSkillsPanel environment ownership", () => {
     expect(renderer!.root.findAllByType(Dialog).every((dialog) => !dialog.props.open)).toBe(true);
     expect(renderer!.root.findByType(AlertDialog).props.open).toBe(false);
     expect(mutate).not.toHaveBeenCalled();
+  });
+
+  it("locks the upload dialog after mutation starts and cannot resubmit while it settles", async () => {
+    let finish!: (value: readonly PulseSkillRecord[]) => void;
+    const mutate = vi.fn(
+      () =>
+        new Promise<readonly PulseSkillRecord[]>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    await act(() => {
+      renderer = create(<ManagedSkillsPanel environmentKey="env-a" skills={[]} mutate={mutate} />);
+    });
+    await act(async () => button("Upload")!.props.onClick());
+    await act(async () => {
+      renderer!.root.findByProps({ placeholder: "code-review" }).props.onChange({
+        target: { value: "review" },
+      });
+      renderer!.root.findByProps({ type: "file" }).props.onChange({
+        currentTarget: {
+          files: [
+            new File(
+              ["---\nname: Review\ndescription: Review code\n---\n\nInstructions.\n"],
+              "SKILL.md",
+            ),
+          ],
+        },
+      });
+    });
+    await act(async () => button("Upload skill")!.props.onClick());
+
+    expect(mutate).toHaveBeenCalledTimes(1);
+    expect(button("Cancel")!.props.disabled).toBe(true);
+    expect(button("Upload")!.props.disabled).toBe(true);
+    await act(async () => button("Saving skill…")!.props.onClick());
+    const openDialog = renderer!.root.findAllByType(Dialog).find((dialog) => dialog.props.open)!;
+    await act(async () => openDialog.props.onOpenChange(false));
+    expect(renderer!.root.findAllByType(Dialog).some((dialog) => dialog.props.open)).toBe(true);
+    expect(mutate).toHaveBeenCalledTimes(1);
+
+    await act(async () => finish([]));
+    expect(renderer!.root.findAllByType(Dialog).every((dialog) => !dialog.props.open)).toBe(true);
   });
 });

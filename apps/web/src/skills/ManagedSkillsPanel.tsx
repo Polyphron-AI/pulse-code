@@ -123,9 +123,9 @@ export function ManagedSkillsPanel({
           <Button
             size="sm"
             variant="outline"
-            disabled={disabled}
+            disabled={disabled || pending !== null}
             onClick={() => {
-              if (!disabled) setUploadOpen(true);
+              if (!disabled && pending === null) setUploadOpen(true);
             }}
           >
             <UploadIcon />
@@ -133,9 +133,9 @@ export function ManagedSkillsPanel({
           </Button>
           <Button
             size="sm"
-            disabled={disabled}
+            disabled={disabled || pending !== null}
             onClick={() => {
-              if (!disabled) setGitTarget("new");
+              if (!disabled && pending === null) setGitTarget("new");
             }}
           >
             <GithubIcon />
@@ -371,7 +371,7 @@ function UploadSkillDialog({
   const [id, setId] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [pending, setPending] = useState(false);
+  const [phase, setPhase] = useState<"idle" | "reading" | "mutating">("idle");
   const controllerRef = useRef<AbortController | null>(null);
   const reset = () => {
     controllerRef.current?.abort();
@@ -379,21 +379,22 @@ function UploadSkillDialog({
     setId("");
     setFiles([]);
     setError(null);
-    setPending(false);
+    setPhase("idle");
   };
   useEffect(() => {
     if (!open || disabled) reset();
   }, [disabled, open]);
   const save = async () => {
-    if (disabled || pending) return;
+    if (disabled || phase !== "idle") return;
     const controller = new AbortController();
     controllerRef.current?.abort();
     controllerRef.current = controller;
-    setPending(true);
+    setPhase("reading");
     setError(null);
     try {
       const upload = await readSkillFiles(files, controller.signal);
       controller.signal.throwIfAborted();
+      setPhase("mutating");
       const result = await onImport(id.trim(), upload);
       controller.signal.throwIfAborted();
       if (result.ok) {
@@ -405,7 +406,7 @@ function UploadSkillDialog({
     } finally {
       if (controllerRef.current === controller) {
         controllerRef.current = null;
-        setPending(false);
+        setPhase("idle");
       }
     }
   };
@@ -413,11 +414,12 @@ function UploadSkillDialog({
     <Dialog
       open={open}
       onOpenChange={(next) => {
+        if (!next && phase === "mutating" && !disabled) return;
         if (!next) reset();
         onOpenChange(disabled ? false : next);
       }}
     >
-      <DialogPopup className="max-w-md">
+      <DialogPopup className="max-w-md" showCloseButton={phase !== "mutating"}>
         <DialogHeader>
           <DialogTitle>Upload a skill</DialogTitle>
           <DialogDescription>
@@ -431,7 +433,7 @@ function UploadSkillDialog({
               <Input
                 id={`${fieldId}-id`}
                 value={id}
-                disabled={disabled || pending}
+                disabled={disabled || phase !== "idle"}
                 placeholder="code-review"
                 onChange={(event) => setId(event.target.value.toLowerCase())}
                 autoFocus
@@ -448,7 +450,7 @@ function UploadSkillDialog({
                 type="file"
                 accept=".zip,.md,.txt,.json,.yaml,.yml"
                 multiple
-                disabled={disabled || pending}
+                disabled={disabled || phase !== "idle"}
                 onChange={(event) => setFiles([...(event.currentTarget.files ?? [])])}
               />
               {files.length ? (
@@ -467,8 +469,9 @@ function UploadSkillDialog({
         <DialogFooter variant="bare">
           <Button
             variant="outline"
-            disabled={disabled}
+            disabled={disabled || phase === "mutating"}
             onClick={() => {
+              if (disabled || phase === "mutating") return;
               reset();
               onOpenChange(false);
             }}
@@ -477,11 +480,18 @@ function UploadSkillDialog({
           </Button>
           <Button
             disabled={
-              disabled || pending || !/^[a-z][a-z0-9-]{0,63}$/.test(id) || files.length === 0
+              disabled ||
+              phase !== "idle" ||
+              !/^[a-z][a-z0-9-]{0,63}$/.test(id) ||
+              files.length === 0
             }
             onClick={() => void save()}
           >
-            {pending ? "Uploading…" : "Upload skill"}
+            {phase === "reading"
+              ? "Reading archive…"
+              : phase === "mutating"
+                ? "Saving skill…"
+                : "Upload skill"}
           </Button>
         </DialogFooter>
       </DialogPopup>
