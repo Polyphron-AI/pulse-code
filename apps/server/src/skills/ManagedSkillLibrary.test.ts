@@ -114,6 +114,55 @@ describe("ManagedSkillLibrary", () => {
     });
   });
 
+  it("keeps the original trusted metadata when the same content is relinked or repoliced", async () => {
+    const current = await library(githubFixture(files(), "b".repeat(40)));
+    const uploaded = await current.importUpload({ id: "review", files: files() });
+    const source = {
+      type: "github" as const,
+      repository: "team/skills",
+      ref: "main",
+      directory: "",
+    };
+
+    const linked = await current.linkGitHub({
+      id: "review",
+      source,
+      updatePolicy: "keep-updated",
+    });
+    expect(linked).toMatchObject({
+      revision: uploaded.revision,
+      source,
+      updatePolicy: "keep-updated",
+      resolvedCommit: "b".repeat(40),
+    });
+    await current.setUpdatePolicy({ id: "review", updatePolicy: "pinned" });
+    await current.sync({ id: "review" });
+
+    const [resolved] = await current.resolveSelection([{ id: "review" }]);
+    expect(resolved).toMatchObject({
+      revision: uploaded.revision,
+      source,
+      resolvedCommit: "b".repeat(40),
+    });
+    const registry = JSON.parse(
+      await NodeFSP.readFile(NodePath.join(current.root, "registry.json"), "utf8"),
+    );
+    expect(registry.skills[0].revisions).toEqual([
+      {
+        id: uploaded.id,
+        name: uploaded.name,
+        description: uploaded.description,
+        revision: uploaded.revision,
+        invocation: uploaded.invocation,
+        updatedAt: uploaded.updatedAt,
+      },
+    ]);
+    expect(registry.skills[0].revisions[0]).not.toHaveProperty("source");
+    expect(registry.skills[0].revisions[0]).not.toHaveProperty("resolvedCommit");
+    expect(registry.skills[0].revisions[0]).not.toHaveProperty("updatePolicy");
+    expect(registry.skills[0].revisions[0]).not.toHaveProperty("checkedAt");
+  });
+
   it("does not publish a downloaded revision when cancellation wins before registry publication", async () => {
     const controller = new AbortController();
     const request = githubFixture(files("Cancelled revision"));
@@ -154,6 +203,47 @@ describe("ManagedSkillLibrary", () => {
 
     await expect(current.list()).rejects.toThrow(/record is invalid/);
     await expect(current.resolveSelection([{ id: "review" }])).rejects.toThrow(/record is invalid/);
+  });
+
+  it("rejects duplicate trusted revisions instead of silently normalizing them", async () => {
+    const current = await library();
+    await current.importUpload({ id: "review", files: files() });
+    const registryPath = NodePath.join(current.root, "registry.json");
+    const registry = JSON.parse(await NodeFSP.readFile(registryPath, "utf8"));
+    registry.skills[0].revisions.push({ ...registry.skills[0].revisions[0] });
+    await NodeFSP.writeFile(registryPath, JSON.stringify(registry));
+
+    await expect(current.list()).rejects.toThrow(/duplicate trusted revisions/);
+  });
+
+  it("rejects operational fields and active metadata changes in trusted revision history", async () => {
+    type PersistedRegistry = {
+      skills: Array<{
+        record: { description: string };
+        revisions: Array<Record<string, unknown>>;
+      }>;
+    };
+    for (const corrupt of [
+      (registry: PersistedRegistry) => {
+        registry.skills[0]!.revisions[0]!.updatePolicy = "pinned";
+      },
+      (registry: PersistedRegistry) => {
+        registry.skills[0]!.record.description = "Changed outside its content revision";
+      },
+    ]) {
+      const current = await library();
+      await current.importUpload({ id: "review", files: files() });
+      const registryPath = NodePath.join(current.root, "registry.json");
+      const registry = JSON.parse(
+        await NodeFSP.readFile(registryPath, "utf8"),
+      ) as PersistedRegistry;
+      corrupt(registry);
+      await NodeFSP.writeFile(registryPath, JSON.stringify(registry));
+
+      await expect(current.resolveSelection([{ id: "review" }])).rejects.toThrow(
+        /operational fields|does not match its trusted revision/,
+      );
+    }
   });
 
   it("retains the prior revision and records errors when a keep-updated sync fails", async () => {

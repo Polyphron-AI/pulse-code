@@ -14,8 +14,13 @@ import {
 
 interface RegistryEntry {
   readonly record: ManagedSkillRecord;
-  readonly revisions: ReadonlyArray<ManagedSkillRecord>;
+  readonly revisions: ReadonlyArray<TrustedRevisionRecord>;
 }
+
+type TrustedRevisionRecord = Pick<
+  ManagedSkillRecord,
+  "id" | "name" | "description" | "revision" | "invocation" | "updatedAt"
+>;
 
 interface Registry {
   readonly version: 1;
@@ -39,11 +44,19 @@ function throwIfAborted(signal?: AbortSignal): void {
   signal?.throwIfAborted();
 }
 
-function parseRecord(value: unknown, expectedId?: string): ManagedSkillRecord {
+function parseTrustedRevision(value: unknown, expectedId?: string): TrustedRevisionRecord {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error("Managed skill registry record is invalid.");
+    throw new Error("Managed skill registry revision metadata is invalid.");
   }
   const record = value as Record<string, unknown>;
+  if (
+    expectedId !== undefined &&
+    Object.keys(record).some(
+      (key) => !["id", "name", "description", "revision", "invocation", "updatedAt"].includes(key),
+    )
+  ) {
+    throw new Error("Managed skill registry revision metadata contains operational fields.");
+  }
   if (
     typeof record.id !== "string" ||
     !ID_PATTERN.test(record.id) ||
@@ -56,20 +69,13 @@ function parseRecord(value: unknown, expectedId?: string): ManagedSkillRecord {
     record.description.length > 2000 ||
     typeof record.revision !== "string" ||
     !REVISION_PATTERN.test(record.revision) ||
-    (record.updatePolicy !== "pinned" && record.updatePolicy !== "keep-updated") ||
     typeof record.updatedAt !== "string" ||
     !record.updatedAt ||
-    typeof record.checkedAt !== "string" ||
-    !record.checkedAt ||
-    (record.error !== undefined && typeof record.error !== "string") ||
-    (record.resolvedCommit !== undefined &&
-      (typeof record.resolvedCommit !== "string" ||
-        !/^[a-f0-9]{40}$/.test(record.resolvedCommit))) ||
     !record.invocation ||
     typeof record.invocation !== "object" ||
     Array.isArray(record.invocation)
   ) {
-    throw new Error("Managed skill registry record is invalid.");
+    throw new Error("Managed skill registry revision metadata is invalid.");
   }
   const invocation = record.invocation as Record<string, unknown>;
   if (
@@ -78,11 +84,24 @@ function parseRecord(value: unknown, expectedId?: string): ManagedSkillRecord {
   ) {
     throw new Error("Managed skill registry invocation restrictions are invalid.");
   }
+  return record as unknown as TrustedRevisionRecord;
+}
+
+function parseRecord(value: unknown): ManagedSkillRecord {
+  const trusted = parseTrustedRevision(value);
+  const record = value as Record<string, unknown>;
   if (!record.source || typeof record.source !== "object" || Array.isArray(record.source)) {
     throw new Error("Managed skill registry source is invalid.");
   }
   const source = record.source as Record<string, unknown>;
   if (
+    (record.updatePolicy !== "pinned" && record.updatePolicy !== "keep-updated") ||
+    typeof record.checkedAt !== "string" ||
+    !record.checkedAt ||
+    (record.error !== undefined && typeof record.error !== "string") ||
+    (record.resolvedCommit !== undefined &&
+      (typeof record.resolvedCommit !== "string" ||
+        !/^[a-f0-9]{40}$/.test(record.resolvedCommit))) ||
     !(
       (source.type === "upload" && Object.keys(source).length === 1) ||
       (source.type === "github" &&
@@ -93,9 +112,35 @@ function parseRecord(value: unknown, expectedId?: string): ManagedSkillRecord {
     ) ||
     (record.updatePolicy === "keep-updated" && source.type !== "github")
   ) {
-    throw new Error("Managed skill registry source is invalid.");
+    throw new Error("Managed skill registry record is invalid.");
   }
   return record as unknown as ManagedSkillRecord;
+}
+
+function trustedRevision(record: ManagedSkillRecord): TrustedRevisionRecord {
+  return {
+    id: record.id,
+    name: record.name,
+    description: record.description,
+    revision: record.revision,
+    invocation: record.invocation,
+    updatedAt: record.updatedAt,
+  };
+}
+
+function sameImmutableMetadata(
+  active: ManagedSkillRecord,
+  trusted: TrustedRevisionRecord,
+): boolean {
+  return (
+    active.id === trusted.id &&
+    active.revision === trusted.revision &&
+    active.name === trusted.name &&
+    active.description === trusted.description &&
+    active.updatedAt === trusted.updatedAt &&
+    active.invocation.userInvocationOnly === trusted.invocation.userInvocationOnly &&
+    active.invocation.userInvocable === trusted.invocation.userInvocable
+  );
 }
 
 function parseRegistry(contents: string): Registry {
@@ -125,18 +170,21 @@ function parseRegistry(contents: string): Registry {
     if (!Array.isArray(entry.revisions)) {
       throw new Error("Managed skill registry revision history is invalid.");
     }
-    const revisions = entry.revisions.map((revision) => parseRecord(revision, record.id));
-    if (!revisions.some((revision) => revision.revision === record.revision)) {
+    const revisions = entry.revisions.map((revision) => parseTrustedRevision(revision, record.id));
+    if (new Set(revisions.map((revision) => revision.revision)).size !== revisions.length) {
+      throw new Error("Managed skill registry contains duplicate trusted revisions.");
+    }
+    const activeRevision = revisions.find((revision) => revision.revision === record.revision);
+    if (!activeRevision) {
       throw new Error("Managed skill registry does not trust its active revision.");
     }
+    if (!sameImmutableMetadata(record, activeRevision)) {
+      throw new Error(
+        "Managed skill registry active metadata does not match its trusted revision.",
+      );
+    }
     ids.add(record.id);
-    return {
-      record,
-      revisions: revisions.filter(
-        (revision, index) =>
-          revisions.findIndex((candidate) => candidate.revision === revision.revision) === index,
-      ),
-    };
+    return { record, revisions };
   });
   return { version: 1, skills };
 }
@@ -271,7 +319,7 @@ export class ManagedSkillLibrary {
       if (!record) {
         throw new Error(`Managed skill ${selection.id} does not trust revision ${revision}.`);
       }
-      return record;
+      return { ...entry.record, ...record };
     });
     return this.store.catalog(records);
   }
@@ -289,10 +337,9 @@ export class ManagedSkillLibrary {
   ): { readonly registry: Registry; readonly result: ManagedSkillRecord } {
     const entry = {
       record,
-      revisions: [
-        ...(previous?.revisions.filter((revision) => revision.revision !== record.revision) ?? []),
-        record,
-      ],
+      revisions: previous?.revisions.some((revision) => revision.revision === record.revision)
+        ? previous.revisions
+        : [...(previous?.revisions ?? []), trustedRevision(record)],
     };
     return {
       registry: {
