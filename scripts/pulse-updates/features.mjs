@@ -12,6 +12,11 @@ export const featureSuites = [
   { id: "managed-skills-rpc", file: "apps/server/src/skills/ManagedSkillRpc.test.ts" },
   { id: "managed-skills-contracts", file: "packages/contracts/src/pulseSkills.test.ts" },
   { id: "rpc-authorization", file: "apps/server/src/auth/RpcAuthorization.test.ts" },
+  {
+    id: "managed-skills-websocket",
+    file: "apps/server/src/server.test.ts",
+    testNamePattern: "managed skill",
+  },
 ];
 
 export function featureTestArgs(root, suite) {
@@ -21,6 +26,7 @@ export function featureTestArgs(root, suite) {
     "test",
     "run",
     suite.file,
+    ...(suite.testNamePattern ? ["-t", suite.testNamePattern] : []),
     "--exclude",
     "**/.t3/**",
   ];

@@ -4856,6 +4856,67 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
+  it.effect("persists managed skills across authenticated websocket connections", () =>
+    Effect.gen(function* () {
+      yield* buildAppUnderTest();
+      const wsUrl = yield* getWsServerUrl("/ws");
+      const imported = yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) =>
+          client[WS_METHODS.pulseSkillsMutate]({
+            operation: "import-upload",
+            id: "review",
+            files: [
+              {
+                path: "SKILL.md",
+                base64: Buffer.from(
+                  "---\nname: Review\ndescription: Review code\n---\n\nRead code.\n",
+                ).toString("base64"),
+              },
+            ],
+          }),
+        ),
+      );
+      assert.equal(imported.length, 1);
+      const listed = yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) => client[WS_METHODS.pulseSkillsList]({})),
+      );
+      assert.deepEqual(listed, imported);
+      const removed = yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) =>
+          client[WS_METHODS.pulseSkillsMutate]({ operation: "remove", id: "review" }),
+        ),
+      );
+      assert.deepEqual(removed, []);
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
+  it.effect("rejects managed skill mutation from a read-only websocket session", () =>
+    Effect.gen(function* () {
+      yield* buildAppUnderTest();
+      const { body } = yield* exchangeAccessToken(defaultDesktopBootstrapToken, {
+        scope: "orchestration:read",
+      });
+      const ticketResponse = yield* HttpClient.post("/api/auth/websocket-ticket", {
+        headers: { authorization: `Bearer ${body.access_token ?? ""}` },
+      });
+      const ticket = (yield* ticketResponse.json) as { readonly ticket: string };
+      const wsUrl = `${yield* getWsServerUrl("/ws", { authenticated: false })}?wsTicket=${encodeURIComponent(ticket.ticket)}`;
+      yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) =>
+          Effect.gen(function* () {
+            assert.deepEqual(yield* client[WS_METHODS.pulseSkillsList]({}), []);
+            const error = yield* Effect.flip(
+              client[WS_METHODS.pulseSkillsMutate]({ operation: "remove", id: "review" }),
+            );
+            assert.equal(error._tag, "EnvironmentAuthorizationError");
+            if (error._tag === "EnvironmentAuthorizationError")
+              assert.equal(error.requiredScope, "orchestration:operate");
+          }),
+        ),
+      );
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
   it.effect("accepts websocket rpc handshake with a bootstrapped browser session cookie", () =>
     Effect.gen(function* () {
       yield* buildAppUnderTest();
