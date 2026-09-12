@@ -34,7 +34,14 @@ export interface PulseMcpLiteralInput {
   readonly value: string;
 }
 
-export type PulseMcpValueInput = PulseMcpSecretInput | PulseMcpLiteralInput;
+export interface PulseMcpRetainSecretInput {
+  readonly type: "retain-secret";
+}
+
+export type PulseMcpValueInput =
+  | PulseMcpSecretInput
+  | PulseMcpLiteralInput
+  | PulseMcpRetainSecretInput;
 
 export interface PulseMcpHttpInput {
   readonly transport: "http";
@@ -134,11 +141,17 @@ export interface PulseMcpConfigServiceShape {
     providerInstanceId: ProviderInstanceId,
     connectionIds: readonly string[],
   ) => Effect.Effect<void, PulseMcpConfigError>;
+  readonly getProviderDefault: (
+    providerInstanceId: ProviderInstanceId,
+  ) => Effect.Effect<readonly string[] | undefined, PulseMcpConfigError>;
   readonly setThreadOverride: (
     threadId: ThreadId,
     connectionIds: readonly string[],
   ) => Effect.Effect<void, PulseMcpConfigError>;
   readonly resetThreadOverride: (threadId: ThreadId) => Effect.Effect<void, PulseMcpConfigError>;
+  readonly getThreadOverride: (
+    threadId: ThreadId,
+  ) => Effect.Effect<readonly string[] | undefined, PulseMcpConfigError>;
   readonly prepareTurn: (
     input: {
       readonly turnId: string;
@@ -190,6 +203,9 @@ const validateInput = (input: PulseMcpConnectionInput): void => {
     throw new PulseMcpConfigError("validate", "MCP connection name cannot be empty.");
   }
   if (input.config.transport === "http") {
+    if (Object.keys(input.config.headers ?? {}).length > 128) {
+      throw new PulseMcpConfigError("validate", "MCP HTTP headers exceed the supported limit.");
+    }
     let url: URL;
     try {
       url = new URL(input.config.url);
@@ -208,6 +224,9 @@ const validateInput = (input: PulseMcpConnectionInput): void => {
   }
   if (input.config.command.trim().length === 0) {
     throw new PulseMcpConfigError("validate", "MCP stdio command cannot be empty.");
+  }
+  if (Object.keys(input.config.env ?? {}).length > 128) {
+    throw new PulseMcpConfigError("validate", "MCP environment exceeds the supported limit.");
   }
   for (const name of Object.keys(input.config.env ?? {})) {
     if (!ENVIRONMENT_NAME.test(name)) {
@@ -472,6 +491,7 @@ const make = Effect.gen(function* () {
   const toStoredValues = (
     values: Readonly<Record<string, PulseMcpValueInput>>,
     reference: string,
+    previous: Readonly<Record<string, PulseMcpStoredValue>>,
   ): readonly [Readonly<Record<string, PulseMcpStoredValue>>, Readonly<Record<string, string>>] => {
     const stored: Record<string, PulseMcpStoredValue> = {};
     const secretValues: Record<string, string> = {};
@@ -479,7 +499,17 @@ const make = Effect.gen(function* () {
       if (value.type === "secret") {
         secretValues[key] = value.value;
         stored[key] = { type: "secret-ref", secretRef: reference, key };
-      } else stored[key] = value;
+      } else if (value.type === "literal") stored[key] = value;
+      else {
+        const retained = previous[key];
+        if (retained?.type !== "secret-ref") {
+          throw new PulseMcpConfigError(
+            "validate",
+            `Cannot retain an MCP secret that is not already configured for '${key}'.`,
+          );
+        }
+        stored[key] = retained;
+      }
     }
     return [stored, secretValues];
   };
@@ -508,30 +538,54 @@ const make = Effect.gen(function* () {
               input.config.transport === "http"
                 ? (input.config.headers ?? {})
                 : (input.config.env ?? {});
-            const [storedValues, secretValues] = toStoredValues(values, reference);
-            const connection: PulseMcpStoredConnection =
-              input.config.transport === "http"
-                ? {
-                    id: input.id,
-                    name: input.name.trim(),
-                    config: { transport: "http", url: input.config.url, headers: storedValues },
-                  }
-                : {
-                    id: input.id,
-                    name: input.name.trim(),
-                    config: {
-                      transport: "stdio",
-                      command: input.config.command,
-                      args: [...(input.config.args ?? [])],
-                      ...(input.config.cwd ? { cwd: input.config.cwd } : {}),
-                      env: storedValues,
-                    },
-                  };
             return lock.withPermits(1)(
               load.pipe(
                 Effect.flatMap((state) =>
                   Effect.gen(function* () {
                     const previous = state.connections[input.id];
+                    if (previous === undefined && Object.keys(state.connections).length >= 128) {
+                      return yield* Effect.fail(
+                        new PulseMcpConfigError(
+                          "validate",
+                          "Pulse MCP connections exceed the supported limit.",
+                        ),
+                      );
+                    }
+                    const previousValues =
+                      previous?.config.transport === input.config.transport
+                        ? previous.config.transport === "http"
+                          ? previous.config.headers
+                          : previous.config.env
+                        : {};
+                    const [storedValues, secretValues] = yield* Effect.try({
+                      try: () => toStoredValues(values, reference, previousValues),
+                      catch: (cause) =>
+                        cause instanceof PulseMcpConfigError
+                          ? cause
+                          : new PulseMcpConfigError("validate", "Invalid MCP secret edit.", cause),
+                    });
+                    const connection: PulseMcpStoredConnection =
+                      input.config.transport === "http"
+                        ? {
+                            id: input.id,
+                            name: input.name.trim(),
+                            config: {
+                              transport: "http",
+                              url: input.config.url,
+                              headers: storedValues,
+                            },
+                          }
+                        : {
+                            id: input.id,
+                            name: input.name.trim(),
+                            config: {
+                              transport: "stdio",
+                              command: input.config.command,
+                              args: [...(input.config.args ?? [])],
+                              ...(input.config.cwd ? { cwd: input.config.cwd } : {}),
+                              env: storedValues,
+                            },
+                          };
                     const previousReferences =
                       previous === undefined
                         ? []
@@ -560,8 +614,14 @@ const make = Effect.gen(function* () {
                         ),
                       ),
                     );
-                    yield* Effect.forEach(new Set(previousReferences), (oldReference) =>
-                      secrets.remove(oldReference).pipe(Effect.ignore),
+                    const retainedReferences = new Set(
+                      Object.values(storedValues).flatMap((value) =>
+                        value.type === "secret-ref" ? [value.secretRef] : [],
+                      ),
+                    );
+                    yield* Effect.forEach(
+                      new Set(previousReferences.filter((value) => !retainedReferences.has(value))),
+                      (oldReference) => secrets.remove(oldReference).pipe(Effect.ignore),
                     );
                     return connection;
                   }),
@@ -650,6 +710,13 @@ const make = Effect.gen(function* () {
         return [undefined, { ...state, threadOverrides }] as const;
       }),
     );
+
+  const getProviderDefault: PulseMcpConfigServiceShape["getProviderDefault"] = (
+    providerInstanceId,
+  ) => load.pipe(Effect.map((state) => state.providerDefaults[providerInstanceId]));
+
+  const getThreadOverride: PulseMcpConfigServiceShape["getThreadOverride"] = (threadId) =>
+    load.pipe(Effect.map((state) => state.threadOverrides[threadId]));
 
   const resolveValues = Effect.fn(function* (
     values: Readonly<Record<string, PulseMcpStoredValue>>,
@@ -788,8 +855,10 @@ const make = Effect.gen(function* () {
     upsertConnection,
     removeConnection,
     setProviderDefault,
+    getProviderDefault,
     setThreadOverride,
     resetThreadOverride,
+    getThreadOverride,
     prepareTurn,
   });
 });
