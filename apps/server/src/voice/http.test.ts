@@ -1,5 +1,12 @@
 import { AuthOrchestrationOperateScope, AuthOrchestrationReadScope } from "@t3tools/contracts";
+import {
+  PULSE_DICTATION_GROQ_API_KEY_PATH,
+  PULSE_DICTATION_GROQ_API_KEY_REMOVE_PATH,
+  PULSE_DICTATION_GROQ_API_KEY_SET_PATH,
+  PULSE_DICTATION_TRANSCRIPTIONS_PATH,
+} from "../../../../packages/contracts/src/pulseDictation.ts";
 import { NodeHttpServer } from "@effect/platform-node";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it, vi } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -8,9 +15,11 @@ import { HttpBody, HttpClient, HttpRouter } from "effect/unstable/http";
 
 import * as EnvironmentAuth from "../auth/EnvironmentAuth.ts";
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
+import * as ServerConfig from "../config.ts";
+import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
+import { SqlitePersistenceMemory } from "../persistence/Layers/Sqlite.ts";
+import * as SessionStore from "../auth/SessionStore.ts";
 import {
-  PULSE_DICTATION_GROQ_API_KEY_PATH,
-  PULSE_DICTATION_TRANSCRIPTIONS_PATH,
   PulseDictationTranscriber,
   pulseDictationRouteLayer,
   type PulseDictationTranscriberService,
@@ -56,6 +65,7 @@ const withRoutes = <A, E, R>(
       yield* pulseDictationRouteLayer.pipe(
         HttpRouter.serve,
         Layer.provide(authLayer(scopes)),
+        Layer.provide(configLayer),
         Layer.provide(Layer.succeed(PulseDictationTranscriber, transcriber)),
         Layer.provide(Layer.succeed(ServerSecretStore.ServerSecretStore, makeSecretStore())),
         Layer.build,
@@ -71,8 +81,101 @@ const audioBody = (entries: ReadonlyArray<readonly [string, Blob, string]>) => {
 };
 
 const transcriber = (text = "hello") => ({ transcribe: vi.fn(async () => text) });
+const configLayer = Layer.succeed(ServerConfig.ServerConfig, {
+  devUrl: undefined,
+  devAllowedOrigins: [],
+} as unknown as ServerConfig.ServerConfig["Service"]);
+
+const realAuthLayer = EnvironmentAuth.layer.pipe(
+  Layer.provideMerge(SessionStore.layer),
+  Layer.provide(SqlitePersistenceMemory),
+  Layer.provide(ServerSecretStore.layer),
+  Layer.provide(ServerEnvironment.identityLayer),
+  Layer.provide(ServerConfig.layerTest(process.cwd(), { prefix: "pulse-dictation-auth-test-" })),
+);
+
+const requestMetadata = {
+  deviceType: "desktop" as const,
+  os: "test",
+  browser: "test",
+  ipAddress: "127.0.0.1",
+};
 
 describe("pulse dictation HTTP routes", () => {
+  it.effect("enforces trusted origins for real cookie auth and permits bearer auth", () => {
+    const fake = transcriber();
+    return Effect.scoped(
+      Effect.gen(function* () {
+        const serverAuth = yield* EnvironmentAuth.EnvironmentAuth;
+        const sessions = yield* SessionStore.SessionStore;
+        const pairing = yield* serverAuth.issuePairingCredential();
+        const browser = yield* serverAuth.createBrowserSession(pairing.credential, requestMetadata);
+        const bearer = yield* serverAuth.issueSession();
+        const trustedOrigin = "https://trusted-client.example";
+        const routeConfig = Layer.succeed(ServerConfig.ServerConfig, {
+          devUrl: new URL(trustedOrigin),
+          devAllowedOrigins: [],
+        } as unknown as ServerConfig.ServerConfig["Service"]);
+
+        yield* pulseDictationRouteLayer.pipe(
+          HttpRouter.serve,
+          Layer.provide(Layer.succeed(EnvironmentAuth.EnvironmentAuth, serverAuth)),
+          Layer.provide(routeConfig),
+          Layer.provide(Layer.succeed(PulseDictationTranscriber, fake)),
+          Layer.provide(Layer.succeed(ServerSecretStore.ServerSecretStore, makeSecretStore())),
+          Layer.build,
+        );
+        const client = yield* HttpClient.HttpClient;
+        const cookie = `${sessions.cookieName}=${browser.sessionToken}`;
+        const body = () =>
+          audioBody([["file", new Blob(["audio"], { type: "audio/webm" }), "clip.webm"]]);
+
+        const foreign = yield* client.post(PULSE_DICTATION_TRANSCRIPTIONS_PATH, {
+          headers: { cookie, origin: "https://attacker.example" },
+          body: body(),
+        });
+        expect(foreign.status).toBe(403);
+        const conflictingOrigin = yield* client.post(PULSE_DICTATION_TRANSCRIPTIONS_PATH, {
+          headers: {
+            cookie,
+            origin: "https://attacker.example",
+            "sec-fetch-site": "same-origin",
+          },
+          body: body(),
+        });
+        expect(conflictingOrigin.status).toBe(403);
+        const missingOrigin = yield* client.post(PULSE_DICTATION_TRANSCRIPTIONS_PATH, {
+          headers: { cookie },
+          body: body(),
+        });
+        expect(missingOrigin.status).toBe(403);
+        const trusted = yield* client.post(PULSE_DICTATION_TRANSCRIPTIONS_PATH, {
+          headers: { cookie, origin: trustedOrigin },
+          body: body(),
+        });
+        expect(trusted.status).toBe(200);
+        const sameOrigin = yield* client.post(PULSE_DICTATION_TRANSCRIPTIONS_PATH, {
+          headers: { cookie, "sec-fetch-site": "same-origin" },
+          body: body(),
+        });
+        expect(sameOrigin.status).toBe(200);
+        const bearerResponse = yield* client.post(PULSE_DICTATION_TRANSCRIPTIONS_PATH, {
+          headers: {
+            authorization: `Bearer ${bearer.token}`,
+            origin: "https://attacker.example",
+          },
+          body: body(),
+        });
+        expect(bearerResponse.status).toBe(200);
+        expect(fake.transcribe).toHaveBeenCalledTimes(3);
+      }),
+    ).pipe(
+      Effect.provide(realAuthLayer),
+      Effect.provide(NodeHttpServer.layerTest),
+      Effect.provide(NodeServices.layer),
+    );
+  });
+
   it.effect("authenticates and requires operate scope before parsing or transcribing", () => {
     const fake = transcriber();
     return withRoutes(
@@ -170,7 +273,7 @@ describe("pulse dictation HTTP routes", () => {
         const initial = yield* client.get(PULSE_DICTATION_GROQ_API_KEY_PATH);
         expect(initial.status).toBe(200);
         expect(yield* initial.json).toEqual({ configured: false });
-        const set = yield* client.put(PULSE_DICTATION_GROQ_API_KEY_PATH, {
+        const set = yield* client.post(PULSE_DICTATION_GROQ_API_KEY_SET_PATH, {
           body: HttpBody.jsonUnsafe({ apiKey: "private-key" }),
         });
         expect(yield* set.json).toEqual({ configured: true });
@@ -178,7 +281,7 @@ describe("pulse dictation HTTP routes", () => {
         const statusBody = yield* status.json;
         expect(statusBody).toEqual({ configured: true });
         expect(statusBody).not.toHaveProperty("apiKey");
-        const removed = yield* client.del(PULSE_DICTATION_GROQ_API_KEY_PATH);
+        const removed = yield* client.post(PULSE_DICTATION_GROQ_API_KEY_REMOVE_PATH);
         expect(removed.status).toBe(204);
       }),
     ),

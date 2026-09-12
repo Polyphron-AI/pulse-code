@@ -1,4 +1,11 @@
 import { AuthOrchestrationOperateScope, AuthOrchestrationReadScope } from "@t3tools/contracts";
+import {
+  PULSE_DICTATION_GROQ_API_KEY_PATH,
+  PULSE_DICTATION_GROQ_API_KEY_REMOVE_PATH,
+  PULSE_DICTATION_GROQ_API_KEY_SET_PATH,
+  PULSE_DICTATION_TRANSCRIPTIONS_PATH,
+  PulseDictationApiKeyInput,
+} from "../../../../packages/contracts/src/pulseDictation.ts";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -21,6 +28,8 @@ import {
   failEnvironmentScopeRequired,
 } from "../auth/http.ts";
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
+import * as ServerConfig from "../config.ts";
+import { isTrustedBrowserOrigin } from "../httpCors.ts";
 import {
   createGroqTranscriber,
   GROQ_DICTATION_API_KEY_SECRET,
@@ -29,17 +38,10 @@ import {
   type GroqTranscriptionAudio,
 } from "./groqTranscription.ts";
 
-export const PULSE_DICTATION_TRANSCRIPTIONS_PATH = "/api/pulse/dictation/transcriptions";
-export const PULSE_DICTATION_GROQ_API_KEY_PATH = "/api/pulse/dictation/groq-api-key";
-
 const MULTIPART_OVERHEAD_BYTES = 64 * 1024;
 const API_KEY_BODY_MAX_BYTES = 16 * 1024;
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
-
-const ApiKeyInput = Schema.Struct({
-  apiKey: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(8_192)),
-});
 
 class DictationCallError extends Data.TaggedError("DictationCallError")<{
   readonly cause: unknown;
@@ -77,6 +79,7 @@ export const pulseDictationTranscriberLayer = Layer.effect(
 
 const authenticateWithScope = (
   scope: typeof AuthOrchestrationReadScope | typeof AuthOrchestrationOperateScope,
+  unsafe = false,
 ) =>
   Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest;
@@ -94,6 +97,19 @@ const authenticateWithScope = (
     );
     if (!session.scopes.includes(scope)) {
       return yield* failEnvironmentScopeRequired(scope);
+    }
+    if (unsafe && session.method === "browser-session-cookie") {
+      const origin = request.headers.origin;
+      const sameOriginFetch = request.headers["sec-fetch-site"] === "same-origin";
+      const requestUrl = HttpServerRequest.toURL(request);
+      const config = yield* ServerConfig.ServerConfig;
+      const trusted =
+        origin === undefined
+          ? sameOriginFetch
+          : Option.isSome(requestUrl) && isTrustedBrowserOrigin(origin, requestUrl.value, config);
+      if (!trusted) {
+        return yield* Effect.fail(clientError("A trusted browser origin is required.", 403));
+      }
     }
   });
 
@@ -163,7 +179,7 @@ const transcriptionRoute = HttpRouter.add(
   "POST",
   PULSE_DICTATION_TRANSCRIPTIONS_PATH,
   Effect.gen(function* () {
-    yield* authenticateWithScope(AuthOrchestrationOperateScope);
+    yield* authenticateWithScope(AuthOrchestrationOperateScope, true);
     const audio = yield* parseSingleAudioFile();
     const transcriber = yield* PulseDictationTranscriber;
     const text = yield* Effect.tryPromise({
@@ -211,13 +227,13 @@ const apiKeyStatusRoute = HttpRouter.add(
 );
 
 const setApiKeyRoute = HttpRouter.add(
-  "PUT",
-  PULSE_DICTATION_GROQ_API_KEY_PATH,
+  "POST",
+  PULSE_DICTATION_GROQ_API_KEY_SET_PATH,
   Effect.gen(function* () {
-    yield* authenticateWithScope(AuthOrchestrationOperateScope);
+    yield* authenticateWithScope(AuthOrchestrationOperateScope, true);
     const request = yield* HttpServerRequest.HttpServerRequest;
     const input = yield* request.json.pipe(
-      Effect.flatMap(Schema.decodeUnknownEffect(ApiKeyInput)),
+      Effect.flatMap(Schema.decodeUnknownEffect(PulseDictationApiKeyInput)),
       Effect.provideService(HttpServerRequest.MaxBodySize, FileSystem.Size(API_KEY_BODY_MAX_BYTES)),
       Effect.mapError(() => clientError("Expected JSON with a non-empty apiKey.")),
     );
@@ -240,10 +256,10 @@ const setApiKeyRoute = HttpRouter.add(
 );
 
 const removeApiKeyRoute = HttpRouter.add(
-  "DELETE",
-  PULSE_DICTATION_GROQ_API_KEY_PATH,
+  "POST",
+  PULSE_DICTATION_GROQ_API_KEY_REMOVE_PATH,
   Effect.gen(function* () {
-    yield* authenticateWithScope(AuthOrchestrationOperateScope);
+    yield* authenticateWithScope(AuthOrchestrationOperateScope, true);
     const secrets = yield* ServerSecretStore.ServerSecretStore;
     yield* secrets.remove(GROQ_DICTATION_API_KEY_SECRET);
     return HttpServerResponse.empty({ status: 204, headers: { "Cache-Control": "no-store" } });
