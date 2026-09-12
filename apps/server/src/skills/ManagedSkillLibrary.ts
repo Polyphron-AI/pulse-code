@@ -237,7 +237,7 @@ export class ManagedSkillLibrary {
         records.push(record);
       }
       throwIfAborted(input.signal);
-      await this.writeRegistry(registry);
+      await this.writeRegistry(registry, input.signal);
       return records;
     });
   }
@@ -252,7 +252,7 @@ export class ManagedSkillLibrary {
         skills: registry.skills.filter((entry) => entry.record.id !== input.id),
       };
       throwIfAborted(input.signal);
-      await this.writeRegistry(next);
+      await this.writeRegistry(next, input.signal);
     });
   }
 
@@ -318,7 +318,7 @@ export class ManagedSkillLibrary {
       throwIfAborted(signal);
       const change = await operation(await this.readRegistry());
       throwIfAborted(signal);
-      await this.writeRegistry(change.registry);
+      await this.writeRegistry(change.registry, signal);
       return change.result;
     });
   }
@@ -343,7 +343,7 @@ export class ManagedSkillLibrary {
     }
   }
 
-  private async writeRegistry(registry: Registry): Promise<void> {
+  private async writeRegistry(registry: Registry, signal?: AbortSignal): Promise<void> {
     await NodeFSP.mkdir(this.root, { recursive: true });
     const destination = NodePath.join(this.root, "registry.json");
     const temporary = NodePath.join(this.root, `.registry-${NodeCrypto.randomUUID()}.tmp`);
@@ -355,6 +355,7 @@ export class ManagedSkillLibrary {
       } finally {
         await handle.close();
       }
+      throwIfAborted(signal);
       await NodeFSP.rename(temporary, destination);
     } finally {
       await NodeFSP.rm(temporary, { force: true });
