@@ -179,9 +179,11 @@ describe("pulse dictation HTTP routes", () => {
         expect(fake.transcribe).toHaveBeenCalledTimes(3);
       }),
     ).pipe(
-      Effect.provide(realAuthLayer),
-      Effect.provide(NodeHttpServer.layerTest),
-      Effect.provide(NodeServices.layer),
+      Effect.provide(
+        Layer.mergeAll(realAuthLayer, NodeHttpServer.layerTest).pipe(
+          Layer.provideMerge(NodeServices.layer),
+        ),
+      ),
     );
   });
 
