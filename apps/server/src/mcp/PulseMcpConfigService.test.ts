@@ -1,9 +1,11 @@
+// @effect-diagnostics preferSchemaOverJson:off -- Tests intentionally construct malformed private persistence documents.
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { ProviderInstanceId, ThreadId } from "@t3tools/contracts";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as ServerConfig from "../config.ts";
@@ -185,6 +187,111 @@ describe("PulseMcpConfigService", () => {
       const connections = yield* service.listConnections;
       expect(connections).toHaveLength(1);
       expect(connections[0]?.name).toBe("Replacement");
+    }).pipe(Effect.provide(testLayer)),
+  );
+
+  it.effect("rejects malformed nested persisted state", () =>
+    Effect.gen(function* () {
+      const service = yield* PulseMcpConfig.PulseMcpConfigService;
+      const config = yield* ServerConfig.ServerConfig;
+      const fs = yield* FileSystem.FileSystem;
+      const malformedStates = [
+        {
+          version: 1,
+          connections: {
+            github: {
+              id: "different",
+              name: "GitHub",
+              config: { transport: "http", url: "https://example.test", headers: {} },
+            },
+          },
+          providerDefaults: {},
+          threadOverrides: {},
+        },
+        {
+          version: 1,
+          connections: {
+            github: {
+              id: "github",
+              name: "GitHub",
+              config: {
+                transport: "http",
+                url: "https://example.test",
+                headers: {
+                  Authorization: {
+                    type: "secret-ref",
+                    secretRef: "pulse-mcp-connection-other-version",
+                    key: "Authorization",
+                  },
+                },
+              },
+            },
+          },
+          providerDefaults: {},
+          threadOverrides: {},
+        },
+        {
+          version: 1,
+          connections: {},
+          providerDefaults: { codex: ["missing"] },
+          threadOverrides: {},
+        },
+        {
+          version: 1,
+          connections: {
+            local: {
+              id: "local",
+              name: "Local",
+              config: { transport: "stdio", command: "mcp", args: [1], env: {} },
+            },
+          },
+          providerDefaults: {},
+          threadOverrides: {},
+        },
+      ];
+
+      for (const state of malformedStates) {
+        yield* fs.writeFileString(`${config.stateDir}/pulse-mcp.json`, JSON.stringify(state));
+        const exit = yield* Effect.exit(service.listConnections);
+        expect(exit._tag).toBe("Failure");
+      }
+    }).pipe(Effect.provide(testLayer)),
+  );
+
+  it.effect("rotates owned secret references and redacts them from public lists", () =>
+    Effect.gen(function* () {
+      const service = yield* PulseMcpConfig.PulseMcpConfigService;
+      const config = yield* ServerConfig.ServerConfig;
+      const fs = yield* FileSystem.FileSystem;
+      const secretStore = yield* ServerSecretStore.ServerSecretStore;
+      const upsert = (value: string) =>
+        service.upsertConnection({
+          id: "github",
+          name: "GitHub",
+          config: {
+            transport: "http",
+            url: "https://example.test",
+            headers: { Authorization: { type: "secret", value } },
+          },
+        });
+
+      yield* upsert("first");
+      const firstState = JSON.parse(yield* fs.readFileString(`${config.stateDir}/pulse-mcp.json`));
+      const firstReference = firstState.connections.github.config.headers.Authorization.secretRef;
+      expect(firstReference).toMatch(/^pulse-mcp-connection-github-/);
+      expect((yield* service.listConnections)[0]?.config).toMatchObject({
+        headers: { Authorization: { type: "secret-ref", secretRef: "[redacted]" } },
+      });
+
+      yield* upsert("second");
+      const secondState = JSON.parse(yield* fs.readFileString(`${config.stateDir}/pulse-mcp.json`));
+      const secondReference = secondState.connections.github.config.headers.Authorization.secretRef;
+      expect(secondReference).not.toBe(firstReference);
+      expect(Option.isNone(yield* secretStore.get(firstReference))).toBe(true);
+      expect(Option.isSome(yield* secretStore.get(secondReference))).toBe(true);
+
+      yield* service.removeConnection("github");
+      expect(Option.isNone(yield* secretStore.get(secondReference))).toBe(true);
     }).pipe(Effect.provide(testLayer)),
   );
 });

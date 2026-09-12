@@ -219,6 +219,124 @@ const validateInput = (input: PulseMcpConnectionInput): void => {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
+const hasOnlyKeys = (value: Record<string, unknown>, keys: readonly string[]) =>
+  Object.keys(value).every((key) => keys.includes(key));
+
+const decodeStoredValues = (
+  value: unknown,
+  connectionId: string,
+  keyIsValid: (key: string) => boolean,
+): Readonly<Record<string, PulseMcpStoredValue>> => {
+  if (!isRecord(value)) throw new Error("invalid stored values");
+  const decoded: Record<string, PulseMcpStoredValue> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (!keyIsValid(key)) throw new Error("invalid stored value key");
+    if (!isRecord(entry) || typeof entry.type !== "string") throw new Error("invalid value");
+    if (
+      entry.type === "literal" &&
+      hasOnlyKeys(entry, ["type", "value"]) &&
+      typeof entry.value === "string"
+    ) {
+      decoded[key] = { type: "literal", value: entry.value };
+      continue;
+    }
+    if (
+      entry.type === "secret-ref" &&
+      hasOnlyKeys(entry, ["type", "secretRef", "key"]) &&
+      typeof entry.secretRef === "string" &&
+      entry.secretRef.startsWith(`${secretName(connectionId)}-`) &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        entry.secretRef.slice(secretName(connectionId).length + 1),
+      ) &&
+      entry.key === key
+    ) {
+      decoded[key] = { type: "secret-ref", secretRef: entry.secretRef, key };
+      continue;
+    }
+    throw new Error("invalid stored value");
+  }
+  return decoded;
+};
+
+const decodeConnection = (key: string, value: unknown): PulseMcpStoredConnection => {
+  validateConnectionId(key);
+  if (
+    !isRecord(value) ||
+    !hasOnlyKeys(value, ["id", "name", "config"]) ||
+    value.id !== key ||
+    typeof value.name !== "string" ||
+    value.name.trim().length === 0 ||
+    !isRecord(value.config) ||
+    typeof value.config.transport !== "string"
+  ) {
+    throw new Error("invalid connection");
+  }
+  const config = value.config;
+  if (
+    config.transport === "http" &&
+    hasOnlyKeys(config, ["transport", "url", "headers"]) &&
+    typeof config.url === "string"
+  ) {
+    const url = new URL(config.url);
+    if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error("invalid url");
+    return {
+      id: key,
+      name: value.name,
+      config: {
+        transport: "http",
+        url: config.url,
+        headers: decodeStoredValues(
+          config.headers,
+          key,
+          (name) => name.trim().length > 0 && !/[\r\n]/.test(name),
+        ),
+      },
+    };
+  }
+  if (
+    config.transport === "stdio" &&
+    hasOnlyKeys(config, ["transport", "command", "args", "cwd", "env"]) &&
+    typeof config.command === "string" &&
+    config.command.trim().length > 0 &&
+    Array.isArray(config.args) &&
+    config.args.every((arg) => typeof arg === "string") &&
+    (config.cwd === undefined || typeof config.cwd === "string")
+  ) {
+    return {
+      id: key,
+      name: value.name,
+      config: {
+        transport: "stdio",
+        command: config.command,
+        args: config.args,
+        ...(config.cwd === undefined ? {} : { cwd: config.cwd }),
+        env: decodeStoredValues(config.env, key, (name) => ENVIRONMENT_NAME.test(name)),
+      },
+    };
+  }
+  throw new Error("invalid transport");
+};
+
+const decodeSelections = (
+  value: Record<string, unknown>,
+  connections: Readonly<Record<string, PulseMcpStoredConnection>>,
+) => {
+  const decoded: Record<string, readonly string[]> = {};
+  for (const [key, ids] of Object.entries(value)) {
+    if (key.trim().length === 0) throw new Error("invalid selection key");
+    if (!Array.isArray(ids) || !ids.every((id) => typeof id === "string")) {
+      throw new Error("invalid selection");
+    }
+    for (const id of ids) {
+      validateConnectionId(id);
+      if (connections[id] === undefined) throw new Error("unknown selection");
+    }
+    if (new Set(ids).size !== ids.length) throw new Error("duplicate selection");
+    decoded[key] = ids;
+  }
+  return decoded;
+};
+
 const decodeState = (raw: string): PulseMcpPersistedState => {
   try {
     const value: unknown = JSON.parse(raw);
@@ -231,13 +349,29 @@ const decodeState = (raw: string): PulseMcpPersistedState => {
     ) {
       throw new Error("unsupported shape");
     }
-    return value as unknown as PulseMcpPersistedState;
+    if (!hasOnlyKeys(value, ["version", "connections", "providerDefaults", "threadOverrides"])) {
+      throw new Error("unknown state fields");
+    }
+    const connections = Object.fromEntries(
+      Object.entries(value.connections).map(([key, connection]) => [
+        key,
+        decodeConnection(key, connection),
+      ]),
+    );
+    return {
+      version: 1,
+      connections,
+      providerDefaults: decodeSelections(value.providerDefaults, connections),
+      threadOverrides: decodeSelections(value.threadOverrides, connections),
+    };
   } catch (cause) {
     throw new PulseMcpConfigError("read", "Failed to decode Pulse MCP configuration.", cause);
   }
 };
 
-const secretName = (connectionId: string) => `${SECRET_PREFIX}${connectionId}`;
+function secretName(connectionId: string) {
+  return `${SECRET_PREFIX}${connectionId}`;
+}
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
 
@@ -275,10 +409,30 @@ const make = Effect.gen(function* () {
 
   const persist = (state: PulseMcpPersistedState) =>
     Effect.gen(function* () {
-      yield* fs.makeDirectory(config.stateDir, { recursive: true });
+      yield* fs.makeDirectory(config.stateDir, { recursive: true, mode: 0o700 });
+      yield* fs.chmod(config.stateDir, 0o700);
       const temporaryPath = `${configPath}.${yield* crypto.randomUUIDv4}.tmp`;
-      yield* fs.writeFileString(temporaryPath, `${JSON.stringify(state, null, 2)}\n`);
-      yield* fs.rename(temporaryPath, configPath);
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const file = yield* fs.open(temporaryPath, { flag: "wx", mode: 0o600 });
+          yield* file.writeAll(textEncoder.encode(`${JSON.stringify(state, null, 2)}\n`));
+          yield* file.sync;
+        }),
+      ).pipe(
+        Effect.flatMap(() => fs.rename(temporaryPath, configPath)),
+        Effect.tap(() => fs.chmod(configPath, 0o600)),
+        Effect.tap(() =>
+          Effect.scoped(
+            fs.open(config.stateDir, { flag: "r" }).pipe(Effect.flatMap((dir) => dir.sync)),
+          ).pipe(Effect.catch(() => Effect.void)),
+        ),
+        Effect.catch((cause) =>
+          fs.remove(temporaryPath).pipe(
+            Effect.ignore,
+            Effect.flatMap(() => Effect.fail(cause)),
+          ),
+        ),
+      );
     }).pipe(
       Effect.mapError(
         (cause) =>
@@ -323,95 +477,131 @@ const make = Effect.gen(function* () {
           : new PulseMcpConfigError("validate", "Invalid MCP connection.", cause),
     }).pipe(
       Effect.flatMap(() => {
-        const reference = secretName(input.id);
-        const values =
-          input.config.transport === "http"
-            ? (input.config.headers ?? {})
-            : (input.config.env ?? {});
-        const [storedValues, secretValues] = toStoredValues(values, reference);
-        const connection: PulseMcpStoredConnection =
-          input.config.transport === "http"
-            ? {
-                id: input.id,
-                name: input.name.trim(),
-                config: { transport: "http", url: input.config.url, headers: storedValues },
-              }
-            : {
-                id: input.id,
-                name: input.name.trim(),
-                config: {
-                  transport: "stdio",
-                  command: input.config.command,
-                  args: [...(input.config.args ?? [])],
-                  ...(input.config.cwd ? { cwd: input.config.cwd } : {}),
-                  env: storedValues,
-                },
-              };
-        return withWrite((state) =>
-          Effect.gen(function* () {
-            if (Object.keys(secretValues).length > 0) {
-              yield* secrets
-                .set(reference, textEncoder.encode(JSON.stringify(secretValues)))
-                .pipe(
-                  Effect.mapError(
-                    (cause) =>
-                      new PulseMcpConfigError(
-                        "write-secret",
-                        "Failed to store MCP secrets.",
-                        cause,
+        return crypto.randomUUIDv4.pipe(
+          Effect.mapError(
+            (cause) =>
+              new PulseMcpConfigError(
+                "write-secret",
+                "Failed to create an MCP secret reference.",
+                cause,
+              ),
+          ),
+          Effect.flatMap((uuid) => {
+            const reference = `${secretName(input.id)}-${uuid}`;
+            const values =
+              input.config.transport === "http"
+                ? (input.config.headers ?? {})
+                : (input.config.env ?? {});
+            const [storedValues, secretValues] = toStoredValues(values, reference);
+            const connection: PulseMcpStoredConnection =
+              input.config.transport === "http"
+                ? {
+                    id: input.id,
+                    name: input.name.trim(),
+                    config: { transport: "http", url: input.config.url, headers: storedValues },
+                  }
+                : {
+                    id: input.id,
+                    name: input.name.trim(),
+                    config: {
+                      transport: "stdio",
+                      command: input.config.command,
+                      args: [...(input.config.args ?? [])],
+                      ...(input.config.cwd ? { cwd: input.config.cwd } : {}),
+                      env: storedValues,
+                    },
+                  };
+            return lock.withPermits(1)(
+              load.pipe(
+                Effect.flatMap((state) =>
+                  Effect.gen(function* () {
+                    const previous = state.connections[input.id];
+                    const previousReferences =
+                      previous === undefined
+                        ? []
+                        : Object.values(
+                            previous.config.transport === "http"
+                              ? previous.config.headers
+                              : previous.config.env,
+                          ).flatMap((value) =>
+                            value.type === "secret-ref" ? [value.secretRef] : [],
+                          );
+                    if (Object.keys(secretValues).length > 0) {
+                      yield* secrets
+                        .set(reference, textEncoder.encode(JSON.stringify(secretValues)))
+                        .pipe(
+                          Effect.mapError(
+                            (cause) =>
+                              new PulseMcpConfigError(
+                                "write-secret",
+                                "Failed to store MCP secrets.",
+                                cause,
+                              ),
+                          ),
+                        );
+                    }
+                    const nextState = {
+                      ...state,
+                      connections: { ...state.connections, [input.id]: connection },
+                    };
+                    yield* persist(nextState).pipe(
+                      Effect.catch((cause) =>
+                        (Object.keys(secretValues).length > 0
+                          ? secrets.remove(reference)
+                          : Effect.void
+                        ).pipe(
+                          Effect.ignore,
+                          Effect.flatMap(() => Effect.fail(cause)),
+                        ),
                       ),
-                  ),
-                );
-            } else {
-              yield* secrets
-                .remove(reference)
-                .pipe(
-                  Effect.mapError(
-                    (cause) =>
-                      new PulseMcpConfigError(
-                        "remove-secret",
-                        "Failed to remove MCP secrets.",
-                        cause,
-                      ),
-                  ),
-                );
-            }
-            return [
-              connection,
-              { ...state, connections: { ...state.connections, [input.id]: connection } },
-            ] as const;
+                    );
+                    yield* Effect.forEach(new Set(previousReferences), (oldReference) =>
+                      secrets.remove(oldReference).pipe(Effect.ignore),
+                    );
+                    return connection;
+                  }),
+                ),
+              ),
+            );
           }),
         );
       }),
     );
 
   const removeConnection: PulseMcpConfigServiceShape["removeConnection"] = (id) =>
-    withWrite((state) =>
-      Effect.gen(function* () {
-        validateConnectionId(id);
-        const { [id]: _removed, ...connections } = state.connections;
-        const cleanSelections = (entries: Readonly<Record<string, readonly string[]>>) =>
-          Object.fromEntries(
-            Object.entries(entries).map(([key, ids]) => [key, ids.filter((value) => value !== id)]),
-          );
-        yield* secrets
-          .remove(secretName(id))
-          .pipe(
-            Effect.mapError(
-              (cause) =>
-                new PulseMcpConfigError("remove-secret", "Failed to remove MCP secrets.", cause),
-            ),
-          );
-        return [
-          undefined,
-          {
-            ...state,
-            connections,
-            providerDefaults: cleanSelections(state.providerDefaults),
-            threadOverrides: cleanSelections(state.threadOverrides),
-          },
-        ] as const;
-      }),
+    lock.withPermits(1)(
+      load.pipe(
+        Effect.flatMap((state) =>
+          Effect.gen(function* () {
+            validateConnectionId(id);
+            const { [id]: _removed, ...connections } = state.connections;
+            const cleanSelections = (entries: Readonly<Record<string, readonly string[]>>) =>
+              Object.fromEntries(
+                Object.entries(entries).map(([key, ids]) => [
+                  key,
+                  ids.filter((value) => value !== id),
+                ]),
+              );
+            const references =
+              _removed === undefined
+                ? []
+                : Object.values(
+                    _removed.config.transport === "http"
+                      ? _removed.config.headers
+                      : _removed.config.env,
+                  ).flatMap((value) => (value.type === "secret-ref" ? [value.secretRef] : []));
+            yield* persist({
+              ...state,
+              connections,
+              providerDefaults: cleanSelections(state.providerDefaults),
+              threadOverrides: cleanSelections(state.threadOverrides),
+            });
+            yield* Effect.forEach(new Set(references), (reference) =>
+              secrets.remove(reference).pipe(Effect.ignore),
+            );
+          }),
+        ),
+      ),
     );
 
   const setProviderDefault: PulseMcpConfigServiceShape["setProviderDefault"] = (
@@ -550,7 +740,33 @@ const make = Effect.gen(function* () {
 
   return PulseMcpConfigService.of({
     listConnections: load.pipe(
-      Effect.map((state) => Object.freeze(Object.values(state.connections))),
+      Effect.map((state) =>
+        Object.freeze(
+          Object.values(state.connections).map((connection) => ({
+            ...connection,
+            config:
+              connection.config.transport === "http"
+                ? {
+                    ...connection.config,
+                    headers: Object.fromEntries(
+                      Object.entries(connection.config.headers).map(([key, value]) => [
+                        key,
+                        value.type === "secret-ref" ? { ...value, secretRef: "[redacted]" } : value,
+                      ]),
+                    ),
+                  }
+                : {
+                    ...connection.config,
+                    env: Object.fromEntries(
+                      Object.entries(connection.config.env).map(([key, value]) => [
+                        key,
+                        value.type === "secret-ref" ? { ...value, secretRef: "[redacted]" } : value,
+                      ]),
+                    ),
+                  },
+          })),
+        ),
+      ),
     ),
     upsertConnection,
     removeConnection,
