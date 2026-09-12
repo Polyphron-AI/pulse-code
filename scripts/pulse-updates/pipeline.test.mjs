@@ -77,6 +77,7 @@ test('real git candidate contains upstream and Pulse changes without altering so
   git(root, ['init']);
   git(root, ['config', 'user.name', 'Pipeline Test']);
   git(root, ['config', 'user.email', 'pipeline@example.invalid']);
+  git(root, ['config', 'core.autocrlf', 'false']);
   writeFileSync(join(root, 'core.txt'), 'upstream base\n');
   git(root, ['add', '.']);
   git(root, ['commit', '-m', 'base']);
