@@ -548,6 +548,7 @@ export const ServerConfig = Schema.Struct({
     Schema.Struct({
       managedSkills: Schema.optionalKey(Schema.Boolean),
       mcpManagement: Schema.optionalKey(Schema.Boolean),
+      groqDictation: Schema.optionalKey(Schema.Boolean),
     }),
   ),
   environment: ExecutionEnvironmentDescriptor,

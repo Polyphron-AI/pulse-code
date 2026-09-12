@@ -2069,6 +2069,31 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
+  it.effect("manages Pulse dictation keys through authenticated composed routes", () =>
+    Effect.gen(function* () {
+      yield* buildAppUnderTest();
+      const url = yield* getHttpServerUrl("/api/pulse/dictation/groq-api-key");
+      const cookie = yield* getAuthenticatedSessionCookieHeader();
+      const headers = { cookie, origin: new URL(url).origin, "content-type": "application/json" };
+      const initial = yield* fetchEffect(url, { headers });
+      assert.equal(initial.status, 200);
+      assert.deepEqual(yield* responseJsonEffect(initial), { configured: false });
+      const stored = yield* fetchEffect(`${url}/set`, {
+        method: "POST",
+        headers,
+        body: encodeTestJson({ apiKey: "synthetic-test-key" }),
+      });
+      assert.equal(stored.status, 200);
+      assert.deepEqual(yield* responseJsonEffect(stored), { configured: true });
+      const status = yield* fetchEffect(url, { headers });
+      assert.deepEqual(yield* responseJsonEffect(status), { configured: true });
+      const removed = yield* fetchEffect(`${url}/remove`, { method: "POST", headers });
+      assert.equal(removed.status, 204);
+      const finalStatus = yield* fetchEffect(url, { headers });
+      assert.deepEqual(yield* responseJsonEffect(finalStatus), { configured: false });
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
   it.effect("serves the public environment descriptor without requiring auth", () =>
     Effect.gen(function* () {
       yield* buildAppUnderTest();
@@ -4874,8 +4899,8 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
                 headers: { Authorization: { type: "secret", value: "fixture-secret" } },
               },
             });
-            assert.notInclude(JSON.stringify(connection), "fixture-secret");
-            assert.notInclude(JSON.stringify(connection), "secretRef");
+            assert.notInclude(encodeTestJson(connection), "fixture-secret");
+            assert.notInclude(encodeTestJson(connection), "secretRef");
             const retained = yield* client[WS_METHODS.pulseMcpUpsert]({
               id: "fixture",
               name: "Renamed",

@@ -5,7 +5,7 @@ import {
   PULSE_DICTATION_GROQ_API_KEY_SET_PATH,
   PULSE_DICTATION_TRANSCRIPTIONS_PATH,
   PulseDictationApiKeyInput,
-} from "../../../../packages/contracts/src/pulseDictation.ts";
+} from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

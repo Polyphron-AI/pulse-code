@@ -41,3 +41,4 @@ export * from "./usage.ts";
 export * from "./rpc.ts";
 export * from "./pulseSkills.ts";
 export * from "./pulseMcp.ts";
+export * from "./pulseDictation.ts";
