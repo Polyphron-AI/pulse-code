@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "project": "Pulse Next",
   "updatedAt": "2026-09-12",
-  "status": "feature-decisions-in-progress",
+  "status": "launch-scope-selected-packaging-pending",
   "branch": "experiment/pulse-next-v040",
   "upstreamBase": "09e8de9c655ae85410bf6b00446f272a01da81c7",
   "sourceSnapshots": {
@@ -16,73 +16,6 @@
     "publicationAuthorized": false
   },
   "launchBundles": [
-    {
-      "id": "luna",
-      "decision": "include",
-      "state": "not-ported",
-      "source": "pulseDevelop",
-      "evidence": [
-        "packages/contracts/src/assistant.ts",
-        "apps/server/src/orchestration/Layers/AssistantReactor.ts",
-        "apps/server/src/orchestration/Layers/AssistantReactor.test.ts"
-      ],
-      "intent": "Retain Luna as the assistant thread role, not mail discovery.",
-      "dependencies": [
-        "role-foundation",
-        "skills-mcp"
-      ]
-    },
-    {
-      "id": "argo",
-      "decision": "include",
-      "state": "not-ported",
-      "source": "pulseDevelop",
-      "evidence": [
-        "packages/contracts/src/manager.ts",
-        "apps/server/src/orchestration/Layers/ManagerReactor.ts",
-        "apps/server/src/orchestration/Layers/ManagerReactor.test.ts",
-        "apps/server/src/mcp/toolkits/manager/handlers.ts"
-      ],
-      "intent": "Retain a viable Argo manager for coding missions and child threads without requiring Orca or OMP.",
-      "dependencies": [
-        "role-foundation",
-        "skills-mcp",
-        "sop-cookbook"
-      ],
-      "acceptanceGap": "Trace and remove actual Orca/OMP dependencies; do not assume hiding navigation is sufficient."
-    },
-    {
-      "id": "watchdog",
-      "decision": "include",
-      "state": "not-ported",
-      "source": "pulseDevelop",
-      "evidence": [
-        "apps/server/src/orchestration/Layers/WatchdogReactor.ts",
-        "apps/server/src/orchestration/Layers/WatchdogReactor.test.ts",
-        "packages/client-runtime/src/state/watchdog.ts"
-      ],
-      "intent": "Retain the thread watchdog role with explicit scope and approval policy.",
-      "dependencies": [
-        "role-foundation"
-      ],
-      "acceptanceGap": "Validate action provenance and prevent silent automatic activation or approval."
-    },
-    {
-      "id": "sop-cookbook",
-      "decision": "include",
-      "state": "source-unresolved",
-      "intent": "Bring the requested SOP cookbook taken from 'scrape'.",
-      "dependencies": [],
-      "openQuestions": [
-        "Identify the exact repository, document or scrape export.",
-        "Confirm recipe format, permitted reuse and which recipes belong in the coding launch."
-      ],
-      "proposedRules": [
-        "Versioned declarative recipes with source attribution, required skills/MCP, steps and completion checks.",
-        "Imported instructions are data, not permission to run tools or approve actions.",
-        "Keep recipe content separate from role runtime and load only the selected recipe."
-      ]
-    },
     {
       "id": "skills-mcp",
       "decision": "include",
@@ -121,14 +54,53 @@
         "apps/web/src/voice/VoiceController.ts",
         "apps/web/src/voice/VoiceController.test.ts"
       ],
-      "intent": "Dictate into the coding composer without requiring Office or Talk workspaces.",
+      "intent": "Composer dictation across Windows, macOS, Linux and mobile web, using Parakeet or Groq API; additional transcription backends may follow later.",
       "dependencies": [],
       "proposedRules": [
         "Reuse existing upstream dictation where available.",
         "Separate platform capture/transcription adapters from composer text insertion.",
         "Do not automatically submit dictated text.",
-        "Retain native mobile dictation supplied by its released client; evaluate responsive-web capture separately."
+        "Retain native mobile dictation supplied by its released client; evaluate responsive-web capture separately.",
+        "Use a small transcription interface with concrete Parakeet and Groq adapters; no general plugin framework.",
+        "Do not automatically download models, select a paid API or switch from local to remote transcription.",
+        "Additional speech backends are later additions, not a launch requirement."
+      ],
+      "platforms": [
+        "Windows",
+        "macOS",
+        "Linux",
+        "mobile web"
+      ],
+      "transcriptionOptions": [
+        "Parakeet",
+        "Groq API"
+      ],
+      "platformEvidence": {
+        "source": "pulseReviewed",
+        "evidence": [
+          "docs/user/managed-skills.md",
+          "docs/user/voice-capture.md"
+        ]
+      },
+      "acceptanceGaps": [
+        "Verify capture and transcription on each target; legacy source does not prove cross-platform support.",
+        "Decide where Parakeet runs for each client and how backend selection/fallback works. Do not assume every backend works on every platform.",
+        "Design explicit Groq API selection, protected credentials, audio-transfer disclosure and cancellation; recording must not silently send audio externally."
       ]
+    },
+    {
+      "id": "attachment-preview-and-feedback",
+      "decision": "conditional-include",
+      "estimatedEffort": "Low to medium",
+      "source": "pulseReviewed",
+      "evidence": [
+        "apps/web/src/components/files/PulseAttachmentPreviewPanel.tsx",
+        "apps/web/src/components/files/PulseAttachmentPreviewPanel.test.tsx"
+      ],
+      "compatibilityNote": "Reuse upstream upload contracts; prefer presentation-only additions.",
+      "state": "gap-assessment-needed",
+      "intent": "Enhance attachment previews only for demonstrated gaps in the pinned T3 baseline.",
+      "acceptanceGate": "Record a reproducible missing behavior and focused test before selecting any Pulse implementation; if no gap exists, inherit upstream unchanged."
     }
   ],
   "prerequisites": [
@@ -136,20 +108,6 @@
       "id": "identity-isolation",
       "state": "not-started",
       "intent": "Isolate experiment home, identity, credentials and update ownership before running or installing."
-    },
-    {
-      "id": "role-foundation",
-      "state": "design-proposed",
-      "dependencies": [
-        "identity-isolation"
-      ],
-      "intent": "Use ordinary upstream threads and providers, with Pulse role policy, provenance, opt-in, cancellation, budgets and durable role state behind a small tested interface.",
-      "rules": [
-        "Roles are policies, not replacement provider runtimes.",
-        "No second orchestration engine or duplicate thread history.",
-        "Opening a client or reconnecting must not create agents or re-enable paused policy.",
-        "Persisted Pulse-only state must not leak unsupported event variants into legacy client streams."
-      ]
     }
   ],
   "excluded": [
@@ -170,6 +128,197 @@
     {
       "id": "pr-filter-pilot",
       "reason": "Superseded as the first feature slice by the narrowed role/skills/MCP/dictation scope."
+    },
+    {
+      "id": "luna",
+      "decision": "defer",
+      "state": "not-ported",
+      "source": "pulseDevelop",
+      "evidence": [
+        "packages/contracts/src/assistant.ts",
+        "apps/server/src/orchestration/Layers/AssistantReactor.ts",
+        "apps/server/src/orchestration/Layers/AssistantReactor.test.ts"
+      ],
+      "intent": "Retain Luna as the assistant thread role, not mail discovery.",
+      "dependencies": [
+        "role-foundation",
+        "skills-mcp"
+      ],
+      "reason": "User explicitly moved this feature to a later addition; not a launch dependency."
+    },
+    {
+      "id": "argo",
+      "decision": "defer",
+      "state": "not-ported",
+      "source": "pulseDevelop",
+      "evidence": [
+        "packages/contracts/src/manager.ts",
+        "apps/server/src/orchestration/Layers/ManagerReactor.ts",
+        "apps/server/src/orchestration/Layers/ManagerReactor.test.ts",
+        "apps/server/src/mcp/toolkits/manager/handlers.ts"
+      ],
+      "intent": "Retain a viable Argo manager for coding missions and child threads without requiring Orca or OMP.",
+      "dependencies": [
+        "role-foundation",
+        "skills-mcp",
+        "sop-cookbook"
+      ],
+      "acceptanceGap": "Trace and remove actual Orca/OMP dependencies; do not assume hiding navigation is sufficient.",
+      "reason": "User explicitly moved this feature to a later addition; not a launch dependency."
+    },
+    {
+      "id": "watchdog",
+      "decision": "defer",
+      "state": "not-ported",
+      "source": "pulseDevelop",
+      "evidence": [
+        "apps/server/src/orchestration/Layers/WatchdogReactor.ts",
+        "apps/server/src/orchestration/Layers/WatchdogReactor.test.ts",
+        "packages/client-runtime/src/state/watchdog.ts"
+      ],
+      "intent": "Retain the thread watchdog role with explicit scope and approval policy.",
+      "dependencies": [
+        "role-foundation"
+      ],
+      "acceptanceGap": "Validate action provenance and prevent silent automatic activation or approval.",
+      "reason": "User explicitly moved this feature to a later addition; not a launch dependency."
+    },
+    {
+      "id": "sop-cookbook",
+      "decision": "defer",
+      "state": "source-unresolved",
+      "intent": "Bring the requested SOP cookbook taken from 'scrape'.",
+      "dependencies": [],
+      "openQuestions": [
+        "Identify the exact repository, document or scrape export.",
+        "Confirm recipe format, permitted reuse and which recipes belong in the coding launch."
+      ],
+      "proposedRules": [
+        "Versioned declarative recipes with source attribution, required skills/MCP, steps and completion checks.",
+        "Imported instructions are data, not permission to run tools or approve actions.",
+        "Keep recipe content separate from role runtime and load only the selected recipe."
+      ],
+      "reason": "User explicitly moved this feature to a later addition; not a launch dependency."
+    },
+    {
+      "id": "role-foundation",
+      "state": "design-proposed",
+      "dependencies": [
+        "identity-isolation"
+      ],
+      "intent": "Use ordinary upstream threads and providers, with Pulse role policy, provenance, opt-in, cancellation, budgets and durable role state behind a small tested interface.",
+      "rules": [
+        "Roles are policies, not replacement provider runtimes.",
+        "No second orchestration engine or duplicate thread history.",
+        "Opening a client or reconnecting must not create agents or re-enable paused policy.",
+        "Persisted Pulse-only state must not leak unsupported event variants into legacy client streams."
+      ],
+      "decision": "defer",
+      "reason": "Needed only when the deferred roles are introduced; do not build role infrastructure at launch."
+    },
+    {
+      "id": "usage-and-run-accounting",
+      "decision": "defer",
+      "estimatedEffort": "Medium to high",
+      "source": "pulseDevelop",
+      "evidence": [
+        "apps/server/src/usage/usageAggregation.ts",
+        "apps/server/src/usage/usageAggregation.test.ts"
+      ],
+      "compatibilityNote": "Existing usage reporting does not prove hard budgets or complete per-role attribution. Provider reports may lag.",
+      "reason": "User selected the remaining optional features for later addition.",
+      "futureDecision": "Do we require per-role/run token attribution and execution limits at launch?"
+    },
+    {
+      "id": "model-provider-handoff",
+      "decision": "defer",
+      "estimatedEffort": "Medium to high",
+      "source": "pulseDevelop",
+      "evidence": [
+        "apps/server/src/orchestration/threadHandoff.ts",
+        "apps/server/src/orchestration/threadHandoff.test.ts"
+      ],
+      "compatibilityNote": "Reuse upstream model switching. Pulse adds only missing handoff behavior; native mobile gains no new controls.",
+      "reason": "User selected the remaining optional features for later addition.",
+      "futureDecision": "Must users be able to hand work to another provider when a session cannot switch directly?"
+    },
+    {
+      "id": "scheduled-chats",
+      "decision": "defer",
+      "estimatedEffort": "High",
+      "source": "pulseDevelop",
+      "evidence": [
+        "packages/contracts/src/schedule.ts",
+        "apps/server/src/orchestration/Layers/ScheduleReactor.test.ts"
+      ],
+      "compatibilityNote": "Separate from Argo's internal cycle timing. Advanced recurrence and one-off followups are not proven implemented.",
+      "reason": "User selected the remaining optional features for later addition.",
+      "futureDecision": "Should users schedule fresh coding sessions at launch?"
+    },
+    {
+      "id": "pulse-pr-preferences",
+      "decision": "defer",
+      "estimatedEffort": "Medium",
+      "source": "pulseReviewed",
+      "evidence": [
+        "apps/web/src/components/pullRequest/PullRequestNamedFilters.tsx",
+        "apps/web/src/components/pullRequest/pullRequestNamedFilters.logic.test.ts"
+      ],
+      "compatibilityNote": "Keep preferences separate from upstream PR data and actions.",
+      "reason": "User selected the remaining optional features for later addition.",
+      "futureDecision": "Are named PR filters and Pulse sorting/preferences required?"
+    },
+    {
+      "id": "tool-row-and-settings-polish",
+      "decision": "defer",
+      "estimatedEffort": "Low to medium",
+      "source": "pulseReviewed",
+      "evidence": [
+        "apps/web/src/components/chat/pulseToolRowPresentation.ts",
+        "apps/web/src/components/settings/pulseSettingsSearch.test.ts"
+      ],
+      "compatibilityNote": "Keep small presentation modules; do not replace whole chat/settings screens.",
+      "reason": "User selected the remaining optional features for later addition.",
+      "futureDecision": "Retain Pulse tool-row presentation and settings-search enhancements?"
+    },
+    {
+      "id": "additional-providers",
+      "decision": "defer",
+      "estimatedEffort": "Unknown pending adapter audit",
+      "source": "pulseReviewed",
+      "evidence": [
+        "docs/user/providers-antigravity.md"
+      ],
+      "compatibilityNote": "Documentation is candidate evidence, not implementation acceptance.",
+      "reason": "User selected the remaining optional features for later addition.",
+      "futureDecision": "Is any extra provider, such as Antigravity, launch-critical?"
+    },
+    {
+      "id": "existing-pulse-data-import",
+      "decision": "defer",
+      "estimatedEffort": "High",
+      "evidence": [],
+      "compatibilityNote": "Explicit copy-only migration and recovery tests; no live schema rewrite or automatic credential copying.",
+      "reason": "User selected the remaining optional features for later addition.",
+      "futureDecision": "Must launch import existing threads, settings, skills and MCP configuration, or start clean?"
+    },
+    {
+      "id": "role-autonomy-controls",
+      "decision": "defer",
+      "estimatedEffort": "Medium to high",
+      "source": "pulseDevelop",
+      "evidence": [
+        "apps/server/src/orchestration/Layers/ManagerReactor.test.ts",
+        "apps/server/src/orchestration/Layers/WatchdogReactor.test.ts"
+      ],
+      "compatibilityNote": "Enforce policy on the server across clients. Existing role code does not establish all desired safeguards.",
+      "reason": "User selected the remaining optional features for later addition.",
+      "futureDecision": "What can Argo and watchdog do unattended, and what always requires approval?"
+    },
+    {
+      "id": "additional-dictation-backends",
+      "decision": "defer",
+      "reason": "User may add transcription backends beyond Parakeet and Groq later."
     }
   ],
   "proposedArchitecture": {
@@ -190,7 +339,7 @@
   "clientCompatibility": {
     "webDesktop": "Pulse-owned controls composed into existing thread, composer and settings patterns; no redesign decided.",
     "releasedMobile": "No assumption that we can ship new native screens or fields. Preserve tested upstream thread behavior; unsupported Pulse management stays in responsive web.",
-    "responsiveWeb": "Proposed complete Pulse control path on phones, including visibility and stop/pause controls.",
+    "responsiveWeb": "Launch skills, MCP and dictation controls adapted for phones, with conditional attachment enhancements. Role management is deferred.",
     "wireRules": [
       "Keep the baseline protocol compatible with pinned client fixtures.",
       "Do not assume optional fields or unknown union variants decode safely.",
@@ -206,139 +355,13 @@
       "Capture actual client versions and unsupported cases; no blanket future-client guarantee."
     ]
   },
-  "nextAction": "Discuss pending features, starting with role autonomy and usage visibility. No runtime implementation until feature and architecture decisions are settled.",
+  "nextAction": "Finalize skills/MCP details and minimal dictation module design, then review desktop/mobile-web UI changes. Do not implement roles, cookbook, unattended permissions or other deferred additions.",
   "decisionPolicy": {
     "pending": "Recommendations are proposals, not approval to implement.",
     "inherit": "Retain upstream behavior; port only a demonstrated missing Pulse behavior.",
     "buildGate": "Finish feature and packaging decisions, then review minimal desktop and mobile-web visuals before runtime implementation."
   },
-  "pendingFeatures": [
-    {
-      "id": "usage-and-run-accounting",
-      "decision": "pending",
-      "recommendation": "Include essential role/run usage visibility and stop controls; inherit upstream reporting first.",
-      "question": "Do we require per-role/run token attribution and execution limits at launch?",
-      "estimatedEffort": "Medium to high",
-      "source": "pulseDevelop",
-      "evidence": [
-        "apps/server/src/usage/usageAggregation.ts",
-        "apps/server/src/usage/usageAggregation.test.ts"
-      ],
-      "compatibilityNote": "Existing usage reporting does not prove hard budgets or complete per-role attribution. Provider reports may lag."
-    },
-    {
-      "id": "model-provider-handoff",
-      "decision": "pending",
-      "recommendation": "Include if continuing across provider limits is launch-critical; otherwise defer.",
-      "question": "Must users be able to hand work to another provider when a session cannot switch directly?",
-      "estimatedEffort": "Medium to high",
-      "source": "pulseDevelop",
-      "evidence": [
-        "apps/server/src/orchestration/threadHandoff.ts",
-        "apps/server/src/orchestration/threadHandoff.test.ts"
-      ],
-      "compatibilityNote": "Reuse upstream model switching. Pulse adds only missing handoff behavior; native mobile gains no new controls."
-    },
-    {
-      "id": "scheduled-chats",
-      "decision": "pending",
-      "recommendation": "Defer standalone scheduled chats unless launch-critical.",
-      "question": "Should users schedule fresh coding sessions at launch?",
-      "estimatedEffort": "High",
-      "source": "pulseDevelop",
-      "evidence": [
-        "packages/contracts/src/schedule.ts",
-        "apps/server/src/orchestration/Layers/ScheduleReactor.test.ts"
-      ],
-      "compatibilityNote": "Separate from Argo's internal cycle timing. Advanced recurrence and one-off followups are not proven implemented."
-    },
-    {
-      "id": "pulse-pr-preferences",
-      "decision": "pending",
-      "recommendation": "Defer Pulse extras; retain upstream PR workspace.",
-      "question": "Are named PR filters and Pulse sorting/preferences required?",
-      "estimatedEffort": "Medium",
-      "source": "pulseReviewed",
-      "evidence": [
-        "apps/web/src/components/pullRequest/PullRequestNamedFilters.tsx",
-        "apps/web/src/components/pullRequest/pullRequestNamedFilters.logic.test.ts"
-      ],
-      "compatibilityNote": "Keep preferences separate from upstream PR data and actions."
-    },
-    {
-      "id": "attachment-preview-and-feedback",
-      "decision": "pending",
-      "recommendation": "Consider only after inspecting the upstream gap.",
-      "question": "Which Pulse file-preview and attachment-feedback behavior is required?",
-      "estimatedEffort": "Low to medium",
-      "source": "pulseReviewed",
-      "evidence": [
-        "apps/web/src/components/files/PulseAttachmentPreviewPanel.tsx",
-        "apps/web/src/components/files/PulseAttachmentPreviewPanel.test.tsx"
-      ],
-      "compatibilityNote": "Reuse upstream upload contracts; prefer presentation-only additions."
-    },
-    {
-      "id": "tool-row-and-settings-polish",
-      "decision": "pending",
-      "recommendation": "Defer cosmetic differences unless needed for approved features.",
-      "question": "Retain Pulse tool-row presentation and settings-search enhancements?",
-      "estimatedEffort": "Low to medium",
-      "source": "pulseReviewed",
-      "evidence": [
-        "apps/web/src/components/chat/pulseToolRowPresentation.ts",
-        "apps/web/src/components/settings/pulseSettingsSearch.test.ts"
-      ],
-      "compatibilityNote": "Keep small presentation modules; do not replace whole chat/settings screens."
-    },
-    {
-      "id": "additional-providers",
-      "decision": "pending",
-      "recommendation": "Use upstream providers initially; OMP stays excluded.",
-      "question": "Is any extra provider, such as Antigravity, launch-critical?",
-      "estimatedEffort": "Unknown pending adapter audit",
-      "source": "pulseReviewed",
-      "evidence": [
-        "docs/user/providers-antigravity.md"
-      ],
-      "compatibilityNote": "Documentation is candidate evidence, not implementation acceptance."
-    },
-    {
-      "id": "existing-pulse-data-import",
-      "decision": "pending",
-      "recommendation": "Keep the experiment isolated; decide migration separately.",
-      "question": "Must launch import existing threads, settings, skills and MCP configuration, or start clean?",
-      "estimatedEffort": "High",
-      "evidence": [],
-      "compatibilityNote": "Explicit copy-only migration and recovery tests; no live schema rewrite or automatic credential copying."
-    },
-    {
-      "id": "voice-launch-platforms",
-      "decision": "pending",
-      "recommendation": "Confirm platforms before selecting transcription adapters.",
-      "question": "Which of Windows, macOS, Linux and mobile web require dictation at launch?",
-      "estimatedEffort": "Platform-dependent",
-      "source": "pulseReviewed",
-      "evidence": [
-        "docs/user/managed-skills.md",
-        "docs/user/voice-capture.md"
-      ],
-      "compatibilityNote": "Reviewed skill docs describe Windows Talk-based capture, not portable web dictation. Separate dictation from the excluded workspace."
-    },
-    {
-      "id": "role-autonomy-controls",
-      "decision": "pending",
-      "recommendation": "Require explicit activation, pause/stop, bounded work and visible decisions.",
-      "question": "What can Argo and watchdog do unattended, and what always requires approval?",
-      "estimatedEffort": "Medium to high",
-      "source": "pulseDevelop",
-      "evidence": [
-        "apps/server/src/orchestration/Layers/ManagerReactor.test.ts",
-        "apps/server/src/orchestration/Layers/WatchdogReactor.test.ts"
-      ],
-      "compatibilityNote": "Enforce policy on the server across clients. Existing role code does not establish all desired safeguards."
-    }
-  ],
+  "pendingFeatures": [],
   "inheritedBaseline": [
     {
       "id": "ordinary-coding",
@@ -357,10 +380,15 @@
     }
   ],
   "openDecisions": [
-    "Identify the exact source meant by 'scrape' and select SOP recipes.",
-    "Select the launch skill/MCP content and management behaviors.",
-    "Resolve all pending feature choices; effort bands are provisional, not measured estimates.",
-    "Approve module packaging.",
-    "Compare minimal desktop/mobile-web UI changes against T3 after scope approval."
+    "Settle launch skill/MCP content and management details.",
+    "Approve minimal module packaging and dictation execution/credential handling per platform.",
+    "Demonstrate any attachment-preview gaps before including enhancements.",
+    "Compare minimal desktop and mobile-web changes against T3 before runtime implementation."
+  ],
+  "decisionHistory": [
+    {
+      "date": "2026-09-12",
+      "summary": "User narrowed launch to skills, MCP, cross-platform Parakeet/Groq dictation and demonstrated attachment-preview gaps. Luna, Argo, watchdog, SOP cookbook and remaining optional features move to later. Orca/OMP remain excluded."
+    }
   ]
 }

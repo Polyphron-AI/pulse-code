@@ -47,11 +47,15 @@ usage accounting. Never enable persistent agents as a side effect of import.
 1. Pin the upstream baseline and Pulse source snapshots. Record unfinished and
    uncommitted work separately; do not silently select one divergent branch.
 2. Establish identity and state isolation, then prove focused baseline checks.
-3. Agree the coding-only launch scope in the manifest: Luna, Argo, watchdog,
-   SOP cookbook, skills, MCP and dictation. Orca and OMP are excluded. The earlier
-   PR-filter pilot is deferred. Architecture approval and visual comparison come
-   before runtime ports. The paused old PR import remains comparison evidence,
-   not a reviewed implementation to copy wholesale.
+3. Launch scope is skills, MCP and dictation using Parakeet or Groq API across
+   Windows, macOS, Linux and mobile web. Add attachment-preview enhancements only
+   for demonstrated upstream gaps. Luna, Argo, watchdog, SOP cookbook, unattended
+   permissions and other optional Pulse additions are deferred. Do not build role
+   infrastructure as a launch prerequisite. Orca and OMP remain excluded.
+   Architecture approval and visual comparison come before runtime ports. The
+   paused old PR import remains comparison evidence, not a reviewed implementation
+   to copy wholesale. Backend availability on each dictation platform still needs
+   verification; selecting a target is not proof that it already works.
 4. Port further bundles in dependency order. Add Pulse preservation tests before
    restoring implementation. Keep upstream imports and Pulse changes separate.
 5. Review the combined result across affected clients, providers and connection
