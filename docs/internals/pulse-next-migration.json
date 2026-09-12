@@ -406,6 +406,29 @@
       "remaining": "Authenticated environment upload, protected Groq key, settings and composer; physical microphone and packaged cross-platform checks. No real audio, model download or provider API call used in fixture tests."
     }
   ],
+  "activeTransportBatches": [
+    {
+      "id": "skills-settings-mount",
+      "branch": "feat/pulse-next-skills-settings",
+      "state": "implementing",
+      "dependsOn": ["1d6daf64c"],
+      "acceptance": "Explicit environment selection; capability-gated RPC; read-only management; stale environment results ignored; no claim of provider invocation yet."
+    },
+    {
+      "id": "dictation-authenticated-http",
+      "branch": "feat/pulse-next-dictation-http",
+      "state": "implementing",
+      "dependsOn": ["558792ae4"],
+      "acceptance": "Authenticate and authorize before body parsing; bounded multipart upload; environment-owned Groq secret status/set/remove; synthetic transcriber tests only."
+    },
+    {
+      "id": "mcp-management-rpc",
+      "branch": "feat/pulse-next-mcp-rpc",
+      "state": "implementing",
+      "dependsOn": ["558792ae4"],
+      "acceptance": "Bounded typed management operations; redacted secrets with explicit retention; saved defaults and thread overrides; root integrates shared RPC and authorization after review."
+    }
+  ],
   "decisionPolicy": {
     "pending": "Recommendations are proposals, not approval to implement.",
     "inherit": "Retain upstream behavior; port only a demonstrated missing Pulse behavior.",
