@@ -290,8 +290,18 @@ describe("PulseMcpConfigService", () => {
       expect(Option.isNone(yield* secretStore.get(firstReference))).toBe(true);
       expect(Option.isSome(yield* secretStore.get(secondReference))).toBe(true);
 
-      yield* service.removeConnection("github");
+      yield* service.upsertConnection({
+        id: "github",
+        name: "GitHub without auth",
+        config: { transport: "http", url: "https://example.test" },
+      });
       expect(Option.isNone(yield* secretStore.get(secondReference))).toBe(true);
+
+      yield* upsert("third");
+      const thirdState = JSON.parse(yield* fs.readFileString(`${config.stateDir}/pulse-mcp.json`));
+      const thirdReference = thirdState.connections.github.config.headers.Authorization.secretRef;
+      yield* service.removeConnection("github");
+      expect(Option.isNone(yield* secretStore.get(thirdReference))).toBe(true);
     }).pipe(Effect.provide(testLayer)),
   );
 });

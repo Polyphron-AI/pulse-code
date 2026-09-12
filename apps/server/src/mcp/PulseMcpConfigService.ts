@@ -597,7 +597,18 @@ const make = Effect.gen(function* () {
               threadOverrides: cleanSelections(state.threadOverrides),
             });
             yield* Effect.forEach(new Set(references), (reference) =>
-              secrets.remove(reference).pipe(Effect.ignore),
+              secrets
+                .remove(reference)
+                .pipe(
+                  Effect.mapError(
+                    (cause) =>
+                      new PulseMcpConfigError(
+                        "remove-secret",
+                        "Failed to remove MCP secrets.",
+                        cause,
+                      ),
+                  ),
+                ),
             );
           }),
         ),
