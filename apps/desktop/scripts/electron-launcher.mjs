@@ -21,6 +21,8 @@ const APP_BUNDLE_ID = isDevelopment
   : "com.t3tools.t3code";
 const APP_PROTOCOL_SCHEMES = isDevelopment ? ["t3code-dev"] : ["t3code"];
 const LAUNCHER_VERSION = 15;
+export const MACOS_MICROPHONE_USAGE_DESCRIPTION =
+  "T3 Code uses the microphone to turn your speech into composer text.";
 const developmentMacIconPngPath = NodePath.join(
   repoRoot,
   "assets",
@@ -227,11 +229,9 @@ function ensureMacIconIcns(runtimeDir) {
 
 function patchMainBundleInfoPlist(appBundlePath, iconPath, executableName) {
   const infoPlistPath = NodePath.join(appBundlePath, "Contents", "Info.plist");
-  setPlistString(infoPlistPath, "CFBundleDisplayName", APP_DISPLAY_NAME);
-  setPlistString(infoPlistPath, "CFBundleName", APP_DISPLAY_NAME);
-  setPlistString(infoPlistPath, "CFBundleIdentifier", APP_BUNDLE_ID);
-  setPlistString(infoPlistPath, "CFBundleExecutable", executableName);
-  setPlistString(infoPlistPath, "CFBundleIconFile", "icon.icns");
+  for (const [key, value] of mainBundleInfoPlistStringEntries(executableName)) {
+    setPlistString(infoPlistPath, key, value);
+  }
   setPlistJson(infoPlistPath, "CFBundleURLTypes", [
     {
       CFBundleURLName: APP_BUNDLE_ID,
@@ -242,6 +242,17 @@ function patchMainBundleInfoPlist(appBundlePath, iconPath, executableName) {
   const resourcesDir = NodePath.join(appBundlePath, "Contents", "Resources");
   NodeFS.copyFileSync(iconPath, NodePath.join(resourcesDir, "icon.icns"));
   NodeFS.copyFileSync(iconPath, NodePath.join(resourcesDir, "electron.icns"));
+}
+
+export function mainBundleInfoPlistStringEntries(executableName) {
+  return [
+    ["CFBundleDisplayName", APP_DISPLAY_NAME],
+    ["CFBundleName", APP_DISPLAY_NAME],
+    ["CFBundleIdentifier", APP_BUNDLE_ID],
+    ["CFBundleExecutable", executableName],
+    ["CFBundleIconFile", "icon.icns"],
+    ["NSMicrophoneUsageDescription", MACOS_MICROPHONE_USAGE_DESCRIPTION],
+  ];
 }
 
 function patchHelperBundleInfoPlists(appBundlePath) {

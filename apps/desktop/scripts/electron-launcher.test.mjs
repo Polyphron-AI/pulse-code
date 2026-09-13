@@ -2,12 +2,20 @@ import { assert, describe, it } from "vite-plus/test";
 
 import {
   makeDevelopmentLauncherScript,
+  MACOS_MICROPHONE_USAGE_DESCRIPTION,
+  mainBundleInfoPlistStringEntries,
   resolveElectronBinaryPath,
   resolveMacLauncherIconPaths,
   resolveMacLauncherPaths,
 } from "./electron-launcher.mjs";
 
 describe("electron development launcher", () => {
+  it("adds the microphone purpose string to the branded macOS bundle", () => {
+    assert.deepInclude(Object.fromEntries(mainBundleInfoPlistStringEntries("Electron")), {
+      NSMicrophoneUsageDescription: MACOS_MICROPHONE_USAGE_DESCRIPTION,
+    });
+  });
+
   it("uses captured values only as fallbacks for a live runner environment", () => {
     const script = makeDevelopmentLauncherScript({
       electronBinaryPath: "/repo/node_modules/electron/Electron",
