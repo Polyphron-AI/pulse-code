@@ -540,7 +540,7 @@ sessionErrorLayer("CodexAdapterLive session errors", (it) => {
       NodeAssert.equal(launchText.includes("secret-stdio-value"), false);
       NodeAssert.equal(
         runtime.options.appServerArgs?.includes(
-          'mcp_servers.pulse_http.env_http_headers={ "Authorization" = "PULSE_MCP_HTTP_0" }',
+          'mcp_servers.pulse_http.env_http_headers={ "Authorization" = "PULSE_MCP_0_HTTP_0" }',
         ),
         true,
       );

@@ -1429,9 +1429,19 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         if (connections.length > 0 && info.driverKind !== "codex") {
           return { status: "unsupported-provider", selectedConnectionIds } as const;
         }
+        let preparationCwd = input.providerSession.cwd;
+        if (
+          preparationCwd === undefined &&
+          input.projectId !== undefined &&
+          Option.isSome(projectionQuery)
+        ) {
+          const project = yield* projectionQuery.value.getProjectShellById(input.projectId);
+          if (Option.isSome(project)) preparationCwd = project.value.workspaceRoot;
+        }
+        preparationCwd ??= process.cwd();
         const fingerprint = PulseMcpPreparation.fingerprint({
           providerInstanceId: instanceId,
-          cwd: input.providerSession.cwd ?? null,
+          cwd: preparationCwd,
           runtimeMode: input.providerSession.runtimeMode,
           modelSelection: input.providerSession.modelSelection,
           servers,
@@ -1473,6 +1483,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
             pulseMcpPreparationProjectIds.set(input.threadId, input.projectId);
           yield* startSession(input.threadId, {
             ...input.providerSession,
+            cwd: preparationCwd,
             provider: info.driverKind,
             providerInstanceId: instanceId,
           }).pipe(
@@ -1502,7 +1513,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
           id: preparationId,
           providerInstanceId: instanceId,
           fingerprint,
-          cwd: input.providerSession.cwd ?? null,
+          cwd: preparationCwd,
           selectedConnectionIds,
           runtimeMode: input.providerSession.runtimeMode,
           modelSelection: input.providerSession.modelSelection,
@@ -1578,6 +1589,15 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
             "The managed MCP preparation is missing, stale, or no longer matches this turn.",
           );
         }
+        if (
+          input.desiredCwd !== undefined &&
+          path.resolve(input.desiredCwd) !== path.resolve(preparation.cwd ?? input.desiredCwd)
+        ) {
+          return yield* toValidationError(
+            "ProviderService.consumePulseMcpPreparation",
+            "The managed MCP preparation was created for a different workspace.",
+          );
+        }
         const currentConnections = yield* pulseMcpConfig.value
           .resolveTurnConnections({
             providerInstanceId: input.providerInstanceId,
@@ -1589,15 +1609,25 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
               toValidationError("ProviderService.consumePulseMcpPreparation", cause.message, cause),
             ),
           );
+        const activeCwd = yield* registry.getByInstance(input.providerInstanceId).pipe(
+          Effect.flatMap((adapter) => adapter.listSessions()),
+          Effect.map(
+            (sessions) => sessions.find((session) => session.threadId === input.threadId)?.cwd,
+          ),
+        );
+        if (
+          preparation.selectedConnectionIds.length > 0 &&
+          (activeCwd === undefined ||
+            path.resolve(activeCwd) !== path.resolve(preparation.cwd ?? activeCwd))
+        ) {
+          return yield* toValidationError(
+            "ProviderService.consumePulseMcpPreparation",
+            "The prepared provider session is no longer running in the expected workspace.",
+          );
+        }
         const currentFingerprint = PulseMcpPreparation.fingerprint({
           providerInstanceId: input.providerInstanceId,
-          cwd:
-            (yield* registry.getByInstance(input.providerInstanceId).pipe(
-              Effect.flatMap((adapter) => adapter.listSessions()),
-              Effect.map(
-                (sessions) => sessions.find((session) => session.threadId === input.threadId)?.cwd,
-              ),
-            )) ?? preparation.cwd,
+          cwd: preparation.cwd,
           runtimeMode: input.runtimeMode,
           modelSelection: input.modelSelection,
           servers: currentConnections.map((connection) => ({

@@ -1238,6 +1238,14 @@ const makeWsRpcLayer = (
           normalizedCommand.type !== "thread.turn.start"
             ? Effect.void
             : Effect.gen(function* () {
+                if (
+                  pulseMcpPreparationId !== undefined &&
+                  normalizedCommand.bootstrap?.prepareWorktree !== undefined
+                ) {
+                  return yield* new OrchestrationDispatchCommandError({
+                    message: "Managed MCP preparation does not support creating a worktree.",
+                  });
+                }
                 const existing = yield* projectionSnapshotQuery.getThreadShellById(
                   normalizedCommand.threadId,
                 );
@@ -1257,6 +1265,14 @@ const makeWsRpcLayer = (
                 const projectId =
                   normalizedCommand.bootstrap?.createThread?.projectId ??
                   (Option.isSome(existing) ? existing.value.projectId : undefined);
+                const project =
+                  projectId === undefined
+                    ? Option.none()
+                    : yield* projectionSnapshotQuery.getProjectShellById(projectId);
+                const desiredCwd =
+                  normalizedCommand.bootstrap?.createThread?.worktreePath ??
+                  (Option.isSome(existing) ? existing.value.worktreePath : undefined) ??
+                  (Option.isSome(project) ? project.value.workspaceRoot : undefined);
                 if (providerService.consumePulseMcpPreparation === undefined) {
                   return yield* new OrchestrationDispatchCommandError({
                     message: "Managed MCP preparation is unavailable.",
@@ -1273,6 +1289,7 @@ const makeWsRpcLayer = (
                     runtimeMode: normalizedCommand.runtimeMode,
                     modelSelection,
                     ...(projectId !== undefined ? { projectId } : {}),
+                    ...(desiredCwd !== undefined ? { desiredCwd } : {}),
                   })
                   .pipe(
                     Effect.mapError(

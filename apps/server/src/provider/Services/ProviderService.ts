@@ -53,6 +53,7 @@ export interface ProviderServiceShape {
     readonly runtimeMode: ProviderSessionStartInput["runtimeMode"];
     readonly modelSelection: ProviderSessionStartInput["modelSelection"];
     readonly projectId?: import("@t3tools/contracts").ProjectId;
+    readonly desiredCwd?: string;
   }) => Effect.Effect<void, ProviderServiceError>;
   /**
    * Start a provider session.

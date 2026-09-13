@@ -2257,12 +2257,12 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
           `{ ${Object.entries(entries)
             .map(([key, value]) => `${quoteToml(key)} = ${quoteToml(value)}`)
             .join(", ")} }`;
-        const managedMcpArgs = managedMcpServers.flatMap((server) => {
+        const managedMcpArgs = managedMcpServers.flatMap((server, serverIndex) => {
           const prefix = `mcp_servers.pulse_${server.id}`;
           if (server.transport === "http") {
             const envHeaders = Object.fromEntries(
               Object.entries(server.headers).map(([header, value], index) => {
-                const envName = `PULSE_MCP_${server.id}_${index}`
+                const envName = `PULSE_MCP_${serverIndex}_${server.id}_${index}`
                   .toUpperCase()
                   .replace(/[^A-Z0-9_]/g, "_");
                 managedMcpEnvironment[envName] = value;

@@ -63,6 +63,7 @@ import {
 import type {
   ProviderAdapterSendTurnInput,
   ProviderAdapterShape,
+  ProviderManagedMcpStatus,
 } from "../Services/ProviderAdapter.ts";
 import * as ProviderAdapterRegistry from "../Services/ProviderAdapterRegistry.ts";
 import * as ProviderService from "../Services/ProviderService.ts";
@@ -82,6 +83,8 @@ import * as AnalyticsService from "../../telemetry/AnalyticsService.ts";
 import { makeAdapterRegistryMock } from "../testUtils/providerAdapterRegistryMock.ts";
 import type { ManagedSkillLibrary } from "../../skills/ManagedSkillLibrary.ts";
 import * as ProjectionSnapshotQuery from "../../orchestration/Services/ProjectionSnapshotQuery.ts";
+import * as PulseMcpConfig from "../../mcp/PulseMcpConfigService.ts";
+import * as McpProviderSession from "../../mcp/McpProviderSession.ts";
 
 const defaultServerSettingsLayer = ServerSettings.ServerSettingsService.layerTest();
 const serverConfigTestLayer = ServerConfig.layerTest(process.cwd(), process.cwd()).pipe(
@@ -272,6 +275,13 @@ function makeFakeCodexAdapter(
       sessions.clear();
     }),
   );
+  const prepareManagedMcp = vi.fn(
+    (
+      _threadId: ThreadId,
+      servers: ReadonlyArray<{ readonly id: string }>,
+    ): Effect.Effect<ReadonlyArray<ProviderManagedMcpStatus>> =>
+      Effect.succeed(servers.map((server) => ({ id: server.id, status: "ready" as const }))),
+  );
 
   const adapter: ProviderAdapterShape<ProviderAdapterError> = {
     provider,
@@ -298,6 +308,7 @@ function makeFakeCodexAdapter(
     readThread,
     rollbackThread,
     ...(provider === CODEX_DRIVER ? { uploadFeedback } : {}),
+    ...(provider === CODEX_DRIVER ? { prepareManagedMcp } : {}),
     stopAll,
     get streamEvents() {
       return Stream.fromPubSub(runtimeEventPubSub);
@@ -335,6 +346,7 @@ function makeFakeCodexAdapter(
     readThread,
     rollbackThread,
     uploadFeedback,
+    prepareManagedMcp,
     stopAll,
   };
 }
@@ -423,6 +435,8 @@ function makeProviderServiceLayer(
     readonly analyticsLayer?: Layer.Layer<AnalyticsService.AnalyticsService>;
     readonly registry?: ProviderAdapterRegistry.ProviderAdapterRegistry["Service"];
     readonly managedSkillLibrary?: Pick<ManagedSkillLibrary, "resolveSelection">;
+    readonly resolveMcpConnections?: PulseMcpConfig.PulseMcpConfigServiceShape["resolveTurnConnections"];
+    readonly serverSettingsLayer?: ReturnType<typeof ServerSettings.layerTest>;
   } = {},
 ) {
   const codex = makeFakeCodexAdapter(CODEX_DRIVER, input.supportsConversationRollback);
@@ -447,6 +461,11 @@ function makeProviderServiceLayer(
     input.directory === undefined
       ? ProviderSessionDirectoryLive.pipe(Layer.provide(runtimeRepositoryLayer))
       : Layer.succeed(ProviderSessionDirectory.ProviderSessionDirectory, input.directory);
+  const pulseMcpLayer = input.resolveMcpConnections
+    ? Layer.succeed(PulseMcpConfig.PulseMcpConfigService, {
+        resolveTurnConnections: input.resolveMcpConnections,
+      } as PulseMcpConfig.PulseMcpConfigServiceShape)
+    : Layer.empty;
 
   const layer = it.layer(
     Layer.mergeAll(
@@ -458,8 +477,9 @@ function makeProviderServiceLayer(
         Layer.provide(NodeServices.layer),
         Layer.provide(providerAdapterLayer),
         Layer.provide(directoryLayer),
-        Layer.provide(defaultServerSettingsLayer),
+        Layer.provide(input.serverSettingsLayer ?? defaultServerSettingsLayer),
         Layer.provide(serverConfigTestLayer),
+        Layer.provideMerge(pulseMcpLayer),
         Layer.provideMerge(input.analyticsLayer ?? AnalyticsService.layerTest),
         Layer.provide(
           Layer.succeed(
@@ -995,6 +1015,226 @@ it.effect("ProviderServiceLive rejects new sessions for disabled custom instance
 );
 
 const routing = makeProviderServiceLayer();
+
+const managedMcpConnection = {
+  id: "managed",
+  name: "Managed",
+  config: {
+    transport: "http" as const,
+    url: "https://mcp.example.test",
+    headers: { Authorization: "secret-one" },
+  },
+};
+
+let resolvedManagedMcpConnections: ReadonlyArray<typeof managedMcpConnection> = [
+  managedMcpConnection,
+];
+const managedMcpRouting = makeProviderServiceLayer({
+  resolveMcpConnections: () => Effect.succeed(resolvedManagedMcpConnections),
+});
+const managedMcpBrowserOffRouting = makeProviderServiceLayer({
+  resolveMcpConnections: () => Effect.succeed([managedMcpConnection]),
+  serverSettingsLayer: ServerSettings.ServerSettingsService.layerTest({
+    enableAgentBrowserAccess: false,
+  }),
+});
+
+managedMcpRouting.layer("managed MCP turn preparation", (it) => {
+  it.effect("prepares and idempotently claims one command while isolating threads", () =>
+    Effect.gen(function* () {
+      const service = yield* ProviderService.ProviderService;
+      const cwd = fixtureCwd("managed-claim");
+      const firstThread = asThreadId("managed-claim-first");
+      const secondThread = asThreadId("managed-claim-second");
+      const prepare = (threadId: ThreadId) =>
+        service.preparePulseMcp!({
+          threadId,
+          providerSession: {
+            threadId,
+            providerInstanceId: codexInstanceId,
+            runtimeMode: "full-access",
+            cwd,
+          },
+          connectionIds: ["managed"],
+        });
+      const first = yield* prepare(firstThread);
+      const second = yield* prepare(secondThread);
+      assert(first.status === "ready" && second.status === "ready");
+      assert.notEqual(first.preparationId, second.preparationId);
+      const claim = {
+        threadId: firstThread,
+        preparationId: first.preparationId,
+        providerInstanceId: codexInstanceId,
+        commandId: "same-command",
+        runtimeMode: "full-access" as const,
+        modelSelection: undefined,
+        desiredCwd: cwd,
+      };
+      yield* service.consumePulseMcpPreparation!(claim);
+      yield* service.consumePulseMcpPreparation!(claim);
+      const duplicate = yield* service.consumePulseMcpPreparation!({
+        ...claim,
+        commandId: "different-command",
+      }).pipe(Effect.exit);
+      assert(Exit.isFailure(duplicate));
+    }),
+  );
+
+  it.effect(
+    "rejects changed configuration, runtime mode, workspace, and missing default token",
+    () =>
+      Effect.gen(function* () {
+        const service = yield* ProviderService.ProviderService;
+        const cwd = fixtureCwd("managed-stale");
+        const threadId = asThreadId("managed-stale");
+        resolvedManagedMcpConnections = [managedMcpConnection];
+        const result = yield* service.preparePulseMcp!({
+          threadId,
+          providerSession: {
+            threadId,
+            providerInstanceId: codexInstanceId,
+            runtimeMode: "full-access",
+            cwd,
+          },
+        });
+        assert(result.status === "ready");
+        const base = {
+          threadId,
+          preparationId: result.preparationId,
+          providerInstanceId: codexInstanceId,
+          commandId: "command",
+          runtimeMode: "full-access" as const,
+          modelSelection: undefined,
+          desiredCwd: cwd,
+        };
+        assert(
+          Exit.isFailure(
+            yield* service.consumePulseMcpPreparation!({ ...base, runtimeMode: "auto" }).pipe(
+              Effect.exit,
+            ),
+          ),
+        );
+        assert(
+          Exit.isFailure(
+            yield* service.consumePulseMcpPreparation!({
+              ...base,
+              desiredCwd: fixtureCwd("other"),
+            }).pipe(Effect.exit),
+          ),
+        );
+        resolvedManagedMcpConnections = [
+          {
+            ...managedMcpConnection,
+            config: { ...managedMcpConnection.config, headers: { Authorization: "secret-two" } },
+          },
+        ];
+        assert(Exit.isFailure(yield* service.consumePulseMcpPreparation!(base).pipe(Effect.exit)));
+        const { preparationId: _preparationId, ...withoutPreparationId } = base;
+        assert(
+          Exit.isFailure(
+            yield* service.consumePulseMcpPreparation!(withoutPreparationId).pipe(Effect.exit),
+          ),
+        );
+      }),
+  );
+
+  it.effect("does not start a provider when no managed connection was selected", () =>
+    Effect.gen(function* () {
+      resolvedManagedMcpConnections = [];
+      const service = yield* ProviderService.ProviderService;
+      const startsBefore = managedMcpRouting.codex.startSession.mock.calls.length;
+      const threadId = asThreadId("managed-empty");
+      const result = yield* service.preparePulseMcp!({
+        threadId,
+        providerSession: {
+          threadId,
+          providerInstanceId: codexInstanceId,
+          runtimeMode: "full-access",
+          cwd: fixtureCwd("empty"),
+        },
+        connectionIds: [],
+      });
+      assert(result.status === "ready");
+      assert.equal(managedMcpRouting.codex.startSession.mock.calls.length, startsBefore);
+    }),
+  );
+
+  it.effect("reports native startup failure and does not leave a runnable session", () =>
+    Effect.gen(function* () {
+      resolvedManagedMcpConnections = [managedMcpConnection];
+      managedMcpRouting.codex.prepareManagedMcp.mockImplementationOnce((_threadId, servers) =>
+        Effect.succeed(
+          servers.map((server) => ({
+            id: server.id,
+            status: "failed" as const,
+            message: "denied",
+          })),
+        ),
+      );
+      const service = yield* ProviderService.ProviderService;
+      const threadId = asThreadId("managed-failed");
+      const result = yield* service.preparePulseMcp!({
+        threadId,
+        providerSession: {
+          threadId,
+          providerInstanceId: codexInstanceId,
+          runtimeMode: "full-access",
+          cwd: fixtureCwd("failed"),
+        },
+      });
+      assert.equal(result.status, "failed");
+      assert.equal(yield* managedMcpRouting.codex.hasSession(threadId), false);
+    }),
+  );
+
+  it.effect("binds an omitted draft cwd to the cwd used to start and consume the session", () =>
+    Effect.gen(function* () {
+      resolvedManagedMcpConnections = [managedMcpConnection];
+      const service = yield* ProviderService.ProviderService;
+      const threadId = asThreadId("managed-default-cwd");
+      const result = yield* service.preparePulseMcp!({
+        threadId,
+        providerSession: {
+          threadId,
+          providerInstanceId: codexInstanceId,
+          runtimeMode: "full-access",
+        },
+      });
+      assert(result.status === "ready");
+      yield* service.consumePulseMcpPreparation!({
+        threadId,
+        preparationId: result.preparationId,
+        providerInstanceId: codexInstanceId,
+        commandId: "default-cwd-command",
+        runtimeMode: "full-access",
+        modelSelection: undefined,
+        desiredCwd: process.cwd(),
+      });
+    }),
+  );
+});
+managedMcpBrowserOffRouting.layer("managed MCP without agent browser access", (it) => {
+  it.effect("retains managed servers through first-draft provider startup", () =>
+    Effect.gen(function* () {
+      const service = yield* ProviderService.ProviderService;
+      const threadId = asThreadId("managed-browser-off");
+      const result = yield* service.preparePulseMcp!({
+        threadId,
+        providerSession: {
+          threadId,
+          providerInstanceId: codexInstanceId,
+          runtimeMode: "full-access",
+          cwd: fixtureCwd("browser-off"),
+        },
+      });
+      assert.equal(result.status, "ready");
+      assert.deepEqual(
+        McpProviderSession.readManagedMcpServers(threadId).map((server) => server.id),
+        ["managed"],
+      );
+    }),
+  );
+});
 const skillRevision = "a".repeat(64);
 const skillResolution = vi.fn(
   async (selections: ReadonlyArray<{ id: string; revision?: string }>) =>
