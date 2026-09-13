@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import * as Schema from "effect/Schema";
-import { PulseSkillMutation } from "./pulseSkills.ts";
+import { PulseSkillMutation, PulseSkillSelectionList } from "./pulseSkills.ts";
 
 describe("managed skill wire input", () => {
   const decode = Schema.decodeUnknownSync(PulseSkillMutation);
@@ -39,5 +39,26 @@ describe("managed skill wire input", () => {
       id: "review",
       policy: "pinned",
     });
+  });
+});
+
+describe("managed skill turn selections", () => {
+  const decode = Schema.decodeUnknownSync(PulseSkillSelectionList);
+  const revision = "a".repeat(64);
+
+  it("accepts pinned id and revision pairs", () => {
+    expect(decode([{ id: "review", revision }])).toEqual([{ id: "review", revision }]);
+  });
+
+  it("rejects duplicate ids and more than 32 selections", () => {
+    expect(() =>
+      decode([
+        { id: "review", revision },
+        { id: "review", revision },
+      ]),
+    ).toThrow();
+    expect(() =>
+      decode(Array.from({ length: 33 }, (_, index) => ({ id: `skill-${index}`, revision }))),
+    ).toThrow();
   });
 });

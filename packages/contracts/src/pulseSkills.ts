@@ -2,8 +2,23 @@ import * as Schema from "effect/Schema";
 import * as Rpc from "effect/unstable/rpc/Rpc";
 import { EnvironmentAuthorizationError } from "./auth.ts";
 
-const Id = Schema.String.check(Schema.isPattern(/^[a-z][a-z0-9-]{0,63}$/));
-const Revision = Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/));
+export const PulseSkillId = Schema.String.check(Schema.isPattern(/^[a-z][a-z0-9-]{0,63}$/));
+export const PulseSkillRevision = Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/));
+export const PulseSkillSelection = Schema.Struct({
+  id: PulseSkillId,
+  revision: PulseSkillRevision,
+});
+export type PulseSkillSelection = typeof PulseSkillSelection.Type;
+export const PulseSkillSelectionList = Schema.Array(PulseSkillSelection)
+  .check(Schema.isMaxLength(32))
+  .check(
+    Schema.makeFilter(
+      (selections) =>
+        new Set(selections.map((selection) => selection.id)).size === selections.length ||
+        "Managed skill selections must use unique ids.",
+    ),
+  );
+export type PulseSkillSelectionList = typeof PulseSkillSelectionList.Type;
 const Policy = Schema.Literals(["pinned", "keep-updated"]);
 const GitHubSource = Schema.Struct({
   type: Schema.Literal("github"),
@@ -12,10 +27,10 @@ const GitHubSource = Schema.Struct({
   directory: Schema.String.check(Schema.isMaxLength(1024)),
 });
 export const PulseSkillRecord = Schema.Struct({
-  id: Id,
+  id: PulseSkillId,
   name: Schema.String,
   description: Schema.String,
-  revision: Revision,
+  revision: PulseSkillRevision,
   source: Schema.Union([Schema.Struct({ type: Schema.Literal("upload") }), GitHubSource]),
   updatePolicy: Policy,
   resolvedCommit: Schema.optional(Schema.String),
@@ -33,7 +48,7 @@ export type PulseSkillRecord = typeof PulseSkillRecord.Type;
 export const PulseSkillMutation = Schema.Union([
   Schema.Struct({
     operation: Schema.Literal("import-upload"),
-    id: Id,
+    id: PulseSkillId,
     files: Schema.Array(
       Schema.Struct({
         path: Schema.String.check(Schema.isMaxLength(1024)),
@@ -43,19 +58,19 @@ export const PulseSkillMutation = Schema.Union([
   }),
   Schema.Struct({
     operation: Schema.Literal("import-github"),
-    id: Id,
+    id: PulseSkillId,
     source: GitHubSource,
     updatePolicy: Policy,
   }),
   Schema.Struct({
     operation: Schema.Literal("link-github"),
-    id: Id,
+    id: PulseSkillId,
     source: GitHubSource,
     updatePolicy: Schema.optional(Policy),
   }),
-  Schema.Struct({ operation: Schema.Literal("set-policy"), id: Id, policy: Policy }),
-  Schema.Struct({ operation: Schema.Literal("sync"), id: Id }),
-  Schema.Struct({ operation: Schema.Literal("remove"), id: Id }),
+  Schema.Struct({ operation: Schema.Literal("set-policy"), id: PulseSkillId, policy: Policy }),
+  Schema.Struct({ operation: Schema.Literal("sync"), id: PulseSkillId }),
+  Schema.Struct({ operation: Schema.Literal("remove"), id: PulseSkillId }),
 ]);
 export type PulseSkillMutation = typeof PulseSkillMutation.Type;
 

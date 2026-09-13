@@ -247,6 +247,27 @@ it.effect("decodes thread.turn.start defaults for provider and runtime mode", ()
     assert.strictEqual(parsed.modelSelection, undefined);
     assert.strictEqual(parsed.runtimeMode, DEFAULT_RUNTIME_MODE);
     assert.strictEqual(parsed.interactionMode, DEFAULT_PROVIDER_INTERACTION_MODE);
+    assert.strictEqual(parsed.pulseSkills, undefined);
+  }),
+);
+
+it.effect("preserves explicit managed skill revisions in thread.turn.start", () =>
+  Effect.gen(function* () {
+    const pulseSkills = [{ id: "review", revision: "a".repeat(64) }];
+    const parsed = yield* decodeThreadTurnStartCommand({
+      type: "thread.turn.start",
+      commandId: "cmd-turn-skills",
+      threadId: "thread-1",
+      message: {
+        messageId: "msg-skills",
+        role: "user",
+        text: "review",
+        attachments: [],
+      },
+      pulseSkills,
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+    assert.deepStrictEqual(parsed.pulseSkills, pulseSkills);
   }),
 );
 

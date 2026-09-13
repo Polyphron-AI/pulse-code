@@ -547,6 +547,7 @@ export const ServerConfig = Schema.Struct({
   pulseCapabilities: Schema.optionalKey(
     Schema.Struct({
       managedSkills: Schema.optionalKey(Schema.Boolean),
+      codexManagedSkills: Schema.optionalKey(Schema.Boolean),
       mcpManagement: Schema.optionalKey(Schema.Boolean),
       mcpCreateOnly: Schema.optionalKey(Schema.Boolean),
       groqDictation: Schema.optionalKey(Schema.Boolean),

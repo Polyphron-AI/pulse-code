@@ -22,6 +22,7 @@ import {
   RuntimeMode,
 } from "./orchestration.ts";
 import { ProviderInstanceId, ProviderDriverKind } from "./providerInstance.ts";
+import { PulseSkillSelectionList } from "./pulseSkills.ts";
 
 const ProviderSessionStatus = Schema.Literals([
   "connecting",
@@ -78,6 +79,7 @@ export const ProviderSendTurnInput = Schema.Struct({
   ),
   modelSelection: Schema.optional(ModelSelection),
   interactionMode: Schema.optional(ProviderInteractionMode),
+  pulseSkills: Schema.optional(PulseSkillSelectionList),
 });
 export type ProviderSendTurnInput = typeof ProviderSendTurnInput.Type;
 
