@@ -180,6 +180,41 @@ describe("ProviderRuntimeEvent", () => {
     }
     expect(parsed.payload.usage.maxTokens).toBe(200000);
     expect(parsed.payload.usage.usedTokens).toBe(31251);
+    expect(parsed.payload.usage.costUsd).toBeUndefined();
+  });
+
+  it("decodes a fractional costUsd on the token usage snapshot", () => {
+    const parsed = decodeRuntimeEvent({
+      type: "thread.token-usage.updated",
+      eventId: "event-token-usage-2",
+      provider: "claudeAgent",
+      createdAt: "2026-02-28T00:00:05.000Z",
+      threadId: "thread-1",
+      payload: {
+        usage: {
+          usedTokens: 1024,
+          costUsd: 1.2345,
+        },
+      },
+    });
+
+    if (parsed.type !== "thread.token-usage.updated") {
+      throw new Error("expected thread.token-usage.updated");
+    }
+    expect(parsed.payload.usage.costUsd).toBe(1.2345);
+  });
+
+  it("rejects a negative costUsd", () => {
+    expect(() =>
+      decodeRuntimeEvent({
+        type: "thread.token-usage.updated",
+        eventId: "event-token-usage-3",
+        provider: "claudeAgent",
+        createdAt: "2026-02-28T00:00:06.000Z",
+        threadId: "thread-1",
+        payload: { usage: { usedTokens: 1, costUsd: -0.5 } },
+      }),
+    ).toThrow();
   });
 });
 
