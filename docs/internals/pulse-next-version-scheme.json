@@ -28,7 +28,7 @@
     {
       "id": "F2",
       "statement": "The user explicitly selected current upstream/main, fetched at 20363c32c9bfdbf49c2716ef11d1f18483fcc01b, as the compatibility target despite the historical branch name.",
-      "consequence": "The completed merge adopts the current post-v0.0.40 upstream line while retaining 0.0.40-pulse.1 as the requested Pulse version scheme for this branch. A later release decision should reconcile that label with the adopted upstream line."
+      "consequence": "The completed merge adopts the v0.0.41 development line, so the Pulse version is 0.0.41-pulse.1 even though upstream manifests still read 0.0.40."
     },
     {
       "id": "F3",
@@ -37,13 +37,13 @@
     }
   ],
   "decision": {
-    "versionString": "0.0.40-pulse.1",
-    "rationale": "The leading 0.0.40 states the T3 Code version this build is compatible up to. The -pulse.N suffix counts Pulse revisions against that same upstream base. One number is used everywhere, so the installer filename, the package manifests and the in-app readout can never disagree.",
+    "versionString": "0.0.41-pulse.1",
+    "rationale": "The leading version states the T3 Code line this build is compatible with. The -pulse.N suffix counts Pulse revisions against that same upstream base. One number is used everywhere, so the installer filename, package manifests and in-app readout cannot disagree.",
     "bumpRule": "On a future upstream sync, set the leading number to the newly adopted T3 version and reset the suffix to .1. Ship-only Pulse changes increment the suffix."
   },
   "acceptanceCases": [
     {
-      "case": "Every package manifest that carries an app version declares 0.0.40-pulse.1.",
+      "case": "Every package manifest that carries an app version declares 0.0.41-pulse.1.",
       "status": "required"
     },
     {
@@ -55,7 +55,7 @@
       "status": "required"
     },
     {
-      "case": "Semver parsers accept the string; it sorts after 0.0.40-nightly.* and before 0.0.40 final, which is correct because a Pulse build is a prerelease of that upstream line.",
+      "case": "Semver parsers accept the string; it sorts after 0.0.41-nightly.* and before 0.0.41 final, which is correct because a Pulse build is a prerelease of that upstream line.",
       "status": "required"
     },
     {
@@ -81,22 +81,44 @@
   ],
   "upstreamCompatibility": {
     "mandate": "Take upstream structure and inject Pulse values through the productIdentity seam. Minimise explicitly edited upstream lines.",
-    "mergeResult": "Merged upstream/main at 20363c32c9. Conflict resolution retained upstream's typed HTTP groups, agent access capabilities, desktop launcher signing and protected-resource metadata, attachment draft changes, provider updates and license generation. Pulse-owned identity, managed skills and MCP, dictation, and 0.0.40-pulse.1 manifest values remain in place."
+    "mergeResult": "Merged upstream/main at 20363c32c9. Conflict resolution retained upstream's typed HTTP groups, agent access capabilities, desktop launcher signing and protected-resource metadata, attachment draft changes, provider updates and license generation. Pulse-owned identity, managed skills and MCP, dictation, and 0.0.41-pulse.1 manifest values remain in place."
   },
   "evidence": {
-    "revision": "c81f1ab97034a3b0dc8bb2901c6b0dfdeb42d290",
-    "location": "command output reported to the coordinator",
-    "focusedTests": [
-      "Contracts, client-runtime, server, web and desktop scoped typechecks passed.",
-      "Provider adapter and service suite: 450 tests passed.",
-      "Authenticated HTTP and dictation transport: 34 tests passed.",
-      "Web composer, draft migration and integrations settings: 290 tests passed.",
-      "Desktop identity, startup, URL handling, protocol, window and launcher: 68 tests passed.",
-      "Desktop artifact packaging: 74 tests passed.",
-      "Web production build passed, including Parakeet worker and third-party license generation.",
-      "Server production bundle passed."
+    "frozenRevision": "d3d67afd494cdfe5eb6ffd1f92596424cb0588f9",
+    "mergeRevision": "c81f1ab97034a3b0dc8bb2901c6b0dfdeb42d290",
+    "mergedUpstreamRevision": "20363c32c9bfdbf49c2716ef11d1f18483fcc01b",
+    "commands": [
+      {
+        "command": "vp test run scripts/build-desktop-artifact.test.ts scripts/lib/third-party-licenses.test.ts",
+        "result": "passed: 2 files, 90 tests"
+      },
+      {
+        "command": "vp run typecheck (cwd: apps/desktop)",
+        "result": "passed"
+      },
+      {
+        "command": "vp run typecheck (cwd: apps/web)",
+        "result": "passed"
+      },
+      {
+        "command": "vp run typecheck (cwd: packages/contracts)",
+        "result": "passed"
+      },
+      {
+        "command": "vp run build (cwd: apps/web)",
+        "result": "passed: 5057 modules transformed; third-party license generation completed"
+      },
+      {
+        "command": "node -e \"const fs=require('fs'); const paths=['apps/desktop/package.json','apps/server/package.json','apps/web/package.json','packages/contracts/package.json']; for(const p of paths){const j=JSON.parse(fs.readFileSync(p,'utf8')); if(j.version!=='0.0.41-pulse.1') throw new Error(p+': '+j.version); if(/T3 Code/i.test(j.productName||'')) throw new Error(p+': '+j.productName)} console.log('4 manifests use 0.0.41-pulse.1; no manifest productName contains T3 Code')\"",
+        "result": "passed: 4 manifests use 0.0.41-pulse.1; no manifest productName contains T3 Code"
+      },
+      {
+        "command": "git diff --check 2b934183d1..d3d67afd494cdfe5eb6ffd1f92596424cb0588f9",
+        "result": "passed with no whitespace errors"
+      }
     ],
-    "knownCheckFinding": "The combined third-party license unit suite has one upstream Windows path-separator assertion failure: expected dist/third-party/NOTICE.txt but received dist\\third-party\\NOTICE.txt. License generation itself passed in the web production build.",
+    "review": "The correction diff from 2b934183d1 through the frozen revision was reviewed after all affected checks passed. It contains only the truthful v0.0.41 Pulse version, restored desktop Pulse productName, Windows-neutral embedded notice paths, tests, and the installer runbook update.",
+    "knownCheckFindings": [],
     "workflowMetrics": {
       "fullReviewPasses": 1,
       "conflictRepairBatches": 3,
@@ -114,5 +136,9 @@
     "The final frozen diff is reviewed as one batch and the ledger records commands, outcomes, remaining release gates, and exact next action."
   ],
   "blockers": [],
-  "nextAction": "Commit the resolved merge, record its revision, push sync/upstream-v040, then let the coordinator integrate it only after the five feature branches are rebased or ported against this new upstream base."
+  "remainingGates": [
+    "No packaged installer, signing, update-feed, physical mobile, or real-provider acceptance was run.",
+    "The other feature branches must be ported onto the merged upstream base before develop integration."
+  ],
+  "nextAction": "Coordinator should port the remaining feature branches onto d3d67afd494cdfe5eb6ffd1f92596424cb0588f9 before develop integration; do not merge this branch to develop or open a pull request from this worktree."
 }
