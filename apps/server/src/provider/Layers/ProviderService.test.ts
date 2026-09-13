@@ -1373,6 +1373,26 @@ managedMcpRouting.layer("managed MCP turn preparation", (it) => {
         modelSelection: undefined,
         desiredCwd: cwd,
       });
+      managedMcpRouting.codex.readManagedMcpStatus.mockImplementationOnce((_threadId, servers) =>
+        Effect.succeed(
+          servers.map((server) => ({
+            id: server.id,
+            status: "failed" as const,
+            message: "cached native failure",
+          })),
+        ),
+      );
+      const stopsBeforeCachedFailure = managedMcpRouting.codex.stopSession.mock.calls.length;
+      const cachedFailure = yield* service.consumePulseMcpPreparation!({
+        threadId: activeThread,
+        providerInstanceId: codexInstanceId,
+        commandId: "active-cached-failure",
+        runtimeMode: "full-access",
+        modelSelection: undefined,
+        desiredCwd: cwd,
+      }).pipe(Effect.exit);
+      assert(Exit.isFailure(cachedFailure));
+      assert.equal(managedMcpRouting.codex.stopSession.mock.calls.length, stopsBeforeCachedFailure);
       resolvedManagedMcpConnections = [
         {
           ...managedMcpConnection,

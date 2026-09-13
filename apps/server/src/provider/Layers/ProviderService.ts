@@ -1653,9 +1653,9 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         modelSelection: input.modelSelection,
         servers: durableServers,
       });
-      const appliedSession = yield* registry.getByInstance(input.providerInstanceId).pipe(
-        Effect.flatMap((adapter) => adapter.listSessions()),
-        Effect.map((sessions) => sessions.find((session) => session.threadId === input.threadId)),
+      const appliedAdapter = yield* registry.getByInstance(input.providerInstanceId);
+      const appliedSession = (yield* appliedAdapter.listSessions()).find(
+        (session) => session.threadId === input.threadId,
       );
       if (
         pulseMcpPreparation.appliedFingerprints.get(input.threadId) === durableFingerprint &&
@@ -1663,6 +1663,18 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         appliedSession?.providerInstanceId === input.providerInstanceId &&
         (appliedSession.status === "ready" || appliedSession.status === "running")
       ) {
+        const cachedStatuses = appliedAdapter.readManagedMcpStatus
+          ? yield* appliedAdapter.readManagedMcpStatus(input.threadId, durableServers)
+          : [];
+        const cachedFailures = cachedStatuses.filter((status) => status.status === "failed");
+        if (cachedFailures.length > 0) {
+          return yield* toValidationError(
+            "ProviderService.consumePulseMcpPreparation",
+            `Managed MCP could not be prepared before this turn: ${cachedFailures
+              .map((status) => status.message ?? status.id)
+              .join("; ")}`,
+          );
+        }
         return;
       }
       const reconciled = yield* preparePulseMcp({
