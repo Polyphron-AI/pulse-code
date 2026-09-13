@@ -1660,6 +1660,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     providerInstanceId: selectedInstanceId,
     threadId: activeThreadId,
     identityKey: composerTargetKey(composerDraftTarget),
+    modelKey: JSON.stringify(composerDraft.modelSelectionByProvider[selectedInstanceId] ?? null),
     draftConnectionIds: composerPulseMcpConnectionIds,
     onDraftConnectionIdsChange: (connectionIds) =>
       setComposerDraftPulseMcpConnectionIds(composerDraftTarget, connectionIds),
@@ -4032,7 +4033,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           },
         ]
       : []),
-    ...(selectedProvider === "codex"
+    ...(selectedProvider === "codex" || managedMcp.picker.selectedIds.length > 0
       ? [
           {
             id: "mcps",

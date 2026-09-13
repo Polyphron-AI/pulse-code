@@ -5,6 +5,7 @@ import {
   type EnvironmentId,
   type ProviderDriverKind,
   type ProviderInstanceId,
+  type ProjectId,
   type ProviderSessionStartInput,
   type ThreadId,
 } from "@t3tools/contracts";
@@ -35,6 +36,8 @@ interface PendingPreparation {
   readonly excludedConnectionIds: ReadonlyArray<string>;
   readonly busy: boolean;
   readonly error: string | null;
+  readonly projectId?: ProjectId;
+  readonly retryable: boolean;
 }
 
 export function useManagedMcpComposer(input: {
@@ -43,6 +46,7 @@ export function useManagedMcpComposer(input: {
   readonly providerInstanceId: ProviderInstanceId;
   readonly threadId: ThreadId | null;
   readonly identityKey: string;
+  readonly modelKey: string;
   readonly draftConnectionIds: ReadonlyArray<string> | null;
   readonly onDraftConnectionIdsChange: (ids: ReadonlyArray<string> | null) => void;
   readonly onManage: () => void;
@@ -58,7 +62,8 @@ export function useManagedMcpComposer(input: {
     !session.isPending && session.data?.authenticated ? session.data.scopes : undefined;
   const canRead = scopes?.includes(AuthOrchestrationReadScope) === true;
   const canOperate = scopes?.includes(AuthOrchestrationOperateScope) === true;
-  const enabled = input.provider === "codex" && supported && canRead && canOperate;
+  const enabled =
+    input.provider === "codex" && capabilityReady && supported && canRead && canOperate;
   const list = useEnvironmentQuery(
     enabled ? pulseMcpList({ environmentId: input.environmentId, input: {} }) : null,
   );
@@ -104,33 +109,46 @@ export function useManagedMcpComposer(input: {
     (list.data === null ||
       providerDefault.data === null ||
       (input.threadId !== null && threadOverride.data === null));
-  const entries = useMemo<ReadonlyArray<ManagedMcpEntry>>(
-    () =>
-      (list.data ?? []).map((connection) => ({
-        id: connection.id,
-        name: connection.name,
-        description:
-          connection.config.transport === "http" ? connection.config.url : "Local command",
-        source: "pulse",
-        status: "unknown",
-      })),
-    [list.data],
-  );
-  const blockedReason = !capabilityReady
-    ? "Waiting for MCP support from this environment."
-    : input.provider !== "codex"
-      ? null
-      : !supported
-        ? "Managed MCPs are not supported by this environment."
-        : !canRead || !canOperate
-          ? "This session cannot use managed MCP connections."
-          : loading
-            ? "MCP selection is still loading."
-            : list.error || providerDefault.error || threadOverride.error
-              ? "MCP selection could not be loaded."
-              : null;
+  const entries = useMemo<ReadonlyArray<ManagedMcpEntry>>(() => {
+    const loaded = (list.data ?? []).map((connection) => ({
+      id: connection.id,
+      name: connection.name,
+      description: connection.config.transport === "http" ? connection.config.url : "Local command",
+      source: "pulse" as const,
+      status: "unknown" as const,
+    }));
+    const loadedIds = new Set(loaded.map(({ id }) => id));
+    return [
+      ...loaded,
+      ...selectedIds
+        .filter((id) => !loadedIds.has(id))
+        .map((id) => ({
+          id,
+          name: id,
+          source: "pulse" as const,
+          status: "unsupported" as const,
+          statusMessage: "Unavailable with the selected provider",
+        })),
+    ];
+  }, [list.data, selectedIds]);
+  const blockedReason =
+    input.provider !== "codex"
+      ? selectedIds.length > 0
+        ? "Managed MCPs can only be used with Codex. Remove them or switch providers."
+        : null
+      : !capabilityReady
+        ? "Waiting for MCP support from this environment."
+        : !supported
+          ? "Managed MCPs are not supported by this environment."
+          : !canRead || !canOperate
+            ? "This session cannot use managed MCP connections."
+            : loading
+              ? "MCP selection is still loading."
+              : list.error || providerDefault.error || threadOverride.error
+                ? "MCP selection could not be loaded."
+                : null;
 
-  const accessKey = `${input.environmentId}:${input.identityKey}:${input.threadId ?? "draft"}:${input.providerInstanceId}:${input.provider}:${selectedIds.join(",")}`;
+  const accessKey = `${input.environmentId}:${input.identityKey}:${input.threadId ?? "draft"}:${input.providerInstanceId}:${input.provider}:${input.modelKey}:${capabilityReady}:${canRead}:${canOperate}:${selectedIds.join(",")}`;
   const accessKeyRef = useRef(accessKey);
   accessKeyRef.current = accessKey;
   const mountedRef = useRef(true);
@@ -178,7 +196,6 @@ export function useManagedMcpComposer(input: {
       ];
       const checking = { ...pendingPreparation, excludedConnectionIds, busy: true, error: null };
       pendingRef.current = checking;
-      setPending(checking);
       try {
         const result = await prepareTurn({
           environmentId: input.environmentId,
@@ -188,6 +205,7 @@ export function useManagedMcpComposer(input: {
             ...(selectionMode === "override" ? { connectionIds: [...selectedIds] } : {}),
             ...(excludedConnectionIds.length > 0 ? { excludedConnectionIds } : {}),
             ...(options?.retry ? { retry: true } : {}),
+            ...(pendingPreparation.projectId ? { projectId: pendingPreparation.projectId } : {}),
           },
         });
         if (
@@ -202,6 +220,7 @@ export function useManagedMcpComposer(input: {
             ...checking,
             busy: false,
             error: "Pulse Code could not check MCP connections. Retry or manage connections.",
+            retryable: true,
           };
           pendingRef.current = failed;
           setPending(failed);
@@ -231,6 +250,7 @@ export function useManagedMcpComposer(input: {
                   ]
                 : [],
             ),
+            retryable: true,
           };
           pendingRef.current = failed;
           setPending(failed);
@@ -240,7 +260,12 @@ export function useManagedMcpComposer(input: {
           result.value.status === "active-turn"
             ? "Finish or stop the active turn, then retry."
             : "This provider cannot use Pulse-managed MCP connections.";
-        const failed = { ...checking, busy: false, error: message };
+        const failed = {
+          ...checking,
+          busy: false,
+          error: message,
+          retryable: result.value.status === "active-turn",
+        };
         pendingRef.current = failed;
         setPending(failed);
       } catch {
@@ -255,6 +280,7 @@ export function useManagedMcpComposer(input: {
           ...checking,
           busy: false,
           error: "Pulse Code could not check MCP connections. Retry or manage connections.",
+          retryable: true,
         };
         pendingRef.current = failed;
         setPending(failed);
@@ -265,8 +291,8 @@ export function useManagedMcpComposer(input: {
 
   const prepare = useCallback<PrepareComposerMcp>(
     (providerSession, options): Promise<McpSubmissionPreparation> => {
-      if (input.provider !== "codex" || !supported) return Promise.resolve({ status: "ready" });
-      if (blockedReason) return Promise.resolve({ status: "cancelled" });
+      if (selectedIds.length === 0 && (input.provider !== "codex" || !supported))
+        return Promise.resolve({ status: "ready" });
       if (activePromiseRef.current) return activePromiseRef.current;
       const promise = new Promise<McpSubmissionPreparation>((resolvePromise) => {
         const resolve = (outcome: McpSubmissionPreparation) => {
@@ -279,14 +305,17 @@ export function useManagedMcpComposer(input: {
           failed: [],
           excludedConnectionIds: [],
           busy: false,
-          error:
-            options?.creatingWorktree && selectedIds.length > 0
+          retryable: !blockedReason && !(options?.creatingWorktree && selectedIds.length > 0),
+          error: blockedReason
+            ? blockedReason
+            : options?.creatingWorktree && selectedIds.length > 0
               ? "Start the thread before using managed MCP connections. New worktree setup cannot apply them yet."
               : null,
+          ...(options?.projectId ? { projectId: options.projectId } : {}),
         };
         pendingRef.current = initial;
-        setPending(initial);
-        if (!initial.error) void runPreparation(providerSession, initial);
+        if (initial.error) setPending(initial);
+        else void runPreparation(providerSession, initial);
       });
       activePromiseRef.current = promise;
       return promise;
@@ -328,6 +357,7 @@ export function useManagedMcpComposer(input: {
       failed={pending.failed}
       error={pending.error}
       busy={pending.busy}
+      retryable={pending.retryable}
       onOpenChange={(open) => {
         if (!open) {
           pending.resolve({ status: "cancelled" });
@@ -351,7 +381,7 @@ export function useManagedMcpComposer(input: {
       selectedIds,
       selectionMode,
       nativeDiscovery: "unavailable" as const,
-      disabled: !enabled,
+      disabled: !enabled && selectedIds.length === 0,
       loading,
       error: list.error ? "Could not load MCPs." : null,
       onChange: changeSelection,

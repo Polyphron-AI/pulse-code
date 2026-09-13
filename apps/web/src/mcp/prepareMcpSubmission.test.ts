@@ -1,4 +1,4 @@
-import { ProviderInstanceId, ThreadId } from "@t3tools/contracts";
+import { ProjectId, ProviderInstanceId, ThreadId } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import { prepareMcpSubmission } from "./prepareMcpSubmission";
@@ -89,12 +89,16 @@ describe("MCP submission boundary", () => {
     await prepareMcpSubmission({
       session,
       creatingWorktree: true,
+      projectId: ProjectId.make("project-1"),
       prepare: async (...args) => {
         received = args;
         return { status: "cancelled" };
       },
       isCurrent: () => true,
     });
-    expect(received).toEqual([session, { creatingWorktree: true }]);
+    expect(received).toEqual([
+      session,
+      { creatingWorktree: true, projectId: ProjectId.make("project-1") },
+    ]);
   });
 });

@@ -19,6 +19,7 @@ interface McpSendPauseActions {
   readonly failed: ReadonlyArray<FailedMcpConnection>;
   readonly error?: string | null;
   readonly busy?: boolean;
+  readonly retryable?: boolean;
   readonly onRetry: () => void;
   readonly onContinueWithout: (excludedConnectionIds: ReadonlyArray<string>) => void;
   readonly onManage: () => void;
@@ -59,9 +60,11 @@ export function McpSendPauseContent(props: McpSendPauseActions) {
             Continue without it
           </Button>
         ) : null}
-        <Button disabled={props.busy} onClick={props.onRetry}>
-          {props.busy ? "Checking…" : "Retry"}
-        </Button>
+        {props.retryable !== false ? (
+          <Button disabled={props.busy} onClick={props.onRetry}>
+            {props.busy ? "Checking…" : "Retry"}
+          </Button>
+        ) : null}
       </AlertDialogFooter>
     </>
   );
