@@ -74,6 +74,9 @@ export function McpConnectionsPanel({
     setPending(false);
     setError(null);
   }, [disabled, environmentKey]);
+  useEffect(() => {
+    if (!canCreate) setEditing((current) => (current === "new" ? null : current));
+  }, [canCreate]);
 
   const run = async (operation: () => Promise<void>): Promise<Result> => {
     if (disabled) return { ok: false, error: "MCP connections are read-only." };

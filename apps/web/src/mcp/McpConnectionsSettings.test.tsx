@@ -18,6 +18,9 @@ const mocks = vi.hoisted(() => ({
   createOnly: true,
   sessionPending: false,
   scopes: ["orchestration:read", "orchestration:operate"] as ReadonlyArray<string>,
+  panelUpsert: null as
+    | null
+    | ((environmentKey: string, input: Record<string, unknown>) => Promise<void>),
 }));
 
 vi.mock("@effect/atom-react", () => ({
@@ -69,12 +72,18 @@ vi.mock("./McpConnectionsPanel", () => ({
     environmentKey,
     disabled,
     canCreate,
+    upsert,
   }: {
     environmentKey: string;
     disabled: boolean;
     canCreate: boolean;
+    upsert: (environmentKey: string, input: Record<string, unknown>) => Promise<void>;
   }) => (
-    <p>
+    <p
+      ref={() => {
+        mocks.panelUpsert = upsert;
+      }}
+    >
       Panel for {environmentKey} {disabled ? "read only" : "editable"}{" "}
       {canCreate ? "add" : "update required"}
     </p>
@@ -118,6 +127,7 @@ beforeEach(() => {
   mocks.createOnly = true;
   mocks.sessionPending = false;
   mocks.scopes = [AuthOrchestrationReadScope, AuthOrchestrationOperateScope];
+  mocks.panelUpsert = null;
 });
 afterEach(async () => {
   await act(() => renderer?.unmount());
@@ -162,6 +172,23 @@ describe("McpConnectionsSettings", () => {
     expect(mocks.list).toHaveBeenCalledWith({ environmentId: "primary", input: {} });
     expect(json()).toContain("editable");
     expect(json()).toContain("update required");
+  });
+
+  it("rejects Add at the mutation boundary after create-only support is withdrawn", async () => {
+    mocks.environments = [environment("primary")];
+    await render();
+    mocks.createOnly = false;
+    await act(() => renderer!.update(<McpConnectionsSettings />));
+
+    await expect(
+      mocks.panelUpsert!("primary", {
+        id: "new-connection",
+        name: "New connection",
+        createOnly: true,
+        config: { transport: "http", url: "https://example.com/mcp", headers: {} },
+      }),
+    ).rejects.toThrow("access changed");
+    expect(mocks.command).not.toHaveBeenCalled();
   });
 
   it("drops stale scopes while the session refreshes", async () => {

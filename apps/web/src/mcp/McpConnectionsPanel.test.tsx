@@ -218,4 +218,35 @@ describe("McpConnectionsPanel environment ownership", () => {
     expect(JSON.stringify(renderer!.toJSON())).toContain("Update this environment");
     expect(renderer!.root.findByProps({ "aria-label": "Edit GitHub" }).props.disabled).toBe(false);
   });
+
+  it("closes an open Add dialog when create-only support is withdrawn", async () => {
+    const upsert = vi.fn();
+    await act(() => {
+      renderer = create(
+        <McpConnectionsPanel
+          environmentKey="env-a"
+          connections={[connection]}
+          canCreate
+          upsert={upsert}
+          remove={vi.fn()}
+        />,
+      );
+    });
+    await act(() => button("Add connection")!.props.onClick());
+    expect(JSON.stringify(renderer!.toJSON())).toContain("Add MCP connection");
+    await act(() => {
+      renderer!.update(
+        <McpConnectionsPanel
+          environmentKey="env-a"
+          connections={[connection]}
+          canCreate={false}
+          upsert={upsert}
+          remove={vi.fn()}
+        />,
+      );
+    });
+    expect(JSON.stringify(renderer!.toJSON())).not.toContain("Add MCP connection");
+    expect(renderer!.root.findAllByProps({ "data-open": false }).length).toBeGreaterThan(0);
+    expect(upsert).not.toHaveBeenCalled();
+  });
 });

@@ -97,7 +97,7 @@ function McpEnvironment({
   const [connections, setConnections] = useState<ReadonlyArray<PulseMcpConnection>>([]);
   const accessGeneration = useRef(0);
   const accessKeyRef = useRef("");
-  const accessKey = `${supported}:${sessionFresh}:${canRead}:${canOperate}`;
+  const accessKey = `${supported}:${canCreate}:${sessionFresh}:${canRead}:${canOperate}`;
   if (accessKeyRef.current !== accessKey) {
     accessKeyRef.current = accessKey;
     accessGeneration.current += 1;
@@ -106,20 +106,21 @@ function McpEnvironment({
     if (list.data) setConnections(list.data);
   }, [list.data]);
 
-  const assertAccess = (capturedEnvironment: string, generation: number) => {
+  const assertAccess = (capturedEnvironment: string, generation: number, createOnly = false) => {
     if (
       capturedEnvironment !== environmentId ||
       generation !== accessGeneration.current ||
       !supported ||
-      !canOperate
+      !canOperate ||
+      (createOnly && !canCreate)
     )
       throw new Error("MCP connection access changed.");
   };
   const upsert = async (capturedEnvironment: string, input: PulseMcpConnectionInput) => {
     const generation = accessGeneration.current;
-    assertAccess(capturedEnvironment, generation);
+    assertAccess(capturedEnvironment, generation, input.createOnly === true);
     const result = await upsertCommand({ environmentId, input });
-    assertAccess(capturedEnvironment, generation);
+    assertAccess(capturedEnvironment, generation, input.createOnly === true);
     if (result._tag === "Failure") throw squashAtomCommandFailure(result);
     setConnections((current) =>
       [...current.filter(({ id }) => id !== result.value.id), result.value].sort((a, b) =>
