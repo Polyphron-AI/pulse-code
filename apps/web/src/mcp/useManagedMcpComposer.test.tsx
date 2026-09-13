@@ -485,6 +485,53 @@ describe("useManagedMcpComposer", () => {
     );
   });
 
+  it("retries a failed selection persistence before preparing", async () => {
+    mocks.setOverride
+      .mockResolvedValueOnce({ _tag: "Failure" })
+      .mockResolvedValueOnce({ _tag: "Success", value: {} });
+    mocks.prepare.mockResolvedValue({
+      _tag: "Success",
+      value: { status: "ready", preparationId: "retried" },
+    });
+    await act(async () => {
+      renderer = create(<Harness threadId={null} identityKey="draft:local" />);
+    });
+    const outcome = mocks.result!.prepare({
+      threadId: ThreadId.make("actual-server-thread"),
+      provider: ProviderDriverKind.make("codex"),
+      providerInstanceId: ProviderInstanceId.make("codex"),
+      runtimeMode: "full-access",
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await act(async () =>
+      (mocks.result!.pause as { props: { onRetry: () => void } }).props.onRetry(),
+    );
+    await expect(outcome).resolves.toEqual({ status: "ready", preparationId: "retried" });
+    expect(mocks.setOverride).toHaveBeenCalledTimes(2);
+    expect(mocks.prepare).toHaveBeenCalledOnce();
+  });
+
+  it("does not prepare after identity cancellation while selection persistence is pending", async () => {
+    let finishPersistence!: (value: unknown) => void;
+    mocks.setOverride.mockReturnValue(new Promise((resolve) => (finishPersistence = resolve)));
+    await act(async () => {
+      renderer = create(<Harness threadId={null} identityKey="draft:first" />);
+    });
+    const outcome = mocks.result!.prepare({
+      threadId: ThreadId.make("actual-server-thread"),
+      provider: ProviderDriverKind.make("codex"),
+      providerInstanceId: ProviderInstanceId.make("codex"),
+      runtimeMode: "full-access",
+    });
+    await act(async () => renderer!.update(<Harness threadId={null} identityKey="draft:second" />));
+    await expect(outcome).resolves.toEqual({ status: "cancelled" });
+    await act(async () => finishPersistence({ _tag: "Success", value: {} }));
+    expect(mocks.prepare).not.toHaveBeenCalled();
+  });
+
   it("saves the current selection as provider defaults without removing the thread override", async () => {
     await act(async () => {
       renderer = create(<Harness />);

@@ -165,9 +165,10 @@ export function useManagedMcpComposer(input: {
   const lastOverrideWriteRef = useRef<{ key: string; result: Promise<boolean> } | null>(null);
   const defaultsResetThreadKeyRef = useRef<string | null>(null);
   const enqueueOverrideWrite = useCallback(
-    (threadId: ThreadId, connectionIds: ReadonlyArray<string>) => {
+    (threadId: ThreadId, connectionIds: ReadonlyArray<string>, forceRetry = false) => {
       const key = `${input.environmentId}:${threadId}:${connectionIds.join(",")}`;
-      if (lastOverrideWriteRef.current?.key === key) return lastOverrideWriteRef.current.result;
+      if (!forceRetry && lastOverrideWriteRef.current?.key === key)
+        return lastOverrideWriteRef.current.result;
       const result = overrideQueueRef.current.then(async () => {
         const write = await setOverride({
           environmentId: input.environmentId,
@@ -227,10 +228,20 @@ export function useManagedMcpComposer(input: {
       try {
         if (
           selectionMode === "override" &&
-          !(await enqueueOverrideWrite(providerSession.threadId, selectedIds))
+          !(await enqueueOverrideWrite(
+            providerSession.threadId,
+            selectedIds,
+            options?.retry === true,
+          ))
         ) {
           throw new Error("Could not save MCP selection");
         }
+        if (
+          !mountedRef.current ||
+          accessKeyRef.current !== accessKey ||
+          attempt !== attemptRef.current
+        )
+          return;
         const result = await prepareTurn({
           environmentId: input.environmentId,
           input: {
@@ -372,7 +383,8 @@ export function useManagedMcpComposer(input: {
     }
     const resetAccessKey = accessKey;
     const threadId = input.threadId;
-    defaultsResetThreadKeyRef.current = `${input.environmentId}:${threadId}`;
+    const resetThreadKey = `${input.environmentId}:${threadId}`;
+    defaultsResetThreadKeyRef.current = resetThreadKey;
     const resetOperation = overrideQueueRef.current.then(async () => {
       if (accessKeyRef.current !== resetAccessKey) return;
       return resetOverride({
@@ -385,12 +397,18 @@ export function useManagedMcpComposer(input: {
       () => undefined,
     );
     const result = await resetOperation;
-    if (!result || accessKeyRef.current !== resetAccessKey) return;
+    if (!result || accessKeyRef.current !== resetAccessKey) {
+      if (defaultsResetThreadKeyRef.current === resetThreadKey)
+        defaultsResetThreadKeyRef.current = null;
+      return;
+    }
     if (result._tag === "Success") {
       lastOverrideWriteRef.current = null;
       setIgnoreServerOverride(true);
       input.onDraftConnectionIdsChange(null);
       threadOverride.refresh();
+    } else if (defaultsResetThreadKeyRef.current === resetThreadKey) {
+      defaultsResetThreadKeyRef.current = null;
     }
   }, [accessKey, input, resetOverride, threadOverride]);
   const saveDefaults = useCallback(async () => {
