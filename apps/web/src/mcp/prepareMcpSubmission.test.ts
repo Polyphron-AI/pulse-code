@@ -11,6 +11,34 @@ const session = {
 };
 
 describe("MCP submission boundary", () => {
+  it("cancels after any draft mutation, including an edit that is later undone", async () => {
+    const original = { attachments: [] };
+    let draft: unknown = original;
+    let listener = () => {};
+    let unsubscribed = false;
+    const result = await prepareMcpSubmission({
+      session,
+      isCurrent: () => true,
+      draft: {
+        read: () => draft,
+        subscribe: (changed) => {
+          listener = changed;
+          return () => {
+            unsubscribed = true;
+          };
+        },
+      },
+      prepare: async () => {
+        draft = { attachments: ["new attachment"] };
+        listener();
+        draft = original;
+        listener();
+        return { status: "ready" };
+      },
+    });
+    expect(result).toEqual({ status: "cancelled" });
+    expect(unsubscribed).toBe(true);
+  });
   it("preserves the ordinary send path when no preparation id is needed", async () => {
     expect(
       await prepareMcpSubmission({

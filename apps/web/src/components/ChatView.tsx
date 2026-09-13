@@ -6591,6 +6591,10 @@ export default function ChatView(props: ChatViewProps) {
       },
       creatingWorktree: shouldCreateWorktree,
       projectId: activeProject.id,
+      draft: {
+        read: () => useComposerDraftStore.getState().getComposerDraft(composerDraftTarget),
+        subscribe: useComposerDraftStore.subscribe,
+      },
       isCurrent: () =>
         mcpSubmissionIdentityRef.current === routeThreadKey && promptRef.current === promptForSend,
     });
@@ -7285,6 +7289,10 @@ export default function ChatView(props: ChatViewProps) {
       const mcpPreparation = await prepareMcpSubmission({
         prepare: preparingComposer?.preparePulseMcp,
         projectId: activeProject.id,
+        draft: {
+          read: () => useComposerDraftStore.getState().getComposerDraft(composerDraftTarget),
+          subscribe: useComposerDraftStore.subscribe,
+        },
         session: {
           threadId: threadIdForSend,
           provider: ctxSelectedProvider,
@@ -7482,6 +7490,10 @@ export default function ChatView(props: ChatViewProps) {
     const mcpPreparation = await prepareMcpSubmission({
       prepare: preparingComposer?.preparePulseMcp,
       projectId: activeProject.id,
+      draft: {
+        read: () => useComposerDraftStore.getState().getComposerDraft(composerDraftTarget),
+        subscribe: useComposerDraftStore.subscribe,
+      },
       session: {
         threadId: nextThreadId,
         provider: ctxSelectedProvider,
