@@ -1290,6 +1290,9 @@ const makeWsRpcLayer = (
                     modelSelection,
                     ...(projectId !== undefined ? { projectId } : {}),
                     ...(desiredCwd !== undefined ? { desiredCwd } : {}),
+                    ...(normalizedCommand.bootstrap?.prepareWorktree !== undefined
+                      ? { preparingWorktree: true }
+                      : {}),
                   })
                   .pipe(
                     Effect.mapError(

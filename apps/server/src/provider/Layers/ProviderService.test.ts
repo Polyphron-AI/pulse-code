@@ -1163,12 +1163,6 @@ managedMcpRouting.layer("managed MCP turn preparation", (it) => {
           },
         ];
         assert(Exit.isFailure(yield* service.consumePulseMcpPreparation!(base).pipe(Effect.exit)));
-        const { preparationId: _preparationId, ...withoutPreparationId } = base;
-        assert(
-          Exit.isFailure(
-            yield* service.consumePulseMcpPreparation!(withoutPreparationId).pipe(Effect.exit),
-          ),
-        );
       }),
   );
 
@@ -1278,6 +1272,102 @@ managedMcpRouting.layer("managed MCP turn preparation", (it) => {
         desiredCwd: cwd,
       }).pipe(Effect.exit);
       assert(Exit.isFailure(consumed));
+    }),
+  );
+
+  it.effect("reconciles durable defaults for tokenless clients before dispatch", () =>
+    Effect.gen(function* () {
+      const service = yield* ProviderService.ProviderService;
+      const cwd = fixtureCwd("tokenless-defaults");
+      const readyThread = asThreadId("tokenless-ready");
+      resolvedManagedMcpConnections = [managedMcpConnection];
+      yield* service.consumePulseMcpPreparation!({
+        threadId: readyThread,
+        providerInstanceId: codexInstanceId,
+        commandId: "native-ready",
+        runtimeMode: "full-access",
+        modelSelection: undefined,
+        desiredCwd: cwd,
+      });
+      assert.equal(yield* managedMcpRouting.codex.hasSession(readyThread), true);
+      yield* service.sendTurn({ threadId: readyThread, input: "native turn", attachments: [] });
+      const startsBeforeRemoteClear = managedMcpRouting.codex.startSession.mock.calls.length;
+      resolvedManagedMcpConnections = [];
+      yield* service.consumePulseMcpPreparation!({
+        threadId: readyThread,
+        providerInstanceId: codexInstanceId,
+        commandId: "native-after-remote-clear",
+        runtimeMode: "full-access",
+        modelSelection: undefined,
+        desiredCwd: cwd,
+      });
+      assert.equal(
+        managedMcpRouting.codex.startSession.mock.calls.length,
+        startsBeforeRemoteClear + 1,
+      );
+      assert.deepEqual(McpProviderSession.readManagedMcpServers(readyThread), []);
+
+      const failedThread = asThreadId("tokenless-failed");
+      resolvedManagedMcpConnections = [managedMcpConnection];
+      managedMcpRouting.codex.prepareManagedMcp.mockImplementationOnce((_threadId, servers) =>
+        Effect.succeed(
+          servers.map((server) => ({
+            id: server.id,
+            status: "failed" as const,
+            message: "native startup failed",
+          })),
+        ),
+      );
+      const failed = yield* service.consumePulseMcpPreparation!({
+        threadId: failedThread,
+        providerInstanceId: codexInstanceId,
+        commandId: "native-failed",
+        runtimeMode: "full-access",
+        modelSelection: undefined,
+        desiredCwd: cwd,
+      }).pipe(Effect.exit);
+      assert(Exit.isFailure(failed));
+      assert.equal(yield* managedMcpRouting.codex.hasSession(failedThread), false);
+
+      const worktreeThread = asThreadId("tokenless-worktree");
+      const blockedWorktree = yield* service.consumePulseMcpPreparation!({
+        threadId: worktreeThread,
+        providerInstanceId: codexInstanceId,
+        commandId: "native-worktree",
+        runtimeMode: "full-access",
+        modelSelection: undefined,
+        desiredCwd: cwd,
+        preparingWorktree: true,
+      }).pipe(Effect.exit);
+      assert(Exit.isFailure(blockedWorktree));
+      resolvedManagedMcpConnections = [];
+      yield* service.consumePulseMcpPreparation!({
+        threadId: worktreeThread,
+        providerInstanceId: codexInstanceId,
+        commandId: "native-empty-worktree",
+        runtimeMode: "full-access",
+        modelSelection: undefined,
+        desiredCwd: cwd,
+        preparingWorktree: true,
+      });
+
+      yield* service.sendTurn({ threadId: readyThread, input: "first", attachments: [] });
+      const startsBeforeClear = managedMcpRouting.codex.startSession.mock.calls.length;
+      McpProviderSession.setManagedMcpServers(readyThread, [
+        { id: "managed", name: "Managed", ...managedMcpConnection.config },
+      ]);
+      assert.equal(McpProviderSession.readManagedMcpServers(readyThread).length, 1);
+      resolvedManagedMcpConnections = [];
+      yield* service.consumePulseMcpPreparation!({
+        threadId: readyThread,
+        providerInstanceId: codexInstanceId,
+        commandId: "native-cleared",
+        runtimeMode: "full-access",
+        modelSelection: undefined,
+        desiredCwd: cwd,
+      });
+      assert.equal(managedMcpRouting.codex.startSession.mock.calls.length, startsBeforeClear + 1);
+      assert.deepEqual(McpProviderSession.readManagedMcpServers(readyThread), []);
     }),
   );
 });
