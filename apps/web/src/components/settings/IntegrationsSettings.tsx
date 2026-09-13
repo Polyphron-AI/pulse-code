@@ -99,6 +99,7 @@ import { searchableSetting } from "./settingsSearch";
 import { BrowserImportWizard, type WizardTarget } from "./BrowserImportWizard";
 import type { ImportOutcome } from "./browserImportWizard.logic";
 import { ManagedSkillsSettings } from "~/skills/ManagedSkillsSettings";
+import { McpConnectionsSettings } from "~/mcp";
 
 const FILL_VALUE = "fill";
 const RESPONSIVE_VALUE = "responsive";
@@ -1185,6 +1186,9 @@ export function IntegrationsSettingsPanel() {
     <SettingsPageContainer>
       <SettingsSection id="skills" title="Skills">
         <ManagedSkillsSettings />
+      </SettingsSection>
+      <SettingsSection id="mcp" title="MCP">
+        <McpConnectionsSettings />
       </SettingsSection>
       <SettingsSection id="browser" title="Browser">
         {/* Server-authoritative, so it stays editable on any client anchored to

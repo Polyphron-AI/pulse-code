@@ -147,8 +147,8 @@ function McpEnvironment({
     <div className="space-y-4">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-[13px] text-muted-foreground">
-          Manage connection records stored on one environment. Provider selection and session
-          application are configured elsewhere.
+          Manage connection records stored on one environment. Composer selection and provider
+          connection are not available yet.
         </p>
         <Select
           value={environmentId}
