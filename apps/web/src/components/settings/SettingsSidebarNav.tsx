@@ -56,6 +56,7 @@ import {
   type SettingsSearchItem,
 } from "./settingsSearch";
 import { useAvailableSettingsSearchItems } from "./useAvailableSettingsSearchItems";
+import { INTEGRATIONS_SETTINGS_SECTIONS } from "./integrationsSettingsSections";
 
 const T3ConnectSidebarSignIn = lazy(() =>
   import("../clerk/T3ConnectSidebarSignIn").then((module) => ({
@@ -110,12 +111,7 @@ const SETTINGS_PAGE_SECTIONS: Partial<
     { label: "Motion", targetId: "motion" },
     { label: "Typography", targetId: "typography" },
   ],
-  "/settings/integrations": [
-    { label: "Skills", targetId: "skills" },
-    { label: "MCP", targetId: "mcp" },
-    { label: "Voice dictation", targetId: "dictation" },
-    { label: "Browser", targetId: "browser" },
-  ],
+  "/settings/integrations": INTEGRATIONS_SETTINGS_SECTIONS,
   "/settings/source-control": [
     { label: "Version control", targetId: "source-control" },
     { label: "Text generation", targetId: "source-control-text-generation" },

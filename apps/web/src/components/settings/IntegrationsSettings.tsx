@@ -101,6 +101,10 @@ import type { ImportOutcome } from "./browserImportWizard.logic";
 import { ManagedSkillsSettings } from "~/skills/ManagedSkillsSettings";
 import { DictationSettings } from "~/voice/DictationSettings";
 import { McpConnectionsSettings } from "~/mcp";
+import {
+  INTEGRATIONS_SETTINGS_SECTIONS,
+  type IntegrationsSettingsSectionId,
+} from "./integrationsSettingsSections";
 
 const FILL_VALUE = "fill";
 const RESPONSIVE_VALUE = "responsive";
@@ -1183,18 +1187,12 @@ export function IntegrationsSettingsPanel() {
     </>
   );
 
-  return (
-    <SettingsPageContainer>
-      <SettingsSection id="skills" title="Skills">
-        <ManagedSkillsSettings />
-      </SettingsSection>
-      <SettingsSection id="mcp" title="MCP">
-        <McpConnectionsSettings />
-      </SettingsSection>
-      <SettingsSection id="dictation" title="Voice dictation">
-        <DictationSettings />
-      </SettingsSection>
-      <SettingsSection id="browser" title="Browser">
+  const sectionContent = {
+    skills: <ManagedSkillsSettings />,
+    mcp: <McpConnectionsSettings />,
+    dictation: <DictationSettings />,
+    browser: (
+      <>
         {/* Server-authoritative, so it stays editable on any client anchored to
             a server; `serverScoped` covers the hosted app, which has none. It
             sits outside the block covering the desktop-only defaults. */}
@@ -1204,7 +1202,17 @@ export function IntegrationsSettingsPanel() {
         ) : (
           previewDefaults
         )}
-      </SettingsSection>
+      </>
+    ),
+  } satisfies Record<IntegrationsSettingsSectionId, ReactNode>;
+
+  return (
+    <SettingsPageContainer>
+      {INTEGRATIONS_SETTINGS_SECTIONS.map(({ label, targetId }) => (
+        <SettingsSection key={targetId} id={targetId} title={label}>
+          {sectionContent[targetId]}
+        </SettingsSection>
+      ))}
     </SettingsPageContainer>
   );
 }
