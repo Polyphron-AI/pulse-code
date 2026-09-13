@@ -52,3 +52,10 @@ The file is read at build time:
 - In the app: Settings → About.
 - In the repo: `cat UPSTREAM.json` or `git tag -l 't3/*'`.
 - For a remote environment: its `ExecutionEnvironmentDescriptor.upstreamVersion` in the environment list.
+
+## Delivery policy
+
+Use the [Pulse delivery playbook](../operations/pulse-feature-delivery.md) for
+upstream batches: acceptance cases first, one implementation owner, frozen review,
+targeted verification and one resumable JSON record. Existing compatibility and
+release requirements in this guide still apply.
