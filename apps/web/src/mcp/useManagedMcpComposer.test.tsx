@@ -405,6 +405,86 @@ describe("useManagedMcpComposer", () => {
     );
   });
 
+  it("serializes rapid selection writes before resetting to defaults", async () => {
+    let finishA!: (value: unknown) => void;
+    let finishB!: (value: unknown) => void;
+    mocks.setOverride
+      .mockReturnValueOnce(new Promise((resolve) => (finishA = resolve)))
+      .mockReturnValueOnce(new Promise((resolve) => (finishB = resolve)));
+    await act(async () => {
+      renderer = create(<Harness draftConnectionIds={["a"]} />);
+    });
+    await act(async () => renderer!.update(<Harness draftConnectionIds={["b"]} />));
+    expect(mocks.setOverride).toHaveBeenCalledTimes(1);
+    const reset = mocks.result!.picker.onUseDefaults();
+    expect(mocks.resetOverride).not.toHaveBeenCalled();
+    await act(async () => finishA({ _tag: "Success", value: {} }));
+    expect(mocks.setOverride).toHaveBeenCalledTimes(2);
+    expect(mocks.resetOverride).not.toHaveBeenCalled();
+    await act(async () => finishB({ _tag: "Success", value: {} }));
+    await act(async () => reset);
+    expect(mocks.setOverride.mock.calls.map((call) => call[0].input.connectionIds)).toEqual([
+      ["a"],
+      ["b"],
+    ]);
+    expect(mocks.resetOverride).toHaveBeenCalledOnce();
+  });
+
+  it("persists draft IDs to the actual session thread before preparing", async () => {
+    const order: string[] = [];
+    mocks.setOverride.mockImplementation(async () => {
+      order.push("persist");
+      return { _tag: "Success", value: {} };
+    });
+    mocks.prepare.mockImplementation(async () => {
+      order.push("prepare");
+      return { _tag: "Success", value: { status: "ready", preparationId: "prepared" } };
+    });
+    await act(async () => {
+      renderer = create(<Harness threadId={null} identityKey="draft:local" />);
+    });
+    const actualThreadId = ThreadId.make("actual-server-thread");
+    await expect(
+      mocks.result!.prepare({
+        threadId: actualThreadId,
+        provider: ProviderDriverKind.make("codex"),
+        providerInstanceId: ProviderInstanceId.make("codex"),
+        runtimeMode: "full-access",
+      }),
+    ).resolves.toEqual({ status: "ready", preparationId: "prepared" });
+    expect(mocks.setOverride).toHaveBeenCalledWith({
+      environmentId: EnvironmentId.make("env-1"),
+      input: { threadId: actualThreadId, connectionIds: ["linear"] },
+    });
+    expect(order).toEqual(["persist", "prepare"]);
+  });
+
+  it("blocks preparation when persisting the actual session thread fails", async () => {
+    mocks.setOverride.mockResolvedValue({ _tag: "Failure" });
+    await act(async () => {
+      renderer = create(<Harness threadId={null} identityKey="draft:local" />);
+    });
+    void mocks.result!.prepare({
+      threadId: ThreadId.make("actual-server-thread"),
+      provider: ProviderDriverKind.make("codex"),
+      providerInstanceId: ProviderInstanceId.make("codex"),
+      runtimeMode: "full-access",
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(mocks.prepare).not.toHaveBeenCalled();
+    expect((mocks.result!.pause as { props: { error: string } }).props.error).toContain(
+      "could not check MCP connections",
+    );
+    await act(async () =>
+      (
+        mocks.result!.pause as { props: { onOpenChange: (open: boolean) => void } }
+      ).props.onOpenChange(false),
+    );
+  });
+
   it("saves the current selection as provider defaults without removing the thread override", async () => {
     await act(async () => {
       renderer = create(<Harness />);
