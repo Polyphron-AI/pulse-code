@@ -1,3 +1,4 @@
+// @effect-diagnostics nodeBuiltinImport:off globalConsole:off - Build-time icon generation runs before an Effect runtime exists.
 // Renders every Pulse raster slot from the committed SVG marks.
 //
 // This is the Pulse counterpart to `export-brand-icons.ts`, which drives Icon

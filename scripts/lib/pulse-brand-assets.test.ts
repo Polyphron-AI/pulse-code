@@ -1,3 +1,4 @@
+// @effect-diagnostics nodeBuiltinImport:off - Tests verify generated raster files on disk.
 import { readFile } from "node:fs/promises";
 
 import { describe, expect, it } from "vite-plus/test";
