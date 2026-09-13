@@ -1,5 +1,5 @@
 {
-  "feature": "Pulse Next upstream v0.0.40 sync and compatibility-encoded version scheme",
+  "feature": "Pulse Next upstream/main sync and compatibility-encoded version scheme",
   "policyVersion": "2026-09-13",
   "owner": "single implementation owner (Sol)",
   "branch": "sync/upstream-v040",
@@ -7,14 +7,15 @@
   "baseRevision": "885200895",
   "scope": {
     "included": [
-      "Confirm the branch's upstream base relative to T3 Code v0.0.40.",
+      "Merge the fetched upstream/main tip without rewriting Pulse branch history.",
+      "Resolve conflicts by retaining upstream structure and routing Pulse-owned identity and behavior through existing Pulse seams.",
       "Adopt one version string that encodes the T3 version the build is compatible up to, plus a Pulse revision suffix.",
       "Apply that string at every version source and surface it consistently.",
-      "Document the bump procedure so a future upstream sync is mechanical."
+      "Document the bump procedure so a future upstream sync is mechanical.",
+      "Run focused conflict-area checks, scoped typechecks, and the applicable production build before reviewing the frozen diff."
     ],
     "excluded": [
-      "Merging upstream/main, which is 214 commits past the v0.0.40 release and belongs to the next upstream line.",
-      "Any push, merge to develop, or pull request. Integration is the coordinator's.",
+      "Merging to develop or opening a pull request. Integration is the coordinator's.",
       "Repo-wide checks. CI owns those."
     ]
   },
@@ -86,14 +87,16 @@
     "location": "reported inline to the coordinator",
     "focusedTests": []
   },
-  "blockers": [
-    {
-      "id": "B1",
-      "statement": "Confirmation that 'at v40' means the released v0.0.40 tree (already present) and not upstream/main's post-release line.",
-      "severity": "decision",
-      "assumedAnswer": "the released v0.0.40 tree",
-      "impactIfWrong": "A separate 28-file conflict resolution against upstream/main would be required."
-    }
+  "mergeAcceptanceCases": [
+    "Fetched upstream/main revision is recorded and is a parent of the completed merge commit.",
+    "All merge conflicts are resolved with no conflict markers or unmerged index entries.",
+    "Pulse product identity, managed skills, MCP, dictation, authentication, environment routing, and version scheme remain intact where upstream touched the same areas.",
+    "Upstream behavior remains unchanged outside explicit Pulse-owned seams.",
+    "Web, desktop, compact/mobile web, and native mobile compile or build where covered by affected scoped checks; older clients retain typed contract compatibility.",
+    "Provider-specific changes preserve Codex, Claude, Cursor, Grok, OpenCode, and Antigravity behavior unless the provider reports an explicit unsupported capability.",
+    "Local, remote, relay, tunnel, worktree, authentication, process ownership, session reuse, cancellation, retry, reload, navigation, concurrent-thread, and queued-turn behavior are unchanged unless a conflict touches that path, in which case focused tests cover it.",
+    "The final frozen diff is reviewed as one batch and the ledger records commands, outcomes, remaining release gates, and exact next action."
   ],
-  "nextAction": "Apply 0.0.40-pulse.1 to every version source, verify the surfaces, document the bump rule, commit in layers."
+  "blockers": [],
+  "nextAction": "Merge fetched upstream/main at 20363c32c9, resolve the full conflict set, verify affected behavior and production builds, review the frozen diff, then commit and push this branch."
 }
