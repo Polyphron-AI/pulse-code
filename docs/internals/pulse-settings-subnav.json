@@ -62,7 +62,7 @@
     {
       "case": "Submenu never advertises a target that is not rendered.",
       "status": "applicable",
-      "note": "All four SettingsSection elements render unconditionally; only the Browser section's inner controls are gated by isElectron. A regression test in IntegrationsSettings.test.tsx pins the rendered section id set so the submenu cannot drift onto a missing target."
+      "note": "The sidebar and IntegrationsSettingsPanel consume the same typed INTEGRATIONS_SETTINGS_SECTIONS tuple. The panel maps that tuple to SettingsSection elements and requires content for every target through a complete Record, so target drift fails structurally instead of relying on static-markup assertions."
     },
     {
       "case": "Navigation away and unmount: submenu collapses with the existing Collapsible and the observer disconnects.",
@@ -96,21 +96,23 @@
     }
   ],
   "implementation": {
-    "notes": "Purely additive: one new \"/settings/integrations\" key in the existing SETTINGS_PAGE_SECTIONS map in SettingsSidebarNav.tsx, same shape as the four keys already there. No component restructuring, no scroll-spy refactor, no shared type change, so upstream merges stay frictionless.",
+    "notes": "INTEGRATIONS_SETTINGS_SECTIONS is the small shared contract for target IDs and labels. SettingsSidebarNav uses it for the submenu, while IntegrationsSettingsPanel maps it to rendered SettingsSection elements and supplies a complete typed content record. Generic scroll-spy and navigation behavior remain unchanged.",
     "files": [
       "apps/web/src/components/settings/SettingsSidebarNav.tsx",
-      "apps/web/src/components/settings/IntegrationsSettings.test.tsx"
+      "apps/web/src/components/settings/SettingsSidebarNav.test.tsx",
+      "apps/web/src/components/settings/IntegrationsSettings.tsx",
+      "apps/web/src/components/settings/integrationsSettingsSections.ts"
     ]
   },
   "state": "development-acceptance-passed",
-  "reviewedRevision": "2e2e8f0926",
+  "reviewedRevision": "6e454bc767",
   "evidence": {
     "tests": [
       "vp test run src/components/settings/SettingsSidebarNav.test.tsx src/components/settings/IntegrationsSettings.test.tsx src/components/settings/settingsSectionVisibility.test.ts src/components/settings/settingsSearch.test.ts (from apps/web): 4 files, 31 tests passed",
       "vp run typecheck (from apps/web): passed",
-      "vp lint apps/web/src/components/settings/SettingsSidebarNav.tsx apps/web/src/components/settings/SettingsSidebarNav.test.tsx apps/web/src/components/settings/IntegrationsSettings.test.tsx: passed with one pre-existing react(set-state-in-effect) warning at SettingsSidebarNav.tsx:199"
+      "vp lint apps/web/src/components/settings/SettingsSidebarNav.tsx apps/web/src/components/settings/SettingsSidebarNav.test.tsx apps/web/src/components/settings/IntegrationsSettings.tsx apps/web/src/components/settings/IntegrationsSettings.test.tsx apps/web/src/components/settings/integrationsSettingsSections.ts: passed with one pre-existing react(set-state-in-effect) warning at SettingsSidebarNav.tsx:195"
     ],
-    "review": "One complete review of the branch diff found that the original test asserted rendered section attributes, which the current repository test policy rejects. Revision 2e2e8f0926 replaces it with a behavioral sidebar test that verifies the four visible entries and same-page MCP scrolling. No implementation defects or unresolved findings remain.",
+    "review": "The first review replaced a forbidden static-attribute assertion with a behavioral sidebar test, but independent review correctly found that it no longer guarded target drift. Revision 6e454bc767 makes section identity a shared typed contract used to render both the submenu and every Integrations section. The behavioral test still verifies the four visible entries and same-page MCP scrolling. No unresolved findings remain.",
     "browser": "Not run. The user requested focused automated verification, and this additive navigation-data change is covered by the existing generic scroll, hash, visibility and mobile-close paths plus the new behavioral test."
   },
   "blockers": [],
