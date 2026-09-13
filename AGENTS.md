@@ -103,6 +103,24 @@ An empty database is a bad test. Seed your worktree's `.t3` with a copy of real 
 
 ## Verifying
 
+### Pulse delivery workflow
+
+Focus on one user-visible feature end to end before starting another feature.
+Define the usable flow, implement its UI, contracts, server/provider behavior and
+failure recovery, then test and review the combined result in the real client.
+Do not treat an isolated helper, endpoint or settings panel as feature completion.
+
+Parallel agents may work on non-overlapping parts of the same feature in separate
+worktrees. Sequence shared contracts and runtime changes. Do not advance unrelated
+features in parallel. Keep layered commits, but avoid a separate review gate for
+every helper; use focused checks during implementation and one combined acceptance
+pass once the flow works. Fix acceptance failures before moving to the next feature.
+
+Preserve upstream-compatible boundaries and existing safety rules. Record the
+active feature, completion criteria, evidence and next feature in the Pulse Next
+JSON ledger so another session resumes the same feature. If blocked, record the
+blocker and ask before switching features or calling a partial implementation done.
+
 - Smallest proof that the change works. `vp test run <files>` for the tests you touched, targeted lint and typecheck for the scope you changed.
 - Test meaningful logic or observable behavior. Do not render components to static markup to assert props or attributes, or add tests that merely assert callback wiring or mirror the implementation.
 - **Do not run repo-wide checks.** No `vp check`, no `vp run -r test`, no `vp run -r typecheck` unless I ask. CI owns the full suite.

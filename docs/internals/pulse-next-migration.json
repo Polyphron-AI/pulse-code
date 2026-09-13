@@ -376,7 +376,19 @@
       "Capture actual client versions and unsupported cases; no blanket future-client guarantee."
     ]
   },
-  "nextAction": "Implement Codex structured managed-skill invocation as a dependency-complete contract/reactor/adapter/composer batch. Independently add dictation settings and microphone controls using the reviewed authenticated transport. MCP provider application and attempt-only preflight recovery follow explicit session boundaries. Skills and MCP settings are user-reachable; packaged/VM acceptance still requires the usable launch flows.",
+  "deliveryPolicy": {
+    "mode": "one-feature-end-to-end",
+    "approvedAt": "2026-09-13",
+    "rule": "Finish one usable user flow across UI, contracts, server/provider and failure recovery, then test and review the combined result before starting another feature.",
+    "parallelism": "Only non-overlapping parts of the same active feature in separate worktrees; sequence shared contracts/runtime changes. No unrelated feature implementation in parallel.",
+    "completion": "Working real-client flow, focused automated checks, integrated review, failure recovery and compatibility evidence. Helpers, endpoints and settings alone do not mean feature complete.",
+    "commits": "Keep layered commits without repeated helper-by-helper review gates.",
+    "activeFeature": "codex-managed-skill-invocation",
+    "acceptance": "Select an installed managed skill in the composer, send to Codex using the exact trusted immutable revision, preserve selection across queued/retry/new-thread paths, and verify the provider payload and visible flow. Native skills remain unchanged; unsupported providers/servers cannot silently ignore selection.",
+    "nextFeature": "dictation-end-to-end",
+    "blockedPolicy": "Record the blocker and request direction before switching features or declaring partial work complete."
+  },
+  "nextAction": "Complete and verify Codex managed-skill invocation end to end. Dictation settings and microphone work are deferred until that feature passes combined acceptance. MCP provider/composer integration follows dictation.",
   "parallelIntegrationBatches": [
     {
       "id": "skills-library-and-settings",
