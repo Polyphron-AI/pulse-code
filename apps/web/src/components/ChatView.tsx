@@ -6579,6 +6579,9 @@ export default function ChatView(props: ChatViewProps) {
 
     sendInFlightRef.current = true;
     const preparingComposer = composerRef.current;
+    const preparedDraftSnapshot = useComposerDraftStore
+      .getState()
+      .getComposerDraft(composerDraftTarget);
     const mcpPreparation = await prepareMcpSubmission({
       prepare: preparingComposer?.preparePulseMcp,
       session: {
@@ -6662,6 +6665,14 @@ export default function ChatView(props: ChatViewProps) {
     }
 
     const attachmentCapabilitiesBeforeDispatch = readLiveAttachmentCapabilities();
+    if (
+      mcpSubmissionIdentityRef.current !== routeThreadKey ||
+      useComposerDraftStore.getState().getComposerDraft(composerDraftTarget) !==
+        preparedDraftSnapshot
+    ) {
+      sendInFlightRef.current = false;
+      return;
+    }
     if (attachmentCapabilitiesBeforeDispatch.fileBlockReason !== null) {
       sendInFlightRef.current = false;
       setThreadError(threadIdForSend, attachmentCapabilitiesBeforeDispatch.fileBlockReason);
@@ -7286,6 +7297,9 @@ export default function ChatView(props: ChatViewProps) {
       sendInFlightRef.current = true;
       const preparingComposer = composerRef.current;
       const draftBeforePreparation = promptRef.current;
+      const preparedDraftSnapshot = useComposerDraftStore
+        .getState()
+        .getComposerDraft(composerDraftTarget);
       const mcpPreparation = await prepareMcpSubmission({
         prepare: preparingComposer?.preparePulseMcp,
         projectId: activeProject.id,
@@ -7383,7 +7397,12 @@ export default function ChatView(props: ChatViewProps) {
       }
 
       if (failure === null) {
-        if (clearComposerOnSuccess && promptRef.current === draftBeforePreparation) {
+        if (
+          clearComposerOnSuccess &&
+          promptRef.current === draftBeforePreparation &&
+          useComposerDraftStore.getState().getComposerDraft(composerDraftTarget) ===
+            preparedDraftSnapshot
+        ) {
           promptRef.current = "";
           clearComposerDraftContent(composerDraftTarget);
           composerRef.current?.resetCursorState();
