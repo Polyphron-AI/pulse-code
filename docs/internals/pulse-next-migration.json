@@ -384,11 +384,24 @@
     "completion": "Working real-client flow, focused automated checks, integrated review, failure recovery and compatibility evidence. Helpers, endpoints and settings alone do not mean feature complete.",
     "commits": "Keep layered commits without repeated helper-by-helper review gates.",
     "activeFeature": "codex-managed-skill-invocation",
+    "activeFeatureStatus": "complete-in-development",
+    "evidence": {
+      "verifiedAt": "2026-09-13",
+      "browser": "Isolated Windows development environment: select immutable skill revision, reload, desktop/mobile-web picker screenshots, send from new draft, preserve selection after promotion. Mock Codex process recorded native text plus skill input with trusted revision path; no model request.",
+      "automated": "Server/contracts 260 targeted tests; draft/picker/real-runtime combined 125 tests; branding/bootstrap 13 and desktop environment 6 tests; web typecheck passed. Added all skill boundary suites to update pipeline.",
+      "review": "Combined review found no critical behavior issue. Corrected provider-switch removal, preserved older pins, and explicit blocked-send reasons. Corrected the adapter test isolation dependency and verified all six added invocation boundary gates independently.",
+      "screenshots": [
+        ".t3/visual-evidence/pulse-next-skills-live-dark-desktop.png",
+        ".t3/visual-evidence/pulse-next-skills-live-dark-mobile.png",
+        ".t3/visual-evidence/pulse-next-skills-voice-dark-preview-desktop.png"
+      ],
+      "limits": "Voice images are layout previews only. Native mobile picker and packaged desktop acceptance are not implemented/verified by this batch. System dark was selected only in the isolated browser, not forced for all users."
+    },
     "acceptance": "Select an installed managed skill in the composer, send to Codex using the exact trusted immutable revision, preserve selection across queued/retry/new-thread paths, and verify the provider payload and visible flow. Native skills remain unchanged; unsupported providers/servers cannot silently ignore selection.",
     "nextFeature": "dictation-end-to-end",
     "blockedPolicy": "Record the blocker and request direction before switching features or declaring partial work complete."
   },
-  "nextAction": "Complete and verify Codex managed-skill invocation end to end. Dictation settings and microphone work are deferred until that feature passes combined acceptance. MCP provider/composer integration follows dictation.",
+  "nextAction": "Codex managed-skill invocation passed development acceptance. Next, complete dictation end to end: settings, microphone controls, transcription insertion and recovery. Preserve paused drafts in pulse-next-dictation; they are not verified or integrated. MCP provider/composer integration follows dictation. Packaged desktop acceptance remains a release gate.",
   "parallelIntegrationBatches": [
     {
       "id": "skills-library-and-settings",

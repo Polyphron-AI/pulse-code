@@ -18,6 +18,32 @@ export const featureSuites = [
   { id: "managed-skills-rpc", file: "apps/server/src/skills/ManagedSkillRpc.test.ts" },
   { id: "managed-skills-contracts", file: "packages/contracts/src/pulseSkills.test.ts" },
   { id: "managed-skills-settings", file: "apps/web/src/skills/ManagedSkillsSettings.test.tsx" },
+  { id: "managed-skills-drafts", file: "apps/web/src/composerDraftStore.test.ts" },
+  { id: "managed-skills-picker", file: "apps/web/src/skills/managedSkillPicker.test.ts" },
+  {
+    id: "managed-skills-subprocess",
+    file: "apps/server/src/provider/Layers/CodexCollabRuntime.integration.test.ts",
+    testNamePattern: "skill",
+  },
+  {
+    id: "managed-skills-events",
+    file: "apps/server/src/orchestration/decider.projectScripts.test.ts",
+  },
+  {
+    id: "managed-skills-provider",
+    file: "apps/server/src/provider/Layers/ProviderService.test.ts",
+    testNamePattern: "skill",
+  },
+  {
+    id: "managed-skills-adapter",
+    file: "apps/server/src/provider/Layers/CodexAdapter.test.ts",
+    testNamePattern: "skill",
+  },
+  {
+    id: "managed-skills-native-input",
+    file: "apps/server/src/provider/Layers/CodexSessionRuntime.test.ts",
+    testNamePattern: "skill",
+  },
   { id: "mcp-contracts", file: "packages/contracts/src/pulseMcp.test.ts" },
   { id: "mcp-rpc", file: "apps/server/src/mcp/PulseMcpRpc.test.ts" },
   { id: "mcp-form", file: "apps/web/src/mcp/mcpForm.test.ts" },
@@ -64,12 +90,12 @@ export function runFeatureSuites(root, run, exists = existsSync) {
     }
   });
   return {
-    scope: "Pulse module foundations only; not UI/provider or packaged-app acceptance",
+    scope: "Pulse modules and deterministic managed-skills invocation; not packaged-app acceptance",
     state: suites.every((suite) => suite.state === "passed") ? "foundations-passed" : "blocked",
     releaseEligible: false,
     suites,
     remaining: [
-      "Skills provider invocation and composer integration",
+      "Managed skills release acceptance on packaged desktop",
       "MCP provider and composer integration",
       "Dictation settings and composer integration",
       "Packaged-app and Windows verification",
