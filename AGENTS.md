@@ -1,5 +1,9 @@
 # T3 Code
 
+Pulse Next is now the development codebase on `develop`. Legacy Pulse Code is
+preserved on `pulse-code-old`. Read `docs/operations/pulse-next-branches.md` before
+integrating an older branch. `main` remains the unchanged production target.
+
 T3 Code is a minimal GUI for coding agents. A Node WebSocket server wraps provider CLIs and agents (Codex, Claude Code, Cursor, Grok, OpenCode, Antigravity) and serves web, desktop, and mobile clients.
 
 You can think of T3 Code as an open source "bring-your-own-subscription" alternative to apps like Claude Desktop, Codex App, Cursor Glass and Conductor.

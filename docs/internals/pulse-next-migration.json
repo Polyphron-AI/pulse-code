@@ -16,7 +16,17 @@
       "Verify upgrade data compatibility and recovery"
     ]
   },
-  "branch": "experiment/pulse-next-v040",
+  "branch": "develop",
+  "branchTransition": {
+    "date": "2026-09-13",
+    "decision": "User selected Pulse Next as the primary development codebase; preserve legacy develop before replacement.",
+    "legacyBranch": "pulse-code-old",
+    "legacyRevision": "2fa59554b67b83fd6a0b643bce39bc969ade1a2e",
+    "sourceBranch": "experiment/pulse-next-v040",
+    "productionBranch": "main",
+    "productionChanged": false,
+    "runbook": "docs/operations/pulse-next-branches.md"
+  },
   "upstreamBase": "09e8de9c655ae85410bf6b00446f272a01da81c7",
   "sourceSnapshots": {
     "pulseDevelop": "353e62727b3f5927e71ad54c73caee2ea3183057",
