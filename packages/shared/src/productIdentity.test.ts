@@ -2,9 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import * as ProductIdentity from "./productIdentity.ts";
 
-const IDENTITY_VALUES = Object.values(ProductIdentity).filter(
-  (value): value is string => typeof value === "string",
-);
+const IDENTITY_VALUES = Object.values(ProductIdentity).filter((value) => typeof value === "string");
 
 describe("product identity", () => {
   it("never reuses a T3 Code identity string", () => {

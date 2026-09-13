@@ -20,6 +20,8 @@ import {
   DESKTOP_APP_ID,
   DESKTOP_ARTIFACT_NAME_TEMPLATE,
   DESKTOP_EXECUTABLE_NAME,
+  DESKTOP_PUBLISHER_NAME,
+  DESKTOP_PUBLISHER_URL,
   DESKTOP_URL_SCHEMES,
   MACOS_MICROPHONE_USAGE_DESCRIPTION as PULSE_MACOS_MICROPHONE_USAGE_DESCRIPTION,
   PRODUCT_ALPHA_NAME,
@@ -33,11 +35,8 @@ import gnomeCaptureBundle from "../apps/desktop/gnome-extension/bundle.json" wit
 import serverPackageJson from "../apps/server/package.json" with { type: "json" };
 
 import { applyWebBrandAssets } from "./apply-web-brand-assets.ts";
-import {
-  BRAND_ASSET_PATHS,
-  resolveWebAssetBrandForChannel,
-  type WebAssetBrand,
-} from "./lib/brand-assets.ts";
+import { resolveWebAssetBrandForChannel, type WebAssetBrand } from "./lib/brand-assets.ts";
+import { PULSE_BRAND_ASSET_PATHS } from "./lib/pulse-brand-assets.ts";
 import { getDefaultBuildArch } from "./lib/build-target-arch.ts";
 import {
   findInlinedExternalPackages,
@@ -955,6 +954,9 @@ interface StagePackageJson {
   readonly packageManager: string;
   readonly description: string;
   readonly author: string;
+  // electron-builder copies `homepage` into the NSIS installer metadata and the
+  // Add/Remove Programs entry, so the publisher is clickable there.
+  readonly homepage: string;
   readonly main: string;
   readonly build: Record<string, unknown>;
   readonly dependencies: Record<string, unknown>;
@@ -2626,19 +2628,22 @@ export function resolveDesktopWebAssetBrand(version: string): WebAssetBrand {
   return resolveWebAssetBrandForChannel(resolveDesktopUpdateChannel(version));
 }
 
+// Pulse Next ships its own mark. `PULSE_BRAND_ASSET_PATHS` keys its slots the
+// same way `BRAND_ASSET_PATHS` does, so this stays a table swap; the T3 files
+// remain on disk and `export-brand-icons.ts` keeps writing to them.
 export function resolveDesktopBuildIconAssets(version: string): DesktopBuildIconAssets {
   if (resolveDesktopUpdateChannel(version) === "nightly") {
     return {
-      macIconPng: BRAND_ASSET_PATHS.nightlyMacIconPng,
-      linuxIconPng: BRAND_ASSET_PATHS.nightlyLinuxIconPng,
-      windowsIconIco: BRAND_ASSET_PATHS.nightlyWindowsIconIco,
+      macIconPng: PULSE_BRAND_ASSET_PATHS.nightlyMacIconPng,
+      linuxIconPng: PULSE_BRAND_ASSET_PATHS.nightlyLinuxIconPng,
+      windowsIconIco: PULSE_BRAND_ASSET_PATHS.nightlyWindowsIconIco,
     };
   }
 
   return {
-    macIconPng: BRAND_ASSET_PATHS.productionMacIconPng,
-    linuxIconPng: BRAND_ASSET_PATHS.productionLinuxIconPng,
-    windowsIconIco: BRAND_ASSET_PATHS.productionWindowsIconIco,
+    macIconPng: PULSE_BRAND_ASSET_PATHS.productionMacIconPng,
+    linuxIconPng: PULSE_BRAND_ASSET_PATHS.productionLinuxIconPng,
+    windowsIconIco: PULSE_BRAND_ASSET_PATHS.productionWindowsIconIco,
   };
 }
 
@@ -2809,6 +2814,7 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
     const winConfig: Record<string, unknown> = {
       target: [target],
       icon: "icon.ico",
+      publisherName: DESKTOP_PUBLISHER_NAME,
       // Resource editing applies the product metadata and icon independently
       // of code signing. Disabling it for local unsigned builds leaves the
       // packaged executable with Electron's stock icon.
@@ -3797,7 +3803,8 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
     private: true,
     packageManager: rootPackageJson.packageManager,
     description: `${PRODUCT_BASE_NAME} desktop build`,
-    author: "T3 Tools",
+    author: DESKTOP_PUBLISHER_NAME,
+    homepage: DESKTOP_PUBLISHER_URL,
     main: "apps/desktop/dist-electron/main.cjs",
     build: yield* createBuildConfig(
       options.platform,

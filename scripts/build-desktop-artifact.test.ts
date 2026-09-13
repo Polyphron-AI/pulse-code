@@ -93,7 +93,7 @@ import {
   WSL_RUNTIME_EXTRA_RESOURCES,
   wslRuntimeArchiveTarTarget,
 } from "./build-desktop-artifact.ts";
-import { BRAND_ASSET_PATHS } from "./lib/brand-assets.ts";
+import { PULSE_BRAND_ASSET_PATHS } from "./lib/pulse-brand-assets.ts";
 import { HostProcessArchitecture, HostProcessPlatform } from "@t3tools/shared/hostProcess";
 import { symlinksSupported } from "@t3tools/shared/testing/symlinks";
 
@@ -291,15 +291,15 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
 
   it("switches desktop packaging icons to the nightly artwork for nightly versions", () => {
     assert.deepStrictEqual(resolveDesktopBuildIconAssets("0.0.17"), {
-      macIconPng: BRAND_ASSET_PATHS.productionMacIconPng,
-      linuxIconPng: BRAND_ASSET_PATHS.productionLinuxIconPng,
-      windowsIconIco: BRAND_ASSET_PATHS.productionWindowsIconIco,
+      macIconPng: PULSE_BRAND_ASSET_PATHS.productionMacIconPng,
+      linuxIconPng: PULSE_BRAND_ASSET_PATHS.productionLinuxIconPng,
+      windowsIconIco: PULSE_BRAND_ASSET_PATHS.productionWindowsIconIco,
     });
 
     assert.deepStrictEqual(resolveDesktopBuildIconAssets("0.0.17-nightly.20260413.42"), {
-      macIconPng: BRAND_ASSET_PATHS.nightlyMacIconPng,
-      linuxIconPng: BRAND_ASSET_PATHS.nightlyLinuxIconPng,
-      windowsIconIco: BRAND_ASSET_PATHS.nightlyWindowsIconIco,
+      macIconPng: PULSE_BRAND_ASSET_PATHS.nightlyMacIconPng,
+      linuxIconPng: PULSE_BRAND_ASSET_PATHS.nightlyLinuxIconPng,
+      windowsIconIco: PULSE_BRAND_ASSET_PATHS.nightlyWindowsIconIco,
     });
   });
 
@@ -341,6 +341,8 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
       assert.notProperty(linux, "publish");
 
       const linuxConfig = linux.linux as Record<string, unknown>;
+      const winConfig = win.win as Record<string, unknown>;
+      assert.equal(winConfig.publisherName, "Polyphron AI");
       assert.equal(linuxConfig.executableName, "pulsenext");
       assert.deepStrictEqual(linuxConfig.desktop, { entry: { StartupWMClass: "pulsenext" } });
       assert.deepStrictEqual(linuxConfig.protocols, [

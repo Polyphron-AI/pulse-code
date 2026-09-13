@@ -18,6 +18,15 @@ export const PRODUCT_ALPHA_NAME = `${PRODUCT_BASE_NAME} (Alpha)`;
 export const PRODUCT_NIGHTLY_NAME = `${PRODUCT_BASE_NAME} (Nightly)`;
 export const PRODUCT_DEV_NAME = `${PRODUCT_BASE_NAME} (Dev)`;
 
+/**
+ * The expected Pulse desktop publisher. The staged package.json `author` owns
+ * package metadata such as VERSIONINFO CompanyName. Electron-builder uses
+ * `win.publisherName` to match the subject of a signing certificate and to
+ * verify signed updates. An unsigned installer still shows Unknown publisher.
+ */
+export const DESKTOP_PUBLISHER_NAME = "Polyphron AI";
+export const DESKTOP_PUBLISHER_URL = "https://polyphronai.com";
+
 export const DESKTOP_APP_ID = "ai.polyphron.pulsenext";
 export const DESKTOP_DEVELOPMENT_APP_ID = `${DESKTOP_APP_ID}.dev`;
 
