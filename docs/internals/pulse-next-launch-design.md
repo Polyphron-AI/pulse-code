@@ -1,11 +1,11 @@
 # Pulse Next launch design proposal
 
-Status: defaults and module approach approved. Managed skills settings, MCP
-management RPC, dictation adapters and authenticated Groq HTTP routes are
-integrated with focused tests. Provider invocation and composer controls remain
-unwired. MCP settings and authenticated dictation client transport are now
-integrated. The feature ledger owns scope and approval state; layout mockups are
-not production behavior or packaged-platform verification.
+Status: defaults and module approach approved. Managed skills invocation and
+dictation passed development acceptance, including their composer controls.
+MCP management is integrated; provider preparation and composer selection are
+the active end-to-end feature. The JSON feature ledger records current evidence
+and remaining checks. Synthetic browser tests and layout mockups do not certify
+physical devices or packaged applications.
 
 ## Packaging
 
