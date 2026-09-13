@@ -13,7 +13,8 @@
       "A Windows-capable raster generator that renders every slot from the SVG with sharp and the existing platform-neutral ICO writer.",
       "Pulse raster files added alongside the T3 files, never replacing them.",
       "A Pulse-owned asset seam so consumers switch in one place.",
-      "Desktop publisher identity: author, homepage and electron-builder publisherName, from one Pulse-owned constant."
+      "Desktop publisher identity: author, homepage and electron-builder publisherName, from one Pulse-owned constant.",
+      "Hosted and desktop-bundled web favicon replacement for development, nightly and production channels."
     ],
     "excluded": [
       "Building a full installer. The user runs integration builds; this slice proves wiring by inspection.",
@@ -42,39 +43,48 @@
   "acceptance": [
     {
       "case": "The committed SVG is the only artwork input; every raster is reproducible from it on Windows with no macOS tooling.",
-      "state": "pending"
+      "state": "passed",
+      "evidence": "pnpm run icons:pulse:check reported that all generated icons match their SVG sources; the focused asset test checked all 18 PNG dimensions."
     },
     {
-      "case": "The production Windows .ico contains 16, 32, 48, 64, 128 and 256 renditions, each actually at its declared size.",
-      "state": "pending"
+      "case": "Each Windows .ico contains 16, 24, 32, 48, 64, 128 and 256 renditions, each actually at its declared size.",
+      "state": "passed",
+      "evidence": "The focused asset test parsed every ICO directory and PNG IHDR for all three channels."
     },
     {
       "case": "resolveDesktopBuildIconAssets returns Pulse paths for both the latest and the nightly channel, and those files exist on disk.",
-      "state": "pending"
+      "state": "passed",
+      "evidence": "scripts/build-desktop-artifact.test.ts asserts the production and nightly Pulse paths; the focused suite passed."
     },
     {
       "case": "The emitted electron-builder config sets win.icon and the staged resources come from the Pulse .ico, so the installer, taskbar, notification-area icon and desktop shortcut all change together. The desktop app registers no Electron Tray, so the notification-area icon is the executable icon resource.",
-      "state": "pending"
+      "state": "passed-by-code-and-tests",
+      "evidence": "The desktop builder stages the selected Pulse ICO as icon.ico and emits win.icon=icon.ico. Full installer appearance remains the separate installed-appearance gate below."
     },
     {
       "case": "The staged package.json author is the Pulse publisher and carries the polyphronai.com homepage, so the Windows Firewall and installer publisher stop reading 'T3 Tools'.",
-      "state": "pending"
+      "state": "passed-by-code-and-tests",
+      "evidence": "The staged manifest reads DESKTOP_PUBLISHER_NAME and DESKTOP_PUBLISHER_URL; the product identity suite passed and the scoped shared typecheck passed."
     },
     {
       "case": "win.publisherName is set so NSIS and SmartScreen display the Pulse publisher for the unsigned build too.",
-      "state": "pending"
+      "state": "passed",
+      "evidence": "createBuildConfig now emits win.publisherName=Polyphron AI and the focused desktop test asserts it."
     },
     {
-      "case": "Web favicons for the production and nightly brands resolve to Pulse files.",
-      "state": "pending"
+      "case": "Web favicons for development, production and nightly brands resolve to Pulse files.",
+      "state": "passed",
+      "evidence": "The Pulse web mapping test covered all four slots in every channel. A production web build passed, apply-web-brand-assets completed, and SHA-256 comparisons matched all four production source and output files."
     },
     {
       "case": "Every T3 asset file that existed at base still exists and is unmodified, so an upstream merge stays clean.",
-      "state": "pending"
+      "state": "passed",
+      "evidence": "git diff --name-only 885200895c..36a14a07bf -- assets contained only assets/pulse paths."
     },
     {
       "case": "Remaining 'T3 Tools' strings that are not the Pulse desktop identity are left alone, with a reason.",
-      "state": "pending"
+      "state": "passed",
+      "reason": "The remaining strings belong to the upstream license, T3 marketing/legal pages, existing native-mobile module metadata and the upstream macOS signing fixture. None names the Pulse desktop package."
     },
     {
       "case": "Installed appearance at 16px on a real taskbar.",
@@ -82,7 +92,35 @@
       "reason": "Requires an integration build and install, which the user owns. This slice proves wiring by inspection only."
     }
   ],
+  "consumptionAudit": {
+    "desktopProductionAndNightly": "macIconPng, linuxIconPng and windowsIconIco feed resolveDesktopBuildIconAssets, platform staging and electron-builder's stable icon resource names.",
+    "webAllChannels": "All four web slots feed resolvePulseWebIconOverrides, used by the hosted Vercel post-build command and by desktop artifact bundling.",
+    "generatorOnly": "The three iOS PNGs and the three development desktop PNG/ICO slots are reproducible outputs but have no consumer in this slice. Mobile store identity is explicitly excluded, and the desktop artifact builder has no development release channel. They must not be described as shipped until those separate decisions change.",
+    "upstreamAssets": "BRAND_ASSET_PATHS and scripts/export-brand-icons.ts remain unchanged and continue to own the upstream T3 assets."
+  },
   "upstreamEdits": [],
-  "tests": [],
-  "nextAction": "implement"
+  "tests": [
+    {
+      "command": "pnpm exec vp test run scripts/lib/pulse-brand-assets.test.ts scripts/build-desktop-artifact.test.ts packages/shared/src/productIdentity.test.ts",
+      "result": "passed: 3 files, 78 tests"
+    },
+    {
+      "command": "pnpm exec tsgo -p scripts/tsconfig.json --noEmit; pnpm exec tsgo -p packages/shared/tsconfig.json --noEmit",
+      "result": "passed"
+    },
+    {
+      "command": "pnpm run icons:pulse:check",
+      "result": "passed: every generated icon matches its SVG source"
+    },
+    {
+      "command": "pnpm exec vp run --filter @t3tools/web build",
+      "result": "passed: 4,947 modules transformed"
+    }
+  ],
+  "frozenRevision": "36a14a07bf",
+  "review": {
+    "passes": 1,
+    "result": "No unresolved blocker in the complete branch diff. The review found and fixed the T3 web-copy path, missing win.publisherName and stale desktop test expectations before freezing the revision."
+  },
+  "nextAction": "Integrate only after the parent batch confirms branch order. A packaged installer and real 16px taskbar appearance remain release acceptance, not development evidence."
 }
