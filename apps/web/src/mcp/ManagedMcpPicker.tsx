@@ -99,7 +99,9 @@ export function ManagedMcpPicker(props: ManagedMcpPickerProps) {
           <input
             value={query}
             onChange={(event) => setQuery(event.currentTarget.value)}
-            onKeyDown={(event) => event.stopPropagation()}
+            onKeyDown={(event) => {
+              if (event.key !== "Escape") event.stopPropagation();
+            }}
             placeholder="Search MCPs"
             className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
           />

@@ -4125,6 +4125,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
             onRuntimeModeChange={handleRuntimeModeChange}
           />
           {managedSkillPicker}
+          {selectedProvider === "codex" || managedMcp.picker.selectedIds.length > 0
+            ? managedMcpPicker
+            : null}
         </>
       ) : (
         <>
