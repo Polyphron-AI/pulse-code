@@ -160,5 +160,13 @@
     }
   ],
   "blockers": [],
-  "nextAction": "review"
+  "nextAction": "Hand to the user: branch feat/thread-usage-meters is ready for a compact-viewport client pass and merge decision. No PR was created.",
+  "revision": "84ae760d6",
+  "review": {
+    "reviewedRevision": "2f214f7b9",
+    "findings": 8,
+    "blockers": 0,
+    "fixedInRevision": "84ae760d6",
+    "recheck": "Fable read the segmented cost derive, adapter stale-cost strip, and mobile composerUsage helper after the fix batch; all findings resolved."
+  }
 }
