@@ -41,9 +41,8 @@ import { useVoiceDictation } from "./useVoiceDictation";
 import { themeColorWithAlpha } from "../../lib/mobileTheme";
 import { armAgentAwarenessLiveActivityForLocalWork } from "../agent-awareness/remoteRegistration";
 import { scopedThreadKey } from "../../lib/scopedEntities";
-import { formatCountdown } from "../../lib/time";
+import { buildComposerUsageAlertBody, buildComposerUsageLabel } from "../../lib/composerUsage";
 import { deriveThreadCostUsd } from "@t3tools/client-runtime/state/thread-usage";
-import { formatUsd } from "@t3tools/shared/usageFormat";
 import { useSelectedThreadDetail } from "../../state/use-thread-detail";
 import { mobilePreferencesAtom } from "../../state/preferences";
 
@@ -278,52 +277,6 @@ const ComposerConnectionStatusPill = memo(function ComposerConnectionStatusPill(
   );
 });
 
-type ComposerUsageSummary = {
-  readonly label: string;
-  readonly alertBody: string;
-};
-
-/**
- * Compact plan-window + cost line for the expanded toolbar, plus the long form
- * the tap alert shows. Null when there is nothing worth a control.
- */
-function buildComposerUsageSummary(input: {
-  readonly planUsage: NonNullable<T3ServerConfig["providers"][number]["planUsage"]> | null;
-  readonly costUsd: number | null;
-  readonly now: number;
-}): ComposerUsageSummary | null {
-  const windows = input.planUsage?.windows ?? [];
-  let headline: (typeof windows)[number] | null = null;
-  for (const window of windows) {
-    if (!Number.isFinite(window.usedPercent)) continue;
-    if (headline === null || window.usedPercent > headline.usedPercent) headline = window;
-  }
-  if (headline === null && input.costUsd === null) return null;
-
-  const costLabel = input.costUsd === null ? null : formatUsd(input.costUsd);
-  const label =
-    headline === null
-      ? (costLabel ?? "")
-      : `${headline.label} ${Math.round(Math.min(100, Math.max(0, headline.usedPercent)))}%${
-          costLabel === null ? "" : ` · ${costLabel}`
-        }`;
-
-  const lines: string[] = [];
-  if (input.planUsage?.planLabel) lines.push(input.planUsage.planLabel);
-  for (const window of windows) {
-    const percent = Math.round(Math.min(100, Math.max(0, window.usedPercent)));
-    const resetsMs = window.resetsAt === undefined ? Number.NaN : Date.parse(window.resetsAt);
-    const reset =
-      Number.isNaN(resetsMs) || resetsMs <= input.now
-        ? null
-        : formatCountdown(resetsMs - input.now);
-    lines.push(`${window.label}: ${percent}% used${reset === null ? "" : ` · resets in ${reset}`}`);
-  }
-  if (costLabel !== null) lines.push(`Session cost: ${costLabel} at API rates`);
-
-  return { label, alertBody: lines.join("\n") };
-}
-
 export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposerProps) {
   const navigation = useNavigation();
   const { themeAppearance } = useAppearancePreferences();
@@ -441,20 +394,16 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
     if (!threadDetail || threadDetail.id !== props.selectedThread.id) return null;
     return deriveThreadCostUsd(threadDetail.activities);
   }, [threadDetail, props.selectedThread.id]);
-  const usageSummary = useMemo(
-    () =>
-      buildComposerUsageSummary({
-        planUsage: selectedProviderStatus?.planUsage ?? null,
-        costUsd: threadCostUsd,
-        // One timestamp per render: no ticking timer in the composer.
-        now: Date.now(),
-      }),
+  const usageInput = useMemo(
+    () => ({ planUsage: selectedProviderStatus?.planUsage ?? null, costUsd: threadCostUsd }),
     [selectedProviderStatus, threadCostUsd],
   );
+  // The label carries no countdown, so it can be cached; the alert body is
+  // built at press time so its reset countdowns are current.
+  const usageLabel = useMemo(() => buildComposerUsageLabel(usageInput), [usageInput]);
   const showUsageDetail = useCallback(() => {
-    if (!usageSummary) return;
-    Alert.alert("Usage", usageSummary.alertBody);
-  }, [usageSummary]);
+    Alert.alert("Usage", buildComposerUsageAlertBody(usageInput, Date.now()));
+  }, [usageInput]);
 
   // ── Trigger detection ────────────────────────────────────
   const [composerSelection, setComposerSelection] = useState(() => ({
@@ -990,11 +939,11 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
                   maxWidth={152}
                   onPress={openSettings}
                 />
-                {usageSummary ? (
+                {usageLabel !== null ? (
                   <ComposerInlineControl
                     accessibilityLabel="Usage details"
-                    icon="chart.pie"
-                    label={usageSummary.label}
+                    icon="chart.bar.xaxis"
+                    label={usageLabel}
                     maxWidth={168}
                     onPress={showUsageDetail}
                     showChevron={false}
