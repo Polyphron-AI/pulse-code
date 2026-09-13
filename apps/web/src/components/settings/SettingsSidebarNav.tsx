@@ -110,6 +110,12 @@ const SETTINGS_PAGE_SECTIONS: Partial<
     { label: "Motion", targetId: "motion" },
     { label: "Typography", targetId: "typography" },
   ],
+  "/settings/integrations": [
+    { label: "Skills", targetId: "skills" },
+    { label: "MCP", targetId: "mcp" },
+    { label: "Voice dictation", targetId: "dictation" },
+    { label: "Browser", targetId: "browser" },
+  ],
   "/settings/source-control": [
     { label: "Version control", targetId: "source-control" },
     { label: "Text generation", targetId: "source-control-text-generation" },
