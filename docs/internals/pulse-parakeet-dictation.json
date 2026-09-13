@@ -66,9 +66,29 @@
       "verification": "Unit test asserts progress messages are forwarded to the setup caller."
     },
     {
-      "case": "Cancel: aborting setup rejects and resets the worker; a later setup starts clean.",
+      "case": "Cancel: aborting one setup or transcription rejects only that caller; a later setup or queued request continues cleanly.",
       "status": "applicable",
-      "verification": "Existing parakeetTranscription tests plus abort coverage."
+      "verification": "Deterministic transcriber tests cover setup-abort retry and two concurrent callers where aborting the first does not terminate the worker or fail the second."
+    },
+    {
+      "case": "Rapid changes, concurrent threads and queued turns do not run Parakeet inference concurrently.",
+      "status": "applicable",
+      "verification": "The main-thread transcriber queues requests and the worker independently serializes model operations. A deterministic test proves the second request is not posted until the first settles."
+    },
+    {
+      "case": "Navigation or unmount during onboarding setup cancels that setup and releases the worker and loaded model.",
+      "status": "applicable",
+      "verification": "Onboarding component test unmounts during setup, then asserts the signal is aborted and the singleton reset runs. Continuing after successful setup explicitly retains the model."
+    },
+    {
+      "case": "Disabling dictation, switching away from Parakeet, or declining it in onboarding releases the device-owned worker and model; re-enabling starts cleanly.",
+      "status": "applicable",
+      "verification": "Settings and onboarding tests assert explicit teardown. Existing preference tests and setup retry tests cover clean re-enable without changing backend selection."
+    },
+    {
+      "case": "Worker ownership and cleanup remain client-local and never affect another browser or environment.",
+      "status": "applicable",
+      "verification": "One singleton is owned by the current browser realm. Request abort is local to its pending entry; only explicit device-level disable, onboarding abandonment, or worker failure tears it down."
     },
     {
       "case": "Retry after failure is possible without reloading the page.",
@@ -126,12 +146,13 @@
     "Confirm the emitted ORT .jsep.wasm and .jsep.mjs assets are served with JavaScript and application/wasm content types through the packaged desktop custom scheme."
   ],
   "status": "development-acceptance-passed",
-  "implementationRevision": "1a75b4e230",
+  "implementationRevision": "5f236118f5",
   "verification": {
-    "focusedTests": "29 tests passed across parakeetTranscription, dictationPreferences, DictationSettings, OnboardingDictationStep and welcomeWizard.logic.",
+    "focusedTests": "34 tests passed across parakeetTranscription, dictationPreferences, DictationSettings, OnboardingDictationStep and welcomeWizard.logic. Added deterministic coverage for concurrent cancellation isolation, serialized requests, setup-abort retry, settings disable and backend-change teardown, onboarding decline, successful retention and navigation/unmount cleanup.",
     "typecheck": "@t3tools/web tsgo --noEmit passed.",
     "formatAndDiff": "Focused formatting check and git diff --check passed.",
-    "productionBuild": "@t3tools/web production build passed. The output contained parakeet.worker-_mWaoHgA.js, ort-wasm-simd-threaded.jsep-P_aWIpzF.mjs and ort-wasm-simd-threaded.jsep-6MnTkKum.wasm; the worker chunk references both emitted JSEP assets.",
+    "productionBuild": "@t3tools/web production build passed after the lifecycle fix. The output contained parakeet.worker-DPmK1zCy.js, ort-wasm-simd-threaded.jsep-P_aWIpzF.mjs and ort-wasm-simd-threaded.jsep-6MnTkKum.wasm.",
+    "review": "Independent review rejected the first development-acceptance revision because request abort reset the shared singleton and cleanup was missing. Revisions 826b7b5f76 and 5f236118f5 separate request cancellation from explicit device teardown, serialize inference on both sides of the worker boundary, and release the model when the user switches away from Parakeet.",
     "limits": "No real model download, microphone, transcription, packaged desktop app or native mobile run. Existing pnpm-workspace.yaml changes were left untouched and are not part of this slice."
   },
   "nextAction": "Run packaged desktop acceptance with a real Parakeet model download and transcription before release."
