@@ -166,6 +166,41 @@ const peerPath = NodePath.join(
 );
 
 describe("CodexSessionRuntime collab integration", () => {
+  it.effect("waits for native MCP startup status after reload", () =>
+    Effect.gen(function* () {
+      NodeFS.writeFileSync(
+        scriptPath,
+        JSON.stringify({
+          rootThreadId: ROOT,
+          notifications: [],
+          mcpStates: {
+            pulse_ready: { status: "ready" },
+            pulse_failed: { status: "failed", message: "connection refused" },
+          },
+        }),
+        "utf8",
+      );
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => NodeFS.rmSync(scriptPath, { force: true })),
+      );
+      const runtime = yield* makeCodexSessionRuntime({
+        threadId: ThreadId.make("thread-managed-mcp-readiness"),
+        binaryPath: peerPath,
+        cwd: NodeOS.tmpdir(),
+        runtimeMode: "full-access",
+        environment: { ...process.env, T3_CODEX_COLLAB_SCRIPT: scriptPath },
+      });
+      yield* runtime.start();
+      const statuses = yield* runtime.prepareManagedMcp!(["pulse_ready", "pulse_failed"]);
+      assert.deepEqual(statuses.get("pulse_ready"), { status: "ready" });
+      assert.deepEqual(statuses.get("pulse_failed"), {
+        status: "failed",
+        message: "connection refused",
+      });
+      yield* runtime.close;
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
   it.effect("sends managed skills as native turn input through the app-server subprocess", () =>
     Effect.gen(function* () {
       const skillPath = NodePath.join(NodeOS.tmpdir(), "pulse-managed-review", "SKILL.md");

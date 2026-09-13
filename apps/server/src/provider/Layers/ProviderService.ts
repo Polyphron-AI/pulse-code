@@ -783,7 +783,13 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     });
   const clearMcpSession = (threadId: ThreadId) =>
     McpSessionRegistry.revokeActiveMcpThread(threadId).pipe(
-      Effect.tap(() => Effect.sync(() => McpProviderSession.clearMcpProviderSession(threadId))),
+      Effect.tap(() =>
+        Effect.sync(() => {
+          McpProviderSession.clearMcpProviderSession(threadId);
+          pulseMcpPreparation.appliedFingerprints.delete(threadId);
+          pulseMcpPreparation.records.delete(threadId);
+        }),
+      ),
     );
 
   const publishRuntimeEvent = (event: ProviderRuntimeEvent): Effect.Effect<void> =>
@@ -1471,8 +1477,9 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         }
         const canReuse =
           input.retry !== true &&
-          existingPreparation?.fingerprint === fingerprint &&
-          active?.providerInstanceId === instanceId;
+          pulseMcpPreparation.appliedFingerprints.get(input.threadId) === fingerprint &&
+          active?.providerInstanceId === instanceId &&
+          active.status === "ready";
         const hadManagedServers =
           McpProviderSession.readManagedMcpServers(input.threadId).length > 0;
         if (!canReuse && (connections.length > 0 || hadManagedServers)) {
@@ -1499,6 +1506,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         const publicStatuses = PulseMcpPreparation.publicStatuses(servers, statuses);
         if (publicStatuses.some((status) => status.status === "failed")) {
           pulseMcpPreparation.records.delete(input.threadId);
+          pulseMcpPreparation.appliedFingerprints.delete(input.threadId);
           yield* adapter.stopSession(input.threadId).pipe(Effect.ignore);
           yield* Effect.sync(() => McpProviderSession.clearMcpProviderSession(input.threadId));
           return {
@@ -1507,6 +1515,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
             connections: publicStatuses,
           } as const;
         }
+        pulseMcpPreparation.appliedFingerprints.set(input.threadId, fingerprint);
         const now = yield* DateTime.now;
         const preparationId = pulseMcpPreparation.issueId(input.threadId);
         pulseMcpPreparation.records.set(input.threadId, {
@@ -1530,9 +1539,10 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
                 pulseMcpPreparation.records.delete(input.threadId);
                 if (current.consumedBy !== undefined) return;
                 yield* adapter.stopSession(input.threadId).pipe(Effect.ignore);
-                yield* Effect.sync(() =>
-                  McpProviderSession.clearMcpProviderSession(input.threadId),
-                );
+                yield* Effect.sync(() => {
+                  McpProviderSession.clearMcpProviderSession(input.threadId);
+                  pulseMcpPreparation.appliedFingerprints.delete(input.threadId);
+                });
               }),
             ),
           ),
@@ -1609,16 +1619,14 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
               toValidationError("ProviderService.consumePulseMcpPreparation", cause.message, cause),
             ),
           );
-        const activeCwd = yield* registry.getByInstance(input.providerInstanceId).pipe(
+        const preparedSession = yield* registry.getByInstance(input.providerInstanceId).pipe(
           Effect.flatMap((adapter) => adapter.listSessions()),
-          Effect.map(
-            (sessions) => sessions.find((session) => session.threadId === input.threadId)?.cwd,
-          ),
+          Effect.map((sessions) => sessions.find((session) => session.threadId === input.threadId)),
         );
         if (
           preparation.selectedConnectionIds.length > 0 &&
-          (activeCwd === undefined ||
-            path.resolve(activeCwd) !== path.resolve(preparation.cwd ?? activeCwd))
+          (preparedSession?.status !== "ready" ||
+            path.resolve(preparedSession.cwd ?? "") !== path.resolve(preparation.cwd ?? ""))
         ) {
           return yield* toValidationError(
             "ProviderService.consumePulseMcpPreparation",

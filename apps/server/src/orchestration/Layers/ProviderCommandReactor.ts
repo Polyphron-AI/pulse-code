@@ -776,7 +776,7 @@ const make = Effect.gen(function* () {
         (activeSession.model === undefined ||
           activeSession.model === desiredModelSelection.model) &&
         activeSession.activeTurnId === undefined &&
-        activeSession.status !== "running";
+        activeSession.status === "ready";
       if (preparedSessionMatches) {
         yield* bindSessionToThread(activeSession);
         yield* refreshWorkspaceSnapshot;

@@ -84,6 +84,7 @@ export const publicStatuses = (
 /** Server-scoped preparation records and same-thread serialization. */
 export const make = () => {
   const records = new Map<ThreadId, Record>();
+  const appliedFingerprints = new Map<ThreadId, string>();
   const locks = new Map<ThreadId, Semaphore.Semaphore>();
   let sequence = 0;
 
@@ -100,5 +101,5 @@ export const make = () => {
   const issueId = (threadId: ThreadId) =>
     `${String(threadId)}-${++sequence}` as PulseMcpPreparationId;
 
-  return { records, withThreadLock, issueId } as const;
+  return { records, appliedFingerprints, withThreadLock, issueId } as const;
 };

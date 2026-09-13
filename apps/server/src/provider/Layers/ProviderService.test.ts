@@ -1030,7 +1030,8 @@ let resolvedManagedMcpConnections: ReadonlyArray<typeof managedMcpConnection> = 
   managedMcpConnection,
 ];
 const managedMcpRouting = makeProviderServiceLayer({
-  resolveMcpConnections: () => Effect.succeed(resolvedManagedMcpConnections),
+  resolveMcpConnections: (input) =>
+    Effect.succeed(input.connectionIds?.length === 0 ? [] : resolvedManagedMcpConnections),
 });
 const managedMcpBrowserOffRouting = makeProviderServiceLayer({
   resolveMcpConnections: () => Effect.succeed([managedMcpConnection]),
@@ -1077,6 +1078,39 @@ managedMcpRouting.layer("managed MCP turn preparation", (it) => {
         commandId: "different-command",
       }).pipe(Effect.exit);
       assert(Exit.isFailure(duplicate));
+      yield* service.sendTurn({ threadId: firstThread, input: "first", attachments: [] });
+      const startsAfterFirstTurn = managedMcpRouting.codex.startSession.mock.calls.length;
+      const unchanged = yield* prepare(firstThread);
+      assert.equal(unchanged.status, "ready");
+      assert.equal(managedMcpRouting.codex.startSession.mock.calls.length, startsAfterFirstTurn);
+
+      resolvedManagedMcpConnections = [
+        {
+          ...managedMcpConnection,
+          config: { ...managedMcpConnection.config, url: "https://changed.example.test" },
+        },
+      ];
+      const changed = yield* prepare(firstThread);
+      assert.equal(changed.status, "ready");
+      assert.equal(
+        managedMcpRouting.codex.startSession.mock.calls.length,
+        startsAfterFirstTurn + 1,
+      );
+      const cleared = yield* service.preparePulseMcp!({
+        threadId: firstThread,
+        providerSession: {
+          threadId: firstThread,
+          providerInstanceId: codexInstanceId,
+          runtimeMode: "full-access",
+          cwd,
+        },
+        connectionIds: [],
+      });
+      assert.equal(cleared.status, "ready");
+      assert.equal(
+        managedMcpRouting.codex.startSession.mock.calls.length,
+        startsAfterFirstTurn + 2,
+      );
     }),
   );
 
@@ -1210,6 +1244,40 @@ managedMcpRouting.layer("managed MCP turn preparation", (it) => {
         modelSelection: undefined,
         desiredCwd: process.cwd(),
       });
+    }),
+  );
+
+  it.effect("rejects a prepared session that becomes unhealthy before dispatch", () =>
+    Effect.gen(function* () {
+      resolvedManagedMcpConnections = [managedMcpConnection];
+      const service = yield* ProviderService.ProviderService;
+      const threadId = asThreadId("managed-unhealthy");
+      const cwd = fixtureCwd("unhealthy");
+      const result = yield* service.preparePulseMcp!({
+        threadId,
+        providerSession: {
+          threadId,
+          providerInstanceId: codexInstanceId,
+          runtimeMode: "full-access",
+          cwd,
+        },
+      });
+      assert(result.status === "ready");
+      managedMcpRouting.codex.updateSession(threadId, (session) => ({
+        ...session,
+        status: "error",
+        lastError: "provider crashed",
+      }));
+      const consumed = yield* service.consumePulseMcpPreparation!({
+        threadId,
+        preparationId: result.preparationId,
+        providerInstanceId: codexInstanceId,
+        commandId: "unhealthy-command",
+        runtimeMode: "full-access",
+        modelSelection: undefined,
+        desiredCwd: cwd,
+      }).pipe(Effect.exit);
+      assert(Exit.isFailure(consumed));
     }),
   );
 });
