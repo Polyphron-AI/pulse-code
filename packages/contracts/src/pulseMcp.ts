@@ -20,6 +20,7 @@ const Values = Schema.Record(
 export const PulseMcpConnectionInput = Schema.Struct({
   id: ConnectionId,
   name: Label,
+  createOnly: Schema.optionalKey(Schema.Boolean),
   config: Schema.Union([
     Schema.Struct({
       transport: Schema.Literal("http"),

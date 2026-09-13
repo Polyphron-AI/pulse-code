@@ -1287,7 +1287,12 @@ const makeWsRpcLayer = (
             },
             settings,
             shellResumeCompletionMarker: true,
-            pulseCapabilities: { managedSkills: true, mcpManagement: true, groqDictation: true },
+            pulseCapabilities: {
+              managedSkills: true,
+              mcpManagement: true,
+              mcpCreateOnly: true,
+              groqDictation: true,
+            },
             ...(fileManagerRevealKind === undefined
               ? {}
               : {

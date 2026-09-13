@@ -77,6 +77,50 @@ const addFixtures = Effect.fn(function* () {
 });
 
 describe("PulseMcpConfigService", () => {
+  it.effect("atomically rejects duplicate creates without replacing saved credentials", () =>
+    Effect.gen(function* () {
+      const service = yield* addFixtures();
+      const before = yield* service.listConnections;
+      const duplicate = yield* service
+        .upsertConnection({
+          id: "github",
+          name: "Replacement",
+          createOnly: true,
+          config: { transport: "http", url: "https://replacement.example.test" },
+        })
+        .pipe(Effect.flip);
+      expect(duplicate.message).toContain("already exists");
+      expect(yield* service.listConnections).toEqual(before);
+      const instanceId = ProviderInstanceId.make("create-check");
+      yield* service.setProviderDefault(instanceId, ["github"]);
+      const prepared = yield* service.prepareTurn(
+        {
+          turnId: "create-check",
+          provider: "codex",
+          providerInstanceId: instanceId,
+          threadId: ThreadId.make("create-check"),
+        },
+        readiness,
+      );
+      expect(prepared.connections[0]?.config).toMatchObject({
+        headers: { Authorization: "Bearer private-token" },
+      });
+      const create = (name: string) =>
+        service
+          .upsertConnection({
+            id: "concurrent",
+            name,
+            createOnly: true,
+            config: { transport: "http", url: "https://fixture.example.test" },
+          })
+          .pipe(Effect.option);
+      const results = yield* Effect.all([create("First"), create("Second")], { concurrency: 2 });
+      expect(results.filter(Option.isSome)).toHaveLength(1);
+      expect(
+        (yield* service.listConnections).filter((entry) => entry.id === "concurrent"),
+      ).toHaveLength(1);
+    }).pipe(Effect.provide(testLayer)),
+  );
   it.effect(
     "keeps secrets out of durable configuration and materializes them only for a turn",
     () =>

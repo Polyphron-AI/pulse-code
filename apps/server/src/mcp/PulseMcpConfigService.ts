@@ -60,6 +60,7 @@ export interface PulseMcpStdioInput {
 export interface PulseMcpConnectionInput {
   readonly id: string;
   readonly name: string;
+  readonly createOnly?: boolean;
   readonly config: PulseMcpHttpInput | PulseMcpStdioInput;
 }
 
@@ -545,6 +546,14 @@ const make = Effect.gen(function* () {
                 Effect.flatMap((state) =>
                   Effect.gen(function* () {
                     const previous = state.connections[input.id];
+                    if (input.createOnly === true && previous !== undefined) {
+                      return yield* Effect.fail(
+                        new PulseMcpConfigError(
+                          "validate",
+                          "An MCP connection with this ID already exists.",
+                        ),
+                      );
+                    }
                     if (previous === undefined && Object.keys(state.connections).length >= 128) {
                       return yield* Effect.fail(
                         new PulseMcpConfigError(
