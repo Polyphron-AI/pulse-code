@@ -2,10 +2,14 @@ import { describe, expect, it } from "@effect/vitest";
 import { EnvironmentId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as SubscriptionRef from "effect/SubscriptionRef";
+import { EnvironmentSupervisor } from "../connection/supervisor.ts";
+import type { RpcSession } from "../rpc/session.ts";
 
 import { RemoteEnvironmentAuthorization } from "../authorization/service.ts";
 import {
   PrimaryConnectionTarget,
+  AVAILABLE_CONNECTION_STATE,
   RelayConnectionTarget,
   type PreparedConnection,
 } from "../connection/model.ts";
@@ -13,6 +17,7 @@ import { ManagedRelayDpopSigner } from "../relay/managedRelay.ts";
 import { remoteHttpClientLayer } from "../rpc/http.ts";
 import {
   getPulseDictationApiKeyStatus,
+  pulseDictationRequestContext,
   PULSE_DICTATION_MAX_AUDIO_BYTES,
   removePulseDictationApiKey,
   setPulseDictationApiKey,
@@ -41,6 +46,33 @@ const context = (prepared = primary) => ({
 });
 
 describe("Pulse dictation HTTP transport", () => {
+  it.effect(
+    "resolves the current connection on every execution and rejects disconnected state",
+    () =>
+      Effect.gen(function* () {
+        const prepared = yield* SubscriptionRef.make<Option.Option<PreparedConnection>>(
+          Option.some(primary),
+        );
+        const supervisor = EnvironmentSupervisor.of({
+          target: primaryTarget,
+          prepared,
+          state: yield* SubscriptionRef.make(AVAILABLE_CONNECTION_STATE),
+          session: yield* SubscriptionRef.make(Option.none<RpcSession>()),
+          connect: Effect.void,
+          disconnect: Effect.void,
+          retryNow: Effect.void,
+        });
+        const read = pulseDictationRequestContext.pipe(
+          Effect.provideService(EnvironmentSupervisor, supervisor),
+        );
+        expect((yield* read).prepared.httpBaseUrl).toBe(primary.httpBaseUrl);
+        const moved = { ...primary, httpBaseUrl: "https://moved.example.test" };
+        yield* SubscriptionRef.set(prepared, Option.some(moved));
+        expect((yield* read).prepared.httpBaseUrl).toBe(moved.httpBaseUrl);
+        yield* SubscriptionRef.set(prepared, Option.none());
+        expect((yield* Effect.flip(read)).message).toBe("The environment is not connected.");
+      }),
+  );
   it.effect("uses cookie-authenticated environment routing for key management", () =>
     Effect.gen(function* () {
       const calls: Array<{ url: string; init: RequestInit }> = [];
