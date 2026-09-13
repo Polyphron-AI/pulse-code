@@ -2660,7 +2660,9 @@ export function resolvePackageManagerUserAgent(packageManager: string): string {
 }
 
 export function resolveDesktopProductName(version: string): string {
-  return resolveDesktopUpdateChannel(version) === "nightly" ? PRODUCT_NIGHTLY_NAME : PRODUCT_ALPHA_NAME;
+  return resolveDesktopUpdateChannel(version) === "nightly"
+    ? PRODUCT_NIGHTLY_NAME
+    : PRODUCT_ALPHA_NAME;
 }
 
 export const createBuildConfig = Effect.fn("createBuildConfig")(function* (

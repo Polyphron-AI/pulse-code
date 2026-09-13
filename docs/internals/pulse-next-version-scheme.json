@@ -84,7 +84,7 @@
     "mergeResult": "Merged upstream/main at 20363c32c9. Conflict resolution retained upstream's typed HTTP groups, agent access capabilities, desktop launcher signing and protected-resource metadata, attachment draft changes, provider updates and license generation. Pulse-owned identity, managed skills and MCP, dictation, and 0.0.40-pulse.1 manifest values remain in place."
   },
   "evidence": {
-    "revision": "pending merge commit",
+    "revision": "c81f1ab97034a3b0dc8bb2901c6b0dfdeb42d290",
     "location": "command output reported to the coordinator",
     "focusedTests": [
       "Contracts, client-runtime, server, web and desktop scoped typechecks passed.",

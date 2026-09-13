@@ -110,8 +110,7 @@ export const executeAuthenticatedEnvironmentHttpRequest = Effect.fn(
 }): Effect.fn.Return<
   A,
   RemoteEnvironmentRequestError,
-  | Effect.Services<ReturnType<typeof makeEnvironmentHttpApiGroupClient<Group>>>
-  | R
+  Effect.Services<ReturnType<typeof makeEnvironmentHttpApiGroupClient<Group>>> | R
 > {
   let httpBaseUrl = input.prepared.httpBaseUrl;
   return yield* Effect.gen(function* () {

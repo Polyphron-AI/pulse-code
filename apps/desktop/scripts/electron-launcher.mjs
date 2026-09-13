@@ -269,7 +269,8 @@ export function resolveMacBundleInfoPlistStrings(executableName) {
     CFBundleIconFile: "icon.icns",
     NSScreenCaptureUsageDescription:
       "Pulse Next captures the active window when you use the snapshot shortcut.",
-    NSDocumentsFolderUsageDescription: "Pulse Next reads project files you open in the desktop app.",
+    NSDocumentsFolderUsageDescription:
+      "Pulse Next reads project files you open in the desktop app.",
     NSMicrophoneUsageDescription:
       "Pulse Next uses the microphone to turn your speech into composer text.",
   };
