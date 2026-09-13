@@ -2277,9 +2277,23 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
           }
         : undefined);
 
+    // `total_cost_usd` is cumulative for the running SDK process, so a newer
+    // report always wins over the value carried forward on `lastGoodUsage`.
+    const resultCostUsd =
+      typeof result?.total_cost_usd === "number" &&
+      Number.isFinite(result.total_cost_usd) &&
+      result.total_cost_usd >= 0
+        ? result.total_cost_usd
+        : undefined;
+    // No cost without a snapshot to hang it on: never fabricate usage.
+    const usageSnapshotWithCost: ThreadTokenUsageSnapshot | undefined =
+      usageSnapshot && resultCostUsd !== undefined
+        ? { ...usageSnapshot, costUsd: resultCostUsd }
+        : usageSnapshot;
+
     const turnState = context.turnState;
     if (!turnState) {
-      yield* emitThreadTokenUsage(context, usageSnapshot, {
+      yield* emitThreadTokenUsage(context, usageSnapshotWithCost, {
         rawMethod: "claude/result",
         rawPayload: result ?? { status },
       });
@@ -2353,7 +2367,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
       items: [...turnState.items],
     });
 
-    yield* emitThreadTokenUsage(context, usageSnapshot, {
+    yield* emitThreadTokenUsage(context, usageSnapshotWithCost, {
       rawMethod: "claude/result",
       rawPayload: result ?? { status },
     });
