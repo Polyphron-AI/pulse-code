@@ -426,7 +426,18 @@
     {
       "id": "provider-session-boundary",
       "baseRevision": "d84d708d0",
-      "state": "source-review",
+      "state": "source-reviewed",
+      "nextCandidate": "Codex-only structured managed-skill mentions resolved to immutable server-owned paths, then native typed skill input. Sequence turn contracts, reactor, adapter and composer as one dependent batch.",
+      "evidence": [
+        "CodexSessionRuntime.buildTurnStartParams currently emits text and attachments; generated app-server UserInput also supports type=skill with name and path.",
+        "CodexAdapter creates an owned app-server runtime per thread. ManagedSkillLibrary.resolveSelection returns trusted immutable skill paths.",
+        "skills/extraRoots/set exists, but checked-in types alone do not establish directory or discovery semantics. Do not assume them."
+      ],
+      "constraints": [
+        "Preserve structured selection identity; do not infer managed skill invocation from ordinary dollar-prefixed prose or accept client filesystem paths.",
+        "Other providers need proven per-session integration. Never copy selected skills into shared provider homes or project folders.",
+        "MCP Continue without must use attempt-only exclusions, preserving saved defaults and thread overrides. Existing failure/retry handling may avoid a new durable pause framework; verify exact send semantics before choosing."
+      ],
       "acceptance": "Identify the smallest verified session-preparation integration and current per-provider capabilities before changing shared send behavior."
     }
   ],
