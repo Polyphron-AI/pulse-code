@@ -828,6 +828,9 @@ import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { serverEnvironment } from "../../state/server";
 import type { ReviewCommentContext } from "../../reviewCommentContext";
+import { ComposerDictation } from "../../voice/ComposerDictation";
+import { appendDictationTranscript } from "../../voice/composerDictationLogic";
+import { useComposerDictation } from "../../voice/useComposerDictation";
 
 const WORKSPACE_SNAPSHOT_RETRY_COOLDOWN_MS = 10_000;
 
@@ -1161,6 +1164,7 @@ export interface ChatComposerHandle {
     interactionModeEnabled: boolean;
     pulseSkills: ReadonlyArray<PulseSkillSelection>;
     pulseSkillsBlockedReason: string | null;
+    dictationBlockedReason: string | null;
   };
   /** Validate the fully composed text immediately before a provider turn starts. */
   validateProviderInput: (providerInput: string) => boolean;
@@ -1653,10 +1657,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     selectedProviderEntry?.snapshot,
     selectedModel,
   );
-  const sendDisabledReason =
-    externalSendDisabledReason ??
-    (activePendingProgress ? null : (attachmentBlockReason ?? providerSendBlockReason));
-  const isSendDisabled = sendDisabledReason !== null;
   const selectedProviderStatus = useMemo(
     () => selectedProviderEntry?.snapshot ?? null,
     [selectedProviderEntry],
@@ -1809,6 +1809,30 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const [composerTrigger, setComposerTrigger] = useState<ComposerTrigger | null>(() =>
     detectComposerTrigger(prompt, prompt.length),
   );
+  const dictation = useComposerDictation({
+    draftIdentity: `${environmentId}:${composerTargetKey(composerDraftTarget)}`,
+    deliver: (transcript) => {
+      const nextPrompt = appendDictationTranscript(promptRef.current, transcript);
+      if (nextPrompt === promptRef.current) return;
+      promptRef.current = nextPrompt;
+      setComposerDraftPrompt(composerDraftTarget, nextPrompt);
+      setComposerCursor(collapseExpandedComposerCursor(nextPrompt, nextPrompt.length));
+    },
+  });
+  const sendDisabledReason =
+    externalSendDisabledReason ??
+    dictation.blockedReason ??
+    (activePendingProgress ? null : (attachmentBlockReason ?? providerSendBlockReason));
+  const isSendDisabled = sendDisabledReason !== null;
+  const dictationDisabledReason =
+    dictation.disabledReason ??
+    (isConnecting
+      ? "Wait for the composer to connect before using dictation."
+      : activePendingApproval !== null || pendingUserInputs.length > 0
+        ? "Finish the pending request before using dictation."
+        : projectSelectionRequired
+          ? "Choose a project before using dictation."
+          : null);
   const [composerHighlightedItemId, setComposerHighlightedItemId] = useState<string | null>(null);
   // Active ArrowUp recall. Cleared on edit and on thread switch.
   const promptHistoryPositionRef = useRef<ComposerPromptHistoryPosition | null>(null);
@@ -4685,6 +4709,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         interactionModeEnabled: planModeUiEnabled,
         pulseSkills: composerPulseSkills.map((selection) => ({ ...selection })),
         pulseSkillsBlockedReason: managedSkillPickerState.blockedReason,
+        dictationBlockedReason: dictation.blockedReason,
       }),
       validateProviderInput: (providerInput: string) => {
         const validationMessage = getComposerSubmissionValidationMessage({
@@ -4735,6 +4760,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       interactionMode,
       planModeUiEnabled,
       managedSkillPickerState.blockedReason,
+      dictation.blockedReason,
       compactThreadContext,
       restoreAfterTimelineReachedEnd,
       getTimelineScrollableNode,
@@ -5603,6 +5629,13 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                       </Tooltip>
                     </>
                   ) : null}
+                  <ComposerDictation
+                    state={dictation.state}
+                    disabledReason={dictationDisabledReason}
+                    onStart={dictation.start}
+                    onStop={dictation.stop}
+                    onCancel={dictation.cancel}
+                  />
                   <ComposerFooterPrimaryActions
                     compact={isComposerResting || isComposerPrimaryActionsCompact}
                     activeContextWindow={
