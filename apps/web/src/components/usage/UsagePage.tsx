@@ -22,6 +22,7 @@ import {
 } from "@t3tools/shared/usageFormat";
 import { EMPTY_SERVER_PROVIDERS, serverEnvironment } from "../../state/server";
 import { useEnvironments } from "../../state/environments";
+import { formatResetCountdown } from "../chat/PlanUsageMeter.logic";
 import { formatElapsedDurationLabel } from "../../timestampFormat";
 import { ScrollArea } from "../ui/scroll-area";
 import { Button } from "../ui/button";
@@ -578,19 +579,6 @@ function PlanUsageWindow({
       </div>
     </div>
   );
-}
-
-/** "2h 10m" until an ISO instant, or null once it has passed. */
-function formatResetCountdown(resetsAt: string, now: number): string | null {
-  const target = Date.parse(resetsAt);
-  if (Number.isNaN(target) || target <= now) return null;
-  const totalMinutes = Math.ceil((target - now) / 60_000);
-  const days = Math.floor(totalMinutes / (60 * 24));
-  const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
-  const minutes = totalMinutes % 60;
-  if (days > 0) return hours > 0 ? `${days}d ${hours}h` : `${days}d`;
-  if (hours > 0) return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
-  return `${minutes}m`;
 }
 
 /** Brand mark for the harness a row belongs to. */

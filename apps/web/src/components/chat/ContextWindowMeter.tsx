@@ -1,3 +1,5 @@
+import { formatUsd } from "@t3tools/shared/usageFormat";
+
 import { Button } from "../ui/button";
 import { type ContextWindowSnapshot, formatContextWindowTokens } from "~/lib/contextWindow";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
@@ -16,8 +18,15 @@ function formatPercentage(value: number | null): string | null {
 export function ContextWindowMeter(props: {
   usage: ContextWindowSnapshot;
   modelDisplayName?: string | null;
+  /**
+   * Thread cost at API rates, already summed across provider restarts. Null
+   * when nothing reported cost, and deliberately hidden for subscription
+   * plans, where the number is not what the user is billed.
+   */
+  costUsd?: number | null;
 }) {
   const { usage, modelDisplayName } = props;
+  const costUsd = props.costUsd ?? null;
   const usedPercentage = formatPercentage(usage.usedPercentage);
   const normalizedPercentage = Math.max(0, Math.min(100, usage.usedPercentage ?? 0));
   const radius = 9.75;
@@ -123,6 +132,17 @@ export function ContextWindowMeter(props: {
               <span className="text-secondary-label">Total processed</span>
               <span className="font-medium tabular-nums text-secondary-label">
                 {formatContextWindowTokens(totalProcessedTokens)}
+              </span>
+            </div>
+          ) : null}
+          {costUsd !== null ? (
+            <div className="flex items-center justify-between gap-3 text-[11px] leading-4">
+              <span className="text-secondary-label">
+                Session cost
+                <span className="ml-1 text-muted-foreground">at API rates</span>
+              </span>
+              <span className="font-medium tabular-nums text-secondary-label">
+                {formatUsd(costUsd)}
               </span>
             </div>
           ) : null}

@@ -106,6 +106,7 @@ import {
   renderProviderTraitsPicker,
 } from "./composerProviderState";
 import { ContextWindowMeter } from "./ContextWindowMeter";
+import { PlanUsageMeter } from "./PlanUsageMeter";
 import { resolveContextWindowModelDisplayName } from "./ContextWindowMeter.logic";
 import { buildExpandedImagePreview, type ExpandedImagePreview } from "./ExpandedImagePreview";
 import { basenameOfPath } from "../../pierre-icons";
@@ -229,7 +230,7 @@ import type { UnifiedSettings } from "@t3tools/contracts/settings";
 import type { SessionPhase, Thread } from "../../types";
 import type { PendingUserInputDraftAnswer } from "../../pendingUserInput";
 import type { PendingApproval, PendingUserInput } from "../../session-logic";
-import { deriveLatestContextWindowSnapshot } from "../../lib/contextWindow";
+import { deriveLatestContextWindowSnapshot, deriveThreadCostUsd } from "../../lib/contextWindow";
 import { formatProviderSkillDisplayName } from "../../providerSkillPresentation";
 import { searchProviderSkills } from "../../providerSkillSearch";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
@@ -399,6 +400,8 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
   compact: boolean;
   activeContextWindow: ReturnType<typeof deriveLatestContextWindowSnapshot>;
   activeThreadModelDisplayName: string | null;
+  planUsage: ServerProvider["planUsage"] | null;
+  activeThreadCostUsd: number | null;
   isPreparingWorktree: boolean;
   pendingAction: {
     questionIndex: number;
@@ -424,10 +427,12 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
 }) {
   return (
     <>
+      {props.planUsage ? <PlanUsageMeter planUsage={props.planUsage} /> : null}
       {props.activeContextWindow ? (
         <ContextWindowMeter
           usage={props.activeContextWindow}
           modelDisplayName={props.activeThreadModelDisplayName}
+          costUsd={props.planUsage ? null : props.activeThreadCostUsd}
         />
       ) : null}
       {props.isPreparingWorktree ? (
@@ -948,6 +953,17 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     () => resolveContextWindowModelDisplayName(activeThreadModelSelection, modelOptionsByInstance),
     [activeThreadModelSelection, modelOptionsByInstance],
   );
+  const activeThreadCostUsd = useMemo(
+    () => deriveThreadCostUsd(activeThreadActivities ?? []),
+    [activeThreadActivities],
+  );
+  // Plan usage belongs to the provider instance the composer will dispatch to,
+  // which is not necessarily the one the thread's last turn ran on.
+  const composerPlanUsage = useMemo(() => {
+    const provider = providerStatuses.find((entry) => entry.instanceId === selectedInstanceId);
+    const planUsage = provider?.planUsage;
+    return planUsage && planUsage.windows.length > 0 ? planUsage : null;
+  }, [providerStatuses, selectedInstanceId]);
 
   // ------------------------------------------------------------------
   // Composer-local state
@@ -3235,6 +3251,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                 className="flex shrink-0 flex-nowrap items-center justify-end gap-2"
               >
                 <ComposerFooterPrimaryActions
+                  planUsage={composerPlanUsage}
+                  activeThreadCostUsd={activeThreadCostUsd}
                   voiceControl={
                     pendingUserInputs.length === 0 && !isComposerApprovalState ? (
                       <ComposerVoiceButton
