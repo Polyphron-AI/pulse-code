@@ -35,6 +35,24 @@ test("one failed test blocks the combined foundation result", () => {
   assert.equal(report.state, "blocked");
   assert.equal(report.suites[1].state, "failed");
 });
+test("MCP gates include the composer, admission and native readiness boundaries", () => {
+  for (const id of [
+    "mcp-composer-lifecycle",
+    "mcp-draft-boundary",
+    "mcp-provider-admission",
+    "mcp-provider-configuration",
+    "mcp-native-readiness",
+  ]) {
+    assert.ok(
+      featureSuites.some((suite) => suite.id === id),
+      id,
+    );
+  }
+  assert.equal(
+    featureSuites.find((suite) => suite.id === "mcp-native-readiness")?.testNamePattern,
+    "native MCP startup",
+  );
+});
 test("timeouts and process failures cannot pass", () => {
   const report = runFeatureSuites(
     "/fixture",

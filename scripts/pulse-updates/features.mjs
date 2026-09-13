@@ -52,6 +52,26 @@ export const featureSuites = [
   { id: "mcp-form", file: "apps/web/src/mcp/mcpForm.test.ts" },
   { id: "mcp-panel", file: "apps/web/src/mcp/McpConnectionsPanel.test.tsx" },
   { id: "mcp-settings", file: "apps/web/src/mcp/McpConnectionsSettings.test.tsx" },
+  { id: "mcp-picker", file: "apps/web/src/mcp/managedMcpPickerLogic.test.ts" },
+  { id: "mcp-send-pause", file: "apps/web/src/mcp/McpSendPause.test.tsx" },
+  { id: "mcp-draft-boundary", file: "apps/web/src/mcp/prepareMcpSubmission.test.ts" },
+  { id: "mcp-composer-lifecycle", file: "apps/web/src/mcp/useManagedMcpComposer.test.tsx" },
+  { id: "mcp-preparation", file: "apps/server/src/mcp/PulseMcpPreparation.test.ts" },
+  {
+    id: "mcp-provider-admission",
+    file: "apps/server/src/provider/Layers/ProviderService.test.ts",
+    testNamePattern: "managed MCP",
+  },
+  {
+    id: "mcp-provider-configuration",
+    file: "apps/server/src/provider/Layers/CodexAdapter.test.ts",
+    testNamePattern: "managed MCP",
+  },
+  {
+    id: "mcp-native-readiness",
+    file: "apps/server/src/provider/Layers/CodexCollabRuntime.integration.test.ts",
+    testNamePattern: "native MCP startup",
+  },
   { id: "dictation-http", file: "apps/server/src/voice/http.test.ts" },
   {
     id: "dictation-client",
@@ -94,13 +114,13 @@ export function runFeatureSuites(root, run, exists = existsSync) {
   });
   return {
     scope:
-      "Pulse modules, managed-skills invocation and dictation integration; not packaged-app acceptance",
+      "Pulse modules, managed-skills invocation, Codex MCP preparation and dictation integration; not packaged-app acceptance",
     state: suites.every((suite) => suite.state === "passed") ? "foundations-passed" : "blocked",
     releaseEligible: false,
     suites,
     remaining: [
       "Managed skills release acceptance on packaged desktop",
-      "MCP provider and composer integration",
+      "MCP real-provider and packaged acceptance; additional provider adapters and new-worktree preparation",
       "Dictation real-model and physical-device acceptance",
       "Packaged-app and Windows verification",
     ],
