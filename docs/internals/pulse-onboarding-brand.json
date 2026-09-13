@@ -1,23 +1,24 @@
 {
-  "feature": "Onboarding branding: first-run wizard and first-run gate identify as Pulse Next",
+  "feature": "Onboarding branding: first-run wizard, recovery gate and hosted web first-use state identify as Pulse Next",
   "policyVersion": "2026-09-13",
   "ledgerVersion": 1,
   "owner": "single implementation owner (Sol)",
   "branch": "feat/pulse-onboarding-brand",
   "worktree": ".worktrees/pulse-onboarding",
   "baseRevision": "885200895c",
-  "problem": "After installing the Pulse Next alpha the first-run wizard still brands itself as T3 Code: dialog title, header wordmark lockup, running-app copy, and the workspace-confirmation failure text.",
+  "problem": "After installing the Pulse Next alpha, the first-run wizard and hosted web first-use state still branded the application as T3 Code.",
   "scope": {
     "in": [
       "apps/web/src/components/onboarding/WelcomeWizard.tsx user-visible product-name strings",
       "apps/web/src/components/onboarding/FirstRunGate.tsx user-visible product-name strings",
+      "apps/web/src/routes/_chat.index.tsx hosted web first-use product-name strings",
       "a Pulse-owned brand component seam for the wizard header wordmark"
     ],
     "out": [
       "artwork for the Pulse mark (owned by the parallel brand-icons slice)",
       "renaming the third-party T3 Connect sign-in service",
       "renaming the real npx t3 CLI commands",
-      "branding outside the onboarding directory (chat empty state, settings, mobile)"
+      "branding outside first-use and recovery flows (settings, general chat surfaces, mobile)"
     ]
   },
   "upstreamCompatibility": {
@@ -93,6 +94,10 @@
       "status": "applicable"
     },
     {
+      "case": "Hosted web first use tells users to connect to Pulse Next while retaining the T3 Connect service name",
+      "status": "applicable"
+    },
+    {
       "case": "T3 Connect remains labelled T3 Connect (third-party service not renamed)",
       "status": "applicable"
     },
@@ -106,7 +111,7 @@
     },
     {
       "case": "Mobile client onboarding",
-      "status": "not applicable (mobile has no WelcomeWizard; separate navigation and screens)"
+      "status": "not applicable (mobile has no WelcomeWizard or hosted web empty state; separate navigation and screens)"
     },
     {
       "case": "Desktop client",
@@ -126,9 +131,11 @@
       "apps/web/src/components/pulse/PulseWordmark.test.tsx renders PRODUCT_BASE_NAME in the Pulse palette",
       "apps/web/src/components/onboarding/onboardingBrand.test.tsx asserts the renamed copy and the deliberately preserved T3 strings"
     ],
-    "command": "vp test run <files> from apps/web"
+    "command": "vp test run src/components/onboarding/onboardingBrand.test.ts src/components/pulse/PulseWordmark.test.tsx from apps/web",
+    "result": "10 tests passed; apps/web typecheck passed"
   },
-  "status": "in progress",
+  "status": "development acceptance passed",
   "blockers": [],
-  "nextAction": "implement the brand seam and string renames, then run the focused tests"
+  "review": "Frozen branch diff reviewed after the full first-use string sweep. The sweep found and fixed the hosted web empty-state copy omitted by the initial slice. T3 Connect and npx t3 command names remain unchanged.",
+  "nextAction": "Integrate after the upstream compatibility merge, then rerun the focused branding tests if onboarding files changed during conflict resolution."
 }

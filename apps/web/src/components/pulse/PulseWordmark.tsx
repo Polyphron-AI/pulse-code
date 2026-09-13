@@ -57,7 +57,7 @@ const ACTIVE_WORDMARK: ComponentType<PulseWordmarkRenderingProps> = PulseTextWor
 export function PulseWordmark({ className }: PulseWordmarkRenderingProps) {
   return (
     <div role="img" aria-label={PRODUCT_BASE_NAME}>
-      <ACTIVE_WORDMARK className={className} />
+      {className === undefined ? <ACTIVE_WORDMARK /> : <ACTIVE_WORDMARK className={className} />}
     </div>
   );
 }

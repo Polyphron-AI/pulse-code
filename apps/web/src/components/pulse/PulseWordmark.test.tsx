@@ -1,33 +1,45 @@
 import { PRODUCT_BASE_NAME } from "@t3tools/shared/productIdentity";
-import { renderToStaticMarkup } from "react-dom/server";
+import { act } from "react";
+import TestRenderer, { type ReactTestRenderer } from "react-test-renderer";
 import { describe, expect, it } from "vite-plus/test";
 
 import { PULSE_BRAND_ACCENT, PulseWordmark } from "./PulseWordmark";
 
 describe("PulseWordmark", () => {
-  it("renders the product name from the shared identity, not a hardcoded literal", () => {
-    const html = renderToStaticMarkup(<PulseWordmark />);
+  async function renderWordmark(className?: string) {
+    let renderer: ReactTestRenderer | undefined;
 
-    expect(html).toContain(PRODUCT_BASE_NAME);
-    expect(html).not.toContain("T3");
+    await act(() => {
+      renderer = TestRenderer.create(
+        className === undefined ? <PulseWordmark /> : <PulseWordmark className={className} />,
+      );
+    });
+
+    return renderer!;
+  }
+
+  it("renders an accessible Pulse product wordmark", async () => {
+    const renderer = await renderWordmark();
+
+    const image = renderer.root.findByProps({ role: "img" });
+    expect(image.props["aria-label"]).toBe(PRODUCT_BASE_NAME);
+    expect(
+      image.findAllByType("span").some((node) => node.children.includes(PRODUCT_BASE_NAME)),
+    ).toBe(true);
+
+    const accent = renderer.root.findByProps({ "aria-hidden": true });
+    expect(accent.props.style.backgroundColor).toBe(PULSE_BRAND_ACCENT);
+
+    await act(() => renderer.unmount());
   });
 
-  it("carries its own accessible name so call sites need no aria-label", () => {
-    const html = renderToStaticMarkup(<PulseWordmark />);
+  it("passes the slot sizing through to the visible wordmark", async () => {
+    const renderer = await renderWordmark("h-4");
 
-    expect(html).toContain(`role="img"`);
-    expect(html).toContain(`aria-label="${PRODUCT_BASE_NAME}"`);
-  });
+    expect(renderer.root.findByProps({ role: "img" }).findByType("span").props.className).toContain(
+      "h-4",
+    );
 
-  it("paints the accent in the Pulse palette", () => {
-    const html = renderToStaticMarkup(<PulseWordmark />);
-
-    expect(html.toLowerCase()).toContain(PULSE_BRAND_ACCENT.toLowerCase());
-  });
-
-  it("passes the slot sizing through to the mark", () => {
-    const html = renderToStaticMarkup(<PulseWordmark className="h-4" />);
-
-    expect(html).toContain("h-4");
+    await act(() => renderer.unmount());
   });
 });

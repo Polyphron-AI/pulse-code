@@ -2,16 +2,18 @@
 // copy arrives branded as T3 Code, and this suite fails the moment a merge
 // reintroduces our-product naming while keeping the genuinely T3-owned strings.
 
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+// @effect-diagnostics-next-line nodeBuiltinImport:off
+import * as NodeFS from "node:fs";
+import * as NodeURL from "node:url";
 import { describe, expect, it } from "vite-plus/test";
 
-function source(file: string) {
-  return readFileSync(fileURLToPath(new URL(file, import.meta.url)), "utf8");
+function source(file: string): string {
+  return NodeFS.readFileSync(NodeURL.fileURLToPath(new URL(file, import.meta.url)), "utf8");
 }
 
 const wizard = source("./WelcomeWizard.tsx");
 const gate = source("./FirstRunGate.tsx");
+const hostedStatic = source("../../routes/_chat.index.tsx");
 
 describe("onboarding product naming", () => {
   it("never names our app T3 Code", () => {
@@ -20,8 +22,10 @@ describe("onboarding product naming", () => {
   });
 
   it("reads the product name from the shared identity seam", () => {
-    for (const file of [wizard, gate]) {
-      expect(file).toContain(`import { PRODUCT_BASE_NAME } from "@t3tools/shared/productIdentity";`);
+    for (const file of [wizard, gate, hostedStatic]) {
+      expect(file).toContain(
+        `import { PRODUCT_BASE_NAME } from "@t3tools/shared/productIdentity";`,
+      );
     }
   });
 
@@ -38,6 +42,12 @@ describe("onboarding product naming", () => {
 
   it("names our app in the workspace confirmation failure", () => {
     expect(gate).toContain("${PRODUCT_BASE_NAME} could not confirm this workspace.");
+  });
+
+  it("names our app in hosted web first-use guidance", () => {
+    expect(hostedStatic).not.toContain("running T3 Code");
+    expect(hostedStatic).toContain("running {PRODUCT_BASE_NAME}");
+    expect(hostedStatic).toContain("Start the {PRODUCT_BASE_NAME} desktop app");
   });
 });
 
