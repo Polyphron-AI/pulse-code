@@ -74,7 +74,7 @@ export const PulseSkillMutation = Schema.Union([
 ]);
 export type PulseSkillMutation = typeof PulseSkillMutation.Type;
 
-export class PulseSkillsError extends Schema.TaggedErrorClass<PulseSkillsError>()(
+export class PulseSkillsError extends Schema.TaggedError<PulseSkillsError>()(
   "PulseSkillsError",
   { message: Schema.String },
 ) {}

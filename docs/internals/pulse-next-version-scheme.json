@@ -27,8 +27,8 @@
     },
     {
       "id": "F2",
-      "statement": "upstream/main is 214 commits ahead of v0.0.40 and its package.json reads 0.0.40 only because upstream bumps the version after cutting a tag.",
-      "consequence": "Merging upstream/main would move Pulse Next past v0.0.40 onto the next development line, contradicting the stated goal. A trial merge produced 28 conflicts, not the 14 the earlier probe recorded, confirming the drift."
+      "statement": "The user explicitly selected current upstream/main, fetched at 20363c32c9bfdbf49c2716ef11d1f18483fcc01b, as the compatibility target despite the historical branch name.",
+      "consequence": "The completed merge adopts the current post-v0.0.40 upstream line while retaining 0.0.40-pulse.1 as the requested Pulse version scheme for this branch. A later release decision should reconcile that label with the adopted upstream line."
     },
     {
       "id": "F3",
@@ -81,11 +81,27 @@
   ],
   "upstreamCompatibility": {
     "mandate": "Take upstream structure and inject Pulse values through the productIdentity seam. Minimise explicitly edited upstream lines.",
-    "effectOfF1": "Because no merge was required, zero upstream logic lines were rewritten. The version scheme touches manifest version fields and Pulse-owned documentation only, which is the smallest possible upstream delta."
+    "mergeResult": "Merged upstream/main at 20363c32c9. Conflict resolution retained upstream's typed HTTP groups, agent access capabilities, desktop launcher signing and protected-resource metadata, attachment draft changes, provider updates and license generation. Pulse-owned identity, managed skills and MCP, dictation, and 0.0.40-pulse.1 manifest values remain in place."
   },
   "evidence": {
-    "location": "reported inline to the coordinator",
-    "focusedTests": []
+    "revision": "pending merge commit",
+    "location": "command output reported to the coordinator",
+    "focusedTests": [
+      "Contracts, client-runtime, server, web and desktop scoped typechecks passed.",
+      "Provider adapter and service suite: 450 tests passed.",
+      "Authenticated HTTP and dictation transport: 34 tests passed.",
+      "Web composer, draft migration and integrations settings: 290 tests passed.",
+      "Desktop identity, startup, URL handling, protocol, window and launcher: 68 tests passed.",
+      "Desktop artifact packaging: 74 tests passed.",
+      "Web production build passed, including Parakeet worker and third-party license generation.",
+      "Server production bundle passed."
+    ],
+    "knownCheckFinding": "The combined third-party license unit suite has one upstream Windows path-separator assertion failure: expected dist/third-party/NOTICE.txt but received dist\\third-party\\NOTICE.txt. License generation itself passed in the web production build.",
+    "workflowMetrics": {
+      "fullReviewPasses": 1,
+      "conflictRepairBatches": 3,
+      "productionBuildRuns": 3
+    }
   },
   "mergeAcceptanceCases": [
     "Fetched upstream/main revision is recorded and is a parent of the completed merge commit.",
@@ -98,5 +114,5 @@
     "The final frozen diff is reviewed as one batch and the ledger records commands, outcomes, remaining release gates, and exact next action."
   ],
   "blockers": [],
-  "nextAction": "Merge fetched upstream/main at 20363c32c9, resolve the full conflict set, verify affected behavior and production builds, review the frozen diff, then commit and push this branch."
+  "nextAction": "Commit the resolved merge, record its revision, push sync/upstream-v040, then let the coordinator integrate it only after the five feature branches are rebased or ported against this new upstream base."
 }
