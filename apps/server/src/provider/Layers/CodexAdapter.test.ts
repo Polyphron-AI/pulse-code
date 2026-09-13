@@ -451,12 +451,18 @@ sessionErrorLayer("CodexAdapterLive session errors", (it) => {
   it.effect("forwards resolved managed skills to the Codex session runtime", () =>
     Effect.gen(function* () {
       const adapter = yield* CodexAdapter;
+      const threadId = asThreadId("sess-managed-skills");
+      yield* adapter.startSession({
+        provider: ProviderDriverKind.make("codex"),
+        threadId,
+        runtimeMode: "full-access",
+      });
       const runtime = sessionRuntimeFactory.lastRuntime;
       NodeAssert.ok(runtime);
       runtime.sendTurnImpl.mockClear();
 
       yield* adapter.sendTurn({
-        threadId: asThreadId("sess-missing"),
+        threadId,
         input: "review",
         resolvedSkills: [{ name: "Code review", path: "/trusted/review/SKILL.md" }],
       });
