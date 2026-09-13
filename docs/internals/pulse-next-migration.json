@@ -27,6 +27,19 @@
     "productionChanged": false,
     "runbook": "docs/operations/pulse-next-branches.md"
   },
+  "upstream040Integration": {
+    "state": "integrated-and-verified",
+    "upstreamSyncRevision": "ca40d5d428",
+    "integrationMergeRevision": "cacda8cec8",
+    "portedBranches": {
+      "feat/pulse-brand-icons": "d27cc5380f",
+      "feat/pulse-settings-subnav": "b63340684a",
+      "feat/pulse-onboarding-brand": "f525237b56",
+      "fix/pulse-parakeet-init": "cbc09ec9c0"
+    },
+    "verification": "188 focused tests passed across 13 files; scoped web, scripts and shared typechecks passed; generated Pulse icon integrity passed; production web build passed with existing chunk-size and plugin-timing warnings.",
+    "clientVerification": "No browser, packaged desktop, physical mobile or real microphone pass was requested or run."
+  },
   "upstreamBase": "09e8de9c655ae85410bf6b00446f272a01da81c7",
   "sourceSnapshots": {
     "pulseDevelop": "353e62727b3f5927e71ad54c73caee2ea3183057",
