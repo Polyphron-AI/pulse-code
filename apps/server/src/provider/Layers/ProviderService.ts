@@ -1468,9 +1468,6 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
           adapter.listSessions(),
         ).pipe(Effect.map((groups) => groups.flatMap((group) => group)));
         const active = sessions.find((session) => session.threadId === input.threadId);
-        if (active?.activeTurnId !== undefined || active?.status === "running") {
-          return { status: "active-turn" } as const;
-        }
         const adapter = yield* registry.getByInstance(instanceId);
         if (connections.length > 0 && adapter.prepareManagedMcp === undefined) {
           return { status: "unsupported-provider", selectedConnectionIds } as const;
@@ -1481,7 +1478,10 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
           pulseMcpPreparation.appliedFingerprints.get(input.threadId) === fingerprint &&
           JSON.stringify(currentlyAppliedServers) === JSON.stringify(servers) &&
           active?.providerInstanceId === instanceId &&
-          active.status === "ready";
+          (active.status === "ready" || active.status === "running");
+        if ((active?.activeTurnId !== undefined || active?.status === "running") && !canReuse) {
+          return { status: "active-turn" } as const;
+        }
         const hadManagedServers = currentlyAppliedServers.length > 0;
         if (!canReuse && (connections.length > 0 || hadManagedServers)) {
           if (active !== undefined) {
@@ -1504,7 +1504,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
           );
         }
         const statuses =
-          connections.length === 0
+          connections.length === 0 || canReuse
             ? []
             : yield* adapter.prepareManagedMcp!(input.threadId, servers);
         const publicStatuses = PulseMcpPreparation.publicStatuses(servers, statuses);
@@ -1567,23 +1567,40 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
   )(function* (input) {
     let preparationId = input.preparationId;
     if (preparationId === undefined) {
+      if (Option.isNone(pulseMcpConfig)) return;
+      const durableConnections = yield* pulseMcpConfig.value
+        .resolveTurnConnections({
+          providerInstanceId: input.providerInstanceId,
+          threadId: input.threadId,
+        })
+        .pipe(
+          Effect.mapError((cause) =>
+            toValidationError("ProviderService.consumePulseMcpPreparation", cause.message, cause),
+          ),
+        );
+      const durableServers: ReadonlyArray<ProviderManagedMcpServer> = durableConnections.map(
+        (connection) => ({ id: connection.id, name: connection.name, ...connection.config }),
+      );
+      const appliedServers = McpProviderSession.readManagedMcpServers(input.threadId);
+      if (durableServers.length === 0 && appliedServers.length === 0) return;
       if (input.preparingWorktree === true) {
-        if (Option.isNone(pulseMcpConfig)) return;
-        const configured = yield* pulseMcpConfig.value
-          .resolveTurnConnections({
-            providerInstanceId: input.providerInstanceId,
-            threadId: input.threadId,
-          })
-          .pipe(
-            Effect.mapError((cause) =>
-              toValidationError("ProviderService.consumePulseMcpPreparation", cause.message, cause),
-            ),
-          );
-        if (configured.length === 0) return;
         return yield* toValidationError(
           "ProviderService.consumePulseMcpPreparation",
           "Managed MCP defaults cannot be prepared until the new worktree exists.",
         );
+      }
+      const durableFingerprint = PulseMcpPreparation.fingerprint({
+        providerInstanceId: input.providerInstanceId,
+        cwd: input.desiredCwd ?? process.cwd(),
+        runtimeMode: input.runtimeMode,
+        modelSelection: input.modelSelection,
+        servers: durableServers,
+      });
+      if (
+        pulseMcpPreparation.appliedFingerprints.get(input.threadId) === durableFingerprint &&
+        JSON.stringify(appliedServers) === JSON.stringify(durableServers)
+      ) {
+        return;
       }
       const reconciled = yield* preparePulseMcp({
         threadId: input.threadId,
@@ -1658,7 +1675,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         );
         if (
           preparation.selectedConnectionIds.length > 0 &&
-          (preparedSession?.status !== "ready" ||
+          ((preparedSession?.status !== "ready" && preparedSession?.status !== "running") ||
             path.resolve(preparedSession.cwd ?? "") !== path.resolve(preparation.cwd ?? ""))
         ) {
           return yield* toValidationError(

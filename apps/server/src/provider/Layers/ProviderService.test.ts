@@ -1306,6 +1306,69 @@ managedMcpRouting.layer("managed MCP turn preparation", (it) => {
         startsBeforeRemoteClear + 1,
       );
       assert.deepEqual(McpProviderSession.readManagedMcpServers(readyThread), []);
+      managedMcpRouting.codex.updateSession(readyThread, (session) => ({
+        ...session,
+        status: "running",
+        activeTurnId: TurnId.make("active-empty"),
+      }));
+      yield* service.consumePulseMcpPreparation!({
+        threadId: readyThread,
+        providerInstanceId: codexInstanceId,
+        commandId: "native-empty-queued",
+        runtimeMode: "full-access",
+        modelSelection: undefined,
+        desiredCwd: cwd,
+      });
+
+      const activeThread = asThreadId("tokenless-active-applied");
+      resolvedManagedMcpConnections = [managedMcpConnection];
+      const activePrepared = yield* service.preparePulseMcp!({
+        threadId: activeThread,
+        providerSession: {
+          threadId: activeThread,
+          providerInstanceId: codexInstanceId,
+          runtimeMode: "full-access",
+          cwd,
+        },
+      });
+      assert(activePrepared.status === "ready");
+      yield* service.consumePulseMcpPreparation!({
+        threadId: activeThread,
+        preparationId: activePrepared.preparationId,
+        providerInstanceId: codexInstanceId,
+        commandId: "active-first",
+        runtimeMode: "full-access",
+        modelSelection: undefined,
+        desiredCwd: cwd,
+      });
+      managedMcpRouting.codex.updateSession(activeThread, (session) => ({
+        ...session,
+        status: "running",
+        activeTurnId: TurnId.make("active-managed"),
+      }));
+      yield* service.consumePulseMcpPreparation!({
+        threadId: activeThread,
+        providerInstanceId: codexInstanceId,
+        commandId: "active-unchanged-queued",
+        runtimeMode: "full-access",
+        modelSelection: undefined,
+        desiredCwd: cwd,
+      });
+      resolvedManagedMcpConnections = [
+        {
+          ...managedMcpConnection,
+          config: { ...managedMcpConnection.config, url: "https://active-changed.example.test" },
+        },
+      ];
+      const changedWhileActive = yield* service.consumePulseMcpPreparation!({
+        threadId: activeThread,
+        providerInstanceId: codexInstanceId,
+        commandId: "active-changed-queued",
+        runtimeMode: "full-access",
+        modelSelection: undefined,
+        desiredCwd: cwd,
+      }).pipe(Effect.exit);
+      assert(Exit.isFailure(changedWhileActive));
 
       const failedThread = asThreadId("tokenless-failed");
       resolvedManagedMcpConnections = [managedMcpConnection];
@@ -1350,24 +1413,6 @@ managedMcpRouting.layer("managed MCP turn preparation", (it) => {
         desiredCwd: cwd,
         preparingWorktree: true,
       });
-
-      yield* service.sendTurn({ threadId: readyThread, input: "first", attachments: [] });
-      const startsBeforeClear = managedMcpRouting.codex.startSession.mock.calls.length;
-      McpProviderSession.setManagedMcpServers(readyThread, [
-        { id: "managed", name: "Managed", ...managedMcpConnection.config },
-      ]);
-      assert.equal(McpProviderSession.readManagedMcpServers(readyThread).length, 1);
-      resolvedManagedMcpConnections = [];
-      yield* service.consumePulseMcpPreparation!({
-        threadId: readyThread,
-        providerInstanceId: codexInstanceId,
-        commandId: "native-cleared",
-        runtimeMode: "full-access",
-        modelSelection: undefined,
-        desiredCwd: cwd,
-      });
-      assert.equal(managedMcpRouting.codex.startSession.mock.calls.length, startsBeforeClear + 1);
-      assert.deepEqual(McpProviderSession.readManagedMcpServers(readyThread), []);
     }),
   );
 });
