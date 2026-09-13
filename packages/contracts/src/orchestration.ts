@@ -17,6 +17,7 @@ import {
   PositiveInt,
   ProjectId,
   ProviderItemId,
+  PulseMcpPreparationId,
   ThreadId,
   TrimmedNonEmptyString,
   TrimmedString,
@@ -987,6 +988,7 @@ export const ThreadTurnStartCommand = Schema.Struct({
   bootstrap: Schema.optional(ThreadTurnStartBootstrap),
   sourceProposedPlan: Schema.optional(SourceProposedPlanReference),
   pulseSkills: Schema.optional(PulseSkillSelectionList),
+  pulseMcpPreparationId: Schema.optional(PulseMcpPreparationId),
   createdAt: IsoDateTime,
 });
 
@@ -1007,6 +1009,7 @@ const ClientThreadTurnStartCommand = Schema.Struct({
   bootstrap: Schema.optional(ThreadTurnStartBootstrap),
   sourceProposedPlan: Schema.optional(SourceProposedPlanReference),
   pulseSkills: Schema.optional(PulseSkillSelectionList),
+  pulseMcpPreparationId: Schema.optional(PulseMcpPreparationId),
   createdAt: IsoDateTime,
 });
 

@@ -246,6 +246,7 @@ export const WS_METHODS = {
   pulseMcpGetThreadOverride: PULSE_MCP_METHODS.getThreadOverride,
   pulseMcpSetThreadOverride: PULSE_MCP_METHODS.setThreadOverride,
   pulseMcpResetThreadOverride: PULSE_MCP_METHODS.resetThreadOverride,
+  pulseMcpPrepareTurn: PULSE_MCP_METHODS.prepareTurn,
   ...PULSE_SKILLS_METHODS,
   // Project registry methods
   projectsList: "projects.list",

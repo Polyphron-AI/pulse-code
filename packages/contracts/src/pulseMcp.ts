@@ -2,8 +2,9 @@ import * as Schema from "effect/Schema";
 import * as Rpc from "effect/unstable/rpc/Rpc";
 
 import { EnvironmentAuthorizationError } from "./auth.ts";
-import { ThreadId } from "./baseSchemas.ts";
+import { PulseMcpPreparationId, ThreadId } from "./baseSchemas.ts";
 import { ProviderInstanceId } from "./providerInstance.ts";
+import { ProviderSessionStartInput } from "./provider.ts";
 
 const ConnectionId = Schema.String.check(Schema.isPattern(/^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/));
 const Label = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256));
@@ -79,10 +80,56 @@ export const PULSE_MCP_METHODS = {
   getThreadOverride: "pulse.mcp.getThreadOverride",
   setThreadOverride: "pulse.mcp.setThreadOverride",
   resetThreadOverride: "pulse.mcp.resetThreadOverride",
+  prepareTurn: "pulse.mcp.prepareTurn",
 } as const;
 
 const Selection = Schema.Struct({ connectionIds: ConnectionIds });
 const OptionalSelection = Schema.Struct({ connectionIds: Schema.optionalKey(ConnectionIds) });
+const PreparedConnectionBase = {
+  connectionId: ConnectionId,
+  name: Label,
+} as const;
+const PreparedConnection = Schema.Union([
+  Schema.Struct({ ...PreparedConnectionBase, status: Schema.Literal("ready") }),
+  Schema.Struct({ ...PreparedConnectionBase, status: Schema.Literal("unknown") }),
+  Schema.Struct({
+    ...PreparedConnectionBase,
+    status: Schema.Literal("failed"),
+    message: Schema.String,
+  }),
+]);
+
+export const PulseMcpPrepareTurnInput = Schema.Struct({
+  threadId: ThreadId,
+  providerSession: ProviderSessionStartInput,
+  /** Omitted resolves the thread override or provider default. Empty selects no managed servers. */
+  connectionIds: Schema.optionalKey(ConnectionIds),
+  /** One-turn exclusions. They never update the saved thread or provider selection. */
+  excludedConnectionIds: Schema.optionalKey(ConnectionIds),
+  /** Forces a fresh native startup attempt after a failed preparation. */
+  retry: Schema.optionalKey(Schema.Boolean),
+});
+export type PulseMcpPrepareTurnInput = typeof PulseMcpPrepareTurnInput.Type;
+
+export const PulseMcpPrepareTurnResult = Schema.Union([
+  Schema.Struct({
+    status: Schema.Literal("ready"),
+    preparationId: PulseMcpPreparationId,
+    selectedConnectionIds: ConnectionIds,
+    connections: Schema.Array(PreparedConnection),
+  }),
+  Schema.Struct({
+    status: Schema.Literal("failed"),
+    selectedConnectionIds: ConnectionIds,
+    connections: Schema.Array(PreparedConnection),
+  }),
+  Schema.Struct({
+    status: Schema.Literal("unsupported-provider"),
+    selectedConnectionIds: ConnectionIds,
+  }),
+  Schema.Struct({ status: Schema.Literal("active-turn") }),
+]);
+export type PulseMcpPrepareTurnResult = typeof PulseMcpPrepareTurnResult.Type;
 
 export const PulseMcpRpcs = [
   Rpc.make(PULSE_MCP_METHODS.list, {
@@ -126,6 +173,11 @@ export const PulseMcpRpcs = [
   Rpc.make(PULSE_MCP_METHODS.resetThreadOverride, {
     payload: Schema.Struct({ threadId: ThreadId }),
     success: OptionalSelection,
+    error: errors,
+  }),
+  Rpc.make(PULSE_MCP_METHODS.prepareTurn, {
+    payload: PulseMcpPrepareTurnInput,
+    success: PulseMcpPrepareTurnResult,
     error: errors,
   }),
 ] as const;
