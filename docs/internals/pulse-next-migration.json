@@ -394,8 +394,8 @@
     "parallelism": "Only non-overlapping parts of the same active feature in separate worktrees; sequence shared contracts/runtime changes. No unrelated feature implementation in parallel.",
     "completion": "Working real-client flow, focused automated checks, integrated review, failure recovery and compatibility evidence. Helpers, endpoints and settings alone do not mean feature complete.",
     "commits": "Keep layered commits without repeated helper-by-helper review gates.",
-    "activeFeature": "mcp-provider-composer-integration",
-    "activeFeatureStatus": "development-acceptance-passed",
+    "activeFeature": "mcp-claude-opencode-adapters",
+    "activeFeatureStatus": "implementation-planned",
     "implementationPlan": "docs/plans/2026-09-13-mcp-end-to-end.md",
     "previousDictationEvidence": {
       "verifiedAt": "2026-09-13",
@@ -441,7 +441,7 @@
       "limits": "Synthetic development acceptance only. Codex-first managed adapter; other providers retain native MCP behavior. Managed selection during new-worktree creation is explicitly blocked until the workspace exists. No signed installer, real external MCP, physical native mobile or remote deployment certification."
     }
   },
-  "nextAction": "Managed skills, dictation and Codex-first MCP passed development acceptance. Follow the delivery playbook for launch-release-acceptance. Real-provider, physical-device, signing, installer and upgrade/recovery checks remain release gates; do not publish or deploy from synthetic evidence alone.",
+  "nextAction": "Implement Claude and OpenCode managed MCP adapters using the existing composer and preparation boundary. Verify provider-native session isolation and readiness, then review the frozen combined feature. No publication or deployment.",
   "parallelIntegrationBatches": [
     {
       "id": "skills-library-and-settings",
@@ -623,6 +623,28 @@
   },
   "mcpBehaviorProposal": "docs/internals/pulse-next-mcp-behavior.md",
   "activeImplementationBatch": {
+    "id": "mcp-claude-opencode-adapters",
+    "state": "implementation-planned",
+    "baseRevision": "7d80a6744",
+    "branch": "experiment/pulse-next-v040",
+    "worktree": ".worktrees/pulse-next",
+    "implementationOwner": "sol_mcp_provider_support",
+    "scope": "Extend existing managed MCP selection and send preparation to Claude and OpenCode. Keep translation and readiness in provider adapters, retain native MCP configuration, and preserve Codex behavior.",
+    "acceptanceCases": [
+      "HTTP headers and stdio argv/env reach the selected provider without global or project configuration writes or secret disclosure.",
+      "First send, subsequent session reuse, promotion, reload and tokenless older-client sends reconcile the saved selection.",
+      "Provider-reported failure pauses sending; Retry rechecks; Continue excludes failures for one turn only; Cancel preserves draft.",
+      "Deselect and changed configuration take effect safely; active turns are not restarted; concurrent threads do not share managed connections.",
+      "Live per-provider capabilities gate web/desktop/compact web; absent capabilities and other providers remain unsupported without breaking ordinary sends.",
+      "Existing native MCPs remain available and owned process/session cleanup does not affect unrelated sessions.",
+      "New-worktree restriction remains explicit; remote configuration belongs to the hosting environment. Native mobile uses existing server compatibility, no new native picker.",
+      "Focused adapter, shared preparation, hook and pipeline tests; configured scoped typechecks; one combined frozen review and applicable build. Synthetic evidence is not real-provider or packaged release certification."
+    ],
+    "completionBlockers": [],
+    "nextAction": "Confirm native Claude/OpenCode configuration, status and isolation APIs; implement end to end in one isolated Sol worktree.",
+    "releaseEligible": false
+  },
+  "previousCodexMcpImplementationBatch": {
     "id": "mcp-provider-composer-integration",
     "state": "development-acceptance-passed",
     "branch": "experiment/pulse-next-v040",
