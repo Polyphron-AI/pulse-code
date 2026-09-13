@@ -54,6 +54,15 @@ export interface ProviderAdapterCapabilities {
   readonly supportsConversationRollback?: boolean;
 }
 
+export interface ProviderResolvedSkill {
+  readonly name: string;
+  readonly path: string;
+}
+
+export type ProviderAdapterSendTurnInput = ProviderSendTurnInput & {
+  readonly resolvedSkills?: ReadonlyArray<ProviderResolvedSkill>;
+};
+
 export interface ProviderThreadTurnSnapshot {
   readonly id: TurnId;
   readonly items: ReadonlyArray<unknown>;
@@ -82,7 +91,7 @@ export interface ProviderAdapterShape<TError> {
    * Send a turn to an active provider session.
    */
   readonly sendTurn: (
-    input: ProviderSendTurnInput,
+    input: ProviderAdapterSendTurnInput,
   ) => Effect.Effect<ProviderTurnStartResult, TError>;
 
   /** Omitted when this adapter does not support manual context compaction. */

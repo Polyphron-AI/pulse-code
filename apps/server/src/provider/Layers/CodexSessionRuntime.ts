@@ -178,6 +178,7 @@ export interface CodexSessionRuntimeSendTurnInput {
   readonly serviceTier?: CodexServiceTier | undefined;
   readonly effort?: EffectCodexSchema.V2TurnStartParams__ReasoningEffort | undefined;
   readonly interactionMode?: ProviderInteractionMode;
+  readonly skills?: ReadonlyArray<{ readonly name: string; readonly path: string }>;
 }
 
 export interface CodexThreadTurnSnapshot {
@@ -604,6 +605,7 @@ export function buildTurnStartParams(input: {
   readonly interactionMode?: ProviderInteractionMode;
   /** Defaults to true so callers that predate the agent-access gate are unchanged. */
   readonly browserToolsAvailable?: boolean;
+  readonly skills?: ReadonlyArray<{ readonly name: string; readonly path: string }>;
 }): Effect.Effect<
   CodexTurnStartParamsWithCollaborationMode,
   CodexErrors.CodexAppServerProtocolParseError
@@ -617,6 +619,9 @@ export function buildTurnStartParams(input: {
   }
   for (const attachment of input.attachments ?? []) {
     turnInput.push(attachment);
+  }
+  for (const skill of input.skills ?? []) {
+    turnInput.push({ type: "skill", name: skill.name, path: skill.path });
   }
 
   const config = runtimeModeToThreadConfig(input.runtimeMode);
@@ -2349,6 +2354,7 @@ export const makeCodexSessionRuntime = (
             ...(input.serviceTier ? { serviceTier: input.serviceTier } : {}),
             ...(input.effort ? { effort: input.effort } : {}),
             ...(input.interactionMode ? { interactionMode: input.interactionMode } : {}),
+            ...(input.skills ? { skills: input.skills } : {}),
             // Derived from the session's own MCP configuration rather than the
             // setting, so the prompt describes the tools this turn actually
             // has even if the setting changed after the session started.

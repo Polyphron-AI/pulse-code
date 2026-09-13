@@ -44,6 +44,7 @@ import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import * as SchemaIssue from "effect/SchemaIssue";
 import * as Stream from "effect/Stream";
+import * as Path from "effect/Path";
 
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
 import * as ServerConfig from "../../config.ts";
@@ -73,6 +74,7 @@ import * as AnalyticsService from "../../telemetry/AnalyticsService.ts";
 import * as McpProviderSession from "../../mcp/McpProviderSession.ts";
 import * as McpSessionRegistry from "../../mcp/McpSessionRegistry.ts";
 import * as ServerSettings from "../../serverSettings.ts";
+import { ManagedSkillLibrary } from "../../skills/ManagedSkillLibrary.ts";
 import * as ProjectionSnapshotQuery from "../../orchestration/Services/ProjectionSnapshotQuery.ts";
 const isModelSelection = Schema.is(ModelSelection);
 
@@ -105,6 +107,7 @@ export interface ProviderServiceLiveOptions {
   readonly issueMcpCredential?: typeof McpSessionRegistry.issueActiveMcpCredential;
   /** Same seam as `issueMcpCredential`, for observing the deny path's revoke. */
   readonly revokeMcpCredential?: typeof McpSessionRegistry.revokeActiveMcpThread;
+  readonly managedSkillLibrary?: Pick<ManagedSkillLibrary, "resolveSelection">;
 }
 
 interface TurnAnalyticsMetadata {
@@ -328,6 +331,10 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
   const registry = yield* ProviderAdapterRegistry.ProviderAdapterRegistry;
   const directory = yield* ProviderSessionDirectory.ProviderSessionDirectory;
   const serverSettings = yield* ServerSettings.ServerSettingsService;
+  const path = yield* Path.Path;
+  const managedSkills =
+    options?.managedSkillLibrary ??
+    new ManagedSkillLibrary(path.join(serverConfig.stateDir, "pulse", "skills"));
   const projectionQuery = yield* Effect.serviceOption(
     ProjectionSnapshotQuery.ProjectionSnapshotQuery,
   );
@@ -1452,7 +1459,34 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         }),
         (turnMetadata) =>
           Effect.gen(function* () {
-            const turn = yield* routed.adapter.sendTurn(input);
+            if ((input.pulseSkills?.length ?? 0) > 0 && routed.adapter.provider !== "codex") {
+              return yield* toValidationError(
+                "ProviderService.sendTurn",
+                `Provider '${routed.adapter.provider}' does not support managed skill invocation`,
+              );
+            }
+            const resolvedSkills =
+              input.pulseSkills === undefined || input.pulseSkills.length === 0
+                ? undefined
+                : yield* Effect.tryPromise({
+                    try: () => managedSkills.resolveSelection(input.pulseSkills ?? []),
+                    catch: (cause) =>
+                      toValidationError(
+                        "ProviderService.sendTurn",
+                        cause instanceof Error
+                          ? cause.message
+                          : "Managed skill selection could not be resolved",
+                        cause,
+                      ),
+                  }).pipe(
+                    Effect.map((skills) =>
+                      skills.map((skill) => ({ name: skill.name, path: skill.skillPath })),
+                    ),
+                  );
+            const turn = yield* routed.adapter.sendTurn({
+              ...input,
+              ...(resolvedSkills !== undefined ? { resolvedSkills } : {}),
+            });
             yield* associateTurnAnalytics({
               providerInstanceId: routed.instanceId,
               threadId: input.threadId,

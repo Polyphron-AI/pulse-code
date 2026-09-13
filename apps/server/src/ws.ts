@@ -1289,6 +1289,7 @@ const makeWsRpcLayer = (
             shellResumeCompletionMarker: true,
             pulseCapabilities: {
               managedSkills: true,
+              codexManagedSkills: true,
               mcpManagement: true,
               mcpCreateOnly: true,
               groqDictation: true,
