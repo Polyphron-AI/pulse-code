@@ -379,12 +379,24 @@
   "deliveryPolicy": {
     "mode": "one-feature-end-to-end",
     "approvedAt": "2026-09-13",
+    "playbook": "docs/operations/pulse-feature-delivery.md",
+    "policyVersion": "2026-09-13",
+    "sharedPolicyCommit": "441e8bd20",
+    "usageEfficiency": {
+      "approvedAt": "2026-09-13",
+      "implementationOwner": "One Sol per end-to-end feature by default; Astra owns scope, dependencies and integration.",
+      "beforeCoding": "Record applicable acceptance cases, unsupported scope and completion blockers before implementation.",
+      "review": "One complete checklist review of a frozen revision; batch findings, then recheck changed code and affected cases.",
+      "verification": "Prove the reusable fixture first; focused checks during implementation; one final combined check and applicable build. Invalidate evidence only when relevant inputs change.",
+      "context": "Short agent briefs and one authoritative JSON handoff; no full-history copies, repeated success logs or automatic agent loops.",
+      "measurement": "Use actual token telemetry when available; otherwise record review rounds, repeated builds and fixture reruns as proxies, never claimed token savings."
+    },
     "rule": "Finish one usable user flow across UI, contracts, server/provider and failure recovery, then test and review the combined result before starting another feature.",
     "parallelism": "Only non-overlapping parts of the same active feature in separate worktrees; sequence shared contracts/runtime changes. No unrelated feature implementation in parallel.",
     "completion": "Working real-client flow, focused automated checks, integrated review, failure recovery and compatibility evidence. Helpers, endpoints and settings alone do not mean feature complete.",
     "commits": "Keep layered commits without repeated helper-by-helper review gates.",
     "activeFeature": "mcp-provider-composer-integration",
-    "activeFeatureStatus": "implementing",
+    "activeFeatureStatus": "paused-for-workflow-update",
     "implementationPlan": "docs/plans/2026-09-13-mcp-end-to-end.md",
     "previousDictationEvidence": {
       "verifiedAt": "2026-09-13",
@@ -416,7 +428,7 @@
     "nextFeature": "launch-release-acceptance",
     "blockedPolicy": "Record the blocker and request direction before switching features or declaring partial work complete."
   },
-  "nextAction": "Managed skills and dictation passed development acceptance. Next feature: MCP provider/composer integration, including selected-connection failure pause, Retry and Continue without it. Dictation physical-device, real-model and packaged desktop acceptance remain release gates; do not mark a release eligible from synthetic tests alone.",
+  "nextAction": "Follow deliveryPolicy.playbook and resume activeImplementationBatch when feature work is requested. MCP remains paused and incomplete; preserve pending work and prior evidence. Physical-device, real-model and packaged desktop acceptance remain separate release gates.",
   "parallelIntegrationBatches": [
     {
       "id": "skills-library-and-settings",
@@ -598,6 +610,24 @@
   },
   "mcpBehaviorProposal": "docs/internals/pulse-next-mcp-behavior.md",
   "activeImplementationBatch": {
+    "id": "mcp-provider-composer-integration",
+    "state": "paused-incomplete",
+    "branch": "experiment/pulse-next-v040",
+    "integrationRevision": "b2882609c",
+    "worktree": ".worktrees/pulse-next",
+    "completionBlockers": [
+      "Finish and test preparation-owned session expiry cleanup; never stop a reused or running upstream session.",
+      "Verify tokenless exact-match admission requires a live healthy provider session.",
+      "Verify explicit empty-selection preparation preserves ordinary active-turn queues.",
+      "Review final hook retry/cancellation fixes and run affected combined acceptance on the final revision."
+    ],
+    "preservedWork": "Uncommitted server follow-up in .worktrees/pulse-next-skills/apps/server/src/provider/Layers/ProviderService.ts; inspect before resuming or cherry-picking.",
+    "evidence": "Earlier browser checks passed ready send, repaired Retry, Cancel, one-turn Continue without it, defaults and promotion/reload. Desktop and mobile-web PNGs are in .t3/visual-evidence. These are prior evidence, not final acceptance of pending fixes.",
+    "nextAction": "Resume the existing server follow-up after inspecting its dirty worktree; finish the listed cases as one batch, freeze the revision, then request one complete review. Do not restart implementation or open another feature.",
+    "optionalImprovements": [],
+    "releaseEligible": false
+  },
+  "previousManagedSkillsFoundationBatch": {
     "id": "managed-skills-foundation",
     "state": "foundation-integrated",
     "agent": "sol_skills_fixes",

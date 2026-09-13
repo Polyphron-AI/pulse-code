@@ -1,5 +1,9 @@
 # MCP end-to-end integration
 
+Follow the [delivery playbook](../operations/pulse-feature-delivery.md).
+The active JSON ledger owns current progress and blockers; this plan is historical
+design context, not a second live checklist.
+
 Implement the approved behavior in `docs/internals/pulse-next-mcp-behavior.md`.
 Finish this feature before starting another launch feature.
 
@@ -32,3 +36,19 @@ tested. Provider-native connections remain untouched.
 Root sequences contracts and integration. Sol implements the server/provider
 domain in its own worktree; independent presentation work may follow once the
 contract is frozen. No stable/develop changes, push or deployment in this batch.
+
+## Compatibility lessons
+
+- Separate the one-turn admission claim from the configuration applied to a
+  provider session. Consuming a claim must not force a reconnect on every turn.
+- Validate the actual workspace and ready session at dispatch, not just the
+  selection shown by the client. Test fixtures must echo the requested workspace
+  instead of returning an unrelated captured path.
+- Reconcile legacy clients on the server: no new picker does not mean stale tools
+  may survive selection changes, or that known connection failures may be ignored.
+- Keep all selection persistence ordered, including draft promotion and resetting
+  defaults. Remounts and rapid selection changes are part of the same user flow.
+- Test both compact and expanded composer branches. A responsive viewport can
+  render a different control tree, not merely smaller CSS.
+- Verify a persisted turn and provider receipt. An optimistically cleared composer
+  is not evidence that the provider received a prompt.
