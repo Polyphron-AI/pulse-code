@@ -14,9 +14,9 @@ const defaultInput = {
   platform: "darwin",
   processArch: "arm64",
   appVersion: "0.0.22",
-  appPath: "/Applications/T3 Code.app/Contents/Resources/app.asar",
+  appPath: "/Applications/Pulse Next.app/Contents/Resources/app.asar",
   isPackaged: false,
-  resourcesPath: "/Applications/T3 Code.app/Contents/Resources",
+  resourcesPath: "/Applications/Pulse Next.app/Contents/Resources",
   runningUnderArm64Translation: false,
 } satisfies DesktopEnvironment.MakeDesktopEnvironmentInput;
 
@@ -73,8 +73,8 @@ describe("DesktopEnvironment", () => {
       assert.equal(environment.serverRoot, "/repo");
       assert.equal(environment.backendEntryPath, "/repo/apps/server/dist/bin.mjs");
       assert.equal(environment.backendCwd, "/repo");
-      assert.equal(environment.appUserModelId, "com.t3tools.t3code.dev");
-      assert.equal(environment.linuxWmClass, "t3code-dev");
+      assert.equal(environment.appUserModelId, "ai.polyphron.pulsenext.dev");
+      assert.equal(environment.linuxWmClass, "pulsenext-dev");
       assert.deepEqual(
         Option.map(environment.devServerUrl, (url) => url.href),
         Option.some("http://localhost:5173/"),
@@ -84,6 +84,22 @@ describe("DesktopEnvironment", () => {
       assert.deepEqual(environment.commitHashOverride, Option.some("0123456789abcdef"));
       assert.deepEqual(environment.otlpTracesUrl, Option.some("http://127.0.0.1:4318/v1/traces"));
       assert.equal(environment.otlpExportIntervalMs, 2500);
+    }),
+  );
+
+  it.effect("identifies a production install as Pulse Next, never as T3 Code", () =>
+    Effect.gen(function* () {
+      // These four values decide which install folder, Start menu entry,
+      // taskbar group and roaming directory the app claims on a machine that
+      // also has T3 Code installed.
+      const environment = yield* makeEnvironment();
+
+      assert.equal(environment.appUserModelId, "ai.polyphron.pulsenext");
+      assert.equal(environment.userDataDirName, "pulsenext");
+      assert.equal(environment.linuxDesktopEntryName, "pulsenext.desktop");
+      assert.equal(environment.linuxWmClass, "pulsenext");
+      assert.equal(environment.displayName, "Pulse Next (Alpha)");
+      assert.equal(environment.baseDir, "/Users/alice/.pulse-next");
     }),
   );
 
@@ -130,8 +146,8 @@ describe("DesktopEnvironment", () => {
       );
       const production = yield* makeEnvironment();
 
-      assert.equal(development.stateDir, "/Users/alice/.t3/dev");
-      assert.equal(production.stateDir, "/Users/alice/.t3/userdata");
+      assert.equal(development.stateDir, "/Users/alice/.pulse-next/dev");
+      assert.equal(production.stateDir, "/Users/alice/.pulse-next/userdata");
     }),
   );
 
@@ -140,12 +156,12 @@ describe("DesktopEnvironment", () => {
       const environment = yield* makeEnvironment(
         {},
         {
-          T3CODE_DESKTOP_APP_USER_MODEL_ID: " com.t3tools.t3code.dev.local ",
+          T3CODE_DESKTOP_APP_USER_MODEL_ID: " ai.polyphron.pulsenext.dev.local ",
           VITE_DEV_SERVER_URL: "http://localhost:5173",
         },
       );
 
-      assert.equal(environment.appUserModelId, "com.t3tools.t3code.dev.local");
+      assert.equal(environment.appUserModelId, "ai.polyphron.pulsenext.dev.local");
     }),
   );
 
