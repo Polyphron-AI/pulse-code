@@ -3,12 +3,14 @@ import type { EnvironmentId } from "@t3tools/contracts";
 export type DictationBackendPreference = "parakeet" | "groq";
 
 export interface DictationPreferences {
+  readonly enabled: boolean;
   readonly backend: DictationBackendPreference;
   readonly groqEnvironmentId: EnvironmentId | null;
 }
 
 const STORAGE_KEY = "pulse:dictation-preferences:v1";
 const DEFAULT_PREFERENCES: DictationPreferences = {
+  enabled: true,
   backend: "parakeet",
   groqEnvironmentId: null,
 };
@@ -34,6 +36,7 @@ export function readDictationPreferences(): DictationPreferences {
   try {
     const value = JSON.parse(raw) as Record<string, unknown>;
     memoryPreferences = {
+      enabled: value.enabled !== false,
       backend: value.backend === "groq" ? "groq" : "parakeet",
       groqEnvironmentId:
         typeof value.groqEnvironmentId === "string"
@@ -55,13 +58,17 @@ export function writeDictationPreferences(preferences: DictationPreferences): vo
   }
 }
 
-export function resolveDictationBackend(
-  environmentIds: ReadonlyArray<EnvironmentId>,
-):
+export function resolveDictationBackend(environmentIds: ReadonlyArray<EnvironmentId>):
   | { readonly backend: "parakeet" }
   | { readonly backend: "groq"; readonly environmentId: EnvironmentId }
-  | { readonly backend: "unavailable"; readonly reason: "groq-environment-unavailable" } {
+  | {
+      readonly backend: "unavailable";
+      readonly reason: "groq-environment-unavailable" | "dictation-disabled";
+    } {
   const preference = readDictationPreferences();
+  if (!preference.enabled) {
+    return { backend: "unavailable", reason: "dictation-disabled" };
+  }
   if (preference.backend === "groq") {
     if (preference.groqEnvironmentId && environmentIds.includes(preference.groqEnvironmentId)) {
       return { backend: "groq", environmentId: preference.groqEnvironmentId };

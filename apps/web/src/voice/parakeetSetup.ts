@@ -1,4 +1,5 @@
 import { ParakeetTranscriber } from "./parakeetTranscription";
+import type { ParakeetSetupProgress } from "./parakeetWorkerProtocol";
 
 let transcriber: ParakeetTranscriber | null = null;
 
@@ -7,6 +8,15 @@ export function getParakeetTranscriber(): ParakeetTranscriber {
 }
 
 /** This is the only settings entry point that may download the local model. */
-export function setupParakeet(signal: AbortSignal): Promise<void> {
-  return getParakeetTranscriber().setup(signal);
+export function setupParakeet(
+  signal: AbortSignal,
+  onProgress?: (progress: ParakeetSetupProgress) => void,
+): Promise<void> {
+  return getParakeetTranscriber().setup(signal, onProgress);
+}
+
+/** Release the device-local model when the user disables or abandons setup. */
+export function resetParakeet(): void {
+  transcriber?.reset();
+  transcriber = null;
 }

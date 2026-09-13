@@ -1,0 +1,159 @@
+{
+  "record": "pulse-parakeet-dictation",
+  "policyVersion": "2026-09-13",
+  "policySource": "docs/operations/pulse-feature-delivery.md",
+  "branch": "fix/pulse-parakeet-init",
+  "worktree": ".worktrees/pulse-parakeet",
+  "baseRevision": "885200895c",
+  "owner": "single implementation owner (Sol)",
+  "relatedLedger": "docs/internals/pulse-next-migration.json#launchBundles[voice-dictation]",
+  "feature": "Parakeet local dictation actually initialises, its failures are legible, and onboarding asks whether the user wants dictation before anything downloads.",
+  "scope": {
+    "included": [
+      "Root-cause fix for Parakeet model initialisation in apps/web/src/voice (Pulse-owned).",
+      "Surface the real worker error (message plus cause) in the console and in Settings.",
+      "Model download progress reporting from the worker to the UI.",
+      "A dictation step in the first-run wizard that records an explicit yes or no.",
+      "The recorded choice stays changeable from Settings, Voice dictation."
+    ],
+    "excluded": [
+      "Branding or wordmark changes in WelcomeWizard.tsx (owned by a parallel slice).",
+      "The Integrations settings submenu (owned by a parallel slice).",
+      "Groq backend behaviour, mobile native dictation, server changes.",
+      "Cross-origin isolation (COOP/COEP) headers: disproven as necessary, see rootCause.",
+      "Packaged desktop installer verification: cannot be run from this worktree."
+    ]
+  },
+  "rootCause": {
+    "statement": "apps/web/src/voice/parakeet.worker.ts overrode env.wasm.wasmPaths with the non-JSEP ONNX Runtime artifacts while the imported ORT build is the JSEP/WebGPU bundle, so ORT dynamically imported a WASM glue module that does not match the runtime and initialisation threw.",
+    "evidence": [
+      "onnxruntime-web@1.24.1 package exports map: the bare 'onnxruntime-web' import in a browser resolves to dist/ort.bundle.min.mjs.",
+      "grep of dist/ort.bundle.min.mjs references only ort-wasm-simd-threaded.jsep.mjs and .jsep.wasm and contains JSEP symbols; dist/ort.wasm.bundle.min.mjs is the build that references the plain ort-wasm-simd-threaded.mjs/.wasm.",
+      "lib/wasm/wasm-utils-import.ts line 248: any urlOverride or prefixOverride disables the embedded-glue path, so the override is what selects the mismatched module.",
+      "parakeet.js@1.4.4 src/backend.js line 54 only assigns wasmPaths when unset, so it never corrects the override.",
+      "The failure was invisible because parakeetTranscription.ts discarded the worker ErrorEvent and replaced every failure with one fixed string."
+    ],
+    "disproven": [
+      {
+        "hypothesis": "Threaded ORT build requires SharedArrayBuffer, so cross-origin isolation is missing.",
+        "evidence": "onnxruntime-web 1.24.1 ships only threaded artifacts and lib/wasm/wasm-factory.ts lines 132-149 force numThreads to 1 when SharedArrayBuffer is absent; parakeet.js src/backend.js lines 67-73 also forces 1 thread in that case. cpuThreads is already 1. Adding COOP/COEP would break the Hugging Face model fetch for no gain."
+      },
+      {
+        "hypothesis": "The packaged desktop CSP blocks the worker or the model download.",
+        "evidence": "makeDesktopContentSecurityPolicy already allows worker-src 'self' for the same-origin module worker, connect-src https: for huggingface.co, and script-src 'wasm-unsafe-eval'. The custom scheme is registered standard, secure, supportFetchAPI and corsEnabled, so IndexedDB caching and fetch are available. No upstream CSP edit is required."
+      }
+    ]
+  },
+  "acceptanceCases": [
+    {
+      "case": "First use: Parakeet setup from Settings downloads the model and reaches ready.",
+      "status": "applicable",
+      "verification": "Focused unit tests cover the worker protocol and the transcriber. Real model download needs a networked manual check."
+    },
+    {
+      "case": "Failure surfaces the real error text, not a fixed string, in the UI and the console.",
+      "status": "applicable",
+      "verification": "Unit test asserts the worker-reported message and cause reach the settings panel."
+    },
+    {
+      "case": "Worker fails to load at module evaluation (ErrorEvent with no reply).",
+      "status": "applicable",
+      "verification": "Unit test asserts the ErrorEvent message, filename and line reach the caller."
+    },
+    {
+      "case": "Progress is visible during the large model download.",
+      "status": "applicable",
+      "verification": "Unit test asserts progress messages are forwarded to the setup caller."
+    },
+    {
+      "case": "Cancel: aborting one setup or transcription rejects only that caller; a later setup or queued request continues cleanly.",
+      "status": "applicable",
+      "verification": "Deterministic transcriber tests cover setup-abort retry and two concurrent callers where aborting the first does not terminate the worker or fail the second."
+    },
+    {
+      "case": "Rapid changes, concurrent threads and queued turns do not run Parakeet inference concurrently.",
+      "status": "applicable",
+      "verification": "The main-thread transcriber queues requests and the worker independently serializes model operations. A deterministic test proves the second request is not posted until the first settles."
+    },
+    {
+      "case": "Navigation or unmount during onboarding or Settings setup cancels that setup and releases the worker and loaded model; unmount after success retains it.",
+      "status": "applicable",
+      "verification": "Onboarding and Settings component tests unmount during setup, then assert the signal is aborted and the singleton reset runs. Separate successful-setup tests prove both flows retain the loaded model when advancing or navigating away."
+    },
+    {
+      "case": "Disabling dictation, switching away from Parakeet, or declining it in onboarding releases the device-owned worker and model; re-enabling starts cleanly.",
+      "status": "applicable",
+      "verification": "Settings and onboarding tests assert explicit teardown. Existing preference tests and setup retry tests cover clean re-enable without changing backend selection."
+    },
+    {
+      "case": "Worker ownership and cleanup remain client-local and never affect another browser or environment.",
+      "status": "applicable",
+      "verification": "One singleton is owned by the current browser realm. Request abort is local to its pending entry; only explicit device-level disable, onboarding abandonment, or worker failure tears it down."
+    },
+    {
+      "case": "Retry after failure is possible without reloading the page.",
+      "status": "applicable",
+      "verification": "Settings and onboarding both return to an actionable state on error. A transcriber test sends a worker-reported failure, retries setup on the same instance and worker, and reaches ready without termination."
+    },
+    {
+      "case": "Onboarding asks about dictation and records yes or no as a persisted choice.",
+      "status": "applicable",
+      "verification": "Unit tests on the new step component assert both writes."
+    },
+    {
+      "case": "Declining in onboarding is reversible later from Settings, Voice dictation.",
+      "status": "applicable",
+      "verification": "DictationSettings reads the same preference store; unit test asserts round trip."
+    },
+    {
+      "case": "Deferring in onboarding leaves the default preference and does not download.",
+      "status": "applicable",
+      "verification": "Unit test asserts skip performs no setup call."
+    },
+    {
+      "case": "Wizard back-navigation to any stage, including the new one, is exhaustive.",
+      "status": "applicable",
+      "verification": "The index-to-step inverse is a total mapping over the step union; unit test covers every index."
+    },
+    {
+      "case": "Compact and mobile web layouts.",
+      "status": "applicable",
+      "verification": "The step reuses StepShell and the existing wizard panel, so it inherits the wizard's responsive shell."
+    },
+    {
+      "case": "Native mobile client.",
+      "status": "not applicable",
+      "verification": "Parakeet and this wizard are web and desktop only; the React Native client keeps its own dictation."
+    },
+    {
+      "case": "Provider differences.",
+      "status": "not applicable",
+      "verification": "Dictation is a client capability and does not vary by coding agent provider."
+    },
+    {
+      "case": "Remote and relay connections.",
+      "status": "applicable",
+      "verification": "Parakeet runs entirely in the client and needs no environment; the preference is client-local."
+    },
+    {
+      "case": "Packaged desktop app initialises Parakeet end to end.",
+      "status": "unverified-blocker-for-release",
+      "verification": "Requires a signed packaged build and network; out of scope for this worktree and listed under openChecks."
+    }
+  ],
+  "openChecks": [
+    "Run the packaged desktop app, choose dictation in onboarding, and confirm the model downloads and transcribes.",
+    "Confirm the emitted ORT .jsep.wasm and .jsep.mjs assets are served with JavaScript and application/wasm content types through the packaged desktop custom scheme."
+  ],
+  "status": "development-acceptance-passed",
+  "implementationRevision": "8914725bbe",
+  "verification": {
+    "focusedTests": "The five-file focused suite passed 34 tests after the concurrency review fix. The later affected re-review ran 26 tests in parakeetTranscription and DictationSettings, adding worker-failure retry and Settings abandonment/retention coverage; all 26 passed.",
+    "typecheck": "@t3tools/web tsgo --noEmit passed.",
+    "formatAndDiff": "Focused formatting check and git diff --check passed.",
+    "productionBuild": "@t3tools/web production build passed after the lifecycle fix. The output contained parakeet.worker-DPmK1zCy.js, ort-wasm-simd-threaded.jsep-P_aWIpzF.mjs and ort-wasm-simd-threaded.jsep-6MnTkKum.wasm.",
+    "review": "Independent review rejected the first development-acceptance revision because request abort reset the shared singleton and cleanup was missing. Revisions 826b7b5f76 and 5f236118f5 separate request cancellation from explicit device teardown, serialize inference on both sides of the worker boundary, and release the model when the user switches away from Parakeet. Affected re-review then found Settings unmount cleanup and direct failure-retry evidence missing; revision 8914725bbe adds both without tearing down a successfully loaded model.",
+    "limits": "No real model download, microphone, transcription, packaged desktop app or native mobile run. Existing pnpm-workspace.yaml changes were left untouched and are not part of this slice."
+  },
+  "nextAction": "Run packaged desktop acceptance with a real Parakeet model download and transcription before release."
+}

@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   save: vi.fn(),
   remove: vi.fn(),
   setup: vi.fn(),
+  resetParakeet: vi.fn(),
 }));
 
 vi.mock("@effect/atom-react", () => ({
@@ -51,7 +52,10 @@ vi.mock("./dictationSettingsState", () => ({
   saveGroqApiKey: "save",
   deleteGroqApiKey: "remove",
 }));
-vi.mock("./parakeetSetup", () => ({ setupParakeet: mocks.setup }));
+vi.mock("./parakeetSetup", () => ({
+  setupParakeet: mocks.setup,
+  resetParakeet: mocks.resetParakeet,
+}));
 vi.mock("../components/ui/radio-group", () => ({
   RadioGroup: ({
     children,
@@ -101,6 +105,7 @@ import { DictationSettings } from "./DictationSettings";
 import {
   readDictationPreferences,
   resetDictationPreferencesForTests,
+  writeDictationPreferences,
 } from "./dictationPreferences";
 
 let renderer: ReactTestRenderer | undefined;
@@ -132,6 +137,7 @@ beforeEach(() => {
   mocks.save.mockReset().mockResolvedValue({ _tag: "Success", value: { configured: true } });
   mocks.remove.mockReset();
   mocks.setup.mockReset();
+  mocks.resetParakeet.mockReset();
 });
 afterEach(async () => {
   await act(() => renderer?.unmount());
@@ -155,6 +161,66 @@ describe("DictationSettings", () => {
     expect(json()).toContain("Set up Parakeet");
   });
 
+  it("shows Parakeet download progress and the real setup error", async () => {
+    mocks.setup.mockImplementation((_signal: AbortSignal, progress: (value: object) => void) => {
+      progress({ loaded: 50, total: 100, file: "encoder.onnx" });
+      return Promise.reject(new Error("CompileError: bad wasm"));
+    });
+    await render();
+    await click("Set up Parakeet");
+    expect(json()).toContain("CompileError: bad wasm");
+    expect(json()).toContain("Set up Parakeet");
+  });
+
+  it("aborts and releases an in-progress setup when Settings unmounts", async () => {
+    let signal!: AbortSignal;
+    mocks.setup.mockImplementation((value: AbortSignal) => {
+      signal = value;
+      return new Promise<void>(() => undefined);
+    });
+    await render();
+    await click("Set up Parakeet");
+    await act(() => renderer?.unmount());
+    renderer = undefined;
+    expect(signal.aborted).toBe(true);
+    expect(mocks.resetParakeet).toHaveBeenCalledOnce();
+  });
+
+  it("retains a successfully loaded model when Settings unmounts", async () => {
+    mocks.setup.mockResolvedValue(undefined);
+    await render();
+    await click("Set up Parakeet");
+    expect(json()).toContain("Parakeet ready");
+    await act(() => renderer?.unmount());
+    renderer = undefined;
+    expect(mocks.resetParakeet).not.toHaveBeenCalled();
+  });
+
+  it("can reverse an onboarding decline", async () => {
+    writeDictationPreferences({ enabled: false, backend: "parakeet", groqEnvironmentId: null });
+    await render();
+    expect(json()).toContain("Dictation stays off");
+    const checkbox = renderer!.root.findByProps({ "data-slot": "checkbox" });
+    await act(() => checkbox.props.onCheckedChange(true));
+    expect(readDictationPreferences().enabled).toBe(true);
+    expect(json()).toContain("Set up Parakeet");
+  });
+
+  it("releases the local model when dictation is disabled", async () => {
+    await render();
+    const checkbox = renderer!.root.findByProps({ "data-slot": "checkbox" });
+    await act(() => checkbox.props.onCheckedChange(false));
+    expect(mocks.resetParakeet).toHaveBeenCalledOnce();
+    expect(readDictationPreferences().enabled).toBe(false);
+  });
+
+  it("releases the local model when the backend changes to Groq", async () => {
+    await render();
+    await click("Use Groq");
+    expect(mocks.resetParakeet).toHaveBeenCalledOnce();
+    expect(readDictationPreferences().backend).toBe("groq");
+  });
+
   it("does not call dictation endpoints without a fresh live capability", async () => {
     mocks.configSource = "cache";
     await render();
@@ -168,9 +234,14 @@ describe("DictationSettings", () => {
     await render();
     await click("Use Groq");
     await click("Choose Office");
-    const input = renderer!.root.findByType("input");
+    const input = renderer!.root
+      .findAllByType("input")
+      .find((item) => item.props.type === "password")!;
     await act(() => input.props.onChange({ currentTarget: { value: "secret-value" } }));
-    expect(renderer!.root.findByType("input").props.value).toBe("secret-value");
+    expect(
+      renderer!.root.findAllByType("input").find((item) => item.props.type === "password")!.props
+        .value,
+    ).toBe("secret-value");
     mocks.pending = true;
     await act(() => renderer!.update(<DictationSettings />));
     mocks.pending = false;
@@ -207,7 +278,8 @@ describe("DictationSettings", () => {
     await click("Choose Office");
     await act(() =>
       renderer!.root
-        .findByType("input")
+        .findAllByType("input")
+        .find((item) => item.props.type === "password")!
         .props.onChange({ currentTarget: { value: "secret-value" } }),
     );
     await act(() => {

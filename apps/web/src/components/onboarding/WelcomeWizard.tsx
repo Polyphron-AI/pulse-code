@@ -76,6 +76,13 @@ import { Dialog } from "../ui/dialog";
 import { toastManager } from "../ui/toast";
 import { cn } from "../../lib/utils";
 import { formatRelativeTime } from "../../timestampFormat";
+import {
+  ONBOARDING_STAGES,
+  onboardingStepAt,
+  onboardingStepIndex,
+  type WizardStep,
+} from "../../onboarding/welcomeWizard.logic";
+import { OnboardingDictationStep } from "./OnboardingDictationStep";
 
 /**
  * First-run welcome wizard. Rendered over the workspace at `/welcome` on a
@@ -86,11 +93,9 @@ import { formatRelativeTime } from "../../timestampFormat";
  * re-runnable by clearing the flag.
  */
 
-type WizardStep = "connection" | "agents" | "import";
 const NO_ENVIRONMENTS: readonly EnvironmentId[] = [];
 
 const AGENT_ONBOARDING_THREAD_ID = ThreadId.make("onboarding-agent-setup");
-const ONBOARDING_STAGES = ["Connect", "Agents", "Projects"] as const;
 const SCAN_LIMIT_MESSAGE = "Scan limit reached. Some projects or conversations may be missing.";
 
 export function WelcomeWizard({
@@ -139,7 +144,7 @@ export function WelcomeWizard({
     setSetupIds(ids);
     setStep("agents");
   };
-  const stageIndex = step === "agents" ? 1 : step === "import" ? 2 : 0;
+  const stageIndex = onboardingStepIndex(step);
   const finish = useCallback(
     (projectRef?: ScopedProjectRef) => {
       if (finishingPromiseRef.current !== null) return finishingPromiseRef.current;
@@ -205,7 +210,8 @@ export function WelcomeWizard({
             isStepDisabled={(index) => isImporting || index >= stageIndex}
             onStepChange={(index) => {
               if (isImporting || index > stageIndex) return;
-              setStep(index === 0 ? "connection" : "agents");
+              const next = onboardingStepAt(index);
+              if (next) setStep(next);
             }}
           />
         </WizardHeader>
@@ -237,7 +243,9 @@ export function WelcomeWizard({
               }}
             />
           ) : step === "agents" ? (
-            <AgentsStep environmentIds={setupIds} onContinue={() => setStep("import")} />
+            <AgentsStep environmentIds={setupIds} onContinue={() => setStep("dictation")} />
+          ) : step === "dictation" ? (
+            <OnboardingDictationStep onContinue={() => setStep("import")} />
           ) : (
             <ImportStep
               scans={scans}
