@@ -166,6 +166,50 @@ const peerPath = NodePath.join(
 );
 
 describe("CodexSessionRuntime collab integration", () => {
+  it.effect("sends managed skills as native turn input through the app-server subprocess", () =>
+    Effect.gen(function* () {
+      const skillPath = NodePath.join(NodeOS.tmpdir(), "pulse-managed-review", "SKILL.md");
+      const script = {
+        rootThreadId: ROOT,
+        recordTurnStarts: true,
+        notifications: [],
+      };
+      // @effect-diagnostics-next-line preferSchemaOverJson:off
+      NodeFS.writeFileSync(scriptPath, JSON.stringify(script), "utf8");
+      NodeFS.rmSync(`${scriptPath}.requests`, { force: true });
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          NodeFS.rmSync(scriptPath, { force: true });
+          NodeFS.rmSync(`${scriptPath}.requests`, { force: true });
+        }),
+      );
+
+      const runtime = yield* makeCodexSessionRuntime({
+        threadId: ThreadId.make("thread-managed-skill-input"),
+        binaryPath: peerPath,
+        cwd: NodeOS.tmpdir(),
+        runtimeMode: "full-access",
+        environment: { ...process.env, T3_CODEX_COLLAB_SCRIPT: scriptPath },
+      });
+
+      yield* runtime.start();
+      yield* runtime.sendTurn({
+        input: "Review this change",
+        skills: [{ name: "Code review", path: skillPath }],
+      });
+
+      const requests = readRecordedRequests();
+      assert.equal(requests.length, 1);
+      assert.equal(requests[0]?.method, "turn/start");
+      assert.deepEqual(requests[0]?.params.input, [
+        { type: "text", text: "Review this change" },
+        { type: "skill", name: "Code review", path: skillPath },
+      ]);
+
+      yield* runtime.close;
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
   it.effect("looks up child model metadata once after activity registration", () =>
     Effect.gen(function* () {
       const script = {
