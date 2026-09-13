@@ -46,12 +46,14 @@ export function McpConnectionsPanel({
   environmentKey,
   connections,
   disabled = false,
+  canCreate = true,
   upsert,
   remove,
 }: {
   readonly environmentKey: string;
   readonly connections: ReadonlyArray<PulseMcpConnection>;
   readonly disabled?: boolean;
+  readonly canCreate?: boolean;
   readonly upsert: (environmentKey: string, input: PulseMcpConnectionInput) => Promise<void>;
   readonly remove: (environmentKey: string, id: string) => Promise<void>;
 }) {
@@ -115,7 +117,11 @@ export function McpConnectionsPanel({
             a provider or run any tool.
           </p>
         </div>
-        <Button size="sm" disabled={disabled || pending} onClick={() => setEditing("new")}>
+        <Button
+          size="sm"
+          disabled={disabled || pending || !canCreate}
+          onClick={() => setEditing("new")}
+        >
           <PlusIcon />
           Add connection
         </Button>
@@ -123,6 +129,12 @@ export function McpConnectionsPanel({
       {disabled ? (
         <p className="text-xs text-muted-foreground">
           You can view these connections, but this session cannot change them.
+        </p>
+      ) : null}
+      {!canCreate ? (
+        <p className="text-xs text-muted-foreground">
+          Update this environment to add MCP connections. Existing connections can still be viewed
+          and edited.
         </p>
       ) : null}
       {error ? (
@@ -193,7 +205,11 @@ export function McpConnectionsPanel({
         disabled={disabled || pending}
         existingIds={connections.map(({ id }) => id)}
         onClose={() => setEditing(null)}
-        onSave={(input) => run(() => upsert(environmentKey, input))}
+        onSave={(input) =>
+          run(() =>
+            upsert(environmentKey, editing === "new" ? { ...input, createOnly: true } : input),
+          )
+        }
       />
       <Dialog open={removing !== null} onOpenChange={(open) => !open && setRemoving(null)}>
         <DialogPopup className="max-w-md">
@@ -447,7 +463,7 @@ function ValuesEditor({
               kind && update(index, { kind: kind as "literal" | "secret", value: "" })
             }
           >
-            <SelectTrigger>
+            <SelectTrigger aria-label={`${label} kind ${index + 1}`}>
               <SelectValue>{value.kind === "secret" ? "Secret" : "Plain text"}</SelectValue>
             </SelectTrigger>
             <SelectPopup>

@@ -170,4 +170,52 @@ describe("McpConnectionsPanel environment ownership", () => {
     expect(upsert).not.toHaveBeenCalled();
     expect(JSON.stringify(renderer!.toJSON())).toContain("already exists");
   });
+
+  it("marks adds create-only and labels value kind selectors", async () => {
+    const upsert = vi.fn().mockResolvedValue(undefined);
+    await act(() => {
+      renderer = create(
+        <McpConnectionsPanel
+          environmentKey="env-a"
+          connections={[connection]}
+          upsert={upsert}
+          remove={vi.fn()}
+        />,
+      );
+    });
+    await act(() => renderer!.root.findByProps({ "aria-label": "Edit GitHub" }).props.onClick());
+    expect(renderer!.root.findByProps({ "aria-label": "Headers kind 1" })).toBeDefined();
+    await act(() => button("Cancel")!.props.onClick());
+    await act(() => button("Add connection")!.props.onClick());
+    const editable = renderer!.root.findAllByType(Input).filter(({ props }) => !props.disabled);
+    await act(() => {
+      editable[0]!.props.onChange({ target: { value: "linear" } });
+      editable[1]!.props.onChange({ target: { value: "Linear" } });
+      renderer!.root.findByProps({ placeholder: "https://example.com/mcp" }).props.onChange({
+        target: { value: "https://linear.example/mcp" },
+      });
+    });
+    await act(() => button("Save connection")!.props.onClick());
+    expect(upsert).toHaveBeenCalledWith(
+      "env-a",
+      expect.objectContaining({ id: "linear", createOnly: true }),
+    );
+  });
+
+  it("gates Add when the environment lacks create-only support", async () => {
+    await act(() => {
+      renderer = create(
+        <McpConnectionsPanel
+          environmentKey="env-a"
+          connections={[connection]}
+          canCreate={false}
+          upsert={vi.fn()}
+          remove={vi.fn()}
+        />,
+      );
+    });
+    expect(button("Add connection")!.props.disabled).toBe(true);
+    expect(JSON.stringify(renderer!.toJSON())).toContain("Update this environment");
+    expect(renderer!.root.findByProps({ "aria-label": "Edit GitHub" }).props.disabled).toBe(false);
+  });
 });

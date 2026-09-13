@@ -83,6 +83,7 @@ function McpEnvironment({
   const projection = Option.getOrNull(AsyncResult.value(configResult));
   const liveConfigReady = projection?.source === "live";
   const supported = liveConfigReady && projection.config.pulseCapabilities?.mcpManagement === true;
+  const canCreate = projection?.config.pulseCapabilities?.mcpCreateOnly === true;
   const session = useEnvironmentSessionState(environmentId);
   const sessionFresh = !session.isPending && session.data?.authenticated === true;
   const scopes = sessionFresh ? session.data?.scopes : undefined;
@@ -192,6 +193,7 @@ function McpEnvironment({
           environmentKey={environmentId}
           connections={connections}
           disabled={!canOperate}
+          canCreate={canCreate}
           upsert={upsert}
           remove={remove}
         />

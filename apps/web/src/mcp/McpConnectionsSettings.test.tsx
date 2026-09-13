@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   listData: [] as ReadonlyArray<unknown>,
   configSource: "live" as "cache" | "live",
   supported: true,
+  createOnly: true,
   sessionPending: false,
   scopes: ["orchestration:read", "orchestration:operate"] as ReadonlyArray<string>,
 }));
@@ -24,7 +25,12 @@ vi.mock("@effect/atom-react", () => ({
     _tag: "Success",
     value: {
       source: mocks.configSource,
-      config: { pulseCapabilities: { mcpManagement: mocks.supported } },
+      config: {
+        pulseCapabilities: {
+          mcpManagement: mocks.supported,
+          mcpCreateOnly: mocks.createOnly,
+        },
+      },
     },
     waiting: false,
   }),
@@ -62,12 +68,15 @@ vi.mock("./McpConnectionsPanel", () => ({
   McpConnectionsPanel: ({
     environmentKey,
     disabled,
+    canCreate,
   }: {
     environmentKey: string;
     disabled: boolean;
+    canCreate: boolean;
   }) => (
     <p>
-      Panel for {environmentKey} {disabled ? "read only" : "editable"}
+      Panel for {environmentKey} {disabled ? "read only" : "editable"}{" "}
+      {canCreate ? "add" : "update required"}
     </p>
   ),
 }));
@@ -106,6 +115,7 @@ beforeEach(() => {
   mocks.command.mockReset();
   mocks.configSource = "live";
   mocks.supported = true;
+  mocks.createOnly = true;
   mocks.sessionPending = false;
   mocks.scopes = [AuthOrchestrationReadScope, AuthOrchestrationOperateScope];
 });
@@ -143,6 +153,15 @@ describe("McpConnectionsSettings", () => {
     await render();
     expect(mocks.list).toHaveBeenCalledWith({ environmentId: "primary", input: {} });
     expect(json()).toContain("read only");
+  });
+
+  it("keeps legacy management available while gating Add", async () => {
+    mocks.environments = [environment("primary")];
+    mocks.createOnly = false;
+    await render();
+    expect(mocks.list).toHaveBeenCalledWith({ environmentId: "primary", input: {} });
+    expect(json()).toContain("editable");
+    expect(json()).toContain("update required");
   });
 
   it("drops stale scopes while the session refreshes", async () => {
