@@ -161,6 +161,12 @@
     "Pulse Next emits no provider.handoff activity. deriveThreadCostUsd still segments on that kind so a future handoff port keeps money already spent; the segmentation is unit-tested but currently unreachable in this codebase.",
     "Compact-viewport layout with both rings plus send on one row is unverified: this port ran no dev server or browser."
   ],
-  "nextAction": "review",
-  "implementedRevision": "7626de1da"
+  "nextAction": "merged-to-develop",
+  "implementedRevision": "7626de1da",
+  "review": {
+    "revision": "6722e3567",
+    "reviewer": "Fable 5.1",
+    "findings": [],
+    "verdict": "no blocking findings; handoff segmentation kept as documented, compact viewport left not-verified per no-browser rule"
+  }
 }
