@@ -18,3 +18,17 @@ export function relativeTime(input: string): string {
   const deltaDays = Math.floor(deltaHours / 24);
   return `${deltaDays}d`;
 }
+
+/** "2h 10m" for a positive millisecond delta, rounded up to the next minute. */
+export function formatCountdown(deltaMs: number): string {
+  const totalMinutes = Math.ceil(deltaMs / 60_000);
+  if (totalMinutes < 60) return `${Math.max(totalMinutes, 1)}m`;
+  const totalHours = Math.floor(totalMinutes / 60);
+  if (totalHours < 24) {
+    const minutes = totalMinutes % 60;
+    return minutes === 0 ? `${totalHours}h` : `${totalHours}h ${minutes}m`;
+  }
+  const days = Math.floor(totalHours / 24);
+  const hours = totalHours % 24;
+  return hours === 0 ? `${days}d` : `${days}d ${hours}h`;
+}
