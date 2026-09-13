@@ -4890,9 +4890,11 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
           Effect.gen(function* () {
             const config = yield* client[WS_METHODS.serverGetConfig]({});
             assert.equal(config.pulseCapabilities?.mcpManagement, true);
+            assert.equal(config.pulseCapabilities?.mcpCreateOnly, true);
             const connection = yield* client[WS_METHODS.pulseMcpUpsert]({
               id: "fixture",
               name: "Fixture",
+              createOnly: true,
               config: {
                 transport: "http",
                 url: "https://example.test/mcp",
@@ -4901,6 +4903,14 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
             });
             assert.notInclude(encodeTestJson(connection), "fixture-secret");
             assert.notInclude(encodeTestJson(connection), "secretRef");
+            yield* client[WS_METHODS.pulseMcpUpsert]({
+              id: "fixture",
+              name: "Unexpected replacement",
+              createOnly: true,
+              config: { transport: "http", url: "https://replacement.example.test" },
+            }).pipe(Effect.flip);
+            const afterDuplicate = yield* client[WS_METHODS.pulseMcpList]({});
+            assert.deepEqual(afterDuplicate, [connection]);
             const retained = yield* client[WS_METHODS.pulseMcpUpsert]({
               id: "fixture",
               name: "Renamed",
