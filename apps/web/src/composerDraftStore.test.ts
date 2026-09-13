@@ -2648,6 +2648,45 @@ describe("composerDraftStore managed skill selections", () => {
   });
 });
 
+describe("composerDraftStore managed MCP selections", () => {
+  const threadId = ThreadId.make("thread-pulse-mcps");
+  const threadRef = scopeThreadRef(TEST_ENVIRONMENT_ID, threadId);
+
+  beforeEach(resetComposerDraftStore);
+  afterEach(resetComposerDraftStore);
+
+  it("distinguishes use defaults from an explicit empty selection", () => {
+    const store = useComposerDraftStore.getState();
+    store.setPulseMcpConnectionIds(threadRef, []);
+    expect(store.getComposerDraft(threadRef)?.pulseMcpConnectionIds).toEqual([]);
+
+    store.setPulseMcpConnectionIds(threadRef, null);
+    expect(store.getComposerDraft(threadRef)).toBeNull();
+  });
+
+  it("preserves explicit selection through promotion and clears it on environment change", () => {
+    const projectRef = scopeProjectRef(TEST_ENVIRONMENT_ID, ProjectId.make("pulse-mcp-project"));
+    const draftId = DraftId.make("pulse-mcp-draft");
+    const store = useComposerDraftStore.getState();
+    store.setProjectDraftThreadId(projectRef, draftId, { threadId });
+    store.setPulseMcpConnectionIds(draftId, ["github", "linear"]);
+
+    markPromotedDraftThreadByRef(threadRef);
+    finalizePromotedDraftThreadByRef(threadRef);
+    expect(store.getComposerDraft(threadRef)?.pulseMcpConnectionIds).toEqual(["github", "linear"]);
+
+    const nextProject = scopeProjectRef(
+      OTHER_TEST_ENVIRONMENT_ID,
+      ProjectId.make("pulse-mcp-project"),
+    );
+    const nextDraftId = DraftId.make("pulse-mcp-retarget");
+    store.setProjectDraftThreadId(projectRef, nextDraftId, { threadId });
+    store.setPulseMcpConnectionIds(nextDraftId, ["github"]);
+    store.setProjectDraftThreadId(nextProject, nextDraftId, { threadId });
+    expect(store.getComposerDraft(nextDraftId)?.pulseMcpConnectionIds).toBeNull();
+  });
+});
+
 // ---------------------------------------------------------------------------
 // createDeferredStorage
 // ---------------------------------------------------------------------------

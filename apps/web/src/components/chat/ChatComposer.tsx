@@ -83,6 +83,9 @@ import {
   useEffectiveComposerModelState,
 } from "../../composerDraftStore";
 import { ManagedSkillPicker, useManagedSkillPickerState } from "../../skills/ManagedSkillPicker";
+import { ManagedMcpPicker } from "../../mcp/ManagedMcpPicker";
+import { useManagedMcpComposer } from "../../mcp/useManagedMcpComposer";
+import type { PrepareComposerMcp } from "../../mcp/prepareMcpSubmission";
 import {
   MAX_STASH_ENTRIES,
   partitionStashAttachments,
@@ -1164,8 +1167,11 @@ export interface ChatComposerHandle {
     interactionModeEnabled: boolean;
     pulseSkills: ReadonlyArray<PulseSkillSelection>;
     pulseSkillsBlockedReason: string | null;
+    pulseMcpConnectionIds: ReadonlyArray<string> | null;
+    pulseMcpBlockedReason: string | null;
     dictationBlockedReason: string | null;
   };
+  preparePulseMcp: PrepareComposerMcp;
   /** Validate the fully composed text immediately before a provider turn starts. */
   validateProviderInput: (providerInput: string) => boolean;
 }
@@ -1306,6 +1312,7 @@ export interface ChatComposerProps {
 
   onProviderModelSelect: (instanceId: ProviderInstanceId, model: string) => void;
   onOpenProviderSetup: (instanceId: ProviderInstanceId) => void;
+  onManageMcpConnections?: () => void;
   getModelDisabledReason: (instanceId: ProviderInstanceId, model: string) => string | null;
   toggleInteractionMode: () => void;
   handleRuntimeModeChange: (mode: RuntimeMode) => void;
@@ -1434,6 +1441,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const composerPreviewAnnotations = composerDraft.previewAnnotations;
   const composerReviewComments = composerDraft.reviewComments;
   const composerPulseSkills = composerDraft.pulseSkills;
+  const composerPulseMcpConnectionIds = composerDraft.pulseMcpConnectionIds;
   const standaloneComposerImages = useMemo(() => {
     const previewAnnotationIds = new Set(
       composerPreviewAnnotations.map((annotation) => annotation.id),
@@ -1503,6 +1511,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   );
   const getComposerDraft = useComposerDraftStore((store) => store.getComposerDraft);
   const setComposerDraftPulseSkills = useComposerDraftStore((store) => store.setPulseSkills);
+  const setComposerDraftPulseMcpConnectionIds = useComposerDraftStore(
+    (store) => store.setPulseMcpConnectionIds,
+  );
 
   useEffect(() => {
     if (!attachmentUploadsCapabilityKnown) {
@@ -1642,6 +1653,16 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     environmentId,
     provider: selectedProvider,
     selected: composerPulseSkills,
+  });
+  const managedMcp = useManagedMcpComposer({
+    environmentId,
+    provider: selectedProvider,
+    providerInstanceId: selectedInstanceId,
+    threadId: activeThreadId,
+    draftConnectionIds: composerPulseMcpConnectionIds,
+    onDraftConnectionIdsChange: (connectionIds) =>
+      setComposerDraftPulseMcpConnectionIds(composerDraftTarget, connectionIds),
+    onManage: props.onManageMcpConnections ?? (() => {}),
   });
 
   const { modelOptions: composerModelOptions, selectedModel } = useEffectiveComposerModelState({
@@ -3967,6 +3988,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       onChange={(pulseSkills) => setComposerDraftPulseSkills(composerDraftTarget, pulseSkills)}
     />
   );
+  const managedMcpPicker = <ManagedMcpPicker {...managedMcp.picker} />;
+  const restingManagedMcpPicker = <ManagedMcpPicker {...managedMcp.picker} size="xs" />;
   const restingBlockDefs = [
     ...(providerTraitsPicker
       ? [
@@ -4003,6 +4026,19 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
               <>
                 <ComposerControlSeparator size={composerControlsInStrip ? "xs" : "sm"} />
                 {composerControlsInStrip ? restingManagedSkillPicker : managedSkillPicker}
+              </>
+            ),
+          },
+        ]
+      : []),
+    ...(selectedProvider === "codex"
+      ? [
+          {
+            id: "mcps",
+            content: (
+              <>
+                <ComposerControlSeparator size={composerControlsInStrip ? "xs" : "sm"} />
+                {composerControlsInStrip ? restingManagedMcpPicker : managedMcpPicker}
               </>
             ),
           },
@@ -4709,8 +4745,14 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         interactionModeEnabled: planModeUiEnabled,
         pulseSkills: composerPulseSkills.map((selection) => ({ ...selection })),
         pulseSkillsBlockedReason: managedSkillPickerState.blockedReason,
+        pulseMcpConnectionIds:
+          managedMcp.picker.selectionMode === "override"
+            ? [...managedMcp.picker.selectedIds]
+            : null,
+        pulseMcpBlockedReason: managedMcp.blockedReason,
         dictationBlockedReason: dictation.blockedReason,
       }),
+      preparePulseMcp: managedMcp.prepare,
       validateProviderInput: (providerInput: string) => {
         const validationMessage = getComposerSubmissionValidationMessage({
           prompt: promptRef.current,
@@ -4760,6 +4802,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       interactionMode,
       planModeUiEnabled,
       managedSkillPickerState.blockedReason,
+      managedMcp,
       dictation.blockedReason,
       compactThreadContext,
       restoreAfterTimelineReachedEnd,
@@ -5682,6 +5725,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           </div>
         </ComposerSurface.Main>
       </div>
+      {managedMcp.pause}
     </form>
   );
 });

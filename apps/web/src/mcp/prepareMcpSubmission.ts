@@ -19,7 +19,7 @@ export async function prepareMcpSubmission(input: {
   if (!input.prepare || !input.isCurrent()) return { status: "cancelled" };
   try {
     const result = await input.prepare(input.session, {
-      creatingWorktree: input.creatingWorktree,
+      ...(input.creatingWorktree !== undefined ? { creatingWorktree: input.creatingWorktree } : {}),
     });
     return input.isCurrent() ? result : { status: "cancelled" };
   } catch {
