@@ -1,5 +1,9 @@
+// @vitest-environment happy-dom
+
+import { getByRole } from "@testing-library/dom";
 import { PRODUCT_BASE_NAME } from "@t3tools/shared/productIdentity";
 import { act, type ReactElement, type ReactNode } from "react";
+import { createRoot, type Root } from "react-dom/client";
 import TestRenderer, {
   type ReactTestRenderer,
   type ReactTestRendererJSON,
@@ -101,16 +105,27 @@ async function render(element: ReactElement): Promise<ReactTestRenderer> {
   return renderer!;
 }
 
+async function renderInDom(element: ReactElement): Promise<{ container: HTMLElement; root: Root }> {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(() => root.render(element));
+  return { container, root };
+}
+
+async function unmountDom(container: HTMLElement, root: Root) {
+  await act(() => root.unmount());
+  container.remove();
+}
+
 describe("onboarding product identity", () => {
   it("exposes the branded wizard title and wordmark to assistive technology", async () => {
-    const renderer = await render(<WelcomeWizardBrandHeader />);
+    const { container, root } = await renderInDom(<WelcomeWizardBrandHeader />);
 
-    expect(normalizedText(renderer.toJSON())).toContain(`Set up ${PRODUCT_BASE_NAME}`);
-    const wordmark = renderer.root.findByProps({ role: "img" });
-    expect(wordmark.props["aria-label"]).toBe(PRODUCT_BASE_NAME);
-    expect(normalizedText(renderer.toJSON())).toContain(PRODUCT_BASE_NAME);
+    expect(getByRole(container, "heading", { name: `Set up ${PRODUCT_BASE_NAME}` })).toBeDefined();
+    expect(getByRole(container, "img", { name: PRODUCT_BASE_NAME })).toBeDefined();
 
-    await act(() => renderer.unmount());
+    await unmountDom(container, root);
   });
 
   it("keeps the T3 Connect service and CLI command while naming Pulse in its guidance", async () => {
@@ -167,12 +182,11 @@ describe("onboarding product identity", () => {
   });
 
   it("renders the production wordmark with one accessible product name", async () => {
-    const renderer = await render(<PulseWordmark />);
-    const wordmark = renderer.root.findByProps({ role: "img" });
+    const { container, root } = await renderInDom(<PulseWordmark />);
+    const wordmark = getByRole(container, "img", { name: PRODUCT_BASE_NAME });
 
-    expect(wordmark.props["aria-label"]).toBe(PRODUCT_BASE_NAME);
-    expect(normalizedText(renderer.toJSON())).toBe(PRODUCT_BASE_NAME);
+    expect(wordmark.textContent).toBe(PRODUCT_BASE_NAME);
 
-    await act(() => renderer.unmount());
+    await unmountDom(container, root);
   });
 });

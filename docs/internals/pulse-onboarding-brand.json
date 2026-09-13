@@ -128,11 +128,11 @@
   ],
   "tests": {
     "planned": [
-      "apps/web/src/components/onboarding/onboardingBrand.test.tsx renders the production identity leaves and queries their accessible title, wordmark and visible copy",
+      "apps/web/src/components/onboarding/onboardingBrand.test.tsx renders the production identity leaves; DOM-backed role/name queries verify the accessible title and wordmark while rendered-text assertions verify visible copy",
       "the behavior suite covers the deliberately retained T3 Connect service name and npx t3 connect, pair and serve commands"
     ],
     "command": "vp test run src/components/onboarding/onboardingBrand.test.tsx from apps/web",
-    "result": "6 behavior tests passed; apps/web typecheck passed; focused lint passed with six pre-existing warnings in the production files and no test-file findings"
+    "result": "6 behavior tests passed, including DOM-backed accessible role/name queries; apps/web typecheck passed; focused test-file lint passed"
   },
   "status": "development acceptance passed",
   "blockers": [],
