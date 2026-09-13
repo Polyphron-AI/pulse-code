@@ -17,7 +17,7 @@ OpenCode uses MCP configuration and status on its thread-owned server. Do not
 modify an externally shared OpenCode server: it cannot isolate each thread's
 managed selection. Report this limitation before submitting the prompt.
 
-OpenCode cannot represent a different working directory for each stdio server.
+Neither installed SDK can represent a different working directory for each stdio server.
 Reject an incompatible explicit directory rather than silently ignoring it or
 introducing shell wrappers. Keep unknown readiness distinct from confirmed
 connection failure. Native errors must not expose configuration secrets.
@@ -39,3 +39,11 @@ modern and tokenless sends, and the provider capability matrix. Register adapter
 coverage in the upstream-update pipeline. Do not contact live providers or MCP
 services for synthetic tests. Packaged and real-provider evidence remains a
 separate release gate.
+
+## SDK compatibility lessons
+
+Check both declarations and implementation for native integration assumptions.
+Claude query methods use their receiver, so tests must model class methods rather
+than only arrow functions. Its configuration result includes per-server errors;
+these remain failures even when the subsequent status inventory omits the server.
+Use generic public messages rather than returning native errors containing secrets.

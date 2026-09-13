@@ -33,7 +33,7 @@
     {
       "id": "skills-mcp",
       "decision": "include",
-      "state": "development-acceptance-passed-codex-first",
+      "state": "development-acceptance-passed-codex-claude-opencode",
       "intent": "Launch with skills and MCP support; inventory exact launch content separately from infrastructure.",
       "dependencies": [],
       "proposedRules": [
@@ -395,7 +395,7 @@
     "completion": "Working real-client flow, focused automated checks, integrated review, failure recovery and compatibility evidence. Helpers, endpoints and settings alone do not mean feature complete.",
     "commits": "Keep layered commits without repeated helper-by-helper review gates.",
     "activeFeature": "mcp-claude-opencode-adapters",
-    "activeFeatureStatus": "implementation-planned",
+    "activeFeatureStatus": "development-acceptance-passed",
     "implementationPlan": "docs/plans/2026-09-13-mcp-provider-adapters.md",
     "previousDictationEvidence": {
       "verifiedAt": "2026-09-13",
@@ -428,6 +428,15 @@
     "blockedPolicy": "Record the blocker and request direction before switching features or declaring partial work complete.",
     "currentFeatureEvidence": {
       "verifiedAt": "2026-09-13",
+      "codeRevision": "377d0c7bf",
+      "automated": "371 combined Claude/OpenCode adapter, ProviderService, composer lifecycle and capability-contract tests passed on integration. Seven update-gate tests and configured Effect-aware server typecheck passed on integration. Owner verified two server Pulse MCP tests and scoped web/contracts typechecks. Production web build passed with existing chunk-size/plugin-timing warnings; its inputs are unchanged by the final Claude-only repair.",
+      "browser": "Retained isolated Chromium/mock Codex regression passed: selected connection, actual provider completion receipt, promotion and immediate reload retain selection, no page errors. Claude/OpenCode native API behavior is covered by deterministic adapter doubles, not live provider browser calls.",
+      "review": "One complete frozen Sol review found three Claude blockers. One affected-only review accepted the combined receiver/cwd/returned-error fixes at be55dfa1, integrated as 377d0c7bf.",
+      "compatibilityLearning": "Check SDK implementation as well as declarations. Model receiver-dependent methods in tests; preserve their receiver. Explicitly reject unsupported per-server cwd. A native configuration result can report connection errors absent from its later status inventory; those errors must still block sending and remain sanitized.",
+      "limits": "Synthetic development acceptance. OpenCode requires a Pulse-owned local server. Claude/OpenCode stdio cwd must match the thread directory. Existing new-worktree restriction remains. No live external MCP, signed installer, physical mobile or remote deployment certification."
+    },
+    "previousCodexMcpEvidence": {
+      "verifiedAt": "2026-09-13",
       "codeRevision": "0df2dc767",
       "automated": "161 focused web/draft tests; 20 integration tests before the final backend-only corrections; 15 affected server/helper/adapter/runtime tests after corrections; 7 update-gate tests. Configured web and Effect-aware server tsgo pass. Production web build passes with chunk-size/plugin-timing warnings.",
       "browser": "Isolated Chromium with mock Codex: ready send and provider completion receipt; immediate reload retains override; failed connection preserves draft; Cancel; repaired Retry; Continue without it reaches completion and preserves saved selection after reload. No page errors. Final ready/reload rechecked after comparison correction.",
@@ -441,7 +450,7 @@
       "limits": "Synthetic development acceptance only. Codex-first managed adapter; other providers retain native MCP behavior. Managed selection during new-worktree creation is explicitly blocked until the workspace exists. No signed installer, real external MCP, physical native mobile or remote deployment certification."
     }
   },
-  "nextAction": "Implement Claude and OpenCode managed MCP adapters using the existing composer and preparation boundary. Verify provider-native session isolation and readiness, then review the frozen combined feature. No publication or deployment.",
+  "nextAction": "Claude and OpenCode managed MCP adapters are integrated and reviewed with synthetic development evidence. Launch-release-acceptance remains next; agree real-provider and packaging scope before publication or deployment.",
   "parallelIntegrationBatches": [
     {
       "id": "skills-library-and-settings",
@@ -624,13 +633,14 @@
   "mcpBehaviorProposal": "docs/internals/pulse-next-mcp-behavior.md",
   "activeImplementationBatch": {
     "id": "mcp-claude-opencode-adapters",
-    "state": "implementing",
+    "state": "development-acceptance-passed",
     "baseRevision": "7d80a6744",
     "branch": "experiment/pulse-next-v040",
     "worktree": ".worktrees/pulse-next",
     "implementationOwner": "sol_mcp_provider_support",
     "implementationWorktree": ".worktrees/pulse-next-mcp-providers",
     "implementationBranch": "feat/pulse-next-mcp-providers",
+    "integrationRevision": "377d0c7bf",
     "scope": "Extend existing managed MCP selection and send preparation to Claude and OpenCode. Keep translation and readiness in provider adapters, retain native MCP configuration, and preserve Codex behavior.",
     "acceptanceCases": [
       "HTTP headers and stdio argv/env reach the selected provider without global or project configuration writes or secret disclosure.",
@@ -644,7 +654,17 @@
     ],
     "completionBlockers": [],
     "baselineEvidence": "236 existing Claude/OpenCode adapter tests, 19 composer lifecycle tests and 7 node:test pipeline checks passed. Isolated browser picker rendered without page errors. Provider SDK APIs inspected locally; no paid calls.",
-    "nextAction": "Finish the combined adapters, capability gates and focused tests; review the frozen implementation before integration.",
+    "evidence": "deliveryPolicy.currentFeatureEvidence",
+    "nextAction": "Retain the clean implementation worktree and isolated fixture. Real-provider and packaged acceptance remain separate release gates; do not publish or deploy.",
+    "workflowMetrics": {
+      "implementationOwners": 1,
+      "fullReviewPasses": 1,
+      "affectedOnlyReviewPasses": 1,
+      "reviewFixBatches": 1,
+      "productionBuildRuns": 1,
+      "tokenUsage": null,
+      "note": "Workflow counts only, not measured token savings. Baseline pipeline check was rerun with node:test after initially using the wrong runner. Dependency installation reported an unapproved protobuf build script; unrelated build scripts were not approved."
+    },
     "releaseEligible": false
   },
   "previousCodexMcpImplementationBatch": {

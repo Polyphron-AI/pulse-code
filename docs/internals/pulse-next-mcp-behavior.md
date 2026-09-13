@@ -1,9 +1,10 @@
 # MCP behavior proposal
 
-Status: launch defaults and connection-failure handling approved. Remaining details
-are the implementation proposal. The isolated preflight decision module is
-implemented and tested. Durable configuration and authenticated management RPC
-and settings are integrated; provider execution and composer integration remain.
+Status: launch defaults and connection-failure handling approved. Durable
+configuration, management, composer selection and provider preparation are
+integrated for Codex, Claude Code and Pulse-owned OpenCode sessions. The active
+JSON ledger records verification and remaining release gates; user documentation
+records provider limits. The sections below retain the agreed behavior design.
 
 ## Ownership and selection
 

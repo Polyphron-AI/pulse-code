@@ -2,8 +2,8 @@
 
 Status: defaults and module approach approved. Managed skills invocation and
 dictation passed development acceptance, including their composer controls.
-Codex-first MCP preparation and composer selection also passed development
-acceptance. The JSON feature ledger records current evidence
+MCP preparation and composer selection passed development acceptance for Codex,
+Claude Code and Pulse-owned OpenCode sessions. The JSON feature ledger records current evidence
 and remaining checks. Synthetic browser tests and layout mockups do not certify
 physical devices or packaged applications.
 
