@@ -32,6 +32,9 @@ interface PendingPreparation {
   readonly providerSession: ProviderSessionStartInput;
   readonly failed: ReadonlyArray<FailedMcpConnection>;
   readonly resolve: (outcome: McpSubmissionPreparation) => void;
+  readonly excludedConnectionIds: ReadonlyArray<string>;
+  readonly busy: boolean;
+  readonly error: string | null;
 }
 
 export function useManagedMcpComposer(input: {
@@ -39,6 +42,7 @@ export function useManagedMcpComposer(input: {
   readonly provider: ProviderDriverKind;
   readonly providerInstanceId: ProviderInstanceId;
   readonly threadId: ThreadId | null;
+  readonly identityKey: string;
   readonly draftConnectionIds: ReadonlyArray<string> | null;
   readonly onDraftConnectionIdsChange: (ids: ReadonlyArray<string> | null) => void;
   readonly onManage: () => void;
@@ -78,10 +82,23 @@ export function useManagedMcpComposer(input: {
   const resetOverride = useAtomCommand(resetPulseMcpThreadOverride, { reportFailure: false });
   const prepareTurn = useAtomCommand(preparePulseMcpTurn, { reportFailure: false });
   const serverOverride = threadOverride.data?.connectionIds;
+  const [ignoreServerOverride, setIgnoreServerOverride] = useState(false);
+  useEffect(() => {
+    setIgnoreServerOverride(false);
+  }, [input.environmentId, input.identityKey, input.threadId]);
+  useEffect(() => {
+    if (serverOverride === undefined) setIgnoreServerOverride(false);
+  }, [serverOverride]);
+  const effectiveServerOverride = ignoreServerOverride ? undefined : serverOverride;
   const selectionMode: "override" | "defaults" =
-    input.draftConnectionIds !== null || serverOverride !== undefined ? "override" : "defaults";
+    input.draftConnectionIds !== null || effectiveServerOverride !== undefined
+      ? "override"
+      : "defaults";
   const selectedIds =
-    input.draftConnectionIds ?? serverOverride ?? providerDefault.data?.connectionIds ?? [];
+    input.draftConnectionIds ??
+    effectiveServerOverride ??
+    providerDefault.data?.connectionIds ??
+    [];
   const loading =
     enabled &&
     (list.data === null ||
@@ -113,77 +130,135 @@ export function useManagedMcpComposer(input: {
               ? "MCP selection could not be loaded."
               : null;
 
-  const accessKey = `${input.environmentId}:${input.threadId ?? "draft"}:${input.providerInstanceId}:${selectedIds.join(",")}`;
+  const accessKey = `${input.environmentId}:${input.identityKey}:${input.threadId ?? "draft"}:${input.providerInstanceId}:${input.provider}:${selectedIds.join(",")}`;
   const accessKeyRef = useRef(accessKey);
+  accessKeyRef.current = accessKey;
+  const mountedRef = useRef(true);
+  const attemptRef = useRef(0);
+  const busyRef = useRef(false);
+  const activePromiseRef = useRef<Promise<McpSubmissionPreparation> | null>(null);
   const [pending, setPending] = useState<PendingPreparation | null>(null);
   const pendingRef = useRef<PendingPreparation | null>(null);
   pendingRef.current = pending;
+  const previousAccessKeyRef = useRef(accessKey);
+  if (previousAccessKeyRef.current !== accessKey) {
+    previousAccessKeyRef.current = accessKey;
+    attemptRef.current += 1;
+    busyRef.current = false;
+    pendingRef.current?.resolve({ status: "cancelled" });
+    pendingRef.current = null;
+  }
   useEffect(() => {
-    if (accessKeyRef.current === accessKey) return;
-    accessKeyRef.current = accessKey;
-    setPending((current) => {
-      current?.resolve({ status: "cancelled" });
-      return null;
-    });
-  }, [accessKey]);
-  useEffect(
-    () => () => {
+    mountedRef.current = true;
+    if (previousAccessKeyRef.current === accessKey && pendingRef.current === null) setPending(null);
+    return () => {
+      mountedRef.current = false;
+      attemptRef.current += 1;
       pendingRef.current?.resolve({ status: "cancelled" });
-    },
-    [],
-  );
+    };
+  }, [accessKey]);
 
   const runPreparation = useCallback(
     async (
       providerSession: ProviderSessionStartInput,
-      resolve: (outcome: McpSubmissionPreparation) => void,
+      pendingPreparation: PendingPreparation,
       options?: {
         readonly excludedConnectionIds?: ReadonlyArray<string>;
         readonly retry?: boolean;
       },
     ) => {
-      const result = await prepareTurn({
-        environmentId: input.environmentId,
-        input: {
-          threadId: providerSession.threadId,
-          providerSession,
-          ...(selectionMode === "override" ? { connectionIds: [...selectedIds] } : {}),
-          ...(options?.excludedConnectionIds
-            ? { excludedConnectionIds: [...options.excludedConnectionIds] }
-            : {}),
-          ...(options?.retry ? { retry: true } : {}),
-        },
-      });
-      if (accessKeyRef.current !== accessKey || result._tag === "Failure") {
-        resolve({ status: "cancelled" });
-        setPending(null);
-        return;
-      }
-      if (result.value.status === "ready") {
-        resolve({ status: "ready", preparationId: result.value.preparationId });
-        setPending(null);
-        return;
-      }
-      if (result.value.status === "failed") {
-        setPending({
-          providerSession,
-          resolve,
-          failed: result.value.connections.flatMap((connection) =>
-            connection.status === "failed"
-              ? [
-                  {
-                    connectionId: connection.connectionId,
-                    name: connection.name,
-                    message: connection.message,
-                  },
-                ]
-              : [],
-          ),
+      if (busyRef.current) return;
+      busyRef.current = true;
+      const attempt = ++attemptRef.current;
+      const excludedConnectionIds = [
+        ...new Set([
+          ...pendingPreparation.excludedConnectionIds,
+          ...(options?.excludedConnectionIds ?? []),
+        ]),
+      ];
+      const checking = { ...pendingPreparation, excludedConnectionIds, busy: true, error: null };
+      pendingRef.current = checking;
+      setPending(checking);
+      try {
+        const result = await prepareTurn({
+          environmentId: input.environmentId,
+          input: {
+            threadId: providerSession.threadId,
+            providerSession,
+            ...(selectionMode === "override" ? { connectionIds: [...selectedIds] } : {}),
+            ...(excludedConnectionIds.length > 0 ? { excludedConnectionIds } : {}),
+            ...(options?.retry ? { retry: true } : {}),
+          },
         });
-        return;
+        if (
+          !mountedRef.current ||
+          accessKeyRef.current !== accessKey ||
+          attempt !== attemptRef.current
+        )
+          return;
+        busyRef.current = false;
+        if (result._tag === "Failure") {
+          const failed = {
+            ...checking,
+            busy: false,
+            error: "Pulse Code could not check MCP connections. Retry or manage connections.",
+          };
+          pendingRef.current = failed;
+          setPending(failed);
+          return;
+        }
+        if (result.value.status === "ready") {
+          pendingPreparation.resolve({
+            status: "ready",
+            preparationId: result.value.preparationId,
+          });
+          pendingRef.current = null;
+          setPending(null);
+          return;
+        }
+        if (result.value.status === "failed") {
+          const failed = {
+            ...checking,
+            busy: false,
+            failed: result.value.connections.flatMap((connection) =>
+              connection.status === "failed"
+                ? [
+                    {
+                      connectionId: connection.connectionId,
+                      name: connection.name,
+                      message: connection.message,
+                    },
+                  ]
+                : [],
+            ),
+          };
+          pendingRef.current = failed;
+          setPending(failed);
+          return;
+        }
+        const message =
+          result.value.status === "active-turn"
+            ? "Finish or stop the active turn, then retry."
+            : "This provider cannot use Pulse-managed MCP connections.";
+        const failed = { ...checking, busy: false, error: message };
+        pendingRef.current = failed;
+        setPending(failed);
+      } catch {
+        if (
+          !mountedRef.current ||
+          accessKeyRef.current !== accessKey ||
+          attempt !== attemptRef.current
+        )
+          return;
+        busyRef.current = false;
+        const failed = {
+          ...checking,
+          busy: false,
+          error: "Pulse Code could not check MCP connections. Retry or manage connections.",
+        };
+        pendingRef.current = failed;
+        setPending(failed);
       }
-      resolve({ status: "cancelled" });
-      setPending(null);
     },
     [accessKey, input.environmentId, prepareTurn, selectedIds, selectionMode],
   );
@@ -192,10 +267,29 @@ export function useManagedMcpComposer(input: {
     (providerSession, options): Promise<McpSubmissionPreparation> => {
       if (input.provider !== "codex" || !supported) return Promise.resolve({ status: "ready" });
       if (blockedReason) return Promise.resolve({ status: "cancelled" });
-      if (options?.creatingWorktree && selectedIds.length > 0) {
-        return Promise.resolve({ status: "cancelled" });
-      }
-      return new Promise((resolve) => void runPreparation(providerSession, resolve));
+      if (activePromiseRef.current) return activePromiseRef.current;
+      const promise = new Promise<McpSubmissionPreparation>((resolvePromise) => {
+        const resolve = (outcome: McpSubmissionPreparation) => {
+          activePromiseRef.current = null;
+          resolvePromise(outcome);
+        };
+        const initial: PendingPreparation = {
+          providerSession,
+          resolve,
+          failed: [],
+          excludedConnectionIds: [],
+          busy: false,
+          error:
+            options?.creatingWorktree && selectedIds.length > 0
+              ? "Start the thread before using managed MCP connections. New worktree setup cannot apply them yet."
+              : null,
+        };
+        pendingRef.current = initial;
+        setPending(initial);
+        if (!initial.error) void runPreparation(providerSession, initial);
+      });
+      activePromiseRef.current = promise;
+      return promise;
     },
     [blockedReason, input.provider, runPreparation, selectedIds.length, supported],
   );
@@ -213,28 +307,39 @@ export function useManagedMcpComposer(input: {
     [input, setOverride, threadOverride],
   );
   const useDefaults = useCallback(async () => {
-    input.onDraftConnectionIdsChange(null);
-    if (!input.threadId) return;
+    if (!input.threadId) {
+      input.onDraftConnectionIdsChange(null);
+      return;
+    }
     const result = await resetOverride({
       environmentId: input.environmentId,
       input: { threadId: input.threadId },
     });
-    if (result._tag === "Success") threadOverride.refresh();
+    if (result._tag === "Success") {
+      setIgnoreServerOverride(true);
+      input.onDraftConnectionIdsChange(null);
+      threadOverride.refresh();
+    }
   }, [input, resetOverride, threadOverride]);
 
   const pause = pending ? (
     <McpSendPause
       open
       failed={pending.failed}
+      error={pending.error}
+      busy={pending.busy}
       onOpenChange={(open) => {
         if (!open) {
           pending.resolve({ status: "cancelled" });
+          pendingRef.current = null;
+          attemptRef.current += 1;
+          busyRef.current = false;
           setPending(null);
         }
       }}
-      onRetry={() => void runPreparation(pending.providerSession, pending.resolve, { retry: true })}
+      onRetry={() => void runPreparation(pending.providerSession, pending, { retry: true })}
       onContinueWithout={(excludedConnectionIds) =>
-        void runPreparation(pending.providerSession, pending.resolve, { excludedConnectionIds })
+        void runPreparation(pending.providerSession, pending, { excludedConnectionIds })
       }
       onManage={input.onManage}
     />

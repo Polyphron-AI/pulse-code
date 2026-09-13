@@ -1659,6 +1659,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     provider: selectedProvider,
     providerInstanceId: selectedInstanceId,
     threadId: activeThreadId,
+    identityKey: composerTargetKey(composerDraftTarget),
     draftConnectionIds: composerPulseMcpConnectionIds,
     onDraftConnectionIdsChange: (connectionIds) =>
       setComposerDraftPulseMcpConnectionIds(composerDraftTarget, connectionIds),

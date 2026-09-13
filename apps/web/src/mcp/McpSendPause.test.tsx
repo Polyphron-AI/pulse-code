@@ -33,4 +33,33 @@ describe("McpSendPause", () => {
     expect(markup).toContain("Manage connections");
     expect(markup).toContain("Cancel");
   });
+
+  it("shows actionable preparation errors without inventing a failed connection", () => {
+    const markup = renderToStaticMarkup(
+      <McpSendPauseContent
+        failed={[]}
+        error="Finish or stop the active turn, then retry."
+        onRetry={() => {}}
+        onContinueWithout={() => {}}
+        onManage={() => {}}
+      />,
+    );
+    expect(markup).toContain("Finish or stop the active turn, then retry.");
+    expect(markup).not.toContain("Continue without it");
+    expect(markup).toContain("Manage connections");
+  });
+
+  it("disables competing actions while a connection check runs", () => {
+    const markup = renderToStaticMarkup(
+      <McpSendPauseContent
+        failed={[{ connectionId: "linear", name: "Linear", message: "Token expired" }]}
+        busy
+        onRetry={() => {}}
+        onContinueWithout={() => {}}
+        onManage={() => {}}
+      />,
+    );
+    expect(markup).toContain("Checking the selected MCP connections");
+    expect(markup.match(/disabled=""/g)).toHaveLength(3);
+  });
 });

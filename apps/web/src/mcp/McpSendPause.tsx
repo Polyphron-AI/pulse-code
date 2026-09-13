@@ -17,6 +17,8 @@ export interface FailedMcpConnection {
 
 interface McpSendPauseActions {
   readonly failed: ReadonlyArray<FailedMcpConnection>;
+  readonly error?: string | null;
+  readonly busy?: boolean;
   readonly onRetry: () => void;
   readonly onContinueWithout: (excludedConnectionIds: ReadonlyArray<string>) => void;
   readonly onManage: () => void;
@@ -29,8 +31,10 @@ export function McpSendPauseContent(props: McpSendPauseActions) {
       <AlertDialogHeader>
         <AlertDialogTitle>MCP connections are not ready</AlertDialogTitle>
         <AlertDialogDescription>
-          Your message has not been sent. Retry the connections, fix them, or continue without the
-          failed connections for this turn.
+          {props.busy
+            ? "Checking the selected MCP connections. Your message has not been sent yet."
+            : (props.error ??
+              "Your message has not been sent. Retry the connections, fix them, or continue without the failed connections for this turn.")}
         </AlertDialogDescription>
         <ul className="space-y-2 pt-2 text-left text-sm">
           {props.failed.map((connection) => (
@@ -43,13 +47,21 @@ export function McpSendPauseContent(props: McpSendPauseActions) {
       </AlertDialogHeader>
       <AlertDialogFooter className="sm:flex-wrap">
         <AlertDialogClose render={<Button variant="ghost" />}>Cancel</AlertDialogClose>
-        <Button variant="outline" onClick={props.onManage}>
+        <Button variant="outline" disabled={props.busy} onClick={props.onManage}>
           Manage connections
         </Button>
-        <Button variant="outline" onClick={() => props.onContinueWithout(failedIds)}>
-          Continue without it
+        {failedIds.length > 0 ? (
+          <Button
+            variant="outline"
+            disabled={props.busy}
+            onClick={() => props.onContinueWithout(failedIds)}
+          >
+            Continue without it
+          </Button>
+        ) : null}
+        <Button disabled={props.busy} onClick={props.onRetry}>
+          {props.busy ? "Checking…" : "Retry"}
         </Button>
-        <Button onClick={props.onRetry}>Retry</Button>
       </AlertDialogFooter>
     </>
   );
