@@ -28,6 +28,14 @@ const mcpStates = () =>
   JSON.parse(NodeFS.readFileSync(process.env.T3_CODEX_COLLAB_SCRIPT, "utf8")).mcpStates;
 
 const write = (message) => process.stdout.write(`${JSON.stringify(message)}\n`);
+const threadStartResponse = (params) =>
+  script.echoSessionCwd && params?.cwd
+    ? {
+        ...fixture.responses.threadStart,
+        cwd: params.cwd,
+        thread: { ...fixture.responses.threadStart.thread, cwd: params.cwd },
+      }
+    : fixture.responses.threadStart;
 let turnStartCount = 0;
 let activeTurn;
 
@@ -112,7 +120,7 @@ rl.on("line", (line) => {
     return;
   }
   if (method === "thread/start") {
-    write({ id, result: fixture.responses.threadStart });
+    write({ id, result: threadStartResponse(message.params) });
     return;
   }
   if (method === "thread/resume") {
@@ -160,7 +168,7 @@ rl.on("line", (line) => {
       }
       return;
     }
-    write({ id, result: fixture.responses.threadStart });
+    write({ id, result: threadStartResponse(message.params) });
     return;
   }
   if (method === "turn/start") {
