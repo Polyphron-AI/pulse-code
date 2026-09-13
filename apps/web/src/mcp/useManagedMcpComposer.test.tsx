@@ -11,6 +11,8 @@ const mocks = vi.hoisted(() => ({
   prepare: vi.fn(),
   setOverride: vi.fn(),
   resetOverride: vi.fn(),
+  saveDefaults: vi.fn(),
+  defaultRefresh: vi.fn(),
   result: null as ReturnType<typeof import("./useManagedMcpComposer").useManagedMcpComposer> | null,
 }));
 
@@ -44,13 +46,14 @@ vi.mock("../state/query", () => ({
           ]
         : { connectionIds: ["linear"] },
     error: null,
-    refresh: vi.fn(),
+    refresh: target?.kind === "default" ? mocks.defaultRefresh : vi.fn(),
   }),
 }));
 vi.mock("./mcpState", () => ({
   pulseMcpList: () => ({ kind: "list" }),
   pulseMcpProviderDefault: () => ({ kind: "default" }),
   pulseMcpThreadOverride: () => ({ kind: "override" }),
+  setPulseMcpProviderDefault: { kind: "saveDefaults" },
   preparePulseMcpTurn: { kind: "prepare" },
   setPulseMcpThreadOverride: { kind: "set" },
   resetPulseMcpThreadOverride: { kind: "reset" },
@@ -61,7 +64,9 @@ vi.mock("../state/use-atom-command", () => ({
       ? mocks.prepare
       : command.kind === "set"
         ? mocks.setOverride
-        : mocks.resetOverride,
+        : command.kind === "saveDefaults"
+          ? mocks.saveDefaults
+          : mocks.resetOverride,
 }));
 vi.mock("./McpSendPause", () => ({ McpSendPause: () => null }));
 
@@ -96,6 +101,8 @@ describe("useManagedMcpComposer", () => {
     mocks.prepare.mockReset();
     mocks.setOverride.mockReset().mockResolvedValue({ _tag: "Success", value: {} });
     mocks.resetOverride.mockReset().mockResolvedValue({ _tag: "Success", value: {} });
+    mocks.saveDefaults.mockReset().mockResolvedValue({ _tag: "Success", value: {} });
+    mocks.defaultRefresh.mockReset();
   });
 
   it("keeps the send pending after failure and carries exclusions into continue", async () => {
@@ -338,5 +345,29 @@ describe("useManagedMcpComposer", () => {
       environmentId: EnvironmentId.make("env-1"),
       input: { threadId: ThreadId.make("thread-1"), connectionIds: ["linear"] },
     });
+  });
+
+  it("saves the current selection as provider defaults without removing the thread override", async () => {
+    await act(async () => {
+      renderer = create(<Harness />);
+    });
+    await act(async () => mocks.result!.picker.onSaveDefaults?.());
+    expect(mocks.saveDefaults).toHaveBeenCalledWith({
+      environmentId: EnvironmentId.make("env-1"),
+      input: {
+        providerInstanceId: ProviderInstanceId.make("codex"),
+        connectionIds: ["linear"],
+      },
+    });
+    expect(mocks.defaultRefresh).toHaveBeenCalledOnce();
+    expect(mocks.resetOverride).not.toHaveBeenCalled();
+    expect(mocks.result!.picker.selectionMode).toBe("override");
+
+    mocks.saveDefaults.mockResolvedValueOnce({ _tag: "Failure" });
+    mocks.defaultRefresh.mockClear();
+    await act(async () => mocks.result!.picker.onSaveDefaults?.());
+    expect(mocks.defaultRefresh).not.toHaveBeenCalled();
+    expect(mocks.resetOverride).not.toHaveBeenCalled();
+    expect(mocks.result!.picker.selectedIds).toEqual(["linear"]);
   });
 });

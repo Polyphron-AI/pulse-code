@@ -26,6 +26,7 @@ import {
   pulseMcpProviderDefault,
   pulseMcpThreadOverride,
   resetPulseMcpThreadOverride,
+  setPulseMcpProviderDefault,
   setPulseMcpThreadOverride,
 } from "./mcpState";
 
@@ -85,6 +86,7 @@ export function useManagedMcpComposer(input: {
   );
   const setOverride = useAtomCommand(setPulseMcpThreadOverride, { reportFailure: false });
   const resetOverride = useAtomCommand(resetPulseMcpThreadOverride, { reportFailure: false });
+  const saveProviderDefault = useAtomCommand(setPulseMcpProviderDefault);
   const prepareTurn = useAtomCommand(preparePulseMcpTurn, { reportFailure: false });
   const serverOverride = threadOverride.data?.connectionIds;
   const [ignoreServerOverride, setIgnoreServerOverride] = useState(false);
@@ -351,6 +353,22 @@ export function useManagedMcpComposer(input: {
       threadOverride.refresh();
     }
   }, [input, resetOverride, threadOverride]);
+  const saveDefaults = useCallback(async () => {
+    const result = await saveProviderDefault({
+      environmentId: input.environmentId,
+      input: {
+        providerInstanceId: input.providerInstanceId,
+        connectionIds: [...selectedIds],
+      },
+    });
+    if (result._tag === "Success") providerDefault.refresh();
+  }, [
+    input.environmentId,
+    input.providerInstanceId,
+    providerDefault,
+    saveProviderDefault,
+    selectedIds,
+  ]);
 
   const previousThreadIdRef = useRef(input.threadId);
   useEffect(() => {
@@ -401,6 +419,7 @@ export function useManagedMcpComposer(input: {
       error: list.error ? "Could not load MCPs." : null,
       onChange: changeSelection,
       onUseDefaults: useDefaults,
+      ...(enabled ? { onSaveDefaults: saveDefaults } : {}),
       onManage: input.onManage,
       onRetry: list.refresh,
     },

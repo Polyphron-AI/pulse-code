@@ -36,6 +36,7 @@ export interface ManagedMcpPickerProps {
   readonly error?: string | null;
   readonly onChange: (connectionIds: ReadonlyArray<string>) => void;
   readonly onUseDefaults: () => void;
+  readonly onSaveDefaults?: () => void;
   readonly onManage: () => void;
   readonly onRetry?: () => void;
 }
@@ -166,6 +167,9 @@ export function ManagedMcpPicker(props: ManagedMcpPickerProps) {
         ) : (
           <p className="px-2 py-1 text-xs text-muted-foreground">Using provider defaults</p>
         )}
+        {props.onSaveDefaults ? (
+          <MenuItem onClick={props.onSaveDefaults}>Save as provider defaults</MenuItem>
+        ) : null}
         <MenuItem onClick={props.onManage}>
           <SettingsIcon />
           Manage MCPs

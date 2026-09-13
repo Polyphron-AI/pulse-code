@@ -30,6 +30,11 @@ export const pulseMcpProviderDefault = createEnvironmentRpcQueryAtomFamily(conne
   idleTtlMs: 60_000,
 });
 
+export const setPulseMcpProviderDefault = createEnvironmentRpcCommand(connectionAtomRuntime, {
+  label: "environment-data:pulse-mcp:set-provider-default",
+  tag: WS_METHODS.pulseMcpSetProviderDefault,
+});
+
 export const pulseMcpThreadOverride = createEnvironmentRpcQueryAtomFamily(connectionAtomRuntime, {
   label: "environment-data:pulse-mcp:thread-override",
   tag: WS_METHODS.pulseMcpGetThreadOverride,
