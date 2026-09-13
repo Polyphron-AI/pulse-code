@@ -6,6 +6,7 @@ import {
   formatDateTimeShort,
   formatHourShort,
   formatRelativeHourShort,
+  formatThreadCostUsd,
   makeWindow,
 } from "./usageFormat.ts";
 
@@ -69,5 +70,21 @@ describe("hourly usage formatting", () => {
     } finally {
       resolvedOptions.mockRestore();
     }
+  });
+});
+
+describe("formatThreadCostUsd", () => {
+  it("hides a zero or absent cost", () => {
+    expect(formatThreadCostUsd(0)).toBeNull();
+    expect(formatThreadCostUsd(null)).toBeNull();
+    expect(formatThreadCostUsd(Number.NaN)).toBeNull();
+  });
+
+  it("floors sub-cent amounts so they never read as free", () => {
+    expect(formatThreadCostUsd(0.004)).toBe("<$0.01");
+  });
+
+  it("formats a normal amount as currency", () => {
+    expect(formatThreadCostUsd(1.5)).toBe("$1.50");
   });
 });

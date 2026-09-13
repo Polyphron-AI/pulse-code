@@ -19,6 +19,16 @@ export function formatUsd(value: number): string {
   return CURRENCY.format(value);
 }
 
+/**
+ * Thread cost for display, or null when there is nothing worth showing.
+ * Exactly zero is not a reading a user needs, and anything the currency
+ * formatter would round to `$0.00` reads as free when it is not.
+ */
+export function formatThreadCostUsd(value: number | null): string | null {
+  if (value === null || !Number.isFinite(value) || value <= 0) return null;
+  return value < 0.01 ? "<$0.01" : formatUsd(value);
+}
+
 export function formatCount(value: number): string {
   return INTEGER.format(Math.round(value));
 }
