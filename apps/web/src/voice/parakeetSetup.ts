@@ -14,3 +14,9 @@ export function setupParakeet(
 ): Promise<void> {
   return getParakeetTranscriber().setup(signal, onProgress);
 }
+
+/** Release the device-local model when the user disables or abandons setup. */
+export function resetParakeet(): void {
+  transcriber?.reset();
+  transcriber = null;
+}

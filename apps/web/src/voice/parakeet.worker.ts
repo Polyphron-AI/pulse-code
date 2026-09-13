@@ -18,13 +18,13 @@ import {
 env.wasm.wasmPaths = { wasm: wasmUrl, mjs: wasmModuleUrl };
 
 let model: ReturnType<typeof fromHub> | null = null;
+let operationTail: Promise<void> = Promise.resolve();
 
 function reply(message: ParakeetWorkerReply): void {
   globalThis.postMessage(message);
 }
 
-globalThis.addEventListener("message", async (event: MessageEvent<ParakeetWorkerRequest>) => {
-  const { id, action, pcm } = event.data;
+async function handleRequest({ id, action, pcm }: ParakeetWorkerRequest): Promise<void> {
   try {
     model ??= fromHub("parakeet-tdt-0.6b-v3", {
       backend: "wasm",
@@ -50,4 +50,8 @@ globalThis.addEventListener("message", async (event: MessageEvent<ParakeetWorker
     console.error(`[parakeet] ${action} failed`, error);
     reply({ id, kind: "failure", failure: describeParakeetFailure(error) });
   }
+}
+
+globalThis.addEventListener("message", (event: MessageEvent<ParakeetWorkerRequest>) => {
+  operationTail = operationTail.then(() => handleRequest(event.data));
 });

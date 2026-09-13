@@ -37,6 +37,8 @@ export class ParakeetTranscriber implements PulseDictationTranscriber<Blob> {
   #generation = 0;
   #readyGeneration: number | null = null;
   #nextId = 0;
+  #operationActive = false;
+  readonly #operationQueue: Array<() => void> = [];
   readonly #pending = new Map<number, Pending>();
 
   constructor(
@@ -53,7 +55,7 @@ export class ParakeetTranscriber implements PulseDictationTranscriber<Blob> {
     onProgress?: (progress: ParakeetSetupProgress) => void,
   ): Promise<void> {
     const generation = this.#generation;
-    await this.#request("setup", undefined, signal, onProgress);
+    await this.#enqueueRequest("setup", undefined, signal, generation, onProgress);
     if (generation !== this.#generation) throw new Error("Parakeet setup was cancelled.");
     this.#readyGeneration = generation;
   }
@@ -69,7 +71,7 @@ export class ParakeetTranscriber implements PulseDictationTranscriber<Blob> {
     if (generation !== this.#generation || this.#readyGeneration !== generation) {
       throw new Error("Parakeet setup is no longer available.");
     }
-    return this.#request("transcribe", pcm, signal);
+    return this.#enqueueRequest("transcribe", pcm, signal, generation);
   }
 
   reset(): void {
@@ -122,7 +124,6 @@ export class ParakeetTranscriber implements PulseDictationTranscriber<Blob> {
     return new Promise((resolve, reject) => {
       const abort = () => {
         if (!this.#pending.delete(id)) return;
-        this.reset();
         reject(signal.reason);
       };
       signal.addEventListener("abort", abort, { once: true });
@@ -139,5 +140,40 @@ export class ParakeetTranscriber implements PulseDictationTranscriber<Blob> {
       });
       worker.postMessage({ id, action, pcm }, pcm ? [pcm.buffer] : []);
     });
+  }
+
+  #enqueueRequest(
+    action: "setup" | "transcribe",
+    pcm: Float32Array | undefined,
+    signal: AbortSignal,
+    generation: number,
+    onProgress?: (progress: ParakeetSetupProgress) => void,
+  ): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const run = () => {
+        if (generation !== this.#generation) {
+          reject(new Error("Parakeet setup is no longer available."));
+          this.#finishOperation();
+          return;
+        }
+        void this.#request(action, pcm, signal, onProgress)
+          .then(resolve, reject)
+          .finally(() => {
+            this.#finishOperation();
+          });
+      };
+      if (this.#operationActive) {
+        this.#operationQueue.push(run);
+        return;
+      }
+      this.#operationActive = true;
+      run();
+    });
+  }
+
+  #finishOperation(): void {
+    const next = this.#operationQueue.shift();
+    if (next) next();
+    else this.#operationActive = false;
   }
 }

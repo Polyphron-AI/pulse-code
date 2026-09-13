@@ -1,7 +1,7 @@
 import { ArrowRightIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-import { setupParakeet } from "../../voice/parakeetSetup";
+import { resetParakeet, setupParakeet } from "../../voice/parakeetSetup";
 import {
   readDictationPreferences,
   writeDictationPreferences,
@@ -13,7 +13,14 @@ export function OnboardingDictationStep({ onContinue }: { readonly onContinue: (
   const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
-  useEffect(() => () => abortRef.current?.abort(), []);
+  const retainModelRef = useRef(false);
+  useEffect(
+    () => () => {
+      abortRef.current?.abort();
+      if (!retainModelRef.current) resetParakeet();
+    },
+    [],
+  );
 
   const chooseParakeet = async () => {
     const current = readDictationPreferences();
@@ -39,6 +46,13 @@ export function OnboardingDictationStep({ onContinue }: { readonly onContinue: (
   const decline = () => {
     const current = readDictationPreferences();
     writeDictationPreferences({ ...current, enabled: false });
+    resetParakeet();
+    retainModelRef.current = true;
+    onContinue();
+  };
+
+  const continueWithParakeet = () => {
+    retainModelRef.current = true;
     onContinue();
   };
 
@@ -73,7 +87,7 @@ export function OnboardingDictationStep({ onContinue }: { readonly onContinue: (
           Not now
         </Button>
         {state === "ready" ? (
-          <Button onClick={onContinue}>
+          <Button onClick={continueWithParakeet}>
             Continue
             <ArrowRightIcon className="size-3.5" />
           </Button>

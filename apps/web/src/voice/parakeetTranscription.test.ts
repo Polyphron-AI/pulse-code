@@ -64,7 +64,7 @@ describe("ParakeetTranscriber", () => {
     await expect(pending).resolves.toBe("local text");
   });
 
-  it("terminates local inference and rejects delivery on cancellation", async () => {
+  it("cancels one inference without terminating the shared worker", async () => {
     const worker = new FakeWorker();
     const transcriber = new ParakeetTranscriber(
       () => worker as unknown as Worker,
@@ -79,7 +79,7 @@ describe("ParakeetTranscriber", () => {
     const reason = new Error("cancelled");
     abort.abort(reason);
     await expect(pending).rejects.toBe(reason);
-    expect(worker.terminate).toHaveBeenCalledOnce();
+    expect(worker.terminate).not.toHaveBeenCalled();
   });
 
   it("reset clears readiness without reloading implicitly", async () => {
@@ -130,7 +130,7 @@ describe("ParakeetTranscriber", () => {
     const decode = vi.fn(async () => new Float32Array([1]));
     const transcriber = new ParakeetTranscriber(createWorker, decode);
     const setup = transcriber.setup(new AbortController().signal);
-    firstWorker.reply({ id: 1, text: "" });
+    firstWorker.reply({ id: 1, kind: "result", text: "" });
     await setup;
     firstWorker.fail();
 
@@ -206,5 +206,48 @@ describe("ParakeetTranscriber", () => {
       }) as ErrorEvent,
     );
     await expect(setup).rejects.toThrow("Failed to load module script at parakeet.worker.js:12:4");
+  });
+
+  it("serializes concurrent inference and lets the next request survive cancellation", async () => {
+    const worker = new FakeWorker();
+    const transcriber = new ParakeetTranscriber(
+      () => worker as unknown as Worker,
+      async (audio) => new Float32Array([audio.size]),
+    );
+    const setup = transcriber.setup(new AbortController().signal);
+    worker.reply({ id: 1, kind: "result", text: "" });
+    await setup;
+
+    const firstAbort = new AbortController();
+    const first = transcriber.transcribe(new Blob(["a"]), firstAbort.signal);
+    const second = transcriber.transcribe(new Blob(["bb"]), new AbortController().signal);
+    await Promise.resolve();
+    expect(worker.postMessage).toHaveBeenCalledTimes(2);
+
+    const reason = new Error("cancel first only");
+    firstAbort.abort(reason);
+    await expect(first).rejects.toBe(reason);
+    await Promise.resolve();
+    expect(worker.postMessage).toHaveBeenCalledTimes(3);
+    expect(worker.terminate).not.toHaveBeenCalled();
+    worker.reply({ id: 3, kind: "result", text: "second transcript" });
+    await expect(second).resolves.toBe("second transcript");
+  });
+
+  it("retries setup cleanly after its caller aborts", async () => {
+    const worker = new FakeWorker();
+    const createWorker = vi.fn(() => worker as unknown as Worker);
+    const transcriber = new ParakeetTranscriber(createWorker, vi.fn());
+    const firstAbort = new AbortController();
+    const first = transcriber.setup(firstAbort.signal);
+    const reason = new Error("left setup");
+    firstAbort.abort(reason);
+    await expect(first).rejects.toBe(reason);
+
+    const retry = transcriber.setup(new AbortController().signal);
+    worker.reply({ id: 2, kind: "result", text: "" });
+    await expect(retry).resolves.toBeUndefined();
+    expect(createWorker).toHaveBeenCalledOnce();
+    expect(worker.terminate).not.toHaveBeenCalled();
   });
 });

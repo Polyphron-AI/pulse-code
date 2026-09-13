@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   save: vi.fn(),
   remove: vi.fn(),
   setup: vi.fn(),
+  resetParakeet: vi.fn(),
 }));
 
 vi.mock("@effect/atom-react", () => ({
@@ -51,7 +52,10 @@ vi.mock("./dictationSettingsState", () => ({
   saveGroqApiKey: "save",
   deleteGroqApiKey: "remove",
 }));
-vi.mock("./parakeetSetup", () => ({ setupParakeet: mocks.setup }));
+vi.mock("./parakeetSetup", () => ({
+  setupParakeet: mocks.setup,
+  resetParakeet: mocks.resetParakeet,
+}));
 vi.mock("../components/ui/radio-group", () => ({
   RadioGroup: ({
     children,
@@ -133,6 +137,7 @@ beforeEach(() => {
   mocks.save.mockReset().mockResolvedValue({ _tag: "Success", value: { configured: true } });
   mocks.remove.mockReset();
   mocks.setup.mockReset();
+  mocks.resetParakeet.mockReset();
 });
 afterEach(async () => {
   await act(() => renderer?.unmount());
@@ -175,6 +180,14 @@ describe("DictationSettings", () => {
     await act(() => checkbox.props.onCheckedChange(true));
     expect(readDictationPreferences().enabled).toBe(true);
     expect(json()).toContain("Set up Parakeet");
+  });
+
+  it("releases the local model when dictation is disabled", async () => {
+    await render();
+    const checkbox = renderer!.root.findByProps({ "data-slot": "checkbox" });
+    await act(() => checkbox.props.onCheckedChange(false));
+    expect(mocks.resetParakeet).toHaveBeenCalledOnce();
+    expect(readDictationPreferences().enabled).toBe(false);
   });
 
   it("does not call dictation endpoints without a fresh live capability", async () => {

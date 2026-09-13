@@ -2,8 +2,11 @@ import { act, type ReactNode } from "react";
 import { create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
-const mocks = vi.hoisted(() => ({ setup: vi.fn() }));
-vi.mock("../../voice/parakeetSetup", () => ({ setupParakeet: mocks.setup }));
+const mocks = vi.hoisted(() => ({ setup: vi.fn(), resetParakeet: vi.fn() }));
+vi.mock("../../voice/parakeetSetup", () => ({
+  setupParakeet: mocks.setup,
+  resetParakeet: mocks.resetParakeet,
+}));
 vi.mock("../ui/button", () => ({
   Button: ({ children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
     <button {...props}>{children as ReactNode}</button>
@@ -37,6 +40,7 @@ beforeEach(() => {
   values.clear();
   resetDictationPreferencesForTests();
   mocks.setup.mockReset();
+  mocks.resetParakeet.mockReset();
 });
 afterEach(async () => {
   await act(() => renderer?.unmount());
@@ -53,6 +57,7 @@ describe("OnboardingDictationStep", () => {
     await click("Not now");
     expect(readDictationPreferences().enabled).toBe(false);
     expect(mocks.setup).not.toHaveBeenCalled();
+    expect(mocks.resetParakeet).toHaveBeenCalled();
     expect(onContinue).toHaveBeenCalledOnce();
   });
 
@@ -76,6 +81,9 @@ describe("OnboardingDictationStep", () => {
     await act(() => finish());
     await click("Continue");
     expect(onContinue).toHaveBeenCalledOnce();
+    await act(() => renderer?.unmount());
+    renderer = undefined;
+    expect(mocks.resetParakeet).not.toHaveBeenCalled();
   });
 
   it("shows the real setup failure and allows retry", async () => {
@@ -87,5 +95,21 @@ describe("OnboardingDictationStep", () => {
     const output = JSON.stringify(renderer!.toJSON());
     expect(output).toContain("CompileError: bad wasm");
     expect(output).toContain("Try Parakeet setup again");
+  });
+
+  it("aborts setup and releases the model when navigation unmounts the step", async () => {
+    let signal!: AbortSignal;
+    mocks.setup.mockImplementation((value: AbortSignal) => {
+      signal = value;
+      return new Promise<void>(() => undefined);
+    });
+    await act(() => {
+      renderer = create(<OnboardingDictationStep onContinue={vi.fn()} />);
+    });
+    await click("Set up local dictation");
+    await act(() => renderer?.unmount());
+    renderer = undefined;
+    expect(signal.aborted).toBe(true);
+    expect(mocks.resetParakeet).toHaveBeenCalledOnce();
   });
 });

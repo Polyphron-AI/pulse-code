@@ -31,7 +31,7 @@ import {
   type DictationBackendPreference,
 } from "./dictationPreferences";
 import { deleteGroqApiKey, readGroqApiKeyStatus, saveGroqApiKey } from "./dictationSettingsState";
-import { setupParakeet } from "./parakeetSetup";
+import { resetParakeet, setupParakeet } from "./parakeetSetup";
 
 export function DictationSettings() {
   const { environments, isReady } = useEnvironments();
@@ -50,6 +50,7 @@ export function DictationSettings() {
 
   useEffect(() => {
     writeDictationPreferences({ enabled, backend, groqEnvironmentId });
+    if (!enabled) resetParakeet();
   }, [enabled, backend, groqEnvironmentId]);
 
   if (!isReady) return <p className="text-sm text-muted-foreground">Checking environments…</p>;
