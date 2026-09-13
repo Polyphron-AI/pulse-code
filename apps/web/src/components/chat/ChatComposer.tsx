@@ -8,6 +8,7 @@ import type {
   PreviewAnnotationPayload,
   ProviderApprovalDecision,
   ProviderInteractionMode,
+  PulseSkillSelection,
   ResolvedKeybindingsConfig,
   RuntimeMode,
   ScopedThreadRef,
@@ -81,6 +82,7 @@ import {
   useComposerThreadDraft,
   useEffectiveComposerModelState,
 } from "../../composerDraftStore";
+import { ManagedSkillPicker, useManagedSkillPickerState } from "../../skills/ManagedSkillPicker";
 import {
   MAX_STASH_ENTRIES,
   partitionStashAttachments,
@@ -1157,6 +1159,8 @@ export interface ChatComposerHandle {
     selectedProviderModels: ReadonlyArray<ServerProvider["models"][number]>;
     interactionMode: ProviderInteractionMode;
     interactionModeEnabled: boolean;
+    pulseSkills: ReadonlyArray<PulseSkillSelection>;
+    pulseSkillsBlockedReason: string | null;
   };
   /** Validate the fully composed text immediately before a provider turn starts. */
   validateProviderInput: (providerInput: string) => boolean;
@@ -1425,6 +1429,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const composerElementContexts = composerDraft.elementContexts;
   const composerPreviewAnnotations = composerDraft.previewAnnotations;
   const composerReviewComments = composerDraft.reviewComments;
+  const composerPulseSkills = composerDraft.pulseSkills;
   const standaloneComposerImages = useMemo(() => {
     const previewAnnotationIds = new Set(
       composerPreviewAnnotations.map((annotation) => annotation.id),
@@ -1493,6 +1498,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     (store) => store.syncPersistedAttachments,
   );
   const getComposerDraft = useComposerDraftStore((store) => store.getComposerDraft);
+  const setComposerDraftPulseSkills = useComposerDraftStore((store) => store.setPulseSkills);
 
   useEffect(() => {
     if (!attachmentUploadsCapabilityKnown) {
@@ -1628,6 +1634,11 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   // disabled.
   const selectedProvider: ProviderDriverKind =
     selectedProviderEntry?.driverKind ?? requestedDriverKind;
+  const managedSkillPickerState = useManagedSkillPickerState({
+    environmentId,
+    provider: selectedProvider,
+    selected: composerPulseSkills,
+  });
 
   const { modelOptions: composerModelOptions, selectedModel } = useEffectiveComposerModelState({
     threadRef: composerDraftTarget,
@@ -3919,6 +3930,19 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     size: "xs",
     hidden: composerControlsHidden || restingHiddenBlockCount > 1,
   });
+  const managedSkillPicker = (
+    <ManagedSkillPicker
+      state={managedSkillPickerState}
+      onChange={(pulseSkills) => setComposerDraftPulseSkills(composerDraftTarget, pulseSkills)}
+    />
+  );
+  const restingManagedSkillPicker = (
+    <ManagedSkillPicker
+      state={managedSkillPickerState}
+      size="xs"
+      onChange={(pulseSkills) => setComposerDraftPulseSkills(composerDraftTarget, pulseSkills)}
+    />
+  );
   const restingBlockDefs = [
     ...(providerTraitsPicker
       ? [
@@ -3947,6 +3971,20 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         />
       ),
     },
+    ...(managedSkillPickerState.providerIsCodex &&
+    (managedSkillPickerState.visible || composerPulseSkills.length > 0)
+      ? [
+          {
+            id: "skills",
+            content: (
+              <>
+                <ComposerControlSeparator size={composerControlsInStrip ? "xs" : "sm"} />
+                {composerControlsInStrip ? restingManagedSkillPicker : managedSkillPicker}
+              </>
+            ),
+          },
+        ]
+      : []),
   ];
   const hiddenRestingBlockIds = restingBlockDefs
     .slice(restingBlockDefs.length - restingHiddenBlockCount)
@@ -4016,14 +4054,17 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       />
 
       {composerControlsCompact ? (
-        <CompactComposerControlsMenu
-          interactionMode={interactionMode}
-          runtimeMode={runtimeMode}
-          showInteractionModeToggle={planModeUiEnabled}
-          traitsMenuContent={providerTraitsMenuContent}
-          onToggleInteractionMode={toggleInteractionMode}
-          onRuntimeModeChange={handleRuntimeModeChange}
-        />
+        <>
+          <CompactComposerControlsMenu
+            interactionMode={interactionMode}
+            runtimeMode={runtimeMode}
+            showInteractionModeToggle={planModeUiEnabled}
+            traitsMenuContent={providerTraitsMenuContent}
+            onToggleInteractionMode={toggleInteractionMode}
+            onRuntimeModeChange={handleRuntimeModeChange}
+          />
+          {managedSkillPicker}
+        </>
       ) : (
         <>
           {restingBlockDefs.map((def, index) => {
@@ -4070,6 +4111,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                 onToggleInteractionMode={toggleInteractionMode}
                 onRuntimeModeChange={handleRuntimeModeChange}
               />
+              {hiddenRestingBlockIds.includes("skills") ? restingManagedSkillPicker : null}
             </div>
           ) : null}
         </>
@@ -4642,6 +4684,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         selectedProviderModels,
         interactionMode,
         interactionModeEnabled: planModeUiEnabled,
+        pulseSkills: composerPulseSkills.map((selection) => ({ ...selection })),
+        pulseSkillsBlockedReason: managedSkillPickerState.blockedReason,
       }),
       validateProviderInput: (providerInput: string) => {
         const validationMessage = getComposerSubmissionValidationMessage({
@@ -4670,6 +4714,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       composerElementContextsRef,
       composerPreviewAnnotations,
       composerReviewComments,
+      composerPulseSkills,
       focusComposer,
       isConnecting,
       isComposerApprovalState,
@@ -4690,6 +4735,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       selectedProviderModels,
       interactionMode,
       planModeUiEnabled,
+      managedSkillPickerState.blockedReason,
       compactThreadContext,
       restoreAfterTimelineReachedEnd,
       getTimelineScrollableNode,
