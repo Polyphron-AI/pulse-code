@@ -150,13 +150,17 @@ describe("Pulse dictation HTTP transport", () => {
         );
       };
 
-      yield* transcribePulseDictation({
+      const error = yield* transcribePulseDictation({
         prepared,
         signer: Option.some(signer),
         remoteAuthorization: Option.some(remoteAuthorization),
         audio: new Blob(["audio"]),
       }).pipe(Effect.provide(remoteHttpClientLayer(fetchFn)), Effect.flip);
 
+      expect(error).toMatchObject({
+        _tag: "PulseDictationHttpResponseError",
+        status: 401,
+      });
       expect(authorizations).toBe(1);
       expect(calls).toHaveLength(1);
       expect(calls[0]!.url).toBe("https://relay.example.test/api/pulse/dictation/transcriptions");
@@ -196,8 +200,29 @@ describe("Pulse dictation HTTP transport", () => {
         Effect.flip,
       ),
     );
-    expect(invalid._tag).toBe("RemoteEnvironmentAuthInvalidJsonError");
+    expect(invalid._tag).toBe("PulseDictationInvalidResponseError");
   });
+
+  it.effect.each([400, 401, 413, 500])("retains sanitized HTTP %s errors", (status) =>
+    Effect.gen(function* () {
+      const error = yield* setPulseDictationApiKey({
+        ...context(),
+        apiKey: "never-retain-me",
+      }).pipe(
+        Effect.provide(
+          remoteHttpClientLayer(async () => Response.json({ error: `safe-${status}` }, { status })),
+        ),
+        Effect.flip,
+      );
+
+      expect(error).toMatchObject({
+        _tag: "PulseDictationHttpResponseError",
+        status,
+        serverMessage: `safe-${status}`,
+      });
+      expect(error).not.toHaveProperty("cause");
+    }),
+  );
 
   it.effect("rejects oversized audio before credentials or bytes leave the client", () =>
     Effect.gen(function* () {

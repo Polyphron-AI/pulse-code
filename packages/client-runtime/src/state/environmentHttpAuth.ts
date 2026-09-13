@@ -99,6 +99,8 @@ export const executeAuthenticatedEnvironmentHttpRequest = Effect.fn(
   }) => Effect.Effect<A, E, R>;
   /** Some endpoints report rejected credentials in a successful response. */
   readonly isUnauthorizedResponse?: (response: NoInfer<A>) => boolean;
+  /** Disable only for non-idempotent requests whose body must never be replayed. */
+  readonly retryInvalidDpopCredential?: boolean;
 }): Effect.fn.Return<A, RemoteEnvironmentRequestError, HttpClient.HttpClient | R> {
   let httpBaseUrl = input.prepared.httpBaseUrl;
   return yield* Effect.gen(function* () {
@@ -148,6 +150,7 @@ export const executeAuthenticatedEnvironmentHttpRequest = Effect.fn(
       if (Result.isFailure(result)) {
         if (
           authorization?._tag === "Dpop" &&
+          input.retryInvalidDpopCredential !== false &&
           rejectedAccessToken === undefined &&
           result.failure._tag === "EnvironmentAuthInvalidError" &&
           result.failure.reason === "invalid_credential"
@@ -160,6 +163,7 @@ export const executeAuthenticatedEnvironmentHttpRequest = Effect.fn(
 
       if (
         authorization?._tag === "Dpop" &&
+        input.retryInvalidDpopCredential !== false &&
         input.isUnauthorizedResponse?.(result.success) === true
       ) {
         if (rejectedAccessToken === undefined) {

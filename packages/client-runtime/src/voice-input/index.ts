@@ -22,6 +22,8 @@ export {
   getPulseDictationApiKeyStatus,
   PULSE_DICTATION_MAX_AUDIO_BYTES,
   PulseDictationAudioTooLargeError,
+  PulseDictationHttpResponseError,
+  PulseDictationInvalidResponseError,
   removePulseDictationApiKey,
   setPulseDictationApiKey,
   transcribePulseDictation,

@@ -4,6 +4,7 @@ import {
   PULSE_DICTATION_GROQ_API_KEY_SET_PATH,
   PULSE_DICTATION_TRANSCRIPTIONS_PATH,
   PulseDictationApiKeyStatus,
+  PulseDictationHttpError,
   PulseDictationTranscription,
 } from "@t3tools/contracts";
 import * as Data from "effect/Data";
@@ -23,11 +24,41 @@ export const PULSE_DICTATION_MAX_AUDIO_BYTES = 25 * 1024 * 1024;
 
 export class PulseDictationAudioTooLargeError extends Data.TaggedError(
   "PulseDictationAudioTooLargeError",
-)<{ readonly size: number; readonly maxSize: number }> {
+)<{
+  readonly size: number;
+  readonly maxSize: number;
+}> {
   override get message(): string {
     return "The recording exceeds the 25 MiB dictation limit.";
   }
 }
+
+export class PulseDictationHttpResponseError extends Data.TaggedError(
+  "PulseDictationHttpResponseError",
+)<{
+  readonly status: number;
+  readonly serverMessage: string;
+}> {
+  override get message(): string {
+    return this.serverMessage;
+  }
+}
+
+export class PulseDictationInvalidResponseError extends Data.TaggedError(
+  "PulseDictationInvalidResponseError",
+)<{
+  readonly status: number;
+}> {
+  override get message(): string {
+    return `The dictation endpoint returned an invalid ${this.status} response.`;
+  }
+}
+
+class PulseDictationSanitizedTransportError extends Data.TaggedError(
+  "PulseDictationSanitizedTransportError",
+)<{
+  readonly message: string;
+}> {}
 
 const statusResponse = Schema.Struct({
   status: Schema.Literal(200),
@@ -52,13 +83,23 @@ type ResponseInput = {
   readonly body?: unknown;
 };
 
+type DictationResponse<A> =
+  | { readonly _tag: "Success"; readonly value: A }
+  | { readonly _tag: "HttpError"; readonly status: number; readonly serverMessage: string }
+  | { readonly _tag: "Invalid"; readonly status: number };
+
 const send = <A, I extends ResponseInput>(input: {
   readonly method: "GET" | "POST";
   readonly url: string;
   readonly headers: { readonly authorization?: string; readonly dpop?: string };
   readonly body?: FormData | { readonly apiKey: string };
   readonly schema: Schema.ConstraintCodec<A, I, never, never>;
-}) =>
+  readonly expectedStatus: number;
+}): Effect.Effect<
+  DictationResponse<A>,
+  PulseDictationSanitizedTransportError,
+  HttpClient.HttpClient
+> =>
   Effect.gen(function* () {
     const http = yield* HttpClient.HttpClient;
     let request =
@@ -68,8 +109,33 @@ const send = <A, I extends ResponseInput>(input: {
       request = request.pipe(HttpClientRequest.bodyFormData(input.body));
     else if (input.body !== undefined)
       request = request.pipe(HttpClientRequest.bodyJsonUnsafe(input.body));
-    const response = yield* http.execute(request);
-    return yield* HttpClientResponse.schemaJson(input.schema)(response);
+    const response = yield* http.execute(request).pipe(
+      Effect.mapError(
+        () =>
+          new PulseDictationSanitizedTransportError({
+            message: "The dictation request could not reach the environment.",
+          }),
+      ),
+    );
+    if (response.status !== input.expectedStatus) {
+      const serverError = yield* response.json.pipe(
+        Effect.flatMap(Schema.decodeUnknownEffect(PulseDictationHttpError)),
+        Effect.option,
+      );
+      return {
+        _tag: "HttpError",
+        status: response.status,
+        serverMessage: Option.isSome(serverError)
+          ? serverError.value.error
+          : `The dictation endpoint returned HTTP ${response.status}.`,
+      };
+    }
+    const decoded = yield* HttpClientResponse.schemaJson(input.schema)(response).pipe(
+      Effect.option,
+    );
+    return Option.isSome(decoded)
+      ? { _tag: "Success", value: decoded.value }
+      : { _tag: "Invalid", status: response.status };
   });
 
 const run = <A, I extends ResponseInput>(
@@ -80,26 +146,36 @@ const run = <A, I extends ResponseInput>(
     readonly timeoutMs: number;
     readonly body?: FormData | { readonly apiKey: string };
     readonly schema: Schema.ConstraintCodec<A, I, never, never>;
+    readonly expectedStatus: number;
+    readonly retryInvalidDpopCredential?: boolean;
   },
-) => {
-  let requestUrl = new URL(config.path, input.prepared.httpBaseUrl).toString();
-  return executeAuthenticatedEnvironmentHttpRequest({
-    ...input,
-    method: config.method,
-    url: (httpBaseUrl) => {
-      requestUrl = new URL(config.path, httpBaseUrl).toString();
-      return requestUrl;
-    },
-    timeoutMs: input.timeoutMs ?? config.timeoutMs,
-    request: ({ headers }) => send({ ...config, url: requestUrl, headers }),
+) =>
+  Effect.gen(function* () {
+    let requestUrl = new URL(config.path, input.prepared.httpBaseUrl).toString();
+    const response = yield* executeAuthenticatedEnvironmentHttpRequest({
+      ...input,
+      method: config.method,
+      url: (httpBaseUrl) => {
+        requestUrl = new URL(config.path, httpBaseUrl).toString();
+        return requestUrl;
+      },
+      timeoutMs: input.timeoutMs ?? config.timeoutMs,
+      ...(config.retryInvalidDpopCredential === undefined
+        ? {}
+        : { retryInvalidDpopCredential: config.retryInvalidDpopCredential }),
+      request: ({ headers }) => send({ ...config, url: requestUrl, headers }),
+    });
+    if (response._tag === "HttpError") return yield* new PulseDictationHttpResponseError(response);
+    if (response._tag === "Invalid") return yield* new PulseDictationInvalidResponseError(response);
+    return response.value;
   });
-};
 
 export const getPulseDictationApiKeyStatus = (input: PulseDictationRequestContext) =>
   run(input, {
     method: "GET",
     path: PULSE_DICTATION_GROQ_API_KEY_PATH,
     timeoutMs: DEFAULT_DICTATION_REQUEST_TIMEOUT_MS,
+    expectedStatus: 200,
     schema: statusResponse,
   }).pipe(Effect.map((response) => response.body));
 
@@ -110,6 +186,7 @@ export const setPulseDictationApiKey = (
     method: "POST",
     path: PULSE_DICTATION_GROQ_API_KEY_SET_PATH,
     timeoutMs: DEFAULT_DICTATION_REQUEST_TIMEOUT_MS,
+    expectedStatus: 200,
     body: { apiKey: input.apiKey },
     schema: statusResponse,
   }).pipe(Effect.map((response) => response.body));
@@ -119,14 +196,12 @@ export const removePulseDictationApiKey = (input: PulseDictationRequestContext) 
     method: "POST",
     path: PULSE_DICTATION_GROQ_API_KEY_REMOVE_PATH,
     timeoutMs: DEFAULT_DICTATION_REQUEST_TIMEOUT_MS,
+    expectedStatus: 204,
     schema: emptyResponse,
   }).pipe(Effect.asVoid);
 
 export const transcribePulseDictation = (
-  input: PulseDictationRequestContext & {
-    readonly audio: Blob;
-    readonly fileName?: string;
-  },
+  input: PulseDictationRequestContext & { readonly audio: Blob; readonly fileName?: string },
 ) =>
   Effect.gen(function* () {
     if (input.audio.size > PULSE_DICTATION_MAX_AUDIO_BYTES) {
@@ -141,6 +216,8 @@ export const transcribePulseDictation = (
       method: "POST",
       path: PULSE_DICTATION_TRANSCRIPTIONS_PATH,
       timeoutMs: DEFAULT_TRANSCRIPTION_TIMEOUT_MS,
+      expectedStatus: 200,
+      retryInvalidDpopCredential: false,
       body,
       schema: transcriptionResponse,
     }).pipe(Effect.map((response) => response.body));
