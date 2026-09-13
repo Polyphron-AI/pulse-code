@@ -157,7 +157,6 @@ export function useManagedMcpComposer(input: {
   const activePromiseRef = useRef<Promise<McpSubmissionPreparation> | null>(null);
   const [pending, setPending] = useState<PendingPreparation | null>(null);
   const pendingRef = useRef<PendingPreparation | null>(null);
-  pendingRef.current = pending;
   const previousAccessKeyRef = useRef(accessKey);
   if (previousAccessKeyRef.current !== accessKey) {
     previousAccessKeyRef.current = accessKey;
@@ -196,6 +195,7 @@ export function useManagedMcpComposer(input: {
       ];
       const checking = { ...pendingPreparation, excludedConnectionIds, busy: true, error: null };
       pendingRef.current = checking;
+      if (options) setPending(checking);
       try {
         const result = await prepareTurn({
           environmentId: input.environmentId,
@@ -227,6 +227,7 @@ export function useManagedMcpComposer(input: {
           return;
         }
         if (result.value.status === "ready") {
+          busyRef.current = false;
           pendingPreparation.resolve({
             status: "ready",
             preparationId: result.value.preparationId,
@@ -350,6 +351,20 @@ export function useManagedMcpComposer(input: {
       threadOverride.refresh();
     }
   }, [input, resetOverride, threadOverride]);
+
+  const previousThreadIdRef = useRef(input.threadId);
+  useEffect(() => {
+    const previousThreadId = previousThreadIdRef.current;
+    previousThreadIdRef.current = input.threadId;
+    if (previousThreadId !== null || input.threadId === null || input.draftConnectionIds === null)
+      return;
+    void setOverride({
+      environmentId: input.environmentId,
+      input: { threadId: input.threadId, connectionIds: [...input.draftConnectionIds] },
+    }).then((result) => {
+      if (result._tag === "Success") threadOverride.refresh();
+    });
+  }, [input.environmentId, input.threadId, input.draftConnectionIds, setOverride, threadOverride]);
 
   const pause = pending ? (
     <McpSendPause
