@@ -120,6 +120,22 @@ Removing an entry removes its managed files from that environment, not its
 provider-native or workspace skills. This panel currently manages stored files
 only: managed skills cannot yet be selected or invoked from the composer.
 
+## Manage MCP connections
+
+On web and desktop, open **Settings → Integrations → MCP** and choose an
+environment. Save an HTTP endpoint or a local command with its arguments and
+environment variables. Commands belong to the selected environment, not the
+device displaying the page. Enter command arguments as a JSON array of strings
+to preserve spaces and empty arguments.
+
+Secret fields stay on the environment. Editing a connection retains existing
+secrets unless you replace or remove them. Removing a connection also removes its
+saved credentials. Older environments may require an update before adding
+connections.
+
+This panel currently manages configuration only. Saving does not connect a
+provider, start a process or run a tool. Composer selection is not available yet.
+
 ## Images and videos in messages
 
 Select an image or video attachment or link to preview it. Playback support depends

@@ -3,8 +3,8 @@
 Status: defaults and module approach approved. Managed skills settings, MCP
 management RPC, dictation adapters and authenticated Groq HTTP routes are
 integrated with focused tests. Provider invocation and composer controls remain
-unwired. MCP settings and dictation client transport are the next independent
-batches. The feature ledger owns scope and approval state; layout mockups are
+unwired. MCP settings and authenticated dictation client transport are now
+integrated. The feature ledger owns scope and approval state; layout mockups are
 not production behavior or packaged-platform verification.
 
 ## Packaging

@@ -3,7 +3,7 @@
 Status: launch defaults and connection-failure handling approved. Remaining details
 are the implementation proposal. The isolated preflight decision module is
 implemented and tested. Durable configuration and authenticated management RPC
-are integrated; settings, provider execution and composer integration remain.
+and settings are integrated; provider execution and composer integration remain.
 
 ## Ownership and selection
 

@@ -411,9 +411,21 @@
       "id": "mcp-settings",
       "branch": "feat/pulse-next-mcp-settings",
       "baseRevision": "d84d708d0",
-      "state": "implementing",
+      "state": "integrated",
+      "integratedRevisions": [
+        "e55bed844",
+        "01cd97683",
+        "9b811766d",
+        "009f26c72",
+        "4d154a573",
+        "a164658c9",
+        "584c386f0"
+      ],
+      "verification": "Independent Sol review; focused form/panel/settings tests and scoped web/server typechecks passed. Real isolated browser create/reload/edit/remove passed with no page errors or horizontal overflow at desktop and 390px mobile-web widths. No endpoint contacted or command launched.",
+      "compatibilityLearning": "Add needs atomic create-only semantics under the environment service lock, not a cached duplicate-ID check. A separate optional capability gates Add on old servers and is rechecked at mutation time; edit remains supported. Preserve exact argv strings through editing, including empty strings, spaces and newlines.",
       "acceptance": "Environment-scoped connection CRUD with live capability and fresh permission checks; secrets retained explicitly and never echoed; no provider connection or process starts on save.",
-      "integrationOwner": "Root mounts the reviewed module in existing Integrations settings."
+      "integrationOwner": "Root mounted the reviewed module in existing Integrations settings.",
+      "remaining": "Provider session application and composer selection remain unwired. Packaged desktop and native mobile are unverified."
     },
     {
       "id": "dictation-client-transport",

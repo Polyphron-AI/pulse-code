@@ -20,6 +20,9 @@ export const featureSuites = [
   { id: "managed-skills-settings", file: "apps/web/src/skills/ManagedSkillsSettings.test.tsx" },
   { id: "mcp-contracts", file: "packages/contracts/src/pulseMcp.test.ts" },
   { id: "mcp-rpc", file: "apps/server/src/mcp/PulseMcpRpc.test.ts" },
+  { id: "mcp-form", file: "apps/web/src/mcp/mcpForm.test.ts" },
+  { id: "mcp-panel", file: "apps/web/src/mcp/McpConnectionsPanel.test.tsx" },
+  { id: "mcp-settings", file: "apps/web/src/mcp/McpConnectionsSettings.test.tsx" },
   { id: "dictation-http", file: "apps/server/src/voice/http.test.ts" },
   {
     id: "dictation-client",
@@ -68,7 +71,7 @@ export function runFeatureSuites(root, run, exists = existsSync) {
     remaining: [
       "Skills provider invocation and composer integration",
       "MCP provider and composer integration",
-      "Dictation settings, authenticated client transport and composer integration",
+      "Dictation settings and composer integration",
       "Packaged-app and Windows verification",
     ],
   };
