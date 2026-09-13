@@ -29,7 +29,7 @@ headline and chart, and refreshing rescans every connected environment.
 You don't have to leave the thread to see where you stand. When the provider you're about to send
 to has reported subscription limits, a small ring sits next to the context window meter in the
 composer. It fills to whichever limit window is closest to its cap, and turns red once that window
-passes 90 percent. Hover it for the full breakdown: your plan, every window with how much is used
+reaches 90 percent. Hover it for the full breakdown: your plan, every window with how much is used
 and when it resets, and how long ago the provider last reported.
 
 On mobile, the same reading appears as a compact control in the expanded composer toolbar, showing

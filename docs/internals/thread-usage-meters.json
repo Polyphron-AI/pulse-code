@@ -47,14 +47,14 @@
     {
       "case": "Handoff to another provider: ring switches to the new instance's plan usage; cost total keeps prior turns (cost is money spent, not provider state).",
       "status": "applicable",
-      "verification": "verified-by-reading",
-      "reason": "Ring follows selectedInstanceId after handoff; deriveThreadCostUsd deliberately does not stop at handoffs (covered by a unit test)."
+      "verification": "verified-by-test",
+      "reason": "Ring follows selectedInstanceId after handoff (read); packages/client-runtime threadUsage.test.ts 'restarts the cumulative counter at each handoff and sums the segments' covers the cost total."
     },
     {
       "case": "Server restart mid-thread: Claude process-cumulative cost resets to a lower value; client total does not drop.",
       "status": "applicable",
       "verification": "verified-by-test",
-      "reason": "packages/client-runtime threadUsage.test.ts 'sums runs across a process restart drop'."
+      "reason": "packages/client-runtime threadUsage.test.ts 'still treats a drop without a handoff as a process restart'; apps/server ClaudeAdapter.test.ts 'does not re-emit a stale Claude cost'."
     },
     {
       "case": "Provider without plan usage (API key Claude, Cursor, Grok, OpenCode): no ring rendered, no empty popover.",
@@ -77,8 +77,8 @@
     {
       "case": "Mobile expanded composer shows the usage control only when there is something to show.",
       "status": "applicable",
-      "verification": "verified-by-reading",
-      "reason": "buildComposerUsageSummary returns null with no headline window and no cost; the control is conditional on it."
+      "verification": "verified-by-test",
+      "reason": "apps/mobile composerUsage.test.ts 'returns null when there is nothing to show' plus the subscription-plan case; the control renders only when the label is non-null."
     },
     {
       "case": "Older client receiving costUsd ignores it (optional field decodes).",
@@ -90,7 +90,7 @@
       "case": "Older server omitting costUsd: clients render no cost row.",
       "status": "applicable",
       "verification": "verified-by-test",
-      "reason": "apps/server ClaudeAdapter.test.ts 'omits costUsd when the SDK result reports no cost'; web hides the row when costUsd is null."
+      "reason": "apps/server ClaudeAdapter.test.ts 'omits costUsd when the SDK result reports no cost'; formatThreadCostUsd returns null for absent or zero cost so no row renders."
     },
     {
       "case": "Remote and relay connections: no new requests, all data already in the provider snapshot and thread activities.",
@@ -124,18 +124,26 @@
     },
     {
       "command": "vp test run src/provider/Layers/ClaudeAdapter.test.ts (apps/server)",
-      "result": "1 file, 75 tests passed"
+      "result": "1 file, 76 tests passed"
     },
     {
       "command": "vp test run src/state/threadUsage.test.ts (packages/client-runtime)",
-      "result": "1 file, 5 tests passed"
+      "result": "1 file, 7 tests passed"
+    },
+    {
+      "command": "vp test run src/usageFormat.test.ts (packages/shared)",
+      "result": "1 file, 9 tests passed"
     },
     {
       "command": "vp test run src/components/chat/ContextWindowMeter.logic.test.ts src/components/chat/PlanUsageMeter.logic.test.ts (apps/web)",
       "result": "2 files, 10 tests passed"
     },
     {
-      "command": "vp run typecheck (packages/contracts, packages/client-runtime)",
+      "command": "vp test run src/lib/composerUsage.test.ts (apps/mobile)",
+      "result": "1 file, 6 tests passed"
+    },
+    {
+      "command": "vp run typecheck (packages/contracts, packages/shared, packages/client-runtime)",
       "result": "clean"
     },
     {
@@ -144,7 +152,7 @@
     },
     {
       "command": "vp run typecheck (apps/server)",
-      "result": "no errors in changed files; pre-existing effect diagnostics in src/bin.test.ts"
+      "result": "no errors in changed files; pre-existing effect diagnostics in src/bin.ts and src/cli tests"
     },
     {
       "command": "vp run typecheck (apps/mobile)",
