@@ -18,6 +18,16 @@ export const PRODUCT_ALPHA_NAME = `${PRODUCT_BASE_NAME} (Alpha)`;
 export const PRODUCT_NIGHTLY_NAME = `${PRODUCT_BASE_NAME} (Nightly)`;
 export const PRODUCT_DEV_NAME = `${PRODUCT_BASE_NAME} (Dev)`;
 
+/**
+ * Who Windows says shipped the app. This becomes the staged package.json
+ * `author` and electron-builder's `win.publisherName`, which together drive the
+ * executable's VERSIONINFO CompanyName. That string is what the Windows Firewall
+ * prompt, the installer and the shortcut's Properties tab all display, so it
+ * must never fall back to T3's.
+ */
+export const DESKTOP_PUBLISHER_NAME = "Polyphron AI";
+export const DESKTOP_PUBLISHER_URL = "https://polyphronai.com";
+
 export const DESKTOP_APP_ID = "ai.polyphron.pulsenext";
 export const DESKTOP_DEVELOPMENT_APP_ID = `${DESKTOP_APP_ID}.dev`;
 

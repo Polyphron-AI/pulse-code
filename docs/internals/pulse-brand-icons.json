@@ -1,0 +1,88 @@
+{
+  "feature": "pulse-brand-icons",
+  "policyVersion": "2026-09-13",
+  "base": "885200895",
+  "branch": "feat/pulse-brand-icons",
+  "worktree": ".worktrees/pulse-brand-icons",
+  "ledgerFor": "Pulse Next brand mark and desktop publisher identity",
+  "predecessor": "docs/internals/pulse-next-installer-identity.json, whose limitations list 'the packaged app still carries T3's icon' and 'no Pulse artwork exists in the repository'. This slice closes both.",
+  "problem": "The installer, Windows taskbar, notification-area icon and desktop shortcut all showed the T3 mark, and Windows Firewall reported the publisher as 'T3 Tools'. Pulse Next already had its own bundle id, executable and product name, but no artwork and no publisher of its own.",
+  "scope": {
+    "included": [
+      "One hand-written SVG mark per channel as the committed source of truth, under assets/pulse/.",
+      "A Windows-capable raster generator that renders every slot from the SVG with sharp and the existing platform-neutral ICO writer.",
+      "Pulse raster files added alongside the T3 files, never replacing them.",
+      "A Pulse-owned asset seam so consumers switch in one place.",
+      "Desktop publisher identity: author, homepage and electron-builder publisherName, from one Pulse-owned constant."
+    ],
+    "excluded": [
+      "Building a full installer. The user runs integration builds; this slice proves wiring by inspection.",
+      "Mobile app icons in apps/mobile/app.config.ts. Out of the reported scope and a separate store-identity decision.",
+      "The macOS development launcher dock icon in apps/desktop/scripts/electron-launcher.mjs. macOS-only, dev-only, and it carries a version-assert test; editing it would add upstream churn for no shipped artifact.",
+      "Code signing and any Azure Trusted Signing publisher name, which comes from the certificate.",
+      "Replacing or deleting any assets/prod, assets/dev or assets/nightly T3 file.",
+      "Changing scripts/export-brand-icons.ts, which is the upstream T3 Icon Composer pipeline and stays byte-identical."
+    ]
+  },
+  "mark": {
+    "concept": "Three vertically centred capsule bars on a near-black rounded-square tile: short, tall, medium from left to right. It reads as a live signal rather than a symmetric bar chart, and the asymmetry gives it forward motion.",
+    "rationale": "Capsules are the shape class that survives box-filter downsampling to 16px. There are no thin strokes, no counters and no detail smaller than a ninth of the canvas, so every raster slot stays legible.",
+    "palette": {
+      "surfaceTile": "#0A0A0B",
+      "accentProduction": "#00FF88",
+      "accentNightly": "#00875A",
+      "accentDevelopment": "#2A6FF0"
+    },
+    "geometry": "1024 canvas, tile radius 224, three bars 132 wide at x 230/446/662, fully rounded, heights 300/620/424 all centred on y 512."
+  },
+  "seam": {
+    "assets": "scripts/lib/pulse-brand-assets.ts holds PULSE_BRAND_ASSET_PATHS and the Pulse mark sources. Upstream BRAND_ASSET_PATHS keeps describing the T3 files so scripts/export-brand-icons.ts still writes where it always did.",
+    "publisher": "DESKTOP_PUBLISHER_NAME and DESKTOP_PUBLISHER_URL in packages/shared/src/productIdentity.ts, the module that already owns every string naming the desktop app to the OS."
+  },
+  "acceptance": [
+    {
+      "case": "The committed SVG is the only artwork input; every raster is reproducible from it on Windows with no macOS tooling.",
+      "state": "pending"
+    },
+    {
+      "case": "The production Windows .ico contains 16, 32, 48, 64, 128 and 256 renditions, each actually at its declared size.",
+      "state": "pending"
+    },
+    {
+      "case": "resolveDesktopBuildIconAssets returns Pulse paths for both the latest and the nightly channel, and those files exist on disk.",
+      "state": "pending"
+    },
+    {
+      "case": "The emitted electron-builder config sets win.icon and the staged resources come from the Pulse .ico, so the installer, taskbar, notification-area icon and desktop shortcut all change together. The desktop app registers no Electron Tray, so the notification-area icon is the executable icon resource.",
+      "state": "pending"
+    },
+    {
+      "case": "The staged package.json author is the Pulse publisher and carries the polyphronai.com homepage, so the Windows Firewall and installer publisher stop reading 'T3 Tools'.",
+      "state": "pending"
+    },
+    {
+      "case": "win.publisherName is set so NSIS and SmartScreen display the Pulse publisher for the unsigned build too.",
+      "state": "pending"
+    },
+    {
+      "case": "Web favicons for the production and nightly brands resolve to Pulse files.",
+      "state": "pending"
+    },
+    {
+      "case": "Every T3 asset file that existed at base still exists and is unmodified, so an upstream merge stays clean.",
+      "state": "pending"
+    },
+    {
+      "case": "Remaining 'T3 Tools' strings that are not the Pulse desktop identity are left alone, with a reason.",
+      "state": "pending"
+    },
+    {
+      "case": "Installed appearance at 16px on a real taskbar.",
+      "state": "not-applicable-here",
+      "reason": "Requires an integration build and install, which the user owns. This slice proves wiring by inspection only."
+    }
+  ],
+  "upstreamEdits": [],
+  "tests": [],
+  "nextAction": "implement"
+}
