@@ -50,7 +50,7 @@ export function DictationSettings() {
 
   useEffect(() => {
     writeDictationPreferences({ enabled, backend, groqEnvironmentId });
-    if (!enabled) resetParakeet();
+    if (!enabled || backend !== "parakeet") resetParakeet();
   }, [enabled, backend, groqEnvironmentId]);
 
   if (!isReady) return <p className="text-sm text-muted-foreground">Checking environments…</p>;

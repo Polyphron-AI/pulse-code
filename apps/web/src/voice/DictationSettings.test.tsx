@@ -190,6 +190,13 @@ describe("DictationSettings", () => {
     expect(readDictationPreferences().enabled).toBe(false);
   });
 
+  it("releases the local model when the backend changes to Groq", async () => {
+    await render();
+    await click("Use Groq");
+    expect(mocks.resetParakeet).toHaveBeenCalledOnce();
+    expect(readDictationPreferences().backend).toBe("groq");
+  });
+
   it("does not call dictation endpoints without a fresh live capability", async () => {
     mocks.configSource = "cache";
     await render();
