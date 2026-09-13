@@ -38,6 +38,8 @@
       "fix/pulse-parakeet-init": "cbc09ec9c0"
     },
     "verification": "188 focused tests passed across 13 files; scoped web, scripts and shared typechecks passed; generated Pulse icon integrity passed; production web build passed with existing chunk-size and plugin-timing warnings.",
+    "parakeetUxRevision": "6475ccb128",
+    "parakeetUxVerification": "17 onboarding and Settings tests passed; failed setup preserves the prior preference; in-progress model downloads can be cancelled and retried; web typecheck and diff check passed.",
     "clientVerification": "No browser, packaged desktop, physical mobile or real microphone pass was requested or run."
   },
   "upstreamBase": "09e8de9c655ae85410bf6b00446f272a01da81c7",
