@@ -12,6 +12,7 @@ import {
   PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
   PreviewAnnotationPayloadSchema,
   type PreviewAnnotationPayload,
+  type PulseSkillRecord,
   RuntimeMode,
   type ServerProvider,
   type ScopedProjectRef,
@@ -72,6 +73,24 @@ export const DraftId = Schema.String.pipe(Schema.brand("DraftId"));
 export type DraftId = typeof DraftId.Type;
 
 const COMPOSER_PERSIST_DEBOUNCE_MS = 300;
+const MAX_COMPOSER_PULSE_SKILLS = 32;
+const PULSE_SKILL_ID_PATTERN = /^[a-z][a-z0-9-]{0,63}$/;
+const PULSE_SKILL_REVISION_PATTERN = /^[a-f0-9]{64}$/;
+
+export type ComposerPulseSkillSelection = Pick<PulseSkillRecord, "id" | "revision">;
+
+const ComposerPulseSkillSelectionSchema = Schema.Struct({
+  id: Schema.String.check(Schema.isPattern(PULSE_SKILL_ID_PATTERN)),
+  revision: Schema.String.check(Schema.isPattern(PULSE_SKILL_REVISION_PATTERN)),
+});
+const ComposerPulseSkillsSchema = Schema.Array(ComposerPulseSkillSelectionSchema).check(
+  Schema.isMaxLength(MAX_COMPOSER_PULSE_SKILLS),
+  Schema.makeFilter(
+    (selections) =>
+      new Set(selections.map((selection) => selection.id)).size === selections.length ||
+      "managed skill selections must have unique ids",
+  ),
+);
 
 // Keep the immutable state until flush. Migration writebacks already have the persisted shape.
 type ComposerPersistState =
@@ -166,6 +185,16 @@ function clearStaleFileUploadMetadata(
   return changed ? { ...draft, files } : draft;
 }
 
+function clearEnvironmentBoundDraftState(
+  draft: ComposerThreadDraftState,
+  environmentId: EnvironmentId,
+): ComposerThreadDraftState {
+  const withoutStaleUploads = clearStaleFileUploadMetadata(draft, environmentId);
+  return withoutStaleUploads.pulseSkills.length === 0
+    ? withoutStaleUploads
+    : { ...withoutStaleUploads, pulseSkills: [] };
+}
+
 export const PersistedComposerFileAttachment = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
@@ -253,6 +282,7 @@ const PersistedComposerThreadDraftState = Schema.Struct({
   modelSelectionExplicit: Schema.optionalKey(Schema.Boolean),
   runtimeMode: Schema.optionalKey(RuntimeMode),
   interactionMode: Schema.optionalKey(ProviderInteractionMode),
+  pulseSkills: Schema.optionalKey(ComposerPulseSkillsSchema),
 });
 type PersistedComposerThreadDraftState = typeof PersistedComposerThreadDraftState.Type;
 
@@ -390,6 +420,7 @@ export interface ComposerThreadDraftState {
   modelSelectionExplicit?: boolean;
   runtimeMode: RuntimeMode | null;
   interactionMode: ProviderInteractionMode | null;
+  pulseSkills: ReadonlyArray<ComposerPulseSkillSelection>;
 }
 
 /**
@@ -598,6 +629,10 @@ interface ComposerDraftStoreState {
     threadRef: ComposerThreadTarget,
     interactionMode: ProviderInteractionMode | null | undefined,
   ) => void;
+  setPulseSkills: (
+    threadRef: ComposerThreadTarget,
+    pulseSkills: ReadonlyArray<ComposerPulseSkillSelection>,
+  ) => void;
   addImage: (threadRef: ComposerThreadTarget, image: ComposerImageAttachment) => void;
   addImages: (threadRef: ComposerThreadTarget, images: ComposerImageAttachment[]) => void;
   removeImage: (threadRef: ComposerThreadTarget, imageId: string) => void;
@@ -743,6 +778,7 @@ const EMPTY_TERMINAL_CONTEXTS: TerminalContextDraft[] = [];
 const EMPTY_ELEMENT_CONTEXTS: ElementContextDraft[] = [];
 const EMPTY_PREVIEW_ANNOTATIONS: PreviewAnnotationPayload[] = [];
 const EMPTY_REVIEW_COMMENTS: ReviewCommentContext[] = [];
+const EMPTY_PULSE_SKILLS: ReadonlyArray<ComposerPulseSkillSelection> = [];
 Object.freeze(EMPTY_IMAGES);
 Object.freeze(EMPTY_FILES);
 Object.freeze(EMPTY_IDS);
@@ -750,6 +786,7 @@ Object.freeze(EMPTY_PERSISTED_ATTACHMENTS);
 Object.freeze(EMPTY_ELEMENT_CONTEXTS);
 Object.freeze(EMPTY_PREVIEW_ANNOTATIONS);
 Object.freeze(EMPTY_REVIEW_COMMENTS);
+Object.freeze(EMPTY_PULSE_SKILLS);
 const EMPTY_MODEL_SELECTION_BY_PROVIDER: Partial<Record<ProviderDriverKind, ModelSelection>> =
   Object.freeze({});
 const EMPTY_COMPOSER_DRAFT_MODEL_STATE = Object.freeze<ComposerDraftModelState>({
@@ -771,6 +808,7 @@ const EMPTY_THREAD_DRAFT = Object.freeze<ComposerThreadDraftState>({
   activeProvider: null,
   runtimeMode: null,
   interactionMode: null,
+  pulseSkills: EMPTY_PULSE_SKILLS,
 });
 
 /**
@@ -794,6 +832,7 @@ function createEmptyThreadDraft(): ComposerThreadDraftState {
     activeProvider: null,
     runtimeMode: null,
     interactionMode: null,
+    pulseSkills: [],
   };
 }
 
@@ -887,8 +926,31 @@ function shouldRemoveDraft(draft: ComposerThreadDraftState): boolean {
     Object.keys(draft.modelSelectionByProvider).length === 0 &&
     draft.activeProvider === null &&
     draft.runtimeMode === null &&
-    draft.interactionMode === null
+    draft.interactionMode === null &&
+    draft.pulseSkills.length === 0
   );
+}
+
+function normalizeComposerPulseSkills(value: unknown): ReadonlyArray<ComposerPulseSkillSelection> {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const normalized: ComposerPulseSkillSelection[] = [];
+  for (const selection of value) {
+    if (normalized.length >= MAX_COMPOSER_PULSE_SKILLS) break;
+    if (!selection || typeof selection !== "object") continue;
+    const { id, revision } = selection as Record<string, unknown>;
+    if (
+      typeof id !== "string" ||
+      !PULSE_SKILL_ID_PATTERN.test(id) ||
+      typeof revision !== "string" ||
+      !PULSE_SKILL_REVISION_PATTERN.test(revision) ||
+      seen.has(id)
+    )
+      continue;
+    seen.add(id);
+    normalized.push({ id, revision });
+  }
+  return normalized;
 }
 
 function normalizeProviderDriverKind(value: unknown): ProviderDriverKind | null {
@@ -1926,6 +1988,7 @@ function normalizePersistedDraftsByThreadId(
       draftCandidate.interactionMode === "plan" || draftCandidate.interactionMode === "default"
         ? draftCandidate.interactionMode
         : null;
+    const pulseSkills = normalizeComposerPulseSkills(draftCandidate.pulseSkills);
     const prompt = ensureInlineTerminalContextPlaceholders(
       promptCandidate,
       terminalContexts.length,
@@ -1989,7 +2052,8 @@ function normalizePersistedDraftsByThreadId(
       reviewComments.length === 0 &&
       !hasModelData &&
       !runtimeMode &&
-      !interactionMode
+      !interactionMode &&
+      pulseSkills.length === 0
     ) {
       continue;
     }
@@ -2021,6 +2085,7 @@ function normalizePersistedDraftsByThreadId(
         : {}),
       ...(runtimeMode ? { runtimeMode } : {}),
       ...(interactionMode ? { interactionMode } : {}),
+      ...(pulseSkills.length > 0 ? { pulseSkills: [...pulseSkills] } : {}),
     };
   }
 
@@ -2123,7 +2188,8 @@ export function partializeComposerDraftStoreState(
       draft.reviewComments.length === 0 &&
       !hasModelData &&
       draft.runtimeMode === null &&
-      draft.interactionMode === null
+      draft.interactionMode === null &&
+      draft.pulseSkills.length === 0
     ) {
       continue;
     }
@@ -2202,6 +2268,9 @@ export function partializeComposerDraftStoreState(
         : {}),
       ...(draft.runtimeMode ? { runtimeMode: draft.runtimeMode } : {}),
       ...(draft.interactionMode ? { interactionMode: draft.interactionMode } : {}),
+      ...(draft.pulseSkills.length > 0
+        ? { pulseSkills: draft.pulseSkills.map((selection) => ({ ...selection })) }
+        : {}),
     };
     persistedDraftsByThreadKey[threadKey] = persistedDraft;
   }
@@ -2464,6 +2533,7 @@ function toHydratedThreadDraft(
     ...(persistedDraft.modelSelectionExplicit ? { modelSelectionExplicit: true } : {}),
     runtimeMode: persistedDraft.runtimeMode ?? null,
     interactionMode: persistedDraft.interactionMode ?? null,
+    pulseSkills: normalizeComposerPulseSkills(persistedDraft.pulseSkills),
   };
 }
 
@@ -2656,7 +2726,7 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
               existingThread.environmentId !== projectRef.environmentId &&
               existingDraft !== undefined
             ) {
-              const nextDraft = clearStaleFileUploadMetadata(
+              const nextDraft = clearEnvironmentBoundDraftState(
                 existingDraft,
                 projectRef.environmentId,
               );
@@ -2799,11 +2869,23 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
             if (isUnchanged) {
               return state;
             }
+            const existingDraft = state.draftsByThreadKey[threadKey];
+            const nextDraftsByThreadKey =
+              projectChanged && existingDraft
+                ? {
+                    ...state.draftsByThreadKey,
+                    [threadKey]: clearEnvironmentBoundDraftState(
+                      existingDraft,
+                      nextProjectRef.environmentId,
+                    ),
+                  }
+                : state.draftsByThreadKey;
             return {
               draftThreadsByThreadKey: {
                 ...state.draftThreadsByThreadKey,
                 [threadKey]: nextDraftThread,
               },
+              draftsByThreadKey: nextDraftsByThreadKey,
             };
           });
         },
@@ -3265,6 +3347,22 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
             } else {
               nextDraftsByThreadKey[threadKey] = nextDraft;
             }
+            return { draftsByThreadKey: nextDraftsByThreadKey };
+          });
+        },
+        setPulseSkills: (threadRef, pulseSkills) => {
+          const threadKey = resolveComposerDraftKey(get(), threadRef) ?? "";
+          if (threadKey.length === 0) return;
+          const nextPulseSkills = normalizeComposerPulseSkills(pulseSkills);
+          set((state) => {
+            const existing = state.draftsByThreadKey[threadKey];
+            if (!existing && nextPulseSkills.length === 0) return state;
+            const base = existing ?? createEmptyThreadDraft();
+            if (Equal.equals(base.pulseSkills, nextPulseSkills)) return state;
+            const nextDraft = { ...base, pulseSkills: nextPulseSkills };
+            const nextDraftsByThreadKey = { ...state.draftsByThreadKey };
+            if (shouldRemoveDraft(nextDraft)) delete nextDraftsByThreadKey[threadKey];
+            else nextDraftsByThreadKey[threadKey] = nextDraft;
             return { draftsByThreadKey: nextDraftsByThreadKey };
           });
         },

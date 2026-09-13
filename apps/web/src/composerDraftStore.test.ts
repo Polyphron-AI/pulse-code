@@ -2565,6 +2565,89 @@ describe("composerDraftStore runtime and interaction settings", () => {
   });
 });
 
+describe("composerDraftStore managed skill selections", () => {
+  const threadId = ThreadId.make("thread-pulse-skills");
+  const threadRef = scopeThreadRef(TEST_ENVIRONMENT_ID, threadId);
+  const first = { id: "release-notes", revision: "a".repeat(64) };
+  const second = { id: "incident-review", revision: "b".repeat(64) };
+
+  beforeEach(resetComposerDraftStore);
+  afterEach(resetComposerDraftStore);
+
+  it("deduplicates by id, bounds the selection, and removes an empty selection-only draft", () => {
+    const store = useComposerDraftStore.getState();
+    store.setPulseSkills(threadRef, [
+      first,
+      { ...first, revision: "c".repeat(64) },
+      ...Array.from({ length: 40 }, (_, index) => ({
+        id: `skill-${index}`,
+        revision: index.toString(16).padStart(64, "0"),
+      })),
+    ]);
+
+    expect(store.getComposerDraft(threadRef)?.pulseSkills).toHaveLength(32);
+    expect(store.getComposerDraft(threadRef)?.pulseSkills[0]).toEqual(first);
+
+    store.setPulseSkills(threadRef, []);
+    expect(store.getComposerDraft(threadRef)).toBeNull();
+  });
+
+  it("preserves selections when composer content is cleared and through promotion", () => {
+    const projectRef = scopeProjectRef(TEST_ENVIRONMENT_ID, ProjectId.make("pulse-skills-project"));
+    const draftId = DraftId.make("pulse-skills-draft");
+    const store = useComposerDraftStore.getState();
+    store.setProjectDraftThreadId(projectRef, draftId, { threadId });
+    store.setPrompt(draftId, "send this");
+    store.setPulseSkills(draftId, [first, second]);
+
+    store.clearComposerContent(draftId);
+    expect(store.getComposerDraft(draftId)?.pulseSkills).toEqual([first, second]);
+
+    markPromotedDraftThreadByRef(threadRef);
+    finalizePromotedDraftThreadByRef(threadRef);
+    expect(store.getComposerDraft(threadRef)?.pulseSkills).toEqual([first, second]);
+  });
+
+  it("clears selections when a draft is retargeted to another environment", () => {
+    const draftId = DraftId.make("retargeted-pulse-skills-draft");
+    const localProject = scopeProjectRef(TEST_ENVIRONMENT_ID, ProjectId.make("local-project"));
+    const remoteProject = scopeProjectRef(
+      OTHER_TEST_ENVIRONMENT_ID,
+      ProjectId.make("remote-project"),
+    );
+    const store = useComposerDraftStore.getState();
+    store.setProjectDraftThreadId(localProject, draftId, { threadId });
+    store.setPulseSkills(draftId, [first]);
+
+    store.setProjectDraftThreadId(remoteProject, draftId, { threadId });
+
+    expect(store.getComposerDraft(draftId)?.pulseSkills).toEqual([]);
+
+    store.setPulseSkills(draftId, [second]);
+    store.setDraftThreadContext(draftId, { projectRef: localProject });
+    expect(store.getComposerDraft(draftId)?.pulseSkills).toEqual([]);
+  });
+
+  it("round-trips selections through persisted storage", async () => {
+    await useComposerDraftStore.persist.clearStorage();
+    vi.useFakeTimers();
+    try {
+      useComposerDraftStore.getState().setPulseSkills(threadRef, [first, second]);
+      await vi.advanceTimersByTimeAsync(300);
+      resetComposerDraftStore();
+      await useComposerDraftStore.persist.rehydrate();
+
+      expect(useComposerDraftStore.getState().getComposerDraft(threadRef)?.pulseSkills).toEqual([
+        first,
+        second,
+      ]);
+    } finally {
+      await useComposerDraftStore.persist.clearStorage();
+      vi.useRealTimers();
+    }
+  });
+});
+
 // ---------------------------------------------------------------------------
 // createDeferredStorage
 // ---------------------------------------------------------------------------
