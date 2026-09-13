@@ -1,0 +1,156 @@
+{
+  "policyVersion": "2026-09-13",
+  "feature": "Thread usage meters: subscription plan windows and API cost in the thread composer",
+  "owner": "one Opus implementation owner, Fable integrates",
+  "branch": "feat/thread-usage-meters",
+  "baseRevision": "da0725736",
+  "worktree": "F:/Dev Ops/T3/Pulse Code (in place)",
+  "scope": {
+    "supported": [
+      "Web and desktop: plan usage ring next to the context window meter in the composer footer, bound to the provider instance the composer targets. Popover lists plan label, each window with used percent and reset countdown, and last update age.",
+      "Web and desktop: session cost row inside the context window popover when the thread reports API cost.",
+      "Mobile: compact usage control in the expanded composer toolbar showing the most-used plan window percent and, when present, session cost. Tapping opens an alert-style sheet with the same detail as web.",
+      "Server: Claude adapter forwards the SDK result's total_cost_usd on the thread token usage snapshot as costUsd (process-cumulative). Clients reconstruct the thread total across process restarts by summing monotone runs.",
+      "Contracts: ThreadTokenUsageSnapshot.costUsd optional non-negative number. No other wire change; plan usage already ships on ServerProvider.planUsage."
+    ],
+    "unsupported": [
+      "Account credit balance: no provider CLI (Codex, Claude, Cursor, Grok, OpenCode) exposes a remaining-balance figure, so the closest honest signal is accumulated API-rate cost.",
+      "Codex, Cursor, Grok, OpenCode cost: those runtimes do not report cost per result. Codex subscription windows are covered by plan usage.",
+      "Claude subscription auth cost: the SDK still reports total_cost_usd at API rates; the popover labels it 'at API rates' and hides it when the provider reports plan windows, since subscription users are not billed per token."
+    ]
+  },
+  "acceptance": [
+    {
+      "case": "First turn on Codex subscription shows plan ring once the first rate-limit event lands; before that the ring is absent, not zero.",
+      "status": "applicable",
+      "verification": "verified-by-reading",
+      "reason": "PlanUsageMeter renders only when a window exists; absent planUsage yields no ring."
+    },
+    {
+      "case": "Subsequent turns update ring percent and popover countdown without remounting the composer.",
+      "status": "applicable",
+      "verification": "verified-by-reading",
+      "reason": "Ring and popover are props on a memoized footer; value changes re-render in place."
+    },
+    {
+      "case": "Reload: ring renders from the provider snapshot immediately, cost renders from persisted context-window activities.",
+      "status": "applicable",
+      "verification": "verified-by-reading",
+      "reason": "Ring reads ServerProvider.planUsage from the live snapshot; cost is a useMemo over persisted activities."
+    },
+    {
+      "case": "Draft to thread: before a thread exists the ring still shows the selected provider's plan usage; cost is absent.",
+      "status": "applicable",
+      "verification": "verified-by-reading",
+      "reason": "composerPlanUsage resolves from selectedInstanceId, not the thread; cost derive over an empty activity list returns null."
+    },
+    {
+      "case": "Handoff to another provider: ring switches to the new instance's plan usage; cost total keeps prior turns (cost is money spent, not provider state).",
+      "status": "applicable",
+      "verification": "verified-by-reading",
+      "reason": "Ring follows selectedInstanceId after handoff; deriveThreadCostUsd deliberately does not stop at handoffs (covered by a unit test)."
+    },
+    {
+      "case": "Server restart mid-thread: Claude process-cumulative cost resets to a lower value; client total does not drop.",
+      "status": "applicable",
+      "verification": "verified-by-test",
+      "reason": "packages/client-runtime threadUsage.test.ts 'sums runs across a process restart drop'."
+    },
+    {
+      "case": "Provider without plan usage (API key Claude, Cursor, Grok, OpenCode): no ring rendered, no empty popover.",
+      "status": "applicable",
+      "verification": "verified-by-reading",
+      "reason": "PlanUsageMeter returns null with no windows; ChatComposer passes null when planUsage is absent or empty."
+    },
+    {
+      "case": "Window at or above 90 percent renders in the destructive color on ring and bar.",
+      "status": "applicable",
+      "verification": "verified-by-test",
+      "reason": "apps/web PlanUsageMeter.logic.test.ts 'turns destructive at 90 percent'; ring and bar share isPlanUsageCritical."
+    },
+    {
+      "case": "Compact web viewport keeps both meters in the footer without wrapping the send button.",
+      "status": "applicable",
+      "verification": "not-verified",
+      "reason": "Needs a real client pass at a narrow viewport; no dev server or browser was started per the task constraints."
+    },
+    {
+      "case": "Mobile expanded composer shows the usage control only when there is something to show.",
+      "status": "applicable",
+      "verification": "verified-by-reading",
+      "reason": "buildComposerUsageSummary returns null with no headline window and no cost; the control is conditional on it."
+    },
+    {
+      "case": "Older client receiving costUsd ignores it (optional field decodes).",
+      "status": "applicable",
+      "verification": "verified-by-test",
+      "reason": "packages/contracts providerRuntime.test.ts decodes the snapshot with and without costUsd."
+    },
+    {
+      "case": "Older server omitting costUsd: clients render no cost row.",
+      "status": "applicable",
+      "verification": "verified-by-test",
+      "reason": "apps/server ClaudeAdapter.test.ts 'omits costUsd when the SDK result reports no cost'; web hides the row when costUsd is null."
+    },
+    {
+      "case": "Remote and relay connections: no new requests, all data already in the provider snapshot and thread activities.",
+      "status": "applicable",
+      "verification": "verified-by-reading",
+      "reason": "No new RPC or HTTP call: plan usage rides the existing provider snapshot, cost rides existing thread activities."
+    },
+    {
+      "case": "No continuously repainting animation; ring transitions only on value change.",
+      "status": "applicable",
+      "verification": "verified-by-reading",
+      "reason": "Ring uses a CSS transition on stroke-dashoffset only; timestamps are computed once per render with no ticking timer."
+    },
+    {
+      "case": "Account balance figure.",
+      "status": "unsupported",
+      "reason": "Unsupported by design: no provider CLI exposes an account balance.",
+      "verification": "not-verified"
+    }
+  ],
+  "tests": [
+    "packages/contracts: ThreadTokenUsageSnapshot decodes with and without costUsd.",
+    "apps/server ClaudeAdapter.test.ts: result with total_cost_usd emits token-usage snapshot carrying costUsd; result without it omits the field.",
+    "apps/web ContextWindowMeter.logic.test.ts or new threadUsage.logic.test.ts: cost reconstruction across drops, handoff boundary behavior, plan ring selection (max window, threshold color).",
+    "apps/mobile: logic test for the shared derive if mobile has its own copy."
+  ],
+  "evidence": [
+    {
+      "command": "vp test run src/providerRuntime.test.ts (packages/contracts)",
+      "result": "1 file, 12 tests passed"
+    },
+    {
+      "command": "vp test run src/provider/Layers/ClaudeAdapter.test.ts (apps/server)",
+      "result": "1 file, 75 tests passed"
+    },
+    {
+      "command": "vp test run src/state/threadUsage.test.ts (packages/client-runtime)",
+      "result": "1 file, 5 tests passed"
+    },
+    {
+      "command": "vp test run src/components/chat/ContextWindowMeter.logic.test.ts src/components/chat/PlanUsageMeter.logic.test.ts (apps/web)",
+      "result": "2 files, 10 tests passed"
+    },
+    {
+      "command": "vp run typecheck (packages/contracts, packages/client-runtime)",
+      "result": "clean"
+    },
+    {
+      "command": "vp run typecheck (apps/web)",
+      "result": "only pre-existing TS2307 for optional voice deps parakeet.js and onnxruntime-web"
+    },
+    {
+      "command": "vp run typecheck (apps/server)",
+      "result": "no errors in changed files; pre-existing effect diagnostics in src/bin.test.ts"
+    },
+    {
+      "command": "vp run typecheck (apps/mobile)",
+      "result": "12 errors, identical to the pre-change baseline measured with git stash; none in changed files"
+    }
+  ],
+  "blockers": [],
+  "nextAction": "review"
+}
