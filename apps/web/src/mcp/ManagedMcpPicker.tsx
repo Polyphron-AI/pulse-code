@@ -11,6 +11,7 @@ import { composerFloatingLayerProps } from "../components/chat/composerEventScop
 import {
   Menu,
   MenuCheckboxItem,
+  MenuGroup,
   MenuGroupLabel,
   MenuItem,
   MenuPopup,
@@ -117,42 +118,45 @@ export function ManagedMcpPicker(props: ManagedMcpPickerProps) {
           </button>
         ) : (
           <>
-            <MenuGroupLabel>Pulse-managed</MenuGroupLabel>
-            {pulseEntries.map((entry) => (
-              <MenuCheckboxItem
-                key={entry.id}
-                variant="switch"
-                checked={props.selectedIds.includes(entry.id)}
-                onCheckedChange={() =>
-                  props.onChange(toggleManagedMcpSelection(props.selectedIds, entry.id))
-                }
-              >
-                <EntryText entry={entry} />
-              </MenuCheckboxItem>
-            ))}
-            {pulseEntries.length === 0 ? (
-              <p className="px-2 py-2 text-sm text-muted-foreground">
-                {query.trim() ? "No matching managed MCPs." : "No managed MCPs configured."}
-              </p>
-            ) : null}
-
-            <MenuSeparator />
-            <MenuGroupLabel>Provider-native</MenuGroupLabel>
-            {props.nativeDiscovery === "unavailable" ? (
-              <p className="px-2 py-2 text-sm text-muted-foreground">
-                Native MCP discovery is unavailable for this provider.
-              </p>
-            ) : nativeEntries.length > 0 ? (
-              nativeEntries.map((entry) => (
-                <div key={entry.id} className="px-2 py-1 text-sm text-foreground">
+            <MenuGroup>
+              <MenuGroupLabel>Pulse-managed</MenuGroupLabel>
+              {pulseEntries.map((entry) => (
+                <MenuCheckboxItem
+                  key={entry.id}
+                  variant="switch"
+                  checked={props.selectedIds.includes(entry.id)}
+                  onCheckedChange={() =>
+                    props.onChange(toggleManagedMcpSelection(props.selectedIds, entry.id))
+                  }
+                >
                   <EntryText entry={entry} />
-                </div>
-              ))
-            ) : (
-              <p className="px-2 py-2 text-sm text-muted-foreground">
-                {query.trim() ? "No matching native MCPs." : "No native MCPs reported."}
-              </p>
-            )}
+                </MenuCheckboxItem>
+              ))}
+              {pulseEntries.length === 0 ? (
+                <p className="px-2 py-2 text-sm text-muted-foreground">
+                  {query.trim() ? "No matching managed MCPs." : "No managed MCPs configured."}
+                </p>
+              ) : null}
+            </MenuGroup>
+            <MenuSeparator />
+            <MenuGroup>
+              <MenuGroupLabel>Provider-native</MenuGroupLabel>
+              {props.nativeDiscovery === "unavailable" ? (
+                <p className="px-2 py-2 text-sm text-muted-foreground">
+                  Native MCP discovery is unavailable for this provider.
+                </p>
+              ) : nativeEntries.length > 0 ? (
+                nativeEntries.map((entry) => (
+                  <div key={entry.id} className="px-2 py-1 text-sm text-foreground">
+                    <EntryText entry={entry} />
+                  </div>
+                ))
+              ) : (
+                <p className="px-2 py-2 text-sm text-muted-foreground">
+                  {query.trim() ? "No matching native MCPs." : "No native MCPs reported."}
+                </p>
+              )}
+            </MenuGroup>
           </>
         )}
 
