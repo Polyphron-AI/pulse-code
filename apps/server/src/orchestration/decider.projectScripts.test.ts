@@ -432,6 +432,7 @@ it.layer(NodeServices.layer)("decider project scripts", (it) => {
           ]),
           interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
           runtimeMode: "approval-required",
+          pulseSkills: [{ id: "review", revision: "a".repeat(64) }],
           createdAt: now,
         },
         readModel,
@@ -455,6 +456,7 @@ it.layer(NodeServices.layer)("decider project scripts", (it) => {
           { id: "fastMode", value: true },
         ]),
         runtimeMode: "approval-required",
+        pulseSkills: [{ id: "review", revision: "a".repeat(64) }],
       });
     }),
   );

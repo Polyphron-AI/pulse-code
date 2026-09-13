@@ -63,6 +63,22 @@ function makeThreadOpenResponse(
 }
 
 describe("buildTurnStartParams", () => {
+  it("emits managed skills as native Codex user input", () => {
+    const params = Effect.runSync(
+      buildTurnStartParams({
+        threadId: "provider-thread-1",
+        runtimeMode: "full-access",
+        prompt: "Review this change",
+        skills: [{ name: "Code review", path: "/trusted/revisions/abc/SKILL.md" }],
+      }),
+    );
+
+    NodeAssert.deepEqual(params.input, [
+      { type: "text", text: "Review this change" },
+      { type: "skill", name: "Code review", path: "/trusted/revisions/abc/SKILL.md" },
+    ]);
+  });
+
   it("keeps invalid turn values only in the schema cause", () => {
     const secret = "codex-turn-input-secret-sentinel";
     const error = Effect.runSync(

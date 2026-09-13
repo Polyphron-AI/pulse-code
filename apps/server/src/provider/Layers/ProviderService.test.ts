@@ -60,7 +60,10 @@ import {
   ProviderWorkspaceMissingError,
   type ProviderAdapterError,
 } from "../Errors.ts";
-import type { ProviderAdapterShape } from "../Services/ProviderAdapter.ts";
+import type {
+  ProviderAdapterSendTurnInput,
+  ProviderAdapterShape,
+} from "../Services/ProviderAdapter.ts";
 import * as ProviderAdapterRegistry from "../Services/ProviderAdapterRegistry.ts";
 import * as ProviderService from "../Services/ProviderService.ts";
 import * as ProviderSessionDirectory from "../Services/ProviderSessionDirectory.ts";
@@ -77,6 +80,7 @@ import * as ServerConfig from "../../config.ts";
 import * as ServerSettings from "../../serverSettings.ts";
 import * as AnalyticsService from "../../telemetry/AnalyticsService.ts";
 import { makeAdapterRegistryMock } from "../testUtils/providerAdapterRegistryMock.ts";
+import type { ManagedSkillLibrary } from "../../skills/ManagedSkillLibrary.ts";
 import * as ProjectionSnapshotQuery from "../../orchestration/Services/ProjectionSnapshotQuery.ts";
 
 const defaultServerSettingsLayer = ServerSettings.ServerSettingsService.layerTest();
@@ -167,7 +171,7 @@ function makeFakeCodexAdapter(
 
   const sendTurn = vi.fn(
     (
-      input: ProviderSendTurnInput,
+      input: ProviderAdapterSendTurnInput,
     ): Effect.Effect<ProviderTurnStartResult, ProviderAdapterError> => {
       if (!sessions.has(input.threadId)) {
         return Effect.fail(
@@ -418,6 +422,7 @@ function makeProviderServiceLayer(
     readonly supportsConversationRollback?: boolean;
     readonly analyticsLayer?: Layer.Layer<AnalyticsService.AnalyticsService>;
     readonly registry?: ProviderAdapterRegistry.ProviderAdapterRegistry["Service"];
+    readonly managedSkillLibrary?: Pick<ManagedSkillLibrary, "resolveSelection">;
   } = {},
 ) {
   const codex = makeFakeCodexAdapter(CODEX_DRIVER, input.supportsConversationRollback);
@@ -445,7 +450,11 @@ function makeProviderServiceLayer(
 
   const layer = it.layer(
     Layer.mergeAll(
-      makeProviderServiceLive().pipe(
+      makeProviderServiceLive({
+        ...(input.managedSkillLibrary !== undefined
+          ? { managedSkillLibrary: input.managedSkillLibrary }
+          : {}),
+      }).pipe(
         Layer.provide(NodeServices.layer),
         Layer.provide(providerAdapterLayer),
         Layer.provide(directoryLayer),
@@ -986,6 +995,30 @@ it.effect("ProviderServiceLive rejects new sessions for disabled custom instance
 );
 
 const routing = makeProviderServiceLayer();
+const skillRevision = "a".repeat(64);
+const skillResolution = vi.fn(
+  async (selections: ReadonlyArray<{ id: string; revision?: string }>) =>
+    selections.map((selection) => {
+      if (selection.id === "removed") throw new Error("Managed skill removed was not found.");
+      if (selection.revision !== skillRevision) {
+        throw new Error(
+          `Managed skill ${selection.id} does not trust revision ${selection.revision}.`,
+        );
+      }
+      return {
+        id: selection.id,
+        name: `Skill ${selection.id}`,
+        description: "Test skill",
+        revision: skillRevision,
+        skillPath: `/trusted/${selection.id}/${skillRevision}/SKILL.md`,
+        source: { type: "upload" as const },
+        invocation: {},
+      };
+    }),
+);
+const skillRouting = makeProviderServiceLayer({
+  managedSkillLibrary: { resolveSelection: skillResolution },
+});
 
 const customCompactionDriver = ProviderDriverKind.make("custom-compaction-provider");
 const nativeCompactionInstanceId = ProviderInstanceId.make("native-compaction");
@@ -2765,6 +2798,102 @@ routing.layer("ProviderServiceLive routing", (it) => {
 
         NodeFS.rmSync(tempDir, { recursive: true, force: true });
       }).pipe(Effect.provide(NodeServices.layer)),
+  );
+});
+
+skillRouting.layer("ProviderServiceLive managed skill invocation", (it) => {
+  it.effect("resolves each Codex turn independently and passes only trusted name/path data", () =>
+    Effect.gen(function* () {
+      const provider = yield* ProviderService.ProviderService;
+      const first = asThreadId("managed-skill-first");
+      const second = asThreadId("managed-skill-second");
+      yield* Effect.forEach([first, second], (threadId) =>
+        provider.startSession(threadId, {
+          provider: CODEX_DRIVER,
+          providerInstanceId: codexInstanceId,
+          threadId,
+          runtimeMode: "full-access",
+        }),
+      );
+
+      yield* Effect.all(
+        [
+          provider.sendTurn({
+            threadId: first,
+            input: "first",
+            pulseSkills: [{ id: "review", revision: skillRevision }],
+          }),
+          provider.sendTurn({
+            threadId: second,
+            input: "second",
+            pulseSkills: [{ id: "release", revision: skillRevision }],
+          }),
+        ],
+        { concurrency: "unbounded" },
+      );
+
+      const calls = skillRouting.codex.sendTurn.mock.calls.map((call) => call[0]);
+      assert.deepEqual(calls.find((call) => call.threadId === first)?.resolvedSkills, [
+        { name: "Skill review", path: `/trusted/review/${skillRevision}/SKILL.md` },
+      ]);
+      assert.deepEqual(calls.find((call) => call.threadId === second)?.resolvedSkills, [
+        { name: "Skill release", path: `/trusted/release/${skillRevision}/SKILL.md` },
+      ]);
+    }),
+  );
+
+  it.effect("rejects unknown revisions and unsupported providers before adapter send", () =>
+    Effect.gen(function* () {
+      const provider = yield* ProviderService.ProviderService;
+      const codexThread = asThreadId("managed-skill-unknown-revision");
+      yield* provider.startSession(codexThread, {
+        provider: CODEX_DRIVER,
+        providerInstanceId: codexInstanceId,
+        threadId: codexThread,
+        runtimeMode: "full-access",
+      });
+      skillRouting.codex.sendTurn.mockClear();
+      const revisionFailure = yield* provider
+        .sendTurn({
+          threadId: codexThread,
+          input: "test",
+          pulseSkills: [{ id: "review", revision: "b".repeat(64) }],
+        })
+        .pipe(Effect.flip);
+      assert.instanceOf(revisionFailure, ProviderValidationError);
+      assert.include(revisionFailure.issue, "does not trust revision");
+      assert.equal(skillRouting.codex.sendTurn.mock.calls.length, 0);
+
+      const removedFailure = yield* provider
+        .sendTurn({
+          threadId: codexThread,
+          input: "test",
+          pulseSkills: [{ id: "removed", revision: skillRevision }],
+        })
+        .pipe(Effect.flip);
+      assert.instanceOf(removedFailure, ProviderValidationError);
+      assert.include(removedFailure.issue, "was not found");
+      assert.equal(skillRouting.codex.sendTurn.mock.calls.length, 0);
+
+      const claudeThread = asThreadId("managed-skill-unsupported");
+      yield* provider.startSession(claudeThread, {
+        provider: CLAUDE_AGENT_DRIVER,
+        providerInstanceId: claudeAgentInstanceId,
+        threadId: claudeThread,
+        runtimeMode: "full-access",
+      });
+      skillRouting.claude.sendTurn.mockClear();
+      const unsupported = yield* provider
+        .sendTurn({
+          threadId: claudeThread,
+          input: "test",
+          pulseSkills: [{ id: "review", revision: skillRevision }],
+        })
+        .pipe(Effect.flip);
+      assert.instanceOf(unsupported, ProviderValidationError);
+      assert.include(unsupported.issue, "does not support managed skill invocation");
+      assert.equal(skillRouting.claude.sendTurn.mock.calls.length, 0);
+    }),
   );
 });
 

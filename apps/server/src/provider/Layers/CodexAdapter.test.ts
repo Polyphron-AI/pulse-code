@@ -448,6 +448,26 @@ sessionErrorLayer("CodexAdapterLive session errors", (it) => {
     }),
   );
 
+  it.effect("forwards resolved managed skills to the Codex session runtime", () =>
+    Effect.gen(function* () {
+      const adapter = yield* CodexAdapter;
+      const runtime = sessionRuntimeFactory.lastRuntime;
+      NodeAssert.ok(runtime);
+      runtime.sendTurnImpl.mockClear();
+
+      yield* adapter.sendTurn({
+        threadId: asThreadId("sess-missing"),
+        input: "review",
+        resolvedSkills: [{ name: "Code review", path: "/trusted/review/SKILL.md" }],
+      });
+
+      NodeAssert.deepStrictEqual(runtime.sendTurnImpl.mock.calls[0]?.[0], {
+        input: "review",
+        skills: [{ name: "Code review", path: "/trusted/review/SKILL.md" }],
+      });
+    }),
+  );
+
   it.effect("passes configured launch args into the session runtime", () => {
     const runtimeFactory = makeRuntimeFactory();
     const layer = Layer.effect(
