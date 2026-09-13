@@ -36,6 +36,7 @@ import * as TestClock from "effect/testing/TestClock";
 import * as CodexErrors from "effect-codex-app-server/errors";
 
 import { ServerConfig } from "../../config.ts";
+import * as McpProviderSession from "../../mcp/McpProviderSession.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
 import { ProviderAdapterValidationError } from "../Errors.ts";
 import type { CodexAdapterShape } from "../Services/CodexAdapter.ts";
@@ -504,6 +505,47 @@ sessionErrorLayer("CodexAdapterLive session errors", (it) => {
       NodeAssert.equal(runtime.options.launchArgs, "--strict-config --enable foo");
     }).pipe(Effect.provide(layer));
   });
+
+  it.effect("keeps managed MCP secrets out of Codex launch arguments", () =>
+    Effect.gen(function* () {
+      const adapter = yield* CodexAdapter;
+      const threadId = asThreadId("sess-managed-mcp-secrets");
+      McpProviderSession.setManagedMcpServers(threadId, [
+        {
+          id: "http",
+          name: "HTTP",
+          transport: "http",
+          url: "https://mcp.example.test",
+          headers: { Authorization: "secret-http-value" },
+        },
+        {
+          id: "stdio",
+          name: "Stdio",
+          transport: "stdio",
+          command: "example-mcp",
+          args: [],
+          env: { API_KEY: "secret-stdio-value" },
+        },
+      ]);
+      yield* adapter.startSession({
+        provider: ProviderDriverKind.make("codex"),
+        threadId,
+        runtimeMode: "full-access",
+      });
+
+      const runtime = sessionRuntimeFactory.lastRuntime;
+      NodeAssert.ok(runtime);
+      const launchText = JSON.stringify(runtime.options.appServerArgs);
+      NodeAssert.equal(launchText.includes("secret-http-value"), false);
+      NodeAssert.equal(launchText.includes("secret-stdio-value"), false);
+      NodeAssert.equal(runtime.options.environment?.API_KEY, "secret-stdio-value");
+      NodeAssert.equal(
+        Object.values(runtime.options.environment ?? {}).includes("secret-http-value"),
+        true,
+      );
+      McpProviderSession.clearMcpProviderSession(threadId);
+    }),
+  );
 
   it.effect("uses T3CODE_CODEX_LAUNCH_ARGS for the session runtime", () => {
     const runtimeFactory = makeRuntimeFactory();
