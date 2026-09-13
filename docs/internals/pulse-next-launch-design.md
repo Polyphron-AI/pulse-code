@@ -2,8 +2,8 @@
 
 Status: defaults and module approach approved. Managed skills invocation and
 dictation passed development acceptance, including their composer controls.
-MCP management is integrated; provider preparation and composer selection are
-the active end-to-end feature. The JSON feature ledger records current evidence
+Codex-first MCP preparation and composer selection also passed development
+acceptance. The JSON feature ledger records current evidence
 and remaining checks. Synthetic browser tests and layout mockups do not certify
 physical devices or packaged applications.
 

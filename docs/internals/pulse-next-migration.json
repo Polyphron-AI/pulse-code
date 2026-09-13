@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "project": "Pulse Next",
   "updatedAt": "2026-09-13",
-  "status": "launch-services-and-adapters-integrated",
+  "status": "launch-features-development-acceptance-passed",
   "upstreamAutomation": {
     "decision": "approved-by-user",
     "implementation": "local-release-check-and-source-preparation-only",
@@ -11,7 +11,6 @@
     "installPolicy": "never replace running installation with an unverified candidate; installation requires confirmation",
     "runbook": "docs/operations/pulse-next-updates.md",
     "remaining": [
-      "Integrate Pulse launch features and targeted compatibility tests",
       "Separate application identity, signing and update feed",
       "Build and install packaged candidate in a disposable VM",
       "Verify upgrade data compatibility and recovery"
@@ -34,7 +33,7 @@
     {
       "id": "skills-mcp",
       "decision": "include",
-      "state": "source-present-scope-details-pending",
+      "state": "development-acceptance-passed-codex-first",
       "intent": "Launch with skills and MCP support; inventory exact launch content separately from infrastructure.",
       "dependencies": [],
       "proposedRules": [
@@ -396,7 +395,7 @@
     "completion": "Working real-client flow, focused automated checks, integrated review, failure recovery and compatibility evidence. Helpers, endpoints and settings alone do not mean feature complete.",
     "commits": "Keep layered commits without repeated helper-by-helper review gates.",
     "activeFeature": "mcp-provider-composer-integration",
-    "activeFeatureStatus": "paused-for-workflow-update",
+    "activeFeatureStatus": "development-acceptance-passed",
     "implementationPlan": "docs/plans/2026-09-13-mcp-end-to-end.md",
     "previousDictationEvidence": {
       "verifiedAt": "2026-09-13",
@@ -426,9 +425,23 @@
     },
     "acceptance": "Select Pulse-managed MCP connections, prepare them through the provider before sending, and preserve the draft on failure. Verify Retry and one-turn Continue without it, saved defaults/overrides, isolated concurrent threads, stale preparation rejection and explicit unsupported states. Keep provider-native configuration unchanged and test the combined real-client flow with a deterministic provider fixture.",
     "nextFeature": "launch-release-acceptance",
-    "blockedPolicy": "Record the blocker and request direction before switching features or declaring partial work complete."
+    "blockedPolicy": "Record the blocker and request direction before switching features or declaring partial work complete.",
+    "currentFeatureEvidence": {
+      "verifiedAt": "2026-09-13",
+      "codeRevision": "0df2dc767",
+      "automated": "161 focused web/draft tests; 20 integration tests before the final backend-only corrections; 15 affected server/helper/adapter/runtime tests after corrections; 7 update-gate tests. Configured web and Effect-aware server tsgo pass. Production web build passes with chunk-size/plugin-timing warnings.",
+      "browser": "Isolated Chromium with mock Codex: ready send and provider completion receipt; immediate reload retains override; failed connection preserves draft; Cancel; repaired Retry; Continue without it reaches completion and preserves saved selection after reload. No page errors. Final ready/reload rechecked after comparison correction.",
+      "review": "One complete frozen Sol review, one affected-only Sol re-review accepted the cached-failure correction; root reviewed the Effect-diagnostic and structural-comparison correction with affected tests.",
+      "compatibilityLearning": "Use the configured Effect-aware tsgo, not plain tsc. Keep per-turn claims separate from applied session configuration; verify live health and cached MCP failures in both modern and tokenless paths. Cleanup must own the idle session it stops.",
+      "screenshots": [
+        ".t3/visual-evidence/pulse-next-mcp-picker-dark-desktop.png",
+        ".t3/visual-evidence/pulse-next-mcp-picker-dark-mobile.png",
+        ".t3/visual-evidence/pulse-next-mcp-failure-dark-desktop.png"
+      ],
+      "limits": "Synthetic development acceptance only. Codex-first managed adapter; other providers retain native MCP behavior. Managed selection during new-worktree creation is explicitly blocked until the workspace exists. No signed installer, real external MCP, physical native mobile or remote deployment certification."
+    }
   },
-  "nextAction": "Follow deliveryPolicy.playbook and resume activeImplementationBatch when feature work is requested. MCP remains paused and incomplete; preserve pending work and prior evidence. Physical-device, real-model and packaged desktop acceptance remain separate release gates.",
+  "nextAction": "Managed skills, dictation and Codex-first MCP passed development acceptance. Follow the delivery playbook for launch-release-acceptance. Real-provider, physical-device, signing, installer and upgrade/recovery checks remain release gates; do not publish or deploy from synthetic evidence alone.",
   "parallelIntegrationBatches": [
     {
       "id": "skills-library-and-settings",
@@ -611,21 +624,76 @@
   "mcpBehaviorProposal": "docs/internals/pulse-next-mcp-behavior.md",
   "activeImplementationBatch": {
     "id": "mcp-provider-composer-integration",
-    "state": "paused-incomplete",
+    "state": "development-acceptance-passed",
     "branch": "experiment/pulse-next-v040",
-    "integrationRevision": "b2882609c",
+    "integrationRevision": "0df2dc767",
     "worktree": ".worktrees/pulse-next",
-    "completionBlockers": [
-      "Finish and test preparation-owned session expiry cleanup; never stop a reused or running upstream session.",
-      "Verify tokenless exact-match admission requires a live healthy provider session.",
-      "Verify explicit empty-selection preparation preserves ordinary active-turn queues.",
-      "Review final hook retry/cancellation fixes and run affected combined acceptance on the final revision."
+    "implementationOwner": "sol_mcp_adapter_audit",
+    "acceptanceCases": [
+      {
+        "case": "First send, subsequent unchanged session reuse, promotion and immediate reload",
+        "status": "passed-development-acceptance"
+      },
+      {
+        "case": "Failure pauses draft; Retry repairs; Continue excludes only this turn; Cancel does not send",
+        "status": "passed-development-acceptance"
+      },
+      {
+        "case": "Defaults, explicit none, ordered selection writes and identity cancellation",
+        "status": "passed-development-acceptance"
+      },
+      {
+        "case": "Concurrent threads, unchanged active queues and changed active configuration",
+        "status": "passed-development-acceptance"
+      },
+      {
+        "case": "Expiry affects only its own idle prepared session; crashed/missing sessions recheck readiness",
+        "status": "passed-development-acceptance"
+      },
+      {
+        "case": "Desktop-width and compact mobile-web composer",
+        "status": "prior-browser-evidence; no UI layout changes planned"
+      },
+      {
+        "case": "Old/native client tokenless sends, authentication and environment identity",
+        "status": "server compatibility tests passed; physical native client not certified"
+      },
+      {
+        "case": "Codex managed execution; other providers retain native MCP behavior",
+        "status": "Codex-first scope; other managed adapters unsupported"
+      },
+      {
+        "case": "New-worktree creation with managed selection",
+        "status": "explicitly unsupported until final workspace exists; verify rejection before persistence"
+      },
+      {
+        "case": "Signed installers, real providers, physical mobile and remote deployment",
+        "status": "separate release acceptance; synthetic development evidence only"
+      }
     ],
-    "preservedWork": "Uncommitted server follow-up in .worktrees/pulse-next-skills/apps/server/src/provider/Layers/ProviderService.ts; inspect before resuming or cherry-picking.",
-    "evidence": "Earlier browser checks passed ready send, repaired Retry, Cancel, one-turn Continue without it, defaults and promotion/reload. Desktop and mobile-web PNGs are in .t3/visual-evidence. These are prior evidence, not final acceptance of pending fixes.",
-    "nextAction": "Resume the existing server follow-up after inspecting its dirty worktree; finish the listed cases as one batch, freeze the revision, then request one complete review. Do not restart implementation or open another feature.",
-    "optionalImprovements": [],
-    "releaseEligible": false
+    "completionBlockers": [],
+    "preservedWork": "Server implementation worktree is clean; isolated mock environment and local evidence retained.",
+    "evidence": "See deliveryPolicy.currentFeatureEvidence for the authoritative verification record.",
+    "nextAction": "MCP development acceptance is complete. Next planned feature is launch-release-acceptance; request release scope before provisioning, publishing or deploying.",
+    "optionalImprovements": [
+      {
+        "id": "bounded-mcp-thread-lock-retention",
+        "priority": "later",
+        "reason": "Per-thread semaphores remain until service teardown; review as a separate measured resource-lifecycle improvement."
+      }
+    ],
+    "releaseEligible": false,
+    "workflowMetrics": {
+      "scope": "Resume under the 2026-09-13 playbook",
+      "implementationOwners": 1,
+      "fullReviewPasses": 1,
+      "affectedOnlyReviewPasses": 1,
+      "productionBuildRuns": 1,
+      "fixtureRepairs": 2,
+      "diagnosticCorrectionBatches": 1,
+      "tokenUsage": null,
+      "note": "Counts are workflow proxies, not measured token savings. Fixture fixes waited for loaded state and deterministic selection before assertions."
+    }
   },
   "previousManagedSkillsFoundationBatch": {
     "id": "managed-skills-foundation",
