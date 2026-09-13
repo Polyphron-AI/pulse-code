@@ -66,7 +66,7 @@ export type PulseMcpConnection = typeof PulseMcpConnection.Type;
 const ConnectionIds = Schema.Array(ConnectionId).check(Schema.isMaxLength(128));
 const Connections = Schema.Array(PulseMcpConnection).check(Schema.isMaxLength(128));
 
-export class PulseMcpError extends Schema.TaggedErrorClass<PulseMcpError>()("PulseMcpError", {
+export class PulseMcpError extends Schema.TaggedError<PulseMcpError>()("PulseMcpError", {
   message: Schema.String,
 }) {}
 

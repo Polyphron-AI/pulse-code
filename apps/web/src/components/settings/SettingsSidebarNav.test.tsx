@@ -8,8 +8,8 @@ const { navigate, scrollToSettingsTarget } = vi.hoisted(() => ({
 }));
 
 vi.mock("@tanstack/react-router", () => ({
-  useLocation: ({ select }: { select: (location: { hash: string }) => unknown }) =>
-    select({ hash: "" }),
+  useLocation: ({ select }: { select: (location: { hash: string; search: object }) => unknown }) =>
+    select({ hash: "", search: {} }),
   useNavigate: () => navigate,
   useRouterState: ({ select }: { select: (state: object) => unknown }) =>
     select({ resolvedLocation: { pathname: "/settings/integrations" } }),
