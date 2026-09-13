@@ -2,7 +2,7 @@ import * as Schema from "effect/Schema";
 import * as Rpc from "effect/unstable/rpc/Rpc";
 
 import { EnvironmentAuthorizationError } from "./auth.ts";
-import { PulseMcpPreparationId, ThreadId } from "./baseSchemas.ts";
+import { ProjectId, PulseMcpPreparationId, ThreadId } from "./baseSchemas.ts";
 import { ProviderInstanceId } from "./providerInstance.ts";
 import { ProviderSessionStartInput } from "./provider.ts";
 
@@ -102,6 +102,8 @@ const PreparedConnection = Schema.Union([
 export const PulseMcpPrepareTurnInput = Schema.Struct({
   threadId: ThreadId,
   providerSession: ProviderSessionStartInput,
+  /** Required for first drafts so project-scoped server tools resolve before projection exists. */
+  projectId: Schema.optionalKey(ProjectId),
   /** Omitted resolves the thread override or provider default. Empty selects no managed servers. */
   connectionIds: Schema.optionalKey(ConnectionIds),
   /** One-turn exclusions. They never update the saved thread or provider selection. */
