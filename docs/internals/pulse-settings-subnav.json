@@ -102,11 +102,17 @@
       "apps/web/src/components/settings/IntegrationsSettings.test.tsx"
     ]
   },
+  "state": "development-acceptance-passed",
+  "reviewedRevision": "2e2e8f0926",
   "evidence": {
     "tests": [
-      "vp test run src/components/settings/IntegrationsSettings.test.tsx src/components/settings/settingsSectionVisibility.test.ts src/components/settings/settingsSearch.test.ts (from apps/web)"
-    ]
+      "vp test run src/components/settings/SettingsSidebarNav.test.tsx src/components/settings/IntegrationsSettings.test.tsx src/components/settings/settingsSectionVisibility.test.ts src/components/settings/settingsSearch.test.ts (from apps/web): 4 files, 31 tests passed",
+      "vp run typecheck (from apps/web): passed",
+      "vp lint apps/web/src/components/settings/SettingsSidebarNav.tsx apps/web/src/components/settings/SettingsSidebarNav.test.tsx apps/web/src/components/settings/IntegrationsSettings.test.tsx: passed with one pre-existing react(set-state-in-effect) warning at SettingsSidebarNav.tsx:199"
+    ],
+    "review": "One complete review of the branch diff found that the original test asserted rendered section attributes, which the current repository test policy rejects. Revision 2e2e8f0926 replaces it with a behavioral sidebar test that verifies the four visible entries and same-page MCP scrolling. No implementation defects or unresolved findings remain.",
+    "browser": "Not run. The user requested focused automated verification, and this additive navigation-data change is covered by the existing generic scroll, hash, visibility and mobile-close paths plus the new behavioral test."
   },
   "blockers": [],
-  "nextAction": "None; slice complete pending maintainer review."
+  "nextAction": "Integrate the reviewed branch after the upstream compatibility merge establishes the final develop base; rerun the same focused suite if integration changes the settings navigation or section structure."
 }
