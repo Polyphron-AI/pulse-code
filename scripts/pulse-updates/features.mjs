@@ -21,6 +21,14 @@ export const featureSuites = [
   { id: "mcp-contracts", file: "packages/contracts/src/pulseMcp.test.ts" },
   { id: "mcp-rpc", file: "apps/server/src/mcp/PulseMcpRpc.test.ts" },
   { id: "dictation-http", file: "apps/server/src/voice/http.test.ts" },
+  {
+    id: "dictation-client",
+    file: "packages/client-runtime/src/voice-input/pulseDictation.test.ts",
+  },
+  {
+    id: "environment-http-auth",
+    file: "packages/client-runtime/src/state/environmentHttpAuth.test.ts",
+  },
   { id: "rpc-authorization", file: "apps/server/src/auth/RpcAuthorization.test.ts" },
   {
     id: "managed-skills-websocket",
