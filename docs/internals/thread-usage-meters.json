@@ -1,0 +1,166 @@
+{
+  "policyVersion": "2026-09-13",
+  "feature": "Thread usage meters on Pulse Next: plan usage ring and session cost in the web composer",
+  "owner": "one Opus implementation owner, Fable integrates",
+  "branch": "feat/thread-usage-meters-next",
+  "baseRevision": "eb702b89f",
+  "worktree": "F:/Dev Ops/T3/Pulse Code/.worktrees/thread-usage-meters-next",
+  "port": {
+    "legacyBranch": "pulse-code-old",
+    "legacyRevision": "2fa59554b",
+    "legacyLedger": "docs/internals/thread-usage-meters.json at 597dca863 on feat/thread-usage-meters",
+    "rule": "docs/operations/pulse-next-branches.md: port selected changes into a fresh branch from origin/develop; never merge the legacy branch wholesale."
+  },
+  "compatibility": {
+    "reuse": [
+      "ServerProvider.usageLimits (packages/contracts/src/providerUsageLimits.ts) is the plan usage source; no new server plumbing.",
+      "LimitWindows from apps/web/src/components/usage/UsageLimits.tsx renders the popover rows; no second window renderer.",
+      "@t3tools/shared/usageLimits helpers (remainingPercent, formatResetsIn) for headline selection and countdowns.",
+      "thread.token-usage.updated ingestion already stores the snapshot verbatim, so costUsd rides the existing context-window.updated activity."
+    ],
+    "upstreamEdits": [
+      "packages/contracts/src/providerRuntime.ts: one optional field costUsd on ThreadTokenUsageSnapshot.",
+      "apps/server/src/provider/Layers/ClaudeAdapter.ts: spread result.total_cost_usd as costUsd onto the emitted usage snapshot; never carry a stale cost forward.",
+      "apps/web/src/components/chat/ContextWindowMeter.tsx: optional costUsd prop rendering one row.",
+      "apps/web/src/components/chat/ChatComposer.tsx: render PlanUsageMeter beside ContextWindowMeter and pass costUsd (null when plan windows exist)."
+    ],
+    "pulseOwned": [
+      "apps/web/src/components/chat/PlanUsageMeter.tsx and PlanUsageMeter.logic.ts (+test)",
+      "packages/client-runtime/src/state/threadUsage.ts (+test), exported as ./state/thread-usage",
+      "packages/shared/src/usageFormat.ts formatThreadCostUsd (+test)"
+    ],
+    "mobile": "No new native controls per pulse-next-migration.json clientCompatibility.releasedMobile. Mobile keeps the upstream /usage-limits card. Session cost is web and desktop only in this port."
+  },
+  "scope": {
+    "supported": [
+      "Web and desktop: ring beside the context window meter showing the most-used window of the selected instance's usageLimits; hidden when there are no windows or usageLimits.unavailable is set. Popover: plan windows via LimitWindows compact rows, checkedAt age. Red at or above 90 percent used.",
+      "Web and desktop: Session cost row in the context window popover from costUsd summed per handoff segment with monotone-run reconstruction; sub-cent shows <$0.01; hidden at 0 or when the selected instance reports plan windows.",
+      "Server: Claude adapter forwards total_cost_usd as costUsd on the token usage snapshot.",
+      "Contracts: ThreadTokenUsageSnapshot.costUsd optional non-negative number."
+    ],
+    "unsupported": [
+      "Account credit balance: no provider exposes it.",
+      "Cost for Codex, Cursor, Grok, OpenCode: no per-result cost reported.",
+      "Mobile native controls: policy keeps released mobile on upstream behavior; /usage-limits already covers plan windows there.",
+      "Mobile session cost: follows from the above."
+    ]
+  },
+  "acceptance": [
+    {
+      "case": "Ring absent until the selected instance has at least one usage window; absent when unavailable.reason is set.",
+      "status": "applicable",
+      "verification": "verified",
+      "evidence": "unit: selectComposerPlanUsage hides undefined limits, empty windows, unsupported and probeFailed"
+    },
+    {
+      "case": "Ring follows the composer's selected instance, including drafts before a thread exists.",
+      "status": "applicable",
+      "verification": "verified-by-inspection",
+      "evidence": "composerPlanUsage resolves providerStatuses by selectedInstanceId, which is defined before any thread exists"
+    },
+    {
+      "case": "Ring and popover update in place as account.rate-limits.updated events land; no remount, no timers.",
+      "status": "applicable",
+      "verification": "verified-by-inspection",
+      "evidence": "ring derives from the providerStatuses prop; the only clock is a useState re-anchored on popover open, no interval"
+    },
+    {
+      "case": "Window at or above 90 percent used renders destructive color.",
+      "status": "applicable",
+      "verification": "verified",
+      "evidence": "unit: isPlanUsageCritical false at 89, true at 90 and 100"
+    },
+    {
+      "case": "Popover rows use LimitWindows so they match the /usage-limits banner and Usage page.",
+      "status": "applicable",
+      "verification": "verified-by-inspection",
+      "evidence": "PlanUsageMeter renders LimitWindows compact; planUsagePercent derives from the shared remainingPercent helper"
+    },
+    {
+      "case": "Session cost sums across provider restarts (drop) and handoff segments; test [10 | handoff | 2 | 2 | 3] = 17 and [10, 2] = 12.",
+      "status": "applicable",
+      "verification": "verified",
+      "evidence": "unit: deriveThreadCostUsd, both cases assert exactly"
+    },
+    {
+      "case": "Cost hidden when selected instance has plan windows; shown for API-key Claude; <$0.01 below a cent; hidden at 0.",
+      "status": "applicable",
+      "verification": "verified",
+      "evidence": "unit: formatThreadCostUsd; inspection: costUsd prop is null whenever composerPlanUsage is set"
+    },
+    {
+      "case": "Claude adapter: result with total_cost_usd emits costUsd; result without it omits costUsd even when lastGoodUsage carried one.",
+      "status": "applicable",
+      "verification": "verified",
+      "evidence": "unit: 3 ClaudeAdapter tests (forwards, omits, does not re-emit stale)"
+    },
+    {
+      "case": "Older client decodes snapshot with costUsd; older server omitting it yields no cost row.",
+      "status": "applicable",
+      "verification": "verified",
+      "evidence": "unit: contracts decode of fractional costUsd, absent costUsd, and rejection of a negative value"
+    },
+    {
+      "case": "Compact web viewport keeps both rings and send on one row.",
+      "status": "applicable",
+      "verification": "not-verified",
+      "evidence": "needs a browser pass; no dev server or browser was run in this port"
+    },
+    {
+      "case": "Remote and relay: no new requests.",
+      "status": "applicable",
+      "verification": "verified-by-inspection",
+      "evidence": "no new RPC or fetch; plan usage reads the already-published ServerProvider.usageLimits and cost rides the existing context-window activity"
+    },
+    {
+      "case": "Mobile native controls.",
+      "status": "unsupported",
+      "reason": "Pulse Next policy: released mobile stays on upstream behavior.",
+      "verification": "not-applicable"
+    }
+  ],
+  "tests": [
+    {
+      "command": "vp test run src/providerRuntime.test.ts",
+      "cwd": "packages/contracts",
+      "result": "14 passed"
+    },
+    {
+      "command": "vp test run src/usageFormat.test.ts",
+      "cwd": "packages/shared",
+      "result": "9 passed"
+    },
+    {
+      "command": "vp test run src/state/threadUsage.test.ts",
+      "cwd": "packages/client-runtime",
+      "result": "7 passed"
+    },
+    {
+      "command": "vp test run src/provider/Layers/ClaudeAdapter.test.ts",
+      "cwd": "apps/server",
+      "result": "132 passed"
+    },
+    {
+      "command": "vp test run src/orchestration/Layers/ProviderRuntimeIngestion.test.ts",
+      "cwd": "apps/server",
+      "result": "65 passed, unchanged"
+    },
+    {
+      "command": "vp test run src/components/chat/PlanUsageMeter.logic.test.ts src/components/chat/ContextWindowMeter.test.tsx src/lib/contextWindow.test.ts",
+      "cwd": "apps/web",
+      "result": "15 passed"
+    }
+  ],
+  "evidence": [
+    "typecheck clean (exit 0, zero errors): packages/contracts, packages/shared, packages/client-runtime, apps/server, apps/web",
+    "lint clean on every new file; ChatComposer and ChatView carry only pre-existing set-state-in-effect warnings",
+    "ingestion verified unchanged: buildContextWindowActivityPayload returns event.payload.usage verbatim, so costUsd rides through with no edit",
+    "mobile untouched per ledger policy"
+  ],
+  "blockers": [
+    "Pulse Next emits no provider.handoff activity. deriveThreadCostUsd still segments on that kind so a future handoff port keeps money already spent; the segmentation is unit-tested but currently unreachable in this codebase.",
+    "Compact-viewport layout with both rings plus send on one row is unverified: this port ran no dev server or browser."
+  ],
+  "nextAction": "review",
+  "implementedRevision": "7626de1da"
+}
