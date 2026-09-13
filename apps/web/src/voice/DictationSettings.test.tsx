@@ -172,6 +172,30 @@ describe("DictationSettings", () => {
     expect(json()).toContain("Set up Parakeet");
   });
 
+  it("aborts and releases an in-progress setup when Settings unmounts", async () => {
+    let signal!: AbortSignal;
+    mocks.setup.mockImplementation((value: AbortSignal) => {
+      signal = value;
+      return new Promise<void>(() => undefined);
+    });
+    await render();
+    await click("Set up Parakeet");
+    await act(() => renderer?.unmount());
+    renderer = undefined;
+    expect(signal.aborted).toBe(true);
+    expect(mocks.resetParakeet).toHaveBeenCalledOnce();
+  });
+
+  it("retains a successfully loaded model when Settings unmounts", async () => {
+    mocks.setup.mockResolvedValue(undefined);
+    await render();
+    await click("Set up Parakeet");
+    expect(json()).toContain("Parakeet ready");
+    await act(() => renderer?.unmount());
+    renderer = undefined;
+    expect(mocks.resetParakeet).not.toHaveBeenCalled();
+  });
+
   it("can reverse an onboarding decline", async () => {
     writeDictationPreferences({ enabled: false, backend: "parakeet", groqEnvironmentId: null });
     await render();

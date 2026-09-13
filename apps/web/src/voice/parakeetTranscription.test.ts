@@ -192,6 +192,25 @@ describe("ParakeetTranscriber", () => {
     );
   });
 
+  it("retries successfully on the same transcriber after a worker-reported failure", async () => {
+    const worker = new FakeWorker();
+    const createWorker = vi.fn(() => worker as unknown as Worker);
+    const transcriber = new ParakeetTranscriber(createWorker, vi.fn());
+    const failedSetup = transcriber.setup(new AbortController().signal);
+    worker.reply({
+      id: 1,
+      kind: "failure",
+      failure: { name: "CompileError", message: "bad wasm", causes: [] },
+    });
+    await expect(failedSetup).rejects.toThrow("CompileError: bad wasm");
+
+    const retry = transcriber.setup(new AbortController().signal);
+    worker.reply({ id: 2, kind: "result", text: "" });
+    await expect(retry).resolves.toBeUndefined();
+    expect(createWorker).toHaveBeenCalledOnce();
+    expect(worker.terminate).not.toHaveBeenCalled();
+  });
+
   it("preserves module worker startup error details", async () => {
     const worker = new FakeWorker();
     const transcriber = new ParakeetTranscriber(() => worker as unknown as Worker, vi.fn());

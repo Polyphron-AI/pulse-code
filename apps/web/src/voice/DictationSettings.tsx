@@ -117,10 +117,20 @@ function ParakeetSetup() {
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
-  useEffect(() => () => abortRef.current?.abort(), []);
+  const ownsSetupRef = useRef(false);
+  const retainModelRef = useRef(false);
+  useEffect(
+    () => () => {
+      abortRef.current?.abort();
+      if (ownsSetupRef.current && !retainModelRef.current) resetParakeet();
+    },
+    [],
+  );
   const setup = async () => {
     const abort = new AbortController();
     abortRef.current = abort;
+    ownsSetupRef.current = true;
+    retainModelRef.current = false;
     setState("setting-up");
     setError(null);
     setProgress(null);
@@ -128,7 +138,10 @@ function ParakeetSetup() {
       await setupParakeet(abort.signal, ({ loaded, total }) => {
         if (!abort.signal.aborted && total > 0) setProgress(Math.round((loaded / total) * 100));
       });
-      if (!abort.signal.aborted) setState("ready");
+      if (!abort.signal.aborted) {
+        retainModelRef.current = true;
+        setState("ready");
+      }
     } catch (cause) {
       if (!abort.signal.aborted) {
         setError(cause instanceof Error ? cause.message : String(cause));
