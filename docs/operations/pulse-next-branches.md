@@ -25,8 +25,10 @@ Fetch, preserve local work on a separate branch, then create a fresh worktree fr
 Pulse Next has no production release yet. Its retained local test environment is
 in `.worktrees/pulse-next/.t3/transport-validation`; the web port observed during
 this transition is 7986. Pairing is required. This is synthetic development
-evidence, not a public deployment. Production identity, signing, update feeds,
-packaged installation and real-provider acceptance remain release gates.
+evidence, not a public deployment. Signing, update feeds, packaged installation and real-provider acceptance
+remain release gates; the desktop application identity is now separate from
+T3 Code's, and [the Pulse Next installer runbook](pulse-next-installer.md)
+owns how to assemble and record a Windows build.
 
 Keep GitHub's default branch on `main` until its scheduled release workflows have
 been reviewed. Changing the default branch can activate scheduled publication from
