@@ -1,6 +1,8 @@
 // @effect-diagnostics nodeBuiltinImport:off - Tests use Node's glob matcher to verify electron-builder exclusions.
 import * as NodeCrypto from "node:crypto";
 import * as NodePath from "node:path";
+import { compareSemverVersions } from "@t3tools/shared/semver";
+import desktopManifest from "../apps/desktop/package.json" with { type: "json" };
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
@@ -275,12 +277,16 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
   // nightly and preview resolvers, so a Pulse build ships stable artwork, the
   // stable update channel and the Alpha product name.
   it("treats a pulse-suffixed version as a stable release", () => {
-    assert.equal(resolveDesktopUpdateChannel("0.0.40-pulse.1"), "latest");
-    assert.equal(resolveDesktopProductName("0.0.40-pulse.1"), "Pulse Next (Alpha)");
+    assert.equal(resolveDesktopUpdateChannel("0.0.41-pulse.1"), "latest");
+    assert.equal(resolveDesktopProductName("0.0.41-pulse.1"), "Pulse Next (Alpha)");
     assert.deepStrictEqual(
-      resolveDesktopBuildIconAssets("0.0.40-pulse.1"),
-      resolveDesktopBuildIconAssets("0.0.40"),
+      resolveDesktopBuildIconAssets("0.0.41-pulse.1"),
+      resolveDesktopBuildIconAssets("0.0.41"),
     );
+    assert.isAbove(compareSemverVersions("0.0.41-pulse.1", "0.0.41-nightly.20260913.1646"), 0);
+    assert.isBelow(compareSemverVersions("0.0.41-pulse.1", "0.0.41"), 0);
+    assert.equal(desktopManifest.productName, "Pulse Next (Alpha)");
+    assert.notMatch(desktopManifest.productName, /T3 Code/i);
   });
 
   it("switches desktop packaging icons to the nightly artwork for nightly versions", () => {

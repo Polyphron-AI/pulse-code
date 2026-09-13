@@ -46,18 +46,18 @@ A Pulse Next version says which T3 Code version the build is compatible up to,
 followed by a Pulse revision count against that same upstream base:
 
 ```
-0.0.40-pulse.1
+0.0.41-pulse.1
 \____/ \_____/
   |        |
   |        Pulse revision against that upstream base, starting at 1
   Upstream T3 Code version this build is compatible up to
 ```
 
-Upstream's own manifests do not identify the release they belong to. The
-`v0.0.40` tag still declares `0.0.39`, because upstream bumps the version after
-cutting a tag. Encoding the upstream version in the Pulse string removes that
-ambiguity: the number on the installer is the number you compare against T3
-Code.
+The merged upstream line determines the compatibility number. When a fetched
+`upstream/main` includes commits from the `0.0.41` nightly or preview line, use
+`0.0.41-pulse.N` even if upstream's manifests still contain `0.0.40`. Upstream
+bumps manifest versions after cutting releases, so the newest merged tag line is
+the reliable compatibility signal.
 
 One string is used everywhere. These four manifests are the only places it is
 written down, and everything else derives from them:
