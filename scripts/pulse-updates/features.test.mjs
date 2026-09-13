@@ -41,6 +41,8 @@ test("MCP gates include the composer, admission and native readiness boundaries"
     "mcp-draft-boundary",
     "mcp-provider-admission",
     "mcp-provider-configuration",
+    "mcp-claude-provider-configuration",
+    "mcp-opencode-provider-configuration",
     "mcp-native-readiness",
   ]) {
     assert.ok(

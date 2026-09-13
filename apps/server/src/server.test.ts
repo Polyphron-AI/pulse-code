@@ -4894,6 +4894,9 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
             const config = yield* client[WS_METHODS.serverGetConfig]({});
             assert.equal(config.pulseCapabilities?.mcpManagement, true);
             assert.equal(config.pulseCapabilities?.mcpCreateOnly, true);
+            assert.equal(config.pulseCapabilities?.codexManagedMcp, true);
+            assert.equal(config.pulseCapabilities?.claudeManagedMcp, true);
+            assert.equal(config.pulseCapabilities?.openCodeManagedMcp, true);
             const connection = yield* client[WS_METHODS.pulseMcpUpsert]({
               id: "fixture",
               name: "Fixture",

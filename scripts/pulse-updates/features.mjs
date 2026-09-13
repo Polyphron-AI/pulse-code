@@ -68,6 +68,16 @@ export const featureSuites = [
     testNamePattern: "managed MCP",
   },
   {
+    id: "mcp-claude-provider-configuration",
+    file: "apps/server/src/provider/Layers/ClaudeAdapter.test.ts",
+    testNamePattern: "managed MCP",
+  },
+  {
+    id: "mcp-opencode-provider-configuration",
+    file: "apps/server/src/provider/Layers/OpenCodeAdapter.test.ts",
+    testNamePattern: "managed MCP",
+  },
+  {
     id: "mcp-native-readiness",
     file: "apps/server/src/provider/Layers/CodexCollabRuntime.integration.test.ts",
     testNamePattern: "native MCP startup",
@@ -120,7 +130,7 @@ export function runFeatureSuites(root, run, exists = existsSync) {
     suites,
     remaining: [
       "Managed skills release acceptance on packaged desktop",
-      "MCP real-provider and packaged acceptance; additional provider adapters and new-worktree preparation",
+      "MCP real-provider and packaged acceptance; new-worktree preparation",
       "Dictation real-model and physical-device acceptance",
       "Packaged-app and Windows verification",
     ],

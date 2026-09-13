@@ -1371,6 +1371,8 @@ const makeWsRpcLayer = (
               mcpManagement: true,
               mcpCreateOnly: true,
               codexManagedMcp: true,
+              claudeManagedMcp: true,
+              openCodeManagedMcp: true,
               groqDictation: true,
             },
             ...(fileManagerRevealKind === undefined

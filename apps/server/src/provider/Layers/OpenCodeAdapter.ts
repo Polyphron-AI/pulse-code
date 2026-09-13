@@ -29,7 +29,15 @@ import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
-import type { OpencodeClient, Part, PermissionRequest, QuestionRequest } from "@opencode-ai/sdk/v2";
+import type {
+  McpLocalConfig,
+  McpRemoteConfig,
+  McpStatus,
+  OpencodeClient,
+  Part,
+  PermissionRequest,
+  QuestionRequest,
+} from "@opencode-ai/sdk/v2";
 import { getModelSelectionStringOptionValue } from "@t3tools/shared/model";
 
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
@@ -45,6 +53,7 @@ import {
 } from "../Errors.ts";
 import { buildRuntimeInstructions } from "../RuntimeInstructions.ts";
 import { type OpenCodeAdapterShape } from "../Services/OpenCodeAdapter.ts";
+import type { ProviderManagedMcpServer } from "../Services/ProviderAdapter.ts";
 import {
   buildOpenCodePermissionRules,
   OpenCodeRuntime,
@@ -61,6 +70,44 @@ import {
 import * as Option from "effect/Option";
 
 const PROVIDER = ProviderDriverKind.make("opencode");
+const managedMcpName = (id: string) => `pulse_${id}`;
+
+function openCodeManagedMcpConfig(
+  server: ProviderManagedMcpServer,
+): McpLocalConfig | McpRemoteConfig {
+  return server.transport === "http"
+    ? { type: "remote", url: server.url, headers: { ...server.headers }, oauth: false }
+    : {
+        type: "local",
+        command: [server.command, ...server.args],
+        environment: { ...server.env },
+      };
+}
+
+function openCodeManagedMcpStatuses(
+  servers: ReadonlyArray<ProviderManagedMcpServer>,
+  statuses: Readonly<Record<string, McpStatus>>,
+) {
+  return servers.map((server) => {
+    const status = statuses[managedMcpName(server.id)];
+    if (status?.status === "connected") return { id: server.id, status: "ready" as const };
+    if (status?.status === "failed")
+      return { id: server.id, status: "failed" as const, message: "OpenCode could not connect." };
+    if (status?.status === "needs_auth" || status?.status === "needs_client_registration")
+      return {
+        id: server.id,
+        status: "failed" as const,
+        message: "OpenCode requires authentication.",
+      };
+    if (status?.status === "disabled")
+      return {
+        id: server.id,
+        status: "failed" as const,
+        message: "OpenCode reports this connection as disabled.",
+      };
+    return { id: server.id, status: "unknown" as const };
+  });
+}
 
 /**
  * Version tag stamped into the OpenCode resume cursor. Bump if the cursor
@@ -3740,6 +3787,75 @@ export function makeOpenCodeAdapter(
       );
     });
 
+    const readManagedMcpStatus: NonNullable<OpenCodeAdapterShape["readManagedMcpStatus"]> =
+      Effect.fn("readManagedMcpStatus")(function* (threadId, servers) {
+        const context = yield* ensureSessionContext(sessions, threadId);
+        if (context.server.external) {
+          return servers.map((server) => ({
+            id: server.id,
+            status: "failed" as const,
+            message: "Pulse-managed MCP is unavailable on a shared OpenCode server.",
+          }));
+        }
+        const statusExit = yield* Effect.exit(
+          runOpenCodeSdk("mcp.status", () => context.client.mcp.status()),
+        );
+        if (Exit.isFailure(statusExit)) {
+          return servers.map((server) => ({
+            id: server.id,
+            status: "failed" as const,
+            message: "OpenCode MCP status could not be read.",
+          }));
+        }
+        return openCodeManagedMcpStatuses(servers, statusExit.value.data ?? {});
+      });
+
+    const prepareManagedMcp: NonNullable<OpenCodeAdapterShape["prepareManagedMcp"]> = Effect.fn(
+      "prepareManagedMcp",
+    )(function* (threadId, servers) {
+      const context = yield* ensureSessionContext(sessions, threadId);
+      if (context.server.external) return yield* readManagedMcpStatus(threadId, servers);
+
+      const invalidCwdIds = new Set<string>();
+      const addFailureIds = new Set<string>();
+      for (const server of servers) {
+        if (
+          server.transport === "stdio" &&
+          server.cwd !== undefined &&
+          !(yield* sameDirectory(server.cwd, context.directory))
+        ) {
+          invalidCwdIds.add(server.id);
+          continue;
+        }
+        const addExit = yield* Effect.exit(
+          runOpenCodeSdk("mcp.add", () =>
+            context.client.mcp.add({
+              name: managedMcpName(server.id),
+              config: openCodeManagedMcpConfig(server),
+            }),
+          ),
+        );
+        if (Exit.isFailure(addExit)) addFailureIds.add(server.id);
+      }
+      const statuses = yield* readManagedMcpStatus(threadId, servers);
+      return statuses.map((status) =>
+        invalidCwdIds.has(status.id)
+          ? {
+              id: status.id,
+              status: "failed" as const,
+              message:
+                "This local command uses a different working directory than the OpenCode thread.",
+            }
+          : addFailureIds.has(status.id)
+            ? {
+                id: status.id,
+                status: "failed" as const,
+                message: "OpenCode MCP connections could not be prepared.",
+              }
+            : status,
+      );
+    });
+
     const stopSession: OpenCodeAdapterShape["stopSession"] = Effect.fn("stopSession")(
       function* (threadId) {
         const context = sessions.get(threadId);
@@ -3845,6 +3961,8 @@ export function makeOpenCodeAdapter(
       },
       startSession,
       sendTurn,
+      prepareManagedMcp,
+      readManagedMcpStatus,
       compaction: { type: "native", start: compactThread },
       interruptTurn,
       respondToRequest,

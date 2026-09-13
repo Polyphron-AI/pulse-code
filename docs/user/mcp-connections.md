@@ -33,9 +33,11 @@ next turn, not halfway through a running tool call. Stop retains its normal mean
 
 ## Current support
 
-This integration is in development. Codex is the first provider with managed
-connection preparation. Other providers keep their native MCP behavior but do not
-yet support Pulse-managed selection. An unknown connection state is not proof that
+This integration is in development. Codex, Claude Code, and locally managed
+OpenCode sessions support managed connection preparation. OpenCode sessions that
+use a shared external server cannot use Pulse-managed connections because changing
+that server would affect other threads. Their native MCP connections remain
+unchanged. An unknown connection state is not proof that
 tools are available, and selection is not proof that the model used a tool.
 
 The new picker targets desktop and web, including mobile web. Released native
@@ -49,6 +51,6 @@ before a turn that needs preparation. If preparation fails, sending fails rather
 than silently omitting a connection. Use an updated web client to manage the
 selection or continue without a failed connection for one turn.
 
-Selected local-command connections cannot assign different values to the same
-environment variable. Pulse reports that conflict before sending; use compatible
-values or select those connections in separate turns.
+For Codex, selected local-command connections cannot assign different values to
+the same environment variable. Pulse reports that conflict before sending; use
+compatible values or select those connections in separate turns.

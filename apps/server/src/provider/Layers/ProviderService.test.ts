@@ -107,9 +107,11 @@ const asThreadId = (value: string): ThreadId => ThreadId.make(value);
 const asTurnId = (value: string): TurnId => TurnId.make(value);
 const codexInstanceId = ProviderInstanceId.make("codex");
 const claudeAgentInstanceId = ProviderInstanceId.make("claudeAgent");
+const openCodeInstanceId = ProviderInstanceId.make("opencode");
 const CODEX_DRIVER = ProviderDriverKind.make("codex");
 const CLAUDE_AGENT_DRIVER = ProviderDriverKind.make("claudeAgent");
 const CURSOR_DRIVER = ProviderDriverKind.make("cursor");
+const OPENCODE_DRIVER = ProviderDriverKind.make("opencode");
 
 const assistantQuoteText = 'Keep the shared parser for "résumé".\nPreserve line breaks.';
 const assistantCitation = {
@@ -315,7 +317,11 @@ function makeFakeCodexAdapter(
     readThread,
     rollbackThread,
     ...(provider === CODEX_DRIVER ? { uploadFeedback } : {}),
-    ...(provider === CODEX_DRIVER ? { prepareManagedMcp, readManagedMcpStatus } : {}),
+    ...(provider === CODEX_DRIVER ||
+    provider === CLAUDE_AGENT_DRIVER ||
+    provider === OPENCODE_DRIVER
+      ? { prepareManagedMcp, readManagedMcpStatus }
+      : {}),
     stopAll,
     get streamEvents() {
       return Stream.fromPubSub(runtimeEventPubSub);
@@ -450,12 +456,14 @@ function makeProviderServiceLayer(
   const codex = makeFakeCodexAdapter(CODEX_DRIVER, input.supportsConversationRollback);
   const claude = makeFakeCodexAdapter(CLAUDE_AGENT_DRIVER);
   const cursor = makeFakeCodexAdapter(CURSOR_DRIVER);
+  const opencode = makeFakeCodexAdapter(OPENCODE_DRIVER);
   const registry =
     input.registry ??
     makeAdapterRegistryMock({
       [ProviderDriverKind.make("codex")]: codex.adapter,
       [ProviderDriverKind.make("claudeAgent")]: claude.adapter,
       [ProviderDriverKind.make("cursor")]: cursor.adapter,
+      [ProviderDriverKind.make("opencode")]: opencode.adapter,
     });
 
   const providerAdapterLayer = Layer.succeed(
@@ -507,6 +515,7 @@ function makeProviderServiceLayer(
     codex,
     claude,
     cursor,
+    opencode,
     layer,
   };
 }
@@ -1049,6 +1058,28 @@ const managedMcpBrowserOffRouting = makeProviderServiceLayer({
 });
 
 managedMcpRouting.layer("managed MCP turn preparation", (it) => {
+  for (const [name, instanceId] of [
+    ["Claude", claudeAgentInstanceId],
+    ["OpenCode", openCodeInstanceId],
+  ] as const) {
+    it.effect(`routes managed MCP preparation to ${name}`, () =>
+      Effect.gen(function* () {
+        const service = yield* ProviderService.ProviderService;
+        const result = yield* service.preparePulseMcp!({
+          threadId: asThreadId(`managed-${name.toLowerCase()}`),
+          providerSession: {
+            threadId: asThreadId(`managed-${name.toLowerCase()}`),
+            providerInstanceId: instanceId,
+            runtimeMode: "full-access",
+            cwd: fixtureCwd(`managed-${name.toLowerCase()}`),
+          },
+          connectionIds: ["managed"],
+        });
+        assert.equal(result.status, "ready");
+      }),
+    );
+  }
+
   it.effect("prepares and idempotently claims one command while isolating threads", () =>
     Effect.gen(function* () {
       const service = yield* ProviderService.ProviderService;

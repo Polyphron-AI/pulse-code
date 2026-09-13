@@ -10,6 +10,8 @@ import type {
   PermissionResult,
   SDKMessage,
   SDKUserMessage,
+  McpServerConfig,
+  McpServerStatus,
 } from "@anthropic-ai/claude-agent-sdk";
 import {
   ApprovalRequestId,
@@ -71,6 +73,10 @@ class FakeClaudeQuery implements AsyncIterable<SDKMessage> {
   public readonly setMaxThinkingTokensCalls: Array<number | null> = [];
   public closeCalls = 0;
   public closeError: unknown | undefined;
+  public readonly setMcpServersCalls: Array<Record<string, McpServerConfig>> = [];
+  public mcpStatuses: McpServerStatus[] = [];
+  public mcpSetError: unknown | undefined;
+  public mcpStatusError: unknown | undefined;
 
   emit(message: SDKMessage): void {
     if (this.done) {
@@ -116,6 +122,16 @@ class FakeClaudeQuery implements AsyncIterable<SDKMessage> {
 
   readonly setMaxThinkingTokens = async (maxThinkingTokens: number | null): Promise<void> => {
     this.setMaxThinkingTokensCalls.push(maxThinkingTokens);
+  };
+
+  readonly setMcpServers = async (servers: Record<string, McpServerConfig>): Promise<void> => {
+    this.setMcpServersCalls.push(servers);
+    if (this.mcpSetError !== undefined) throw this.mcpSetError;
+  };
+
+  readonly mcpServerStatus = async (): Promise<McpServerStatus[]> => {
+    if (this.mcpStatusError !== undefined) throw this.mcpStatusError;
+    return this.mcpStatuses;
   };
 
   readonly close = (): void => {
@@ -309,6 +325,68 @@ const RESUME_THREAD_ID = ThreadId.make("thread-claude-resume");
 const SYNTHETIC_SUBAGENT_MODEL = "claude-synthetic-subagent[expanded]";
 
 describe("ClaudeAdapterLive", () => {
+  it.effect("prepares managed MCP without disabling Claude native settings", () => {
+    const harness = makeHarness();
+    return Effect.gen(function* () {
+      const adapter = yield* ClaudeAdapter;
+      yield* adapter.startSession({
+        threadId: THREAD_ID,
+        provider: ProviderDriverKind.make("claudeAgent"),
+        runtimeMode: "full-access",
+      });
+      harness.query.mcpStatuses = [
+        { name: "pulse_remote", status: "connected" },
+        { name: "pulse_waiting", status: "pending" },
+        { name: "pulse_failed", status: "failed", error: "credential=secret" },
+      ];
+      const statuses = yield* adapter.prepareManagedMcp!(THREAD_ID, [
+        {
+          id: "remote",
+          name: "Remote",
+          transport: "http",
+          url: "https://mcp.example.test",
+          headers: { Authorization: "secret" },
+        },
+        {
+          id: "waiting",
+          name: "Waiting",
+          transport: "stdio",
+          command: "mcp-server",
+          args: ["--stdio"],
+          env: { TOKEN: "secret" },
+        },
+        {
+          id: "failed",
+          name: "Failed",
+          transport: "http",
+          url: "https://failed.example.test",
+          headers: {},
+        },
+      ]);
+
+      assert.deepEqual(statuses, [
+        { id: "remote", status: "ready" },
+        { id: "waiting", status: "unknown" },
+        { id: "failed", status: "failed", message: "Claude could not connect." },
+      ]);
+      assert.deepEqual(Object.keys(harness.query.setMcpServersCalls[0] ?? {}), [
+        "pulse_remote",
+        "pulse_waiting",
+        "pulse_failed",
+      ]);
+      assert.deepEqual(harness.getLastCreateQueryInput()?.options.settingSources, [
+        "user",
+        "project",
+        "local",
+      ]);
+      assert.equal(harness.getLastCreateQueryInput()?.options.strictMcpConfig, undefined);
+      harness.query.finish();
+    }).pipe(
+      Effect.provideService(Random.Random, makeDeterministicRandomService()),
+      Effect.provide(harness.layer),
+    );
+  });
+
   it.effect("returns validation error for non-claude provider on startSession", () => {
     const harness = makeHarness();
     return Effect.gen(function* () {

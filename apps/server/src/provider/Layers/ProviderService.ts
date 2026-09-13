@@ -1417,7 +1417,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
           ...connection.config,
         }));
         const conflictingIds = PulseMcpPreparation.findConflictingStdioConnections(servers);
-        if (conflictingIds.size > 0) {
+        if (info.driverKind === "codex" && conflictingIds.size > 0) {
           return {
             status: "failed",
             selectedConnectionIds,
@@ -1438,7 +1438,12 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
             ),
           } as const;
         }
-        if (connections.length > 0 && info.driverKind !== "codex") {
+        if (
+          connections.length > 0 &&
+          info.driverKind !== "codex" &&
+          info.driverKind !== "claudeAgent" &&
+          info.driverKind !== "opencode"
+        ) {
           return { status: "unsupported-provider", selectedConnectionIds } as const;
         }
         let preparationCwd = input.providerSession.cwd;

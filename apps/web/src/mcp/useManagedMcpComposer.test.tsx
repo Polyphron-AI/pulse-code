@@ -23,7 +23,16 @@ vi.mock("effect/unstable/reactivity", () => ({
     value: () => ({
       _id: "Option",
       _tag: "Some",
-      value: { source: "live", config: { pulseCapabilities: { codexManagedMcp: true } } },
+      value: {
+        source: "live",
+        config: {
+          pulseCapabilities: {
+            codexManagedMcp: true,
+            claudeManagedMcp: true,
+            openCodeManagedMcp: true,
+          },
+        },
+      },
     }),
   },
 }));
@@ -36,6 +45,7 @@ vi.mock("../state/session", () => ({
 vi.mock("../state/server", () => ({ serverEnvironment: { configProjection: () => ({}) } }));
 vi.mock("../state/query", () => ({
   useEnvironmentQuery: (target: { kind?: string } | null) => {
+    if (target === null) return { data: null, error: null, refresh: vi.fn() };
     const failed = target?.kind === mocks.queryError;
     return {
       data: failed
@@ -81,15 +91,17 @@ function Harness({
   threadId = ThreadId.make("thread-1"),
   identityKey = "thread:1",
   draftConnectionIds = ["linear"],
+  provider = "codex",
 }: {
   threadId?: ThreadId | null;
   identityKey?: string;
   draftConnectionIds?: ReadonlyArray<string> | null;
+  provider?: "codex" | "claudeAgent" | "opencode" | "cursor";
 }) {
   mocks.result = useManagedMcpComposer({
     environmentId: EnvironmentId.make("env-1"),
-    provider: ProviderDriverKind.make("codex"),
-    providerInstanceId: ProviderInstanceId.make("codex"),
+    provider: ProviderDriverKind.make(provider),
+    providerInstanceId: ProviderInstanceId.make(provider),
     threadId,
     identityKey,
     modelKey: "gpt-5",
@@ -113,6 +125,24 @@ describe("useManagedMcpComposer", () => {
   afterEach(() => {
     renderer?.unmount();
     renderer = null;
+  });
+
+  it.each(["codex", "claudeAgent", "opencode"] as const)(
+    "enables managed MCP for the %s capability",
+    async (provider) => {
+      await act(async () => {
+        renderer = create(<Harness provider={provider} />);
+      });
+      expect(mocks.result?.blockedReason).toBeNull();
+      expect(mocks.result?.picker.disabled).toBe(false);
+    },
+  );
+
+  it("keeps unsupported providers explicitly blocked", async () => {
+    await act(async () => {
+      renderer = create(<Harness provider="cursor" />);
+    });
+    expect(mocks.result?.blockedReason).toContain("unavailable for this provider");
   });
 
   it("keeps the send pending after failure and carries exclusions into continue", async () => {

@@ -129,6 +129,10 @@ const runtimeMock = {
     questionListImplementation: null as (() => Promise<Array<QuestionRequest>>) | null,
     sessionUpdateCalls: [] as Array<{ sessionID: string; permission: unknown }>,
     forkCalls: [] as Array<{ sessionID: string; directory?: string }>,
+    mcpAddCalls: [] as Array<unknown>,
+    mcpStatuses: {} as Record<string, { status: string; error?: string }>,
+    mcpAddFailures: new Set<string>(),
+    mcpStatusError: null as Error | null,
   },
   reset() {
     this.state.startCalls.length = 0;
@@ -184,6 +188,10 @@ const runtimeMock = {
     this.state.questionListImplementation = null;
     this.state.sessionUpdateCalls.length = 0;
     this.state.forkCalls.length = 0;
+    this.state.mcpAddCalls.length = 0;
+    this.state.mcpStatuses = {};
+    this.state.mcpAddFailures.clear();
+    this.state.mcpStatusError = null;
   },
 };
 
@@ -388,6 +396,18 @@ const OpenCodeRuntimeTestDouble: OpenCodeRuntimeShape = {
           }
         },
       },
+      mcp: {
+        add: async (input: { name: string; config: unknown }) => {
+          runtimeMock.state.mcpAddCalls.push(input);
+          if (runtimeMock.state.mcpAddFailures.has(input.name))
+            throw new Error("secret transport failure");
+          return { data: runtimeMock.state.mcpStatuses };
+        },
+        status: async () => {
+          if (runtimeMock.state.mcpStatusError) throw runtimeMock.state.mcpStatusError;
+          return { data: runtimeMock.state.mcpStatuses };
+        },
+      },
       event: {
         subscribe: async (
           _input: unknown,
@@ -561,8 +581,119 @@ const OpenCodeAdapterTestLayer = Layer.effect(
   Layer.provideMerge(NodeServices.layer),
 );
 
+const OpenCodeManagedMcpTestLayer = Layer.effect(
+  OpenCodeAdapter,
+  makeOpenCodeAdapter(Schema.decodeSync(OpenCodeSettings)({ binaryPath: "fake-opencode" })),
+).pipe(
+  Layer.provideMerge(Layer.succeed(OpenCodeRuntime, OpenCodeRuntimeTestDouble)),
+  Layer.provideMerge(ServerConfig.layerTest(process.cwd(), process.cwd())),
+  Layer.provideMerge(ServerSettingsService.layerTest()),
+  Layer.provideMerge(providerSessionDirectoryTestLayer),
+  Layer.provideMerge(NodeServices.layer),
+);
+
 beforeEach(() => {
   runtimeMock.reset();
+});
+
+it.layer(OpenCodeManagedMcpTestLayer)("OpenCode managed MCP", (it) => {
+  it.effect("prepares isolated configs and keeps missing status unknown", () =>
+    Effect.gen(function* () {
+      const adapter = yield* OpenCodeAdapter;
+      const threadId = asThreadId("managed-mcp-local");
+      yield* adapter.startSession({
+        threadId,
+        provider: ProviderDriverKind.make("opencode"),
+        runtimeMode: "full-access",
+        cwd: process.cwd(),
+      });
+      runtimeMock.state.mcpStatuses = { pulse_remote: { status: "connected" } };
+      const statuses = yield* adapter.prepareManagedMcp!(threadId, [
+        {
+          id: "remote",
+          name: "Remote",
+          transport: "http",
+          url: "https://mcp.example.test",
+          headers: { Authorization: "secret" },
+        },
+        {
+          id: "pending",
+          name: "Pending",
+          transport: "stdio",
+          command: "mcp-server",
+          args: ["--stdio"],
+          env: { TOKEN: "secret" },
+        },
+      ]);
+
+      NodeAssert.deepEqual(statuses, [
+        { id: "remote", status: "ready" },
+        { id: "pending", status: "unknown" },
+      ]);
+      NodeAssert.deepEqual(
+        runtimeMock.state.mcpAddCalls.map((call) => (call as { name: string }).name),
+        ["pulse_remote", "pulse_pending"],
+      );
+    }),
+  );
+
+  it.effect("reports a mismatched stdio cwd without launching through a shell", () =>
+    Effect.gen(function* () {
+      const adapter = yield* OpenCodeAdapter;
+      const threadId = asThreadId("managed-mcp-cwd");
+      yield* adapter.startSession({
+        threadId,
+        provider: ProviderDriverKind.make("opencode"),
+        runtimeMode: "full-access",
+        cwd: process.cwd(),
+      });
+      const statuses = yield* adapter.prepareManagedMcp!(threadId, [
+        {
+          id: "other-cwd",
+          name: "Other cwd",
+          transport: "stdio",
+          command: "mcp-server",
+          args: [],
+          cwd: `${process.cwd()}-elsewhere`,
+          env: {},
+        },
+      ]);
+
+      NodeAssert.equal(statuses[0]?.status, "failed");
+      NodeAssert.deepEqual(runtimeMock.state.mcpAddCalls, []);
+    }),
+  );
+
+  it.effect("sanitizes managed MCP status failures", () =>
+    Effect.gen(function* () {
+      const adapter = yield* OpenCodeAdapter;
+      const threadId = asThreadId("managed-mcp-status-failure");
+      yield* adapter.startSession({
+        threadId,
+        provider: ProviderDriverKind.make("opencode"),
+        runtimeMode: "full-access",
+        cwd: process.cwd(),
+      });
+      runtimeMock.state.mcpStatusError = new Error("Authorization: secret");
+      const statuses = yield* adapter.readManagedMcpStatus!(threadId, [
+        {
+          id: "remote",
+          name: "Remote",
+          transport: "http",
+          url: "https://mcp.example.test",
+          headers: { Authorization: "secret" },
+        },
+      ]);
+
+      NodeAssert.deepEqual(statuses, [
+        {
+          id: "remote",
+          status: "failed",
+          message: "OpenCode MCP status could not be read.",
+        },
+      ]);
+    }),
+  );
 });
 
 const advanceTestClock = (ms: number) =>
@@ -612,6 +743,36 @@ const questionRequest = (id: string, sessionID: string): QuestionRequest => ({
 });
 
 it.layer(OpenCodeAdapterTestLayer)("OpenCodeAdapterLive", (it) => {
+  it.effect("rejects managed MCP on a shared OpenCode server without mutating it", () =>
+    Effect.gen(function* () {
+      const adapter = yield* OpenCodeAdapter;
+      const threadId = asThreadId("managed-mcp-external");
+      yield* adapter.startSession({
+        threadId,
+        provider: ProviderDriverKind.make("opencode"),
+        runtimeMode: "full-access",
+      });
+      const statuses = yield* adapter.prepareManagedMcp!(threadId, [
+        {
+          id: "remote",
+          name: "Remote",
+          transport: "http",
+          url: "https://mcp.example.test",
+          headers: { Authorization: "secret" },
+        },
+      ]);
+
+      NodeAssert.deepEqual(statuses, [
+        {
+          id: "remote",
+          status: "failed",
+          message: "Pulse-managed MCP is unavailable on a shared OpenCode server.",
+        },
+      ]);
+      NodeAssert.deepEqual(runtimeMock.state.mcpAddCalls, []);
+    }),
+  );
+
   it.effect("reuses a configured OpenCode server URL instead of spawning a local server", () =>
     Effect.gen(function* () {
       const adapter = yield* OpenCodeAdapter;

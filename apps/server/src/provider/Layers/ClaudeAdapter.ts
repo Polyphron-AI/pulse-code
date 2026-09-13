@@ -19,6 +19,8 @@ import {
   type SettingSource,
   type SDKUserMessage,
   type ModelUsage,
+  type McpServerConfig,
+  type McpServerStatus,
 } from "@anthropic-ai/claude-agent-sdk";
 import { parseCliArgs } from "@t3tools/shared/cliArgs";
 import { isWorkspaceImagePreviewPath } from "@t3tools/shared/filePreview";
@@ -108,11 +110,50 @@ import {
   type ProviderAdapterError,
 } from "../Errors.ts";
 import { type ClaudeAdapterShape } from "../Services/ClaudeAdapter.ts";
+import type { ProviderManagedMcpServer } from "../Services/ProviderAdapter.ts";
 import { type EventNdjsonLogger, makeEventNdjsonLogger } from "./EventNdjsonLogger.ts";
 const encodeUnknownJsonStringExit = Schema.encodeUnknownExit(Schema.fromJsonString(Schema.Unknown));
 const decodeUnknownJsonStringExit = Schema.decodeUnknownExit(Schema.fromJsonString(Schema.Unknown));
 
 const PROVIDER = ProviderDriverKind.make("claudeAgent");
+const managedMcpName = (id: string) => `pulse_${id}`;
+
+function claudeManagedMcpConfig(server: ProviderManagedMcpServer): McpServerConfig {
+  return server.transport === "http"
+    ? { type: "http", url: server.url, headers: { ...server.headers } }
+    : {
+        type: "stdio",
+        command: server.command,
+        args: [...server.args],
+        env: { ...server.env },
+      };
+}
+
+function claudeManagedMcpStatuses(
+  servers: ReadonlyArray<ProviderManagedMcpServer>,
+  statuses: ReadonlyArray<McpServerStatus>,
+) {
+  const byName = new Map(statuses.map((status) => [status.name, status]));
+  return servers.map((server) => {
+    const status = byName.get(managedMcpName(server.id));
+    if (status?.status === "connected") return { id: server.id, status: "ready" as const };
+    if (status?.status === "failed")
+      return { id: server.id, status: "failed" as const, message: "Claude could not connect." };
+    if (status?.status === "needs-auth")
+      return {
+        id: server.id,
+        status: "failed" as const,
+        message: "Claude requires authentication.",
+      };
+    if (status?.status === "disabled")
+      return {
+        id: server.id,
+        status: "failed" as const,
+        message: "Claude reports this connection as disabled.",
+      };
+    return { id: server.id, status: "unknown" as const };
+  });
+}
 type ClaudeTextStreamKind = Extract<RuntimeContentStreamKind, "assistant_text" | "reasoning_text">;
 type ClaudeToolResultStreamKind = Extract<
   RuntimeContentStreamKind,
@@ -341,6 +382,8 @@ interface ClaudeQueryRuntime extends AsyncIterable<SDKMessage> {
   readonly setPermissionMode: (mode: PermissionMode) => Promise<void>;
   readonly setMaxThinkingTokens: (maxThinkingTokens: number | null) => Promise<void>;
   readonly close: () => void;
+  readonly setMcpServers?: (servers: Record<string, McpServerConfig>) => Promise<unknown>;
+  readonly mcpServerStatus?: () => Promise<McpServerStatus[]>;
 }
 
 export interface ClaudeAdapterLiveOptions {
@@ -4659,6 +4702,20 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
           : {}),
       };
       const mcpSession = McpProviderSession.readMcpProviderSession(input.threadId);
+      const sdkMcpServers: Record<string, McpServerConfig> = Object.fromEntries([
+        ...(mcpSession
+          ? [
+              [
+                "t3-code",
+                {
+                  type: "http" as const,
+                  url: mcpSession.endpoint,
+                  headers: { Authorization: mcpSession.authorizationHeader },
+                },
+              ] as const,
+            ]
+          : []),
+      ]);
       // The attachments dir grant lets the agent Read/copy pasted images at
       // the paths ProviderService injects into the turn text, without an
       // approval prompt. It is a leaf directory holding only attachment
@@ -4699,19 +4756,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         env: claudeEnvironment,
         additionalDirectories,
         ...(Object.keys(extraArgs).length > 0 ? { extraArgs } : {}),
-        ...(mcpSession
-          ? {
-              mcpServers: {
-                "t3-code": {
-                  type: "http",
-                  url: mcpSession.endpoint,
-                  headers: {
-                    Authorization: mcpSession.authorizationHeader,
-                  },
-                },
-              },
-            }
-          : {}),
+        ...(Object.keys(sdkMcpServers).length > 0 ? { mcpServers: sdkMcpServers } : {}),
       };
 
       yield* Effect.annotateCurrentSpan({
@@ -5079,6 +5124,88 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     yield* Deferred.succeed(pending.answers, answers);
   });
 
+  const readManagedMcpStatus: NonNullable<ClaudeAdapterShape["readManagedMcpStatus"]> = Effect.fn(
+    "readManagedMcpStatus",
+  )(function* (threadId, servers) {
+    const context = yield* requireSession(threadId);
+    if (context.query.mcpServerStatus === undefined) {
+      return servers.map((server) => ({ id: server.id, status: "unknown" as const }));
+    }
+    const readStatus = context.query.mcpServerStatus;
+    const statusExit = yield* Effect.exit(
+      Effect.tryPromise({
+        try: () => readStatus(),
+        catch: (cause) =>
+          new ProviderAdapterRequestError({
+            provider: PROVIDER,
+            method: "mcpServerStatus",
+            detail: "Claude MCP status could not be read.",
+            cause,
+          }),
+      }),
+    );
+    if (Exit.isFailure(statusExit)) {
+      return servers.map((server) => ({
+        id: server.id,
+        status: "failed" as const,
+        message: "Claude MCP status could not be read.",
+      }));
+    }
+    return claudeManagedMcpStatuses(servers, statusExit.value);
+  });
+
+  const prepareManagedMcp: NonNullable<ClaudeAdapterShape["prepareManagedMcp"]> = Effect.fn(
+    "prepareManagedMcp",
+  )(function* (threadId, servers) {
+    const context = yield* requireSession(threadId);
+    if (context.query.setMcpServers === undefined) {
+      return servers.map((server) => ({
+        id: server.id,
+        status: "failed" as const,
+        message: "This Claude runtime cannot configure MCP connections.",
+      }));
+    }
+    const mcpSession = McpProviderSession.readMcpProviderSession(threadId);
+    const dynamicServers: Record<string, McpServerConfig> = Object.fromEntries([
+      ...servers.map(
+        (server) => [managedMcpName(server.id), claudeManagedMcpConfig(server)] as const,
+      ),
+      ...(mcpSession
+        ? [
+            [
+              "t3-code",
+              {
+                type: "http" as const,
+                url: mcpSession.endpoint,
+                headers: { Authorization: mcpSession.authorizationHeader },
+              },
+            ] as const,
+          ]
+        : []),
+    ]);
+    const setServers = context.query.setMcpServers;
+    const setExit = yield* Effect.exit(
+      Effect.tryPromise({
+        try: () => setServers(dynamicServers),
+        catch: (cause) =>
+          new ProviderAdapterRequestError({
+            provider: PROVIDER,
+            method: "setMcpServers",
+            detail: "Claude MCP connections could not be prepared.",
+            cause,
+          }),
+      }),
+    );
+    if (Exit.isFailure(setExit)) {
+      return servers.map((server) => ({
+        id: server.id,
+        status: "failed" as const,
+        message: "Claude MCP connections could not be prepared.",
+      }));
+    }
+    return yield* readManagedMcpStatus(threadId, servers);
+  });
+
   const stopSession: ClaudeAdapterShape["stopSession"] = Effect.fn("stopSession")(
     function* (threadId) {
       const context = yield* requireSession(threadId);
@@ -5133,6 +5260,8 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     compaction: { type: "slash-command", command: "/compact" },
     startSession,
     sendTurn,
+    prepareManagedMcp,
+    readManagedMcpStatus,
     interruptTurn,
     readThread,
     rollbackThread,

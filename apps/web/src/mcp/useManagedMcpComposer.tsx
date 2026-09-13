@@ -57,14 +57,20 @@ export function useManagedMcpComposer(input: {
   );
   const projection = Option.getOrNull(AsyncResult.value(configResult));
   const capabilityReady = projection?.source === "live";
-  const supported = projection?.config.pulseCapabilities?.codexManagedMcp === true;
+  const supported =
+    input.provider === "codex"
+      ? projection?.config.pulseCapabilities?.codexManagedMcp === true
+      : input.provider === "claudeAgent"
+        ? projection?.config.pulseCapabilities?.claudeManagedMcp === true
+        : input.provider === "opencode"
+          ? projection?.config.pulseCapabilities?.openCodeManagedMcp === true
+          : false;
   const session = useEnvironmentSessionState(input.environmentId);
   const scopes =
     !session.isPending && session.data?.authenticated ? session.data.scopes : undefined;
   const canRead = scopes?.includes(AuthOrchestrationReadScope) === true;
   const canOperate = scopes?.includes(AuthOrchestrationOperateScope) === true;
-  const enabled =
-    input.provider === "codex" && capabilityReady && supported && canRead && canOperate;
+  const enabled = capabilityReady && supported && canRead && canOperate;
   const list = useEnvironmentQuery(
     enabled ? pulseMcpList({ environmentId: input.environmentId, input: {} }) : null,
   );
@@ -136,9 +142,9 @@ export function useManagedMcpComposer(input: {
     ];
   }, [list.data, selectedIds]);
   const blockedReason =
-    input.provider !== "codex"
+    !supported && capabilityReady
       ? selectedIds.length > 0
-        ? "Managed MCPs can only be used with Codex. Remove them or switch providers."
+        ? "Managed MCPs are unavailable for this provider. Remove them or switch providers."
         : null
       : !capabilityReady
         ? "Waiting for MCP support from this environment."
@@ -337,8 +343,7 @@ export function useManagedMcpComposer(input: {
 
   const prepare = useCallback<PrepareComposerMcp>(
     (providerSession, options): Promise<McpSubmissionPreparation> => {
-      if (selectedIds.length === 0 && (input.provider !== "codex" || !supported))
-        return Promise.resolve({ status: "ready" });
+      if (selectedIds.length === 0 && !supported) return Promise.resolve({ status: "ready" });
       if (activePromiseRef.current) return activePromiseRef.current;
       const promise = new Promise<McpSubmissionPreparation>((resolvePromise) => {
         const resolve = (outcome: McpSubmissionPreparation) => {

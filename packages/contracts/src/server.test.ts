@@ -27,8 +27,17 @@ describe("Pulse capability compatibility", () => {
     expect(decode({ pulseCapabilities: {} })).toEqual({ pulseCapabilities: {} });
   });
   it("retains known flags while ignoring future capabilities", () => {
-    expect(decode({ pulseCapabilities: { managedSkills: true, futureFeature: true } })).toEqual({
-      pulseCapabilities: { managedSkills: true },
+    expect(
+      decode({
+        pulseCapabilities: {
+          managedSkills: true,
+          claudeManagedMcp: true,
+          openCodeManagedMcp: true,
+          futureFeature: true,
+        },
+      }),
+    ).toEqual({
+      pulseCapabilities: { managedSkills: true, claudeManagedMcp: true, openCodeManagedMcp: true },
     });
     expect(() => decode({ pulseCapabilities: { managedSkills: "true" } })).toThrow();
   });

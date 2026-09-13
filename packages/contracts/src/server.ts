@@ -551,6 +551,8 @@ export const ServerConfig = Schema.Struct({
       mcpManagement: Schema.optionalKey(Schema.Boolean),
       mcpCreateOnly: Schema.optionalKey(Schema.Boolean),
       codexManagedMcp: Schema.optionalKey(Schema.Boolean),
+      claudeManagedMcp: Schema.optionalKey(Schema.Boolean),
+      openCodeManagedMcp: Schema.optionalKey(Schema.Boolean),
       groqDictation: Schema.optionalKey(Schema.Boolean),
     }),
   ),
