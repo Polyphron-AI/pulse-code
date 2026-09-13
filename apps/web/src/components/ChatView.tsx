@@ -1,4 +1,5 @@
 import { useLoadBalancedEnvironment } from "../hooks/useLoadBalancedEnvironment";
+import { prepareMcpSubmission } from "../mcp/prepareMcpSubmission";
 import type { UsageLimitSourceSnapshots } from "@t3tools/contracts";
 import {
   collectProviderUsageLimits,
@@ -1388,6 +1389,13 @@ export default function ChatView(props: ChatViewProps) {
     [environmentId, threadId],
   );
   const routeThreadKey = useMemo(() => scopedThreadKey(routeThreadRef), [routeThreadRef]);
+  const mcpSubmissionIdentityRef = useRef<string | null>(routeThreadKey);
+  useLayoutEffect(() => {
+    mcpSubmissionIdentityRef.current = routeThreadKey;
+    return () => {
+      mcpSubmissionIdentityRef.current = null;
+    };
+  }, [routeThreadKey]);
   const updateProjectScriptSettings = useAtomCommand(serverEnvironment.updateSettings, {
     reportFailure: false,
   });
@@ -6456,12 +6464,10 @@ export default function ChatView(props: ChatViewProps) {
       if (composerRef.current?.validateProviderInput(outgoingFollowUpText) === false) {
         return;
       }
-      promptRef.current = "";
-      clearComposerDraftContent(composerDraftTarget);
-      composerRef.current?.resetCursorState();
       await onSubmitPlanFollowUp({
         text: followUp.text,
         interactionMode: followUp.interactionMode,
+        clearComposerOnSuccess: true,
       });
       return;
     }
@@ -6572,6 +6578,27 @@ export default function ChatView(props: ChatViewProps) {
     };
 
     sendInFlightRef.current = true;
+    const preparingComposer = composerRef.current;
+    const mcpPreparation = await prepareMcpSubmission({
+      prepare: preparingComposer?.preparePulseMcp,
+      session: {
+        threadId: threadIdForSend,
+        provider: ctxSelectedProvider,
+        providerInstanceId: ctxSelectedModelSelection.instanceId,
+        modelSelection: ctxSelectedModelSelection,
+        runtimeMode,
+        cwd: activeThread.worktreePath ?? activeProject.workspaceRoot,
+      },
+      creatingWorktree: shouldCreateWorktree,
+      isCurrent: () =>
+        mcpSubmissionIdentityRef.current === routeThreadKey && promptRef.current === promptForSend,
+    });
+    if (mcpPreparation.status !== "ready") {
+      sendInFlightRef.current = false;
+      if (mcpPreparation.status === "error")
+        setThreadError(threadIdForSend, mcpPreparation.message);
+      return;
+    }
     const attachmentCapabilitiesBeforeUpload = readLiveAttachmentCapabilities();
     if (attachmentCapabilitiesBeforeUpload.fileBlockReason !== null) {
       sendInFlightRef.current = false;
@@ -6858,6 +6885,9 @@ export default function ChatView(props: ChatViewProps) {
           modelSelection: ctxSelectedModelSelection,
           titleSeed: title,
           ...(pulseSkills.length > 0 ? { pulseSkills } : {}),
+          ...(mcpPreparation.preparationId
+            ? { pulseMcpPreparationId: mcpPreparation.preparationId }
+            : {}),
           runtimeMode,
           interactionMode: sendInteractionMode,
           ...(bootstrap ? { bootstrap } : {}),
@@ -7195,12 +7225,15 @@ export default function ChatView(props: ChatViewProps) {
     async ({
       text,
       interactionMode: nextInteractionMode,
+      clearComposerOnSuccess = false,
     }: {
       text: string;
       interactionMode: "default" | "plan";
+      clearComposerOnSuccess?: boolean;
     }) => {
       if (
         !activeThread ||
+        !activeProject ||
         !isServerThread ||
         isSendBusy ||
         isConnecting ||
@@ -7246,6 +7279,28 @@ export default function ChatView(props: ChatViewProps) {
       });
 
       sendInFlightRef.current = true;
+      const preparingComposer = composerRef.current;
+      const draftBeforePreparation = promptRef.current;
+      const mcpPreparation = await prepareMcpSubmission({
+        prepare: preparingComposer?.preparePulseMcp,
+        session: {
+          threadId: threadIdForSend,
+          provider: ctxSelectedProvider,
+          providerInstanceId: ctxSelectedModelSelection.instanceId,
+          modelSelection: ctxSelectedModelSelection,
+          runtimeMode,
+          cwd: activeThread.worktreePath ?? activeProject.workspaceRoot,
+        },
+        isCurrent: () =>
+          mcpSubmissionIdentityRef.current === routeThreadKey &&
+          promptRef.current === draftBeforePreparation,
+      });
+      if (mcpPreparation.status !== "ready") {
+        sendInFlightRef.current = false;
+        if (mcpPreparation.status === "error")
+          setThreadError(threadIdForSend, mcpPreparation.message);
+        return;
+      }
       beginLocalDispatch({ preparingWorktree: false });
       setThreadError(threadIdForSend, null);
 
@@ -7298,6 +7353,9 @@ export default function ChatView(props: ChatViewProps) {
             modelSelection: ctxSelectedModelSelection,
             titleSeed: activeThread.title,
             ...(pulseSkills.length > 0 ? { pulseSkills } : {}),
+            ...(mcpPreparation.preparationId
+              ? { pulseMcpPreparationId: mcpPreparation.preparationId }
+              : {}),
             runtimeMode,
             interactionMode: nextInteractionMode,
             ...(nextInteractionMode === "default" && activeProposedPlan
@@ -7315,6 +7373,11 @@ export default function ChatView(props: ChatViewProps) {
       }
 
       if (failure === null) {
+        if (clearComposerOnSuccess && promptRef.current === draftBeforePreparation) {
+          promptRef.current = "";
+          clearComposerDraftContent(composerDraftTarget);
+          composerRef.current?.resetCursorState();
+        }
         clearUsageLimitsFor(routeThreadKey);
         acknowledgeActiveThreadWoke();
         sendInFlightRef.current = false;
@@ -7336,6 +7399,7 @@ export default function ChatView(props: ChatViewProps) {
     },
     [
       activeThread,
+      activeProject,
       activeProposedPlan,
       acknowledgeActiveThreadWoke,
       beginLocalDispatch,
@@ -7354,6 +7418,8 @@ export default function ChatView(props: ChatViewProps) {
       composerRef,
       clearUsageLimitsFor,
       routeThreadKey,
+      clearComposerDraftContent,
+      composerDraftTarget,
     ],
   );
 
@@ -7409,6 +7475,28 @@ export default function ChatView(props: ChatViewProps) {
     const nextThreadModelSelection: ModelSelection = ctxSelectedModelSelection;
 
     sendInFlightRef.current = true;
+    const preparingComposer = composerRef.current;
+    const draftBeforePreparation = promptRef.current;
+    const mcpPreparation = await prepareMcpSubmission({
+      prepare: preparingComposer?.preparePulseMcp,
+      session: {
+        threadId: nextThreadId,
+        provider: ctxSelectedProvider,
+        providerInstanceId: ctxSelectedModelSelection.instanceId,
+        modelSelection: ctxSelectedModelSelection,
+        runtimeMode,
+        cwd: activeThread.worktreePath ?? activeProject.workspaceRoot,
+      },
+      isCurrent: () =>
+        mcpSubmissionIdentityRef.current === routeThreadKey &&
+        promptRef.current === draftBeforePreparation,
+    });
+    if (mcpPreparation.status !== "ready") {
+      sendInFlightRef.current = false;
+      if (mcpPreparation.status === "error")
+        setThreadError(activeThread.id, mcpPreparation.message);
+      return;
+    }
     beginLocalDispatch({ preparingWorktree: false });
     const finish = () => {
       sendInFlightRef.current = false;
@@ -7446,6 +7534,9 @@ export default function ChatView(props: ChatViewProps) {
           modelSelection: ctxSelectedModelSelection,
           titleSeed: nextThreadTitle,
           ...(pulseSkills.length > 0 ? { pulseSkills } : {}),
+          ...(mcpPreparation.preparationId
+            ? { pulseMcpPreparationId: mcpPreparation.preparationId }
+            : {}),
           runtimeMode,
           interactionMode: "default",
           sourceProposedPlan: {
@@ -8100,6 +8191,9 @@ export default function ChatView(props: ChatViewProps) {
                       <ComposerSurface.Host>
                         <div ref={attachDraftHeroComposerAnchorRef} className="relative z-10">
                           <ChatComposer
+                            onManageMcpConnections={() =>
+                              void navigate({ to: "/settings/integrations" })
+                            }
                             composerRef={composerRef}
                             composerDraftTarget={composerDraftTarget}
                             environmentId={environmentId}
