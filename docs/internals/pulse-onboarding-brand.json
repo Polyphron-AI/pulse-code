@@ -128,14 +128,14 @@
   ],
   "tests": {
     "planned": [
-      "apps/web/src/components/pulse/PulseWordmark.test.tsx renders PRODUCT_BASE_NAME in the Pulse palette",
-      "apps/web/src/components/onboarding/onboardingBrand.test.tsx asserts the renamed copy and the deliberately preserved T3 strings"
+      "apps/web/src/components/onboarding/onboardingBrand.test.tsx renders the production identity leaves and queries their accessible title, wordmark and visible copy",
+      "the behavior suite covers the deliberately retained T3 Connect service name and npx t3 connect, pair and serve commands"
     ],
-    "command": "vp test run src/components/onboarding/onboardingBrand.test.ts src/components/pulse/PulseWordmark.test.tsx from apps/web",
-    "result": "10 tests passed; apps/web typecheck passed"
+    "command": "vp test run src/components/onboarding/onboardingBrand.test.tsx from apps/web",
+    "result": "6 behavior tests passed; apps/web typecheck passed; focused lint passed with six pre-existing warnings in the production files and no test-file findings"
   },
   "status": "development acceptance passed",
   "blockers": [],
-  "review": "Frozen branch diff reviewed after the full first-use string sweep. The sweep found and fixed the hosted web empty-state copy omitted by the initial slice. T3 Connect and npx t3 command names remain unchanged.",
+  "review": "Frozen branch diff reviewed after the full first-use string sweep. The sweep found and fixed the hosted web empty-state copy omitted by the initial slice. The original source-scanning tests were rejected in independent review and replaced with rendered behavior tests over production leaves. T3 Connect and npx t3 command names remain unchanged.",
   "nextAction": "Integrate after the upstream compatibility merge, then rerun the focused branding tests if onboarding files changed during conflict resolution."
 }

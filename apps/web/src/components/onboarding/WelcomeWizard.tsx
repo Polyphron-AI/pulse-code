@@ -190,10 +190,9 @@ export function WelcomeWizard({
         showCloseButton={false}
         initialFocus={() => document.getElementById("onboarding-pairing-url") ?? true}
       >
-        <DialogTitle className="sr-only">Set up {PRODUCT_BASE_NAME}</DialogTitle>
         <div className="flex min-h-0 flex-col">
           <DialogHeader className="gap-4">
-            <PulseWordmark className="h-4" />
+            <WelcomeWizardBrandHeader />
             <WizardSteps
               steps={ONBOARDING_STAGES}
               currentStep={stageIndex}
@@ -245,6 +244,16 @@ export function WelcomeWizard({
         </div>
       </DialogPopup>
     </Dialog>
+  );
+}
+
+/** Stable Pulse-owned identity presented at the start of the upstream wizard. */
+export function WelcomeWizardBrandHeader() {
+  return (
+    <>
+      <DialogTitle className="sr-only">Set up {PRODUCT_BASE_NAME}</DialogTitle>
+      <PulseWordmark className="h-4" />
+    </>
   );
 }
 
@@ -396,7 +405,7 @@ function ConnectionStep({
   );
 }
 
-function ConnectAccountOption({
+export function ConnectAccountOption({
   autoSelectedComputers,
   disabled,
   selectedIds,
@@ -486,7 +495,7 @@ function ConnectAccountOption({
 /**
  * Register a computer in this browser using a server-minted pairing link.
  */
-function PairingForm({
+export function PairingForm({
   isPairing,
   setIsPairing,
   onPaired,
@@ -590,7 +599,8 @@ function PairingForm({
             </p>
             <CommandBlock command="npx t3 pair" className="mt-2" />
             <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-              Start {PRODUCT_BASE_NAME} first, or run <code className="font-mono">npx t3 serve</code>. Add{" "}
+              Start {PRODUCT_BASE_NAME} first, or run{" "}
+              <code className="font-mono">npx t3 serve</code>. Add{" "}
               <code className="font-mono">--tailscale</code> to use your tailnet.
             </p>
           </CollapsiblePanel>

@@ -196,7 +196,7 @@ export function FirstRunGate({
   return children;
 }
 
-function FirstRunRecovery({
+export function FirstRunRecovery({
   reason,
   retrying = false,
 }: {

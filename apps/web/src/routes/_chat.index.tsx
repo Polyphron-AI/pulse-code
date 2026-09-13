@@ -112,7 +112,7 @@ export const Route = createFileRoute("/_chat/")({
   component: ChatIndexRouteView,
 });
 
-function HostedStaticOnboardingState() {
+export function HostedStaticOnboardingState() {
   const cloudEnabled = hasCloudPublicConfig();
 
   return (
