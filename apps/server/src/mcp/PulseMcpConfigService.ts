@@ -162,6 +162,12 @@ export interface PulseMcpConfigServiceShape {
     },
     dependencies: PulseMcpPreflightDependencies,
   ) => Effect.Effect<PulseMcpTurnPreparation, PulseMcpConfigError>;
+  readonly resolveTurnConnections: (input: {
+    readonly providerInstanceId: ProviderInstanceId;
+    readonly threadId: ThreadId;
+    readonly connectionIds?: readonly string[];
+    readonly excludedConnectionIds?: readonly string[];
+  }) => Effect.Effect<readonly PulseMcpResolvedConnection[], PulseMcpConfigError>;
 }
 
 export class PulseMcpConfigService extends Context.Service<
@@ -836,6 +842,29 @@ const make = Effect.gen(function* () {
         ),
       );
 
+  const resolveTurnConnections: PulseMcpConfigServiceShape["resolveTurnConnections"] = (input) =>
+    lock.withPermits(1)(
+      load.pipe(
+        Effect.flatMap((state) => {
+          const selected =
+            input.connectionIds ??
+            state.threadOverrides[input.threadId] ??
+            state.providerDefaults[input.providerInstanceId] ??
+            [];
+          const excluded = new Set(input.excludedConnectionIds ?? []);
+          return Effect.forEach(
+            unique(selected).filter((id) => !excluded.has(id)),
+            (id) => {
+              const connection = state.connections[id];
+              return connection === undefined
+                ? Effect.fail(new PulseMcpConfigError("prepare", `Unknown MCP connection '${id}'.`))
+                : resolveConnection(connection);
+            },
+          );
+        }),
+      ),
+    );
+
   return PulseMcpConfigService.of({
     listConnections: load.pipe(
       Effect.map((state) =>
@@ -874,6 +903,7 @@ const make = Effect.gen(function* () {
     resetThreadOverride,
     getThreadOverride,
     prepareTurn,
+    resolveTurnConnections,
   });
 });
 

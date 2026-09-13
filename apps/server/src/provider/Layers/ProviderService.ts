@@ -28,6 +28,7 @@ import {
   type ProviderDriverKind,
   type ProviderRuntimeEvent,
   type ProviderSession,
+  type PulseMcpPrepareTurnInput,
 } from "@t3tools/contracts";
 import { expandAssistantCitationsForProvider } from "@t3tools/shared/assistantCitations";
 import { causeErrorTag } from "@t3tools/shared/observability";
@@ -76,6 +77,9 @@ import * as McpSessionRegistry from "../../mcp/McpSessionRegistry.ts";
 import * as ServerSettings from "../../serverSettings.ts";
 import { ManagedSkillLibrary } from "../../skills/ManagedSkillLibrary.ts";
 import * as ProjectionSnapshotQuery from "../../orchestration/Services/ProjectionSnapshotQuery.ts";
+import * as PulseMcpConfig from "../../mcp/PulseMcpConfigService.ts";
+import * as PulseMcpPreparation from "../../mcp/PulseMcpPreparation.ts";
+import type { ProviderManagedMcpServer } from "../Services/ProviderAdapter.ts";
 const isModelSelection = Schema.is(ModelSelection);
 
 /** How long a manual context compaction may run before ProviderService gives up on it. */
@@ -180,7 +184,7 @@ function turnEffort(modelSelection: ProviderSendTurnInput["modelSelection"]): st
 }
 
 type ProviderServiceMethod<Name extends keyof ProviderService.ProviderService["Service"]> =
-  ProviderService.ProviderService["Service"][Name];
+  NonNullable<ProviderService.ProviderService["Service"][Name]>;
 
 const ProviderRollbackConversationInput = Schema.Struct({
   threadId: ThreadId,
@@ -338,6 +342,10 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
   const projectionQuery = yield* Effect.serviceOption(
     ProjectionSnapshotQuery.ProjectionSnapshotQuery,
   );
+  const pulseMcpConfig = yield* Effect.serviceOption(PulseMcpConfig.PulseMcpConfigService);
+  const providerServiceScope = yield* Effect.scope;
+  const pulseMcpPreparation = PulseMcpPreparation.make();
+  const pulseMcpPreparationProjectIds = new Map<ThreadId, import("@t3tools/contracts").ProjectId>();
   const issueMcpCredential =
     options?.issueMcpCredential ?? McpSessionRegistry.issueActiveMcpCredential;
   const revokeMcpCredential =
@@ -737,6 +745,10 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
       }
       // Provider-only runtimes may omit orchestration. An unresolved project
       // must not bypass an explicit browser override.
+      const preparedProjectId = pulseMcpPreparationProjectIds.get(threadId);
+      if (preparedProjectId !== undefined) {
+        return resolveProjectAgentBrowserAccess(settings, preparedProjectId);
+      }
       if (Option.isNone(projectionQuery)) return false;
       const thread = yield* projectionQuery.value.getThreadShellById(threadId);
       if (Option.isNone(thread)) return false;
@@ -1348,6 +1360,265 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
       );
     },
   );
+
+  const preparePulseMcp: ProviderServiceMethod<"preparePulseMcp"> = Effect.fn(
+    "ProviderService.preparePulseMcp",
+  )(function* (input: PulseMcpPrepareTurnInput) {
+    if (input.providerSession.threadId !== input.threadId) {
+      return yield* toValidationError(
+        "ProviderService.preparePulseMcp",
+        "The provider session thread id does not match the preparation thread id.",
+      );
+    }
+    const instanceId = yield* requireBindingInstanceId(
+      "ProviderService.preparePulseMcp",
+      input.providerSession,
+    );
+    return yield* pulseMcpPreparation.withThreadLock(
+      input.threadId,
+      Effect.gen(function* () {
+        if (Option.isNone(pulseMcpConfig)) {
+          return yield* toValidationError(
+            "ProviderService.preparePulseMcp",
+            "Pulse MCP configuration is unavailable.",
+          );
+        }
+        const info = yield* registry.getInstanceInfo(instanceId);
+        const connections = yield* pulseMcpConfig.value
+          .resolveTurnConnections({
+            providerInstanceId: instanceId,
+            threadId: input.threadId,
+            ...(input.connectionIds !== undefined ? { connectionIds: input.connectionIds } : {}),
+            ...(input.excludedConnectionIds !== undefined
+              ? { excludedConnectionIds: input.excludedConnectionIds }
+              : {}),
+          })
+          .pipe(
+            Effect.mapError((cause) =>
+              toValidationError("ProviderService.preparePulseMcp", cause.message, cause),
+            ),
+          );
+        const selectedConnectionIds = connections.map((connection) => connection.id);
+        const servers: ReadonlyArray<ProviderManagedMcpServer> = connections.map((connection) => ({
+          id: connection.id,
+          name: connection.name,
+          ...connection.config,
+        }));
+        const conflictingIds = PulseMcpPreparation.findConflictingStdioConnections(servers);
+        if (conflictingIds.size > 0) {
+          return {
+            status: "failed",
+            selectedConnectionIds,
+            connections: connections.map((connection) =>
+              conflictingIds.has(connection.id)
+                ? {
+                    connectionId: connection.id,
+                    name: connection.name,
+                    status: "failed" as const,
+                    message:
+                      "Selected stdio connections assign different values to the same environment variable.",
+                  }
+                : {
+                    connectionId: connection.id,
+                    name: connection.name,
+                    status: "unknown" as const,
+                  },
+            ),
+          } as const;
+        }
+        if (connections.length > 0 && info.driverKind !== "codex") {
+          return { status: "unsupported-provider", selectedConnectionIds } as const;
+        }
+        const fingerprint = PulseMcpPreparation.fingerprint({
+          providerInstanceId: instanceId,
+          cwd: input.providerSession.cwd ?? null,
+          runtimeMode: input.providerSession.runtimeMode,
+          modelSelection: input.providerSession.modelSelection,
+          servers,
+        });
+        let existingPreparation = pulseMcpPreparation.records.get(input.threadId);
+        const preparationNow = yield* DateTime.now;
+        if (
+          existingPreparation !== undefined &&
+          existingPreparation.expiresAt <= preparationNow.epochMilliseconds
+        ) {
+          pulseMcpPreparation.records.delete(input.threadId);
+          existingPreparation = undefined;
+        }
+        const sessions = yield* Effect.forEach(yield* getAdapterEntries, ([, adapter]) =>
+          adapter.listSessions(),
+        ).pipe(Effect.map((groups) => groups.flatMap((group) => group)));
+        const active = sessions.find((session) => session.threadId === input.threadId);
+        if (active?.activeTurnId !== undefined || active?.status === "running") {
+          return { status: "active-turn" } as const;
+        }
+        if (existingPreparation?.consumedBy !== undefined) {
+          pulseMcpPreparation.records.delete(input.threadId);
+        }
+        const adapter = yield* registry.getByInstance(instanceId);
+        if (connections.length > 0 && adapter.prepareManagedMcp === undefined) {
+          return { status: "unsupported-provider", selectedConnectionIds } as const;
+        }
+        const canReuse =
+          input.retry !== true &&
+          existingPreparation?.fingerprint === fingerprint &&
+          active?.providerInstanceId === instanceId;
+        if (!canReuse) {
+          yield* Effect.sync(() =>
+            McpProviderSession.setManagedMcpServers(input.threadId, servers),
+          );
+          if (input.projectId !== undefined)
+            pulseMcpPreparationProjectIds.set(input.threadId, input.projectId);
+          yield* startSession(input.threadId, {
+            ...input.providerSession,
+            provider: info.driverKind,
+            providerInstanceId: instanceId,
+          }).pipe(
+            Effect.ensuring(
+              Effect.sync(() => void pulseMcpPreparationProjectIds.delete(input.threadId)),
+            ),
+          );
+        }
+        const statuses =
+          connections.length === 0
+            ? []
+            : yield* adapter.prepareManagedMcp!(input.threadId, servers);
+        const publicStatuses = PulseMcpPreparation.publicStatuses(servers, statuses);
+        if (publicStatuses.some((status) => status.status === "failed")) {
+          pulseMcpPreparation.records.delete(input.threadId);
+          yield* adapter.stopSession(input.threadId).pipe(Effect.ignore);
+          yield* Effect.sync(() => McpProviderSession.clearMcpProviderSession(input.threadId));
+          return {
+            status: "failed",
+            selectedConnectionIds,
+            connections: publicStatuses,
+          } as const;
+        }
+        const now = yield* DateTime.now;
+        const preparationId = pulseMcpPreparation.issueId(input.threadId);
+        pulseMcpPreparation.records.set(input.threadId, {
+          id: preparationId,
+          providerInstanceId: instanceId,
+          fingerprint,
+          selectedConnectionIds,
+          runtimeMode: input.providerSession.runtimeMode,
+          modelSelection: input.providerSession.modelSelection,
+          projectId: input.projectId,
+          expiresAt: now.epochMilliseconds + 5 * 60_000,
+        });
+        yield* Effect.sleep("5 minutes").pipe(
+          Effect.andThen(
+            pulseMcpPreparation.withThreadLock(
+              input.threadId,
+              Effect.gen(function* () {
+                const current = pulseMcpPreparation.records.get(input.threadId);
+                if (current?.id !== preparationId) return;
+                pulseMcpPreparation.records.delete(input.threadId);
+                if (current.consumedBy !== undefined) return;
+                yield* adapter.stopSession(input.threadId).pipe(Effect.ignore);
+                yield* Effect.sync(() =>
+                  McpProviderSession.clearMcpProviderSession(input.threadId),
+                );
+              }),
+            ),
+          ),
+          Effect.forkIn(providerServiceScope),
+        );
+        return {
+          status: "ready",
+          preparationId,
+          selectedConnectionIds,
+          connections: publicStatuses,
+        } as const;
+      }),
+    );
+  });
+
+  const consumePulseMcpPreparation: ProviderServiceMethod<"consumePulseMcpPreparation"> = Effect.fn(
+    "ProviderService.consumePulseMcpPreparation",
+  )(function* (input) {
+    yield* pulseMcpPreparation.withThreadLock(
+      input.threadId,
+      Effect.gen(function* () {
+        if (Option.isNone(pulseMcpConfig)) return;
+        const preparation = pulseMcpPreparation.records.get(input.threadId);
+        if (input.preparationId === undefined) {
+          const configured = yield* pulseMcpConfig.value
+            .resolveTurnConnections({
+              providerInstanceId: input.providerInstanceId,
+              threadId: input.threadId,
+            })
+            .pipe(
+              Effect.mapError((cause) =>
+                toValidationError(
+                  "ProviderService.consumePulseMcpPreparation",
+                  cause.message,
+                  cause,
+                ),
+              ),
+            );
+          if (configured.length === 0) return;
+        }
+        const now = yield* DateTime.now;
+        if (
+          !preparation ||
+          preparation.id !== input.preparationId ||
+          preparation.providerInstanceId !== input.providerInstanceId ||
+          preparation.expiresAt <= now.epochMilliseconds ||
+          preparation.runtimeMode !== input.runtimeMode ||
+          JSON.stringify(preparation.modelSelection ?? null) !==
+            JSON.stringify(input.modelSelection ?? null) ||
+          (preparation.projectId !== undefined && preparation.projectId !== input.projectId)
+        ) {
+          return yield* toValidationError(
+            "ProviderService.consumePulseMcpPreparation",
+            "The managed MCP preparation is missing, stale, or no longer matches this turn.",
+          );
+        }
+        const currentConnections = yield* pulseMcpConfig.value
+          .resolveTurnConnections({
+            providerInstanceId: input.providerInstanceId,
+            threadId: input.threadId,
+            connectionIds: preparation.selectedConnectionIds,
+          })
+          .pipe(
+            Effect.mapError((cause) =>
+              toValidationError("ProviderService.consumePulseMcpPreparation", cause.message, cause),
+            ),
+          );
+        const currentFingerprint = PulseMcpPreparation.fingerprint({
+          providerInstanceId: input.providerInstanceId,
+          cwd: yield* registry.getByInstance(input.providerInstanceId).pipe(
+            Effect.flatMap((adapter) => adapter.listSessions()),
+            Effect.map(
+              (sessions) =>
+                sessions.find((session) => session.threadId === input.threadId)?.cwd ?? null,
+            ),
+          ),
+          runtimeMode: input.runtimeMode,
+          modelSelection: input.modelSelection,
+          servers: currentConnections.map((connection) => ({
+            id: connection.id,
+            name: connection.name,
+            ...connection.config,
+          })),
+        });
+        if (currentFingerprint !== preparation.fingerprint) {
+          return yield* toValidationError(
+            "ProviderService.consumePulseMcpPreparation",
+            "The managed MCP configuration changed after preparation.",
+          );
+        }
+        if (preparation.consumedBy !== undefined && preparation.consumedBy !== input.commandId) {
+          return yield* toValidationError(
+            "ProviderService.consumePulseMcpPreparation",
+            "The managed MCP preparation was already consumed by another turn.",
+          );
+        }
+        preparation.consumedBy = input.commandId;
+      }),
+    );
+  });
 
   const sendTurn: ProviderServiceMethod<"sendTurn"> = Effect.fn("sendTurn")(function* (rawInput) {
     const parsed = yield* decodeInputOrValidationError({
@@ -2107,6 +2378,8 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
 
   return {
     startSession,
+    preparePulseMcp,
+    consumePulseMcpPreparation,
     sendTurn,
     compactThread,
     interruptTurn,

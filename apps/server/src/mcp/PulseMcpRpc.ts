@@ -1,4 +1,8 @@
-import { PulseMcpError, type PulseMcpConnectionInput } from "@t3tools/contracts";
+import {
+  PulseMcpError,
+  type PulseMcpConnectionInput,
+  type PulseMcpPrepareTurnInput,
+} from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 
 import type {
@@ -6,6 +10,7 @@ import type {
   PulseMcpStoredConnection,
   PulseMcpStoredValue,
 } from "./PulseMcpConfigService.ts";
+import type { ProviderServiceShape } from "../provider/Services/ProviderService.ts";
 
 const publicValue = (value: PulseMcpStoredValue) =>
   value.type === "literal" ? value : ({ type: "secret", configured: true } as const);
@@ -48,7 +53,10 @@ const redactFailure = <A, E>(effect: Effect.Effect<A, E>) =>
   );
 
 /** Config-only RPC handlers. The caller must share one service instance across all connections. */
-export function pulseMcpHandlers(service: PulseMcpConfigServiceShape) {
+export function pulseMcpHandlers(
+  service: PulseMcpConfigServiceShape,
+  providerService?: ProviderServiceShape,
+) {
   return {
     list: () =>
       redactFailure(
@@ -108,5 +116,9 @@ export function pulseMcpHandlers(service: PulseMcpConfigServiceShape) {
     }: Parameters<PulseMcpConfigServiceShape["resetThreadOverride"]>[0] extends infer Id
       ? { readonly threadId: Id }
       : never) => redactFailure(service.resetThreadOverride(threadId).pipe(Effect.as({}))),
+    prepareTurn: (input: PulseMcpPrepareTurnInput) =>
+      providerService?.preparePulseMcp === undefined
+        ? Effect.fail(rpcFailure())
+        : redactFailure(providerService.preparePulseMcp(input)),
   };
 }

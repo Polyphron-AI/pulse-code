@@ -197,6 +197,12 @@ export interface CodexSessionRuntimeShape {
   readonly sendTurn: (
     input: CodexSessionRuntimeSendTurnInput,
   ) => Effect.Effect<ProviderTurnStartResult, CodexSessionRuntimeError>;
+  readonly prepareManagedMcp?: (
+    names: ReadonlyArray<string>,
+  ) => Effect.Effect<
+    ReadonlyMap<string, { status: "ready" | "unknown" | "failed"; message?: string }>,
+    CodexSessionRuntimeError
+  >;
   readonly compactThread: Effect.Effect<void, CodexSessionRuntimeError>;
   readonly interruptTurn: (turnId?: TurnId) => Effect.Effect<void, CodexSessionRuntimeError>;
   readonly readThread: Effect.Effect<CodexThreadSnapshot, CodexSessionRuntimeError>;
@@ -1204,6 +1210,9 @@ export const makeCodexSessionRuntime = (
     const collabChildLiveTurnsRef = yield* Ref.make(new Map<string, string>());
     const suppressMemoryConsolidationNotification = makeMemoryConsolidationNotificationFilter();
     const closedRef = yield* Ref.make(false);
+    const mcpStartupStatusesRef = yield* Ref.make(
+      new Map<string, { status: "ready" | "failed"; message?: string }>(),
+    );
 
     // `~` is not shell-expanded when env vars are set via
     // `child_process.spawn`; `expandHomePath` lets a configured
@@ -1898,6 +1907,19 @@ export const makeCodexSessionRuntime = (
       ),
     );
 
+    yield* client.handleServerNotification("mcpServer/startupStatus/updated", (payload) => {
+      if (payload.status !== "ready" && payload.status !== "failed") return Effect.void;
+      const status = payload.status;
+      return Ref.update(mcpStartupStatusesRef, (current) => {
+        const next = new Map(current);
+        next.set(payload.name, {
+          status,
+          ...(payload.error ? { message: payload.error } : {}),
+        });
+        return next;
+      });
+    });
+
     yield* client.handleServerNotification("turn/started", (payload) =>
       currentSessionProviderThreadId.pipe(
         Effect.flatMap((providerThreadId) => {
@@ -2387,6 +2409,27 @@ export const makeCodexSessionRuntime = (
               ? { resumeCursor: { threadId: resumedProviderThreadId } }
               : {}),
           } satisfies ProviderTurnStartResult;
+        }),
+      prepareManagedMcp: (names) =>
+        Effect.gen(function* () {
+          yield* client.request("config/mcpServer/reload", undefined);
+          const inventory = yield* client.request("mcpServerStatus/list", {
+            detail: "toolsAndAuthOnly",
+          });
+          const statuses = yield* Ref.get(mcpStartupStatusesRef);
+          const present = new Set(inventory.data.map((server) => server.name));
+          return new Map(
+            names.map((name) => {
+              const observed = statuses.get(name);
+              return [
+                name,
+                observed ??
+                  (present.has(name)
+                    ? { status: "ready" as const }
+                    : { status: "unknown" as const }),
+              ] as const;
+            }),
+          );
         }),
       interruptTurn: (turnId) =>
         Effect.gen(function* () {

@@ -59,6 +59,30 @@ export interface ProviderResolvedSkill {
   readonly path: string;
 }
 
+export type ProviderManagedMcpServer =
+  | {
+      readonly id: string;
+      readonly name: string;
+      readonly transport: "http";
+      readonly url: string;
+      readonly headers: Readonly<Record<string, string>>;
+    }
+  | {
+      readonly id: string;
+      readonly name: string;
+      readonly transport: "stdio";
+      readonly command: string;
+      readonly args: ReadonlyArray<string>;
+      readonly cwd?: string;
+      readonly env: Readonly<Record<string, string>>;
+    };
+
+export interface ProviderManagedMcpStatus {
+  readonly id: string;
+  readonly status: "ready" | "unknown" | "failed";
+  readonly message?: string;
+}
+
 export type ProviderAdapterSendTurnInput = ProviderSendTurnInput & {
   readonly resolvedSkills?: ReadonlyArray<ProviderResolvedSkill>;
 };
@@ -93,6 +117,12 @@ export interface ProviderAdapterShape<TError> {
   readonly sendTurn: (
     input: ProviderAdapterSendTurnInput,
   ) => Effect.Effect<ProviderTurnStartResult, TError>;
+
+  /** Strict provider-native startup check. Omitted when managed MCP is unsupported. */
+  readonly prepareManagedMcp?: (
+    threadId: ThreadId,
+    servers: ReadonlyArray<ProviderManagedMcpServer>,
+  ) => Effect.Effect<ReadonlyArray<ProviderManagedMcpStatus>, TError>;
 
   /** Omitted when this adapter does not support manual context compaction. */
   readonly compaction?: ProviderCompaction<TError>;

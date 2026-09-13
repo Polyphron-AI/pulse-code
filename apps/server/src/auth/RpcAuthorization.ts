@@ -29,6 +29,7 @@ export const RPC_REQUIRED_SCOPES = {
   [WS_METHODS.pulseMcpGetThreadOverride]: AuthOrchestrationReadScope,
   [WS_METHODS.pulseMcpSetThreadOverride]: AuthOrchestrationOperateScope,
   [WS_METHODS.pulseMcpResetThreadOverride]: AuthOrchestrationOperateScope,
+  [WS_METHODS.pulseMcpPrepareTurn]: AuthOrchestrationOperateScope,
   [WS_METHODS.pulseSkillsList]: AuthOrchestrationReadScope,
   [WS_METHODS.pulseSkillsMutate]: AuthOrchestrationOperateScope,
   [ORCHESTRATION_WS_METHODS.dispatchCommand]: AuthOrchestrationOperateScope,

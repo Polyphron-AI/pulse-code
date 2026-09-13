@@ -2250,13 +2250,65 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
             ? getCodexServiceTierOptionValue(input.modelSelection)
             : undefined;
         const mcpSession = McpProviderSession.readMcpProviderSession(input.threadId);
+        const managedMcpServers = McpProviderSession.readManagedMcpServers(input.threadId);
+        const quoteToml = (value: string) => JSON.stringify(value);
+        const managedMcpEnvironment: NodeJS.ProcessEnv = {};
+        const managedMcpArgs = managedMcpServers.flatMap((server) => {
+          const prefix = `mcp_servers.pulse_${server.id}`;
+          if (server.transport === "http") {
+            const envHeaders = Object.fromEntries(
+              Object.entries(server.headers).map(([header, value], index) => {
+                const envName = `PULSE_MCP_${server.id}_${index}`
+                  .toUpperCase()
+                  .replace(/[^A-Z0-9_]/g, "_");
+                managedMcpEnvironment[envName] = value;
+                return [header, envName];
+              }),
+            );
+            return [
+              "-c",
+              `${prefix}.url=${quoteToml(server.url)}`,
+              ...(Object.keys(envHeaders).length === 0
+                ? []
+                : ["-c", `${prefix}.env_http_headers=${JSON.stringify(envHeaders)}`]),
+            ];
+          }
+          for (const [name, value] of Object.entries(server.env)) {
+            managedMcpEnvironment[name] = value;
+          }
+          return [
+            "-c",
+            `${prefix}.command=${quoteToml(server.command)}`,
+            "-c",
+            `${prefix}.args=${JSON.stringify(server.args)}`,
+            ...(server.cwd ? ["-c", `${prefix}.cwd=${quoteToml(server.cwd)}`] : []),
+            ...(Object.keys(server.env).length === 0
+              ? []
+              : ["-c", `${prefix}.env_vars=${JSON.stringify(Object.keys(server.env))}`]),
+          ];
+        });
         const runtimeInput: CodexSessionRuntimeOptions = {
           threadId: input.threadId,
           providerInstanceId: boundInstanceId,
           cwd: input.cwd ?? process.cwd(),
           binaryPath: codexConfig.binaryPath,
           launchArgs: resolveCodexLaunchArgs(codexConfig.launchArgs, options?.environment),
-          ...(options?.environment ? { environment: options.environment } : {}),
+          ...(options?.environment || Object.keys(managedMcpEnvironment).length > 0 || mcpSession
+            ? {
+                environment: {
+                  ...(options?.environment ?? process.env),
+                  ...managedMcpEnvironment,
+                  ...(mcpSession
+                    ? {
+                        T3_MCP_BEARER_TOKEN: mcpSession.authorizationHeader.replace(
+                          /^Bearer\s+/,
+                          "",
+                        ),
+                      }
+                    : {}),
+                },
+              }
+            : {}),
           ...(codexConfig.homePath ? { homePath: codexConfig.homePath } : {}),
           ...(isCodexResumeCursorSchema(input.resumeCursor)
             ? { resumeCursor: input.resumeCursor }
@@ -2268,18 +2320,17 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
           ...(serviceTier ? { serviceTier } : {}),
           ...(mcpSession
             ? {
-                environment: {
-                  ...(options?.environment ?? process.env),
-                  T3_MCP_BEARER_TOKEN: mcpSession.authorizationHeader.replace(/^Bearer\s+/, ""),
-                },
                 appServerArgs: [
                   "-c",
                   `mcp_servers.t3-code.url=${mcpSession.endpoint}`,
                   "-c",
                   'mcp_servers.t3-code.bearer_token_env_var="T3_MCP_BEARER_TOKEN"',
+                  ...managedMcpArgs,
                 ],
               }
-            : {}),
+            : managedMcpArgs.length > 0
+              ? { appServerArgs: managedMcpArgs }
+              : {}),
         };
         const turnTokenUsage = makeCodexTurnTokenUsageState();
         const sessionScope = yield* Scope.make("sequential");
@@ -2484,6 +2535,30 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
       .pipe(Effect.mapError((cause) => mapCodexRuntimeError(input.threadId, "turn/start", cause)));
   });
 
+  const prepareManagedMcp: NonNullable<CodexAdapterShape["prepareManagedMcp"]> = (
+    threadId,
+    servers,
+  ) =>
+    Effect.gen(function* () {
+      const session = yield* requireSession(threadId);
+      const statuses: ReadonlyMap<
+        string,
+        { status: "ready" | "unknown" | "failed"; message?: string }
+      > = session.runtime.prepareManagedMcp
+        ? yield* session.runtime.prepareManagedMcp(servers.map((server) => `pulse_${server.id}`))
+        : new Map();
+      return servers.map((server) => {
+        const status = statuses.get(`pulse_${server.id}`) ?? { status: "unknown" as const };
+        return { id: server.id, ...status };
+      });
+    }).pipe(
+      Effect.mapError((cause) =>
+        cause._tag === "ProviderAdapterSessionNotFoundError"
+          ? cause
+          : mapCodexRuntimeError(threadId, "config/mcpServer/reload", cause),
+      ),
+    );
+
   const requireSession = Effect.fn("requireSession")(function* (threadId: ThreadId) {
     const session = sessions.get(threadId);
     if (!session || session.stopped) {
@@ -2657,6 +2732,7 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
     },
     startSession,
     sendTurn,
+    prepareManagedMcp,
     compaction: { type: "native", start: compactThread },
     interruptTurn,
     readThread,

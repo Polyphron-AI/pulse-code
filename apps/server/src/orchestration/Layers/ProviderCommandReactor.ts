@@ -765,6 +765,25 @@ const make = Effect.gen(function* () {
         });
       });
 
+    // A pre-send managed-MCP preparation may start the provider before a
+    // first-draft thread is projected. Adopt that exact idle session instead
+    // of restarting it and losing the provider-native readiness result.
+    if (thread.session === null && activeSession !== undefined) {
+      const preparedSessionMatches =
+        activeSession.providerInstanceId === desiredInstanceId &&
+        activeSession.runtimeMode === desiredRuntimeMode &&
+        activeSession.cwd === effectiveCwd &&
+        (activeSession.model === undefined ||
+          activeSession.model === desiredModelSelection.model) &&
+        activeSession.activeTurnId === undefined &&
+        activeSession.status !== "running";
+      if (preparedSessionMatches) {
+        yield* bindSessionToThread(activeSession);
+        yield* refreshWorkspaceSnapshot;
+        return activeSession.threadId;
+      }
+    }
+
     const existingSessionThreadId =
       thread.session && thread.session.status !== "stopped" && activeSession ? thread.id : null;
     if (existingSessionThreadId) {

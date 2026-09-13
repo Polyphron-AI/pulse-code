@@ -23,6 +23,9 @@ import type {
   ProviderStopSessionInput,
   ProviderUploadFeedbackInput,
   ProviderUploadFeedbackResult,
+  PulseMcpPrepareTurnInput,
+  PulseMcpPrepareTurnResult,
+  PulseMcpPreparationId,
   MessageId,
   ThreadId,
   ProviderTurnStartResult,
@@ -39,6 +42,18 @@ import type { ProviderInstanceRoutingInfo } from "./ProviderAdapterRegistry.ts";
  * ProviderServiceShape - Service API for provider session and turn orchestration.
  */
 export interface ProviderServiceShape {
+  readonly preparePulseMcp?: (
+    input: PulseMcpPrepareTurnInput,
+  ) => Effect.Effect<PulseMcpPrepareTurnResult, ProviderServiceError>;
+  readonly consumePulseMcpPreparation?: (input: {
+    readonly threadId: ThreadId;
+    readonly preparationId?: PulseMcpPreparationId;
+    readonly providerInstanceId: ProviderInstanceId;
+    readonly commandId: string;
+    readonly runtimeMode: ProviderSessionStartInput["runtimeMode"];
+    readonly modelSelection: ProviderSessionStartInput["modelSelection"];
+    readonly projectId?: import("@t3tools/contracts").ProjectId;
+  }) => Effect.Effect<void, ProviderServiceError>;
   /**
    * Start a provider session.
    */

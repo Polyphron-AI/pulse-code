@@ -536,7 +536,10 @@ const makeWsRpcLayer = (
       const serverUpdate = yield* ServerSelfUpdate.ServerSelfUpdate;
       const config = yield* ServerConfig.ServerConfig;
       const pulseSkills = managedSkillHandlers(yield* ManagedSkills);
-      const pulseMcp = pulseMcpHandlers(yield* PulseMcpConfig.PulseMcpConfigService);
+      const pulseMcp = pulseMcpHandlers(
+        yield* PulseMcpConfig.PulseMcpConfigService,
+        providerService,
+      );
       const lifecycleEvents = yield* ServerLifecycleEvents.ServerLifecycleEvents;
       const serverSettings = yield* ServerSettings.ServerSettingsService;
       const startup = yield* ServerRuntimeStartup.ServerRuntimeStartup;
@@ -1210,6 +1213,10 @@ const makeWsRpcLayer = (
       const dispatchNormalizedCommand = (
         normalizedCommand: OrchestrationCommand,
       ): Effect.Effect<{ readonly sequence: number }, OrchestrationDispatchCommandError> => {
+        const pulseMcpPreparationId =
+          normalizedCommand.type === "thread.turn.start"
+            ? normalizedCommand.pulseMcpPreparationId
+            : undefined;
         const dispatchEffect =
           normalizedCommand.type === "thread.turn.start" && normalizedCommand.bootstrap
             ? dispatchBootstrapTurnStart(normalizedCommand)
@@ -1227,8 +1234,59 @@ const makeWsRpcLayer = (
                 ),
               );
 
+        const validateMcpPreparation =
+          normalizedCommand.type !== "thread.turn.start"
+            ? Effect.void
+            : Effect.gen(function* () {
+                const existing = yield* projectionSnapshotQuery.getThreadShellById(
+                  normalizedCommand.threadId,
+                );
+                const providerInstanceId =
+                  normalizedCommand.modelSelection?.instanceId ??
+                  normalizedCommand.bootstrap?.createThread?.modelSelection.instanceId ??
+                  (Option.isSome(existing) ? existing.value.modelSelection.instanceId : undefined);
+                if (providerInstanceId === undefined) {
+                  return yield* new OrchestrationDispatchCommandError({
+                    message: "Managed MCP preparation has no provider instance to validate.",
+                  });
+                }
+                const modelSelection =
+                  normalizedCommand.modelSelection ??
+                  normalizedCommand.bootstrap?.createThread?.modelSelection ??
+                  (Option.isSome(existing) ? existing.value.modelSelection : undefined);
+                const projectId =
+                  normalizedCommand.bootstrap?.createThread?.projectId ??
+                  (Option.isSome(existing) ? existing.value.projectId : undefined);
+                if (providerService.consumePulseMcpPreparation === undefined) {
+                  return yield* new OrchestrationDispatchCommandError({
+                    message: "Managed MCP preparation is unavailable.",
+                  });
+                }
+                yield* providerService
+                  .consumePulseMcpPreparation({
+                    threadId: normalizedCommand.threadId,
+                    ...(pulseMcpPreparationId !== undefined
+                      ? { preparationId: pulseMcpPreparationId }
+                      : {}),
+                    providerInstanceId,
+                    commandId: String(normalizedCommand.commandId),
+                    runtimeMode: normalizedCommand.runtimeMode,
+                    modelSelection,
+                    ...(projectId !== undefined ? { projectId } : {}),
+                  })
+                  .pipe(
+                    Effect.mapError(
+                      (cause) =>
+                        new OrchestrationDispatchCommandError({
+                          message: cause.message,
+                          cause,
+                        }),
+                    ),
+                  );
+              });
+
         return startup
-          .enqueueCommand(dispatchEffect)
+          .enqueueCommand(validateMcpPreparation.pipe(Effect.andThen(dispatchEffect)))
           .pipe(
             Effect.mapError((cause) =>
               toDispatchCommandError(cause, "Failed to dispatch orchestration command"),
@@ -1292,6 +1350,7 @@ const makeWsRpcLayer = (
               codexManagedSkills: true,
               mcpManagement: true,
               mcpCreateOnly: true,
+              codexManagedMcp: true,
               groqDictation: true,
             },
             ...(fileManagerRevealKind === undefined
@@ -1825,6 +1884,10 @@ const makeWsRpcLayer = (
             pulseMcp.resetThreadOverride(input),
             { "rpc.aggregate": "pulse.mcp" },
           ),
+        [WS_METHODS.pulseMcpPrepareTurn]: (input) =>
+          observeRpcEffect(WS_METHODS.pulseMcpPrepareTurn, pulseMcp.prepareTurn(input), {
+            "rpc.aggregate": "pulse.mcp",
+          }),
         [WS_METHODS.pulseSkillsMutate]: (input) =>
           observeRpcEffect(WS_METHODS.pulseSkillsMutate, pulseSkills.mutate(input), {
             "rpc.aggregate": "pulse.skills",
