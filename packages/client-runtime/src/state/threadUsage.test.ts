@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import type { OrchestrationThreadActivity } from "@t3tools/contracts";
+import { THREAD_HANDOFF_ACTIVITY_KIND, type OrchestrationThreadActivity } from "@t3tools/contracts";
 
 import { deriveThreadCostUsd } from "./threadUsage.ts";
 
@@ -53,12 +53,31 @@ describe("deriveThreadCostUsd", () => {
     expect(deriveThreadCostUsd(activities)).toBeCloseTo(1.5, 10);
   });
 
-  it("keeps cost across a handoff", () => {
+  it("restarts the cumulative counter at each handoff and sums the segments", () => {
     const activities = [
-      activity("context-window.updated", { usedTokens: 1, costUsd: 3 }, 0),
-      activity("thread.handoff", {}, 1),
-      activity("context-window.updated", { usedTokens: 1, costUsd: 0.5 }, 2),
+      activity("context-window.updated", { usedTokens: 1, costUsd: 10 }, 0),
+      activity(THREAD_HANDOFF_ACTIVITY_KIND, {}, 1),
+      activity("context-window.updated", { usedTokens: 1, costUsd: 2 }, 2),
+      activity(THREAD_HANDOFF_ACTIVITY_KIND, {}, 3),
+      activity("context-window.updated", { usedTokens: 1, costUsd: 2 }, 4),
+      activity(THREAD_HANDOFF_ACTIVITY_KIND, {}, 5),
+      activity("context-window.updated", { usedTokens: 1, costUsd: 3 }, 6),
     ];
-    expect(deriveThreadCostUsd(activities)).toBeCloseTo(3.5, 10);
+    expect(deriveThreadCostUsd(activities)).toBeCloseTo(17, 10);
+  });
+
+  it("still treats a drop without a handoff as a process restart", () => {
+    expect(deriveThreadCostUsd(costActivities([10, 2]))).toBeCloseTo(12, 10);
+  });
+
+  it("contributes nothing for a segment that reported no cost", () => {
+    const activities = [
+      activity("context-window.updated", { usedTokens: 1 }, 0),
+      activity(THREAD_HANDOFF_ACTIVITY_KIND, {}, 1),
+      activity("context-window.updated", { usedTokens: 1, costUsd: 4 }, 2),
+      activity(THREAD_HANDOFF_ACTIVITY_KIND, {}, 3),
+      activity("context-window.updated", { usedTokens: 1 }, 4),
+    ];
+    expect(deriveThreadCostUsd(activities)).toBeCloseTo(4, 10);
   });
 });
