@@ -396,7 +396,7 @@
     "commits": "Keep layered commits without repeated helper-by-helper review gates.",
     "activeFeature": "mcp-claude-opencode-adapters",
     "activeFeatureStatus": "implementation-planned",
-    "implementationPlan": "docs/plans/2026-09-13-mcp-end-to-end.md",
+    "implementationPlan": "docs/plans/2026-09-13-mcp-provider-adapters.md",
     "previousDictationEvidence": {
       "verifiedAt": "2026-09-13",
       "automated": "142 focused voice, authenticated transport/server and desktop packaging tests; 6 pipeline gate tests; web typecheck and production web build passed. Build reported chunk-size and plugin-timing warnings.",
@@ -624,11 +624,13 @@
   "mcpBehaviorProposal": "docs/internals/pulse-next-mcp-behavior.md",
   "activeImplementationBatch": {
     "id": "mcp-claude-opencode-adapters",
-    "state": "implementation-planned",
+    "state": "implementing",
     "baseRevision": "7d80a6744",
     "branch": "experiment/pulse-next-v040",
     "worktree": ".worktrees/pulse-next",
     "implementationOwner": "sol_mcp_provider_support",
+    "implementationWorktree": ".worktrees/pulse-next-mcp-providers",
+    "implementationBranch": "feat/pulse-next-mcp-providers",
     "scope": "Extend existing managed MCP selection and send preparation to Claude and OpenCode. Keep translation and readiness in provider adapters, retain native MCP configuration, and preserve Codex behavior.",
     "acceptanceCases": [
       "HTTP headers and stdio argv/env reach the selected provider without global or project configuration writes or secret disclosure.",
@@ -641,7 +643,8 @@
       "Focused adapter, shared preparation, hook and pipeline tests; configured scoped typechecks; one combined frozen review and applicable build. Synthetic evidence is not real-provider or packaged release certification."
     ],
     "completionBlockers": [],
-    "nextAction": "Confirm native Claude/OpenCode configuration, status and isolation APIs; implement end to end in one isolated Sol worktree.",
+    "baselineEvidence": "236 existing Claude/OpenCode adapter tests, 19 composer lifecycle tests and 7 node:test pipeline checks passed. Isolated browser picker rendered without page errors. Provider SDK APIs inspected locally; no paid calls.",
+    "nextAction": "Finish the combined adapters, capability gates and focused tests; review the frozen implementation before integration.",
     "releaseEligible": false
   },
   "previousCodexMcpImplementationBatch": {
