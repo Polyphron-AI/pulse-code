@@ -18,3 +18,12 @@ export {
   type VoiceTranscriptionErrorCode,
   type VoiceTranscriptionOptions,
 } from "./transcription.ts";
+export {
+  getPulseDictationApiKeyStatus,
+  PULSE_DICTATION_MAX_AUDIO_BYTES,
+  PulseDictationAudioTooLargeError,
+  removePulseDictationApiKey,
+  setPulseDictationApiKey,
+  transcribePulseDictation,
+  type PulseDictationRequestContext,
+} from "./pulseDictation.ts";
