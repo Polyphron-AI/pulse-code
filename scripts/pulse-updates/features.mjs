@@ -10,6 +10,9 @@ export const featureSuites = [
   { id: "mcp-connections", file: "apps/server/src/mcp/PulseMcpConfigService.test.ts" },
   { id: "dictation-lifecycle", file: "apps/web/src/voice/pulseDictation.test.ts" },
   { id: "dictation-capture", file: "apps/web/src/voice/mediaRecorderCapture.test.ts" },
+  { id: "dictation-settings", file: "apps/web/src/voice/DictationSettings.test.tsx" },
+  { id: "dictation-preferences", file: "apps/web/src/voice/dictationPreferences.test.ts" },
+  { id: "dictation-composer", file: "apps/web/src/voice/composerDictationLogic.test.ts" },
   { id: "dictation-groq", file: "apps/server/src/voice/groqTranscription.test.ts" },
   { id: "dictation-parakeet", file: "apps/web/src/voice/parakeetTranscription.test.ts" },
   { id: "managed-skills-library", file: "apps/server/src/skills/ManagedSkillLibrary.test.ts" },
@@ -90,14 +93,15 @@ export function runFeatureSuites(root, run, exists = existsSync) {
     }
   });
   return {
-    scope: "Pulse modules and deterministic managed-skills invocation; not packaged-app acceptance",
+    scope:
+      "Pulse modules, managed-skills invocation and dictation integration; not packaged-app acceptance",
     state: suites.every((suite) => suite.state === "passed") ? "foundations-passed" : "blocked",
     releaseEligible: false,
     suites,
     remaining: [
       "Managed skills release acceptance on packaged desktop",
       "MCP provider and composer integration",
-      "Dictation settings and composer integration",
+      "Dictation real-model and physical-device acceptance",
       "Packaged-app and Windows verification",
     ],
   };

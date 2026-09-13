@@ -91,7 +91,7 @@
     {
       "id": "voice-dictation",
       "decision": "include",
-      "state": "not-ported",
+      "state": "development-acceptance-passed",
       "source": "pulseDevelop",
       "evidence": [
         "apps/desktop/src/voice/VoiceDesktop.ts",
@@ -118,8 +118,8 @@
       },
       "acceptanceGaps": [
         "Verify capture and transcription on each target; legacy source does not prove cross-platform support.",
-        "Decide where Parakeet runs for each client and how backend selection/fallback works. Do not assume every backend works on every platform.",
-        "Design explicit Groq API selection, protected credentials, audio-transfer disclosure and cancellation; recording must not silently send audio externally."
+        "Verify real Parakeet model loading and accuracy on supported devices; development acceptance used a mock model worker with real browser capture and decoding.",
+        "Verify live Groq transcription and packaged desktop microphone permissions. Synthetic browser acceptance does not certify physical devices or signed installers."
       ]
     },
     {
@@ -383,9 +383,23 @@
     "parallelism": "Only non-overlapping parts of the same active feature in separate worktrees; sequence shared contracts/runtime changes. No unrelated feature implementation in parallel.",
     "completion": "Working real-client flow, focused automated checks, integrated review, failure recovery and compatibility evidence. Helpers, endpoints and settings alone do not mean feature complete.",
     "commits": "Keep layered commits without repeated helper-by-helper review gates.",
-    "activeFeature": "codex-managed-skill-invocation",
+    "activeFeature": "dictation-end-to-end",
     "activeFeatureStatus": "complete-in-development",
     "evidence": {
+      "verifiedAt": "2026-09-13",
+      "automated": "142 focused voice, authenticated transport/server and desktop packaging tests; 6 pipeline gate tests; web typecheck and production web build passed. Build reported chunk-size and plugin-timing warnings.",
+      "browser": "Isolated Chromium with synthetic microphone: real MediaRecorder capture, multipart upload fixture, transcript insertion without sending, cancel recording, HTTP error and record-again recovery, and cancellation of in-flight upload. Parakeet explicit setup through SPA navigation used real audio decoding and a mock model worker, with no audio upload. No page errors. Synthetic Groq key removed after testing.",
+      "review": "Integrated Sol review; fixed immediate recorder-failure display, abort propagation, stale environment selection, all composer send-path guards, and macOS microphone entitlements independent of passkey configuration.",
+      "compatibilityLearning": "Keep voice preferences and credentials outside upstream ServerSettings. Resolve current authenticated environment context at operation time; integrate at the composer insertion/send boundary. Never fall back to another environment or transcription backend.",
+      "integrationTip": "64b527b0e",
+      "screenshots": [
+        ".t3/visual-evidence/pulse-next-voice-ready-dark-desktop.png",
+        ".t3/visual-evidence/pulse-next-voice-ready-dark-mobile.png",
+        ".t3/visual-evidence/pulse-next-voice-recording-dark-desktop.png"
+      ],
+      "limits": "No real model download, paid Groq request, physical microphone or signed desktop installer acceptance. Mobile viewport is not physical mobile testing. Native mobile is unchanged. System dark was selected only in the isolated browser. Release eligibility remains false."
+    },
+    "previousFeatureEvidence": {
       "verifiedAt": "2026-09-13",
       "browser": "Isolated Windows development environment: select immutable skill revision, reload, desktop/mobile-web picker screenshots, send from new draft, preserve selection after promotion. Mock Codex process recorded native text plus skill input with trusted revision path; no model request.",
       "automated": "Server/contracts 260 targeted tests; draft/picker/real-runtime combined 125 tests; branding/bootstrap 13 and desktop environment 6 tests; web typecheck passed. Added all skill boundary suites to update pipeline.",
@@ -397,11 +411,11 @@
       ],
       "limits": "Voice images are layout previews only. Native mobile picker and packaged desktop acceptance are not implemented/verified by this batch. System dark was selected only in the isolated browser, not forced for all users."
     },
-    "acceptance": "Select an installed managed skill in the composer, send to Codex using the exact trusted immutable revision, preserve selection across queued/retry/new-thread paths, and verify the provider payload and visible flow. Native skills remain unchanged; unsupported providers/servers cannot silently ignore selection.",
-    "nextFeature": "dictation-end-to-end",
+    "acceptance": "Configure Parakeet on this device or Groq on an explicitly chosen environment, record from the top-right composer microphone, stop and insert transcript without sending. Cancel and record-again recovery preserve draft edits; navigation and sending cannot insert stale text. Verify desktop and mobile web with deterministic capture/transcription fixtures and focused integration tests; report physical/model/platform limitations separately.",
+    "nextFeature": "mcp-provider-composer-integration",
     "blockedPolicy": "Record the blocker and request direction before switching features or declaring partial work complete."
   },
-  "nextAction": "Codex managed-skill invocation passed development acceptance. Next, complete dictation end to end: settings, microphone controls, transcription insertion and recovery. Preserve paused drafts in pulse-next-dictation; they are not verified or integrated. MCP provider/composer integration follows dictation. Packaged desktop acceptance remains a release gate.",
+  "nextAction": "Managed skills and dictation passed development acceptance. Next feature: MCP provider/composer integration, including selected-connection failure pause, Retry and Continue without it. Dictation physical-device, real-model and packaged desktop acceptance remain release gates; do not mark a release eligible from synthetic tests alone.",
   "parallelIntegrationBatches": [
     {
       "id": "skills-library-and-settings",

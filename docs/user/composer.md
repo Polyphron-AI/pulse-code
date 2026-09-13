@@ -80,6 +80,25 @@ Stashes containing uploaded files must be restored in their original environment
 Those files are retained for 24 hours. After an upload expires, restore the prompt
 and use **Attach again** or remove the missing file before sending.
 
+## Voice dictation on web and desktop
+
+Open **Settings → Integrations → Voice dictation** and choose where to transcribe:
+
+- **Parakeet on this device** keeps audio local. Choose **Set up Parakeet** to
+  load the model. Setup needs a network connection and enough device memory.
+- **Groq through an environment** sends the recording through the environment
+  you select to Groq. Save its API key there; it is not stored in your browser.
+
+Use the microphone above Send to record, then stop to insert the transcript.
+Dictation never sends the message. Review and edit the text first. Cancel discards
+the recording without changing your draft. If transcription fails, record again.
+Changing drafts cancels dictation so text cannot land in another thread.
+
+Mobile browsers need HTTPS to access the microphone. Plain HTTP connections to a
+LAN or tailnet address cannot record; use an HTTPS connection instead. Desktop
+may also require microphone permission in your operating system. Browser and
+device limits still apply, including available memory for the local model.
+
 ## Voice input on iPhone
 
 On supported iPhones with iOS 26 or later, use the composer's microphone to record,
