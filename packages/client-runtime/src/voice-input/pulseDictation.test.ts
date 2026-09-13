@@ -171,6 +171,78 @@ describe("Pulse dictation HTTP transport", () => {
     }),
   );
 
+  it.effect(
+    "keeps concurrent reusable status requests bound to their own relay authorization",
+    () =>
+      Effect.gen(function* () {
+        const relayTarget = new RelayConnectionTarget({ environmentId, label: "Relay" });
+        const prepared: PreparedConnection = {
+          ...primary,
+          target: relayTarget,
+          httpAuthorization: { _tag: "Dpop", accessToken: "expired", expiresAtEpochMs: 0 },
+        };
+        let authorizationIndex = 0;
+        const remoteAuthorization = RemoteEnvironmentAuthorization.of({
+          authorizeBearer: () => Effect.die("unexpected"),
+          authorizeDpop: () => Effect.die("unexpected"),
+          authorizeDpopHttp: () =>
+            Effect.sync(() => {
+              const index = ++authorizationIndex;
+              return {
+                environmentId,
+                label: `Relay ${index}`,
+                httpBaseUrl: `https://relay-${index}.example.test`,
+                httpAuthorization: {
+                  _tag: "Dpop" as const,
+                  accessToken: `token-${index}`,
+                  expiresAtEpochMs: 9_999_999_999_999,
+                },
+              };
+            }),
+        });
+        const proofsStarted = Promise.withResolvers<void>();
+        let proofCount = 0;
+        const signer = ManagedRelayDpopSigner.of({
+          thumbprint: Effect.succeed("thumbprint"),
+          createProof: ({ url, accessToken }) =>
+            Effect.promise(async () => {
+              proofCount += 1;
+              if (proofCount === 2) proofsStarted.resolve();
+              await proofsStarted.promise;
+              return `proof:${url}:${accessToken}`;
+            }),
+        });
+        const calls: Array<{ url: string; authorization: string | null; proof: string | null }> =
+          [];
+        const fetchFn: typeof fetch = async (request, init) => {
+          const headers = new Headers(init?.headers);
+          calls.push({
+            url: String(request),
+            authorization: headers.get("authorization"),
+            proof: headers.get("dpop"),
+          });
+          return Response.json({ configured: false });
+        };
+        const request = getPulseDictationApiKeyStatus({
+          prepared,
+          signer: Option.some(signer),
+          remoteAuthorization: Option.some(remoteAuthorization),
+        }).pipe(Effect.provide(remoteHttpClientLayer(fetchFn)));
+
+        yield* Effect.all([request, request], { concurrency: "unbounded" });
+
+        expect(calls).toHaveLength(2);
+        for (const call of calls) {
+          const index = new URL(call.url).hostname === "relay-1.example.test" ? 1 : 2;
+          expect(call.url).toBe(
+            `https://relay-${index}.example.test/api/pulse/dictation/groq-api-key`,
+          );
+          expect(call.authorization).toBe(`DPoP token-${index}`);
+          expect(call.proof).toBe(`proof:${call.url}:token-${index}`);
+        }
+      }),
+  );
+
   it("aborts the in-flight fetch and rejects invalid successful responses", async () => {
     let fetchAborted = false;
     const started = Promise.withResolvers<void>();
