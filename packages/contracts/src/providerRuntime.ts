@@ -329,6 +329,13 @@ export const ThreadTokenUsageSnapshot = Schema.Struct({
   durationMs: Schema.optional(NonNegativeInt),
   compactsAutomatically: Schema.optional(Schema.Boolean),
   autoCompactThreshold: Schema.optional(PositiveInt),
+  /**
+   * Cost at API rates for the provider process this snapshot came from, in
+   * USD. Cumulative within that process, so it resets whenever the provider
+   * restarts; clients reconstruct a thread total from the series. Only
+   * providers that report a per-result cost set it.
+   */
+  costUsd: Schema.optional(Schema.Number.check(Schema.isGreaterThanOrEqualTo(0))),
 });
 export type ThreadTokenUsageSnapshot = typeof ThreadTokenUsageSnapshot.Type;
 
