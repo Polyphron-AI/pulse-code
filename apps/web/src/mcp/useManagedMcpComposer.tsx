@@ -106,8 +106,10 @@ export function useManagedMcpComposer(input: {
     effectiveServerOverride ??
     providerDefault.data?.connectionIds ??
     [];
+  const queryFailed = Boolean(list.error || providerDefault.error || threadOverride.error);
   const loading =
     enabled &&
+    !queryFailed &&
     (list.data === null ||
       providerDefault.data === null ||
       (input.threadId !== null && threadOverride.data === null));
@@ -144,10 +146,10 @@ export function useManagedMcpComposer(input: {
           ? "Managed MCPs are not supported by this environment."
           : !canRead || !canOperate
             ? "This session cannot use managed MCP connections."
-            : loading
-              ? "MCP selection is still loading."
-              : list.error || providerDefault.error || threadOverride.error
-                ? "MCP selection could not be loaded."
+            : queryFailed
+              ? "MCP selection could not be loaded."
+              : loading
+                ? "MCP selection is still loading."
                 : null;
 
   const accessKey = `${input.environmentId}:${input.identityKey}:${input.threadId ?? "draft"}:${input.providerInstanceId}:${input.provider}:${input.modelKey}:${capabilityReady}:${canRead}:${canOperate}:${selectedIds.join(",")}`;

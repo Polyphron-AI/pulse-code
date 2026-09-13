@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   resetOverride: vi.fn(),
   saveDefaults: vi.fn(),
   defaultRefresh: vi.fn(),
+  queryError: null as "list" | "default" | null,
   result: null as ReturnType<typeof import("./useManagedMcpComposer").useManagedMcpComposer> | null,
 }));
 
@@ -34,20 +35,24 @@ vi.mock("../state/session", () => ({
 }));
 vi.mock("../state/server", () => ({ serverEnvironment: { configProjection: () => ({}) } }));
 vi.mock("../state/query", () => ({
-  useEnvironmentQuery: (target: { kind?: string } | null) => ({
-    data:
-      target?.kind === "list"
-        ? [
-            {
-              id: "linear",
-              name: "Linear",
-              config: { transport: "stdio", command: "linear", args: [], env: {} },
-            },
-          ]
-        : { connectionIds: ["linear"] },
-    error: null,
-    refresh: target?.kind === "default" ? mocks.defaultRefresh : vi.fn(),
-  }),
+  useEnvironmentQuery: (target: { kind?: string } | null) => {
+    const failed = target?.kind === mocks.queryError;
+    return {
+      data: failed
+        ? null
+        : target?.kind === "list"
+          ? [
+              {
+                id: "linear",
+                name: "Linear",
+                config: { transport: "stdio", command: "linear", args: [], env: {} },
+              },
+            ]
+          : { connectionIds: ["linear"] },
+      error: failed ? new Error(`${target?.kind} failed`) : null,
+      refresh: target?.kind === "default" ? mocks.defaultRefresh : vi.fn(),
+    };
+  },
 }));
 vi.mock("./mcpState", () => ({
   pulseMcpList: () => ({ kind: "list" }),
@@ -103,6 +108,7 @@ describe("useManagedMcpComposer", () => {
     mocks.resetOverride.mockReset().mockResolvedValue({ _tag: "Success", value: {} });
     mocks.saveDefaults.mockReset().mockResolvedValue({ _tag: "Success", value: {} });
     mocks.defaultRefresh.mockReset();
+    mocks.queryError = null;
   });
 
   it("keeps the send pending after failure and carries exclusions into continue", async () => {
@@ -152,6 +158,18 @@ describe("useManagedMcpComposer", () => {
     expect(outcome).toEqual({ status: "ready", preparationId: "prep-1" });
     expect(mocks.prepare.mock.calls[1]?.[0].input.excludedConnectionIds).toEqual(["linear"]);
   });
+
+  it.each(["list", "default"] as const)(
+    "reports an initial %s query failure instead of remaining loading",
+    async (query) => {
+      mocks.queryError = query;
+      await act(async () => {
+        renderer = create(<Harness />);
+      });
+      expect(mocks.result!.blockedReason).toBe("MCP selection could not be loaded.");
+      expect(mocks.result!.picker.loading).toBe(false);
+    },
+  );
 
   it("accumulates continue-without exclusions across repeated failures", async () => {
     const failed = (id: string) => ({
