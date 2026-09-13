@@ -266,6 +266,19 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
     assert.equal(resolveDesktopProductName("0.0.17-nightly.20260413.42"), "Pulse Next (Nightly)");
   });
 
+  // Pulse releases encode the upstream version they are compatible up to, as
+  // `<t3 version>-pulse.<n>`. That prerelease suffix must stay invisible to the
+  // nightly and preview resolvers, so a Pulse build ships stable artwork, the
+  // stable update channel and the Alpha product name.
+  it("treats a pulse-suffixed version as a stable release", () => {
+    assert.equal(resolveDesktopUpdateChannel("0.0.40-pulse.1"), "latest");
+    assert.equal(resolveDesktopProductName("0.0.40-pulse.1"), "Pulse Next (Alpha)");
+    assert.deepStrictEqual(
+      resolveDesktopBuildIconAssets("0.0.40-pulse.1"),
+      resolveDesktopBuildIconAssets("0.0.40"),
+    );
+  });
+
   it("switches desktop packaging icons to the nightly artwork for nightly versions", () => {
     assert.deepStrictEqual(resolveDesktopBuildIconAssets("0.0.17"), {
       macIconPng: BRAND_ASSET_PATHS.productionMacIconPng,

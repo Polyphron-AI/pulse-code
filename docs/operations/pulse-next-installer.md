@@ -40,6 +40,53 @@ server CLI's own default home (`apps/server/src/os-jank.ts`), and the WSL
 backend's Linux-side runtime cache under `$HOME/.t3/wsl-runtime` inside the WSL
 distro.
 
+## Version scheme
+
+A Pulse Next version says which T3 Code version the build is compatible up to,
+followed by a Pulse revision count against that same upstream base:
+
+```
+0.0.40-pulse.1
+\____/ \_____/
+  |        |
+  |        Pulse revision against that upstream base, starting at 1
+  Upstream T3 Code version this build is compatible up to
+```
+
+Upstream's own manifests do not identify the release they belong to. The
+`v0.0.40` tag still declares `0.0.39`, because upstream bumps the version after
+cutting a tag. Encoding the upstream version in the Pulse string removes that
+ambiguity: the number on the installer is the number you compare against T3
+Code.
+
+One string is used everywhere. These four manifests are the only places it is
+written down, and everything else derives from them:
+
+- `apps/server/package.json`, which feeds `t3 --version`, the environment
+  handshake's `serverVersion`, and the packaged artifact version.
+- `apps/web/package.json`, which Vite injects as `APP_VERSION` and the About
+  panel renders.
+- `apps/desktop/package.json`, which the Electron app reports in development.
+- `packages/contracts/package.json`, package metadata only.
+
+The suffix is a semver prerelease, so tooling sorts and parses it normally. It
+is deliberately not shaped like upstream's `-nightly.<date>.<build>` or `-pr.<n>`
+suffixes, which the update channel, icon and product-name resolvers match on. A
+`-pulse.N` build therefore resolves to the stable channel, the production icons
+and the `Pulse Next (Alpha)` product name, which is what a Pulse release wants.
+
+`apps/mobile` is not on this scheme. It keeps its own store-facing Expo version
+in `app.config.ts`, because App Store and Play track numbering independently.
+
+### Bumping after an upstream sync
+
+1. Merge the new upstream release tag.
+2. Set the leading number in all four manifests to that T3 Code version.
+3. Reset the suffix to `.1`.
+
+For a Pulse-only change with no upstream move, increment the suffix instead and
+leave the leading number alone.
+
 ## Build the installer
 
 Build on Windows x64. The preflight needs Rust with the `x86_64-pc-windows-msvc`
