@@ -13,6 +13,7 @@ import type {
   RuntimeMode,
   ScopedThreadRef,
   ServerProvider,
+  ServerProviderUsageLimits,
   ThreadId,
 } from "@t3tools/contracts";
 import {
@@ -196,6 +197,8 @@ import {
   renderProviderTraitsPicker,
 } from "./composerProviderState";
 import { ContextWindowMeter } from "./ContextWindowMeter";
+import { PlanUsageMeter } from "./PlanUsageMeter";
+import { selectComposerPlanUsage } from "./PlanUsageMeter.logic";
 import {
   providerSupportsManualCompaction,
   resolveContextWindowModelDisplayName,
@@ -1055,6 +1058,8 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
   compact: boolean;
   activeContextWindow: ContextWindowSnapshot | null;
   activeThreadModelDisplayName: string | null;
+  activeThreadCostUsd: number | null;
+  composerPlanUsage: { driver: ServerProvider["driver"]; limits: ServerProviderUsageLimits } | null;
   isPreparingWorktree: boolean;
   pendingAction: {
     questionIndex: number;
@@ -1082,6 +1087,12 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
 }) {
   return (
     <>
+      {props.composerPlanUsage ? (
+        <PlanUsageMeter
+          driver={props.composerPlanUsage.driver}
+          usageLimits={props.composerPlanUsage.limits}
+        />
+      ) : null}
       {props.activeContextWindow ? (
         <ContextWindowMeter
           usage={props.activeContextWindow}
@@ -1089,6 +1100,11 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
           onCompact={props.onCompactContext}
           compactDisabled={props.compactDisabled}
           compactDisabledReason={props.compactDisabledReason}
+          // Cost visibility intentionally follows the instance the composer
+          // targets, not the one the thread's last turn ran on: it answers
+          // "will the next send cost me money", and a subscription plan
+          // already answers that with its windows.
+          costUsd={props.composerPlanUsage ? null : props.activeThreadCostUsd}
         />
       ) : null}
       <ComposerPrimaryActions
@@ -1255,6 +1271,7 @@ export interface ChatComposerProps {
 
   // Context window
   activeContextWindow: ContextWindowSnapshot | null;
+  activeThreadCostUsd: number | null;
   compactThreadUnavailable: boolean;
   compactDisabled: boolean;
   compactDisabledReason: string | null;
@@ -1371,6 +1388,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     activeProjectDefaultModelSelection,
     activeThreadModelSelection,
     activeContextWindow,
+    activeThreadCostUsd,
     compactThreadUnavailable,
     compactDisabled,
     compactDisabledReason,
@@ -1635,6 +1653,13 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   );
   const selectedInstanceId =
     selectedProviderEntry?.instanceId ?? NO_PROVIDER_MODEL_SELECTION.instanceId;
+  // Plan usage belongs to the provider instance the composer will dispatch to,
+  // which is not necessarily the one the thread's last turn ran on.
+  const composerPlanUsage = useMemo(() => {
+    const provider = providerStatuses.find((entry) => entry.instanceId === selectedInstanceId);
+    const limits = selectComposerPlanUsage(provider?.usageLimits);
+    return provider && limits ? { driver: provider.driver, limits } : null;
+  }, [providerStatuses, selectedInstanceId]);
   const noProviderAvailable = selectedProviderEntry === undefined;
   const providerSetupInstanceId = noProviderAvailable
     ? (unavailableProviderInstanceId ??
@@ -5698,6 +5723,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                       settings.contextWindowMeterEnabled ? activeContextWindow : null
                     }
                     activeThreadModelDisplayName={activeThreadModelDisplayName}
+                    activeThreadCostUsd={activeThreadCostUsd}
+                    composerPlanUsage={composerPlanUsage}
                     pendingAction={pendingPrimaryAction}
                     isRunning={phase === "running"}
                     showPlanFollowUpPrompt={
