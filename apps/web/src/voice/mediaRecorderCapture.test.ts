@@ -116,10 +116,11 @@ describe("MediaRecorderCapture", () => {
     await test.capture.prepare(abort.signal);
     const recording = await test.capture.record(abort.signal);
     test.recorder.autoStop = false;
-    const stopped = recording.stop(abort.signal);
+    const completed = recording.completion;
     test.recorder.emitError();
 
-    await expect(stopped).rejects.toThrow("Microphone recording failed");
+    await expect(completed).rejects.toThrow("Microphone recording failed");
+    await expect(recording.stop(abort.signal)).rejects.toThrow("Microphone recording failed");
     expect(test.stopTrack).toHaveBeenCalledOnce();
   });
 
@@ -129,9 +130,11 @@ describe("MediaRecorderCapture", () => {
     await test.capture.prepare(abort.signal);
     const recording = await test.capture.record(abort.signal);
     test.recorder.autoStop = false;
+    const completed = recording.completion;
     test.recorder.chunk(new Blob([new Uint8Array(PULSE_DICTATION_MAX_CAPTURE_BYTES)]));
     test.recorder.chunk(new Blob([new Uint8Array([1])]));
 
+    await expect(completed).rejects.toThrow("25 MiB capture limit");
     await expect(recording.stop(abort.signal)).rejects.toThrow("25 MiB capture limit");
     test.recorder.emitStop();
     expect(test.stopTrack).toHaveBeenCalledOnce();

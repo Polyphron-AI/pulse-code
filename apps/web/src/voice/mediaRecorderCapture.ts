@@ -135,7 +135,12 @@ export class MediaRecorderCapture implements PulseDictationCapture<PulseRecorded
       throw error;
     }
 
+    const completion = stopped.then(() => undefined);
+    // The signal is optional for backwards-compatible consumers. Mark it observed here while
+    // preserving rejection for controllers that subscribe to early capture failure.
+    void completion.catch(() => undefined);
     return {
+      completion,
       stop: async (stopSignal) => {
         if (stopSignal.aborted) {
           abortRecording();

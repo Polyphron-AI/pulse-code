@@ -10,6 +10,8 @@ export type PulseDictationState =
   | { phase: "error"; message: string };
 
 export interface PulseDictationRecording<Audio> {
+  /** Settles when capture ends on its own. Adapters may omit it when they cannot observe that. */
+  readonly completion?: Promise<void>;
   stop(signal: AbortSignal): Promise<Audio>;
   cancel(): void;
 }
@@ -94,6 +96,7 @@ export class PulseDictationController<Audio> {
 
       this.#recording = recording;
       this.#setState({ phase: "recording", backend: origin.backend });
+      void recording.completion?.catch((error) => this.#failIfCurrent(run, error));
     } catch (error) {
       this.#failIfCurrent(run, error);
     }

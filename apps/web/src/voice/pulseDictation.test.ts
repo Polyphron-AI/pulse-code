@@ -148,6 +148,47 @@ describe("PulseDictationController", () => {
     });
   });
 
+  it("reports a recorder failure before Stop is pressed", async () => {
+    const test = setup();
+    const completion = deferred<void>();
+    test.recorded.resolve({ ...test.recording, completion: completion.promise });
+    const started = test.controller.start({
+      backend: "parakeet",
+      draftIdentity: "draft-a",
+      deliver: vi.fn(),
+    });
+    test.prepared.resolve();
+    await started;
+
+    completion.reject(new Error("Microphone recording failed."));
+    await Promise.resolve();
+
+    expect(test.cancelRecording).toHaveBeenCalledOnce();
+    expect(test.controller.getSnapshot()).toEqual({
+      phase: "error",
+      message: "Microphone recording failed.",
+    });
+  });
+
+  it("ignores completion failure after recording cancellation", async () => {
+    const test = setup();
+    const completion = deferred<void>();
+    test.recorded.resolve({ ...test.recording, completion: completion.promise });
+    const started = test.controller.start({
+      backend: "parakeet",
+      draftIdentity: "draft-a",
+      deliver: vi.fn(),
+    });
+    test.prepared.resolve();
+    await started;
+    test.controller.cancel();
+
+    completion.reject(new Error("late recorder error"));
+    await Promise.resolve();
+
+    expect(test.controller.getSnapshot()).toEqual({ phase: "idle" });
+  });
+
   it("isolates listener failures and notifies a stable listener snapshot", async () => {
     const test = setup();
     const notified = vi.fn();
