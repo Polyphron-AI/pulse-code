@@ -25,7 +25,7 @@ export const emptyConnectionDraft = (): ConnectionDraft => ({
   transport: "http",
   url: "",
   command: "",
-  args: "",
+  args: "[]",
   cwd: "",
   values: [],
 });
@@ -50,7 +50,10 @@ export function draftFromConnection(connection: PulseMcpConnection): ConnectionD
     transport: connection.config.transport,
     url: connection.config.transport === "http" ? connection.config.url : "",
     command: connection.config.transport === "stdio" ? connection.config.command : "",
-    args: connection.config.transport === "stdio" ? connection.config.args.join("\n") : "",
+    args:
+      connection.config.transport === "stdio"
+        ? JSON.stringify(connection.config.args, null, 2)
+        : "[]",
     cwd: connection.config.transport === "stdio" ? (connection.config.cwd ?? "") : "",
     values,
   };
@@ -73,15 +76,13 @@ export function connectionInputFromDraft(draft: ConnectionDraft): PulseMcpConnec
   if (draft.transport === "http") {
     return { ...base, config: { transport: "http", url: draft.url.trim(), headers: values } };
   }
+  const args = JSON.parse(draft.args) as unknown;
   return {
     ...base,
     config: {
       transport: "stdio",
       command: draft.command.trim(),
-      args: draft.args
-        .split("\n")
-        .map((arg) => arg.trim())
-        .filter(Boolean),
+      args: args as Array<string>,
       ...(draft.cwd.trim() ? { cwd: draft.cwd.trim() } : {}),
       env: values,
     },
@@ -95,6 +96,16 @@ export function validateConnectionDraft(draft: ConnectionDraft): string | null {
   if (!draft.name.trim()) return "Name is required.";
   if (draft.transport === "http" && !draft.url.trim()) return "URL is required.";
   if (draft.transport === "stdio" && !draft.command.trim()) return "Command is required.";
+  if (draft.transport === "stdio") {
+    try {
+      const args = JSON.parse(draft.args) as unknown;
+      if (!Array.isArray(args) || args.some((arg) => typeof arg !== "string")) {
+        return "Arguments must be a JSON array of strings.";
+      }
+    } catch {
+      return "Arguments must be a valid JSON array of strings.";
+    }
+  }
   const keys = draft.values.map(({ key }) => key.trim()).filter(Boolean);
   if (new Set(keys).size !== keys.length) return "Header or environment names must be unique.";
   if (draft.values.some((value) => !value.key.trim())) return "Remove empty rows before saving.";

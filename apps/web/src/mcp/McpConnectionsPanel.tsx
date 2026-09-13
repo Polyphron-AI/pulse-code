@@ -7,7 +7,7 @@ import {
   TerminalIcon,
   Trash2Icon,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "../components/ui/alert";
 import { Badge } from "../components/ui/badge";
@@ -191,6 +191,7 @@ export function McpConnectionsPanel({
         key={`${environmentKey}:${editing === "new" ? "new" : (editing?.id ?? "closed")}`}
         target={editing}
         disabled={disabled || pending}
+        existingIds={connections.map(({ id }) => id)}
         onClose={() => setEditing(null)}
         onSave={(input) => run(() => upsert(environmentKey, input))}
       />
@@ -229,11 +230,13 @@ export function McpConnectionsPanel({
 function ConnectionDialog({
   target,
   disabled,
+  existingIds,
   onClose,
   onSave,
 }: {
   readonly target: PulseMcpConnection | "new" | null;
   readonly disabled: boolean;
+  readonly existingIds: ReadonlyArray<string>;
   readonly onClose: () => void;
   readonly onSave: (input: PulseMcpConnectionInput) => Promise<Result>;
 }) {
@@ -241,11 +244,15 @@ function ConnectionDialog({
     target && target !== "new" ? draftFromConnection(target) : emptyConnectionDraft(),
   );
   const [error, setError] = useState<string | null>(null);
+  const fieldPrefix = useId();
   const set = <K extends keyof ConnectionDraft>(key: K, value: ConnectionDraft[K]) =>
     setDraft((current) => ({ ...current, [key]: value }));
   const save = async () => {
     const issue = validateConnectionDraft(draft);
     if (issue) return setError(issue);
+    if (target === "new" && existingIds.includes(draft.id.trim())) {
+      return setError("A connection with this ID already exists. Edit the existing connection.");
+    }
     setError(null);
     const result = await onSave(connectionInputFromDraft(draft));
     if (result.ok) onClose();
@@ -265,28 +272,30 @@ function ConnectionDialog({
         </DialogHeader>
         <DialogPanel className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="ID">
+            <Field label="ID" htmlFor={`${fieldPrefix}-id`}>
               <Input
+                id={`${fieldPrefix}-id`}
                 value={draft.id}
                 disabled={disabled || target !== "new"}
                 onChange={(event) => set("id", event.target.value)}
               />
             </Field>
-            <Field label="Name">
+            <Field label="Name" htmlFor={`${fieldPrefix}-name`}>
               <Input
+                id={`${fieldPrefix}-name`}
                 value={draft.name}
                 disabled={disabled}
                 onChange={(event) => set("name", event.target.value)}
               />
             </Field>
           </div>
-          <Field label="Transport">
+          <Field label="Transport" htmlFor={`${fieldPrefix}-transport`}>
             <Select
               value={draft.transport}
               disabled={disabled || target !== "new"}
               onValueChange={(value) => value && set("transport", value as "http" | "stdio")}
             >
-              <SelectTrigger className="w-full">
+              <SelectTrigger id={`${fieldPrefix}-transport`} className="w-full">
                 <SelectValue>{draft.transport === "http" ? "HTTP" : "stdio"}</SelectValue>
               </SelectTrigger>
               <SelectPopup>
@@ -296,8 +305,9 @@ function ConnectionDialog({
             </Select>
           </Field>
           {draft.transport === "http" ? (
-            <Field label="URL">
+            <Field label="URL" htmlFor={`${fieldPrefix}-url`}>
               <Input
+                id={`${fieldPrefix}-url`}
                 type="url"
                 value={draft.url}
                 disabled={disabled}
@@ -307,23 +317,30 @@ function ConnectionDialog({
             </Field>
           ) : (
             <>
-              <Field label="Command">
+              <Field label="Command" htmlFor={`${fieldPrefix}-command`}>
                 <Input
+                  id={`${fieldPrefix}-command`}
                   value={draft.command}
                   disabled={disabled}
                   placeholder="npx"
                   onChange={(event) => set("command", event.target.value)}
                 />
               </Field>
-              <Field label="Arguments" hint="One argument per line">
+              <Field
+                label="Arguments"
+                hint='JSON string array, for example ["-y", "server"]'
+                htmlFor={`${fieldPrefix}-args`}
+              >
                 <Textarea
+                  id={`${fieldPrefix}-args`}
                   value={draft.args}
                   disabled={disabled}
                   onChange={(event) => set("args", event.target.value)}
                 />
               </Field>
-              <Field label="Working directory" hint="Optional">
+              <Field label="Working directory" hint="Optional" htmlFor={`${fieldPrefix}-cwd`}>
                 <Input
+                  id={`${fieldPrefix}-cwd`}
                   value={draft.cwd}
                   disabled={disabled}
                   onChange={(event) => set("cwd", event.target.value)}
@@ -355,15 +372,17 @@ function ConnectionDialog({
 function Field({
   label,
   hint,
+  htmlFor,
   children,
 }: {
   readonly label: string;
   readonly hint?: string;
+  readonly htmlFor: string;
   readonly children: React.ReactNode;
 }) {
   return (
     <div className="space-y-1.5">
-      <Label>{label}</Label>
+      <Label htmlFor={htmlFor}>{label}</Label>
       {children}
       {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
     </div>
