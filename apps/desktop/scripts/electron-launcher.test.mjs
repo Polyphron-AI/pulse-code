@@ -1,6 +1,18 @@
+import {
+  DESKTOP_APP_ID,
+  DESKTOP_DEVELOPMENT_APP_ID,
+  DESKTOP_DEVELOPMENT_URL_SCHEME,
+  DESKTOP_URL_SCHEME,
+  MACOS_MICROPHONE_USAGE_DESCRIPTION as SHARED_MACOS_MICROPHONE_USAGE_DESCRIPTION,
+  PRODUCT_ALPHA_NAME,
+  PRODUCT_DEV_NAME,
+} from "@t3tools/shared/productIdentity";
 import { assert, describe, it } from "vite-plus/test";
 
 import {
+  APP_BUNDLE_ID,
+  APP_DISPLAY_NAME,
+  APP_PROTOCOL_SCHEMES,
   makeDevelopmentLauncherScript,
   MACOS_MICROPHONE_USAGE_DESCRIPTION,
   mainBundleInfoPlistStringEntries,
@@ -10,6 +22,27 @@ import {
 } from "./electron-launcher.mjs";
 
 describe("electron development launcher", () => {
+  // The launcher duplicates these strings because plain node cannot load the
+  // TypeScript identity module. A drift here would give the dev app a bundle id
+  // or scheme that no longer belongs to Pulse Next.
+  it("repeats the shared product identity without drifting from it", () => {
+    assert.equal(MACOS_MICROPHONE_USAGE_DESCRIPTION, SHARED_MACOS_MICROPHONE_USAGE_DESCRIPTION);
+    assert.oneOf(APP_DISPLAY_NAME, [PRODUCT_DEV_NAME, PRODUCT_ALPHA_NAME]);
+    assert.equal(APP_PROTOCOL_SCHEMES.length, 1);
+    assert.oneOf(APP_PROTOCOL_SCHEMES[0], [DESKTOP_URL_SCHEME, DESKTOP_DEVELOPMENT_URL_SCHEME]);
+
+    // The dev bundle id keeps a per-repo suffix so two checkouts do not share
+    // one macOS registration, but it stays under the Pulse Next namespace.
+    const isDevelopmentLauncher = APP_DISPLAY_NAME === PRODUCT_DEV_NAME;
+    if (isDevelopmentLauncher) {
+      assert.match(APP_BUNDLE_ID, new RegExp(`^${DESKTOP_DEVELOPMENT_APP_ID}\.[a-z0-9]+$`));
+      assert.equal(APP_PROTOCOL_SCHEMES[0], DESKTOP_DEVELOPMENT_URL_SCHEME);
+    } else {
+      assert.equal(APP_BUNDLE_ID, DESKTOP_APP_ID);
+      assert.equal(APP_PROTOCOL_SCHEMES[0], DESKTOP_URL_SCHEME);
+    }
+  });
+
   it("adds the microphone purpose string to the branded macOS bundle", () => {
     assert.deepInclude(Object.fromEntries(mainBundleInfoPlistStringEntries("Electron")), {
       NSMicrophoneUsageDescription: MACOS_MICROPHONE_USAGE_DESCRIPTION,

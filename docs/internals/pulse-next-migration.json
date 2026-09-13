@@ -149,7 +149,8 @@
   "prerequisites": [
     {
       "id": "identity-isolation",
-      "state": "not-started",
+      "state": "desktop-identity-isolated",
+      "note": "Desktop app id, executable, URL schemes, user data and ~/.pulse-next home are separate from T3 Code and a default build carries no update feed; signing and a Pulse update feed remain. See docs/operations/pulse-next-installer.md.",
       "intent": "Isolate experiment home, identity, credentials and update ownership before running or installing."
     }
   ],

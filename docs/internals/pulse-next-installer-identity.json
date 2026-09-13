@@ -1,0 +1,145 @@
+{
+  "feature": "pulse-next-installer-identity",
+  "policyVersion": "2026-09-13",
+  "base": "88ab5f948",
+  "branch": "feat/pulse-next-installer-identity",
+  "worktree": ".worktrees/pulse-next-installer-identity",
+  "ledgerFor": "prerequisite identity-isolation, desktop part",
+  "scope": {
+    "included": [
+      "One Pulse-owned identity module, packages/shared/src/productIdentity.ts, with a subpath export.",
+      "Desktop runtime identity: app user model id, URL schemes, Linux desktop entry and WM class, Electron user-data directory, home base dir.",
+      "Packaging identity in scripts/build-desktop-artifact.ts: appId, product name, artifact name, protocols, Linux executable and StartupWMClass, microphone string, DMG title.",
+      "Development launcher bundle id, display name and scheme.",
+      "Runbook for assembling and recording a Windows x64 installer."
+    ],
+    "excluded": [
+      "Code signing.",
+      "Any Pulse update feed or publication.",
+      "Pulse icon artwork.",
+      "Server CLI default home in apps/server/src/os-jank.ts, which stays T3's.",
+      "Worktree dev-home logic in packages/shared/src/devHome.ts, unchanged.",
+      "Renaming environment variables or adding PULSE_* aliases."
+    ]
+  },
+  "identity": {
+    "appId": "ai.polyphron.pulsenext",
+    "developmentAppId": "ai.polyphron.pulsenext.dev",
+    "executable": "pulsenext",
+    "urlSchemes": ["pulsenext", "pulsenext-dev"],
+    "userDataDirNames": ["pulsenext", "pulsenext-dev"],
+    "homeBaseDir": "~/.pulse-next",
+    "productName": "Pulse Next (Alpha)",
+    "nightlyProductName": "Pulse Next (Nightly)",
+    "artifactName": "Pulse-Next-${version}-${arch}.${ext}"
+  },
+  "upstreamEdits": [
+    "apps/desktop/package.json: productName.",
+    "apps/desktop/src/app/DesktopEnvironment.ts: identity fields from the module; legacyUserDataDirName removed.",
+    "apps/desktop/src/app/DesktopAppIdentity.ts: legacy user-data lookup and its error type removed.",
+    "apps/desktop/src/app/DesktopStatePaths.ts: default base dir.",
+    "apps/desktop/src/app/DesktopEarlyElectronStartup.ts: Linux WM class.",
+    "apps/desktop/src/app/DesktopLinuxUrlHandler.ts: URL handler desktop entry name.",
+    "apps/desktop/src/app/DesktopClerk.ts: comment only.",
+    "apps/desktop/src/electron/ElectronProtocol.ts: scheme constants.",
+    "apps/desktop/scripts/electron-launcher.mjs: duplicated strings, launcher version bumped to 16.",
+    "scripts/build-desktop-artifact.ts: electron-builder config identity.",
+    "Tests that pinned the old strings in apps/desktop/src and scripts."
+  ],
+  "acceptance": [
+    {
+      "case": "Packaged Windows config carries appId, productName and artifactName from the identity module.",
+      "state": "passed",
+      "verification": "scripts/build-desktop-artifact.test.ts, \"packages under the Pulse Next identity, with no update feed by default\"."
+    },
+    {
+      "case": "No publish config is emitted when neither T3CODE_DESKTOP_UPDATE_REPOSITORY nor GITHUB_REPOSITORY is set, so no app-update.yml ships and the updater reports no feed.",
+      "state": "passed",
+      "verification": "Same test asserts notProperty(config, \"publish\") for win and linux. DesktopUpdates.readAppUpdateYml maps a missing file to Option.none, and hasUpdateFeedConfig then disables automatic updates."
+    },
+    {
+      "case": "The user data path never resolves to a T3 directory, even when %APPDATA%\\t3code or \"T3 Code (Alpha)\" exists.",
+      "state": "passed",
+      "verification": "apps/desktop/src/app/DesktopAppIdentity.test.ts, \"never adopts a T3 Code userData directory, even when one exists\", with a FileSystem stub that reports every probed path as present."
+    },
+    {
+      "case": "Base dir defaults to ~/.pulse-next for production and development.",
+      "state": "passed",
+      "verification": "apps/desktop/src/app/DesktopEnvironment.test.ts, production identity case and \"keeps implicit development state separate from production state\"."
+    },
+    {
+      "case": "An explicit T3CODE_HOME still wins over the default base dir.",
+      "state": "passed",
+      "verification": "apps/desktop/src/app/DesktopEnvironment.test.ts, explicit-home cases; apps/desktop/src/app/DesktopEarlyElectronStartup.test.ts for the pre-Electron path."
+    },
+    {
+      "case": "Schemes pulsenext and pulsenext-dev are registered; no t3code scheme is registered or aliased.",
+      "state": "passed",
+      "verification": "apps/desktop/src/electron/ElectronProtocol.test.ts; protocols assertions in scripts/build-desktop-artifact.test.ts for mac and linux."
+    },
+    {
+      "case": "Linux desktop entry, URL handler entry and WM class use the pulsenext names.",
+      "state": "passed",
+      "verification": "apps/desktop/src/app/DesktopEnvironment.test.ts, apps/desktop/src/app/DesktopLinuxUrlHandler.test.ts, linux config assertions in scripts/build-desktop-artifact.test.ts."
+    },
+    {
+      "case": "The development launcher bundle id stays under the Pulse Next namespace and keeps its per-repo suffix.",
+      "state": "passed",
+      "verification": "apps/desktop/scripts/electron-launcher.test.mjs, \"repeats the shared product identity without drifting from it\"."
+    },
+    {
+      "case": "An installer build on Windows x64 succeeds and packages the Pulse Next identity with no update feed.",
+      "state": "passed",
+      "verification": "Built 2026-09-13 from d0f41fb95 with --build-version 0.1.0-pulse-next.20260913.1. Staged package.json: name pulsenext, appId ai.polyphron.pulsenext, productName Pulse Next (Alpha), no publish block. win-unpacked has Pulse Next (Alpha).exe and no resources/app-update.yml. Payload validation passed (67 files, 26 sidecar natives)."
+    },
+    {
+      "case": "Side-by-side install beside T3 Code leaves the other install untouched.",
+      "state": "pending",
+      "verification": "Not run. Pulse Next policy forbids installing candidates from this workflow; the user installs when ready and follows docs/operations/pulse-next-installer.md."
+    }
+  ],
+  "tests": [
+    "packages/shared: vp test run src/productIdentity.test.ts, 4 passed.",
+    "apps/desktop: vp test run over DesktopEnvironment, DesktopClerk, DesktopEarlyElectronStartup, DesktopLinuxUrlHandler, DesktopAppIdentity, ElectronProtocol, DesktopWindow, DesktopAssets, DesktopLifecycle, ElectronApp, ElectronWindow, DesktopBackendConfiguration, 110 passed.",
+    "apps/desktop: vp test run scripts/electron-launcher.test.mjs, 6 passed.",
+    "scripts: vp test run build-desktop-artifact.test.ts, 69 passed, 2 failed."
+  ],
+  "knownFailures": [
+    {
+      "tests": [
+        "scripts/build-desktop-artifact.test.ts > ships only Linux runtime members in the WSL archive",
+        "scripts/build-desktop-artifact.test.ts > skips the primary native probe for cross-architecture Windows payloads"
+      ],
+      "cause": "Windows host environment; the spawned tar and native probe fail here.",
+      "evidence": "Both fail identically when scripts/build-desktop-artifact.ts and its test are restored to base 88ab5f948."
+    }
+  ],
+  "typecheck": {
+    "baseline": "packages/shared, apps/desktop and scripts all exit 0 at base; apps/desktop reports 4 pre-existing Effect suggestions.",
+    "after": "Unchanged: all three exit 0, same 4 suggestions in apps/desktop, no new errors."
+  },
+  "limitations": [
+    "The packaged app still carries T3's icon. The export pipeline needs macOS-only ictool and an Icon Composer project, and no Pulse artwork exists in the repository.",
+    "The WSL backend still caches its Linux runtime at $HOME/.t3/wsl-runtime inside the WSL distro, which a T3 Code install would share. That cache is keyed by version and architecture and holds no user data."
+  ],
+  "nextAction": "merged-to-develop; side-by-side install check remains for the user",
+  "build": {
+    "date": "2026-09-13",
+    "commit": "d0f41fb958a951779330b7456b85bbe0bdabe2ed",
+    "version": "0.1.0-pulse-next.20260913.1",
+    "artifact": "release/pulse-next/Pulse-Next-0.1.0-pulse-next.20260913.1-x64.exe",
+    "sha256": "98afe7b0919503493705852b64d53407d15520c8d3323e87e4c8a6954e537b9f",
+    "sizeBytes": 156788551,
+    "signed": false,
+    "wslPrebuild": false,
+    "notes": "Gitignored under release/. Not installed, not published. First attempt failed preflight until the MSVC v143 x64 Spectre-mitigated libraries component was added to VS 2022 Build Tools."
+  },
+  "review": {
+    "revision": "a3096463d",
+    "reviewer": "Fable 5.1",
+    "findings": [
+      "pnpm-workspace.yaml carried an unresolved protobufjs allowBuilds placeholder written by pnpm install; restored in d0f41fb95."
+    ],
+    "verdict": "no blocking findings after the fix"
+  }
+}
