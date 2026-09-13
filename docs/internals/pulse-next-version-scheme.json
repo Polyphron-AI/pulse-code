@@ -1,0 +1,144 @@
+{
+  "feature": "Pulse Next upstream/main sync and compatibility-encoded version scheme",
+  "policyVersion": "2026-09-13",
+  "owner": "single implementation owner (Sol)",
+  "branch": "sync/upstream-v040",
+  "worktree": ".worktrees/upstream-v040-probe",
+  "baseRevision": "885200895",
+  "scope": {
+    "included": [
+      "Merge the fetched upstream/main tip without rewriting Pulse branch history.",
+      "Resolve conflicts by retaining upstream structure and routing Pulse-owned identity and behavior through existing Pulse seams.",
+      "Adopt one version string that encodes the T3 version the build is compatible up to, plus a Pulse revision suffix.",
+      "Apply that string at every version source and surface it consistently.",
+      "Document the bump procedure so a future upstream sync is mechanical.",
+      "Run focused conflict-area checks, scoped typechecks, and the applicable production build before reviewing the frozen diff."
+    ],
+    "excluded": [
+      "Merging to develop or opening a pull request. Integration is the coordinator's.",
+      "Repo-wide checks. CI owns those."
+    ]
+  },
+  "findings": [
+    {
+      "id": "F1",
+      "statement": "Upstream tag v0.0.40 (09e8de9c655ae85410bf6b00446f272a01da81c7) is already a full ancestor of this branch; `git rev-list --count v0.0.40 ^HEAD` is 0.",
+      "consequence": "Part one of the task needs no merge. The branch already carries the complete T3 Code v0.0.40 release tree."
+    },
+    {
+      "id": "F2",
+      "statement": "The user explicitly selected current upstream/main, fetched at 20363c32c9bfdbf49c2716ef11d1f18483fcc01b, as the compatibility target despite the historical branch name.",
+      "consequence": "The completed merge adopts the v0.0.41 development line, so the Pulse version is 0.0.41-pulse.1 even though upstream manifests still read 0.0.40."
+    },
+    {
+      "id": "F3",
+      "statement": "The v0.0.40 tag's own package.json files still declare 0.0.39.",
+      "consequence": "Upstream's package version does not identify the release it belongs to. This is exactly the ambiguity the encoded Pulse version scheme removes."
+    }
+  ],
+  "decision": {
+    "versionString": "0.0.41-pulse.1",
+    "rationale": "The leading version states the T3 Code line this build is compatible with. The -pulse.N suffix counts Pulse revisions against that same upstream base. One number is used everywhere, so the installer filename, package manifests and in-app readout cannot disagree.",
+    "bumpRule": "On a future upstream sync, set the leading number to the newly adopted T3 version and reset the suffix to .1. Ship-only Pulse changes increment the suffix."
+  },
+  "acceptanceCases": [
+    {
+      "case": "Every package manifest that carries an app version declares 0.0.41-pulse.1.",
+      "status": "required"
+    },
+    {
+      "case": "The in-app version readout shows the same encoded string, sourced from the manifest rather than a literal.",
+      "status": "required"
+    },
+    {
+      "case": "The desktop installer artifact filename resolves through DESKTOP_ARTIFACT_NAME_TEMPLATE to the same encoded string.",
+      "status": "required"
+    },
+    {
+      "case": "Semver parsers accept the string; it sorts after 0.0.41-nightly.* and before 0.0.41 final, which is correct because a Pulse build is a prerelease of that upstream line.",
+      "status": "required"
+    },
+    {
+      "case": "Nightly branding detection is unaffected; the -pulse. suffix must not match the nightly pattern in apps/web/src/branding.logic.ts.",
+      "status": "required"
+    },
+    {
+      "case": "Pulse identity constants are unchanged by this work; productIdentity.ts stays the single seam.",
+      "status": "required"
+    },
+    {
+      "case": "pnpm-workspace.yaml is not polluted with an allowBuilds placeholder by any install.",
+      "status": "required"
+    },
+    {
+      "case": "Mobile client version display.",
+      "status": "not applicable unless a version readout exists there; recorded in the surface map"
+    },
+    {
+      "case": "Provider adapters, remote and tunnel connection modes.",
+      "status": "not applicable; the version string is not provider or transport shaped"
+    }
+  ],
+  "upstreamCompatibility": {
+    "mandate": "Take upstream structure and inject Pulse values through the productIdentity seam. Minimise explicitly edited upstream lines.",
+    "mergeResult": "Merged upstream/main at 20363c32c9. Conflict resolution retained upstream's typed HTTP groups, agent access capabilities, desktop launcher signing and protected-resource metadata, attachment draft changes, provider updates and license generation. Pulse-owned identity, managed skills and MCP, dictation, and 0.0.41-pulse.1 manifest values remain in place."
+  },
+  "evidence": {
+    "frozenRevision": "d3d67afd494cdfe5eb6ffd1f92596424cb0588f9",
+    "mergeRevision": "c81f1ab97034a3b0dc8bb2901c6b0dfdeb42d290",
+    "mergedUpstreamRevision": "20363c32c9bfdbf49c2716ef11d1f18483fcc01b",
+    "commands": [
+      {
+        "command": "vp test run scripts/build-desktop-artifact.test.ts scripts/lib/third-party-licenses.test.ts",
+        "result": "passed: 2 files, 90 tests"
+      },
+      {
+        "command": "vp run typecheck (cwd: apps/desktop)",
+        "result": "passed"
+      },
+      {
+        "command": "vp run typecheck (cwd: apps/web)",
+        "result": "passed"
+      },
+      {
+        "command": "vp run typecheck (cwd: packages/contracts)",
+        "result": "passed"
+      },
+      {
+        "command": "vp run build (cwd: apps/web)",
+        "result": "passed: 5057 modules transformed; third-party license generation completed"
+      },
+      {
+        "command": "node -e \"const fs=require('fs'); const paths=['apps/desktop/package.json','apps/server/package.json','apps/web/package.json','packages/contracts/package.json']; for(const p of paths){const j=JSON.parse(fs.readFileSync(p,'utf8')); if(j.version!=='0.0.41-pulse.1') throw new Error(p+': '+j.version); if(/T3 Code/i.test(j.productName||'')) throw new Error(p+': '+j.productName)} console.log('4 manifests use 0.0.41-pulse.1; no manifest productName contains T3 Code')\"",
+        "result": "passed: 4 manifests use 0.0.41-pulse.1; no manifest productName contains T3 Code"
+      },
+      {
+        "command": "git diff --check 2b934183d1..d3d67afd494cdfe5eb6ffd1f92596424cb0588f9",
+        "result": "passed with no whitespace errors"
+      }
+    ],
+    "review": "The correction diff from 2b934183d1 through the frozen revision was reviewed after all affected checks passed. It contains only the truthful v0.0.41 Pulse version, restored desktop Pulse productName, Windows-neutral embedded notice paths, tests, and the installer runbook update.",
+    "knownCheckFindings": [],
+    "workflowMetrics": {
+      "fullReviewPasses": 1,
+      "conflictRepairBatches": 3,
+      "productionBuildRuns": 3
+    }
+  },
+  "mergeAcceptanceCases": [
+    "Fetched upstream/main revision is recorded and is a parent of the completed merge commit.",
+    "All merge conflicts are resolved with no conflict markers or unmerged index entries.",
+    "Pulse product identity, managed skills, MCP, dictation, authentication, environment routing, and version scheme remain intact where upstream touched the same areas.",
+    "Upstream behavior remains unchanged outside explicit Pulse-owned seams.",
+    "Web, desktop, compact/mobile web, and native mobile compile or build where covered by affected scoped checks; older clients retain typed contract compatibility.",
+    "Provider-specific changes preserve Codex, Claude, Cursor, Grok, OpenCode, and Antigravity behavior unless the provider reports an explicit unsupported capability.",
+    "Local, remote, relay, tunnel, worktree, authentication, process ownership, session reuse, cancellation, retry, reload, navigation, concurrent-thread, and queued-turn behavior are unchanged unless a conflict touches that path, in which case focused tests cover it.",
+    "The final frozen diff is reviewed as one batch and the ledger records commands, outcomes, remaining release gates, and exact next action."
+  ],
+  "blockers": [],
+  "remainingGates": [
+    "No packaged installer, signing, update-feed, physical mobile, or real-provider acceptance was run.",
+    "The other feature branches must be ported onto the merged upstream base before develop integration."
+  ],
+  "nextAction": "Coordinator should port the remaining feature branches onto d3d67afd494cdfe5eb6ffd1f92596424cb0588f9 before develop integration; do not merge this branch to develop or open a pull request from this worktree."
+}

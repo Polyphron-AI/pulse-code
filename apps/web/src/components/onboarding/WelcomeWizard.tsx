@@ -26,7 +26,7 @@ import {
   MonitorIcon,
   TerminalIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { TYPOGRAPHY_ADVANCED_STORAGE_KEY } from "../../appearanceFonts";
 import { useLocalStorage } from "../../hooks/useLocalStorage";
@@ -72,8 +72,8 @@ import { Input } from "../ui/input";
 import { Tooltip, TooltipTrigger, TooltipPopup } from "../ui/tooltip";
 import { ScrollArea } from "../ui/scroll-area";
 import { Spinner } from "../ui/spinner";
-import { WizardPanel, WizardSteps } from "../ui/wizard";
-import { Dialog, DialogHeader, DialogPopup, DialogTitle } from "../ui/dialog";
+import { WizardPanel, WizardSteps, WizardPopup, WizardHeader } from "../ui/wizard";
+import { Dialog } from "../ui/dialog";
 import { toastManager } from "../ui/toast";
 import { cn } from "../../lib/utils";
 import { formatRelativeTime } from "../../timestampFormat";
@@ -184,76 +184,74 @@ export function WelcomeWizard({
 
   return (
     <Dialog open disablePointerDismissal onOpenChange={(_, event) => event.cancel()}>
-      <DialogPopup
-        className="max-w-xl overflow-x-hidden overflow-y-auto"
+      <WizardPopup
         bottomStickOnMobile={false}
         showCloseButton={false}
         initialFocus={() => document.getElementById("onboarding-pairing-url") ?? true}
       >
-        <div className="flex min-h-0 flex-col">
-          <DialogHeader className="gap-4">
-            <WelcomeWizardBrandHeader />
-            <WizardSteps
-              steps={ONBOARDING_STAGES}
-              currentStep={stageIndex}
-              isStepDisabled={(index) => isImporting || index >= stageIndex}
-              onStepChange={(index) => {
-                if (isImporting || index > stageIndex) return;
-                setStep(index === 0 ? "connection" : "agents");
+        <WelcomeWizardBrandHeader>
+          <WizardSteps
+            steps={ONBOARDING_STAGES}
+            currentStep={stageIndex}
+            isStepDisabled={(index) => isImporting || index >= stageIndex}
+            onStepChange={(index) => {
+              if (isImporting || index > stageIndex) return;
+              setStep(index === 0 ? "connection" : "agents");
+            }}
+          />
+        </WelcomeWizardBrandHeader>
+
+        <WizardPanel holdHeight={isLoadingProjects}>
+          {step === "connection" ? (
+            <ConnectionStep
+              expandPairingInitially={!localAvailable && !hasCloudPublicConfig()}
+              selectedIds={selectedIds}
+              autoSelectedComputers={autoSelectedComputers.current}
+              onSelectionChange={setSelection}
+              onToggleEnvironment={(environmentId, checked) =>
+                setSelection((current) => {
+                  const next = new Set(current ?? selectedIds);
+                  if (checked) next.add(environmentId);
+                  else next.delete(environmentId);
+                  return next;
+                })
+              }
+              onContinue={() =>
+                startSetup(
+                  environments
+                    .filter((environment) => selectedIds.has(environment.environmentId))
+                    .map((environment) => environment.environmentId),
+                )
+              }
+              onPaired={(environmentId) => {
+                setSelection(new Set([...selectedIds, environmentId]));
               }}
             />
-          </DialogHeader>
-
-          <WizardPanel className="min-w-0" holdHeight={isLoadingProjects}>
-            {step === "connection" ? (
-              <ConnectionStep
-                expandPairingInitially={!localAvailable && !hasCloudPublicConfig()}
-                selectedIds={selectedIds}
-                autoSelectedComputers={autoSelectedComputers.current}
-                onSelectionChange={setSelection}
-                onToggleEnvironment={(environmentId, checked) =>
-                  setSelection((current) => {
-                    const next = new Set(current ?? selectedIds);
-                    if (checked) next.add(environmentId);
-                    else next.delete(environmentId);
-                    return next;
-                  })
-                }
-                onContinue={() =>
-                  startSetup(
-                    environments
-                      .filter((environment) => selectedIds.has(environment.environmentId))
-                      .map((environment) => environment.environmentId),
-                  )
-                }
-                onPaired={(environmentId) => {
-                  setSelection(new Set([...selectedIds, environmentId]));
-                }}
-              />
-            ) : step === "agents" ? (
-              <AgentsStep environmentIds={setupIds} onContinue={() => setStep("import")} />
-            ) : (
-              <ImportStep
-                scans={scans}
-                isImporting={isImporting}
-                setIsImporting={setIsImporting}
-                onDone={finish}
-              />
-            )}
-          </WizardPanel>
-        </div>
-      </DialogPopup>
+          ) : step === "agents" ? (
+            <AgentsStep environmentIds={setupIds} onContinue={() => setStep("import")} />
+          ) : (
+            <ImportStep
+              scans={scans}
+              isImporting={isImporting}
+              setIsImporting={setIsImporting}
+              onDone={finish}
+            />
+          )}
+        </WizardPanel>
+      </WizardPopup>
     </Dialog>
   );
 }
 
 /** Stable Pulse-owned identity presented at the start of the upstream wizard. */
-export function WelcomeWizardBrandHeader() {
+export function WelcomeWizardBrandHeader({ children }: { readonly children?: ReactNode }) {
   return (
-    <>
-      <DialogTitle className="sr-only">Set up {PRODUCT_BASE_NAME}</DialogTitle>
-      <PulseWordmark className="h-4" />
-    </>
+    <WizardHeader
+      title={`Set up ${PRODUCT_BASE_NAME}`}
+      identity={<PulseWordmark className="h-4" />}
+    >
+      {children}
+    </WizardHeader>
   );
 }
 
