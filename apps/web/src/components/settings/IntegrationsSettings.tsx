@@ -37,7 +37,7 @@ import {
 } from "@t3tools/contracts";
 import { PREVIEW_VIEWPORT_PRESETS } from "@t3tools/shared/previewViewport";
 import { MoreVertical, Plus as PlusIcon } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { Fragment, useCallback, useRef, useState, type ReactNode } from "react";
 
 import { ScreenRotationIcon } from "~/browser/ScreenRotationIcon";
 import { AnimatedHeight } from "~/components/AnimatedHeight";
@@ -116,6 +116,10 @@ import type { ImportOutcome } from "./browserImportWizard.logic";
 import { ManagedSkillsSettings } from "~/skills/ManagedSkillsSettings";
 import { DictationSettings } from "~/voice/DictationSettings";
 import { McpConnectionsSettings } from "~/mcp";
+import {
+  INTEGRATIONS_SETTINGS_SECTIONS,
+  type IntegrationsSettingsSectionId,
+} from "./integrationsSettingsSections";
 
 const FILL_VALUE = "fill";
 const RESPONSIVE_VALUE = "responsive";
@@ -1302,30 +1306,29 @@ export function IntegrationsSettingsPanel() {
       <BrowserAutoShowFloatingPreviewSetting disabled={previewDefaultsDisabled} />
     </>
   );
+  const sectionContent = {
+    skills: <ManagedSkillsSettings />,
+    mcp: <McpConnectionsSettings />,
+    dictation: <DictationSettings />,
+    browser: previewDefaultsDisabled ? (
+      <SettingsUnavailableGroup message="Only available in the desktop app.">
+        {previewDefaults}
+      </SettingsUnavailableGroup>
+    ) : (
+      previewDefaults
+    ),
+  } satisfies Record<IntegrationsSettingsSectionId, ReactNode>;
 
   return (
     <SettingsPageContainer>
-      <SettingsSection id="skills" title="Skills">
-        <ManagedSkillsSettings />
-      </SettingsSection>
-      <SettingsSection id="mcp" title="MCP">
-        <McpConnectionsSettings />
-      </SettingsSection>
-      <SettingsSection id="dictation" title="Voice dictation">
-        <DictationSettings />
-      </SettingsSection>
-      {/* Server-authoritative agent access is scoped by the header selection;
-          the preview defaults below are device-local and ignore it. */}
-      <ProjectDefaultsSettings category="integrations" />
-      <SettingsSection id="browser" title="Browser">
-        {previewDefaultsDisabled ? (
-          <SettingsUnavailableGroup message="Only available in the desktop app.">
-            {previewDefaults}
-          </SettingsUnavailableGroup>
-        ) : (
-          previewDefaults
-        )}
-      </SettingsSection>
+      {INTEGRATIONS_SETTINGS_SECTIONS.map(({ label, targetId }) => (
+        <Fragment key={targetId}>
+          {targetId === "browser" ? <ProjectDefaultsSettings category="integrations" /> : null}
+          <SettingsSection id={targetId} title={label}>
+            {sectionContent[targetId]}
+          </SettingsSection>
+        </Fragment>
+      ))}
       <DeviceIntegrationSettings />
     </SettingsPageContainer>
   );

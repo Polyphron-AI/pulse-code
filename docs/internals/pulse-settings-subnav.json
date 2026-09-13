@@ -1,0 +1,120 @@
+{
+  "feature": "Integrations settings sub-navigation",
+  "policyVersion": "2026-09-13",
+  "branch": "feat/pulse-settings-subnav",
+  "worktree": ".worktrees/pulse-settings-subnav",
+  "baseRevision": "885200895c",
+  "owner": "single implementation owner",
+  "scope": {
+    "summary": "Give /settings/integrations the same sidebar sub-section list that /settings/general already has, so Skills, MCP, Voice dictation and Browser are reachable and trackable from the settings sidebar instead of only from the thread surface.",
+    "in": [
+      "apps/web sidebar submenu entries for /settings/integrations",
+      "scroll-spy highlight and hash deep-link for those entries, reusing the existing generic code paths"
+    ],
+    "out": [
+      "new Integrations screen or sub-sections on mobile",
+      "changes to what the Integrations page itself renders",
+      "settings search index changes"
+    ]
+  },
+  "sectionIds": [
+    {
+      "targetId": "skills",
+      "label": "Skills",
+      "heading": "Skills"
+    },
+    {
+      "targetId": "mcp",
+      "label": "MCP",
+      "heading": "MCP"
+    },
+    {
+      "targetId": "dictation",
+      "label": "Voice dictation",
+      "heading": "Voice dictation"
+    },
+    {
+      "targetId": "browser",
+      "label": "Browser",
+      "heading": "Browser"
+    }
+  ],
+  "acceptance": [
+    {
+      "case": "First use: opening /settings/integrations shows four sub-entries under the Integrations nav item.",
+      "status": "applicable"
+    },
+    {
+      "case": "Sub-entry click scrolls to the matching section, or navigates with the hash when arriving from another page.",
+      "status": "applicable",
+      "note": "handlePageSectionClick is path-generic; no per-page code."
+    },
+    {
+      "case": "Reload and deep link: /settings/integrations#mcp lands on the MCP section.",
+      "status": "applicable",
+      "note": "Hash handling is shared with /settings/general."
+    },
+    {
+      "case": "Scroll-spy marks the visible sub-entry as active while scrolling.",
+      "status": "applicable",
+      "note": "observedVisibilityScope now resolves for this path because it has page sections."
+    },
+    {
+      "case": "Submenu never advertises a target that is not rendered.",
+      "status": "applicable",
+      "note": "The sidebar and IntegrationsSettingsPanel consume the same typed INTEGRATIONS_SETTINGS_SECTIONS tuple. The panel maps that tuple to SettingsSection elements and requires content for every target through a complete Record, so target drift fails structurally instead of relying on static-markup assertions."
+    },
+    {
+      "case": "Navigation away and unmount: submenu collapses with the existing Collapsible and the observer disconnects.",
+      "status": "applicable",
+      "note": "Shared effect cleanup, unchanged."
+    },
+    {
+      "case": "Compact/mobile web: sidebar closes on sub-entry click.",
+      "status": "applicable",
+      "note": "Existing isMobile branch in handlePageSectionClick."
+    },
+    {
+      "case": "Desktop client.",
+      "status": "applicable",
+      "note": "Desktop wraps the web app; no separate change."
+    },
+    {
+      "case": "Native mobile app.",
+      "status": "not applicable",
+      "note": "apps/mobile SettingsRouteScreen has no sub-section structure and no Integrations screen, so there is nothing to mirror."
+    },
+    {
+      "case": "Server, contracts, providers, remote/relay and tunnel modes.",
+      "status": "not applicable",
+      "note": "Client-local static navigation data; nothing crosses the wire."
+    },
+    {
+      "case": "Reverse state.",
+      "status": "not applicable",
+      "note": "The submenu is display-only; it adds no toggle that needs an inverse."
+    }
+  ],
+  "implementation": {
+    "notes": "INTEGRATIONS_SETTINGS_SECTIONS is the small shared contract for target IDs and labels. SettingsSidebarNav uses it for the submenu, while IntegrationsSettingsPanel maps it to rendered SettingsSection elements and supplies a complete typed content record. Generic scroll-spy and navigation behavior remain unchanged.",
+    "files": [
+      "apps/web/src/components/settings/SettingsSidebarNav.tsx",
+      "apps/web/src/components/settings/SettingsSidebarNav.test.tsx",
+      "apps/web/src/components/settings/IntegrationsSettings.tsx",
+      "apps/web/src/components/settings/integrationsSettingsSections.ts"
+    ]
+  },
+  "state": "development-acceptance-passed",
+  "reviewedRevision": "6e454bc767",
+  "evidence": {
+    "tests": [
+      "vp test run src/components/settings/SettingsSidebarNav.test.tsx src/components/settings/IntegrationsSettings.test.tsx src/components/settings/settingsSectionVisibility.test.ts src/components/settings/settingsSearch.test.ts (from apps/web): 4 files, 31 tests passed",
+      "vp run typecheck (from apps/web): passed",
+      "vp lint apps/web/src/components/settings/SettingsSidebarNav.tsx apps/web/src/components/settings/SettingsSidebarNav.test.tsx apps/web/src/components/settings/IntegrationsSettings.tsx apps/web/src/components/settings/IntegrationsSettings.test.tsx apps/web/src/components/settings/integrationsSettingsSections.ts: passed with one pre-existing react(set-state-in-effect) warning at SettingsSidebarNav.tsx:195"
+    ],
+    "review": "The first review replaced a forbidden static-attribute assertion with a behavioral sidebar test, but independent review correctly found that it no longer guarded target drift. Revision 6e454bc767 makes section identity a shared typed contract used to render both the submenu and every Integrations section. The behavioral test still verifies the four visible entries and same-page MCP scrolling. No unresolved findings remain.",
+    "browser": "Not run. The user requested focused automated verification, and this additive navigation-data change is covered by the existing generic scroll, hash, visibility and mobile-close paths plus the new behavioral test."
+  },
+  "blockers": [],
+  "nextAction": "Integrate the reviewed branch after the upstream compatibility merge establishes the final develop base; rerun the same focused suite if integration changes the settings navigation or section structure."
+}
