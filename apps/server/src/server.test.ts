@@ -781,6 +781,9 @@ const buildAppUnderTest = (options?: {
           }),
           Layer.mock(ProviderService.ProviderService)({
             uploadFeedback: () => Effect.die("Provider feedback is not stubbed in this test"),
+            preparePulseMcp: () =>
+              Effect.succeed({ status: "unsupported-provider", selectedConnectionIds: [] }),
+            consumePulseMcpPreparation: () => Effect.void,
             ...options?.layers?.providerService,
           }),
           Layer.mock(ProviderAuthService)({
