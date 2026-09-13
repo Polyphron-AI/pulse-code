@@ -6590,6 +6590,7 @@ export default function ChatView(props: ChatViewProps) {
         cwd: activeThread.worktreePath ?? activeProject.workspaceRoot,
       },
       creatingWorktree: shouldCreateWorktree,
+      projectId: activeProject.id,
       isCurrent: () =>
         mcpSubmissionIdentityRef.current === routeThreadKey && promptRef.current === promptForSend,
     });
@@ -7283,6 +7284,7 @@ export default function ChatView(props: ChatViewProps) {
       const draftBeforePreparation = promptRef.current;
       const mcpPreparation = await prepareMcpSubmission({
         prepare: preparingComposer?.preparePulseMcp,
+        projectId: activeProject.id,
         session: {
           threadId: threadIdForSend,
           provider: ctxSelectedProvider,
@@ -7479,6 +7481,7 @@ export default function ChatView(props: ChatViewProps) {
     const draftBeforePreparation = promptRef.current;
     const mcpPreparation = await prepareMcpSubmission({
       prepare: preparingComposer?.preparePulseMcp,
+      projectId: activeProject.id,
       session: {
         threadId: nextThreadId,
         provider: ctxSelectedProvider,

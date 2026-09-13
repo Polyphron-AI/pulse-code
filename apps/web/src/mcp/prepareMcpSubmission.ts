@@ -1,4 +1,8 @@
-import type { ProviderSessionStartInput, PulseMcpPreparationId } from "@t3tools/contracts";
+import type {
+  ProjectId,
+  ProviderSessionStartInput,
+  PulseMcpPreparationId,
+} from "@t3tools/contracts";
 
 export type McpSubmissionPreparation =
   | { readonly status: "ready"; readonly preparationId?: PulseMcpPreparationId }
@@ -6,7 +10,7 @@ export type McpSubmissionPreparation =
 
 export type PrepareComposerMcp = (
   session: ProviderSessionStartInput,
-  options?: { readonly creatingWorktree?: boolean },
+  options?: { readonly creatingWorktree?: boolean; readonly projectId?: ProjectId },
 ) => Promise<McpSubmissionPreparation>;
 
 /** Guard the awaited preparation before any caller clears or dispatches a draft. */
@@ -14,12 +18,14 @@ export async function prepareMcpSubmission(input: {
   readonly prepare: PrepareComposerMcp | undefined;
   readonly session: ProviderSessionStartInput;
   readonly creatingWorktree?: boolean;
+  readonly projectId?: ProjectId;
   readonly isCurrent: () => boolean;
 }): Promise<McpSubmissionPreparation | { readonly status: "error"; readonly message: string }> {
   if (!input.prepare || !input.isCurrent()) return { status: "cancelled" };
   try {
     const result = await input.prepare(input.session, {
       ...(input.creatingWorktree !== undefined ? { creatingWorktree: input.creatingWorktree } : {}),
+      ...(input.projectId !== undefined ? { projectId: input.projectId } : {}),
     });
     return input.isCurrent() ? result : { status: "cancelled" };
   } catch {
