@@ -535,9 +535,15 @@ sessionErrorLayer("CodexAdapterLive session errors", (it) => {
 
       const runtime = sessionRuntimeFactory.lastRuntime;
       NodeAssert.ok(runtime);
-      const launchText = JSON.stringify(runtime.options.appServerArgs);
-      NodeAssert.equal(launchText.includes("secret-http-value"), false);
-      NodeAssert.equal(launchText.includes("secret-stdio-value"), false);
+      const launchArgs = runtime.options.appServerArgs ?? [];
+      NodeAssert.equal(
+        launchArgs.some((arg) => arg.includes("secret-http-value")),
+        false,
+      );
+      NodeAssert.equal(
+        launchArgs.some((arg) => arg.includes("secret-stdio-value")),
+        false,
+      );
       NodeAssert.equal(
         runtime.options.appServerArgs?.includes(
           'mcp_servers.pulse_http.env_http_headers={ "Authorization" = "PULSE_MCP_0_HTTP_0" }',

@@ -7,6 +7,7 @@ import type {
   ThreadId,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 
 import type {
@@ -27,6 +28,20 @@ export interface Record {
   consumedBy?: string;
 }
 
+const encodeJson = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
+
+const canonicalize = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value)
+        .toSorted(([left], [right]) => left.localeCompare(right))
+        .map(([key, entry]) => [key, canonicalize(entry)]),
+    );
+  }
+  return value;
+};
+
 export const fingerprint = (input: {
   readonly providerInstanceId: ProviderInstanceId;
   readonly cwd: string | null;
@@ -34,13 +49,15 @@ export const fingerprint = (input: {
   readonly modelSelection: ModelSelection | undefined;
   readonly servers: ReadonlyArray<ProviderManagedMcpServer>;
 }) =>
-  JSON.stringify({
-    instanceId: input.providerInstanceId,
-    cwd: input.cwd,
-    runtimeMode: input.runtimeMode,
-    modelSelection: input.modelSelection ?? null,
-    servers: input.servers,
-  });
+  encodeJson(
+    canonicalize({
+      instanceId: input.providerInstanceId,
+      cwd: input.cwd,
+      runtimeMode: input.runtimeMode,
+      modelSelection: input.modelSelection ?? null,
+      servers: input.servers,
+    }),
+  );
 
 export const findConflictingStdioConnections = (
   servers: ReadonlyArray<ProviderManagedMcpServer>,

@@ -37,6 +37,7 @@ const decodeMcpElicitationResponse = Schema.decodeUnknownEffect(
     }),
   ),
 );
+const encodeJson = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
 
 /**
  * The captured sequence, extended with the shapes the live capture didn't
@@ -170,7 +171,7 @@ describe("CodexSessionRuntime collab integration", () => {
     Effect.gen(function* () {
       NodeFS.writeFileSync(
         scriptPath,
-        JSON.stringify({
+        encodeJson({
           rootThreadId: ROOT,
           notifications: [],
           mcpStates: {

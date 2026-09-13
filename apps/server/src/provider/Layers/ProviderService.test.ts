@@ -1066,6 +1066,18 @@ managedMcpRouting.layer("managed MCP turn preparation", (it) => {
           },
           connectionIds: ["managed"],
         });
+      resolvedManagedMcpConnections = [
+        {
+          ...managedMcpConnection,
+          config: {
+            ...managedMcpConnection.config,
+            headers: {
+              Authorization: "secret-one",
+              "X-Workspace": "pulse",
+            } as typeof managedMcpConnection.config.headers & Record<string, string>,
+          },
+        },
+      ];
       const first = yield* prepare(firstThread);
       const second = yield* prepare(secondThread);
       assert(first.status === "ready" && second.status === "ready");
@@ -1088,6 +1100,18 @@ managedMcpRouting.layer("managed MCP turn preparation", (it) => {
       assert(Exit.isFailure(duplicate));
       yield* service.sendTurn({ threadId: firstThread, input: "first", attachments: [] });
       const startsAfterFirstTurn = managedMcpRouting.codex.startSession.mock.calls.length;
+      resolvedManagedMcpConnections = [
+        {
+          ...managedMcpConnection,
+          config: {
+            ...managedMcpConnection.config,
+            headers: {
+              "X-Workspace": "pulse",
+              Authorization: "secret-one",
+            } as typeof managedMcpConnection.config.headers & Record<string, string>,
+          },
+        },
+      ];
       const unchanged = yield* prepare(firstThread);
       assert.equal(unchanged.status, "ready");
       assert.equal(managedMcpRouting.codex.startSession.mock.calls.length, startsAfterFirstTurn);

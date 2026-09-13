@@ -46,6 +46,7 @@ import * as Schema from "effect/Schema";
 import * as SchemaIssue from "effect/SchemaIssue";
 import * as Stream from "effect/Stream";
 import * as Path from "effect/Path";
+import { isDeepStrictEqual } from "node:util";
 
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
 import * as ServerConfig from "../../config.ts";
@@ -1488,7 +1489,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
           unmanagedEmptySelection ||
           (input.retry !== true &&
             pulseMcpPreparation.appliedFingerprints.get(input.threadId) === fingerprint &&
-            JSON.stringify(currentlyAppliedServers) === JSON.stringify(servers) &&
+            isDeepStrictEqual(currentlyAppliedServers, servers) &&
             active?.providerInstanceId === instanceId &&
             (active.status === "ready" || active.status === "running"));
         if ((active?.activeTurnId !== undefined || active?.status === "running") && !canReuse) {
@@ -1659,7 +1660,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
       );
       if (
         pulseMcpPreparation.appliedFingerprints.get(input.threadId) === durableFingerprint &&
-        JSON.stringify(appliedServers) === JSON.stringify(durableServers) &&
+        isDeepStrictEqual(appliedServers, durableServers) &&
         appliedSession?.providerInstanceId === input.providerInstanceId &&
         (appliedSession.status === "ready" || appliedSession.status === "running")
       ) {
@@ -1715,8 +1716,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
           preparation.providerInstanceId !== input.providerInstanceId ||
           preparation.expiresAt <= now.epochMilliseconds ||
           preparation.runtimeMode !== input.runtimeMode ||
-          JSON.stringify(preparation.modelSelection ?? null) !==
-            JSON.stringify(input.modelSelection ?? null) ||
+          !isDeepStrictEqual(preparation.modelSelection ?? null, input.modelSelection ?? null) ||
           (preparation.projectId !== undefined && preparation.projectId !== input.projectId)
         ) {
           return yield* toValidationError(
