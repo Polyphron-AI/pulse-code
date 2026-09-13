@@ -1,6 +1,7 @@
 import { RefreshIcon } from "~/components/ui/refresh-icon";
 import { useAtomValue } from "@effect/atom-react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
+import { PRODUCT_BASE_NAME } from "@t3tools/shared/productIdentity";
 import { Atom } from "effect/unstable/reactivity";
 import { useEffect, useState } from "react";
 
@@ -212,7 +213,7 @@ function FirstRunRecovery({
         <p className="mt-2 text-sm text-muted-foreground">
           {settingsReadFailed
             ? "Your saved settings could not be loaded."
-            : "T3 Code could not confirm this workspace."}
+            : `${PRODUCT_BASE_NAME} could not confirm this workspace.`}
         </p>
         <Button
           className="mt-5"
