@@ -19,11 +19,10 @@ export const PRODUCT_NIGHTLY_NAME = `${PRODUCT_BASE_NAME} (Nightly)`;
 export const PRODUCT_DEV_NAME = `${PRODUCT_BASE_NAME} (Dev)`;
 
 /**
- * Who Windows says shipped the app. This becomes the staged package.json
- * `author` and electron-builder's `win.publisherName`, which together drive the
- * executable's VERSIONINFO CompanyName. That string is what the Windows Firewall
- * prompt, the installer and the shortcut's Properties tab all display, so it
- * must never fall back to T3's.
+ * The expected Pulse desktop publisher. The staged package.json `author` owns
+ * package metadata such as VERSIONINFO CompanyName. Electron-builder uses
+ * `win.publisherName` to match the subject of a signing certificate and to
+ * verify signed updates. An unsigned installer still shows Unknown publisher.
  */
 export const DESKTOP_PUBLISHER_NAME = "Polyphron AI";
 export const DESKTOP_PUBLISHER_URL = "https://polyphronai.com";

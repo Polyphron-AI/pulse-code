@@ -2,10 +2,12 @@ import { readFile } from "node:fs/promises";
 
 import { describe, expect, it } from "vite-plus/test";
 
+import { resolveDesktopBuildIconAssets } from "../build-desktop-artifact.ts";
 import { readPngDimensions, WINDOWS_ICON_SIZES } from "./icon-export.ts";
 import {
   PULSE_BRANDS,
   PULSE_BRAND_ASSET_PATHS,
+  PULSE_GENERATOR_ONLY_ASSET_KEYS,
   PULSE_PNG_SLOT_SIZES,
   resolvePulseBrandOutputs,
   resolvePulseWebIconOverrides,
@@ -24,8 +26,8 @@ function readIcoRenditions(contents: Buffer) {
 }
 
 describe("pulse-brand-assets", () => {
-  it("maps every web slot to the filenames shipped by hosted and desktop builds", () => {
-    for (const brand of PULSE_BRANDS) {
+  it("maps release web slots to the filenames shipped by hosted and desktop builds", () => {
+    for (const brand of ["nightly", "production"] as const) {
       expect(resolvePulseWebIconOverrides(brand, "dist/client")).toEqual([
         {
           sourceRelativePath: PULSE_BRAND_ASSET_PATHS[`${brand}WebFaviconIco`],
@@ -44,6 +46,27 @@ describe("pulse-brand-assets", () => {
           targetRelativePath: "dist/client/apple-touch-icon.png",
         },
       ]);
+    }
+  });
+
+  it("classifies every asset slot as release-consumed or generator-only", () => {
+    const latestDesktop = resolveDesktopBuildIconAssets("1.0.0");
+    const nightlyDesktop = resolveDesktopBuildIconAssets("1.0.0-nightly.20260913.1");
+    const releasedPaths = new Set<string>([
+      ...Object.values(latestDesktop),
+      ...Object.values(nightlyDesktop),
+      ...resolvePulseWebIconOverrides("production", "dist/client").map(
+        ({ sourceRelativePath }) => sourceRelativePath,
+      ),
+      ...resolvePulseWebIconOverrides("nightly", "dist/client").map(
+        ({ sourceRelativePath }) => sourceRelativePath,
+      ),
+    ]);
+    const generatorOnly = new Set<string>(PULSE_GENERATOR_ONLY_ASSET_KEYS);
+
+    for (const [key, assetPath] of Object.entries(PULSE_BRAND_ASSET_PATHS)) {
+      const classifications = Number(releasedPaths.has(assetPath)) + Number(generatorOnly.has(key));
+      expect(classifications, `${key} must have exactly one classification`).toBe(1);
     }
   });
 

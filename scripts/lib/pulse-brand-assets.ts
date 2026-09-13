@@ -91,6 +91,25 @@ export const PULSE_BRAND_ASSET_PATHS = {
   productionWebAppleTouchIconPng: pulseBrandSlots("production").webAppleTouchIconPng,
 } as const;
 
+export type PulseBrandAssetKey = keyof typeof PULSE_BRAND_ASSET_PATHS;
+
+/**
+ * Generated assets that no release path consumes yet. Mobile identity is a
+ * separate decision, and desktop packaging has no development channel.
+ */
+export const PULSE_GENERATOR_ONLY_ASSET_KEYS = [
+  "developmentIosIconPng",
+  "developmentMacIconPng",
+  "developmentLinuxIconPng",
+  "developmentWindowsIconIco",
+  "developmentWebFaviconIco",
+  "developmentWebFavicon16Png",
+  "developmentWebFavicon32Png",
+  "developmentWebAppleTouchIconPng",
+  "nightlyIosIconPng",
+  "productionIosIconPng",
+] as const satisfies ReadonlyArray<PulseBrandAssetKey>;
+
 /** Square PNG slots and the edge length each one must be rendered at. */
 export const PULSE_PNG_SLOT_SIZES = {
   iosIconPng: 1024,

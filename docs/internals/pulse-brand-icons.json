@@ -13,14 +13,14 @@
       "A Windows-capable raster generator that renders every slot from the SVG with sharp and the existing platform-neutral ICO writer.",
       "Pulse raster files added alongside the T3 files, never replacing them.",
       "A Pulse-owned asset seam so consumers switch in one place.",
-      "Desktop publisher identity: author, homepage and electron-builder publisherName, from one Pulse-owned constant.",
-      "Hosted and desktop-bundled web favicon replacement for development, nightly and production channels."
+      "Desktop package identity: author, homepage and electron-builder publisherName, from one Pulse-owned constant with distinct metadata and signing roles.",
+      "Hosted and desktop-bundled web favicon replacement for nightly and production channels."
     ],
     "excluded": [
       "Building a full installer. The user runs integration builds; this slice proves wiring by inspection.",
       "Mobile app icons in apps/mobile/app.config.ts. Out of the reported scope and a separate store-identity decision.",
       "The macOS development launcher dock icon in apps/desktop/scripts/electron-launcher.mjs. macOS-only, dev-only, and it carries a version-assert test; editing it would add upstream churn for no shipped artifact.",
-      "Code signing and any Azure Trusted Signing publisher name, which comes from the certificate.",
+      "Code signing and the authenticated Windows publisher identity, which comes from the certificate.",
       "Replacing or deleting any assets/prod, assets/dev or assets/nightly T3 file.",
       "Changing scripts/export-brand-icons.ts, which is the upstream T3 Icon Composer pipeline and stays byte-identical."
     ]
@@ -62,19 +62,19 @@
       "evidence": "The desktop builder stages the selected Pulse ICO as icon.ico and emits win.icon=icon.ico. Full installer appearance remains the separate installed-appearance gate below."
     },
     {
-      "case": "The staged package.json author is the Pulse publisher and carries the polyphronai.com homepage, so the Windows Firewall and installer publisher stop reading 'T3 Tools'.",
+      "case": "The staged package.json author is Polyphron AI and carries the polyphronai.com homepage, so package metadata such as VERSIONINFO CompanyName no longer falls back to T3 Tools.",
       "state": "passed-by-code-and-tests",
       "evidence": "The staged manifest reads DESKTOP_PUBLISHER_NAME and DESKTOP_PUBLISHER_URL; the product identity suite passed and the scoped shared typecheck passed."
     },
     {
-      "case": "win.publisherName is set so NSIS and SmartScreen display the Pulse publisher for the unsigned build too.",
-      "state": "passed",
-      "evidence": "createBuildConfig now emits win.publisherName=Polyphron AI and the focused desktop test asserts it."
+      "case": "win.publisherName names the expected signing-certificate subject and signed-update publisher.",
+      "state": "passed-by-code-and-tests",
+      "evidence": "createBuildConfig emits win.publisherName=Polyphron AI and the focused desktop test asserts it. This setting does not authenticate an unsigned binary."
     },
     {
-      "case": "Web favicons for development, production and nightly brands resolve to Pulse files.",
+      "case": "Web favicons for production and nightly release brands resolve to Pulse files.",
       "state": "passed",
-      "evidence": "The Pulse web mapping test covered all four slots in every channel. A production web build passed, apply-web-brand-assets completed, and SHA-256 comparisons matched all four production source and output files."
+      "evidence": "The Pulse web mapping test covered all four slots in both release channels. A production web build passed, apply-web-brand-assets completed, and SHA-256 comparisons matched all four production source and output files."
     },
     {
       "case": "Every T3 asset file that existed at base still exists and is unmodified, so an upstream merge stays clean.",
@@ -90,19 +90,25 @@
       "case": "Installed appearance at 16px on a real taskbar.",
       "state": "not-applicable-here",
       "reason": "Requires an integration build and install, which the user owns. This slice proves wiring by inspection only."
+    },
+    {
+      "case": "SmartScreen and installer dialogs show an authenticated Polyphron AI publisher.",
+      "state": "release-gate",
+      "reason": "Unsigned installers correctly show Unknown publisher. This requires a signed build whose certificate subject matches win.publisherName, followed by installed update verification."
     }
   ],
   "consumptionAudit": {
     "desktopProductionAndNightly": "macIconPng, linuxIconPng and windowsIconIco feed resolveDesktopBuildIconAssets, platform staging and electron-builder's stable icon resource names.",
-    "webAllChannels": "All four web slots feed resolvePulseWebIconOverrides, used by the hosted Vercel post-build command and by desktop artifact bundling.",
-    "generatorOnly": "The three iOS PNGs and the three development desktop PNG/ICO slots are reproducible outputs but have no consumer in this slice. Mobile store identity is explicitly excluded, and the desktop artifact builder has no development release channel. They must not be described as shipped until those separate decisions change.",
+    "webProductionAndNightly": "All four web slots for each release channel feed resolvePulseWebIconOverrides, used by the hosted Vercel post-build command and by desktop artifact bundling.",
+    "generatorOnly": "All eight development raster slots plus the nightly and production iOS PNGs are reproducible outputs but have no automatic release consumer in this slice. Mobile store identity is explicitly excluded, and neither hosted nor desktop packaging selects a development release channel. They must not be described as shipped until those separate decisions change.",
+    "enforcement": "The slot-classification test enumerates every PULSE_BRAND_ASSET_PATHS key and requires exactly one classification: release-consumed or PULSE_GENERATOR_ONLY_ASSET_KEYS.",
     "upstreamAssets": "BRAND_ASSET_PATHS and scripts/export-brand-icons.ts remain unchanged and continue to own the upstream T3 assets."
   },
   "upstreamEdits": [],
   "tests": [
     {
       "command": "pnpm exec vp test run scripts/lib/pulse-brand-assets.test.ts scripts/build-desktop-artifact.test.ts packages/shared/src/productIdentity.test.ts",
-      "result": "passed: 3 files, 78 tests"
+      "result": "passed: 3 files, 79 tests"
     },
     {
       "command": "pnpm exec tsgo -p scripts/tsconfig.json --noEmit; pnpm exec tsgo -p packages/shared/tsconfig.json --noEmit",
@@ -117,10 +123,10 @@
       "result": "passed: 4,947 modules transformed"
     }
   ],
-  "frozenRevision": "36a14a07bf",
+  "frozenRevision": "pending review-fix commit",
   "review": {
-    "passes": 1,
-    "result": "No unresolved blocker in the complete branch diff. The review found and fixed the T3 web-copy path, missing win.publisherName and stale desktop test expectations before freezing the revision."
+    "passes": 2,
+    "result": "The second review rejected overclaims about development web consumption and unsigned SmartScreen identity. The fix adds exhaustive slot classification and separates package metadata, expected signer identity and authenticated signed-build evidence."
   },
-  "nextAction": "Integrate only after the parent batch confirms branch order. A packaged installer and real 16px taskbar appearance remain release acceptance, not development evidence."
+  "nextAction": "Integrate only after the parent batch confirms branch order. A signed packaged installer, publisher authentication, update verification and real 16px taskbar appearance remain release acceptance."
 }
