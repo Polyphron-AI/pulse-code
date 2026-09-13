@@ -345,6 +345,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
   const pulseMcpConfig = yield* Effect.serviceOption(PulseMcpConfig.PulseMcpConfigService);
   const providerServiceScope = yield* Effect.scope;
   const pulseMcpPreparation = PulseMcpPreparation.make();
+  const providerSessionGenerations = new Map<ThreadId, number>();
   const pulseMcpPreparationProjectIds = new Map<ThreadId, import("@t3tools/contracts").ProjectId>();
   const issueMcpCredential =
     options?.issueMcpCredential ?? McpSessionRegistry.issueActiveMcpCredential;
@@ -1330,6 +1331,10 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         yield* upsertSessionBinding(sessionWithInstance, threadId, {
           modelSelection: input.modelSelection,
         });
+        providerSessionGenerations.set(
+          threadId,
+          (providerSessionGenerations.get(threadId) ?? 0) + 1,
+        );
         yield* analytics.record("provider.session.started", {
           provider: sessionWithInstance.provider,
           runtimeMode: input.runtimeMode,
@@ -1461,7 +1466,11 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
           pulseMcpPreparation.records.delete(input.threadId);
           existingPreparation = undefined;
         }
-        if (existingPreparation?.consumedBy !== undefined) {
+        if (
+          existingPreparation?.consumedBy !== undefined &&
+          (connections.length > 0 ||
+            McpProviderSession.readManagedMcpServers(input.threadId).length > 0)
+        ) {
           return { status: "active-turn" } as const;
         }
         const sessions = yield* Effect.forEach(yield* getAdapterEntries, ([, adapter]) =>
@@ -1473,16 +1482,27 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
           return { status: "unsupported-provider", selectedConnectionIds } as const;
         }
         const currentlyAppliedServers = McpProviderSession.readManagedMcpServers(input.threadId);
+        const unmanagedEmptySelection =
+          connections.length === 0 && currentlyAppliedServers.length === 0;
         const canReuse =
-          input.retry !== true &&
-          pulseMcpPreparation.appliedFingerprints.get(input.threadId) === fingerprint &&
-          JSON.stringify(currentlyAppliedServers) === JSON.stringify(servers) &&
-          active?.providerInstanceId === instanceId &&
-          (active.status === "ready" || active.status === "running");
+          unmanagedEmptySelection ||
+          (input.retry !== true &&
+            pulseMcpPreparation.appliedFingerprints.get(input.threadId) === fingerprint &&
+            JSON.stringify(currentlyAppliedServers) === JSON.stringify(servers) &&
+            active?.providerInstanceId === instanceId &&
+            (active.status === "ready" || active.status === "running"));
         if ((active?.activeTurnId !== undefined || active?.status === "running") && !canReuse) {
           return { status: "active-turn" } as const;
         }
         const hadManagedServers = currentlyAppliedServers.length > 0;
+        let startedSessionMarker:
+          | {
+              readonly updatedAt: string;
+              readonly providerInstanceId: ProviderInstanceId | undefined;
+              readonly cwd: string | undefined;
+              readonly generation: number;
+            }
+          | undefined;
         if (!canReuse && (connections.length > 0 || hadManagedServers)) {
           if (active !== undefined) {
             yield* adapter.stopSession(input.threadId).pipe(Effect.ignore);
@@ -1492,7 +1512,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
           );
           if (input.projectId !== undefined)
             pulseMcpPreparationProjectIds.set(input.threadId, input.projectId);
-          yield* startSession(input.threadId, {
+          const startedSession = yield* startSession(input.threadId, {
             ...input.providerSession,
             cwd: preparationCwd,
             provider: info.driverKind,
@@ -1502,17 +1522,40 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
               Effect.sync(() => void pulseMcpPreparationProjectIds.delete(input.threadId)),
             ),
           );
+          startedSessionMarker = {
+            updatedAt: startedSession.updatedAt,
+            providerInstanceId: startedSession.providerInstanceId,
+            cwd: startedSession.cwd,
+            generation: providerSessionGenerations.get(input.threadId) ?? 0,
+          };
         }
         const statuses =
-          connections.length === 0 || canReuse
+          connections.length === 0
             ? []
-            : yield* adapter.prepareManagedMcp!(input.threadId, servers);
+            : canReuse
+              ? adapter.readManagedMcpStatus
+                ? yield* adapter.readManagedMcpStatus(input.threadId, servers)
+                : []
+              : yield* adapter.prepareManagedMcp!(input.threadId, servers);
         const publicStatuses = PulseMcpPreparation.publicStatuses(servers, statuses);
         if (publicStatuses.some((status) => status.status === "failed")) {
           pulseMcpPreparation.records.delete(input.threadId);
-          pulseMcpPreparation.appliedFingerprints.delete(input.threadId);
-          yield* adapter.stopSession(input.threadId).pipe(Effect.ignore);
-          yield* Effect.sync(() => McpProviderSession.clearMcpProviderSession(input.threadId));
+          if (startedSessionMarker !== undefined) {
+            const currentSession = (yield* adapter.listSessions()).find(
+              (session) => session.threadId === input.threadId,
+            );
+            if (
+              currentSession?.status === "ready" &&
+              currentSession.activeTurnId === undefined &&
+              providerSessionGenerations.get(input.threadId) === startedSessionMarker.generation
+            ) {
+              yield* adapter.stopSession(input.threadId).pipe(Effect.ignore);
+              yield* Effect.sync(() => {
+                pulseMcpPreparation.appliedFingerprints.delete(input.threadId);
+                McpProviderSession.clearMcpProviderSession(input.threadId);
+              });
+            }
+          }
           return {
             status: "failed",
             selectedConnectionIds,
@@ -1541,7 +1584,21 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
                 const current = pulseMcpPreparation.records.get(input.threadId);
                 if (current?.id !== preparationId) return;
                 pulseMcpPreparation.records.delete(input.threadId);
-                if (current.consumedBy !== undefined) return;
+                if (current.consumedBy !== undefined || startedSessionMarker === undefined) return;
+                const currentSession = (yield* adapter.listSessions()).find(
+                  (session) => session.threadId === input.threadId,
+                );
+                if (
+                  currentSession?.status !== "ready" ||
+                  currentSession.activeTurnId !== undefined ||
+                  currentSession.updatedAt !== startedSessionMarker.updatedAt ||
+                  currentSession.providerInstanceId !== startedSessionMarker.providerInstanceId ||
+                  currentSession.cwd !== startedSessionMarker.cwd ||
+                  providerSessionGenerations.get(input.threadId) !==
+                    startedSessionMarker.generation ||
+                  pulseMcpPreparation.appliedFingerprints.get(input.threadId) !== fingerprint
+                )
+                  return;
                 yield* adapter.stopSession(input.threadId).pipe(Effect.ignore);
                 yield* Effect.sync(() => {
                   McpProviderSession.clearMcpProviderSession(input.threadId);
@@ -1596,9 +1653,15 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         modelSelection: input.modelSelection,
         servers: durableServers,
       });
+      const appliedSession = yield* registry.getByInstance(input.providerInstanceId).pipe(
+        Effect.flatMap((adapter) => adapter.listSessions()),
+        Effect.map((sessions) => sessions.find((session) => session.threadId === input.threadId)),
+      );
       if (
         pulseMcpPreparation.appliedFingerprints.get(input.threadId) === durableFingerprint &&
-        JSON.stringify(appliedServers) === JSON.stringify(durableServers)
+        JSON.stringify(appliedServers) === JSON.stringify(durableServers) &&
+        appliedSession?.providerInstanceId === input.providerInstanceId &&
+        (appliedSession.status === "ready" || appliedSession.status === "running")
       ) {
         return;
       }

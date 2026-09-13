@@ -2563,6 +2563,21 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
       ),
     );
 
+  const readManagedMcpStatus: NonNullable<CodexAdapterShape["readManagedMcpStatus"]> = (
+    threadId,
+    servers,
+  ) =>
+    Effect.gen(function* () {
+      const session = yield* requireSession(threadId);
+      const statuses = session.runtime.readManagedMcpStatus
+        ? yield* session.runtime.readManagedMcpStatus(servers.map((server) => `pulse_${server.id}`))
+        : new Map();
+      return servers.map((server) => ({
+        id: server.id,
+        ...(statuses.get(`pulse_${server.id}`) ?? { status: "unknown" as const }),
+      }));
+    });
+
   const requireSession = Effect.fn("requireSession")(function* (threadId: ThreadId) {
     const session = sessions.get(threadId);
     if (!session || session.stopped) {
@@ -2737,6 +2752,7 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
     startSession,
     sendTurn,
     prepareManagedMcp,
+    readManagedMcpStatus,
     compaction: { type: "native", start: compactThread },
     interruptTurn,
     readThread,

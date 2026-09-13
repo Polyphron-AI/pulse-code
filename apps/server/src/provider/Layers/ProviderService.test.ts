@@ -282,6 +282,13 @@ function makeFakeCodexAdapter(
     ): Effect.Effect<ReadonlyArray<ProviderManagedMcpStatus>> =>
       Effect.succeed(servers.map((server) => ({ id: server.id, status: "ready" as const }))),
   );
+  const readManagedMcpStatus = vi.fn(
+    (
+      _threadId: ThreadId,
+      servers: ReadonlyArray<{ readonly id: string }>,
+    ): Effect.Effect<ReadonlyArray<ProviderManagedMcpStatus>> =>
+      Effect.succeed(servers.map((server) => ({ id: server.id, status: "ready" as const }))),
+  );
 
   const adapter: ProviderAdapterShape<ProviderAdapterError> = {
     provider,
@@ -308,7 +315,7 @@ function makeFakeCodexAdapter(
     readThread,
     rollbackThread,
     ...(provider === CODEX_DRIVER ? { uploadFeedback } : {}),
-    ...(provider === CODEX_DRIVER ? { prepareManagedMcp } : {}),
+    ...(provider === CODEX_DRIVER ? { prepareManagedMcp, readManagedMcpStatus } : {}),
     stopAll,
     get streamEvents() {
       return Stream.fromPubSub(runtimeEventPubSub);
@@ -347,6 +354,7 @@ function makeFakeCodexAdapter(
     rollbackThread,
     uploadFeedback,
     prepareManagedMcp,
+    readManagedMcpStatus,
     stopAll,
   };
 }
@@ -1319,6 +1327,17 @@ managedMcpRouting.layer("managed MCP turn preparation", (it) => {
         modelSelection: undefined,
         desiredCwd: cwd,
       });
+      const explicitEmpty = yield* service.preparePulseMcp!({
+        threadId: readyThread,
+        providerSession: {
+          threadId: readyThread,
+          providerInstanceId: codexInstanceId,
+          runtimeMode: "full-access",
+          cwd,
+        },
+        connectionIds: [],
+      });
+      assert.equal(explicitEmpty.status, "ready");
 
       const activeThread = asThreadId("tokenless-active-applied");
       resolvedManagedMcpConnections = [managedMcpConnection];
@@ -1370,6 +1389,47 @@ managedMcpRouting.layer("managed MCP turn preparation", (it) => {
       }).pipe(Effect.exit);
       assert(Exit.isFailure(changedWhileActive));
 
+      const unhealthyThread = asThreadId("tokenless-unhealthy-applied");
+      resolvedManagedMcpConnections = [managedMcpConnection];
+      const unhealthyPrepared = yield* service.preparePulseMcp!({
+        threadId: unhealthyThread,
+        providerSession: {
+          threadId: unhealthyThread,
+          providerInstanceId: codexInstanceId,
+          runtimeMode: "full-access",
+          cwd,
+        },
+      });
+      assert(unhealthyPrepared.status === "ready");
+      yield* service.consumePulseMcpPreparation!({
+        threadId: unhealthyThread,
+        preparationId: unhealthyPrepared.preparationId,
+        providerInstanceId: codexInstanceId,
+        commandId: "unhealthy-first",
+        runtimeMode: "full-access",
+        modelSelection: undefined,
+        desiredCwd: cwd,
+      });
+      yield* service.sendTurn({ threadId: unhealthyThread, input: "first", attachments: [] });
+      managedMcpRouting.codex.updateSession(unhealthyThread, (session) => ({
+        ...session,
+        status: "error",
+        lastError: "crashed",
+      }));
+      const startsBeforeRecovery = managedMcpRouting.codex.startSession.mock.calls.length;
+      yield* service.consumePulseMcpPreparation!({
+        threadId: unhealthyThread,
+        providerInstanceId: codexInstanceId,
+        commandId: "unhealthy-recovered",
+        runtimeMode: "full-access",
+        modelSelection: undefined,
+        desiredCwd: cwd,
+      });
+      assert.equal(
+        managedMcpRouting.codex.startSession.mock.calls.length,
+        startsBeforeRecovery + 1,
+      );
+
       const failedThread = asThreadId("tokenless-failed");
       resolvedManagedMcpConnections = [managedMcpConnection];
       managedMcpRouting.codex.prepareManagedMcp.mockImplementationOnce((_threadId, servers) =>
@@ -1413,6 +1473,110 @@ managedMcpRouting.layer("managed MCP turn preparation", (it) => {
         desiredCwd: cwd,
         preparingWorktree: true,
       });
+    }),
+  );
+
+  it.effect("expires only a preparation-owned session that is still idle and unchanged", () =>
+    Effect.gen(function* () {
+      resolvedManagedMcpConnections = [managedMcpConnection];
+      const service = yield* ProviderService.ProviderService;
+      const cwd = fixtureCwd("managed-expiry");
+      const reusedThread = asThreadId("managed-expiry-reused");
+      const first = yield* service.preparePulseMcp!({
+        threadId: reusedThread,
+        providerSession: {
+          threadId: reusedThread,
+          providerInstanceId: codexInstanceId,
+          runtimeMode: "full-access",
+          cwd,
+        },
+      });
+      assert(first.status === "ready");
+      yield* service.consumePulseMcpPreparation!({
+        threadId: reusedThread,
+        preparationId: first.preparationId,
+        providerInstanceId: codexInstanceId,
+        commandId: "expiry-first",
+        runtimeMode: "full-access",
+        modelSelection: undefined,
+        desiredCwd: cwd,
+      });
+      yield* service.sendTurn({ threadId: reusedThread, input: "first", attachments: [] });
+      yield* service.preparePulseMcp!({
+        threadId: reusedThread,
+        providerSession: {
+          threadId: reusedThread,
+          providerInstanceId: codexInstanceId,
+          runtimeMode: "full-access",
+          cwd,
+        },
+      });
+      yield* advanceTestClock(5 * 60_000);
+      assert.equal(yield* managedMcpRouting.codex.hasSession(reusedThread), true);
+
+      const ownedThread = asThreadId("managed-expiry-running");
+      yield* service.preparePulseMcp!({
+        threadId: ownedThread,
+        providerSession: {
+          threadId: ownedThread,
+          providerInstanceId: codexInstanceId,
+          runtimeMode: "full-access",
+          cwd,
+        },
+      });
+      managedMcpRouting.codex.updateSession(ownedThread, (session) => ({
+        ...session,
+        status: "running",
+        activeTurnId: TurnId.make("expiry-running"),
+      }));
+      yield* advanceTestClock(5 * 60_000);
+      assert.equal(yield* managedMcpRouting.codex.hasSession(ownedThread), true);
+    }),
+  );
+
+  it.effect("blocks reuse when Codex reports a cached asynchronous MCP failure", () =>
+    Effect.gen(function* () {
+      resolvedManagedMcpConnections = [managedMcpConnection];
+      const service = yield* ProviderService.ProviderService;
+      const threadId = asThreadId("managed-cached-failure");
+      const cwd = fixtureCwd("cached-failure");
+      const first = yield* service.preparePulseMcp!({
+        threadId,
+        providerSession: {
+          threadId,
+          providerInstanceId: codexInstanceId,
+          runtimeMode: "full-access",
+          cwd,
+        },
+      });
+      assert(first.status === "ready");
+      managedMcpRouting.codex.updateSession(threadId, (session) => ({
+        ...session,
+        status: "running",
+        activeTurnId: TurnId.make("cached-failure-active"),
+      }));
+      const stopsBefore = managedMcpRouting.codex.stopSession.mock.calls.length;
+      managedMcpRouting.codex.readManagedMcpStatus.mockImplementationOnce((_threadId, servers) =>
+        Effect.succeed(
+          servers.map((server) => ({
+            id: server.id,
+            status: "failed" as const,
+            message: "server disconnected",
+          })),
+        ),
+      );
+      const reused = yield* service.preparePulseMcp!({
+        threadId,
+        providerSession: {
+          threadId,
+          providerInstanceId: codexInstanceId,
+          runtimeMode: "full-access",
+          cwd,
+        },
+      });
+      assert.equal(reused.status, "failed");
+      assert.equal(yield* managedMcpRouting.codex.hasSession(threadId), true);
+      assert.equal(managedMcpRouting.codex.stopSession.mock.calls.length, stopsBefore);
     }),
   );
 });

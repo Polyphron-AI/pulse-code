@@ -123,6 +123,11 @@ export interface ProviderAdapterShape<TError> {
     threadId: ThreadId,
     servers: ReadonlyArray<ProviderManagedMcpServer>,
   ) => Effect.Effect<ReadonlyArray<ProviderManagedMcpStatus>, TError>;
+  /** Read provider-native cached status without reloading or mutating the session. */
+  readonly readManagedMcpStatus?: (
+    threadId: ThreadId,
+    servers: ReadonlyArray<ProviderManagedMcpServer>,
+  ) => Effect.Effect<ReadonlyArray<ProviderManagedMcpStatus>, TError>;
 
   /** Omitted when this adapter does not support manual context compaction. */
   readonly compaction?: ProviderCompaction<TError>;
