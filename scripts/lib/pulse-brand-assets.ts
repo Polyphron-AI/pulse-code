@@ -48,6 +48,13 @@ function pulseBrandSlots(brand: WebAssetBrand) {
 
 export type PulseBrandSlots = ReturnType<typeof pulseBrandSlots>;
 
+const WEB_ICON_TARGETS = {
+  webFaviconIco: "favicon.ico",
+  webFavicon16Png: "favicon-16x16.png",
+  webFavicon32Png: "favicon-32x32.png",
+  webAppleTouchIconPng: "apple-touch-icon.png",
+} as const;
+
 /**
  * Every Pulse raster slot, keyed the way `BRAND_ASSET_PATHS` keys its own, so a
  * consumer reads the same slot name whichever table it points at.
@@ -100,6 +107,15 @@ export function resolvePulseBrandOutputs(brand: WebAssetBrand) {
     markSvgPath: PULSE_MARK_SVG_PATHS[brand],
     slots: pulseBrandSlots(brand),
   };
+}
+
+/** Copies the Pulse web slots into the stable filenames referenced by index.html. */
+export function resolvePulseWebIconOverrides(brand: WebAssetBrand, targetDirectory: string) {
+  const slots = pulseBrandSlots(brand);
+  return Object.entries(WEB_ICON_TARGETS).map(([slot, target]) => ({
+    sourceRelativePath: slots[slot as keyof typeof WEB_ICON_TARGETS],
+    targetRelativePath: `${targetDirectory}/${target}`,
+  }));
 }
 
 // Re-exported so a caller iterating web channels does not have to import from
