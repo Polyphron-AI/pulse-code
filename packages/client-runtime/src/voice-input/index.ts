@@ -20,6 +20,7 @@ export {
 } from "./transcription.ts";
 export {
   getPulseDictationApiKeyStatus,
+  pulseDictationRequestContext,
   PULSE_DICTATION_MAX_AUDIO_BYTES,
   PulseDictationAudioTooLargeError,
   PulseDictationHttpResponseError,

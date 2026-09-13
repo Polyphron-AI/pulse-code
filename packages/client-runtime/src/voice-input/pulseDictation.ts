@@ -11,11 +11,13 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+import * as SubscriptionRef from "effect/SubscriptionRef";
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http";
 
-import type { RemoteEnvironmentAuthorization } from "../authorization/service.ts";
+import { RemoteEnvironmentAuthorization } from "../authorization/service.ts";
 import type { PreparedConnection } from "../connection/model.ts";
-import type { ManagedRelayDpopSigner } from "../relay/managedRelay.ts";
+import { ManagedRelayDpopSigner } from "../relay/managedRelay.ts";
+import { EnvironmentSupervisor } from "../connection/supervisor.ts";
 import { executeAuthenticatedEnvironmentHttpRequest } from "../state/environmentHttpAuth.ts";
 
 const DEFAULT_DICTATION_REQUEST_TIMEOUT_MS = 30_000;
@@ -76,6 +78,22 @@ export interface PulseDictationRequestContext {
   readonly remoteAuthorization?: Option.Option<RemoteEnvironmentAuthorization["Service"]>;
   readonly timeoutMs?: number;
 }
+
+/** Reads the selected environment at execution time; auth details stay inside client-runtime. */
+export const pulseDictationRequestContext = Effect.gen(function* () {
+  const supervisor = yield* EnvironmentSupervisor;
+  const prepared = yield* SubscriptionRef.get(supervisor.prepared);
+  if (Option.isNone(prepared)) {
+    return yield* new PulseDictationSanitizedTransportError({
+      message: "The environment is not connected.",
+    });
+  }
+  return {
+    prepared: prepared.value,
+    signer: yield* Effect.serviceOption(ManagedRelayDpopSigner),
+    remoteAuthorization: yield* Effect.serviceOption(RemoteEnvironmentAuthorization),
+  };
+});
 
 type ResponseInput = {
   readonly status?: number;
