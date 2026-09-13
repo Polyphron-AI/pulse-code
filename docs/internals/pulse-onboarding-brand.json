@@ -1,0 +1,141 @@
+{
+  "feature": "Onboarding branding: first-run wizard, recovery gate and hosted web first-use state identify as Pulse Next",
+  "policyVersion": "2026-09-13",
+  "ledgerVersion": 1,
+  "owner": "single implementation owner (Sol)",
+  "branch": "feat/pulse-onboarding-brand",
+  "worktree": ".worktrees/pulse-onboarding",
+  "baseRevision": "885200895c",
+  "problem": "After installing the Pulse Next alpha, the first-run wizard and hosted web first-use state still branded the application as T3 Code.",
+  "scope": {
+    "in": [
+      "apps/web/src/components/onboarding/WelcomeWizard.tsx user-visible product-name strings",
+      "apps/web/src/components/onboarding/FirstRunGate.tsx user-visible product-name strings",
+      "apps/web/src/routes/_chat.index.tsx hosted web first-use product-name strings",
+      "a Pulse-owned brand component seam for the wizard header wordmark"
+    ],
+    "out": [
+      "artwork for the Pulse mark (owned by the parallel brand-icons slice)",
+      "renaming the third-party T3 Connect sign-in service",
+      "renaming the real npx t3 CLI commands",
+      "branding outside first-use and recovery flows (settings, general chat surfaces, mobile)"
+    ]
+  },
+  "upstreamCompatibility": {
+    "mandate": "Pulse Next is T3 upstream plus a thin, well-seamed Pulse layer. Future upstream copy changes must conflict on one token, not a rewritten block.",
+    "rules": [
+      "No structural refactor of WelcomeWizard or FirstRunGate.",
+      "Product name reads from the Pulse-owned packages/shared/src/productIdentity.ts seam, never a new hardcoded literal.",
+      "The brand component lives in a Pulse-owned file upstream never touches and is swapped in at a single import site.",
+      "Every explicitly edited upstream line is enumerated in the delivery report with a justification."
+    ]
+  },
+  "namingDecisions": [
+    {
+      "site": "WelcomeWizard.tsx DialogTitle 'Set up T3 Code'",
+      "call": "rename",
+      "why": "names our app"
+    },
+    {
+      "site": "WelcomeWizard.tsx header aria-label 'T3 Code' and the T3Wordmark + 'Code' lockup",
+      "call": "rename via Pulse brand component",
+      "why": "our product wordmark; the adjacent 'Code' span is part of the same T3 Code lockup and cannot survive the rename"
+    },
+    {
+      "site": "WelcomeWizard.tsx 'Keep T3 Code running.'",
+      "call": "rename",
+      "why": "instructs the user to keep our app running"
+    },
+    {
+      "site": "WelcomeWizard.tsx 'Start T3 Code first, or run npx t3 serve'",
+      "call": "rename the app clause only",
+      "why": "mixed string: the app is ours, npx t3 serve is a real upstream CLI command and stays verbatim"
+    },
+    {
+      "site": "FirstRunGate.tsx 'T3 Code could not confirm this workspace.'",
+      "call": "rename",
+      "why": "our app reporting its own failure"
+    },
+    {
+      "site": "WelcomeWizard.tsx 'T3 Connect' label and useT3ConnectAuthPrompt import",
+      "call": "keep",
+      "why": "T3 Connect is T3's hosted sign-in service, a genuinely third-party product; renaming it would be a lie"
+    },
+    {
+      "site": "WelcomeWizard.tsx 'npx t3 connect' and 'npx t3 pair' command blocks",
+      "call": "keep",
+      "why": "real commands the user must type verbatim"
+    },
+    {
+      "site": "FirstRunGate.tsx comment mentioning npx t3 users",
+      "call": "keep",
+      "why": "not user-visible, and refers to the real CLI"
+    }
+  ],
+  "acceptanceCases": [
+    {
+      "case": "First use: wizard header shows the Pulse Next wordmark, not a T3 Code lockup",
+      "status": "applicable"
+    },
+    {
+      "case": "Screen-reader users get 'Pulse Next' from the dialog title and the header role=img label",
+      "status": "applicable"
+    },
+    {
+      "case": "Cloud connection step tells the user to keep Pulse Next running while still printing npx t3 connect verbatim",
+      "status": "applicable"
+    },
+    {
+      "case": "Direct pairing step names Pulse Next but keeps npx t3 pair, npx t3 serve and --tailscale verbatim",
+      "status": "applicable"
+    },
+    {
+      "case": "First-run connection recovery says Pulse Next could not confirm this workspace",
+      "status": "applicable"
+    },
+    {
+      "case": "Hosted web first use tells users to connect to Pulse Next while retaining the T3 Connect service name",
+      "status": "applicable"
+    },
+    {
+      "case": "T3 Connect remains labelled T3 Connect (third-party service not renamed)",
+      "status": "applicable"
+    },
+    {
+      "case": "Product name derives from PRODUCT_BASE_NAME so a rename is one edit",
+      "status": "applicable"
+    },
+    {
+      "case": "Real Pulse mark artwork drops into the brand seam as a one-line change",
+      "status": "applicable (seam only; artwork owned by the parallel brand-icons slice)"
+    },
+    {
+      "case": "Mobile client onboarding",
+      "status": "not applicable (mobile has no WelcomeWizard or hosted web empty state; separate navigation and screens)"
+    },
+    {
+      "case": "Desktop client",
+      "status": "applicable by inheritance (desktop wraps the same web bundle, no separate code path)"
+    },
+    {
+      "case": "Provider differences, remote/relay/tunnel connection modes, queued turns, session reuse",
+      "status": "not applicable (static presentation copy, no provider, transport or turn state involved)"
+    },
+    {
+      "case": "Reverse states",
+      "status": "not applicable (a rename adds no new way in)"
+    }
+  ],
+  "tests": {
+    "planned": [
+      "apps/web/src/components/onboarding/onboardingBrand.test.tsx renders the production identity leaves; DOM-backed role/name queries verify the accessible title and wordmark while rendered-text assertions verify visible copy",
+      "the behavior suite covers the deliberately retained T3 Connect service name and npx t3 connect, pair and serve commands"
+    ],
+    "command": "vp test run src/components/onboarding/onboardingBrand.test.tsx from apps/web",
+    "result": "6 behavior tests passed, including DOM-backed accessible role/name queries; apps/web typecheck passed; focused test-file lint passed"
+  },
+  "status": "development acceptance passed",
+  "blockers": [],
+  "review": "Frozen branch diff reviewed after the full first-use string sweep. The sweep found and fixed the hosted web empty-state copy omitted by the initial slice. The original source-scanning tests were rejected in independent review and replaced with rendered behavior tests over production leaves. T3 Connect and npx t3 command names remain unchanged.",
+  "nextAction": "Integrate after the upstream compatibility merge, then rerun the focused branding tests if onboarding files changed during conflict resolution."
+}

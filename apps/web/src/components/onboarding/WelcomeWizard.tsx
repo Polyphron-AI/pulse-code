@@ -14,6 +14,7 @@ import {
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
 import { CommandId, ProviderDriverKind, ThreadId } from "@t3tools/contracts";
+import { PRODUCT_BASE_NAME } from "@t3tools/shared/productIdentity";
 import * as Schema from "effect/Schema";
 import {
   ArrowRightIcon,
@@ -25,7 +26,7 @@ import {
   MonitorIcon,
   TerminalIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { TYPOGRAPHY_ADVANCED_STORAGE_KEY } from "../../appearanceFonts";
 import { useLocalStorage } from "../../hooks/useLocalStorage";
@@ -63,7 +64,7 @@ import { getDriverOption } from "../settings/providerDriverMeta";
 import { TerminalViewport } from "../ThreadTerminalDrawer";
 import { CloudEnvironmentConnectRows } from "../cloud/CloudEnvironmentConnectList";
 import { ClaudeAI, OpenAI } from "../Icons";
-import { T3Wordmark } from "../T3Wordmark";
+import { PulseWordmark } from "../pulse/PulseWordmark";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "../ui/collapsible";
@@ -193,17 +194,7 @@ export function WelcomeWizard({
         showCloseButton={false}
         initialFocus={() => document.getElementById("onboarding-pairing-url") ?? true}
       >
-        <WizardHeader
-          title="Set up T3 Code"
-          identity={
-            <div className="flex items-baseline gap-1.5" role="img" aria-label="T3 Code">
-              <T3Wordmark className="h-4 w-auto shrink-0" aria-hidden />
-              <span className="text-[1.4rem] font-medium tracking-tight text-muted-foreground">
-                Code
-              </span>
-            </div>
-          }
-        >
+        <WelcomeWizardBrandHeader>
           <WizardSteps
             steps={ONBOARDING_STAGES}
             currentStep={stageIndex}
@@ -214,7 +205,7 @@ export function WelcomeWizard({
               if (next) setStep(next);
             }}
           />
-        </WizardHeader>
+        </WelcomeWizardBrandHeader>
 
         <WizardPanel holdHeight={isLoadingProjects}>
           {step === "connection" ? (
@@ -257,6 +248,18 @@ export function WelcomeWizard({
         </WizardPanel>
       </WizardPopup>
     </Dialog>
+  );
+}
+
+/** Stable Pulse-owned identity presented at the start of the upstream wizard. */
+export function WelcomeWizardBrandHeader({ children }: { readonly children?: ReactNode }) {
+  return (
+    <WizardHeader
+      title={`Set up ${PRODUCT_BASE_NAME}`}
+      identity={<PulseWordmark className="h-4" />}
+    >
+      {children}
+    </WizardHeader>
   );
 }
 
@@ -408,7 +411,7 @@ function ConnectionStep({
   );
 }
 
-function ConnectAccountOption({
+export function ConnectAccountOption({
   autoSelectedComputers,
   disabled,
   selectedIds,
@@ -485,7 +488,7 @@ function ConnectAccountOption({
           </p>
           <CommandBlock command="npx t3 connect" className="mt-3" />
           <p className="mt-3 text-xs text-muted-foreground">
-            Keep T3 Code running. Select the computers you want to set up above.
+            Keep {PRODUCT_BASE_NAME} running. Select the computers you want to set up above.
           </p>
         </div>
       </CollapsiblePanel>
@@ -498,7 +501,7 @@ function ConnectAccountOption({
 /**
  * Register a computer in this browser using a server-minted pairing link.
  */
-function PairingForm({
+export function PairingForm({
   isPairing,
   setIsPairing,
   onPaired,
@@ -602,7 +605,8 @@ function PairingForm({
             </p>
             <CommandBlock command="npx t3 pair" className="mt-2" />
             <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-              Start T3 Code first, or run <code className="font-mono">npx t3 serve</code>. Add{" "}
+              Start {PRODUCT_BASE_NAME} first, or run{" "}
+              <code className="font-mono">npx t3 serve</code>. Add{" "}
               <code className="font-mono">--tailscale</code> to use your tailnet.
             </p>
           </CollapsiblePanel>
