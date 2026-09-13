@@ -15,6 +15,18 @@ const fixture = JSON.parse(
 );
 const script = JSON.parse(NodeFS.readFileSync(process.env.T3_CODEX_COLLAB_SCRIPT, "utf8"));
 
+if (script.recordLaunchArgs) {
+  NodeFS.appendFileSync(
+    `${process.env.T3_CODEX_COLLAB_SCRIPT}.launches`,
+    `${JSON.stringify({ args: process.argv.slice(2) })}\n`,
+  );
+}
+
+// Reload this fixture field so a browser test can repair a connection without
+// replacing the provider process. Never contact the configured MCP endpoints.
+const mcpStates = () =>
+  JSON.parse(NodeFS.readFileSync(process.env.T3_CODEX_COLLAB_SCRIPT, "utf8")).mcpStates;
+
 const write = (message) => process.stdout.write(`${JSON.stringify(message)}\n`);
 let turnStartCount = 0;
 let activeTurn;
@@ -59,6 +71,40 @@ rl.on("line", (line) => {
   }
   if (method === "account/read") {
     write({ id, result: { account: { type: "apiKey" }, requiresOpenaiAuth: false } });
+    return;
+  }
+  if (method === "config/mcpServer/reload" && mcpStates()) {
+    write({ id, result: {} });
+    for (const [name, state] of Object.entries(mcpStates())) {
+      write({
+        jsonrpc: "2.0",
+        method: "mcpServer/startupStatus/updated",
+        params: {
+          name,
+          status: state.status,
+          ...(state.message ? { error: state.message } : {}),
+          threadId: script.rootThreadId,
+        },
+      });
+    }
+    return;
+  }
+  if (method === "mcpServerStatus/list" && mcpStates()) {
+    write({
+      id,
+      result: {
+        data: Object.entries(mcpStates())
+          .filter(([, state]) => state.status === "ready")
+          .map(([name]) => ({
+            name,
+            authStatus: "unsupported",
+            tools: {},
+            resources: [],
+            resourceTemplates: [],
+          })),
+        nextCursor: null,
+      },
+    });
     return;
   }
   if (method === "skills/list" || method === "model/list") {
