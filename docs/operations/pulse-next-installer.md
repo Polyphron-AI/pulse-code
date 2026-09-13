@@ -42,8 +42,11 @@ distro.
 
 ## Build the installer
 
-Build on Windows x64. Artifacts land in `release/` unless `--output-dir` says
-otherwise. Use a `-pulse-next.` version suffix so the file is never mistaken for
+Build on Windows x64. The preflight needs Rust with the `x86_64-pc-windows-msvc`
+target, Python 3, and VS 2022 Build Tools with the C++ workload, a Windows SDK
+and the **MSVC v143 x64/x86 Spectre-mitigated libs** component. Without the
+Spectre libraries the build stops before staging with a prerequisites error.
+Artifacts land in `release/` unless `--output-dir` says otherwise. Use a `-pulse-next.` version suffix so the file is never mistaken for
 a T3 build, and keep the stage directory so the packaged config can be read back.
 
 ```powershell
@@ -108,3 +111,17 @@ None of this is authorised yet, and the build reflects that:
   pipeline exports from an Icon Composer project through macOS-only `ictool`,
   and no Pulse source artwork exists in the repository. Replacing the icon is a
   separate task.
+
+## Reference build
+
+The first Pulse Next installer built from `develop`:
+
+| Field   | Value                                                              |
+| ------- | ------------------------------------------------------------------ |
+| Date    | 2026-09-13                                                         |
+| Commit  | `d0f41fb958a951779330b7456b85bbe0bdabe2ed`                         |
+| Version | `0.1.0-pulse-next.20260913.1`                                      |
+| File    | `Pulse-Next-0.1.0-pulse-next.20260913.1-x64.exe`                   |
+| SHA-256 | `98afe7b0919503493705852b64d53407d15520c8d3323e87e4c8a6954e537b9f` |
+
+Unsigned, no WSL prebuild, not installed, not published.

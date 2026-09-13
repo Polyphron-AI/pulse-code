@@ -88,9 +88,14 @@
       "verification": "apps/desktop/scripts/electron-launcher.test.mjs, \"repeats the shared product identity without drifting from it\"."
     },
     {
-      "case": "An installer build on Windows x64 succeeds and installs beside T3 Code.",
+      "case": "An installer build on Windows x64 succeeds and packages the Pulse Next identity with no update feed.",
+      "state": "passed",
+      "verification": "Built 2026-09-13 from d0f41fb95 with --build-version 0.1.0-pulse-next.20260913.1. Staged package.json: name pulsenext, appId ai.polyphron.pulsenext, productName Pulse Next (Alpha), no publish block. win-unpacked has Pulse Next (Alpha).exe and no resources/app-update.yml. Payload validation passed (67 files, 26 sidecar natives)."
+    },
+    {
+      "case": "Side-by-side install beside T3 Code leaves the other install untouched.",
       "state": "pending",
-      "verification": "Reserved for the user. Not run by the implementation owner; see docs/operations/pulse-next-installer.md for the command and the hash recording step."
+      "verification": "Not run. Pulse Next policy forbids installing candidates from this workflow; the user installs when ready and follows docs/operations/pulse-next-installer.md."
     }
   ],
   "tests": [
@@ -117,5 +122,24 @@
     "The packaged app still carries T3's icon. The export pipeline needs macOS-only ictool and an Icon Composer project, and no Pulse artwork exists in the repository.",
     "The WSL backend still caches its Linux runtime at $HOME/.t3/wsl-runtime inside the WSL distro, which a T3 Code install would share. That cache is keyed by version and architecture and holds no user data."
   ],
-  "nextAction": "User builds the Windows x64 installer per docs/operations/pulse-next-installer.md, records version, commit and SHA-256, and confirms a side-by-side install leaves an installed T3 Code untouched. Then close the last acceptance case."
+  "nextAction": "merged-to-develop; side-by-side install check remains for the user",
+  "build": {
+    "date": "2026-09-13",
+    "commit": "d0f41fb958a951779330b7456b85bbe0bdabe2ed",
+    "version": "0.1.0-pulse-next.20260913.1",
+    "artifact": "release/pulse-next/Pulse-Next-0.1.0-pulse-next.20260913.1-x64.exe",
+    "sha256": "98afe7b0919503493705852b64d53407d15520c8d3323e87e4c8a6954e537b9f",
+    "sizeBytes": 156788551,
+    "signed": false,
+    "wslPrebuild": false,
+    "notes": "Gitignored under release/. Not installed, not published. First attempt failed preflight until the MSVC v143 x64 Spectre-mitigated libraries component was added to VS 2022 Build Tools."
+  },
+  "review": {
+    "revision": "a3096463d",
+    "reviewer": "Fable 5.1",
+    "findings": [
+      "pnpm-workspace.yaml carried an unresolved protobufjs allowBuilds placeholder written by pnpm install; restored in d0f41fb95."
+    ],
+    "verdict": "no blocking findings after the fix"
+  }
 }
