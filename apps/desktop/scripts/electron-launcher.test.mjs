@@ -1,71 +1,48 @@
-import {
-  DESKTOP_APP_ID,
-  DESKTOP_DEVELOPMENT_APP_ID,
-  DESKTOP_DEVELOPMENT_URL_SCHEME,
-  DESKTOP_URL_SCHEME,
-  MACOS_MICROPHONE_USAGE_DESCRIPTION as SHARED_MACOS_MICROPHONE_USAGE_DESCRIPTION,
-  PRODUCT_ALPHA_NAME,
-  PRODUCT_DEV_NAME,
-} from "@t3tools/shared/productIdentity";
+import * as NodeFS from "node:fs";
+import * as NodeOS from "node:os";
+import * as NodePath from "node:path";
+
 import { assert, describe, it } from "vite-plus/test";
 
 import {
-  APP_BUNDLE_ID,
-  APP_DISPLAY_NAME,
-  APP_PROTOCOL_SCHEMES,
+  makeDevelopmentEnvironmentScript,
   makeDevelopmentLauncherScript,
-  MACOS_MICROPHONE_USAGE_DESCRIPTION,
-  mainBundleInfoPlistStringEntries,
   resolveElectronBinaryPath,
+  resolveMacBundleInfoPlistStrings,
+  resolveMacCodeSignArguments,
   resolveMacLauncherIconPaths,
   resolveMacLauncherPaths,
+  writeDevelopmentLauncherScript,
 } from "./electron-launcher.mjs";
 
 describe("electron development launcher", () => {
-  // The launcher duplicates these strings because plain node cannot load the
-  // TypeScript identity module. A drift here would give the dev app a bundle id
-  // or scheme that no longer belongs to Pulse Next.
-  it("repeats the shared product identity without drifting from it", () => {
-    assert.equal(MACOS_MICROPHONE_USAGE_DESCRIPTION, SHARED_MACOS_MICROPHONE_USAGE_DESCRIPTION);
-    assert.oneOf(APP_DISPLAY_NAME, [PRODUCT_DEV_NAME, PRODUCT_ALPHA_NAME]);
-    assert.equal(APP_PROTOCOL_SCHEMES.length, 1);
-    assert.oneOf(APP_PROTOCOL_SCHEMES[0], [DESKTOP_URL_SCHEME, DESKTOP_DEVELOPMENT_URL_SCHEME]);
-
-    // The dev bundle id keeps a per-repo suffix so two checkouts do not share
-    // one macOS registration, but it stays under the Pulse Next namespace.
-    const isDevelopmentLauncher = APP_DISPLAY_NAME === PRODUCT_DEV_NAME;
-    if (isDevelopmentLauncher) {
-      assert.match(APP_BUNDLE_ID, new RegExp(`^${DESKTOP_DEVELOPMENT_APP_ID}\.[a-z0-9]+$`));
-      assert.equal(APP_PROTOCOL_SCHEMES[0], DESKTOP_DEVELOPMENT_URL_SCHEME);
-    } else {
-      assert.equal(APP_BUNDLE_ID, DESKTOP_APP_ID);
-      assert.equal(APP_PROTOCOL_SCHEMES[0], DESKTOP_URL_SCHEME);
-    }
-  });
-
-  it("adds the microphone purpose string to the branded macOS bundle", () => {
-    assert.deepInclude(Object.fromEntries(mainBundleInfoPlistStringEntries("Electron")), {
-      NSMicrophoneUsageDescription: MACOS_MICROPHONE_USAGE_DESCRIPTION,
-    });
-  });
-
   it("uses captured values only as fallbacks for a live runner environment", () => {
+    const environmentScript = makeDevelopmentEnvironmentScript({
+      VITE_DEV_SERVER_URL: "http://127.0.0.1:8526",
+      T3CODE_PORT: "16566",
+      T3CODE_HOME: "/tmp/t3",
+    });
+
+    assert.include(
+      environmentScript,
+      "if [ -z \"${VITE_DEV_SERVER_URL:-}\" ]; then export VITE_DEV_SERVER_URL='http://127.0.0.1:8526'; fi",
+    );
+    assert.notInclude(environmentScript, "\nexport VITE_DEV_SERVER_URL=");
+  });
+
+  it("keeps the launcher script free of volatile environment values", () => {
     const script = makeDevelopmentLauncherScript({
       electronBinaryPath: "/repo/node_modules/electron/Electron",
       mainEntryPath: "/repo/apps/desktop/dist-electron/main.cjs",
       desktopRoot: "/repo/apps/desktop",
-      environment: {
-        VITE_DEV_SERVER_URL: "http://127.0.0.1:8526",
-        T3CODE_PORT: "16566",
-        T3CODE_HOME: "/tmp/t3",
-      },
+      environmentFilePath: "/repo/apps/desktop/.electron-runtime/dev-environment.sh",
     });
 
     assert.include(
       script,
-      "if [ -z \"${VITE_DEV_SERVER_URL:-}\" ]; then export VITE_DEV_SERVER_URL='http://127.0.0.1:8526'; fi",
+      "if [ -f '/repo/apps/desktop/.electron-runtime/dev-environment.sh' ]; then . '/repo/apps/desktop/.electron-runtime/dev-environment.sh'; fi",
     );
-    assert.notInclude(script, "\nexport VITE_DEV_SERVER_URL=");
+    assert.notInclude(script, "VITE_DEV_SERVER_URL");
     assert.include(
       script,
       "exec '/repo/node_modules/electron/Electron' --t3code-dev-root='/repo/apps/desktop' '/repo/apps/desktop/dist-electron/main.cjs' \"$@\"",
@@ -112,13 +89,58 @@ describe("electron development launcher", () => {
       electronBinaryPath: paths.runtimeElectronBinaryPath,
       mainEntryPath: "/repo/apps/desktop/dist-electron/main.cjs",
       desktopRoot: "/repo/apps/desktop",
-      environment: {},
+      environmentFilePath: "/repo/apps/desktop/.electron-runtime/dev-environment.sh",
     });
     assert.include(
       script,
       "exec '/repo/apps/desktop/.electron-runtime/T3 Code (Dev).app/Contents/MacOS/Electron'",
     );
     assert.notInclude(script, "node_modules/electron");
+  });
+
+  it("declares why the macOS app needs protected access", () => {
+    const values = resolveMacBundleInfoPlistStrings("T3 Code (Dev) Launcher");
+
+    assert.equal(
+      values.NSScreenCaptureUsageDescription,
+      "Pulse Next captures the active window when you use the snapshot shortcut.",
+    );
+    assert.equal(
+      values.NSDocumentsFolderUsageDescription,
+      "Pulse Next reads project files you open in the desktop app.",
+    );
+    assert.equal(
+      values.NSMicrophoneUsageDescription,
+      "Pulse Next uses the microphone to turn your speech into composer text.",
+    );
+  });
+
+  it("ad-hoc signs the complete development app bundle", () => {
+    assert.deepEqual(resolveMacCodeSignArguments("/runtime/T3 Code (Dev).app"), [
+      "--force",
+      "--deep",
+      "--sign",
+      "-",
+      "--timestamp=none",
+      "/runtime/T3 Code (Dev).app",
+    ]);
+  });
+
+  it("restores execute permissions on an unchanged launcher", () => {
+    const directory = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "t3-launcher-"));
+    const launcherPath = NodePath.join(directory, "launcher");
+    try {
+      writeDevelopmentLauncherScript(launcherPath, "/runtime/Electron");
+      NodeFS.chmodSync(launcherPath, 0o644);
+
+      assert.isFalse(writeDevelopmentLauncherScript(launcherPath, "/runtime/Electron"));
+      assert.equal(
+        NodeFS.statSync(launcherPath).mode & 0o777,
+        process.platform === "win32" ? 0o666 : 0o755,
+      );
+    } finally {
+      NodeFS.rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   it("derives launcher icons from canonical development and production assets", () => {

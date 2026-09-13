@@ -172,6 +172,7 @@ const run = <A, I extends ResponseInput>(
     let requestUrl = new URL(config.path, input.prepared.httpBaseUrl).toString();
     const response = yield* executeAuthenticatedEnvironmentHttpRequest({
       ...input,
+      group: "orchestration",
       method: config.method,
       url: (httpBaseUrl) => {
         requestUrl = new URL(config.path, httpBaseUrl).toString();

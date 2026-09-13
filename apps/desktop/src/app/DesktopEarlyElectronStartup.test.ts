@@ -82,6 +82,8 @@ describe("DesktopEarlyElectronStartup", () => {
 
     assert.deepEqual(options, {
       linuxWmClass: "pulsenext-dev",
+      isDevelopment: true,
+      linuxDesktopEntryName: "pulsenext-dev.desktop",
       passwordStore: "gnome-libsecret",
     });
   });
