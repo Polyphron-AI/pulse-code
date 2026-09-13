@@ -21,6 +21,7 @@ import {
   type ModelUsage,
   type McpServerConfig,
   type McpServerStatus,
+  type McpSetServersResult,
 } from "@anthropic-ai/claude-agent-sdk";
 import { parseCliArgs } from "@t3tools/shared/cliArgs";
 import { isWorkspaceImagePreviewPath } from "@t3tools/shared/filePreview";
@@ -382,7 +383,9 @@ interface ClaudeQueryRuntime extends AsyncIterable<SDKMessage> {
   readonly setPermissionMode: (mode: PermissionMode) => Promise<void>;
   readonly setMaxThinkingTokens: (maxThinkingTokens: number | null) => Promise<void>;
   readonly close: () => void;
-  readonly setMcpServers?: (servers: Record<string, McpServerConfig>) => Promise<unknown>;
+  readonly setMcpServers?: (
+    servers: Record<string, McpServerConfig>,
+  ) => Promise<McpSetServersResult>;
   readonly mcpServerStatus?: () => Promise<McpServerStatus[]>;
 }
 
@@ -1999,6 +2002,17 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
       }) as ClaudeQueryRuntime);
 
   const sessions = new Map<ThreadId, ClaudeSessionContext>();
+  const sameDirectory = Effect.fn("sameClaudeMcpDirectory")(function* (
+    left: string,
+    right: string,
+  ) {
+    const canonical = (value: string) => {
+      const lexical = path.resolve(value);
+      return fileSystem.realPath(lexical).pipe(Effect.orElseSucceed(() => lexical));
+    };
+    const [canonicalLeft, canonicalRight] = yield* Effect.all([canonical(left), canonical(right)]);
+    return path.resolve(canonicalLeft) === path.resolve(canonicalRight);
+  });
   const runtimeEventQueue = yield* Queue.unbounded<ProviderRuntimeEvent>();
 
   const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
@@ -5134,7 +5148,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     const readStatus = context.query.mcpServerStatus;
     const statusExit = yield* Effect.exit(
       Effect.tryPromise({
-        try: () => readStatus(),
+        try: () => readStatus.call(context.query),
         catch: (cause) =>
           new ProviderAdapterRequestError({
             provider: PROVIDER,
@@ -5166,8 +5180,21 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
       }));
     }
     const mcpSession = McpProviderSession.readMcpProviderSession(threadId);
+    const invalidCwdIds = new Set<string>();
+    const configurableServers: Array<ProviderManagedMcpServer> = [];
+    for (const server of servers) {
+      if (
+        server.transport === "stdio" &&
+        server.cwd !== undefined &&
+        !(yield* sameDirectory(server.cwd, context.session.cwd ?? process.cwd()))
+      ) {
+        invalidCwdIds.add(server.id);
+      } else {
+        configurableServers.push(server);
+      }
+    }
     const dynamicServers: Record<string, McpServerConfig> = Object.fromEntries([
-      ...servers.map(
+      ...configurableServers.map(
         (server) => [managedMcpName(server.id), claudeManagedMcpConfig(server)] as const,
       ),
       ...(mcpSession
@@ -5186,7 +5213,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     const setServers = context.query.setMcpServers;
     const setExit = yield* Effect.exit(
       Effect.tryPromise({
-        try: () => setServers(dynamicServers),
+        try: () => setServers.call(context.query, dynamicServers),
         catch: (cause) =>
           new ProviderAdapterRequestError({
             provider: PROVIDER,
@@ -5203,7 +5230,28 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         message: "Claude MCP connections could not be prepared.",
       }));
     }
-    return yield* readManagedMcpStatus(threadId, servers);
+    const setErrors = new Set(
+      Object.keys(setExit.value.errors).flatMap((name) =>
+        name.startsWith("pulse_") ? [name.slice("pulse_".length)] : [],
+      ),
+    );
+    const statuses = yield* readManagedMcpStatus(threadId, servers);
+    return statuses.map((status) =>
+      invalidCwdIds.has(status.id)
+        ? {
+            id: status.id,
+            status: "failed" as const,
+            message:
+              "This local command uses a different working directory than the Claude thread.",
+          }
+        : setErrors.has(status.id)
+          ? {
+              id: status.id,
+              status: "failed" as const,
+              message: "Claude MCP connections could not be prepared.",
+            }
+          : status,
+    );
   });
 
   const stopSession: ClaudeAdapterShape["stopSession"] = Effect.fn("stopSession")(

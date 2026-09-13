@@ -12,6 +12,7 @@ import type {
   SDKUserMessage,
   McpServerConfig,
   McpServerStatus,
+  McpSetServersResult,
 } from "@anthropic-ai/claude-agent-sdk";
 import {
   ApprovalRequestId,
@@ -77,6 +78,7 @@ class FakeClaudeQuery implements AsyncIterable<SDKMessage> {
   public mcpStatuses: McpServerStatus[] = [];
   public mcpSetError: unknown | undefined;
   public mcpStatusError: unknown | undefined;
+  public mcpSetResult: McpSetServersResult = { added: [], removed: [], errors: {} };
 
   emit(message: SDKMessage): void {
     if (this.done) {
@@ -124,15 +126,16 @@ class FakeClaudeQuery implements AsyncIterable<SDKMessage> {
     this.setMaxThinkingTokensCalls.push(maxThinkingTokens);
   };
 
-  readonly setMcpServers = async (servers: Record<string, McpServerConfig>): Promise<void> => {
+  async setMcpServers(servers: Record<string, McpServerConfig>): Promise<McpSetServersResult> {
     this.setMcpServersCalls.push(servers);
     if (this.mcpSetError !== undefined) throw this.mcpSetError;
-  };
+    return this.mcpSetResult;
+  }
 
-  readonly mcpServerStatus = async (): Promise<McpServerStatus[]> => {
+  async mcpServerStatus(): Promise<McpServerStatus[]> {
     if (this.mcpStatusError !== undefined) throw this.mcpStatusError;
     return this.mcpStatuses;
-  };
+  }
 
   readonly close = (): void => {
     this.closeCalls += 1;
@@ -380,6 +383,98 @@ describe("ClaudeAdapterLive", () => {
         "local",
       ]);
       assert.equal(harness.getLastCreateQueryInput()?.options.strictMcpConfig, undefined);
+      assert.deepEqual(
+        yield* adapter.readManagedMcpStatus!(THREAD_ID, [
+          {
+            id: "remote",
+            name: "Remote",
+            transport: "http",
+            url: "https://mcp.example.test",
+            headers: {},
+          },
+        ]),
+        [{ id: "remote", status: "ready" }],
+      );
+      harness.query.finish();
+    }).pipe(
+      Effect.provideService(Random.Random, makeDeterministicRandomService()),
+      Effect.provide(harness.layer),
+    );
+  });
+
+  it.effect("rejects a managed MCP stdio cwd outside the Claude thread", () => {
+    const harness = makeHarness({ cwd: process.cwd() });
+    return Effect.gen(function* () {
+      const adapter = yield* ClaudeAdapter;
+      yield* adapter.startSession({
+        threadId: THREAD_ID,
+        provider: ProviderDriverKind.make("claudeAgent"),
+        runtimeMode: "full-access",
+        cwd: process.cwd(),
+      });
+      const statuses = yield* adapter.prepareManagedMcp!(THREAD_ID, [
+        {
+          id: "other-cwd",
+          name: "Other cwd",
+          transport: "stdio",
+          command: "mcp-server",
+          args: [],
+          cwd: `${process.cwd()}-elsewhere`,
+          env: {},
+        },
+      ]);
+      assert.equal(statuses[0]?.status, "failed");
+      assert.deepEqual(harness.query.setMcpServersCalls[0], {});
+      const equivalentStatuses = yield* adapter.prepareManagedMcp!(THREAD_ID, [
+        {
+          id: "same-cwd",
+          name: "Same cwd",
+          transport: "stdio",
+          command: "mcp-server",
+          args: [],
+          cwd: NodePath.join(process.cwd(), "."),
+          env: {},
+        },
+      ]);
+      assert.deepEqual(equivalentStatuses, [{ id: "same-cwd", status: "unknown" }]);
+      assert.ok(harness.query.setMcpServersCalls[1]?.["pulse_same-cwd"]);
+      harness.query.finish();
+    }).pipe(
+      Effect.provideService(Random.Random, makeDeterministicRandomService()),
+      Effect.provide(harness.layer),
+    );
+  });
+
+  it.effect("honors sanitized managed MCP set errors when status inventory is missing", () => {
+    const harness = makeHarness();
+    return Effect.gen(function* () {
+      const adapter = yield* ClaudeAdapter;
+      yield* adapter.startSession({
+        threadId: THREAD_ID,
+        provider: ProviderDriverKind.make("claudeAgent"),
+        runtimeMode: "full-access",
+      });
+      harness.query.mcpSetResult = {
+        added: [],
+        removed: [],
+        errors: { pulse_failed: "Authorization: secret" },
+      };
+      const statuses = yield* adapter.prepareManagedMcp!(THREAD_ID, [
+        {
+          id: "failed",
+          name: "Failed",
+          transport: "http",
+          url: "https://mcp.example.test",
+          headers: { Authorization: "secret" },
+        },
+      ]);
+      assert.deepEqual(statuses, [
+        {
+          id: "failed",
+          status: "failed",
+          message: "Claude MCP connections could not be prepared.",
+        },
+      ]);
       harness.query.finish();
     }).pipe(
       Effect.provideService(Random.Random, makeDeterministicRandomService()),

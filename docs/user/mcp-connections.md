@@ -54,3 +54,7 @@ selection or continue without a failed connection for one turn.
 For Codex, selected local-command connections cannot assign different values to
 the same environment variable. Pulse reports that conflict before sending; use
 compatible values or select those connections in separate turns.
+
+Claude Code and OpenCode run local MCP servers from the thread's working
+directory. If a connection requests a different working directory, Pulse reports
+the mismatch before sending instead of silently running it elsewhere.
