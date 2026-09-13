@@ -2285,11 +2285,19 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
       result.total_cost_usd >= 0
         ? result.total_cost_usd
         : undefined;
-    // No cost without a snapshot to hang it on: never fabricate usage.
-    const usageSnapshotWithCost: ThreadTokenUsageSnapshot | undefined =
-      usageSnapshot && resultCostUsd !== undefined
-        ? { ...usageSnapshot, costUsd: resultCostUsd }
-        : usageSnapshot;
+    // No cost without a snapshot to hang it on: never fabricate usage. And
+    // never re-emit a cost the current result did not report: snapshots
+    // derived from `lastGoodUsage` carry the previous reading forward, which
+    // would read as a fresh measurement downstream.
+    let usageSnapshotWithCost: ThreadTokenUsageSnapshot | undefined = usageSnapshot;
+    if (usageSnapshot) {
+      if (resultCostUsd !== undefined) {
+        usageSnapshotWithCost = { ...usageSnapshot, costUsd: resultCostUsd };
+      } else if (usageSnapshot.costUsd !== undefined) {
+        const { costUsd: _staleCostUsd, ...withoutCost } = usageSnapshot;
+        usageSnapshotWithCost = withoutCost;
+      }
+    }
 
     const turnState = context.turnState;
     if (!turnState) {

@@ -2695,6 +2695,74 @@ describe("ClaudeAdapterLive", () => {
     );
   });
 
+  it.effect("does not re-emit a stale cost on a later result that reports none", () => {
+    const harness = makeHarness();
+    return Effect.gen(function* () {
+      const adapter = yield* ClaudeAdapter;
+
+      const runtimeEventsFiber = yield* Stream.take(adapter.streamEvents, 9).pipe(
+        Stream.runCollect,
+        Effect.forkChild,
+      );
+
+      yield* adapter.startSession({
+        threadId: THREAD_ID,
+        provider: ProviderDriverKind.make("claudeAgent"),
+        runtimeMode: "full-access",
+      });
+
+      yield* adapter.sendTurn({ threadId: THREAD_ID, input: "hello", attachments: [] });
+
+      harness.query.emit({
+        type: "result",
+        subtype: "success",
+        is_error: false,
+        duration_ms: 1234,
+        duration_api_ms: 1200,
+        num_turns: 1,
+        result: "done",
+        stop_reason: "end_turn",
+        session_id: "sdk-session-result-cost-first",
+        total_cost_usd: 1.2345,
+        usage: { total_tokens: 535000 },
+        modelUsage: {
+          "claude-opus-4-6": { contextWindow: 200000, maxOutputTokens: 64000 },
+        },
+      } as unknown as SDKMessage);
+
+      // A later result with no usage and no cost: the snapshot is rebuilt from
+      // the last good usage, which still carries the earlier cost.
+      harness.query.emit({
+        type: "result",
+        subtype: "success",
+        is_error: false,
+        duration_ms: 10,
+        duration_api_ms: 5,
+        num_turns: 0,
+        result: "",
+        session_id: "sdk-session-result-cost-second",
+      } as unknown as SDKMessage);
+      harness.query.finish();
+
+      const runtimeEvents = Array.from(yield* Fiber.join(runtimeEventsFiber));
+      const usageEvents = runtimeEvents.filter(
+        (event) => event.type === "thread.token-usage.updated",
+      );
+      assert.equal(usageEvents.length >= 2, true);
+      const first = usageEvents[0];
+      const last = usageEvents.at(-1);
+      if (first?.type === "thread.token-usage.updated") {
+        assert.equal(first.payload.usage.costUsd, 1.2345);
+      }
+      if (last?.type === "thread.token-usage.updated") {
+        assert.equal("costUsd" in last.payload.usage, false);
+      }
+    }).pipe(
+      Effect.provideService(Random.Random, makeDeterministicRandomService()),
+      Effect.provide(harness.layer),
+    );
+  });
+
   it.effect("omits costUsd when the SDK result reports no cost", () => {
     const harness = makeHarness();
     return Effect.gen(function* () {
