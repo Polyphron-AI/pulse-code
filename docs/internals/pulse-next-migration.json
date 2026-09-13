@@ -376,7 +376,7 @@
       "Capture actual client versions and unsupported cases; no blanket future-client guarantee."
     ]
   },
-  "nextAction": "Mount the reviewed skills panel using selected-environment authenticated client wiring, then sequence provider invocation, MCP management/preflight integration and dictation upload/settings/composer integration. Services, isolated skills panel and dictation adapters are independently reviewed and integrated. Packaged/VM verification remains blocked until usable features exist.",
+  "nextAction": "Implement Codex structured managed-skill invocation as a dependency-complete contract/reactor/adapter/composer batch. Independently add dictation settings and microphone controls using the reviewed authenticated transport. MCP provider application and attempt-only preflight recovery follow explicit session boundaries. Skills and MCP settings are user-reachable; packaged/VM acceptance still requires the usable launch flows.",
   "parallelIntegrationBatches": [
     {
       "id": "skills-library-and-settings",
@@ -386,7 +386,7 @@
       "integratedRpcRevision": "b40a6fe75",
       "reviewedPanelRevision": "8dc4394d6",
       "integratedPanelRevision": "59cc7b2e6",
-      "remaining": "Mount settings panel through captured environment-specific clients, preserve identity through provider invocation and picker. Panel is not yet user-reachable. RPC uses existing read/operate scopes and one route-lifetime library writer; two real WebSocket tests verify persistence and denied read-only mutation."
+      "remaining": "Preserve structured identity through provider invocation and picker. Settings are now user-reachable with captured environment, live capability and permission gates; see activeTransportBatches."
     },
     {
       "id": "mcp-durable-connections",
@@ -394,8 +394,8 @@
       "state": "service-integrated",
       "reviewedRevision": "07a3637c2",
       "integratedRevision": "924a7e292",
-      "remaining": "Authenticated management, provider session configuration and composer pause/retry/continue integration.",
-      "durabilityLimit": "Secret file and config publication are ordered. Post-publication secret cleanup and directory fsync are best-effort; crashes may leave unreferenced secret files. No general cleanup journal was introduced. Add a focused publication-failure rollback test."
+      "remaining": "Provider session configuration and composer pause/retry/continue integration. Authenticated management and settings are integrated.",
+      "durabilityLimit": "Secret file and config publication are ordered. Post-publication secret cleanup and directory fsync are best-effort; crashes may leave unreferenced secret files. No general cleanup journal was introduced. Publication-failure and interruption tests now cover rollback before rename and preservation after publication."
     },
     {
       "id": "dictation-concrete-adapters",
@@ -403,7 +403,7 @@
       "state": "adapters-integrated",
       "reviewedRevisions": ["93de52dd7", "08bca4c44", "de80752cd"],
       "integratedRevision": "0edfb7b00",
-      "remaining": "Authenticated environment upload, protected Groq key, settings and composer; physical microphone and packaged cross-platform checks. No real audio, model download or provider API call used in fixture tests."
+      "remaining": "Settings and composer; physical microphone and packaged cross-platform checks. Authenticated upload, protected Groq key and client transport are integrated. No real audio, model download or provider API call used in fixture tests."
     }
   ],
   "activeClientBatches": [
@@ -481,7 +481,7 @@
       ],
       "verification": "Independent Sol review; authenticated route tests and real composed-server synthetic key set/status/remove passed. No real microphone, model download or Groq API request.",
       "compatibilityLearning": "HttpRouter.add captures request service requirements: supply handler-only dependencies through typed router middleware, not an outer Layer.provide. POST key action endpoints preserve existing CORS methods. Secrets remain environment-owned, outside upstream ServerSettings.",
-      "remaining": "Authenticated client transport, settings and composer microphone; packaged and physical-device checks.",
+      "remaining": "Settings and composer microphone; packaged and physical-device checks. Authenticated client transport is integrated.",
       "dependsOn": ["558792ae4"],
       "acceptance": "Authenticate and authorize before body parsing; bounded multipart upload; environment-owned Groq secret status/set/remove; synthetic transcriber tests only."
     },
@@ -492,7 +492,7 @@
       "integratedRevisions": ["53a47f74a", "4190f69d5", "9bee2c128", "651a3b8ad", "3d2abd796"],
       "verification": "Independent Sol review; real WebSocket management and read-only authorization checks passed, including secret redaction, retention and absent versus empty overrides.",
       "compatibilityLearning": "Keep Pulse RPCs prefixed and config separate; share one environment service/semaphore across connections. Atomic rename is the publication commit point, so best-effort post-publication failures must not roll back referenced secrets.",
-      "remaining": "Settings UI, provider session configuration and composer pause/retry/continue.",
+      "remaining": "Provider session configuration and composer pause/retry/continue. Settings UI is integrated.",
       "dependsOn": ["558792ae4"],
       "acceptance": "Bounded typed management operations; redacted secrets with explicit retention; saved defaults and thread overrides; root integrates shared RPC and authorization after review."
     }
