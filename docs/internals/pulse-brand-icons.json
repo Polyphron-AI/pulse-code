@@ -123,7 +123,7 @@
       "result": "passed: 4,947 modules transformed"
     }
   ],
-  "frozenRevision": "pending review-fix commit",
+  "frozenRevision": "68270f6b04",
   "review": {
     "passes": 2,
     "result": "The second review rejected overclaims about development web consumption and unsigned SmartScreen identity. The fix adds exhaustive slot classification and separates package metadata, expected signer identity and authenticated signed-build evidence."
