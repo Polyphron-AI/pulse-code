@@ -23,8 +23,6 @@ export function OnboardingDictationStep({ onContinue }: { readonly onContinue: (
   );
 
   const chooseParakeet = async () => {
-    const current = readDictationPreferences();
-    writeDictationPreferences({ ...current, enabled: true, backend: "parakeet" });
     const abort = new AbortController();
     abortRef.current = abort;
     setState("setting-up");
@@ -34,7 +32,11 @@ export function OnboardingDictationStep({ onContinue }: { readonly onContinue: (
       await setupParakeet(abort.signal, ({ loaded, total }) => {
         if (!abort.signal.aborted && total > 0) setProgress(Math.round((loaded / total) * 100));
       });
-      if (!abort.signal.aborted) setState("ready");
+      if (!abort.signal.aborted) {
+        const current = readDictationPreferences();
+        writeDictationPreferences({ ...current, enabled: true, backend: "parakeet" });
+        setState("ready");
+      }
     } catch (cause) {
       if (!abort.signal.aborted) {
         setError(cause instanceof Error ? cause.message : String(cause));
@@ -54,6 +56,16 @@ export function OnboardingDictationStep({ onContinue }: { readonly onContinue: (
   const continueWithParakeet = () => {
     retainModelRef.current = true;
     onContinue();
+  };
+
+  const cancelSetup = () => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    resetParakeet();
+    retainModelRef.current = true;
+    setState("idle");
+    setProgress(null);
+    setError(null);
   };
 
   return (
@@ -80,7 +92,37 @@ export function OnboardingDictationStep({ onContinue }: { readonly onContinue: (
                 ? "Try Parakeet setup again"
                 : "Set up local dictation"}
         </Button>
-        {error ? <p className="text-sm text-error-foreground">Setup failed: {error}</p> : null}
+        {state === "setting-up" ? (
+          <div className="space-y-1" aria-live="polite">
+            <p className="text-sm text-muted-foreground">
+              This is a one-time download. You can cancel and finish setup later from Settings.
+            </p>
+            {progress !== null ? (
+              <div
+                className="h-1.5 overflow-hidden rounded-full bg-muted"
+                role="progressbar"
+                aria-label="Parakeet download progress"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={progress}
+              >
+                <div
+                  className="h-full bg-primary transition-[width]"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+            ) : null}
+            <Button variant="ghost" onClick={cancelSetup}>
+              Cancel download
+            </Button>
+          </div>
+        ) : null}
+        {error ? (
+          <p className="text-sm text-error-foreground" role="alert">
+            Parakeet couldn’t start. Try again, or choose Not now and enable it later in Settings.
+            <span className="mt-1 block text-xs opacity-80">{error}</span>
+          </p>
+        ) : null}
       </div>
       <div className="mt-6 flex justify-between gap-3">
         <Button variant="ghost" disabled={state === "setting-up"} onClick={decline}>

@@ -149,6 +149,15 @@ function ParakeetSetup() {
       }
     }
   };
+  const cancelSetup = () => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    ownsSetupRef.current = false;
+    resetParakeet();
+    setState("idle");
+    setProgress(null);
+    setError(null);
+  };
   return (
     <div className="space-y-2">
       <Button
@@ -164,8 +173,36 @@ function ParakeetSetup() {
             ? "Parakeet ready"
             : "Set up Parakeet"}
       </Button>
+      {state === "setting-up" ? (
+        <div className="space-y-1" aria-live="polite">
+          <p className="text-xs text-muted-foreground">
+            One-time download; it stays on this device for future dictation.
+          </p>
+          {progress !== null ? (
+            <div
+              className="h-1.5 overflow-hidden rounded-full bg-muted"
+              role="progressbar"
+              aria-label="Parakeet download progress"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={progress}
+            >
+              <div
+                className="h-full bg-primary transition-[width]"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+          ) : null}
+          <Button variant="ghost" onClick={cancelSetup}>
+            Cancel download
+          </Button>
+        </div>
+      ) : null}
       {state === "error" ? (
-        <p className="text-sm text-error-foreground">Parakeet setup failed: {error}</p>
+        <p className="text-sm text-error-foreground" role="alert">
+          Parakeet couldn’t start. Try again, or switch to Groq.
+          <span className="mt-1 block text-xs opacity-80">{error}</span>
+        </p>
       ) : null}
     </div>
   );

@@ -17,6 +17,7 @@ import { OnboardingDictationStep } from "./OnboardingDictationStep";
 import {
   readDictationPreferences,
   resetDictationPreferencesForTests,
+  writeDictationPreferences,
 } from "../../voice/dictationPreferences";
 
 const values = new Map<string, string>();
@@ -76,9 +77,10 @@ describe("OnboardingDictationStep", () => {
     await act(() => {
       renderer!.root.findAllByType("button")[0]!.props.onClick();
     });
-    expect(readDictationPreferences()).toMatchObject({ enabled: true, backend: "parakeet" });
+    expect(readDictationPreferences().enabled).toBe(true);
     expect(JSON.stringify(renderer!.toJSON())).toContain("40%");
     await act(() => finish());
+    expect(readDictationPreferences()).toMatchObject({ enabled: true, backend: "parakeet" });
     await click("Continue");
     expect(onContinue).toHaveBeenCalledOnce();
     await act(() => renderer?.unmount());
@@ -87,6 +89,8 @@ describe("OnboardingDictationStep", () => {
   });
 
   it("shows the real setup failure and allows retry", async () => {
+    const current = readDictationPreferences();
+    writeDictationPreferences({ ...current, enabled: false });
     mocks.setup.mockRejectedValueOnce(new Error("CompileError: bad wasm"));
     await act(() => {
       renderer = create(<OnboardingDictationStep onContinue={vi.fn()} />);
@@ -95,6 +99,23 @@ describe("OnboardingDictationStep", () => {
     const output = JSON.stringify(renderer!.toJSON());
     expect(output).toContain("CompileError: bad wasm");
     expect(output).toContain("Try Parakeet setup again");
+    expect(readDictationPreferences().enabled).toBe(false);
+  });
+
+  it("can cancel a download and leave setup available", async () => {
+    let signal!: AbortSignal;
+    mocks.setup.mockImplementation((value: AbortSignal) => {
+      signal = value;
+      return new Promise<void>(() => undefined);
+    });
+    await act(() => {
+      renderer = create(<OnboardingDictationStep onContinue={vi.fn()} />);
+    });
+    await click("Set up local dictation");
+    await click("Cancel download");
+    expect(signal.aborted).toBe(true);
+    expect(JSON.stringify(renderer!.toJSON())).toContain("Set up local dictation");
+    expect(mocks.resetParakeet).toHaveBeenCalledOnce();
   });
 
   it("aborts setup and releases the model when navigation unmounts the step", async () => {
