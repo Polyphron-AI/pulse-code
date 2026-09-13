@@ -1,0 +1,99 @@
+{
+  "feature": "Pulse Next upstream v0.0.40 sync and compatibility-encoded version scheme",
+  "policyVersion": "2026-09-13",
+  "owner": "single implementation owner (Sol)",
+  "branch": "sync/upstream-v040",
+  "worktree": ".worktrees/upstream-v040-probe",
+  "baseRevision": "885200895",
+  "scope": {
+    "included": [
+      "Confirm the branch's upstream base relative to T3 Code v0.0.40.",
+      "Adopt one version string that encodes the T3 version the build is compatible up to, plus a Pulse revision suffix.",
+      "Apply that string at every version source and surface it consistently.",
+      "Document the bump procedure so a future upstream sync is mechanical."
+    ],
+    "excluded": [
+      "Merging upstream/main, which is 214 commits past the v0.0.40 release and belongs to the next upstream line.",
+      "Any push, merge to develop, or pull request. Integration is the coordinator's.",
+      "Repo-wide checks. CI owns those."
+    ]
+  },
+  "findings": [
+    {
+      "id": "F1",
+      "statement": "Upstream tag v0.0.40 (09e8de9c655ae85410bf6b00446f272a01da81c7) is already a full ancestor of this branch; `git rev-list --count v0.0.40 ^HEAD` is 0.",
+      "consequence": "Part one of the task needs no merge. The branch already carries the complete T3 Code v0.0.40 release tree."
+    },
+    {
+      "id": "F2",
+      "statement": "upstream/main is 214 commits ahead of v0.0.40 and its package.json reads 0.0.40 only because upstream bumps the version after cutting a tag.",
+      "consequence": "Merging upstream/main would move Pulse Next past v0.0.40 onto the next development line, contradicting the stated goal. A trial merge produced 28 conflicts, not the 14 the earlier probe recorded, confirming the drift."
+    },
+    {
+      "id": "F3",
+      "statement": "The v0.0.40 tag's own package.json files still declare 0.0.39.",
+      "consequence": "Upstream's package version does not identify the release it belongs to. This is exactly the ambiguity the encoded Pulse version scheme removes."
+    }
+  ],
+  "decision": {
+    "versionString": "0.0.40-pulse.1",
+    "rationale": "The leading 0.0.40 states the T3 Code version this build is compatible up to. The -pulse.N suffix counts Pulse revisions against that same upstream base. One number is used everywhere, so the installer filename, the package manifests and the in-app readout can never disagree.",
+    "bumpRule": "On a future upstream sync, set the leading number to the newly adopted T3 version and reset the suffix to .1. Ship-only Pulse changes increment the suffix."
+  },
+  "acceptanceCases": [
+    {
+      "case": "Every package manifest that carries an app version declares 0.0.40-pulse.1.",
+      "status": "required"
+    },
+    {
+      "case": "The in-app version readout shows the same encoded string, sourced from the manifest rather than a literal.",
+      "status": "required"
+    },
+    {
+      "case": "The desktop installer artifact filename resolves through DESKTOP_ARTIFACT_NAME_TEMPLATE to the same encoded string.",
+      "status": "required"
+    },
+    {
+      "case": "Semver parsers accept the string; it sorts after 0.0.40-nightly.* and before 0.0.40 final, which is correct because a Pulse build is a prerelease of that upstream line.",
+      "status": "required"
+    },
+    {
+      "case": "Nightly branding detection is unaffected; the -pulse. suffix must not match the nightly pattern in apps/web/src/branding.logic.ts.",
+      "status": "required"
+    },
+    {
+      "case": "Pulse identity constants are unchanged by this work; productIdentity.ts stays the single seam.",
+      "status": "required"
+    },
+    {
+      "case": "pnpm-workspace.yaml is not polluted with an allowBuilds placeholder by any install.",
+      "status": "required"
+    },
+    {
+      "case": "Mobile client version display.",
+      "status": "not applicable unless a version readout exists there; recorded in the surface map"
+    },
+    {
+      "case": "Provider adapters, remote and tunnel connection modes.",
+      "status": "not applicable; the version string is not provider or transport shaped"
+    }
+  ],
+  "upstreamCompatibility": {
+    "mandate": "Take upstream structure and inject Pulse values through the productIdentity seam. Minimise explicitly edited upstream lines.",
+    "effectOfF1": "Because no merge was required, zero upstream logic lines were rewritten. The version scheme touches manifest version fields and Pulse-owned documentation only, which is the smallest possible upstream delta."
+  },
+  "evidence": {
+    "location": "reported inline to the coordinator",
+    "focusedTests": []
+  },
+  "blockers": [
+    {
+      "id": "B1",
+      "statement": "Confirmation that 'at v40' means the released v0.0.40 tree (already present) and not upstream/main's post-release line.",
+      "severity": "decision",
+      "assumedAnswer": "the released v0.0.40 tree",
+      "impactIfWrong": "A separate 28-file conflict resolution against upstream/main would be required."
+    }
+  ],
+  "nextAction": "Apply 0.0.40-pulse.1 to every version source, verify the surfaces, document the bump rule, commit in layers."
+}
