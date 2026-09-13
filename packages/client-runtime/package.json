@@ -178,6 +178,10 @@
     "./state/vcs": {
       "types": "./src/state/vcs.ts",
       "default": "./src/state/vcs.ts"
+    },
+    "./state/thread-usage": {
+      "types": "./src/state/threadUsage.ts",
+      "default": "./src/state/threadUsage.ts"
     }
   },
   "scripts": {
