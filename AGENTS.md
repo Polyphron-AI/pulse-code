@@ -104,6 +104,16 @@ An empty database is a bad test. Seed your worktree's `.t3` with a copy of real 
 
 ## Verifying
 
+### Pulse delivery workflow
+
+Before feature work or upstream imports, read [the delivery playbook](docs/operations/pulse-feature-delivery.md)
+and the branch's active JSON ledger. Use one implementation owner, acceptance
+cases before coding, focused checks, and one complete review of a frozen revision.
+Batch findings and recheck affected behavior after fixes. Keep layered commits
+without per-commit review gates. Use short handoffs and compact tool output.
+Preserve correctness checks and Pulse-owned boundaries. Older branches must adopt
+the policy before resuming; do not merge unrelated feature code for instructions.
+
 - Smallest proof that the change works. `vp test run <files>` for the tests you touched, targeted lint and typecheck for the scope you changed.
 - **Do not run repo-wide checks.** No `vp check`, no `vp run -r test`, no `vp run -r typecheck` unless I ask. CI owns the full suite.
 - Backend behavior changes ship with focused tests for that behavior.
