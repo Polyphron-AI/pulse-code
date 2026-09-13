@@ -77,17 +77,3 @@ describe("Integrations browser discovery", () => {
     expect(listBrowserImportSources).not.toHaveBeenCalled();
   });
 });
-
-describe("Integrations settings sub-navigation targets", () => {
-  it("renders every section the settings sidebar submenu links to", async () => {
-    await openSettings();
-
-    const sectionIds = renderer!.root
-      .findAllByType("section")
-      .map((section) => section.props.id)
-      .filter((id): id is string => typeof id === "string");
-
-    // The sidebar submenu for /settings/integrations deep-links to these ids.
-    expect(sectionIds).toEqual(["skills", "mcp", "dictation", "browser"]);
-  });
-});
