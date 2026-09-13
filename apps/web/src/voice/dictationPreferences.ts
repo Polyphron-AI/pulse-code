@@ -24,7 +24,12 @@ function storage(): Storage | null {
 }
 
 export function readDictationPreferences(): DictationPreferences {
-  const raw = storage()?.getItem(STORAGE_KEY);
+  let raw: string | null | undefined;
+  try {
+    raw = storage()?.getItem(STORAGE_KEY);
+  } catch {
+    return memoryPreferences;
+  }
   if (!raw) return memoryPreferences;
   try {
     const value = JSON.parse(raw) as Record<string, unknown>;

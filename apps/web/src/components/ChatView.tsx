@@ -6304,8 +6304,11 @@ export default function ChatView(props: ChatViewProps) {
       notifyDirectAnnotationAttached();
       return;
     }
-    if (sendCtx.pulseSkillsBlockedReason) {
-      toastManager.add({ type: "error", title: sendCtx.pulseSkillsBlockedReason });
+    if (sendCtx.dictationBlockedReason || sendCtx.pulseSkillsBlockedReason) {
+      toastManager.add({
+        type: "error",
+        title: sendCtx.dictationBlockedReason ?? sendCtx.pulseSkillsBlockedReason!,
+      });
       notifyDirectAnnotationAttached();
       return;
     }
@@ -7215,8 +7218,11 @@ export default function ChatView(props: ChatViewProps) {
       if (!sendCtx?.providerAvailable || !sendCtx.interactionModeEnabled) {
         return;
       }
-      if (sendCtx.pulseSkillsBlockedReason) {
-        toastManager.add({ type: "error", title: sendCtx.pulseSkillsBlockedReason });
+      if (sendCtx.dictationBlockedReason || sendCtx.pulseSkillsBlockedReason) {
+        toastManager.add({
+          type: "error",
+          title: sendCtx.dictationBlockedReason ?? sendCtx.pulseSkillsBlockedReason!,
+        });
         return;
       }
       const pulseSkills = sendCtx.pulseSkills.map(({ id, revision }) => ({ id, revision }));
@@ -7369,8 +7375,11 @@ export default function ChatView(props: ChatViewProps) {
     if (!sendCtx?.providerAvailable || !sendCtx.interactionModeEnabled) {
       return;
     }
-    if (sendCtx.pulseSkillsBlockedReason) {
-      toastManager.add({ type: "error", title: sendCtx.pulseSkillsBlockedReason });
+    if (sendCtx.dictationBlockedReason || sendCtx.pulseSkillsBlockedReason) {
+      toastManager.add({
+        type: "error",
+        title: sendCtx.dictationBlockedReason ?? sendCtx.pulseSkillsBlockedReason!,
+      });
       return;
     }
     const pulseSkills = sendCtx.pulseSkills.map(({ id, revision }) => ({ id, revision }));

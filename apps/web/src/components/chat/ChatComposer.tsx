@@ -5035,6 +5035,20 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
               composerProviderState.composerSurfaceClassName,
             )}
           >
+            {isComposerCollapsedMobile || isComposerApprovalState ? null : (
+              <div
+                className="flex justify-end px-3 pt-2 sm:px-4"
+                data-pulse-dictation-controls="true"
+              >
+                <ComposerDictation
+                  state={dictation.state}
+                  disabledReason={dictationDisabledReason}
+                  onStart={dictation.start}
+                  onStop={dictation.stop}
+                  onCancel={dictation.cancel}
+                />
+              </div>
+            )}
             {showCollapsedMobilePromptRow ? (
               <div className="flex items-center justify-between gap-2 px-3 py-2">
                 <button
@@ -5629,13 +5643,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                       </Tooltip>
                     </>
                   ) : null}
-                  <ComposerDictation
-                    state={dictation.state}
-                    disabledReason={dictationDisabledReason}
-                    onStart={dictation.start}
-                    onStop={dictation.stop}
-                    onCancel={dictation.cancel}
-                  />
                   <ComposerFooterPrimaryActions
                     compact={isComposerResting || isComposerPrimaryActionsCompact}
                     activeContextWindow={

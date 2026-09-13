@@ -59,6 +59,7 @@ export const transcribeGroqDictation: AtomCommand<
 > = createEnvironmentCommand(connectionAtomRuntime, {
   label: "pulse-dictation:transcribe",
   execute: ({ audio, fileName, signal }) => {
+    if (signal.aborted) return Effect.interrupt;
     const aborted = Effect.callback<never>((resume) => {
       const interrupt = () => resume(Effect.interrupt);
       if (signal.aborted) {

@@ -47,16 +47,16 @@ export function DictationSettings() {
     : null;
 
   useEffect(() => {
-    writeDictationPreferences({ backend, groqEnvironmentId: environmentId });
-  }, [backend, environmentId]);
+    writeDictationPreferences({ backend, groqEnvironmentId });
+  }, [backend, groqEnvironmentId]);
 
   if (!isReady) return <p className="text-sm text-muted-foreground">Checking environments…</p>;
   return (
     <div className="space-y-5">
       <div className="space-y-3">
         <p className="text-[13px] text-muted-foreground">
-          Choose where recordings will be transcribed. Dictation controls are not available in the
-          composer yet.
+          Choose where recordings will be transcribed. Use the microphone in the composer to record,
+          then review the inserted text before sending.
         </p>
         <RadioGroup
           value={backend}
@@ -200,6 +200,7 @@ function GroqEnvironmentConfiguration({
   const removeKey = useAtomCommand(deleteGroqApiKey, { reportFailure: false });
   const [apiKey, setApiKey] = useState("");
   const [configured, setConfigured] = useState<boolean | null>(null);
+  const [mutating, setMutating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const generation = useRef(0);
   const accessKey = `${environmentId}:${projection?.source}:${supported}:${fresh}:${canRead}:${canOperate}`;
@@ -207,6 +208,7 @@ function GroqEnvironmentConfiguration({
     setApiKey("");
     setConfigured(null);
     setError(null);
+    setMutating(false);
     generation.current += 1;
     const current = generation.current;
     if (!supported || !canRead) return;
@@ -220,7 +222,9 @@ function GroqEnvironmentConfiguration({
     };
   }, [accessKey]);
   const mutate = async (kind: "save" | "remove") => {
-    const current = generation.current;
+    if (mutating || !supported || !canOperate) return;
+    const current = ++generation.current;
+    setMutating(true);
     setError(null);
     const result =
       kind === "save"
@@ -228,6 +232,7 @@ function GroqEnvironmentConfiguration({
         : await removeKey({ environmentId, input: {} });
     setApiKey("");
     if (current !== generation.current) return;
+    setMutating(false);
     if (result._tag === "Success") setConfigured(kind === "save");
     else setError(String(squashAtomCommandFailure(result)));
   };
@@ -257,17 +262,22 @@ function GroqEnvironmentConfiguration({
           <Input
             nativeInput
             type="password"
+            disabled={mutating}
             autoComplete="off"
             value={apiKey}
             onChange={(event) => setApiKey(event.currentTarget.value)}
             placeholder="Groq API key"
             aria-label="Groq API key"
           />
-          <Button disabled={!apiKey.trim()} onClick={() => void mutate("save")}>
+          <Button disabled={mutating || !apiKey.trim()} onClick={() => void mutate("save")}>
             Save key
           </Button>
           {configured ? (
-            <Button variant="destructive-outline" onClick={() => void mutate("remove")}>
+            <Button
+              disabled={mutating}
+              variant="destructive-outline"
+              onClick={() => void mutate("remove")}
+            >
               Remove key
             </Button>
           ) : null}

@@ -23,6 +23,20 @@ beforeEach(() => {
 });
 
 describe("dictation preferences", () => {
+  it("keeps session preferences when browser storage reads are denied", () => {
+    writeDictationPreferences({ backend: "groq", groqEnvironmentId: EnvironmentId.make("office") });
+    vi.stubGlobal("window", {
+      localStorage: {
+        getItem: () => {
+          throw new Error("Storage denied");
+        },
+      },
+    });
+    expect(resolveDictationBackend([EnvironmentId.make("office")])).toEqual({
+      backend: "groq",
+      environmentId: "office",
+    });
+  });
   it("persists only the backend and selected Groq environment", () => {
     writeDictationPreferences({
       backend: "groq",

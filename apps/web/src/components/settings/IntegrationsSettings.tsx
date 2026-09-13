@@ -99,6 +99,7 @@ import { searchableSetting } from "./settingsSearch";
 import { BrowserImportWizard, type WizardTarget } from "./BrowserImportWizard";
 import type { ImportOutcome } from "./browserImportWizard.logic";
 import { ManagedSkillsSettings } from "~/skills/ManagedSkillsSettings";
+import { DictationSettings } from "~/voice/DictationSettings";
 import { McpConnectionsSettings } from "~/mcp";
 
 const FILL_VALUE = "fill";
@@ -1189,6 +1190,9 @@ export function IntegrationsSettingsPanel() {
       </SettingsSection>
       <SettingsSection id="mcp" title="MCP">
         <McpConnectionsSettings />
+      </SettingsSection>
+      <SettingsSection id="dictation" title="Voice dictation">
+        <DictationSettings />
       </SettingsSection>
       <SettingsSection id="browser" title="Browser">
         {/* Server-authoritative, so it stays editable on any client anchored to

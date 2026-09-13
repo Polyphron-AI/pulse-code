@@ -98,7 +98,10 @@ vi.mock("../components/ui/input", () => ({
 }));
 
 import { DictationSettings } from "./DictationSettings";
-import { resetDictationPreferencesForTests } from "./dictationPreferences";
+import {
+  readDictationPreferences,
+  resetDictationPreferencesForTests,
+} from "./dictationPreferences";
 
 let renderer: ReactTestRenderer | undefined;
 const json = () => JSON.stringify(renderer!.toJSON());
@@ -137,6 +140,15 @@ afterEach(async () => {
 });
 
 describe("DictationSettings", () => {
+  it("retains the chosen environment while the environment list is temporarily unavailable", async () => {
+    await render();
+    await click("Use Groq");
+    await click("Choose Office");
+    mocks.environments = [];
+    await act(() => renderer!.update(<DictationSettings />));
+    expect(readDictationPreferences().groqEnvironmentId).toBe("office");
+    expect(json()).toContain("Choose the environment");
+  });
   it("does not set up Parakeet merely by rendering settings", async () => {
     await render();
     expect(mocks.setup).not.toHaveBeenCalled();
