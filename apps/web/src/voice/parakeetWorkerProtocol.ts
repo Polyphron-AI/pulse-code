@@ -50,7 +50,12 @@ export function describeParakeetFailure(error: unknown): ParakeetFailure {
     causes.push(current instanceof Error ? `${current.name}: ${current.message}` : String(current));
     current = current instanceof Error ? current.cause : undefined;
   }
-  return { name: error.name, message: error.message, causes, stack: error.stack };
+  return {
+    name: error.name,
+    message: error.message,
+    causes,
+    ...(error.stack ? { stack: error.stack } : {}),
+  };
 }
 
 /** Rebuild a throwable Error whose text still names the underlying cause. */

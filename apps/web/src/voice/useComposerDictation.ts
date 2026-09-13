@@ -103,7 +103,9 @@ export function useComposerDictation(input: {
   const resolved = resolveDictationBackend(environmentIds);
   const disabledReason =
     resolved.backend === "unavailable"
-      ? "Choose a connected Groq environment in Settings before using dictation."
+      ? resolved.reason === "dictation-disabled"
+        ? "Turn on dictation in Settings before using it."
+        : "Choose a connected Groq environment in Settings before using dictation."
       : null;
   const active =
     controllerState.phase === "preparing" ||
@@ -119,7 +121,11 @@ export function useComposerDictation(input: {
     setGateError(null);
     const captured = resolveDictationBackend(environmentIds);
     if (captured.backend === "unavailable") {
-      setGateError("Choose a connected Groq environment in Settings before using dictation.");
+      setGateError(
+        captured.reason === "dictation-disabled"
+          ? "Turn on dictation in Settings before using it."
+          : "Choose a connected Groq environment in Settings before using dictation.",
+      );
       return;
     }
     if (captured.backend === "groq") {

@@ -24,7 +24,11 @@ beforeEach(() => {
 
 describe("dictation preferences", () => {
   it("keeps session preferences when browser storage reads are denied", () => {
-    writeDictationPreferences({ backend: "groq", groqEnvironmentId: EnvironmentId.make("office") });
+    writeDictationPreferences({
+      enabled: true,
+      backend: "groq",
+      groqEnvironmentId: EnvironmentId.make("office"),
+    });
     vi.stubGlobal("window", {
       localStorage: {
         getItem: () => {
@@ -39,10 +43,12 @@ describe("dictation preferences", () => {
   });
   it("persists only the backend and selected Groq environment", () => {
     writeDictationPreferences({
+      enabled: true,
       backend: "groq",
       groqEnvironmentId: EnvironmentId.make("office"),
     });
     expect(readDictationPreferences()).toEqual({
+      enabled: true,
       backend: "groq",
       groqEnvironmentId: "office",
     });
@@ -51,6 +57,7 @@ describe("dictation preferences", () => {
 
   it("never reroutes Groq when its selected environment is unavailable", () => {
     writeDictationPreferences({
+      enabled: true,
       backend: "groq",
       groqEnvironmentId: EnvironmentId.make("office"),
     });
@@ -62,9 +69,17 @@ describe("dictation preferences", () => {
 
   it("returns the selected backend as an immutable recording-start snapshot", () => {
     const office = EnvironmentId.make("office");
-    writeDictationPreferences({ backend: "groq", groqEnvironmentId: office });
+    writeDictationPreferences({ enabled: true, backend: "groq", groqEnvironmentId: office });
     const snapshot = resolveDictationBackend([office]);
-    writeDictationPreferences({ backend: "parakeet", groqEnvironmentId: office });
+    writeDictationPreferences({ enabled: true, backend: "parakeet", groqEnvironmentId: office });
     expect(snapshot).toEqual({ backend: "groq", environmentId: office });
+  });
+
+  it("disables dictation without changing the selected backend", () => {
+    writeDictationPreferences({ enabled: false, backend: "parakeet", groqEnvironmentId: null });
+    expect(resolveDictationBackend([])).toEqual({
+      backend: "unavailable",
+      reason: "dictation-disabled",
+    });
   });
 });

@@ -101,6 +101,7 @@ import { DictationSettings } from "./DictationSettings";
 import {
   readDictationPreferences,
   resetDictationPreferencesForTests,
+  writeDictationPreferences,
 } from "./dictationPreferences";
 
 let renderer: ReactTestRenderer | undefined;
@@ -155,6 +156,27 @@ describe("DictationSettings", () => {
     expect(json()).toContain("Set up Parakeet");
   });
 
+  it("shows Parakeet download progress and the real setup error", async () => {
+    mocks.setup.mockImplementation((_signal: AbortSignal, progress: (value: object) => void) => {
+      progress({ loaded: 50, total: 100, file: "encoder.onnx" });
+      return Promise.reject(new Error("CompileError: bad wasm"));
+    });
+    await render();
+    await click("Set up Parakeet");
+    expect(json()).toContain("CompileError: bad wasm");
+    expect(json()).toContain("Set up Parakeet");
+  });
+
+  it("can reverse an onboarding decline", async () => {
+    writeDictationPreferences({ enabled: false, backend: "parakeet", groqEnvironmentId: null });
+    await render();
+    expect(json()).toContain("Dictation stays off");
+    const checkbox = renderer!.root.findByProps({ "data-slot": "checkbox" });
+    await act(() => checkbox.props.onCheckedChange(true));
+    expect(readDictationPreferences().enabled).toBe(true);
+    expect(json()).toContain("Set up Parakeet");
+  });
+
   it("does not call dictation endpoints without a fresh live capability", async () => {
     mocks.configSource = "cache";
     await render();
@@ -168,9 +190,14 @@ describe("DictationSettings", () => {
     await render();
     await click("Use Groq");
     await click("Choose Office");
-    const input = renderer!.root.findByType("input");
+    const input = renderer!.root
+      .findAllByType("input")
+      .find((item) => item.props.type === "password")!;
     await act(() => input.props.onChange({ currentTarget: { value: "secret-value" } }));
-    expect(renderer!.root.findByType("input").props.value).toBe("secret-value");
+    expect(
+      renderer!.root.findAllByType("input").find((item) => item.props.type === "password")!.props
+        .value,
+    ).toBe("secret-value");
     mocks.pending = true;
     await act(() => renderer!.update(<DictationSettings />));
     mocks.pending = false;
@@ -207,7 +234,8 @@ describe("DictationSettings", () => {
     await click("Choose Office");
     await act(() =>
       renderer!.root
-        .findByType("input")
+        .findAllByType("input")
+        .find((item) => item.props.type === "password")!
         .props.onChange({ currentTarget: { value: "secret-value" } }),
     );
     await act(() => {

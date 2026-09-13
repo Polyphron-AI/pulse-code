@@ -11,6 +11,7 @@ import { AsyncResult } from "effect/unstable/reactivity";
 
 import { resolveEnvironmentOptionLabel } from "../components/BranchToolbar.logic";
 import { Button } from "../components/ui/button";
+import { Checkbox } from "../components/ui/checkbox";
 import { Input } from "../components/ui/input";
 import { Radio, RadioGroup } from "../components/ui/radio-group";
 import {
@@ -36,6 +37,7 @@ export function DictationSettings() {
   const { environments, isReady } = useEnvironments();
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const initial = useRef(readDictationPreferences()).current;
+  const [enabled, setEnabled] = useState(initial.enabled);
   const [backend, setBackend] = useState<DictationBackendPreference>(initial.backend);
   const [groqEnvironmentId, setGroqEnvironmentId] = useState<EnvironmentId | null>(
     initial.groqEnvironmentId,
@@ -47,68 +49,90 @@ export function DictationSettings() {
     : null;
 
   useEffect(() => {
-    writeDictationPreferences({ backend, groqEnvironmentId });
-  }, [backend, groqEnvironmentId]);
+    writeDictationPreferences({ enabled, backend, groqEnvironmentId });
+  }, [enabled, backend, groqEnvironmentId]);
 
   if (!isReady) return <p className="text-sm text-muted-foreground">Checking environments…</p>;
   return (
     <div className="space-y-5">
-      <div className="space-y-3">
-        <p className="text-[13px] text-muted-foreground">
-          Choose where recordings will be transcribed. Use the microphone in the composer to record,
-          then review the inserted text before sending.
+      <label className="flex items-center gap-3 text-sm font-medium">
+        <Checkbox checked={enabled} onCheckedChange={setEnabled} />
+        Enable dictation in the composer
+      </label>
+      {!enabled ? (
+        <p className="text-sm text-muted-foreground">
+          Dictation stays off until you enable it here.
         </p>
-        <RadioGroup
-          value={backend}
-          onValueChange={(value) => setBackend(value as DictationBackendPreference)}
-        >
-          <label className="flex items-start gap-3 rounded-lg border border-border p-3">
-            <Radio value="parakeet" />
-            <span>
-              <span className="block text-sm font-medium">Parakeet on this device</span>
-              <span className="block text-xs text-muted-foreground">
-                Audio stays in this browser. The model downloads only when you choose setup.
-              </span>
-            </span>
-          </label>
-          <label className="flex items-start gap-3 rounded-lg border border-border p-3">
-            <Radio value="groq" />
-            <span>
-              <span className="block text-sm font-medium">Groq through an environment</span>
-              <span className="block text-xs text-muted-foreground">
-                The recording goes to the selected Pulse environment, then to Groq.
-              </span>
-            </span>
-          </label>
-        </RadioGroup>
-      </div>
-      {backend === "parakeet" ? (
-        <ParakeetSetup />
-      ) : (
-        <GroqEnvironment
-          environmentId={environmentId}
-          environments={environments}
-          primaryEnvironmentId={primaryEnvironmentId}
-          onEnvironmentChange={setGroqEnvironmentId}
-        />
-      )}
+      ) : null}
+      {enabled ? (
+        <>
+          <div className="space-y-3">
+            <p className="text-[13px] text-muted-foreground">
+              Choose where recordings will be transcribed. Use the microphone in the composer to
+              record, then review the inserted text before sending.
+            </p>
+            <RadioGroup
+              value={backend}
+              onValueChange={(value) => setBackend(value as DictationBackendPreference)}
+            >
+              <label className="flex items-start gap-3 rounded-lg border border-border p-3">
+                <Radio value="parakeet" />
+                <span>
+                  <span className="block text-sm font-medium">Parakeet on this device</span>
+                  <span className="block text-xs text-muted-foreground">
+                    Audio stays in this browser. The model downloads only when you choose setup.
+                  </span>
+                </span>
+              </label>
+              <label className="flex items-start gap-3 rounded-lg border border-border p-3">
+                <Radio value="groq" />
+                <span>
+                  <span className="block text-sm font-medium">Groq through an environment</span>
+                  <span className="block text-xs text-muted-foreground">
+                    The recording goes to the selected Pulse environment, then to Groq.
+                  </span>
+                </span>
+              </label>
+            </RadioGroup>
+          </div>
+          {backend === "parakeet" ? (
+            <ParakeetSetup />
+          ) : (
+            <GroqEnvironment
+              environmentId={environmentId}
+              environments={environments}
+              primaryEnvironmentId={primaryEnvironmentId}
+              onEnvironmentChange={setGroqEnvironmentId}
+            />
+          )}
+        </>
+      ) : null}
     </div>
   );
 }
 
 function ParakeetSetup() {
   const [state, setState] = useState<"idle" | "setting-up" | "ready" | "error">("idle");
+  const [error, setError] = useState<string | null>(null);
+  const [progress, setProgress] = useState<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   useEffect(() => () => abortRef.current?.abort(), []);
   const setup = async () => {
     const abort = new AbortController();
     abortRef.current = abort;
     setState("setting-up");
+    setError(null);
+    setProgress(null);
     try {
-      await setupParakeet(abort.signal);
+      await setupParakeet(abort.signal, ({ loaded, total }) => {
+        if (!abort.signal.aborted && total > 0) setProgress(Math.round((loaded / total) * 100));
+      });
       if (!abort.signal.aborted) setState("ready");
-    } catch {
-      if (!abort.signal.aborted) setState("error");
+    } catch (cause) {
+      if (!abort.signal.aborted) {
+        setError(cause instanceof Error ? cause.message : String(cause));
+        setState("error");
+      }
     }
   };
   return (
@@ -119,15 +143,15 @@ function ParakeetSetup() {
         onClick={() => void setup()}
       >
         {state === "setting-up"
-          ? "Setting up…"
+          ? progress === null
+            ? "Setting up…"
+            : `Downloading… ${String(progress)}%`
           : state === "ready"
             ? "Parakeet ready"
             : "Set up Parakeet"}
       </Button>
       {state === "error" ? (
-        <p className="text-sm text-error-foreground">
-          Parakeet setup failed. Check the connection and available memory.
-        </p>
+        <p className="text-sm text-error-foreground">Parakeet setup failed: {error}</p>
       ) : null}
     </div>
   );

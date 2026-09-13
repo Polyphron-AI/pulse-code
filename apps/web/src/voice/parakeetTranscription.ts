@@ -1,12 +1,16 @@
 import type { PulseDictationTranscriber } from "./pulseDictation";
+import {
+  describeWorkerErrorEvent,
+  parakeetFailureToError,
+  type ParakeetSetupProgress,
+  type ParakeetWorkerReply,
+} from "./parakeetWorkerProtocol";
 
-interface WorkerReply {
-  readonly id: number;
-  readonly text?: string;
-  readonly error?: string;
-}
-
-type Pending = { resolve(text: string): void; reject(error: Error): void };
+type Pending = {
+  resolve(text: string): void;
+  reject(error: Error): void;
+  onProgress?: (progress: ParakeetSetupProgress) => void;
+};
 
 async function decodeToMono16Khz(audio: Blob): Promise<Float32Array> {
   const context = new AudioContext({ sampleRate: 16_000 });
@@ -44,9 +48,12 @@ export class ParakeetTranscriber implements PulseDictationTranscriber<Blob> {
     this.#decode = decode;
   }
 
-  async setup(signal: AbortSignal): Promise<void> {
+  async setup(
+    signal: AbortSignal,
+    onProgress?: (progress: ParakeetSetupProgress) => void,
+  ): Promise<void> {
     const generation = this.#generation;
-    await this.#request("setup", undefined, signal);
+    await this.#request("setup", undefined, signal, onProgress);
     if (generation !== this.#generation) throw new Error("Parakeet setup was cancelled.");
     this.#readyGeneration = generation;
   }
@@ -77,20 +84,23 @@ export class ParakeetTranscriber implements PulseDictationTranscriber<Blob> {
   #getWorker(): Worker {
     if (this.#worker) return this.#worker;
     const worker = this.#createWorker();
-    worker.addEventListener("message", (event: MessageEvent<WorkerReply>) => {
+    worker.addEventListener("message", (event: MessageEvent<ParakeetWorkerReply>) => {
       const item = this.#pending.get(event.data.id);
       if (!item) return;
+      if (event.data.kind === "progress") {
+        const { loaded, total, file } = event.data;
+        item.onProgress?.({ loaded, total, file });
+        return;
+      }
       this.#pending.delete(event.data.id);
-      if (event.data.error) item.reject(new Error(event.data.error));
-      else item.resolve(event.data.text ?? "");
+      if (event.data.kind === "failure") item.reject(parakeetFailureToError(event.data.failure));
+      else item.resolve(event.data.text);
     });
-    worker.addEventListener("error", () => {
+    worker.addEventListener("error", (event) => {
       this.#generation += 1;
       this.#readyGeneration = null;
       for (const item of this.#pending.values()) {
-        item.reject(
-          new Error("Parakeet could not start. Check the connection and available memory."),
-        );
+        item.reject(parakeetFailureToError(describeWorkerErrorEvent(event)));
       }
       this.#pending.clear();
       worker.terminate();
@@ -104,6 +114,7 @@ export class ParakeetTranscriber implements PulseDictationTranscriber<Blob> {
     action: "setup" | "transcribe",
     pcm: Float32Array | undefined,
     signal: AbortSignal,
+    onProgress?: (progress: ParakeetSetupProgress) => void,
   ): Promise<string> {
     if (signal.aborted) return Promise.reject(signal.reason);
     const worker = this.#getWorker();
@@ -116,6 +127,7 @@ export class ParakeetTranscriber implements PulseDictationTranscriber<Blob> {
       };
       signal.addEventListener("abort", abort, { once: true });
       this.#pending.set(id, {
+        ...(onProgress ? { onProgress } : {}),
         resolve: (text) => {
           signal.removeEventListener("abort", abort);
           resolve(text);

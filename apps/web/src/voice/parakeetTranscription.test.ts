@@ -8,8 +8,8 @@ class FakeWorker extends EventTarget {
   reply(data: object) {
     this.dispatchEvent(new MessageEvent("message", { data }));
   }
-  fail() {
-    this.dispatchEvent(new Event("error"));
+  fail(event: Event = new Event("error")) {
+    this.dispatchEvent(event);
   }
 }
 
@@ -30,7 +30,7 @@ describe("ParakeetTranscriber", () => {
 
     const setup = transcriber.setup(new AbortController().signal);
     expect(worker.postMessage).toHaveBeenCalledWith({ id: 1, action: "setup", pcm: undefined }, []);
-    worker.reply({ id: 1, text: "" });
+    worker.reply({ id: 1, kind: "result", text: "" });
     await setup;
   });
 
@@ -51,7 +51,7 @@ describe("ParakeetTranscriber", () => {
     const decode = vi.fn(async () => pcm);
     const transcriber = new ParakeetTranscriber(() => worker as unknown as Worker, decode);
     const setup = transcriber.setup(new AbortController().signal);
-    worker.reply({ id: 1, text: "" });
+    worker.reply({ id: 1, kind: "result", text: "" });
     await setup;
     const audio = new Blob([new Uint8Array([1])], { type: "audio/webm" });
     const pending = transcriber.transcribe(audio, new AbortController().signal);
@@ -60,7 +60,7 @@ describe("ParakeetTranscriber", () => {
     expect(worker.postMessage).toHaveBeenCalledWith({ id: 2, action: "transcribe", pcm }, [
       pcm.buffer,
     ]);
-    worker.reply({ id: 2, text: "local text" });
+    worker.reply({ id: 2, kind: "result", text: "local text" });
     await expect(pending).resolves.toBe("local text");
   });
 
@@ -71,7 +71,7 @@ describe("ParakeetTranscriber", () => {
       async () => new Float32Array([1]),
     );
     const setup = transcriber.setup(new AbortController().signal);
-    worker.reply({ id: 1, text: "" });
+    worker.reply({ id: 1, kind: "result", text: "" });
     await setup;
     const abort = new AbortController();
     const pending = transcriber.transcribe(new Blob([new Uint8Array([1])]), abort.signal);
@@ -88,7 +88,7 @@ describe("ParakeetTranscriber", () => {
     const decode = vi.fn(async () => new Float32Array([1]));
     const transcriber = new ParakeetTranscriber(createWorker, decode);
     const setup = transcriber.setup(new AbortController().signal);
-    worker.reply({ id: 1, text: "" });
+    worker.reply({ id: 1, kind: "result", text: "" });
     await setup;
     transcriber.reset();
 
@@ -105,7 +105,7 @@ describe("ParakeetTranscriber", () => {
     const decoded = deferred<Float32Array>();
     const transcriber = new ParakeetTranscriber(createWorker, () => decoded.promise);
     const setup = transcriber.setup(new AbortController().signal);
-    worker.reply({ id: 1, text: "" });
+    worker.reply({ id: 1, kind: "result", text: "" });
     await setup;
 
     const pending = transcriber.transcribe(
@@ -147,7 +147,7 @@ describe("ParakeetTranscriber", () => {
     const decode = vi.fn(async () => new Float32Array([1]));
     const transcriber = new ParakeetTranscriber(createWorker, decode);
     const setup = transcriber.setup(new AbortController().signal);
-    worker.reply({ id: 1, text: "" });
+    worker.reply({ id: 1, kind: "result", text: "" });
     transcriber.reset();
 
     await expect(setup).rejects.toThrow("setup was cancelled");
@@ -156,5 +156,55 @@ describe("ParakeetTranscriber", () => {
     ).rejects.toThrow("Set up the Parakeet model");
     expect(createWorker).toHaveBeenCalledOnce();
     expect(decode).not.toHaveBeenCalled();
+  });
+
+  it("keeps setup pending through progress and reports it to the caller", async () => {
+    const worker = new FakeWorker();
+    const progress = vi.fn();
+    const transcriber = new ParakeetTranscriber(() => worker as unknown as Worker, vi.fn());
+    let settled = false;
+    const setup = transcriber.setup(new AbortController().signal, progress).finally(() => {
+      settled = true;
+    });
+    worker.reply({ id: 1, kind: "progress", loaded: 25, total: 100, file: "encoder.onnx" });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    expect(progress).toHaveBeenCalledWith({ loaded: 25, total: 100, file: "encoder.onnx" });
+    worker.reply({ id: 1, kind: "result", text: "" });
+    await setup;
+  });
+
+  it("preserves a worker-reported error and cause", async () => {
+    const worker = new FakeWorker();
+    const transcriber = new ParakeetTranscriber(() => worker as unknown as Worker, vi.fn());
+    const setup = transcriber.setup(new AbortController().signal);
+    worker.reply({
+      id: 1,
+      kind: "failure",
+      failure: {
+        name: "TypeError",
+        message: "Glue module mismatch",
+        causes: ["CompileError: bad wasm"],
+      },
+    });
+    await expect(setup).rejects.toThrow(
+      "TypeError: Glue module mismatch (caused by CompileError: bad wasm)",
+    );
+  });
+
+  it("preserves module worker startup error details", async () => {
+    const worker = new FakeWorker();
+    const transcriber = new ParakeetTranscriber(() => worker as unknown as Worker, vi.fn());
+    const setup = transcriber.setup(new AbortController().signal);
+    worker.fail(
+      Object.assign(new Event("error"), {
+        message: "Failed to load module script",
+        filename: "parakeet.worker.js",
+        lineno: 12,
+        colno: 4,
+        error: undefined,
+      }) as ErrorEvent,
+    );
+    await expect(setup).rejects.toThrow("Failed to load module script at parakeet.worker.js:12:4");
   });
 });
