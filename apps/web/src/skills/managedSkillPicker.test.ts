@@ -24,8 +24,8 @@ describe("managed skill picker logic", () => {
     expect(toggleManagedSkillSelection(selected, first)).toBe(selected);
   });
 
-  it("retains stale selections until the user removes or replaces them", () => {
-    expect(staleManagedSkillSelections([first], [{ ...updated } as never])).toEqual([first]);
+  it("trusts a pinned older revision while the skill id remains installed", () => {
+    expect(staleManagedSkillSelections([first], [{ ...updated } as never])).toEqual([]);
   });
 
   it("only blocks Codex turns that carry unavailable selections", () => {
@@ -40,8 +40,11 @@ describe("managed skill picker logic", () => {
       error: false,
       skills: [],
     };
-    expect(managedSkillsBlockedReason(base)).toContain("changed or was removed");
-    expect(managedSkillsBlockedReason({ ...base, providerIsCodex: false })).toBeNull();
+    expect(managedSkillsBlockedReason(base)).toContain("was removed");
+    expect(managedSkillsBlockedReason({ ...base, providerIsCodex: false })).toContain(
+      "only be used with Codex",
+    );
     expect(managedSkillsBlockedReason({ ...base, selected: [] })).toBeNull();
+    expect(managedSkillsBlockedReason({ ...base, skills: [{ ...updated } as never] })).toBeNull();
   });
 });

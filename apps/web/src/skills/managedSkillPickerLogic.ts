@@ -23,8 +23,8 @@ export function staleManagedSkillSelections(
   selected: ReadonlyArray<PulseSkillSelection>,
   skills: ReadonlyArray<PulseSkillRecord>,
 ): ReadonlyArray<PulseSkillSelection> {
-  const available = new Set(skills.map((skill) => `${skill.id}:${skill.revision}`));
-  return selected.filter((selection) => !available.has(`${selection.id}:${selection.revision}`));
+  const available = new Set(skills.map((skill) => skill.id));
+  return selected.filter((selection) => !available.has(selection.id));
 }
 
 export function managedSkillsBlockedReason(input: {
@@ -38,7 +38,10 @@ export function managedSkillsBlockedReason(input: {
   readonly error: boolean;
   readonly skills: ReadonlyArray<PulseSkillRecord>;
 }): string | null {
-  if (!input.providerIsCodex || input.selected.length === 0) return null;
+  if (input.selected.length === 0) return null;
+  if (!input.providerIsCodex) {
+    return "Managed skills can only be used with Codex. Remove them or switch providers.";
+  }
   if (!input.capabilityReady) return "Waiting for managed skills support from this environment.";
   if (!input.supported) return "Managed skills are not supported by this environment.";
   if (!input.canRead || !input.canOperate) {
@@ -47,7 +50,7 @@ export function managedSkillsBlockedReason(input: {
   if (input.error) return "Managed skills could not be loaded. Open Skills and try again.";
   if (input.loading) return "Managed skills are still loading.";
   if (staleManagedSkillSelections(input.selected, input.skills).length > 0) {
-    return "A selected managed skill changed or was removed. Open Skills to update it.";
+    return "A selected managed skill was removed. Open Skills to remove it or import it again.";
   }
   return null;
 }

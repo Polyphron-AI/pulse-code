@@ -3971,8 +3971,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         />
       ),
     },
-    ...(managedSkillPickerState.providerIsCodex &&
-    (managedSkillPickerState.visible || composerPulseSkills.length > 0)
+    ...(managedSkillPickerState.visible || composerPulseSkills.length > 0
       ? [
           {
             id: "skills",
