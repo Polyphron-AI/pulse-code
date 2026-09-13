@@ -62,6 +62,23 @@ anything. The command is offered only for providers that appear under **Usage �
 API-key accounts may not report subscription limits. This also applies to Claude connections
 using a proxy through `ANTHROPIC_AUTH_TOKEN`.
 
+## Usage in the thread
+
+You don't have to leave the thread to see where you stand. When the provider you're about to send
+to has reported subscription limits, a small ring sits next to the context window meter in the
+composer. It fills to whichever limit window is closest to its cap, and turns red once that window
+reaches 90 percent. Hover or tap it for the full breakdown: every window with how much is left and
+when it resets, and how long ago the provider last reported. Those rows are the same ones
+`/usage-limits` and **Usage → Limits** show, so the readings always agree.
+
+This complements `/usage-limits` rather than replacing it. On mobile, use that command to check
+your limits without leaving the conversation.
+
+For providers billed per token rather than by subscription, the context window popover adds a
+**Session cost** line: what this thread has run up so far, at API rates. It keeps counting across
+restarts, because that is money already spent. Threads on a subscription plan don't show it, since
+you aren't billed per token there.
+
 ## Connect a CLIProxyAPI hub
 
 To see pooled accounts, open **Settings → Providers → Usage providers → Add hub**. Choose the
