@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "project": "Pulse Next",
-  "updatedAt": "2026-09-12",
+  "updatedAt": "2026-09-13",
   "status": "launch-services-and-adapters-integrated",
   "upstreamAutomation": {
     "decision": "approved-by-user",
@@ -404,6 +404,30 @@
       "reviewedRevisions": ["93de52dd7", "08bca4c44", "de80752cd"],
       "integratedRevision": "0edfb7b00",
       "remaining": "Authenticated environment upload, protected Groq key, settings and composer; physical microphone and packaged cross-platform checks. No real audio, model download or provider API call used in fixture tests."
+    }
+  ],
+  "activeClientBatches": [
+    {
+      "id": "mcp-settings",
+      "branch": "feat/pulse-next-mcp-settings",
+      "baseRevision": "d84d708d0",
+      "state": "implementing",
+      "acceptance": "Environment-scoped connection CRUD with live capability and fresh permission checks; secrets retained explicitly and never echoed; no provider connection or process starts on save.",
+      "integrationOwner": "Root mounts the reviewed module in existing Integrations settings."
+    },
+    {
+      "id": "dictation-client-transport",
+      "branch": "feat/pulse-next-dictation-client",
+      "baseRevision": "d84d708d0",
+      "state": "implementing",
+      "acceptance": "Reuse authenticated environment HTTP for key management and multipart transcription; validate replies, propagate cancellation, keep original environment identity, never retry transcription automatically.",
+      "remaining": "Settings and microphone composition follow the reviewed transport API."
+    },
+    {
+      "id": "provider-session-boundary",
+      "baseRevision": "d84d708d0",
+      "state": "source-review",
+      "acceptance": "Identify the smallest verified session-preparation integration and current per-provider capabilities before changing shared send behavior."
     }
   ],
   "activeTransportBatches": [
