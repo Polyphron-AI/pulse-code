@@ -432,6 +432,10 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
         <ContextWindowMeter
           usage={props.activeContextWindow}
           modelDisplayName={props.activeThreadModelDisplayName}
+          // Cost visibility intentionally follows the instance the composer
+          // targets, not the one the thread's last turn ran on: it answers
+          // "will the next send cost me money", and a subscription plan
+          // already answers that with its windows.
           costUsd={props.planUsage ? null : props.activeThreadCostUsd}
         />
       ) : null}

@@ -1,4 +1,4 @@
-import { formatUsd } from "@t3tools/shared/usageFormat";
+import { formatThreadCostUsd } from "@t3tools/shared/usageFormat";
 
 import { Button } from "../ui/button";
 import { type ContextWindowSnapshot, formatContextWindowTokens } from "~/lib/contextWindow";
@@ -26,7 +26,7 @@ export function ContextWindowMeter(props: {
   costUsd?: number | null;
 }) {
   const { usage, modelDisplayName } = props;
-  const costUsd = props.costUsd ?? null;
+  const costLabel = formatThreadCostUsd(props.costUsd ?? null);
   const usedPercentage = formatPercentage(usage.usedPercentage);
   const normalizedPercentage = Math.max(0, Math.min(100, usage.usedPercentage ?? 0));
   const radius = 9.75;
@@ -135,15 +135,13 @@ export function ContextWindowMeter(props: {
               </span>
             </div>
           ) : null}
-          {costUsd !== null ? (
+          {costLabel !== null ? (
             <div className="flex items-center justify-between gap-3 text-[11px] leading-4">
               <span className="text-secondary-label">
                 Session cost
                 <span className="ml-1 text-muted-foreground">at API rates</span>
               </span>
-              <span className="font-medium tabular-nums text-secondary-label">
-                {formatUsd(costUsd)}
-              </span>
+              <span className="font-medium tabular-nums text-secondary-label">{costLabel}</span>
             </div>
           ) : null}
           {usage.compactsAutomatically ? (
