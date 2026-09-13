@@ -19,7 +19,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AndroidScreenHeader } from "../../components/AndroidScreenHeader";
 import { AppText as Text } from "../../components/AppText";
 import { ProviderIcon } from "../../components/ProviderIcon";
-import { relativeTime } from "../../lib/time";
+import { formatCountdown, relativeTime } from "../../lib/time";
 import { NativeStackScreenOptions } from "../../native/StackHeader";
 import { useServerConfigs } from "../../state/entities";
 import { useUsage, type EnvironmentUsageStatus } from "../../state/usage";
@@ -158,20 +158,6 @@ const DRIVER_FALLBACK_LABEL: Record<string, string> = {
   claudeAgent: "Claude Code",
   codex: "Codex",
 };
-
-/** "2h 10m", "45m", "3d 4h" — for plan window reset countdowns. */
-function formatCountdown(deltaMs: number): string {
-  const totalMinutes = Math.ceil(deltaMs / 60_000);
-  if (totalMinutes < 60) return `${Math.max(totalMinutes, 1)}m`;
-  const totalHours = Math.floor(totalMinutes / 60);
-  if (totalHours < 24) {
-    const minutes = totalMinutes % 60;
-    return minutes === 0 ? `${totalHours}h` : `${totalHours}h ${minutes}m`;
-  }
-  const days = Math.floor(totalHours / 24);
-  const hours = totalHours % 24;
-  return hours === 0 ? `${days}d` : `${days}d ${hours}h`;
-}
 
 /**
  * Subscription plan rate-limit windows, reported live by Codex and Claude

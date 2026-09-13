@@ -2277,9 +2277,31 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
           }
         : undefined);
 
+    // `total_cost_usd` is cumulative for the running SDK process, so a newer
+    // report always wins over the value carried forward on `lastGoodUsage`.
+    const resultCostUsd =
+      typeof result?.total_cost_usd === "number" &&
+      Number.isFinite(result.total_cost_usd) &&
+      result.total_cost_usd >= 0
+        ? result.total_cost_usd
+        : undefined;
+    // No cost without a snapshot to hang it on: never fabricate usage. And
+    // never re-emit a cost the current result did not report: snapshots
+    // derived from `lastGoodUsage` carry the previous reading forward, which
+    // would read as a fresh measurement downstream.
+    let usageSnapshotWithCost: ThreadTokenUsageSnapshot | undefined = usageSnapshot;
+    if (usageSnapshot) {
+      if (resultCostUsd !== undefined) {
+        usageSnapshotWithCost = { ...usageSnapshot, costUsd: resultCostUsd };
+      } else if (usageSnapshot.costUsd !== undefined) {
+        const { costUsd: _staleCostUsd, ...withoutCost } = usageSnapshot;
+        usageSnapshotWithCost = withoutCost;
+      }
+    }
+
     const turnState = context.turnState;
     if (!turnState) {
-      yield* emitThreadTokenUsage(context, usageSnapshot, {
+      yield* emitThreadTokenUsage(context, usageSnapshotWithCost, {
         rawMethod: "claude/result",
         rawPayload: result ?? { status },
       });
@@ -2353,7 +2375,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
       items: [...turnState.items],
     });
 
-    yield* emitThreadTokenUsage(context, usageSnapshot, {
+    yield* emitThreadTokenUsage(context, usageSnapshotWithCost, {
       rawMethod: "claude/result",
       rawPayload: result ?? { status },
     });

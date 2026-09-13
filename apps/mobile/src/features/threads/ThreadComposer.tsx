@@ -19,6 +19,7 @@ import type { ReactNode } from "react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Image,
   Platform,
   Pressable,
@@ -40,6 +41,9 @@ import { useVoiceDictation } from "./useVoiceDictation";
 import { themeColorWithAlpha } from "../../lib/mobileTheme";
 import { armAgentAwarenessLiveActivityForLocalWork } from "../agent-awareness/remoteRegistration";
 import { scopedThreadKey } from "../../lib/scopedEntities";
+import { buildComposerUsageAlertBody, buildComposerUsageLabel } from "../../lib/composerUsage";
+import { deriveThreadCostUsd } from "@t3tools/client-runtime/state/thread-usage";
+import { useSelectedThreadDetail } from "../../state/use-thread-detail";
 import { mobilePreferencesAtom } from "../../state/preferences";
 
 import { AppText as Text } from "../../components/AppText";
@@ -382,6 +386,24 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
       ) ?? null
     );
   }, [props.serverConfig, props.selectedThread.modelSelection.instanceId]);
+
+  // Cost rides the thread's own activities, so it survives handoffs and
+  // provider restarts; plan usage rides the instance the composer targets.
+  const threadDetail = useSelectedThreadDetail();
+  const threadCostUsd = useMemo(() => {
+    if (!threadDetail || threadDetail.id !== props.selectedThread.id) return null;
+    return deriveThreadCostUsd(threadDetail.activities);
+  }, [threadDetail, props.selectedThread.id]);
+  const usageInput = useMemo(
+    () => ({ planUsage: selectedProviderStatus?.planUsage ?? null, costUsd: threadCostUsd }),
+    [selectedProviderStatus, threadCostUsd],
+  );
+  // The label carries no countdown, so it can be cached; the alert body is
+  // built at press time so its reset countdowns are current.
+  const usageLabel = useMemo(() => buildComposerUsageLabel(usageInput), [usageInput]);
+  const showUsageDetail = useCallback(() => {
+    Alert.alert("Usage", buildComposerUsageAlertBody(usageInput, Date.now()));
+  }, [usageInput]);
 
   // ── Trigger detection ────────────────────────────────────
   const [composerSelection, setComposerSelection] = useState(() => ({
@@ -917,6 +939,16 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
                   maxWidth={152}
                   onPress={openSettings}
                 />
+                {usageLabel !== null ? (
+                  <ComposerInlineControl
+                    accessibilityLabel="Usage details"
+                    icon="chart.bar.xaxis"
+                    label={usageLabel}
+                    maxWidth={168}
+                    onPress={showUsageDetail}
+                    showChevron={false}
+                  />
+                ) : null}
                 {showStopAction ? (
                   <ComposerToolbarButton
                     accessibilityLabel="Stop"

@@ -306,6 +306,9 @@ const ThreadMetadataUpdatedPayload = Schema.Struct({
 });
 export type ThreadMetadataUpdatedPayload = typeof ThreadMetadataUpdatedPayload.Type;
 
+/** Non-negative finite USD amount; cost is fractional, so not an integer. */
+const NonNegativeUsd = Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0));
+
 export const ThreadTokenUsageSnapshot = Schema.Struct({
   usedTokens: NonNegativeInt,
   totalProcessedTokens: Schema.optional(NonNegativeInt),
@@ -322,6 +325,10 @@ export const ThreadTokenUsageSnapshot = Schema.Struct({
   toolUses: Schema.optional(NonNegativeInt),
   durationMs: Schema.optional(NonNegativeInt),
   compactsAutomatically: Schema.optional(Schema.Boolean),
+  // Process-cumulative API-rate cost in USD as reported by the provider, not a
+  // per-turn delta. It resets whenever the provider process restarts, so
+  // clients reconstruct thread totals by summing monotone runs across restarts.
+  costUsd: Schema.optional(NonNegativeUsd),
 });
 export type ThreadTokenUsageSnapshot = typeof ThreadTokenUsageSnapshot.Type;
 

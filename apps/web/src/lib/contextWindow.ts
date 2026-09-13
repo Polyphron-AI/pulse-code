@@ -4,6 +4,10 @@ import {
   type ThreadTokenUsageSnapshot,
 } from "@t3tools/contracts";
 
+// Thread cost lives in client-runtime so mobile derives it identically; it is
+// re-exported here because every web consumer already reaches for this module.
+export { deriveThreadCostUsd } from "@t3tools/client-runtime/state/thread-usage";
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
 }
