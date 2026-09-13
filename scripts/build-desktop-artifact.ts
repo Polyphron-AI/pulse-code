@@ -1286,26 +1286,26 @@ function escapeXml(value: string): string {
     .replaceAll("'", "&apos;");
 }
 
-export function renderMacPasskeyEntitlements(
-  configuration: MacPasskeySigningConfiguration,
-): string {
-  const associatedDomains = configuration.rpDomains
-    .map((domain) => `      <string>webcredentials:${escapeXml(domain)}</string>`)
-    .join("\n");
-
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-  <dict>
-    <key>com.apple.application-identifier</key>
+export function renderMacEntitlements(configuration?: MacPasskeySigningConfiguration): string {
+  const passkeyEntitlements = configuration
+    ? `    <key>com.apple.application-identifier</key>
     <string>${escapeXml(`${configuration.teamId}.${configuration.appId}`)}</string>
     <key>com.apple.developer.team-identifier</key>
     <string>${escapeXml(configuration.teamId)}</string>
     <key>com.apple.developer.associated-domains</key>
     <array>
-${associatedDomains}
+${configuration.rpDomains
+  .map((domain) => `      <string>webcredentials:${escapeXml(domain)}</string>`)
+  .join("\n")}
     </array>
-    <key>com.apple.security.cs.allow-jit</key>
+`
+    : "";
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+${passkeyEntitlements}    <key>com.apple.security.cs.allow-jit</key>
     <true/>
     <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
     <true/>
@@ -1316,6 +1316,12 @@ ${associatedDomains}
   </dict>
 </plist>
 `;
+}
+
+export function renderMacPasskeyEntitlements(
+  configuration: MacPasskeySigningConfiguration,
+): string {
+  return renderMacEntitlements(configuration);
 }
 
 export function resolveFffNativeDependencies(
@@ -2574,10 +2580,10 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
   signed: boolean,
   mockUpdates: boolean,
   mockUpdateServerPort: number | undefined,
-  macPasskeySigning:
+  macEntitlements:
     | {
         readonly entitlementsPath: string;
-        readonly provisioningProfilePath: string;
+        readonly provisioningProfilePath?: string;
       }
     | undefined,
   // Windows only, and false when no Linux node-pty prebuild was bundled: the
@@ -2641,10 +2647,12 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
         },
       ],
       ...(signed ? { sign: path.join(repoRoot, "scripts/sign-macos.ts") } : {}),
-      ...(macPasskeySigning
+      ...(macEntitlements
         ? {
-            entitlements: macPasskeySigning.entitlementsPath,
-            provisioningProfile: macPasskeySigning.provisioningProfilePath,
+            entitlements: macEntitlements.entitlementsPath,
+            ...(macEntitlements.provisioningProfilePath
+              ? { provisioningProfile: macEntitlements.provisioningProfilePath }
+              : {}),
           }
         : {}),
     };
@@ -3620,16 +3628,17 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
         ),
       }
     : undefined;
-  const macEntitlementsPath = macPasskeySigning
-    ? path.join(stageAppDir, "entitlements.mac.plist")
-    : undefined;
-  if (macPasskeySigning && macEntitlementsPath) {
+  const macEntitlementsPath =
+    options.platform === "mac" ? path.join(stageAppDir, "entitlements.mac.plist") : undefined;
+  if (macPasskeySigning) {
     if (!(yield* fs.exists(macPasskeySigning.provisioningProfilePath))) {
       return yield* new MacProvisioningProfileNotFoundError({
         provisioningProfilePath: macPasskeySigning.provisioningProfilePath,
       });
     }
-    yield* fs.writeFileString(macEntitlementsPath, renderMacPasskeyEntitlements(macPasskeySigning));
+  }
+  if (macEntitlementsPath) {
+    yield* fs.writeFileString(macEntitlementsPath, renderMacEntitlements(macPasskeySigning));
   }
 
   // Windows splits dependencies per process: app.asar carries only the
@@ -3681,10 +3690,12 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
       options.signed,
       options.mockUpdates,
       options.mockUpdateServerPort,
-      macPasskeySigning && macEntitlementsPath
+      macEntitlementsPath
         ? {
             entitlementsPath: macEntitlementsPath,
-            provisioningProfilePath: macPasskeySigning.provisioningProfilePath,
+            ...(macPasskeySigning
+              ? { provisioningProfilePath: macPasskeySigning.provisioningProfilePath }
+              : {}),
           }
         : undefined,
       bundlesWslRuntime({ arch: options.arch, prebuildPath: options.wslPrebuild }),

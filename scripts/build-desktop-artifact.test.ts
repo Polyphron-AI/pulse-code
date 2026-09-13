@@ -40,6 +40,7 @@ import {
   preflightLinuxDesktopBuild,
   preflightMacDesktopBuild,
   preflightWindowsDesktopBuild,
+  renderMacEntitlements,
   renderMacPasskeyEntitlements,
   MACOS_MICROPHONE_USAGE_DESCRIPTION,
   resolveClerkPasskeyNativeArtifacts,
@@ -1615,6 +1616,13 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
     assert.include(entitlements, "<key>com.apple.security.device.audio-input</key>");
   });
 
+  it("renders microphone entitlements without passkey configuration", () => {
+    const entitlements = renderMacEntitlements();
+
+    assert.include(entitlements, "<key>com.apple.security.device.audio-input</key>");
+    assert.notInclude(entitlements, "com.apple.developer.associated-domains");
+  });
+
   it("rejects incomplete macOS passkey signing configuration", () => {
     const captureError = (env: Readonly<Record<string, string | undefined>>) => {
       try {
@@ -1714,6 +1722,18 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
       assert.deepStrictEqual(mac.extendInfo, {
         NSMicrophoneUsageDescription: MACOS_MICROPHONE_USAGE_DESCRIPTION,
       });
+    }).pipe(Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env: {} })))),
+  );
+
+  it.effect("uses explicit microphone entitlements without passkey configuration", () =>
+    Effect.gen(function* () {
+      const config = yield* createBuildConfig("mac", "zip", "1.2.3", false, false, undefined, {
+        entitlementsPath: "/tmp/entitlements.mac.plist",
+      });
+
+      const mac = config.mac as Record<string, unknown>;
+      assert.equal(mac.entitlements, "/tmp/entitlements.mac.plist");
+      assert.notProperty(mac, "provisioningProfile");
     }).pipe(Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env: {} })))),
   );
 
