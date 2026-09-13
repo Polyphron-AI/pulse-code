@@ -42,6 +42,10 @@ export function clearMcpProviderSession(threadId: ThreadId): void {
   managedServersByThread.delete(threadId);
 }
 
+export function clearMcpBrowserSession(threadId: ThreadId): void {
+  sessionsByThread.delete(threadId);
+}
+
 export function clearAllMcpProviderSessions(): void {
   sessionsByThread.clear();
   managedServersByThread.clear();

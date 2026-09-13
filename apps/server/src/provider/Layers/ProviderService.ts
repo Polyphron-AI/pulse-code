@@ -772,7 +772,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         // would keep refreshing it. A session restart (runtime mode, cwd,
         // model) re-prepares without stopping, so it relies on this.
         yield* revokeMcpCredential(threadId);
-        yield* Effect.sync(() => McpProviderSession.clearMcpProviderSession(threadId));
+        yield* Effect.sync(() => McpProviderSession.clearMcpBrowserSession(threadId));
         return undefined;
       }
       const credential = yield* issueMcpCredential({ threadId, providerInstanceId });
@@ -1445,15 +1445,15 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
           pulseMcpPreparation.records.delete(input.threadId);
           existingPreparation = undefined;
         }
+        if (existingPreparation?.consumedBy !== undefined) {
+          return { status: "active-turn" } as const;
+        }
         const sessions = yield* Effect.forEach(yield* getAdapterEntries, ([, adapter]) =>
           adapter.listSessions(),
         ).pipe(Effect.map((groups) => groups.flatMap((group) => group)));
         const active = sessions.find((session) => session.threadId === input.threadId);
         if (active?.activeTurnId !== undefined || active?.status === "running") {
           return { status: "active-turn" } as const;
-        }
-        if (existingPreparation?.consumedBy !== undefined) {
-          pulseMcpPreparation.records.delete(input.threadId);
         }
         const adapter = yield* registry.getByInstance(instanceId);
         if (connections.length > 0 && adapter.prepareManagedMcp === undefined) {
@@ -1463,7 +1463,9 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
           input.retry !== true &&
           existingPreparation?.fingerprint === fingerprint &&
           active?.providerInstanceId === instanceId;
-        if (!canReuse) {
+        const hadManagedServers =
+          McpProviderSession.readManagedMcpServers(input.threadId).length > 0;
+        if (!canReuse && (connections.length > 0 || hadManagedServers)) {
           yield* Effect.sync(() =>
             McpProviderSession.setManagedMcpServers(input.threadId, servers),
           );
@@ -1500,6 +1502,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
           id: preparationId,
           providerInstanceId: instanceId,
           fingerprint,
+          cwd: input.providerSession.cwd ?? null,
           selectedConnectionIds,
           runtimeMode: input.providerSession.runtimeMode,
           modelSelection: input.providerSession.modelSelection,
@@ -1588,13 +1591,13 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
           );
         const currentFingerprint = PulseMcpPreparation.fingerprint({
           providerInstanceId: input.providerInstanceId,
-          cwd: yield* registry.getByInstance(input.providerInstanceId).pipe(
-            Effect.flatMap((adapter) => adapter.listSessions()),
-            Effect.map(
-              (sessions) =>
-                sessions.find((session) => session.threadId === input.threadId)?.cwd ?? null,
-            ),
-          ),
+          cwd:
+            (yield* registry.getByInstance(input.providerInstanceId).pipe(
+              Effect.flatMap((adapter) => adapter.listSessions()),
+              Effect.map(
+                (sessions) => sessions.find((session) => session.threadId === input.threadId)?.cwd,
+              ),
+            )) ?? preparation.cwd,
           runtimeMode: input.runtimeMode,
           modelSelection: input.modelSelection,
           servers: currentConnections.map((connection) => ({
@@ -1789,6 +1792,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
           lastRuntimeEventAt: yield* nowIso,
         },
       });
+      pulseMcpPreparation.records.delete(input.threadId);
       yield* analytics.record("provider.turn.sent", {
         provider: routed.adapter.provider,
         model: input.modelSelection?.model,

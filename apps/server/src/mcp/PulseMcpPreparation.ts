@@ -18,6 +18,7 @@ export interface Record {
   readonly id: PulseMcpPreparationId;
   readonly providerInstanceId: ProviderInstanceId;
   readonly fingerprint: string;
+  readonly cwd: string | null;
   readonly selectedConnectionIds: ReadonlyArray<string>;
   readonly runtimeMode: RuntimeMode;
   readonly modelSelection: ModelSelection | undefined;

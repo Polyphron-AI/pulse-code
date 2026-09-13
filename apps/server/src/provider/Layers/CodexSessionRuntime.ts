@@ -1213,6 +1213,9 @@ export const makeCodexSessionRuntime = (
     const mcpStartupStatusesRef = yield* Ref.make(
       new Map<string, { status: "ready" | "failed"; message?: string }>(),
     );
+    const mcpStartupWaitersRef = yield* Ref.make(
+      new Map<string, Deferred.Deferred<{ status: "ready" | "failed"; message?: string }>>(),
+    );
 
     // `~` is not shell-expanded when env vars are set via
     // `child_process.spawn`; `expandHomePath` lets a configured
@@ -1908,15 +1911,25 @@ export const makeCodexSessionRuntime = (
     );
 
     yield* client.handleServerNotification("mcpServer/startupStatus/updated", (payload) => {
-      if (payload.status !== "ready" && payload.status !== "failed") return Effect.void;
-      const status = payload.status;
-      return Ref.update(mcpStartupStatusesRef, (current) => {
-        const next = new Map(current);
-        next.set(payload.name, {
-          status,
-          ...(payload.error ? { message: payload.error } : {}),
+      if (payload.status !== "ready" && payload.status !== "failed") {
+        return Ref.update(mcpStartupStatusesRef, (current) => {
+          const next = new Map(current);
+          next.delete(payload.name);
+          return next;
         });
-        return next;
+      }
+      const observed = {
+        status: payload.status,
+        ...(payload.error ? { message: payload.error } : {}),
+      } as const;
+      return Effect.gen(function* () {
+        yield* Ref.update(mcpStartupStatusesRef, (current) => {
+          const next = new Map(current);
+          next.set(payload.name, observed);
+          return next;
+        });
+        const waiter = (yield* Ref.get(mcpStartupWaitersRef)).get(payload.name);
+        if (waiter) yield* Deferred.succeed(waiter, observed);
       });
     });
 
@@ -2412,22 +2425,35 @@ export const makeCodexSessionRuntime = (
         }),
       prepareManagedMcp: (names) =>
         Effect.gen(function* () {
+          const waiters = new Map(
+            yield* Effect.forEach(names, (name) =>
+              Deferred.make<{ status: "ready" | "failed"; message?: string }>().pipe(
+                Effect.map((waiter) => [name, waiter] as const),
+              ),
+            ),
+          );
+          yield* Ref.update(mcpStartupStatusesRef, (current) => {
+            const next = new Map(current);
+            for (const name of names) next.delete(name);
+            return next;
+          });
+          yield* Ref.set(mcpStartupWaitersRef, waiters);
           yield* client.request("config/mcpServer/reload", undefined);
-          const inventory = yield* client.request("mcpServerStatus/list", {
+          yield* client.request("mcpServerStatus/list", {
             detail: "toolsAndAuthOnly",
           });
+          yield* Effect.forEach(
+            waiters.values(),
+            (waiter) =>
+              Deferred.await(waiter).pipe(Effect.race(Effect.sleep("3 seconds")), Effect.asVoid),
+            { concurrency: "unbounded" },
+          );
           const statuses = yield* Ref.get(mcpStartupStatusesRef);
-          const present = new Set(inventory.data.map((server) => server.name));
+          yield* Ref.set(mcpStartupWaitersRef, new Map());
           return new Map(
             names.map((name) => {
               const observed = statuses.get(name);
-              return [
-                name,
-                observed ??
-                  (present.has(name)
-                    ? { status: "ready" as const }
-                    : { status: "unknown" as const }),
-              ] as const;
+              return [name, observed ?? { status: "unknown" as const }] as const;
             }),
           );
         }),

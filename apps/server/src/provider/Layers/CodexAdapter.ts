@@ -2253,6 +2253,10 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
         const managedMcpServers = McpProviderSession.readManagedMcpServers(input.threadId);
         const quoteToml = (value: string) => JSON.stringify(value);
         const managedMcpEnvironment: NodeJS.ProcessEnv = {};
+        const tomlInlineTable = (entries: Readonly<Record<string, string>>) =>
+          `{ ${Object.entries(entries)
+            .map(([key, value]) => `${quoteToml(key)} = ${quoteToml(value)}`)
+            .join(", ")} }`;
         const managedMcpArgs = managedMcpServers.flatMap((server) => {
           const prefix = `mcp_servers.pulse_${server.id}`;
           if (server.transport === "http") {
@@ -2270,7 +2274,7 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
               `${prefix}.url=${quoteToml(server.url)}`,
               ...(Object.keys(envHeaders).length === 0
                 ? []
-                : ["-c", `${prefix}.env_http_headers=${JSON.stringify(envHeaders)}`]),
+                : ["-c", `${prefix}.env_http_headers=${tomlInlineTable(envHeaders)}`]),
             ];
           }
           for (const [name, value] of Object.entries(server.env)) {
