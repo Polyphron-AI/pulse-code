@@ -123,8 +123,16 @@
   ],
   "openChecks": [
     "Run the packaged desktop app, choose dictation in onboarding, and confirm the model downloads and transcribes.",
-    "Confirm the emitted ORT .jsep.wasm and .jsep.mjs assets are present in the production web bundle and served with a JavaScript and application/wasm content type through the desktop custom scheme."
+    "Confirm the emitted ORT .jsep.wasm and .jsep.mjs assets are served with JavaScript and application/wasm content types through the packaged desktop custom scheme."
   ],
-  "status": "in-progress",
-  "nextAction": "Implement the worker artifact fix, legible errors, progress, and the onboarding step; then run focused voice and onboarding tests."
+  "status": "development-acceptance-passed",
+  "implementationRevision": "1a75b4e230",
+  "verification": {
+    "focusedTests": "29 tests passed across parakeetTranscription, dictationPreferences, DictationSettings, OnboardingDictationStep and welcomeWizard.logic.",
+    "typecheck": "@t3tools/web tsgo --noEmit passed.",
+    "formatAndDiff": "Focused formatting check and git diff --check passed.",
+    "productionBuild": "@t3tools/web production build passed. The output contained parakeet.worker-_mWaoHgA.js, ort-wasm-simd-threaded.jsep-P_aWIpzF.mjs and ort-wasm-simd-threaded.jsep-6MnTkKum.wasm; the worker chunk references both emitted JSEP assets.",
+    "limits": "No real model download, microphone, transcription, packaged desktop app or native mobile run. Existing pnpm-workspace.yaml changes were left untouched and are not part of this slice."
+  },
+  "nextAction": "Run packaged desktop acceptance with a real Parakeet model download and transcription before release."
 }
