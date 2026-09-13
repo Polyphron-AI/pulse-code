@@ -49,17 +49,34 @@ export const deleteGroqApiKey: AtomCommand<
 
 /** Composer-facing authenticated Groq adapter. The selected environment is fixed by the command input. */
 export const transcribeGroqDictation: AtomCommand<
-  EnvironmentTarget<{ readonly audio: Blob; readonly fileName?: string }>,
+  EnvironmentTarget<{
+    readonly audio: Blob;
+    readonly fileName?: string;
+    readonly signal: AbortSignal;
+  }>,
   PulseDictationTranscription,
   unknown
 > = createEnvironmentCommand(connectionAtomRuntime, {
   label: "pulse-dictation:transcribe",
-  execute: ({ audio, fileName }: { readonly audio: Blob; readonly fileName?: string }) =>
-    Effect.flatMap(pulseDictationRequestContext, (context) =>
-      transcribePulseDictation({
-        ...context,
-        audio,
-        ...(fileName === undefined ? {} : { fileName }),
-      }),
-    ),
+  execute: ({ audio, fileName, signal }) => {
+    const aborted = Effect.callback<never>((resume) => {
+      const interrupt = () => resume(Effect.interrupt);
+      if (signal.aborted) {
+        interrupt();
+        return;
+      }
+      signal.addEventListener("abort", interrupt, { once: true });
+      return Effect.sync(() => signal.removeEventListener("abort", interrupt));
+    });
+    return Effect.raceFirst(
+      Effect.flatMap(pulseDictationRequestContext, (context) =>
+        transcribePulseDictation({
+          ...context,
+          audio,
+          ...(fileName === undefined ? {} : { fileName }),
+        }),
+      ),
+      aborted,
+    );
+  },
 });
