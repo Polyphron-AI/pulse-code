@@ -6304,6 +6304,12 @@ export default function ChatView(props: ChatViewProps) {
       notifyDirectAnnotationAttached();
       return;
     }
+    if (sendCtx.pulseSkillsBlockedReason) {
+      toastManager.add({ type: "error", title: sendCtx.pulseSkillsBlockedReason });
+      notifyDirectAnnotationAttached();
+      return;
+    }
+    const pulseSkills = sendCtx.pulseSkills.map(({ id, revision }) => ({ id, revision }));
     const {
       images: sendContextImages,
       files: composerFiles,
@@ -6848,6 +6854,7 @@ export default function ChatView(props: ChatViewProps) {
           },
           modelSelection: ctxSelectedModelSelection,
           titleSeed: title,
+          ...(pulseSkills.length > 0 ? { pulseSkills } : {}),
           runtimeMode,
           interactionMode: sendInteractionMode,
           ...(bootstrap ? { bootstrap } : {}),
@@ -7208,6 +7215,11 @@ export default function ChatView(props: ChatViewProps) {
       if (!sendCtx?.providerAvailable || !sendCtx.interactionModeEnabled) {
         return;
       }
+      if (sendCtx.pulseSkillsBlockedReason) {
+        toastManager.add({ type: "error", title: sendCtx.pulseSkillsBlockedReason });
+        return;
+      }
+      const pulseSkills = sendCtx.pulseSkills.map(({ id, revision }) => ({ id, revision }));
       const {
         selectedProvider: ctxSelectedProvider,
         selectedModel: ctxSelectedModel,
@@ -7279,6 +7291,7 @@ export default function ChatView(props: ChatViewProps) {
             },
             modelSelection: ctxSelectedModelSelection,
             titleSeed: activeThread.title,
+            ...(pulseSkills.length > 0 ? { pulseSkills } : {}),
             runtimeMode,
             interactionMode: nextInteractionMode,
             ...(nextInteractionMode === "default" && activeProposedPlan
@@ -7356,6 +7369,11 @@ export default function ChatView(props: ChatViewProps) {
     if (!sendCtx?.providerAvailable || !sendCtx.interactionModeEnabled) {
       return;
     }
+    if (sendCtx.pulseSkillsBlockedReason) {
+      toastManager.add({ type: "error", title: sendCtx.pulseSkillsBlockedReason });
+      return;
+    }
+    const pulseSkills = sendCtx.pulseSkills.map(({ id, revision }) => ({ id, revision }));
     const {
       selectedProvider: ctxSelectedProvider,
       selectedModel: ctxSelectedModel,
@@ -7418,6 +7436,7 @@ export default function ChatView(props: ChatViewProps) {
           },
           modelSelection: ctxSelectedModelSelection,
           titleSeed: nextThreadTitle,
+          ...(pulseSkills.length > 0 ? { pulseSkills } : {}),
           runtimeMode,
           interactionMode: "default",
           sourceProposedPlan: {

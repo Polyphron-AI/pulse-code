@@ -116,9 +116,19 @@ environment. Upload a skill folder or ZIP, or import a skill directory from GitH
 GitHub imports can be pinned or kept updated; uploaded skills can later be linked
 to GitHub.
 
-Removing an entry removes its managed files from that environment, not its
-provider-native or workspace skills. This panel currently manages stored files
-only: managed skills cannot yet be selected or invoked from the composer.
+For Codex, open **Skills** in the composer and select the skills for your next
+turn. Each selection keeps its exact revision until you change it. Selections
+stay enabled after sending; turn them off in the same picker. GitHub collections
+can be collapsed without disabling their selected skills. Uploaded skills appear
+last. Provider-native and workspace skills remain available separately.
+
+Managed invocation requires an updated environment and currently supports Codex.
+Switching to an unsupported provider does not discard selections: remove them or
+switch back before sending. Removing a managed entry makes its saved selections
+unavailable, without removing provider-native or workspace skills.
+
+The picker is shared by desktop and web, including mobile browsers. The native
+mobile app does not yet offer managed skill selection.
 
 ## Manage MCP connections
 

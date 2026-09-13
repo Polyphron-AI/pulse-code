@@ -141,7 +141,8 @@ function ManagedSkillsEnvironment({
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-[13px] text-muted-foreground">
-            Manage skill files stored on one environment. Composer selection is not available yet.
+            Manage skill files stored on one environment. Select managed skills in the Codex
+            composer on environments that support skill invocation.
           </p>
         </div>
         <Select

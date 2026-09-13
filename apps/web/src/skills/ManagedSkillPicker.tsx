@@ -147,6 +147,11 @@ export function ManagedSkillPicker(props: {
         <ComposerControlChevron size={size} />
       </MenuTrigger>
       <MenuPopup align="start" className="w-72" {...composerFloatingLayerProps}>
+        {props.state.blockedReason ? (
+          <p className="px-2 py-1 text-xs text-warning-foreground" role="status">
+            {props.state.blockedReason}
+          </p>
+        ) : null}
         <label className="mb-1 flex h-8 items-center gap-2 rounded-md bg-muted/55 px-2 text-muted-foreground focus-within:ring-2 focus-within:ring-ring">
           <SearchIcon className="size-3.5 shrink-0" aria-hidden />
           <span className="sr-only">Search skills</span>
@@ -216,7 +221,7 @@ export function ManagedSkillPicker(props: {
                             <MenuCheckboxItem
                               checked={checked}
                               disabled={
-                                !props.state.visible ||
+                                (!checked && !props.state.visible) ||
                                 (!pinned && selectedCount >= MAX_MANAGED_SKILL_SELECTIONS)
                               }
                               onCheckedChange={() =>
