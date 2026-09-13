@@ -5,7 +5,7 @@ import {
   ThreadId,
 } from "@t3tools/contracts";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
-import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 const mocks = vi.hoisted(() => ({
   prepare: vi.fn(),
@@ -80,9 +80,11 @@ import { useManagedMcpComposer } from "./useManagedMcpComposer";
 function Harness({
   threadId = ThreadId.make("thread-1"),
   identityKey = "thread:1",
+  draftConnectionIds = ["linear"],
 }: {
   threadId?: ThreadId | null;
   identityKey?: string;
+  draftConnectionIds?: ReadonlyArray<string> | null;
 }) {
   mocks.result = useManagedMcpComposer({
     environmentId: EnvironmentId.make("env-1"),
@@ -91,7 +93,7 @@ function Harness({
     threadId,
     identityKey,
     modelKey: "gpt-5",
-    draftConnectionIds: ["linear"],
+    draftConnectionIds,
     onDraftConnectionIdsChange: () => {},
     onManage: () => {},
   });
@@ -100,15 +102,17 @@ function Harness({
 
 describe("useManagedMcpComposer", () => {
   let renderer: ReactTestRenderer | null = null;
-  afterEach(() => {
-    renderer?.unmount();
-    renderer = null;
+  beforeEach(() => {
     mocks.prepare.mockReset();
     mocks.setOverride.mockReset().mockResolvedValue({ _tag: "Success", value: {} });
     mocks.resetOverride.mockReset().mockResolvedValue({ _tag: "Success", value: {} });
     mocks.saveDefaults.mockReset().mockResolvedValue({ _tag: "Success", value: {} });
     mocks.defaultRefresh.mockReset();
     mocks.queryError = null;
+  });
+  afterEach(() => {
+    renderer?.unmount();
+    renderer = null;
   });
 
   it("keeps the send pending after failure and carries exclusions into continue", async () => {
@@ -363,6 +367,42 @@ describe("useManagedMcpComposer", () => {
       environmentId: EnvironmentId.make("env-1"),
       input: { threadId: ThreadId.make("thread-1"), connectionIds: ["linear"] },
     });
+  });
+
+  it("persists a draft selection on a remount with a thread without duplicate rerender writes", async () => {
+    await act(async () => {
+      renderer = create(<Harness threadId={ThreadId.make("thread-1")} />);
+    });
+    expect(mocks.setOverride).toHaveBeenCalledOnce();
+    await act(async () => renderer!.update(<Harness threadId={ThreadId.make("thread-1")} />));
+    expect(mocks.setOverride).toHaveBeenCalledOnce();
+  });
+
+  it("preserves the draft selection when remount persistence fails", async () => {
+    mocks.setOverride.mockResolvedValue({ _tag: "Failure" });
+    await act(async () => {
+      renderer = create(<Harness threadId={ThreadId.make("thread-1")} />);
+    });
+    expect(mocks.result!.picker.selectionMode).toBe("override");
+    expect(mocks.result!.picker.selectedIds).toEqual(["linear"]);
+    expect(mocks.resetOverride).not.toHaveBeenCalled();
+  });
+
+  it("waits for promotion persistence before resetting to provider defaults", async () => {
+    let finishPersistence!: (value: unknown) => void;
+    mocks.setOverride.mockReturnValue(new Promise((resolve) => (finishPersistence = resolve)));
+    await act(async () => {
+      renderer = create(<Harness threadId={ThreadId.make("thread-1")} />);
+    });
+    const reset = mocks.result!.picker.onUseDefaults();
+    await act(async () => void (await Promise.resolve()));
+    expect(mocks.resetOverride).not.toHaveBeenCalled();
+    await act(async () => finishPersistence({ _tag: "Success", value: {} }));
+    await act(async () => reset);
+    expect(mocks.resetOverride).toHaveBeenCalledOnce();
+    expect(mocks.setOverride.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.resetOverride.mock.invocationCallOrder[0]!,
+    );
   });
 
   it("saves the current selection as provider defaults without removing the thread override", async () => {

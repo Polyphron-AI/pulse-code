@@ -345,6 +345,7 @@ export function useManagedMcpComposer(input: {
       input.onDraftConnectionIdsChange(null);
       return;
     }
+    await draftOverridePersistencePromiseRef.current;
     const result = await resetOverride({
       environmentId: input.environmentId,
       input: { threadId: input.threadId },
@@ -372,17 +373,20 @@ export function useManagedMcpComposer(input: {
     selectedIds,
   ]);
 
-  const previousThreadIdRef = useRef(input.threadId);
+  const persistedDraftOverrideKeyRef = useRef<string | null>(null);
+  const draftOverridePersistencePromiseRef = useRef<Promise<void>>(Promise.resolve());
   useEffect(() => {
-    const previousThreadId = previousThreadIdRef.current;
-    previousThreadIdRef.current = input.threadId;
-    if (previousThreadId !== null || input.threadId === null || input.draftConnectionIds === null)
-      return;
-    void setOverride({
+    if (input.threadId === null || input.draftConnectionIds === null) return;
+    const persistenceKey = `${input.environmentId}:${input.threadId}:${input.draftConnectionIds.join(",")}`;
+    if (persistedDraftOverrideKeyRef.current === persistenceKey) return;
+    persistedDraftOverrideKeyRef.current = persistenceKey;
+    draftOverridePersistencePromiseRef.current = setOverride({
       environmentId: input.environmentId,
       input: { threadId: input.threadId, connectionIds: [...input.draftConnectionIds] },
     }).then((result) => {
       if (result._tag === "Success") threadOverride.refresh();
+      else if (persistedDraftOverrideKeyRef.current === persistenceKey)
+        persistedDraftOverrideKeyRef.current = null;
     });
   }, [input.environmentId, input.threadId, input.draftConnectionIds, setOverride, threadOverride]);
 
