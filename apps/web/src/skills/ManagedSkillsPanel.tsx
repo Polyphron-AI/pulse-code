@@ -734,12 +734,16 @@ function GitHubSkillDialog({
               </div>
             ) : null}
             {target === "new" && resolvedDirectories.length > 1 ? (
-              <fieldset className="grid gap-2">
+              <div
+                className="grid gap-2"
+                role="group"
+                aria-labelledby={`${fieldId}-resolved-skills-label`}
+              >
                 <div className="flex items-end justify-between gap-3">
                   <div>
-                    <legend className="text-sm font-medium">
+                    <p id={`${fieldId}-resolved-skills-label`} className="text-sm font-medium">
                       Skills to import ({selectedDirectories.length} selected)
-                    </legend>
+                    </p>
                     <p className="text-xs text-muted-foreground">Resolved from {ref}</p>
                   </div>
                   <div className="flex gap-1">
@@ -795,7 +799,7 @@ function GitHubSkillDialog({
                     );
                   })}
                 </div>
-              </fieldset>
+              </div>
             ) : target === "new" ? (
               <div className="grid gap-1.5">
                 <Label htmlFor={`${fieldId}-git-id`}>Skill ID</Label>
