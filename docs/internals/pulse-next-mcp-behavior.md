@@ -69,6 +69,37 @@ actual calls through upstream tool activity, not a separate activity log.
 MCP tools are not slash skills. Do not invent /tool-name execution commands as part
 of this integration. Existing provider-native commands remain unchanged.
 
+## Reviewed discovery and portability
+
+Approved extension: show MCP and Skills controls even with an empty library.
+Provider-native skill visibility reuses the existing workspace-aware snapshots.
+Native MCP inventory reads an existing provider session; opening the picker must
+not start a provider, reload its MCP configuration or execute a configured command.
+Configured entries are not evidence that a session has connected to them.
+
+Import review scans supported user-level Claude, Codex and OpenCode configuration
+on the selected environment. Send safe candidate metadata to the client, then
+reread the source on import and store credentials using existing environment secret
+storage. Unsupported authentication and tool-policy semantics need a visible reason,
+not a lossy import. Provider-owned configuration stays unchanged.
+
+Approval can enable following a source for later additions. Persist which source
+was approved and which entries were already reviewed. A later scan imports only
+new entries, never enables them for chats, overwrites managed edits or restores
+skipped and removed entries. Following must have an off switch. Isolate source
+errors and use a bounded server schedule rather than continuous filesystem polling.
+
+Managed skill portability uses the same immutable selected revisions across Codex,
+Claude and Pulse-owned OpenCode sessions. Keep provider-specific loading inside
+the adapters. Claude receives a generated local skill-only plugin; OpenCode receives
+additional skill paths in its owned session process configuration. Preserve support
+files and native invocation restrictions. Do not load an imported repository as an
+arbitrary plugin, write global skill directories or replace native provider config.
+Selection and revision changes must apply before the next turn, with continuation
+identity preserved. Shared external OpenCode servers cannot accept this mutation.
+
+The active ledger tracks implementation and verification of this extension.
+
 ## Compatibility and acceptance
 
 Use a Pulse-owned selection/configuration module and small adapters into provider

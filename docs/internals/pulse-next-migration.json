@@ -542,18 +542,23 @@
       "id": "managed-integrations-discovery",
       "branch": "feat/pulse-next-managed-discovery",
       "baseRevision": "28befc1217",
-      "state": "implementing",
-      "scope": "Always-visible MCP and skills chat controls; environment-local Claude, Codex and OpenCode MCP discovery with reviewed import; GitHub skill URL resolution and explicit working auto-update policy.",
+      "state": "reviewed",
+      "scope": "Always-visible MCP and skills chat controls; environment-local Claude, Codex and OpenCode MCP discovery with initial source review and automatic subsequent additions; GitHub skill URL resolution and explicit working auto-update policy; managed skill portability across Codex, Claude and Pulse-owned OpenCode sessions.",
       "acceptance": [
         "MCP and Skills remain visible with zero entries and on all providers; empty states link to management, while unsupported invocation remains accurately gated.",
+        "Provider-native skills reuse existing workspace-aware provider snapshots. Native MCP inventory reads existing sessions without starting or reloading them. Keep provider-supplied and Pulse-managed entries distinct; configured, connected and unknown states must not be conflated.",
+        "Reviewed Codex MCP imports can be selected through existing Claude and locally managed OpenCode adapters. Do not duplicate provider-supplied entries merely to display them or rewrite provider global configuration.",
+        "Managed skills are selectable and invocable in Codex, Claude and Pulse-owned OpenCode sessions. Load selected immutable revisions through provider-native mechanisms, preserve supporting files, handle selection changes and resumed sessions, and never install into global provider directories. External shared OpenCode servers must report unsupported managed loading without mutation.",
         "Discover supported user-level provider config formats in the selected environment, review safe candidate metadata, then import without overwriting managed records, enabling chat defaults or changing provider files.",
+        "After source approval, automatically import new entries on a bounded schedule. Persist reviewed source and seen-entry state; skipped or removed entries are not resurrected, existing managed edits are not overwritten, and following can be disabled.",
         "Discovery never executes commands or exposes raw credentials. Import rereads authoritative source config, stores credential values through the existing secret store and reports unsupported semantics.",
         "GitHub repository, directory and SKILL.md URLs resolve editable source fields and skill metadata. Multiple candidates require selection; malformed or unsupported sources give actionable errors.",
         "Auto-update defaults off, persists per skill, checks enabled sources on a bounded server schedule and preserves immutable revisions used by active turns. Failures retain the last valid skill.",
         "Retry, cancellation, environment changes, stale responses, missing files, duplicates, permissions and older-server capability gates have focused fixture coverage.",
         "Web, compact web and desktop share controls. Native mobile retains existing contracts; provider invocation capabilities do not expand implicitly. Verification remains code-only."
       ],
-      "remaining": "Implementation, fixture tests, scoped checks, frozen review and Pulse Next packaging."
+      "verification": "Implementation 58c4d213e0894631cf9d6a204731ea2b31d43d1b independently reviewed with no remaining blockers after the fix batch and affected rechecks. Combined 703a6ca773 suite passed 519 tests across 17 files; final changes touch only discovery service and skill store, with all 37 affected tests passing. Scoped server and web typechecks passed, with server rechecked after final fixes. Added induced restart failure/retry, native Claude registration and explicit-only dispatch, discovery retry/queue/tombstone, GitHub lookup failure and filesystem identity regressions. No browser or live provider processes launched.",
+      "remaining": "Build Pulse Next Windows installer and integrate develop. Packaged-app, browser, microphone and live-provider behavior remain untested at the user's request."
     },
     {
       "id": "voice-setup-guidance",

@@ -161,16 +161,29 @@ provider supports it. Web and desktop also offer compaction from the context met
 
 On web and desktop, open **Settings → Integrations → Skills** and choose an
 environment. Upload a skill folder or ZIP, or import a skill directory from GitHub.
-GitHub imports can be pinned or kept updated; uploaded skills can later be linked
-to GitHub.
+Paste a GitHub repository, skill-directory or SKILL.md URL to find skills and fill
+the source fields. If the repository contains several skills or tool-specific
+copies, choose the directory you want. You can still edit the fields manually.
 
-For Codex, open **Skills** in the composer and select the skills for your next
+GitHub imports can be pinned or auto-updated; uploaded skills can later be linked
+to GitHub. Auto-update is off by default. Turning it on checks for validated updates
+while the environment is running. Failed updates leave the last valid skill
+available, and active chat selections keep their pinned revision until you change it.
+
+The **Skills** control stays visible even when the library is empty. For supported providers,
+open it in the composer and select the skills for your next
 turn. Each selection keeps its exact revision until you change it. Selections
 stay enabled after sending; turn them off in the same picker. GitHub collections
 can be collapsed without disabling their selected skills. Uploaded skills appear
 last. Provider-native and workspace skills remain available separately.
 
-Managed invocation requires an updated environment and currently supports Codex.
+Managed invocation requires an updated environment and supports Codex, Claude,
+and OpenCode sessions started by Pulse. Pulse supplies the selected revision and
+its supporting files without installing skills into the provider's global folders.
+An externally managed OpenCode server cannot receive Pulse-managed skill files.
+Skills that depend on provider-specific tools still need those tools to be available.
+In Claude, select an explicit-invocation-only skill on its own so Pulse can dispatch
+its native command. Skills marked as unavailable for user invocation cannot be selected.
 Switching to an unsupported provider does not discard selections: remove them or
 switch back before sending. Removing a managed entry makes its saved selections
 unavailable, without removing provider-native or workspace skills.
@@ -191,8 +204,10 @@ secrets unless you replace or remove them. Removing a connection also removes it
 saved credentials. Older environments may require an update before adding
 connections.
 
-This panel currently manages configuration only. Saving does not connect a
-provider, start a process or run a tool. Composer selection is not available yet.
+Detect existing Claude Code, Codex and OpenCode user-level connections and review
+them before importing. Saving or importing does not connect a provider, start a
+process or run a tool. Use the always-visible **MCP** chat control to manage or
+select connections. See [MCP connections](mcp-connections.md) for supported providers.
 
 ## Context in your message
 

@@ -10,6 +10,13 @@ off. Tool calls keep the provider's existing approval behavior.
 
 ## Select connections
 
+MCP and Skills stay visible in the chat controls even when nothing has been added.
+Open their management actions to add entries. A visible control does not mean the
+selected provider supports using managed entries; the menu explains any limitation.
+Provider-supplied entries are shown separately from Pulse-managed entries. A
+configured entry is not proof of a live connection, and a connected server is not
+proof that the model has called one of its tools.
+
 Use MCP beside Skills in the composer. The count means selected connections, not
 available tools. Search by name and select the connections needed for the next
 turn. Use defaults restores the provider-instance default selection. Selecting
@@ -20,6 +27,27 @@ remove the current thread's override.
 Pulse-managed connections are separate from the provider's native connections.
 Pulse does not overwrite the provider's global configuration. If native discovery
 is unavailable, the picker says so rather than claiming there are no connections.
+
+## Import existing provider connections
+
+In **Settings → Integrations → MCP**, choose an environment and detect existing
+Claude Code, Codex and OpenCode connections. Detection reads user-level
+configuration on that environment's machine, not on the device displaying the page.
+Review the detected entries before importing them into Pulse-managed MCP.
+Once you approve following a source, new entries added to that provider's
+configuration are imported automatically while the environment is running. You
+can turn following off. Entries skipped during review or later removed from Pulse
+are not added back automatically.
+
+Importing does not change the provider's files, start commands or select connections
+for a chat. Existing managed entries are not overwritten. Missing credentials or
+settings Pulse cannot preserve are reported instead of silently dropped. Provider
+OAuth sessions are not transferred. Imported connections are independent copies;
+later provider-config edits do not replace your managed configuration. Automatic
+addition never selects a connection for your chats.
+
+For example, you can review and import a Codex connection once, then select its
+Pulse-managed copy for a Claude Code or locally managed OpenCode conversation.
 
 ## Before sending
 
