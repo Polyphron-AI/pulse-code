@@ -2388,6 +2388,23 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
       });
     },
   );
+  const readNativeMcpInventory: ProviderServiceMethod<"readNativeMcpInventory"> = Effect.fn(
+    "ProviderService.readNativeMcpInventory",
+  )(function* (input) {
+    const adapter = yield* registry.getByInstance(input.providerInstanceId);
+    if (adapter.readNativeMcpInventory === undefined) return null;
+    return yield* adapter
+      .readNativeMcpInventory(input.threadId)
+      .pipe(
+        Effect.mapError((cause) =>
+          toValidationError(
+            "ProviderService.readNativeMcpInventory",
+            "Provider-native MCP status could not be read.",
+            cause,
+          ),
+        ),
+      );
+  });
 
   const interruptTurn: ProviderServiceMethod<"interruptTurn"> = Effect.fn("interruptTurn")(
     function* (rawInput) {
@@ -2874,6 +2891,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
   return {
     startSession,
     preparePulseMcp,
+    readNativeMcpInventory,
     consumePulseMcpPreparation,
     sendTurn,
     compactThread,

@@ -6,6 +6,7 @@ import {
   type EnvironmentId,
   type PulseMcpConnection,
   type PulseMcpConnectionInput,
+  type PulseMcpDiscoveryCandidate,
 } from "@t3tools/contracts";
 import { useEffect, useRef, useState } from "react";
 import * as Option from "effect/Option";
@@ -25,7 +26,14 @@ import { useEnvironmentSessionState } from "../state/session";
 import { serverEnvironment } from "../state/server";
 import { useAtomCommand } from "../state/use-atom-command";
 import { McpConnectionsPanel } from "./McpConnectionsPanel";
-import { pulseMcpList, removePulseMcp, upsertPulseMcp } from "./mcpState";
+import {
+  discoverPulseMcp,
+  importDiscoveredPulseMcp,
+  pulseMcpList,
+  removePulseMcp,
+  setPulseMcpDiscoveryFollow,
+  upsertPulseMcp,
+} from "./mcpState";
 
 export function resolveMcpEnvironmentId(
   environmentIds: ReadonlyArray<EnvironmentId>,
@@ -84,6 +92,7 @@ function McpEnvironment({
   const liveConfigReady = projection?.source === "live";
   const supported = liveConfigReady && projection.config.pulseCapabilities?.mcpManagement === true;
   const canCreate = projection?.config.pulseCapabilities?.mcpCreateOnly === true;
+  const canDiscover = projection?.config.pulseCapabilities?.mcpDiscovery === true;
   const session = useEnvironmentSessionState(environmentId);
   const sessionFresh = !session.isPending && session.data?.authenticated === true;
   const scopes = sessionFresh ? session.data?.scopes : undefined;
@@ -94,6 +103,11 @@ function McpEnvironment({
   );
   const upsertCommand = useAtomCommand(upsertPulseMcp, { reportFailure: false });
   const removeCommand = useAtomCommand(removePulseMcp, { reportFailure: false });
+  const discovered = useEnvironmentQuery(
+    canDiscover && canRead ? discoverPulseMcp({ environmentId, input: {} }) : null,
+  );
+  const importDiscovered = useAtomCommand(importDiscoveredPulseMcp, { reportFailure: false });
+  const setDiscoveryFollow = useAtomCommand(setPulseMcpDiscoveryFollow, { reportFailure: false });
   const [connections, setConnections] = useState<ReadonlyArray<PulseMcpConnection>>([]);
   const accessGeneration = useRef(0);
   const accessKeyRef = useRef("");
@@ -190,15 +204,135 @@ function McpEnvironment({
       ) : list.isPending && list.data === null ? (
         <p className="text-sm text-muted-foreground">Loading MCP connections…</p>
       ) : (
-        <McpConnectionsPanel
-          environmentKey={environmentId}
-          connections={connections}
-          disabled={!canOperate}
-          canCreate={canCreate}
-          upsert={upsert}
-          remove={remove}
-        />
+        <>
+          {canDiscover ? (
+            <McpDiscoveryReview
+              candidates={discovered.data ?? []}
+              managedIds={connections.map(({ id }) => id)}
+              disabled={!canOperate}
+              loading={discovered.isPending && discovered.data === null}
+              onRefresh={discovered.refresh}
+              onImport={async (candidate) => {
+                const result = await importDiscovered({
+                  environmentId,
+                  input: { source: candidate.source, name: candidate.name },
+                });
+                if (result._tag === "Failure") throw squashAtomCommandFailure(result);
+                setConnections((current) =>
+                  [...current, result.value].sort((a, b) => a.name.localeCompare(b.name)),
+                );
+                discovered.refresh();
+              }}
+              onFollow={async (source, followNew) => {
+                const result = await setDiscoveryFollow({
+                  environmentId,
+                  input: { source, followNew },
+                });
+                if (result._tag === "Failure") throw squashAtomCommandFailure(result);
+                discovered.refresh();
+              }}
+            />
+          ) : null}
+          <McpConnectionsPanel
+            environmentKey={environmentId}
+            connections={connections}
+            disabled={!canOperate}
+            canCreate={canCreate}
+            upsert={upsert}
+            remove={remove}
+          />
+        </>
       )}
     </div>
+  );
+}
+
+function McpDiscoveryReview(props: {
+  readonly candidates: ReadonlyArray<PulseMcpDiscoveryCandidate>;
+  readonly managedIds: readonly string[];
+  readonly disabled: boolean;
+  readonly loading: boolean;
+  readonly onRefresh: () => void;
+  readonly onImport: (candidate: PulseMcpDiscoveryCandidate) => Promise<void>;
+  readonly onFollow: (
+    source: PulseMcpDiscoveryCandidate["source"],
+    followNew: boolean,
+  ) => Promise<void>;
+}) {
+  const [busy, setBusy] = useState<string | null>(null);
+  return (
+    <section
+      className="mb-4 rounded-lg border border-border p-3"
+      aria-label="Provider MCP discovery"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <p className="text-sm font-medium">Detected user-level MCP servers</p>
+          <p className="text-xs text-muted-foreground">
+            Review before importing. Imports do not enable a server in chats.
+          </p>
+        </div>
+        <button type="button" className="text-sm text-primary underline" onClick={props.onRefresh}>
+          Scan again
+        </button>
+      </div>
+      {props.loading ? (
+        <p className="mt-2 text-sm text-muted-foreground">Scanning provider configs…</p>
+      ) : null}
+      {["claude", "codex", "opencode"].map((source) => {
+        const candidates = props.candidates.filter((candidate) => candidate.source === source);
+        if (candidates.length === 0) return null;
+        const following = candidates.some((candidate) => candidate.following);
+        return (
+          <label
+            key={source}
+            className="mt-2 flex items-center gap-2 text-xs text-muted-foreground"
+          >
+            <input
+              type="checkbox"
+              checked={following}
+              disabled={props.disabled}
+              onChange={(event) =>
+                void props.onFollow(
+                  source as PulseMcpDiscoveryCandidate["source"],
+                  event.currentTarget.checked,
+                )
+              }
+            />
+            Follow new {source} servers after this reviewed baseline
+          </label>
+        );
+      })}
+      {props.candidates.map((candidate) => {
+        const managed = props.managedIds.includes(candidate.id);
+        return (
+          <div
+            key={`${candidate.source}:${candidate.name}`}
+            className="mt-2 flex items-center justify-between gap-3 border-t border-border pt-2 text-sm"
+          >
+            <div className="min-w-0">
+              <p className="truncate">
+                {candidate.name}{" "}
+                <span className="text-xs text-muted-foreground">{candidate.source}</span>
+              </p>
+              {candidate.reason ? (
+                <p className="text-xs text-muted-foreground">{candidate.reason}</p>
+              ) : null}
+            </div>
+            <button
+              type="button"
+              className="shrink-0 text-primary underline disabled:text-muted-foreground disabled:no-underline"
+              disabled={props.disabled || !candidate.importable || managed || busy !== null}
+              onClick={() => {
+                setBusy(candidate.id);
+                void props.onImport(candidate).finally(() => setBusy(null));
+              }}
+            >
+              {managed ? "Already managed" : busy === candidate.id ? "Importing…" : "Import"}
+            </button>
+          </div>
+        );
+      })}
+    </section>
   );
 }

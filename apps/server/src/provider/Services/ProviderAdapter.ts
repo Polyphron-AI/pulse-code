@@ -82,6 +82,10 @@ export interface ProviderManagedMcpStatus {
   readonly status: "ready" | "unknown" | "failed";
   readonly message?: string;
 }
+export interface ProviderNativeMcpStatus {
+  readonly name: string;
+  readonly status: "ready" | "unknown" | "failed" | "auth-required";
+}
 
 export type ProviderAdapterSendTurnInput = ProviderSendTurnInput & {
   readonly resolvedSkills?: ReadonlyArray<ProviderResolvedSkill>;
@@ -128,6 +132,10 @@ export interface ProviderAdapterShape<TError> {
     threadId: ThreadId,
     servers: ReadonlyArray<ProviderManagedMcpServer>,
   ) => Effect.Effect<ReadonlyArray<ProviderManagedMcpStatus>, TError>;
+  /** Reads safe cached/native status for an existing session. It must not reload or start servers. */
+  readonly readNativeMcpInventory?: (
+    threadId: ThreadId,
+  ) => Effect.Effect<ReadonlyArray<ProviderNativeMcpStatus>, TError>;
 
   /** Omitted when this adapter does not support manual context compaction. */
   readonly compaction?: ProviderCompaction<TError>;

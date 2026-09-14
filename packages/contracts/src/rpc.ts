@@ -273,6 +273,10 @@ export const WS_METHODS = {
   pulseMcpSetThreadOverride: PULSE_MCP_METHODS.setThreadOverride,
   pulseMcpResetThreadOverride: PULSE_MCP_METHODS.resetThreadOverride,
   pulseMcpPrepareTurn: PULSE_MCP_METHODS.prepareTurn,
+  pulseMcpDiscover: PULSE_MCP_METHODS.discover,
+  pulseMcpImportDiscovered: PULSE_MCP_METHODS.importDiscovered,
+  pulseMcpNativeInventory: PULSE_MCP_METHODS.nativeInventory,
+  pulseMcpSetDiscoveryFollow: PULSE_MCP_METHODS.setDiscoveryFollow,
   ...PULSE_SKILLS_METHODS,
   // Project registry methods
   projectsList: "projects.list",

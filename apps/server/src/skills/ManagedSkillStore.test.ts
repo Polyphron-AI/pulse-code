@@ -8,10 +8,53 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   downloadGitHubSkill,
   ManagedSkillStore,
+  resolveGitHubSkillUrl,
   validateSkillFiles,
   validateSkillPath,
   type GitHubRequest,
 } from "./ManagedSkillStore.ts";
+
+it("resolves repository URLs to the default ref and safe skill directories", async () => {
+  const request: GitHubRequest = async (endpoint) => {
+    if (endpoint === "repos/pbakaus/impeccable") return { default_branch: "main" };
+    if (endpoint.endsWith("/commits/main")) return { sha: "a".repeat(40) };
+    return {
+      tree: [
+        { type: "blob", path: ".agents/skills/impeccable/SKILL.md" },
+        { type: "blob", path: ".claude/skills/impeccable/SKILL.md" },
+        { type: "blob", path: "tests/oracle/audit/SKILL.md" },
+      ],
+    };
+  };
+  await expect(
+    resolveGitHubSkillUrl("https://github.com/pbakaus/impeccable", request),
+  ).resolves.toEqual({
+    repository: "pbakaus/impeccable",
+    ref: "main",
+    directories: [".agents/skills/impeccable", ".claude/skills/impeccable"],
+  });
+});
+
+it("resolves a blob URL to exactly its skill directory", async () => {
+  const request: GitHubRequest = async (endpoint) =>
+    endpoint.includes("/commits/")
+      ? { sha: "b".repeat(40) }
+      : endpoint.includes("/git/trees/")
+        ? {
+            tree: [
+              { type: "blob", path: "skills/review/SKILL.md" },
+              { type: "blob", path: "skills/other/SKILL.md" },
+            ],
+          }
+        : { default_branch: "main" };
+  await expect(
+    resolveGitHubSkillUrl("https://github.com/team/repo/blob/main/skills/review/SKILL.md", request),
+  ).resolves.toMatchObject({
+    repository: "team/repo",
+    ref: "main",
+    directories: ["skills/review"],
+  });
+});
 
 function files(body = "Review changes carefully.", metadata = "") {
   return [

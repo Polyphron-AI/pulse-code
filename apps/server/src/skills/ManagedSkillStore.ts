@@ -9,7 +9,8 @@ import { parse } from "yaml";
 
 const execute = NodeUtil.promisify(NodeChildProcess.execFile);
 const MAX_FILES = 128;
-const MAX_FILE_BYTES = 1024 * 1024;
+const MAX_UPLOAD_FILE_BYTES = 1024 * 1024;
+const MAX_GITHUB_FILE_BYTES = 2 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 8 * 1024 * 1024;
 const REVISION_PATTERN = /^[a-f0-9]{64}$/;
 const MANAGED_ID_PATTERN = /^[a-z][a-z0-9-]{0,63}$/;
@@ -129,7 +130,10 @@ export function validateSkillPath(value: string): string {
   return value;
 }
 
-export function validateSkillFiles(files: ReadonlyArray<SkillUploadFile>): ValidatedSkillFiles {
+export function validateSkillFiles(
+  files: ReadonlyArray<SkillUploadFile>,
+  maxFileBytes = MAX_UPLOAD_FILE_BYTES,
+): ValidatedSkillFiles {
   if (!files.length || files.length > MAX_FILES) {
     throw new Error(`A skill must contain 1 to ${MAX_FILES} files.`);
   }
@@ -146,7 +150,7 @@ export function validateSkillFiles(files: ReadonlyArray<SkillUploadFile>): Valid
       }
       const content = Buffer.from(file.base64, "base64");
       bytes += content.length;
-      if (content.length > MAX_FILE_BYTES || bytes > MAX_TOTAL_BYTES) {
+      if (content.length > maxFileBytes || bytes > MAX_TOTAL_BYTES) {
         throw new Error("Skills are limited to 8 MB total and 1 MB per file.");
       }
       return { path, content };
@@ -205,6 +209,70 @@ export function validateSkillFiles(files: ReadonlyArray<SkillUploadFile>): Valid
 }
 
 export type GitHubRequest = (endpoint: string) => Promise<unknown>;
+
+export interface GitHubSkillResolution {
+  readonly repository: string;
+  readonly ref: string;
+  readonly directories: readonly string[];
+}
+
+export async function resolveGitHubSkillUrl(
+  urlValue: string,
+  request: GitHubRequest,
+): Promise<GitHubSkillResolution> {
+  let url: URL;
+  try {
+    url = new URL(urlValue);
+  } catch {
+    throw new Error("Use a GitHub repository, tree or SKILL.md URL.");
+  }
+  if (url.protocol !== "https:" || url.hostname.toLowerCase() !== "github.com")
+    throw new Error("Only https://github.com skill URLs are supported.");
+  const segments = url.pathname.split("/").filter(Boolean).map(decodeURIComponent);
+  if (segments.length < 2) throw new Error("Use a GitHub owner/repository URL.");
+  const repository = `${segments[0]}/${segments[1]!.replace(/\.git$/, "")}`;
+  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository))
+    throw new Error("Use a GitHub owner/repository URL.");
+  const base = `repos/${encodeURIComponent(segments[0]!)}/${encodeURIComponent(segments[1]!.replace(/\.git$/, ""))}`;
+  const repositoryInfo = object(await request(base));
+  const defaultRef = repositoryInfo.default_branch;
+  if (typeof defaultRef !== "string" || !defaultRef)
+    throw new Error("GitHub did not return the default branch.");
+  let ref = defaultRef;
+  let requestedDirectory: string | undefined;
+  if (segments[2] === "tree" || segments[2] === "blob") {
+    if (!segments[3]) throw new Error("GitHub tree and blob URLs must include a branch or ref.");
+    ref = segments[3];
+    const tail = segments.slice(4);
+    if (segments[2] === "blob" && tail.at(-1)?.toLowerCase() === "skill.md") tail.pop();
+    requestedDirectory = tail.join("/");
+  } else if (segments.length > 2) throw new Error("Unsupported GitHub URL path.");
+  const commit = object(await request(`${base}/commits/${encodeURIComponent(ref)}`)).sha;
+  if (typeof commit !== "string" || !/^[a-f0-9]{40}$/.test(commit))
+    throw new Error("GitHub did not return a commit revision.");
+  const tree = object(await request(`${base}/git/trees/${commit}?recursive=1`));
+  if (tree.truncated || !Array.isArray(tree.tree))
+    throw new Error("Repository tree is too large to inspect safely.");
+  const directories = tree.tree.map(object).flatMap((entry) => {
+    if (
+      entry.type !== "blob" ||
+      typeof entry.path !== "string" ||
+      !/(^|\/)SKILL\.md$/i.test(entry.path)
+    )
+      return [];
+    const directory = entry.path.replace(/\/?SKILL\.md$/i, "");
+    if (
+      requestedDirectory !== undefined &&
+      directory !== requestedDirectory &&
+      !directory.startsWith(`${requestedDirectory}/`)
+    )
+      return [];
+    if (/(^|\/)(test|tests|fixture|fixtures)(\/|$)/i.test(directory)) return [];
+    return [directory];
+  });
+  if (directories.length === 0) throw new Error("No SKILL.md was found at this GitHub location.");
+  return { repository, ref, directories: [...new Set(directories)].sort() };
+}
 
 export const githubRequest: GitHubRequest = async (endpoint) => {
   try {
@@ -285,7 +353,7 @@ export async function downloadGitHubSkill(source: GitHubSkillSource, request: Gi
     }
     if (
       typeof entry.size !== "number" ||
-      entry.size > MAX_FILE_BYTES ||
+      entry.size > MAX_GITHUB_FILE_BYTES ||
       (total += entry.size) > MAX_TOTAL_BYTES
     ) {
       throw new Error("Skill directory exceeds the upload size limits.");
@@ -354,7 +422,7 @@ export class ManagedSkillStore {
     const downloaded = await downloadGitHubSkill(validatedSource, this.request);
     return this.persist(
       validatedId,
-      validateSkillFiles(downloaded.files),
+      validateSkillFiles(downloaded.files, MAX_GITHUB_FILE_BYTES),
       validatedSource,
       previous,
       updatePolicy,
@@ -507,7 +575,7 @@ export class ManagedSkillStore {
           if (discovered.length > MAX_FILES) {
             throw new Error(`A skill must contain 1 to ${MAX_FILES} files.`);
           }
-          if (size > MAX_FILE_BYTES || totalBytes > MAX_TOTAL_BYTES) {
+          if (size > MAX_UPLOAD_FILE_BYTES || totalBytes > MAX_TOTAL_BYTES) {
             throw new Error("Skills are limited to 8 MB total and 1 MB per file.");
           }
         } else throw new Error("Managed skill revisions can contain only files and directories.");

@@ -4,6 +4,7 @@ import {
   type PulseMcpPrepareTurnInput,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
+import type { ProviderNativeMcpStatus } from "../provider/Services/ProviderAdapter.ts";
 
 import type {
   PulseMcpConfigServiceShape,
@@ -11,6 +12,7 @@ import type {
   PulseMcpStoredValue,
 } from "./PulseMcpConfigService.ts";
 import type { ProviderServiceShape } from "../provider/Services/ProviderService.ts";
+import type { PulseMcpDiscoveryService } from "./PulseMcpDiscoveryService.ts";
 
 const publicValue = (value: PulseMcpStoredValue) =>
   value.type === "literal" ? value : ({ type: "secret", configured: true } as const);
@@ -56,6 +58,7 @@ const redactFailure = <A, E>(effect: Effect.Effect<A, E>) =>
 export function pulseMcpHandlers(
   service: PulseMcpConfigServiceShape,
   providerService?: ProviderServiceShape,
+  discovery?: PulseMcpDiscoveryService,
 ) {
   return {
     list: () =>
@@ -65,6 +68,40 @@ export function pulseMcpHandlers(
     upsert: (input: PulseMcpConnectionInput) =>
       redactFailure(service.upsertConnection(input).pipe(Effect.map(publicConnection))),
     remove: ({ id }: { readonly id: string }) => redactFailure(service.removeConnection(id)),
+    discover: () =>
+      discovery === undefined ? Effect.fail(rpcFailure()) : redactFailure(discovery.discover()),
+    importDiscovered: (input: {
+      readonly source: "claude" | "codex" | "opencode";
+      readonly name: string;
+    }) =>
+      discovery === undefined
+        ? Effect.fail(rpcFailure())
+        : redactFailure(discovery.import(input).pipe(Effect.map(publicConnection))),
+    nativeInventory: (input: {
+      readonly threadId: import("@t3tools/contracts").ThreadId;
+      readonly providerInstanceId: import("@t3tools/contracts").ProviderInstanceId;
+    }): Effect.Effect<
+      | { readonly status: "unavailable" }
+      | { readonly status: "available"; readonly servers: readonly ProviderNativeMcpStatus[] },
+      PulseMcpError
+    > => {
+      if (providerService?.readNativeMcpInventory === undefined)
+        return Effect.succeed({ status: "unavailable" as const });
+      return redactFailure(providerService.readNativeMcpInventory(input)).pipe(
+        Effect.map((servers) =>
+          servers === null
+            ? { status: "unavailable" as const }
+            : { status: "available" as const, servers },
+        ),
+      );
+    },
+    setDiscoveryFollow: (input: {
+      readonly source: "claude" | "codex" | "opencode";
+      readonly followNew: boolean;
+    }) =>
+      discovery === undefined
+        ? Effect.fail(rpcFailure())
+        : redactFailure(discovery.setFollow(input)),
     getProviderDefault: ({
       providerInstanceId,
     }: Parameters<PulseMcpConfigServiceShape["getProviderDefault"]>[0] extends infer Id

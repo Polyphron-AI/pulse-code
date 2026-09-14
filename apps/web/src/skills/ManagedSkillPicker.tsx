@@ -6,6 +6,7 @@ import {
   type ProviderDriverKind,
   type PulseSkillRecord,
   type PulseSkillSelection,
+  type ServerProviderSkill,
 } from "@t3tools/contracts";
 import {
   ChevronDownIcon,
@@ -30,6 +31,7 @@ import { useEnvironmentQuery } from "../state/query";
 import { useEnvironmentSessionState } from "../state/session";
 import { serverEnvironment } from "../state/server";
 import { groupManagedSkills, shortRevision } from "./managedSkills";
+import { formatProviderSkillDisplayName } from "@t3tools/client-runtime/providerSkills";
 import {
   MAX_MANAGED_SKILL_SELECTIONS,
   managedSkillsBlockedReason,
@@ -99,6 +101,7 @@ export function ManagedSkillPicker(props: {
   readonly state: ManagedSkillPickerState;
   readonly size?: "sm" | "xs";
   readonly hidden?: boolean;
+  readonly nativeSkills?: ReadonlyArray<ServerProviderSkill>;
   readonly onChange: (skills: ReadonlyArray<PulseSkillSelection>) => void;
 }) {
   const groups = useMemo(() => groupManagedSkills(props.state.skills), [props.state.skills]);
@@ -162,6 +165,24 @@ export function ManagedSkillPicker(props: {
             className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
           />
         </label>
+        {(props.nativeSkills?.length ?? 0) > 0 ? (
+          <div className="mb-1 border-b border-border/50 pb-1">
+            <p className="px-2 py-1 text-xs font-medium text-muted-foreground">Provider-supplied</p>
+            {props.nativeSkills!.map((skill) => (
+              <div key={`${skill.path}:${skill.name}`} className="px-2 py-1 text-sm">
+                <span className="block truncate">{formatProviderSkillDisplayName(skill)}</span>
+                <span className="block truncate text-xs text-muted-foreground">
+                  {skill.enabled
+                    ? `Available to ${props.state.providerIsCodex ? "Codex" : "the provider"}`
+                    : "Disabled in provider settings"}
+                  {skill.userInvocable === false
+                    ? "; provider-controlled"
+                    : `; invoke with $${skill.name}`}
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : null}
         {props.state.loading ? (
           <div className="px-2 py-2 text-sm text-muted-foreground">Loading skills…</div>
         ) : props.state.error ? (

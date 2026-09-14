@@ -25,7 +25,11 @@ import { useEnvironmentSessionState } from "../state/session";
 import { serverEnvironment } from "../state/server";
 import { useAtomCommand } from "../state/use-atom-command";
 import { ManagedSkillsPanel } from "./ManagedSkillsPanel";
-import { managedSkillsList, mutateManagedSkill } from "./managedSkillsState";
+import {
+  managedSkillsList,
+  mutateManagedSkill,
+  resolveManagedSkillGitHub,
+} from "./managedSkillsState";
 
 export function resolveManagedSkillsEnvironmentId(
   environmentIds: ReadonlyArray<EnvironmentId>,
@@ -98,6 +102,7 @@ function ManagedSkillsEnvironment({
     liveSupportsManagedSkills && canRead ? managedSkillsList({ environmentId, input: {} }) : null,
   );
   const mutate = useAtomCommand(mutateManagedSkill, { reportFailure: false });
+  const resolveGitHub = useAtomCommand(resolveManagedSkillGitHub, { reportFailure: false });
   const [skills, setSkills] = useState<ReadonlyArray<PulseSkillRecord>>([]);
   const accessGenerationRef = useRef(0);
   const accessKeyRef = useRef("");
@@ -190,6 +195,16 @@ function ManagedSkillsEnvironment({
           environmentKey={environmentId}
           skills={skills}
           mutate={runMutation}
+          resolveGitHub={async (capturedEnvironmentId, url) => {
+            if (capturedEnvironmentId !== environmentId || !canRead)
+              throw new Error("Managed skills access changed.");
+            const generation = accessGenerationRef.current;
+            const result = await resolveGitHub({ environmentId, input: { url } });
+            if (generation !== accessGenerationRef.current)
+              throw new Error("Managed skills access changed before resolution finished.");
+            if (result._tag === "Failure") throw squashAtomCommandFailure(result);
+            return result.value;
+          }}
           disabled={!canOperate}
         />
       )}

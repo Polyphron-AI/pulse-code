@@ -81,6 +81,7 @@ export class PulseSkillsError extends Schema.TaggedError<PulseSkillsError>()("Pu
 export const PULSE_SKILLS_METHODS = {
   pulseSkillsList: "pulse.skills.list",
   pulseSkillsMutate: "pulse.skills.mutate",
+  pulseSkillsResolveGitHub: "pulse.skills.resolveGitHub",
 } as const;
 
 export const PulseSkillsRpcs = [
@@ -92,6 +93,15 @@ export const PulseSkillsRpcs = [
   Rpc.make(PULSE_SKILLS_METHODS.pulseSkillsMutate, {
     payload: PulseSkillMutation,
     success: Schema.Array(PulseSkillRecord),
+    error: Schema.Union([PulseSkillsError, EnvironmentAuthorizationError]),
+  }),
+  Rpc.make(PULSE_SKILLS_METHODS.pulseSkillsResolveGitHub, {
+    payload: Schema.Struct({ url: Schema.String.check(Schema.isMaxLength(2_048)) }),
+    success: Schema.Struct({
+      repository: Schema.String,
+      ref: Schema.String,
+      directories: Schema.Array(Schema.String),
+    }),
     error: Schema.Union([PulseSkillsError, EnvironmentAuthorizationError]),
   }),
 ] as const;

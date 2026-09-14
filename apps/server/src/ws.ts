@@ -84,6 +84,7 @@ import * as CheckpointDiffQuery from "./checkpointing/CheckpointDiffQuery.ts";
 import * as ServerConfig from "./config.ts";
 import * as PulseMcpConfig from "./mcp/PulseMcpConfigService.ts";
 import { pulseMcpHandlers } from "./mcp/PulseMcpRpc.ts";
+import { makeNodePulseMcpDiscoveryService } from "./mcp/PulseMcpDiscoveryService.ts";
 import {
   ManagedSkills,
   managedSkillHandlers,
@@ -569,10 +570,16 @@ const makeWsRpcLayer = (
       const serverUpdate = yield* ServerSelfUpdate.ServerSelfUpdate;
       const config = yield* ServerConfig.ServerConfig;
       const pulseSkills = managedSkillHandlers(yield* ManagedSkills);
-      const pulseMcp = pulseMcpHandlers(
-        yield* PulseMcpConfig.PulseMcpConfigService,
-        providerService,
-      );
+      const pulseMcpConfig = yield* PulseMcpConfig.PulseMcpConfigService;
+      const pulseMcpDiscovery = makeNodePulseMcpDiscoveryService(pulseMcpConfig, config.stateDir);
+      yield* pulseMcpDiscovery
+        .syncFollowed()
+        .pipe(
+          Effect.ignoreCause({ log: true }),
+          Effect.repeat(Schedule.spaced("1 hour")),
+          Effect.forkScoped,
+        );
+      const pulseMcp = pulseMcpHandlers(pulseMcpConfig, providerService, pulseMcpDiscovery);
       const lifecycleEvents = yield* ServerLifecycleEvents.ServerLifecycleEvents;
       const serverSettings = yield* ServerSettings.ServerSettingsService;
       const startup = yield* ServerRuntimeStartup.ServerRuntimeStartup;
@@ -1685,6 +1692,8 @@ const makeWsRpcLayer = (
               codexManagedSkills: true,
               mcpManagement: true,
               mcpCreateOnly: true,
+              mcpDiscovery: true,
+              mcpNativeInventory: true,
               codexManagedMcp: true,
               claudeManagedMcp: true,
               openCodeManagedMcp: true,
@@ -2191,6 +2200,26 @@ const makeWsRpcLayer = (
           observeRpcEffect(WS_METHODS.pulseMcpRemove, pulseMcp.remove(input), {
             "rpc.aggregate": "pulse.mcp",
           }),
+        [WS_METHODS.pulseMcpDiscover]: () =>
+          observeRpcEffect(WS_METHODS.pulseMcpDiscover, pulseMcp.discover(), {
+            "rpc.aggregate": "pulse.mcp",
+          }),
+        [WS_METHODS.pulseMcpImportDiscovered]: (input) =>
+          observeRpcEffect(WS_METHODS.pulseMcpImportDiscovered, pulseMcp.importDiscovered(input), {
+            "rpc.aggregate": "pulse.mcp",
+          }),
+        [WS_METHODS.pulseMcpNativeInventory]: (input) =>
+          observeRpcEffect(WS_METHODS.pulseMcpNativeInventory, pulseMcp.nativeInventory(input), {
+            "rpc.aggregate": "pulse.mcp",
+          }),
+        [WS_METHODS.pulseMcpSetDiscoveryFollow]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.pulseMcpSetDiscoveryFollow,
+            pulseMcp.setDiscoveryFollow(input),
+            {
+              "rpc.aggregate": "pulse.mcp",
+            },
+          ),
         [WS_METHODS.pulseMcpGetProviderDefault]: (input) =>
           observeRpcEffect(
             WS_METHODS.pulseMcpGetProviderDefault,
@@ -2227,6 +2256,10 @@ const makeWsRpcLayer = (
           }),
         [WS_METHODS.pulseSkillsMutate]: (input) =>
           observeRpcEffect(WS_METHODS.pulseSkillsMutate, pulseSkills.mutate(input), {
+            "rpc.aggregate": "pulse.skills",
+          }),
+        [WS_METHODS.pulseSkillsResolveGitHub]: (input) =>
+          observeRpcEffect(WS_METHODS.pulseSkillsResolveGitHub, pulseSkills.resolveGitHub(input), {
             "rpc.aggregate": "pulse.skills",
           }),
         [WS_METHODS.serverGetConfig]: (_input) =>

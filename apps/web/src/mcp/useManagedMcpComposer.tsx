@@ -23,6 +23,7 @@ import type { McpSubmissionPreparation, PrepareComposerMcp } from "./prepareMcpS
 import {
   preparePulseMcpTurn,
   pulseMcpList,
+  pulseMcpNativeInventory,
   pulseMcpProviderDefault,
   pulseMcpThreadOverride,
   resetPulseMcpThreadOverride,
@@ -90,6 +91,16 @@ export function useManagedMcpComposer(input: {
         })
       : null,
   );
+  const nativeInventorySupported =
+    projection?.config.pulseCapabilities?.mcpNativeInventory === true;
+  const nativeInventory = useEnvironmentQuery(
+    nativeInventorySupported && canRead && input.threadId
+      ? pulseMcpNativeInventory({
+          environmentId: input.environmentId,
+          input: { threadId: input.threadId, providerInstanceId: input.providerInstanceId },
+        })
+      : null,
+  );
   const setOverride = useAtomCommand(setPulseMcpThreadOverride, { reportFailure: false });
   const resetOverride = useAtomCommand(resetPulseMcpThreadOverride, { reportFailure: false });
   const saveProviderDefault = useAtomCommand(setPulseMcpProviderDefault);
@@ -130,6 +141,23 @@ export function useManagedMcpComposer(input: {
     const loadedIds = new Set(loaded.map(({ id }) => id));
     return [
       ...loaded,
+      ...(nativeInventory.data?.status === "available"
+        ? nativeInventory.data.servers.map((server) => ({
+            id: `native:${server.name}`,
+            name: server.name,
+            description: "Provider-native MCP",
+            source: "provider" as const,
+            status:
+              server.status === "ready"
+                ? ("available" as const)
+                : server.status === "failed"
+                  ? ("error" as const)
+                  : ("unknown" as const),
+            ...(server.status === "auth-required"
+              ? { statusMessage: "Authentication required" }
+              : {}),
+          }))
+        : []),
       ...selectedIds
         .filter((id) => !loadedIds.has(id))
         .map((id) => ({
@@ -140,7 +168,7 @@ export function useManagedMcpComposer(input: {
           statusMessage: "Unavailable with the selected provider",
         })),
     ];
-  }, [list.data, selectedIds]);
+  }, [list.data, nativeInventory.data, selectedIds]);
   const blockedReason =
     !supported && capabilityReady
       ? selectedIds.length > 0
@@ -468,8 +496,12 @@ export function useManagedMcpComposer(input: {
       entries,
       selectedIds,
       selectionMode,
-      nativeDiscovery: "unavailable" as const,
-      disabled: !enabled && selectedIds.length === 0,
+      nativeDiscovery:
+        nativeInventory.data?.status === "available"
+          ? ("available" as const)
+          : ("unavailable" as const),
+      disabled: false,
+      selectionDisabled: !enabled,
       loading,
       error: list.error ? "Could not load MCPs." : null,
       onChange: changeSelection,

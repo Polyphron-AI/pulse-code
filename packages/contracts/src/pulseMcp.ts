@@ -63,6 +63,18 @@ export const PulseMcpConnection = Schema.Struct({
 });
 export type PulseMcpConnection = typeof PulseMcpConnection.Type;
 
+export const PulseMcpDiscoverySource = Schema.Literals(["claude", "codex", "opencode"]);
+export const PulseMcpDiscoveryCandidate = Schema.Struct({
+  id: ConnectionId,
+  name: Label,
+  source: PulseMcpDiscoverySource,
+  transport: Schema.Literals(["stdio", "http", "unsupported"]),
+  importable: Schema.Boolean,
+  reason: Schema.optionalKey(Schema.String),
+  following: Schema.optionalKey(Schema.Boolean),
+});
+export type PulseMcpDiscoveryCandidate = typeof PulseMcpDiscoveryCandidate.Type;
+
 const ConnectionIds = Schema.Array(ConnectionId).check(Schema.isMaxLength(128));
 const Connections = Schema.Array(PulseMcpConnection).check(Schema.isMaxLength(128));
 
@@ -81,6 +93,10 @@ export const PULSE_MCP_METHODS = {
   setThreadOverride: "pulse.mcp.setThreadOverride",
   resetThreadOverride: "pulse.mcp.resetThreadOverride",
   prepareTurn: "pulse.mcp.prepareTurn",
+  discover: "pulse.mcp.discover",
+  importDiscovered: "pulse.mcp.importDiscovered",
+  nativeInventory: "pulse.mcp.nativeInventory",
+  setDiscoveryFollow: "pulse.mcp.setDiscoveryFollow",
 } as const;
 
 const Selection = Schema.Struct({ connectionIds: ConnectionIds });
@@ -146,6 +162,37 @@ export const PulseMcpRpcs = [
   }),
   Rpc.make(PULSE_MCP_METHODS.remove, {
     payload: Schema.Struct({ id: ConnectionId }),
+    success: Schema.Void,
+    error: errors,
+  }),
+  Rpc.make(PULSE_MCP_METHODS.discover, {
+    payload: Schema.Struct({}),
+    success: Schema.Array(PulseMcpDiscoveryCandidate),
+    error: errors,
+  }),
+  Rpc.make(PULSE_MCP_METHODS.importDiscovered, {
+    payload: Schema.Struct({ source: PulseMcpDiscoverySource, name: Label }),
+    success: PulseMcpConnection,
+    error: errors,
+  }),
+  Rpc.make(PULSE_MCP_METHODS.nativeInventory, {
+    payload: Schema.Struct({ threadId: ThreadId, providerInstanceId: ProviderInstanceId }),
+    success: Schema.Union([
+      Schema.Struct({ status: Schema.Literal("unavailable") }),
+      Schema.Struct({
+        status: Schema.Literal("available"),
+        servers: Schema.Array(
+          Schema.Struct({
+            name: Label,
+            status: Schema.Literals(["ready", "unknown", "failed", "auth-required"]),
+          }),
+        ),
+      }),
+    ]),
+    error: errors,
+  }),
+  Rpc.make(PULSE_MCP_METHODS.setDiscoveryFollow, {
+    payload: Schema.Struct({ source: PulseMcpDiscoverySource, followNew: Schema.Boolean }),
     success: Schema.Void,
     error: errors,
   }),

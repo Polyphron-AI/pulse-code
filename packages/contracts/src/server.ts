@@ -553,6 +553,8 @@ export const ServerConfig = Schema.Struct({
       codexManagedSkills: Schema.optionalKey(Schema.Boolean),
       mcpManagement: Schema.optionalKey(Schema.Boolean),
       mcpCreateOnly: Schema.optionalKey(Schema.Boolean),
+      mcpDiscovery: Schema.optionalKey(Schema.Boolean),
+      mcpNativeInventory: Schema.optionalKey(Schema.Boolean),
       codexManagedMcp: Schema.optionalKey(Schema.Boolean),
       claudeManagedMcp: Schema.optionalKey(Schema.Boolean),
       openCodeManagedMcp: Schema.optionalKey(Schema.Boolean),

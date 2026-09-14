@@ -223,6 +223,9 @@ export interface CodexSessionRuntimeShape {
   ) => Effect.Effect<
     ReadonlyMap<string, { status: "ready" | "unknown" | "failed"; message?: string }>
   >;
+  readonly readNativeMcpInventory?: Effect.Effect<
+    ReadonlyArray<{ readonly name: string; readonly status: "ready" | "failed" }>
+  >;
   readonly compactThread: Effect.Effect<void, CodexSessionRuntimeError>;
   readonly interruptTurn: (turnId?: TurnId) => Effect.Effect<void, CodexSessionRuntimeError>;
   readonly readThread: Effect.Effect<CodexThreadSnapshot, CodexSessionRuntimeError>;
@@ -2616,6 +2619,15 @@ export const makeCodexSessionRuntime = (
             turnId: effectiveTurnId,
           });
         }),
+      readNativeMcpInventory: Ref.get(mcpStartupStatusesRef).pipe(
+        Effect.map((statuses) =>
+          [...statuses].flatMap(([name, status]) =>
+            name === "t3-code" || name.startsWith("pulse_")
+              ? []
+              : [{ name, status: status.status }],
+          ),
+        ),
+      ),
       readThread: Effect.gen(function* () {
         const providerThreadId = yield* readProviderThreadId;
         return yield* readCodexThread(client, providerThreadId);

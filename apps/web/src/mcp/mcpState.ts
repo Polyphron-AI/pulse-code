@@ -23,6 +23,29 @@ export const removePulseMcp = createEnvironmentRpcCommand(connectionAtomRuntime,
   tag: WS_METHODS.pulseMcpRemove,
 });
 
+export const discoverPulseMcp = createEnvironmentRpcQueryAtomFamily(connectionAtomRuntime, {
+  label: "environment-data:pulse-mcp:discover",
+  tag: WS_METHODS.pulseMcpDiscover,
+  staleTimeMs: 0,
+  idleTtlMs: 60_000,
+});
+
+export const importDiscoveredPulseMcp = createEnvironmentRpcCommand(connectionAtomRuntime, {
+  label: "environment-data:pulse-mcp:import-discovered",
+  tag: WS_METHODS.pulseMcpImportDiscovered,
+});
+
+export const pulseMcpNativeInventory = createEnvironmentRpcQueryAtomFamily(connectionAtomRuntime, {
+  label: "environment-data:pulse-mcp:native-inventory",
+  tag: WS_METHODS.pulseMcpNativeInventory,
+  staleTimeMs: 5_000,
+  idleTtlMs: 60_000,
+});
+export const setPulseMcpDiscoveryFollow = createEnvironmentRpcCommand(connectionAtomRuntime, {
+  label: "environment-data:pulse-mcp:set-discovery-follow",
+  tag: WS_METHODS.pulseMcpSetDiscoveryFollow,
+});
+
 export const pulseMcpProviderDefault = createEnvironmentRpcQueryAtomFamily(connectionAtomRuntime, {
   label: "environment-data:pulse-mcp:provider-default",
   tag: WS_METHODS.pulseMcpGetProviderDefault,

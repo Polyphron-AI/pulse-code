@@ -5535,6 +5535,38 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
       });
     },
   );
+  const readNativeMcpInventory: NonNullable<ClaudeAdapterShape["readNativeMcpInventory"]> =
+    Effect.fn("readNativeMcpInventory")(function* (threadId) {
+      const context = yield* requireSession(threadId);
+      if (context.query.mcpServerStatus === undefined) return [];
+      const statuses = yield* Effect.tryPromise({
+        try: () => context.query.mcpServerStatus!.call(context.query),
+        catch: (cause) =>
+          new ProviderAdapterRequestError({
+            provider: PROVIDER,
+            method: "mcpServerStatus",
+            detail: "Claude MCP status could not be read.",
+            cause,
+          }),
+      });
+      return statuses.flatMap((status) =>
+        status.name === "t3-code" || status.name.startsWith("pulse_")
+          ? []
+          : [
+              {
+                name: status.name,
+                status:
+                  status.status === "connected"
+                    ? ("ready" as const)
+                    : status.status === "needs-auth"
+                      ? ("auth-required" as const)
+                      : status.status === "failed" || status.status === "disabled"
+                        ? ("failed" as const)
+                        : ("unknown" as const),
+              },
+            ],
+      );
+    });
 
   const listSessions: ClaudeAdapterShape["listSessions"] = () =>
     Effect.sync(() => Array.from(sessions.values(), ({ session }) => ({ ...session })));
@@ -5583,6 +5615,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     sendTurn,
     prepareManagedMcp,
     readManagedMcpStatus,
+    readNativeMcpInventory,
     interruptTurn,
     readThread,
     rollbackThread,

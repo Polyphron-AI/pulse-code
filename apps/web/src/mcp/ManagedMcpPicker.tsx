@@ -32,6 +32,7 @@ export interface ManagedMcpPickerProps {
   readonly nativeDiscovery: "available" | "unavailable";
   readonly size?: ComposerControlSize;
   readonly disabled?: boolean;
+  readonly selectionDisabled?: boolean;
   readonly loading?: boolean;
   readonly error?: string | null;
   readonly onChange: (connectionIds: ReadonlyArray<string>) => void;
@@ -128,6 +129,7 @@ export function ManagedMcpPicker(props: ManagedMcpPickerProps) {
                   key={entry.id}
                   variant="switch"
                   checked={props.selectedIds.includes(entry.id)}
+                  disabled={props.selectionDisabled}
                   onCheckedChange={() =>
                     props.onChange(toggleManagedMcpSelection(props.selectedIds, entry.id))
                   }
@@ -165,7 +167,9 @@ export function ManagedMcpPicker(props: ManagedMcpPickerProps) {
 
         <MenuSeparator />
         {props.selectionMode === "override" ? (
-          <MenuItem onClick={props.onUseDefaults}>Use defaults</MenuItem>
+          <MenuItem disabled={props.selectionDisabled} onClick={props.onUseDefaults}>
+            Use defaults
+          </MenuItem>
         ) : (
           <p className="px-2 py-1 text-xs text-muted-foreground">Using provider defaults</p>
         )}

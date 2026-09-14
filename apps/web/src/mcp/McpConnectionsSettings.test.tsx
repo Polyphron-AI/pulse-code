@@ -66,6 +66,9 @@ vi.mock("./mcpState", () => ({
   pulseMcpList: mocks.list,
   upsertPulseMcp: Symbol("upsert"),
   removePulseMcp: Symbol("remove"),
+  discoverPulseMcp: () => null,
+  importDiscoveredPulseMcp: Symbol("importDiscovered"),
+  setPulseMcpDiscoveryFollow: Symbol("setDiscoveryFollow"),
 }));
 vi.mock("./McpConnectionsPanel", () => ({
   McpConnectionsPanel: ({

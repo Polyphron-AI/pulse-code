@@ -17,3 +17,8 @@ export const mutateManagedSkill = createEnvironmentRpcCommand(connectionAtomRunt
   label: "environment-data:pulse-skills:mutate",
   tag: WS_METHODS.pulseSkillsMutate,
 });
+
+export const resolveManagedSkillGitHub = createEnvironmentRpcCommand(connectionAtomRuntime, {
+  label: "environment-data:pulse-skills:resolve-github",
+  tag: WS_METHODS.pulseSkillsResolveGitHub,
+});

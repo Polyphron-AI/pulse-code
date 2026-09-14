@@ -2643,6 +2643,15 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
         ...(statuses.get(`pulse_${server.id}`) ?? { status: "unknown" as const }),
       }));
     });
+  const readNativeMcpInventory: NonNullable<CodexAdapterShape["readNativeMcpInventory"]> = (
+    threadId,
+  ) =>
+    Effect.gen(function* () {
+      const session = yield* requireSession(threadId);
+      return session.runtime.readNativeMcpInventory
+        ? yield* session.runtime.readNativeMcpInventory
+        : [];
+    });
 
   const requireSession = Effect.fn("requireSession")(function* (threadId: ThreadId) {
     const session = sessions.get(threadId);
@@ -2818,6 +2827,7 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
     startSession,
     sendTurn,
     prepareManagedMcp,
+    readNativeMcpInventory,
     readManagedMcpStatus,
     compaction: { type: "native", start: compactThread },
     interruptTurn,

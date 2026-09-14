@@ -3858,6 +3858,30 @@ export function makeOpenCodeAdapter(
             : status,
       );
     });
+    const readNativeMcpInventory: NonNullable<OpenCodeAdapterShape["readNativeMcpInventory"]> =
+      Effect.fn("readNativeMcpInventory")(function* (threadId) {
+        const context = yield* ensureSessionContext(sessions, threadId);
+        const response = yield* runOpenCodeSdk("mcp.status", () =>
+          context.client.mcp.status(),
+        ).pipe(Effect.mapError(toRequestError));
+        return Object.entries(response.data ?? {}).flatMap(([name, status]) =>
+          name === "t3-code" || name.startsWith("pulse_")
+            ? []
+            : [
+                {
+                  name,
+                  status:
+                    status.status === "connected"
+                      ? ("ready" as const)
+                      : status.status === "needs_auth"
+                        ? ("auth-required" as const)
+                        : status.status === "failed" || status.status === "disabled"
+                          ? ("failed" as const)
+                          : ("unknown" as const),
+                },
+              ],
+        );
+      });
 
     const stopSession: OpenCodeAdapterShape["stopSession"] = Effect.fn("stopSession")(
       function* (threadId) {
@@ -4041,6 +4065,7 @@ export function makeOpenCodeAdapter(
       sendTurn,
       prepareManagedMcp,
       readManagedMcpStatus,
+      readNativeMcpInventory,
       compaction: { type: "native", start: compactThread },
       interruptTurn,
       respondToRequest,

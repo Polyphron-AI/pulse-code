@@ -4911,12 +4911,14 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const managedSkillPicker = (
     <ManagedSkillPicker
       state={managedSkillPickerState}
+      nativeSkills={selectedProviderSkills}
       onChange={(pulseSkills) => setComposerDraftPulseSkills(composerDraftTarget, pulseSkills)}
     />
   );
   const restingManagedSkillPicker = (
     <ManagedSkillPicker
       state={managedSkillPickerState}
+      nativeSkills={selectedProviderSkills}
       size="xs"
       onChange={(pulseSkills) => setComposerDraftPulseSkills(composerDraftTarget, pulseSkills)}
     />

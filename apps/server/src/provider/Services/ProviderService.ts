@@ -36,12 +36,17 @@ import type * as Stream from "effect/Stream";
 
 import type { ProviderServiceError } from "../Errors.ts";
 import type { ProviderAdapterCapabilities } from "./ProviderAdapter.ts";
+import type { ProviderNativeMcpStatus } from "./ProviderAdapter.ts";
 import type { ProviderInstanceRoutingInfo } from "./ProviderAdapterRegistry.ts";
 
 /**
  * ProviderServiceShape - Service API for provider session and turn orchestration.
  */
 export interface ProviderServiceShape {
+  readonly readNativeMcpInventory?: (input: {
+    readonly threadId: ThreadId;
+    readonly providerInstanceId: ProviderInstanceId;
+  }) => Effect.Effect<ReadonlyArray<ProviderNativeMcpStatus> | null, ProviderServiceError>;
   readonly preparePulseMcp?: (
     input: PulseMcpPrepareTurnInput,
   ) => Effect.Effect<PulseMcpPrepareTurnResult, ProviderServiceError>;

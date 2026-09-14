@@ -44,6 +44,14 @@ export interface ManagedSkillsPanelProps {
     mutation: PulseSkillMutation,
   ) => Promise<ReadonlyArray<PulseSkillRecord>>;
   readonly disabled?: boolean;
+  readonly resolveGitHub?: (
+    environmentKey: string,
+    url: string,
+  ) => Promise<{
+    readonly repository: string;
+    readonly ref: string;
+    readonly directories: readonly string[];
+  }>;
 }
 
 type MutationResult = { readonly ok: true } | { readonly ok: false; readonly error: string };
@@ -56,6 +64,7 @@ export function ManagedSkillsPanel({
   environmentKey,
   skills,
   mutate,
+  resolveGitHub,
   disabled = false,
 }: ManagedSkillsPanelProps) {
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -214,6 +223,9 @@ export function ManagedSkillsPanel({
         disabled={disabled}
         onOpenChange={(open) => !open && setGitTarget(null)}
         onImport={(mutation) => run("github", mutation)}
+        {...(resolveGitHub
+          ? { resolveGitHub: (url: string) => resolveGitHub(environmentKey, url) }
+          : {})}
       />
       <AlertDialog
         open={!disabled && removing !== null}
@@ -504,12 +516,20 @@ function GitHubSkillDialog({
   disabled,
   onOpenChange,
   onImport,
+  resolveGitHub,
 }: {
   readonly target: PulseSkillRecord | "new" | null;
   readonly busy: boolean;
   readonly disabled: boolean;
   readonly onOpenChange: (open: boolean) => void;
   readonly onImport: (mutation: PulseSkillMutation) => Promise<MutationResult>;
+  readonly resolveGitHub?: (
+    url: string,
+  ) => Promise<{
+    readonly repository: string;
+    readonly ref: string;
+    readonly directories: readonly string[];
+  }>;
 }) {
   const fieldId = useId();
   const [id, setId] = useState("");
@@ -517,12 +537,20 @@ function GitHubSkillDialog({
   const [ref, setRef] = useState("main");
   const [directory, setDirectory] = useState("");
   const [keepUpdated, setKeepUpdated] = useState(false);
+  const [url, setUrl] = useState("");
+  const [resolving, setResolving] = useState(false);
+  const [resolvedDirectories, setResolvedDirectories] = useState<readonly string[]>([]);
+  const resolveGeneration = useRef(0);
   const reset = () => {
     setId("");
     setRepository("");
     setRef("main");
     setDirectory("");
     setKeepUpdated(false);
+    setUrl("");
+    setResolving(false);
+    setResolvedDirectories([]);
+    resolveGeneration.current += 1;
   };
   useEffect(() => {
     if (!target || disabled) {
@@ -586,6 +614,47 @@ function GitHubSkillDialog({
         </DialogHeader>
         <DialogPanel>
           <div className="grid gap-4">
+            {target === "new" && resolveGitHub ? (
+              <div className="grid gap-1.5">
+                <Label htmlFor={`${fieldId}-git-url`}>GitHub skill URL</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id={`${fieldId}-git-url`}
+                    value={url}
+                    disabled={disabled || busy || resolving}
+                    placeholder="https://github.com/owner/repository"
+                    onChange={(event) => setUrl(event.target.value)}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={!url.trim() || disabled || busy || resolving}
+                    onClick={() => {
+                      const generation = ++resolveGeneration.current;
+                      setResolving(true);
+                      void resolveGitHub(url.trim())
+                        .then((resolved) => {
+                          if (generation !== resolveGeneration.current) return;
+                          setRepository(resolved.repository);
+                          setRef(resolved.ref);
+                          setResolvedDirectories(resolved.directories);
+                          if (resolved.directories.length === 1)
+                            setDirectory(resolved.directories[0]!);
+                          else setDirectory("");
+                        })
+                        .finally(() => {
+                          if (generation === resolveGeneration.current) setResolving(false);
+                        });
+                    }}
+                  >
+                    {resolving ? "Resolving…" : "Resolve"}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  When a repository contains several skills, choose the directory below.
+                </p>
+              </div>
+            ) : null}
             {target === "new" ? (
               <div className="grid gap-1.5">
                 <Label htmlFor={`${fieldId}-git-id`}>Skill ID</Label>
@@ -624,11 +693,17 @@ function GitHubSkillDialog({
                 <Label htmlFor={`${fieldId}-directory`}>Skill directory</Label>
                 <Input
                   id={`${fieldId}-directory`}
+                  list={`${fieldId}-directories`}
                   value={directory}
                   disabled={disabled || busy}
                   placeholder="skills/review"
                   onChange={(event) => setDirectory(event.target.value)}
                 />
+                <datalist id={`${fieldId}-directories`}>
+                  {resolvedDirectories.map((candidate) => (
+                    <option key={candidate} value={candidate} />
+                  ))}
+                </datalist>
               </div>
             </div>
             <div className="grid gap-1.5">

@@ -59,6 +59,7 @@ vi.mock("../state/use-atom-command", () => ({ useAtomCommand: () => mocks.mutate
 vi.mock("./managedSkillsState", () => ({
   managedSkillsList: mocks.list,
   mutateManagedSkill: Symbol("mutateManagedSkill"),
+  resolveManagedSkillGitHub: Symbol("resolveManagedSkillGitHub"),
 }));
 vi.mock("./ManagedSkillsPanel", () => ({
   ManagedSkillsPanel: ({
