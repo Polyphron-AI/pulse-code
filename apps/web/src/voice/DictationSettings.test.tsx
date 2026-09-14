@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   remove: vi.fn(),
   setup: vi.fn(),
   resetParakeet: vi.fn(),
+  parakeetReady: false,
 }));
 
 vi.mock("@effect/atom-react", () => ({
@@ -55,6 +56,7 @@ vi.mock("./dictationSettingsState", () => ({
 vi.mock("./parakeetSetup", () => ({
   setupParakeet: mocks.setup,
   resetParakeet: mocks.resetParakeet,
+  isParakeetReady: () => mocks.parakeetReady,
 }));
 vi.mock("../components/ui/radio-group", () => ({
   RadioGroup: ({
@@ -138,6 +140,7 @@ beforeEach(() => {
   mocks.remove.mockReset();
   mocks.setup.mockReset();
   mocks.resetParakeet.mockReset();
+  mocks.parakeetReady = false;
 });
 afterEach(async () => {
   await act(() => renderer?.unmount());
@@ -190,10 +193,20 @@ describe("DictationSettings", () => {
     mocks.setup.mockResolvedValue(undefined);
     await render();
     await click("Set up Parakeet");
-    expect(json()).toContain("Parakeet ready");
+    expect(json()).toContain("Parakeet is ready");
     await act(() => renderer?.unmount());
     renderer = undefined;
     expect(mocks.resetParakeet).not.toHaveBeenCalled();
+  });
+
+  it("shows the existing Parakeet readiness when Settings remounts", async () => {
+    mocks.parakeetReady = true;
+    await render();
+    expect(json()).toContain("Parakeet is ready");
+    expect(json()).toContain("Return to your conversation and click the microphone to record.");
+    expect(renderer!.root.findAllByProps({ role: "status" })).toHaveLength(1);
+    expect(json()).not.toContain("Set up Parakeet");
+    expect(mocks.setup).not.toHaveBeenCalled();
   });
 
   it("can reverse an onboarding decline", async () => {

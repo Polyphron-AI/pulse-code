@@ -90,7 +90,9 @@ describe("ParakeetTranscriber", () => {
     const setup = transcriber.setup(new AbortController().signal);
     worker.reply({ id: 1, kind: "result", text: "" });
     await setup;
+    expect(transcriber.isReady()).toBe(true);
     transcriber.reset();
+    expect(transcriber.isReady()).toBe(false);
 
     await expect(
       transcriber.transcribe(new Blob([new Uint8Array([1])]), new AbortController().signal),
@@ -132,7 +134,9 @@ describe("ParakeetTranscriber", () => {
     const setup = transcriber.setup(new AbortController().signal);
     firstWorker.reply({ id: 1, kind: "result", text: "" });
     await setup;
+    expect(transcriber.isReady()).toBe(true);
     firstWorker.fail();
+    expect(transcriber.isReady()).toBe(false);
 
     await expect(
       transcriber.transcribe(new Blob([new Uint8Array([1])]), new AbortController().signal),
@@ -190,6 +194,7 @@ describe("ParakeetTranscriber", () => {
     await expect(setup).rejects.toThrow(
       "TypeError: Glue module mismatch (caused by CompileError: bad wasm)",
     );
+    expect(transcriber.isReady()).toBe(false);
   });
 
   it("retries successfully on the same transcriber after a worker-reported failure", async () => {

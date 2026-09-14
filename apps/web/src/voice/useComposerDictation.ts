@@ -14,6 +14,7 @@ import {
 } from "react";
 import * as Option from "effect/Option";
 import { AsyncResult } from "effect/unstable/reactivity";
+import { useNavigate } from "@tanstack/react-router";
 
 import { useEnvironments } from "../state/environments";
 import { appAtomRegistry } from "../rpc/atomRegistry";
@@ -24,7 +25,7 @@ import { resolveDictationBackend } from "./dictationPreferences";
 import { dictationFileName } from "./composerDictationLogic";
 import { transcribeGroqDictation } from "./dictationSettingsState";
 import { MediaRecorderCapture } from "./mediaRecorderCapture";
-import { getParakeetTranscriber } from "./parakeetSetup";
+import { getParakeetTranscriber, isParakeetReady } from "./parakeetSetup";
 import { PulseDictationController, type PulseDictationState } from "./pulseDictation";
 
 function groqStartError(environmentId: EnvironmentId): string | null {
@@ -62,6 +63,7 @@ export function useComposerDictation(input: {
   readonly stop: () => void;
   readonly cancel: () => void;
 } {
+  const navigate = useNavigate();
   const transcribeGroq = useAtomCommand(transcribeGroqDictation, { reportFailure: false });
   const { environments } = useEnvironments();
   const environmentIds = environments.map((environment) => environment.environmentId);
@@ -121,11 +123,7 @@ export function useComposerDictation(input: {
     setGateError(null);
     const captured = resolveDictationBackend(environmentIds);
     if (captured.backend === "unavailable") {
-      setGateError(
-        captured.reason === "dictation-disabled"
-          ? "Turn on dictation in Settings before using it."
-          : "Choose a connected Groq environment in Settings before using dictation.",
-      );
+      void navigate({ to: "/settings/integrations", hash: "dictation" });
       return;
     }
     if (captured.backend === "groq") {
@@ -136,6 +134,10 @@ export function useComposerDictation(input: {
       }
       capturedGroqEnvironmentIdRef.current = captured.environmentId;
     } else {
+      if (!isParakeetReady()) {
+        void navigate({ to: "/settings/integrations", hash: "dictation" });
+        return;
+      }
       capturedGroqEnvironmentIdRef.current = null;
     }
     void controller.start({
@@ -146,7 +148,7 @@ export function useComposerDictation(input: {
         return undefined;
       },
     });
-  }, [controller, environmentIds, input.draftIdentity]);
+  }, [controller, environmentIds, input.draftIdentity, navigate]);
 
   const cancel = useCallback(() => {
     setGateError(null);

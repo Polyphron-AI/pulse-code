@@ -15,8 +15,11 @@ export function setupParakeet(
   return getParakeetTranscriber().setup(signal, onProgress);
 }
 
+export function isParakeetReady(): boolean {
+  return transcriber?.isReady() === true;
+}
+
 /** Release the device-local model when the user disables or abandons setup. */
 export function resetParakeet(): void {
   transcriber?.reset();
-  transcriber = null;
 }

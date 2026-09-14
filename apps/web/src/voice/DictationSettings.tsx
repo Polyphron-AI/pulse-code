@@ -31,7 +31,7 @@ import {
   type DictationBackendPreference,
 } from "./dictationPreferences";
 import { deleteGroqApiKey, readGroqApiKeyStatus, saveGroqApiKey } from "./dictationSettingsState";
-import { resetParakeet, setupParakeet } from "./parakeetSetup";
+import { isParakeetReady, resetParakeet, setupParakeet } from "./parakeetSetup";
 
 export function DictationSettings() {
   const { environments, isReady } = useEnvironments();
@@ -113,7 +113,9 @@ export function DictationSettings() {
 }
 
 function ParakeetSetup() {
-  const [state, setState] = useState<"idle" | "setting-up" | "ready" | "error">("idle");
+  const [state, setState] = useState<"idle" | "setting-up" | "ready" | "error">(() =>
+    isParakeetReady() ? "ready" : "idle",
+  );
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -159,20 +161,26 @@ function ParakeetSetup() {
     setError(null);
   };
   return (
-    <div className="space-y-2">
-      <Button
-        variant="outline"
-        disabled={state === "setting-up" || state === "ready"}
-        onClick={() => void setup()}
-      >
-        {state === "setting-up"
-          ? progress === null
-            ? "Setting up…"
-            : `Downloading… ${String(progress)}%`
-          : state === "ready"
-            ? "Parakeet ready"
+    <div className="space-y-3 rounded-lg border border-border bg-muted/30 p-4">
+      <div className="space-y-1" role={state === "ready" ? "status" : undefined}>
+        <p className="text-sm font-medium">
+          {state === "ready" ? "Parakeet is ready" : "Set up local voice dictation"}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          {state === "ready"
+            ? "Return to your conversation and click the microphone to record."
+            : "Download the Parakeet model before using the microphone. Audio stays on this device."}
+        </p>
+      </div>
+      {state !== "ready" ? (
+        <Button disabled={state === "setting-up"} onClick={() => void setup()}>
+          {state === "setting-up"
+            ? progress === null
+              ? "Setting up…"
+              : `Downloading… ${String(progress)}%`
             : "Set up Parakeet"}
-      </Button>
+        </Button>
+      ) : null}
       {state === "setting-up" ? (
         <div className="space-y-1" aria-live="polite">
           <p className="text-xs text-muted-foreground">

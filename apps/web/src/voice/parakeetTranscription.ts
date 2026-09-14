@@ -50,6 +50,10 @@ export class ParakeetTranscriber implements PulseDictationTranscriber<Blob> {
     this.#decode = decode;
   }
 
+  isReady(): boolean {
+    return this.#worker !== null && this.#readyGeneration === this.#generation;
+  }
+
   async setup(
     signal: AbortSignal,
     onProgress?: (progress: ParakeetSetupProgress) => void,
@@ -95,8 +99,10 @@ export class ParakeetTranscriber implements PulseDictationTranscriber<Blob> {
         return;
       }
       this.#pending.delete(event.data.id);
-      if (event.data.kind === "failure") item.reject(parakeetFailureToError(event.data.failure));
-      else item.resolve(event.data.text);
+      if (event.data.kind === "failure") {
+        this.#readyGeneration = null;
+        item.reject(parakeetFailureToError(event.data.failure));
+      } else item.resolve(event.data.text);
     });
     worker.addEventListener("error", (event) => {
       this.#generation += 1;
