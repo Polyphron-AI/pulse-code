@@ -144,6 +144,38 @@
         "Verify capture and transcription on each target; legacy source does not prove cross-platform support.",
         "Verify real Parakeet model loading and accuracy on supported devices; development acceptance used a mock model worker with real browser capture and decoding.",
         "Verify live Groq transcription and packaged desktop microphone permissions. Synthetic browser acceptance does not certify physical devices or signed installers."
+      ],
+      "futureRoadmap": [
+        {
+          "order": 1,
+          "feature": "Direct PCM capture and background Parakeet warmup.",
+          "goal": "Remove whole-recording Blob decoding from the stop path and make local dictation ready before first use."
+        },
+        {
+          "order": 2,
+          "feature": "Local deterministic cleanup with explicit punctuation, safe filler removal, corrections, snippets and undo.",
+          "goal": "Improve dictated text without a network request or an unbounded rewrite; retain the original transcript for recovery."
+        },
+        {
+          "order": 3,
+          "feature": "Personal dictionary and coding vocabulary gathered from the current project.",
+          "goal": "Recognize user terms, file names, symbols and technical vocabulary while keeping project context scoped to that project."
+        },
+        {
+          "order": 4,
+          "feature": "Optional Concise and Rewrite modes.",
+          "goal": "Offer deliberate model-assisted editing without delaying the default local dictation path or changing its privacy behavior."
+        },
+        {
+          "order": 5,
+          "feature": "Voice editing commands such as delete last sentence.",
+          "goal": "Let users correct composer text without restarting dictation or reaching for the keyboard."
+        },
+        {
+          "order": 6,
+          "feature": "Partial transcription or a streaming runtime.",
+          "goal": "Consider streaming only after measuring end-to-end latency for the first four roadmap items; do not replace the current runtime without evidence that streaming improves perceived delay."
+        }
       ]
     },
     {
