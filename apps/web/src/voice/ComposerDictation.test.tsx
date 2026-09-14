@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-import type { ReactNode } from "react";
-import { act } from "react";
+import type { ReactElement, ReactNode } from "react";
+import { act, cloneElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
@@ -18,12 +18,8 @@ vi.mock("../components/ui/button", () => ({
 }));
 vi.mock("../components/ui/tooltip", () => ({
   Tooltip: ({ children }: { children: ReactNode }) => children,
-  TooltipTrigger: ({ children, render }: { children: ReactNode; render: ReactNode }) => (
-    <>
-      {render}
-      {children}
-    </>
-  ),
+  TooltipTrigger: ({ children, render }: { children: ReactNode; render: ReactNode }) =>
+    cloneElement(render as ReactElement<{ children?: ReactNode }>, {}, children),
   TooltipPopup: ({ children }: { children: ReactNode }) => children,
 }));
 
@@ -76,10 +72,37 @@ describe("ComposerDictation", () => {
       );
     });
     expect(container.textContent).not.toContain("Set up voice");
-    (
-      container.querySelector('[aria-label="Stop recording and transcribe"]') as HTMLButtonElement
-    ).click();
+    const recordingButton = container.querySelector(
+      '[aria-label="Stop recording and transcribe"]',
+    ) as HTMLButtonElement;
+    expect(recordingButton.textContent).toContain("Voice dictation");
+    expect(recordingButton.getAttribute("aria-pressed")).toBe("true");
+    expect(recordingButton.className).toContain("bg-[#ff3b1f]");
+    expect(recordingButton.querySelectorAll(".pulse-dictation-wave > span")).toHaveLength(3);
+    recordingButton.click();
     expect(onStop).toHaveBeenCalledOnce();
     expect(container.querySelectorAll("button")).toHaveLength(1);
+  });
+
+  it("keeps the idle microphone neutral", async () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+    await act(() => {
+      root!.render(
+        <ComposerDictation
+          state={{ phase: "idle" }}
+          disabledReason={null}
+          onStart={vi.fn()}
+          onStop={vi.fn()}
+          onCancel={vi.fn()}
+          parakeetConfigured
+        />,
+      );
+    });
+    const mic = container.querySelector('[aria-label="Dictate"]') as HTMLButtonElement;
+    expect(mic.textContent).not.toContain("Voice dictation");
+    expect(mic.getAttribute("aria-pressed")).toBe("false");
+    expect(mic.className).not.toContain("bg-[#ff3b1f]");
   });
 });

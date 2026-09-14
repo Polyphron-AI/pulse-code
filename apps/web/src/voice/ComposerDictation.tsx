@@ -73,9 +73,13 @@ export function ComposerDictation(props: {
             <Button
               type="button"
               variant="ghost"
-              size="icon-sm"
+              size={recording ? "sm" : "icon-sm"}
               disabled={unavailable}
-              className={recording ? "text-error-foreground" : undefined}
+              className={
+                recording
+                  ? "border-[#ff674f] bg-[#ff3b1f] px-2.5 text-white shadow-sm shadow-black/20 [--control-icon-color:white] hover:bg-[#e9341b]"
+                  : undefined
+              }
               onPointerDown={(event) => event.preventDefault()}
               onClick={recording ? props.onStop : busy ? props.onCancel : props.onStart}
               onContextMenu={showAudioInputMenu}
@@ -84,13 +88,24 @@ export function ComposerDictation(props: {
                 showAudioInputMenu(event);
               }}
               aria-label={label}
+              aria-pressed={recording}
             />
           }
         >
           {busy ? (
             <AudioLinesIcon />
+          ) : recording ? (
+            <>
+              <span className="pulse-dictation-wave" aria-hidden="true">
+                <span />
+                <span />
+                <span />
+              </span>
+              <span className="text-xs font-semibold">Voice dictation</span>
+              <MicIcon className="fill-current" />
+            </>
           ) : (
-            <MicIcon className={recording ? "fill-current" : undefined} />
+            <MicIcon />
           )}
         </TooltipTrigger>
         <TooltipPopup className="max-w-72 whitespace-normal">

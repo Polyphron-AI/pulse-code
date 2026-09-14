@@ -2106,6 +2106,53 @@ code {
   }
 }
 
+@keyframes pulse-dictation-wave {
+  0%,
+  100% {
+    transform: scaleY(0.4);
+    opacity: 0.65;
+  }
+
+  50% {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+
+.pulse-dictation-wave {
+  display: flex;
+  height: 14px;
+  align-items: center;
+  gap: 2px;
+}
+
+.pulse-dictation-wave > span {
+  width: 2px;
+  height: 12px;
+  border-radius: 999px;
+  background: currentColor;
+  animation: pulse-dictation-wave 720ms ease-in-out infinite;
+}
+
+.pulse-dictation-wave > span:nth-child(2) {
+  animation-delay: -240ms;
+}
+
+.pulse-dictation-wave > span:nth-child(3) {
+  animation-delay: -430ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pulse-dictation-wave > span {
+    animation: none;
+  }
+
+  .pulse-dictation-wave > span:first-child,
+  .pulse-dictation-wave > span:last-child {
+    transform: scaleY(0.55);
+  }
+}
+
 /* Let the sortable rows open label clearance before painting the dividers.
    This runs once per pickup; rows retain dnd-kit's normal 200ms transitions. */
 .sidebar-drag-boundary-label {
