@@ -73,6 +73,21 @@ export interface ThreadTitleGenerationResult {
   title: string;
 }
 
+export interface ThreadHandoffGenerationInput {
+  cwd: string;
+  /** Formatted transcript of the thread being handed off. */
+  threadContext: string;
+  /** The thread's title, which orients the summary even when context is truncated. */
+  threadTitle?: string | undefined;
+  attachments?: ReadonlyArray<ChatAttachment> | undefined;
+  /** What model and provider to use for generation. */
+  modelSelection: ModelSelection;
+}
+
+export interface ThreadHandoffGenerationResult {
+  summary: string;
+}
+
 /**
  * TextGeneration - Service tag for commit and change request text generation.
  */
@@ -104,6 +119,11 @@ export class TextGeneration extends Context.Service<
     readonly generateThreadTitle: (
       input: ThreadTitleGenerationInput,
     ) => Effect.Effect<ThreadTitleGenerationResult, TextGenerationError>;
+
+    /** Summarize a thread so its work can continue in a new thread on another provider. */
+    readonly generateThreadHandoff: (
+      input: ThreadHandoffGenerationInput,
+    ) => Effect.Effect<ThreadHandoffGenerationResult, TextGenerationError>;
   }
 >()("t3/textGeneration/TextGeneration") {}
 
@@ -111,7 +131,8 @@ type TextGenerationOp =
   | "generateCommitMessage"
   | "generatePrContent"
   | "generateBranchName"
-  | "generateThreadTitle";
+  | "generateThreadTitle"
+  | "generateThreadHandoff";
 
 const resolveInstance = (
   registry: ProviderInstanceRegistry.ProviderInstanceRegistry["Service"],
@@ -150,6 +171,10 @@ export const makeTextGenerationFromRegistry = (
     generateThreadTitle: (input) =>
       resolveInstance(registry, "generateThreadTitle", input.modelSelection.instanceId).pipe(
         Effect.flatMap((textGeneration) => textGeneration.generateThreadTitle(input)),
+      ),
+    generateThreadHandoff: (input) =>
+      resolveInstance(registry, "generateThreadHandoff", input.modelSelection.instanceId).pipe(
+        Effect.flatMap((textGeneration) => textGeneration.generateThreadHandoff(input)),
       ),
   });
 

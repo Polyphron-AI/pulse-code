@@ -309,6 +309,10 @@ function createTextGeneration(
       Effect.succeed({
         title: "Update workflow",
       }),
+    generateThreadHandoff: () =>
+      Effect.succeed({
+        summary: "Handoff brief",
+      }),
     ...overrides,
   };
 
@@ -352,6 +356,17 @@ function createTextGeneration(
           (cause) =>
             new TextGenerationError({
               operation: "generateThreadTitle",
+              detail: "fake text generation failed",
+              ...(cause !== undefined ? { cause } : {}),
+            }),
+        ),
+      ),
+    generateThreadHandoff: (input) =>
+      implementation.generateThreadHandoff(input).pipe(
+        Effect.mapError(
+          (cause) =>
+            new TextGenerationError({
+              operation: "generateThreadHandoff",
               detail: "fake text generation failed",
               ...(cause !== undefined ? { cause } : {}),
             }),

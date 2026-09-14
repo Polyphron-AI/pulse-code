@@ -25,6 +25,7 @@ import {
   buildBranchNamePrompt,
   buildCommitMessagePrompt,
   buildPrContentPrompt,
+  buildThreadHandoffPrompt,
   buildThreadTitlePrompt,
 } from "./TextGenerationPrompts.ts";
 import {
@@ -401,10 +402,25 @@ export const makeAntigravityTextGeneration = Effect.fn("makeAntigravityTextGener
       return { title: sanitizeThreadTitle(generated.title) };
     });
 
+  const generateThreadHandoff: TextGeneration.TextGeneration["Service"]["generateThreadHandoff"] =
+    Effect.fn("AntigravityTextGeneration.generateThreadHandoff")(function* (input) {
+      const generated = yield* runAntigravityJson({
+        operation: "generateThreadHandoff",
+        ...buildThreadHandoffPrompt({
+          threadContext: input.threadContext,
+          threadTitle: input.threadTitle,
+          attachments: input.attachments,
+        }),
+        modelSelection: input.modelSelection,
+      });
+      return { summary: generated.summary.trim() };
+    });
+
   return {
     generateCommitMessage,
     generatePrContent,
     generateBranchName,
     generateThreadTitle,
+    generateThreadHandoff,
   } satisfies TextGeneration.TextGeneration["Service"];
 });

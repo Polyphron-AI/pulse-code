@@ -14,6 +14,7 @@ const baseState: ThreadActionMenuState = {
   snoozePresets: [
     { id: "hour", label: "In 1 hour", whenLabel: "3:00 PM", snoozedUntil: "2026-08-07T15:00:00Z" },
   ],
+  handoffTargets: [],
 };
 
 function ids(state: ThreadActionMenuState): string[] {
@@ -105,5 +106,15 @@ describe("buildThreadActionMenuItems", () => {
       (item) => item.id === "archive",
     );
     expect(archiveItem?.disabled).toBe(true);
+  });
+
+  it("offers a handoff submenu only when other providers are available", () => {
+    expect(ids(baseState)).not.toContain("continue-in");
+    const withTargets = buildThreadActionMenuItems({
+      ...baseState,
+      handoffTargets: [{ instanceId: "claude", label: "Claude", disabled: false }],
+    });
+    const handoff = withTargets.find((item) => item.id === "continue-in");
+    expect(handoff?.children?.map((child) => child.id)).toEqual(["continue-in:claude"]);
   });
 });
