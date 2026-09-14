@@ -2163,6 +2163,11 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
                           .slice(0, -"SKILL.md".length)
                           .replace(/[\\/]$/, ""),
                         revision: skill.revision,
+                        ...(skill.variantSkillPaths
+                          ? { variantSkillPaths: skill.variantSkillPaths }
+                          : {}),
+                        ...(skill.skillFamily ? { skillFamily: true as const } : {}),
+                        ...(skill.genericFallback ? { genericFallback: true as const } : {}),
                         ...(skill.invocation.userInvocationOnly
                           ? { userInvocationOnly: true }
                           : {}),
@@ -2186,10 +2191,29 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
           `Provider '${routed.adapter.provider}' requires an explicit continuation prompt`,
         );
       }
+      const providerKey = routed.adapter.provider as "codex" | "claudeAgent" | "opencode";
+      const missingFamily = resolvedSkills.find(
+        (skill) =>
+          skill.skillFamily && !skill.genericFallback && !skill.variantSkillPaths?.[providerKey],
+      );
+      if (missingFamily)
+        return yield* toValidationError(
+          "ProviderService.sendTurn",
+          `Managed skill '${missingFamily.id}' has no ${routed.adapter.provider} or generic variant.`,
+        );
+      const providerResolvedSkills = resolvedSkills.map((skill) => {
+        const variantPath = skill.variantSkillPaths?.[providerKey];
+        if (!variantPath) return skill;
+        return {
+          ...skill,
+          path: variantPath,
+          directory: variantPath.slice(0, -"SKILL.md".length).replace(/[\\/]$/, ""),
+        };
+      });
       if (
         routed.adapter.provider === "claudeAgent" &&
-        resolvedSkills.some((skill) => skill.userInvocationOnly) &&
-        resolvedSkills.length !== 1
+        providerResolvedSkills.some((skill) => skill.userInvocationOnly) &&
+        providerResolvedSkills.length !== 1
       ) {
         return yield* toValidationError(
           "ProviderService.sendTurn",
@@ -2216,7 +2240,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
       }
       if (routed.adapter.provider !== "codex") {
         const previous = ManagedSkillProviderSession.readManagedProviderSkills(input.threadId);
-        if (!isDeepStrictEqual(previous, resolvedSkills)) {
+        if (!isDeepStrictEqual(previous, providerResolvedSkills)) {
           const binding = Option.getOrUndefined(yield* directory.getBinding(input.threadId));
           const activeTurnId =
             binding?.runtimePayload !== null &&
@@ -2232,7 +2256,10 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
           }
           if (routed.isActive) yield* routed.adapter.stopSession(input.threadId);
           yield* Effect.sync(() =>
-            ManagedSkillProviderSession.setManagedProviderSkills(input.threadId, resolvedSkills),
+            ManagedSkillProviderSession.setManagedProviderSkills(
+              input.threadId,
+              providerResolvedSkills,
+            ),
           );
           routed = yield* resolveRoutableSession({
             threadId: input.threadId,
@@ -2274,12 +2301,12 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
           Effect.gen(function* () {
             const turn = yield* routed.adapter.sendTurn({
               ...input,
-              ...(resolvedSkills.length > 0
+              ...(providerResolvedSkills.length > 0
                 ? {
                     resolvedSkills:
                       routed.adapter.provider === "codex"
-                        ? resolvedSkills.map(({ name, path }) => ({ name, path }))
-                        : resolvedSkills,
+                        ? providerResolvedSkills.map(({ name, path }) => ({ name, path }))
+                        : providerResolvedSkills,
                   }
                 : {}),
             });

@@ -1697,6 +1697,15 @@ const skillResolution = vi.fn(
         skillPath: `/trusted/${selection.id}/${skillRevision}/SKILL.md`,
         source: { type: "upload" as const },
         invocation: {},
+        ...(selection.id === "family"
+          ? {
+              variantSkillPaths: {
+                codex: `/trusted/family/${skillRevision}/codex/SKILL.md`,
+                claudeAgent: `/trusted/family/${skillRevision}/claude/SKILL.md`,
+                opencode: `/trusted/family/${skillRevision}/opencode/SKILL.md`,
+              },
+            }
+          : {}),
       };
     }),
 );
@@ -3964,6 +3973,33 @@ routing.layer("ProviderServiceLive routing", (it) => {
 });
 
 skillRouting.layer("ProviderServiceLive managed skill invocation", (it) => {
+  it.effect("chooses the provider-specific entry point from one logical skill family", () =>
+    Effect.gen(function* () {
+      const provider = yield* ProviderService.ProviderService;
+      for (const [driver, instanceId, adapter, suffix] of [
+        [CODEX_DRIVER, codexInstanceId, skillRouting.codex, "codex"],
+        [CLAUDE_AGENT_DRIVER, claudeAgentInstanceId, skillRouting.claude, "claude"],
+        [OPENCODE_DRIVER, openCodeInstanceId, skillRouting.opencode, "opencode"],
+      ] as const) {
+        const threadId = asThreadId(`family-${suffix}`);
+        yield* provider.startSession(threadId, {
+          provider: driver,
+          providerInstanceId: instanceId,
+          threadId,
+          runtimeMode: "full-access",
+        });
+        yield* provider.sendTurn({
+          threadId,
+          input: "use family",
+          pulseSkills: [{ id: "family", revision: skillRevision }],
+        });
+        assert.include(
+          adapter.sendTurn.mock.lastCall?.[0].resolvedSkills?.[0]?.path ?? "",
+          `/${suffix}/SKILL.md`,
+        );
+      }
+    }),
+  );
   it.effect("resolves each Codex turn independently and passes only trusted name/path data", () =>
     Effect.gen(function* () {
       const provider = yield* ProviderService.ProviderService;

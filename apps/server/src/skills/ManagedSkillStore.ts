@@ -9,6 +9,7 @@ import { parse } from "yaml";
 
 const execute = NodeUtil.promisify(NodeChildProcess.execFile);
 const MAX_FILES = 128;
+const MAX_FAMILY_FILES = 384;
 const MAX_UPLOAD_FILE_BYTES = 1024 * 1024;
 const MAX_GITHUB_FILE_BYTES = 2 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 8 * 1024 * 1024;
@@ -29,6 +30,7 @@ export interface GitHubSkillSource {
   readonly repository: string;
   readonly ref: string;
   readonly directory: string;
+  readonly variants?: readonly string[] | undefined;
 }
 
 export type ManagedSkillSource = UploadSkillSource | GitHubSkillSource;
@@ -59,6 +61,11 @@ export interface ManagedSkillCatalogDescriptor {
   readonly description: string;
   readonly revision: string;
   readonly skillPath: string;
+  readonly variantSkillPaths?: Readonly<
+    Partial<Record<"codex" | "claudeAgent" | "opencode", string>>
+  >;
+  readonly skillFamily?: true;
+  readonly genericFallback?: true;
   readonly source: ManagedSkillSource;
   readonly resolvedCommit?: string;
   readonly invocation: ManagedSkillInvocationRestrictions;
@@ -133,9 +140,10 @@ export function validateSkillPath(value: string): string {
 export function validateSkillFiles(
   files: ReadonlyArray<SkillUploadFile>,
   maxFileBytes = MAX_UPLOAD_FILE_BYTES,
+  maxFiles = MAX_FILES,
 ): ValidatedSkillFiles {
-  if (!files.length || files.length > MAX_FILES) {
-    throw new Error(`A skill must contain 1 to ${MAX_FILES} files.`);
+  if (!files.length || files.length > maxFiles) {
+    throw new Error(`A skill must contain 1 to ${maxFiles} files.`);
   }
   const names = new Set<string>();
   let bytes = 0;
@@ -329,7 +337,11 @@ function validateGitHubSource(source: GitHubSkillSource): GitHubSkillSource {
   if (source.ref.length > 200) throw new Error("GitHub refs are limited to 200 characters.");
   const directory = source.directory.trim().replace(/^\/+|\/+$/g, "");
   if (directory) validateSkillPath(directory);
-  return { ...source, ref: source.ref.trim(), directory };
+  const variants = [
+    ...new Set((source.variants ?? []).map((value) => value.trim().replace(/^\/+|\/+$/g, ""))),
+  ];
+  for (const variant of variants) validateSkillPath(variant);
+  return { ...source, ref: source.ref.trim(), directory, ...(variants.length ? { variants } : {}) };
 }
 
 function validateUpdatePolicy(
@@ -360,18 +372,41 @@ export async function downloadGitHubSkill(source: GitHubSkillSource, request: Gi
   if (tree.truncated || !Array.isArray(tree.tree)) {
     throw new Error("Repository tree is too large to import safely.");
   }
-  const prefix = directory ? `${directory}/` : "";
-  const entries = tree.tree
-    .map(object)
-    .filter(
-      (entry) =>
-        typeof entry.path === "string" && entry.path.startsWith(prefix) && entry.type !== "tree",
-    );
-  if (!entries.length || entries.length > MAX_FILES) {
-    throw new Error(`Choose a skill directory containing at most ${MAX_FILES} files.`);
+  const variantKind = (value: string) =>
+    value.startsWith(".claude/skills/")
+      ? "claudeAgent"
+      : value.startsWith(".opencode/skills/")
+        ? "opencode"
+        : value.startsWith(".agents/skills/")
+          ? "codex"
+          : undefined;
+  const usedKinds = new Set<string>();
+  const variantPrefixes = (validatedSource.variants ?? [])
+    .filter((value) => value !== directory)
+    .flatMap((value) => {
+      const kind = variantKind(value);
+      if (!kind) return [];
+      if (kind && usedKinds.has(kind))
+        throw new Error(`Skill family contains multiple ${kind} variants.`);
+      if (kind) usedKinds.add(kind);
+      return [{ directory: value, storageKey: kind }];
+    });
+  const selectedPrefixes = [{ directory, storageKey: undefined }, ...variantPrefixes];
+  const entries = tree.tree.map(object).flatMap((entry) =>
+    selectedPrefixes.flatMap((selected) => {
+      const selectedPrefix = selected.directory ? `${selected.directory}/` : "";
+      return typeof entry.path === "string" &&
+        entry.path.startsWith(selectedPrefix) &&
+        entry.type !== "tree"
+        ? [{ entry, selectedPrefix, storageKey: selected.storageKey }]
+        : [];
+    }),
+  );
+  if (!entries.length || entries.length > MAX_FAMILY_FILES) {
+    throw new Error(`Choose a skill family containing at most ${MAX_FAMILY_FILES} files.`);
   }
   let total = 0;
-  for (const entry of entries) {
+  for (const { entry } of entries) {
     if (entry.type !== "blob" || !["100644", "100755"].includes(String(entry.mode))) {
       throw new Error("Skill directories cannot contain symbolic links or submodules.");
     }
@@ -387,13 +422,13 @@ export async function downloadGitHubSkill(source: GitHubSkillSource, request: Gi
     }
   }
   const files: SkillUploadFile[] = [];
-  for (const entry of entries) {
+  for (const { entry, selectedPrefix, storageKey } of entries) {
     const blob = object(await request(`${base}/git/blobs/${entry.sha}`));
     if (blob.encoding !== "base64" || typeof blob.content !== "string") {
       throw new Error("GitHub could not return the skill file.");
     }
     files.push({
-      path: String(entry.path).slice(prefix.length),
+      path: `${storageKey ? `.pulse-variants/${storageKey}/` : ""}${String(entry.path).slice(selectedPrefix.length)}`,
       base64: blob.content.replace(/\s/g, ""),
     });
   }
@@ -446,7 +481,7 @@ export class ManagedSkillStore {
     const downloaded = await downloadGitHubSkill(validatedSource, this.request);
     return this.persist(
       validatedId,
-      validateSkillFiles(downloaded.files, MAX_GITHUB_FILE_BYTES),
+      validateSkillFiles(downloaded.files, MAX_GITHUB_FILE_BYTES, MAX_FAMILY_FILES),
       validatedSource,
       previous,
       updatePolicy,
@@ -499,7 +534,12 @@ export class ManagedSkillStore {
         validateManagedId(record.id);
         const revisionDirectory = this.revisionPath(record.revision);
         const skillPath = NodePath.join(revisionDirectory, "SKILL.md");
-        await this.verifyRevision(revisionDirectory, record.revision);
+        const family = record.source.type === "github" && (record.source.variants?.length ?? 0) > 0;
+        await this.verifyRevision(
+          revisionDirectory,
+          record.revision,
+          family ? MAX_FAMILY_FILES : MAX_FILES,
+        );
         const [realDirectory, realSkillPath] = await Promise.all([
           NodeFSP.realpath(revisionDirectory),
           NodeFSP.realpath(skillPath),
@@ -510,12 +550,49 @@ export class ManagedSkillStore {
         if (!skillEntry.isFile() || skillEntry.isSymbolicLink()) {
           throw new Error("Managed skill entry point must be a regular file.");
         }
+        const variantSkillPaths = Object.fromEntries(
+          (
+            await Promise.all(
+              (["codex", "claudeAgent", "opencode"] as const).map(async (provider) => {
+                const candidate = NodePath.join(
+                  revisionDirectory,
+                  ".pulse-variants",
+                  provider,
+                  "SKILL.md",
+                );
+                if (!(await pathExists(candidate))) return undefined;
+                const realCandidate = await NodeFSP.realpath(candidate);
+                this.assertContained(realDirectory, realCandidate);
+                return [provider, realCandidate] as const;
+              }),
+            )
+          ).filter((entry) => entry !== undefined),
+        );
+        if (record.source.type === "github" && record.source.variants?.length) {
+          const canonicalKind = record.source.directory.startsWith(".claude/skills/")
+            ? "claudeAgent"
+            : record.source.directory.startsWith(".opencode/skills/")
+              ? "opencode"
+              : record.source.directory.startsWith(".agents/skills/")
+                ? "codex"
+                : undefined;
+          if (canonicalKind) variantSkillPaths[canonicalKind] = realSkillPath;
+        }
         return {
           id: record.id,
           name: record.name,
           description: record.description,
           revision: record.revision,
           skillPath: realSkillPath,
+          ...(Object.keys(variantSkillPaths).length ? { variantSkillPaths } : {}),
+          ...(record.source.type === "github" && record.source.variants?.length
+            ? {
+                skillFamily: true as const,
+                ...(!/^\.(?:claude|opencode)\/skills\//.test(record.source.directory)
+                  ? { genericFallback: true as const }
+                  : {}),
+              }
+            : {}),
           source: record.source,
           ...(record.resolvedCommit ? { resolvedCommit: record.resolvedCommit } : {}),
           invocation: record.invocation,
@@ -577,7 +654,11 @@ export class ManagedSkillStore {
     };
   }
 
-  private async verifyRevision(destination: string, expectedRevision: string): Promise<void> {
+  private async verifyRevision(
+    destination: string,
+    expectedRevision: string,
+    maxFiles = MAX_FILES,
+  ): Promise<void> {
     const entry = await NodeFSP.lstat(destination);
     if (!entry.isDirectory() || entry.isSymbolicLink()) {
       throw new Error("Managed skill revision path is not a regular directory.");
@@ -596,8 +677,8 @@ export class ManagedSkillStore {
           const size = (await NodeFSP.stat(path)).size;
           discovered.push({ path: relative, filePath: path });
           totalBytes += size;
-          if (discovered.length > MAX_FILES) {
-            throw new Error(`A skill must contain 1 to ${MAX_FILES} files.`);
+          if (discovered.length > maxFiles) {
+            throw new Error(`A skill must contain 1 to ${maxFiles} files.`);
           }
           if (size > MAX_GITHUB_FILE_BYTES || totalBytes > MAX_TOTAL_BYTES) {
             throw new Error("Stored skills are limited to 8 MB total and 2 MB per file.");
@@ -614,6 +695,7 @@ export class ManagedSkillStore {
         })),
       ),
       MAX_GITHUB_FILE_BYTES,
+      maxFiles,
     );
     if (actual.revision !== expectedRevision) {
       throw new Error("Existing managed skill revision does not match its content hash.");

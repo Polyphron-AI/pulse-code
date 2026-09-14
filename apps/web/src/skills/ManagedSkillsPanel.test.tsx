@@ -175,7 +175,7 @@ describe("ManagedSkillsPanel environment ownership", () => {
     const resolveGitHub = vi.fn().mockResolvedValue({
       repository: "team/skills",
       ref: "main",
-      directories: ["skills/review", "skills/release", "special/review"],
+      directories: ["skills/review", "skills/release", "special/deploy"],
     });
     await act(() => {
       renderer = create(
@@ -225,14 +225,60 @@ describe("ManagedSkillsPanel environment ownership", () => {
     });
     expect(mutate).toHaveBeenNthCalledWith(2, "env-a", {
       operation: "import-github",
-      id: "review-3",
+      id: "deploy",
       source: {
         type: "github",
         repository: "team/skills",
         ref: "main",
-        directory: "special/review",
+        directory: "special/deploy",
       },
       updatePolicy: "keep-updated",
+    });
+  });
+
+  it("groups provider copies into one logical skill family", async () => {
+    const mutate = vi.fn().mockResolvedValue([]);
+    await act(() => {
+      renderer = create(
+        <ManagedSkillsPanel
+          environmentKey="env-a"
+          skills={[]}
+          mutate={mutate}
+          resolveGitHub={() =>
+            Promise.resolve({
+              repository: "pbakaus/impeccable",
+              ref: "main",
+              directories: [
+                ".claude/skills/impeccable",
+                ".agents/skills/impeccable",
+                ".opencode/skills/impeccable",
+              ],
+            })
+          }
+        />,
+      );
+    });
+    await act(async () => button("Import from GitHub")!.props.onClick());
+    await act(() =>
+      renderer!.root
+        .findByProps({ placeholder: "https://github.com/owner/repository" })
+        .props.onChange({ target: { value: "https://github.com/pbakaus/impeccable" } }),
+    );
+    await act(async () => button("Resolve")!.props.onClick());
+
+    expect(renderer!.root.findAllByType(Checkbox)).toHaveLength(1);
+    await act(() => button("Select all")!.props.onClick());
+    await act(async () => button("Import 1 skill")!.props.onClick());
+    expect(mutate.mock.calls[0]?.[1]).toMatchObject({
+      id: "impeccable",
+      source: {
+        directory: ".agents/skills/impeccable",
+        variants: [
+          ".agents/skills/impeccable",
+          ".claude/skills/impeccable",
+          ".opencode/skills/impeccable",
+        ],
+      },
     });
   });
 

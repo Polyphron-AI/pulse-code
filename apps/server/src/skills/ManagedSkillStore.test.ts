@@ -89,6 +89,66 @@ it("does not fall back to a shorter ref after a transient GitHub failure", async
   ).rejects.toThrow(/rate limited/);
 });
 
+it("imports provider variants as one immutable family and exposes provider entry points", async () => {
+  let failVariant = false;
+  const bodies = new Map([
+    ["1".repeat(40), "---\nname: review\ndescription: Generic\n---\ngeneric"],
+    ["2".repeat(40), "---\nname: review\ndescription: Claude\n---\nclaude"],
+    ["3".repeat(40), "---\nname: review\ndescription: OpenCode\n---\nopencode"],
+  ]);
+  const request: GitHubRequest = async (endpoint) => {
+    if (endpoint.includes("/commits/")) return { sha: "a".repeat(40) };
+    if (endpoint.includes("/git/trees/"))
+      return {
+        tree: [
+          {
+            type: "blob",
+            mode: "100644",
+            path: ".agents/skills/review/SKILL.md",
+            size: 60,
+            sha: "1".repeat(40),
+          },
+          {
+            type: "blob",
+            mode: "100644",
+            path: ".claude/skills/review/SKILL.md",
+            size: 60,
+            sha: "2".repeat(40),
+          },
+          {
+            type: "blob",
+            mode: "100644",
+            path: ".opencode/skills/review/SKILL.md",
+            size: 60,
+            sha: "3".repeat(40),
+          },
+        ],
+      };
+    const sha = endpoint.split("/").at(-1)!;
+    if (failVariant && sha === "2".repeat(40)) throw new Error("variant unavailable");
+    return { encoding: "base64", content: Buffer.from(bodies.get(sha)!).toString("base64") };
+  };
+  await withStore(async (store) => {
+    const record = await store.importGitHub("review", {
+      type: "github",
+      repository: "team/repo",
+      ref: "main",
+      directory: ".agents/skills/review",
+      variants: [".agents/skills/review", ".claude/skills/review", ".opencode/skills/review"],
+    });
+    const [catalog] = await store.catalog([record]);
+    expect(catalog?.variantSkillPaths).toMatchObject({
+      codex: expect.stringContaining("SKILL.md"),
+      claudeAgent: expect.stringContaining(".pulse-variants"),
+      opencode: expect.stringContaining(".pulse-variants"),
+    });
+    failVariant = true;
+    const failedUpdate = await store.sync({ ...record, updatePolicy: "keep-updated" });
+    expect(failedUpdate.revision).toBe(record.revision);
+    expect(failedUpdate.error).toContain("variant unavailable");
+  }, request);
+});
+
 function files(body = "Review changes carefully.", metadata = "") {
   return [
     {

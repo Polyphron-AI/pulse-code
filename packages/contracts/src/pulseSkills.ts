@@ -25,6 +25,9 @@ const GitHubSource = Schema.Struct({
   repository: Schema.String.check(Schema.isMaxLength(200)),
   ref: Schema.String.check(Schema.isMaxLength(200)),
   directory: Schema.String.check(Schema.isMaxLength(1024)),
+  variants: Schema.optional(
+    Schema.Array(Schema.String.check(Schema.isMaxLength(1024))).check(Schema.isMaxLength(8)),
+  ),
 });
 export const PulseSkillRecord = Schema.Struct({
   id: PulseSkillId,

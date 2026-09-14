@@ -61,15 +61,26 @@ type MutationResult = { readonly ok: true } | { readonly ok: false; readonly err
 
 function resolvedSkillOptions(directories: readonly string[], reservedIds: readonly string[] = []) {
   const used = new Set(reservedIds);
-  return directories.map((directory) => {
-    const base =
-      directory
-        .split("/")
-        .filter(Boolean)
-        .at(-1)
-        ?.toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-+|-+$/g, "") || "skill";
+  const preference = (directory: string) => {
+    if (directory.startsWith(".agents/skills/")) return 0;
+    if (directory.startsWith(".claude/skills/")) return 1;
+    if (directory.startsWith(".opencode/skills/")) return 2;
+    if (directory.startsWith("plugin/skills/")) return 3;
+    return 4;
+  };
+  const groups = new Map<string, { readonly name: string; readonly variants: string[] }>();
+  for (const directory of directories) {
+    const name = directory.split("/").filter(Boolean).at(-1)?.toLowerCase() || "skill";
+    const providerVariant = /^(?:\.[^/]+|[^/]+-plugin|plugin)\/skills\/([^/]+)$/i.exec(directory);
+    const key = providerVariant ? `provider:${name}` : `directory:${directory}`;
+    const group = groups.get(key);
+    groups.set(key, { name, variants: [...(group?.variants ?? []), directory] });
+  }
+  return [...groups.values()].map(({ name, variants }) => {
+    const directory = [...variants].sort(
+      (left, right) => preference(left) - preference(right) || left.localeCompare(right),
+    )[0]!;
+    const base = name.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "skill";
     const stem = /^[a-z]/.test(base) ? base : `skill-${base}`;
     let id = stem.slice(0, 64);
     let suffix = 2;
@@ -78,7 +89,16 @@ function resolvedSkillOptions(directories: readonly string[], reservedIds: reado
       id = `${stem.slice(0, 64 - ending.length)}${ending}`;
     }
     used.add(id);
-    return { directory, id };
+    const availableVariantCount = variants.filter((variant) =>
+      /^\.(?:agents|claude|opencode)\/skills\//.test(variant),
+    ).length;
+    return {
+      directory,
+      id,
+      variants: [...variants].sort(),
+      variantCount: variants.length,
+      availableVariantCount,
+    };
   });
 }
 
@@ -616,6 +636,7 @@ function GitHubSkillDialog({
             repository: repository.trim(),
             ref: ref.trim(),
             directory: option.directory,
+            ...(option.variants.length > 1 ? { variants: option.variants } : {}),
           },
           updatePolicy: keepUpdated ? "keep-updated" : "pinned",
         });
@@ -758,7 +779,13 @@ function GitHubSkillDialog({
                       variant="ghost"
                       size="xs"
                       disabled={disabled || busy}
-                      onClick={() => setSelectedDirectories(resolvedDirectories)}
+                      onClick={() =>
+                        setSelectedDirectories(
+                          resolvedSkillOptions(resolvedDirectories, reservedIds).map(
+                            (option) => option.directory,
+                          ),
+                        )
+                      }
                     >
                       Select all
                     </Button>
@@ -800,6 +827,19 @@ function GitHubSkillDialog({
                           <span className="block truncate text-xs text-muted-foreground">
                             {option.directory}
                           </span>
+                          {option.variantCount > 1 ? (
+                            <details className="text-xs text-muted-foreground">
+                              <summary>
+                                {option.availableVariantCount} available in Pulse;{" "}
+                                {option.variantCount} detected
+                              </summary>
+                              {option.variants.map((variant) => (
+                                <span key={variant} className="block truncate pl-2">
+                                  {variant}
+                                </span>
+                              ))}
+                            </details>
+                          ) : null}
                         </span>
                       </label>
                     );
