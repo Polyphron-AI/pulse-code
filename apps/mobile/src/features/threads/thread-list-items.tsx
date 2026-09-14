@@ -4,7 +4,7 @@ import type {
   EnvironmentThreadShell,
 } from "@t3tools/client-runtime/state/shell";
 import type { EnvironmentThreadSearchMatch } from "@t3tools/client-runtime/state/thread-search";
-import type { EnvironmentMachineKind } from "@t3tools/contracts";
+import type { EnvironmentMachineKind, ProviderInstanceId } from "@t3tools/contracts";
 import type { MenuAction } from "@react-native-menu/menu";
 import { SymbolView } from "../../components/AppSymbol";
 import { memo, useCallback, useMemo, type ComponentProps } from "react";
@@ -22,10 +22,16 @@ import { HOME_HORIZONTAL_INSET } from "../../lib/layoutMetrics";
 import { relativeTime } from "../../lib/time";
 import { themeColorWithAlpha } from "../../lib/mobileTheme";
 import { useUniwindTheme } from "../../lib/useUniwindTheme";
+import { useServerConfigs } from "../../state/entities";
 import type { PendingNewTask } from "../../state/use-pending-new-tasks";
 import { useThreadPr, type ThreadPrPresentation } from "../../state/use-thread-pr";
 import type { HomeGroupDisplayAction } from "../home/homeListItems";
 import { ThreadSwipeable } from "../home/thread-swipe-actions";
+import {
+  buildThreadHandoffMenuItems,
+  resolveThreadHandoffMenuSelection,
+  resolveThreadHandoffTargets,
+} from "./threadHandoffMenu";
 import { buildThreadTitleRegenerationMenuItems } from "./thread-title-regeneration-menu";
 import { QueuedMessageIcon } from "./queued-message-icon";
 import { resolveThreadStatus } from "./threadPresentation";
@@ -459,6 +465,10 @@ export const ThreadListRow = memo(function ThreadListRow(props: {
   readonly onArchiveThread: (thread: EnvironmentThreadShell) => void;
   readonly onDeleteThread: (thread: EnvironmentThreadShell) => void;
   readonly onNewThreadOnBranch: (thread: EnvironmentThreadShell) => void;
+  readonly onContinueInProvider: (
+    thread: EnvironmentThreadShell,
+    instanceId: ProviderInstanceId,
+  ) => void;
   readonly onRegenerateThreadTitle: (thread: EnvironmentThreadShell) => void;
   readonly titleRegenerationSupported: boolean;
   readonly onSwipeableWillOpen: (methods: SwipeableMethods) => void;
@@ -492,6 +502,7 @@ export const ThreadListRow = memo(function ThreadListRow(props: {
     onDeleteThread,
     onRegenerateThreadTitle,
     onNewThreadOnBranch,
+    onContinueInProvider,
   } = props;
   const status = resolveThreadStatus(thread);
   const pr = useThreadPr(thread);
@@ -538,6 +549,11 @@ export const ThreadListRow = memo(function ThreadListRow(props: {
     () => onRegenerateThreadTitle(thread),
     [onRegenerateThreadTitle, thread],
   );
+  const serverConfigs = useServerConfigs();
+  const handoffTargets = useMemo(
+    () => resolveThreadHandoffTargets(serverConfigs, thread),
+    [serverConfigs, thread],
+  );
   const menuActions = useMemo<MenuAction[]>(
     () => [
       ...(thread.branch
@@ -550,6 +566,7 @@ export const ThreadListRow = memo(function ThreadListRow(props: {
             },
           ]
         : []),
+      ...buildThreadHandoffMenuItems(handoffTargets),
       THREAD_ROW_MENU_ACTIONS[0]!,
       ...buildThreadTitleRegenerationMenuItems({
         supported: props.titleRegenerationSupported,
@@ -557,7 +574,7 @@ export const ThreadListRow = memo(function ThreadListRow(props: {
       }),
       THREAD_ROW_MENU_ACTIONS[1]!,
     ],
-    [props.titleRegenerationSupported, thread.branch, thread.titleRegeneration],
+    [handoffTargets, props.titleRegenerationSupported, thread.branch, thread.titleRegeneration],
   );
   const primaryAction = useMemo(
     () => ({
@@ -574,8 +591,21 @@ export const ThreadListRow = memo(function ThreadListRow(props: {
       if (nativeEvent.event === "archive") handleArchive();
       if (nativeEvent.event === "regenerate-title") handleRegenerateTitle();
       if (nativeEvent.event === "delete") handleDelete();
+      const handoff = resolveThreadHandoffMenuSelection({
+        event: nativeEvent.event,
+        targets: handoffTargets,
+      });
+      if (handoff) onContinueInProvider(thread, handoff.instanceId);
     },
-    [handleArchive, handleDelete, handleRegenerateTitle, onNewThreadOnBranch, thread],
+    [
+      handleArchive,
+      handleDelete,
+      handleRegenerateTitle,
+      handoffTargets,
+      onContinueInProvider,
+      onNewThreadOnBranch,
+      thread,
+    ],
   );
 
   const statusPill = effectiveStatus ? (

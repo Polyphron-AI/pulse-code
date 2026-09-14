@@ -25,7 +25,7 @@ worktree**, each background submission creates its own worktree.
 A thread stays with the provider it started on, because each provider keeps its own session. To
 move the work, open the thread's menu and choose **Continue in...**, then pick a provider. The
 same action is in the command palette as **Continue in another provider...** for the thread you
-are viewing.
+are viewing. On mobile, long-press a thread and choose **Continue in...**.
 
 The thread's current provider writes a short handoff brief covering the goal, what is done, the
 current state, and what is next. T3 Code opens a new thread on the provider you chose with that

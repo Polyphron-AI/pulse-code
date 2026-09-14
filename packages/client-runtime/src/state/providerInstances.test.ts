@@ -10,7 +10,7 @@ import {
   resolveDefaultProviderModelSelection,
   resolveSelectableProviderInstance,
   resolveProviderDriverKindForInstanceSelection,
-} from "./providerInstances";
+} from "./providerInstances.ts";
 
 function provider(input: {
   provider: ProviderDriverKind;

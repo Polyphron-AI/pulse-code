@@ -53,6 +53,7 @@ import {
 import { AndroidHomeFabLayout } from "../home/AndroidHomeFab";
 import { HomeListOptionsProvider } from "../home/home-list-options";
 import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
+import { useThreadHandoff } from "../threads/use-thread-handoff";
 import { ThreadNavigationSidebar } from "../threads/ThreadNavigationSidebar";
 import { WORKSPACE_PANE_TIMING } from "./workspace-pane-animation";
 import { WorkspaceInspectorPane } from "./workspace-inspector-pane";
@@ -472,6 +473,8 @@ function AdaptiveWorkspaceLayoutContent(
     [navigation],
   );
 
+  const startThreadHandoff = useThreadHandoff();
+
   const handleNewThreadInProject = useCallback(
     (project: EnvironmentProject) => {
       navigation.navigate("NewTaskSheet", {
@@ -571,6 +574,7 @@ function AdaptiveWorkspaceLayoutContent(
                     onOpenEnvironmentSettings={handleOpenEnvironmentSettings}
                     onNewThreadInProject={handleNewThreadInProject}
                     onNewThreadOnBranch={handleNewThreadOnBranch}
+                    onContinueInProvider={startThreadHandoff}
                     onSelectThread={handleSelectThread}
                     onSearchQueryChange={setPrimarySidebarSearchQuery}
                     searchQuery={primarySidebarSearchQuery}

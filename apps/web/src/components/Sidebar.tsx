@@ -117,7 +117,8 @@ import {
 } from "../threadSelectionStore";
 import { useThreadActions } from "../hooks/useThreadActions";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
-import { buildThreadHandoffTargets, useThreadHandoff } from "../hooks/useThreadHandoff";
+import { buildThreadHandoffTargets } from "@t3tools/client-runtime/state/thread-handoff";
+import { useThreadHandoff } from "../hooks/useThreadHandoff";
 import { isCommandPaletteOpen, openCommandPalette } from "../commandPaletteBus";
 import { startNewThreadFromContext } from "../lib/chatThreadActions";
 import { useClientSettings } from "../hooks/useSettings";

@@ -151,6 +151,14 @@
       "types": "./src/state/projects.ts",
       "default": "./src/state/projects.ts"
     },
+    "./state/thread-handoff": {
+      "types": "./src/state/threadHandoff.ts",
+      "default": "./src/state/threadHandoff.ts"
+    },
+    "./state/provider-instances": {
+      "types": "./src/state/providerInstances.ts",
+      "default": "./src/state/providerInstances.ts"
+    },
     "./state/provider-instance-display": {
       "types": "./src/state/providerInstanceDisplay.ts",
       "default": "./src/state/providerInstanceDisplay.ts"

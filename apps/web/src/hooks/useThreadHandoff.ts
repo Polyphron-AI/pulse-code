@@ -5,55 +5,22 @@ import {
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
 import { DEFAULT_SERVER_SETTINGS } from "@t3tools/contracts";
-import type {
-  EnvironmentId,
-  ProviderInstanceId,
-  ScopedThreadRef,
-  ServerProvider,
-} from "@t3tools/contracts";
+import {
+  buildThreadHandoffTargets,
+  type ThreadHandoffTarget,
+} from "@t3tools/client-runtime/state/thread-handoff";
+import type { EnvironmentId, ProviderInstanceId, ScopedThreadRef } from "@t3tools/contracts";
 import { useCallback, useMemo } from "react";
 
 import { toastManager } from "../components/ui/toast";
-import {
-  applyProviderInstanceSettings,
-  deriveProviderInstanceEntries,
-  getDefaultProviderInstanceModel,
-  isProviderInstancePickerReady,
-  isProviderInstancePickerVisible,
-  sortProviderInstanceEntries,
-} from "../providerInstances";
+import { getDefaultProviderInstanceModel } from "../providerInstances";
 import { readThreadShell, useServerConfigs } from "../state/entities";
 import { orchestrationEnvironment } from "../state/orchestration";
 import { useAtomCommand } from "../state/use-atom-command";
 import { useComposerDraftStore } from "../composerDraftStore";
 import { useNewThreadHandler } from "./useHandleNewThread";
 
-export interface ThreadHandoffTarget {
-  readonly instanceId: ProviderInstanceId;
-  readonly label: string;
-  /** The instance cannot start right now, so the menu shows it greyed out. */
-  readonly disabled: boolean;
-}
-
-/**
- * The provider instances a thread can be handed off to: everything the model
- * picker would show for that environment. Callers drop the thread's own
- * instance, which they know from the thread snapshot they are acting on.
- */
-export function buildThreadHandoffTargets(
-  providers: ReadonlyArray<ServerProvider>,
-  settings: Parameters<typeof applyProviderInstanceSettings>[1],
-): ReadonlyArray<ThreadHandoffTarget> {
-  return sortProviderInstanceEntries(
-    applyProviderInstanceSettings(deriveProviderInstanceEntries(providers), settings),
-  )
-    .filter(isProviderInstancePickerVisible)
-    .map((entry) => ({
-      instanceId: entry.instanceId,
-      label: entry.displayName,
-      disabled: !isProviderInstancePickerReady(entry),
-    }));
-}
+export type { ThreadHandoffTarget };
 
 /** React binding for {@link buildThreadHandoffTargets}, for single-environment surfaces. */
 export function useThreadHandoffTargets(

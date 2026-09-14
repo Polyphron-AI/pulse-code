@@ -11,7 +11,11 @@ import {
 import { LegendList } from "@legendapp/list/react-native";
 import type { MenuAction } from "@react-native-menu/menu";
 import { useAtomValue } from "@effect/atom-react";
-import { type EnvironmentId, resolveEnvironmentMachineKind } from "@t3tools/contracts";
+import {
+  type EnvironmentId,
+  type ProviderInstanceId,
+  resolveEnvironmentMachineKind,
+} from "@t3tools/contracts";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LayoutChangeEvent } from "react-native";
 import { Platform, Pressable, StyleSheet, TextInput, View } from "react-native";
@@ -106,6 +110,10 @@ interface ThreadNavigationSidebarProps {
   readonly onOpenSettings: () => void;
   readonly onOpenEnvironmentSettings: () => void;
   readonly onNewThreadOnBranch: (thread: EnvironmentThreadShell) => void;
+  readonly onContinueInProvider: (
+    thread: EnvironmentThreadShell,
+    instanceId: ProviderInstanceId,
+  ) => void;
   readonly onNewThreadInProject: (project: EnvironmentProject) => void;
   readonly onSearchQueryChange: (query: string) => void;
   readonly onSelectThread: (thread: EnvironmentThreadShell) => void;
@@ -899,6 +907,7 @@ function ThreadNavigationSidebarPane(
           return (
             <ThreadListV2Row
               onNewThreadOnBranch={props.onNewThreadOnBranch}
+              onContinueInProvider={props.onContinueInProvider}
               thread={thread}
               variant={item.item.variant}
               hasQueuedMessages={queuedThreadKeys.has(`${thread.environmentId}:${thread.id}`)}
@@ -1026,6 +1035,7 @@ function ThreadNavigationSidebarPane(
           return (
             <ThreadListRow
               onNewThreadOnBranch={props.onNewThreadOnBranch}
+              onContinueInProvider={props.onContinueInProvider}
               variant="sidebar"
               thread={thread}
               hasQueuedMessages={queuedThreadKeys.has(`${thread.environmentId}:${thread.id}`)}
@@ -1091,6 +1101,7 @@ function ThreadNavigationSidebarPane(
       regenerateThreadTitle,
       props.onNewThreadInProject,
       props.onNewThreadOnBranch,
+      props.onContinueInProvider,
       props.searchQuery,
       props.selectedThreadKey,
       props.width,
