@@ -539,6 +539,22 @@
       "remaining": "Settings and microphone composition follow the reviewed transport API."
     },
     {
+      "id": "voice-setup-guidance",
+      "branch": "feat/pulse-next-voice-guidance",
+      "baseRevision": "f846497c2e",
+      "state": "implementing",
+      "scope": "Make voice setup prominent and route microphone activation to dictation settings when setup is required, before requesting capture.",
+      "acceptance": [
+        "Unprepared Parakeet activation opens settings without microphone access or automatic model download; ready Parakeet activation records normally.",
+        "Setup and ready states are clearly explained; returning to settings reflects real runtime readiness, including reset and worker failure.",
+        "Disabled dictation and unavailable Groq guide to settings without silently changing the selected backend or saved preferences.",
+        "Recording, preparing, transcribing, retry, cancellation, reset, navigation, concurrent drafts and queued turns retain existing capture and draft ownership.",
+        "Web, compact web and desktop share the implementation. Native mobile, provider adapters, wire contracts and local/remote authentication are unchanged.",
+        "Code tests only, as requested. No browser, Electron launch, microphone access or model download for verification."
+      ],
+      "remaining": "Implementation, focused code tests, independent review and updated Pulse Next installer."
+    },
+    {
       "id": "parakeet-desktop-blob-fetch",
       "branch": "fix/pulse-next-parakeet-blob",
       "baseRevision": "fefd3179b6",
