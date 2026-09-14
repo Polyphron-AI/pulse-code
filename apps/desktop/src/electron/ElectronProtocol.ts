@@ -86,7 +86,8 @@ export function makeDesktopContentSecurityPolicy(input: DesktopProtocolRegistrat
   // the build-configured Clerk, relay, and OTLP endpoints. Those environment
   // origins are not known when this response policy is created, so restrict
   // connections by the network schemes the client supports instead of by host.
-  const connectSources = ["'self'", "http:", "https:", "ws:", "wss:"];
+  // Blob reads let local model loaders consume files they have already downloaded.
+  const connectSources = ["'self'", "blob:", "http:", "https:", "ws:", "wss:"];
 
   return [
     "default-src 'self'",

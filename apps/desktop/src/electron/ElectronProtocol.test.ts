@@ -105,7 +105,7 @@ describe("ElectronProtocol", () => {
           );
           assert.include(
             response.headers.get("content-security-policy") ?? "",
-            "connect-src 'self' http: https: ws: wss:",
+            "connect-src 'self' blob: http: https: ws: wss:",
           );
           assert.include(
             response.headers.get("content-security-policy") ?? "",
@@ -255,7 +255,14 @@ describe("ElectronProtocol", () => {
       "https://clerk.t3.codes",
       "https://challenges.cloudflare.com",
     ]);
-    assert.deepEqual(directives["connect-src"], ["'self'", "http:", "https:", "ws:", "wss:"]);
+    assert.deepEqual(directives["connect-src"], [
+      "'self'",
+      "blob:",
+      "http:",
+      "https:",
+      "ws:",
+      "wss:",
+    ]);
     assert.deepEqual(directives["img-src"], [
       "'self'",
       "pulsenext:",
@@ -268,4 +275,45 @@ describe("ElectronProtocol", () => {
     assert.deepEqual(directives["font-src"], ["'self'", "pulsenext:", "data:"]);
     assert.deepEqual(directives["frame-src"], ["'self'", "blob:", "http:", "https:"]);
   });
+
+  it.each([
+    {
+      name: "development",
+      input: {
+        scheme: "pulsenext-dev",
+        targetOrigin: new URL("http://127.0.0.1:3773/"),
+        clerkFrontendApiHostname: undefined,
+      },
+    },
+    {
+      name: "packaged",
+      input: {
+        scheme: "pulsenext",
+        assetDirectory: "C:/Program Files/Pulse Next/resources/app",
+        clerkFrontendApiHostname: undefined,
+      },
+    },
+  ])(
+    "allows Parakeet blob reads in the $name policy without widening executable sources",
+    ({ input }) => {
+      const policy = ElectronProtocol.makeDesktopContentSecurityPolicy(input);
+      const directives = Object.fromEntries(
+        policy.split("; ").map((directive) => {
+          const [name, ...sources] = directive.split(" ");
+          return [name, sources];
+        }),
+      );
+
+      assert.deepEqual(directives["connect-src"], [
+        "'self'",
+        "blob:",
+        "http:",
+        "https:",
+        "ws:",
+        "wss:",
+      ]);
+      assert.notInclude(directives["script-src"] ?? [], "blob:");
+      assert.deepEqual(directives["worker-src"], ["'self'", "blob:"]);
+    },
+  );
 });
