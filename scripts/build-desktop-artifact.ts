@@ -38,6 +38,7 @@ import { applyWebBrandAssets } from "./apply-web-brand-assets.ts";
 import { resolveWebAssetBrandForChannel, type WebAssetBrand } from "./lib/brand-assets.ts";
 import { PULSE_BRAND_ASSET_PATHS } from "./lib/pulse-brand-assets.ts";
 import { getDefaultBuildArch } from "./lib/build-target-arch.ts";
+import { isPulseNextVersion, stageBundledParakeet } from "./lib/bundled-parakeet.ts";
 import {
   findInlinedExternalPackages,
   selectCliRuntimeExternalDependencies,
@@ -3550,6 +3551,12 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
   const webAssetBrand = resolveDesktopWebAssetBrand(appVersion);
   yield* applyWebBrandAssets(webAssetBrand, "apps/server/dist/client");
   yield* Effect.log(`[desktop-artifact] Applied ${webAssetBrand} web client branding.`);
+  if (options.platform === "win" && isPulseNextVersion(appVersion)) {
+    yield* Effect.log("[desktop-artifact] Staging bundled Parakeet voice model...");
+    yield* Effect.tryPromise(() =>
+      stageBundledParakeet(repoRoot, path.dirname(bundledClientEntry)),
+    );
+  }
   yield* validateBundledClientAssets(path.dirname(bundledClientEntry));
 
   yield* fs.makeDirectory(path.join(stageAppDir, "apps/desktop"), { recursive: true });

@@ -107,6 +107,8 @@ and use **Attach again** or remove the missing file before sending.
 
 ## Voice dictation on web and desktop
 
+Pulse Next for Windows includes the local Parakeet speech model in the installer. Voice is ready on first launch: click the microphone to record and click it again to stop and transcribe. No model setup or network download is required. Hosted web clients still offer the one-time Parakeet setup because they do not have an installer payload.
+
 Choose **Set up voice** beside the composer microphone to open
 **Settings → Integrations → Voice dictation**, then choose where to transcribe.
 Clicking the microphone also opens settings if dictation is off or Parakeet

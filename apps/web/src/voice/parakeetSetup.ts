@@ -6,6 +6,9 @@ const CONFIGURED_KEY = "pulse:parakeet-configured:v1";
 const listeners = new Set<() => void>();
 
 export function isParakeetConfigured(): boolean {
+  // Pulse Next desktop installers include the model in their client payload.
+  // Browser builds still require the explicit download/setup flow.
+  if (import.meta.env.PROD && typeof window !== "undefined" && window.desktopBridge) return true;
   try {
     return typeof window !== "undefined" && window.localStorage.getItem(CONFIGURED_KEY) === "true";
   } catch {
