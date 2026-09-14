@@ -1,5 +1,7 @@
+// @effect-diagnostics nodeBuiltinImport:off -- Build configuration resolves a package file path for the bundler.
 import "vite-plus/test/config";
 import { defineConfig, mergeConfig } from "vite-plus";
+import * as NodePath from "node:path";
 
 import baseConfig from "../../vite.config.ts";
 import { loadRepoEnv } from "../../scripts/lib/public-config.ts";
@@ -75,6 +77,15 @@ export default mergeConfig(
       },
     },
     pack: {
+      // jsonc-parser advertises a CommonJS UMD `main` whose internal dynamic
+      // requires cannot survive the single-file CLI bundle. Keep normal source
+      // imports intact, but make packaging consume its static ESM graph.
+      alias: {
+        "jsonc-parser": NodePath.join(
+          import.meta.dirname,
+          "node_modules/jsonc-parser/lib/esm/main.js",
+        ),
+      },
       // The executable embeds one entry; the history worker becomes a hidden
       // subcommand there instead of a sibling script.
       entry: packExecutable ? ["src/bin.ts"] : ["src/bin.ts", "src/claude-history-worker.ts"],
