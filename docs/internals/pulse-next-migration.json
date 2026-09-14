@@ -542,7 +542,7 @@
       "id": "voice-setup-guidance",
       "branch": "feat/pulse-next-voice-guidance",
       "baseRevision": "f846497c2e",
-      "state": "implementing",
+      "state": "reviewed-and-packaged",
       "scope": "Make voice setup prominent and route microphone activation to dictation settings when setup is required, before requesting capture.",
       "acceptance": [
         "Unprepared Parakeet activation opens settings without microphone access or automatic model download; ready Parakeet activation records normally.",
@@ -552,7 +552,14 @@
         "Web, compact web and desktop share the implementation. Native mobile, provider adapters, wire contracts and local/remote authentication are unchanged.",
         "Code tests only, as requested. No browser, Electron launch, microphone access or model download for verification."
       ],
-      "remaining": "Implementation, focused code tests, independent review and updated Pulse Next installer."
+      "verification": "32 focused code tests passed across ComposerDictation, useComposerDictation, DictationSettings and parakeetTranscription. Scoped web typecheck passed. Targeted lint exited 0 with warnings. Independent frozen review caught an external composer gate regression; corrected in 97961dbd21 and affected review found no blockers. Rebuilt after that source fix. Final Windows NSIS build validated 48 payload files including 18 sidecar natives; staged metadata identifies 97961dbd21ee.",
+      "artifact": {
+        "path": "release/pulse-next/Pulse-Next-0.0.41-pulse.5-x64.exe",
+        "bytes": 137022126,
+        "sha256": "724a7558f8ad7b37ce98b865d7f3cff2bed58103e578a43a387d07abee351406",
+        "signed": false
+      },
+      "remaining": "No browser, Electron or microphone testing, per user instruction. Visual layout and full model startup remain unverified."
     },
     {
       "id": "parakeet-desktop-blob-fetch",
