@@ -7,7 +7,11 @@ import {
 } from "../components/auth/PairingRouteSurface";
 
 export const Route = createFileRoute("/pair")({
-  beforeLoad: async ({ context }) => {
+  validateSearch: (search: Record<string, unknown>): PairSearch => {
+    const returnTo = normalizeOAuthReturnPath(search.returnTo);
+    return returnTo ? { returnTo } : {};
+  },
+  beforeLoad: async ({ context, search }) => {
     const { authGateState } = context;
     if (authGateState.status === "hosted-pairing") {
       return {
@@ -16,7 +20,7 @@ export const Route = createFileRoute("/pair")({
     }
 
     if (authGateState.status === "authenticated" || authGateState.status === "hosted-static") {
-      throw redirect({ to: "/", replace: true });
+      throw redirect({ href: search.returnTo ?? "/", replace: true });
     }
     return {
       authGateState,
@@ -26,8 +30,13 @@ export const Route = createFileRoute("/pair")({
   pendingComponent: PairRoutePendingView,
 });
 
+export interface PairSearch {
+  readonly returnTo?: string;
+}
+
 function PairRouteView() {
   const { authGateState } = Route.useRouteContext();
+  const { returnTo } = Route.useSearch();
   const navigate = useNavigate();
 
   if (!authGateState) {
@@ -42,11 +51,27 @@ function PairRouteView() {
     <PairingRouteSurface
       auth={authGateState.auth}
       onAuthenticated={() => {
+        if (returnTo) {
+          window.location.replace(returnTo);
+          return;
+        }
         void navigate({ to: "/", replace: true });
       }}
       {...(authGateState.errorMessage ? { initialErrorMessage: authGateState.errorMessage } : {})}
     />
   );
+}
+
+export function normalizeOAuthReturnPath(value: unknown): string | undefined {
+  if (typeof value !== "string" || !value.startsWith("/oauth/authorize?")) return undefined;
+  try {
+    const url = new URL(value, "http://pulse.local");
+    return url.origin === "http://pulse.local" && url.pathname === "/oauth/authorize"
+      ? `${url.pathname}${url.search}`
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function PairRoutePendingView() {
