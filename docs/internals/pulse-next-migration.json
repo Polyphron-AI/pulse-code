@@ -593,6 +593,28 @@
       "remaining": "Browser, installed-app, microphone and live-provider behavior remain untested at the user's request. Native mobile has no new managed picker; external shared OpenCode servers cannot load managed skills."
     },
     {
+      "id": "voice-capture-toggle-and-device",
+      "branch": "feat/pulse-next-voice-capture",
+      "baseRevision": "9ab49b0c2d",
+      "state": "reviewed-and-packaged",
+      "scope": "Persist successful Parakeet setup across reloads, use one composer microphone control for the recording lifecycle, and let users choose the capture input while defaulting safely to the operating-system microphone.",
+      "acceptance": [
+        "Successful setup immediately removes Set up voice and survives a client reload; a configured model reloads from its browser cache before capture, while a real reload failure clears stale setup state.",
+        "The microphone starts recording when idle, stops and transcribes when recording, and cancels preparation or transcription without adding separate pause, stop or cancel controls.",
+        "Right-click, the Context Menu key and Shift+F10 list System default plus detected audio inputs. The system default is selected until the user chooses another device.",
+        "Capture requests the saved input exactly. If it disappears, Pulse clears the selection and retries once with the system default; permission and device-use failures remain visible.",
+        "Web, compact web and desktop share the implementation. Native mobile and provider transport remain unchanged. Verification remains code-only."
+      ],
+      "verification": "Frozen revision 879ef3e64b passed independent review with no blockers. All 68 web voice tests across nine files passed, scoped web typecheck passed, diff validation passed, and the required Impeccable detector returned no findings. No browser, Electron, microphone or live model run was performed.",
+      "artifact": {
+        "path": "release/pulse-next/Pulse-Next-0.0.41-pulse.8-x64.exe",
+        "bytes": 137030315,
+        "sha256": "32a46f712e28331b4e6ec8a827f5929e78273340a6169d6f7b3775d9eeb0cb41",
+        "signed": false
+      },
+      "remaining": "The installer was not installed or launched. Real Windows microphone enumeration, permission and Parakeet transcription remain unverified at the user's request."
+    },
+    {
       "id": "voice-setup-guidance",
       "branch": "feat/pulse-next-voice-guidance",
       "baseRevision": "f846497c2e",
