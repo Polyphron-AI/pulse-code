@@ -5579,10 +5579,23 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
       context.query.mcpServerStatus !== undefined &&
       context.query.mcpAuthenticate !== undefined
     ) {
-      const rawStatuses = yield* Effect.tryPromise({
-        try: () => context.query.mcpServerStatus!.call(context.query),
-        catch: () => [] as McpServerStatus[],
-      });
+      // A status read that fails just means nothing is known to need auth yet,
+      // so the pass below finds no candidates and prepare still reports status.
+      const rawStatusExit = yield* Effect.exit(
+        Effect.tryPromise({
+          try: () => context.query.mcpServerStatus!.call(context.query),
+          catch: (cause) =>
+            new ProviderAdapterRequestError({
+              provider: PROVIDER,
+              method: "mcpServerStatus",
+              detail: "Claude MCP status could not be read.",
+              cause,
+            }),
+        }),
+      );
+      const rawStatuses: ReadonlyArray<McpServerStatus> = Exit.isFailure(rawStatusExit)
+        ? []
+        : rawStatusExit.value;
       for (const status of rawStatuses) {
         if (status.status !== "needs-auth" || !status.name.startsWith("pulse_")) continue;
         const connectionId = status.name.slice("pulse_".length);
