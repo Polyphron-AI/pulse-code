@@ -1346,6 +1346,9 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           interactionMode: targetThread.interactionMode,
           ...(sourceProposedPlan !== undefined ? { sourceProposedPlan } : {}),
           ...(command.pulseSkills !== undefined ? { pulseSkills: command.pulseSkills } : {}),
+          ...(command.bootstrap?.prepareWorktree !== undefined
+            ? { deferredPulseMcpPreparation: true }
+            : {}),
           createdAt: command.createdAt,
         },
       };

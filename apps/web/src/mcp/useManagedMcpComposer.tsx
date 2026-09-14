@@ -414,22 +414,46 @@ export function useManagedMcpComposer(input: {
           failed: [],
           excludedConnectionIds: [],
           busy: false,
-          retryable: !blockedReason && !(options?.creatingWorktree && selectedIds.length > 0),
-          error: blockedReason
-            ? blockedReason
-            : options?.creatingWorktree && selectedIds.length > 0
-              ? "Start the thread before using managed MCP connections. New worktree setup cannot apply them yet."
-              : null,
+          retryable: !blockedReason,
+          error: blockedReason,
           ...(options?.projectId ? { projectId: options.projectId } : {}),
         };
         pendingRef.current = initial;
-        if (initial.error) setPending(initial);
-        else void runPreparation(providerSession, initial);
+        if (initial.error) {
+          setPending(initial);
+        } else if (options?.creatingWorktree) {
+          void (async () => {
+            if (
+              selectionMode === "override" &&
+              !(await enqueueOverrideWrite(providerSession.threadId, selectedIds))
+            ) {
+              const failed = {
+                ...initial,
+                error: "Pulse Code could not save the MCP selection.",
+                retryable: true,
+              };
+              pendingRef.current = failed;
+              setPending(failed);
+              return;
+            }
+            resolve({ status: "ready" });
+          })();
+        } else {
+          void runPreparation(providerSession, initial);
+        }
       });
       activePromiseRef.current = promise;
       return promise;
     },
-    [blockedReason, input.provider, runPreparation, selectedIds.length, supported],
+    [
+      blockedReason,
+      enqueueOverrideWrite,
+      input.provider,
+      runPreparation,
+      selectedIds,
+      selectionMode,
+      supported,
+    ],
   );
 
   const changeSelection = useCallback(

@@ -820,6 +820,26 @@
     ]
   },
   "mcpBehaviorProposal": "docs/internals/pulse-next-mcp-behavior.md",
+  "currentFeature": {
+    "id": "mcp-reauth-and-worktree-deferred-prepare",
+    "state": "implementation-verified",
+    "branch": "feat/pulse-next-mcp-reauth",
+    "baseRevision": "27b8401e90",
+    "scope": "Expose Claude's provider-owned managed MCP OAuth login and defer managed MCP preparation for first-turn worktree creation until the final worktree exists.",
+    "acceptanceCases": [
+      "Claude needs-auth invokes Claude's native MCP authentication flow, which opens the Pulse pairing/login page and keeps OAuth credentials provider-owned.",
+      "After the browser login completes, preparation rechecks provider-native MCP status before allowing the turn to continue.",
+      "Cancel preserves the draft and Continue without remains one-turn-only.",
+      "A first turn that creates a worktree dispatches without the pre-worktree blocking dialog and prepares selected MCP connections against the final worktree before provider send.",
+      "Preparation failure after worktree setup fails the turn visibly without sending the prompt to the provider.",
+      "Existing threads, reload, provider defaults, explicit overrides, remote environments and concurrent threads preserve current behavior.",
+      "Codex, OpenCode and unsupported providers preserve current authentication and preparation behavior.",
+      "Focused contract, Claude adapter, provider orchestration and composer tests pass, followed by scoped typechecks and one Pulse Next Windows build."
+    ],
+    "verification": "Claude adapter and provider service: 241 focused tests passed. Managed MCP composer: 30 focused tests passed. Server, web and contracts scoped typechecks passed; existing Effect suggestions only.",
+    "completionBlockers": ["Pulse Next Windows installer build and payload validation"],
+    "nextAction": "Build an unsigned Pulse Next 0.0.44 Windows installer without publishing or installing it."
+  },
   "activeImplementationBatch": {
     "id": "mcp-claude-opencode-adapters",
     "state": "development-acceptance-passed",

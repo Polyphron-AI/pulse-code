@@ -1868,12 +1868,6 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
       );
       const appliedServers = McpProviderSession.readManagedMcpServers(input.threadId);
       if (durableServers.length === 0 && appliedServers.length === 0) return;
-      if (input.preparingWorktree === true) {
-        return yield* toValidationError(
-          "ProviderService.consumePulseMcpPreparation",
-          "Managed MCP defaults cannot be prepared until the new worktree exists.",
-        );
-      }
       const durableFingerprint = PulseMcpPreparation.fingerprint({
         providerInstanceId: input.providerInstanceId,
         cwd: input.desiredCwd ?? process.cwd(),
