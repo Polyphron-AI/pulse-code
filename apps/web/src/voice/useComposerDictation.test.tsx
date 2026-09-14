@@ -40,8 +40,11 @@ import {
 
 let renderer: ReactTestRenderer | undefined;
 let start!: () => void;
+let disabledReason!: string | null;
 function Harness() {
-  start = useComposerDictation({ draftIdentity: "draft:voice", deliver: vi.fn() }).start;
+  const dictation = useComposerDictation({ draftIdentity: "draft:voice", deliver: vi.fn() });
+  start = dictation.start;
+  disabledReason = dictation.disabledReason;
   return null;
 }
 
@@ -73,6 +76,7 @@ describe("useComposerDictation", () => {
       to: "/settings/integrations",
       hash: "dictation",
     });
+    expect(disabledReason).toBeNull();
     expect(mocks.start).not.toHaveBeenCalled();
   });
 
@@ -99,6 +103,7 @@ describe("useComposerDictation", () => {
       to: "/settings/integrations",
       hash: "dictation",
     });
+    expect(disabledReason).toBeNull();
     expect(mocks.start).not.toHaveBeenCalled();
     expect(readDictationPreferences()).toEqual(preferences);
   });
@@ -117,6 +122,7 @@ describe("useComposerDictation", () => {
       to: "/settings/integrations",
       hash: "dictation",
     });
+    expect(disabledReason).toBeNull();
     expect(mocks.start).not.toHaveBeenCalled();
     expect(readDictationPreferences()).toEqual({
       enabled: true,

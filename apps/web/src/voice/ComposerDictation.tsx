@@ -52,6 +52,7 @@ export function ComposerDictation(props: {
 
   const isError = props.state.phase === "error";
   const label = isError ? "Record again" : "Dictate";
+  const unavailable = !isError && props.disabledReason !== null;
   if (isError) {
     return (
       <div className="flex min-w-0 items-center gap-1" role="alert">
@@ -90,6 +91,7 @@ export function ComposerDictation(props: {
               type="button"
               variant="ghost"
               size="icon-sm"
+              disabled={unavailable}
               onPointerDown={(event) => event.preventDefault()}
               onClick={props.onStart}
               aria-label={label}

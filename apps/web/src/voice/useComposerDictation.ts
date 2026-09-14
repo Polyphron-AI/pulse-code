@@ -102,13 +102,9 @@ export function useComposerDictation(input: {
   const state: PulseDictationState = gateError
     ? { phase: "error", message: gateError }
     : controllerState;
-  const resolved = resolveDictationBackend(environmentIds);
-  const disabledReason =
-    resolved.backend === "unavailable"
-      ? resolved.reason === "dictation-disabled"
-        ? "Turn on dictation in Settings before using it."
-        : "Choose a connected Groq environment in Settings before using dictation."
-      : null;
+  // Setup gaps are actionable from the microphone itself. ChatComposer may still supply an
+  // external disabled reason for connection, approval, or project-selection gates.
+  const disabledReason = null;
   const active =
     controllerState.phase === "preparing" ||
     controllerState.phase === "recording" ||
