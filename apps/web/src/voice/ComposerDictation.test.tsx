@@ -77,7 +77,7 @@ describe("ComposerDictation", () => {
     ) as HTMLButtonElement;
     expect(recordingButton.textContent).toContain("Voice dictation");
     expect(recordingButton.getAttribute("aria-pressed")).toBe("true");
-    expect(recordingButton.className).toContain("bg-[#ff3b1f]");
+    expect(recordingButton.className).toContain("bg-[#c92f18]");
     expect(recordingButton.querySelectorAll(".pulse-dictation-wave > span")).toHaveLength(3);
     recordingButton.click();
     expect(onStop).toHaveBeenCalledOnce();
@@ -103,6 +103,6 @@ describe("ComposerDictation", () => {
     const mic = container.querySelector('[aria-label="Dictate"]') as HTMLButtonElement;
     expect(mic.textContent).not.toContain("Voice dictation");
     expect(mic.getAttribute("aria-pressed")).toBe("false");
-    expect(mic.className).not.toContain("bg-[#ff3b1f]");
+    expect(mic.className).not.toContain("bg-[#c92f18]");
   });
 });

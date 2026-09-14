@@ -77,7 +77,7 @@ export function ComposerDictation(props: {
               disabled={unavailable}
               className={
                 recording
-                  ? "border-[#ff674f] bg-[#ff3b1f] px-2.5 text-white shadow-sm shadow-black/20 [--control-icon-color:white] hover:bg-[#e9341b]"
+                  ? "border-[#ed705f] bg-[#c92f18] px-2.5 text-white shadow-sm shadow-black/20 [--control-icon-color:white] hover:bg-[#b92713]"
                   : undefined
               }
               onPointerDown={(event) => event.preventDefault()}
