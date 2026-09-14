@@ -407,6 +407,7 @@ interface ClaudeSessionContext {
   /** Limits already announced for the running turn, keyed `window:resetsAt`. */
   announcedUsageLimits: { turnId: string; keys: Set<string> } | undefined;
   stopped: boolean;
+  readonly expectedManagedSkillNames: readonly string[];
 }
 
 interface ClaudeQueryRuntime extends AsyncIterable<SDKMessage> {
@@ -418,6 +419,22 @@ interface ClaudeQueryRuntime extends AsyncIterable<SDKMessage> {
     servers: Record<string, McpServerConfig>,
   ) => Promise<McpSetServersResult>;
   readonly mcpServerStatus?: () => Promise<McpServerStatus[]>;
+}
+
+export function validateClaudeManagedSkillInit(
+  message: Extract<SDKMessage, { readonly type: "system"; readonly subtype: "init" }>,
+  expectedNames: readonly string[],
+): void {
+  if (expectedNames.length === 0) return;
+  const pluginLoaded = message.plugins.some((plugin) => plugin.name === "pulse-managed-skills");
+  const advertised = new Set([...message.skills, ...message.slash_commands]);
+  const missing = expectedNames.filter(
+    (name) => !advertised.has(name) && !advertised.has(`/${name}`),
+  );
+  if (!pluginLoaded || missing.length > 0)
+    throw new Error(
+      "Claude did not register the selected Pulse-managed skills during initialization.",
+    );
 }
 
 export interface ClaudeAdapterLiveOptions {
@@ -1522,6 +1539,12 @@ function buildPromptText(
   const prompt = input.input?.trim() ?? "";
   const managed =
     input.resolvedSkills?.map((skill) => `/pulse-managed-skills:${skill.id ?? skill.name}`) ?? [];
+  const userOnly = input.resolvedSkills?.find((skill) => skill.userInvocationOnly);
+  if (userOnly) {
+    const invocation = `/pulse-managed-skills:${userOnly.id ?? userOnly.name}`;
+    const argument = applyClaudePromptEffortPrefix(prompt, promptEffort);
+    return argument ? `${invocation} ${argument}` : invocation;
+  }
   const withSkills =
     managed.length > 0
       ? `${prompt}\n\nUse the selected Pulse-managed skills when relevant: ${managed.join(", ")}.`
@@ -3525,6 +3548,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
 
     switch (message.subtype) {
       case "init":
+        validateClaudeManagedSkillInit(message, context.expectedManagedSkillNames);
         yield* offerRuntimeEvent({
           ...base,
           type: "session.configured",
@@ -4975,6 +4999,9 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         lastThreadStartedId: undefined,
         announcedUsageLimits: undefined,
         stopped: false,
+        expectedManagedSkillNames: managedSkills.map(
+          (skill) => `pulse-managed-skills:${skill.id ?? skill.name}`,
+        ),
       };
       yield* Ref.set(contextRef, context);
       sessions.set(threadId, context);

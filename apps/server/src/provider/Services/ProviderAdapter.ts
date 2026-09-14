@@ -60,6 +60,7 @@ export interface ProviderResolvedSkill {
   readonly path: string;
   readonly directory?: string;
   readonly revision?: string;
+  readonly userInvocationOnly?: boolean;
 }
 
 export type ProviderManagedMcpServer =

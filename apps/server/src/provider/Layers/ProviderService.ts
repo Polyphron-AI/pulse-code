@@ -2163,6 +2163,9 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
                           .slice(0, -"SKILL.md".length)
                           .replace(/[\\/]$/, ""),
                         revision: skill.revision,
+                        ...(skill.invocation.userInvocationOnly
+                          ? { userInvocationOnly: true }
+                          : {}),
                       })),
                     );
               }),
@@ -2181,6 +2184,16 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         return yield* toValidationError(
           "ProviderService.sendTurn",
           `Provider '${routed.adapter.provider}' requires an explicit continuation prompt`,
+        );
+      }
+      if (
+        routed.adapter.provider === "claudeAgent" &&
+        resolvedSkills.some((skill) => skill.userInvocationOnly) &&
+        resolvedSkills.length !== 1
+      ) {
+        return yield* toValidationError(
+          "ProviderService.sendTurn",
+          "A user-invocation-only managed skill must be the only selected skill in Claude.",
         );
       }
       if (!routed.isActive) {

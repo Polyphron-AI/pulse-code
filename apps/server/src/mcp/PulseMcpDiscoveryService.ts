@@ -57,6 +57,14 @@ export function makePulseMcpDiscoveryService(input: {
     >;
   };
   let mutation = Promise.resolve();
+  const enqueue = <A>(operation: () => Promise<A>) => {
+    const result = mutation.then(operation, operation);
+    mutation = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  };
   const readApprovals = async (): Promise<ApprovalState> => {
     if (!input.approvalsPath) return { version: 1, sources: {} };
     try {
@@ -150,28 +158,34 @@ export function makePulseMcpDiscoveryService(input: {
     setFollow: ({ source, followNew }) =>
       Effect.tryPromise({
         try: () =>
-          (mutation = mutation.then(async () => {
+          enqueue(async () => {
             const candidates = await read(new AbortController().signal);
             const state = await readApprovals();
+            const previous = state.sources[source]?.seen ?? [];
             await writeApprovals({
               ...state,
               sources: {
                 ...state.sources,
                 [source]: {
                   followNew,
-                  seen: candidates
-                    .filter((candidate) => candidate.source === source)
-                    .map((candidate) => candidate.name),
+                  seen: [
+                    ...new Set([
+                      ...previous,
+                      ...candidates
+                        .filter((candidate) => candidate.source === source)
+                        .map((candidate) => candidate.name),
+                    ]),
+                  ],
                 },
               },
             });
-          })),
+          }),
         catch: () => new PulseMcpError({ message: "MCP discovery preference could not be saved." }),
       }),
     syncFollowed: () =>
       Effect.tryPromise({
         try: () =>
-          (mutation = mutation.then(async () => {
+          enqueue(async () => {
             const state = await readApprovals();
             const candidates = await read(new AbortController().signal);
             let next = state;
@@ -179,15 +193,24 @@ export function makePulseMcpDiscoveryService(input: {
               const approval = next.sources[source];
               if (!approval?.followNew) continue;
               const seen = new Set(approval.seen);
-              for (const candidate of candidates.filter(
-                (item) => item.source === source && !seen.has(item.name),
+              const sourceCandidates = candidates.filter((item) => item.source === source);
+              const nameCounts = new Map<string, number>();
+              for (const candidate of sourceCandidates)
+                nameCounts.set(candidate.name, (nameCounts.get(candidate.name) ?? 0) + 1);
+              for (const candidate of sourceCandidates.filter(
+                (item) => !seen.has(item.name) && nameCounts.get(item.name) === 1,
               )) {
-                seen.add(candidate.name);
                 const connection = discoveredMcpInput(candidate);
-                if (connection)
-                  await Effect.runPromise(input.config.upsertConnection(connection)).catch(
-                    () => undefined,
-                  );
+                if (!connection) {
+                  seen.add(candidate.name);
+                  continue;
+                }
+                try {
+                  await Effect.runPromise(input.config.upsertConnection(connection));
+                  seen.add(candidate.name);
+                } catch {
+                  // Transient storage failures remain unseen so the next scheduled pass retries.
+                }
               }
               next = {
                 ...next,
@@ -195,7 +218,7 @@ export function makePulseMcpDiscoveryService(input: {
               };
             }
             await writeApprovals(next);
-          })),
+          }),
         catch: () =>
           new PulseMcpError({ message: "Followed MCP sources could not be synchronized." }),
       }),
@@ -226,15 +249,22 @@ export function makeNodePulseMcpDiscoveryService(
       }
     },
   });
+  const seenPaths = new Set<string>();
+  const uniqueFile = (source: PulseMcpDiscoverySource, path: string) => {
+    const normalized = NodePath.resolve(path).toLowerCase();
+    if (seenPaths.has(normalized)) return [];
+    seenPaths.add(normalized);
+    return [file(source, path)];
+  };
   return makePulseMcpDiscoveryService({
     config,
     approvalsPath: NodePath.join(stateDir, "pulse-mcp-discovery.json"),
     environment: process.env,
     files: [
-      file("claude", paths.claude),
-      file("codex", paths.codex),
-      ...paths.opencode.map((path) => file("opencode", path)),
-      ...(process.env.OPENCODE_CONFIG ? [file("opencode", process.env.OPENCODE_CONFIG)] : []),
+      ...uniqueFile("claude", paths.claude),
+      ...uniqueFile("codex", paths.codex),
+      ...paths.opencode.flatMap((path) => uniqueFile("opencode", path)),
+      ...(process.env.OPENCODE_CONFIG ? uniqueFile("opencode", process.env.OPENCODE_CONFIG) : []),
     ],
   });
 }

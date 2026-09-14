@@ -42,6 +42,7 @@ import * as TestClock from "effect/testing/TestClock";
 import { attachmentRelativePath } from "../../attachmentStore.ts";
 import { ServerConfig } from "../../config.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
+import * as ManagedSkillProviderSession from "../../skills/ManagedSkillProviderSession.ts";
 import {
   SYNTHETIC_CLAUDE_CAPABLE_MODEL,
   SYNTHETIC_CLAUDE_COLLIDING_ALIAS,
@@ -52,7 +53,11 @@ import {
 import { ProviderAdapterProcessError, ProviderAdapterValidationError } from "../Errors.ts";
 import type { ClaudeAdapterShape } from "../Services/ClaudeAdapter.ts";
 import type { ClaudeScopedLimitNames } from "./claudeUsageLimits.ts";
-import { makeClaudeAdapter, type ClaudeAdapterLiveOptions } from "./ClaudeAdapter.ts";
+import {
+  makeClaudeAdapter,
+  type ClaudeAdapterLiveOptions,
+  validateClaudeManagedSkillInit,
+} from "./ClaudeAdapter.ts";
 const decodeClaudeSettings = Schema.decodeSync(ClaudeSettings);
 const encodeUnknownJsonString = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
 
@@ -336,6 +341,107 @@ const RESUME_THREAD_ID = ThreadId.make("thread-claude-resume");
 const SYNTHETIC_SUBAGENT_MODEL = "claude-synthetic-subagent[expanded]";
 
 describe("ClaudeAdapterLive", () => {
+  it("rejects an init receipt that omits an expected managed skill", () => {
+    assert.throws(
+      () =>
+        validateClaudeManagedSkillInit(
+          {
+            type: "system",
+            subtype: "init",
+            apiKeySource: "none",
+            claude_code_version: "test",
+            cwd: "/tmp",
+            tools: [],
+            mcp_servers: [],
+            model: SYNTHETIC_CLAUDE_STANDARD_MODEL,
+            permissionMode: "bypassPermissions",
+            slash_commands: [],
+            output_style: "default",
+            skills: [],
+            plugins: [{ name: "pulse-managed-skills", path: "/tmp/plugin" }],
+            session_id: "managed",
+            uuid: "managed-init-missing",
+          } as unknown as SDKMessage & { type: "system"; subtype: "init" },
+          ["pulse-managed-skills:review"],
+        ),
+      /did not register/,
+    );
+  });
+
+  it.effect("registers staged managed skills and directly dispatches a user-only selection", () => {
+    const root = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "claude-managed-skill-"));
+    const source = NodePath.join(root, "source");
+    NodeFS.mkdirSync(source);
+    NodeFS.writeFileSync(
+      NodePath.join(source, "SKILL.md"),
+      "---\nname: Review\ndescription: Review\ndisable-model-invocation: true\n---\nReview.\n",
+    );
+    ManagedSkillProviderSession.setManagedProviderSkills(THREAD_ID, [
+      {
+        id: "review",
+        name: "Review",
+        path: NodePath.join(source, "SKILL.md"),
+        directory: source,
+        revision: "a".repeat(64),
+        userInvocationOnly: true,
+      },
+    ]);
+    const harness = makeHarness({ baseDir: root });
+    return Effect.gen(function* () {
+      const adapter = yield* ClaudeAdapter;
+      yield* adapter.startSession({
+        threadId: THREAD_ID,
+        provider: ProviderDriverKind.make("claudeAgent"),
+        runtimeMode: "full-access",
+      });
+      const options = harness.getLastCreateQueryInput()?.options;
+      assert.equal(options?.plugins?.[0]?.type, "local");
+      yield* adapter.sendTurn({
+        threadId: THREAD_ID,
+        input: "check this",
+        resolvedSkills: [
+          {
+            id: "review",
+            name: "Review",
+            path: NodePath.join(source, "SKILL.md"),
+            directory: source,
+            userInvocationOnly: true,
+          },
+        ],
+      });
+      const prompt = yield* Effect.promise(() =>
+        readFirstPromptText(harness.getLastCreateQueryInput()),
+      );
+      assert.equal(prompt, "/pulse-managed-skills:review check this");
+      harness.query.emit({
+        type: "system",
+        subtype: "init",
+        apiKeySource: "none",
+        claude_code_version: "test",
+        cwd: root,
+        tools: [],
+        mcp_servers: [],
+        model: SYNTHETIC_CLAUDE_STANDARD_MODEL,
+        permissionMode: "bypassPermissions",
+        slash_commands: ["pulse-managed-skills:review"],
+        output_style: "default",
+        skills: ["pulse-managed-skills:review"],
+        plugins: [{ name: "pulse-managed-skills", path: String(options?.plugins?.[0]?.path) }],
+        session_id: "managed",
+        uuid: "managed-init",
+      } as unknown as SDKMessage);
+    }).pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          ManagedSkillProviderSession.clearManagedProviderSkills(THREAD_ID);
+          NodeFS.rmSync(root, { recursive: true, force: true });
+        }),
+      ),
+      Effect.provideService(Random.Random, makeDeterministicRandomService()),
+      Effect.provide(harness.layer),
+    );
+  });
+
   it.effect("prepares managed MCP without disabling Claude native settings", () => {
     const harness = makeHarness();
     return Effect.gen(function* () {

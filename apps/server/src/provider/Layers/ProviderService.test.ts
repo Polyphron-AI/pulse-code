@@ -85,6 +85,7 @@ import type { ManagedSkillLibrary } from "../../skills/ManagedSkillLibrary.ts";
 import * as ProjectionSnapshotQuery from "../../orchestration/Services/ProjectionSnapshotQuery.ts";
 import * as PulseMcpConfig from "../../mcp/PulseMcpConfigService.ts";
 import * as McpProviderSession from "../../mcp/McpProviderSession.ts";
+import * as ManagedSkillProviderSession from "../../skills/ManagedSkillProviderSession.ts";
 
 const encodeJson = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
 const defaultServerSettingsLayer = ServerSettings.ServerSettingsService.layerTest();
@@ -4069,6 +4070,62 @@ skillRouting.layer("ProviderServiceLive managed skill invocation", (it) => {
       assert.instanceOf(steeringChangeFailure, ProviderValidationError);
       assert.include(steeringChangeFailure.issue, "cannot change while a turn is running");
       assert.equal(skillRouting.claude.stopSession.mock.calls.length, stopCalls);
+    }),
+  );
+
+  it.effect("restores the prior managed selection when a Claude restart fails and retries", () =>
+    Effect.gen(function* () {
+      const provider = yield* ProviderService.ProviderService;
+      const directory = yield* ProviderSessionDirectory.ProviderSessionDirectory;
+      const threadId = asThreadId("managed-skill-restart-retry");
+      yield* provider.startSession(threadId, {
+        provider: CLAUDE_AGENT_DRIVER,
+        providerInstanceId: claudeAgentInstanceId,
+        threadId,
+        runtimeMode: "full-access",
+      });
+      yield* provider.sendTurn({
+        threadId,
+        input: "review",
+        pulseSkills: [{ id: "review", revision: skillRevision }],
+      });
+      const binding = Option.getOrThrow(yield* directory.getBinding(threadId));
+      yield* directory.upsert({
+        ...binding,
+        runtimePayload: { activeTurnId: null },
+        status: "running",
+      });
+      skillRouting.claude.startSession.mockImplementationOnce(
+        () =>
+          Effect.fail(
+            new ProviderAdapterRequestError({
+              provider: CLAUDE_AGENT_DRIVER,
+              method: "start",
+              detail: "induced",
+            }),
+          ) as never,
+      );
+      const failure = yield* provider
+        .sendTurn({
+          threadId,
+          input: "release",
+          pulseSkills: [{ id: "release", revision: skillRevision }],
+        })
+        .pipe(Effect.flip);
+      assert.instanceOf(failure, ProviderAdapterRequestError);
+      assert.equal(
+        ManagedSkillProviderSession.readManagedProviderSkills(threadId)[0]?.id,
+        "review",
+      );
+      yield* provider.sendTurn({
+        threadId,
+        input: "release retry",
+        pulseSkills: [{ id: "release", revision: skillRevision }],
+      });
+      assert.equal(
+        ManagedSkillProviderSession.readManagedProviderSkills(threadId)[0]?.id,
+        "release",
+      );
     }),
   );
 });

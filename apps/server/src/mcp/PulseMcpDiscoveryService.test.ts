@@ -55,4 +55,41 @@ describe("PulseMcpDiscoveryService", () => {
       ["opencode user configuration", false],
     ]);
   });
+
+  it("retries transient imports, preserves seen tombstones, and recovers its mutation queue", async () => {
+    const root = await NodeFSP.mkdtemp(NodePath.join(NodeOs.tmpdir(), "pulse-mcp-retry-"));
+    try {
+      let raw = JSON.stringify({ mcpServers: { skipped: { command: "one" } } });
+      let attempts = 0;
+      const service = makePulseMcpDiscoveryService({
+        approvalsPath: NodePath.join(root, "approvals.json"),
+        files: [{ source: "claude", read: async () => raw }],
+        config: {
+          upsertConnection: (connection: { readonly id: string }) =>
+            Effect.suspend(() => {
+              attempts += 1;
+              return attempts === 1 ? Effect.die("temporary") : Effect.succeed(connection as never);
+            }),
+        } as unknown as PulseMcpConfigServiceShape,
+      });
+      await Effect.runPromise(service.setFollow({ source: "claude", followNew: true }));
+      await Effect.runPromise(service.setFollow({ source: "claude", followNew: false }));
+      raw = JSON.stringify({
+        mcpServers: { skipped: { command: "one" }, later: { command: "two" } },
+      });
+      await Effect.runPromise(service.setFollow({ source: "claude", followNew: true }));
+      raw = JSON.stringify({
+        mcpServers: {
+          skipped: { command: "one" },
+          later: { command: "two" },
+          retry: { command: "three" },
+        },
+      });
+      await Effect.runPromise(service.syncFollowed());
+      await Effect.runPromise(service.syncFollowed());
+      expect(attempts).toBe(2);
+    } finally {
+      await NodeFSP.rm(root, { recursive: true, force: true });
+    }
+  });
 });

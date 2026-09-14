@@ -37,16 +37,18 @@ it("resolves repository URLs to the default ref and safe skill directories", asy
 
 it("resolves a blob URL to exactly its skill directory", async () => {
   const request: GitHubRequest = async (endpoint) =>
-    endpoint.includes("/commits/")
+    endpoint.endsWith("/commits/main")
       ? { sha: "b".repeat(40) }
-      : endpoint.includes("/git/trees/")
-        ? {
-            tree: [
-              { type: "blob", path: "skills/review/SKILL.md" },
-              { type: "blob", path: "skills/other/SKILL.md" },
-            ],
-          }
-        : { default_branch: "main" };
+      : endpoint.includes("/commits/")
+        ? Promise.reject(new Error("unknown ref"))
+        : endpoint.includes("/git/trees/")
+          ? {
+              tree: [
+                { type: "blob", path: "skills/review/SKILL.md" },
+                { type: "blob", path: "skills/other/SKILL.md" },
+              ],
+            }
+          : { default_branch: "main" };
   await expect(
     resolveGitHubSkillUrl("https://github.com/team/repo/blob/main/skills/review/SKILL.md", request),
   ).resolves.toMatchObject({
@@ -54,6 +56,23 @@ it("resolves a blob URL to exactly its skill directory", async () => {
     ref: "main",
     directories: ["skills/review"],
   });
+});
+
+it("resolves the longest valid slash-containing GitHub ref", async () => {
+  const requests: string[] = [];
+  const request: GitHubRequest = async (endpoint) => {
+    requests.push(endpoint);
+    if (endpoint === "repos/team/repo") return { default_branch: "main" };
+    if (endpoint.endsWith("/commits/feature%2Fskills")) return { sha: "c".repeat(40) };
+    if (endpoint.includes("/commits/")) throw new Error("unknown ref");
+    return { tree: [{ type: "blob", path: "packs/review/SKILL.md" }] };
+  };
+  await expect(
+    resolveGitHubSkillUrl("https://github.com/team/repo/tree/feature/skills/packs/review", request),
+  ).resolves.toMatchObject({ ref: "feature/skills", directories: ["packs/review"] });
+  expect(requests.filter((endpoint) => endpoint.includes("/commits/")).length).toBeLessThanOrEqual(
+    8,
+  );
 });
 
 function files(body = "Review changes carefully.", metadata = "") {

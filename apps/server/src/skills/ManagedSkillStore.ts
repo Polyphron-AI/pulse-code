@@ -240,14 +240,33 @@ export async function resolveGitHubSkillUrl(
     throw new Error("GitHub did not return the default branch.");
   let ref = defaultRef;
   let requestedDirectory: string | undefined;
+  let commitSha: unknown;
   if (segments[2] === "tree" || segments[2] === "blob") {
     if (!segments[3]) throw new Error("GitHub tree and blob URLs must include a branch or ref.");
-    ref = segments[3];
-    const tail = segments.slice(4);
+    const remainder = segments.slice(3);
+    let refLength = 0;
+    const maxRefSegments = Math.min(remainder.length, 8);
+    for (let length = maxRefSegments; length > 0; length -= 1) {
+      const candidate = remainder.slice(0, length).join("/");
+      try {
+        const sha = object(await request(`${base}/commits/${encodeURIComponent(candidate)}`)).sha;
+        if (typeof sha === "string" && /^[a-f0-9]{40}$/.test(sha)) {
+          ref = candidate;
+          commitSha = sha;
+          refLength = length;
+          break;
+        }
+      } catch {
+        // A ref may itself contain slashes; keep shortening until GitHub resolves one.
+      }
+    }
+    if (!refLength) throw new Error("GitHub did not return a commit revision.");
+    const tail = remainder.slice(refLength);
     if (segments[2] === "blob" && tail.at(-1)?.toLowerCase() === "skill.md") tail.pop();
     requestedDirectory = tail.join("/");
   } else if (segments.length > 2) throw new Error("Unsupported GitHub URL path.");
-  const commit = object(await request(`${base}/commits/${encodeURIComponent(ref)}`)).sha;
+  const commit =
+    commitSha ?? object(await request(`${base}/commits/${encodeURIComponent(ref)}`)).sha;
   if (typeof commit !== "string" || !/^[a-f0-9]{40}$/.test(commit))
     throw new Error("GitHub did not return a commit revision.");
   const tree = object(await request(`${base}/git/trees/${commit}?recursive=1`));
