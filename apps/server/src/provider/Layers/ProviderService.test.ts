@@ -1706,6 +1706,14 @@ const skillResolution = vi.fn(
               },
             }
           : {}),
+        ...(selection.id === "claude-only"
+          ? {
+              skillFamily: true as const,
+              variantSkillPaths: {
+                claudeAgent: `/trusted/claude-only/${skillRevision}/SKILL.md`,
+              },
+            }
+          : {}),
       };
     }),
 );
@@ -3998,6 +4006,27 @@ skillRouting.layer("ProviderServiceLive managed skill invocation", (it) => {
           `/${suffix}/SKILL.md`,
         );
       }
+    }),
+  );
+  it.effect("does not route a lone Claude skill into Codex", () =>
+    Effect.gen(function* () {
+      const provider = yield* ProviderService.ProviderService;
+      const threadId = asThreadId("claude-only-on-codex");
+      yield* provider.startSession(threadId, {
+        provider: CODEX_DRIVER,
+        providerInstanceId: codexInstanceId,
+        threadId,
+        runtimeMode: "full-access",
+      });
+      const failure = yield* provider
+        .sendTurn({
+          threadId,
+          input: "use it",
+          pulseSkills: [{ id: "claude-only", revision: skillRevision }],
+        })
+        .pipe(Effect.flip);
+      assert.instanceOf(failure, ProviderValidationError);
+      assert.include(failure.issue, "no codex or generic variant");
     }),
   );
   it.effect("resolves each Codex turn independently and passes only trusted name/path data", () =>

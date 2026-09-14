@@ -147,6 +147,30 @@ it("imports provider variants as one immutable family and exposes provider entry
     const failedUpdate = await store.sync({ ...record, updatePolicy: "keep-updated" });
     expect(failedUpdate.revision).toBe(record.revision);
     expect(failedUpdate.error).toContain("variant unavailable");
+    expect(() =>
+      store.linkGitHub(record, {
+        type: "github",
+        repository: "team/repo",
+        ref: "main",
+        directory: "plugin/skills/review",
+      }),
+    ).toThrow(/not runnable/);
+    failVariant = false;
+    for (const [id, directory, provider, fallback] of [
+      ["claude-only", ".claude/skills/review", "claudeAgent", false],
+      ["opencode-only", ".opencode/skills/review", "opencode", false],
+      ["agents-only", ".agents/skills/review", "codex", true],
+    ] as const) {
+      const lone = await store.importGitHub(id, {
+        type: "github",
+        repository: "team/repo",
+        ref: "main",
+        directory,
+      });
+      const [descriptor] = await store.catalog([lone]);
+      expect(descriptor?.variantSkillPaths?.[provider]).toContain("SKILL.md");
+      expect(descriptor?.genericFallback === true).toBe(fallback);
+    }
   }, request);
 });
 
@@ -160,7 +184,7 @@ it("rejects nested or mismatched runnable family layouts", async () => {
         directory: ".agents/skills/review/nested",
         variants: [".claude/skills/review"],
       }),
-    ).rejects.toThrow(/exact/);
+    ).rejects.toThrow(/not runnable|exact/);
     await expect(
       store.importGitHub("review", {
         type: "github",
@@ -170,6 +194,14 @@ it("rejects nested or mismatched runnable family layouts", async () => {
         variants: [".claude/skills/other"],
       }),
     ).rejects.toThrow(/same family/);
+    await expect(
+      store.importGitHub("plugin", {
+        type: "github",
+        repository: "team/repo",
+        ref: "main",
+        directory: "plugin/skills/review",
+      }),
+    ).rejects.toThrow(/not runnable/);
   });
 });
 

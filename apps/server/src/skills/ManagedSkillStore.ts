@@ -337,6 +337,10 @@ function validateGitHubSource(source: GitHubSkillSource): GitHubSkillSource {
   if (source.ref.length > 200) throw new Error("GitHub refs are limited to 200 characters.");
   const directory = source.directory.trim().replace(/^\/+|\/+$/g, "");
   if (directory) validateSkillPath(directory);
+  const supportedProviderDirectory = /^\.(agents|claude|opencode)\/skills\/[^/]+$/i.test(directory);
+  const providerLikeDirectory = /^(?:plugin|\.[^/]+|[^/]+-plugin)\/skills\//i.test(directory);
+  if (providerLikeDirectory && !supportedProviderDirectory)
+    throw new Error("This provider-specific skill layout is not runnable in Pulse.");
   const variants = [
     ...new Set((source.variants ?? []).map((value) => value.trim().replace(/^\/+|\/+$/g, ""))),
   ];
@@ -600,7 +604,7 @@ export class ManagedSkillStore {
             )
           ).filter((entry) => entry !== undefined),
         );
-        if (record.source.type === "github" && record.source.variants?.length) {
+        if (record.source.type === "github") {
           const canonicalKind = /^\.claude\/skills\/[^/]+$/i.test(record.source.directory)
             ? "claudeAgent"
             : /^\.opencode\/skills\/[^/]+$/i.test(record.source.directory)
@@ -617,7 +621,8 @@ export class ManagedSkillStore {
           revision: record.revision,
           skillPath: realSkillPath,
           ...(Object.keys(variantSkillPaths).length ? { variantSkillPaths } : {}),
-          ...(record.source.type === "github" && record.source.variants?.length
+          ...(record.source.type === "github" &&
+          /^\.(?:agents|claude|opencode)\/skills\/[^/]+$/i.test(record.source.directory)
             ? {
                 skillFamily: true as const,
                 ...(/^\.agents\/skills\/[^/]+$/i.test(record.source.directory)
