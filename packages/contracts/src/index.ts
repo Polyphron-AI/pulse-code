@@ -42,6 +42,7 @@ export * from "./previewAutomation.ts";
 export * from "./resourceTelemetry.ts";
 export * from "./usage.ts";
 export * from "./rpc.ts";
+export * from "./worktreeSetup.ts";
 export * from "./pulseSkills.ts";
 export * from "./pulseMcp.ts";
 export * from "./pulseDictation.ts";
