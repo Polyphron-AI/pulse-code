@@ -341,6 +341,19 @@ function validateGitHubSource(source: GitHubSkillSource): GitHubSkillSource {
     ...new Set((source.variants ?? []).map((value) => value.trim().replace(/^\/+|\/+$/g, ""))),
   ];
   for (const variant of variants) validateSkillPath(variant);
+  if (variants.length > 0) {
+    const family = directory.split("/").at(-1)?.toLowerCase();
+    const runnable = /^\.(agents|claude|opencode)\/skills\/([^/]+)$/i.exec(directory);
+    if (!runnable || runnable[2]?.toLowerCase() !== family)
+      throw new Error(
+        "Skill families require an exact .agents, .claude or .opencode skill directory.",
+      );
+    for (const variant of variants) {
+      const match = /^\.(agents|claude|opencode)\/skills\/([^/]+)$/i.exec(variant);
+      if (match && match[2]?.toLowerCase() !== family)
+        throw new Error("Runnable skill variants must use the same family directory name.");
+    }
+  }
   return { ...source, ref: source.ref.trim(), directory, ...(variants.length ? { variants } : {}) };
 }
 
@@ -373,14 +386,15 @@ export async function downloadGitHubSkill(source: GitHubSkillSource, request: Gi
     throw new Error("Repository tree is too large to import safely.");
   }
   const variantKind = (value: string) =>
-    value.startsWith(".claude/skills/")
+    /^\.claude\/skills\/[^/]+$/i.test(value)
       ? "claudeAgent"
-      : value.startsWith(".opencode/skills/")
+      : /^\.opencode\/skills\/[^/]+$/i.test(value)
         ? "opencode"
-        : value.startsWith(".agents/skills/")
+        : /^\.agents\/skills\/[^/]+$/i.test(value)
           ? "codex"
           : undefined;
-  const usedKinds = new Set<string>();
+  const canonicalKind = variantKind(directory);
+  const usedKinds = new Set<string>(canonicalKind ? [canonicalKind] : []);
   const variantPrefixes = (validatedSource.variants ?? [])
     .filter((value) => value !== directory)
     .flatMap((value) => {
@@ -435,6 +449,22 @@ export async function downloadGitHubSkill(source: GitHubSkillSource, request: Gi
   return { files, commit };
 }
 
+function validateSkillFamilyFiles(files: ReadonlyArray<SkillUploadFile>): ValidatedSkillFiles {
+  const canonical = validateSkillFiles(files, MAX_GITHUB_FILE_BYTES, MAX_FAMILY_FILES);
+  const restrictions = { ...canonical.invocation };
+  for (const provider of ["codex", "claudeAgent", "opencode"] as const) {
+    const prefix = `.pulse-variants/${provider}/`;
+    const variantFiles = files
+      .filter((file) => file.path.startsWith(prefix))
+      .map((file) => ({ ...file, path: file.path.slice(prefix.length) }));
+    if (!variantFiles.length) continue;
+    const variant = validateSkillFiles(variantFiles, MAX_GITHUB_FILE_BYTES, MAX_FILES);
+    if (variant.invocation.userInvocationOnly) restrictions.userInvocationOnly = true;
+    if (variant.invocation.userInvocable === false) restrictions.userInvocable = false;
+  }
+  return { ...canonical, invocation: restrictions };
+}
+
 async function pathExists(path: string): Promise<boolean> {
   return NodeFSP.lstat(path).then(
     () => true,
@@ -481,7 +511,9 @@ export class ManagedSkillStore {
     const downloaded = await downloadGitHubSkill(validatedSource, this.request);
     return this.persist(
       validatedId,
-      validateSkillFiles(downloaded.files, MAX_GITHUB_FILE_BYTES, MAX_FAMILY_FILES),
+      validatedSource.variants?.length
+        ? validateSkillFamilyFiles(downloaded.files)
+        : validateSkillFiles(downloaded.files, MAX_GITHUB_FILE_BYTES),
       validatedSource,
       previous,
       updatePolicy,
@@ -569,11 +601,11 @@ export class ManagedSkillStore {
           ).filter((entry) => entry !== undefined),
         );
         if (record.source.type === "github" && record.source.variants?.length) {
-          const canonicalKind = record.source.directory.startsWith(".claude/skills/")
+          const canonicalKind = /^\.claude\/skills\/[^/]+$/i.test(record.source.directory)
             ? "claudeAgent"
-            : record.source.directory.startsWith(".opencode/skills/")
+            : /^\.opencode\/skills\/[^/]+$/i.test(record.source.directory)
               ? "opencode"
-              : record.source.directory.startsWith(".agents/skills/")
+              : /^\.agents\/skills\/[^/]+$/i.test(record.source.directory)
                 ? "codex"
                 : undefined;
           if (canonicalKind) variantSkillPaths[canonicalKind] = realSkillPath;
@@ -588,7 +620,7 @@ export class ManagedSkillStore {
           ...(record.source.type === "github" && record.source.variants?.length
             ? {
                 skillFamily: true as const,
-                ...(!/^\.(?:claude|opencode)\/skills\//.test(record.source.directory)
+                ...(/^\.agents\/skills\/[^/]+$/i.test(record.source.directory)
                   ? { genericFallback: true as const }
                   : {}),
               }

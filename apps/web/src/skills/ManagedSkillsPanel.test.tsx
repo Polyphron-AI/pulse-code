@@ -111,7 +111,7 @@ describe("ManagedSkillsPanel environment ownership", () => {
             Promise.resolve({
               repository: "team/skills",
               ref: "main",
-              directories: ["skills/123", "other/release"],
+              directories: [".agents/skills/123", ".agents/skills/release"],
             })
           }
         />,
@@ -175,7 +175,7 @@ describe("ManagedSkillsPanel environment ownership", () => {
     const resolveGitHub = vi.fn().mockResolvedValue({
       repository: "team/skills",
       ref: "main",
-      directories: ["skills/review", "skills/release", "special/deploy"],
+      directories: [".agents/skills/review", ".agents/skills/release", ".agents/skills/deploy"],
     });
     await act(() => {
       renderer = create(
@@ -219,7 +219,7 @@ describe("ManagedSkillsPanel environment ownership", () => {
         type: "github",
         repository: "team/skills",
         ref: "main",
-        directory: "skills/review",
+        directory: ".agents/skills/review",
       },
       updatePolicy: "keep-updated",
     });
@@ -230,7 +230,7 @@ describe("ManagedSkillsPanel environment ownership", () => {
         type: "github",
         repository: "team/skills",
         ref: "main",
-        directory: "special/deploy",
+        directory: ".agents/skills/deploy",
       },
       updatePolicy: "keep-updated",
     });
@@ -252,6 +252,7 @@ describe("ManagedSkillsPanel environment ownership", () => {
                 ".claude/skills/impeccable",
                 ".agents/skills/impeccable",
                 ".opencode/skills/impeccable",
+                "plugin/skills/plugin-only",
               ],
             })
           }
@@ -266,7 +267,10 @@ describe("ManagedSkillsPanel environment ownership", () => {
     );
     await act(async () => button("Resolve")!.props.onClick());
 
-    expect(renderer!.root.findAllByType(Checkbox)).toHaveLength(1);
+    expect(renderer!.root.findAllByType(Checkbox)).toHaveLength(2);
+    expect(
+      renderer!.root.findAllByType(Checkbox).filter((item) => item.props.disabled),
+    ).toHaveLength(1);
     await act(() => button("Select all")!.props.onClick());
     await act(async () => button("Import 1 skill")!.props.onClick());
     expect(mutate.mock.calls[0]?.[1]).toMatchObject({

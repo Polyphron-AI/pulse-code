@@ -93,7 +93,7 @@ it("imports provider variants as one immutable family and exposes provider entry
   let failVariant = false;
   const bodies = new Map([
     ["1".repeat(40), "---\nname: review\ndescription: Generic\n---\ngeneric"],
-    ["2".repeat(40), "---\nname: review\ndescription: Claude\n---\nclaude"],
+    ["2".repeat(40), "---\nname: review\ndescription: Claude\nuser-invocable: false\n---\nclaude"],
     ["3".repeat(40), "---\nname: review\ndescription: OpenCode\n---\nopencode"],
   ]);
   const request: GitHubRequest = async (endpoint) => {
@@ -137,6 +137,7 @@ it("imports provider variants as one immutable family and exposes provider entry
       variants: [".agents/skills/review", ".claude/skills/review", ".opencode/skills/review"],
     });
     const [catalog] = await store.catalog([record]);
+    expect(record.invocation.userInvocable).toBe(false);
     expect(catalog?.variantSkillPaths).toMatchObject({
       codex: expect.stringContaining("SKILL.md"),
       claudeAgent: expect.stringContaining(".pulse-variants"),
@@ -147,6 +148,29 @@ it("imports provider variants as one immutable family and exposes provider entry
     expect(failedUpdate.revision).toBe(record.revision);
     expect(failedUpdate.error).toContain("variant unavailable");
   }, request);
+});
+
+it("rejects nested or mismatched runnable family layouts", async () => {
+  await withStore(async (store) => {
+    await expect(
+      store.importGitHub("review", {
+        type: "github",
+        repository: "team/repo",
+        ref: "main",
+        directory: ".agents/skills/review/nested",
+        variants: [".claude/skills/review"],
+      }),
+    ).rejects.toThrow(/exact/);
+    await expect(
+      store.importGitHub("review", {
+        type: "github",
+        repository: "team/repo",
+        ref: "main",
+        directory: ".agents/skills/review",
+        variants: [".claude/skills/other"],
+      }),
+    ).rejects.toThrow(/same family/);
+  });
 });
 
 function files(body = "Review changes carefully.", metadata = "") {

@@ -90,7 +90,7 @@ function resolvedSkillOptions(directories: readonly string[], reservedIds: reado
     }
     used.add(id);
     const availableVariantCount = variants.filter((variant) =>
-      /^\.(?:agents|claude|opencode)\/skills\//.test(variant),
+      /^\.(?:agents|claude|opencode)\/skills\/[^/]+$/i.test(variant),
     ).length;
     return {
       directory,
@@ -98,6 +98,7 @@ function resolvedSkillOptions(directories: readonly string[], reservedIds: reado
       variants: [...variants].sort(),
       variantCount: variants.length,
       availableVariantCount,
+      importable: availableVariantCount > 0,
     };
   });
 }
@@ -781,9 +782,9 @@ function GitHubSkillDialog({
                       disabled={disabled || busy}
                       onClick={() =>
                         setSelectedDirectories(
-                          resolvedSkillOptions(resolvedDirectories, reservedIds).map(
-                            (option) => option.directory,
-                          ),
+                          resolvedSkillOptions(resolvedDirectories, reservedIds)
+                            .map((option) => (option.importable ? option.directory : ""))
+                            .filter(Boolean),
                         )
                       }
                     >
@@ -813,7 +814,7 @@ function GitHubSkillDialog({
                       >
                         <Checkbox
                           checked={checked}
-                          disabled={disabled || busy}
+                          disabled={disabled || busy || !option.importable}
                           onCheckedChange={(next) =>
                             setSelectedDirectories((current) =>
                               next
@@ -839,6 +840,11 @@ function GitHubSkillDialog({
                                 </span>
                               ))}
                             </details>
+                          ) : null}
+                          {!option.importable ? (
+                            <span className="block text-xs text-muted-foreground">
+                              Detected for an unsupported provider; not importable in Pulse yet
+                            </span>
                           ) : null}
                         </span>
                       </label>
