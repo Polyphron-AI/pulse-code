@@ -117,10 +117,13 @@ still needs setup. This does not start a recording or download a model.
 - **Groq through an environment** sends the recording through the environment
   you select to Groq. Save its API key there; it is not stored in your browser.
 
-When Parakeet is ready, return to your conversation and use the microphone above
-Send to record, then stop to insert the transcript.
-Dictation never sends the message. Review and edit the text first. Cancel discards
-the recording without changing your draft. If transcription fails, record again.
+After setup, **Set up voice** disappears. Click the microphone to record, then click
+the same microphone again to stop and insert the transcript. Right-click the
+microphone to choose an input device. Pulse uses the system default microphone until
+you choose another one, and returns to the system default if that device disappears.
+Dictation never sends the message. Review and edit the text first. Clicking the
+microphone while preparation or transcription is pending cancels that work. If
+transcription fails, record again.
 Changing drafts cancels dictation so text cannot land in another thread.
 
 Mobile browsers need HTTPS to access the microphone. Plain HTTP connections to a

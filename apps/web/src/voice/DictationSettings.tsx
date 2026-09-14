@@ -31,7 +31,12 @@ import {
   type DictationBackendPreference,
 } from "./dictationPreferences";
 import { deleteGroqApiKey, readGroqApiKeyStatus, saveGroqApiKey } from "./dictationSettingsState";
-import { isParakeetReady, resetParakeet, setupParakeet } from "./parakeetSetup";
+import {
+  isParakeetConfigured,
+  isParakeetReady,
+  resetParakeet,
+  setupParakeet,
+} from "./parakeetSetup";
 
 export function DictationSettings() {
   const { environments, isReady } = useEnvironments();
@@ -114,7 +119,7 @@ export function DictationSettings() {
 
 function ParakeetSetup() {
   const [state, setState] = useState<"idle" | "setting-up" | "ready" | "error">(() =>
-    isParakeetReady() ? "ready" : "idle",
+    isParakeetReady() || isParakeetConfigured() ? "ready" : "idle",
   );
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<number | null>(null);
@@ -164,11 +169,11 @@ function ParakeetSetup() {
     <div className="space-y-3 rounded-lg border border-border bg-muted/30 p-4">
       <div className="space-y-1" role={state === "ready" ? "status" : undefined}>
         <p className="text-sm font-medium">
-          {state === "ready" ? "Parakeet is ready" : "Set up local voice dictation"}
+          {state === "ready" ? "Parakeet is set up" : "Set up local voice dictation"}
         </p>
         <p className="text-xs text-muted-foreground">
           {state === "ready"
-            ? "Return to your conversation and click the microphone to record."
+            ? "Click the microphone to record. Click it again to stop and transcribe."
             : "Download the Parakeet model before using the microphone. Audio stays on this device."}
         </p>
       </div>

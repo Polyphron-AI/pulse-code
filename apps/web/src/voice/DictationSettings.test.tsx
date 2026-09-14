@@ -57,6 +57,7 @@ vi.mock("./parakeetSetup", () => ({
   setupParakeet: mocks.setup,
   resetParakeet: mocks.resetParakeet,
   isParakeetReady: () => mocks.parakeetReady,
+  isParakeetConfigured: () => mocks.parakeetReady,
 }));
 vi.mock("../components/ui/radio-group", () => ({
   RadioGroup: ({
@@ -193,7 +194,7 @@ describe("DictationSettings", () => {
     mocks.setup.mockResolvedValue(undefined);
     await render();
     await click("Set up Parakeet");
-    expect(json()).toContain("Parakeet is ready");
+    expect(json()).toContain("Parakeet is set up");
     await act(() => renderer?.unmount());
     renderer = undefined;
     expect(mocks.resetParakeet).not.toHaveBeenCalled();
@@ -202,8 +203,8 @@ describe("DictationSettings", () => {
   it("shows the existing Parakeet readiness when Settings remounts", async () => {
     mocks.parakeetReady = true;
     await render();
-    expect(json()).toContain("Parakeet is ready");
-    expect(json()).toContain("Return to your conversation and click the microphone to record.");
+    expect(json()).toContain("Parakeet is set up");
+    expect(json()).toContain("Click it again to stop and transcribe.");
     expect(renderer!.root.findAllByProps({ role: "status" })).toHaveLength(1);
     expect(json()).not.toContain("Set up Parakeet");
     expect(mocks.setup).not.toHaveBeenCalled();

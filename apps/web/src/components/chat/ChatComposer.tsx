@@ -6276,6 +6276,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   onStart={dictation.start}
                   onStop={dictation.stop}
                   onCancel={dictation.cancel}
+                  parakeetConfigured={dictation.parakeetConfigured}
                 />
               </div>
             )}

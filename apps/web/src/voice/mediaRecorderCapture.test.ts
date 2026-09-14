@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 
 import { PULSE_DICTATION_MAX_CAPTURE_BYTES, MediaRecorderCapture } from "./mediaRecorderCapture";
+import { writeAudioInputDeviceId } from "./audioInputDevices";
 
 class FakeRecorder extends EventTarget {
   readonly mimeType: string;
@@ -64,6 +65,48 @@ describe("MediaRecorderCapture", () => {
       mimeType: "audio/webm;codecs=opus",
     });
     expect(test.stopTrack).toHaveBeenCalledOnce();
+  });
+
+  it("requests a selected input device", async () => {
+    const values = new Map<string, string>();
+    vi.stubGlobal("window", {
+      localStorage: {
+        getItem: (key: string) => values.get(key) ?? null,
+        setItem: (key: string, value: string) => values.set(key, value),
+        removeItem: (key: string) => values.delete(key),
+      },
+    });
+    writeAudioInputDeviceId("usb-mic");
+    const test = setup();
+    await test.capture.prepare(new AbortController().signal);
+    expect(test.platform.getUserMedia).toHaveBeenCalledWith({
+      audio: expect.objectContaining({ deviceId: { exact: "usb-mic" } }),
+    });
+    writeAudioInputDeviceId(null);
+    vi.unstubAllGlobals();
+  });
+
+  it("falls back to the system default when the selected input disappeared", async () => {
+    const values = new Map<string, string>();
+    vi.stubGlobal("window", {
+      localStorage: {
+        getItem: (key: string) => values.get(key) ?? null,
+        setItem: (key: string, value: string) => values.set(key, value),
+        removeItem: (key: string) => values.delete(key),
+      },
+    });
+    writeAudioInputDeviceId("removed-mic");
+    const test = setup();
+    test.platform.getUserMedia.mockRejectedValueOnce(
+      new DOMException("Microphone not found", "NotFoundError"),
+    );
+    await test.capture.prepare(new AbortController().signal);
+    expect(test.platform.getUserMedia).toHaveBeenCalledTimes(2);
+    expect(test.platform.getUserMedia).toHaveBeenLastCalledWith({
+      audio: expect.not.objectContaining({ deviceId: expect.anything() }),
+    });
+    writeAudioInputDeviceId(null);
+    vi.unstubAllGlobals();
   });
 
   it("uses the browser default when none of the preferred codecs is supported", async () => {

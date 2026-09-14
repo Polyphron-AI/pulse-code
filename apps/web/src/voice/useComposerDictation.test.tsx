@@ -6,6 +6,8 @@ import { EnvironmentId } from "@t3tools/contracts";
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   ready: false,
+  configured: false,
+  setup: vi.fn(),
   start: vi.fn(),
   cancel: vi.fn(),
   setDraftIdentity: vi.fn(),
@@ -16,7 +18,10 @@ vi.mock("../state/environments", () => ({ useEnvironments: () => ({ environments
 vi.mock("../state/use-atom-command", () => ({ useAtomCommand: () => vi.fn() }));
 vi.mock("./parakeetSetup", () => ({
   getParakeetTranscriber: () => ({ transcribe: vi.fn() }),
+  isParakeetConfigured: () => mocks.configured,
   isParakeetReady: () => mocks.ready,
+  setupParakeet: mocks.setup,
+  subscribeParakeetSetup: () => () => undefined,
 }));
 vi.mock("./mediaRecorderCapture", () => ({ MediaRecorderCapture: class {} }));
 vi.mock("./pulseDictation", () => ({
@@ -59,6 +64,8 @@ beforeEach(() => {
   mocks.cancel.mockReset();
   mocks.setDraftIdentity.mockReset();
   mocks.ready = false;
+  mocks.configured = false;
+  mocks.setup.mockReset();
 });
 afterEach(async () => {
   await act(() => renderer?.unmount());
@@ -71,7 +78,11 @@ describe("useComposerDictation", () => {
     await act(() => {
       renderer = create(<Harness />);
     });
-    await act(() => start());
+    await act(async () => {
+      start();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
     expect(mocks.navigate).toHaveBeenCalledWith({
       to: "/settings/integrations",
       hash: "dictation",
@@ -87,6 +98,23 @@ describe("useComposerDictation", () => {
     mocks.ready = true;
     await act(() => start());
     expect(mocks.navigate).not.toHaveBeenCalled();
+    expect(mocks.start).toHaveBeenCalledWith(
+      expect.objectContaining({ backend: "parakeet", draftIdentity: "draft:voice" }),
+    );
+  });
+
+  it("reloads a configured Parakeet model before starting capture", async () => {
+    mocks.configured = true;
+    mocks.setup.mockResolvedValue(undefined);
+    await act(() => {
+      renderer = create(<Harness />);
+    });
+    await act(async () => {
+      start();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(mocks.setup).toHaveBeenCalledOnce();
     expect(mocks.start).toHaveBeenCalledWith(
       expect.objectContaining({ backend: "parakeet", draftIdentity: "draft:voice" }),
     );

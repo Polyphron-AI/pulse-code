@@ -25,7 +25,13 @@ import { resolveDictationBackend } from "./dictationPreferences";
 import { dictationFileName } from "./composerDictationLogic";
 import { transcribeGroqDictation } from "./dictationSettingsState";
 import { MediaRecorderCapture } from "./mediaRecorderCapture";
-import { getParakeetTranscriber, isParakeetReady } from "./parakeetSetup";
+import {
+  getParakeetTranscriber,
+  isParakeetConfigured,
+  isParakeetReady,
+  setupParakeet,
+  subscribeParakeetSetup,
+} from "./parakeetSetup";
 import { PulseDictationController, type PulseDictationState } from "./pulseDictation";
 
 function groqStartError(environmentId: EnvironmentId): string | null {
@@ -62,6 +68,7 @@ export function useComposerDictation(input: {
   readonly start: () => void;
   readonly stop: () => void;
   readonly cancel: () => void;
+  readonly parakeetConfigured: boolean;
 } {
   const navigate = useNavigate();
   const transcribeGroq = useAtomCommand(transcribeGroqDictation, { reportFailure: false });
@@ -71,6 +78,13 @@ export function useComposerDictation(input: {
   const deliverRef = useRef(input.deliver);
   deliverRef.current = input.deliver;
   const [gateError, setGateError] = useState<string | null>(null);
+  const [warmingParakeet, setWarmingParakeet] = useState(false);
+  const warmupAbortRef = useRef<AbortController | null>(null);
+  const parakeetConfigured = useSyncExternalStore(
+    subscribeParakeetSetup,
+    isParakeetConfigured,
+    () => false,
+  );
   const controller = useMemo(
     () =>
       new PulseDictationController<Blob>({
@@ -101,18 +115,24 @@ export function useComposerDictation(input: {
   );
   const state: PulseDictationState = gateError
     ? { phase: "error", message: gateError }
-    : controllerState;
+    : warmingParakeet
+      ? { phase: "preparing", backend: "parakeet" }
+      : controllerState;
   // Setup gaps are actionable from the microphone itself. ChatComposer may still supply an
   // external disabled reason for connection, approval, or project-selection gates.
   const disabledReason = null;
   const active =
+    warmingParakeet ||
     controllerState.phase === "preparing" ||
     controllerState.phase === "recording" ||
     controllerState.phase === "transcribing";
 
   useLayoutEffect(() => {
     controller.setDraftIdentity(input.draftIdentity);
-    return () => controller.cancel();
+    return () => {
+      warmupAbortRef.current?.abort();
+      controller.cancel();
+    };
   }, [controller, input.draftIdentity]);
 
   const start = useCallback(() => {
@@ -130,24 +150,46 @@ export function useComposerDictation(input: {
       }
       capturedGroqEnvironmentIdRef.current = captured.environmentId;
     } else {
-      if (!isParakeetReady()) {
+      if (!isParakeetReady() && !isParakeetConfigured()) {
         void navigate({ to: "/settings/integrations", hash: "dictation" });
         return;
       }
       capturedGroqEnvironmentIdRef.current = null;
     }
-    void controller.start({
-      backend: captured.backend,
-      draftIdentity: input.draftIdentity,
-      deliver: (text) => {
-        deliverRef.current(text);
-        return undefined;
-      },
-    });
+    const run = async () => {
+      if (captured.backend === "parakeet" && !isParakeetReady()) {
+        const abort = new AbortController();
+        warmupAbortRef.current = abort;
+        setWarmingParakeet(true);
+        try {
+          await setupParakeet(abort.signal);
+        } catch (error) {
+          if (!abort.signal.aborted)
+            setGateError(error instanceof Error ? error.message : "Parakeet could not start.");
+          return;
+        } finally {
+          if (warmupAbortRef.current === abort) warmupAbortRef.current = null;
+          setWarmingParakeet(false);
+        }
+        if (abort.signal.aborted) return;
+      }
+      await controller.start({
+        backend: captured.backend,
+        draftIdentity: input.draftIdentity,
+        deliver: (text) => {
+          deliverRef.current(text);
+          return undefined;
+        },
+      });
+    };
+    void run();
   }, [controller, environmentIds, input.draftIdentity, navigate]);
 
   const cancel = useCallback(() => {
     setGateError(null);
+    warmupAbortRef.current?.abort();
+    warmupAbortRef.current = null;
+    setWarmingParakeet(false);
     controller.cancel();
   }, [controller]);
 
@@ -158,5 +200,6 @@ export function useComposerDictation(input: {
     start,
     stop: () => void controller.stop(),
     cancel,
+    parakeetConfigured,
   };
 }

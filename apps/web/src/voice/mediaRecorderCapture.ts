@@ -1,4 +1,5 @@
 import type { PulseDictationCapture, PulseDictationRecording } from "./pulseDictation";
+import { readAudioInputDeviceId, writeAudioInputDeviceId } from "./audioInputDevices";
 
 export const PULSE_DICTATION_MIME_TYPES = [
   "audio/webm;codecs=opus",
@@ -43,9 +44,30 @@ export class MediaRecorderCapture implements PulseDictationCapture<PulseRecorded
   async prepare(signal: AbortSignal): Promise<void> {
     this.#releasePrepared();
     if (signal.aborted) throw signal.reason;
-    const stream = await this.#platform().getUserMedia({
-      audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
-    });
+    const selectedDeviceId = readAudioInputDeviceId();
+    const audio = {
+      channelCount: 1,
+      echoCancellation: true,
+      noiseSuppression: true,
+      ...(selectedDeviceId ? { deviceId: { exact: selectedDeviceId } } : {}),
+    };
+    let stream: MediaStream;
+    try {
+      stream = await this.#platform().getUserMedia({ audio });
+    } catch (error) {
+      if (
+        !selectedDeviceId ||
+        typeof DOMException === "undefined" ||
+        !(error instanceof DOMException) ||
+        !["NotFoundError", "OverconstrainedError"].includes(error.name)
+      ) {
+        throw error;
+      }
+      writeAudioInputDeviceId(null);
+      stream = await this.#platform().getUserMedia({
+        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
+      });
+    }
     if (signal.aborted) {
       stopTracks(stream);
       throw signal.reason;
