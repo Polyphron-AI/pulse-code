@@ -542,7 +542,7 @@
       "id": "managed-integrations-discovery",
       "branch": "feat/pulse-next-managed-discovery",
       "baseRevision": "28befc1217",
-      "state": "reviewed",
+      "state": "reviewed-and-packaged",
       "scope": "Always-visible MCP and skills chat controls; environment-local Claude, Codex and OpenCode MCP discovery with initial source review and automatic subsequent additions; GitHub skill URL resolution and explicit working auto-update policy; managed skill portability across Codex, Claude and Pulse-owned OpenCode sessions.",
       "acceptance": [
         "MCP and Skills remain visible with zero entries and on all providers; empty states link to management, while unsupported invocation remains accurately gated.",
@@ -558,7 +558,14 @@
         "Web, compact web and desktop share controls. Native mobile retains existing contracts; provider invocation capabilities do not expand implicitly. Verification remains code-only."
       ],
       "verification": "Implementation 58c4d213e0894631cf9d6a204731ea2b31d43d1b independently reviewed with no remaining blockers after the fix batch and affected rechecks. Combined 703a6ca773 suite passed 519 tests across 17 files; final changes touch only discovery service and skill store, with all 37 affected tests passing. Scoped server and web typechecks passed, with server rechecked after final fixes. Added induced restart failure/retry, native Claude registration and explicit-only dispatch, discovery retry/queue/tombstone, GitHub lookup failure and filesystem identity regressions. No browser or live provider processes launched.",
-      "remaining": "Build Pulse Next Windows installer and integrate develop. Packaged-app, browser, microphone and live-provider behavior remain untested at the user's request."
+      "packaging": "First build at 5e6f2fb28a caught jsonc-parser UMD relative requires in the isolated server check. Narrow, independently reviewed pack-only ESM alias fixed it in ff42666ac5347f5419d3e07d33cdde28bcefb44c. Rebuilt Windows NSIS successfully; isolated server --version check and 48 payload files including 18 sidecar natives validated. Staged metadata identifies ff42666ac534, version 0.0.41-pulse.6. No installer was installed or launched.",
+      "artifact": {
+        "path": "release/pulse-next/Pulse-Next-0.0.41-pulse.6-x64.exe",
+        "bytes": 137026416,
+        "sha256": "3b2448b37db050c659820a2e79a5d97c1a40f5ef12730230d2790e7e47ca8d4d",
+        "signed": false
+      },
+      "remaining": "Browser, installed-app, microphone and live-provider behavior remain untested at the user's request. Native mobile has no new managed picker; external shared OpenCode servers cannot load managed skills."
     },
     {
       "id": "voice-setup-guidance",
