@@ -12,6 +12,7 @@ export interface PulseMcpTurnInput {
   readonly turnId: string;
   readonly provider: string;
   readonly defaultConnectionIds: readonly string[];
+  readonly defaultSelectionSource?: "global" | "project";
   /** Undefined means use defaults. An empty array is an explicit selection of none. */
   readonly threadConnectionIds?: readonly string[];
 }
@@ -20,7 +21,7 @@ export interface PulseMcpTurnSnapshot {
   readonly turnId: string;
   readonly provider: string;
   readonly selectedConnectionIds: readonly string[];
-  readonly selectionSource: "default" | "thread";
+  readonly selectionSource: "global" | "project" | "thread";
 }
 
 export type PulseMcpPreflightDirective =
@@ -52,7 +53,7 @@ const freezeSnapshot = (input: PulseMcpTurnInput): PulseMcpTurnSnapshot => {
     selectedConnectionIds: Object.freeze(
       stableUnique(hasOverride ? input.threadConnectionIds : input.defaultConnectionIds),
     ),
-    selectionSource: hasOverride ? "thread" : "default",
+    selectionSource: hasOverride ? "thread" : (input.defaultSelectionSource ?? "global"),
   });
 };
 

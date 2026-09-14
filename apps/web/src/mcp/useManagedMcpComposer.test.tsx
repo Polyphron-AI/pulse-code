@@ -2,6 +2,7 @@ import {
   EnvironmentId,
   ProviderDriverKind,
   ProviderInstanceId,
+  ProjectId,
   ThreadId,
 } from "@t3tools/contracts";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
@@ -12,7 +13,10 @@ const mocks = vi.hoisted(() => ({
   setOverride: vi.fn(),
   resetOverride: vi.fn(),
   saveDefaults: vi.fn(),
+  saveProjectDefaults: vi.fn(),
+  resetProjectDefaults: vi.fn(),
   defaultRefresh: vi.fn(),
+  projectRefresh: vi.fn(),
   queryError: null as "list" | "default" | null,
   result: null as ReturnType<typeof import("./useManagedMcpComposer").useManagedMcpComposer> | null,
 }));
@@ -60,15 +64,23 @@ vi.mock("../state/query", () => ({
             ]
           : { connectionIds: ["linear"] },
       error: failed ? new Error(`${target?.kind} failed`) : null,
-      refresh: target?.kind === "default" ? mocks.defaultRefresh : vi.fn(),
+      refresh:
+        target?.kind === "default"
+          ? mocks.defaultRefresh
+          : target?.kind === "project"
+            ? mocks.projectRefresh
+            : vi.fn(),
     };
   },
 }));
 vi.mock("./mcpState", () => ({
   pulseMcpList: () => ({ kind: "list" }),
   pulseMcpProviderDefault: () => ({ kind: "default" }),
+  pulseMcpProjectDefault: () => ({ kind: "project" }),
   pulseMcpThreadOverride: () => ({ kind: "override" }),
   setPulseMcpProviderDefault: { kind: "saveDefaults" },
+  setPulseMcpProjectDefault: { kind: "saveProjectDefaults" },
+  resetPulseMcpProjectDefault: { kind: "resetProjectDefaults" },
   preparePulseMcpTurn: { kind: "prepare" },
   setPulseMcpThreadOverride: { kind: "set" },
   resetPulseMcpThreadOverride: { kind: "reset" },
@@ -81,7 +93,11 @@ vi.mock("../state/use-atom-command", () => ({
         ? mocks.setOverride
         : command.kind === "saveDefaults"
           ? mocks.saveDefaults
-          : mocks.resetOverride,
+          : command.kind === "saveProjectDefaults"
+            ? mocks.saveProjectDefaults
+            : command.kind === "resetProjectDefaults"
+              ? mocks.resetProjectDefaults
+              : mocks.resetOverride,
 }));
 vi.mock("./McpSendPause", () => ({ McpSendPause: () => null }));
 
@@ -102,6 +118,7 @@ function Harness({
     environmentId: EnvironmentId.make("env-1"),
     provider: ProviderDriverKind.make(provider),
     providerInstanceId: ProviderInstanceId.make(provider),
+    projectId: ProjectId.make("project-1"),
     threadId,
     identityKey,
     modelKey: "gpt-5",
@@ -119,7 +136,10 @@ describe("useManagedMcpComposer", () => {
     mocks.setOverride.mockReset().mockResolvedValue({ _tag: "Success", value: {} });
     mocks.resetOverride.mockReset().mockResolvedValue({ _tag: "Success", value: {} });
     mocks.saveDefaults.mockReset().mockResolvedValue({ _tag: "Success", value: {} });
+    mocks.saveProjectDefaults.mockReset().mockResolvedValue({ _tag: "Success", value: {} });
+    mocks.resetProjectDefaults.mockReset().mockResolvedValue({ _tag: "Success", value: {} });
     mocks.defaultRefresh.mockReset();
+    mocks.projectRefresh.mockReset();
     mocks.queryError = null;
   });
   afterEach(() => {
@@ -588,7 +608,7 @@ describe("useManagedMcpComposer", () => {
     await act(async () => {
       renderer = create(<Harness />);
     });
-    await act(async () => mocks.result!.picker.onSaveDefaults?.());
+    await act(async () => mocks.result!.picker.onSaveGlobalDefaults?.());
     expect(mocks.saveDefaults).toHaveBeenCalledWith({
       environmentId: EnvironmentId.make("env-1"),
       input: {
@@ -602,9 +622,39 @@ describe("useManagedMcpComposer", () => {
 
     mocks.saveDefaults.mockResolvedValueOnce({ _tag: "Failure" });
     mocks.defaultRefresh.mockClear();
-    await act(async () => mocks.result!.picker.onSaveDefaults?.());
+    await act(async () => mocks.result!.picker.onSaveGlobalDefaults?.());
     expect(mocks.defaultRefresh).not.toHaveBeenCalled();
     expect(mocks.resetOverride).not.toHaveBeenCalled();
     expect(mocks.result!.picker.selectedIds).toEqual(["linear"]);
+  });
+
+  it("saves the current selection as project defaults", async () => {
+    await act(async () => {
+      renderer = create(<Harness />);
+    });
+    await act(async () => mocks.result!.picker.onSaveProjectDefaults?.());
+    expect(mocks.saveProjectDefaults).toHaveBeenCalledWith({
+      environmentId: EnvironmentId.make("env-1"),
+      input: {
+        projectId: ProjectId.make("project-1"),
+        providerInstanceId: ProviderInstanceId.make("codex"),
+        connectionIds: ["linear"],
+      },
+    });
+  });
+
+  it("resets project defaults to the global selection", async () => {
+    await act(async () => {
+      renderer = create(<Harness draftConnectionIds={null} />);
+    });
+    await act(async () => mocks.result!.picker.onResetProjectDefaults?.());
+    expect(mocks.resetProjectDefaults).toHaveBeenCalledWith({
+      environmentId: EnvironmentId.make("env-1"),
+      input: {
+        projectId: ProjectId.make("project-1"),
+        providerInstanceId: ProviderInstanceId.make("codex"),
+      },
+    });
+    expect(mocks.projectRefresh).toHaveBeenCalledOnce();
   });
 });

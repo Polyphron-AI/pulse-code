@@ -1,5 +1,5 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { ProviderInstanceId, ThreadId } from "@t3tools/contracts";
+import { ProjectId, ProviderInstanceId, ThreadId } from "@t3tools/contracts";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -73,6 +73,15 @@ describe("Pulse MCP RPC bridge", () => {
         connectionIds: [],
       });
       expect(yield* rpc.getProviderDefault({ providerInstanceId })).toEqual({ connectionIds: [] });
+      const projectId = ProjectId.make("project-1");
+      expect(yield* rpc.getProjectDefault({ projectId, providerInstanceId })).toEqual({});
+      expect(
+        yield* rpc.setProjectDefault({ projectId, providerInstanceId, connectionIds: [] }),
+      ).toEqual({ connectionIds: [] });
+      expect(yield* rpc.getProjectDefault({ projectId, providerInstanceId })).toEqual({
+        connectionIds: [],
+      });
+      expect(yield* rpc.resetProjectDefault({ projectId, providerInstanceId })).toEqual({});
       yield* rpc.setThreadOverride({ threadId, connectionIds: [] });
       expect(yield* rpc.getThreadOverride({ threadId })).toEqual({ connectionIds: [] });
       expect(yield* rpc.resetThreadOverride({ threadId })).toEqual({});

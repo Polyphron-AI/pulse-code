@@ -89,6 +89,9 @@ export const PULSE_MCP_METHODS = {
   remove: "pulse.mcp.remove",
   getProviderDefault: "pulse.mcp.getProviderDefault",
   setProviderDefault: "pulse.mcp.setProviderDefault",
+  getProjectDefault: "pulse.mcp.getProjectDefault",
+  setProjectDefault: "pulse.mcp.setProjectDefault",
+  resetProjectDefault: "pulse.mcp.resetProjectDefault",
   getThreadOverride: "pulse.mcp.getThreadOverride",
   setThreadOverride: "pulse.mcp.setThreadOverride",
   resetThreadOverride: "pulse.mcp.resetThreadOverride",
@@ -207,6 +210,25 @@ export const PulseMcpRpcs = [
       connectionIds: ConnectionIds,
     }),
     success: Selection,
+    error: errors,
+  }),
+  Rpc.make(PULSE_MCP_METHODS.getProjectDefault, {
+    payload: Schema.Struct({ projectId: ProjectId, providerInstanceId: ProviderInstanceId }),
+    success: OptionalSelection,
+    error: errors,
+  }),
+  Rpc.make(PULSE_MCP_METHODS.setProjectDefault, {
+    payload: Schema.Struct({
+      projectId: ProjectId,
+      providerInstanceId: ProviderInstanceId,
+      connectionIds: ConnectionIds,
+    }),
+    success: Selection,
+    error: errors,
+  }),
+  Rpc.make(PULSE_MCP_METHODS.resetProjectDefault, {
+    payload: Schema.Struct({ projectId: ProjectId, providerInstanceId: ProviderInstanceId }),
+    success: OptionalSelection,
     error: errors,
   }),
   Rpc.make(PULSE_MCP_METHODS.getThreadOverride, {

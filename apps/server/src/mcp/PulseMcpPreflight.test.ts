@@ -16,7 +16,7 @@ describe("Pulse MCP turn preflight decisions", () => {
     });
     expect((await defaults.start()).type).toBe("submit");
     expect(defaults.snapshot).toMatchObject({
-      selectionSource: "default",
+      selectionSource: "global",
       selectedConnectionIds: ["docs", "issues"],
     });
 

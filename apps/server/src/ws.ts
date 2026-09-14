@@ -2307,6 +2307,24 @@ const makeWsRpcLayer = (
             pulseMcp.setProviderDefault(input),
             { "rpc.aggregate": "pulse.mcp" },
           ),
+        [WS_METHODS.pulseMcpGetProjectDefault]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.pulseMcpGetProjectDefault,
+            pulseMcp.getProjectDefault(input),
+            { "rpc.aggregate": "pulse.mcp" },
+          ),
+        [WS_METHODS.pulseMcpSetProjectDefault]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.pulseMcpSetProjectDefault,
+            pulseMcp.setProjectDefault(input),
+            { "rpc.aggregate": "pulse.mcp" },
+          ),
+        [WS_METHODS.pulseMcpResetProjectDefault]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.pulseMcpResetProjectDefault,
+            pulseMcp.resetProjectDefault(input),
+            { "rpc.aggregate": "pulse.mcp" },
+          ),
         [WS_METHODS.pulseMcpGetThreadOverride]: (input) =>
           observeRpcEffect(
             WS_METHODS.pulseMcpGetThreadOverride,

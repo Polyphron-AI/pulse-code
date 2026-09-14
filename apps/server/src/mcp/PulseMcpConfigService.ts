@@ -8,7 +8,7 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Semaphore from "effect/Semaphore";
 
-import type { ProviderInstanceId } from "@t3tools/contracts";
+import type { ProjectId, ProviderInstanceId } from "@t3tools/contracts";
 import type { ThreadId } from "@t3tools/contracts";
 
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
@@ -109,9 +109,10 @@ export interface PulseMcpResolvedConnection {
 }
 
 interface PulseMcpPersistedState {
-  readonly version: 1;
+  readonly version: 2;
   readonly connections: Readonly<Record<string, PulseMcpStoredConnection>>;
   readonly providerDefaults: Readonly<Record<string, readonly string[]>>;
+  readonly projectDefaults: Readonly<Record<string, readonly string[]>>;
   readonly threadOverrides: Readonly<Record<string, readonly string[]>>;
 }
 
@@ -145,6 +146,19 @@ export interface PulseMcpConfigServiceShape {
   readonly getProviderDefault: (
     providerInstanceId: ProviderInstanceId,
   ) => Effect.Effect<readonly string[] | undefined, PulseMcpConfigError>;
+  readonly setProjectDefault: (
+    projectId: ProjectId,
+    providerInstanceId: ProviderInstanceId,
+    connectionIds: readonly string[],
+  ) => Effect.Effect<void, PulseMcpConfigError>;
+  readonly resetProjectDefault: (
+    projectId: ProjectId,
+    providerInstanceId: ProviderInstanceId,
+  ) => Effect.Effect<void, PulseMcpConfigError>;
+  readonly getProjectDefault: (
+    projectId: ProjectId,
+    providerInstanceId: ProviderInstanceId,
+  ) => Effect.Effect<readonly string[] | undefined, PulseMcpConfigError>;
   readonly setThreadOverride: (
     threadId: ThreadId,
     connectionIds: readonly string[],
@@ -158,12 +172,14 @@ export interface PulseMcpConfigServiceShape {
       readonly turnId: string;
       readonly provider: string;
       readonly providerInstanceId: ProviderInstanceId;
+      readonly projectId?: ProjectId;
       readonly threadId: ThreadId;
     },
     dependencies: PulseMcpPreflightDependencies,
   ) => Effect.Effect<PulseMcpTurnPreparation, PulseMcpConfigError>;
   readonly resolveTurnConnections: (input: {
     readonly providerInstanceId: ProviderInstanceId;
+    readonly projectId?: ProjectId;
     readonly threadId: ThreadId;
     readonly connectionIds?: readonly string[];
     readonly excludedConnectionIds?: readonly string[];
@@ -176,11 +192,15 @@ export class PulseMcpConfigService extends Context.Service<
 >()("t3/mcp/PulseMcpConfigService") {}
 
 const emptyState = (): PulseMcpPersistedState => ({
-  version: 1,
+  version: 2,
   connections: {},
   providerDefaults: {},
+  projectDefaults: {},
   threadOverrides: {},
 });
+
+const projectDefaultKey = (projectId: ProjectId, providerInstanceId: ProviderInstanceId) =>
+  JSON.stringify([projectId, providerInstanceId]);
 
 const unique = (ids: readonly string[]) => [...new Set(ids)];
 
@@ -368,14 +388,23 @@ const decodeState = (raw: string): PulseMcpPersistedState => {
     const value: unknown = JSON.parse(raw);
     if (
       !isRecord(value) ||
-      value.version !== 1 ||
+      (value.version !== 1 && value.version !== 2) ||
       !isRecord(value.connections) ||
       !isRecord(value.providerDefaults) ||
+      (value.version === 2 && !isRecord(value.projectDefaults)) ||
       !isRecord(value.threadOverrides)
     ) {
       throw new Error("unsupported shape");
     }
-    if (!hasOnlyKeys(value, ["version", "connections", "providerDefaults", "threadOverrides"])) {
+    if (
+      !hasOnlyKeys(value, [
+        "version",
+        "connections",
+        "providerDefaults",
+        "projectDefaults",
+        "threadOverrides",
+      ])
+    ) {
       throw new Error("unknown state fields");
     }
     const connections = Object.fromEntries(
@@ -385,9 +414,13 @@ const decodeState = (raw: string): PulseMcpPersistedState => {
       ]),
     );
     return {
-      version: 1,
+      version: 2,
       connections,
       providerDefaults: decodeSelections(value.providerDefaults, connections),
+      projectDefaults:
+        value.version === 2
+          ? decodeSelections(value.projectDefaults as Record<string, unknown>, connections)
+          : {},
       threadOverrides: decodeSelections(value.threadOverrides, connections),
     };
   } catch (cause) {
@@ -679,6 +712,7 @@ const make = Effect.gen(function* () {
               ...state,
               connections,
               providerDefaults: cleanSelections(state.providerDefaults),
+              projectDefaults: cleanSelections(state.projectDefaults),
               threadOverrides: cleanSelections(state.threadOverrides),
             });
             yield* Effect.forEach(new Set(references), (reference) =>
@@ -734,6 +768,49 @@ const make = Effect.gen(function* () {
   const getProviderDefault: PulseMcpConfigServiceShape["getProviderDefault"] = (
     providerInstanceId,
   ) => load.pipe(Effect.map((state) => state.providerDefaults[providerInstanceId]));
+
+  const setProjectDefault: PulseMcpConfigServiceShape["setProjectDefault"] = (
+    projectId,
+    providerInstanceId,
+    ids,
+  ) =>
+    withWrite((state) =>
+      Effect.sync(
+        () =>
+          [
+            undefined,
+            {
+              ...state,
+              projectDefaults: {
+                ...state.projectDefaults,
+                [projectDefaultKey(projectId, providerInstanceId)]: assertKnownIds(state, ids),
+              },
+            },
+          ] as const,
+      ),
+    );
+
+  const resetProjectDefault: PulseMcpConfigServiceShape["resetProjectDefault"] = (
+    projectId,
+    providerInstanceId,
+  ) =>
+    withWrite((state) =>
+      Effect.sync(() => {
+        const key = projectDefaultKey(projectId, providerInstanceId);
+        const { [key]: _removed, ...projectDefaults } = state.projectDefaults;
+        return [undefined, { ...state, projectDefaults }] as const;
+      }),
+    );
+
+  const getProjectDefault: PulseMcpConfigServiceShape["getProjectDefault"] = (
+    projectId,
+    providerInstanceId,
+  ) =>
+    load.pipe(
+      Effect.map(
+        (state) => state.projectDefaults[projectDefaultKey(projectId, providerInstanceId)],
+      ),
+    );
 
   const getThreadOverride: PulseMcpConfigServiceShape["getThreadOverride"] = (threadId) =>
     load.pipe(Effect.map((state) => state.threadOverrides[threadId]));
@@ -807,12 +884,20 @@ const make = Effect.gen(function* () {
       .withPermits(1)(
         load.pipe(
           Effect.flatMap((state) => {
-            const defaults = state.providerDefaults[input.providerInstanceId] ?? [];
+            const projectDefault =
+              input.projectId === undefined
+                ? undefined
+                : state.projectDefaults[
+                    projectDefaultKey(input.projectId, input.providerInstanceId)
+                  ];
+            const defaults =
+              projectDefault ?? state.providerDefaults[input.providerInstanceId] ?? [];
             const override = state.threadOverrides[input.threadId];
             const turnInput: PulseMcpTurnInput = {
               turnId: input.turnId,
               provider: input.provider,
               defaultConnectionIds: defaults,
+              defaultSelectionSource: projectDefault === undefined ? "global" : "project",
               ...(override !== undefined ? { threadConnectionIds: override } : {}),
             };
             const selected = override ?? defaults;
@@ -849,6 +934,11 @@ const make = Effect.gen(function* () {
           const selected =
             input.connectionIds ??
             state.threadOverrides[input.threadId] ??
+            (input.projectId === undefined
+              ? undefined
+              : state.projectDefaults[
+                  projectDefaultKey(input.projectId, input.providerInstanceId)
+                ]) ??
             state.providerDefaults[input.providerInstanceId] ??
             [];
           const excluded = new Set(input.excludedConnectionIds ?? []);
@@ -899,6 +989,9 @@ const make = Effect.gen(function* () {
     removeConnection,
     setProviderDefault,
     getProviderDefault,
+    setProjectDefault,
+    resetProjectDefault,
+    getProjectDefault,
     setThreadOverride,
     resetThreadOverride,
     getThreadOverride,

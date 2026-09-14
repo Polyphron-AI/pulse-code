@@ -25,9 +25,12 @@ import {
   pulseMcpList,
   pulseMcpNativeInventory,
   pulseMcpProviderDefault,
+  pulseMcpProjectDefault,
   pulseMcpThreadOverride,
   resetPulseMcpThreadOverride,
+  resetPulseMcpProjectDefault,
   setPulseMcpProviderDefault,
+  setPulseMcpProjectDefault,
   setPulseMcpThreadOverride,
   discoverPulseMcp,
 } from "./mcpState";
@@ -47,6 +50,7 @@ export function useManagedMcpComposer(input: {
   readonly environmentId: EnvironmentId;
   readonly provider: ProviderDriverKind;
   readonly providerInstanceId: ProviderInstanceId;
+  readonly projectId: ProjectId | null;
   readonly threadId: ThreadId | null;
   readonly identityKey: string;
   readonly modelKey: string;
@@ -84,6 +88,17 @@ export function useManagedMcpComposer(input: {
         })
       : null,
   );
+  const projectDefault = useEnvironmentQuery(
+    enabled && input.projectId
+      ? pulseMcpProjectDefault({
+          environmentId: input.environmentId,
+          input: {
+            projectId: input.projectId,
+            providerInstanceId: input.providerInstanceId,
+          },
+        })
+      : null,
+  );
   const threadOverride = useEnvironmentQuery(
     enabled && input.threadId
       ? pulseMcpThreadOverride({
@@ -110,6 +125,8 @@ export function useManagedMcpComposer(input: {
   const setOverride = useAtomCommand(setPulseMcpThreadOverride, { reportFailure: false });
   const resetOverride = useAtomCommand(resetPulseMcpThreadOverride, { reportFailure: false });
   const saveProviderDefault = useAtomCommand(setPulseMcpProviderDefault);
+  const saveProjectDefault = useAtomCommand(setPulseMcpProjectDefault);
+  const resetProjectDefault = useAtomCommand(resetPulseMcpProjectDefault);
   const prepareTurn = useAtomCommand(preparePulseMcpTurn, { reportFailure: false });
   const serverOverride = threadOverride.data?.connectionIds;
   const [ignoreServerOverride, setIgnoreServerOverride] = useState(false);
@@ -127,14 +144,18 @@ export function useManagedMcpComposer(input: {
   const selectedIds =
     input.draftConnectionIds ??
     effectiveServerOverride ??
+    projectDefault.data?.connectionIds ??
     providerDefault.data?.connectionIds ??
     [];
-  const queryFailed = Boolean(list.error || providerDefault.error || threadOverride.error);
+  const queryFailed = Boolean(
+    list.error || providerDefault.error || projectDefault.error || threadOverride.error,
+  );
   const loading =
     enabled &&
     !queryFailed &&
     (list.data === null ||
       providerDefault.data === null ||
+      (input.projectId !== null && projectDefault.data === null) ||
       (input.threadId !== null && threadOverride.data === null));
   const entries = useMemo<ReadonlyArray<ManagedMcpEntry>>(() => {
     const loaded = (list.data ?? []).map((connection) => ({
@@ -216,7 +237,7 @@ export function useManagedMcpComposer(input: {
                 ? "MCP selection is still loading."
                 : null;
 
-  const accessKey = `${input.environmentId}:${input.identityKey}:${input.threadId ?? "draft"}:${input.providerInstanceId}:${input.provider}:${input.modelKey}:${capabilityReady}:${canRead}:${canOperate}:${selectedIds.join(",")}`;
+  const accessKey = `${input.environmentId}:${input.projectId ?? "projectless"}:${input.identityKey}:${input.threadId ?? "draft"}:${input.providerInstanceId}:${input.provider}:${input.modelKey}:${capabilityReady}:${canRead}:${canOperate}:${selectedIds.join(",")}`;
   const accessKeyRef = useRef(accessKey);
   accessKeyRef.current = accessKey;
   const mountedRef = useRef(true);
@@ -514,6 +535,42 @@ export function useManagedMcpComposer(input: {
     saveProviderDefault,
     selectedIds,
   ]);
+  const saveProjectDefaults = useCallback(async () => {
+    if (!input.projectId) return;
+    const result = await saveProjectDefault({
+      environmentId: input.environmentId,
+      input: {
+        projectId: input.projectId,
+        providerInstanceId: input.providerInstanceId,
+        connectionIds: [...selectedIds],
+      },
+    });
+    if (result._tag === "Success") projectDefault.refresh();
+  }, [
+    input.environmentId,
+    input.projectId,
+    input.providerInstanceId,
+    projectDefault,
+    saveProjectDefault,
+    selectedIds,
+  ]);
+  const resetProjectDefaults = useCallback(async () => {
+    if (!input.projectId) return;
+    const result = await resetProjectDefault({
+      environmentId: input.environmentId,
+      input: {
+        projectId: input.projectId,
+        providerInstanceId: input.providerInstanceId,
+      },
+    });
+    if (result._tag === "Success") projectDefault.refresh();
+  }, [
+    input.environmentId,
+    input.projectId,
+    input.providerInstanceId,
+    projectDefault,
+    resetProjectDefault,
+  ]);
 
   useEffect(() => {
     if (input.threadId === null || input.draftConnectionIds === null) return;
@@ -550,6 +607,10 @@ export function useManagedMcpComposer(input: {
       entries,
       selectedIds,
       selectionMode,
+      defaultScope:
+        projectDefault.data?.connectionIds === undefined
+          ? ("global" as const)
+          : ("project" as const),
       nativeDiscovery:
         nativeInventory.data?.status === "available" || (configuredInventory.data?.length ?? 0) > 0
           ? ("available" as const)
@@ -560,7 +621,11 @@ export function useManagedMcpComposer(input: {
       error: list.error ? "Could not load MCPs." : null,
       onChange: changeSelection,
       onUseDefaults: useDefaults,
-      ...(enabled ? { onSaveDefaults: saveDefaults } : {}),
+      ...(enabled ? { onSaveGlobalDefaults: saveDefaults } : {}),
+      ...(enabled && input.projectId ? { onSaveProjectDefaults: saveProjectDefaults } : {}),
+      ...(enabled && input.projectId && projectDefault.data?.connectionIds !== undefined
+        ? { onResetProjectDefaults: resetProjectDefaults }
+        : {}),
       onManage: input.onManage,
       onRetry: list.refresh,
     },

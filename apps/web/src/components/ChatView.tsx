@@ -9274,6 +9274,7 @@ export default function ChatView(props: ChatViewProps) {
                             routeThreadRef={routeThreadRef}
                             draftId={draftId}
                             activeThreadId={activeThreadId}
+                            activeProjectId={activeProject?.id ?? null}
                             activeThreadEnvironmentId={activeThread?.environmentId}
                             activeThread={activeThread}
                             activeThreadShell={routeServerThreadShell}

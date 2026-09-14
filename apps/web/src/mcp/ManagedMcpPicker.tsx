@@ -29,6 +29,7 @@ export interface ManagedMcpPickerProps {
   readonly entries: ReadonlyArray<ManagedMcpEntry>;
   readonly selectedIds: ReadonlyArray<string>;
   readonly selectionMode: "defaults" | "override";
+  readonly defaultScope: "global" | "project";
   readonly nativeDiscovery: "available" | "unavailable";
   readonly size?: ComposerControlSize;
   readonly disabled?: boolean;
@@ -37,7 +38,9 @@ export interface ManagedMcpPickerProps {
   readonly error?: string | null;
   readonly onChange: (connectionIds: ReadonlyArray<string>) => void;
   readonly onUseDefaults: () => void;
-  readonly onSaveDefaults?: () => void;
+  readonly onSaveGlobalDefaults?: () => void;
+  readonly onSaveProjectDefaults?: () => void;
+  readonly onResetProjectDefaults?: () => void;
   readonly onManage: () => void;
   readonly onRetry?: () => void;
 }
@@ -171,10 +174,18 @@ export function ManagedMcpPicker(props: ManagedMcpPickerProps) {
             Use defaults
           </MenuItem>
         ) : (
-          <p className="px-2 py-1 text-xs text-muted-foreground">Using provider defaults</p>
+          <p className="px-2 py-1 text-xs text-muted-foreground">
+            Using {props.defaultScope} defaults
+          </p>
         )}
-        {props.onSaveDefaults ? (
-          <MenuItem onClick={props.onSaveDefaults}>Save as provider defaults</MenuItem>
+        {props.onSaveProjectDefaults ? (
+          <MenuItem onClick={props.onSaveProjectDefaults}>Save as project defaults</MenuItem>
+        ) : null}
+        {props.onResetProjectDefaults ? (
+          <MenuItem onClick={props.onResetProjectDefaults}>Reset project defaults</MenuItem>
+        ) : null}
+        {props.onSaveGlobalDefaults ? (
+          <MenuItem onClick={props.onSaveGlobalDefaults}>Save as global defaults</MenuItem>
         ) : null}
         <MenuItem onClick={props.onManage}>
           <SettingsIcon />

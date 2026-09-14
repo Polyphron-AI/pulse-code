@@ -1622,6 +1622,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
           .resolveTurnConnections({
             providerInstanceId: instanceId,
             threadId: input.threadId,
+            ...(input.projectId !== undefined ? { projectId: input.projectId } : {}),
             ...(input.connectionIds !== undefined ? { connectionIds: input.connectionIds } : {}),
             ...(input.excludedConnectionIds !== undefined
               ? { excludedConnectionIds: input.excludedConnectionIds }
@@ -1857,6 +1858,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         .resolveTurnConnections({
           providerInstanceId: input.providerInstanceId,
           threadId: input.threadId,
+          ...(input.projectId !== undefined ? { projectId: input.projectId } : {}),
         })
         .pipe(
           Effect.mapError((cause) =>

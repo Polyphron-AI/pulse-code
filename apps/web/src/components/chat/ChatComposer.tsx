@@ -1315,6 +1315,7 @@ export interface ChatComposerProps {
 
   // Thread context
   activeThreadId: ThreadId | null;
+  activeProjectId: ProjectId | null;
   activeThreadEnvironmentId: EnvironmentId | undefined;
   activeThread: Thread | undefined;
   /** The routed server thread's shell, present before its detail loads. */
@@ -1911,6 +1912,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     environmentId,
     provider: selectedProvider,
     providerInstanceId: selectedInstanceId,
+    projectId: props.activeProjectId,
     threadId: activeThreadId,
     identityKey: composerTargetKey(composerDraftTarget),
     modelKey: JSON.stringify(composerDraft.modelSelectionByProvider[selectedInstanceId] ?? null),

@@ -126,6 +126,22 @@ export function pulseMcpHandlers(
           .setProviderDefault(providerInstanceId, connectionIds)
           .pipe(Effect.as({ connectionIds })),
       ),
+    getProjectDefault: ({ projectId, providerInstanceId }) =>
+      redactFailure(
+        service
+          .getProjectDefault(projectId, providerInstanceId)
+          .pipe(
+            Effect.map((connectionIds) => (connectionIds === undefined ? {} : { connectionIds })),
+          ),
+      ),
+    setProjectDefault: ({ projectId, providerInstanceId, connectionIds }) =>
+      redactFailure(
+        service
+          .setProjectDefault(projectId, providerInstanceId, connectionIds)
+          .pipe(Effect.as({ connectionIds })),
+      ),
+    resetProjectDefault: ({ projectId, providerInstanceId }) =>
+      redactFailure(service.resetProjectDefault(projectId, providerInstanceId).pipe(Effect.as({}))),
     getThreadOverride: ({
       threadId,
     }: Parameters<PulseMcpConfigServiceShape["getThreadOverride"]>[0] extends infer Id

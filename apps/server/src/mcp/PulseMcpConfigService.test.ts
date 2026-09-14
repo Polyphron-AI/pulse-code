@@ -1,6 +1,6 @@
 // @effect-diagnostics preferSchemaOverJson:off -- Tests intentionally construct malformed private persistence documents.
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { ProviderInstanceId, ThreadId } from "@t3tools/contracts";
+import { ProjectId, ProviderInstanceId, ThreadId } from "@t3tools/contracts";
 import { describe, expect, it } from "@effect/vitest";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -77,6 +77,39 @@ const addFixtures = Effect.fn(function* () {
 });
 
 describe("PulseMcpConfigService", () => {
+  it.effect("loads version 1 selections without inventing project defaults", () =>
+    Effect.gen(function* () {
+      const config = yield* ServerConfig.ServerConfig;
+      const fs = yield* FileSystem.FileSystem;
+      yield* fs.makeDirectory(config.stateDir, { recursive: true });
+      yield* fs.writeFileString(
+        `${config.stateDir}/pulse-mcp.json`,
+        JSON.stringify({
+          version: 1,
+          connections: {
+            github: {
+              id: "github",
+              name: "GitHub",
+              config: { transport: "http", url: "https://mcp.example.test/github", headers: {} },
+            },
+          },
+          providerDefaults: { claude: ["github"] },
+          threadOverrides: {},
+        }),
+      );
+      const service = yield* PulseMcpConfig.PulseMcpConfigService;
+      expect(yield* service.getProviderDefault(ProviderInstanceId.make("claude"))).toEqual([
+        "github",
+      ]);
+      expect(
+        yield* service.getProjectDefault(
+          ProjectId.make("project"),
+          ProviderInstanceId.make("claude"),
+        ),
+      ).toBeUndefined();
+    }).pipe(Effect.provide(testLayer)),
+  );
+
   it.effect("atomically rejects duplicate creates without replacing saved credentials", () =>
     Effect.gen(function* () {
       const service = yield* addFixtures();
@@ -149,7 +182,7 @@ describe("PulseMcpConfigService", () => {
           url: "https://mcp.example.test/github",
           headers: { Authorization: "Bearer private-token", "X-Pulse": "enabled" },
         });
-        expect(prepared.preflight.snapshot.selectionSource).toBe("default");
+        expect(prepared.preflight.snapshot.selectionSource).toBe("global");
       }).pipe(Effect.provide(testLayer)),
   );
 
@@ -177,7 +210,7 @@ describe("PulseMcpConfigService", () => {
       );
       expect(reset.preflight.snapshot).toMatchObject({
         selectedConnectionIds: ["github"],
-        selectionSource: "default",
+        selectionSource: "global",
       });
     }).pipe(Effect.provide(testLayer)),
   );
@@ -224,6 +257,51 @@ describe("PulseMcpConfigService", () => {
       expect(second.preflight.snapshot.selectedConnectionIds).toEqual(["local_docs"]);
       expect(Object.isFrozen(first.preflight.snapshot.selectedConnectionIds)).toBe(true);
       expect(Object.isFrozen(first.connections)).toBe(true);
+    }).pipe(Effect.provide(testLayer)),
+  );
+
+  it.effect("resolves thread, project, and global selections in order", () =>
+    Effect.gen(function* () {
+      const service = yield* addFixtures();
+      const instanceId = ProviderInstanceId.make("claude_scoped");
+      const projectId = ProjectId.make("project-scoped");
+      const threadId = ThreadId.make("thread-scoped");
+      yield* service.setProviderDefault(instanceId, ["github"]);
+
+      expect(
+        (yield* service.resolveTurnConnections({
+          providerInstanceId: instanceId,
+          threadId,
+        })).map(({ id }) => id),
+      ).toEqual(["github"]);
+
+      yield* service.setProjectDefault(projectId, instanceId, ["local_docs"]);
+      expect(
+        (yield* service.resolveTurnConnections({
+          providerInstanceId: instanceId,
+          projectId,
+          threadId,
+        })).map(({ id }) => id),
+      ).toEqual(["local_docs"]);
+
+      yield* service.setThreadOverride(threadId, []);
+      expect(
+        yield* service.resolveTurnConnections({
+          providerInstanceId: instanceId,
+          projectId,
+          threadId,
+        }),
+      ).toEqual([]);
+
+      yield* service.resetThreadOverride(threadId);
+      yield* service.resetProjectDefault(projectId, instanceId);
+      expect(
+        (yield* service.resolveTurnConnections({
+          providerInstanceId: instanceId,
+          projectId,
+          threadId,
+        })).map(({ id }) => id),
+      ).toEqual(["github"]);
     }).pipe(Effect.provide(testLayer)),
   );
 

@@ -58,6 +58,23 @@ export const setPulseMcpProviderDefault = createEnvironmentRpcCommand(connection
   tag: WS_METHODS.pulseMcpSetProviderDefault,
 });
 
+export const pulseMcpProjectDefault = createEnvironmentRpcQueryAtomFamily(connectionAtomRuntime, {
+  label: "environment-data:pulse-mcp:project-default",
+  tag: WS_METHODS.pulseMcpGetProjectDefault,
+  staleTimeMs: 5_000,
+  idleTtlMs: 60_000,
+});
+
+export const setPulseMcpProjectDefault = createEnvironmentRpcCommand(connectionAtomRuntime, {
+  label: "environment-data:pulse-mcp:set-project-default",
+  tag: WS_METHODS.pulseMcpSetProjectDefault,
+});
+
+export const resetPulseMcpProjectDefault = createEnvironmentRpcCommand(connectionAtomRuntime, {
+  label: "environment-data:pulse-mcp:reset-project-default",
+  tag: WS_METHODS.pulseMcpResetProjectDefault,
+});
+
 export const pulseMcpThreadOverride = createEnvironmentRpcQueryAtomFamily(connectionAtomRuntime, {
   label: "environment-data:pulse-mcp:thread-override",
   tag: WS_METHODS.pulseMcpGetThreadOverride,
