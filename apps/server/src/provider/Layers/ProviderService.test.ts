@@ -1528,28 +1528,27 @@ managedMcpRouting.layer("managed MCP turn preparation", (it) => {
       }).pipe(Effect.exit);
       assert(Exit.isFailure(failed));
       assert.equal(yield* managedMcpRouting.codex.hasSession(failedThread), false);
+    }),
+  );
 
-      const worktreeThread = asThreadId("tokenless-worktree");
-      const blockedWorktree = yield* service.consumePulseMcpPreparation!({
-        threadId: worktreeThread,
+  it.effect("prepares durable MCP defaults after a worktree path exists", () =>
+    Effect.gen(function* () {
+      const service = yield* ProviderService.ProviderService;
+      const threadId = asThreadId("tokenless-worktree");
+      const cwd = fixtureCwd("tokenless-worktree");
+      resolvedManagedMcpConnections = [managedMcpConnection];
+
+      yield* service.consumePulseMcpPreparation!({
+        threadId,
         providerInstanceId: codexInstanceId,
         commandId: "native-worktree",
         runtimeMode: "full-access",
         modelSelection: undefined,
         desiredCwd: cwd,
-        preparingWorktree: true,
-      }).pipe(Effect.exit);
-      assert(Exit.isFailure(blockedWorktree));
-      resolvedManagedMcpConnections = [];
-      yield* service.consumePulseMcpPreparation!({
-        threadId: worktreeThread,
-        providerInstanceId: codexInstanceId,
-        commandId: "native-empty-worktree",
-        runtimeMode: "full-access",
-        modelSelection: undefined,
-        desiredCwd: cwd,
-        preparingWorktree: true,
       });
+
+      assert.equal(yield* managedMcpRouting.codex.hasSession(threadId), true);
+      assert.equal(managedMcpRouting.codex.startSession.mock.lastCall?.[0].cwd, cwd);
     }),
   );
 

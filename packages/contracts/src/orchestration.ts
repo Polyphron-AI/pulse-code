@@ -1763,6 +1763,8 @@ export const ThreadTurnStartRequestedPayload = Schema.Struct({
   ),
   sourceProposedPlan: Schema.optional(SourceProposedPlanReference),
   pulseSkills: Schema.optional(PulseSkillSelectionList),
+  /** New-worktree sends prepare managed MCP after the worktree path exists. */
+  deferredPulseMcpPreparation: Schema.optional(Schema.Boolean),
   createdAt: IsoDateTime,
 });
 

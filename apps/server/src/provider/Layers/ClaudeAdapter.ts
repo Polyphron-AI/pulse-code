@@ -419,6 +419,7 @@ interface ClaudeQueryRuntime extends AsyncIterable<SDKMessage> {
     servers: Record<string, McpServerConfig>,
   ) => Promise<McpSetServersResult>;
   readonly mcpServerStatus?: () => Promise<McpServerStatus[]>;
+  readonly mcpAuthenticate?: (serverName: string, redirectUri?: string) => Promise<unknown>;
 }
 
 export function validateClaudeManagedSkillInit(
@@ -5572,6 +5573,35 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         name.startsWith("pulse_") ? [name.slice("pulse_".length)] : [],
       ),
     );
+    const authErrors = new Set<string>();
+    const configurableIds = new Set(configurableServers.map((server) => server.id));
+    if (
+      context.query.mcpServerStatus !== undefined &&
+      context.query.mcpAuthenticate !== undefined
+    ) {
+      const rawStatuses = yield* Effect.tryPromise({
+        try: () => context.query.mcpServerStatus!.call(context.query),
+        catch: () => [] as McpServerStatus[],
+      });
+      for (const status of rawStatuses) {
+        if (status.status !== "needs-auth" || !status.name.startsWith("pulse_")) continue;
+        const connectionId = status.name.slice("pulse_".length);
+        if (!configurableIds.has(connectionId) || setErrors.has(connectionId)) continue;
+        const authExit = yield* Effect.exit(
+          Effect.tryPromise({
+            try: () => context.query.mcpAuthenticate!.call(context.query, status.name),
+            catch: (cause) =>
+              new ProviderAdapterRequestError({
+                provider: PROVIDER,
+                method: "mcpAuthenticate",
+                detail: "Claude MCP authentication could not be completed.",
+                cause,
+              }),
+          }),
+        );
+        if (Exit.isFailure(authExit)) authErrors.add(connectionId);
+      }
+    }
     const statuses = yield* readManagedMcpStatus(threadId, servers);
     return statuses.map((status) =>
       invalidCwdIds.has(status.id)
@@ -5587,7 +5617,13 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
               status: "failed" as const,
               message: "Claude MCP connections could not be prepared.",
             }
-          : status,
+          : authErrors.has(status.id)
+            ? {
+                id: status.id,
+                status: "failed" as const,
+                message: "Claude MCP authentication could not be completed.",
+              }
+            : status,
     );
   });
 

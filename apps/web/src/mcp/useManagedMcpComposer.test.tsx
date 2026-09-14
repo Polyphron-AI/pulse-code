@@ -145,6 +145,28 @@ describe("useManagedMcpComposer", () => {
     expect(mocks.result?.blockedReason).toContain("unavailable for this provider");
   });
 
+  it("defers managed MCP preparation while a new worktree is being created", async () => {
+    await act(async () => {
+      renderer = create(<Harness />);
+    });
+
+    let outcome: unknown;
+    await act(async () => {
+      outcome = await mocks.result!.prepare(
+        {
+          threadId: ThreadId.make("thread-1"),
+          provider: ProviderDriverKind.make("codex"),
+          providerInstanceId: ProviderInstanceId.make("codex"),
+          runtimeMode: "full-access",
+        },
+        { creatingWorktree: true },
+      );
+    });
+
+    expect(outcome).toEqual({ status: "ready" });
+    expect(mocks.prepare).not.toHaveBeenCalled();
+  });
+
   it("keeps the send pending after failure and carries exclusions into continue", async () => {
     mocks.prepare
       .mockResolvedValueOnce({

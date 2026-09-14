@@ -81,7 +81,10 @@ class FakeClaudeQuery implements AsyncIterable<SDKMessage> {
   public closeCalls = 0;
   public closeError: unknown | undefined;
   public readonly setMcpServersCalls: Array<Record<string, McpServerConfig>> = [];
+  public readonly mcpAuthenticateCalls: string[] = [];
   public mcpStatuses: McpServerStatus[] = [];
+  public mcpAuthenticateError: unknown | undefined;
+  public onMcpAuthenticate: ((serverName: string) => void) | undefined;
   public mcpSetError: unknown | undefined;
   public mcpStatusError: unknown | undefined;
   public mcpSetResult: McpSetServersResult = { added: [], removed: [], errors: {} };
@@ -141,6 +144,12 @@ class FakeClaudeQuery implements AsyncIterable<SDKMessage> {
   async mcpServerStatus(): Promise<McpServerStatus[]> {
     if (this.mcpStatusError !== undefined) throw this.mcpStatusError;
     return this.mcpStatuses;
+  }
+
+  async mcpAuthenticate(serverName: string): Promise<void> {
+    this.mcpAuthenticateCalls.push(serverName);
+    if (this.mcpAuthenticateError !== undefined) throw this.mcpAuthenticateError;
+    this.onMcpAuthenticate?.(serverName);
   }
 
   readonly close = (): void => {
@@ -509,6 +518,39 @@ describe("ClaudeAdapterLive", () => {
         ]),
         [{ id: "remote", status: "ready" }],
       );
+      harness.query.finish();
+    }).pipe(
+      Effect.provideService(Random.Random, makeDeterministicRandomService()),
+      Effect.provide(harness.layer),
+    );
+  });
+
+  it.effect("starts Claude authentication for managed MCP connections that need it", () => {
+    const harness = makeHarness();
+    return Effect.gen(function* () {
+      const adapter = yield* ClaudeAdapter;
+      yield* adapter.startSession({
+        threadId: THREAD_ID,
+        provider: ProviderDriverKind.make("claudeAgent"),
+        runtimeMode: "full-access",
+      });
+      harness.query.mcpStatuses = [{ name: "pulse_remote", status: "needs-auth" }];
+      harness.query.onMcpAuthenticate = () => {
+        harness.query.mcpStatuses = [{ name: "pulse_remote", status: "connected" }];
+      };
+
+      const statuses = yield* adapter.prepareManagedMcp!(THREAD_ID, [
+        {
+          id: "remote",
+          name: "Remote",
+          transport: "http",
+          url: "https://mcp.example.test",
+          headers: {},
+        },
+      ]);
+
+      assert.deepEqual(harness.query.mcpAuthenticateCalls, ["pulse_remote"]);
+      assert.deepEqual(statuses, [{ id: "remote", status: "ready" }]);
       harness.query.finish();
     }).pipe(
       Effect.provideService(Random.Random, makeDeterministicRandomService()),

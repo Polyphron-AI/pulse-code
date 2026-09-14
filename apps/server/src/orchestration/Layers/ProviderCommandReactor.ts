@@ -1425,6 +1425,28 @@ const make = Effect.gen(function* () {
 
     yield* ensureThreadWorktree(thread);
 
+    if (
+      event.payload.deferredPulseMcpPreparation === true &&
+      providerService.consumePulseMcpPreparation !== undefined
+    ) {
+      const preparation = yield* providerService
+        .consumePulseMcpPreparation({
+          threadId: thread.id,
+          providerInstanceId:
+            event.payload.modelSelection?.instanceId ?? thread.modelSelection.instanceId,
+          commandId: String(event.commandId ?? event.eventId),
+          runtimeMode: event.payload.runtimeMode,
+          modelSelection: event.payload.modelSelection ?? thread.modelSelection,
+          projectId: thread.projectId,
+          ...(thread.worktreePath ? { desiredCwd: thread.worktreePath } : {}),
+        })
+        .pipe(Effect.exit);
+      if (preparation._tag === "Failure") {
+        yield* recoverTurnStartFailure(preparation.cause);
+        return;
+      }
+    }
+
     const isCompactCommand = isCompactCommandMessage(message);
     if (!hasOtherUserMessages && !isCompactCommand) {
       const project = yield* resolveProject(thread.projectId);

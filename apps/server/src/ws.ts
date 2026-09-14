@@ -1560,14 +1560,7 @@ const makeWsRpcLayer = (
           normalizedCommand.type !== "thread.turn.start"
             ? Effect.void
             : Effect.gen(function* () {
-                if (
-                  pulseMcpPreparationId !== undefined &&
-                  normalizedCommand.bootstrap?.prepareWorktree !== undefined
-                ) {
-                  return yield* new OrchestrationDispatchCommandError({
-                    message: "Managed MCP preparation does not support creating a worktree.",
-                  });
-                }
+                if (normalizedCommand.bootstrap?.prepareWorktree !== undefined) return;
                 const existing = yield* projectionSnapshotQuery.getThreadShellById(
                   normalizedCommand.threadId,
                 );
@@ -1612,9 +1605,6 @@ const makeWsRpcLayer = (
                     modelSelection,
                     ...(projectId !== undefined ? { projectId } : {}),
                     ...(desiredCwd !== undefined ? { desiredCwd } : {}),
-                    ...(normalizedCommand.bootstrap?.prepareWorktree !== undefined
-                      ? { preparingWorktree: true }
-                      : {}),
                   })
                   .pipe(
                     Effect.mapError(
