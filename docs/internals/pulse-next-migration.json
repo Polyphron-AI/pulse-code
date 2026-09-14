@@ -542,7 +542,7 @@
       "id": "dictation-composer-setup-link",
       "branch": "feat/pulse-next-voice-setup",
       "baseRevision": "dc254b3a56",
-      "state": "implementation-frozen",
+      "state": "reviewed-and-packaged",
       "scope": "Add a Set up voice action beside the existing composer microphone that opens the existing device-local Parakeet settings through SPA navigation. Keep the action available after a dictation error and do not change the selected transcription backend.",
       "acceptance": [
         "Idle and error composer states expose Set up voice beside the existing microphone or retry controls; recording, preparing and transcribing controls are unchanged.",
@@ -551,8 +551,14 @@
         "Local and remote environments use device-local Parakeet setup in the browser; no provider, contract, authentication, process, session or cleanup behavior changes.",
         "Existing retry, cancel, deselect, changed-settings, concurrent-thread, queued-turn and promotion behavior remains owned by the current dictation and draft modules."
       ],
-      "verification": "21 focused dictation settings, preference and composer-logic tests passed; scoped web typecheck passed with pre-existing Effect suggestions. No browser, server, model download, microphone, provider request or production build was run.",
-      "remaining": "Root-owned frozen review and production build. Real-client visual and interaction acceptance requires explicit browser permission."
+      "verification": "Independent implementation and packaging reviews found no blockers. 21 focused voice tests, 75 packaging tests, scoped web and scripts typechecks passed. Production Windows x64 NSIS build succeeded and validated 48 payload files including 18 sidecar natives. Voice implementation revision: 016681f1f1; packaging revision: 5dbe293d97.",
+      "artifact": {
+        "path": "release/pulse-next/Pulse-Next-0.0.41-pulse.3-x64.exe",
+        "bytes": 137017898,
+        "sha256": "87fdc6ef02b62061016aa4354917e8c498224d8a82c0bb9f8d8c47fff92bad2e",
+        "signed": false
+      },
+      "remaining": "Installer was not installed or launched. Real-client visual, microphone and model-download acceptance remains unverified and requires explicit permission."
     },
     {
       "id": "provider-session-boundary",
