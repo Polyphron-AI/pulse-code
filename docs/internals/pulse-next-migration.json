@@ -542,17 +542,26 @@
       "id": "multi-skill-github-import",
       "branch": "feat/pulse-next-multi-skill-import",
       "baseRevision": "0f0c81e70b",
-      "state": "reviewed",
-      "scope": "Let users select multiple discovered skill directories from one GitHub repository and make pinned versus keep-updated policy selection visually explicit.",
+      "state": "reviewed-and-packaged",
+      "scope": "Let users select multiple logical skills from one GitHub repository, preserve provider-specific copies as one managed skill family, and make pinned versus keep-updated policy selection visually explicit.",
       "acceptance": [
-        "Resolve shows a checkbox for every directory when a repository contains multiple skills; Select all and Clear support choosing any non-empty subset without silently importing tool-specific duplicates.",
-        "Each checked directory imports as its own immutable managed skill with a deterministic unique ID and the selected update policy.",
+        "Resolve shows one checkbox per logical skill; provider-specific copies are grouped, with supported and total detected variant counts shown explicitly.",
+        "Each checked logical skill imports as one immutable managed family with a deterministic unique ID and the selected update policy.",
+        "Pulse retains detected provider paths as source metadata, stores validated .agents, .claude and .opencode payloads, prefers an exact provider match, and uses only .agents as the portable fallback.",
+        "Unsupported and plugin-only layouts remain visible but cannot become runnable payloads; lone provider directories are classified at the server boundary.",
         "Single-skill and existing link-to-GitHub flows retain editable manual fields.",
         "Pinned and keep-updated choices use clearly selected policy cards with a direct description of update behavior.",
         "Web, compact web and desktop share the dialog. Verification remains code-only."
       ],
-      "verification": "Frozen f4d37c13b4 independently reviewed with no remaining blockers after fixing valid collision IDs, pending Resolve field locking and fixed-commit policy gating. Fourteen focused panel/settings tests passed and scoped web typecheck passed. No browser or installed-app verification, per the standing code-only constraint.",
-      "remaining": "Pulse Next packaging and develop integration."
+      "verification": "Frozen 6a615563b independently reviewed with no remaining blockers after hardening provider-family admission, per-variant SKILL.md validation, conservative invocation restrictions, exact-provider dispatch and lone provider/plugin paths at the server boundary. The owner suite passed 156 focused tests; root reran the affected store, routing and panel suite plus scoped server and web typechecks successfully. No browser, installed-app, microphone or live-provider verification, per the standing code-only constraint.",
+      "packaging": "Windows NSIS 0.0.41-pulse.7 rebuilt from the reviewed provider-family implementation. The isolated packager validated 48 payload files and 18 server sidecar native modules. The installer was not installed or launched.",
+      "artifact": {
+        "path": "release/pulse-next/Pulse-Next-0.0.41-pulse.7-x64.exe",
+        "bytes": 137031475,
+        "sha256": "653debe22b221f0abf846ed72230617847f0f7932c59eca8d3a788bb36a73eaa",
+        "signed": false
+      },
+      "remaining": "Browser, installed-app, microphone and live-provider behavior remain untested at the user's request. Detected unsupported provider variants are retained as metadata until a safe adapter is added."
     },
     {
       "id": "managed-integrations-discovery",
