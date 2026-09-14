@@ -1,8 +1,11 @@
 # T3 Code
 
-Pulse Next is now the development codebase on `develop`. Legacy Pulse Code is
-preserved on `pulse-code-old`. Read `docs/operations/pulse-next-branches.md` before
-integrating an older branch. `main` remains the unchanged production target.
+Pulse Next is the only development codebase. Start every new task from freshly
+fetched `origin/develop`, not `main` or an existing historical worktree. The v40
+line has advanced to `0.0.41-pulse.N`; do not reset it to v40. Historical branches
+are preserved under `archive/2026-09-14/`, including `pulse-code-old`. Read
+`docs/operations/pulse-next-branches.md` before porting selected old changes.
+`main` remains the unchanged production target, not a feature branch base.
 
 T3 Code is a minimal GUI for coding agents. A Node WebSocket server wraps provider CLIs and agents (Codex, Claude Code, Cursor, Grok, OpenCode, Antigravity) and serves web, desktop, and mobile clients.
 
