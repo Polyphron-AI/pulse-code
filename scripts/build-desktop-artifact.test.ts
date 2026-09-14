@@ -332,7 +332,8 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
 
       const linuxConfig = linux.linux as Record<string, unknown>;
       const winConfig = win.win as Record<string, unknown>;
-      assert.equal(winConfig.publisherName, "Polyphron AI");
+      assert.deepStrictEqual(winConfig.signtoolOptions, { publisherName: "Polyphron AI" });
+      assert.notProperty(winConfig, "publisherName");
       assert.equal(linuxConfig.executableName, "pulsenext");
       assert.deepStrictEqual(linuxConfig.desktop, { entry: { StartupWMClass: "pulsenext" } });
       assert.deepStrictEqual(linuxConfig.protocols, [
