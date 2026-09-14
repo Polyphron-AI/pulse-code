@@ -539,6 +539,19 @@
       "remaining": "Settings and microphone composition follow the reviewed transport API."
     },
     {
+      "id": "parakeet-desktop-blob-fetch",
+      "branch": "fix/pulse-next-parakeet-blob",
+      "baseRevision": "fefd3179b6",
+      "state": "implementing",
+      "scope": "Allow local Blob fetches used by Parakeet's model and tokenizer loader in the desktop content security policy, without broadening executable sources.",
+      "acceptance": [
+        "Packaged and development desktop policies allow blob: connections for initial downloads and cached model reads while preserving network sources and script restrictions.",
+        "Retry, cancellation, reset, settings changes, navigation, concurrent threads and subsequent turns retain the existing loader lifecycle; no model or draft state changes.",
+        "Web and native mobile policies, provider adapters, contracts, local and remote authentication, processes and worktrees are unchanged."
+      ],
+      "remaining": "Focused regression, frozen review and Windows installer rebuild. Live model setup remains unverified."
+    },
+    {
       "id": "dictation-composer-setup-link",
       "branch": "feat/pulse-next-voice-setup",
       "baseRevision": "dc254b3a56",
