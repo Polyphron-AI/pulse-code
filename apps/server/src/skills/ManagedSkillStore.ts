@@ -209,6 +209,7 @@ export function validateSkillFiles(
 }
 
 export type GitHubRequest = (endpoint: string) => Promise<unknown>;
+export class GitHubNotFoundError extends Error {}
 
 export interface GitHubSkillResolution {
   readonly repository: string;
@@ -256,7 +257,8 @@ export async function resolveGitHubSkillUrl(
           refLength = length;
           break;
         }
-      } catch {
+      } catch (error) {
+        if (!(error instanceof GitHubNotFoundError)) throw error;
         // A ref may itself contain slashes; keep shortening until GitHub resolves one.
       }
     }
@@ -306,7 +308,10 @@ export const githubRequest: GitHubRequest = async (endpoint) => {
       },
     );
     return JSON.parse(stdout);
-  } catch {
+  } catch (cause) {
+    const stderr =
+      typeof cause === "object" && cause !== null && "stderr" in cause ? String(cause.stderr) : "";
+    if (/\bHTTP\s+404\b|\bNot Found\b/i.test(stderr)) throw new GitHubNotFoundError();
     throw new Error(
       "GitHub sync failed. Check GitHub sign-in on this environment, repository access, revision and API rate limits.",
     );

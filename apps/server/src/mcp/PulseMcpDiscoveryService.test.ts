@@ -5,10 +5,30 @@ import * as NodePath from "node:path";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 
-import { makePulseMcpDiscoveryService } from "./PulseMcpDiscoveryService.ts";
+import { discoveryFileIdentity, makePulseMcpDiscoveryService } from "./PulseMcpDiscoveryService.ts";
 import type { PulseMcpConfigServiceShape } from "./PulseMcpConfigService.ts";
+import { PulseMcpConfigError } from "./PulseMcpConfigService.ts";
 
 describe("PulseMcpDiscoveryService", () => {
+  it("uses physical file identity while preserving case on case-sensitive platforms", async () => {
+    const root = await NodeFSP.mkdtemp(NodePath.join(NodeOs.tmpdir(), "pulse-mcp-identity-"));
+    try {
+      const targetDir = NodePath.join(root, "target");
+      const aliasDir = NodePath.join(root, "alias");
+      await NodeFSP.mkdir(targetDir);
+      const target = NodePath.join(targetDir, "Target.json");
+      await NodeFSP.writeFile(target, "{}");
+      await NodeFSP.symlink(targetDir, aliasDir, "junction");
+      expect(await discoveryFileIdentity(NodePath.join(aliasDir, "Target.json"))).toBe(
+        await discoveryFileIdentity(target),
+      );
+      expect(await discoveryFileIdentity(NodePath.join(root, "Case.json"), "linux")).not.toBe(
+        await discoveryFileIdentity(NodePath.join(root, "case.json"), "linux"),
+      );
+    } finally {
+      await NodeFSP.rm(root, { recursive: true, force: true });
+    }
+  });
   it("records the reviewed baseline and imports only later additions", async () => {
     const root = await NodeFSP.mkdtemp(NodePath.join(NodeOs.tmpdir(), "pulse-mcp-follow-"));
     try {
@@ -88,6 +108,53 @@ describe("PulseMcpDiscoveryService", () => {
       await Effect.runPromise(service.syncFollowed());
       await Effect.runPromise(service.syncFollowed());
       expect(attempts).toBe(2);
+    } finally {
+      await NodeFSP.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("reconciles an existing create-only import after an approvals write crash", async () => {
+    const root = await NodeFSP.mkdtemp(NodePath.join(NodeOs.tmpdir(), "pulse-mcp-crash-"));
+    const approvalsPath = NodePath.join(root, "approvals.json");
+    const approval = JSON.stringify({
+      version: 1,
+      sources: { claude: { followNew: true, seen: [] } },
+    });
+    try {
+      await NodeFSP.writeFile(approvalsPath, approval);
+      let stored = false;
+      const service = makePulseMcpDiscoveryService({
+        approvalsPath,
+        files: [
+          {
+            source: "claude",
+            read: async () => JSON.stringify({ mcpServers: { later: { command: "one" } } }),
+          },
+        ],
+        config: {
+          upsertConnection: () =>
+            Effect.tryPromise({
+              try: async () => {
+                if (stored)
+                  throw new PulseMcpConfigError(
+                    "validate",
+                    "An MCP connection with this ID already exists.",
+                  );
+                stored = true;
+                await NodeFSP.rm(approvalsPath);
+                await NodeFSP.mkdir(approvalsPath);
+                return {} as never;
+              },
+              catch: (error) => error as PulseMcpConfigError,
+            }),
+        } as unknown as PulseMcpConfigServiceShape,
+      });
+      await expect(Effect.runPromise(service.syncFollowed())).rejects.toBeDefined();
+      await NodeFSP.rm(approvalsPath, { recursive: true });
+      await NodeFSP.writeFile(approvalsPath, approval);
+      await Effect.runPromise(service.syncFollowed());
+      const saved = JSON.parse(await NodeFSP.readFile(approvalsPath, "utf8"));
+      expect(saved.sources.claude.seen).toEqual(["later"]);
     } finally {
       await NodeFSP.rm(root, { recursive: true, force: true });
     }

@@ -7,6 +7,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
   downloadGitHubSkill,
+  GitHubNotFoundError,
   ManagedSkillStore,
   resolveGitHubSkillUrl,
   validateSkillFiles,
@@ -40,7 +41,7 @@ it("resolves a blob URL to exactly its skill directory", async () => {
     endpoint.endsWith("/commits/main")
       ? { sha: "b".repeat(40) }
       : endpoint.includes("/commits/")
-        ? Promise.reject(new Error("unknown ref"))
+        ? Promise.reject(new GitHubNotFoundError())
         : endpoint.includes("/git/trees/")
           ? {
               tree: [
@@ -64,7 +65,7 @@ it("resolves the longest valid slash-containing GitHub ref", async () => {
     requests.push(endpoint);
     if (endpoint === "repos/team/repo") return { default_branch: "main" };
     if (endpoint.endsWith("/commits/feature%2Fskills")) return { sha: "c".repeat(40) };
-    if (endpoint.includes("/commits/")) throw new Error("unknown ref");
+    if (endpoint.includes("/commits/")) throw new GitHubNotFoundError();
     return { tree: [{ type: "blob", path: "packs/review/SKILL.md" }] };
   };
   await expect(
@@ -73,6 +74,19 @@ it("resolves the longest valid slash-containing GitHub ref", async () => {
   expect(requests.filter((endpoint) => endpoint.includes("/commits/")).length).toBeLessThanOrEqual(
     8,
   );
+});
+
+it("does not fall back to a shorter ref after a transient GitHub failure", async () => {
+  const request: GitHubRequest = async (endpoint) => {
+    if (endpoint === "repos/team/repo") return { default_branch: "main" };
+    if (endpoint.endsWith("/commits/feature%2Fskills%2Fpacks%2Freview"))
+      throw new Error("rate limited");
+    if (endpoint.endsWith("/commits/feature%2Fskills")) return { sha: "d".repeat(40) };
+    throw new GitHubNotFoundError();
+  };
+  await expect(
+    resolveGitHubSkillUrl("https://github.com/team/repo/tree/feature/skills/packs/review", request),
+  ).rejects.toThrow(/rate limited/);
 });
 
 function files(body = "Review changes carefully.", metadata = "") {

@@ -6,9 +6,10 @@ import * as NodeOs from "node:os";
 import * as NodePath from "node:path";
 import { PulseMcpError } from "@t3tools/contracts";
 
-import type {
-  PulseMcpConfigServiceShape,
-  PulseMcpStoredConnection,
+import {
+  PulseMcpConfigError,
+  type PulseMcpConfigServiceShape,
+  type PulseMcpStoredConnection,
 } from "./PulseMcpConfigService.ts";
 import {
   discoveredMcpInput,
@@ -23,6 +24,7 @@ import {
 interface DiscoveryFile {
   readonly source: PulseMcpDiscoverySource;
   readonly read: (signal: AbortSignal) => Promise<string | undefined>;
+  readonly identity?: () => Promise<string>;
 }
 
 export interface PulseMcpDiscoveryService {
@@ -97,8 +99,14 @@ export function makePulseMcpDiscoveryService(input: {
   };
   const read = async (signal: AbortSignal) => {
     const candidates = [];
+    const identities = new Set<string>();
     for (const file of input.files) {
       try {
+        if (file.identity) {
+          const identity = await file.identity();
+          if (identities.has(identity)) continue;
+          identities.add(identity);
+        }
         const raw = await file.read(signal);
         if (raw === undefined) continue;
         const parsed =
@@ -208,7 +216,14 @@ export function makePulseMcpDiscoveryService(input: {
                 try {
                   await Effect.runPromise(input.config.upsertConnection(connection));
                   seen.add(candidate.name);
-                } catch {
+                } catch (error) {
+                  if (
+                    error instanceof PulseMcpConfigError &&
+                    error.operation === "validate" &&
+                    error.message === "An MCP connection with this ID already exists."
+                  ) {
+                    seen.add(candidate.name);
+                  }
                   // Transient storage failures remain unseen so the next scheduled pass retries.
                 }
               }
@@ -227,6 +242,17 @@ export function makePulseMcpDiscoveryService(input: {
 
 const MAX_CONFIG_BYTES = 2 * 1024 * 1024;
 
+export async function discoveryFileIdentity(
+  path: string,
+  platform = process.platform,
+): Promise<string> {
+  const resolved = await NodeFsp.realpath(path).catch((error: NodeJS.ErrnoException) => {
+    if (error.code === "ENOENT") return NodePath.resolve(path);
+    throw error;
+  });
+  return platform === "win32" ? resolved.toLowerCase() : resolved;
+}
+
 export function makeNodePulseMcpDiscoveryService(
   config: PulseMcpConfigServiceShape,
   stateDir: string,
@@ -238,6 +264,7 @@ export function makeNodePulseMcpDiscoveryService(
   });
   const file = (source: PulseMcpDiscoverySource, path: string): DiscoveryFile => ({
     source,
+    identity: () => discoveryFileIdentity(path),
     read: async (signal) => {
       try {
         const stat = await NodeFsp.stat(path);
@@ -249,22 +276,15 @@ export function makeNodePulseMcpDiscoveryService(
       }
     },
   });
-  const seenPaths = new Set<string>();
-  const uniqueFile = (source: PulseMcpDiscoverySource, path: string) => {
-    const normalized = NodePath.resolve(path).toLowerCase();
-    if (seenPaths.has(normalized)) return [];
-    seenPaths.add(normalized);
-    return [file(source, path)];
-  };
   return makePulseMcpDiscoveryService({
     config,
     approvalsPath: NodePath.join(stateDir, "pulse-mcp-discovery.json"),
     environment: process.env,
     files: [
-      ...uniqueFile("claude", paths.claude),
-      ...uniqueFile("codex", paths.codex),
-      ...paths.opencode.flatMap((path) => uniqueFile("opencode", path)),
-      ...(process.env.OPENCODE_CONFIG ? uniqueFile("opencode", process.env.OPENCODE_CONFIG) : []),
+      file("claude", paths.claude),
+      file("codex", paths.codex),
+      ...paths.opencode.map((path) => file("opencode", path)),
+      ...(process.env.OPENCODE_CONFIG ? [file("opencode", process.env.OPENCODE_CONFIG)] : []),
     ],
   });
 }
