@@ -21,7 +21,7 @@ import { AlertDialog } from "../components/ui/alert-dialog";
 import { Button } from "../components/ui/button";
 import { Checkbox } from "../components/ui/checkbox";
 import { Dialog } from "../components/ui/dialog";
-import { RadioGroup } from "../components/ui/radio-group";
+import { Radio, RadioGroup } from "../components/ui/radio-group";
 import { ManagedSkillsPanel } from "./ManagedSkillsPanel";
 
 const skill: PulseSkillRecord = {
@@ -52,6 +52,124 @@ function button(label: string) {
 }
 
 describe("ManagedSkillsPanel environment ownership", () => {
+  it("locks source fields while GitHub resolution is pending", async () => {
+    let finish!: (value: {
+      repository: string;
+      ref: string;
+      directories: readonly string[];
+    }) => void;
+    const resolveGitHub = vi.fn(
+      () =>
+        new Promise<{
+          repository: string;
+          ref: string;
+          directories: readonly string[];
+        }>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    await act(() => {
+      renderer = create(
+        <ManagedSkillsPanel
+          environmentKey="env-a"
+          skills={[]}
+          mutate={vi.fn().mockResolvedValue([])}
+          resolveGitHub={resolveGitHub}
+        />,
+      );
+    });
+    await act(async () => button("Import from GitHub")!.props.onClick());
+    await act(() =>
+      renderer!.root
+        .findByProps({ placeholder: "https://github.com/owner/repository" })
+        .props.onChange({ target: { value: "https://github.com/team/skills" } }),
+    );
+    act(() => button("Resolve")!.props.onClick());
+
+    expect(renderer!.root.findByProps({ placeholder: "owner/repository" }).props.disabled).toBe(
+      true,
+    );
+    expect(renderer!.root.findByProps({ placeholder: "skills/review" }).props.disabled).toBe(true);
+    await act(async () =>
+      finish({ repository: "team/skills", ref: "main", directories: ["skills/review"] }),
+    );
+    expect(renderer!.root.findByProps({ placeholder: "owner/repository" }).props.disabled).toBe(
+      false,
+    );
+  });
+
+  it("keeps generated IDs valid when a numeric directory collides", async () => {
+    const mutate = vi.fn().mockResolvedValue([]);
+    const numericSkill = { ...skill, id: "skill-123", name: "Numeric skill" };
+    await act(() => {
+      renderer = create(
+        <ManagedSkillsPanel
+          environmentKey="env-a"
+          skills={[numericSkill]}
+          mutate={mutate}
+          resolveGitHub={() =>
+            Promise.resolve({
+              repository: "team/skills",
+              ref: "main",
+              directories: ["skills/123", "other/release"],
+            })
+          }
+        />,
+      );
+    });
+    await act(async () => button("Import from GitHub")!.props.onClick());
+    await act(() =>
+      renderer!.root
+        .findByProps({ placeholder: "https://github.com/owner/repository" })
+        .props.onChange({ target: { value: "https://github.com/team/skills" } }),
+    );
+    await act(async () => button("Resolve")!.props.onClick());
+
+    expect(renderer!.root.findAllByProps({ children: "skill-123-2" })).toHaveLength(1);
+    await act(() => button("Select all")!.props.onClick());
+    await act(async () => button("Import 2 skills")!.props.onClick());
+    expect(mutate.mock.calls[0]?.[1].id).toBe("skill-123-2");
+  });
+
+  it("pins fixed commit URLs and disables automatic updates", async () => {
+    const commit = "a".repeat(40);
+    await act(() => {
+      renderer = create(
+        <ManagedSkillsPanel
+          environmentKey="env-a"
+          skills={[]}
+          mutate={vi.fn().mockResolvedValue([])}
+          resolveGitHub={() =>
+            Promise.resolve({
+              repository: "team/skills",
+              ref: commit,
+              directories: ["skills/review"],
+            })
+          }
+        />,
+      );
+    });
+    await act(async () => button("Import from GitHub")!.props.onClick());
+    await act(() =>
+      renderer!.root
+        .findByProps({ placeholder: "https://github.com/owner/repository" })
+        .props.onChange({ target: { value: "https://github.com/team/skills/tree/commit" } }),
+    );
+    await act(async () => button("Resolve")!.props.onClick());
+
+    expect(renderer!.root.findByType(RadioGroup).props.value).toBe("pinned");
+    expect(
+      renderer!.root.findAllByType(Radio).find((radio) => radio.props.value === "keep-updated")!
+        .props.disabled,
+    ).toBe(true);
+    expect(
+      renderer!.root.findAllByProps({
+        children:
+          "Fixed commit URLs can only be pinned. Use a branch or tag to keep a skill updated.",
+      }),
+    ).toHaveLength(1);
+  });
+
   it("imports each checked skill returned by GitHub resolution", async () => {
     const mutate = vi.fn().mockResolvedValue([]);
     const resolveGitHub = vi.fn().mockResolvedValue({

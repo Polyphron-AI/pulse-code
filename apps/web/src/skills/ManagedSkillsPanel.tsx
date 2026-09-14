@@ -70,11 +70,12 @@ function resolvedSkillOptions(directories: readonly string[], reservedIds: reado
         ?.toLowerCase()
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/^-+|-+$/g, "") || "skill";
-    let id = /^[a-z]/.test(base) ? base.slice(0, 64) : `skill-${base}`.slice(0, 64);
+    const stem = /^[a-z]/.test(base) ? base : `skill-${base}`;
+    let id = stem.slice(0, 64);
     let suffix = 2;
     while (used.has(id)) {
       const ending = `-${suffix++}`;
-      id = `${base.slice(0, 64 - ending.length)}${ending}`;
+      id = `${stem.slice(0, 64 - ending.length)}${ending}`;
     }
     used.add(id);
     return { directory, id };
@@ -573,6 +574,10 @@ function GitHubSkillDialog({
     setResolvedDirectories([]);
     setSelectedDirectories([]);
   };
+  const invalidateResolvedChoices = () => {
+    resolveGeneration.current += 1;
+    clearResolvedChoices();
+  };
   const reset = () => {
     setId("");
     setRepository("");
@@ -686,7 +691,7 @@ function GitHubSkillDialog({
                     placeholder="https://github.com/owner/repository"
                     onChange={(event) => {
                       setUrl(event.target.value);
-                      clearResolvedChoices();
+                      invalidateResolvedChoices();
                     }}
                   />
                   <Button
@@ -702,6 +707,7 @@ function GitHubSkillDialog({
                           if (generation !== resolveGeneration.current) return;
                           setRepository(resolved.repository);
                           setRef(resolved.ref);
+                          if (/^[a-f0-9]{40}$/i.test(resolved.ref)) setKeepUpdated(false);
                           setResolvedDirectories(resolved.directories);
                           setSelectedDirectories([]);
                           if (resolved.directories.length === 1) {
@@ -818,11 +824,11 @@ function GitHubSkillDialog({
               <Input
                 id={`${fieldId}-repository`}
                 value={repository}
-                disabled={disabled || busy}
+                disabled={disabled || busy || resolving}
                 placeholder="owner/repository"
                 onChange={(event) => {
                   setRepository(event.target.value);
-                  clearResolvedChoices();
+                  invalidateResolvedChoices();
                 }}
                 autoFocus={target !== "new"}
               />
@@ -834,10 +840,11 @@ function GitHubSkillDialog({
                   <Input
                     id={`${fieldId}-ref`}
                     value={ref}
-                    disabled={disabled || busy}
+                    disabled={disabled || busy || resolving}
                     onChange={(event) => {
                       setRef(event.target.value);
-                      clearResolvedChoices();
+                      if (/^[a-f0-9]{40}$/i.test(event.target.value.trim())) setKeepUpdated(false);
+                      invalidateResolvedChoices();
                     }}
                   />
                 </div>
@@ -847,7 +854,7 @@ function GitHubSkillDialog({
                     id={`${fieldId}-directory`}
                     list={`${fieldId}-directories`}
                     value={directory}
-                    disabled={disabled || busy}
+                    disabled={disabled || busy || resolving}
                     placeholder="skills/review"
                     onChange={(event) => setDirectory(event.target.value)}
                   />
@@ -864,7 +871,9 @@ function GitHubSkillDialog({
               <RadioGroup
                 className="grid grid-cols-2 gap-2"
                 value={keepUpdated ? "keep-updated" : "pinned"}
-                onValueChange={(value) => setKeepUpdated(value === "keep-updated")}
+                onValueChange={(value) =>
+                  setKeepUpdated(value === "keep-updated" && !/^[a-f0-9]{40}$/i.test(ref.trim()))
+                }
               >
                 {[
                   {
@@ -887,9 +896,19 @@ function GitHubSkillDialog({
                         selected
                           ? "border-primary bg-primary/10 ring-1 ring-primary/30"
                           : "border-border hover:bg-muted/50",
+                        policy.value === "keep-updated" && /^[a-f0-9]{40}$/i.test(ref.trim())
+                          ? "cursor-not-allowed opacity-50"
+                          : null,
                       )}
                     >
-                      <Radio value={policy.value} disabled={disabled || busy} />
+                      <Radio
+                        value={policy.value}
+                        disabled={
+                          disabled ||
+                          busy ||
+                          (policy.value === "keep-updated" && /^[a-f0-9]{40}$/i.test(ref.trim()))
+                        }
+                      />
                       <span>
                         <span className="block text-sm font-semibold">{policy.title}</span>
                         <span className="mt-0.5 block text-xs leading-snug text-muted-foreground">
@@ -900,6 +919,11 @@ function GitHubSkillDialog({
                   );
                 })}
               </RadioGroup>
+              {/^[a-f0-9]{40}$/i.test(ref.trim()) ? (
+                <p className="text-xs text-muted-foreground">
+                  Fixed commit URLs can only be pinned. Use a branch or tag to keep a skill updated.
+                </p>
+              ) : null}
             </div>
           </div>
         </DialogPanel>
