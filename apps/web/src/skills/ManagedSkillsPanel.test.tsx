@@ -19,7 +19,9 @@ vi.mock("../components/ui/dialog", () => {
 
 import { AlertDialog } from "../components/ui/alert-dialog";
 import { Button } from "../components/ui/button";
+import { Checkbox } from "../components/ui/checkbox";
 import { Dialog } from "../components/ui/dialog";
+import { RadioGroup } from "../components/ui/radio-group";
 import { ManagedSkillsPanel } from "./ManagedSkillsPanel";
 
 const skill: PulseSkillRecord = {
@@ -50,6 +52,72 @@ function button(label: string) {
 }
 
 describe("ManagedSkillsPanel environment ownership", () => {
+  it("imports each checked skill returned by GitHub resolution", async () => {
+    const mutate = vi.fn().mockResolvedValue([]);
+    const resolveGitHub = vi.fn().mockResolvedValue({
+      repository: "team/skills",
+      ref: "main",
+      directories: ["skills/review", "skills/release", "special/review"],
+    });
+    await act(() => {
+      renderer = create(
+        <ManagedSkillsPanel
+          environmentKey="env-a"
+          skills={[skill]}
+          mutate={mutate}
+          resolveGitHub={resolveGitHub}
+        />,
+      );
+    });
+
+    await act(async () => button("Import from GitHub")!.props.onClick());
+    await act(() =>
+      renderer!.root
+        .findByProps({ placeholder: "https://github.com/owner/repository" })
+        .props.onChange({ target: { value: "https://github.com/team/skills" } }),
+    );
+    await act(async () => button("Resolve")!.props.onClick());
+
+    const choices = renderer!.root.findAllByType(Checkbox);
+    expect(choices).toHaveLength(3);
+    expect(choices.every((choice) => !choice.props.checked)).toBe(true);
+    expect(button("Import 0 skills")!.props.disabled).toBe(true);
+    await act(() => button("Select all")!.props.onClick());
+    expect(renderer!.root.findAllByType(Checkbox).every((choice) => choice.props.checked)).toBe(
+      true,
+    );
+    const selectedChoices = renderer!.root.findAllByType(Checkbox);
+    await act(() => selectedChoices[1]!.props.onCheckedChange(false));
+    const policy = renderer!.root.findByType(RadioGroup);
+    expect(policy.props.value).toBe("pinned");
+    await act(() => policy.props.onValueChange("keep-updated"));
+    await act(async () => button("Import 2 skills")!.props.onClick());
+
+    expect(mutate).toHaveBeenCalledTimes(2);
+    expect(mutate).toHaveBeenNthCalledWith(1, "env-a", {
+      operation: "import-github",
+      id: "review-2",
+      source: {
+        type: "github",
+        repository: "team/skills",
+        ref: "main",
+        directory: "skills/review",
+      },
+      updatePolicy: "keep-updated",
+    });
+    expect(mutate).toHaveBeenNthCalledWith(2, "env-a", {
+      operation: "import-github",
+      id: "review-3",
+      source: {
+        type: "github",
+        repository: "team/skills",
+        ref: "main",
+        directory: "special/review",
+      },
+      updatePolicy: "keep-updated",
+    });
+  });
+
   it("captures the environment key and ignores a completion after switching environments", async () => {
     let finish!: (value: readonly PulseSkillRecord[]) => void;
     const mutate = vi.fn(

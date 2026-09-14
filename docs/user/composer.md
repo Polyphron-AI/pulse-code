@@ -163,10 +163,13 @@ On web and desktop, open **Settings → Integrations → Skills** and choose an
 environment. Upload a skill folder or ZIP, or import a skill directory from GitHub.
 Paste a GitHub repository, skill-directory or SKILL.md URL to find skills and fill
 the source fields. If the repository contains several skills or tool-specific
-copies, choose the directory you want. You can still edit the fields manually.
+copies, Resolve shows a checklist. Select the skills you want to import;
+Pulse gives duplicate folder names unique IDs. You can still edit the fields manually
+when the URL resolves to one skill.
 
 GitHub imports can be pinned or auto-updated; uploaded skills can later be linked
-to GitHub. Auto-update is off by default. Turning it on checks for validated updates
+to GitHub. The selected policy card explains whether Pulse pins today's commit or
+checks the branch for updates. Auto-update is off by default. Turning it on checks for validated updates
 while the environment is running. Failed updates leave the last valid skill
 available, and active chat selections keep their pinned revision until you change it.
 

@@ -539,6 +539,21 @@
       "remaining": "Settings and microphone composition follow the reviewed transport API."
     },
     {
+      "id": "multi-skill-github-import",
+      "branch": "feat/pulse-next-multi-skill-import",
+      "baseRevision": "0f0c81e70b",
+      "state": "implementing",
+      "scope": "Let users select multiple discovered skill directories from one GitHub repository and make pinned versus keep-updated policy selection visually explicit.",
+      "acceptance": [
+        "Resolve shows a checkbox for every directory when a repository contains multiple skills; Select all and Clear support choosing any non-empty subset without silently importing tool-specific duplicates.",
+        "Each checked directory imports as its own immutable managed skill with a deterministic unique ID and the selected update policy.",
+        "Single-skill and existing link-to-GitHub flows retain editable manual fields.",
+        "Pinned and keep-updated choices use clearly selected policy cards with a direct description of update behavior.",
+        "Web, compact web and desktop share the dialog. Verification remains code-only."
+      ],
+      "remaining": "Focused verification, review, Pulse Next packaging and develop integration."
+    },
+    {
       "id": "managed-integrations-discovery",
       "branch": "feat/pulse-next-managed-discovery",
       "baseRevision": "28befc1217",

@@ -23,6 +23,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "../components/ui/alert";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
+import { Checkbox } from "../components/ui/checkbox";
 import {
   Dialog,
   DialogDescription,
@@ -34,6 +35,8 @@ import {
 } from "../components/ui/dialog";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
+import { Radio, RadioGroup } from "../components/ui/radio-group";
+import { cn } from "../lib/utils";
 import { groupManagedSkills, readSkillFiles, shortRevision } from "./managedSkills";
 
 export interface ManagedSkillsPanelProps {
@@ -55,6 +58,28 @@ export interface ManagedSkillsPanelProps {
 }
 
 type MutationResult = { readonly ok: true } | { readonly ok: false; readonly error: string };
+
+function resolvedSkillOptions(directories: readonly string[], reservedIds: readonly string[] = []) {
+  const used = new Set(reservedIds);
+  return directories.map((directory) => {
+    const base =
+      directory
+        .split("/")
+        .filter(Boolean)
+        .at(-1)
+        ?.toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "") || "skill";
+    let id = /^[a-z]/.test(base) ? base.slice(0, 64) : `skill-${base}`.slice(0, 64);
+    let suffix = 2;
+    while (used.has(id)) {
+      const ending = `-${suffix++}`;
+      id = `${base.slice(0, 64 - ending.length)}${ending}`;
+    }
+    used.add(id);
+    return { directory, id };
+  });
+}
 
 function message(error: unknown): string {
   return error instanceof Error ? error.message : "The skill operation failed.";
@@ -221,6 +246,7 @@ export function ManagedSkillsPanel({
         target={disabled ? null : gitTarget}
         busy={pending === "github"}
         disabled={disabled}
+        reservedIds={skills.map((skill) => skill.id)}
         onOpenChange={(open) => !open && setGitTarget(null)}
         onImport={(mutation) => run("github", mutation)}
         {...(resolveGitHub
@@ -517,6 +543,7 @@ function GitHubSkillDialog({
   onOpenChange,
   onImport,
   resolveGitHub,
+  reservedIds,
 }: {
   readonly target: PulseSkillRecord | "new" | null;
   readonly busy: boolean;
@@ -528,6 +555,7 @@ function GitHubSkillDialog({
     readonly ref: string;
     readonly directories: readonly string[];
   }>;
+  readonly reservedIds: readonly string[];
 }) {
   const fieldId = useId();
   const [id, setId] = useState("");
@@ -538,8 +566,13 @@ function GitHubSkillDialog({
   const [url, setUrl] = useState("");
   const [resolving, setResolving] = useState(false);
   const [resolvedDirectories, setResolvedDirectories] = useState<readonly string[]>([]);
+  const [selectedDirectories, setSelectedDirectories] = useState<readonly string[]>([]);
   const [resolveError, setResolveError] = useState<string | null>(null);
   const resolveGeneration = useRef(0);
+  const clearResolvedChoices = () => {
+    setResolvedDirectories([]);
+    setSelectedDirectories([]);
+  };
   const reset = () => {
     setId("");
     setRepository("");
@@ -548,7 +581,7 @@ function GitHubSkillDialog({
     setKeepUpdated(false);
     setUrl("");
     setResolving(false);
-    setResolvedDirectories([]);
+    clearResolvedChoices();
     setResolveError(null);
     resolveGeneration.current += 1;
   };
@@ -565,6 +598,31 @@ function GitHubSkillDialog({
   }, [disabled, target]);
   const save = async () => {
     if (disabled || !target) return;
+    if (target === "new" && resolvedDirectories.length > 1) {
+      const options = resolvedSkillOptions(resolvedDirectories, reservedIds).filter((option) =>
+        selectedDirectories.includes(option.directory),
+      );
+      for (const option of options) {
+        const result = await onImport({
+          operation: "import-github",
+          id: option.id,
+          source: {
+            type: "github",
+            repository: repository.trim(),
+            ref: ref.trim(),
+            directory: option.directory,
+          },
+          updatePolicy: keepUpdated ? "keep-updated" : "pinned",
+        });
+        if (!result.ok) return;
+        setSelectedDirectories((current) =>
+          current.filter((candidate) => candidate !== option.directory),
+        );
+      }
+      reset();
+      onOpenChange(false);
+      return;
+    }
     const source = {
       type: "github" as const,
       repository: repository.trim(),
@@ -592,7 +650,10 @@ function GitHubSkillDialog({
   };
   const valid =
     target !== null &&
-    (target !== "new" || /^[a-z][a-z0-9-]{0,63}$/.test(id)) &&
+    (target !== "new" ||
+      (resolvedDirectories.length > 1
+        ? selectedDirectories.length > 0
+        : /^[a-z][a-z0-9-]{0,63}$/.test(id))) &&
     /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository.trim()) &&
     ref.trim().length > 0;
   return (
@@ -603,7 +664,7 @@ function GitHubSkillDialog({
         onOpenChange(disabled ? false : next);
       }}
     >
-      <DialogPopup className="max-w-md">
+      <DialogPopup className="max-w-lg">
         <DialogHeader>
           <DialogTitle>
             {target === "new" ? "Import from GitHub" : `Link ${target?.name ?? "skill"} to GitHub`}
@@ -623,7 +684,10 @@ function GitHubSkillDialog({
                     value={url}
                     disabled={disabled || busy || resolving}
                     placeholder="https://github.com/owner/repository"
-                    onChange={(event) => setUrl(event.target.value)}
+                    onChange={(event) => {
+                      setUrl(event.target.value);
+                      clearResolvedChoices();
+                    }}
                   />
                   <Button
                     type="button"
@@ -639,9 +703,13 @@ function GitHubSkillDialog({
                           setRepository(resolved.repository);
                           setRef(resolved.ref);
                           setResolvedDirectories(resolved.directories);
-                          if (resolved.directories.length === 1)
+                          setSelectedDirectories([]);
+                          if (resolved.directories.length === 1) {
                             setDirectory(resolved.directories[0]!);
-                          else setDirectory("");
+                            setId(
+                              resolvedSkillOptions(resolved.directories, reservedIds)[0]?.id ?? "",
+                            );
+                          } else setDirectory("");
                         })
                         .catch((cause) => {
                           if (generation === resolveGeneration.current)
@@ -656,7 +724,7 @@ function GitHubSkillDialog({
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  When a repository contains several skills, choose the directory below.
+                  Resolve the repository, then choose which skills to add.
                 </p>
                 {resolveError ? (
                   <p className="text-xs text-error-foreground" role="alert">
@@ -665,7 +733,70 @@ function GitHubSkillDialog({
                 ) : null}
               </div>
             ) : null}
-            {target === "new" ? (
+            {target === "new" && resolvedDirectories.length > 1 ? (
+              <fieldset className="grid gap-2">
+                <div className="flex items-end justify-between gap-3">
+                  <div>
+                    <legend className="text-sm font-medium">
+                      Skills to import ({selectedDirectories.length} selected)
+                    </legend>
+                    <p className="text-xs text-muted-foreground">Resolved from {ref}</p>
+                  </div>
+                  <div className="flex gap-1">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="xs"
+                      disabled={disabled || busy}
+                      onClick={() => setSelectedDirectories(resolvedDirectories)}
+                    >
+                      Select all
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="xs"
+                      disabled={disabled || busy || selectedDirectories.length === 0}
+                      onClick={() => setSelectedDirectories([])}
+                    >
+                      Clear
+                    </Button>
+                  </div>
+                </div>
+                <div className="max-h-56 space-y-1 overflow-y-auto rounded-lg border p-1.5">
+                  {resolvedSkillOptions(resolvedDirectories, reservedIds).map((option) => {
+                    const checked = selectedDirectories.includes(option.directory);
+                    return (
+                      <label
+                        key={option.directory}
+                        className={cn(
+                          "flex cursor-pointer items-start gap-3 rounded-md px-2.5 py-2.5 transition-colors",
+                          checked ? "bg-primary/10" : "hover:bg-muted/60",
+                        )}
+                      >
+                        <Checkbox
+                          checked={checked}
+                          disabled={disabled || busy}
+                          onCheckedChange={(next) =>
+                            setSelectedDirectories((current) =>
+                              next
+                                ? [...current, option.directory]
+                                : current.filter((candidate) => candidate !== option.directory),
+                            )
+                          }
+                        />
+                        <span className="min-w-0">
+                          <span className="block text-sm font-medium">{option.id}</span>
+                          <span className="block truncate text-xs text-muted-foreground">
+                            {option.directory}
+                          </span>
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </fieldset>
+            ) : target === "new" ? (
               <div className="grid gap-1.5">
                 <Label htmlFor={`${fieldId}-git-id`}>Skill ID</Label>
                 <Input
@@ -685,63 +816,86 @@ function GitHubSkillDialog({
                 value={repository}
                 disabled={disabled || busy}
                 placeholder="owner/repository"
-                onChange={(event) => setRepository(event.target.value)}
+                onChange={(event) => {
+                  setRepository(event.target.value);
+                  clearResolvedChoices();
+                }}
                 autoFocus={target !== "new"}
               />
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="grid gap-1.5">
-                <Label htmlFor={`${fieldId}-ref`}>Branch or ref</Label>
-                <Input
-                  id={`${fieldId}-ref`}
-                  value={ref}
-                  disabled={disabled || busy}
-                  onChange={(event) => setRef(event.target.value)}
-                />
+            {resolvedDirectories.length <= 1 ? (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-1.5">
+                  <Label htmlFor={`${fieldId}-ref`}>Branch or ref</Label>
+                  <Input
+                    id={`${fieldId}-ref`}
+                    value={ref}
+                    disabled={disabled || busy}
+                    onChange={(event) => {
+                      setRef(event.target.value);
+                      clearResolvedChoices();
+                    }}
+                  />
+                </div>
+                <div className="grid gap-1.5">
+                  <Label htmlFor={`${fieldId}-directory`}>Skill directory</Label>
+                  <Input
+                    id={`${fieldId}-directory`}
+                    list={`${fieldId}-directories`}
+                    value={directory}
+                    disabled={disabled || busy}
+                    placeholder="skills/review"
+                    onChange={(event) => setDirectory(event.target.value)}
+                  />
+                  <datalist id={`${fieldId}-directories`}>
+                    {resolvedDirectories.map((candidate) => (
+                      <option key={candidate} value={candidate} />
+                    ))}
+                  </datalist>
+                </div>
               </div>
-              <div className="grid gap-1.5">
-                <Label htmlFor={`${fieldId}-directory`}>Skill directory</Label>
-                <Input
-                  id={`${fieldId}-directory`}
-                  list={`${fieldId}-directories`}
-                  value={directory}
-                  disabled={disabled || busy}
-                  placeholder="skills/review"
-                  onChange={(event) => setDirectory(event.target.value)}
-                />
-                <datalist id={`${fieldId}-directories`}>
-                  {resolvedDirectories.map((candidate) => (
-                    <option key={candidate} value={candidate} />
-                  ))}
-                </datalist>
-              </div>
-            </div>
+            ) : null}
             <div className="grid gap-1.5">
               <Label>Update policy</Label>
-              <div className="grid grid-cols-2 gap-2">
-                <Button
-                  type="button"
-                  variant={!keepUpdated ? "secondary" : "outline"}
-                  disabled={disabled || busy}
-                  onClick={() => setKeepUpdated(false)}
-                >
-                  Pin version
-                </Button>
-                <Button
-                  type="button"
-                  variant={keepUpdated ? "secondary" : "outline"}
-
-                  disabled={disabled || busy}
-                  onClick={() => setKeepUpdated(true)}
-                >
-                  Keep updated
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {keepUpdated
-                  ? "Track this branch or ref for validated updates."
-                  : "Keep the resolved commit until you change it."}
-              </p>
+              <RadioGroup
+                className="grid grid-cols-2 gap-2"
+                value={keepUpdated ? "keep-updated" : "pinned"}
+                onValueChange={(value) => setKeepUpdated(value === "keep-updated")}
+              >
+                {[
+                  {
+                    value: "pinned",
+                    title: "Pin this version",
+                    description: "Stay on the commit imported today.",
+                  },
+                  {
+                    value: "keep-updated",
+                    title: "Keep updated",
+                    description: "Check this branch for validated updates.",
+                  },
+                ].map((policy) => {
+                  const selected = policy.value === (keepUpdated ? "keep-updated" : "pinned");
+                  return (
+                    <label
+                      key={policy.value}
+                      className={cn(
+                        "flex cursor-pointer items-start gap-2.5 rounded-lg border p-3 transition-colors",
+                        selected
+                          ? "border-primary bg-primary/10 ring-1 ring-primary/30"
+                          : "border-border hover:bg-muted/50",
+                      )}
+                    >
+                      <Radio value={policy.value} disabled={disabled || busy} />
+                      <span>
+                        <span className="block text-sm font-semibold">{policy.title}</span>
+                        <span className="mt-0.5 block text-xs leading-snug text-muted-foreground">
+                          {policy.description}
+                        </span>
+                      </span>
+                    </label>
+                  );
+                })}
+              </RadioGroup>
             </div>
           </div>
         </DialogPanel>
@@ -750,7 +904,13 @@ function GitHubSkillDialog({
             Cancel
           </Button>
           <Button disabled={disabled || busy || !valid} onClick={() => void save()}>
-            {busy ? "Validating…" : target === "new" ? "Import skill" : "Link skill"}
+            {busy
+              ? "Validating…"
+              : target === "new" && resolvedDirectories.length > 1
+                ? `Import ${selectedDirectories.length} skill${selectedDirectories.length === 1 ? "" : "s"}`
+                : target === "new"
+                  ? "Import skill"
+                  : "Link skill"}
           </Button>
         </DialogFooter>
       </DialogPopup>
