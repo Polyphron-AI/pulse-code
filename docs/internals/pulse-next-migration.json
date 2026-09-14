@@ -822,9 +822,10 @@
   "mcpBehaviorProposal": "docs/internals/pulse-next-mcp-behavior.md",
   "currentFeature": {
     "id": "mcp-environment-auth-project-defaults",
-    "state": "verification-in-progress",
+    "state": "build-verified",
     "branch": "feat/mcp-environment-auth-project-defaults",
     "baseRevision": "26508b0ced",
+    "implementationRevision": "b5a657cc1d",
     "scope": "Reuse provider-owned MCP authentication across an environment while applying managed MCP nominations through global, project and thread scopes.",
     "acceptanceCases": [
       "OAuth credentials remain owned by the provider instance's environment-level credential store; projects and worktrees persist only managed connection IDs.",
@@ -836,8 +837,15 @@
       "Remote environments remain authoritative for credentials and policy; Codex, Claude, OpenCode and unsupported providers retain their existing adapter behavior.",
       "Focused contract, configuration, RPC, provider, Claude adapter and composer tests pass, followed by scoped typechecks and one Pulse Next Windows build."
     ],
+    "verification": "281 focused server tests across managed MCP configuration, preflight, RPC, provider orchestration, Claude authentication and authorization passed; 26 composer tests and 6 contract tests passed. Server, web and contracts scoped typechecks passed. Pulse Next 0.0.41-pulse.11 Windows payload validation passed with 48 files and 18 sidecar natives.",
+    "artifact": {
+      "path": "release/pulse-next/Pulse-Next-0.0.41-pulse.11-x64.exe",
+      "bytes": 598616192,
+      "sha256": "705B719CAC8859EFCC3E03C90934EECE1392E2B9DAC6CC69DD3698A202575425",
+      "signed": false
+    },
     "completionBlockers": [],
-    "nextAction": "Complete focused verification, integrate into develop and build Pulse Next 0.0.41-pulse.11."
+    "nextAction": "Install manually when ready and validate one real Claude-to-Pulse browser login. Publishing remains unauthorized."
   },
   "activeImplementationBatch": {
     "id": "mcp-claude-opencode-adapters",
