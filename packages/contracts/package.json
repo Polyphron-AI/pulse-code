@@ -1,6 +1,6 @@
 {
   "name": "@t3tools/contracts",
-  "version": "0.0.41-pulse.5",
+  "version": "0.0.41-pulse.6",
   "private": true,
   "files": [
     "dist"

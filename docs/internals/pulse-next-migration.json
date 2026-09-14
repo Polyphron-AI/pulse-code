@@ -539,6 +539,23 @@
       "remaining": "Settings and microphone composition follow the reviewed transport API."
     },
     {
+      "id": "managed-integrations-discovery",
+      "branch": "feat/pulse-next-managed-discovery",
+      "baseRevision": "28befc1217",
+      "state": "implementing",
+      "scope": "Always-visible MCP and skills chat controls; environment-local Claude, Codex and OpenCode MCP discovery with reviewed import; GitHub skill URL resolution and explicit working auto-update policy.",
+      "acceptance": [
+        "MCP and Skills remain visible with zero entries and on all providers; empty states link to management, while unsupported invocation remains accurately gated.",
+        "Discover supported user-level provider config formats in the selected environment, review safe candidate metadata, then import without overwriting managed records, enabling chat defaults or changing provider files.",
+        "Discovery never executes commands or exposes raw credentials. Import rereads authoritative source config, stores credential values through the existing secret store and reports unsupported semantics.",
+        "GitHub repository, directory and SKILL.md URLs resolve editable source fields and skill metadata. Multiple candidates require selection; malformed or unsupported sources give actionable errors.",
+        "Auto-update defaults off, persists per skill, checks enabled sources on a bounded server schedule and preserves immutable revisions used by active turns. Failures retain the last valid skill.",
+        "Retry, cancellation, environment changes, stale responses, missing files, duplicates, permissions and older-server capability gates have focused fixture coverage.",
+        "Web, compact web and desktop share controls. Native mobile retains existing contracts; provider invocation capabilities do not expand implicitly. Verification remains code-only."
+      ],
+      "remaining": "Implementation, fixture tests, scoped checks, frozen review and Pulse Next packaging."
+    },
+    {
       "id": "voice-setup-guidance",
       "branch": "feat/pulse-next-voice-guidance",
       "baseRevision": "f846497c2e",

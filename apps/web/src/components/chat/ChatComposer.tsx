@@ -4951,32 +4951,24 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         />
       ),
     },
-    ...(managedSkillPickerState.visible || composerPulseSkills.length > 0
-      ? [
-          {
-            id: "skills",
-            content: (
-              <>
-                <ComposerControlSeparator size={composerControlsInStrip ? "xs" : "sm"} />
-                {composerControlsInStrip ? restingManagedSkillPicker : managedSkillPicker}
-              </>
-            ),
-          },
-        ]
-      : []),
-    ...(selectedProvider === "codex" || managedMcp.picker.selectedIds.length > 0
-      ? [
-          {
-            id: "mcps",
-            content: (
-              <>
-                <ComposerControlSeparator size={composerControlsInStrip ? "xs" : "sm"} />
-                {composerControlsInStrip ? restingManagedMcpPicker : managedMcpPicker}
-              </>
-            ),
-          },
-        ]
-      : []),
+    {
+      id: "skills",
+      content: (
+        <>
+          <ComposerControlSeparator size={composerControlsInStrip ? "xs" : "sm"} />
+          {composerControlsInStrip ? restingManagedSkillPicker : managedSkillPicker}
+        </>
+      ),
+    },
+    {
+      id: "mcps",
+      content: (
+        <>
+          <ComposerControlSeparator size={composerControlsInStrip ? "xs" : "sm"} />
+          {composerControlsInStrip ? restingManagedMcpPicker : managedMcpPicker}
+        </>
+      ),
+    },
   ];
   const hiddenRestingBlockIds = restingBlockDefs
     .slice(restingBlockDefs.length - restingHiddenBlockCount)
@@ -5064,9 +5056,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
             onRuntimeModeChange={handleRuntimeModeChange}
           />
           {managedSkillPicker}
-          {selectedProvider === "codex" || managedMcp.picker.selectedIds.length > 0
-            ? managedMcpPicker
-            : null}
+          {managedMcpPicker}
         </>
       ) : (
         <>

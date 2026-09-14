@@ -105,7 +105,6 @@ export function ManagedSkillPicker(props: {
   const stale = staleManagedSkillSelections(props.state.selected, props.state.skills);
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
-  if (!props.state.visible && props.state.selected.length === 0) return null;
   const size = props.size ?? "sm";
   const selectedCount = props.state.selected.length;
   const normalizedQuery = query.trim().toLowerCase();
