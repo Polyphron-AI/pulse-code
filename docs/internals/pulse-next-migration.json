@@ -593,6 +593,28 @@
       "remaining": "Browser, installed-app, microphone and live-provider behavior remain untested at the user's request. Native mobile has no new managed picker; external shared OpenCode servers cannot load managed skills."
     },
     {
+      "id": "voice-recording-animation",
+      "branch": "feat/pulse-next-voice-animation",
+      "baseRevision": "27b8401e90",
+      "state": "reviewed-and-packaged",
+      "scope": "Make active voice recording unmistakable by adapting Pulse Talk's three-bar listening animation and warm recording color to the Pulse Next composer microphone.",
+      "acceptance": [
+        "Idle, preparing and transcribing use the normal neutral composer control; only active recording expands into a warm red Voice dictation pill.",
+        "The recording pill contains Pulse Talk's staggered three-bar 720 ms wave and the microphone remains the single stop action.",
+        "Stopping synchronously returns the control to its neutral transcribing state; aria-pressed and the stop label expose the same state without relying on color.",
+        "Reduced motion freezes the bars into a static voice-level shape. Base and hover text contrast remain above 4.5:1.",
+        "Web, compact web and desktop share the component and CSS. Capture, device selection, model loading, native mobile and provider behavior remain unchanged."
+      ],
+      "verification": "Frozen revision 86ace23810 passed independent review after replacing Pulse Talk's low-contrast source red with contrast-safe recording colors. White text measures 5.38:1 on #c92f18 and 6.25:1 on hover #b92713. All 69 web voice tests passed, scoped web typecheck passed, diff validation passed, and the Impeccable detector returned no findings. Verification remained code-only.",
+      "artifact": {
+        "path": "release/pulse-next/Pulse-Next-0.0.41-pulse.9-x64.exe",
+        "bytes": 137026941,
+        "sha256": "cb3fcf14538921e37ca2d00fc6204cf60c38c41c9c1ecfb9130aef838bf52e46",
+        "signed": false
+      },
+      "remaining": "The installer was not installed or launched. Real-client motion and microphone behavior remain unverified under the standing code-only constraint."
+    },
+    {
       "id": "voice-capture-toggle-and-device",
       "branch": "feat/pulse-next-voice-capture",
       "baseRevision": "9ab49b0c2d",
