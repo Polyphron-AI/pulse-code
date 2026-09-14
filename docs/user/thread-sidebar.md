@@ -22,3 +22,16 @@ pill** fallback because their colors are not controlled by Pulse Code.
 To generate a fresh title from the conversation, open a thread's context menu and choose
 **Regenerate title**. While Pulse Code is generating it, the action reads **Regenerating…** and cannot
 be selected again. The option is hidden when the connected environment needs a server update.
+
+## Continuing in another provider
+
+A thread stays with the provider it started on, because each provider keeps its own session. To
+move the work, open the thread's context menu and choose **Continue in…**, then pick a provider.
+The same action is in the command palette as **Continue in another provider…** for the thread you
+are viewing.
+
+The thread's current provider writes a short handoff brief covering the goal, what is done, the
+current state, and what is next. Pulse Code opens a new thread on the provider you chose with that
+brief already in the composer. Nothing is sent until you review it and hit send, so you can edit or
+add to the brief first. Very long threads are summarized from their beginning and their most recent
+work, and Pulse Code tells you when earlier content was left out.

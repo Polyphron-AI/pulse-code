@@ -21,6 +21,7 @@ import {
   buildBranchNamePrompt,
   buildCommitMessagePrompt,
   buildPrContentPrompt,
+  buildThreadHandoffPrompt,
   buildThreadTitlePrompt,
 } from "./TextGenerationPrompts.ts";
 import {
@@ -37,7 +38,8 @@ type OmpTextGenerationOperation =
   | "generateCommitMessage"
   | "generatePrContent"
   | "generateBranchName"
-  | "generateThreadTitle";
+  | "generateThreadTitle"
+  | "generateThreadHandoff";
 
 type OmpTextGenerationSettings = Pick<OmpSettings, "binaryPath">;
 
@@ -295,10 +297,31 @@ export const makeOmpTextGeneration = Effect.fn("makeOmpTextGeneration")(function
       } satisfies TextGeneration.ThreadTitleGenerationResult;
     });
 
+  const generateThreadHandoff: TextGeneration.TextGeneration["Service"]["generateThreadHandoff"] =
+    Effect.fn("OmpTextGeneration.generateThreadHandoff")(function* (input) {
+      const { prompt, outputSchema } = buildThreadHandoffPrompt({
+        threadContext: input.threadContext,
+        threadTitle: input.threadTitle,
+        attachments: input.attachments,
+      });
+
+      const generated = yield* runOmpJson({
+        operation: "generateThreadHandoff",
+        prompt,
+        outputSchemaJson: outputSchema,
+        modelSelection: input.modelSelection,
+      });
+
+      return {
+        summary: generated.summary.trim(),
+      } satisfies TextGeneration.ThreadHandoffGenerationResult;
+    });
+
   return {
     generateCommitMessage,
     generatePrContent,
     generateBranchName,
     generateThreadTitle,
+    generateThreadHandoff,
   } satisfies TextGeneration.TextGeneration["Service"];
 });

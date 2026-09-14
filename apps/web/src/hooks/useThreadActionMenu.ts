@@ -33,6 +33,7 @@ import { readLocalApi } from "../localApi";
 import { useUiStateStore } from "../uiStateStore";
 import { useCopyToClipboard } from "./useCopyToClipboard";
 import { useNewThreadHandler } from "./useHandleNewThread";
+import { useThreadHandoff, useThreadHandoffTargets } from "./useThreadHandoff";
 import { useClientSettings } from "./useSettings";
 import { useThreadActions } from "./useThreadActions";
 
@@ -79,6 +80,8 @@ export function useThreadActionMenu(input: {
     reportFailure: false,
   });
   const handleNewThread = useNewThreadHandler();
+  const handoffTargets = useThreadHandoffTargets(threadRef?.environmentId ?? null);
+  const startThreadHandoff = useThreadHandoff();
   const markThreadUnread = useUiStateStore((s) => s.markThreadUnread);
   const autoSettleAfterDays = useClientSettings((s) => s.sidebarAutoSettleAfterDays);
   const autoSettleOnMerge = useClientSettings((s) => s.sidebarAutoSettleOnMerge);
@@ -144,10 +147,22 @@ export function useThreadActionMenu(input: {
           isRunning: thread.session?.status === "running" && thread.session.activeTurnId != null,
           supports,
           snoozePresets,
+          // A thread is already running its own instance; offering it as a
+          // handoff target would just be a confusing no-op.
+          handoffTargets: handoffTargets.filter(
+            (target) => target.instanceId !== thread.modelSelection.instanceId,
+          ),
         });
         const clicked = await settlePromise(() => api.contextMenu.show(items, position));
         if (clicked._tag === "Failure" || clicked.value === null) return;
         const action: ThreadActionMenuId = clicked.value;
+        if (action.startsWith("continue-in:")) {
+          const instanceId = action.slice("continue-in:".length);
+          const target = handoffTargets.find((candidate) => candidate.instanceId === instanceId);
+          if (!target) return;
+          await startThreadHandoff({ threadRef, instanceId: target.instanceId });
+          return;
+        }
         if (action.startsWith("snooze:")) {
           const preset = snoozePresets.find((candidate) => `snooze:${candidate.id}` === action);
           if (!preset) return;
@@ -320,6 +335,8 @@ export function useThreadActionMenu(input: {
       copyThreadIdToClipboard,
       deleteThread,
       handleNewThread,
+      handoffTargets,
+      startThreadHandoff,
       markThreadUnread,
       onStartRename,
       pinThread,

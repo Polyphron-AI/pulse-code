@@ -20,6 +20,7 @@ import {
 import {
   createAtomCommandScheduler,
   createEnvironmentCommand,
+  createEnvironmentRpcCommand,
   createEnvironmentRpcQueryAtomFamily,
 } from "./runtime.ts";
 
@@ -58,6 +59,17 @@ export function createOrchestrationEnvironmentAtoms<R, E>(
     archivedShellSnapshot: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "environment-data:orchestration:archived-shell-snapshot",
       tag: ORCHESTRATION_WS_METHODS.getArchivedShellSnapshot,
+    }),
+    // Deliberately a command, not a cached query: each call spends provider
+    // tokens, so it must only run when the user asks for it.
+    generateThreadHandoff: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:orchestration:generate-thread-handoff",
+      tag: ORCHESTRATION_WS_METHODS.generateThreadHandoff,
+      concurrency: {
+        mode: "serial" as const,
+        key: ({ environmentId, input }: { environmentId: string; input: { threadId: string } }) =>
+          JSON.stringify([environmentId, input.threadId]),
+      },
     }),
     createSchedule: createEnvironmentCommand(runtime, {
       label: "environment-data:commands:schedule:create",

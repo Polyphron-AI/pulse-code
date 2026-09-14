@@ -54,6 +54,7 @@ export const ORCHESTRATION_WS_METHODS = {
   getTurnDiff: "orchestration.getTurnDiff",
   getFullThreadDiff: "orchestration.getFullThreadDiff",
   searchThreads: "orchestration.searchThreads",
+  generateThreadHandoff: "orchestration.generateThreadHandoff",
   getArchivedShellSnapshot: "orchestration.getArchivedShellSnapshot",
   subscribeShell: "orchestration.subscribeShell",
   subscribeThread: "orchestration.subscribeThread",
@@ -1690,6 +1691,25 @@ export const OrchestrationSearchThreadsResult = Schema.Struct({
 });
 export type OrchestrationSearchThreadsResult = typeof OrchestrationSearchThreadsResult.Type;
 
+/**
+ * Ask the thread's own provider to write a handoff summary of the work so far.
+ * The caller seeds a new thread's composer with the result, which is how a
+ * user moves an in-flight thread to a provider the current one is locked out of.
+ */
+export const OrchestrationGenerateThreadHandoffInput = Schema.Struct({
+  threadId: ThreadId,
+});
+export type OrchestrationGenerateThreadHandoffInput =
+  typeof OrchestrationGenerateThreadHandoffInput.Type;
+
+export const OrchestrationGenerateThreadHandoffResult = Schema.Struct({
+  summary: TrimmedNonEmptyString,
+  /** True when the thread was long enough that earlier content was dropped. */
+  truncated: Schema.Boolean,
+});
+export type OrchestrationGenerateThreadHandoffResult =
+  typeof OrchestrationGenerateThreadHandoffResult.Type;
+
 export const OrchestrationGetWorkflowScriptInput = Schema.Struct({
   threadId: ThreadId,
   /** Absolute path from the workflow's runHandles.scriptPath. The server
@@ -1759,6 +1779,10 @@ export const OrchestrationRpcSchemas = {
     input: OrchestrationSearchThreadsInput,
     output: OrchestrationSearchThreadsResult,
   },
+  generateThreadHandoff: {
+    input: OrchestrationGenerateThreadHandoffInput,
+    output: OrchestrationGenerateThreadHandoffResult,
+  },
   getArchivedShellSnapshot: {
     input: Schema.Struct({}),
     output: OrchestrationShellSnapshot,
@@ -1807,6 +1831,14 @@ export class OrchestrationGetFullThreadDiffError extends Schema.TaggedErrorClass
 
 export class OrchestrationSearchThreadsError extends Schema.TaggedErrorClass<OrchestrationSearchThreadsError>()(
   "OrchestrationSearchThreadsError",
+  {
+    message: TrimmedNonEmptyString,
+    cause: Schema.optional(Schema.Defect()),
+  },
+) {}
+
+export class OrchestrationGenerateThreadHandoffError extends Schema.TaggedErrorClass<OrchestrationGenerateThreadHandoffError>()(
+  "OrchestrationGenerateThreadHandoffError",
   {
     message: TrimmedNonEmptyString,
     cause: Schema.optional(Schema.Defect()),

@@ -28,6 +28,7 @@ import {
   type OrchestrationThreadStreamItem,
   OrchestrationGetFullThreadDiffError,
   OrchestrationGetSnapshotError,
+  OrchestrationGenerateThreadHandoffError,
   OrchestrationSearchThreadsError,
   OrchestrationGetTurnDiffError,
   ORCHESTRATION_WS_METHODS,
@@ -65,6 +66,9 @@ import { HttpRouter, HttpServerRequest, HttpServerRespondable } from "effect/uns
 import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 
 import * as CheckpointDiffQuery from "./checkpointing/CheckpointDiffQuery.ts";
+import { resolveThreadWorkspaceCwd } from "./checkpointing/Utils.ts";
+import * as TextGeneration from "./textGeneration/TextGeneration.ts";
+import { formatThreadHandoffContext } from "./orchestration/threadHandoffContext.ts";
 import * as ServerConfig from "./config.ts";
 import * as Keybindings from "./keybindings.ts";
 import * as ExternalLauncher from "./process/externalLauncher.ts";
@@ -370,6 +374,7 @@ const makeWsRpcLayer = (
       const projectionSnapshotQuery = yield* ProjectionSnapshotQuery.ProjectionSnapshotQuery;
       const orchestrationEngine = yield* OrchestrationEngine.OrchestrationEngineService;
       const checkpointDiffQuery = yield* CheckpointDiffQuery.CheckpointDiffQuery;
+      const textGeneration = yield* TextGeneration.TextGeneration;
       const keybindings = yield* Keybindings.Keybindings;
       const externalLauncher = yield* ExternalLauncher.ExternalLauncher;
       const remoteOpenTargets = yield* RemoteOpenTargets.RemoteOpenTargets;
@@ -1217,6 +1222,84 @@ const makeWsRpcLayer = (
                     cause,
                   }),
               ),
+            ),
+            { "rpc.aggregate": "orchestration" },
+          ),
+        [ORCHESTRATION_WS_METHODS.generateThreadHandoff]: (input) =>
+          observeRpcEffect(
+            ORCHESTRATION_WS_METHODS.generateThreadHandoff,
+            Effect.gen(function* () {
+              const thread = yield* projectionSnapshotQuery
+                .getThreadDetailById(input.threadId)
+                .pipe(Effect.map(Option.getOrUndefined));
+              if (!thread) {
+                return yield* new OrchestrationGenerateThreadHandoffError({
+                  message: "Thread not found",
+                });
+              }
+
+              const handoffContext = formatThreadHandoffContext(thread.messages);
+              if (handoffContext.context.length === 0) {
+                return yield* new OrchestrationGenerateThreadHandoffError({
+                  message: "This thread has no conversation to summarize yet.",
+                });
+              }
+
+              const project = yield* projectionSnapshotQuery
+                .getProjectShellById(thread.projectId)
+                .pipe(Effect.map(Option.getOrUndefined));
+              const cwd =
+                resolveThreadWorkspaceCwd({
+                  thread,
+                  projects: project ? [project] : [],
+                }) ?? process.cwd();
+
+              // The summary is written by the thread's own provider, which is
+              // the only one that has been living in this work.
+              const generated = yield* textGeneration.generateThreadHandoff({
+                cwd,
+                threadContext: handoffContext.context,
+                threadTitle: thread.title,
+                ...(handoffContext.attachments.length > 0
+                  ? { attachments: handoffContext.attachments }
+                  : {}),
+                modelSelection: thread.modelSelection,
+              });
+
+              if (generated.summary.length === 0) {
+                return yield* new OrchestrationGenerateThreadHandoffError({
+                  message: "The provider returned an empty summary.",
+                });
+              }
+
+              return {
+                summary: generated.summary,
+                truncated: handoffContext.truncated,
+              };
+            }).pipe(
+              Effect.catchTags({
+                TextGenerationError: (cause) =>
+                  Effect.fail(
+                    new OrchestrationGenerateThreadHandoffError({
+                      message: "Failed to generate a handoff summary",
+                      cause,
+                    }),
+                  ),
+                PersistenceSqlError: (cause) =>
+                  Effect.fail(
+                    new OrchestrationGenerateThreadHandoffError({
+                      message: "Failed to read the thread",
+                      cause,
+                    }),
+                  ),
+                PersistenceDecodeError: (cause) =>
+                  Effect.fail(
+                    new OrchestrationGenerateThreadHandoffError({
+                      message: "Failed to read the thread",
+                      cause,
+                    }),
+                  ),
+              }),
             ),
             { "rpc.aggregate": "orchestration" },
           ),

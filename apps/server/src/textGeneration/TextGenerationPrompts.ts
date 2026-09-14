@@ -316,3 +316,52 @@ export function buildThreadTitlePrompt(input: ThreadTitlePromptInput) {
 
   return { prompt, outputSchema };
 }
+
+// ---------------------------------------------------------------------------
+// Thread handoff
+// ---------------------------------------------------------------------------
+
+export interface ThreadHandoffPromptInput {
+  threadContext: string;
+  threadTitle?: string | undefined;
+  attachments?: ReadonlyArray<ChatAttachment> | undefined;
+}
+
+const THREAD_HANDOFF_PROMPT = `Write a handoff brief so a different coding agent, with no access to this conversation, can pick the work up where it stands.
+Return JSON with exactly one key: summary.
+
+The summary is pasted into a new thread's composer as the user's opening message, so write it addressed to the next agent, in the user's voice.
+
+Cover, in this order, using short markdown sections and omitting any that do not apply:
+- Goal: what the user is trying to achieve, in one or two sentences.
+- Done so far: the concrete changes already made, naming the files, functions, and commands involved.
+- Current state: what works, what is broken, and anything verified or explicitly not verified.
+- Decisions and constraints: choices already settled, including approaches ruled out and why, so they are not relitigated.
+- Next: the specific remaining work.
+
+Rules:
+- Only state what the thread supports. Never invent file paths, symbols, commands, or results.
+- Preserve exact identifiers, paths, branch names, and error text verbatim.
+- Do not claim work is complete unless the thread shows it finished.
+- Omit pleasantries, meta narration about the handoff itself, and restatements of these instructions.
+- Stay under 500 words.`;
+
+export function buildThreadHandoffPrompt(input: ThreadHandoffPromptInput) {
+  const titleLine =
+    input.threadTitle !== undefined && input.threadTitle.trim().length > 0
+      ? `\n\nThread title:\n${limitSection(input.threadTitle, 200)}`
+      : "";
+  const attachmentLines = (input.attachments ?? []).map(
+    (attachment) => `- ${attachment.name} (${attachment.mimeType}, ${attachment.sizeBytes} bytes)`,
+  );
+  const attachmentSection =
+    attachmentLines.length > 0
+      ? `\n\nAttachment metadata:\n${limitSection(attachmentLines.join("\n"), 4_000)}`
+      : "";
+  const prompt = `${THREAD_HANDOFF_PROMPT}${titleLine}\n\nThread contents:\n${input.threadContext}${attachmentSection}`;
+  const outputSchema = Schema.Struct({
+    summary: Schema.String,
+  });
+
+  return { prompt, outputSchema };
+}

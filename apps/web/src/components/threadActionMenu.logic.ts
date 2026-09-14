@@ -8,6 +8,8 @@ import type { SnoozePreset } from "@t3tools/client-runtime/state/thread-settled"
  */
 export type ThreadActionMenuId =
   | "new-thread-on-branch"
+  | "continue-in"
+  | `continue-in:${string}`
   | "pin"
   | "unpin"
   | "settle"
@@ -40,6 +42,15 @@ export interface ThreadActionMenuState {
     readonly titleRegeneration: boolean;
   };
   readonly snoozePresets: ReadonlyArray<SnoozePreset>;
+  /**
+   * Provider instances this thread can be handed off to. Empty when the
+   * environment exposes no other provider, which hides the submenu entirely.
+   */
+  readonly handoffTargets: ReadonlyArray<{
+    readonly instanceId: string;
+    readonly label: string;
+    readonly disabled: boolean;
+  }>;
 }
 
 /**
@@ -56,6 +67,22 @@ export function buildThreadActionMenuItems(
           {
             id: "new-thread-on-branch" as const,
             label: `New thread on ${state.branch}`,
+          },
+        ]
+      : []),
+    // Providers cannot be swapped inside a live thread, so this hands the
+    // work to a new one instead, carrying a summary written by this thread's
+    // own provider.
+    ...(state.handoffTargets.length > 0
+      ? [
+          {
+            id: "continue-in" as const,
+            label: "Continue in…",
+            children: state.handoffTargets.map((target) => ({
+              id: `continue-in:${target.instanceId}` as const,
+              label: target.label,
+              disabled: target.disabled,
+            })),
           },
         ]
       : []),

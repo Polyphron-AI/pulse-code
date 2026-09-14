@@ -22,6 +22,7 @@ import {
   buildBranchNamePrompt,
   buildCommitMessagePrompt,
   buildPrContentPrompt,
+  buildThreadHandoffPrompt,
   buildThreadTitlePrompt,
 } from "./TextGenerationPrompts.ts";
 import * as TextGeneration from "./TextGeneration.ts";
@@ -39,6 +40,7 @@ const OpenCodeTextGenerationOperation = Schema.Literals([
   "generatePrContent",
   "generateBranchName",
   "generateThreadTitle",
+  "generateThreadHandoff",
 ]);
 
 type OpenCodeTextGenerationOperation = typeof OpenCodeTextGenerationOperation.Type;
@@ -253,7 +255,8 @@ export const makeOpenCodeTextGeneration = Effect.fn("makeOpenCodeTextGeneration"
       | "generateCommitMessage"
       | "generatePrContent"
       | "generateBranchName"
-      | "generateThreadTitle";
+      | "generateThreadTitle"
+      | "generateThreadHandoff";
   }) =>
     sharedServerMutex.withPermit(
       Effect.gen(function* () {
@@ -615,10 +618,33 @@ export const makeOpenCodeTextGeneration = Effect.fn("makeOpenCodeTextGeneration"
       };
     });
 
+  const generateThreadHandoff: TextGeneration.TextGeneration["Service"]["generateThreadHandoff"] =
+    Effect.fn("OpenCodeTextGeneration.generateThreadHandoff")(function* (input) {
+      const { prompt, outputSchema } = buildThreadHandoffPrompt({
+        threadContext: input.threadContext,
+        threadTitle: input.threadTitle,
+        attachments: input.attachments,
+      });
+
+      const generated = yield* runOpenCodeJson({
+        operation: "generateThreadHandoff",
+        cwd: input.cwd,
+        prompt,
+        outputSchemaJson: outputSchema,
+        attachments: input.attachments,
+        modelSelection: input.modelSelection,
+      });
+
+      return {
+        summary: generated.summary.trim(),
+      } satisfies TextGeneration.ThreadHandoffGenerationResult;
+    });
+
   return {
     generateCommitMessage,
     generatePrContent,
     generateBranchName,
     generateThreadTitle,
+    generateThreadHandoff,
   } satisfies TextGeneration.TextGeneration["Service"];
 });
