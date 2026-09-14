@@ -542,14 +542,21 @@
       "id": "parakeet-desktop-blob-fetch",
       "branch": "fix/pulse-next-parakeet-blob",
       "baseRevision": "fefd3179b6",
-      "state": "implementing",
+      "state": "reviewed-and-packaged",
       "scope": "Allow local Blob fetches used by Parakeet's model and tokenizer loader in the desktop content security policy, without broadening executable sources.",
       "acceptance": [
         "Packaged and development desktop policies allow blob: connections for initial downloads and cached model reads while preserving network sources and script restrictions.",
         "Retry, cancellation, reset, settings changes, navigation, concurrent threads and subsequent turns retain the existing loader lifecycle; no model or draft state changes.",
         "Web and native mobile policies, provider adapters, contracts, local and remote authentication, processes and worktrees are unchanged."
       ],
-      "remaining": "Focused regression, frozen review and Windows installer rebuild. Live model setup remains unverified."
+      "verification": "Frozen revision e80beef4dc independently reviewed with no blockers. Policy regression failed before the fix, then passed 9/9. Combined ElectronProtocol and parakeetTranscription tests passed 23/23; targeted lint passed. Desktop tsc passed with --composite false; standard composite mode retains two unrelated TS6307 script file-list errors in unchanged sources. Windows NSIS production build succeeded and validated 48 payload files including 18 sidecar natives.",
+      "artifact": {
+        "path": "release/pulse-next/Pulse-Next-0.0.41-pulse.4-x64.exe",
+        "bytes": 137017496,
+        "sha256": "bd76dc4f6e3f3915fd7d8a43a5b04cc1258151b4f322da828f5103d89f23a20a",
+        "signed": false
+      },
+      "remaining": "Installer not installed or launched. Full Parakeet startup, model download and microphone acceptance remain unverified."
     },
     {
       "id": "dictation-composer-setup-link",
