@@ -22,6 +22,7 @@ import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as P from "effect/Predicate";
+import { parse as parseJsonc, type ParseError } from "jsonc-parser";
 import * as Ref from "effect/Ref";
 import * as Result from "effect/Result";
 import * as Scope from "effect/Scope";
@@ -56,6 +57,30 @@ export function resolveOpenCodeConfigContent(
     inheritedEnvironment.OPENCODE_CONFIG_CONTENT ??
     OPENCODE_EMPTY_CONFIG_CONTENT
   );
+}
+
+export function mergeOpenCodeSkillPaths(configContent: string, paths: readonly string[]): string {
+  let value: unknown;
+  const errors: ParseError[] = [];
+  value = parseJsonc(configContent, errors, { allowTrailingComma: true });
+  if (errors.length > 0) {
+    throw new Error("OpenCode config content is invalid JSON.");
+  }
+  if (!P.isReadonlyObject(value) || Array.isArray(value))
+    throw new Error("OpenCode config content must be an object.");
+  const skills =
+    P.isReadonlyObject(value.skills) && !Array.isArray(value.skills) ? value.skills : {};
+  const existing = skills.paths;
+  if (
+    existing !== undefined &&
+    (!Array.isArray(existing) || existing.some((path) => typeof path !== "string"))
+  )
+    throw new Error("OpenCode skills.paths must contain strings.");
+  const existingPaths = existing as readonly string[] | undefined;
+  return JSON.stringify({
+    ...value,
+    skills: { ...skills, paths: [...new Set([...(existingPaths ?? []), ...paths])] },
+  });
 }
 
 export function resolveOpenCodeServerPassword(

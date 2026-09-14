@@ -94,4 +94,29 @@ describe("Pulse MCP RPC bridge", () => {
       expect(error.message).not.toContain("file:///private/path");
     }).pipe(Effect.provide(testLayer)),
   );
+
+  it.effect("returns only safe provider-native MCP inventory metadata", () =>
+    Effect.gen(function* () {
+      const service = yield* PulseMcpConfig.PulseMcpConfigService;
+      const rpc = pulseMcpHandlers(service, {
+        readNativeMcpInventory: () =>
+          Effect.succeed([
+            { name: "github", status: "ready" as const },
+            { name: "private", status: "auth-required" as const },
+          ]),
+      } as never);
+      expect(
+        yield* rpc.nativeInventory({
+          threadId: ThreadId.make("thread-native"),
+          providerInstanceId: ProviderInstanceId.make("claude"),
+        }),
+      ).toEqual({
+        status: "available",
+        servers: [
+          { name: "github", status: "ready" },
+          { name: "private", status: "auth-required" },
+        ],
+      });
+    }).pipe(Effect.provide(testLayer)),
+  );
 });

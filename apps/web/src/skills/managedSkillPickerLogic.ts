@@ -29,7 +29,7 @@ export function staleManagedSkillSelections(
 
 export function managedSkillsBlockedReason(input: {
   readonly selected: ReadonlyArray<PulseSkillSelection>;
-  readonly providerIsCodex: boolean;
+  readonly providerSupported: boolean;
   readonly capabilityReady: boolean;
   readonly supported: boolean;
   readonly canRead: boolean;
@@ -39,8 +39,8 @@ export function managedSkillsBlockedReason(input: {
   readonly skills: ReadonlyArray<PulseSkillRecord>;
 }): string | null {
   if (input.selected.length === 0) return null;
-  if (!input.providerIsCodex) {
-    return "Managed skills can only be used with Codex. Remove them or switch providers.";
+  if (!input.providerSupported) {
+    return "Managed skills are unavailable for this provider. Remove them or switch providers.";
   }
   if (!input.capabilityReady) return "Waiting for managed skills support from this environment.";
   if (!input.supported) return "Managed skills are not supported by this environment.";

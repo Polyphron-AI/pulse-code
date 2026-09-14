@@ -575,8 +575,8 @@ export class ManagedSkillStore {
           if (discovered.length > MAX_FILES) {
             throw new Error(`A skill must contain 1 to ${MAX_FILES} files.`);
           }
-          if (size > MAX_UPLOAD_FILE_BYTES || totalBytes > MAX_TOTAL_BYTES) {
-            throw new Error("Skills are limited to 8 MB total and 1 MB per file.");
+          if (size > MAX_GITHUB_FILE_BYTES || totalBytes > MAX_TOTAL_BYTES) {
+            throw new Error("Stored skills are limited to 8 MB total and 2 MB per file.");
           }
         } else throw new Error("Managed skill revisions can contain only files and directories.");
       }
@@ -589,6 +589,7 @@ export class ManagedSkillStore {
           base64: (await NodeFSP.readFile(file.filePath)).toString("base64"),
         })),
       ),
+      MAX_GITHUB_FILE_BYTES,
     );
     if (actual.revision !== expectedRevision) {
       throw new Error("Existing managed skill revision does not match its content hash.");

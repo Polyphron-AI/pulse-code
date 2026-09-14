@@ -29,6 +29,7 @@ import {
   resetPulseMcpThreadOverride,
   setPulseMcpProviderDefault,
   setPulseMcpThreadOverride,
+  discoverPulseMcp,
 } from "./mcpState";
 
 interface PendingPreparation {
@@ -101,6 +102,11 @@ export function useManagedMcpComposer(input: {
         })
       : null,
   );
+  const configuredInventory = useEnvironmentQuery(
+    projection?.config.pulseCapabilities?.mcpDiscovery === true && canRead
+      ? discoverPulseMcp({ environmentId: input.environmentId, input: {} })
+      : null,
+  );
   const setOverride = useAtomCommand(setPulseMcpThreadOverride, { reportFailure: false });
   const resetOverride = useAtomCommand(resetPulseMcpThreadOverride, { reportFailure: false });
   const saveProviderDefault = useAtomCommand(setPulseMcpProviderDefault);
@@ -158,6 +164,30 @@ export function useManagedMcpComposer(input: {
               : {}),
           }))
         : []),
+      ...(nativeInventory.data?.status !== "available"
+        ? (configuredInventory.data ?? []).flatMap((candidate) => {
+            const source =
+              input.provider === "claudeAgent"
+                ? "claude"
+                : input.provider === "opencode"
+                  ? "opencode"
+                  : input.provider === "codex"
+                    ? "codex"
+                    : null;
+            return source === candidate.source && candidate.transport !== "unsupported"
+              ? [
+                  {
+                    id: `configured:${candidate.source}:${candidate.name}`,
+                    name: candidate.name,
+                    description: "Provider user configuration",
+                    source: "provider" as const,
+                    status: "unknown" as const,
+                    statusMessage: "Configured; runtime not verified",
+                  },
+                ]
+              : [];
+          })
+        : []),
       ...selectedIds
         .filter((id) => !loadedIds.has(id))
         .map((id) => ({
@@ -168,7 +198,7 @@ export function useManagedMcpComposer(input: {
           statusMessage: "Unavailable with the selected provider",
         })),
     ];
-  }, [list.data, nativeInventory.data, selectedIds]);
+  }, [configuredInventory.data, input.provider, list.data, nativeInventory.data, selectedIds]);
   const blockedReason =
     !supported && capabilityReady
       ? selectedIds.length > 0
@@ -497,7 +527,7 @@ export function useManagedMcpComposer(input: {
       selectedIds,
       selectionMode,
       nativeDiscovery:
-        nativeInventory.data?.status === "available"
+        nativeInventory.data?.status === "available" || (configuredInventory.data?.length ?? 0) > 0
           ? ("available" as const)
           : ("unavailable" as const),
       disabled: false,

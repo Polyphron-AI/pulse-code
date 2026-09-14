@@ -551,6 +551,8 @@ export const ServerConfig = Schema.Struct({
     Schema.Struct({
       managedSkills: Schema.optionalKey(Schema.Boolean),
       codexManagedSkills: Schema.optionalKey(Schema.Boolean),
+      claudeManagedSkills: Schema.optionalKey(Schema.Boolean),
+      openCodeManagedSkills: Schema.optionalKey(Schema.Boolean),
       mcpManagement: Schema.optionalKey(Schema.Boolean),
       mcpCreateOnly: Schema.optionalKey(Schema.Boolean),
       mcpDiscovery: Schema.optionalKey(Schema.Boolean),

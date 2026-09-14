@@ -55,8 +55,11 @@ export interface ProviderAdapterCapabilities {
 }
 
 export interface ProviderResolvedSkill {
+  readonly id?: string;
   readonly name: string;
   readonly path: string;
+  readonly directory?: string;
+  readonly revision?: string;
 }
 
 export type ProviderManagedMcpServer =

@@ -4003,7 +4003,7 @@ skillRouting.layer("ProviderServiceLive managed skill invocation", (it) => {
     }),
   );
 
-  it.effect("rejects unknown revisions and unsupported providers before adapter send", () =>
+  it.effect("rejects unknown revisions and routes trusted skills to Claude", () =>
     Effect.gen(function* () {
       const provider = yield* ProviderService.ProviderService;
       const codexThread = asThreadId("managed-skill-unknown-revision");
@@ -4044,16 +4044,31 @@ skillRouting.layer("ProviderServiceLive managed skill invocation", (it) => {
         runtimeMode: "full-access",
       });
       skillRouting.claude.sendTurn.mockClear();
-      const unsupported = yield* provider
+      yield* provider.sendTurn({
+        threadId: claudeThread,
+        input: "test",
+        pulseSkills: [{ id: "review", revision: skillRevision }],
+      });
+      assert.deepEqual(skillRouting.claude.sendTurn.mock.lastCall?.[0].resolvedSkills, [
+        {
+          id: "review",
+          name: "Skill review",
+          path: `/trusted/review/${skillRevision}/SKILL.md`,
+          directory: `/trusted/review/${skillRevision}`,
+          revision: skillRevision,
+        },
+      ]);
+      const stopCalls = skillRouting.claude.stopSession.mock.calls.length;
+      const steeringChangeFailure = yield* provider
         .sendTurn({
           threadId: claudeThread,
-          input: "test",
-          pulseSkills: [{ id: "review", revision: skillRevision }],
+          input: "steer with a changed skill",
+          pulseSkills: [{ id: "release", revision: skillRevision }],
         })
         .pipe(Effect.flip);
-      assert.instanceOf(unsupported, ProviderValidationError);
-      assert.include(unsupported.issue, "does not support managed skill invocation");
-      assert.equal(skillRouting.claude.sendTurn.mock.calls.length, 0);
+      assert.instanceOf(steeringChangeFailure, ProviderValidationError);
+      assert.include(steeringChangeFailure.issue, "cannot change while a turn is running");
+      assert.equal(skillRouting.claude.stopSession.mock.calls.length, stopCalls);
     }),
   );
 });

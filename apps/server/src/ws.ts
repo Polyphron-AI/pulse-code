@@ -1690,6 +1690,8 @@ const makeWsRpcLayer = (
             pulseCapabilities: {
               managedSkills: true,
               codexManagedSkills: true,
+              claudeManagedSkills: true,
+              openCodeManagedSkills: true,
               mcpManagement: true,
               mcpCreateOnly: true,
               mcpDiscovery: true,

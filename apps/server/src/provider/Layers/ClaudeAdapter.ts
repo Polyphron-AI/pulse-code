@@ -1,4 +1,4 @@
-// @effect-diagnostics nodeBuiltinImport:off
+// @effect-diagnostics nodeBuiltinImport:off preferSchemaOverJson:off
 /**
  * ClaudeAdapterLive - Scoped live implementation for the Claude Agent provider adapter.
  *
@@ -28,6 +28,8 @@ import {
   type McpSetServersResult,
 } from "@anthropic-ai/claude-agent-sdk";
 import { parseCliArgs } from "@t3tools/shared/cliArgs";
+import * as ManagedSkillProviderSession from "../../skills/ManagedSkillProviderSession.ts";
+import { stageClaudeManagedSkills } from "../../skills/ManagedSkillClaudePlugin.ts";
 import { isWorkspaceImagePreviewPath } from "@t3tools/shared/filePreview";
 import { type ClaudeScopedLimitNames, claudeRateLimitEventToUpdate } from "./claudeUsageLimits.ts";
 import {
@@ -117,7 +119,10 @@ import {
   type ProviderAdapterError,
 } from "../Errors.ts";
 import { type ClaudeAdapterShape } from "../Services/ClaudeAdapter.ts";
-import type { ProviderManagedMcpServer } from "../Services/ProviderAdapter.ts";
+import type {
+  ProviderAdapterSendTurnInput,
+  ProviderManagedMcpServer,
+} from "../Services/ProviderAdapter.ts";
 import { spawnAndCollect } from "../providerSnapshot.ts";
 import { type EventNdjsonLogger, makeEventNdjsonLogger } from "./EventNdjsonLogger.ts";
 const encodeUnknownJsonStringExit = Schema.encodeUnknownExit(Schema.fromJsonString(Schema.Unknown));
@@ -1501,7 +1506,7 @@ const CLAUDE_SETTING_SOURCES = [
 ] as const satisfies ReadonlyArray<SettingSource>;
 
 function buildPromptText(
-  input: ProviderSendTurnInput,
+  input: ProviderAdapterSendTurnInput,
   boundInstanceId: ProviderInstanceId,
   catalog: ClaudeModelCatalog,
 ): string {
@@ -1514,7 +1519,14 @@ function buildPromptText(
   const caps = getClaudeCatalogModelCapabilities(catalog, claudeModel);
 
   const promptEffort = resolvePromptInjectedEffort(caps, rawEffort);
-  return applyClaudePromptEffortPrefix(input.input?.trim() ?? "", promptEffort);
+  const prompt = input.input?.trim() ?? "";
+  const managed =
+    input.resolvedSkills?.map((skill) => `/pulse-managed-skills:${skill.id ?? skill.name}`) ?? [];
+  const withSkills =
+    managed.length > 0
+      ? `${prompt}\n\nUse the selected Pulse-managed skills when relevant: ${managed.join(", ")}.`
+      : prompt;
+  return applyClaudePromptEffortPrefix(withSkills, promptEffort);
 }
 
 function buildUserMessage(input: {
@@ -1546,7 +1558,7 @@ function buildClaudeImageContentBlock(input: {
 }
 
 const buildUserMessageEffect = Effect.fn("buildUserMessageEffect")(function* (
-  input: ProviderSendTurnInput,
+  input: ProviderAdapterSendTurnInput,
   dependencies: {
     readonly fileSystem: FileSystem.FileSystem;
     readonly attachmentsDir: string;
@@ -4810,6 +4822,25 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         ...(input.cwd ? [input.cwd] : []),
         serverConfig.attachmentsDir,
       ];
+      const managedSkills = ManagedSkillProviderSession.readManagedProviderSkills(input.threadId);
+      const managedPluginPath =
+        managedSkills.length > 0
+          ? yield* Effect.tryPromise({
+              try: () =>
+                stageClaudeManagedSkills({
+                  stateDir: serverConfig.stateDir,
+                  threadId: input.threadId,
+                  skills: managedSkills,
+                }),
+              catch: (cause) =>
+                new ProviderAdapterRequestError({
+                  provider: PROVIDER,
+                  method: "managedSkills.stage",
+                  detail: "Managed skills could not be staged for Claude.",
+                  cause,
+                }),
+            })
+          : undefined;
       const queryOptions: ClaudeQueryOptions = {
         ...(input.cwd ? { cwd: input.cwd } : {}),
         ...(apiModelId ? { model: apiModelId } : {}),
@@ -4841,6 +4872,12 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         supportedDialogKinds: ["resume_return"],
         env: McpProviderSession.withAgentDeviceEnvironment(claudeEnvironment, mcpSession),
         additionalDirectories,
+        ...(managedPluginPath
+          ? {
+              plugins: [{ type: "local" as const, path: managedPluginPath }],
+              skipMcpDiscovery: true,
+            }
+          : {}),
         ...(Object.keys(extraArgs).length > 0 ? { extraArgs } : {}),
         ...(Object.keys(sdkMcpServers).length > 0 ? { mcpServers: sdkMcpServers } : {}),
       };

@@ -523,9 +523,7 @@ function GitHubSkillDialog({
   readonly disabled: boolean;
   readonly onOpenChange: (open: boolean) => void;
   readonly onImport: (mutation: PulseSkillMutation) => Promise<MutationResult>;
-  readonly resolveGitHub?: (
-    url: string,
-  ) => Promise<{
+  readonly resolveGitHub?: (url: string) => Promise<{
     readonly repository: string;
     readonly ref: string;
     readonly directories: readonly string[];
@@ -540,6 +538,7 @@ function GitHubSkillDialog({
   const [url, setUrl] = useState("");
   const [resolving, setResolving] = useState(false);
   const [resolvedDirectories, setResolvedDirectories] = useState<readonly string[]>([]);
+  const [resolveError, setResolveError] = useState<string | null>(null);
   const resolveGeneration = useRef(0);
   const reset = () => {
     setId("");
@@ -550,6 +549,7 @@ function GitHubSkillDialog({
     setUrl("");
     setResolving(false);
     setResolvedDirectories([]);
+    setResolveError(null);
     resolveGeneration.current += 1;
   };
   useEffect(() => {
@@ -632,6 +632,7 @@ function GitHubSkillDialog({
                     onClick={() => {
                       const generation = ++resolveGeneration.current;
                       setResolving(true);
+                      setResolveError(null);
                       void resolveGitHub(url.trim())
                         .then((resolved) => {
                           if (generation !== resolveGeneration.current) return;
@@ -641,6 +642,10 @@ function GitHubSkillDialog({
                           if (resolved.directories.length === 1)
                             setDirectory(resolved.directories[0]!);
                           else setDirectory("");
+                        })
+                        .catch((cause) => {
+                          if (generation === resolveGeneration.current)
+                            setResolveError(message(cause));
                         })
                         .finally(() => {
                           if (generation === resolveGeneration.current) setResolving(false);
@@ -653,6 +658,11 @@ function GitHubSkillDialog({
                 <p className="text-xs text-muted-foreground">
                   When a repository contains several skills, choose the directory below.
                 </p>
+                {resolveError ? (
+                  <p className="text-xs text-error-foreground" role="alert">
+                    {resolveError}
+                  </p>
+                ) : null}
               </div>
             ) : null}
             {target === "new" ? (

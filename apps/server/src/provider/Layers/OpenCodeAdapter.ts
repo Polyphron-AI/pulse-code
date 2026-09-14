@@ -43,6 +43,8 @@ import { getModelSelectionStringOptionValue } from "@t3tools/shared/model";
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
 import { ServerConfig } from "../../config.ts";
 import * as McpProviderSession from "../../mcp/McpProviderSession.ts";
+import * as ManagedSkillProviderSession from "../../skills/ManagedSkillProviderSession.ts";
+import { stageClaudeManagedSkills } from "../../skills/ManagedSkillClaudePlugin.ts";
 import { type EventNdjsonLogger, makeEventNdjsonLogger } from "./EventNdjsonLogger.ts";
 import {
   ProviderAdapterProcessError,
@@ -59,6 +61,8 @@ import {
   OpenCodeRuntime,
   OpenCodeRuntimeError,
   openCodeQuestionId,
+  mergeOpenCodeSkillPaths,
+  resolveOpenCodeConfigContent,
   openCodeRuntimeErrorDetail,
   parseOpenCodeModelSlug,
   runOpenCodeSdk,
@@ -2875,15 +2879,54 @@ export function makeOpenCodeAdapter(
               // we provide below — closing `sessionScope` kills the child
               // process automatically. No manual `server.close()` needed.
               const mcpSession = McpProviderSession.readMcpProviderSession(input.threadId);
+              const managedSkills = ManagedSkillProviderSession.readManagedProviderSkills(
+                input.threadId,
+              );
+              if (managedSkills.length > 0 && serverUrl) {
+                return yield* new ProviderAdapterRequestError({
+                  provider: PROVIDER,
+                  method: "managedSkills.stage",
+                  detail:
+                    "Pulse-managed skills require a Pulse-owned OpenCode session; external OpenCode servers are not supported.",
+                });
+              }
+              const managedSkillRoot =
+                managedSkills.length > 0
+                  ? yield* Effect.tryPromise({
+                      try: () =>
+                        stageClaudeManagedSkills({
+                          stateDir: serverConfig.stateDir,
+                          threadId: input.threadId,
+                          skills: managedSkills,
+                        }),
+                      catch: (cause) =>
+                        new ProviderAdapterRequestError({
+                          provider: PROVIDER,
+                          method: "managedSkills.stage",
+                          detail: "Managed skills could not be staged for OpenCode.",
+                          cause,
+                        }),
+                    })
+                  : undefined;
+              const baseEnvironment = McpProviderSession.withAgentDeviceEnvironment(
+                options?.environment ?? process.env,
+                mcpSession,
+              );
               const server = yield* openCodeRuntime.connectToOpenCodeServer({
                 binaryPath,
                 directory,
                 serverUrl,
                 ...(serverPassword ? { serverPassword } : {}),
-                environment: McpProviderSession.withAgentDeviceEnvironment(
-                  options?.environment ?? process.env,
-                  mcpSession,
-                ),
+                environment:
+                  managedSkills.length > 0
+                    ? {
+                        ...baseEnvironment,
+                        OPENCODE_CONFIG_CONTENT: mergeOpenCodeSkillPaths(
+                          resolveOpenCodeConfigContent(baseEnvironment),
+                          [path.join(managedSkillRoot!, "skills")],
+                        ),
+                      }
+                    : baseEnvironment,
               });
               const client = openCodeRuntime.createOpenCodeSdkClient({
                 baseUrl: server.url,
@@ -3139,7 +3182,12 @@ export function makeOpenCodeAdapter(
         });
       }
 
-      const text = input.input?.trim();
+      const baseText = input.input?.trim();
+      const managedSkillNames = input.resolvedSkills?.map((skill) => skill.id ?? skill.name) ?? [];
+      const text =
+        managedSkillNames.length > 0
+          ? `${baseText ?? ""}\n\nUse the selected Pulse-managed skills when relevant: ${managedSkillNames.join(", ")}.`
+          : baseText;
       // OpenCode ingests images, text, and PDFs natively; formats its model
       // paths reject ride only as the prompt's file path line.
       const fileParts = toOpenCodeFileParts({

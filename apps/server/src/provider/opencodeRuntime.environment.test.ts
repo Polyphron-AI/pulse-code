@@ -19,10 +19,25 @@ import {
   OpenCodeRuntime,
   OpenCodeRuntimeError,
   OpenCodeRuntimeLive,
+  mergeOpenCodeSkillPaths,
   resolveOpenCodeConfigContent,
   resolveOpenCodeServerPassword,
   verifyOpenCodeServerVersion,
 } from "./opencodeRuntime.ts";
+
+it("merges managed skill paths without replacing OpenCode configuration", () => {
+  expect(
+    JSON.parse(
+      mergeOpenCodeSkillPaths('{"theme":"dark","skills":{"paths":["native"]}}', [
+        "managed",
+        "native",
+      ]),
+    ),
+  ).toEqual({
+    theme: "dark",
+    skills: { paths: ["native", "managed"] },
+  });
+});
 
 describe("resolveOpenCodeConfigContent", () => {
   it("prefers the caller environment over the inherited environment", () => {

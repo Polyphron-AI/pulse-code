@@ -91,6 +91,8 @@ import { ManagedSkillLibrary } from "../../skills/ManagedSkillLibrary.ts";
 import * as ProjectionSnapshotQuery from "../../orchestration/Services/ProjectionSnapshotQuery.ts";
 import * as PulseMcpConfig from "../../mcp/PulseMcpConfigService.ts";
 import * as PulseMcpPreparation from "../../mcp/PulseMcpPreparation.ts";
+import * as ManagedSkillProviderSession from "../../skills/ManagedSkillProviderSession.ts";
+import { clearClaudeManagedSkills } from "../../skills/ManagedSkillClaudePlugin.ts";
 import type { ProviderManagedMcpServer } from "../Services/ProviderAdapter.ts";
 const isModelSelection = Schema.is(ModelSelection);
 const encodePromptJson = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
@@ -2129,6 +2131,42 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     let metricProvider = "unknown";
     let metricModel = input.modelSelection?.model;
     return yield* Effect.gen(function* () {
+      const resolvedSkills =
+        input.pulseSkills === undefined || input.pulseSkills.length === 0
+          ? []
+          : yield* Effect.tryPromise({
+              try: () => managedSkills.resolveSelection(input.pulseSkills ?? []),
+              catch: (cause) =>
+                toValidationError(
+                  "ProviderService.sendTurn",
+                  cause instanceof Error
+                    ? cause.message
+                    : "Managed skill selection could not be resolved",
+                  cause,
+                ),
+            }).pipe(
+              Effect.flatMap((skills) => {
+                const blocked = skills.find((skill) => skill.invocation.userInvocable === false);
+                return blocked
+                  ? Effect.fail(
+                      toValidationError(
+                        "ProviderService.sendTurn",
+                        `Managed skill '${blocked.id}' is not user-invocable.`,
+                      ),
+                    )
+                  : Effect.succeed(
+                      skills.map((skill) => ({
+                        id: skill.id,
+                        name: skill.name,
+                        path: skill.skillPath,
+                        directory: skill.skillPath
+                          .slice(0, -"SKILL.md".length)
+                          .replace(/[\\/]$/, ""),
+                        revision: skill.revision,
+                      })),
+                    );
+              }),
+            );
       let routed = yield* resolveRoutableSession({
         threadId: input.threadId,
         operation: "ProviderService.sendTurn",
@@ -2151,6 +2189,50 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
           operation: "ProviderService.sendTurn",
           allowRecovery: true,
         });
+      }
+      if (
+        resolvedSkills.length > 0 &&
+        routed.adapter.provider !== "codex" &&
+        routed.adapter.provider !== "claudeAgent" &&
+        routed.adapter.provider !== "opencode"
+      ) {
+        return yield* toValidationError(
+          "ProviderService.sendTurn",
+          `Provider '${routed.adapter.provider}' does not support managed skill invocation`,
+        );
+      }
+      if (routed.adapter.provider !== "codex") {
+        const previous = ManagedSkillProviderSession.readManagedProviderSkills(input.threadId);
+        if (!isDeepStrictEqual(previous, resolvedSkills)) {
+          const binding = Option.getOrUndefined(yield* directory.getBinding(input.threadId));
+          const activeTurnId =
+            binding?.runtimePayload !== null &&
+            typeof binding?.runtimePayload === "object" &&
+            !Array.isArray(binding.runtimePayload)
+              ? (binding.runtimePayload as Record<string, unknown>).activeTurnId
+              : undefined;
+          if (activeTurnId !== undefined && activeTurnId !== null) {
+            return yield* toValidationError(
+              "ProviderService.sendTurn",
+              "Managed skill selection cannot change while a turn is running. Send the same selection when steering, or wait for the turn to finish.",
+            );
+          }
+          if (routed.isActive) yield* routed.adapter.stopSession(input.threadId);
+          yield* Effect.sync(() =>
+            ManagedSkillProviderSession.setManagedProviderSkills(input.threadId, resolvedSkills),
+          );
+          routed = yield* resolveRoutableSession({
+            threadId: input.threadId,
+            operation: "ProviderService.sendTurn",
+            allowRecovery: true,
+          }).pipe(
+            Effect.tapError(() =>
+              Effect.sync(() =>
+                ManagedSkillProviderSession.setManagedProviderSkills(input.threadId, previous),
+              ),
+            ),
+          );
+        }
       }
       metricProvider = routed.adapter.provider;
       metricModel = input.modelSelection?.model;
@@ -2177,33 +2259,16 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         }),
         (turnMetadata) =>
           Effect.gen(function* () {
-            if ((input.pulseSkills?.length ?? 0) > 0 && routed.adapter.provider !== "codex") {
-              return yield* toValidationError(
-                "ProviderService.sendTurn",
-                `Provider '${routed.adapter.provider}' does not support managed skill invocation`,
-              );
-            }
-            const resolvedSkills =
-              input.pulseSkills === undefined || input.pulseSkills.length === 0
-                ? undefined
-                : yield* Effect.tryPromise({
-                    try: () => managedSkills.resolveSelection(input.pulseSkills ?? []),
-                    catch: (cause) =>
-                      toValidationError(
-                        "ProviderService.sendTurn",
-                        cause instanceof Error
-                          ? cause.message
-                          : "Managed skill selection could not be resolved",
-                        cause,
-                      ),
-                  }).pipe(
-                    Effect.map((skills) =>
-                      skills.map((skill) => ({ name: skill.name, path: skill.skillPath })),
-                    ),
-                  );
             const turn = yield* routed.adapter.sendTurn({
               ...input,
-              ...(resolvedSkills !== undefined ? { resolvedSkills } : {}),
+              ...(resolvedSkills.length > 0
+                ? {
+                    resolvedSkills:
+                      routed.adapter.provider === "codex"
+                        ? resolvedSkills.map(({ name, path }) => ({ name, path }))
+                        : resolvedSkills,
+                  }
+                : {}),
             });
             yield* associateTurnAnalytics({
               providerInstanceId: routed.instanceId,
@@ -2558,6 +2623,12 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         timedOutNativeCompactions.delete(input.threadId);
         yield* clearTurnAnalyticsSession(routed.instanceId, input.threadId);
         yield* clearMcpSession(input.threadId);
+        yield* Effect.sync(() =>
+          ManagedSkillProviderSession.clearManagedProviderSkills(input.threadId),
+        );
+        yield* Effect.tryPromise(() =>
+          clearClaudeManagedSkills(serverConfig.stateDir, input.threadId),
+        ).pipe(Effect.ignore);
         yield* directory.upsert({
           threadId: input.threadId,
           provider: routed.adapter.provider,

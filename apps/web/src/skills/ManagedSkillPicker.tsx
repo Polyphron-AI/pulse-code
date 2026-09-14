@@ -41,7 +41,8 @@ import {
 import { managedSkillsList } from "./managedSkillsState";
 
 export interface ManagedSkillPickerState {
-  readonly providerIsCodex: boolean;
+  readonly providerSupported: boolean;
+  readonly providerLabel: string;
   readonly visible: boolean;
   readonly skills: ReadonlyArray<PulseSkillRecord>;
   readonly selected: ReadonlyArray<PulseSkillSelection>;
@@ -62,7 +63,14 @@ export function useManagedSkillPickerState(input: {
   const projection = Option.getOrNull(AsyncResult.value(configResult));
   const capabilityReady = projection?.source === "live";
   const supported =
-    capabilityReady && projection.config.pulseCapabilities?.codexManagedSkills === true;
+    capabilityReady &&
+    (input.provider === "codex"
+      ? projection.config.pulseCapabilities?.codexManagedSkills === true
+      : input.provider === "claudeAgent"
+        ? projection.config.pulseCapabilities?.claudeManagedSkills === true
+        : input.provider === "opencode"
+          ? projection.config.pulseCapabilities?.openCodeManagedSkills === true
+          : false);
   const session = useEnvironmentSessionState(input.environmentId);
   const sessionFresh = !session.isPending && session.data?.authenticated === true;
   const scopes = sessionFresh && session.data ? session.data.scopes : undefined;
@@ -74,15 +82,23 @@ export function useManagedSkillPickerState(input: {
       : null,
   );
   const skills = list.data ?? [];
-  const providerIsCodex = input.provider === "codex";
+  const providerSupported = ["codex", "claudeAgent", "opencode"].includes(input.provider);
   return {
-    providerIsCodex,
-    visible: providerIsCodex && supported && canRead && canOperate,
+    providerSupported,
+    providerLabel:
+      input.provider === "claudeAgent"
+        ? "Claude"
+        : input.provider === "opencode"
+          ? "OpenCode"
+          : input.provider === "codex"
+            ? "Codex"
+            : "the provider",
+    visible: providerSupported && supported && canRead && canOperate,
     skills,
     selected: input.selected,
     blockedReason: managedSkillsBlockedReason({
       selected: input.selected,
-      providerIsCodex,
+      providerSupported,
       capabilityReady,
       supported,
       canRead,
@@ -173,7 +189,7 @@ export function ManagedSkillPicker(props: {
                 <span className="block truncate">{formatProviderSkillDisplayName(skill)}</span>
                 <span className="block truncate text-xs text-muted-foreground">
                   {skill.enabled
-                    ? `Available to ${props.state.providerIsCodex ? "Codex" : "the provider"}`
+                    ? `Available to ${props.state.providerLabel}`
                     : "Disabled in provider settings"}
                   {skill.userInvocable === false
                     ? "; provider-controlled"
@@ -242,6 +258,7 @@ export function ManagedSkillPicker(props: {
                               checked={checked}
                               disabled={
                                 (!checked && !props.state.visible) ||
+                                skill.invocation.userInvocable === false ||
                                 (!pinned && selectedCount >= MAX_MANAGED_SKILL_SELECTIONS)
                               }
                               onCheckedChange={() =>

@@ -31,7 +31,7 @@ describe("managed skill picker logic", () => {
   it("only blocks Codex turns that carry unavailable selections", () => {
     const base = {
       selected: [first],
-      providerIsCodex: true,
+      providerSupported: true,
       capabilityReady: true,
       supported: true,
       canRead: true,
@@ -41,8 +41,8 @@ describe("managed skill picker logic", () => {
       skills: [],
     };
     expect(managedSkillsBlockedReason(base)).toContain("was removed");
-    expect(managedSkillsBlockedReason({ ...base, providerIsCodex: false })).toContain(
-      "only be used with Codex",
+    expect(managedSkillsBlockedReason({ ...base, providerSupported: false })).toContain(
+      "unavailable for this provider",
     );
     expect(managedSkillsBlockedReason({ ...base, selected: [] })).toBeNull();
     expect(managedSkillsBlockedReason({ ...base, skills: [{ ...updated } as never] })).toBeNull();

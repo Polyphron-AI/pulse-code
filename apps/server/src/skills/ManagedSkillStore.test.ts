@@ -291,7 +291,7 @@ describe("managed skill imports", () => {
       const revision = store.revisionPath(record.revision);
       const oversized = NodePath.join(revision, "oversized.bin");
       await NodeFSP.writeFile(oversized, "");
-      await NodeFSP.truncate(oversized, 1024 * 1024 + 1);
+      await NodeFSP.truncate(oversized, 2 * 1024 * 1024 + 1);
       await expect(store.catalog([record])).rejects.toThrow(/limited/);
 
       await NodeFSP.rm(oversized);

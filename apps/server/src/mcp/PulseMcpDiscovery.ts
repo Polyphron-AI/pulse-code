@@ -100,6 +100,13 @@ const decodeServer = (
   const openCodeCommand = source === "opencode" ? strings(value.command) : undefined;
   const command = typeof value.command === "string" ? value.command : openCodeCommand?.[0];
   const url = typeof value.url === "string" ? value.url : undefined;
+  if (source === "opencode" && value.oauth !== undefined && value.oauth !== false)
+    return {
+      ...base,
+      transport: url ? "http" : "unsupported",
+      importable: false,
+      reason: "OpenCode OAuth connections cannot be imported automatically.",
+    };
   if (command) {
     const args =
       openCodeCommand?.slice(1) ?? (value.args === undefined ? undefined : strings(value.args));
@@ -248,6 +255,7 @@ export function parseCodexMcpServers(
       "default_tools_approval_mode",
       "oauth",
       "http_headers_helper",
+      "enabled",
     ].filter((key) => value[key] !== undefined);
     if (unsupported.length > 0)
       return {
