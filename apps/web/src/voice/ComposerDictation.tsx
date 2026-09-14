@@ -1,4 +1,5 @@
 import { AudioLinesIcon, MicIcon, RotateCcwIcon, SquareIcon, XIcon } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 
 import { Button } from "../components/ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../components/ui/tooltip";
@@ -58,6 +59,7 @@ export function ComposerDictation(props: {
         <span className="max-w-32 truncate text-xs text-error-foreground">
           {props.state.message}
         </span>
+        <SetupVoiceButton />
         <Tooltip>
           <TooltipTrigger
             render={
@@ -80,26 +82,48 @@ export function ComposerDictation(props: {
     );
   }
   return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            disabled={unavailable}
-            onPointerDown={(event) => event.preventDefault()}
-            onClick={props.onStart}
-            aria-label={label}
-          />
-        }
-      >
-        <MicIcon />
-      </TooltipTrigger>
-      <TooltipPopup className="max-w-72 whitespace-normal">
-        {props.disabledReason ?? "Dictate"}
-      </TooltipPopup>
-    </Tooltip>
+    <div className="flex items-center gap-1" role="group" aria-label="Voice dictation">
+      <SetupVoiceButton />
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              disabled={unavailable}
+              onPointerDown={(event) => event.preventDefault()}
+              onClick={props.onStart}
+              aria-label={label}
+            />
+          }
+        >
+          <MicIcon />
+        </TooltipTrigger>
+        <TooltipPopup className="max-w-72 whitespace-normal">
+          {props.disabledReason ?? "Dictate"}
+        </TooltipPopup>
+      </Tooltip>
+    </div>
+  );
+}
+
+function SetupVoiceButton() {
+  return (
+    <Button
+      size="xs"
+      variant="ghost-muted"
+      className="rounded-full px-2 text-xs"
+      render={
+        <Link
+          to="/settings/integrations"
+          hash="dictation"
+          aria-label="Set up voice with Parakeet"
+        />
+      }
+    >
+      Set up voice
+    </Button>
   );
 }
 

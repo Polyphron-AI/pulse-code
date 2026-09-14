@@ -539,6 +539,22 @@
       "remaining": "Settings and microphone composition follow the reviewed transport API."
     },
     {
+      "id": "dictation-composer-setup-link",
+      "branch": "feat/pulse-next-voice-setup",
+      "baseRevision": "dc254b3a56",
+      "state": "implementation-frozen",
+      "scope": "Add a Set up voice action beside the existing composer microphone that opens the existing device-local Parakeet settings through SPA navigation. Keep the action available after a dictation error and do not change the selected transcription backend.",
+      "acceptance": [
+        "Idle and error composer states expose Set up voice beside the existing microphone or retry controls; recording, preparing and transcribing controls are unchanged.",
+        "The action opens /settings/integrations#dictation without reloading the client or changing dictation preferences, so the existing composer draft store remains authoritative across navigation.",
+        "Web, compact web and desktop share the same composer and settings route. Native mobile is unchanged because it has separate released dictation and navigation.",
+        "Local and remote environments use device-local Parakeet setup in the browser; no provider, contract, authentication, process, session or cleanup behavior changes.",
+        "Existing retry, cancel, deselect, changed-settings, concurrent-thread, queued-turn and promotion behavior remains owned by the current dictation and draft modules."
+      ],
+      "verification": "21 focused dictation settings, preference and composer-logic tests passed; scoped web typecheck passed with pre-existing Effect suggestions. No browser, server, model download, microphone, provider request or production build was run.",
+      "remaining": "Root-owned frozen review and production build. Real-client visual and interaction acceptance requires explicit browser permission."
+    },
+    {
       "id": "provider-session-boundary",
       "baseRevision": "d84d708d0",
       "state": "source-reviewed",
