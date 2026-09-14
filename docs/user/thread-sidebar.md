@@ -20,6 +20,19 @@ on Windows and Linux to start a new thread and immediately open another draft. T
 next draft keeps the workspace mode and base branch you selected. With **New
 worktree**, each background submission creates its own worktree.
 
+## Continue in another provider
+
+A thread stays with the provider it started on, because each provider keeps its own session. To
+move the work, open the thread's menu and choose **Continue in...**, then pick a provider. The
+same action is in the command palette as **Continue in another provider...** for the thread you
+are viewing.
+
+The thread's current provider writes a short handoff brief covering the goal, what is done, the
+current state, and what is next. T3 Code opens a new thread on the provider you chose with that
+brief already in the composer. Nothing is sent until you review it, so you can edit or add to the
+brief first. Very long threads are summarized from their beginning and their most recent work, and
+T3 Code tells you when earlier content was left out.
+
 ## Pin and reorder threads
 
 Pin a thread from its menu to keep it above your active work.

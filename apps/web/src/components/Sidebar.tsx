@@ -29,6 +29,7 @@ import {
   scopedThreadKey,
 } from "@t3tools/client-runtime/environment";
 import {
+  DEFAULT_SERVER_SETTINGS,
   resolveEnvironmentMachineKind,
   type EnvironmentMachineKind,
   type ProjectIconOverride,
@@ -116,6 +117,7 @@ import {
 } from "../threadSelectionStore";
 import { useThreadActions } from "../hooks/useThreadActions";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
+import { buildThreadHandoffTargets, useThreadHandoff } from "../hooks/useThreadHandoff";
 import { isCommandPaletteOpen, openCommandPalette } from "../commandPaletteBus";
 import { startNewThreadFromContext } from "../lib/chatThreadActions";
 import { useClientSettings } from "../hooks/useSettings";
@@ -3959,6 +3961,8 @@ export default function Sidebar() {
     ],
   );
 
+  const startThreadHandoff = useThreadHandoff();
+
   const handleThreadContextMenu = useCallback(
     (threadRef: ScopedThreadRef, position: { x: number; y: number }) => {
       void (async () => {
@@ -3995,6 +3999,12 @@ export default function Sidebar() {
         const isPinned = thread.pinnedAt != null;
         // Presets resolve at menu-open time (same as the popover).
         const snoozePresets = resolveSnoozePresets(new Date(), timestampFormat);
+        // A thread already runs its own instance, so it is never a handoff target.
+        const threadServerConfig = serverConfigs.get(thread.environmentId);
+        const handoffTargets = buildThreadHandoffTargets(
+          threadServerConfig?.providers ?? [],
+          threadServerConfig?.settings ?? DEFAULT_SERVER_SETTINGS,
+        ).filter((target) => target.instanceId !== thread.modelSelection.instanceId);
         const clicked = await settlePromise(() =>
           api.contextMenu.show(
             buildThreadActionMenuItems({
@@ -4013,11 +4023,18 @@ export default function Sidebar() {
                 titleRegeneration: supportsTitleRegeneration,
               },
               snoozePresets,
+              handoffTargets,
             }),
             position,
           ),
         );
         if (clicked._tag === "Failure") return;
+        if (clicked.value?.startsWith("continue-in:")) {
+          const instanceId = clicked.value.slice("continue-in:".length);
+          const target = handoffTargets.find((candidate) => candidate.instanceId === instanceId);
+          if (target) await startThreadHandoff({ threadRef, instanceId: target.instanceId });
+          return;
+        }
         if (clicked.value?.startsWith("snooze:")) {
           const preset = snoozePresets.find(
             (candidate) => `snooze:${candidate.id}` === clicked.value,
@@ -4199,6 +4216,7 @@ export default function Sidebar() {
       openProjectSettings,
       projectByKey,
       serverConfigs,
+      startThreadHandoff,
       startThreadRename,
       updateThreadMetadata,
       timestampFormat,

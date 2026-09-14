@@ -42,6 +42,7 @@ import { useLocation, useNavigate, useParams } from "@tanstack/react-router";
 import * as Option from "effect/Option";
 import {
   ArrowLeftIcon,
+  BotIcon,
   CornerLeftUpIcon,
   FileSearchIcon,
   FolderIcon,
@@ -73,6 +74,7 @@ import { useDesktopLocalBootstraps } from "../connection/useDesktopLocalBootstra
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
 import { useOpenPanelPullRequestUrl } from "../hooks/useOpenPanelPullRequestUrl";
 import { writeTextToClipboard } from "../hooks/useCopyToClipboard";
+import { useThreadHandoff, useThreadHandoffTargets } from "../hooks/useThreadHandoff";
 import { useClientSettings } from "../hooks/useSettings";
 import { useTheme } from "../hooks/useTheme";
 import { readLocalApi } from "../localApi";
@@ -696,6 +698,8 @@ function OpenCommandPaletteDialog(props: {
       );
     }
   }, [activeThreadReferenceCopyTarget]);
+  const threadHandoffTargets = useThreadHandoffTargets(activeThread?.environmentId ?? null);
+  const startThreadHandoff = useThreadHandoff();
   const projectOrder = useUiStateStore((store) => store.projectOrder);
   const threads = useThreadShells();
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
@@ -1682,6 +1686,44 @@ function OpenCommandPaletteDialog(props: {
       icon: <SquarePenIcon className={ITEM_ICON_CLASS} />,
       addonIcon: <SquarePenIcon className={ADDON_ICON_CLASS} />,
       groups: [{ value: "projects", label: "Projects", items: projectThreadItems }],
+    });
+  }
+
+  const relatedThreadRef = activeThread
+    ? scopeThreadRef(activeThread.environmentId, activeThread.id)
+    : null;
+  // Providers cannot be swapped inside a live thread, so this hands the work
+  // to a fresh one seeded with a brief written by the thread's own provider.
+  const handoffItems: CommandPaletteActionItem[] = relatedThreadRef
+    ? threadHandoffTargets
+        .filter(
+          (target) =>
+            !target.disabled && target.instanceId !== activeThread?.modelSelection.instanceId,
+        )
+        .map((target) => ({
+          kind: "action" as const,
+          value: `continue-in:${target.instanceId}`,
+          searchTerms: [target.label],
+          title: target.label,
+          icon: <BotIcon className={ITEM_ICON_CLASS} />,
+          run: async () => {
+            await startThreadHandoff({
+              threadRef: relatedThreadRef,
+              instanceId: target.instanceId,
+            });
+          },
+        }))
+    : [];
+  if (handoffItems.length > 0) {
+    actionItems.push({
+      kind: "submenu",
+      value: "action:continue-in-provider",
+      searchTerms: ["continue", "provider", "switch", "handoff", "summary", "new thread"],
+      title: "Continue in another provider…",
+      description: "Summarize this thread into a new thread on another provider",
+      icon: <BotIcon className={ITEM_ICON_CLASS} />,
+      addonIcon: <BotIcon className={ADDON_ICON_CLASS} />,
+      groups: [{ value: "providers", label: "Providers", items: handoffItems }],
     });
   }
 
