@@ -107,14 +107,18 @@ and use **Attach again** or remove the missing file before sending.
 
 ## Voice dictation on web and desktop
 
-Open **Settings → Integrations → Voice dictation** and choose where to transcribe:
+Choose **Set up voice** beside the composer microphone to open
+**Settings → Integrations → Voice dictation**, then choose where to transcribe.
+Clicking the microphone also opens settings if dictation is off or Parakeet
+still needs setup. This does not start a recording or download a model.
 
 - **Parakeet on this device** keeps audio local. Choose **Set up Parakeet** to
   load the model. Setup needs a network connection and enough device memory.
 - **Groq through an environment** sends the recording through the environment
   you select to Groq. Save its API key there; it is not stored in your browser.
 
-Use the microphone above Send to record, then stop to insert the transcript.
+When Parakeet is ready, return to your conversation and use the microphone above
+Send to record, then stop to insert the transcript.
 Dictation never sends the message. Review and edit the text first. Cancel discards
 the recording without changing your draft. If transcription fails, record again.
 Changing drafts cancels dictation so text cannot land in another thread.
