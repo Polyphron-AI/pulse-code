@@ -542,7 +542,7 @@
       "id": "multi-skill-github-import",
       "branch": "feat/pulse-next-multi-skill-import",
       "baseRevision": "0f0c81e70b",
-      "state": "implementing",
+      "state": "reviewed",
       "scope": "Let users select multiple discovered skill directories from one GitHub repository and make pinned versus keep-updated policy selection visually explicit.",
       "acceptance": [
         "Resolve shows a checkbox for every directory when a repository contains multiple skills; Select all and Clear support choosing any non-empty subset without silently importing tool-specific duplicates.",
@@ -551,7 +551,8 @@
         "Pinned and keep-updated choices use clearly selected policy cards with a direct description of update behavior.",
         "Web, compact web and desktop share the dialog. Verification remains code-only."
       ],
-      "remaining": "Focused verification, review, Pulse Next packaging and develop integration."
+      "verification": "Frozen f4d37c13b4 independently reviewed with no remaining blockers after fixing valid collision IDs, pending Resolve field locking and fixed-commit policy gating. Fourteen focused panel/settings tests passed and scoped web typecheck passed. No browser or installed-app verification, per the standing code-only constraint.",
+      "remaining": "Pulse Next packaging and develop integration."
     },
     {
       "id": "managed-integrations-discovery",
