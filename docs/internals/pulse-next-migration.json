@@ -1,7 +1,22 @@
 {
+  "active": {
+    "readMe": "Continuation turns read only this block. Start from nextAction. Details for the same feature are under currentFeature; everything after that is history.",
+    "policyVersion": "2026-09-14",
+    "playbook": "docs/operations/pulse-feature-delivery.md",
+    "feature": "mcp-environment-auth-project-defaults",
+    "state": "build-verified",
+    "branch": "feat/mcp-environment-auth-project-defaults",
+    "baseRevision": "26508b0ced",
+    "implementationRevision": "b5a657cc1d",
+    "worktree": ".worktrees/pulse-next-mcp-providers",
+    "completionBlockers": [],
+    "nextAction": "Install manually when ready and validate one real Claude-to-Pulse browser login. Publishing remains unauthorized.",
+    "programNextAction": "Claude and OpenCode managed MCP adapters are integrated and reviewed with synthetic development evidence. Launch-release-acceptance remains next; agree real-provider and packaging scope before publication or deployment.",
+    "updatedAt": "2026-09-14"
+  },
   "schemaVersion": 1,
   "project": "Pulse Next",
-  "updatedAt": "2026-09-13",
+  "updatedAt": "2026-09-14",
   "status": "launch-features-development-acceptance-passed",
   "upstreamAutomation": {
     "decision": "approved-by-user",
@@ -138,7 +153,10 @@
       "transcriptionOptions": ["Parakeet", "Groq API"],
       "platformEvidence": {
         "source": "pulseReviewed",
-        "evidence": ["docs/user/managed-skills.md", "docs/user/voice-capture.md"]
+        "evidence": [
+          "docs/user/managed-skills.md",
+          "docs/user/voice-capture.md"
+        ]
       },
       "acceptanceGaps": [
         "Verify capture and transcription on each target; legacy source does not prove cross-platform support.",
@@ -437,7 +455,7 @@
     "mode": "one-feature-end-to-end",
     "approvedAt": "2026-09-13",
     "playbook": "docs/operations/pulse-feature-delivery.md",
-    "policyVersion": "2026-09-13",
+    "policyVersion": "2026-09-14",
     "sharedPolicyCommit": "441e8bd20",
     "usageEfficiency": {
       "approvedAt": "2026-09-13",
@@ -784,7 +802,13 @@
       "id": "mcp-management-rpc",
       "branch": "feat/pulse-next-mcp-rpc",
       "state": "integrated",
-      "integratedRevisions": ["53a47f74a", "4190f69d5", "9bee2c128", "651a3b8ad", "3d2abd796"],
+      "integratedRevisions": [
+        "53a47f74a",
+        "4190f69d5",
+        "9bee2c128",
+        "651a3b8ad",
+        "3d2abd796"
+      ],
       "verification": "Independent Sol review; real WebSocket management and read-only authorization checks passed, including secret redaction, retention and absent versus empty overrides.",
       "compatibilityLearning": "Keep Pulse RPCs prefixed and config separate; share one environment service/semaphore across connections. Atomic rename is the publication commit point, so best-effort post-publication failures must not roll back referenced secrets.",
       "remaining": "Provider session configuration and composer pause/retry/continue. Settings UI is integrated.",

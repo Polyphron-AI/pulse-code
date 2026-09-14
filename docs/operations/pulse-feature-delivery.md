@@ -1,11 +1,24 @@
 # Pulse feature delivery
 
-Policy version: 2026-09-13.
+Policy version: 2026-09-14.
 
 This is the default workflow for Pulse features and upstream compatibility work.
 Its purpose is to reduce repeated AI analysis and repair without weakening tests.
 The current feature and evidence belong in the branch's authoritative JSON ledger.
 This page owns the process; the ledger owns progress. Do not duplicate either.
+
+## Resuming work
+
+Most turns on a Pulse thread continue a feature that is already designed. On a
+continuation turn such as "proceed", read only the ledger's `active` block and the
+code it points at. Do not re-read this playbook, `AGENTS.md` beyond its safety
+rules, or any skill unless `active.policyVersion` differs from the version above
+or the user changes scope. Start from `active.nextAction`; do not re-derive it.
+
+Load a skill only when the turn needs a decision the ledger does not record: a
+new design choice, a browser or device verification, or finishing a branch. A
+skill read that ends in "the design is already settled" was wasted; check the
+ledger first.
 
 ## Before implementation
 
@@ -34,11 +47,54 @@ implementation is justified only by independent domains with separate worktrees;
 sequence shared contracts, settings and runtime changes. Do not add persistent
 agents, background review loops or unrelated feature work.
 
-Give each agent a short brief: objective, base revision, worktree, owned files,
-invariants, acceptance cases, test commands and requested result. Link the ledger
-instead of copying conversation history. On completion request only the commit,
-test result, unresolved findings and next action. Check whether an agent is active
-before sending work; use a follow-up task to restart an idle agent deliberately.
+### Codex agent hygiene
+
+These rules come from the 2026-09-10 usage investigation, where four spawned
+agents and their automatic reviewers ran for 13 to 25 hours against compacted
+contexts of about 125k tokens and produced the largest Codex bill on record.
+
+- At most three spawned agents per feature, each with one bounded task.
+- An agent that has reported is finished. Close it. Do not send a follow-up task
+  to an idle agent unless the ledger names that task as the next action.
+- Never spawn a replacement for a finished or stopped agent. Reassess first.
+- No agent may spawn agents of its own.
+- No background review loops. Review is one Sol pass on a frozen revision.
+- Before spawning, confirm the task is independent of every other running agent's
+  owned files. If it is not, it is sequential work for the owner.
+
+### Codex configuration for Pulse threads
+
+Pulse threads run through the user's Codex home config. The settings below are
+the expected baseline; record any deliberate deviation in the ledger.
+
+- `approvals_reviewer = "none"`. With `auto_review`, Codex spawns a guardian per
+  worker that re-reads the worker's context on every shell call. Guardians were
+  about 254M of 306M automatic-review tokens on 2026-09-10. Use `auto_review`
+  only for an unattended run the user explicitly asks for.
+- `model_reasoning_effort = "low"` for Sol implementation and review. Astra
+  decides scope and integration and may use higher effort for that turn.
+- `approval_policy = "on-request"` with `sandbox_mode = "workspace-write"`.
+- Keep global skills and plugins to the set Pulse work uses. Every enabled entry
+  loads its description into each session. The repo `.codex/config.toml` adds
+  only project MCP servers; it does not override these home settings.
+
+### Briefs and reports
+
+Give each agent a brief in this shape and nothing longer:
+
+```text
+Objective: <one sentence>
+Base: <revision> in <worktree path>, branch <name>
+Owned files: <paths or globs>; do not touch anything else
+Invariants: <one line per rule that must stay true>
+Acceptance: <ledger record id> cases <numbers>
+Verify: <exact test and typecheck commands>
+Report: commit, test counts, unresolved findings, next action
+```
+
+Link the ledger instead of copying conversation history. The completion report
+is those four report items only. No narrative, no file inventories, no restated
+plan. Check whether an agent is active before sending work.
 
 Keep layered commits. A commit is a recovery point, not an automatic review or
 full-build gate. Continue the same feature until its agreed acceptance is met.
@@ -76,10 +132,14 @@ and the relevant error excerpt, not asset inventories, complete WebSocket frames
 or repeated successful output. Redact credentials. Expand output only to answer a
 specific diagnostic question. Keep user updates concise and meaningful.
 
-Update one active JSON record at meaningful checkpoints with the revision,
+Update the ledger's `active` block at meaningful checkpoints with the revision,
 worktree, acceptance status, unresolved blockers, evidence and exact next action.
-Keep optional improvements in a separate backlog. On pause, preserve dirty work
-and record its location. Do not restart completed investigations on resume.
+It is the first key in the file and the only part a continuation turn reads, so
+keep it under about forty lines. Detailed evidence and history live in the later
+keys; when a feature completes, move its record out of `active` into history in
+the same commit. Keep optional improvements in a separate backlog. On pause,
+preserve dirty work and record its location. Do not restart completed
+investigations on resume.
 
 Measure actual token usage only when telemetry is available. Otherwise record
 review/fix rounds, repeated builds and fixture reruns as proxies, with reasons.

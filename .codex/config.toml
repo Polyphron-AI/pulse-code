@@ -1,3 +1,7 @@
+# Project MCP servers only. Model, effort, sandbox and approvals_reviewer come from
+# the Codex home config; the expected Pulse baseline is documented under
+# "Codex configuration for Pulse threads" in docs/operations/pulse-feature-delivery.md.
+
 [mcp_servers.xcodebuildmcp]
 enabled = true
 required = false

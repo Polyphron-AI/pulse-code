@@ -110,18 +110,21 @@ An empty database is a bad test. Seed your worktree's `.t3` with a copy of real 
 
 ## Verifying
 
+<!-- pulse:begin delivery-workflow (Pulse addition; keep this block intact across upstream merges) -->
+
 ### Pulse delivery workflow
 
-Before Pulse feature work, read [the delivery playbook](docs/operations/pulse-feature-delivery.md)
-and the active record in `docs/internals/pulse-next-migration.json`.
-Use one implementation owner, an acceptance checklist before coding, focused
-checks during work, and one complete review of a frozen revision. Batch findings;
-recheck affected behavior after fixes. Keep layered commits without per-commit
-review gates. Do not skip correctness checks to reduce token use.
-Record resumable state and evidence once in the JSON ledger, not in repeated
-handoff narratives. Keep Pulse modules separate from upstream integration edits.
-The user-approved Pulse ledger is an exception to the generic work-artifact rule
-below; keep temporary logs and scratch plans untracked.
+Starting a Pulse feature: read [the delivery playbook](docs/operations/pulse-feature-delivery.md)
+and the `active` block at the top of `docs/internals/pulse-next-migration.json`.
+Continuing one ("proceed"): read only the `active` block and start from its
+`nextAction`. Do not re-read the playbook or load skills unless the policy version
+changed or the user changed scope.
+
+One implementation owner, acceptance cases before coding, at most three spawned
+agents, one review of a frozen revision. Do not skip correctness checks to reduce
+token use. The user-approved Pulse ledger is an exception to the work-artifact
+rule below; keep temporary logs and scratch plans untracked.
+<!-- pulse:end delivery-workflow -->
 
 - Smallest proof that the change works. `vp test run <files>` for the tests you touched, targeted lint and typecheck for the scope you changed.
 - Test meaningful logic or observable behavior. Do not render components to static markup to assert props or attributes, or add tests that merely assert callback wiring or mirror the implementation.
