@@ -126,7 +126,13 @@ export function pulseMcpHandlers(
           .setProviderDefault(providerInstanceId, connectionIds)
           .pipe(Effect.as({ connectionIds })),
       ),
-    getProjectDefault: ({ projectId, providerInstanceId }) =>
+    getProjectDefault: ({
+      projectId,
+      providerInstanceId,
+    }: {
+      readonly projectId: Parameters<PulseMcpConfigServiceShape["getProjectDefault"]>[0];
+      readonly providerInstanceId: Parameters<PulseMcpConfigServiceShape["getProjectDefault"]>[1];
+    }) =>
       redactFailure(
         service
           .getProjectDefault(projectId, providerInstanceId)
@@ -134,13 +140,27 @@ export function pulseMcpHandlers(
             Effect.map((connectionIds) => (connectionIds === undefined ? {} : { connectionIds })),
           ),
       ),
-    setProjectDefault: ({ projectId, providerInstanceId, connectionIds }) =>
+    setProjectDefault: ({
+      projectId,
+      providerInstanceId,
+      connectionIds,
+    }: {
+      readonly projectId: Parameters<PulseMcpConfigServiceShape["setProjectDefault"]>[0];
+      readonly providerInstanceId: Parameters<PulseMcpConfigServiceShape["setProjectDefault"]>[1];
+      readonly connectionIds: readonly string[];
+    }) =>
       redactFailure(
         service
           .setProjectDefault(projectId, providerInstanceId, connectionIds)
           .pipe(Effect.as({ connectionIds })),
       ),
-    resetProjectDefault: ({ projectId, providerInstanceId }) =>
+    resetProjectDefault: ({
+      projectId,
+      providerInstanceId,
+    }: {
+      readonly projectId: Parameters<PulseMcpConfigServiceShape["resetProjectDefault"]>[0];
+      readonly providerInstanceId: Parameters<PulseMcpConfigServiceShape["resetProjectDefault"]>[1];
+    }) =>
       redactFailure(service.resetProjectDefault(projectId, providerInstanceId).pipe(Effect.as({}))),
     getThreadOverride: ({
       threadId,
