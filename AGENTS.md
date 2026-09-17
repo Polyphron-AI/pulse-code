@@ -120,9 +120,12 @@ Continuing one ("proceed"): read only the `active` block and start from its
 `nextAction`. Do not re-read the playbook or load skills unless the policy version
 changed or the user changed scope.
 
-One implementation owner, acceptance cases before coding, at most three spawned
-agents, one review of a frozen revision. Do not skip correctness checks to reduce
-token use. The user-approved Pulse ledger is an exception to the work-artifact
+For upstream imports, use the playbook's compatibility-update workflow and
+`.agents/skills/pulse-upstream-compatibility/SKILL.md`: deterministic checks first,
+agent investigation and review for affected Pulse behavior or failures.
+For features, one implementation owner, acceptance cases before coding, at most
+three spawned agents, one review of a frozen revision. Do not skip correctness
+checks to reduce token use. The user-approved Pulse ledger is an exception to the work-artifact
 rule below; keep temporary logs and scratch plans untracked.
 <!-- pulse:end delivery-workflow -->
 

@@ -5,6 +5,11 @@ T3 release hourly while the registered user is logged in. This is polling, not a
 instant release webhook. It does not run when the machine is off. There are no
 provider calls, automatic repairs, pushes, publications or host installations.
 
+For importing and verifying a detected release, follow
+[Upstream compatibility updates](pulse-feature-delivery.md#upstream-compatibility-updates).
+That policy defines the fixed Pulse suite, checks selected from the upstream diff,
+when agent investigation is needed, and which verification results can be reused.
+
 ## Current limit
 
 Release detection and isolated source preparation are implemented. The full build,

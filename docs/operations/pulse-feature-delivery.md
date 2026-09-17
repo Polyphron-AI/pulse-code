@@ -1,6 +1,6 @@
 # Pulse feature delivery
 
-Policy version: 2026-09-14.
+Policy version: 2026-09-17.
 
 This is the default workflow for Pulse features and upstream compatibility work.
 Its purpose is to reduce repeated AI analysis and repair without weakening tests.
@@ -19,6 +19,84 @@ Load a skill only when the turn needs a decision the ledger does not record: a
 new design choice, a browser or device verification, or finishing a branch. A
 skill read that ends in "the design is already settled" was wasted; check the
 ledger first.
+
+## Upstream compatibility updates
+
+Protect Pulse behavior with a stable compatibility suite and checks selected from
+the upstream diff. Near-total upstream coverage is not the goal. Keep Pulse
+customizations at clear integration points when this reduces recurring conflicts;
+do not refactor unrelated code as part of an import.
+
+Start each new import from freshly fetched `origin/develop` in an isolated
+worktree. Resolve the latest stable upstream release unless the user selects
+another ref, and record its exact commit. Preserve Pulse branding and version
+lineage. A clean Git merge is not evidence of behavioral compatibility.
+
+### Routine checks and exceptions
+
+Use deterministic commands for release detection, source preparation, dependency
+installation, tests, typechecks, builds and result collection. The existing
+commands and their implementation limits are in
+[the updater runbook](pulse-next-updates.md). The scheduled updater currently
+detects releases and prepares source only; this policy does not make it a complete
+automated acceptance or installation pipeline.
+
+- Run the maintained Pulse suite in `scripts/pulse-updates/features.mjs` for an
+  imported candidate. Keep regressions for actual Pulse defects in that manifest.
+- Compare the upstream diff with Pulse-owned code and its callers, contracts,
+  provider adapters and dependencies. Overlapping behavior needs inspection even
+  when files merge cleanly. Add focused checks for affected integration points;
+  do not automatically run or expand the upstream-wide suite.
+- Check the lockfile, runtime and installed dependencies before treating failures
+  as regressions. Reuse a valid baseline receipt, or reproduce a suspected failure
+  on the unchanged Pulse base with the same supported environment. Label failures
+  as introduced, pre-existing, environment-related or unresolved. Never fix the
+  live checkout's dependencies just to obtain a baseline.
+- Use scoped typechecks and the relevant build to catch integration failures that
+  tests miss. Browser, real-provider, native-device and packaged-app evidence stay
+  separate and retain their existing authorization requirements.
+
+For an update with complete passing checks and no changed Pulse integration
+behavior, collect the report without a default agent review. Missing test
+selection, a new upstream interaction, a conflict or a failed check is an
+exception requiring investigation. Unknown impact must not be labelled low risk.
+Inspect only the relevant diff, callers and failure excerpts. Do not make an
+agent repeatedly poll a long-running command or reload successful logs.
+
+Use the active agent for a small exception. A larger repair may justify one
+implementation owner and one bounded review of the frozen Pulse integration
+changes. Do not review every upstream-only file. Report findings together, fix
+the batch, then inspect changed portions and rerun affected checks. This selection
+rule overrides the default feature-wide review and delegation below for upstream
+imports; it does not waive correctness checks.
+
+### Tests, reuse and completion
+
+Test observable Pulse contracts rather than copied upstream internals or a
+coverage percentage. Cover persisted state and cross-feature transitions at the
+affected boundary: changed settings, queued work, retry, cancel, restoration,
+navigation and provider differences. Test interacting features together where
+their combination changes behavior. Passing isolated feature tests is insufficient
+for a new interaction.
+
+Reuse results only when their source, transitive dependencies, lockfile, runtime,
+configuration and fixtures remain applicable. After a repair, rerun affected
+checks and assemble one report from the fresh and still-valid receipts. Record
+the revisions behind each result. Do not rebuild for documentation-only changes.
+
+The report names the Pulse base and upstream commit, applied changes, test counts,
+check outcomes, unresolved findings and untested surfaces. Missing suites,
+timeouts and runner failures are failures, not passes. Passing development checks
+does not authorize merging, publishing or replacing the installed application.
+Preserve any authorization the user has already given for those actions.
+
+Keep logs and scratch files ignored. Record continuation state in the Pulse
+ledger. If usage telemetry exists, report task-bounded main-agent and delegated
+usage separately, including cached input; do not sum repeated cumulative counters
+or add reasoning tokens again when they are included in output. Distinguish a
+verified charge from an API-rate estimate and name the rate and service tier.
+When telemetry is absent, say so instead of estimating from messages or elapsed
+time. Minimize repeated context and tool turns, not meaningful test execution.
 
 ## Before implementation
 
@@ -40,7 +118,7 @@ or removes recurring upstream conflicts. Avoid a general extension framework.
 
 ## Ownership and implementation
 
-Default to one Sol implementation owner for the complete feature. Astra makes
+For new feature implementation, default to one Sol implementation owner. Astra makes
 scope, dependency and compatibility decisions and performs final integration.
 Use another Sol for a bounded review after the implementation is frozen. Parallel
 implementation is justified only by independent domains with separate worktrees;
