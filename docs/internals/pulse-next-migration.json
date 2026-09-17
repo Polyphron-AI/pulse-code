@@ -1,8 +1,8 @@
 {
   "active": {
-    "policyVersion": "2026-09-14",
+    "policyVersion": "2026-09-17",
     "feature": "upstream-042-pulse-compatibility",
-    "state": "verified-local-import",
+    "state": "installer-build",
     "branch": "sync/upstream-042",
     "baseRevision": "5b89623eb4",
     "implementationRevision": "013d20cd5f",
@@ -10,7 +10,7 @@
     "worktree": "C:/Users/qblaa/.t3/worktrees/Pulse Code/pulse-upstream-042",
     "completionBlockers": [],
     "evidence": "upstream042Integration",
-    "nextAction": "Local import and compatibility checks complete on sync/upstream-042. Develop and installed application unchanged; integration/publication are separate actions.",
+    "nextAction": "Build and validate Windows x64 installer 0.0.42-pulse.1, push develop and publish a Pulse Next prerelease. User authorized commit, push and installer deployment.",
     "updatedAt": "2026-09-17"
   },
   "schemaVersion": 1,
@@ -1096,5 +1096,14 @@
         "behavior": "Queued turns pin MCP selections and skill revisions. Cancel/Stop restore compatible configurations and retain incompatible messages held in the queue."
       }
     }
+  },
+  "installer042Release": {
+    "version": "0.0.42-pulse.1",
+    "upstreamRevision": "719a76ca1dbf5490f1aa33ffb9966301e02be9a9",
+    "authorization": "User requested commit, push and deploy new installer.",
+    "channel": "GitHub prerelease",
+    "signing": "unsigned",
+    "automaticUpdateFeed": "not configured",
+    "state": "building"
   }
 }
