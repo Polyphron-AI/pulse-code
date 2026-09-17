@@ -93,11 +93,12 @@ Build on Windows x64. The preflight needs Rust with the `x86_64-pc-windows-msvc`
 target, Python 3, and VS 2022 Build Tools with the C++ workload, a Windows SDK
 and the **MSVC v143 x64/x86 Spectre-mitigated libs** component. Without the
 Spectre libraries the build stops before staging with a prerequisites error.
-Artifacts land in `release/` unless `--output-dir` says otherwise. Use a `-pulse-next.` version suffix so the file is never mistaken for
-a T3 build, and keep the stage directory so the packaged config can be read back.
+Artifacts land in `release/` unless `--output-dir` says otherwise. Use the
+`<upstream-version>-pulse.N` version scheme above, and keep the stage directory
+so the packaged config can be read back.
 
 ```powershell
-vp run dist:desktop:win:x64 --build-version 0.1.0-pulse-next.20260913.1 --output-dir release\pulse-next --keep-stage
+vp run dist:desktop:win:x64 --build-version 0.0.42-pulse.1 --output-dir release\pulse-next --keep-stage
 ```
 
 The underlying script is `scripts/build-desktop-artifact.ts`; run
@@ -139,9 +140,10 @@ damage another application's state.
 - Running the repo's dev launcher registers `ai.polyphron.pulsenext.dev.<repo>`,
   which is distinct again from an installed Pulse Next.
 
-## No publication, no update feed, no signing yet
+## Local build defaults
 
-None of this is authorised yet, and the build reflects that:
+The build command produces a local artifact. Publication requires a separately
+authorized release action; it does not configure signing or an update feed:
 
 - **No update feed.** `createBuildConfig` only emits an electron-builder
   `publish` block when `T3CODE_DESKTOP_UPDATE_REPOSITORY` or
@@ -150,14 +152,13 @@ None of this is authorised yet, and the build reflects that:
   provider-less file as "no update feed is configured" and disables automatic
   updates. A locally built installer therefore cannot reach T3's GitHub releases.
   Do not set either variable for a Pulse Next build until a Pulse feed exists.
-- **No publication.** Nothing here pushes a release, tags a commit, or uploads an
-  artifact. Hand the installer over as a file.
+- **No automatic publication.** Nothing in the build command pushes a release,
+  tags a commit, or uploads an artifact. An authorized manual GitHub prerelease
+  can carry the installer and its SHA-256 without enabling an update feed. Use a
+  `pulse-next-<version>` tag so the upstream `v*.*.*` release workflow is not
+  triggered accidentally.
 - **No signing.** The build is unsigned, so Windows SmartScreen will warn on
   first run. Signing needs its own credentials and its own decision.
-- **No Pulse icon yet.** The packaged app still carries T3's mark. The icon
-  pipeline exports from an Icon Composer project through macOS-only `ictool`,
-  and no Pulse source artwork exists in the repository. Replacing the icon is a
-  separate task.
 
 ## Reference build
 

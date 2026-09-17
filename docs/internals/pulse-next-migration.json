@@ -2,15 +2,15 @@
   "active": {
     "policyVersion": "2026-09-17",
     "feature": "upstream-042-pulse-compatibility",
-    "state": "installer-build",
+    "state": "installer-uploading",
     "branch": "sync/upstream-042",
     "baseRevision": "5b89623eb4",
-    "implementationRevision": "013d20cd5f",
+    "implementationRevision": "849ef560a0",
     "upstreamRelease": "v0.0.42",
     "worktree": "C:/Users/qblaa/.t3/worktrees/Pulse Code/pulse-upstream-042",
     "completionBlockers": [],
     "evidence": "upstream042Integration",
-    "nextAction": "Build and validate Windows x64 installer 0.0.42-pulse.1, push develop and publish a Pulse Next prerelease. User authorized commit, push and installer deployment.",
+    "nextAction": "Wait for existing gh upload session 56759, then verify GitHub release 391042120 assets and SHA-256, upload verification.json, record publication and push final documentation. Do not start a duplicate upload.",
     "updatedAt": "2026-09-17"
   },
   "schemaVersion": 1,
@@ -1104,6 +1104,15 @@
     "channel": "GitHub prerelease",
     "signing": "unsigned",
     "automaticUpdateFeed": "not configured",
-    "state": "building"
+    "state": "uploading",
+    "sourceRevision": "849ef560a0",
+    "githubReleaseId": 391042120,
+    "tag": "pulse-next-0.0.42-pulse.1",
+    "installer": "release/pulse-next-042/Pulse-Next-0.0.42-pulse.1-x64.exe",
+    "sha256": "93adcee3241388f0c1df22cbb0fc92e399966167ecfc58ed7e6828894352ed49",
+    "bytes": 598747423,
+    "packagingTestsPassed": 94,
+    "windowsPayload": "48 files, 18 sidecar natives validated",
+    "uploadSession": 56759
   }
 }
