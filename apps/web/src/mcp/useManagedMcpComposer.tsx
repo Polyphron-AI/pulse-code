@@ -44,6 +44,8 @@ interface PendingPreparation {
   readonly error: string | null;
   readonly projectId?: ProjectId;
   readonly retryable: boolean;
+  readonly connectionIds: ReadonlyArray<string>;
+  readonly pinnedSelection: boolean;
 }
 
 export function useManagedMcpComposer(input: {
@@ -312,6 +314,7 @@ export function useManagedMcpComposer(input: {
       if (options) setPending(checking);
       try {
         if (
+          !pendingPreparation.pinnedSelection &&
           selectionMode === "override" &&
           !(await enqueueOverrideWrite(
             providerSession.threadId,
@@ -332,7 +335,9 @@ export function useManagedMcpComposer(input: {
           input: {
             threadId: providerSession.threadId,
             providerSession,
-            ...(selectionMode === "override" ? { connectionIds: [...selectedIds] } : {}),
+            ...(pendingPreparation.pinnedSelection || selectionMode === "override"
+              ? { connectionIds: [...pendingPreparation.connectionIds] }
+              : {}),
             ...(excludedConnectionIds.length > 0 ? { excludedConnectionIds } : {}),
             ...(options?.retry ? { retry: true } : {}),
             ...(pendingPreparation.projectId ? { projectId: pendingPreparation.projectId } : {}),
@@ -422,8 +427,14 @@ export function useManagedMcpComposer(input: {
 
   const prepare = useCallback<PrepareComposerMcp>(
     (providerSession, options): Promise<McpSubmissionPreparation> => {
-      if (selectedIds.length === 0 && !supported) return Promise.resolve({ status: "ready" });
+      const preparationConnectionIds = options?.connectionIds ?? selectedIds;
+      if (preparationConnectionIds.length === 0 && !supported)
+        return Promise.resolve({ status: "ready" });
       if (activePromiseRef.current) return activePromiseRef.current;
+      const preparationBlockedReason =
+        options?.connectionIds !== undefined && !supported && capabilityReady
+          ? "Managed MCPs are unavailable for this provider. Remove them or switch providers."
+          : blockedReason;
       const promise = new Promise<McpSubmissionPreparation>((resolvePromise) => {
         const resolve = (outcome: McpSubmissionPreparation) => {
           activePromiseRef.current = null;
@@ -435,8 +446,10 @@ export function useManagedMcpComposer(input: {
           failed: [],
           excludedConnectionIds: [],
           busy: false,
-          retryable: !blockedReason,
-          error: blockedReason,
+          retryable: !preparationBlockedReason,
+          error: preparationBlockedReason,
+          connectionIds: [...preparationConnectionIds],
+          pinnedSelection: options?.connectionIds !== undefined,
           ...(options?.projectId ? { projectId: options.projectId } : {}),
         };
         pendingRef.current = initial;
@@ -445,6 +458,7 @@ export function useManagedMcpComposer(input: {
         } else if (options?.creatingWorktree) {
           void (async () => {
             if (
+              !initial.pinnedSelection &&
               selectionMode === "override" &&
               !(await enqueueOverrideWrite(providerSession.threadId, selectedIds))
             ) {
@@ -468,6 +482,7 @@ export function useManagedMcpComposer(input: {
     },
     [
       blockedReason,
+      capabilityReady,
       enqueueOverrideWrite,
       input.provider,
       runPreparation,
@@ -630,6 +645,7 @@ export function useManagedMcpComposer(input: {
       onRetry: list.refresh,
     },
     blockedReason,
+    selectionReady: capabilityReady && !loading && !queryFailed,
     selectedCount: selectedIds.length,
     prepare,
     pause,

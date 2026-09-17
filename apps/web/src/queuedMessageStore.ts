@@ -22,6 +22,8 @@ export interface QueuedComposerMessage {
   reviewComments: ReviewCommentContext[];
   /** Skills are pinned when the user queues the turn, independent of later composer edits. */
   pulseSkills?: PulseSkillSelection[];
+  /** Resolved effective MCP selection at queue time, including inherited defaults. */
+  pulseMcpConnectionIds?: string[];
   submissionIntent: ComposerSubmissionIntent;
   /**
    * The newest completed tool activity at queue time. A different id later
@@ -68,6 +70,50 @@ interface QueuedMessageStoreState {
 }
 
 const EMPTY_QUEUE: QueuedComposerMessage[] = [];
+
+export interface QueuedComposerConfiguration {
+  readonly pulseSkills: ReadonlyArray<PulseSkillSelection>;
+  readonly pulseMcpConnectionIds: ReadonlyArray<string>;
+}
+
+const sameConfiguration = (left: QueuedComposerConfiguration, right: QueuedComposerConfiguration) =>
+  JSON.stringify(left.pulseSkills) === JSON.stringify(right.pulseSkills) &&
+  JSON.stringify(left.pulseMcpConnectionIds) === JSON.stringify(right.pulseMcpConnectionIds);
+
+export function queuedComposerConfiguration(
+  message: QueuedComposerMessage,
+): QueuedComposerConfiguration {
+  return {
+    pulseSkills: message.pulseSkills ?? [],
+    pulseMcpConnectionIds: message.pulseMcpConnectionIds ?? [],
+  };
+}
+
+/** Pick one safe configuration for composer restoration and keep incompatible turns queued. */
+export function partitionQueuedMessagesForRestore(input: {
+  readonly messages: ReadonlyArray<QueuedComposerMessage>;
+  readonly current: QueuedComposerConfiguration;
+  readonly currentHasContent: boolean;
+}): {
+  readonly restore: ReadonlyArray<QueuedComposerMessage>;
+  readonly hold: ReadonlyArray<QueuedComposerMessage>;
+  readonly configuration: QueuedComposerConfiguration;
+} {
+  const configuration = input.currentHasContent
+    ? input.current
+    : input.messages[0]
+      ? queuedComposerConfiguration(input.messages[0])
+      : input.current;
+  return {
+    restore: input.messages.filter((message) =>
+      sameConfiguration(queuedComposerConfiguration(message), configuration),
+    ),
+    hold: input.messages.filter(
+      (message) => !sameConfiguration(queuedComposerConfiguration(message), configuration),
+    ),
+    configuration,
+  };
+}
 
 /** In-memory only: a queued message is a live intent, not a draft worth persisting. */
 export const useQueuedMessageStore = create<QueuedMessageStoreState>()((set, get) => ({

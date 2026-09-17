@@ -1294,6 +1294,8 @@ export interface ChatComposerHandle {
     pulseSkills: ReadonlyArray<PulseSkillSelection>;
     pulseSkillsBlockedReason: string | null;
     pulseMcpConnectionIds: ReadonlyArray<string> | null;
+    pulseMcpEffectiveConnectionIds: ReadonlyArray<string>;
+    pulseMcpSelectionReady: boolean;
     pulseMcpBlockedReason: string | null;
     dictationBlockedReason: string | null;
   };
@@ -5968,6 +5970,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           managedMcp.picker.selectionMode === "override"
             ? [...managedMcp.picker.selectedIds]
             : null,
+        pulseMcpEffectiveConnectionIds: [...managedMcp.picker.selectedIds],
+        pulseMcpSelectionReady: managedMcp.selectionReady,
         pulseMcpBlockedReason: managedMcp.blockedReason,
         dictationBlockedReason: dictation.blockedReason,
       }),

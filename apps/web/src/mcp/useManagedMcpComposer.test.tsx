@@ -165,6 +165,29 @@ describe("useManagedMcpComposer", () => {
     expect(mocks.result?.blockedReason).toContain("unavailable for this provider");
   });
 
+  it("does not bypass a pinned queued selection on an unsupported provider", async () => {
+    await act(async () => {
+      renderer = create(<Harness provider="cursor" draftConnectionIds={[]} />);
+    });
+    await act(async () => {
+      void mocks.result!.prepare(
+        {
+          threadId: ThreadId.make("thread-1"),
+          provider: ProviderDriverKind.make("cursor"),
+          providerInstanceId: ProviderInstanceId.make("cursor"),
+          runtimeMode: "full-access",
+        },
+        { connectionIds: ["queued"] },
+      );
+      await Promise.resolve();
+    });
+
+    expect((mocks.result!.pause as { props: { error: string } }).props.error).toContain(
+      "unavailable for this provider",
+    );
+    expect(mocks.prepare).not.toHaveBeenCalled();
+  });
+
   it("defers managed MCP preparation while a new worktree is being created", async () => {
     await act(async () => {
       renderer = create(<Harness />);
@@ -233,6 +256,57 @@ describe("useManagedMcpComposer", () => {
     const outcome = await promise;
     expect(outcome).toEqual({ status: "ready", preparationId: "prep-1" });
     expect(mocks.prepare.mock.calls[1]?.[0].input.excludedConnectionIds).toEqual(["linear"]);
+  });
+
+  it("keeps a queued selection pinned through failure and retry", async () => {
+    mocks.prepare
+      .mockResolvedValueOnce({
+        _tag: "Success",
+        value: {
+          status: "failed",
+          selectedConnectionIds: ["queued"],
+          connections: [
+            { connectionId: "queued", name: "Queued", status: "failed", message: "offline" },
+          ],
+        },
+      })
+      .mockResolvedValueOnce({
+        _tag: "Success",
+        value: {
+          status: "ready",
+          preparationId: "prep-queued",
+          selectedConnectionIds: ["queued"],
+          connections: [],
+        },
+      });
+    await act(async () => {
+      renderer = create(<Harness draftConnectionIds={["current"]} />);
+    });
+    mocks.setOverride.mockClear();
+    const session = {
+      threadId: ThreadId.make("thread-1"),
+      provider: ProviderDriverKind.make("codex"),
+      providerInstanceId: ProviderInstanceId.make("codex"),
+      runtimeMode: "full-access" as const,
+    };
+    let promise!: Promise<unknown>;
+    await act(async () => {
+      promise = mocks.result!.prepare(session, { connectionIds: ["queued"] });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      const pause = mocks.result!.pause as { props: { onRetry: () => void } };
+      pause.props.onRetry();
+      await Promise.resolve();
+    });
+
+    expect(await promise).toEqual({ status: "ready", preparationId: "prep-queued" });
+    expect(mocks.prepare.mock.calls.map((call) => call[0].input.connectionIds)).toEqual([
+      ["queued"],
+      ["queued"],
+    ]);
+    expect(mocks.setOverride).not.toHaveBeenCalled();
   });
 
   it.each(["list", "default"] as const)(

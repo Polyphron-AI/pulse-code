@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from "vite-plus/test";
 import {
   isQueuedMessageDue,
   latestCompletedToolActivityId,
+  partitionQueuedMessagesForRestore,
   useQueuedMessageStore,
   type QueuedComposerMessage,
 } from "./queuedMessageStore";
@@ -99,6 +100,111 @@ describe("queuedMessageStore", () => {
     expect(
       useQueuedMessageStore.getState().queuesByThreadKey["thread-a"]?.[0]?.pulseSkills,
     ).toEqual([{ id: "review", revision: "abc123" }]);
+  });
+
+  it("restores one queued configuration and holds incompatible messages", () => {
+    const first = {
+      ...makeMessage("first"),
+      id: "first",
+      pulseSkills: [{ id: "review", revision: "a" }],
+      pulseMcpConnectionIds: ["linear"],
+    };
+    const second = {
+      ...makeMessage("second"),
+      id: "second",
+      pulseSkills: [{ id: "review", revision: "b" }],
+      pulseMcpConnectionIds: ["github"],
+    };
+
+    expect(
+      partitionQueuedMessagesForRestore({
+        messages: [first, second],
+        current: { pulseSkills: [], pulseMcpConnectionIds: [] },
+        currentHasContent: false,
+      }),
+    ).toEqual({
+      restore: [first],
+      hold: [second],
+      configuration: {
+        pulseSkills: [{ id: "review", revision: "a" }],
+        pulseMcpConnectionIds: ["linear"],
+      },
+    });
+  });
+
+  it("preserves a nonempty current draft configuration", () => {
+    const queued = {
+      ...makeMessage("queued"),
+      id: "queued",
+      pulseSkills: [{ id: "review", revision: "a" }],
+      pulseMcpConnectionIds: ["linear"],
+    };
+
+    expect(
+      partitionQueuedMessagesForRestore({
+        messages: [queued],
+        current: {
+          pulseSkills: [{ id: "review", revision: "b" }],
+          pulseMcpConnectionIds: ["github"],
+        },
+        currentHasContent: true,
+      }),
+    ).toEqual({
+      restore: [],
+      hold: [queued],
+      configuration: {
+        pulseSkills: [{ id: "review", revision: "b" }],
+        pulseMcpConnectionIds: ["github"],
+      },
+    });
+  });
+
+  it("restores the queued configuration when the current composer is empty", () => {
+    const queued = {
+      ...makeMessage("queued"),
+      id: "queued",
+      pulseSkills: [{ id: "review", revision: "a" }],
+      pulseMcpConnectionIds: ["linear"],
+    };
+
+    expect(
+      partitionQueuedMessagesForRestore({
+        messages: [queued],
+        current: {
+          pulseSkills: [{ id: "review", revision: "b" }],
+          pulseMcpConnectionIds: ["github"],
+        },
+        currentHasContent: false,
+      }),
+    ).toEqual({
+      restore: [queued],
+      hold: [],
+      configuration: {
+        pulseSkills: [{ id: "review", revision: "a" }],
+        pulseMcpConnectionIds: ["linear"],
+      },
+    });
+  });
+
+  it("preserves an explicit empty configuration on a nonempty draft", () => {
+    const queued = {
+      ...makeMessage("queued"),
+      id: "queued",
+      pulseSkills: [{ id: "review", revision: "a" }],
+      pulseMcpConnectionIds: ["linear"],
+    };
+
+    expect(
+      partitionQueuedMessagesForRestore({
+        messages: [queued],
+        current: { pulseSkills: [], pulseMcpConnectionIds: [] },
+        currentHasContent: true,
+      }),
+    ).toEqual({
+      restore: [],
+      hold: [queued],
+      configuration: { pulseSkills: [], pulseMcpConnectionIds: [] },
+    });
   });
 
   it("drain empties one thread's queue in order", () => {

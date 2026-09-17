@@ -10,7 +10,11 @@ export type McpSubmissionPreparation =
 
 export type PrepareComposerMcp = (
   session: ProviderSessionStartInput,
-  options?: { readonly creatingWorktree?: boolean; readonly projectId?: ProjectId },
+  options?: {
+    readonly creatingWorktree?: boolean;
+    readonly projectId?: ProjectId;
+    readonly connectionIds?: ReadonlyArray<string>;
+  },
 ) => Promise<McpSubmissionPreparation>;
 
 /** Guard the awaited preparation before any caller clears or dispatches a draft. */
@@ -19,6 +23,7 @@ export async function prepareMcpSubmission(input: {
   readonly session: ProviderSessionStartInput;
   readonly creatingWorktree?: boolean;
   readonly projectId?: ProjectId;
+  readonly connectionIds?: ReadonlyArray<string>;
   readonly isCurrent: () => boolean;
   readonly draft?: {
     readonly read: () => unknown;
@@ -36,6 +41,7 @@ export async function prepareMcpSubmission(input: {
     const result = await input.prepare(input.session, {
       ...(input.creatingWorktree !== undefined ? { creatingWorktree: input.creatingWorktree } : {}),
       ...(input.projectId !== undefined ? { projectId: input.projectId } : {}),
+      ...(input.connectionIds !== undefined ? { connectionIds: input.connectionIds } : {}),
     });
     return isCurrent() ? result : { status: "cancelled" };
   } catch {

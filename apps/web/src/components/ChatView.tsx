@@ -314,6 +314,7 @@ import {
 import {
   isQueuedMessageDue,
   latestCompletedToolActivityId,
+  partitionQueuedMessagesForRestore,
   type QueuedComposerMessage,
   useQueuedMessages,
   useQueuedMessageStore,
@@ -1629,6 +1630,10 @@ export default function ChatView(props: ChatViewProps) {
   const setComposerDraftRuntimeMode = useComposerDraftStore((store) => store.setRuntimeMode);
   const setComposerDraftInteractionMode = useComposerDraftStore(
     (store) => store.setInteractionMode,
+  );
+  const setComposerDraftPulseSkills = useComposerDraftStore((store) => store.setPulseSkills);
+  const setComposerDraftPulseMcpConnectionIds = useComposerDraftStore(
+    (store) => store.setPulseMcpConnectionIds,
   );
   const clearComposerDraftContent = useComposerDraftStore((store) => store.clearComposerContent);
   const setDraftThreadContext = useComposerDraftStore((store) => store.setDraftThreadContext);
@@ -7123,7 +7128,33 @@ export default function ChatView(props: ChatViewProps) {
   // send. Prompts join with blank lines; attachments and contexts are added.
   const restoreQueuedMessagesToComposer = (messages: ReadonlyArray<QueuedComposerMessage>) => {
     if (messages.length === 0) return;
-    const prompts = [promptRef.current, ...messages.map((message) => message.prompt)]
+    const sendContext = composerRef.current?.getSendContext();
+    const currentConfiguration = {
+      pulseSkills: sendContext?.pulseSkills ?? [],
+      pulseMcpConnectionIds: sendContext?.pulseMcpEffectiveConnectionIds ?? [],
+    };
+    const currentHasContent = composerDraftHasUserContent(
+      useComposerDraftStore.getState().getComposerDraft(composerDraftTarget),
+    );
+    const partition = partitionQueuedMessagesForRestore({
+      messages,
+      current: currentConfiguration,
+      currentHasContent,
+    });
+    if (activeThreadKey) {
+      for (const message of [...partition.hold].reverse()) {
+        useQueuedMessageStore.getState().holdAtFront(activeThreadKey, message);
+      }
+    }
+    if (partition.restore.length === 0) return;
+    if (!currentHasContent) {
+      setComposerDraftPulseSkills(composerDraftTarget, partition.configuration.pulseSkills);
+      setComposerDraftPulseMcpConnectionIds(
+        composerDraftTarget,
+        partition.configuration.pulseMcpConnectionIds,
+      );
+    }
+    const prompts = [promptRef.current, ...partition.restore.map((message) => message.prompt)]
       .map((prompt) => prompt.trim())
       .filter((prompt) => prompt.length > 0);
     const nextPrompt = prompts.join("\n\n");
@@ -7138,7 +7169,10 @@ export default function ChatView(props: ChatViewProps) {
         composerImagesRef.current.length -
         composerFilesRef.current.length,
     );
-    const attachments = messages.flatMap((message) => [...message.images, ...message.files]);
+    const attachments = partition.restore.flatMap((message) => [
+      ...message.images,
+      ...message.files,
+    ]);
     const restored = attachments.slice(0, attachmentRoom);
     const overflow = attachments.slice(attachmentRoom);
     const restoredImages = restored.filter((attachment) => attachment.type === "image");
@@ -7157,6 +7191,8 @@ export default function ChatView(props: ChatViewProps) {
         terminalContexts: [],
         previewAnnotations: [],
         reviewComments: [],
+        pulseSkills: [...partition.configuration.pulseSkills],
+        pulseMcpConnectionIds: [...partition.configuration.pulseMcpConnectionIds],
         submissionIntent: "foreground",
         queuedAfterToolActivityId: latestCompletedToolActivityId(threadActivities),
         // Restoration is not a send. The user decides when the overflow goes.
@@ -7173,18 +7209,18 @@ export default function ChatView(props: ChatViewProps) {
     }
     const restoredTerminalContexts = [
       ...composerTerminalContextsRef.current,
-      ...messages.flatMap((message) => message.terminalContexts),
+      ...partition.restore.flatMap((message) => message.terminalContexts),
     ];
     composerTerminalContextsRef.current = restoredTerminalContexts;
     setComposerDraftTerminalContexts(composerDraftTarget, restoredTerminalContexts);
     const draft = useComposerDraftStore.getState().getComposerDraft(composerDraftTarget);
     setComposerDraftPreviewAnnotations(composerDraftTarget, [
       ...(draft?.previewAnnotations ?? []),
-      ...messages.flatMap((message) => message.previewAnnotations),
+      ...partition.restore.flatMap((message) => message.previewAnnotations),
     ]);
     setComposerDraftReviewComments(composerDraftTarget, [
       ...(draft?.reviewComments ?? []),
-      ...messages.flatMap((message) => message.reviewComments),
+      ...partition.restore.flatMap((message) => message.reviewComments),
     ]);
     composerRef.current?.resetCursorState({
       cursor: collapseExpandedComposerCursor(nextPrompt, nextPrompt.length),
@@ -7286,10 +7322,18 @@ export default function ChatView(props: ChatViewProps) {
       notifyDirectAnnotationAttached();
       return;
     }
-    if (!queuedMessage && (sendCtx.dictationBlockedReason || sendCtx.pulseSkillsBlockedReason)) {
+    if (
+      !queuedMessage &&
+      (sendCtx.dictationBlockedReason ||
+        sendCtx.pulseSkillsBlockedReason ||
+        sendCtx.pulseMcpBlockedReason)
+    ) {
       toastManager.add({
         type: "error",
-        title: sendCtx.dictationBlockedReason ?? sendCtx.pulseSkillsBlockedReason!,
+        title:
+          sendCtx.dictationBlockedReason ??
+          sendCtx.pulseSkillsBlockedReason ??
+          sendCtx.pulseMcpBlockedReason!,
       });
       notifyDirectAnnotationAttached();
       return;
@@ -7544,6 +7588,7 @@ export default function ChatView(props: ChatViewProps) {
       activeThreadKey &&
       settings.followUpBehavior === "queue"
     ) {
+      if (!sendCtx.pulseMcpSelectionReady) return;
       if (composerRef.current?.validateProviderInput(promptForSend) === false) {
         return;
       }
@@ -7555,6 +7600,7 @@ export default function ChatView(props: ChatViewProps) {
         previewAnnotations: [...composerPreviewAnnotations],
         reviewComments: [...composerReviewComments],
         pulseSkills: sendCtx.pulseSkills.map(({ id, revision }) => ({ id, revision })),
+        pulseMcpConnectionIds: [...sendCtx.pulseMcpEffectiveConnectionIds],
         submissionIntent,
         queuedAfterToolActivityId: latestCompletedToolActivityId(threadActivities),
         createdAt: new Date().toISOString(),
@@ -7696,6 +7742,9 @@ export default function ChatView(props: ChatViewProps) {
       },
       creatingWorktree: shouldCreateWorktree,
       projectId: activeProject.id,
+      ...(queuedMessage?.pulseMcpConnectionIds
+        ? { connectionIds: queuedMessage.pulseMcpConnectionIds }
+        : {}),
       ...(queuedMessage
         ? {}
         : {

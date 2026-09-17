@@ -90,6 +90,7 @@ describe("MCP submission boundary", () => {
       session,
       creatingWorktree: true,
       projectId: ProjectId.make("project-1"),
+      connectionIds: ["queued-linear"],
       prepare: async (...args) => {
         received = args;
         return { status: "cancelled" };
@@ -98,7 +99,11 @@ describe("MCP submission boundary", () => {
     });
     expect(received).toEqual([
       session,
-      { creatingWorktree: true, projectId: ProjectId.make("project-1") },
+      {
+        creatingWorktree: true,
+        projectId: ProjectId.make("project-1"),
+        connectionIds: ["queued-linear"],
+      },
     ]);
   });
 });
