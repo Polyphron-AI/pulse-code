@@ -1,22 +1,21 @@
 {
   "active": {
-    "readMe": "Continuation turns read only this block. Start from nextAction. Details for the same feature are under currentFeature; everything after that is history.",
     "policyVersion": "2026-09-14",
-    "playbook": "docs/operations/pulse-feature-delivery.md",
-    "feature": "mcp-environment-auth-project-defaults",
-    "state": "build-verified",
-    "branch": "feat/mcp-environment-auth-project-defaults",
-    "baseRevision": "26508b0ced",
-    "implementationRevision": "b5a657cc1d",
-    "worktree": ".worktrees/pulse-next-mcp-providers",
+    "feature": "upstream-042-pulse-compatibility",
+    "state": "verified-local-import",
+    "branch": "sync/upstream-042",
+    "baseRevision": "5b89623eb4",
+    "implementationRevision": "013d20cd5f",
+    "upstreamRelease": "v0.0.42",
+    "worktree": "C:/Users/qblaa/.t3/worktrees/Pulse Code/pulse-upstream-042",
     "completionBlockers": [],
-    "nextAction": "Install manually when ready and validate one real Claude-to-Pulse browser login. Publishing remains unauthorized.",
-    "programNextAction": "Claude and OpenCode managed MCP adapters are integrated and reviewed with synthetic development evidence. Launch-release-acceptance remains next; agree real-provider and packaging scope before publication or deployment.",
-    "updatedAt": "2026-09-14"
+    "evidence": "upstream042Integration",
+    "nextAction": "Local import and compatibility checks complete on sync/upstream-042. Develop and installed application unchanged; integration/publication are separate actions.",
+    "updatedAt": "2026-09-17"
   },
   "schemaVersion": 1,
   "project": "Pulse Next",
-  "updatedAt": "2026-09-14",
+  "updatedAt": "2026-09-17",
   "status": "launch-features-development-acceptance-passed",
   "upstreamAutomation": {
     "decision": "approved-by-user",
@@ -57,7 +56,7 @@
     "parakeetUxVerification": "17 onboarding and Settings tests passed; failed setup preserves the prior preference; in-progress model downloads can be cancelled and retried; web typecheck and diff check passed.",
     "clientVerification": "No browser, packaged desktop, physical mobile or real microphone pass was requested or run."
   },
-  "upstreamBase": "09e8de9c655ae85410bf6b00446f272a01da81c7",
+  "upstreamBase": "719a76ca1dbf5490f1aa33ffb9966301e02be9a9",
   "sourceSnapshots": {
     "pulseDevelop": "353e62727b3f5927e71ad54c73caee2ea3183057",
     "pulseReviewed": "7b4dcead3b891800a4700fff1f698941dd7da018"
@@ -153,10 +152,7 @@
       "transcriptionOptions": ["Parakeet", "Groq API"],
       "platformEvidence": {
         "source": "pulseReviewed",
-        "evidence": [
-          "docs/user/managed-skills.md",
-          "docs/user/voice-capture.md"
-        ]
+        "evidence": ["docs/user/managed-skills.md", "docs/user/voice-capture.md"]
       },
       "acceptanceGaps": [
         "Verify capture and transcription on each target; legacy source does not prove cross-platform support.",
@@ -802,13 +798,7 @@
       "id": "mcp-management-rpc",
       "branch": "feat/pulse-next-mcp-rpc",
       "state": "integrated",
-      "integratedRevisions": [
-        "53a47f74a",
-        "4190f69d5",
-        "9bee2c128",
-        "651a3b8ad",
-        "3d2abd796"
-      ],
+      "integratedRevisions": ["53a47f74a", "4190f69d5", "9bee2c128", "651a3b8ad", "3d2abd796"],
       "verification": "Independent Sol review; real WebSocket management and read-only authorization checks passed, including secret redaction, retention and absent versus empty overrides.",
       "compatibilityLearning": "Keep Pulse RPCs prefixed and config separate; share one environment service/semaphore across connections. Atomic rename is the publication commit point, so best-effort post-publication failures must not roll back referenced secrets.",
       "remaining": "Provider session configuration and composer pause/retry/continue. Settings UI is integrated.",
@@ -1039,5 +1029,72 @@
       "focusedTests": 14,
       "scope": "Selection and preflight decisions with tests; provider/settings/composer integration follows"
     }
-  ]
+  ],
+  "upstream042PreviousActive": {
+    "readMe": "Continuation turns read only this block. Start from nextAction. Details for the same feature are under currentFeature; everything after that is history.",
+    "policyVersion": "2026-09-14",
+    "playbook": "docs/operations/pulse-feature-delivery.md",
+    "feature": "mcp-environment-auth-project-defaults",
+    "state": "build-verified",
+    "branch": "feat/mcp-environment-auth-project-defaults",
+    "baseRevision": "26508b0ced",
+    "implementationRevision": "b5a657cc1d",
+    "worktree": ".worktrees/pulse-next-mcp-providers",
+    "completionBlockers": [],
+    "nextAction": "Install manually when ready and validate one real Claude-to-Pulse browser login. Publishing remains unauthorized.",
+    "programNextAction": "Claude and OpenCode managed MCP adapters are integrated and reviewed with synthetic development evidence. Launch-release-acceptance remains next; agree real-provider and packaging scope before publication or deployment.",
+    "updatedAt": "2026-09-14"
+  },
+  "upstream042Integration": {
+    "state": "verified-local-import",
+    "baseRevision": "5b89623eb4",
+    "upstreamRevision": "719a76ca1dbf5490f1aa33ffb9966301e02be9a9",
+    "release": "v0.0.42",
+    "implementationRevision": "013d20cd5f",
+    "acceptance": [
+      "Preserve Pulse branding, version lineage, managed skills, MCP preparation/defaults/auth and dictation.",
+      "Preserve mobile provider handoff alongside upstream rename actions.",
+      "Preserve MCP preparation and queued-message failure/retry/cancel behavior across thread navigation.",
+      "Run Pulse feature suites before and after import; compare existing failures.",
+      "Run focused integration tests, affected typechecks and web production build.",
+      "No browser/device verification, installation, publication or production changes."
+    ],
+    "baseline": {
+      "revision": "5b89623eb4",
+      "valid": false,
+      "reason": "Original checkout has Effect beta.103 instead of declared rc.112; many suites fail during import. Clean worktree dependencies installed with rc.112.",
+      "logs": "C:/Users/qblaa/AppData/Local/Temp/pulse-042-baseline",
+      "updaterTests": "23 passed"
+    },
+    "verification": {
+      "pulseFeatureSuites": 44,
+      "pulseTestsPassed": 502,
+      "focusedCompatibilityTestsPassed": 257,
+      "updaterTestsPassed": 23,
+      "mcpRpcFollowupTestsPassed": 4,
+      "typechecks": ["web", "mobile", "desktop", "server", "contracts", "client-runtime"],
+      "webProductionBuild": "passed after review fixes",
+      "targetedLint": "passed with warnings",
+      "diffCheck": "passed excluding upstream patch context whitespace",
+      "logs": ".t3/upstream-updates/verification-042",
+      "externalLogs": "C:/Users/qblaa/AppData/Local/Temp/pulse-042-*.log",
+      "limitations": [
+        "No clean before-import baseline due to stale original-checkout dependencies.",
+        "No browser, physical mobile, real-provider or packaged installation verification."
+      ],
+      "reviewFixTestsPassed": 211
+    },
+    "review": {
+      "revision": "9c66a954e4",
+      "findings": [
+        "Queued replay reads current MCP selection instead of pinned selection.",
+        "Cancel/Stop does not preserve queued skill revisions."
+      ],
+      "resolution": {
+        "revision": "013d20cd5f",
+        "status": "both findings fixed; root inspected changed portions",
+        "behavior": "Queued turns pin MCP selections and skill revisions. Cancel/Stop restore compatible configurations and retain incompatible messages held in the queue."
+      }
+    }
+  }
 }

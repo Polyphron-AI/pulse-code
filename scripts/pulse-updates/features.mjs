@@ -22,6 +22,7 @@ export const featureSuites = [
   { id: "managed-skills-contracts", file: "packages/contracts/src/pulseSkills.test.ts" },
   { id: "managed-skills-settings", file: "apps/web/src/skills/ManagedSkillsSettings.test.tsx" },
   { id: "managed-skills-drafts", file: "apps/web/src/composerDraftStore.test.ts" },
+  { id: "pulse-queued-messages", file: "apps/web/src/queuedMessageStore.test.ts" },
   { id: "managed-skills-picker", file: "apps/web/src/skills/managedSkillPicker.test.ts" },
   {
     id: "managed-skills-subprocess",
