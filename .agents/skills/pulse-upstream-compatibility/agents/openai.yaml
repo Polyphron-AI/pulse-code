@@ -1,0 +1,4 @@
+interface:
+  display_name: "Pulse Upstream Compatibility"
+  short_description: "Import T3 updates with focused Pulse checks"
+  default_prompt: "Use $pulse-upstream-compatibility to assess and import the latest stable T3 release into Pulse."
