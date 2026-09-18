@@ -1900,6 +1900,7 @@ const makeWsRpcLayer = (
               codexManagedMcp: true,
               claudeManagedMcp: true,
               openCodeManagedMcp: true,
+              wardenCredentials: true,
               groqDictation: true,
             },
             ...(fileManagerRevealKind === undefined
@@ -2558,6 +2559,24 @@ const makeWsRpcLayer = (
           observeRpcEffect(WS_METHODS.pulseMcpPrepareTurn, pulseMcp.prepareTurn(input), {
             "rpc.aggregate": "pulse.mcp",
           }),
+        [WS_METHODS.pulseMcpWardenGet]: () =>
+          observeRpcEffect(WS_METHODS.pulseMcpWardenGet, pulseMcp.wardenGet(), {
+            "rpc.aggregate": "pulse.mcp",
+          }),
+        [WS_METHODS.pulseMcpWardenSet]: (input) =>
+          observeRpcEffect(WS_METHODS.pulseMcpWardenSet, pulseMcp.wardenSet(input), {
+            "rpc.aggregate": "pulse.mcp",
+          }),
+        [WS_METHODS.pulseMcpWardenTest]: () =>
+          observeRpcEffect(WS_METHODS.pulseMcpWardenTest, pulseMcp.wardenTest(), {
+            "rpc.aggregate": "pulse.mcp",
+          }),
+        [WS_METHODS.pulseMcpWardenListCredentials]: () =>
+          observeRpcEffect(
+            WS_METHODS.pulseMcpWardenListCredentials,
+            pulseMcp.wardenListCredentials(),
+            { "rpc.aggregate": "pulse.mcp" },
+          ),
         [WS_METHODS.pulseSkillsMutate]: (input) =>
           observeRpcEffect(WS_METHODS.pulseSkillsMutate, pulseSkills.mutate(input), {
             "rpc.aggregate": "pulse.skills",
