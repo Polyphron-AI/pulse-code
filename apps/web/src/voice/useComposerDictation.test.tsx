@@ -105,7 +105,9 @@ describe("useComposerDictation", () => {
 
   it("reloads a configured Parakeet model before starting capture", async () => {
     mocks.configured = true;
-    mocks.setup.mockResolvedValue(undefined);
+    mocks.setup.mockImplementation(async () => {
+      mocks.ready = true;
+    });
     await act(() => {
       renderer = create(<Harness />);
     });

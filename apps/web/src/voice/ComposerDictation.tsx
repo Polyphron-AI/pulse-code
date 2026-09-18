@@ -19,6 +19,7 @@ export function ComposerDictation(props: {
   readonly onStop: () => void;
   readonly onCancel: () => void;
   readonly parakeetConfigured: boolean;
+  readonly shortcutLabel: string | null;
 }) {
   const isError = props.state.phase === "error";
   const recording = props.state.phase === "recording";
@@ -31,6 +32,9 @@ export function ComposerDictation(props: {
         ? "Record again"
         : "Dictate";
   const unavailable = !isError && props.disabledReason !== null;
+  const shortcutHint = props.shortcutLabel
+    ? `Shortcut: ${props.shortcutLabel}. `
+    : "No keyboard shortcut is set. ";
   if (isError) {
     return (
       <div className="flex min-w-0 items-center gap-1" role="alert">
@@ -54,6 +58,7 @@ export function ComposerDictation(props: {
                   showAudioInputMenu(event);
                 }}
                 aria-label={label}
+                data-composer-shortcut="composer.dictation"
               />
             }
           >
@@ -73,7 +78,7 @@ export function ComposerDictation(props: {
             <Button
               type="button"
               variant="ghost"
-              size={recording ? "sm" : "icon-sm"}
+              size={recording || busy ? "sm" : "icon-sm"}
               disabled={unavailable}
               className={
                 recording
@@ -89,11 +94,19 @@ export function ComposerDictation(props: {
               }}
               aria-label={label}
               aria-pressed={recording}
+              data-composer-shortcut="composer.dictation"
             />
           }
         >
           {busy ? (
-            <AudioLinesIcon />
+            <>
+              <AudioLinesIcon />
+              <span className="text-xs font-semibold">
+                {props.state.phase === "transcribing"
+                  ? "Transcribing… Click to cancel"
+                  : "Preparing… Click to cancel"}
+              </span>
+            </>
           ) : recording ? (
             <>
               <span className="pulse-dictation-wave" aria-hidden="true">
@@ -101,7 +114,7 @@ export function ComposerDictation(props: {
                 <span />
                 <span />
               </span>
-              <span className="text-xs font-semibold">Voice dictation</span>
+              <span className="text-xs font-semibold">Recording</span>
               <MicIcon className="fill-current" />
             </>
           ) : (
@@ -109,7 +122,7 @@ export function ComposerDictation(props: {
           )}
         </TooltipTrigger>
         <TooltipPopup className="max-w-72 whitespace-normal">
-          {props.disabledReason ?? `${label}. Right-click to choose a microphone.`}
+          {props.disabledReason ?? `${label}. ${shortcutHint}Right-click to choose a microphone.`}
         </TooltipPopup>
       </Tooltip>
     </div>

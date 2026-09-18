@@ -77,6 +77,7 @@ export const STATIC_KEYBINDING_COMMANDS = [
   "projectSearch.toggle",
   "themeEditor.toggle",
   "composer.stash",
+  "composer.dictation",
   "composer.host",
   "composer.effort",
   "composer.mode",
