@@ -1,6 +1,6 @@
 {
   "blocked_by": [],
-  "commits": [],
+  "commits": ["548febddff", "a4bb46be2f"],
   "created_at": "2026-09-18T14:39:41Z",
   "execution_context": {
     "branch": "fix/voice-dictation-ux",
@@ -27,6 +27,6 @@
   "secret_overrides": [],
   "status": "complete",
   "subject": "Make voice dictation discoverable and responsive",
-  "updated_at": "2026-09-18T14:48:17Z",
+  "updated_at": "2026-09-18T15:02:54Z",
   "verification_receipts": []
 }
