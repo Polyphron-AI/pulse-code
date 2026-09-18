@@ -33,7 +33,7 @@ export function ComposerDictation(props: {
         : "Dictate";
   const unavailable = !isError && props.disabledReason !== null;
   const shortcutHint = props.shortcutLabel
-    ? `Shortcut: ${props.shortcutLabel}. `
+    ? `Hold ${props.shortcutLabel} to dictate. `
     : "No keyboard shortcut is set. ";
   if (isError) {
     return (

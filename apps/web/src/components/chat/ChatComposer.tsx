@@ -5164,8 +5164,15 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const bannerStackItems = activityStackItem
     ? [activityStackItem, ...props.bannerItems]
     : props.bannerItems;
+  const dictationShortcutHeldRef = useRef(false);
   useEffect(() => {
-    const handler = (event: globalThis.KeyboardEvent) => {
+    const finishShortcutDictation = () => {
+      if (!dictationShortcutHeldRef.current) return;
+      dictationShortcutHeldRef.current = false;
+      if (dictation.state.phase === "recording") dictation.stop();
+      else if (dictation.state.phase === "preparing") dictation.cancel();
+    };
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
       const command = resolveShortcutCommand(event, keybindings, {
         context: {
           terminalFocus: getTerminalFocusOwner() !== null,
@@ -5175,13 +5182,27 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       if (command !== "composer.dictation") return;
       event.preventDefault();
       event.stopPropagation();
-      if (dictation.state.phase === "recording") dictation.stop();
-      else if (dictation.state.phase === "preparing" || dictation.state.phase === "transcribing")
-        dictation.cancel();
-      else if (dictationDisabledReason === null) dictation.start();
+      if (event.repeat || dictationShortcutHeldRef.current) return;
+      if (dictationDisabledReason === null) {
+        dictationShortcutHeldRef.current = true;
+        dictation.start();
+      }
     };
-    window.addEventListener("keydown", handler, true);
-    return () => window.removeEventListener("keydown", handler, true);
+    const handleKeyUp = (event: globalThis.KeyboardEvent) => {
+      if (!dictationShortcutHeldRef.current) return;
+      if (event.key !== " " && event.key !== "Control" && event.key !== "Shift") return;
+      event.preventDefault();
+      event.stopPropagation();
+      finishShortcutDictation();
+    };
+    window.addEventListener("keydown", handleKeyDown, true);
+    window.addEventListener("keyup", handleKeyUp, true);
+    window.addEventListener("blur", finishShortcutDictation);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown, true);
+      window.removeEventListener("keyup", handleKeyUp, true);
+      window.removeEventListener("blur", finishShortcutDictation);
+    };
   }, [dictation, dictationDisabledReason, keybindings, terminalOpen]);
 
   useEffect(() => {
