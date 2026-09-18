@@ -15,7 +15,11 @@ import type { ProviderServiceShape } from "../provider/Services/ProviderService.
 import type { PulseMcpDiscoveryService } from "./PulseMcpDiscoveryService.ts";
 
 const publicValue = (value: PulseMcpStoredValue) =>
-  value.type === "literal" ? value : ({ type: "secret", configured: true } as const);
+  value.type === "literal"
+    ? value
+    : value.type === "warden-ref"
+      ? ({ type: "warden", credentialRef: value.credentialRef } as const)
+      : ({ type: "secret", configured: true } as const);
 
 const publicConnection = (connection: PulseMcpStoredConnection) => ({
   id: connection.id,

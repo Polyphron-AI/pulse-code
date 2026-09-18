@@ -13,6 +13,7 @@ import * as PlatformError from "effect/PlatformError";
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as ServerConfig from "../config.ts";
 import * as PulseMcpConfig from "./PulseMcpConfigService.ts";
+import type { PulseWardenClientShape } from "./PulseWardenClient.ts";
 
 const configLayer = ServerConfig.layerTest(process.cwd(), { prefix: "pulse-mcp-config-test-" });
 const secretLayer = ServerSecretStore.layer.pipe(Layer.provide(configLayer));
@@ -272,7 +273,7 @@ describe("PulseMcpConfigService", () => {
         (yield* service.resolveTurnConnections({
           providerInstanceId: instanceId,
           threadId,
-        })).map(({ id }) => id),
+        })).connections.map(({ id }) => id),
       ).toEqual(["github"]);
 
       yield* service.setProjectDefault(projectId, instanceId, ["local_docs"]);
@@ -281,16 +282,16 @@ describe("PulseMcpConfigService", () => {
           providerInstanceId: instanceId,
           projectId,
           threadId,
-        })).map(({ id }) => id),
+        })).connections.map(({ id }) => id),
       ).toEqual(["local_docs"]);
 
       yield* service.setThreadOverride(threadId, []);
       expect(
-        yield* service.resolveTurnConnections({
+        (yield* service.resolveTurnConnections({
           providerInstanceId: instanceId,
           projectId,
           threadId,
-        }),
+        })).connections,
       ).toEqual([]);
 
       yield* service.resetThreadOverride(threadId);
@@ -300,7 +301,7 @@ describe("PulseMcpConfigService", () => {
           providerInstanceId: instanceId,
           projectId,
           threadId,
-        })).map(({ id }) => id),
+        })).connections.map(({ id }) => id),
       ).toEqual(["github"]);
     }).pipe(Effect.provide(testLayer)),
   );
@@ -664,4 +665,251 @@ describe("PulseMcpConfigService", () => {
       }).pipe(Effect.provide(layerWithPulseFileSystem(failing)));
     }).pipe(Effect.provide(NodeServices.layer)),
   );
+});
+
+const REF_GH = "urn:pulse:acme:credential:gh-token";
+const REF_DOCS = "urn:pulse:acme:credential:docs-token";
+
+const wardenLayer = (client: PulseWardenClientShape, calls?: { count: number }) => {
+  const pulse = PulseMcpConfig.layerWith({
+    wardenClient: () => {
+      if (calls) calls.count += 1;
+      return client;
+    },
+  }).pipe(Layer.provide(secretLayer), Layer.provide(configLayer));
+  return Layer.mergeAll(configLayer, secretLayer, pulse).pipe(
+    Layer.provideMerge(NodeServices.layer),
+  );
+};
+
+const grantingClient = (input: {
+  readonly grants: readonly { id: string; scope: string; status: string }[];
+  readonly releases?: string[];
+}): PulseWardenClientShape => ({
+  callTool: (name) =>
+    name === "warden_grants_list"
+      ? Effect.succeed({ grants: input.grants })
+      : Effect.succeed({ principal: { id: "u1", name: "Ops" } }),
+  release: (body) => {
+    input.releases?.push(body.credentialRef);
+    return Effect.succeed({
+      credentialRef: body.credentialRef,
+      material: `material:${body.credentialRef}`,
+      requestDigest: "sha256:x",
+    });
+  },
+});
+
+const addWardenFixtures = Effect.fn(function* () {
+  const service = yield* PulseMcpConfig.PulseMcpConfigService;
+  yield* service.setWardenSettings({ origin: "https://go.example.test", pat: "pat-secret" });
+  yield* service.upsertConnection({
+    id: "github",
+    name: "GitHub",
+    config: {
+      transport: "http",
+      url: "https://mcp.example.test/github",
+      headers: {
+        Authorization: { type: "warden", credentialRef: REF_GH },
+        "X-Pulse": { type: "literal", value: "enabled" },
+      },
+    },
+  });
+  yield* service.upsertConnection({
+    id: "local_docs",
+    name: "Local docs",
+    config: {
+      transport: "stdio",
+      command: "docs-mcp",
+      args: ["--stdio"],
+      env: {
+        DOCS_TOKEN: { type: "warden", credentialRef: REF_DOCS },
+        DOCS_KEY: { type: "secret", value: "stored-secret" },
+      },
+    },
+  });
+  const instanceId = ProviderInstanceId.make("codex_warden");
+  yield* service.setProviderDefault(instanceId, ["github", "local_docs"]);
+  return { service, instanceId, threadId: ThreadId.make("thread-warden") };
+});
+
+describe("PulseMcpConfigService Warden", () => {
+  it.effect("stores the PAT in the secret store and never exposes it", () =>
+    Effect.gen(function* () {
+      const service = yield* PulseMcpConfig.PulseMcpConfigService;
+      const secrets = yield* ServerSecretStore.ServerSecretStore;
+      expect(yield* service.getWardenSettings).toEqual({ origin: "", patConfigured: false });
+      const set = yield* service.setWardenSettings({
+        origin: "https://go.example.test/",
+        pat: "pat-secret",
+      });
+      expect(set).toEqual({ origin: "https://go.example.test", patConfigured: true });
+      expect(JSON.stringify(set)).not.toContain("pat-secret");
+      const stored = yield* secrets.get(PulseMcpConfig.WARDEN_PAT_SECRET);
+      expect(Option.isSome(stored) && new TextDecoder().decode(stored.value)).toBe("pat-secret");
+      yield* service.recordWardenPrincipal({ id: "u1", name: "Ops" });
+      expect((yield* service.getWardenSettings).principal).toEqual({ id: "u1", name: "Ops" });
+      const kept = yield* service.setWardenSettings({ origin: "https://go.example.test" });
+      expect(kept.patConfigured).toBe(true);
+      const cleared = yield* service.setWardenSettings({
+        origin: "https://go.example.test",
+        pat: "",
+      });
+      expect(cleared.patConfigured).toBe(false);
+      expect(Option.isNone(yield* secrets.get(PulseMcpConfig.WARDEN_PAT_SECRET))).toBe(true);
+      expect(Option.isNone(yield* service.readWardenAccess)).toBe(true);
+    }).pipe(Effect.provide(testLayer)),
+  );
+
+  it.effect("round-trips a warden value through upsert and list without storing material", () =>
+    Effect.gen(function* () {
+      const { service } = yield* addWardenFixtures();
+      const listed = yield* service.listConnections;
+      const github = listed.find(({ id }) => id === "github");
+      expect(github?.config.transport === "http" && github.config.headers.Authorization).toEqual({
+        type: "warden-ref",
+        credentialRef: REF_GH,
+      });
+      yield* service.upsertConnection({
+        id: "github",
+        name: "GitHub",
+        config: {
+          transport: "http",
+          url: "https://mcp.example.test/github",
+          headers: { Authorization: { type: "secret", value: "now-a-secret" } },
+        },
+      });
+      const again = (yield* service.listConnections).find(({ id }) => id === "github");
+      expect(again?.config.transport === "http" && again.config.headers.Authorization?.type).toBe(
+        "secret-ref",
+      );
+    }).pipe(Effect.provide(wardenLayer(grantingClient({ grants: [] })))),
+  );
+
+  it.effect("rejects an invalid credential URN and retaining a secret over a warden value", () =>
+    Effect.gen(function* () {
+      const { service } = yield* addWardenFixtures();
+      const invalid = yield* Effect.exit(
+        service.upsertConnection({
+          id: "github",
+          name: "GitHub",
+          config: {
+            transport: "http",
+            url: "https://mcp.example.test/github",
+            headers: { Authorization: { type: "warden", credentialRef: "not-a-urn" } },
+          },
+        }),
+      );
+      expect(invalid._tag).toBe("Failure");
+      const retained = yield* Effect.exit(
+        service.upsertConnection({
+          id: "github",
+          name: "GitHub",
+          config: {
+            transport: "http",
+            url: "https://mcp.example.test/github",
+            headers: { Authorization: { type: "retain-secret" } },
+          },
+        }),
+      );
+      expect(retained._tag).toBe("Failure");
+    }).pipe(Effect.provide(wardenLayer(grantingClient({ grants: [] })))),
+  );
+
+  it.effect("splices released material into http headers and stdio env", () =>
+    Effect.gen(function* () {
+      const releases: string[] = [];
+      const { service, instanceId, threadId } = yield* addWardenFixtures();
+      const resolution = yield* service.resolveTurnConnections({
+        providerInstanceId: instanceId,
+        threadId,
+      });
+      expect(resolution.failures).toEqual([]);
+      const [github, docs] = resolution.connections;
+      expect(github?.config.transport === "http" && github.config.headers).toEqual({
+        Authorization: `material:${REF_GH}`,
+        "X-Pulse": "enabled",
+      });
+      expect(docs?.config.transport === "stdio" && docs.config.env).toEqual({
+        DOCS_TOKEN: `material:${REF_DOCS}`,
+        DOCS_KEY: "stored-secret",
+      });
+      const persisted = yield* (yield* FileSystem.FileSystem).readFileString(
+        `${(yield* ServerConfig.ServerConfig).stateDir}/pulse-mcp.json`,
+      );
+      expect(persisted).not.toContain("material:");
+      expect(persisted).not.toContain("pat-secret");
+    }).pipe(
+      Effect.provide(
+        wardenLayer(
+          grantingClient({
+            grants: [
+              { id: "g1", scope: REF_GH, status: "active" },
+              { id: "g2", scope: REF_DOCS, status: "active" },
+            ],
+          }),
+        ),
+      ),
+    ),
+  );
+
+  it.effect("fails only the connection whose grant is missing", () =>
+    Effect.gen(function* () {
+      const { service, instanceId, threadId } = yield* addWardenFixtures();
+      const resolution = yield* service.resolveTurnConnections({
+        providerInstanceId: instanceId,
+        threadId,
+      });
+      expect(resolution.connections.map(({ id }) => id)).toEqual(["github"]);
+      expect(resolution.failures).toEqual([
+        {
+          connectionId: "local_docs",
+          name: "Local docs",
+          reason: "warden-grant-required",
+          message:
+            "Pulse Go has no active grant for this credential. Issue and accept a grant-only grant in Pulse Go, then retry.",
+        },
+      ]);
+    }).pipe(
+      Effect.provide(
+        wardenLayer(grantingClient({ grants: [{ id: "g1", scope: REF_GH, status: "active" }] })),
+      ),
+    ),
+  );
+
+  it.effect(
+    "reports warden-not-configured without calling Pulse Go when the PAT is missing",
+    () => {
+      const calls = { count: 0 };
+      return Effect.gen(function* () {
+        const { service, instanceId, threadId } = yield* addWardenFixtures();
+        yield* service.setWardenSettings({ origin: "https://go.example.test", pat: "" });
+        const resolution = yield* service.resolveTurnConnections({
+          providerInstanceId: instanceId,
+          threadId,
+        });
+        expect(resolution.connections).toEqual([]);
+        expect(resolution.failures.map(({ reason }) => reason)).toEqual([
+          "warden-not-configured",
+          "warden-not-configured",
+        ]);
+        expect(calls.count).toBe(0);
+      }).pipe(Effect.provide(wardenLayer(grantingClient({ grants: [] }), calls)));
+    },
+  );
+
+  it.effect("does not call Pulse Go when no selected connection uses Warden", () => {
+    const calls = { count: 0 };
+    return Effect.gen(function* () {
+      const service = yield* addFixtures();
+      const instanceId = ProviderInstanceId.make("codex_plain");
+      yield* service.setProviderDefault(instanceId, ["github"]);
+      const resolution = yield* service.resolveTurnConnections({
+        providerInstanceId: instanceId,
+        threadId: ThreadId.make("thread-plain"),
+      });
+      expect(resolution.failures).toEqual([]);
+      expect(calls.count).toBe(0);
+    }).pipe(Effect.provide(wardenLayer(grantingClient({ grants: [] }), calls)));
+  });
 });

@@ -1050,10 +1050,14 @@ let resolvedManagedMcpConnections: ReadonlyArray<typeof managedMcpConnection> = 
 ];
 const managedMcpRouting = makeProviderServiceLayer({
   resolveMcpConnections: (input) =>
-    Effect.succeed(input.connectionIds?.length === 0 ? [] : resolvedManagedMcpConnections),
+    Effect.succeed({
+      connections: input.connectionIds?.length === 0 ? [] : resolvedManagedMcpConnections,
+      failures: [],
+    }),
 });
 const managedMcpBrowserOffRouting = makeProviderServiceLayer({
-  resolveMcpConnections: () => Effect.succeed([managedMcpConnection]),
+  resolveMcpConnections: () =>
+    Effect.succeed({ connections: [managedMcpConnection], failures: [] }),
   serverSettingsLayer: ServerSettings.ServerSettingsService.layerTest({
     enableAgentBrowserAccess: false,
   }),
