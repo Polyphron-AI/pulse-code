@@ -88,7 +88,7 @@ export function PlanUsageMeter(props: {
         side="top"
         align="end"
         viewportClassName="p-0"
-        className="w-80 max-w-none text-left whitespace-normal"
+        className="w-96 max-w-none text-left whitespace-normal"
       >
         <div className="flex flex-col gap-2 p-[var(--floating-content-inset)]">
           <div className="flex items-center justify-between gap-3">
