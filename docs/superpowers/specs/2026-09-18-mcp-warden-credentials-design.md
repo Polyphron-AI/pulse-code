@@ -120,7 +120,9 @@ else in the service knows whether material is cached.
 Desktop wraps web. Mobile shows connection status only and does not edit
 Warden settings.
 
-- Settings > Integrations > MCP: a "Pulse Go Warden" card above the
+- The MCP settings page (the sibling `/settings/mcp` route chosen on 2026-09-18;
+  the MCP section under Integrations until that route lands): a "Pulse Go
+  Warden" card above the
   connections list for the selected environment. Origin field, PAT field
   (write-only; shows "Configured" with Replace and Clear once set), and a
   "Test connection" button that shows the principal name or the typed error.
@@ -135,14 +137,14 @@ Warden settings.
   reference, coloured by the worst grant state across its values.
 - Send pause for `warden-grant-required`: "Pulse Go has no active grant for
   this credential. Issue and accept a grant-only grant in Pulse Go, then
-  retry." Retry, Fix connection (opens MCP settings for the environment), and
+  retry." Retry, Fix connection (opens the MCP settings page for the environment), and
   Continue without it are unchanged.
 
 ## 4. Error handling
 
 | Condition                                                    | Reason                | Pause copy                                                                                                     |
 | ------------------------------------------------------------ | --------------------- | -------------------------------------------------------------------------------------------------------------- |
-| No origin or PAT                                             | warden-not-configured | Configure Pulse Go Warden in Settings > Integrations > MCP.                                                    |
+| No origin or PAT                                             | warden-not-configured | Configure Pulse Go Warden in Settings > MCP.                                                                   |
 | 401, expired or revoked PAT                                  | warden-unauthorized   | Pulse Go rejected the token for this environment. Replace it in Settings.                                      |
 | No active grant with matching scope                          | warden-grant-required | Pulse Go has no active grant for this credential. Issue and accept a grant-only grant in Pulse Go, then retry. |
 | 503 warden_unsupported, warden_unavailable, network, timeout | warden-unavailable    | Pulse Go Warden is unreachable. Retry.                                                                         |
