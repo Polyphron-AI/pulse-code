@@ -47,6 +47,7 @@ describe("ComposerDictation", () => {
           onStop={vi.fn()}
           onCancel={vi.fn()}
           parakeetConfigured={false}
+          shortcutLabel="Ctrl+Shift+Space"
         />,
       );
     });
@@ -68,6 +69,7 @@ describe("ComposerDictation", () => {
           onStop={onStop}
           onCancel={vi.fn()}
           parakeetConfigured
+          shortcutLabel="Ctrl+Shift+Space"
         />,
       );
     });
@@ -75,7 +77,7 @@ describe("ComposerDictation", () => {
     const recordingButton = container.querySelector(
       '[aria-label="Stop recording and transcribe"]',
     ) as HTMLButtonElement;
-    expect(recordingButton.textContent).toContain("Voice dictation");
+    expect(recordingButton.textContent).toContain("Recording");
     expect(recordingButton.getAttribute("aria-pressed")).toBe("true");
     expect(recordingButton.className).toContain("bg-[#c92f18]");
     expect(recordingButton.querySelectorAll(".pulse-dictation-wave > span")).toHaveLength(3);
@@ -97,6 +99,7 @@ describe("ComposerDictation", () => {
           onStop={vi.fn()}
           onCancel={vi.fn()}
           parakeetConfigured
+          shortcutLabel="Ctrl+Shift+Space"
         />,
       );
     });
@@ -104,5 +107,30 @@ describe("ComposerDictation", () => {
     expect(mic.textContent).not.toContain("Voice dictation");
     expect(mic.getAttribute("aria-pressed")).toBe("false");
     expect(mic.className).not.toContain("bg-[#c92f18]");
+    expect(container.textContent).toContain("Shortcut: Ctrl+Shift+Space.");
+    expect(container.textContent).toContain("Right-click to choose a microphone.");
+  });
+
+  it("shows processing text after recording stops", async () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+    await act(() => {
+      root!.render(
+        <ComposerDictation
+          state={{ phase: "transcribing", backend: "parakeet" }}
+          disabledReason={null}
+          onStart={vi.fn()}
+          onStop={vi.fn()}
+          onCancel={vi.fn()}
+          parakeetConfigured
+          shortcutLabel="Ctrl+Shift+Space"
+        />,
+      );
+    });
+    expect(container.textContent).toContain("Transcribing… Click to cancel");
+    expect(container.querySelector("button")?.getAttribute("aria-label")).toBe(
+      "Cancel transcribing",
+    );
   });
 });

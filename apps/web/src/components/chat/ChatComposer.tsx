@@ -5165,6 +5165,26 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     ? [activityStackItem, ...props.bannerItems]
     : props.bannerItems;
   useEffect(() => {
+    const handler = (event: globalThis.KeyboardEvent) => {
+      const command = resolveShortcutCommand(event, keybindings, {
+        context: {
+          terminalFocus: getTerminalFocusOwner() !== null,
+          terminalOpen,
+        },
+      });
+      if (command !== "composer.dictation") return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (dictation.state.phase === "recording") dictation.stop();
+      else if (dictation.state.phase === "preparing" || dictation.state.phase === "transcribing")
+        dictation.cancel();
+      else if (dictationDisabledReason === null) dictation.start();
+    };
+    window.addEventListener("keydown", handler, true);
+    return () => window.removeEventListener("keydown", handler, true);
+  }, [dictation, dictationDisabledReason, keybindings, terminalOpen]);
+
+  useEffect(() => {
     if (activeTasksProgress === null || activeTaskSteps === null) {
       setIsTasksDrawerOpen(false);
     }
@@ -6321,6 +6341,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   onStop={dictation.stop}
                   onCancel={dictation.cancel}
                   parakeetConfigured={dictation.parakeetConfigured}
+                  shortcutLabel={shortcutLabelForCommand(keybindings, "composer.dictation")}
                 />
               </div>
             )}

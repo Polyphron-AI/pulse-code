@@ -80,11 +80,24 @@ export function useComposerDictation(input: {
   const [gateError, setGateError] = useState<string | null>(null);
   const [warmingParakeet, setWarmingParakeet] = useState(false);
   const warmupAbortRef = useRef<AbortController | null>(null);
+  const parakeetWarmupRef = useRef<Promise<void> | null>(null);
   const parakeetConfigured = useSyncExternalStore(
     subscribeParakeetSetup,
     isParakeetConfigured,
     () => false,
   );
+  useLayoutEffect(() => {
+    if (!parakeetConfigured || isParakeetReady()) return;
+    const abort = new AbortController();
+    const warmup = setupParakeet(abort.signal);
+    parakeetWarmupRef.current = warmup;
+    void warmup
+      .catch(() => undefined)
+      .finally(() => {
+        if (parakeetWarmupRef.current === warmup) parakeetWarmupRef.current = null;
+      });
+    return () => abort.abort();
+  }, [parakeetConfigured]);
   const controller = useMemo(
     () =>
       new PulseDictationController<Blob>({
@@ -162,7 +175,7 @@ export function useComposerDictation(input: {
         warmupAbortRef.current = abort;
         setWarmingParakeet(true);
         try {
-          await setupParakeet(abort.signal);
+          await (parakeetWarmupRef.current ?? setupParakeet(abort.signal));
         } catch (error) {
           if (!abort.signal.aborted)
             setGateError(error instanceof Error ? error.message : "Parakeet could not start.");
