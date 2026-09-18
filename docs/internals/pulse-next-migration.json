@@ -1,16 +1,14 @@
 {
   "active": {
     "policyVersion": "2026-09-17",
-    "feature": "upstream-042-pulse-compatibility",
+    "feature": "installer-042-pulse-2-release",
     "state": "complete",
-    "branch": "sync/upstream-042",
-    "baseRevision": "5b89623eb4",
-    "implementationRevision": "849ef560a0",
-    "upstreamRelease": "v0.0.42",
-    "worktree": "C:/Users/qblaa/.t3/worktrees/Pulse Code/pulse-upstream-042",
+    "branch": "develop",
+    "baseRevision": "f0d0ea867e",
+    "implementationRevision": "691d8fdd8a",
     "completionBlockers": [],
-    "evidence": "upstream042Integration",
-    "nextAction": "Release published and verified. Await the next requested change.",
+    "evidence": "installer042Pulse2Release",
+    "nextAction": "Release 0.0.42-pulse.2 published and verified. Next feature: MCP Warden credentials, spec at docs/superpowers/specs/2026-09-18-mcp-warden-credentials-design.md, awaiting user spec review before writing-plans.",
     "updatedAt": "2026-09-18"
   },
   "schemaVersion": 1,
@@ -1115,5 +1113,30 @@
     "windowsPayload": "48 files, 18 sidecar natives validated",
     "releaseUrl": "https://github.com/Polyphron-AI/pulse-code/releases/tag/pulse-next-0.0.42-pulse.1",
     "publishedAssetVerified": "GitHub asset size and SHA-256 match the validated local installer; verification.json uploaded."
+  },
+  "installer042Pulse2Release": {
+    "version": "0.0.42-pulse.2",
+    "upstreamRevision": "719a76ca1dbf5490f1aa33ffb9966301e02be9a9",
+    "authorization": "User requested commit, push and deploy; approved folding fix/voice-dictation-ux into the build.",
+    "channel": "GitHub prerelease",
+    "signing": "unsigned",
+    "automaticUpdateFeed": "not configured",
+    "state": "published",
+    "sourceRevision": "691d8fdd8a",
+    "includes": [
+      "fix(web): make voice dictation easier to use",
+      "fix(web): widen plan usage popover and limit labels"
+    ],
+    "tag": "pulse-next-0.0.42-pulse.2",
+    "installer": "release/pulse-next-042-2/Pulse-Next-0.0.42-pulse.2-x64.exe",
+    "sha256": "fdd0d2d29a937def95303f1752e55acad527818f15e3e25771cd1d30d95aed03",
+    "bytes": 598735743,
+    "packagingTestsPassed": 89,
+    "voiceDictationTestsPassed": 9,
+    "webTypecheck": "passed",
+    "windowsPayload": "48 files, 18 sidecar natives validated",
+    "environmentNotes": "Packaging tests must run from PowerShell with ELECTRON_RUN_AS_NODE unset; Git Bash resolves GNU tar and the T3 Code host leaks ELECTRON_RUN_AS_NODE=1, both cause false failures.",
+    "releaseUrl": "https://github.com/Polyphron-AI/pulse-code/releases/tag/pulse-next-0.0.42-pulse.2",
+    "publishedAssetVerified": "Downloaded GitHub asset matches local installer size (598735743 bytes) and SHA-256; SHA256SUMS.txt and verification.json uploaded."
   }
 }
