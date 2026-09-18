@@ -1,14 +1,26 @@
 {
   "active": {
     "policyVersion": "2026-09-17",
-    "feature": "installer-042-pulse-2-release",
-    "state": "complete",
-    "branch": "develop",
-    "baseRevision": "f0d0ea867e",
-    "implementationRevision": "691d8fdd8a",
+    "feature": "mcp-warden-credentials",
+    "state": "in-progress",
+    "branch": "feat/mcp-warden-credentials",
+    "baseRevision": "380cec7098",
+    "implementationRevision": null,
+    "spec": "docs/superpowers/specs/2026-09-18-mcp-warden-credentials-design.md",
+    "plan": "docs/superpowers/plans/2026-09-18-mcp-warden-credentials.md",
+    "acceptance": [
+      "Grant matches only on exact scope and active status; pending and expired grants do not match",
+      "Releases for several refs run in parallel and land in the right header or env slot for http and stdio",
+      "Each spec error row yields the mapped reason on that connection only",
+      "Missing PAT yields warden-not-configured without a network call",
+      "Grant index cache expires after 30 seconds under the test clock",
+      "pulse.mcp.warden.set stores the PAT in the secret store, public settings never expose it, empty PAT removes it",
+      "Warden value round-trips through upsert, list, and public view",
+      "Latency: two Warden values add p50 under 400 ms and p95 under 1 s against a local Pulse Go, else swap to expiry-scoped caching"
+    ],
     "completionBlockers": [],
-    "evidence": "installer042Pulse2Release",
-    "nextAction": "Release 0.0.42-pulse.2 published and verified. Next feature: MCP Warden credentials, spec at docs/superpowers/specs/2026-09-18-mcp-warden-credentials-design.md, awaiting user spec review before writing-plans.",
+    "evidence": null,
+    "nextAction": "Execute plan Task 1 (contracts).",
     "updatedAt": "2026-09-18"
   },
   "schemaVersion": 1,
