@@ -1,6 +1,27 @@
 {
   "active": {
     "policyVersion": "2026-09-17",
+    "feature": "thread-skill-selection-status",
+    "state": "verified-awaiting-integration",
+    "branch": "qb/feat-skill-selection-status",
+    "baseRevision": "380cec7098",
+    "implementationRevision": "6c6811051f",
+    "acceptance": [
+      "Clicking an enabled provider-supplied skill in the thread Skills tab embeds its invocation mention into that thread's composer.",
+      "The selected row and Skills control report selection for the current message; clicking again or removing the mention clears it.",
+      "The mention survives draft reload, queued turns and draft-to-thread promotion through the existing composer text path.",
+      "Sending preserves the skill mention in thread history and uses the existing provider-specific invocation path.",
+      "Disabled or provider-controlled skills cannot be selected by the user.",
+      "Web and desktop share the behavior; compact web remains usable; native mobile is unchanged because it has no matching Skills tab.",
+      "The UI says available or selected, and does not claim provider activation without provider evidence."
+    ],
+    "completionBlockers": [],
+    "evidence": "88 focused tests passed with 1 existing skip; client-runtime and web typechecks passed with existing Effect suggestions; targeted lint had only existing ChatComposer warnings; Impeccable detector, prose lint, diff check and production web build passed. Browser verification was not authorized or run.",
+    "nextAction": "Choose the integration path for qb/feat-skill-selection-status. The verified implementation commit is 6c6811051f; the worktree is preserved.",
+    "updatedAt": "2026-09-19"
+  },
+  "mcpToggleReadiness": {
+    "policyVersion": "2026-09-17",
     "feature": "mcp-toggle-readiness",
     "state": "ready-for-installer",
     "branch": "develop",

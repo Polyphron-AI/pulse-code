@@ -6,9 +6,11 @@ import {
   formatProviderSkillDisplayName,
   getProviderSlashCommandsForSlashMenu,
   getProviderSkillsForSlashMenu,
+  hasProviderSkillMention,
   resolveProviderSkillsForCwd,
   resolveProviderSlashCommandsForCwd,
   resolveProviderSkillSourceKind,
+  toggleProviderSkillMention,
 } from "./providerSkills.ts";
 
 const provider = {
@@ -130,6 +132,43 @@ describe("getProviderSkillsForSlashMenu", () => {
     ];
 
     expect(getProviderSkillsForSlashMenu(skills, true)).toEqual([enabledSkill]);
+  });
+});
+
+describe("provider skill mentions", () => {
+  it("recognizes only a complete invocation token", () => {
+    expect(hasProviderSkillMention("$brainstorming plan this", "brainstorming")).toBe(true);
+    expect(hasProviderSkillMention("use $brainstorming", "brainstorming")).toBe(true);
+    expect(hasProviderSkillMention("use $brainstorming-more", "brainstorming")).toBe(false);
+    expect(hasProviderSkillMention("email$name", "name")).toBe(false);
+  });
+
+  it("inserts an invocation at the caret with stable word boundaries", () => {
+    expect(toggleProviderSkillMention("Plan this", "brainstorming", 4)).toEqual({
+      rangeStart: 4,
+      rangeEnd: 4,
+      replacement: " $brainstorming",
+    });
+    expect(toggleProviderSkillMention("Plan this", "brainstorming", 0)).toEqual({
+      rangeStart: 0,
+      rangeEnd: 0,
+      replacement: "$brainstorming ",
+    });
+  });
+
+  it("removes the selected invocation without collapsing line breaks", () => {
+    expect(
+      toggleProviderSkillMention("Plan with $brainstorming please", "brainstorming", 0),
+    ).toEqual({
+      rangeStart: 10,
+      rangeEnd: 25,
+      replacement: "",
+    });
+    expect(toggleProviderSkillMention("Plan\n$brainstorming\nplease", "brainstorming", 0)).toEqual({
+      rangeStart: 5,
+      rangeEnd: 19,
+      replacement: "",
+    });
   });
 });
 
