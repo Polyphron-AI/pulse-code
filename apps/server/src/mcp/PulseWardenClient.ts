@@ -1,3 +1,5 @@
+// @effect-diagnostics preferSchemaOverJson:off -- Pulse Go uses an untyped JSON-RPC boundary.
+
 import * as Effect from "effect/Effect";
 
 export type PulseWardenErrorKind =

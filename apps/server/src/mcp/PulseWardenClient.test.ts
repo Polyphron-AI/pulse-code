@@ -1,3 +1,5 @@
+// @effect-diagnostics nodeBuiltinImport:off -- The HTTP fixture owns a local Node server.
+
 import * as NodeHttp from "node:http";
 import type * as NodeNet from "node:net";
 import { describe, expect, it } from "@effect/vitest";

@@ -1,5 +1,8 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
+// @effect-diagnostics preferSchemaOverJson:off -- These assertions inspect redacted RPC values.
+
 import { ProjectId, ProviderInstanceId, PulseMcpWardenError, ThreadId } from "@t3tools/contracts";
+import * as Schema from "effect/Schema";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -243,7 +246,7 @@ describe("Pulse MCP Warden RPC", () => {
       expect(Exit.isFailure(missing)).toBe(true);
       const error = Exit.isFailure(missing) ? missing.cause.reasons[0] : undefined;
       expect(
-        error?._tag === "Fail" && error.error instanceof PulseMcpWardenError && error.error.kind,
+        error?._tag === "Fail" && Schema.is(PulseMcpWardenError)(error.error) && error.error.kind,
       ).toBe("not-configured");
       yield* unconfigured.wardenSet({ origin: "https://go.example.test", pat: "pat-secret" });
       const rejected = pulseMcpHandlers(service, undefined, undefined, {
@@ -256,7 +259,7 @@ describe("Pulse MCP Warden RPC", () => {
       const failure = Exit.isFailure(exit) ? exit.cause.reasons[0] : undefined;
       expect(
         failure?._tag === "Fail" &&
-          failure.error instanceof PulseMcpWardenError &&
+          Schema.is(PulseMcpWardenError)(failure.error) &&
           failure.error.kind,
       ).toBe("unauthorized");
       expect(JSON.stringify(exit)).not.toContain("pat-secret");
