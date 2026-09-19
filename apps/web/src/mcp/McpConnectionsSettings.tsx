@@ -251,6 +251,7 @@ function McpEnvironment({
             connections={connections}
             disabled={!canOperate}
             canCreate={canCreate}
+            wardenCredentials={wardenEnabled ? (wardenCredentials.data ?? []) : null}
             upsert={upsert}
             remove={remove}
           />
