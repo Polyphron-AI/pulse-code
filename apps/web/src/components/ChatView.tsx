@@ -9903,6 +9903,16 @@ export default function ChatView(props: ChatViewProps) {
                             keybindings={keybindings}
                             terminalOpen={Boolean(terminalUiState.terminalOpen)}
                             gitCwd={gitCwd}
+                            managedMcpCwd={
+                              activeThread &&
+                              (!isServerThread || activeThread.messages.length === 0) &&
+                              sendEnvMode === "worktree" &&
+                              !activeThread.worktreePath
+                                ? null
+                                : (activeThread?.worktreePath ??
+                                  activeProject?.workspaceRoot ??
+                                  null)
+                            }
                             pullRequestProjectId={
                               supportsPullRequests ? (activeProject?.id ?? null) : null
                             }

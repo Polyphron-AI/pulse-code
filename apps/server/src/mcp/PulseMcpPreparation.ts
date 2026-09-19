@@ -88,12 +88,16 @@ export const publicStatuses = (
       id: server.id,
       status: "unknown" as const,
     };
-    return status.status === "failed"
+    return status.status !== "ready"
       ? {
           connectionId: server.id,
           name: server.name,
           status: "failed" as const,
-          message: status.message ?? "The provider could not start this MCP server.",
+          message:
+            status.message ??
+            (status.status === "unknown"
+              ? "The provider has not confirmed MCP readiness. Retry or manage the connection."
+              : "The provider could not start this MCP server."),
         }
       : { connectionId: server.id, name: server.name, status: status.status };
   });

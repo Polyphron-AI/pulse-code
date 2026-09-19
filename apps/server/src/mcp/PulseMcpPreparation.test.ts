@@ -54,7 +54,14 @@ describe("PulseMcpPreparation", () => {
         [{ id: "a", name: "A", transport: "http", url: "https://mcp", headers: {} }],
         [],
       ),
-      [{ connectionId: "a", name: "A", status: "unknown" }],
+      [
+        {
+          connectionId: "a",
+          name: "A",
+          status: "failed",
+          message: "The provider has not confirmed MCP readiness. Retry or manage the connection.",
+        },
+      ],
     );
   });
 });

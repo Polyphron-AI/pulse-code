@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   resetProjectDefaults: vi.fn(),
   defaultRefresh: vi.fn(),
   projectRefresh: vi.fn(),
+  changeDraft: vi.fn(),
   queryError: null as "list" | "default" | null,
   result: null as ReturnType<typeof import("./useManagedMcpComposer").useManagedMcpComposer> | null,
 }));
@@ -60,6 +61,11 @@ vi.mock("../state/query", () => ({
                 id: "linear",
                 name: "Linear",
                 config: { transport: "stdio", command: "linear", args: [], env: {} },
+              },
+              {
+                id: "github",
+                name: "GitHub",
+                config: { transport: "stdio", command: "github", args: [], env: {} },
               },
             ]
           : { connectionIds: ["linear"] },
@@ -122,8 +128,23 @@ function Harness({
     threadId,
     identityKey,
     modelKey: "gpt-5",
+    providerSession:
+      threadId === null
+        ? null
+        : {
+            threadId,
+            provider: ProviderDriverKind.make(provider),
+            providerInstanceId: ProviderInstanceId.make(provider),
+            modelSelection: {
+              instanceId: ProviderInstanceId.make(provider),
+              model: "gpt-5",
+              options: [],
+            },
+            runtimeMode: "full-access",
+            cwd: "C:/repo",
+          },
     draftConnectionIds,
-    onDraftConnectionIdsChange: () => {},
+    onDraftConnectionIdsChange: mocks.changeDraft,
     onManage: () => {},
   });
   return null;
@@ -140,11 +161,406 @@ describe("useManagedMcpComposer", () => {
     mocks.resetProjectDefaults.mockReset().mockResolvedValue({ _tag: "Success", value: {} });
     mocks.defaultRefresh.mockReset();
     mocks.projectRefresh.mockReset();
+    mocks.changeDraft.mockReset();
     mocks.queryError = null;
   });
   afterEach(() => {
     renderer?.unmount();
     renderer = null;
+  });
+
+  it("keeps a toggled connection off while checking and commits it only when ready", async () => {
+    let finishPreparation!: (value: unknown) => void;
+    mocks.prepare.mockReturnValue(new Promise((resolve) => (finishPreparation = resolve)));
+    await act(async () => {
+      renderer = create(<Harness draftConnectionIds={[]} />);
+    });
+
+    await act(async () => {
+      mocks.result!.picker.onChange(["linear"]);
+      await Promise.resolve();
+    });
+
+    expect(mocks.result!.picker.selectedIds).toEqual([]);
+    expect(mocks.result!.picker.entries.find(({ id }) => id === "linear")?.statusMessage).toBe(
+      "Checking…",
+    );
+    expect(mocks.changeDraft).not.toHaveBeenCalled();
+    expect(mocks.prepare).toHaveBeenCalledWith({
+      environmentId: EnvironmentId.make("env-1"),
+      input: {
+        threadId: ThreadId.make("thread-1"),
+        providerSession: {
+          threadId: ThreadId.make("thread-1"),
+          provider: ProviderDriverKind.make("codex"),
+          providerInstanceId: ProviderInstanceId.make("codex"),
+          modelSelection: {
+            instanceId: ProviderInstanceId.make("codex"),
+            model: "gpt-5",
+            options: [],
+          },
+          runtimeMode: "full-access",
+          cwd: "C:/repo",
+        },
+        connectionIds: ["linear"],
+        projectId: ProjectId.make("project-1"),
+      },
+    });
+
+    await act(async () =>
+      finishPreparation({
+        _tag: "Success",
+        value: {
+          status: "ready",
+          preparationId: "toggle-ready",
+          selectedConnectionIds: ["linear"],
+          connections: [
+            { connectionId: "linear", name: "Linear", status: "ready", message: "Ready" },
+          ],
+        },
+      }),
+    );
+
+    expect(mocks.changeDraft).toHaveBeenCalledWith(["linear"]);
+  });
+
+  it("expires verified readiness before the server removes its idle preparation", async () => {
+    vi.useFakeTimers();
+    try {
+      mocks.prepare.mockResolvedValue({
+        _tag: "Success",
+        value: {
+          status: "ready",
+          preparationId: "ready",
+          selectedConnectionIds: ["linear"],
+          connections: [{ connectionId: "linear", name: "Linear", status: "ready" }],
+        },
+      });
+      await act(async () => {
+        renderer = create(<Harness draftConnectionIds={[]} />);
+      });
+      await act(async () => {
+        mocks.result!.picker.onChange(["linear"]);
+      });
+      await act(async () => {
+        renderer!.update(<Harness draftConnectionIds={["linear"]} />);
+      });
+      expect(mocks.result!.picker.entries[0]?.statusMessage).toBe("Active · Ready");
+      await act(async () => {
+        vi.advanceTimersByTime(5 * 60_000);
+      });
+      expect(mocks.result!.picker.entries[0]?.statusMessage).not.toBe("Active · Ready");
+      expect(mocks.result!.picker.retryConnectionIds).toContain("linear");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("invalidates verified readiness when send-time freshness fails", async () => {
+    mocks.prepare.mockResolvedValueOnce({
+      _tag: "Success",
+      value: {
+        status: "ready",
+        preparationId: "ready",
+        selectedConnectionIds: ["linear"],
+        connections: [{ connectionId: "linear", name: "Linear", status: "ready" }],
+      },
+    });
+    await act(async () => {
+      renderer = create(<Harness draftConnectionIds={[]} />);
+    });
+    await act(async () => {
+      mocks.result!.picker.onChange(["linear"]);
+    });
+    await act(async () => {
+      renderer!.update(<Harness draftConnectionIds={["linear"]} />);
+    });
+    expect(mocks.result!.picker.entries[0]?.statusMessage).toBe("Active · Ready");
+    mocks.prepare.mockResolvedValueOnce({
+      _tag: "Success",
+      value: {
+        status: "failed",
+        selectedConnectionIds: ["linear"],
+        connections: [
+          {
+            connectionId: "linear",
+            name: "Linear",
+            status: "failed",
+            message: "Authentication required",
+          },
+        ],
+      },
+    });
+    await act(async () => {
+      void mocks.result!.prepare({
+        threadId: ThreadId.make("thread-1"),
+        providerInstanceId: ProviderInstanceId.make("codex"),
+        runtimeMode: "full-access",
+        cwd: "C:/repo",
+      });
+    });
+    expect(mocks.result!.picker.entries[0]?.statusMessage).not.toBe("Active · Ready");
+    expect(mocks.result!.pause).not.toBeNull();
+  });
+
+  it("invalidates pending readiness on a project default reset", async () => {
+    let finish!: (value: unknown) => void;
+    mocks.prepare.mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    await act(async () => {
+      renderer = create(<Harness draftConnectionIds={[]} />);
+    });
+    await act(async () => {
+      mocks.result!.picker.onChange(["linear"]);
+    });
+    await act(async () => {
+      await mocks.result!.picker.onResetProjectDefaults!();
+    });
+    await act(async () => {
+      finish({
+        _tag: "Success",
+        value: {
+          status: "ready",
+          preparationId: "stale",
+          selectedConnectionIds: ["linear"],
+          connections: [{ connectionId: "linear", name: "Linear", status: "ready" }],
+        },
+      });
+    });
+    expect(mocks.changeDraft).not.toHaveBeenCalled();
+  });
+
+  it("keeps a failed toggle off and exposes its reason for Retry and Manage", async () => {
+    mocks.prepare.mockResolvedValue({
+      _tag: "Success",
+      value: {
+        status: "failed",
+        selectedConnectionIds: ["linear"],
+        connections: [
+          {
+            connectionId: "linear",
+            name: "Linear",
+            status: "failed",
+            message: "Authentication required",
+          },
+        ],
+      },
+    });
+    await act(async () => {
+      renderer = create(<Harness draftConnectionIds={[]} />);
+    });
+    await act(async () => {
+      mocks.result!.picker.onChange(["linear"]);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mocks.result!.picker.selectedIds).toEqual([]);
+    expect(mocks.changeDraft).not.toHaveBeenCalled();
+    expect(mocks.result!.picker.entries.find(({ id }) => id === "linear")?.statusMessage).toBe(
+      "Authentication required",
+    );
+    expect(mocks.result!.picker.retryConnectionIds).toContain("linear");
+
+    mocks.prepare.mockResolvedValueOnce({
+      _tag: "Success",
+      value: {
+        status: "ready",
+        preparationId: "retried-toggle",
+        selectedConnectionIds: ["linear"],
+        connections: [{ connectionId: "linear", name: "Linear", status: "ready" }],
+      },
+    });
+    await act(async () => {
+      mocks.result!.picker.onRetryConnection("linear");
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(mocks.prepare.mock.calls[1]?.[0].input.retry).toBe(true);
+    expect(mocks.changeDraft).toHaveBeenCalledWith(["linear"]);
+  });
+
+  it("invalidates every requested ready label when one connection fails", async () => {
+    let finishPreparation!: (value: unknown) => void;
+    mocks.prepare.mockReturnValue(new Promise((resolve) => (finishPreparation = resolve)));
+    await act(async () => {
+      renderer = create(<Harness draftConnectionIds={["github"]} />);
+    });
+    await act(async () => {
+      mocks.result!.picker.onChange(["github", "linear"]);
+      await Promise.resolve();
+    });
+    expect(
+      mocks
+        .result!.picker.entries.filter(({ id }) => id === "github" || id === "linear")
+        .map(({ statusMessage }) => statusMessage),
+    ).toEqual(["Checking…", "Checking…"]);
+
+    await act(async () =>
+      finishPreparation({
+        _tag: "Success",
+        value: {
+          status: "failed",
+          selectedConnectionIds: ["github", "linear"],
+          connections: [
+            { connectionId: "github", name: "GitHub", status: "ready" },
+            { connectionId: "linear", name: "Linear", status: "failed", message: "Sign in" },
+          ],
+        },
+      }),
+    );
+    expect(mocks.changeDraft).not.toHaveBeenCalled();
+    expect(mocks.result!.picker.entries.find(({ id }) => id === "github")?.statusMessage).toContain(
+      "not retained",
+    );
+  });
+
+  it("clears a ready label when the composer context changes", async () => {
+    mocks.prepare.mockResolvedValue({
+      _tag: "Success",
+      value: {
+        status: "ready",
+        preparationId: "ready-before-context-change",
+        selectedConnectionIds: ["linear"],
+        connections: [{ connectionId: "linear", name: "Linear", status: "ready" }],
+      },
+    });
+    await act(async () => {
+      renderer = create(<Harness draftConnectionIds={[]} />);
+    });
+    await act(async () => {
+      mocks.result!.picker.onChange(["linear"]);
+      await Promise.resolve();
+      await Promise.resolve();
+      renderer!.update(<Harness draftConnectionIds={["linear"]} />);
+    });
+    expect(mocks.result!.picker.entries.find(({ id }) => id === "linear")?.statusMessage).toBe(
+      "Active · Ready",
+    );
+
+    await act(async () => {
+      renderer!.update(<Harness draftConnectionIds={["linear"]} identityKey="thread:other" />);
+      await Promise.resolve();
+    });
+    expect(mocks.result!.picker.entries.find(({ id }) => id === "linear")?.statusMessage).toBe(
+      undefined,
+    );
+  });
+
+  it("removes a toggled-off connection before provider reconciliation completes", async () => {
+    let finishPreparation!: (value: unknown) => void;
+    mocks.prepare.mockReturnValue(new Promise((resolve) => (finishPreparation = resolve)));
+    await act(async () => {
+      renderer = create(<Harness />);
+    });
+
+    await act(async () => {
+      mocks.result!.picker.onChange([]);
+      await Promise.resolve();
+    });
+
+    expect(mocks.changeDraft).toHaveBeenCalledWith([]);
+    expect(mocks.result!.picker.entries.find(({ id }) => id === "linear")?.statusMessage).toBe(
+      "Checking…",
+    );
+    expect(mocks.prepare.mock.calls[0]?.[0].input.connectionIds).toEqual([]);
+
+    await act(async () =>
+      finishPreparation({
+        _tag: "Success",
+        value: {
+          status: "ready",
+          preparationId: "removed",
+          selectedConnectionIds: [],
+          connections: [],
+        },
+      }),
+    );
+    expect(mocks.changeDraft).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries failed off reconciliation without selecting the connection again", async () => {
+    mocks.prepare
+      .mockResolvedValueOnce({
+        _tag: "Success",
+        value: {
+          status: "failed",
+          selectedConnectionIds: [],
+          connections: [
+            { connectionId: "linear", name: "Linear", status: "failed", message: "Timed out" },
+          ],
+        },
+      })
+      .mockResolvedValueOnce({
+        _tag: "Success",
+        value: {
+          status: "ready",
+          preparationId: "removed-after-retry",
+          selectedConnectionIds: [],
+          connections: [],
+        },
+      });
+    await act(async () => {
+      renderer = create(<Harness />);
+    });
+    await act(async () => {
+      mocks.result!.picker.onChange([]);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      mocks.result!.picker.onRetryConnection("linear");
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mocks.prepare.mock.calls.map((call) => call[0].input.connectionIds)).toEqual([[], []]);
+    expect(mocks.prepare.mock.calls[1]?.[0].input.retry).toBe(true);
+    expect(mocks.changeDraft.mock.calls).toEqual([[[]], [[]]]);
+  });
+
+  it("ignores a late toggle result after unmount", async () => {
+    let finishPreparation!: (value: unknown) => void;
+    mocks.prepare.mockReturnValue(new Promise((resolve) => (finishPreparation = resolve)));
+    await act(async () => {
+      renderer = create(<Harness draftConnectionIds={[]} />);
+    });
+    await act(async () => {
+      mocks.result!.picker.onChange(["linear"]);
+      await Promise.resolve();
+      renderer!.unmount();
+      renderer = null;
+    });
+    await act(async () =>
+      finishPreparation({
+        _tag: "Success",
+        value: {
+          status: "ready",
+          preparationId: "late",
+          selectedConnectionIds: ["linear"],
+          connections: [{ connectionId: "linear", name: "Linear", status: "ready" }],
+        },
+      }),
+    );
+    expect(mocks.changeDraft).not.toHaveBeenCalled();
+  });
+
+  it("removes a connection without a provider session and reports pending reconciliation", async () => {
+    await act(async () => {
+      renderer = create(<Harness threadId={null} />);
+    });
+    await act(async () => {
+      mocks.result!.picker.onChange([]);
+      await Promise.resolve();
+    });
+    expect(mocks.changeDraft).toHaveBeenCalledWith([]);
+    expect(mocks.prepare).not.toHaveBeenCalled();
+    expect(mocks.result!.picker.entries.find(({ id }) => id === "linear")?.statusMessage).toBe(
+      "Off · Pending reconciliation",
+    );
   });
 
   it.each(["codex", "claudeAgent", "opencode"] as const)(
@@ -584,7 +1000,15 @@ describe("useManagedMcpComposer", () => {
     });
     mocks.prepare.mockImplementation(async () => {
       order.push("prepare");
-      return { _tag: "Success", value: { status: "ready", preparationId: "prepared" } };
+      return {
+        _tag: "Success",
+        value: {
+          status: "ready",
+          preparationId: "prepared",
+          selectedConnectionIds: ["linear"],
+          connections: [{ connectionId: "linear", name: "Linear", status: "ready" }],
+        },
+      };
     });
     await act(async () => {
       renderer = create(<Harness threadId={null} identityKey="draft:local" />);
@@ -637,7 +1061,12 @@ describe("useManagedMcpComposer", () => {
       .mockResolvedValueOnce({ _tag: "Success", value: {} });
     mocks.prepare.mockResolvedValue({
       _tag: "Success",
-      value: { status: "ready", preparationId: "retried" },
+      value: {
+        status: "ready",
+        preparationId: "retried",
+        selectedConnectionIds: ["linear"],
+        connections: [{ connectionId: "linear", name: "Linear", status: "ready" }],
+      },
     });
     await act(async () => {
       renderer = create(<Harness threadId={null} identityKey="draft:local" />);

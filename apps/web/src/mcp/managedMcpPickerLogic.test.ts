@@ -34,6 +34,7 @@ describe("managed MCP picker logic", () => {
 
   it("uses honest labels for known, unknown, and failed states", () => {
     expect(managedMcpStatusLabel(entries[0]!)).toBe("Available");
+    expect(managedMcpStatusLabel({ ...entries[0]!, status: "checking" })).toBe("Checking…");
     expect(managedMcpStatusLabel({ ...entries[0]!, status: "unknown" })).toBe("Status unknown");
     expect(managedMcpStatusLabel({ ...entries[0]!, status: "error" })).toBe("Connection error");
     expect(managedMcpStatusLabel({ ...entries[0]!, statusMessage: "Token expired" })).toBe(

@@ -37,6 +37,8 @@ export interface ManagedMcpPickerProps {
   readonly loading?: boolean;
   readonly error?: string | null;
   readonly onChange: (connectionIds: ReadonlyArray<string>) => void;
+  readonly retryConnectionIds?: ReadonlyArray<string>;
+  readonly onRetryConnection?: (connectionId: string) => void;
   readonly onUseDefaults: () => void;
   readonly onSaveGlobalDefaults?: () => void;
   readonly onSaveProjectDefaults?: () => void;
@@ -128,17 +130,29 @@ export function ManagedMcpPicker(props: ManagedMcpPickerProps) {
             <MenuGroup>
               <MenuGroupLabel>Pulse-managed</MenuGroupLabel>
               {pulseEntries.map((entry) => (
-                <MenuCheckboxItem
-                  key={entry.id}
-                  variant="switch"
-                  checked={props.selectedIds.includes(entry.id)}
-                  disabled={props.selectionDisabled}
-                  onCheckedChange={() =>
-                    props.onChange(toggleManagedMcpSelection(props.selectedIds, entry.id))
-                  }
-                >
-                  <EntryText entry={entry} />
-                </MenuCheckboxItem>
+                <div key={entry.id}>
+                  <MenuCheckboxItem
+                    variant="switch"
+                    checked={props.selectedIds.includes(entry.id)}
+                    disabled={props.selectionDisabled || entry.status === "checking"}
+                    onCheckedChange={() =>
+                      props.onChange(toggleManagedMcpSelection(props.selectedIds, entry.id))
+                    }
+                  >
+                    <EntryText entry={entry} />
+                  </MenuCheckboxItem>
+                  {props.retryConnectionIds?.includes(entry.id) ? (
+                    <MenuItem
+                      closeOnClick={false}
+                      disabled={props.selectionDisabled}
+                      aria-label={`Retry ${entry.name}`}
+                      className="ml-8 rounded-sm px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+                      onClick={() => props.onRetryConnection?.(entry.id)}
+                    >
+                      Retry
+                    </MenuItem>
+                  ) : null}
+                </div>
               ))}
               {pulseEntries.length === 0 ? (
                 <p className="px-2 py-2 text-sm text-muted-foreground">
@@ -179,13 +193,19 @@ export function ManagedMcpPicker(props: ManagedMcpPickerProps) {
           </p>
         )}
         {props.onSaveProjectDefaults ? (
-          <MenuItem onClick={props.onSaveProjectDefaults}>Save as project defaults</MenuItem>
+          <MenuItem disabled={props.selectionDisabled} onClick={props.onSaveProjectDefaults}>
+            Save as project defaults
+          </MenuItem>
         ) : null}
         {props.onResetProjectDefaults ? (
-          <MenuItem onClick={props.onResetProjectDefaults}>Reset project defaults</MenuItem>
+          <MenuItem disabled={props.selectionDisabled} onClick={props.onResetProjectDefaults}>
+            Reset project defaults
+          </MenuItem>
         ) : null}
         {props.onSaveGlobalDefaults ? (
-          <MenuItem onClick={props.onSaveGlobalDefaults}>Save as global defaults</MenuItem>
+          <MenuItem disabled={props.selectionDisabled} onClick={props.onSaveGlobalDefaults}>
+            Save as global defaults
+          </MenuItem>
         ) : null}
         <MenuItem onClick={props.onManage}>
           <SettingsIcon />

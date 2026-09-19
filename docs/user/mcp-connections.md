@@ -14,15 +14,29 @@ MCP and Skills stay visible in the chat controls even when nothing has been adde
 Open their management actions to add entries. A visible control does not mean the
 selected provider supports using managed entries; the menu explains any limitation.
 Provider-supplied entries are shown separately from Pulse-managed entries. A
-configured entry is not proof of a live connection, and a connected server is not
+configured entry is not proof of a live connection, and a ready connection is not
 proof that the model has called one of its tools.
 
-Use MCP beside Skills in the composer. The count means selected connections, not
-available tools. Search by name and select the connections needed for the next
-turn. Use defaults restores the provider-instance default selection. Selecting
-none is an explicit override, not a request to restore defaults. Save as provider
-defaults saves the current selection for that provider instance; it does not
-remove the current thread's override.
+Use MCP beside Skills in the composer. Search by name and switch on the
+connections needed for the next turn. A connection shows **Checking…** while the
+provider initializes or reloads it, checks authentication, and confirms its tools
+are registered. The switch stays on only after every selected connection is ready,
+then shows **Active · Ready**. Pulse never calls an MCP tool as part of this check.
+
+The count means selected connections. Saved defaults and expired readiness checks
+still need provider confirmation. Readiness labels expire before an idle prepared
+session can be removed; Retry checks the connection again.
+
+If the provider cannot confirm readiness, the switch stays off and the picker
+shows the reason. Retry runs the check again; Manage MCPs opens the saved
+configuration. Switching a connection off removes it from the next prepared
+selection immediately. The provider session is not treated as reconciled until
+the follow-up preparation finishes.
+
+Use defaults restores the provider-instance default selection. Selecting none is
+an explicit override, not a request to restore defaults. Save as provider defaults
+saves the current selection for that provider instance; it does not remove the
+current thread's override.
 
 Pulse-managed connections are separate from the provider's native connections.
 Pulse does not overwrite the provider's global configuration. If native discovery
@@ -51,8 +65,9 @@ Pulse-managed copy for a Claude Code or locally managed OpenCode conversation.
 
 ## Before sending
 
-Pulse prepares selected connections before sending the prompt. If a connection
-fails, the draft stays in the composer. Retry tries preparation again. Manage
+Pulse prepares selected connections again before sending the prompt to check
+their current readiness. If a connection fails, the draft
+stays in the composer. Retry tries preparation again. Manage
 connections opens the saved configuration. Continue without it excludes the failed
 connections for this turn only, leaving your saved selection unchanged.
 
@@ -65,13 +80,13 @@ This integration is in development. Codex, Claude Code, and locally managed
 OpenCode sessions support managed connection preparation. OpenCode sessions that
 use a shared external server cannot use Pulse-managed connections because changing
 that server would affect other threads. Their native MCP connections remain
-unchanged. An unknown connection state is not proof that
-tools are available, and selection is not proof that the model used a tool.
+unchanged. An unknown connection state is not proof that tools are available, and
+readiness is not proof that the model used a tool.
 
 The new picker targets desktop and web, including mobile web. Released native
-mobile clients do not gain a new picker from a server update. When creating a new
-worktree, deselect managed connections for the first turn, then select them once
-its workspace exists.
+mobile clients do not gain a new picker from a server update. A new worktree needs
+to exist before the picker can check connections in that workspace. Existing
+selections are checked before the first turn runs in the created worktree.
 Packaged-app and real-provider acceptance are still required before release.
 
 Older clients use the server's saved selection. The server checks connections
