@@ -1401,6 +1401,7 @@ export interface ChatComposerProps {
   keybindings: ResolvedKeybindingsConfig;
   terminalOpen: boolean;
   gitCwd: string | null;
+  managedMcpCwd?: string | null;
   pullRequestProjectId: ProjectId | null;
   pullRequestRepository: string | null;
   restingControlsHost: HTMLDivElement | null;
@@ -1521,6 +1522,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     keybindings,
     terminalOpen,
     gitCwd,
+    managedMcpCwd,
     pullRequestProjectId,
     pullRequestRepository,
     restingControlsHost,
@@ -1914,20 +1916,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     provider: selectedProvider,
     selected: composerPulseSkills,
   });
-  const managedMcp = useManagedMcpComposer({
-    environmentId,
-    provider: selectedProvider,
-    providerInstanceId: selectedInstanceId,
-    projectId: props.activeProjectId,
-    threadId: activeThreadId,
-    identityKey: composerTargetKey(composerDraftTarget),
-    modelKey: JSON.stringify(composerDraft.modelSelectionByProvider[selectedInstanceId] ?? null),
-    draftConnectionIds: composerPulseMcpConnectionIds,
-    onDraftConnectionIdsChange: (connectionIds) =>
-      setComposerDraftPulseMcpConnectionIds(composerDraftTarget, connectionIds),
-    onManage: props.onManageMcpConnections ?? (() => {}),
-  });
-
   const { modelOptions: composerModelOptions, selectedModel } = useEffectiveComposerModelState({
     threadRef: composerDraftTarget,
     providers: providerStatuses,
@@ -2047,6 +2035,31 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     () => createModelSelection(selectedInstanceId, selectedModel, selectedModelOptionsForDispatch),
     [selectedInstanceId, selectedModel, selectedModelOptionsForDispatch],
   );
+  const resolvedManagedMcpCwd = managedMcpCwd === undefined ? gitCwd : managedMcpCwd;
+  const managedMcp = useManagedMcpComposer({
+    environmentId,
+    provider: selectedProvider,
+    providerInstanceId: selectedInstanceId,
+    projectId: props.activeProjectId,
+    threadId: activeThreadId,
+    identityKey: composerTargetKey(composerDraftTarget),
+    modelKey: JSON.stringify(selectedModelSelection),
+    providerSession:
+      activeThreadId && resolvedManagedMcpCwd
+        ? {
+            threadId: activeThreadId,
+            provider: selectedProvider,
+            providerInstanceId: selectedInstanceId,
+            modelSelection: selectedModelSelection,
+            runtimeMode,
+            cwd: resolvedManagedMcpCwd,
+          }
+        : null,
+    draftConnectionIds: composerPulseMcpConnectionIds,
+    onDraftConnectionIdsChange: (connectionIds) =>
+      setComposerDraftPulseMcpConnectionIds(composerDraftTarget, connectionIds),
+    onManage: props.onManageMcpConnections ?? (() => {}),
+  });
   const selectedModelForPicker = selectedModel;
   // Instance-keyed option list so the picker can show each configured
   // instance (built-in + custom) as a first-class sidebar entry. The

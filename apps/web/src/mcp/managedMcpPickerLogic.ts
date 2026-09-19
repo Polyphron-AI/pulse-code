@@ -1,5 +1,6 @@
 export type ManagedMcpStatus =
   | "available"
+  | "checking"
   | "error"
   | "sign-in-required"
   | "unknown"
@@ -43,6 +44,8 @@ export function managedMcpStatusLabel(entry: ManagedMcpEntry): string {
   switch (entry.status) {
     case "available":
       return "Available";
+    case "checking":
+      return "Checking…";
     case "error":
       return "Connection error";
     case "sign-in-required":
