@@ -971,8 +971,10 @@ import {
   formatProviderSkillDisplayName,
   getProviderSlashCommandsForSlashMenu,
   getProviderSkillsForSlashMenu,
+  hasProviderSkillMention,
   resolveProviderSkillsForCwd,
   resolveProviderSlashCommandsForCwd,
+  toggleProviderSkillMention,
 } from "@t3tools/client-runtime/providerSkills";
 import { searchProviderSkills } from "../../providerSkillSearch";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
@@ -1946,9 +1948,11 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     [selectedProviderEntry],
   );
   const compactCommandAvailable = providerSupportsManualCompaction(selectedProviderEntry);
-  const selectedProviderSkills = selectedProviderStatus
-    ? resolveProviderSkillsForCwd(selectedProviderStatus, gitCwd)
-    : [];
+  const selectedProviderSkills = useMemo(
+    () =>
+      selectedProviderStatus ? resolveProviderSkillsForCwd(selectedProviderStatus, gitCwd) : [],
+    [gitCwd, selectedProviderStatus],
+  );
   const selectedProviderSlashCommands = selectedProviderStatus
     ? resolveProviderSlashCommandsForCwd(selectedProviderStatus, gitCwd)
     : [];
@@ -3733,6 +3737,17 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     ],
   );
 
+  const onToggleProviderSkill = useCallback(
+    (skill: ServerProvider["skills"][number]) => {
+      const snapshot = readComposerSnapshot();
+      const edit = toggleProviderSkillMention(snapshot.value, skill.name, snapshot.expandedCursor);
+      applyPromptReplacement(edit.rangeStart, edit.rangeEnd, edit.replacement, {
+        expectedText: snapshot.value.slice(edit.rangeStart, edit.rangeEnd),
+      });
+    },
+    [applyPromptReplacement, readComposerSnapshot],
+  );
+
   const onComposerMenuItemHighlighted = useCallback(
     (itemId: string | null) => {
       setComposerHighlightedItemId(itemId);
@@ -4928,10 +4943,17 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     size: "xs",
     hidden: composerControlsHidden || restingHiddenBlockCount > 1,
   });
+  const selectedNativeSkillNames = new Set(
+    selectedProviderSkills
+      .filter((skill) => hasProviderSkillMention(prompt, skill.name))
+      .map((skill) => skill.name),
+  );
   const managedSkillPicker = (
     <ManagedSkillPicker
       state={managedSkillPickerState}
       nativeSkills={selectedProviderSkills}
+      selectedNativeSkillNames={selectedNativeSkillNames}
+      onNativeSkillToggle={onToggleProviderSkill}
       onChange={(pulseSkills) => setComposerDraftPulseSkills(composerDraftTarget, pulseSkills)}
     />
   );
@@ -4939,6 +4961,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     <ManagedSkillPicker
       state={managedSkillPickerState}
       nativeSkills={selectedProviderSkills}
+      selectedNativeSkillNames={selectedNativeSkillNames}
+      onNativeSkillToggle={onToggleProviderSkill}
       size="xs"
       onChange={(pulseSkills) => setComposerDraftPulseSkills(composerDraftTarget, pulseSkills)}
     />

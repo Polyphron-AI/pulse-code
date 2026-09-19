@@ -31,7 +31,10 @@ import { useEnvironmentQuery } from "../state/query";
 import { useEnvironmentSessionState } from "../state/session";
 import { serverEnvironment } from "../state/server";
 import { groupManagedSkills, shortRevision } from "./managedSkills";
-import { formatProviderSkillDisplayName } from "@t3tools/client-runtime/providerSkills";
+import {
+  formatProviderSkillDisplayName,
+  isProviderSkillUserInvocable,
+} from "@t3tools/client-runtime/providerSkills";
 import {
   MAX_MANAGED_SKILL_SELECTIONS,
   managedSkillsBlockedReason,
@@ -118,6 +121,8 @@ export function ManagedSkillPicker(props: {
   readonly size?: "sm" | "xs";
   readonly hidden?: boolean;
   readonly nativeSkills?: ReadonlyArray<ServerProviderSkill>;
+  readonly selectedNativeSkillNames?: ReadonlySet<string>;
+  readonly onNativeSkillToggle?: (skill: ServerProviderSkill) => void;
   readonly onChange: (skills: ReadonlyArray<PulseSkillSelection>) => void;
 }) {
   const groups = useMemo(() => groupManagedSkills(props.state.skills), [props.state.skills]);
@@ -125,8 +130,16 @@ export function ManagedSkillPicker(props: {
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   const size = props.size ?? "sm";
-  const selectedCount = props.state.selected.length;
+  const selectedNativeCount = props.selectedNativeSkillNames?.size ?? 0;
+  const selectedCount = props.state.selected.length + selectedNativeCount;
   const normalizedQuery = query.trim().toLowerCase();
+  const filteredNativeSkills = (props.nativeSkills ?? []).filter(
+    (skill) =>
+      normalizedQuery.length === 0 ||
+      `${skill.name} ${skill.displayName ?? ""} ${skill.description ?? ""}`
+        .toLowerCase()
+        .includes(normalizedQuery),
+  );
   const filteredGroups = groups.flatMap((group) => {
     const skills = group.skills.filter(
       (skill) =>
@@ -184,19 +197,36 @@ export function ManagedSkillPicker(props: {
         {(props.nativeSkills?.length ?? 0) > 0 ? (
           <div className="mb-1 border-b border-border/50 pb-1">
             <p className="px-2 py-1 text-xs font-medium text-muted-foreground">Provider-supplied</p>
-            {props.nativeSkills!.map((skill) => (
-              <div key={`${skill.path}:${skill.name}`} className="px-2 py-1 text-sm">
-                <span className="block truncate">{formatProviderSkillDisplayName(skill)}</span>
-                <span className="block truncate text-xs text-muted-foreground">
-                  {skill.enabled
-                    ? `Available to ${props.state.providerLabel}`
-                    : "Disabled in provider settings"}
-                  {skill.userInvocable === false
-                    ? "; provider-controlled"
-                    : `; invoke with $${skill.name}`}
-                </span>
+            {filteredNativeSkills.map((skill) => {
+              const selected = props.selectedNativeSkillNames?.has(skill.name) ?? false;
+              const userInvocable = isProviderSkillUserInvocable(skill);
+              return (
+                <MenuCheckboxItem
+                  key={`${skill.path}:${skill.name}`}
+                  checked={selected}
+                  disabled={!userInvocable || !props.onNativeSkillToggle}
+                  onCheckedChange={() => props.onNativeSkillToggle?.(skill)}
+                >
+                  <span className="flex min-w-0 flex-col">
+                    <span className="truncate">{formatProviderSkillDisplayName(skill)}</span>
+                    <span className="truncate text-xs text-muted-foreground">
+                      {selected
+                        ? "Selected for this message"
+                        : !skill.enabled
+                          ? "Disabled in provider settings"
+                          : skill.userInvocable === false
+                            ? "Available to the provider; provider-controlled"
+                            : `Available to ${props.state.providerLabel}; click to invoke $${skill.name}`}
+                    </span>
+                  </span>
+                </MenuCheckboxItem>
+              );
+            })}
+            {filteredNativeSkills.length === 0 && normalizedQuery ? (
+              <div className="px-2 py-2 text-sm text-muted-foreground">
+                No matching provider skills.
               </div>
-            ))}
+            ) : null}
           </div>
         ) : null}
         {props.state.loading ? (
