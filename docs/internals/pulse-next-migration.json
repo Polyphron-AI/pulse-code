@@ -2,10 +2,10 @@
   "active": {
     "policyVersion": "2026-09-17",
     "feature": "thread-skill-selection-status",
-    "state": "implementing",
+    "state": "verified-awaiting-integration",
     "branch": "qb/feat-skill-selection-status",
     "baseRevision": "380cec7098",
-    "implementationRevision": null,
+    "implementationRevision": "6c6811051f",
     "acceptance": [
       "Clicking an enabled provider-supplied skill in the thread Skills tab embeds its invocation mention into that thread's composer.",
       "The selected row and Skills control report selection for the current message; clicking again or removing the mention clears it.",
@@ -16,8 +16,8 @@
       "The UI says available or selected, and does not claim provider activation without provider evidence."
     ],
     "completionBlockers": [],
-    "evidence": null,
-    "nextAction": "Implement and test provider-supplied click-to-embed in the thread Skills tab, then run scoped web verification.",
+    "evidence": "88 focused tests passed with 1 existing skip; client-runtime and web typechecks passed with existing Effect suggestions; targeted lint had only existing ChatComposer warnings; Impeccable detector, prose lint, diff check and production web build passed. Browser verification was not authorized or run.",
+    "nextAction": "Choose the integration path for qb/feat-skill-selection-status. The verified implementation commit is 6c6811051f; the worktree is preserved.",
     "updatedAt": "2026-09-19"
   },
   "schemaVersion": 1,
