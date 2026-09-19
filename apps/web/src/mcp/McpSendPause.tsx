@@ -1,3 +1,5 @@
+import type { PulseMcpWardenFailureReason } from "@t3tools/contracts";
+
 import { Button } from "../components/ui/button";
 import {
   AlertDialog,
@@ -13,6 +15,7 @@ export interface FailedMcpConnection {
   readonly connectionId: string;
   readonly name: string;
   readonly message: string;
+  readonly reason?: PulseMcpWardenFailureReason;
 }
 
 interface McpSendPauseActions {
@@ -40,7 +43,14 @@ export function McpSendPauseContent(props: McpSendPauseActions) {
         <ul className="space-y-2 pt-2 text-left text-sm">
           {props.failed.map((connection) => (
             <li key={connection.connectionId} className="rounded-md bg-muted/55 px-3 py-2">
-              <div className="font-medium text-foreground">{connection.name}</div>
+              <div className="flex items-center gap-2 font-medium text-foreground">
+                {connection.name}
+                {connection.reason?.startsWith("warden-") ? (
+                  <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-normal text-muted-foreground">
+                    Pulse Go Warden
+                  </span>
+                ) : null}
+              </div>
               <div className="text-muted-foreground">{connection.message}</div>
             </li>
           ))}
