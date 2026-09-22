@@ -2,6 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
   connectionInputFromDraft,
+  connectionWardenRefs,
   draftFromConnection,
   emptyConnectionDraft,
   validateConnectionDraft,
@@ -68,6 +69,7 @@ describe("MCP connection form", () => {
           key: "MODE",
           kind: "literal" as const,
           value: "safe",
+          credentialRef: "",
           configuredSecret: false,
           replaceSecret: false,
         },
@@ -112,6 +114,7 @@ describe("MCP connection form", () => {
           key: "Authorization",
           kind: "secret" as const,
           value: "",
+          credentialRef: "",
           configuredSecret: true,
           replaceSecret: true,
         },
@@ -119,6 +122,7 @@ describe("MCP connection form", () => {
           key: "Authorization",
           kind: "literal" as const,
           value: "x",
+          credentialRef: "",
           configuredSecret: false,
           replaceSecret: false,
         },
@@ -128,5 +132,54 @@ describe("MCP connection form", () => {
     expect(validateConnectionDraft({ ...draft, values: [draft.values[0]!] })).toBe(
       "Enter a value for each new or replacement secret.",
     );
+  });
+
+  it("round-trips a warden value by credential URN", () => {
+    const connection = {
+      id: "github",
+      name: "GitHub",
+      config: {
+        transport: "http" as const,
+        url: "https://example.com/mcp",
+        headers: {
+          Authorization: { type: "warden" as const, credentialRef: "urn:pulse:acme:credential:gh" },
+        },
+      },
+    };
+    const draft = draftFromConnection(connection);
+    expect(draft.values[0]).toMatchObject({
+      key: "Authorization",
+      kind: "warden",
+      credentialRef: "urn:pulse:acme:credential:gh",
+      value: "",
+    });
+    expect(connectionInputFromDraft(draft).config).toEqual(connection.config);
+    expect(connectionWardenRefs(connection)).toEqual(["urn:pulse:acme:credential:gh"]);
+  });
+
+  it("requires a credential for warden rows", () => {
+    const draft = {
+      ...emptyConnectionDraft(),
+      id: "github",
+      name: "GitHub",
+      url: "https://example.com/mcp",
+      values: [
+        {
+          key: "Authorization",
+          kind: "warden" as const,
+          value: "",
+          credentialRef: "",
+          configuredSecret: false,
+          replaceSecret: false,
+        },
+      ],
+    };
+    expect(validateConnectionDraft(draft)).toBe("Choose a Warden credential for each Warden row.");
+    expect(
+      validateConnectionDraft({
+        ...draft,
+        values: [{ ...draft.values[0]!, credentialRef: "urn:pulse:acme:credential:gh" }],
+      }),
+    ).toBeNull();
   });
 });

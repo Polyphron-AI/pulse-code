@@ -69,6 +69,15 @@ actual calls through upstream tool activity, not a separate activity log.
 MCP tools are not slash skills. Do not invent /tool-name execution commands as part
 of this integration. Existing provider-native commands remain unchanged.
 
+Warden-backed values are released from Pulse Go during turn preparation and spliced
+into the resolved connection in memory, so provider adapters see an ordinary header
+or environment value and need no Warden awareness. Material is never written to
+`pulse-mcp.json` or the secret store; only the credential URN is. Releases happen
+per turn so that a revoked grant is observed on the next send, and a short in-memory
+memo lets the prepare and consume steps of one send share a single release. If
+per-turn release latency proves unacceptable, the swap point is
+`WardenMaterialSource` in `apps/server/src/mcp/PulseWardenMaterial.ts`.
+
 ## Reviewed discovery and portability
 
 Approved extension: show MCP and Skills controls even with an empty library.

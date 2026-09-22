@@ -26,10 +26,12 @@ import { useEnvironmentSessionState } from "../state/session";
 import { serverEnvironment } from "../state/server";
 import { useAtomCommand } from "../state/use-atom-command";
 import { McpConnectionsPanel } from "./McpConnectionsPanel";
+import { McpWardenCard } from "./McpWardenCard";
 import {
   discoverPulseMcp,
   importDiscoveredPulseMcp,
   pulseMcpList,
+  pulseMcpWardenCredentials,
   removePulseMcp,
   setPulseMcpDiscoveryFollow,
   upsertPulseMcp,
@@ -105,6 +107,10 @@ function McpEnvironment({
   const removeCommand = useAtomCommand(removePulseMcp, { reportFailure: false });
   const discovered = useEnvironmentQuery(
     canDiscover && canRead ? discoverPulseMcp({ environmentId, input: {} }) : null,
+  );
+  const wardenEnabled = projection?.config.pulseCapabilities?.wardenCredentials === true;
+  const wardenCredentials = useEnvironmentQuery(
+    wardenEnabled && canRead ? pulseMcpWardenCredentials({ environmentId, input: {} }) : null,
   );
   const importDiscovered = useAtomCommand(importDiscoveredPulseMcp, { reportFailure: false });
   const setDiscoveryFollow = useAtomCommand(setPulseMcpDiscoveryFollow, { reportFailure: false });
@@ -205,6 +211,13 @@ function McpEnvironment({
         <p className="text-sm text-muted-foreground">Loading MCP connections…</p>
       ) : (
         <>
+          {wardenEnabled ? (
+            <McpWardenCard
+              environmentId={environmentId}
+              disabled={!canOperate}
+              onSaved={wardenCredentials.refresh}
+            />
+          ) : null}
           {canDiscover ? (
             <McpDiscoveryReview
               candidates={discovered.data ?? []}
@@ -238,6 +251,7 @@ function McpEnvironment({
             connections={connections}
             disabled={!canOperate}
             canCreate={canCreate}
+            wardenCredentials={wardenEnabled ? (wardenCredentials.data ?? []) : null}
             upsert={upsert}
             remove={remove}
           />

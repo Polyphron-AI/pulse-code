@@ -96,3 +96,30 @@ export const preparePulseMcpTurn = createEnvironmentRpcCommand(connectionAtomRun
   label: "environment-data:pulse-mcp:prepare-turn",
   tag: WS_METHODS.pulseMcpPrepareTurn,
 });
+
+export const pulseMcpWardenSettings = createEnvironmentRpcQueryAtomFamily(connectionAtomRuntime, {
+  label: "environment-data:pulse-mcp:warden-settings",
+  tag: WS_METHODS.pulseMcpWardenGet,
+  staleTimeMs: 5_000,
+  idleTtlMs: 60_000,
+});
+
+export const setPulseMcpWarden = createEnvironmentRpcCommand(connectionAtomRuntime, {
+  label: "environment-data:pulse-mcp:warden-set",
+  tag: WS_METHODS.pulseMcpWardenSet,
+});
+
+export const testPulseMcpWarden = createEnvironmentRpcCommand(connectionAtomRuntime, {
+  label: "environment-data:pulse-mcp:warden-test",
+  tag: WS_METHODS.pulseMcpWardenTest,
+});
+
+export const pulseMcpWardenCredentials = createEnvironmentRpcQueryAtomFamily(
+  connectionAtomRuntime,
+  {
+    label: "environment-data:pulse-mcp:warden-credentials",
+    tag: WS_METHODS.pulseMcpWardenListCredentials,
+    staleTimeMs: 15_000,
+    idleTtlMs: 60_000,
+  },
+);

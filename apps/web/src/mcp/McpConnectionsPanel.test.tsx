@@ -62,6 +62,7 @@ describe("McpConnectionsPanel environment ownership", () => {
         <McpConnectionsPanel
           environmentKey="env-a"
           connections={[connection]}
+          wardenCredentials={null}
           upsert={upsert}
           remove={remove}
         />,
@@ -76,6 +77,7 @@ describe("McpConnectionsPanel environment ownership", () => {
         <McpConnectionsPanel
           environmentKey="env-b"
           connections={[]}
+          wardenCredentials={null}
           upsert={upsert}
           remove={remove}
         />,
@@ -94,6 +96,7 @@ describe("McpConnectionsPanel environment ownership", () => {
         <McpConnectionsPanel
           environmentKey="env-a"
           connections={[connection]}
+          wardenCredentials={null}
           upsert={upsert}
           remove={remove}
         />,
@@ -114,6 +117,7 @@ describe("McpConnectionsPanel environment ownership", () => {
         <McpConnectionsPanel
           environmentKey="env-b"
           connections={[]}
+          wardenCredentials={null}
           upsert={upsert}
           remove={remove}
         />,
@@ -133,6 +137,7 @@ describe("McpConnectionsPanel environment ownership", () => {
         <McpConnectionsPanel
           environmentKey="env-a"
           connections={[connection]}
+          wardenCredentials={null}
           upsert={upsert}
           remove={vi.fn()}
         />,
@@ -151,6 +156,7 @@ describe("McpConnectionsPanel environment ownership", () => {
         <McpConnectionsPanel
           environmentKey="env-a"
           connections={[connection]}
+          wardenCredentials={null}
           upsert={upsert}
           remove={vi.fn()}
         />,
@@ -178,6 +184,7 @@ describe("McpConnectionsPanel environment ownership", () => {
         <McpConnectionsPanel
           environmentKey="env-a"
           connections={[connection]}
+          wardenCredentials={null}
           upsert={upsert}
           remove={vi.fn()}
         />,
@@ -208,6 +215,7 @@ describe("McpConnectionsPanel environment ownership", () => {
         <McpConnectionsPanel
           environmentKey="env-a"
           connections={[connection]}
+          wardenCredentials={null}
           canCreate={false}
           upsert={vi.fn()}
           remove={vi.fn()}
@@ -226,6 +234,7 @@ describe("McpConnectionsPanel environment ownership", () => {
         <McpConnectionsPanel
           environmentKey="env-a"
           connections={[connection]}
+          wardenCredentials={null}
           canCreate
           upsert={upsert}
           remove={vi.fn()}
@@ -239,6 +248,7 @@ describe("McpConnectionsPanel environment ownership", () => {
         <McpConnectionsPanel
           environmentKey="env-a"
           connections={[connection]}
+          wardenCredentials={null}
           canCreate={false}
           upsert={upsert}
           remove={vi.fn()}

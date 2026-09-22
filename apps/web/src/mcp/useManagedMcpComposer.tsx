@@ -482,6 +482,7 @@ export function useManagedMcpComposer(input: {
                       connectionId: connection.connectionId,
                       name: connection.name,
                       message: connection.message,
+                      ...(connection.reason !== undefined ? { reason: connection.reason } : {}),
                     },
                   ]
                 : [],

@@ -1618,7 +1618,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
           );
         }
         const info = yield* registry.getInstanceInfo(instanceId);
-        const connections = yield* pulseMcpConfig.value
+        const resolution = yield* pulseMcpConfig.value
           .resolveTurnConnections({
             providerInstanceId: instanceId,
             threadId: input.threadId,
@@ -1633,6 +1633,31 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
               toValidationError("ProviderService.preparePulseMcp", cause.message, cause),
             ),
           );
+        const connections = resolution.connections;
+        if (resolution.failures.length > 0) {
+          // One connection's Warden failure pauses the send; the others stay listed as unknown.
+          return {
+            status: "failed",
+            selectedConnectionIds: [
+              ...connections.map((connection) => connection.id),
+              ...resolution.failures.map((failure) => failure.connectionId),
+            ],
+            connections: [
+              ...connections.map((connection) => ({
+                connectionId: connection.id,
+                name: connection.name,
+                status: "unknown" as const,
+              })),
+              ...resolution.failures.map((failure) => ({
+                connectionId: failure.connectionId,
+                name: failure.name,
+                status: "failed" as const,
+                reason: failure.reason,
+                message: failure.message,
+              })),
+            ],
+          } as const;
+        }
         const selectedConnectionIds = connections.map((connection) => connection.id);
         const servers: ReadonlyArray<ProviderManagedMcpServer> = connections.map((connection) => ({
           id: connection.id,
@@ -1866,7 +1891,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     let preparationId = input.preparationId;
     if (preparationId === undefined) {
       if (Option.isNone(pulseMcpConfig)) return;
-      const durableConnections = yield* pulseMcpConfig.value
+      const durableResolution = yield* pulseMcpConfig.value
         .resolveTurnConnections({
           providerInstanceId: input.providerInstanceId,
           threadId: input.threadId,
@@ -1877,6 +1902,13 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
             toValidationError("ProviderService.consumePulseMcpPreparation", cause.message, cause),
           ),
         );
+      if (durableResolution.failures.length > 0) {
+        return yield* toValidationError(
+          "ProviderService.consumePulseMcpPreparation",
+          durableResolution.failures[0]?.message ?? "A managed MCP credential is unavailable.",
+        );
+      }
+      const durableConnections = durableResolution.connections;
       const durableServers: ReadonlyArray<ProviderManagedMcpServer> = durableConnections.map(
         (connection) => ({ id: connection.id, name: connection.name, ...connection.config }),
       );
@@ -1987,7 +2019,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
             "The managed MCP preparation was created for a different workspace.",
           );
         }
-        const currentConnections = yield* pulseMcpConfig.value
+        const currentResolution = yield* pulseMcpConfig.value
           .resolveTurnConnections({
             providerInstanceId: input.providerInstanceId,
             threadId: input.threadId,
@@ -1998,6 +2030,13 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
               toValidationError("ProviderService.consumePulseMcpPreparation", cause.message, cause),
             ),
           );
+        if (currentResolution.failures.length > 0) {
+          return yield* toValidationError(
+            "ProviderService.consumePulseMcpPreparation",
+            currentResolution.failures[0]?.message ?? "A managed MCP credential is unavailable.",
+          );
+        }
+        const currentConnections = currentResolution.connections;
         const preparedSession = yield* registry.getByInstance(input.providerInstanceId).pipe(
           Effect.flatMap((adapter) => adapter.listSessions()),
           Effect.map((sessions) => sessions.find((session) => session.threadId === input.threadId)),

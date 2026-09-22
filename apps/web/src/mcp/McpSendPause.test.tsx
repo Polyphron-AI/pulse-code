@@ -49,6 +49,27 @@ describe("McpSendPause", () => {
     expect(markup).toContain("Manage connections");
   });
 
+  it("labels Warden failures and keeps the server copy", () => {
+    const markup = renderToStaticMarkup(
+      <McpSendPauseContent
+        failed={[
+          {
+            connectionId: "gh",
+            name: "GitHub",
+            reason: "warden-grant-required",
+            message:
+              "Pulse Go has no active grant for this credential. Issue and accept a grant-only grant in Pulse Go, then retry.",
+          },
+        ]}
+        onRetry={() => {}}
+        onContinueWithout={() => {}}
+        onManage={() => {}}
+      />,
+    );
+    expect(markup).toContain("Pulse Go Warden");
+    expect(markup).toContain("no active grant for this credential");
+  });
+
   it("disables competing actions while a connection check runs", () => {
     const markup = renderToStaticMarkup(
       <McpSendPauseContent

@@ -9,12 +9,21 @@ import { ProviderSessionStartInput } from "./provider.ts";
 const ConnectionId = Schema.String.check(Schema.isPattern(/^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/));
 const Label = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256));
 const Value = Schema.String.check(Schema.isMaxLength(24_000));
+export const WardenCredentialRef = Schema.String.check(
+  Schema.isPattern(/^urn:pulse:[A-Za-z0-9._-]{1,64}:credential:[A-Za-z0-9._-]{1,64}$/),
+);
+export type WardenCredentialRef = typeof WardenCredentialRef.Type;
+const WardenValue = Schema.Struct({
+  type: Schema.Literal("warden"),
+  credentialRef: WardenCredentialRef,
+});
 const Values = Schema.Record(
   Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256)),
   Schema.Union([
     Schema.Struct({ type: Schema.Literal("literal"), value: Value }),
     Schema.Struct({ type: Schema.Literal("secret"), value: Value }),
     Schema.Struct({ type: Schema.Literal("retain-secret") }),
+    WardenValue,
   ]),
 ).check(Schema.isMaxProperties(128));
 
@@ -44,6 +53,7 @@ export type PulseMcpConnectionInput = typeof PulseMcpConnectionInput.Type;
 const PublicValue = Schema.Union([
   Schema.Struct({ type: Schema.Literal("literal"), value: Value }),
   Schema.Struct({ type: Schema.Literal("secret"), configured: Schema.Literal(true) }),
+  WardenValue,
 ]);
 const PublicValues = Schema.Record(Schema.String, PublicValue);
 
@@ -82,7 +92,65 @@ export class PulseMcpError extends Schema.TaggedError<PulseMcpError>()("PulseMcp
   message: Schema.String,
 }) {}
 
+export const PulseMcpWardenErrorKind = Schema.Literals([
+  "not-configured",
+  "unauthorized",
+  "unavailable",
+  "denied",
+  "protocol",
+]);
+export type PulseMcpWardenErrorKind = typeof PulseMcpWardenErrorKind.Type;
+
+/** Typed Warden failures for the test and credential listing RPCs. Never carries the PAT or material. */
+export class PulseMcpWardenError extends Schema.TaggedError<PulseMcpWardenError>()(
+  "PulseMcpWardenError",
+  { kind: PulseMcpWardenErrorKind, message: Schema.String },
+) {}
+
+const WardenPrincipal = Schema.Struct({ id: Schema.String, name: Schema.String });
+
+export const PulseMcpWardenSettings = Schema.Struct({
+  origin: Schema.String,
+  patConfigured: Schema.Boolean,
+  principal: Schema.optionalKey(WardenPrincipal),
+});
+export type PulseMcpWardenSettings = typeof PulseMcpWardenSettings.Type;
+
+/** Empty `pat` clears the stored token. Omitted `pat` keeps it. */
+export const PulseMcpWardenSettingsInput = Schema.Struct({
+  origin: Schema.String.check(Schema.isMaxLength(2_048)),
+  pat: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(4_096))),
+});
+export type PulseMcpWardenSettingsInput = typeof PulseMcpWardenSettingsInput.Type;
+
+export const PulseMcpWardenTestResult = Schema.Struct({ principal: WardenPrincipal });
+export type PulseMcpWardenTestResult = typeof PulseMcpWardenTestResult.Type;
+
+export const PulseMcpWardenCredential = Schema.Struct({
+  credentialRef: WardenCredentialRef,
+  resourceRef: Schema.String,
+  available: Schema.Boolean,
+  grant: Schema.Struct({
+    status: Schema.Literals(["active", "pending", "none"]),
+    expiresAt: Schema.optionalKey(Schema.String),
+  }),
+});
+export type PulseMcpWardenCredential = typeof PulseMcpWardenCredential.Type;
+
+export const PulseMcpWardenFailureReason = Schema.Literals([
+  "warden-not-configured",
+  "warden-unauthorized",
+  "warden-grant-required",
+  "warden-unavailable",
+]);
+export type PulseMcpWardenFailureReason = typeof PulseMcpWardenFailureReason.Type;
+
 const errors = Schema.Union([PulseMcpError, EnvironmentAuthorizationError]);
+const wardenErrors = Schema.Union([
+  PulseMcpWardenError,
+  PulseMcpError,
+  EnvironmentAuthorizationError,
+]);
 export const PULSE_MCP_METHODS = {
   list: "pulse.mcp.list",
   upsert: "pulse.mcp.upsert",
@@ -100,6 +168,10 @@ export const PULSE_MCP_METHODS = {
   importDiscovered: "pulse.mcp.importDiscovered",
   nativeInventory: "pulse.mcp.nativeInventory",
   setDiscoveryFollow: "pulse.mcp.setDiscoveryFollow",
+  wardenGet: "pulse.mcp.warden.get",
+  wardenSet: "pulse.mcp.warden.set",
+  wardenTest: "pulse.mcp.warden.test",
+  wardenListCredentials: "pulse.mcp.warden.listCredentials",
 } as const;
 
 const Selection = Schema.Struct({ connectionIds: ConnectionIds });
@@ -115,6 +187,8 @@ const PreparedConnection = Schema.Union([
     ...PreparedConnectionBase,
     status: Schema.Literal("failed"),
     message: Schema.String,
+    /** Present for Warden failures so clients can point at the right fix. */
+    reason: Schema.optionalKey(PulseMcpWardenFailureReason),
   }),
 ]);
 
@@ -250,5 +324,25 @@ export const PulseMcpRpcs = [
     payload: PulseMcpPrepareTurnInput,
     success: PulseMcpPrepareTurnResult,
     error: errors,
+  }),
+  Rpc.make(PULSE_MCP_METHODS.wardenGet, {
+    payload: Schema.Struct({}),
+    success: PulseMcpWardenSettings,
+    error: errors,
+  }),
+  Rpc.make(PULSE_MCP_METHODS.wardenSet, {
+    payload: PulseMcpWardenSettingsInput,
+    success: PulseMcpWardenSettings,
+    error: errors,
+  }),
+  Rpc.make(PULSE_MCP_METHODS.wardenTest, {
+    payload: Schema.Struct({}),
+    success: PulseMcpWardenTestResult,
+    error: wardenErrors,
+  }),
+  Rpc.make(PULSE_MCP_METHODS.wardenListCredentials, {
+    payload: Schema.Struct({}),
+    success: Schema.Array(PulseMcpWardenCredential).check(Schema.isMaxLength(512)),
+    error: wardenErrors,
   }),
 ] as const;

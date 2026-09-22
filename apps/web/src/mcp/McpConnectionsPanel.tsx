@@ -1,4 +1,8 @@
-import type { PulseMcpConnection, PulseMcpConnectionInput } from "@t3tools/contracts";
+import type {
+  PulseMcpConnection,
+  PulseMcpConnectionInput,
+  PulseMcpWardenCredential,
+} from "@t3tools/contracts";
 import {
   AlertCircleIcon,
   GlobeIcon,
@@ -33,12 +37,15 @@ import {
 import { Textarea } from "../components/ui/textarea";
 import {
   connectionInputFromDraft,
+  connectionWardenRefs,
   draftFromConnection,
+  emptyValueDraft,
   emptyConnectionDraft,
   type ConnectionDraft,
   type ValueDraft,
   validateConnectionDraft,
 } from "./mcpForm";
+import { grantBadgeLabel, worstGrantStatus } from "./mcpWardenForm";
 
 type Result = { readonly ok: true } | { readonly ok: false; readonly error: string };
 
@@ -47,6 +54,7 @@ export function McpConnectionsPanel({
   connections,
   disabled = false,
   canCreate = true,
+  wardenCredentials = null,
   upsert,
   remove,
 }: {
@@ -54,6 +62,7 @@ export function McpConnectionsPanel({
   readonly connections: ReadonlyArray<PulseMcpConnection>;
   readonly disabled?: boolean;
   readonly canCreate?: boolean;
+  readonly wardenCredentials: ReadonlyArray<PulseMcpWardenCredential> | null;
   readonly upsert: (environmentKey: string, input: PulseMcpConnectionInput) => Promise<void>;
   readonly remove: (environmentKey: string, id: string) => Promise<void>;
 }) {
@@ -170,6 +179,7 @@ export function McpConnectionsPanel({
                   )}
                   <p className="truncate text-sm font-medium">{connection.name}</p>
                   <Badge variant="outline">{connection.config.transport}</Badge>
+                  <WardenBadge connection={connection} wardenCredentials={wardenCredentials} />
                 </div>
                 <p className="mt-1 truncate text-xs text-muted-foreground">
                   {connection.id} ·{" "}
@@ -207,6 +217,7 @@ export function McpConnectionsPanel({
         target={editing}
         disabled={disabled || pending}
         existingIds={connections.map(({ id }) => id)}
+        wardenCredentials={wardenCredentials}
         onClose={() => setEditing(null)}
         onSave={(input) =>
           run(() =>
@@ -250,12 +261,14 @@ function ConnectionDialog({
   target,
   disabled,
   existingIds,
+  wardenCredentials,
   onClose,
   onSave,
 }: {
   readonly target: PulseMcpConnection | "new" | null;
   readonly disabled: boolean;
   readonly existingIds: ReadonlyArray<string>;
+  readonly wardenCredentials: ReadonlyArray<PulseMcpWardenCredential> | null;
   readonly onClose: () => void;
   readonly onSave: (input: PulseMcpConnectionInput) => Promise<Result>;
 }) {
@@ -371,6 +384,7 @@ function ConnectionDialog({
             label={draft.transport === "http" ? "Headers" : "Environment variables"}
             values={draft.values}
             disabled={disabled}
+            wardenCredentials={wardenCredentials}
             onChange={(values) => set("values", values)}
           />
           {error ? <p className="text-sm text-error-foreground">{error}</p> : null}
@@ -412,11 +426,13 @@ function ValuesEditor({
   label,
   values,
   disabled,
+  wardenCredentials,
   onChange,
 }: {
   readonly label: string;
   readonly values: ReadonlyArray<ValueDraft>;
   readonly disabled: boolean;
+  readonly wardenCredentials: ReadonlyArray<PulseMcpWardenCredential> | null;
   readonly onChange: (values: ReadonlyArray<ValueDraft>) => void;
 }) {
   const update = (index: number, change: Partial<ValueDraft>) =>
@@ -431,18 +447,7 @@ function ValuesEditor({
           size="xs"
           variant="outline"
           disabled={disabled}
-          onClick={() =>
-            onChange([
-              ...values,
-              {
-                key: "",
-                kind: "literal",
-                value: "",
-                configuredSecret: false,
-                replaceSecret: false,
-              },
-            ])
-          }
+          onClick={() => onChange([...values, emptyValueDraft()])}
         >
           Add row
         </Button>
@@ -463,7 +468,12 @@ function ValuesEditor({
             value={value.kind}
             disabled={disabled || value.configuredSecret}
             onValueChange={(kind) =>
-              kind && update(index, { kind: kind as "literal" | "secret", value: "" })
+              kind &&
+              update(index, {
+                kind: kind as ValueDraft["kind"],
+                value: "",
+                credentialRef: "",
+              })
             }
           >
             <SelectTrigger aria-label={`${label} kind ${index + 1}`}>
@@ -472,9 +482,20 @@ function ValuesEditor({
             <SelectPopup>
               <SelectItem value="literal">Plain text</SelectItem>
               <SelectItem value="secret">Secret</SelectItem>
+              {wardenCredentials !== null ? (
+                <SelectItem value="warden">Warden credential</SelectItem>
+              ) : null}
             </SelectPopup>
           </Select>
-          {value.kind === "secret" && value.configuredSecret && !value.replaceSecret ? (
+          {value.kind === "warden" ? (
+            <WardenCredentialPicker
+              label={`${label} credential ${index + 1}`}
+              credentials={wardenCredentials ?? []}
+              value={value.credentialRef}
+              disabled={disabled}
+              onChange={(credentialRef) => update(index, { credentialRef })}
+            />
+          ) : value.kind === "secret" && value.configuredSecret && !value.replaceSecret ? (
             <Button
               variant="outline"
               disabled={disabled}
@@ -504,5 +525,79 @@ function ValuesEditor({
         </div>
       ))}
     </div>
+  );
+}
+
+function WardenCredentialPicker({
+  label,
+  credentials,
+  value,
+  disabled,
+  onChange,
+}: {
+  readonly label: string;
+  readonly credentials: ReadonlyArray<PulseMcpWardenCredential>;
+  readonly value: string;
+  readonly disabled: boolean;
+  readonly onChange: (credentialRef: string) => void;
+}) {
+  const selected = credentials.find((credential) => credential.credentialRef === value);
+  return (
+    <div className="space-y-1">
+      <Select value={value} disabled={disabled} onValueChange={(next) => next && onChange(next)}>
+        <SelectTrigger aria-label={label}>
+          <SelectValue>
+            {selected ? selected.resourceRef : value ? value : "Choose a credential"}
+          </SelectValue>
+        </SelectTrigger>
+        <SelectPopup>
+          {credentials.length === 0 ? (
+            <div className="px-2 py-1.5 text-xs text-muted-foreground">
+              No credentials. Test the Warden connection above.
+            </div>
+          ) : null}
+          {credentials.map((credential) => (
+            <SelectItem key={credential.credentialRef} value={credential.credentialRef}>
+              <span className="flex flex-col">
+                <span>{credential.resourceRef}</span>
+                <span className="text-xs text-muted-foreground">
+                  {credential.credentialRef} · {grantBadgeLabel(credential.grant)}
+                </span>
+              </span>
+            </SelectItem>
+          ))}
+        </SelectPopup>
+      </Select>
+      {selected ? (
+        <Badge variant={selected.grant.status === "active" ? "outline" : "destructive"}>
+          {grantBadgeLabel(selected.grant)}
+        </Badge>
+      ) : null}
+    </div>
+  );
+}
+
+function WardenBadge({
+  connection,
+  wardenCredentials,
+}: {
+  readonly connection: PulseMcpConnection;
+  readonly wardenCredentials: ReadonlyArray<PulseMcpWardenCredential> | null;
+}) {
+  if (wardenCredentials === null) return null;
+  const refs = connectionWardenRefs(connection);
+  if (refs.length === 0) return null;
+  const worst = worstGrantStatus(
+    refs.map(
+      (ref) =>
+        wardenCredentials.find((credential) => credential.credentialRef === ref)?.grant.status ??
+        "none",
+    ),
+  );
+  if (worst === null) return null;
+  return (
+    <Badge variant={worst === "active" ? "outline" : "destructive"} title={refs.join("\n")}>
+      Warden{worst === "active" ? "" : worst === "pending" ? ": pending grant" : ": no grant"}
+    </Badge>
   );
 }

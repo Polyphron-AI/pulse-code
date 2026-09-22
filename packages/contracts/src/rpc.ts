@@ -290,6 +290,10 @@ export const WS_METHODS = {
   pulseMcpImportDiscovered: PULSE_MCP_METHODS.importDiscovered,
   pulseMcpNativeInventory: PULSE_MCP_METHODS.nativeInventory,
   pulseMcpSetDiscoveryFollow: PULSE_MCP_METHODS.setDiscoveryFollow,
+  pulseMcpWardenGet: PULSE_MCP_METHODS.wardenGet,
+  pulseMcpWardenSet: PULSE_MCP_METHODS.wardenSet,
+  pulseMcpWardenTest: PULSE_MCP_METHODS.wardenTest,
+  pulseMcpWardenListCredentials: PULSE_MCP_METHODS.wardenListCredentials,
   ...PULSE_SKILLS_METHODS,
   // Project registry methods
   projectsList: "projects.list",
