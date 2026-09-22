@@ -63,19 +63,19 @@ addition never selects a connection for your chats.
 For example, you can review and import a Codex connection once, then select its
 Pulse-managed copy for a Claude Code or locally managed OpenCode conversation.
 
-## Pulse Go Warden credentials
+## Pulse Go Warden operations
 
-A connection header or environment variable can reference a credential kept in
-Pulse Go Warden instead of a value stored in Pulse Code. Pulse Code asks Pulse Go
-for the material each time it prepares a turn and never saves it.
+Protected credentials stay with Pulse Go Warden. Connect to its MCP server to
+request an approved operation, then follow the returned Pulse Go link to review
+and authorize the request.
 
-To set it up, open Settings > MCP, enter your Pulse Go origin and a personal
-access token in the Pulse Go Warden card, and choose Test connection. Then edit a
-connection, set a row's kind to Warden credential, and pick the credential.
+Older connections that inject a Warden credential into a header or environment
+variable are disabled, including connections with an active grant. They stop
+before sending and show a message directing you to Warden operations. Retrying
+or accepting another grant does not enable credential injection.
 
-Grants are issued and accepted in Pulse Go, not here. The picker shows whether
-each credential has an active grant. A connection whose credential has no active
-grant fails before sending with a message telling you what to fix in Pulse Go.
+The Warden settings card can still check the connection and show credential
+metadata. Grants are issued and accepted in Pulse Go.
 
 ## Before sending
 

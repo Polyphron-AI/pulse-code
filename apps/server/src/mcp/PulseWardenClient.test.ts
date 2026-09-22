@@ -1,199 +1,150 @@
-// @effect-diagnostics nodeBuiltinImport:off -- The HTTP fixture owns a local Node server.
-
-import * as NodeHttp from "node:http";
-import type * as NodeNet from "node:net";
+// @effect-diagnostics preferSchemaOverJson:off -- Fixtures exercise Pulse Go's JSON-RPC wire boundary.
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
+import { makePulseWardenClient, wardenArray, type PulseWardenError } from "./PulseWardenClient.ts";
 
-import { makePulseWardenClient, PulseWardenError, wardenArray } from "./PulseWardenClient.ts";
+const failureOf = Effect.fn(function* (effect: Effect.Effect<unknown, PulseWardenError>) {
+  const result = yield* Effect.result(effect);
+  if (result._tag === "Failure") return result.failure;
+  return yield* Effect.die("expected Warden refusal");
+});
 
-interface Seen {
-  readonly path: string;
-  readonly authorization: string | undefined;
-  readonly body: unknown;
-}
-
-const withServer = async (
-  handler: (request: Seen, response: NodeHttp.ServerResponse) => void,
-  run: (origin: string, seen: Seen[]) => Promise<void>,
-) => {
-  const seen: Seen[] = [];
-  const server = NodeHttp.createServer((request, response) => {
-    let raw = "";
-    request.on("data", (chunk) => {
-      raw += chunk;
-    });
-    request.on("end", () => {
-      const record: Seen = {
-        path: request.url ?? "",
-        authorization: request.headers.authorization,
-        body: raw ? JSON.parse(raw) : undefined,
-      };
-      seen.push(record);
-      handler(record, response);
-    });
-  });
-  const port = await new Promise<number>((resolve) => {
-    server.listen(0, "127.0.0.1", () => resolve((server.address() as NodeNet.AddressInfo).port));
-  });
-  try {
-    await run(`http://127.0.0.1:${port}`, seen);
-  } finally {
-    await new Promise((resolve) => server.close(resolve));
-  }
-};
-
-const json = (response: NodeHttp.ServerResponse, status: number, body: unknown) => {
-  response.writeHead(status, { "content-type": "application/json" });
-  response.end(JSON.stringify(body));
-};
-
-const failureOf = async <A>(effect: Effect.Effect<A, PulseWardenError>) => {
-  const exit = await Effect.runPromiseExit(effect);
-  if (Exit.isSuccess(exit)) throw new Error("expected failure");
-  const reason = exit.cause.reasons.find((entry) => entry._tag === "Fail");
-  const error = reason?._tag === "Fail" ? reason.error : undefined;
-  if (!(error instanceof PulseWardenError)) throw new Error("expected PulseWardenError");
-  return error;
-};
+const access = { origin: "https://go.example.test/", pat: "fixture-token" };
+const jsonResponse = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
 describe("PulseWardenClient", () => {
-  it("posts a JSON-RPC tools/call with the bearer token and returns structured content", () =>
-    withServer(
-      (_, response) =>
-        json(response, 200, {
-          jsonrpc: "2.0",
-          id: 1,
-          result: {
-            content: [{ type: "text", text: '{"principal":{"id":"u1","name":"Ops"}}' }],
-            structuredContent: { principal: { id: "u1", name: "Ops" } },
-          },
-        }),
-      async (origin, seen) => {
-        const client = makePulseWardenClient({ origin, pat: "pat-secret" });
-        const result = await Effect.runPromise(client.callTool("warden_capabilities", {}));
-        expect(result).toEqual({ principal: { id: "u1", name: "Ops" } });
-        expect(seen[0]?.path).toBe("/mcp");
-        expect(seen[0]?.authorization).toBe("Bearer pat-secret");
-        expect(seen[0]?.body).toMatchObject({
-          jsonrpc: "2.0",
-          method: "tools/call",
-          params: { name: "warden_capabilities", arguments: {} },
-        });
-      },
-    ));
+  it.effect("posts JSON-RPC metadata calls with authorization and decodes structured content", () =>
+    Effect.gen(function* () {
+      const calls: { url: string; init: RequestInit | undefined }[] = [];
+      const client = makePulseWardenClient(access, {
+        fetch: async (url, init) => {
+          calls.push({ url: String(url), init });
+          return jsonResponse({ result: { structuredContent: { principal: { id: "u1" } } } });
+        },
+      });
+      expect(yield* client.callTool("warden_capabilities", {})).toEqual({
+        principal: { id: "u1" },
+      });
+      expect(calls[0]?.url).toBe("https://go.example.test/mcp");
+      expect(new Headers(calls[0]?.init?.headers).get("authorization")).toBe(
+        "Bearer fixture-token",
+      );
+      expect(JSON.parse(String(calls[0]?.init?.body))).toMatchObject({
+        jsonrpc: "2.0",
+        method: "tools/call",
+        params: { name: "warden_capabilities", arguments: {} },
+      });
+    }),
+  );
 
-  it("falls back to parsing text content when structuredContent is absent", () =>
-    withServer(
-      (_, response) =>
-        json(response, 200, {
-          jsonrpc: "2.0",
-          id: 1,
-          result: { content: [{ type: "text", text: '[{"id":"g1"}]' }] },
-        }),
-      async (origin) => {
-        const client = makePulseWardenClient({ origin, pat: "pat" });
-        expect(await Effect.runPromise(client.callTool("warden_grants_list", {}))).toEqual([
-          { id: "g1" },
-        ]);
-      },
-    ));
+  it.effect("decodes text-only metadata responses", () =>
+    Effect.gen(function* () {
+      const client = makePulseWardenClient(access, {
+        fetch: async () =>
+          jsonResponse({ result: { content: [{ type: "text", text: '[{"id":"g1"}]' }] } }),
+      });
+      expect(yield* client.callTool("warden_grants_list", {})).toEqual([{ id: "g1" }]);
+    }),
+  );
 
-  it("maps HTTP 401 to unauthorized without echoing the token", () =>
-    withServer(
-      (_, response) => json(response, 401, { error: "unauthorized" }),
-      async (origin) => {
-        const client = makePulseWardenClient({ origin, pat: "pat-secret" });
-        const error = await failureOf(client.callTool("warden_capabilities", {}));
-        expect(error.kind).toBe("unauthorized");
-        expect(error.message).not.toContain("pat-secret");
-      },
-    ));
-
-  it("maps 503 warden_unavailable and network failures to unavailable", async () => {
-    await withServer(
-      (_, response) => json(response, 503, { error: "warden_unavailable" }),
-      async (origin) => {
-        const client = makePulseWardenClient({ origin, pat: "pat" });
-        expect((await failureOf(client.callTool("warden_capabilities", {}))).kind).toBe(
-          "unavailable",
-        );
-      },
-    );
-    const closed = makePulseWardenClient({ origin: "http://127.0.0.1:1", pat: "pat" });
-    expect((await failureOf(closed.callTool("warden_capabilities", {}))).kind).toBe("unavailable");
-  });
-
-  it("maps other 4xx to denied with the server message and malformed JSON to protocol", async () => {
-    await withServer(
-      (_, response) =>
-        json(response, 403, { error: "invalid_project_id", message: "Project not allowed" }),
-      async (origin) => {
-        const client = makePulseWardenClient({ origin, pat: "pat" });
-        const error = await failureOf(
-          client.release({ requestId: "r", grantId: "g", credentialRef: "c", scope: "c" }),
-        );
+  it.effect("refuses legacy release without contacting even a material-capable server", () =>
+    Effect.gen(function* () {
+      let calls = 0;
+      const client = makePulseWardenClient(access, {
+        fetch: async () => {
+          calls += 1;
+          return jsonResponse({
+            credentialRef: "c",
+            material: "fixture-material",
+            requestDigest: "digest",
+          });
+        },
+      });
+      const request = { requestId: "r", grantId: "g", credentialRef: "c", scope: "c" };
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const error = yield* client.release(request).pipe(Effect.flip);
         expect(error.kind).toBe("denied");
-        expect(error.message).toBe("Project not allowed");
-      },
-    );
-    await withServer(
-      (_, response) => {
-        response.writeHead(200, { "content-type": "application/json" });
-        response.end("not json");
-      },
-      async (origin) => {
-        const client = makePulseWardenClient({ origin, pat: "pat" });
-        expect((await failureOf(client.callTool("warden_capabilities", {}))).kind).toBe("protocol");
-      },
-    );
-  });
+        expect(error.message).toContain("approved operation");
+        expect(error.message).not.toContain("fixture-material");
+        expect(error.message).not.toContain(access.pat);
+      }
+      expect(calls).toBe(0);
+    }),
+  );
 
-  it("posts a release and returns the material", () =>
-    withServer(
-      (request, response) =>
-        request.path === "/api/warden/release"
-          ? json(response, 200, {
-              credentialRef: "urn:pulse:acme:credential:gh",
-              material: "ghp_material",
-              requestDigest: "sha256:abc",
-            })
-          : json(response, 404, {}),
-      async (origin, seen) => {
-        const client = makePulseWardenClient({ origin, pat: "pat" });
-        const released = await Effect.runPromise(
-          client.release({
-            requestId: "req-1",
-            grantId: "grant-1",
-            credentialRef: "urn:pulse:acme:credential:gh",
-            scope: "urn:pulse:acme:credential:gh",
-          }),
-        );
-        expect(released.material).toBe("ghp_material");
-        expect(seen[0]?.body).toEqual({
-          requestId: "req-1",
-          grantId: "grant-1",
-          credentialRef: "urn:pulse:acme:credential:gh",
-          scope: "urn:pulse:acme:credential:gh",
+  it.effect("classifies HTTP failures without exposing the access token", () =>
+    Effect.gen(function* () {
+      for (const [status, kind] of [
+        [401, "unauthorized"],
+        [403, "denied"],
+        [503, "unavailable"],
+      ] as const) {
+        const client = makePulseWardenClient(access, {
+          fetch: async () => jsonResponse({ error: "refused" }, status),
         });
-      },
-    ));
+        const error = yield* failureOf(client.callTool("warden_capabilities", {}));
+        expect(error.kind).toBe(kind);
+        expect(error.message).not.toContain(access.pat);
+      }
+    }),
+  );
 
-  it("times out slow calls as unavailable", () =>
-    withServer(
-      () => {
-        // Never responds, so the client timeout is what ends the call.
-      },
-      async (origin) => {
-        const client = makePulseWardenClient({ origin, pat: "pat" }, { timeoutMs: 50 });
-        expect((await failureOf(client.callTool("warden_capabilities", {}))).kind).toBe(
-          "unavailable",
-        );
-      },
-    ));
+  it.effect("classifies malformed and denied tool responses", () =>
+    Effect.gen(function* () {
+      for (const [body, kind] of [
+        ["not json", "protocol"],
+        [
+          JSON.stringify({
+            result: { isError: true, content: [{ type: "text", text: "Denied" }] },
+          }),
+          "denied",
+        ],
+      ] as const) {
+        const client = makePulseWardenClient(access, { fetch: async () => new Response(body) });
+        expect((yield* failureOf(client.callTool("warden_capabilities", {}))).kind).toBe(kind);
+      }
+    }),
+  );
 
-  it("reads a bare array or a keyed array", () => {
+  it.effect("maps network failures to unavailable", () =>
+    Effect.gen(function* () {
+      const client = makePulseWardenClient(access, {
+        fetch: async () => {
+          throw new Error("network failed");
+        },
+      });
+      expect((yield* failureOf(client.callTool("warden_capabilities", {}))).kind).toBe(
+        "unavailable",
+      );
+    }),
+  );
+
+  it.effect("aborts a stalled transport at the configured deadline", () =>
+    Effect.gen(function* () {
+      const client = makePulseWardenClient(access, {
+        timeoutMs: 10,
+        fetch: (_url, init) =>
+          new Promise<Response>((_resolve, reject) => {
+            const signal = init?.signal;
+            if (!signal) {
+              reject(new Error("missing request deadline"));
+              return;
+            }
+            if (signal.aborted) {
+              reject(signal.reason);
+              return;
+            }
+            signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+          }),
+      });
+      expect((yield* failureOf(client.callTool("warden_capabilities", {}))).kind).toBe(
+        "unavailable",
+      );
+    }),
+  );
+
+  it("reads a bare array or keyed array", () => {
     expect(wardenArray([1], "grants")).toEqual([1]);
     expect(wardenArray({ grants: [2] }, "grants")).toEqual([2]);
     expect(() => wardenArray({ other: [] }, "grants")).toThrow();

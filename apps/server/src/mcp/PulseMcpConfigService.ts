@@ -97,7 +97,7 @@ export interface PulseMcpSecretReference {
   readonly key: string;
 }
 
-/** Holds no material: the credential is released from Pulse Go at turn preparation. */
+/** Legacy stored reference retained for editing; turn preparation refuses injection. */
 export interface PulseMcpWardenReference {
   readonly type: "warden-ref";
   readonly credentialRef: string;
@@ -578,8 +578,7 @@ const make = (options: PulseMcpConfigLayerOptions) =>
     const secrets = yield* ServerSecretStore.ServerSecretStore;
     const lock = yield* Semaphore.make(1);
     const configPath = path.join(config.stateDir, CONFIG_FILE);
-    // The grant index and release memo live here so they survive across turns but are
-    // dropped whenever the origin or token changes.
+    // Cache the compatibility guard, which rejects legacy credential injection.
     const wardenRuntime = yield* Ref.make<
       Option.Option<{ readonly key: string; readonly source: WardenMaterialSource }>
     >(Option.none());
@@ -1143,7 +1142,7 @@ const make = (options: PulseMcpConfigLayerOptions) =>
             }),
           });
 
-    /** Resolves stored values, releases Warden material once per distinct ref, and splices it in. */
+    /** Resolve local values and refuse legacy Warden injection references before launch. */
     const resolveSelection = Effect.fn(function* (
       state: PulseMcpPersistedState,
       ids: readonly string[],
@@ -1175,12 +1174,8 @@ const make = (options: PulseMcpConfigLayerOptions) =>
       for (const pending of pendings) {
         const values: Record<string, string> = { ...pending.values };
         let failure: PulseMcpConnectionFailure | undefined;
-        for (const [key, ref] of Object.entries(pending.wardenKeys)) {
+        for (const ref of Object.values(pending.wardenKeys)) {
           const material = materials.get(ref);
-          if (material?.ok === true) {
-            values[key] = material.material;
-            continue;
-          }
           const failed = material ?? {
             ok: false as const,
             ...wardenFailure(new PulseWardenError("protocol", "")),
@@ -1191,8 +1186,7 @@ const make = (options: PulseMcpConfigLayerOptions) =>
             reason: failed.reason,
             message: failed.message,
           };
-          // The credential URN is safe to log; the material and the token never are.
-          yield* Effect.logWarning("pulse mcp warden release failed").pipe(
+          yield* Effect.logWarning("pulse mcp warden injection refused").pipe(
             Effect.annotateLogs({
               connectionId: pending.connection.id,
               credentialRef: ref,

@@ -734,6 +734,46 @@ const addWardenFixtures = Effect.fn(function* () {
 });
 
 describe("PulseMcpConfigService Warden", () => {
+  it.effect(
+    "blocks legacy injection before provider preparation and preserves ordinary connections",
+    () =>
+      Effect.gen(function* () {
+        const { service, instanceId, threadId } = yield* addWardenFixtures();
+        yield* service.upsertConnection({
+          id: "ordinary",
+          name: "Ordinary",
+          config: {
+            transport: "http",
+            url: "https://ordinary.example.test",
+            headers: { "X-Pulse": { type: "literal", value: "enabled" } },
+          },
+        });
+        yield* service.setProviderDefault(instanceId, ["github", "ordinary"]);
+        const selection = { providerInstanceId: instanceId, threadId };
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          const resolution = yield* service.resolveTurnConnections(selection);
+          expect(resolution.connections.map(({ id }) => id)).toEqual(["ordinary"]);
+          expect(resolution.failures.map(({ connectionId }) => connectionId)).toEqual(["github"]);
+          const error = yield* service
+            .prepareTurn({ ...selection, turnId: `retry-${attempt}`, provider: "codex" }, readiness)
+            .pipe(Effect.flip);
+          expect(error.message).toContain("approved operation");
+        }
+        expect((yield* service.listConnections).map(({ id }) => id).sort()).toEqual([
+          "github",
+          "local_docs",
+          "ordinary",
+        ]);
+      }).pipe(
+        Effect.provide(
+          wardenLayer({
+            callTool: () => Effect.die("must not request grant metadata to inject material"),
+            release: () => Effect.die("must not release material"),
+          }),
+        ),
+      ),
+  );
+
   it.effect("stores the PAT in the secret store and never exposes it", () =>
     Effect.gen(function* () {
       const service = yield* PulseMcpConfig.PulseMcpConfigService;
@@ -816,24 +856,19 @@ describe("PulseMcpConfigService Warden", () => {
     }).pipe(Effect.provide(wardenLayer(grantingClient({ grants: [] })))),
   );
 
-  it.effect("splices released material into http headers and stdio env", () =>
+  it.effect("refuses legacy Warden HTTP headers and stdio env even with active grants", () =>
     Effect.gen(function* () {
-      const releases: string[] = [];
       const { service, instanceId, threadId } = yield* addWardenFixtures();
       const resolution = yield* service.resolveTurnConnections({
         providerInstanceId: instanceId,
         threadId,
       });
-      expect(resolution.failures).toEqual([]);
-      const [github, docs] = resolution.connections;
-      expect(github?.config.transport === "http" && github.config.headers).toEqual({
-        Authorization: `material:${REF_GH}`,
-        "X-Pulse": "enabled",
-      });
-      expect(docs?.config.transport === "stdio" && docs.config.env).toEqual({
-        DOCS_TOKEN: `material:${REF_DOCS}`,
-        DOCS_KEY: "stored-secret",
-      });
+      expect(resolution.connections).toEqual([]);
+      expect(resolution.failures.map(({ reason }) => reason)).toEqual([
+        "warden-unavailable",
+        "warden-unavailable",
+      ]);
+      expect(resolution.failures[0]?.message).toContain("approved operation");
       const persisted = yield* (yield* FileSystem.FileSystem).readFileString(
         `${(yield* ServerConfig.ServerConfig).stateDir}/pulse-mcp.json`,
       );
@@ -853,23 +888,19 @@ describe("PulseMcpConfigService Warden", () => {
     ),
   );
 
-  it.effect("fails only the connection whose grant is missing", () =>
+  it.effect("refuses injection regardless of whether a matching grant exists", () =>
     Effect.gen(function* () {
       const { service, instanceId, threadId } = yield* addWardenFixtures();
       const resolution = yield* service.resolveTurnConnections({
         providerInstanceId: instanceId,
         threadId,
       });
-      expect(resolution.connections.map(({ id }) => id)).toEqual(["github"]);
-      expect(resolution.failures).toEqual([
-        {
-          connectionId: "local_docs",
-          name: "Local docs",
-          reason: "warden-grant-required",
-          message:
-            "Pulse Go has no active grant for this credential. Issue and accept a grant-only grant in Pulse Go, then retry.",
-        },
+      expect(resolution.connections).toEqual([]);
+      expect(resolution.failures.map(({ connectionId }) => connectionId)).toEqual([
+        "github",
+        "local_docs",
       ]);
+      expect(resolution.failures.every(({ reason }) => reason === "warden-unavailable")).toBe(true);
     }).pipe(
       Effect.provide(
         wardenLayer(grantingClient({ grants: [{ id: "g1", scope: REF_GH, status: "active" }] })),
