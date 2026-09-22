@@ -1256,6 +1256,103 @@ managedMcpRouting.layer("managed MCP turn preparation", (it) => {
     }),
   );
 
+  for (const missing of [false, true]) {
+    it.effect(
+      `rejects ${missing ? "missing" : "unknown"} MCP readiness and cleans up startup`,
+      () =>
+        Effect.gen(function* () {
+          resolvedManagedMcpConnections = [managedMcpConnection];
+          managedMcpRouting.codex.prepareManagedMcp.mockImplementationOnce((_threadId, servers) =>
+            Effect.succeed(
+              missing
+                ? []
+                : servers.map((server) => ({ id: server.id, status: "unknown" as const })),
+            ),
+          );
+          const service = yield* ProviderService.ProviderService;
+          const threadId = asThreadId(`managed-unconfirmed-${missing}`);
+          const result = yield* service.preparePulseMcp!({
+            threadId,
+            providerSession: {
+              threadId,
+              providerInstanceId: codexInstanceId,
+              runtimeMode: "full-access",
+              cwd: fixtureCwd("unconfirmed"),
+            },
+          });
+          assert.equal(result.status, "failed");
+          assert(result.status === "failed");
+          assert.equal(result.connections[0]?.status, "failed");
+          assert.equal(yield* managedMcpRouting.codex.hasSession(threadId), false);
+        }),
+    );
+  }
+
+  for (const missing of [false, true]) {
+    it.effect(`rejects ${missing ? "missing" : "unknown"} cached MCP readiness before send`, () =>
+      Effect.gen(function* () {
+        resolvedManagedMcpConnections = [managedMcpConnection];
+        const service = yield* ProviderService.ProviderService;
+        const threadId = asThreadId(`managed-cached-unconfirmed-${missing}`);
+        const cwd = fixtureCwd("cached-unconfirmed");
+        const prepared = yield* service.preparePulseMcp!({
+          threadId,
+          providerSession: {
+            threadId,
+            providerInstanceId: codexInstanceId,
+            runtimeMode: "full-access",
+            cwd,
+          },
+        });
+        assert(prepared.status === "ready");
+        managedMcpRouting.codex.readManagedMcpStatus.mockImplementationOnce((_threadId, servers) =>
+          Effect.succeed(
+            missing ? [] : servers.map((server) => ({ id: server.id, status: "unknown" as const })),
+          ),
+        );
+        const result = yield* service.consumePulseMcpPreparation!({
+          threadId,
+          providerInstanceId: codexInstanceId,
+          commandId: "unconfirmed-send",
+          runtimeMode: "full-access",
+          modelSelection: undefined,
+          desiredCwd: cwd,
+        }).pipe(Effect.exit);
+        assert(Exit.isFailure(result));
+        assert.equal(yield* managedMcpRouting.codex.hasSession(threadId), true);
+      }),
+    );
+  }
+
+  it.effect("times out MCP readiness and cleans up the preparation-owned session", () =>
+    Effect.gen(function* () {
+      resolvedManagedMcpConnections = [managedMcpConnection];
+      const checking = yield* Deferred.make<void>();
+      managedMcpRouting.codex.prepareManagedMcp.mockImplementationOnce(() =>
+        Deferred.succeed(checking, undefined).pipe(Effect.andThen(Effect.never)),
+      );
+      const service = yield* ProviderService.ProviderService;
+      const threadId = asThreadId("managed-timeout");
+      const preparation = yield* service.preparePulseMcp!({
+        threadId,
+        providerSession: {
+          threadId,
+          providerInstanceId: codexInstanceId,
+          runtimeMode: "full-access",
+          cwd: fixtureCwd("timeout"),
+        },
+      }).pipe(Effect.forkChild);
+      yield* Deferred.await(checking);
+      yield* advanceTestClock(30_000);
+      const result = yield* Fiber.join(preparation);
+      assert(result.status === "failed");
+      const connection = result.connections[0];
+      assert(connection?.status === "failed");
+      assert.match(connection.message, /timed out/);
+      assert.equal(yield* managedMcpRouting.codex.hasSession(threadId), false);
+    }),
+  );
+
   it.effect("reports native startup failure and does not leave a runnable session", () =>
     Effect.gen(function* () {
       resolvedManagedMcpConnections = [managedMcpConnection];

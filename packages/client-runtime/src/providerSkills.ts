@@ -56,6 +56,59 @@ export function isProviderSkillUserInvocable(
   return skill.enabled && skill.userInvocable !== false;
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function providerSkillMentionPattern(name: string): RegExp {
+  return new RegExp(`(^|\\s)\\$${escapeRegExp(name)}(?=\\s|$)`);
+}
+
+export function hasProviderSkillMention(prompt: string, name: string): boolean {
+  return providerSkillMentionPattern(name).test(prompt);
+}
+
+export interface ProviderSkillMentionEdit {
+  readonly rangeStart: number;
+  readonly rangeEnd: number;
+  readonly replacement: string;
+}
+
+/**
+ * Produces the smallest prompt edit that toggles one provider-native skill.
+ * The invocation stays in prompt text so drafts, queued turns, transcripts and
+ * provider-specific `$skill` dispatch all share the same source of truth.
+ */
+export function toggleProviderSkillMention(
+  prompt: string,
+  name: string,
+  cursor: number,
+): ProviderSkillMentionEdit {
+  const match = providerSkillMentionPattern(name).exec(prompt);
+  if (match) {
+    const prefixLength = (match[1] ?? "").length;
+    let rangeStart = match.index + prefixLength;
+    let rangeEnd = rangeStart + name.length + 1;
+    if (/[ \t]/.test(prompt[rangeEnd] ?? "")) {
+      rangeEnd += 1;
+    } else if (rangeStart > 0 && /[ \t]/.test(prompt[rangeStart - 1] ?? "")) {
+      rangeStart -= 1;
+    }
+    return { rangeStart, rangeEnd, replacement: "" };
+  }
+
+  const insertionPoint = Math.max(0, Math.min(prompt.length, cursor));
+  const leadingSpace =
+    insertionPoint > 0 && !/\s/.test(prompt[insertionPoint - 1] ?? "") ? " " : "";
+  const trailingSpace =
+    insertionPoint === prompt.length || !/\s/.test(prompt[insertionPoint] ?? "") ? " " : "";
+  return {
+    rangeStart: insertionPoint,
+    rangeEnd: insertionPoint,
+    replacement: `${leadingSpace}$${name}${trailingSpace}`,
+  };
+}
+
 export function getProviderSkillsForSlashMenu(
   skills: ReadonlyArray<ServerProviderSkill>,
   showSkillsInSlashMenu: boolean,

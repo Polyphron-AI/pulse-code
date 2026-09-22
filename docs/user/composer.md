@@ -173,6 +173,13 @@ provider. On mobile, both are also available before starting a thread on
 The slash menu also includes skills unless you turn off **Settings → General →
 Show skills in slash menu**. Only skills enabled for the provider are listed.
 
+On web and desktop, you can also open the thread's **Skills** control and click
+a provider-supplied skill. T3 Code inserts its `$skill` mention at the cursor and
+marks it **Selected for this message**. Click the selected row again, or remove
+the mention from the composer, to turn it off. The sent message keeps the skill
+chip in thread history. **Available** means the provider exposed the skill;
+selection does not claim that the provider reported loading it.
+
 Provider commands must start the message to run. T3 Code commands such as
 `/model` and `/plan`, and skill mentions, work on any line.
 

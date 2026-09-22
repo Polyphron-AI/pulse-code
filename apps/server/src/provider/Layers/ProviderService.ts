@@ -53,7 +53,7 @@ import * as Schema from "effect/Schema";
 import * as SchemaIssue from "effect/SchemaIssue";
 import * as Stream from "effect/Stream";
 import * as Path from "effect/Path";
-import { isDeepStrictEqual } from "node:util";
+import * as NodeUtil from "node:util";
 
 import { appendUserInputAttachmentPaths } from "../userInputAttachments.ts";
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
@@ -1742,7 +1742,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
           unmanagedEmptySelection ||
           (input.retry !== true &&
             pulseMcpPreparation.appliedFingerprints.get(input.threadId) === fingerprint &&
-            isDeepStrictEqual(currentlyAppliedServers, servers) &&
+            NodeUtil.isDeepStrictEqual(currentlyAppliedServers, servers) &&
             active?.providerInstanceId === instanceId &&
             (active.status === "ready" || active.status === "running"));
         if ((active?.activeTurnId !== undefined || active?.status === "running") && !canReuse) {
@@ -1786,11 +1786,23 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         const statuses =
           connections.length === 0
             ? []
-            : canReuse
-              ? adapter.readManagedMcpStatus
-                ? yield* adapter.readManagedMcpStatus(input.threadId, servers)
-                : []
-              : yield* adapter.prepareManagedMcp!(input.threadId, servers);
+            : yield* (
+                canReuse
+                  ? (adapter.readManagedMcpStatus?.(input.threadId, servers) ?? Effect.succeed([]))
+                  : adapter.prepareManagedMcp!(input.threadId, servers)
+              ).pipe(
+                Effect.timeoutOrElse({
+                  duration: "30 seconds",
+                  orElse: () =>
+                    Effect.succeed(
+                      servers.map((server) => ({
+                        id: server.id,
+                        status: "failed" as const,
+                        message: "MCP readiness check timed out. Retry or manage the connection.",
+                      })),
+                    ),
+                }),
+              );
         const publicStatuses = PulseMcpPreparation.publicStatuses(servers, statuses);
         if (publicStatuses.some((status) => status.status === "failed")) {
           pulseMcpPreparation.records.delete(input.threadId);
@@ -1915,19 +1927,35 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
       );
       if (
         pulseMcpPreparation.appliedFingerprints.get(input.threadId) === durableFingerprint &&
-        isDeepStrictEqual(appliedServers, durableServers) &&
+        NodeUtil.isDeepStrictEqual(appliedServers, durableServers) &&
         appliedSession?.providerInstanceId === input.providerInstanceId &&
         (appliedSession.status === "ready" || appliedSession.status === "running")
       ) {
-        const cachedStatuses = appliedAdapter.readManagedMcpStatus
-          ? yield* appliedAdapter.readManagedMcpStatus(input.threadId, durableServers)
-          : [];
-        const cachedFailures = cachedStatuses.filter((status) => status.status === "failed");
+        const cachedStatuses = yield* (
+          appliedAdapter.readManagedMcpStatus?.(input.threadId, durableServers) ??
+          Effect.succeed([])
+        ).pipe(
+          Effect.timeoutOrElse({
+            duration: "30 seconds",
+            orElse: () =>
+              Effect.succeed(
+                durableServers.map((server) => ({
+                  id: server.id,
+                  status: "failed" as const,
+                  message: "MCP readiness check timed out. Retry or manage the connection.",
+                })),
+              ),
+          }),
+        );
+        const cachedFailures = PulseMcpPreparation.publicStatuses(
+          durableServers,
+          cachedStatuses,
+        ).filter((status) => status.status === "failed");
         if (cachedFailures.length > 0) {
           return yield* toValidationError(
             "ProviderService.consumePulseMcpPreparation",
             `Managed MCP could not be prepared before this turn: ${cachedFailures
-              .map((status) => status.message ?? status.id)
+              .map((status) => status.message)
               .join("; ")}`,
           );
         }
@@ -1971,7 +1999,10 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
           preparation.providerInstanceId !== input.providerInstanceId ||
           preparation.expiresAt <= now.epochMilliseconds ||
           preparation.runtimeMode !== input.runtimeMode ||
-          !isDeepStrictEqual(preparation.modelSelection ?? null, input.modelSelection ?? null) ||
+          !NodeUtil.isDeepStrictEqual(
+            preparation.modelSelection ?? null,
+            input.modelSelection ?? null,
+          ) ||
           (preparation.projectId !== undefined && preparation.projectId !== input.projectId)
         ) {
           return yield* toValidationError(
@@ -2275,7 +2306,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
       }
       if (routed.adapter.provider !== "codex") {
         const previous = ManagedSkillProviderSession.readManagedProviderSkills(input.threadId);
-        if (!isDeepStrictEqual(previous, providerResolvedSkills)) {
+        if (!NodeUtil.isDeepStrictEqual(previous, providerResolvedSkills)) {
           const binding = Option.getOrUndefined(yield* directory.getBinding(input.threadId));
           const activeTurnId =
             binding?.runtimePayload !== null &&

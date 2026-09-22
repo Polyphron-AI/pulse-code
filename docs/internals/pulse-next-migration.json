@@ -1,8 +1,29 @@
 {
   "active": {
     "policyVersion": "2026-09-17",
+    "feature": "thread-skill-selection-status",
+    "state": "verified-awaiting-integration",
+    "branch": "qb/feat-skill-selection-status",
+    "baseRevision": "380cec7098",
+    "implementationRevision": "6c6811051f",
+    "acceptance": [
+      "Clicking an enabled provider-supplied skill in the thread Skills tab embeds its invocation mention into that thread's composer.",
+      "The selected row and Skills control report selection for the current message; clicking again or removing the mention clears it.",
+      "The mention survives draft reload, queued turns and draft-to-thread promotion through the existing composer text path.",
+      "Sending preserves the skill mention in thread history and uses the existing provider-specific invocation path.",
+      "Disabled or provider-controlled skills cannot be selected by the user.",
+      "Web and desktop share the behavior; compact web remains usable; native mobile is unchanged because it has no matching Skills tab.",
+      "The UI says available or selected, and does not claim provider activation without provider evidence."
+    ],
+    "completionBlockers": [],
+    "evidence": "88 focused tests passed with 1 existing skip; client-runtime and web typechecks passed with existing Effect suggestions; targeted lint had only existing ChatComposer warnings; Impeccable detector, prose lint, diff check and production web build passed. Browser verification was not authorized or run.",
+    "nextAction": "Choose the integration path for qb/feat-skill-selection-status. The verified implementation commit is 6c6811051f; the worktree is preserved.",
+    "updatedAt": "2026-09-19"
+  },
+  "wardenCredentials": {
+    "policyVersion": "2026-09-17",
     "feature": "mcp-warden-credentials",
-    "state": "implemented",
+    "state": "implemented-awaiting-live-latency",
     "branch": "feat/mcp-warden-credentials",
     "baseRevision": "380cec7098",
     "implementationRevision": "817d8410e2",
@@ -19,10 +40,30 @@
       "Latency: two Warden values add p50 under 400 ms and p95 under 1 s against a local Pulse Go, else swap to expiry-scoped caching"
     ],
     "completionBlockers": [
-      "Latency acceptance blocked: no local Pulse Go instance with a PAT, two credentials, and accepted grant-only grants."
+      "Latency acceptance needs a local Pulse Go instance with a PAT, two credentials, and accepted grant-only grants."
     ],
-    "evidence": "blocked: no local Pulse Go",
-    "nextAction": "Review frozen revision, then merge feat/mcp-warden-credentials into develop.",
+    "evidence": "71 focused Warden contract, server, and web tests passed after synchronization with origin/develop; live latency remains unrun.",
+    "nextAction": "Run the two-credential local Pulse Go latency acceptance, then review the frozen revision.",
+    "updatedAt": "2026-09-22"
+  },
+  "mcpToggleReadiness": {
+    "policyVersion": "2026-09-17",
+    "feature": "mcp-toggle-readiness",
+    "state": "ready-for-installer",
+    "branch": "develop",
+    "baseRevision": "380cec70988ae722f6d09475e6c192da8c6b6d0c",
+    "implementationRevision": "89e69bcfd3",
+    "completionBlockers": [],
+    "evidence": "176 focused tests passed: 113 server preparation/service, 12 provider adapter MCP, 51 web MCP. Scoped server/web typechecks and lint passed with warnings; formatting, diff and user-documentation prose checks passed. One frozen-diff review identified three stale-state issues, all reproduced and fixed with passing regressions. Browser and real-provider verification were not run.",
+    "nextAction": "User authorized commit, push and merge into develop for the next installer. Include MCP toggle readiness in the next installer build; no installer was built or released by this task. Browser verification still requires explicit authorization.",
+    "acceptance": [
+      "Toggle on checks exact provider, model, thread, project and cwd context before committing all-ready selection.",
+      "Unknown, missing, failed, auth-required and timed-out statuses keep activation off and expose retry/manage.",
+      "Context changes and stale responses cannot commit selection; draft promotion and defaults retain send-time preparation.",
+      "Toggle off changes the next selection without claiming the active session reconciled.",
+      "Web and desktop share the picker; native and older clients retain shared server readiness guards.",
+      "No arbitrary MCP tool execution, repo-wide checks, browser or live-install changes."
+    ],
     "updatedAt": "2026-09-19"
   },
   "schemaVersion": 1,

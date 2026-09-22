@@ -56,6 +56,7 @@ export function useManagedMcpComposer(input: {
   readonly threadId: ThreadId | null;
   readonly identityKey: string;
   readonly modelKey: string;
+  readonly providerSession: ProviderSessionStartInput | null;
   readonly draftConnectionIds: ReadonlyArray<string> | null;
   readonly onDraftConnectionIdsChange: (ids: ReadonlyArray<string> | null) => void;
   readonly onManage: () => void;
@@ -130,6 +131,44 @@ export function useManagedMcpComposer(input: {
   const saveProjectDefault = useAtomCommand(setPulseMcpProjectDefault);
   const resetProjectDefault = useAtomCommand(resetPulseMcpProjectDefault);
   const prepareTurn = useAtomCommand(preparePulseMcpTurn, { reportFailure: false });
+  const [toggleStatuses, setToggleStatuses] = useState<
+    Readonly<
+      Record<string, { status: "checking" | "ready" | "inactive" | "error"; message?: string }>
+    >
+  >({});
+  const toggleAttemptRef = useRef(0);
+  const toggleRetryRef = useRef(new Map<string, { selecting: boolean }>());
+  const toggleContextKey = `${input.environmentId}:${input.projectId ?? "projectless"}:${input.identityKey}:${input.provider}:${input.providerInstanceId}:${input.modelKey}:${input.providerSession?.threadId ?? "draft"}:${input.providerSession?.cwd ?? "no-cwd"}:${input.providerSession?.runtimeMode ?? "no-runtime"}:${JSON.stringify(list.data)}`;
+  const toggleContextKeyRef = useRef(toggleContextKey);
+  if (toggleContextKeyRef.current !== toggleContextKey) {
+    toggleContextKeyRef.current = toggleContextKey;
+    toggleAttemptRef.current += 1;
+  }
+  useEffect(() => {
+    toggleRetryRef.current.clear();
+    setToggleStatuses({});
+  }, [toggleContextKey]);
+  useEffect(() => {
+    if (!Object.values(toggleStatuses).some(({ status }) => status === "ready")) return;
+    // Idle provider preparations expire after five minutes. Drop the cached
+    // label earlier so it cannot outlive the session it describes.
+    const timer = setTimeout(() => {
+      setToggleStatuses((current) =>
+        Object.fromEntries(
+          Object.entries(current).map(([id, value]) => [
+            id,
+            value.status === "ready"
+              ? {
+                  status: "error" as const,
+                  message: "Readiness check expired. Retry to confirm the connection.",
+                }
+              : value,
+          ]),
+        ),
+      );
+    }, 4 * 60_000);
+    return () => clearTimeout(timer);
+  }, [toggleStatuses]);
   const serverOverride = threadOverride.data?.connectionIds;
   const [ignoreServerOverride, setIgnoreServerOverride] = useState(false);
   useEffect(() => {
@@ -149,6 +188,17 @@ export function useManagedMcpComposer(input: {
     projectDefault.data?.connectionIds ??
     providerDefault.data?.connectionIds ??
     [];
+  const selectionSignature = selectedIds.join("\0");
+  const expectedSelectionSignatureRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (expectedSelectionSignatureRef.current === selectionSignature) {
+      expectedSelectionSignatureRef.current = null;
+      return;
+    }
+    toggleAttemptRef.current += 1;
+    toggleRetryRef.current.clear();
+    setToggleStatuses({});
+  }, [selectionSignature]);
   const queryFailed = Boolean(
     list.error || providerDefault.error || projectDefault.error || threadOverride.error,
   );
@@ -160,13 +210,33 @@ export function useManagedMcpComposer(input: {
       (input.projectId !== null && projectDefault.data === null) ||
       (input.threadId !== null && threadOverride.data === null));
   const entries = useMemo<ReadonlyArray<ManagedMcpEntry>>(() => {
-    const loaded = (list.data ?? []).map((connection) => ({
-      id: connection.id,
-      name: connection.name,
-      description: connection.config.transport === "http" ? connection.config.url : "Local command",
-      source: "pulse" as const,
-      status: "unknown" as const,
-    }));
+    const loaded = (list.data ?? []).map((connection) => {
+      const toggleStatus = toggleStatuses[connection.id];
+      return {
+        id: connection.id,
+        name: connection.name,
+        description:
+          connection.config.transport === "http" ? connection.config.url : "Local command",
+        source: "pulse" as const,
+        status:
+          toggleStatus?.status === "ready"
+            ? ("available" as const)
+            : toggleStatus?.status === "checking"
+              ? ("checking" as const)
+              : toggleStatus?.status === "error"
+                ? ("error" as const)
+                : ("unknown" as const),
+        ...(toggleStatus?.status === "checking"
+          ? { statusMessage: "Checking…" }
+          : toggleStatus?.status === "ready" && selectedIds.includes(connection.id)
+            ? { statusMessage: "Active · Ready" }
+            : toggleStatus?.status === "inactive"
+              ? { statusMessage: toggleStatus.message ?? "Off · Reconciled" }
+              : toggleStatus?.message
+                ? { statusMessage: toggleStatus.message }
+                : {}),
+      };
+    });
     const loadedIds = new Set(loaded.map(({ id }) => id));
     return [
       ...loaded,
@@ -221,9 +291,18 @@ export function useManagedMcpComposer(input: {
           statusMessage: "Unavailable with the selected provider",
         })),
     ];
-  }, [configuredInventory.data, input.provider, list.data, nativeInventory.data, selectedIds]);
-  const blockedReason =
-    !supported && capabilityReady
+  }, [
+    configuredInventory.data,
+    input.provider,
+    list.data,
+    nativeInventory.data,
+    selectedIds,
+    toggleStatuses,
+  ]);
+  const toggleChecking = Object.values(toggleStatuses).some(({ status }) => status === "checking");
+  const blockedReason = toggleChecking
+    ? "Wait for the MCP readiness check to finish."
+    : !supported && capabilityReady
       ? selectedIds.length > 0
         ? "Managed MCPs are unavailable for this provider. Remove them or switch providers."
         : null
@@ -310,6 +389,17 @@ export function useManagedMcpComposer(input: {
         ]),
       ];
       const checking = { ...pendingPreparation, excludedConnectionIds, busy: true, error: null };
+      toggleRetryRef.current.clear();
+      setToggleStatuses({});
+      const showReadinessFailure = (message: string) =>
+        setToggleStatuses(
+          Object.fromEntries(
+            pendingPreparation.connectionIds.map((id) => [
+              id,
+              { status: "error" as const, message },
+            ]),
+          ),
+        );
       pendingRef.current = checking;
       if (options) setPending(checking);
       try {
@@ -359,9 +449,19 @@ export function useManagedMcpComposer(input: {
           };
           pendingRef.current = failed;
           setPending(failed);
+          showReadinessFailure(failed.error);
           return;
         }
         if (result.value.status === "ready") {
+          setToggleStatuses(
+            Object.fromEntries(
+              result.value.connections.flatMap((connection) =>
+                connection.status === "ready"
+                  ? [[connection.connectionId, { status: "ready" as const }]]
+                  : [],
+              ),
+            ),
+          );
           busyRef.current = false;
           pendingPreparation.resolve({
             status: "ready",
@@ -391,6 +491,10 @@ export function useManagedMcpComposer(input: {
           };
           pendingRef.current = failed;
           setPending(failed);
+          showReadinessFailure(
+            failed.failed.map(({ name, message }) => `${name}: ${message}`).join("; ") ||
+              "The provider did not confirm MCP readiness. Retry or manage connections.",
+          );
           return;
         }
         const message =
@@ -405,6 +509,7 @@ export function useManagedMcpComposer(input: {
         };
         pendingRef.current = failed;
         setPending(failed);
+        showReadinessFailure(message);
       } catch {
         if (
           !mountedRef.current ||
@@ -421,6 +526,7 @@ export function useManagedMcpComposer(input: {
         };
         pendingRef.current = failed;
         setPending(failed);
+        showReadinessFailure(failed.error);
       }
     },
     [accessKey, enqueueOverrideWrite, input.environmentId, prepareTurn, selectedIds, selectionMode],
@@ -493,14 +599,132 @@ export function useManagedMcpComposer(input: {
     ],
   );
 
+  const reconcileSelection = useCallback(
+    async (ids: ReadonlyArray<string>, connectionId: string, selecting: boolean, retry = false) => {
+      defaultsResetThreadKeyRef.current = null;
+      if (!selecting) {
+        expectedSelectionSignatureRef.current = ids.join("\0");
+        input.onDraftConnectionIdsChange(ids);
+      }
+      const providerSession = input.providerSession;
+      if (!providerSession) {
+        setToggleStatuses((current) => ({
+          ...current,
+          [connectionId]: {
+            status: selecting ? "error" : "inactive",
+            message: selecting
+              ? input.threadId
+                ? "Create the worktree before checking the connection."
+                : "Start this thread before checking the connection."
+              : "Off · Pending reconciliation",
+          },
+        }));
+        return;
+      }
+      const attempt = ++toggleAttemptRef.current;
+      const contextKey = toggleContextKeyRef.current;
+      setToggleStatuses({
+        ...Object.fromEntries(ids.map((id) => [id, { status: "checking" as const }])),
+        ...(!ids.includes(connectionId) ? { [connectionId]: { status: "checking" as const } } : {}),
+      });
+      const result = await prepareTurn({
+        environmentId: input.environmentId,
+        input: {
+          threadId: providerSession.threadId,
+          providerSession,
+          connectionIds: [...ids],
+          ...(input.projectId ? { projectId: input.projectId } : {}),
+          ...(retry ? { retry: true } : {}),
+        },
+      });
+      if (
+        !mountedRef.current ||
+        contextKey !== toggleContextKeyRef.current ||
+        attempt !== toggleAttemptRef.current
+      )
+        return;
+      const prepared = result._tag === "Success" ? result.value : null;
+      const preparedConnections =
+        prepared?.status === "ready" || prepared?.status === "failed" ? prepared.connections : [];
+      const requestedStatuses = new Map(
+        preparedConnections.map((connection) => [connection.connectionId, connection]),
+      );
+      const allReady =
+        prepared?.status === "ready" &&
+        ids.every((id) => requestedStatuses.get(id)?.status === "ready");
+      if (allReady) {
+        toggleRetryRef.current.delete(connectionId);
+        setToggleStatuses((current) => ({
+          ...current,
+          ...Object.fromEntries(ids.map((id) => [id, { status: "ready" as const }])),
+          [connectionId]: { status: selecting ? "ready" : "inactive" },
+        }));
+        if (selecting) {
+          expectedSelectionSignatureRef.current = ids.join("\0");
+          input.onDraftConnectionIdsChange(ids);
+        }
+        return;
+      }
+      const failedConnection =
+        preparedConnections.find((connection) => connection.status !== "ready") ??
+        requestedStatuses.get(connectionId);
+      const message =
+        (failedConnection?.status === "failed" ? failedConnection.message : undefined) ??
+        (prepared?.status === "active-turn"
+          ? "Finish or stop the active turn, then retry."
+          : prepared?.status === "unsupported-provider"
+            ? "This provider cannot use Pulse-managed MCP connections."
+            : result._tag === "Failure"
+              ? "Pulse Code could not check this connection. Retry or manage connections."
+              : "The provider did not confirm this connection is ready. Retry or manage connections.");
+      for (const id of new Set([...ids, connectionId]))
+        toggleRetryRef.current.set(id, { selecting: id === connectionId ? selecting : true });
+      setToggleStatuses({
+        ...Object.fromEntries(
+          ids.map((id) => [
+            id,
+            {
+              status: "error" as const,
+              message:
+                id === failedConnection?.connectionId
+                  ? message
+                  : "Readiness was not retained because another connection failed.",
+            },
+          ]),
+        ),
+        [connectionId]: { status: "error", message },
+      });
+    },
+    [input, prepareTurn],
+  );
   const changeSelection = useCallback(
     (ids: ReadonlyArray<string>) => {
-      defaultsResetThreadKeyRef.current = null;
-      input.onDraftConnectionIdsChange(ids);
+      const added = ids.find((id) => !selectedIds.includes(id));
+      const removed = selectedIds.find((id) => !ids.includes(id));
+      const changed = added ?? removed;
+      if (!changed) return;
+      void reconcileSelection(ids, changed, added !== undefined);
     },
-    [input],
+    [reconcileSelection, selectedIds],
+  );
+  const retryConnection = useCallback(
+    (connectionId: string) => {
+      const target = toggleRetryRef.current.get(connectionId);
+      void reconcileSelection(
+        target?.selecting === false
+          ? selectedIds.filter((id) => id !== connectionId)
+          : [...new Set([...selectedIds, connectionId])],
+        connectionId,
+        target?.selecting ?? true,
+        true,
+      );
+    },
+    [reconcileSelection, selectedIds],
   );
   const useDefaults = useCallback(async () => {
+    toggleAttemptRef.current += 1;
+    toggleRetryRef.current.clear();
+    setToggleStatuses({});
     if (!input.threadId) {
       input.onDraftConnectionIdsChange(null);
       return;
@@ -571,7 +795,10 @@ export function useManagedMcpComposer(input: {
     selectedIds,
   ]);
   const resetProjectDefaults = useCallback(async () => {
+    toggleAttemptRef.current += 1;
+    toggleRetryRef.current.clear();
     if (!input.projectId) return;
+    setToggleStatuses({});
     const result = await resetProjectDefault({
       environmentId: input.environmentId,
       input: {
@@ -632,10 +859,14 @@ export function useManagedMcpComposer(input: {
           ? ("available" as const)
           : ("unavailable" as const),
       disabled: false,
-      selectionDisabled: !enabled,
+      selectionDisabled: !enabled || toggleChecking,
       loading,
       error: list.error ? "Could not load MCPs." : null,
       onChange: changeSelection,
+      retryConnectionIds: Object.entries(toggleStatuses)
+        .filter(([, value]) => value.status === "error")
+        .map(([id]) => id),
+      onRetryConnection: retryConnection,
       onUseDefaults: useDefaults,
       ...(enabled ? { onSaveGlobalDefaults: saveDefaults } : {}),
       ...(enabled && input.projectId ? { onSaveProjectDefaults: saveProjectDefaults } : {}),
@@ -646,7 +877,7 @@ export function useManagedMcpComposer(input: {
       onRetry: list.refresh,
     },
     blockedReason,
-    selectionReady: capabilityReady && !loading && !queryFailed,
+    selectionReady: capabilityReady && !loading && !queryFailed && !toggleChecking,
     selectedCount: selectedIds.length,
     prepare,
     pause,
