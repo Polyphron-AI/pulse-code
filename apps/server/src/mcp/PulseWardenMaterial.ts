@@ -1,20 +1,18 @@
 import type { PulseMcpWardenFailureReason } from "@t3tools/contracts";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
-import * as NodeCrypto from "node:crypto";
 
 import * as Ref from "effect/Ref";
 
-import { PulseWardenError, wardenArray, type PulseWardenClientShape } from "./PulseWardenClient.ts";
+import {
+  PulseWardenError,
+  WARDEN_ISOLATED_EXECUTION_REQUIRED,
+  wardenArray,
+  type PulseWardenClientShape,
+} from "./PulseWardenClient.ts";
 
 /** How long a grant listing stays usable before Pulse Go is asked again. */
 const GRANT_TTL_MS = 30_000;
-/** How long a released credential stays reusable, so one send releases once. */
-const MATERIAL_TTL_MS = 60_000;
-const RELEASE_CONCURRENCY = 4;
-
-export const GRANT_REQUIRED_MESSAGE =
-  "Pulse Go has no active grant for this credential. Issue and accept a grant-only grant in Pulse Go, then retry.";
 
 export interface WardenGrant {
   readonly id: string;
@@ -27,14 +25,12 @@ export interface WardenFailure {
   readonly message: string;
 }
 
-export type WardenMaterial =
-  | { readonly ok: true; readonly material: string }
-  | ({ readonly ok: false } & WardenFailure);
+export type WardenMaterial = { readonly ok: false } & WardenFailure;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-/** Grants can scope anything Pulse Go knows about; only credential scopes can release. */
+/** Credential-scoped metadata for the settings surface, never execution authority. */
 const CREDENTIAL_SCOPE = /^urn:pulse:[A-Za-z0-9._-]{1,64}:credential:[A-Za-z0-9._-]{1,64}$/;
 
 const trimPeriod = (message: string) => message.replace(/\.+$/, "");
@@ -128,69 +124,23 @@ export interface WardenMaterialSource {
   ) => Effect.Effect<ReadonlyMap<string, WardenMaterial>, never>;
 }
 
-/**
- * Releases credential material from Pulse Go. Material is held only in memory, only for
- * `MATERIAL_TTL_MS`, so the re-resolve that follows a send does not release twice.
- */
+/** Compatibility boundary for stored Warden references; never fetches or caches material. */
 export const makeWardenMaterialSource = (
-  client: PulseWardenClientShape,
-  index: WardenGrantIndex,
+  _client: PulseWardenClientShape,
+  _index: WardenGrantIndex,
 ): Effect.Effect<WardenMaterialSource> =>
-  Effect.gen(function* () {
-    const memo = yield* Ref.make(
-      new Map<string, { readonly material: string; readonly releasedAt: number }>(),
-    );
-
-    const release = (ref: string, grant: WardenGrant) =>
-      Effect.gen(function* () {
-        const now = yield* Clock.currentTimeMillis;
-        const key = `${ref}\u0000${grant.id}`;
-        const cached = (yield* Ref.get(memo)).get(key);
-        if (cached !== undefined && now - cached.releasedAt < MATERIAL_TTL_MS) {
-          return { ok: true, material: cached.material } as const;
-        }
-        const released = yield* client.release({
-          requestId: NodeCrypto.randomUUID(),
-          grantId: grant.id,
-          credentialRef: ref,
-          scope: grant.scope,
-        });
-        yield* Ref.update(memo, (current) =>
-          new Map(current).set(key, { material: released.material, releasedAt: now }),
-        );
-        return { ok: true, material: released.material } as const;
-      }).pipe(
-        Effect.catch((error) => Effect.succeed({ ok: false, ...wardenFailure(error) } as const)),
-      );
-
-    const resolve = (refs: readonly string[]) =>
-      Effect.gen(function* () {
-        const unique = [...new Set(refs)];
-        if (unique.length === 0) return new Map<string, WardenMaterial>();
-        const grants = yield* Effect.result(index.active);
-        if (grants._tag === "Failure") {
-          const failure = { ok: false, ...wardenFailure(grants.failure) } as const;
-          return new Map<string, WardenMaterial>(unique.map((ref) => [ref, failure]));
-        }
-        const entries = yield* Effect.forEach(
-          unique,
-          (ref) => {
-            const grant = grants.success.get(ref);
-            return grant === undefined
-              ? Effect.succeed([
-                  ref,
-                  {
-                    ok: false,
-                    reason: "warden-grant-required",
-                    message: GRANT_REQUIRED_MESSAGE,
-                  },
-                ] as const)
-              : release(ref, grant).pipe(Effect.map((material) => [ref, material] as const));
-          },
-          { concurrency: RELEASE_CONCURRENCY },
-        );
-        return new Map<string, WardenMaterial>(entries);
-      });
-
-    return { resolve };
+  Effect.succeed({
+    resolve: (refs) =>
+      Effect.succeed(
+        new Map<string, WardenMaterial>(
+          refs.map((ref) => [
+            ref,
+            {
+              ok: false,
+              reason: "warden-unavailable",
+              message: WARDEN_ISOLATED_EXECUTION_REQUIRED,
+            },
+          ]),
+        ),
+      ),
   });

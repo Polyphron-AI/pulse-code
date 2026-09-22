@@ -53,6 +53,9 @@ export interface PulseWardenClientShape {
 
 const DEFAULT_TIMEOUT_MS = 5_000;
 
+export const WARDEN_ISOLATED_EXECUTION_REQUIRED =
+  "Warden credential injection into MCP connections is disabled. Use an approved operation through the Pulse Go Warden MCP server.";
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
@@ -128,8 +131,8 @@ const decodeToolResult = (body: unknown): unknown => {
 };
 
 /**
- * Talks to a Pulse Go server as it ships: JSON-RPC tool calls on `/mcp` for metadata and
- * `/api/warden/release` for material. Construct one per environment access pair.
+ * Talks to Pulse Go through `/mcp`. Legacy material release fails locally: protected
+ * credentials belong in Warden's isolated operation runner, never in a provider process.
  */
 export const makePulseWardenClient = (
   access: PulseWardenAccess,
@@ -189,22 +192,6 @@ export const makePulseWardenClient = (
           }),
         ),
       ),
-    release: (body) =>
-      post("/api/warden/release", body).pipe(
-        Effect.flatMap((result) =>
-          isRecord(result) &&
-          typeof result.credentialRef === "string" &&
-          typeof result.material === "string" &&
-          typeof result.requestDigest === "string"
-            ? Effect.succeed({
-                credentialRef: result.credentialRef,
-                material: result.material,
-                requestDigest: result.requestDigest,
-              })
-            : Effect.fail(
-                new PulseWardenError("protocol", "Pulse Go release response was malformed."),
-              ),
-        ),
-      ),
+    release: () => Effect.fail(new PulseWardenError("denied", WARDEN_ISOLATED_EXECUTION_REQUIRED)),
   };
 };

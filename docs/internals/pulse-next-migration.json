@@ -1,6 +1,25 @@
 {
   "active": {
     "policyVersion": "2026-09-17",
+    "feature": "warden-managed-operations-material-boundary",
+    "state": "local-verification-passed",
+    "branch": "feat/warden-managed-operations",
+    "baseRevision": "4f7e4eac69",
+    "worktree": "F:/Dev Ops/T3/warden-managed-operations",
+    "acceptance": [
+      "Legacy raw release fails locally without an HTTP request, regardless of server support.",
+      "Stored Warden refs fail before provider preparation on first use and retry; no material cache or header/environment injection remains.",
+      "Ordinary connections and Warden metadata calls remain available; saved configuration remains editable.",
+      "Shared server enforcement covers web, desktop, native/older clients and local/remote connections; no provider-specific credential path is added.",
+      "Browser and real-provider checks are not run for this bounded server change."
+    ],
+    "completionBlockers": [],
+    "evidence": "33 tests passed across PulseWardenClient, PulseWardenMaterial and PulseMcpConfigService. Server typecheck, six-file targeted lint and git diff --check passed. No production build, browser, native-client or real-provider run.",
+    "nextAction": "Parent reviews and integrates this isolated boundary change. Full managed operations readiness depends on Pulse Go operation contracts and runner.",
+    "updatedAt": "2026-09-22"
+  },
+  "previousMcpToggleActive": {
+    "policyVersion": "2026-09-17",
     "feature": "thread-skill-selection-status",
     "state": "verified-awaiting-integration",
     "branch": "qb/feat-skill-selection-status",
