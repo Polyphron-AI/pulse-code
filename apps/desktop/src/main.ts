@@ -51,6 +51,7 @@ import * as DesktopServerExposure from "./backend/DesktopServerExposure.ts";
 import * as DesktopClientSettings from "./settings/DesktopClientSettings.ts";
 import * as DesktopSavedEnvironments from "./settings/DesktopSavedEnvironments.ts";
 import * as DesktopSnapShot from "./snapShot/DesktopSnapShot.ts";
+import * as DesktopVoice from "./voice/DesktopVoice.ts";
 import * as DesktopAppSettings from "./settings/DesktopAppSettings.ts";
 import * as DesktopPreReadyPlatform from "./app/DesktopPreReadyPlatform.ts";
 import * as DesktopShellEnvironment from "./shell/DesktopShellEnvironment.ts";
@@ -161,6 +162,10 @@ const desktopSnapShotLayer = DesktopSnapShot.layer.pipe(
   Layer.provideMerge(desktopWindowLayer),
   Layer.provideMerge(desktopFoundationLayer),
 );
+const desktopVoiceLayer = DesktopVoice.layer.pipe(
+  Layer.provideMerge(desktopWindowLayer),
+  Layer.provideMerge(desktopFoundationLayer),
+);
 const desktopAppActivationLayer = DesktopAppActivation.layer.pipe(
   Layer.provide(desktopWindowLayer),
 );
@@ -199,6 +204,7 @@ const desktopApplicationLayer = Layer.mergeAll(
   desktopSshLayer,
 ).pipe(
   Layer.provideMerge(desktopSnapShotLayer),
+  Layer.provideMerge(desktopVoiceLayer),
   Layer.provideMerge(DesktopUpdates.layer),
   Layer.provideMerge(desktopWslBackendLayer),
   Layer.provideMerge(desktopLocalEnvironmentAuthLayer),

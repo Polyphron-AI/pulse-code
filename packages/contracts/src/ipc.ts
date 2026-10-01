@@ -313,6 +313,72 @@ export const DesktopSnapShotEvent = Schema.Union([
 ]);
 export type DesktopSnapShotEvent = typeof DesktopSnapShotEvent.Type;
 
+/**
+ * The pulse-voice engine on this desktop. `unsupported` off Windows;
+ * `unavailable` carries the reason (missing, incompatible, or crashing).
+ */
+export const DesktopVoiceState = Schema.Struct({
+  status: Schema.Literals(["unsupported", "stopped", "starting", "ready", "unavailable"]),
+  message: Schema.NullOr(Schema.String),
+  dictation: Schema.Literals(["idle", "recording", "transcribing"]),
+  meetingSessionId: Schema.NullOr(Schema.String),
+});
+export type DesktopVoiceState = typeof DesktopVoiceState.Type;
+
+export const DesktopVoiceDevice = Schema.Struct({
+  id: Schema.String,
+  name: Schema.String,
+  isDefault: Schema.Boolean,
+});
+export type DesktopVoiceDevice = typeof DesktopVoiceDevice.Type;
+
+export const DesktopVoiceDevices = Schema.Struct({
+  inputs: Schema.Array(DesktopVoiceDevice),
+  outputs: Schema.Array(DesktopVoiceDevice),
+});
+export type DesktopVoiceDevices = typeof DesktopVoiceDevices.Type;
+
+/** Little-endian signed 16-bit mono samples recorded by the renderer. */
+export const DesktopVoiceTranscribeInput = Schema.Struct({
+  pcm16: Schema.Uint8Array,
+  sampleRate: Schema.Int.check(Schema.isBetween({ minimum: 8_000, maximum: 192_000 })),
+});
+export type DesktopVoiceTranscribeInput = typeof DesktopVoiceTranscribeInput.Type;
+
+export const DesktopVoiceTranscript = Schema.Struct({ text: Schema.String });
+export type DesktopVoiceTranscript = typeof DesktopVoiceTranscript.Type;
+
+export const DesktopVoiceMeetingStarted = Schema.Struct({ sessionId: Schema.String });
+export type DesktopVoiceMeetingStarted = typeof DesktopVoiceMeetingStarted.Type;
+
+export const DesktopVoiceMeetingStopped = Schema.Struct({
+  sessionId: Schema.String,
+  durationMs: Schema.Number,
+});
+export type DesktopVoiceMeetingStopped = typeof DesktopVoiceMeetingStopped.Type;
+
+/** A finalized meeting transcript segment. Times are relative to the meeting start. */
+export const DesktopVoiceMeetingSegment = Schema.Struct({
+  sessionId: Schema.String,
+  index: Schema.Int,
+  startMs: Schema.Number,
+  endMs: Schema.Number,
+  text: Schema.String,
+});
+export type DesktopVoiceMeetingSegment = typeof DesktopVoiceMeetingSegment.Type;
+
+export const DesktopVoiceEvent = Schema.Union([
+  Schema.Struct({ type: Schema.Literal("state"), state: DesktopVoiceState }),
+  Schema.Struct({ type: Schema.Literal("meeting-segment"), segment: DesktopVoiceMeetingSegment }),
+  /** Meeting capture ended on its own, for example when the device was removed. */
+  Schema.Struct({
+    type: Schema.Literal("meeting-error"),
+    sessionId: Schema.NullOr(Schema.String),
+    message: Schema.String,
+  }),
+]);
+export type DesktopVoiceEvent = typeof DesktopVoiceEvent.Type;
+
 export const DesktopPendingSnapShot = Schema.Struct({
   id: DesktopSnapShotId,
   name: Schema.String,
@@ -1257,6 +1323,15 @@ export interface DesktopBridge {
   ) => Promise<void>;
   dismissSnapShotAnimation?: (id: DesktopSnapShotId) => Promise<void>;
   acknowledgeSnapShot?: (id: string) => Promise<void>;
+  /** Windows pulse-voice engine. Absent on older desktop shells. */
+  getVoiceState?: () => Promise<DesktopVoiceState>;
+  listVoiceDevices?: () => Promise<DesktopVoiceDevices>;
+  transcribeVoice?: (input: DesktopVoiceTranscribeInput) => Promise<DesktopVoiceTranscript>;
+  /** Starts meeting capture with the devices from client settings. */
+  startVoiceMeeting?: () => Promise<DesktopVoiceMeetingStarted>;
+  /** Resolves after every segment of the meeting has been emitted. */
+  stopVoiceMeeting?: () => Promise<DesktopVoiceMeetingStopped>;
+  onVoiceEvent?: (listener: (event: DesktopVoiceEvent) => void) => () => void;
   ensureSshEnvironment: (
     target: DesktopSshEnvironmentTarget,
     options?: { issuePairingToken?: boolean },

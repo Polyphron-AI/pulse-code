@@ -4,6 +4,7 @@ import type {
   DesktopPreviewRecordingFrame,
   DesktopPreviewTabState,
   DesktopSnapShotEvent,
+  DesktopVoiceEvent,
 } from "@t3tools/contracts";
 import { exposeClerkBridge } from "@clerk/electron/preload";
 import { contextBridge, ipcRenderer, webFrame } from "electron";
@@ -25,6 +26,13 @@ function isSnapShotEvent(value: unknown): value is DesktopSnapShotEvent {
     SNAP_SHOT_EVENT_TYPES.has(type) &&
     (id === undefined || typeof id === "string")
   );
+}
+
+const VOICE_EVENT_TYPES = new Set(["state", "meeting-segment", "meeting-error"]);
+function isVoiceEvent(value: unknown): value is DesktopVoiceEvent {
+  if (typeof value !== "object" || value === null) return false;
+  const { type } = value as { type?: unknown };
+  return typeof type === "string" && VOICE_EVENT_TYPES.has(type);
 }
 
 exposeClerkBridge({ passkeys: true });
@@ -115,6 +123,11 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   dismissSnapShotAnimation: (id) =>
     ipcRenderer.invoke(IpcChannels.DISMISS_SNAP_SHOT_ANIMATION_CHANNEL, id),
   acknowledgeSnapShot: (id) => ipcRenderer.invoke(IpcChannels.ACKNOWLEDGE_SNAP_SHOT_CHANNEL, id),
+  getVoiceState: () => ipcRenderer.invoke(IpcChannels.GET_VOICE_STATE_CHANNEL),
+  listVoiceDevices: () => ipcRenderer.invoke(IpcChannels.LIST_VOICE_DEVICES_CHANNEL),
+  transcribeVoice: (input) => ipcRenderer.invoke(IpcChannels.TRANSCRIBE_VOICE_CHANNEL, input),
+  startVoiceMeeting: () => ipcRenderer.invoke(IpcChannels.START_VOICE_MEETING_CHANNEL),
+  stopVoiceMeeting: () => ipcRenderer.invoke(IpcChannels.STOP_VOICE_MEETING_CHANNEL),
   getConnectionCatalog: () => ipcRenderer.invoke(IpcChannels.GET_CONNECTION_CATALOG_CHANNEL),
   setConnectionCatalog: (catalog) =>
     ipcRenderer.invoke(IpcChannels.SET_CONNECTION_CATALOG_CHANNEL, catalog),
@@ -202,6 +215,17 @@ contextBridge.exposeInMainWorld("desktopBridge", {
     ipcRenderer.on(IpcChannels.SNAP_SHOT_EVENT_CHANNEL, wrappedListener);
     return () => {
       ipcRenderer.removeListener(IpcChannels.SNAP_SHOT_EVENT_CHANNEL, wrappedListener);
+    };
+  },
+  onVoiceEvent: (listener) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, event: unknown) => {
+      if (!isVoiceEvent(event)) return;
+      listener(event);
+    };
+
+    ipcRenderer.on(IpcChannels.VOICE_EVENT_CHANNEL, wrappedListener);
+    return () => {
+      ipcRenderer.removeListener(IpcChannels.VOICE_EVENT_CHANNEL, wrappedListener);
     };
   },
   onQuitShortcut: (listener) => {

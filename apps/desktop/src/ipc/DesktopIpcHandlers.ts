@@ -68,6 +68,7 @@ import {
   setSnapShotShortcutSuppressed,
 } from "./methods/snapShot.ts";
 import * as PreviewIpc from "./methods/preview.ts";
+import * as VoiceIpc from "./methods/voice.ts";
 import * as AppActivationIpc from "./methods/appActivation.ts";
 import { getWslState, setWslBackendEnabled, setWslDistro, setWslOnly } from "./methods/wsl.ts";
 
@@ -102,6 +103,11 @@ export const installDesktopIpcHandlers = Effect.fn("desktop.ipc.installHandlers"
   yield* ipc.handle(setSnapShotAnimationDestination);
   yield* ipc.handle(dismissSnapShotAnimation);
   yield* ipc.handle(acknowledgeSnapShot);
+  yield* ipc.handle(VoiceIpc.getVoiceState);
+  yield* ipc.handle(VoiceIpc.listVoiceDevices);
+  yield* ipc.handle(VoiceIpc.transcribeVoice);
+  yield* ipc.handle(VoiceIpc.startVoiceMeeting);
+  yield* ipc.handle(VoiceIpc.stopVoiceMeeting);
   yield* ipc.handle(setConnectionCatalog);
   yield* ipc.handle(clearConnectionCatalog);
 

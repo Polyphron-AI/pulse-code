@@ -287,6 +287,21 @@ export const LoadBalancingWeights = Schema.Record(
 
 export const DiffColorScheme = Schema.Literals(["red-green", "blue-orange"]);
 
+/** Key names the pulse-voice global hotkey understands. */
+export const VoiceHotkeyKey = Schema.String.check(
+  Schema.isPattern(/^(?:Ctrl|Alt|Shift|Win|Space|[A-Z]|F(?:[1-9]|1\d|2[0-4]))$/),
+);
+export type VoiceHotkeyKey = typeof VoiceHotkeyKey.Type;
+export const VoiceDictationShortcut = Schema.Array(VoiceHotkeyKey).check(
+  Schema.isMinLength(1),
+  Schema.isMaxLength(4),
+);
+export type VoiceDictationShortcut = typeof VoiceDictationShortcut.Type;
+export const DEFAULT_VOICE_DICTATION_SHORTCUT: VoiceDictationShortcut = ["Ctrl", "Win"];
+/** `hold` records while the chord is held; `toggle` starts and stops on presses. */
+export const VoiceDictationMode = Schema.Literals(["hold", "toggle"]);
+export type VoiceDictationMode = typeof VoiceDictationMode.Type;
+
 export const ClientSettingsSchema = Schema.Struct({
   notificationMode: NotificationMode.pipe(
     Schema.withDecodingDefault(Effect.succeed("off" as const)),
@@ -473,6 +488,20 @@ export const ClientSettingsSchema = Schema.Struct({
   snapShotFlash: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   snapShotAnimations: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   wordWrap: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  voiceGlobalDictationEnabled: Schema.Boolean.pipe(
+    Schema.withDecodingDefault(Effect.succeed(false)),
+  ),
+  voiceDictationShortcut: VoiceDictationShortcut.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_VOICE_DICTATION_SHORTCUT)),
+  ),
+  voiceDictationMode: VoiceDictationMode.pipe(
+    Schema.withDecodingDefault(Effect.succeed<VoiceDictationMode>("hold")),
+  ),
+  voiceInputDeviceId: Schema.NullOr(Schema.String).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null)),
+  ),
+  voicePillEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  voiceMeetingSystemAudio: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
 });
 export type ClientSettings = typeof ClientSettingsSchema.Type;
 
@@ -1522,5 +1551,11 @@ export const ClientSettingsPatch = Schema.Struct({
   snapShotFlash: Schema.optionalKey(Schema.Boolean),
   snapShotAnimations: Schema.optionalKey(Schema.Boolean),
   wordWrap: Schema.optionalKey(Schema.Boolean),
+  voiceGlobalDictationEnabled: Schema.optionalKey(Schema.Boolean),
+  voiceDictationShortcut: Schema.optionalKey(VoiceDictationShortcut),
+  voiceDictationMode: Schema.optionalKey(VoiceDictationMode),
+  voiceInputDeviceId: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  voicePillEnabled: Schema.optionalKey(Schema.Boolean),
+  voiceMeetingSystemAudio: Schema.optionalKey(Schema.Boolean),
 });
 export type ClientSettingsPatch = typeof ClientSettingsPatch.Type;
