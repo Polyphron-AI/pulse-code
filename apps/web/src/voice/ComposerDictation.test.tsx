@@ -107,7 +107,7 @@ describe("ComposerDictation", () => {
     expect(mic.textContent).not.toContain("Voice dictation");
     expect(mic.getAttribute("aria-pressed")).toBe("false");
     expect(mic.className).not.toContain("bg-[#c92f18]");
-    expect(container.textContent).toContain("Shortcut: Ctrl+Shift+Space.");
+    expect(container.textContent).toContain("Hold Ctrl+Shift+Space to dictate.");
     expect(container.textContent).toContain("Right-click to choose a microphone.");
   });
 
