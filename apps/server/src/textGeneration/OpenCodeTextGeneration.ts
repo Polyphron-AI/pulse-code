@@ -18,6 +18,7 @@ import {
   buildBranchNamePrompt,
   buildCommitMessagePrompt,
   buildPrContentPrompt,
+  buildMeetingSummaryPrompt,
   buildThreadHandoffPrompt,
   buildThreadTitlePrompt,
 } from "./TextGenerationPrompts.ts";
@@ -25,6 +26,7 @@ import * as TextGeneration from "./TextGeneration.ts";
 import {
   sanitizeCommitSubject,
   sanitizePrTitle,
+  sanitizeMeetingSummary,
   sanitizeThreadTitle,
 } from "./TextGenerationUtils.ts";
 import * as OpenCodeRuntime from "../provider/opencodeRuntime.ts";
@@ -36,6 +38,7 @@ const OpenCodeTextGenerationOperation = Schema.Literals([
   "generateBranchName",
   "generateThreadTitle",
   "generateThreadHandoff",
+  "generateMeetingSummary",
 ]);
 
 type OpenCodeTextGenerationOperation = typeof OpenCodeTextGenerationOperation.Type;
@@ -477,11 +480,32 @@ export const makeOpenCodeTextGeneration = Effect.fn("makeOpenCodeTextGeneration"
       } satisfies TextGeneration.ThreadHandoffGenerationResult;
     });
 
+  const generateMeetingSummary: TextGeneration.TextGeneration["Service"]["generateMeetingSummary"] =
+    Effect.fn("OpenCodeTextGeneration.generateMeetingSummary")(function* (input) {
+      const { prompt, outputSchema } = buildMeetingSummaryPrompt({
+        transcript: input.transcript,
+        title: input.title,
+      });
+
+      const generated = yield* runOpenCodeJson({
+        operation: "generateMeetingSummary",
+        cwd: input.cwd,
+        prompt,
+        outputSchemaJson: outputSchema,
+        modelSelection: input.modelSelection,
+      });
+
+      return sanitizeMeetingSummary(
+        generated,
+      ) satisfies TextGeneration.MeetingSummaryGenerationResult;
+    });
+
   return {
     generateCommitMessage,
     generatePrContent,
     generateBranchName,
     generateThreadTitle,
     generateThreadHandoff,
+    generateMeetingSummary,
   } satisfies TextGeneration.TextGeneration["Service"];
 });

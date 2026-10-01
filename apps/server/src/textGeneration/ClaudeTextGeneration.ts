@@ -24,6 +24,7 @@ import {
   buildBranchNamePrompt,
   buildCommitMessagePrompt,
   buildPrContentPrompt,
+  buildMeetingSummaryPrompt,
   buildThreadHandoffPrompt,
   buildThreadTitlePrompt,
 } from "./TextGenerationPrompts.ts";
@@ -31,6 +32,7 @@ import {
   normalizeCliError,
   sanitizeCommitSubject,
   sanitizePrTitle,
+  sanitizeMeetingSummary,
   sanitizeThreadTitle,
   toJsonSchemaObject,
 } from "./TextGenerationUtils.ts";
@@ -104,7 +106,8 @@ export const makeClaudeTextGeneration = Effect.fn("makeClaudeTextGeneration")(fu
       | "generatePrContent"
       | "generateBranchName"
       | "generateThreadTitle"
-      | "generateThreadHandoff",
+      | "generateThreadHandoff"
+      | "generateMeetingSummary",
     value: unknown,
     detail: string,
   ): Effect.Effect<string, TextGenerationError> =>
@@ -135,7 +138,8 @@ export const makeClaudeTextGeneration = Effect.fn("makeClaudeTextGeneration")(fu
       | "generatePrContent"
       | "generateBranchName"
       | "generateThreadTitle"
-      | "generateThreadHandoff";
+      | "generateThreadHandoff"
+      | "generateMeetingSummary";
     cwd: string;
     prompt: string;
     outputSchemaJson: S;
@@ -434,11 +438,32 @@ export const makeClaudeTextGeneration = Effect.fn("makeClaudeTextGeneration")(fu
       } satisfies TextGeneration.ThreadHandoffGenerationResult;
     });
 
+  const generateMeetingSummary: TextGeneration.TextGeneration["Service"]["generateMeetingSummary"] =
+    Effect.fn("ClaudeTextGeneration.generateMeetingSummary")(function* (input) {
+      const { prompt, outputSchema } = buildMeetingSummaryPrompt({
+        transcript: input.transcript,
+        title: input.title,
+      });
+
+      const generated = yield* runClaudeJson({
+        operation: "generateMeetingSummary",
+        cwd: input.cwd,
+        prompt,
+        outputSchemaJson: outputSchema,
+        modelSelection: input.modelSelection,
+      });
+
+      return sanitizeMeetingSummary(
+        generated,
+      ) satisfies TextGeneration.MeetingSummaryGenerationResult;
+    });
+
   return {
     generateCommitMessage,
     generatePrContent,
     generateBranchName,
     generateThreadTitle,
     generateThreadHandoff,
+    generateMeetingSummary,
   } satisfies TextGeneration.TextGeneration["Service"];
 });

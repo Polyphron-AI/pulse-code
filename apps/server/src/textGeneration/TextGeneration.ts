@@ -92,6 +92,22 @@ export interface ThreadHandoffGenerationResult {
   summary: string;
 }
 
+export interface MeetingSummaryGenerationInput {
+  cwd: string;
+  /** Timestamped transcript lines, oldest first. Long transcripts are truncated by the prompt. */
+  transcript: string;
+  title?: string | undefined;
+  /** What model and provider to use for generation. */
+  modelSelection: ModelSelection;
+}
+
+export interface MeetingSummaryGenerationResult {
+  /** Markdown with Summary, Decisions and Action items sections. */
+  summary: string;
+  /** A suggested meeting title, absent when the model gave none. */
+  title?: string | undefined;
+}
+
 /**
  * TextGeneration - Service tag for commit and change request text generation.
  */
@@ -128,6 +144,11 @@ export class TextGeneration extends Context.Service<
     readonly generateThreadHandoff: (
       input: ThreadHandoffGenerationInput,
     ) => Effect.Effect<ThreadHandoffGenerationResult, TextGenerationError>;
+
+    /** Summarize a recorded meeting transcript into markdown and a suggested title. */
+    readonly generateMeetingSummary: (
+      input: MeetingSummaryGenerationInput,
+    ) => Effect.Effect<MeetingSummaryGenerationResult, TextGenerationError>;
   }
 >()("t3/textGeneration/TextGeneration") {}
 
@@ -136,7 +157,8 @@ type TextGenerationOp =
   | "generatePrContent"
   | "generateBranchName"
   | "generateThreadTitle"
-  | "generateThreadHandoff";
+  | "generateThreadHandoff"
+  | "generateMeetingSummary";
 
 const resolveInstance = (
   registry: ProviderInstanceRegistry.ProviderInstanceRegistry["Service"],
@@ -192,6 +214,10 @@ export const make = Effect.gen(function* () {
     generateThreadHandoff: (input) =>
       resolveInstance(registry, "generateThreadHandoff", input.modelSelection.instanceId).pipe(
         Effect.flatMap((textGeneration) => textGeneration.generateThreadHandoff(input)),
+      ),
+    generateMeetingSummary: (input) =>
+      resolveInstance(registry, "generateMeetingSummary", input.modelSelection.instanceId).pipe(
+        Effect.flatMap((textGeneration) => textGeneration.generateMeetingSummary(input)),
       ),
   });
 });
