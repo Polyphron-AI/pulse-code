@@ -7,7 +7,7 @@
     "worktree": ".worktrees/qb-feat-pulse-voice",
     "baseRevision": "4f7e4eac69",
     "sidecar": "Polyphron-AI/meetily branch pulse/headless, crate pulse-voice/ (protocol: pulse-voice/PROTOCOL.md)",
-    "scope": "Windows desktop: Meetily-derived native Parakeet sidecar, global hold/toggle hotkey, hover pill on the focused window's monitor, paste into any focused app with clipboard restore, meeting capture (mic + system audio). Meetings stored by the server with read-only list/detail/summary/Send to thread on web, remote web and mobile. Composer uses the native engine on desktop with WASM then Groq fallback. No macOS/Linux capture, no wake word, no Meetily Python backend.",
+    "scope": "Windows desktop: Meetily-derived native Parakeet sidecar, global hold/toggle hotkey, hover pill on the focused window's monitor, paste into any focused app with clipboard restore, meeting capture (mic + system audio). Meetings stored by the server with read-only list/detail/summary/Send to thread on web, remote web and mobile. Composer Parakeet uses the native engine on Windows desktop, falling back to the in-browser model when that is set up; Groq stays an explicit choice because the controller never switches backends. No macOS/Linux capture, no wake word, no Meetily Python backend.",
     "acceptance": [
       "A1 Hotkey with any app focused shows the pill within 150 ms on the focused window's monitor (cursor monitor fallback), across 2+ mixed-DPI displays.",
       "A2 Hold mode stops on release, toggle mode on second press; a 10 s utterance pastes into the focused app within 1.5 s on CPU and the prior clipboard is restored.",
@@ -24,9 +24,15 @@
     ],
     "notApplicable": "Provider differences: summaries use the existing text generation path, so each provider is supported where text generation is. Queued turns and draft promotion apply only to Send to thread, which uses the existing composer draft path.",
     "tasks": "T1 protocol (done) > T2 Rust sidecar; T3 meetings contracts+server > T4 meetings web+mobile; T1 > T5 desktop supervisor+bridge > T6 hotkey/pill/paste, T7 meeting capture (needs T3), T8 composer native backend; T2 > T9 build bundling (+nemo128.onnx); T10 settings+docs; T11 one frozen-revision review; T12 real Windows run.",
-    "completionBlockers": ["T2-T12 not done"],
-    "evidence": "None yet.",
-    "nextAction": "Finish T2 (sidecar worker) and T3/T4 (meetings worker); coordinator implements T5-T10 in this worktree.",
+    "completionBlockers": [
+      "T4 web+mobile screens (meetings worker)",
+      "T7 meeting capture",
+      "T11 frozen-revision review",
+      "T12 real Windows run (hotkey with Win chord, text.insert, second monitor with a different DPI)",
+      "Fork branch pulse/headless must be pushed before CI packaging can fetch PULSE_VOICE_REVISION"
+    ],
+    "evidence": "Sidecar a75a9e27ca: cargo test 32 pass (coordinator rerun). Desktop voice 375a82e56b: PulseVoiceSupervisor 9 + DictationFlow 8 tests. Packaging a67250ca7e: build-desktop-artifact tests 76/76. Composer native engine a6e4217e76: nativeParakeet 8 tests. Settings and docs 2a96037773: DictationSettings 13 tests; web tsc 0 errors.",
+    "nextAction": "When the meetings worker reports, merge qb/feat-pulse-voice-meetings, rerun one of its verification commands, then implement T7 (desktop recorder writing segments to the server) and run T11.",
     "updatedAt": "2026-10-01"
   },
   "skillSelectionStatus": {
