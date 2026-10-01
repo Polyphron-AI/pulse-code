@@ -31,8 +31,8 @@ A thread stays with the provider it started on, because each provider keeps its 
 web and desktop, choose a different provider and model in the model picker, then choose
 **Start a new thread from a summary**. You can also open the thread's menu and choose
 **Continue in...**, then pick a provider. The same action is in the command palette as
-**Continue in another provider...** for the thread you are viewing. On mobile, long-press a
-thread and choose **Continue in...**.
+**Continue in another provider...** for the thread you are viewing. On mobile, choose the
+destination model in thread settings, or long-press a thread and choose **Continue in...**.
 
 The destination provider writes a short handoff brief covering the goal, what is done, the
 current state, and what is next. OpenAI uses Luna at Medium thinking, Anthropic uses Haiku, and

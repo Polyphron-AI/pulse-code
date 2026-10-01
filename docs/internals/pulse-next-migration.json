@@ -1,37 +1,9 @@
 {
   "active": {
     "policyVersion": "2026-09-17",
-    "feature": "provider-summary-handoff",
-    "taskId": "B-2026-10-01-001",
-    "state": "repairing-adapter-fallback",
-    "owner": "implement_handoff",
-    "baseRevision": "cf2fd80e0f",
-    "branch": "qb/feat-provider-summary-handoff",
-    "worktree": "F:/Dev Ops/T3/Pulse Code/.worktrees/provider-summary-handoff",
-    "ponytail": "full",
-    "acceptance": [
-      "Provider picker offers new thread from summary for incompatible available destination models.",
-      "Summary uses destination instance: Luna for OpenAI, Haiku for Anthropic, Flash for Google, medium thinking when supported.",
-      "New draft retains selected destination model and options, editable summary, original thread unchanged.",
-      "Existing compatible switches and thread-menu handoffs remain functional on web, desktop and native mobile.",
-      "Failures, retry, duplicate clicks, reload, environment/workspace routing and older clients covered by focused checks."
-    ],
-    "verificationScope": {
-      "webDesktop": "Focused tests, types and production web build; browser not authorized.",
-      "nativeMobile": "Shared routing and existing handoff updated; device verification not authorized.",
-      "providers": "Synthetic checks only, no paid provider calls.",
-      "connections": "Environment-scoped RPC retained for local/remote/tunnel.",
-      "queuedRunningThreads": "Snapshot current conversation; never modify source provider session.",
-      "sourceEvidence": "User attachment inspected; no matching Pulse tickets/reports under provider or summary."
-    },
-    "completionBlockers": ["Implementation, focused checks and frozen-diff review pending."],
-    "nextAction": "implement_handoff: add bounded Cursor/Grok/OpenCode selected-model fallback with visible notice when inferred family lacks a supported small summary model; retain strict Codex/Claude/Antigravity mapping, rerun service tests and typecheck, then freeze.",
-    "updatedAt": "2026-10-01",
-    "acceptedCapabilityException": "User confirmed Haiku Thinking enabled with visible notice that Medium is unavailable; Luna and Flash use Medium.",
-    "evidence": {
-      "ownerReported": "Service model routing 7/7; picker and real draft-store checks 2/2; original red witnessed before green. Native wiring and failure checks ongoing.",
-      "prose": "prose_lint.py --root . --changed: clean, 1 eligible file."
-    }
+    "state": "idle",
+    "nextAction": "No active feature. Provider summary handoff is implemented locally on qb/feat-provider-summary-handoff; no PR or deployment requested.",
+    "updatedAt": "2026-10-01"
   },
   "wardenCredentials": {
     "policyVersion": "2026-09-17",
@@ -1265,6 +1237,112 @@
         ],
         "nextAction": "v0.0.44 is published to origin/develop with thread output speed and dictation push-to-talk. Build the Windows x64 NSIS installer from develop, check packaged identity and version, and record the SHA-256 with the commit.",
         "updatedAt": "2026-10-01"
+      }
+    },
+    {
+      "policyVersion": "2026-09-17",
+      "feature": "provider-summary-handoff",
+      "taskId": "B-2026-10-01-001",
+      "state": "implemented-locally",
+      "owner": "implement_handoff",
+      "baseRevision": "cf2fd80e0f",
+      "branch": "qb/feat-provider-summary-handoff",
+      "worktree": "F:/Dev Ops/T3/Pulse Code/.worktrees/provider-summary-handoff",
+      "ponytail": "full",
+      "acceptance": [
+        "Provider picker offers new thread from summary for incompatible available destination models.",
+        "Summary uses destination instance: Luna for OpenAI, Haiku for Anthropic, Flash for Google, medium thinking when supported.",
+        "New draft retains selected destination model and options, editable summary, original thread unchanged.",
+        "Existing compatible switches and thread-menu handoffs remain functional on web, desktop and native mobile.",
+        "Failures, retry, duplicate clicks, reload, environment/workspace routing and older clients covered by focused checks."
+      ],
+      "verificationScope": {
+        "webDesktop": "Focused tests, types and production web build; browser not authorized.",
+        "nativeMobile": "Shared routing and existing handoff updated; device verification not authorized.",
+        "providers": "Synthetic checks only, no paid provider calls.",
+        "connections": "Environment-scoped RPC retained for local/remote/tunnel.",
+        "queuedRunningThreads": "Snapshot current conversation; never modify source provider session.",
+        "sourceEvidence": "User attachment inspected; no matching Pulse tickets/reports under provider or summary."
+      },
+      "completionBlockers": [],
+      "nextAction": "No implementation work remains. Local branch available for review; PR and deployment were not requested.",
+      "updatedAt": "2026-10-01",
+      "acceptedCapabilityException": "User confirmed Haiku Thinking enabled with visible notice that Medium is unavailable; Luna and Flash use Medium.",
+      "implementationRevision": "6047dcf713a040522df88b124af95263088668f3",
+      "verification": {
+        "server": {
+          "command": "vp test run src/textGeneration/TextGeneration.test.ts src/orchestration/threadHandoffContext.test.ts",
+          "cwd": "apps/server",
+          "tests": 14,
+          "exit": 0,
+          "author": "root"
+        },
+        "web": {
+          "command": "vp test run src/components/chat/ModelPickerContent.test.ts src/components/chat/ProviderModelPicker.summary.test.tsx src/hooks/useThreadHandoff.test.tsx",
+          "cwd": "apps/web",
+          "tests": 26,
+          "exit": 0,
+          "author": "root"
+        },
+        "shared": {
+          "command": "vp test run src/state/threadHandoff.test.ts",
+          "cwd": "packages/client-runtime",
+          "tests": 2,
+          "exit": 0,
+          "author": "root"
+        },
+        "mobile": {
+          "command": "vp test run src/features/threads/thread-settings-sheet-state.test.ts src/features/threads/threadHandoffMenu.test.ts",
+          "cwd": "apps/mobile",
+          "tests": 14,
+          "exit": 0,
+          "author": "implement_handoff"
+        },
+        "contracts": {
+          "command": "vp test run src/orchestration.test.ts",
+          "cwd": "packages/contracts",
+          "tests": 65,
+          "exit": 0,
+          "author": "implement_handoff"
+        },
+        "typechecks": {
+          "command": "vp run typecheck",
+          "packages": [
+            "apps/server",
+            "apps/web",
+            "apps/mobile",
+            "packages/contracts",
+            "packages/client-runtime"
+          ],
+          "exit": 0,
+          "author": "implement_handoff"
+        },
+        "lint": {
+          "scope": "16 changed source/test files; narrow repair rerun",
+          "exit": 0,
+          "warnings": "Existing React suggestions; no blocking findings."
+        },
+        "webBuild": {
+          "command": "vp run build",
+          "cwd": "apps/web",
+          "exit": 0,
+          "author": "root"
+        },
+        "uiDetector": {
+          "command": "impeccable.cmd detect --json on changed picker/composer/settings surfaces",
+          "exit": 0,
+          "findings": 0
+        },
+        "reviews": {
+          "revision": "6047dcf713a040522df88b124af95263088668f3",
+          "standards": "PASS, standards_review, no findings",
+          "specification": "PASS, spec_review, no findings"
+        },
+        "unrun": [
+          "Browser and native-device verification, not authorized.",
+          "Live provider calls, no paid synthetic tests.",
+          "Packaged desktop installation and local/relay/tunnel client journeys."
+        ]
       }
     }
   ]
