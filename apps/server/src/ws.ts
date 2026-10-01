@@ -2143,8 +2143,7 @@ const makeWsRpcLayer = (
                   projects: project ? [project] : [],
                 }) ?? process.cwd();
 
-              // The summary is written by the thread's own provider, which is
-              // the only one that has been living in this work.
+              // Older clients omit the destination and retain source-provider routing.
               const generated = yield* textGeneration.generateThreadHandoff({
                 cwd,
                 threadContext: handoffContext.context,
@@ -2152,7 +2151,8 @@ const makeWsRpcLayer = (
                 ...(handoffContext.attachments.length > 0
                   ? { attachments: handoffContext.attachments }
                   : {}),
-                modelSelection: thread.modelSelection,
+                modelSelection: input.destination ?? thread.modelSelection,
+                useSummaryModel: input.destination !== undefined,
               });
 
               if (generated.summary.length === 0) {
@@ -2163,6 +2163,9 @@ const makeWsRpcLayer = (
 
               return {
                 summary: generated.summary,
+                ...(generated.capabilityNotice
+                  ? { capabilityNotice: generated.capabilityNotice }
+                  : {}),
                 truncated: handoffContext.truncated,
               };
             }).pipe(
@@ -2170,7 +2173,7 @@ const makeWsRpcLayer = (
                 TextGenerationError: (cause) =>
                   Effect.fail(
                     new OrchestrationGenerateThreadHandoffError({
-                      message: "Failed to generate a handoff summary",
+                      message: cause.detail,
                       cause,
                     }),
                   ),

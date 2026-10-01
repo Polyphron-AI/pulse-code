@@ -1,3 +1,5 @@
+import { threadModelSelectionNeedsSummary } from "@t3tools/client-runtime/state/thread-handoff";
+import { useThreadHandoff } from "./use-thread-handoff";
 import { ChatGptUsageLimitNotice } from "./ChatGptUsageLimitNotice";
 import type { ComposerTextPaste } from "../../native/T3ComposerEditor.types";
 import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
@@ -269,6 +271,7 @@ export function ComposerSurface(props: {
 }
 
 export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposerProps) {
+  const handoffThread = useThreadHandoff();
   const project = useProject(scopeProjectRef(props.environmentId, props.selectedThread.projectId));
   const { themeVariables: materialTheme } = useAppearancePreferences();
   const composerPanel = materialTheme["--color-composer-panel"];
@@ -525,12 +528,6 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
     [props.serverConfig, currentModelSelection],
   );
   const providerGroups = useMemo(() => groupByProvider(modelOptions), [modelOptions]);
-  // An existing thread is bound to its harness: sessions can't move between
-  // provider instances, so the picker only offers the thread's own group.
-  const threadProviderGroups = useMemo(
-    () => providerGroups.filter((group) => group.providerKey === currentModelSelection.instanceId),
-    [providerGroups, currentModelSelection.instanceId],
-  );
   const currentModelOption =
     modelOptions.find(
       (option) =>
@@ -551,7 +548,22 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
       ownerId: settingsOwnerId,
       environmentId: props.environmentId,
       providerInstanceId: currentModelSelection.instanceId,
-      providerGroups: threadProviderGroups,
+      providerGroups,
+      requiresSummary: (option) =>
+        threadModelSelectionNeedsSummary({
+          providers: props.serverConfig?.providers ?? [],
+          currentModelSelection,
+          currentProviderInstanceId: props.selectedThread.session?.providerInstanceId,
+          nextModelSelection: option.selection,
+          hasStartedSession: props.selectedThread.session !== null,
+        }),
+      onStartThreadFromSummary: (option) => {
+        void handoffThread(
+          { ...props.selectedThread, environmentId: props.environmentId },
+          option.selection.instanceId,
+          option.selection,
+        );
+      },
       selectedModel: currentModelSelection,
       onSelectModel: (option) => props.onUpdateModelSelection(option.selection),
       optionDescriptors: providerOptionDescriptors,
@@ -567,7 +579,11 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
       props.onUpdateRuntimeMode,
       providerOptionDescriptors,
       settingsOwnerId,
-      threadProviderGroups,
+      providerGroups,
+      handoffThread,
+      props.selectedThread,
+      props.serverConfig,
+      props.environmentId,
     ],
   );
   const openSettings = useCallback(() => {
