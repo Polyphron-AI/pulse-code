@@ -12,7 +12,7 @@ type Pending = {
   onProgress?: (progress: ParakeetSetupProgress) => void;
 };
 
-async function decodeToMono16Khz(audio: Blob): Promise<Float32Array> {
+export async function decodeToMono16Khz(audio: Blob): Promise<Float32Array> {
   const context = new AudioContext({ sampleRate: 16_000 });
   try {
     const decoded = await context.decodeAudioData(await audio.arrayBuffer());

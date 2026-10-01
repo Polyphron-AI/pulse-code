@@ -32,6 +32,7 @@ import {
   setupParakeet,
   subscribeParakeetSetup,
 } from "./parakeetSetup";
+import { getNativeParakeet, nativeFirstTranscriber } from "./nativeParakeet";
 import { PulseDictationController, type PulseDictationState } from "./pulseDictation";
 
 function groqStartError(environmentId: EnvironmentId): string | null {
@@ -86,8 +87,16 @@ export function useComposerDictation(input: {
     isParakeetConfigured,
     () => false,
   );
+  const nativeParakeet = getNativeParakeet();
+  const nativeStatus = useSyncExternalStore(
+    nativeParakeet.subscribe,
+    nativeParakeet.getStatus,
+    () => "unavailable" as const,
+  );
+  const nativeAvailable = nativeStatus === "available";
+  // The in-browser model only warms up once the desktop has no native engine.
   useLayoutEffect(() => {
-    if (!parakeetConfigured || isParakeetReady()) return;
+    if (nativeStatus !== "unavailable" || !parakeetConfigured || isParakeetReady()) return;
     const abort = new AbortController();
     const warmup = setupParakeet(abort.signal);
     parakeetWarmupRef.current = warmup;
@@ -97,13 +106,19 @@ export function useComposerDictation(input: {
         if (parakeetWarmupRef.current === warmup) parakeetWarmupRef.current = null;
       });
     return () => abort.abort();
-  }, [parakeetConfigured]);
+  }, [nativeStatus, parakeetConfigured]);
   const controller = useMemo(
     () =>
       new PulseDictationController<Blob>({
         capture: new MediaRecorderCapture(),
         transcribers: {
-          parakeet: getParakeetTranscriber(),
+          parakeet: nativeFirstTranscriber(getNativeParakeet(), {
+            configured: isParakeetConfigured,
+            ensureReady: async (signal) => {
+              if (!isParakeetReady()) await setupParakeet(signal);
+            },
+            transcriber: getParakeetTranscriber(),
+          }),
           groq: {
             transcribe: async (audio, signal) => {
               const environmentId = capturedGroqEnvironmentIdRef.current;
@@ -163,14 +178,14 @@ export function useComposerDictation(input: {
       }
       capturedGroqEnvironmentIdRef.current = captured.environmentId;
     } else {
-      if (!isParakeetReady() && !isParakeetConfigured()) {
+      if (!nativeAvailable && !isParakeetReady() && !isParakeetConfigured()) {
         void navigate({ to: "/settings/integrations", hash: "dictation" });
         return;
       }
       capturedGroqEnvironmentIdRef.current = null;
     }
     const run = async () => {
-      if (captured.backend === "parakeet" && !isParakeetReady()) {
+      if (captured.backend === "parakeet" && !nativeAvailable && !isParakeetReady()) {
         const abort = new AbortController();
         warmupAbortRef.current = abort;
         setWarmingParakeet(true);
@@ -196,7 +211,7 @@ export function useComposerDictation(input: {
       });
     };
     void run();
-  }, [controller, environmentIds, input.draftIdentity, navigate]);
+  }, [controller, environmentIds, input.draftIdentity, nativeAvailable, navigate]);
 
   const cancel = useCallback(() => {
     setGateError(null);
@@ -213,6 +228,6 @@ export function useComposerDictation(input: {
     start,
     stop: () => void controller.stop(),
     cancel,
-    parakeetConfigured,
+    parakeetConfigured: parakeetConfigured || nativeAvailable,
   };
 }
