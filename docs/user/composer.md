@@ -145,6 +145,18 @@ microphone while preparation or transcription is pending cancels that work. If
 transcription fails, record again.
 Changing drafts cancels dictation so text cannot land in another thread.
 
+### Dictate into any app on Windows
+
+The Windows desktop app can also dictate outside Pulse. In **Settings →
+Integrations → Voice dictation**, turn on **Dictate into any app with a shortcut**.
+Press the shortcut (Ctrl + Win by default) in any app, speak, and the transcript is
+pasted where your cursor is. Your clipboard is restored afterwards. A small pill
+appears on the screen you are working on while Pulse listens and transcribes.
+
+You can hold the shortcut while speaking, or press it once to start and again to
+stop. Press Escape to cancel. Transcription uses Parakeet on your computer; audio
+never leaves it. The composer microphone in the Windows app uses the same engine.
+
 Mobile browsers need HTTPS to access the microphone. Plain HTTP connections to a
 LAN or tailnet address cannot record; use an HTTPS connection instead. Desktop
 may also require microphone permission in your operating system. Browser and

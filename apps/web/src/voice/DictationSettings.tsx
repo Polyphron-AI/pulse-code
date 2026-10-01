@@ -4,7 +4,7 @@ import {
   AuthOrchestrationReadScope,
   type EnvironmentId,
 } from "@t3tools/contracts";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import * as Option from "effect/Option";
 import { AsyncResult } from "effect/unstable/reactivity";
@@ -30,6 +30,8 @@ import {
   writeDictationPreferences,
   type DictationBackendPreference,
 } from "./dictationPreferences";
+import { DesktopVoiceSettings } from "./DesktopVoiceSettings";
+import { getNativeParakeet } from "./nativeParakeet";
 import { deleteGroqApiKey, readGroqApiKeyStatus, saveGroqApiKey } from "./dictationSettingsState";
 import {
   isParakeetConfigured,
@@ -113,11 +115,28 @@ export function DictationSettings() {
           )}
         </>
       ) : null}
+      <DesktopVoiceSettings />
     </div>
   );
 }
 
 function ParakeetSetup() {
+  const native = getNativeParakeet();
+  const nativeStatus = useSyncExternalStore(native.subscribe, native.getStatus, native.getStatus);
+  if (nativeStatus === "available") {
+    return (
+      <div className="space-y-1 rounded-lg border border-border bg-muted/30 p-4" role="status">
+        <p className="text-sm font-medium">Parakeet is ready in the desktop app</p>
+        <p className="text-xs text-muted-foreground">
+          Click the microphone to record. Click it again to stop and transcribe.
+        </p>
+      </div>
+    );
+  }
+  return <BrowserParakeetSetup />;
+}
+
+function BrowserParakeetSetup() {
   const [state, setState] = useState<"idle" | "setting-up" | "ready" | "error">(() =>
     isParakeetReady() || isParakeetConfigured() ? "ready" : "idle",
   );
