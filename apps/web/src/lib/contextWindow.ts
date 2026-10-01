@@ -1,7 +1,10 @@
 import type { OrchestrationThreadActivity, ThreadTokenUsageSnapshot } from "@t3tools/contracts";
 
 // Re-exported so context-window consumers reach for one module, not two.
-export { deriveThreadCostUsd } from "@t3tools/client-runtime/state/thread-usage";
+export {
+  deriveOutputTokensPerSecond,
+  deriveThreadCostUsd,
+} from "@t3tools/client-runtime/state/thread-usage";
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : null;

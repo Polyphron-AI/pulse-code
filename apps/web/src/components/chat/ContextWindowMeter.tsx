@@ -1,3 +1,4 @@
+import { OUTPUT_RATE_TURN_WINDOW } from "@t3tools/client-runtime/state/thread-usage";
 import { formatThreadCostUsd } from "@t3tools/shared/usageFormat";
 
 import { Button } from "../ui/button";
@@ -29,9 +30,12 @@ export function ContextWindowMeter(props: {
    * plans, where the number is not what the user is billed.
    */
   costUsd?: number | null;
+  /** Output tokens per second over recent turns; null when none reported. */
+  outputTokensPerSecond?: number | null;
 }) {
   const { usage, modelDisplayName, onCompact, compactDisabled, compactDisabledReason } = props;
   const costLabel = formatThreadCostUsd(props.costUsd ?? null);
+  const outputRate = props.outputTokensPerSecond ?? null;
   const usedPercentage = formatPercentage(usage.usedPercentage);
   const normalizedPercentage = Math.max(0, Math.min(100, usage.usedPercentage ?? 0));
   const radius = 9.75;
@@ -143,12 +147,25 @@ export function ContextWindowMeter(props: {
             </div>
           ) : null}
           {costLabel !== null ? (
-            <div className="flex items-center justify-between gap-3 text-[11px] leading-4">
+            <div className="flex items-center justify-between gap-3 text-2xs leading-4">
               <span className="text-secondary-label">
                 Session cost
                 <span className="ml-1 text-muted-foreground">at API rates</span>
               </span>
               <span className="font-medium tabular-nums text-secondary-label">{costLabel}</span>
+            </div>
+          ) : null}
+          {outputRate !== null ? (
+            <div className="flex items-center justify-between gap-3 text-2xs leading-4">
+              <span className="text-secondary-label">
+                Output speed
+                <span className="ml-1 text-muted-foreground">
+                  last {OUTPUT_RATE_TURN_WINDOW} turns
+                </span>
+              </span>
+              <span className="font-medium tabular-nums text-secondary-label">
+                {outputRate < 10 ? outputRate.toFixed(1) : Math.round(outputRate)} tok/s
+              </span>
             </div>
           ) : null}
           {usage.compactsAutomatically ? (

@@ -4,7 +4,7 @@ import type { OrchestrationThreadActivity } from "@t3tools/contracts";
 /** Pulse Next has no handoff activity yet; the derive still segments on it. */
 const THREAD_HANDOFF_ACTIVITY_KIND = "provider.handoff";
 
-import { deriveThreadCostUsd } from "./threadUsage.ts";
+import { deriveOutputTokensPerSecond, deriveThreadCostUsd } from "./threadUsage.ts";
 
 function activity(
   kind: string,
@@ -82,5 +82,30 @@ describe("deriveThreadCostUsd", () => {
       activity("context-window.updated", { usedTokens: 1 }, 4),
     ];
     expect(deriveThreadCostUsd(activities)).toBeCloseTo(4, 10);
+  });
+});
+
+describe("deriveOutputTokensPerSecond", () => {
+  const turn = (turnOutputTokens: number, turnDurationMs: number, index: number) =>
+    activity("context-window.updated", { turnOutputTokens, turnDurationMs }, index);
+
+  it("stays null until two turns cover thirty seconds", () => {
+    expect(deriveOutputTokensPerSecond(costActivities([0.5]))).toBeNull();
+    // One long turn is still one turn.
+    expect(deriveOutputTokensPerSecond([turn(6_000, 60_000, 0)])).toBeNull();
+    // Two quick exchanges are latency, not throughput.
+    expect(deriveOutputTokensPerSecond([turn(100, 5_000, 0), turn(100, 5_000, 1)])).toBeNull();
+    expect(deriveOutputTokensPerSecond([turn(1_500, 15_000, 0), turn(1_500, 15_000, 1)])).toBe(100);
+  });
+
+  it("weights by time across the last five turns, ignoring older ones", () => {
+    const activities = [
+      turn(1_000_000, 1_000, 0), // outside the window
+      ...[1, 2, 3, 4].map((index) => turn(1_000, 10_000, index)),
+      activity("context-window.updated", { usedTokens: 10 }, 5),
+      turn(1_000, 1_000, 6),
+    ];
+    // 5,000 tokens over 41 seconds, not the 280 tok/s mean of per-turn rates.
+    expect(deriveOutputTokensPerSecond(activities)).toBeCloseTo(5_000 / 41, 10);
   });
 });

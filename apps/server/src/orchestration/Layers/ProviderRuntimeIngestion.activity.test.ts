@@ -3,6 +3,7 @@ import {
   ProviderDriverKind,
   RuntimeTaskId,
   ThreadId,
+  TurnId,
   type ProviderRuntimeEvent,
 } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
@@ -80,6 +81,43 @@ describe("runtimeEventToActivities task progress", () => {
     expect(usagePayload.typedUsage).toEqual({ totalTokens: 4_200, toolUses: 7 });
     expect(usagePayload.usageSnapshot).toBe(true);
     expect(usagePayload).not.toHaveProperty("status");
+  });
+});
+describe("runtimeEventToActivities turn throughput", () => {
+  const completed = (outputTokens: number | undefined) =>
+    ({
+      ...base,
+      type: "turn.completed",
+      eventId: EventId.make("evt-turn-done"),
+      turnId: TurnId.make("turn-1"),
+      createdAt: "2026-08-06T00:00:20.000Z",
+      payload: {
+        state: "completed",
+        tokenUsage: {
+          usageStatus: "partial",
+          usageScope: "main_agent",
+          hasSubagents: false,
+          ...(outputTokens !== undefined ? { outputTokens } : {}),
+        },
+      },
+    }) satisfies ProviderRuntimeEvent;
+
+  it("records output tokens and wall time from the turn's start", () => {
+    const [activity, ...rest] = runtimeEventToActivities(
+      completed(800),
+      undefined,
+      "2026-08-06T00:00:00.000Z",
+    );
+
+    expect(rest).toEqual([]);
+    expect(activity?.kind).toBe("context-window.updated");
+    // No usedTokens, so the meter keeps reading the real usage snapshot.
+    expect(activity?.payload).toEqual({ turnOutputTokens: 800, turnDurationMs: 20_000 });
+  });
+
+  it("records nothing without output tokens or a known start", () => {
+    expect(runtimeEventToActivities(completed(undefined), undefined, base.createdAt)).toEqual([]);
+    expect(runtimeEventToActivities(completed(800))).toEqual([]);
   });
 });
 describe("runtimeEventToActivities tool streaming persistence", () => {

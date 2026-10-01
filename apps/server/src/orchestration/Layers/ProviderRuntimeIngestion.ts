@@ -489,9 +489,14 @@ function taskLinkageActivityFields(payload: Record<string, unknown>): Record<str
   return fields;
 }
 
+/**
+ * `turnStartedAt` is the projected turn's start, supplied for terminal turn
+ * events so the turn's output throughput can be recorded.
+ */
 export function runtimeEventToActivities(
   event: ProviderRuntimeEvent,
   taskTitle?: string,
+  turnStartedAt?: string | null,
 ): ReadonlyArray<OrchestrationThreadActivity> {
   const maybeSequence = (() => {
     const eventWithSequence = event as ProviderRuntimeEvent & { sessionSequence?: number };
@@ -924,6 +929,32 @@ export function runtimeEventToActivities(
           kind: "context-window.updated",
           summary: "Context window updated",
           payload,
+          turnId: toTurnId(event.turnId) ?? null,
+          ...maybeSequence,
+        },
+      ];
+    }
+
+    case "turn.completed":
+    case "turn.aborted": {
+      const turnOutputTokens = event.payload.tokenUsage?.outputTokens;
+      const turnDurationMs = turnStartedAt
+        ? Date.parse(event.createdAt) - Date.parse(turnStartedAt)
+        : Number.NaN;
+      if (!turnOutputTokens || !(turnDurationMs > 0)) {
+        return [];
+      }
+      // Rides on context-window.updated, which every client already keeps out
+      // of the work log; a new kind would render as a row on shipped clients.
+      // Without usedTokens the row never shadows the meter's usage snapshot.
+      return [
+        {
+          id: event.eventId,
+          createdAt: event.createdAt,
+          tone: "info",
+          kind: "context-window.updated",
+          summary: "Turn throughput recorded",
+          payload: { turnOutputTokens, turnDurationMs },
           turnId: toTurnId(event.turnId) ?? null,
           ...maybeSequence,
         },
@@ -2602,7 +2633,16 @@ const make = Effect.gen(function* () {
         }
       }
 
-      const activities = runtimeEventToActivities(activityEvent, taskTitle);
+      const turnStartedAt =
+        isTerminalTurn && eventTurnId !== undefined && event.payload.tokenUsage?.outputTokens
+          ? Option.getOrUndefined(
+              yield* projectionTurnRepository.getByTurnId({
+                threadId: thread.id,
+                turnId: eventTurnId,
+              }),
+            )?.startedAt
+          : undefined;
+      const activities = runtimeEventToActivities(activityEvent, taskTitle, turnStartedAt);
       yield* Effect.forEach(activities, (activity) =>
         providerCommandId(event, "thread-activity-append").pipe(
           Effect.flatMap((commandId) =>
