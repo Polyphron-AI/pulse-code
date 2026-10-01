@@ -770,6 +770,8 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
       "node_modules/native/addon.so",
       "node_modules/native/addon.so.1",
       "node_modules/native/addon.dylib",
+      "apps/server/dist/client/parakeet-model/encoder-model.int8.onnx",
+      "apps/server/dist/client/parakeet-model/vocab.txt",
     ]) {
       assert.isTrue(
         NodePath.matchesGlob(file, WINDOWS_NATIVE_ASAR_UNPACK_GLOB),

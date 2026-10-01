@@ -39,6 +39,7 @@ import { resolveWebAssetBrandForChannel, type WebAssetBrand } from "./lib/brand-
 import { PULSE_BRAND_ASSET_PATHS } from "./lib/pulse-brand-assets.ts";
 import { getDefaultBuildArch } from "./lib/build-target-arch.ts";
 import { isPulseNextVersion, stageBundledParakeet } from "./lib/bundled-parakeet.ts";
+import { stageBundledPulseVoice } from "./lib/bundled-pulse-voice.ts";
 import {
   findInlinedExternalPackages,
   selectCliRuntimeExternalDependencies,
@@ -1011,9 +1012,11 @@ export function resolveMacFileExclusions(arch?: typeof BuildArch.Type) {
 export const WINDOWS_SERVER_ASAR_RESOURCE = "server.asar";
 // dlopen/spawn need real files, so native modules, shared libraries, and
 // helper executables live in each archive's .unpacked sibling (the standard
-// asar redirect convention). Everything else stays packed.
+// asar redirect convention). The Parakeet model is read by the native
+// pulse-voice sidecar, which cannot see inside an archive. Everything else
+// stays packed.
 export const WINDOWS_NATIVE_ASAR_UNPACK_GLOB =
-  "{**/*.node,**/*.dll,**/*.exe,**/*.so,**/*.so.*,**/*.dylib}";
+  "{**/*.node,**/*.dll,**/*.exe,**/*.so,**/*.so.*,**/*.dylib,**/parakeet-model/**}";
 // Mirrors DESKTOP_FILE_EXCLUSIONS for the hand-packed sidecar: the Claude SDK
 // platform packages are dead weight (see above), and node_modules/.bin shims
 // are never spawned at runtime (and are symlinks on POSIX build hosts, which
@@ -1083,6 +1086,9 @@ export const DESKTOP_EXTRA_RESOURCES = [
     from: "apps/desktop/prod-resources/resource-monitor",
     to: "resource-monitor",
   },
+] as const;
+export const WINDOWS_PULSE_VOICE_EXTRA_RESOURCES = [
+  { from: "apps/desktop/prod-resources/pulse-voice", to: "pulse-voice" },
 ] as const;
 export const LINUX_CAPTURE_EXTRA_RESOURCES = [
   {
@@ -2689,6 +2695,9 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       ...(platform === "linux" ? LINUX_CAPTURE_EXTRA_RESOURCES : []),
       ...(platform === "linux" ? LINUX_BROWSER_SECRET_EXTRA_RESOURCES : []),
       ...(platform === "win" ? WINDOWS_SERVER_EXTRA_RESOURCES : []),
+      ...(platform === "win" && isPulseNextVersion(version)
+        ? WINDOWS_PULSE_VOICE_EXTRA_RESOURCES
+        : []),
       ...(platform === "win" && wslRuntimeBundled ? WSL_RUNTIME_EXTRA_RESOURCES : []),
     ],
   };
@@ -3596,6 +3605,17 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
     arch: options.arch,
     verbose: options.verbose,
   });
+  if (options.platform === "win" && isPulseNextVersion(appVersion)) {
+    yield* Effect.log("[desktop-artifact] Building pulse-voice sidecar...");
+    const sourceOverride = yield* Config.string("PULSE_VOICE_SOURCE").pipe(Config.option);
+    yield* Effect.tryPromise(() =>
+      stageBundledPulseVoice({
+        repoRoot,
+        stageResourcesDir,
+        sourceOverride: Option.getOrUndefined(sourceOverride),
+      }),
+    );
+  }
   if (options.platform === "linux") {
     for (const backend of ["kde", "hyprland"] as const)
       yield* stageLinuxCaptureHelper({

@@ -19,6 +19,12 @@ const files = [
     sha256: "eea7483ee3d1a30375daedc8ed83e3960c91b098812127a0d99d1c8977667a70",
   },
   {
+    // Mel-spectrogram preprocessor used by the native pulse-voice engine.
+    name: "nemo128.onnx",
+    size: 139_764,
+    sha256: "a9fde1486ebfcc08f328d75ad4610c67835fea58c73ba57e3209a6f6cf019e9f",
+  },
+  {
     name: "vocab.txt",
     size: 93_939,
     sha256: "d58544679ea4bc6ac563d1f545eb7d474bd6cfa467f0a6e2c1dc1c7d37e3c35d",

@@ -44,5 +44,5 @@ node_modules/
 
 # pnpm content-addressable store; never belongs in the repo.
 .pnpm-store/
-# Dev copy of the pulse-voice sidecar (scripts/stage-pulse-voice.ts)
+# Dev copy of pulse-voice.exe for the desktop shell (or set PULSE_VOICE_BIN)
 apps/desktop/.pulse-voice/
