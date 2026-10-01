@@ -41,6 +41,7 @@ import {
 import { useLocation, useNavigate, useParams } from "@tanstack/react-router";
 import * as Option from "effect/Option";
 import {
+  AudioLinesIcon,
   ArrowLeftIcon,
   BotIcon,
   CornerLeftUpIcon,
@@ -1858,6 +1859,46 @@ function OpenCommandPaletteDialog(props: {
         themeHalves,
         initialAppearance: resolvedTheme,
       });
+    },
+  });
+
+  // Meetings live per environment, so with several connected the palette asks which one.
+  const meetingsEnvironmentItems: CommandPaletteActionItem[] = addProjectEnvironmentOptions.map(
+    (option) => ({
+      kind: "action",
+      value: `action:meetings:environment:${option.environmentId}`,
+      searchTerms: [option.label, option.environmentId, option.isPrimary ? "this device" : ""],
+      title: option.label,
+      description: option.isConnected
+        ? option.isPrimary
+          ? "This device"
+          : option.environmentId
+        : option.status,
+      disabled: !option.isConnected,
+      icon: <EnvironmentMachineIcon kind={option.machine} className={ITEM_ICON_CLASS} />,
+      run: async () => {
+        await navigate({ to: "/meetings", search: { environmentId: option.environmentId } });
+      },
+    }),
+  );
+  const chooseMeetingsEnvironment = addProjectEnvironmentOptions.length > 1;
+  const meetingsEnvironmentView: CommandPaletteView = {
+    addonIcon: <AudioLinesIcon className={ADDON_ICON_CLASS} />,
+    groups: [{ value: "environments", label: "Environments", items: meetingsEnvironmentItems }],
+  };
+  actionItems.push({
+    kind: "action",
+    value: "action:meetings",
+    searchTerms: ["meetings", "transcripts", "summaries", "recordings", "notes"],
+    title: "Open meetings",
+    icon: <AudioLinesIcon className={ITEM_ICON_CLASS} />,
+    keepOpen: chooseMeetingsEnvironment,
+    run: async () => {
+      if (chooseMeetingsEnvironment) {
+        pushPaletteView(meetingsEnvironmentView);
+        return;
+      }
+      await navigate({ to: "/meetings" });
     },
   });
 
