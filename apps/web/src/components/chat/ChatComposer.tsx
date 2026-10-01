@@ -1203,6 +1203,7 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
   reserveContextWindowMeter: boolean;
   activeThreadModelDisplayName: string | null;
   activeThreadCostUsd: number | null;
+  activeOutputTokensPerSecond: number | null;
   composerPlanUsage: { driver: ServerProvider["driver"]; limits: ServerProviderUsageLimits } | null;
   isPreparingWorktree: boolean;
   pendingAction: {
@@ -1248,6 +1249,7 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
           // "will the next send cost me money", and a subscription plan
           // already answers that with its windows.
           costUsd={props.composerPlanUsage ? null : props.activeThreadCostUsd}
+          outputTokensPerSecond={props.activeOutputTokensPerSecond}
         />
       ) : props.reserveContextWindowMeter ? (
         <ContextWindowMeterPlaceholder />
@@ -1439,6 +1441,7 @@ export interface ChatComposerProps {
   // Context window
   activeContextWindow: ContextWindowSnapshot | null;
   activeThreadCostUsd: number | null;
+  activeOutputTokensPerSecond: number | null;
   compactThreadUnavailable: boolean;
   compactDisabled: boolean;
   compactDisabledReason: string | null;
@@ -1569,6 +1572,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     activeThreadModelSelection,
     activeContextWindow,
     activeThreadCostUsd,
+    activeOutputTokensPerSecond,
     compactThreadUnavailable,
     compactDisabled,
     compactDisabledReason,
@@ -7232,6 +7236,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     reserveContextWindowMeter={reserveContextWindowMeter}
                     activeThreadModelDisplayName={activeThreadModelDisplayName}
                     activeThreadCostUsd={activeThreadCostUsd}
+                    activeOutputTokensPerSecond={activeOutputTokensPerSecond}
                     composerPlanUsage={composerPlanUsage}
                     pendingAction={pendingPrimaryAction}
                     isRunning={phase === "running"}

@@ -416,6 +416,7 @@ import {
 } from "./chat/ContextWindowMeter.logic";
 import {
   deriveLatestContextWindowSnapshot,
+  deriveOutputTokensPerSecond,
   deriveThreadCostUsd,
   formatContextWindowTokens,
 } from "../lib/contextWindow";
@@ -2923,6 +2924,10 @@ export default function ChatView(props: ChatViewProps) {
   );
   const activeThreadCostUsd = useMemo(
     () => deriveThreadCostUsd(threadActivities),
+    [threadActivities],
+  );
+  const activeOutputTokensPerSecond = useMemo(
+    () => deriveOutputTokensPerSecond(threadActivities),
     [threadActivities],
   );
   const workLogEntries = useMemo(() => deriveWorkLogEntries(threadActivities), [threadActivities]);
@@ -10326,6 +10331,7 @@ export default function ChatView(props: ChatViewProps) {
                             activeThreadModelSelection={activeThread?.modelSelection}
                             activeContextWindow={activeContextWindow}
                             activeThreadCostUsd={activeThreadCostUsd}
+                            activeOutputTokensPerSecond={activeOutputTokensPerSecond}
                             compactThreadUnavailable={compactThreadUnavailable}
                             compactDisabled={compactDisabled}
                             compactDisabledReason={compactDisabledReason}
