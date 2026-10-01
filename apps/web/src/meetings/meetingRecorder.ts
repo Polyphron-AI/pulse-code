@@ -26,8 +26,18 @@ export type MeetingRecorderState =
       readonly unsaved: boolean;
     };
 
+/** What a page reload needs to keep saving the meeting the desktop is still recording. */
+export type SavedMeetingSession = {
+  readonly environmentId: EnvironmentId;
+  readonly meetingId: MeetingId;
+  readonly sessionId: string;
+  readonly startedAt: string;
+};
+
 export type MeetingRecorderDeps = {
   readonly desktop: {
+    /** The desktop's recording session, if any; it outlives page reloads. */
+    readonly activeSessionId: () => Promise<string | null>;
     readonly start: () => Promise<{ readonly sessionId: string }>;
     readonly stop: () => Promise<{ readonly sessionId: string; readonly durationMs: number }>;
     readonly onEvent: (listener: (event: DesktopVoiceEvent) => void) => () => void;
@@ -46,6 +56,11 @@ export type MeetingRecorderDeps = {
       durationMs: number,
     ) => Promise<void>;
     readonly remove: (environmentId: EnvironmentId, id: MeetingId) => Promise<void>;
+  };
+  /** Survives a page reload, but not an app restart. */
+  readonly store: {
+    readonly load: () => SavedMeetingSession | null;
+    readonly save: (session: SavedMeetingSession | null) => void;
   };
   readonly now: () => Date;
 };
@@ -127,19 +142,7 @@ export class MeetingRecorder {
     this.#unsubscribe = this.#deps.desktop.onEvent((event) => this.#onEvent(event, early));
     try {
       const { sessionId } = await this.#deps.desktop.start();
-      this.#session = {
-        environmentId,
-        meetingId,
-        sessionId,
-        startedAt,
-        pending: [],
-        segmentCount: 0,
-        lastEndMs: 0,
-        durationMs: null,
-        flushing: null,
-        syncError: null,
-      };
-      this.#publishRecording();
+      this.#adopt({ environmentId, meetingId, sessionId, startedAt });
       for (const segment of early) this.#onEvent({ type: "meeting-segment", segment }, []);
     } catch (error) {
       this.#detach();
@@ -151,6 +154,35 @@ export class MeetingRecorder {
         unsaved: false,
       });
     }
+  }
+
+  /**
+   * Picks up after a page reload. A meeting the desktop is still recording keeps saving to its
+   * server meeting; segments finalized while the page was reloading are lost. A meeting whose
+   * capture ended during the reload is finished, and capture with nowhere to save is stopped.
+   */
+  async resume(): Promise<void> {
+    if (this.#session || this.#state.phase !== "idle") return;
+    const saved = this.#deps.store.load();
+    let active: string | null;
+    try {
+      active = await this.#deps.desktop.activeSessionId();
+    } catch {
+      return;
+    }
+    if (this.#session || this.#state.phase !== "idle") return;
+    if (saved && saved.sessionId === active) {
+      this.#unsubscribe = this.#deps.desktop.onEvent((event) => this.#onEvent(event, []));
+      this.#adopt(saved);
+      return;
+    }
+    if (active !== null) await this.#deps.desktop.stop().catch(() => undefined);
+    if (!saved) return;
+    this.#adopt(saved);
+    const session = this.#session!;
+    session.durationMs = Math.max(0, this.#deps.now().getTime() - Date.parse(saved.startedAt));
+    this.#setState({ phase: "stopping", meetingId: session.meetingId });
+    await this.#finish(session);
   }
 
   /** Stops capture, saves every remaining segment, then marks the meeting ready. */
@@ -174,6 +206,13 @@ export class MeetingRecorder {
     if (!session || this.#state.phase !== "error") return;
     this.#setState({ phase: "stopping", meetingId: session.meetingId });
     await this.#finish(session);
+  }
+
+  /** Gives up on a meeting that cannot be saved, such as one deleted from another client. */
+  discard(): void {
+    if (!this.#session || this.#state.phase !== "error") return;
+    this.#detach();
+    this.#setState({ phase: "idle" });
   }
 
   dispose(): void {
@@ -267,6 +306,21 @@ export class MeetingRecorder {
     return session.flushing;
   }
 
+  #adopt(saved: SavedMeetingSession): void {
+    this.#session = {
+      ...saved,
+      pending: [],
+      segmentCount: 0,
+      lastEndMs: 0,
+      durationMs: null,
+      flushing: null,
+      syncError: null,
+    };
+    this.#deps.store.save(saved);
+    this.#setState({ phase: "starting" });
+    this.#publishRecording();
+  }
+
   #publishRecording(): void {
     const session = this.#session;
     if (!session || (this.#state.phase !== "recording" && this.#state.phase !== "starting")) return;
@@ -282,6 +336,7 @@ export class MeetingRecorder {
   #detach(): void {
     this.#unsubscribe?.();
     this.#unsubscribe = null;
+    if (this.#session) this.#deps.store.save(null);
     this.#session = null;
   }
 

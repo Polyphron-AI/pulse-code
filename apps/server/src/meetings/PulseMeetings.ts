@@ -1,6 +1,7 @@
 import {
   type MeetingDetail,
   type MeetingId,
+  type MeetingRevision,
   type MeetingSegment,
   type MeetingSummaryRow,
   PulseMeetingsError,
@@ -53,8 +54,8 @@ export class PulseMeetings extends Context.Service<
     readonly summarize: (id: MeetingId) => MeetingsEffect<MeetingSummaryRow>;
     readonly rename: (id: MeetingId, title: string) => MeetingsEffect<MeetingSummaryRow>;
     readonly delete: (id: MeetingId) => MeetingsEffect<void>;
-    /** Grows on every meeting change. Carries no meeting data, so clients refetch. */
-    readonly revisions: Stream.Stream<number>;
+    /** Grows on every meeting change and names the meeting, so clients refetch only what changed. */
+    readonly revisions: Stream.Stream<MeetingRevision>;
   }
 >()("t3/meetings/PulseMeetings") {}
 
@@ -102,8 +103,15 @@ export const make = Effect.gen(function* () {
 
   // Starting from the clock keeps revisions increasing across server restarts.
   const initialRevision = yield* Clock.currentTimeMillis;
-  const revision = yield* SubscriptionRef.make(initialRevision);
-  const publish = SubscriptionRef.update(revision, (value) => value + 1);
+  const revision = yield* SubscriptionRef.make<MeetingRevision>({
+    revision: initialRevision,
+    meetingId: "" as MeetingId,
+  });
+  const publish = (meetingId: MeetingId) =>
+    SubscriptionRef.update(revision, (current) => ({
+      revision: current.revision + 1,
+      meetingId,
+    }));
   const inFlight = new Set<MeetingId>();
 
   const storageFailure = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
@@ -184,7 +192,7 @@ export const make = Effect.gen(function* () {
         ),
       ),
       Effect.onInterrupt(() => Effect.sync(() => inFlight.delete(id))),
-      Effect.ensuring(publish),
+      Effect.ensuring(publish(id)),
     );
 
   const startSummary = (id: MeetingId) =>
@@ -200,7 +208,7 @@ export const make = Effect.gen(function* () {
           }),
         );
         inFlight.add(id);
-        yield* publish;
+        yield* publish(id);
         yield* runSummary(id).pipe(Effect.forkIn(scope));
       }),
     );
@@ -228,7 +236,7 @@ export const make = Effect.gen(function* () {
             now: yield* nowIso,
           }),
         );
-        yield* publish;
+        yield* publish(id);
         return yield* requireRow(id);
       }),
     appendSegments: (id, segments) =>
@@ -241,7 +249,7 @@ export const make = Effect.gen(function* () {
         }
         if (segments.length === 0) return MeetingRepository.toSummaryRow(record);
         yield* storageFailure(repository.upsertSegments(id, segments, yield* nowIso));
-        yield* publish;
+        yield* publish(id);
         return yield* requireRow(id);
       }),
     finish: ({ id, endedAt, durationMs }) =>
@@ -249,7 +257,7 @@ export const make = Effect.gen(function* () {
         const record = yield* requireRecord(id);
         if (record.status === "ready") return MeetingRepository.toSummaryRow(record);
         yield* storageFailure(repository.finish({ id, endedAt, durationMs, now: yield* nowIso }));
-        yield* publish;
+        yield* publish(id);
         yield* startSummary(id);
         return yield* requireRow(id);
       }),
@@ -268,17 +276,17 @@ export const make = Effect.gen(function* () {
       Effect.gen(function* () {
         yield* requireRecord(id);
         yield* storageFailure(repository.rename(id, title, yield* nowIso));
-        yield* publish;
+        yield* publish(id);
         return yield* requireRow(id);
       }),
     delete: (id) =>
       Effect.gen(function* () {
         yield* requireRecord(id);
         yield* storageFailure(repository.delete(id));
-        yield* publish;
+        yield* publish(id);
       }),
     revisions: SubscriptionRef.changes(revision).pipe(
-      Stream.filter((value) => value > initialRevision),
+      Stream.filter((value) => value.revision > initialRevision),
     ),
   });
 });

@@ -203,7 +203,7 @@ describe("PulseMeetings", () => {
     }).pipe(Effect.provide(makeLayer(handler)));
   });
 
-  it.effect("publishes a new revision when a meeting is deleted", () => {
+  it.effect("publishes a revision naming the meeting when it is deleted", () => {
     const handler = { current: unused("generateMeetingSummary") as SummaryHandler };
     return Effect.gen(function* () {
       const meetings = yield* PulseMeetings;
@@ -211,12 +211,12 @@ describe("PulseMeetings", () => {
       const before = Option.getOrThrow(yield* meetings.revisions.pipe(Stream.runHead));
 
       const next = yield* meetings.revisions.pipe(
-        Stream.filter((revision) => revision > before),
+        Stream.filter((change) => change.revision > before.revision),
         Stream.runHead,
         Effect.forkChild,
       );
       yield* meetings.delete(id);
-      expect(Option.getOrThrow(yield* Fiber.join(next))).toBeGreaterThan(before);
+      expect(Option.getOrThrow(yield* Fiber.join(next)).meetingId).toBe(id);
       expect(yield* meetings.list).toHaveLength(0);
       const missing = yield* meetings.get(id).pipe(Effect.flip);
       expect(missing.message).toBe("Meeting not found.");

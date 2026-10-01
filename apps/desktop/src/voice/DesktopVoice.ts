@@ -1,4 +1,4 @@
-// @effect-diagnostics nodeBuiltinImport:off -- The desktop shell owns the pulse-voice child process.
+// @effect-diagnostics nodeBuiltinImport:off globalTimers:off -- The desktop shell owns the pulse-voice child process and its idle release timer.
 
 import * as NodeChildProcess from "node:child_process";
 
@@ -62,6 +62,8 @@ export class DesktopVoice extends Context.Service<
 >()("@t3tools/desktop/voice/DesktopVoice") {}
 
 const ESCAPE_ACCELERATOR = "Escape";
+// How long the model stays loaded after its last use when global dictation is off.
+const IDLE_RELEASE_MS = 60_000;
 
 function errorReason(error: unknown): string {
   return error instanceof Error && error.message ? error.message : "The voice engine failed.";
@@ -137,6 +139,8 @@ export const make = Effect.gen(function* () {
   let dictation: DictationPhase = "idle";
   let meetingSessionId: string | null = null;
   let escapeRegistered = false;
+  let transcribing = 0;
+  let releaseTimer: ReturnType<typeof setTimeout> | null = null;
 
   const currentState = (): DesktopVoiceState => ({
     ...voiceStatus(supervisor.status),
@@ -178,6 +182,7 @@ export const make = Effect.gen(function* () {
     const sessionId = meetingSessionId;
     meetingSessionId = null;
     emit({ type: "meeting-error", sessionId, message });
+    scheduleRelease();
   };
 
   const handleEvent = (event: PulseVoiceEvent) => {
@@ -214,6 +219,8 @@ export const make = Effect.gen(function* () {
     onStatus: (status) => {
       if (status.kind !== "ready" && status.kind !== "starting") {
         endMeeting("The voice engine stopped during the meeting.");
+        // The dead process never sends the hotkey release, so end the dictation here.
+        if (dictation !== "idle") void flow.cancel();
       }
       publishState();
     },
@@ -259,6 +266,26 @@ export const make = Effect.gen(function* () {
     onError: (message) => log(`dictation failed: ${message}`),
   });
 
+  // The model holds about 700 MB. Without global dictation nothing keeps it loaded, so it is
+  // released a while after the last composer transcription or meeting.
+  const scheduleRelease = () => {
+    if (releaseTimer !== null) clearTimeout(releaseTimer);
+    releaseTimer = null;
+    if (settings.voiceGlobalDictationEnabled || supervisor.running === undefined) return;
+    releaseTimer = setTimeout(() => {
+      releaseTimer = null;
+      if (
+        settings.voiceGlobalDictationEnabled ||
+        meetingSessionId !== null ||
+        transcribing > 0 ||
+        dictation !== "idle"
+      ) {
+        return;
+      }
+      void supervisor.stop();
+    }, IDLE_RELEASE_MS);
+  };
+
   const request = <A>(operation: string, run: (client: PulseVoiceClient) => Promise<A>) =>
     Effect.tryPromise({
       try: async () => run(await client()),
@@ -279,15 +306,13 @@ export const make = Effect.gen(function* () {
     if (enabled && supervisor.status.kind === "failed") void client().catch(() => undefined);
     const running = supervisor.running;
     if (running) yield* Effect.promise(() => applyHotkey(running).catch(() => undefined));
-    // The model holds about 700 MB; release it when nothing needs it.
-    if (!enabled && wasEnabled && meetingSessionId === null) {
-      yield* Effect.promise(() => supervisor.stop());
-    }
+    if (!enabled && wasEnabled) scheduleRelease();
   });
 
   yield* Effect.addFinalizer(() =>
     Effect.promise(async () => {
       setEscape(false);
+      if (releaseTimer !== null) clearTimeout(releaseTimer);
       await flow.cancel();
       await supervisor.stop();
       pill.dispose();
@@ -305,11 +330,17 @@ export const make = Effect.gen(function* () {
     listDevices: request("list-devices", (client) => client.request("devices.list")),
     transcribe: (input) =>
       request("transcribe", async (client) => {
-        const transcript = await client.request("transcribe", {
-          pcm16: Encoding.encodeBase64(input.pcm16),
-          sampleRate: input.sampleRate,
-        });
-        return { text: transcript.text };
+        transcribing += 1;
+        try {
+          const transcript = await client.request("transcribe", {
+            pcm16: Encoding.encodeBase64(input.pcm16),
+            sampleRate: input.sampleRate,
+          });
+          return { text: transcript.text };
+        } finally {
+          transcribing -= 1;
+          scheduleRelease();
+        }
       }),
     startMeeting: Effect.suspend(() =>
       meetingSessionId !== null
@@ -340,10 +371,14 @@ export const make = Effect.gen(function* () {
             }),
           )
         : request("stop-meeting", async (client) => {
-            const stopped = await client.request("meeting.stop");
-            meetingSessionId = null;
-            publishState();
-            return stopped;
+            try {
+              return await client.request("meeting.stop");
+            } finally {
+              // A failed stop must not leave every later meeting refused as already recording.
+              meetingSessionId = null;
+              publishState();
+              scheduleRelease();
+            }
           }),
     ),
   });

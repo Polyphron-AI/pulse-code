@@ -6,17 +6,24 @@ import type {
 } from "@t3tools/contracts";
 import { describe, expect, it, vi } from "vite-plus/test";
 
-import { MeetingRecorder } from "./meetingRecorder";
+import { MeetingRecorder, type SavedMeetingSession } from "./meetingRecorder";
 
 const MEETING = "meeting-1" as MeetingId;
 const ENV = "env-1" as EnvironmentId;
 
-function makeRecorder() {
+function makeRecorder(
+  options: {
+    readonly stored?: SavedMeetingSession | null;
+    readonly activeSessionId?: string | null;
+  } = {},
+) {
   let emit: (event: DesktopVoiceEvent) => void = () => undefined;
   const saved: MeetingSegment[] = [];
   let appendFailures = 0;
+  const store = { current: options.stored ?? null };
   const deps = {
     desktop: {
+      activeSessionId: vi.fn(async () => options.activeSessionId ?? null),
       start: vi.fn(async () => ({ sessionId: "s1" })),
       stop: vi.fn(async () => ({ sessionId: "s1", durationMs: 9_000 })),
       onEvent: vi.fn((listener: (event: DesktopVoiceEvent) => void) => {
@@ -51,6 +58,12 @@ function makeRecorder() {
       ),
       remove: vi.fn(async (_environmentId: EnvironmentId, _id: MeetingId) => undefined),
     },
+    store: {
+      load: () => store.current,
+      save: (session: SavedMeetingSession | null) => {
+        store.current = session;
+      },
+    },
     now: () => new Date("2026-10-01T10:00:00.000Z"),
   };
   const segment = (index: number, text = `segment ${index}`, sessionId = "s1") =>
@@ -62,6 +75,7 @@ function makeRecorder() {
     recorder: new MeetingRecorder(deps),
     deps,
     saved,
+    store,
     segment,
     emit: (event: DesktopVoiceEvent) => emit(event),
     failAppends: (count: number) => {
@@ -165,6 +179,59 @@ describe("MeetingRecorder", () => {
       meetingId: null,
       unsaved: false,
     });
+  });
+
+  it("keeps saving the desktop's meeting after a page reload", async () => {
+    const { recorder: first, store } = makeRecorder();
+    await first.start(ENV);
+    const reloaded = makeRecorder({ stored: store.current, activeSessionId: "s1" });
+    await reloaded.recorder.resume();
+    reloaded.segment(4);
+    await settle();
+    expect(reloaded.saved.map((item) => item.index)).toEqual([4]);
+    await reloaded.recorder.stop();
+    expect(reloaded.deps.server.finish).toHaveBeenCalledWith(
+      ENV,
+      MEETING,
+      expect.any(String),
+      9_000,
+    );
+    expect(reloaded.store.current).toBeNull();
+  });
+
+  it("finishes a meeting whose capture ended during a reload", async () => {
+    const stored = {
+      environmentId: ENV,
+      meetingId: MEETING,
+      sessionId: "s1",
+      startedAt: "2026-10-01T09:59:00.000Z",
+    };
+    const { recorder, deps, store } = makeRecorder({ stored, activeSessionId: null });
+    await recorder.resume();
+    expect(deps.desktop.stop).not.toHaveBeenCalled();
+    expect(deps.server.finish).toHaveBeenCalledWith(ENV, MEETING, expect.any(String), 60_000);
+    expect(recorder.getSnapshot()).toEqual({ phase: "idle" });
+    expect(store.current).toBeNull();
+  });
+
+  it("stops desktop capture that has no meeting to save to", async () => {
+    const { recorder, deps } = makeRecorder({ stored: null, activeSessionId: "orphan" });
+    await recorder.resume();
+    expect(deps.desktop.stop).toHaveBeenCalledOnce();
+    expect(recorder.getSnapshot()).toEqual({ phase: "idle" });
+  });
+
+  it("discards a meeting that can no longer be saved", async () => {
+    const { recorder, deps, segment, failAppends } = makeRecorder();
+    await recorder.start(ENV);
+    failAppends(10);
+    segment(0);
+    await recorder.stop();
+    expect(recorder.getSnapshot()).toMatchObject({ phase: "error", unsaved: true });
+    recorder.discard();
+    expect(recorder.getSnapshot()).toEqual({ phase: "idle" });
+    await recorder.start(ENV);
+    expect(deps.server.create).toHaveBeenCalledTimes(2);
   });
 
   it("does not record when the server cannot create the meeting", async () => {

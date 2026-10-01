@@ -1,5 +1,12 @@
-import { type EnvironmentId, type MeetingDetail, WS_METHODS } from "@t3tools/contracts";
-import type { Atom } from "effect/unstable/reactivity";
+import {
+  type EnvironmentId,
+  type MeetingDetail,
+  type MeetingId,
+  type MeetingRevision,
+  WS_METHODS,
+} from "@t3tools/contracts";
+import * as Option from "effect/Option";
+import { AsyncResult, Atom } from "effect/unstable/reactivity";
 
 import type { EnvironmentRegistry } from "../connection/registry.ts";
 import {
@@ -9,8 +16,24 @@ import {
 } from "./runtime.ts";
 
 /**
- * Meeting reads and commands for one client runtime. The server publishes a bare revision on
- * every meeting change, so reads refetch from it instead of receiving transcripts over the stream.
+ * The latest revision that touched `meetingId`, or `previous` when the change was for another
+ * meeting. A detail refreshes only when this value moves.
+ */
+export function meetingRevisionFor(
+  change: AsyncResult.AsyncResult<MeetingRevision, unknown>,
+  meetingId: MeetingId,
+  previous: number,
+): number {
+  return AsyncResult.isSuccess(change) && change.value.meetingId === meetingId
+    ? change.value.revision
+    : previous;
+}
+
+/**
+ * Meeting reads and commands for one client runtime. The server publishes a revision naming the
+ * changed meeting, so reads refetch from it instead of receiving transcripts over the stream. The
+ * list refetches on every change; a detail only on changes to its own meeting, because a recording
+ * meeting changes with every transcript segment.
  */
 export function createMeetingEnvironmentAtoms<R, E>(
   runtime: Atom.AtomRuntime<EnvironmentRegistry | R, E>,
@@ -21,6 +44,16 @@ export function createMeetingEnvironmentAtoms<R, E>(
   });
   const refreshTrigger = ({ environmentId }: { readonly environmentId: EnvironmentId }) =>
     revisions({ environmentId, input: {} });
+  const meetingRevision = Atom.family((key: string) => {
+    const [environmentId, meetingId] = JSON.parse(key) as [EnvironmentId, MeetingId];
+    return Atom.make((get) =>
+      meetingRevisionFor(
+        get(revisions({ environmentId, input: {} })),
+        meetingId,
+        Option.getOrElse(get.self<number>(), () => 0),
+      ),
+    );
+  });
   return {
     revisions,
     list: createEnvironmentRpcQueryAtomFamily(runtime, {
@@ -35,7 +68,8 @@ export function createMeetingEnvironmentAtoms<R, E>(
       tag: WS_METHODS.pulseMeetingsGet,
       staleTimeMs: 30_000,
       idleTtlMs: 60_000,
-      refreshTrigger,
+      refreshTrigger: ({ environmentId, input }) =>
+        meetingRevision(JSON.stringify([environmentId, input.id])),
     }),
     create: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:pulse-meetings:create",

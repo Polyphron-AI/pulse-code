@@ -1,10 +1,26 @@
+import type { MeetingId } from "@t3tools/contracts";
+import { AsyncResult } from "effect/unstable/reactivity";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
   buildMeetingThreadPrompt,
   formatMeetingDuration,
   formatMeetingOffset,
+  meetingRevisionFor,
 } from "./meetings.ts";
+
+const meetingA = "meeting-a" as MeetingId;
+const meetingB = "meeting-b" as MeetingId;
+
+describe("meetingRevisionFor", () => {
+  it("moves only for changes to its own meeting", () => {
+    const change = (revision: number, meetingId: MeetingId) =>
+      AsyncResult.success({ revision, meetingId });
+    expect(meetingRevisionFor(change(7, meetingA), meetingA, 3)).toBe(7);
+    expect(meetingRevisionFor(change(8, meetingB), meetingA, 7)).toBe(7);
+    expect(meetingRevisionFor(AsyncResult.initial(), meetingA, 7)).toBe(7);
+  });
+});
 
 const segment = (index: number, text: string) => ({
   index,

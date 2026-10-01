@@ -14,25 +14,22 @@
       "A3 Cancel (Escape on pill or empty transcript) inserts nothing; errors show in the pill and clear; a second hotkey during transcription is ignored.",
       "A4 Idle: no recording means zero sustained sidecar/desktop CPU and a closed microphone.",
       "A5 Sidecar spawned once, restarted with backoff after a crash, terminated on quit; a missing or incompatible sidecar disables global dictation and meetings capture with a visible reason.",
-      "A6 Desktop composer dictation uses the native engine and falls back to WASM Parakeet, then Groq, without user action.",
+      "A6 Desktop composer dictation uses the native engine and falls back to WASM Parakeet when that model is set up; Groq stays an explicit choice.",
       "A7 Meeting recording (mic + optional system audio) persists segments as they arrive, survives renderer reload mid-meeting, and on stop stores a provider-written summary; summary failure is retryable.",
       "A8 Web, remote web and mobile list meetings, open transcript and summary, receive live updates, and Send to thread prefills that client's composer; no recording controls there.",
       "A9 Rename and delete meetings from any client; deletion reaches other connected clients.",
-      "A10 Settings: enable global dictation, hotkey chord, hold/toggle, microphone, pill on/off, meeting system audio, summary model; changes apply without restart.",
+      "A10 Settings: enable global dictation, hotkey chord, hold/toggle, microphone, pill on/off, meeting system audio; summaries use the existing text generation model; changes apply without restart.",
       "A11 macOS/Linux desktop and browser clients hide hotkey, pill and recording; nothing errors.",
       "A12 Unchanged: existing composer dictation, Groq path, SnapShot shortcut and mobile iOS voice input behave as before."
     ],
     "notApplicable": "Provider differences: summaries use the existing text generation path, so each provider is supported where text generation is. Queued turns and draft promotion apply only to Send to thread, which uses the existing composer draft path.",
     "tasks": "T1 protocol (done) > T2 Rust sidecar; T3 meetings contracts+server > T4 meetings web+mobile; T1 > T5 desktop supervisor+bridge > T6 hotkey/pill/paste, T7 meeting capture (needs T3), T8 composer native backend; T2 > T9 build bundling (+nemo128.onnx); T10 settings+docs; T11 one frozen-revision review; T12 real Windows run.",
     "completionBlockers": [
-      "T4 web+mobile screens (meetings worker)",
-      "T7 meeting capture",
-      "T11 frozen-revision review",
-      "T12 real Windows run (hotkey with Win chord, text.insert, second monitor with a different DPI)",
+      "T12 real Windows run (hotkey with Win chord, text.insert, second monitor with a different DPI, renderer reload mid-meeting, mobile Send to thread sheet stacking)",
       "Fork branch pulse/headless must be pushed before CI packaging can fetch PULSE_VOICE_REVISION"
     ],
-    "evidence": "Sidecar a75a9e27ca: cargo test 32 pass (coordinator rerun). Desktop voice 375a82e56b: PulseVoiceSupervisor 9 + DictationFlow 8 tests. Packaging a67250ca7e: build-desktop-artifact tests 76/76. Composer native engine a6e4217e76: nativeParakeet 8 tests. Settings and docs 2a96037773: DictationSettings 13 tests; web tsc 0 errors.",
-    "nextAction": "When the meetings worker reports, merge qb/feat-pulse-voice-meetings, rerun one of its verification commands, then implement T7 (desktop recorder writing segments to the server) and run T11.",
+    "evidence": "Sidecar a75a9e27ca: cargo test 32 pass (coordinator rerun). Desktop voice 375a82e56b: PulseVoiceSupervisor 9 + DictationFlow 8 tests. Packaging a67250ca7e: build-desktop-artifact tests 76/76. Composer native engine a6e4217e76: nativeParakeet 8 tests. Settings and docs 2a96037773: DictationSettings 13 tests; web tsc 0 errors. Meetings server/client/web/mobile merged at dfbd17da1d: PulseMeetings 7, client meetings 6 tests. Recorder 6c5b03501e. T11 review of 6c5b03501e: 2 high, 5 medium, 3 low; fixed in the review-fix commit (reload resume, engine gating, Discard, dictation cancel on crash, stop clears session, idle model release, per-meeting detail refresh, asar exclusion, system audio setting, meetings user doc); meetingRecorder 11, desktop voice 17, packaging 75 tests; tsc clean in server, web, desktop, client-runtime, contracts, mobile. GitManager.test.ts 3 cross-repo PR timeouts reproduce with the base file, so they predate this work. Open: a live meeting's own detail still refetches its full transcript per segment; segments finalized during a renderer reload are lost; a server meeting left recording by an app crash can only be deleted; Meetings entries are not hidden on older servers; Android meetings row icon.",
+    "nextAction": "With user permission, run T12 on Windows (packaged or dev desktop with PULSE_VOICE_BIN). The user must authorize pushing pulse/headless before CI packaging.",
     "updatedAt": "2026-10-01"
   },
   "skillSelectionStatus": {

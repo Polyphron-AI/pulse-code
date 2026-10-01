@@ -174,6 +174,13 @@ export function DesktopVoiceSettings() {
           <p className="text-xs text-muted-foreground">Press Escape to cancel a dictation.</p>
         </div>
       ) : null}
+      <label className="flex items-center gap-3 text-sm">
+        <Checkbox
+          checked={settings.voiceMeetingSystemAudio}
+          onCheckedChange={(checked) => void updateSettings({ voiceMeetingSystemAudio: checked })}
+        />
+        Include other participants' audio when recording meetings
+      </label>
     </div>
   );
 }

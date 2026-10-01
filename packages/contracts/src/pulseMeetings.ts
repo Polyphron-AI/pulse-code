@@ -51,6 +51,13 @@ export const MeetingDetail = Schema.Struct({
 });
 export type MeetingDetail = typeof MeetingDetail.Type;
 
+/** One meeting changed. Carries no meeting data, so clients refetch what they show. */
+export const MeetingRevision = Schema.Struct({
+  revision: NonNegativeInt,
+  meetingId: MeetingId,
+});
+export type MeetingRevision = typeof MeetingRevision.Type;
+
 export class PulseMeetingsError extends Schema.TaggedError<PulseMeetingsError>()(
   "PulseMeetingsError",
   { message: Schema.String },
@@ -116,10 +123,10 @@ export const PulseMeetingsRpcs = [
     success: Schema.Void,
     error: MeetingsError,
   }),
-  /** A number that grows on every meeting change. Carries no meeting data. */
+  /** A revision that grows on every meeting change, naming the meeting that changed. */
   Rpc.make(PULSE_MEETINGS_METHODS.pulseMeetingsRevisions, {
     payload: Schema.Struct({}),
-    success: NonNegativeInt,
+    success: MeetingRevision,
     error: EnvironmentAuthorizationError,
     stream: true,
   }),
