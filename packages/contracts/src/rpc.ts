@@ -2,6 +2,7 @@ import * as Schema from "effect/Schema";
 import * as Rpc from "effect/unstable/rpc/Rpc";
 import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 import { PULSE_SKILLS_METHODS, PulseSkillsRpcs } from "./pulseSkills.ts";
+import { PULSE_MEETINGS_METHODS, PulseMeetingsRpcs } from "./pulseMeetings.ts";
 import { PULSE_MCP_METHODS, PulseMcpRpcs } from "./pulseMcp.ts";
 import { NonNegativeInt, TrimmedNonEmptyString } from "./baseSchemas.ts";
 import {
@@ -295,6 +296,7 @@ export const WS_METHODS = {
   pulseMcpWardenTest: PULSE_MCP_METHODS.wardenTest,
   pulseMcpWardenListCredentials: PULSE_MCP_METHODS.wardenListCredentials,
   ...PULSE_SKILLS_METHODS,
+  ...PULSE_MEETINGS_METHODS,
   // Project registry methods
   projectsList: "projects.list",
   projectsAdd: "projects.add",
@@ -1394,6 +1396,7 @@ const WsSubscribeResourceTelemetryRpc = Rpc.make(WS_METHODS.subscribeResourceTel
 export const WsRpcGroup = RpcGroup.make(
   ...PulseMcpRpcs,
   ...PulseSkillsRpcs,
+  ...PulseMeetingsRpcs,
   WsServerProbeRpc,
   WsServerGetConfigRpc,
   WsServerRefreshProvidersRpc,

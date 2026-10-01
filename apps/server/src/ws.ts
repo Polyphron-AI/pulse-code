@@ -98,6 +98,7 @@ import {
   managedSkillHandlers,
   layer as managedSkillsLayer,
 } from "./skills/ManagedSkillRpc.ts";
+import { PulseMeetings, layer as pulseMeetingsLayer } from "./meetings/PulseMeetings.ts";
 import * as EnvironmentTheme from "./environmentTheme.ts";
 import * as Keybindings from "./keybindings.ts";
 import * as ExternalLauncher from "./process/externalLauncher.ts";
@@ -582,6 +583,7 @@ const makeWsRpcLayer = (
       const serverUpdate = yield* ServerSelfUpdate.ServerSelfUpdate;
       const config = yield* ServerConfig.ServerConfig;
       const pulseSkills = managedSkillHandlers(yield* ManagedSkills);
+      const pulseMeetings = yield* PulseMeetings;
       const pulseMcpConfig = yield* PulseMcpConfig.PulseMcpConfigService;
       const pulseMcpDiscovery = makeNodePulseMcpDiscoveryService(pulseMcpConfig, config.stateDir);
       yield* pulseMcpDiscovery
@@ -2577,6 +2579,46 @@ const makeWsRpcLayer = (
             pulseMcp.wardenListCredentials(),
             { "rpc.aggregate": "pulse.mcp" },
           ),
+        [WS_METHODS.pulseMeetingsList]: () =>
+          observeRpcEffect(WS_METHODS.pulseMeetingsList, pulseMeetings.list, {
+            "rpc.aggregate": "pulse.meetings",
+          }),
+        [WS_METHODS.pulseMeetingsGet]: (input) =>
+          observeRpcEffect(WS_METHODS.pulseMeetingsGet, pulseMeetings.get(input.id), {
+            "rpc.aggregate": "pulse.meetings",
+          }),
+        [WS_METHODS.pulseMeetingsCreate]: (input) =>
+          observeRpcEffect(WS_METHODS.pulseMeetingsCreate, pulseMeetings.create(input), {
+            "rpc.aggregate": "pulse.meetings",
+          }),
+        [WS_METHODS.pulseMeetingsAppendSegments]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.pulseMeetingsAppendSegments,
+            pulseMeetings.appendSegments(input.id, input.segments),
+            { "rpc.aggregate": "pulse.meetings" },
+          ),
+        [WS_METHODS.pulseMeetingsFinish]: (input) =>
+          observeRpcEffect(WS_METHODS.pulseMeetingsFinish, pulseMeetings.finish(input), {
+            "rpc.aggregate": "pulse.meetings",
+          }),
+        [WS_METHODS.pulseMeetingsSummarize]: (input) =>
+          observeRpcEffect(WS_METHODS.pulseMeetingsSummarize, pulseMeetings.summarize(input.id), {
+            "rpc.aggregate": "pulse.meetings",
+          }),
+        [WS_METHODS.pulseMeetingsRename]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.pulseMeetingsRename,
+            pulseMeetings.rename(input.id, input.title),
+            { "rpc.aggregate": "pulse.meetings" },
+          ),
+        [WS_METHODS.pulseMeetingsDelete]: (input) =>
+          observeRpcEffect(WS_METHODS.pulseMeetingsDelete, pulseMeetings.delete(input.id), {
+            "rpc.aggregate": "pulse.meetings",
+          }),
+        [WS_METHODS.pulseMeetingsRevisions]: (_input) =>
+          observeRpcStream(WS_METHODS.pulseMeetingsRevisions, pulseMeetings.revisions, {
+            "rpc.aggregate": "pulse.meetings",
+          }),
         [WS_METHODS.pulseSkillsMutate]: (input) =>
           observeRpcEffect(WS_METHODS.pulseSkillsMutate, pulseSkills.mutate(input), {
             "rpc.aggregate": "pulse.skills",
@@ -3957,6 +3999,7 @@ const makeWsRpcLayer = (
 export const websocketRpcRouteLayer = Layer.unwrap(
   Effect.gen(function* () {
     const managedSkills = yield* ManagedSkills;
+    const pulseMeetings = yield* PulseMeetings;
     const pulseMcpConfig = yield* PulseMcpConfig.PulseMcpConfigService;
     const previewAutomationBroker = yield* PreviewAutomationBroker.PreviewAutomationBroker;
     const baseServerSelfUpdate = yield* ServerSelfUpdate.ServerSelfUpdate;
@@ -4028,6 +4071,7 @@ export const websocketRpcRouteLayer = Layer.unwrap(
             ).pipe(
               Layer.provideMerge(RpcSerialization.layerJson),
               Layer.provide(Layer.succeed(ManagedSkills, managedSkills)),
+              Layer.provide(Layer.succeed(PulseMeetings, pulseMeetings)),
               Layer.provide(Layer.succeed(PulseMcpConfig.PulseMcpConfigService, pulseMcpConfig)),
               Layer.provide(Layer.succeed(SqlClient.SqlClient, sql)),
               Layer.provide(AgentSessionScanner.layer),
@@ -4073,4 +4117,8 @@ export const websocketRpcRouteLayer = Layer.unwrap(
       ),
     );
   }),
-).pipe(Layer.provide(managedSkillsLayer), Layer.provide(PulseMcpConfig.layer));
+).pipe(
+  Layer.provide(managedSkillsLayer),
+  Layer.provide(pulseMeetingsLayer),
+  Layer.provide(PulseMcpConfig.layer),
+);
