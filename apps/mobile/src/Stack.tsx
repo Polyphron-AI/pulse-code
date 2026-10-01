@@ -38,6 +38,8 @@ import { ThreadRouteScreen } from "./features/threads/ThreadRouteScreen";
 import { ConnectionsRouteScreen } from "./features/connection/ConnectionsRouteScreen";
 import { ConnectionsNewRouteScreen } from "./features/connection/ConnectionsNewRouteScreen";
 import { HomeRouteScreen } from "./features/home/HomeRouteScreen";
+import { MeetingDetailScreen } from "./features/meetings/MeetingDetailScreen";
+import { MeetingsListScreen } from "./features/meetings/MeetingsListScreen";
 import { AddProjectDestinationRoute } from "./features/projects/AddProjectDestinationRoute";
 import { AddProjectLocalRoute } from "./features/projects/AddProjectLocalRoute";
 import { AddProjectRepositoryRoute } from "./features/projects/AddProjectRepositoryRoute";
@@ -240,6 +242,20 @@ const SettingsContentStack = createNativeStackNavigator({
       linking: "usage",
       options: {
         title: "Usage",
+      },
+    }),
+    SettingsMeetings: createNativeStackScreen({
+      screen: MeetingsListScreen,
+      linking: "meetings",
+      options: {
+        title: "Meetings",
+      },
+    }),
+    SettingsMeeting: createNativeStackScreen({
+      screen: MeetingDetailScreen,
+      linking: "meetings/:environmentId/:meetingId",
+      options: {
+        title: "Meeting",
       },
     }),
   },

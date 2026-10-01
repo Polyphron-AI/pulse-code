@@ -603,6 +603,11 @@ function GeneralSettingsSection() {
       ) : null}
       <AutoSettleSettingsRows />
       <SettingsRow icon="chart.bar.xaxis" label="Usage" target="SettingsUsage" />
+      <SettingsRow
+        icon={{ ios: "waveform", android: "chat_bubble" }}
+        label="Meetings"
+        target="SettingsMeetings"
+      />
     </SettingsSection>
   );
 }
