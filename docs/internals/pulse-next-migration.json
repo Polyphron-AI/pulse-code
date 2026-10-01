@@ -1,10 +1,11 @@
 {
   "active": {
     "policyVersion": "2026-09-17",
-    "feature": null,
-    "state": "idle",
-    "completionBlockers": [],
-    "nextAction": "No active upstream import. Latest verified source import is v0.0.44; remote publication and packaged-app acceptance remain separate.",
+    "feature": "release-0.0.44-pulse.1",
+    "state": "building-windows-installer",
+    "version": "0.0.44-pulse.1",
+    "completionBlockers": ["Packaged installer build, identity check and SHA-256 record pending"],
+    "nextAction": "v0.0.44 is published to origin/develop with thread output speed and dictation push-to-talk. Build the Windows x64 NSIS installer from develop, check packaged identity and version, and record the SHA-256 with the commit.",
     "updatedAt": "2026-10-01"
   },
   "wardenCredentials": {
