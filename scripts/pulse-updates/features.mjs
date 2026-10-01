@@ -56,6 +56,11 @@ export const featureSuites = [
   { id: "mcp-picker", file: "apps/web/src/mcp/managedMcpPickerLogic.test.ts" },
   { id: "mcp-send-pause", file: "apps/web/src/mcp/McpSendPause.test.tsx" },
   { id: "mcp-draft-boundary", file: "apps/web/src/mcp/prepareMcpSubmission.test.ts" },
+  {
+    id: "thread-handoff-context",
+    file: "apps/server/src/orchestration/threadHandoffContext.test.ts",
+  },
+  { id: "mcp-pinned-submission", file: "apps/web/src/mcp/preparePinnedMcpSubmission.test.ts" },
   { id: "mcp-composer-lifecycle", file: "apps/web/src/mcp/useManagedMcpComposer.test.tsx" },
   { id: "mcp-preparation", file: "apps/server/src/mcp/PulseMcpPreparation.test.ts" },
   {

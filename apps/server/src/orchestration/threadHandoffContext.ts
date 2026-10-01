@@ -14,7 +14,7 @@ const EARLIER_TRUNCATION_MARKER = "[Earlier thread content truncated]\n\n";
 const FIRST_USER_TRUNCATION_MARKER = "\n[First user message truncated]";
 
 export interface ThreadHandoffMessage {
-  readonly role: "user" | "assistant" | "system";
+  readonly role: "user" | "assistant" | "system" | "reasoning";
   readonly text: string;
   readonly attachments?: ReadonlyArray<ChatAttachment> | undefined;
 }
@@ -26,7 +26,7 @@ export interface ThreadHandoffContext {
 }
 
 function formatSection(message: ThreadHandoffMessage): string | undefined {
-  if (message.role === "system") {
+  if (message.role === "system" || message.role === "reasoning") {
     return undefined;
   }
   const text = message.text.trim();

@@ -167,7 +167,6 @@ export function ManagedSkillPicker(props: {
         render={
           <ComposerControl
             size={size}
-            variant="ghost"
             className="shrink-0"
             aria-label={selectedCount ? `Skills, ${selectedCount} selected` : "Skills"}
           />

@@ -8,9 +8,10 @@ const message = (role: ThreadHandoffMessage["role"], text: string): ThreadHandof
 });
 
 describe("formatThreadHandoffContext", () => {
-  it("formats the whole thread when it fits, skipping system messages", () => {
+  it("formats the whole thread when it fits, skipping system and reasoning messages", () => {
     const result = formatThreadHandoffContext([
       message("system", "internal preamble"),
+      message("reasoning", "private reasoning summary"),
       message("user", "Add a retry to the uploader"),
       message("assistant", "Done, retries three times"),
     ]);

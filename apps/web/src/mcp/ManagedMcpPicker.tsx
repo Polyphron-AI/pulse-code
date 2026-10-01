@@ -84,7 +84,6 @@ export function ManagedMcpPicker(props: ManagedMcpPickerProps) {
         render={
           <ComposerControl
             size={size}
-            variant="ghost"
             className="shrink-0"
             aria-label={selectedCount ? `MCPs, ${selectedCount} selected` : "MCPs"}
           />

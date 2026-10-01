@@ -1,3 +1,4 @@
+import { ByteSize } from "effect";
 import { AuthOrchestrationOperateScope, AuthOrchestrationReadScope } from "@t3tools/contracts";
 import {
   PULSE_DICTATION_GROQ_API_KEY_PATH,
@@ -244,7 +245,7 @@ const setApiKeyRoute = HttpRouter.add(
     const request = yield* HttpServerRequest.HttpServerRequest;
     const input = yield* request.json.pipe(
       Effect.flatMap(Schema.decodeUnknownEffect(PulseDictationApiKeyInput)),
-      Effect.provideService(HttpServerRequest.MaxBodySize, FileSystem.Size(API_KEY_BODY_MAX_BYTES)),
+      Effect.provideService(HttpServerRequest.MaxBodySize, ByteSize.bytes(API_KEY_BODY_MAX_BYTES)),
       Effect.mapError(() => clientError("Expected JSON with a non-empty apiKey.")),
     );
     const apiKey = input.apiKey.trim();
