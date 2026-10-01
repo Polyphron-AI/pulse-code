@@ -92,7 +92,7 @@ export function MeetingsListPage({
             ) : null}
           </WorkspaceBreadcrumb>
           <div className="min-w-0 flex-1" />
-          <MeetingRecorderSlot />
+          <MeetingRecorderSlot environmentId={environmentId} />
         </WorkspacePageHeader>
         <ScrollArea className="min-h-0 flex-1">
           <WorkspacePageContainer width="readable">
