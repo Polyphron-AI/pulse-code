@@ -1,6 +1,36 @@
 {
   "active": {
     "policyVersion": "2026-09-17",
+    "feature": "pulse-voice",
+    "state": "implementing",
+    "branch": "qb/feat-pulse-voice",
+    "worktree": ".worktrees/qb-feat-pulse-voice",
+    "baseRevision": "4f7e4eac69",
+    "sidecar": "Polyphron-AI/meetily branch pulse/headless, crate pulse-voice/ (protocol: pulse-voice/PROTOCOL.md)",
+    "scope": "Windows desktop: Meetily-derived native Parakeet sidecar, global hold/toggle hotkey, hover pill on the focused window's monitor, paste into any focused app with clipboard restore, meeting capture (mic + system audio). Meetings stored by the server with read-only list/detail/summary/Send to thread on web, remote web and mobile. Composer uses the native engine on desktop with WASM then Groq fallback. No macOS/Linux capture, no wake word, no Meetily Python backend.",
+    "acceptance": [
+      "A1 Hotkey with any app focused shows the pill within 150 ms on the focused window's monitor (cursor monitor fallback), across 2+ mixed-DPI displays.",
+      "A2 Hold mode stops on release, toggle mode on second press; a 10 s utterance pastes into the focused app within 1.5 s on CPU and the prior clipboard is restored.",
+      "A3 Cancel (Escape on pill or empty transcript) inserts nothing; errors show in the pill and clear; a second hotkey during transcription is ignored.",
+      "A4 Idle: no recording means zero sustained sidecar/desktop CPU and a closed microphone.",
+      "A5 Sidecar spawned once, restarted with backoff after a crash, terminated on quit; a missing or incompatible sidecar disables global dictation and meetings capture with a visible reason.",
+      "A6 Desktop composer dictation uses the native engine and falls back to WASM Parakeet, then Groq, without user action.",
+      "A7 Meeting recording (mic + optional system audio) persists segments as they arrive, survives renderer reload mid-meeting, and on stop stores a provider-written summary; summary failure is retryable.",
+      "A8 Web, remote web and mobile list meetings, open transcript and summary, receive live updates, and Send to thread prefills that client's composer; no recording controls there.",
+      "A9 Rename and delete meetings from any client; deletion reaches other connected clients.",
+      "A10 Settings: enable global dictation, hotkey chord, hold/toggle, microphone, pill on/off, meeting system audio, summary model; changes apply without restart.",
+      "A11 macOS/Linux desktop and browser clients hide hotkey, pill and recording; nothing errors.",
+      "A12 Unchanged: existing composer dictation, Groq path, SnapShot shortcut and mobile iOS voice input behave as before."
+    ],
+    "notApplicable": "Provider differences: summaries use the existing text generation path, so each provider is supported where text generation is. Queued turns and draft promotion apply only to Send to thread, which uses the existing composer draft path.",
+    "tasks": "T1 protocol (done) > T2 Rust sidecar; T3 meetings contracts+server > T4 meetings web+mobile; T1 > T5 desktop supervisor+bridge > T6 hotkey/pill/paste, T7 meeting capture (needs T3), T8 composer native backend; T2 > T9 build bundling (+nemo128.onnx); T10 settings+docs; T11 one frozen-revision review; T12 real Windows run.",
+    "completionBlockers": ["T2-T12 not done"],
+    "evidence": "None yet.",
+    "nextAction": "Finish T2 (sidecar worker) and T3/T4 (meetings worker); coordinator implements T5-T10 in this worktree.",
+    "updatedAt": "2026-10-01"
+  },
+  "skillSelectionStatus": {
+    "policyVersion": "2026-09-17",
     "feature": "thread-skill-selection-status",
     "state": "verified-awaiting-integration",
     "branch": "qb/feat-skill-selection-status",
