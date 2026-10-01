@@ -15,12 +15,14 @@ import {
   buildBranchNamePrompt,
   buildCommitMessagePrompt,
   buildPrContentPrompt,
+  buildMeetingSummaryPrompt,
   buildThreadHandoffPrompt,
   buildThreadTitlePrompt,
 } from "./TextGenerationPrompts.ts";
 import {
   sanitizeCommitSubject,
   sanitizePrTitle,
+  sanitizeMeetingSummary,
   sanitizeThreadTitle,
 } from "./TextGenerationUtils.ts";
 import {
@@ -56,7 +58,8 @@ export const makeCursorTextGeneration = Effect.fn("makeCursorTextGeneration")(fu
       | "generatePrContent"
       | "generateBranchName"
       | "generateThreadTitle"
-      | "generateThreadHandoff";
+      | "generateThreadHandoff"
+      | "generateMeetingSummary";
     cwd: string;
     prompt: string;
     outputSchemaJson: S;
@@ -284,11 +287,32 @@ export const makeCursorTextGeneration = Effect.fn("makeCursorTextGeneration")(fu
       } satisfies TextGeneration.ThreadHandoffGenerationResult;
     });
 
+  const generateMeetingSummary: TextGeneration.TextGeneration["Service"]["generateMeetingSummary"] =
+    Effect.fn("CursorTextGeneration.generateMeetingSummary")(function* (input) {
+      const { prompt, outputSchema } = buildMeetingSummaryPrompt({
+        transcript: input.transcript,
+        title: input.title,
+      });
+
+      const generated = yield* runCursorJson({
+        operation: "generateMeetingSummary",
+        cwd: input.cwd,
+        prompt,
+        outputSchemaJson: outputSchema,
+        modelSelection: input.modelSelection,
+      });
+
+      return sanitizeMeetingSummary(
+        generated,
+      ) satisfies TextGeneration.MeetingSummaryGenerationResult;
+    });
+
   return {
     generateCommitMessage,
     generatePrContent,
     generateBranchName,
     generateThreadTitle,
     generateThreadHandoff,
+    generateMeetingSummary,
   } satisfies TextGeneration.TextGeneration["Service"];
 });

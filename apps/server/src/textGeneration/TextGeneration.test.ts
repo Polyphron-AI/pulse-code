@@ -26,6 +26,8 @@ const makeStubTextGeneration = (
     generateThreadTitle: () => Effect.die("generateThreadTitle stub not configured for this test"),
     generateThreadHandoff: () =>
       Effect.die("generateThreadHandoff stub not configured for this test"),
+    generateMeetingSummary: () =>
+      Effect.die("generateMeetingSummary stub not configured for this test"),
     ...overrides,
   });
 

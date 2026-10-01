@@ -17,6 +17,25 @@ describe("RPC authorization scopes", () => {
       AuthOrchestrationOperateScope,
     );
   });
+  it("lets readers browse meetings and requires operate access to change them", () => {
+    for (const method of [
+      WS_METHODS.pulseMeetingsList,
+      WS_METHODS.pulseMeetingsGet,
+      WS_METHODS.pulseMeetingsRevisions,
+    ]) {
+      expect(requiredScopeForRpcMethod(method)).toBe(AuthOrchestrationReadScope);
+    }
+    for (const method of [
+      WS_METHODS.pulseMeetingsCreate,
+      WS_METHODS.pulseMeetingsAppendSegments,
+      WS_METHODS.pulseMeetingsFinish,
+      WS_METHODS.pulseMeetingsSummarize,
+      WS_METHODS.pulseMeetingsRename,
+      WS_METHODS.pulseMeetingsDelete,
+    ]) {
+      expect(requiredScopeForRpcMethod(method)).toBe(AuthOrchestrationOperateScope);
+    }
+  });
   it("declares exactly one scope for every RPC in the server group", () => {
     expect(new Set(Object.keys(RPC_REQUIRED_SCOPES))).toEqual(new Set(WsRpcGroup.requests.keys()));
   });

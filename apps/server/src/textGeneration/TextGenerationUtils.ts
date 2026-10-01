@@ -121,3 +121,21 @@ export function normalizeCliError(
     cause: error,
   });
 }
+
+const MAX_MEETING_TITLE_CHARS = 120;
+
+/** Trim a generated meeting summary and drop an unusable suggested title. */
+export function sanitizeMeetingSummary(generated: {
+  readonly title: string;
+  readonly summary: string;
+}): { summary: string; title?: string } {
+  const title = generated.title
+    .trim()
+    .split(/\r?\n/g)[0]
+    ?.trim()
+    .replace(/^['"`]+|['"`]+$/g, "");
+  return {
+    summary: generated.summary.trim(),
+    ...(title ? { title: title.slice(0, MAX_MEETING_TITLE_CHARS).trimEnd() } : {}),
+  };
+}

@@ -313,6 +313,10 @@ function createTextGeneration(
       Effect.succeed({
         summary: "Handoff brief",
       }),
+    generateMeetingSummary: () =>
+      Effect.succeed({
+        summary: "Meeting summary",
+      }),
     ...overrides,
   };
 
@@ -367,6 +371,17 @@ function createTextGeneration(
           (cause) =>
             new TextGenerationError({
               operation: "generateThreadHandoff",
+              detail: "fake text generation failed",
+              ...(cause !== undefined ? { cause } : {}),
+            }),
+        ),
+      ),
+    generateMeetingSummary: (input) =>
+      implementation.generateMeetingSummary(input).pipe(
+        Effect.mapError(
+          (cause) =>
+            new TextGenerationError({
+              operation: "generateMeetingSummary",
               detail: "fake text generation failed",
               ...(cause !== undefined ? { cause } : {}),
             }),

@@ -3,8 +3,10 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   buildBranchNamePrompt,
   buildCommitMessagePrompt,
+  buildMeetingSummaryPrompt,
   buildPrContentPrompt,
   buildThreadTitlePrompt,
+  MEETING_TRANSCRIPT_CHAR_BUDGET,
 } from "./TextGenerationPrompts.ts";
 import {
   normalizeCliError,
@@ -328,5 +330,28 @@ describe("normalizeCliError", () => {
 
     expect(result.detail).toBe("Failed to generate a commit message");
     expect(result.message).not.toContain("secret-token");
+  });
+});
+
+describe("buildMeetingSummaryPrompt", () => {
+  it("passes a short transcript through untouched", () => {
+    const { prompt } = buildMeetingSummaryPrompt({ transcript: "[00:00] We ship Friday." });
+    expect(prompt).toContain("Transcript:\n[00:00] We ship Friday.");
+    expect(prompt).not.toContain("omitted");
+  });
+
+  it("keeps the start and end of a long transcript and says the middle was cut", () => {
+    const head = "OPENING-AGENDA ";
+    const tail = " CLOSING-ACTIONS";
+    const transcript = `${head}${"m".repeat(MEETING_TRANSCRIPT_CHAR_BUDGET * 2)}${tail}`;
+    const { prompt } = buildMeetingSummaryPrompt({ transcript });
+
+    expect(prompt).toContain(head);
+    expect(prompt).toContain(tail);
+    expect(prompt).toContain("its middle section was omitted");
+    expect(prompt).toMatch(
+      /\[\.\.\. \d+ characters from the middle of the meeting omitted \.\.\.\]/,
+    );
+    expect(prompt.length).toBeLessThan(MEETING_TRANSCRIPT_CHAR_BUDGET + 5_000);
   });
 });

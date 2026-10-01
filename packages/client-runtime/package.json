@@ -163,6 +163,10 @@
       "types": "./src/state/providerInstanceDisplay.ts",
       "default": "./src/state/providerInstanceDisplay.ts"
     },
+    "./state/meetings": {
+      "types": "./src/state/meetings.ts",
+      "default": "./src/state/meetings.ts"
+    },
     "./state/pull-requests": {
       "types": "./src/state/pullRequests.ts",
       "default": "./src/state/pullRequests.ts"

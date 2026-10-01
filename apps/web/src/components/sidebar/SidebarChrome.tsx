@@ -1,5 +1,6 @@
 import {
   ArrowLeftIcon,
+  AudioLinesIcon,
   ChartNoAxesColumnIcon,
   GitPullRequestIcon,
   SettingsIcon,
@@ -145,7 +146,9 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
             ? "usage"
             : location.pathname === "/pull-requests"
               ? "pull-requests"
-              : null,
+              : /^\/meetings(?:\/|$)/.test(location.pathname)
+                ? "meetings"
+                : null,
   });
   const { environments } = useEnvironments();
   // The page reads every connected server, so one of them offering pull requests is enough for
@@ -164,6 +167,10 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
       to: "/pull-requests",
       search: readPullRequestListPreferences(),
     });
+  }, [closeMobileSidebar, navigate]);
+  const handleMeetingsClick = useCallback(() => {
+    closeMobileSidebar();
+    void navigate({ to: "/meetings" });
   }, [closeMobileSidebar, navigate]);
   const handleSettingsClick = useCallback(() => {
     closeMobileSidebar();
@@ -209,6 +216,11 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
               onClick={handlePullRequestsClick}
             />
           ) : null}
+          <SidebarUtilityItem
+            icon={<AudioLinesIcon />}
+            label="Meetings"
+            onClick={handleMeetingsClick}
+          />
           <SidebarUtilityItem
             icon={<ChartNoAxesColumnIcon />}
             label="Usage"

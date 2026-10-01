@@ -25,12 +25,14 @@ import {
   buildBranchNamePrompt,
   buildCommitMessagePrompt,
   buildPrContentPrompt,
+  buildMeetingSummaryPrompt,
   buildThreadHandoffPrompt,
   buildThreadTitlePrompt,
 } from "./TextGenerationPrompts.ts";
 import {
   sanitizeCommitSubject,
   sanitizePrTitle,
+  sanitizeMeetingSummary,
   sanitizeThreadTitle,
 } from "./TextGenerationUtils.ts";
 
@@ -420,11 +422,25 @@ export const makeAntigravityTextGeneration = Effect.fn("makeAntigravityTextGener
       return { summary: generated.summary.trim() };
     });
 
+  const generateMeetingSummary: TextGeneration.TextGeneration["Service"]["generateMeetingSummary"] =
+    Effect.fn("AntigravityTextGeneration.generateMeetingSummary")(function* (input) {
+      const generated = yield* runAntigravityJson({
+        operation: "generateMeetingSummary",
+        ...buildMeetingSummaryPrompt({
+          transcript: input.transcript,
+          title: input.title,
+        }),
+        modelSelection: input.modelSelection,
+      });
+      return sanitizeMeetingSummary(generated);
+    });
+
   return {
     generateCommitMessage,
     generatePrContent,
     generateBranchName,
     generateThreadTitle,
     generateThreadHandoff,
+    generateMeetingSummary,
   } satisfies TextGeneration.TextGeneration["Service"];
 });
