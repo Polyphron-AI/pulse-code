@@ -3,6 +3,11 @@ import * as Schema from "effect/Schema";
 
 import { MailAccount, MailAccountInput, MailMessageRef } from "./pulseMail.ts";
 
+const decodeAccount = Schema.decodeUnknownSync(MailAccount);
+const decodeInput = Schema.decodeUnknownSync(MailAccountInput);
+const encodeAccount = Schema.encodeSync(MailAccount);
+const decodeRef = Schema.decodeUnknownSync(MailMessageRef);
+
 const account = {
   id: "acct_1",
   nickname: "Work",
@@ -20,7 +25,7 @@ const account = {
 
 describe("Pulse mail contracts", () => {
   it("drops secret fields from public accounts", () => {
-    const decoded = Schema.decodeUnknownSync(MailAccount)({
+    const decoded = decodeAccount({
       ...account,
       password: "hunter2",
       auth: {
@@ -30,7 +35,7 @@ describe("Pulse mail contracts", () => {
         clientSecret: "s",
       },
     });
-    const encoded = JSON.stringify(Schema.encodeSync(MailAccount)(decoded));
+    const encoded = JSON.stringify(encodeAccount(decoded));
     expect(encoded).not.toContain("hunter2");
     expect(encoded).not.toContain('"s"');
     expect(encoded).toContain('"clientSecretConfigured":true');
@@ -44,15 +49,11 @@ describe("Pulse mail contracts", () => {
       smtp: { host: "smtp.example.com", port: 587 },
       auth: { kind: "password" },
     };
-    expect(() => Schema.decodeUnknownSync(MailAccountInput)(input)).not.toThrow();
-    expect(() =>
-      Schema.decodeUnknownSync(MailAccountInput)({ ...input, smtp: { host: "x", port: 25 } }),
-    ).toThrow();
+    expect(() => decodeInput(input)).not.toThrow();
+    expect(() => decodeInput({ ...input, smtp: { host: "x", port: 25 } })).toThrow();
   });
 
   it("requires UIDVALIDITY and UID in message references", () => {
-    expect(() =>
-      Schema.decodeUnknownSync(MailMessageRef)({ accountId: "acct_1", mailbox: "INBOX", uid: 3 }),
-    ).toThrow();
+    expect(() => decodeRef({ accountId: "acct_1", mailbox: "INBOX", uid: 3 })).toThrow();
   });
 });
