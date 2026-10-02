@@ -196,6 +196,17 @@ const inUidSet = (set: string, uids: ReadonlyArray<number>) => {
   return (uid: number) => ranges.some(([a, b]) => uid >= a && uid <= b);
 };
 
+const APPEND = /^APPEND ("?)(.+?)\1 (?:\(([^)]*)\) )?\{\d+\+?\}\r\n([\s\S]*)$/i;
+const STORE = /^([+-]?)(FLAGS|X-GM-LABELS)(?:\.SILENT)? \(([^)]*)\)/i;
+
+/** Gmail labels live beside flags on the fake message; tests read them with `labelsOf`. */
+const LABELS = new WeakMap<FakeImapMessage, Set<string>>();
+export const labelsOf = (message: FakeImapMessage) => {
+  const labels = LABELS.get(message) ?? new Set<string>();
+  LABELS.set(message, labels);
+  return labels;
+};
+
 const SECTION = /BODY(?:\.PEEK)?\[([^\]]*)\](?:<(\d+)\.(\d+)>)?/gi;
 
 const sectionOf = (raw: string, section: string) => {
@@ -206,7 +217,8 @@ const sectionOf = (raw: string, section: string) => {
 
 /**
  * A responder for an IMAP server holding `mailboxes` in memory: sign-in, LIST, SELECT/EXAMINE,
- * UID SEARCH (every UID), UID FETCH (flags, size, BODY sections), and LOGOUT. Tests extend it by
+ * APPEND, UID SEARCH (every UID, or by Message-ID header), UID FETCH (flags, size, BODY sections),
+ * UID STORE (flags and Gmail labels), UID MOVE, and LOGOUT. Tests extend it by
  * handling a command first and falling back to this responder.
  */
 export const fakeImap = (
@@ -247,9 +259,64 @@ export const fakeImap = (
           `* OK [UIDNEXT ${selected.uidNext}] ok\r\n` +
           `${tag} OK [${upper === "EXAMINE" ? "READ-ONLY" : "READ-WRITE"}] done\r\n`,
       );
+    } else if (upper === "APPEND") {
+      const append = APPEND.exec(command);
+      const target = mailboxes.find((mailbox) => mailbox.name === append?.[2]);
+      if (!append || !target) {
+        io.send(`${tag} NO [TRYCREATE] no such mailbox\r\n`);
+        return;
+      }
+      const uid = target.uidNext++;
+      const flags = (append[3] ?? "").split(" ").filter(Boolean);
+      target.messages.push({ uid, flags: new Set(flags), raw: append[4] ?? "" });
+      io.send(`${tag} OK [APPENDUID ${target.uidValidity} ${uid}] appended\r\n`);
     } else if (upper === "UID" && sub === "SEARCH") {
-      const uids = selected?.messages.map((message) => message.uid) ?? [];
+      const header = /HEADER MESSAGE-ID "?([^"]+)"?/i.exec(args)?.[1];
+      const uids = (selected?.messages ?? [])
+        .filter((message) => header === undefined || message.raw.includes(header))
+        .map((message) => message.uid);
       io.send(`* SEARCH ${uids.join(" ")}\r\n${tag} OK done\r\n`);
+    } else if (upper === "UID" && sub === "STORE" && selected) {
+      const store = STORE.exec(rest.slice(2).join(" "));
+      const matches = inUidSet(
+        rest[1] ?? "",
+        selected.messages.map((message) => message.uid),
+      );
+      const names = (store?.[3] ?? "").split(" ").filter(Boolean);
+      const out = selected.messages.flatMap((message, index) => {
+        if (!store || !matches(message.uid)) return [];
+        const target =
+          store[2]?.toUpperCase() === "X-GM-LABELS" ? labelsOf(message) : message.flags;
+        for (const name of names) {
+          if (store[1] === "-") target.delete(name);
+          else target.add(name);
+        }
+        return [
+          `* ${index + 1} FETCH (UID ${message.uid} FLAGS (${[...message.flags].join(" ")}))\r\n`,
+        ];
+      });
+      io.send(`${out.join("")}${tag} OK done\r\n`);
+    } else if (upper === "UID" && sub === "MOVE" && selected) {
+      const name = rest.slice(2).join(" ").replace(/^"|"$/g, "");
+      const target = mailboxes.find((mailbox) => mailbox.name === name);
+      if (!target) {
+        io.send(`${tag} NO [TRYCREATE] no such mailbox\r\n`);
+        return;
+      }
+      const matches = inUidSet(
+        rest[1] ?? "",
+        selected.messages.map((message) => message.uid),
+      );
+      const moving = selected.messages.filter((message) => matches(message.uid));
+      selected.messages = selected.messages.filter((message) => !matches(message.uid));
+      const newUids = moving.map((message) => {
+        const uid = target.uidNext++;
+        target.messages.push({ ...message, uid });
+        return uid;
+      });
+      io.send(
+        `* OK [COPYUID ${target.uidValidity} ${moving.map((message) => message.uid).join(",")} ${newUids.join(",")}] moved\r\n${tag} OK done\r\n`,
+      );
     } else if (upper === "UID" && sub === "FETCH" && selected) {
       const set = rest[1] ?? "";
       const items = rest.slice(2).join(" ");
