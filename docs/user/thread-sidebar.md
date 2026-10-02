@@ -34,8 +34,11 @@ web and desktop, choose a different provider and model in the model picker, then
 **Continue in another provider...** for the thread you are viewing. On mobile, choose the
 destination model in thread settings, or long-press a thread and choose **Continue in...**.
 
-The destination provider writes a short handoff brief covering the goal, what is done, the
-current state, and what is next. OpenAI uses Luna at Medium thinking, Anthropic uses Haiku, and
+The source provider first compacts the conversation on an isolated session copy where supported.
+Otherwise, it compacts the available conversation into portable continuation state. T3 Code tells
+you which approach was used. The destination provider then structures a handoff brief covering
+the goal, settled decisions, completed work, remaining checks, and the exact next step.
+OpenAI uses Luna at Medium thinking, Anthropic uses Haiku, and
 Google uses Flash Medium. If Haiku offers only Thinking on/off, Thinking is enabled and T3 Code
 tells you that Medium is unavailable.
 

@@ -81,6 +81,13 @@ export interface ThreadTitleGenerationResult {
 }
 
 export interface ThreadHandoffGenerationInput {
+  source?: {
+    modelSelection: ModelSelection;
+    resumeCursor?: unknown;
+    nativeEligible: boolean;
+    lastTurnId?: string | undefined;
+  };
+  phase?: "compact" | "structure";
   /** Select a small summary model from this instance, independently of the draft model. */
   useSummaryModel?: boolean;
   cwd: string;
@@ -96,6 +103,7 @@ export interface ThreadHandoffGenerationInput {
 export interface ThreadHandoffGenerationResult {
   summary: string;
   capabilityNotice?: string;
+  usedNativeContext?: boolean;
 }
 
 /**
@@ -134,6 +142,10 @@ export class TextGeneration extends Context.Service<
     readonly generateThreadHandoff: (
       input: ThreadHandoffGenerationInput,
     ) => Effect.Effect<ThreadHandoffGenerationResult, TextGenerationError>;
+    /** Compact only an isolated copy; absent when safe native export is unsupported. */
+    readonly compactThreadHandoff?: (
+      input: ThreadHandoffGenerationInput,
+    ) => Effect.Effect<ThreadHandoffGenerationResult | undefined, TextGenerationError>;
   }
 >()("t3/textGeneration/TextGeneration") {}
 
@@ -220,13 +232,51 @@ export const make = Effect.gen(function* () {
           detail: selection,
         });
       }
+      let sourceResult: ThreadHandoffGenerationResult | undefined;
+      if (input.source) {
+        const source = yield* resolveInstance(
+          registry,
+          "generateThreadHandoff",
+          input.source.modelSelection.instanceId,
+        );
+        const sourceInput = {
+          ...input,
+          useSummaryModel: false,
+          phase: "compact" as const,
+          modelSelection: input.source.modelSelection,
+        };
+        if (input.source.nativeEligible && source.compactThreadHandoff) {
+          sourceResult = yield* source.compactThreadHandoff(sourceInput);
+        }
+        if (!sourceResult) {
+          sourceResult = yield* source.generateThreadHandoff(sourceInput);
+          sourceResult = {
+            ...sourceResult,
+            capabilityNotice:
+              "Native compaction on a safe session copy is unavailable. The source provider compacted the supplied conversation before the destination structured the brief.",
+          };
+        }
+        if (!sourceResult.summary.trim()) {
+          return yield* new TextGenerationError({
+            operation: "generateThreadHandoff",
+            detail:
+              "The source provider returned no readable continuation state. Retry the handoff.",
+          });
+        }
+      }
       const generated = yield* instance.textGeneration.generateThreadHandoff({
         ...input,
+        ...(sourceResult ? { threadContext: sourceResult.summary, attachments: undefined } : {}),
+        phase: "structure",
         modelSelection: selection.modelSelection,
       });
+      const capabilityNotice = [sourceResult?.capabilityNotice, selection.capabilityNotice]
+        .filter(Boolean)
+        .join(" ");
       return {
         ...generated,
-        ...(selection.capabilityNotice ? { capabilityNotice: selection.capabilityNotice } : {}),
+        ...(capabilityNotice ? { capabilityNotice } : {}),
+        ...(sourceResult?.usedNativeContext ? { usedNativeContext: true } : {}),
       };
     }),
   });

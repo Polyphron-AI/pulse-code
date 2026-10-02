@@ -458,6 +458,7 @@ export const makeOpenCodeTextGeneration = Effect.fn("makeOpenCodeTextGeneration"
   const generateThreadHandoff: TextGeneration.TextGeneration["Service"]["generateThreadHandoff"] =
     Effect.fn("OpenCodeTextGeneration.generateThreadHandoff")(function* (input) {
       const { prompt, outputSchema } = buildThreadHandoffPrompt({
+        phase: input.phase,
         threadContext: input.threadContext,
         threadTitle: input.threadTitle,
         attachments: input.attachments,

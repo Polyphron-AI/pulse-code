@@ -2144,16 +2144,66 @@ const makeWsRpcLayer = (
                 }) ?? process.cwd();
 
               // Older clients omit the destination and retain source-provider routing.
+              const binding = input.destination
+                ? yield* providerSessionDirectory.getBinding(thread.id).pipe(
+                    Effect.map(Option.getOrUndefined),
+                    Effect.mapError(
+                      (cause) =>
+                        new OrchestrationGenerateThreadHandoffError({
+                          message: "Failed to read the source session",
+                          cause,
+                        }),
+                    ),
+                  )
+                : undefined;
               const generated = yield* textGeneration.generateThreadHandoff({
                 cwd,
-                threadContext: handoffContext.context,
+                threadContext: `Workspace: ${cwd}\nBranch: ${thread.branch ?? "unspecified"}\nThread: ${thread.id}\nProject: ${thread.projectId}\nSource provider instance: ${thread.modelSelection.instanceId}\n\n${handoffContext.context}`,
                 threadTitle: thread.title,
                 ...(handoffContext.attachments.length > 0
                   ? { attachments: handoffContext.attachments }
                   : {}),
                 modelSelection: input.destination ?? thread.modelSelection,
                 useSummaryModel: input.destination !== undefined,
+                ...(input.destination
+                  ? {
+                      source: {
+                        modelSelection: thread.modelSelection,
+                        resumeCursor:
+                          binding?.providerInstanceId === thread.modelSelection.instanceId
+                            ? binding.resumeCursor
+                            : undefined,
+                        nativeEligible:
+                          thread.session?.activeTurnId == null &&
+                          thread.session?.status !== "starting" &&
+                          thread.session?.status !== "running" &&
+                          thread.latestTurn?.state === "completed" &&
+                          !thread.messages.some(
+                            (message) =>
+                              message.streaming ||
+                              (message.role === "user" && message.turnId == null),
+                          ),
+                        lastTurnId: thread.latestTurn?.turnId,
+                      },
+                    }
+                  : {}),
               });
+
+              const current = yield* projectionSnapshotQuery
+                .getThreadDetailById(thread.id)
+                .pipe(Effect.map(Option.getOrUndefined));
+              if (
+                current?.updatedAt !== thread.updatedAt ||
+                current?.messages.length !== thread.messages.length ||
+                current?.messages.some(
+                  (message, index) => message.updatedAt !== thread.messages[index]?.updatedAt,
+                )
+              ) {
+                return yield* new OrchestrationGenerateThreadHandoffError({
+                  message:
+                    "The source thread changed while preparing the handoff. Wait for its turn to finish and retry.",
+                });
+              }
 
               if (generated.summary.length === 0) {
                 return yield* new OrchestrationGenerateThreadHandoffError({
@@ -2166,7 +2216,7 @@ const makeWsRpcLayer = (
                 ...(generated.capabilityNotice
                   ? { capabilityNotice: generated.capabilityNotice }
                   : {}),
-                truncated: handoffContext.truncated,
+                truncated: generated.usedNativeContext ? false : handoffContext.truncated,
               };
             }).pipe(
               Effect.catchTags({

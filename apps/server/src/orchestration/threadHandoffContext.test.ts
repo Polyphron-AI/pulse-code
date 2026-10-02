@@ -8,6 +8,20 @@ const message = (role: ThreadHandoffMessage["role"], text: string): ThreadHandof
 });
 
 describe("formatThreadHandoffContext", () => {
+  it("retains the unfinished action at the end of a long initial continuation brief", () => {
+    const result = formatThreadHandoffContext([
+      message(
+        "user",
+        `SETTLED: keep the existing design\n${"state ".repeat(2_000)}\nNEXT EXACT ACTION: finish receipt verification`,
+      ),
+      message("assistant", "later ".repeat(12_000)),
+      message("assistant", "Latest failure: receipt missing"),
+    ]);
+    expect(result.truncated).toBe(true);
+    expect(result.context).toContain("SETTLED: keep the existing design");
+    expect(result.context).toContain("NEXT EXACT ACTION: finish receipt verification");
+    expect(result.context.length).toBeLessThanOrEqual(60_000);
+  });
   it("formats the whole thread when it fits, skipping system and reasoning messages", () => {
     const result = formatThreadHandoffContext([
       message("system", "internal preamble"),

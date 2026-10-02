@@ -411,6 +411,7 @@ export const makeAntigravityTextGeneration = Effect.fn("makeAntigravityTextGener
       const generated = yield* runAntigravityJson({
         operation: "generateThreadHandoff",
         ...buildThreadHandoffPrompt({
+          phase: input.phase,
           threadContext: input.threadContext,
           threadTitle: input.threadTitle,
           attachments: input.attachments,

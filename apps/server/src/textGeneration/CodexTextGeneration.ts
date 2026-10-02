@@ -22,6 +22,8 @@ import * as ServerConfig from "../config.ts";
 import { expandHomePath } from "../pathExpansion.ts";
 import { codexExecLaunchArgs, resolveCodexLaunchArgs } from "../provider/Layers/codexLaunchArgs.ts";
 import * as TextGeneration from "./TextGeneration.ts";
+import { withCodexAppServerClient } from "../provider/Layers/CodexProvider.ts";
+import { compactCopiedCodexThread } from "./CodexHandoffCompaction.ts";
 import {
   buildBranchNamePrompt,
   buildCommitMessagePrompt,
@@ -220,6 +222,16 @@ export const makeCodexTextGeneration = Effect.fn("makeCodexTextGeneration")(func
           "--skip-git-repo-check",
           "-s",
           "read-only",
+          ...(operation === "generateThreadHandoff"
+            ? [
+                "--config",
+                "features.shell_tool=false",
+                "--config",
+                "features.apply_patch_freeform=false",
+                "--config",
+                'web_search="disabled"',
+              ]
+            : []),
           "--model",
           model,
           "--config",
@@ -445,6 +457,7 @@ export const makeCodexTextGeneration = Effect.fn("makeCodexTextGeneration")(func
         input.attachments,
       );
       const { prompt, outputSchema } = buildThreadHandoffPrompt({
+        phase: input.phase,
         threadContext: input.threadContext,
         threadTitle: input.threadTitle,
         attachments: input.attachments,
@@ -470,5 +483,34 @@ export const makeCodexTextGeneration = Effect.fn("makeCodexTextGeneration")(func
     generateBranchName,
     generateThreadTitle,
     generateThreadHandoff,
+    compactThreadHandoff: (input) =>
+      Effect.gen(function* () {
+        if (!input.source?.resumeCursor) return undefined;
+        const resolved = resolveRuntime ? yield* resolveRuntime : undefined;
+        const config = resolved?.config ?? codexConfig;
+        const { client } = yield* withCodexAppServerClient({
+          binaryPath: config.binaryPath || "codex",
+          homePath: config.homePath,
+          launchArgs: config.launchArgs,
+          cwd: input.cwd,
+          environment: resolved?.environment ?? resolvedEnvironment,
+        });
+        return yield* compactCopiedCodexThread(client, input);
+      }).pipe(
+        Effect.scoped,
+        Effect.timeout("180 seconds"),
+        Effect.catchTag("CodexAppServerRequestError", (error) =>
+          error.code === -32601 ? Effect.succeed(undefined) : Effect.fail(error),
+        ),
+        Effect.mapError(
+          (cause) =>
+            new TextGenerationError({
+              operation: "generateThreadHandoff",
+              detail: `Source compaction failed: ${cause.message}`,
+              cause,
+            }),
+        ),
+        Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, commandSpawner),
+      ),
   } satisfies TextGeneration.TextGeneration["Service"];
 });

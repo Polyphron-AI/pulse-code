@@ -268,6 +268,7 @@ export const makeGrokTextGeneration = Effect.fn("makeGrokTextGeneration")(functi
   const generateThreadHandoff: TextGeneration.TextGeneration["Service"]["generateThreadHandoff"] =
     Effect.fn("GrokTextGeneration.generateThreadHandoff")(function* (input) {
       const { prompt, outputSchema } = buildThreadHandoffPrompt({
+        phase: input.phase,
         threadContext: input.threadContext,
         threadTitle: input.threadTitle,
         attachments: input.attachments,

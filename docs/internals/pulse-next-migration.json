@@ -1,9 +1,20 @@
 {
   "active": {
     "policyVersion": "2026-09-17",
-    "state": "idle",
-    "nextAction": "No active feature. Provider summary handoff is implemented locally on qb/feat-provider-summary-handoff; no PR or deployment requested.",
-    "updatedAt": "2026-10-01"
+    "state": "reviewing",
+    "feature": "provider-summary-handoff-compaction",
+    "branch": "qb/feat-provider-summary-handoff",
+    "baseRevision": "cf2fd80e0f1e06941dd75b250593dd8b0fe49ab5",
+    "acceptance": [
+      "Native compaction operates on an isolated copied source session where supported; source conversation is unchanged",
+      "If native compaction or readable export is unsupported, a portable source-provider pass compacts the conversation before destination structuring",
+      "The destination small model structures continuation state without restarting settled work; selected destination draft model remains unchanged",
+      "Brief preserves goals, decisions, completed work, outstanding verification, exact next action and workspace; fallback and truncation remain visible",
+      "Failure and cancellation release temporary resources without mutating source or creating a misleading draft"
+    ],
+    "evidence": "Owner reports 63 focused tests, server typecheck and changed-path lint passing; seven native tests passed after schema compiler hoisting. Native provider behavior is synthetic, no live provider execution authorized.",
+    "nextAction": "Parent runs combined handoff checks. compact_handoff_spec and compact_handoff_standards each review the frozen compaction revision once, read-only. Fix supported findings as one batch and rerun affected checks; no PR or deployment requested.",
+    "updatedAt": "2026-10-02"
   },
   "wardenCredentials": {
     "policyVersion": "2026-09-17",
