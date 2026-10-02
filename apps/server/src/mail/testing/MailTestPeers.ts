@@ -169,3 +169,115 @@ export const imapTag = (line: string) => {
   const space = line.indexOf(" ");
   return { tag: line.slice(0, space), command: line.slice(space + 1) };
 };
+
+export interface FakeImapMessage {
+  readonly uid: number;
+  flags: Set<string>;
+  readonly raw: string;
+}
+
+export interface FakeImapMailbox {
+  readonly name: string;
+  readonly specialUse?: string;
+  uidValidity: number;
+  uidNext: number;
+  messages: Array<FakeImapMessage>;
+}
+
+/** Expands an IMAP UID set such as `1,4:6,9:*` against the UIDs present. */
+const inUidSet = (set: string, uids: ReadonlyArray<number>) => {
+  const max = Math.max(0, ...uids);
+  const ranges = set.split(",").map((part) => {
+    const [from = "0", to = from] = part.split(":");
+    const a = from === "*" ? max : Number(from);
+    const b = to === "*" ? max : Number(to);
+    return [Math.min(a, b), Math.max(a, b)] as const;
+  });
+  return (uid: number) => ranges.some(([a, b]) => uid >= a && uid <= b);
+};
+
+const SECTION = /BODY(?:\.PEEK)?\[([^\]]*)\](?:<(\d+)\.(\d+)>)?/gi;
+
+const sectionOf = (raw: string, section: string) => {
+  if (section === "") return raw;
+  const end = raw.indexOf("\r\n\r\n");
+  return end < 0 ? raw : raw.slice(0, end + 4);
+};
+
+/**
+ * A responder for an IMAP server holding `mailboxes` in memory: sign-in, LIST, SELECT/EXAMINE,
+ * UID SEARCH (every UID), UID FETCH (flags, size, BODY sections), and LOGOUT. Tests extend it by
+ * handling a command first and falling back to this responder.
+ */
+export const fakeImap = (
+  mailboxes: Array<FakeImapMailbox>,
+  options: { readonly capabilities?: string } = {},
+) => {
+  const capabilities = `IMAP4rev1 AUTH=PLAIN SASL-IR ${options.capabilities ?? ""}`.trim();
+  let selected: FakeImapMailbox | undefined;
+  const respond = ({ line }: MailPeerCommand, io: MailPeerIo) => {
+    const { tag, command } = imapTag(line);
+    const [verb = "", ...rest] = command.split(" ");
+    const upper = verb.toUpperCase();
+    const args = rest.join(" ");
+    const sub = rest[0]?.toUpperCase();
+    if (upper === "CAPABILITY") io.send(`* CAPABILITY ${capabilities}\r\n${tag} OK done\r\n`);
+    else if (upper === "AUTHENTICATE" || upper === "LOGIN") io.send(`${tag} OK signed in\r\n`);
+    else if ((upper === "LIST" || upper === "LSUB") && args.endsWith('""')) {
+      // An empty pattern asks for the hierarchy delimiter only.
+      io.send(`* ${upper} (\\Noselect) "/" ""\r\n${tag} OK done\r\n`);
+    } else if (upper === "LIST" || upper === "LSUB") {
+      const lines = mailboxes.map(
+        (mailbox) =>
+          `* ${upper} (\\HasNoChildren${mailbox.specialUse ? ` ${mailbox.specialUse}` : ""}) "/" "${mailbox.name}"\r\n`,
+      );
+      io.send(`${lines.join("")}${tag} OK done\r\n`);
+    } else if (upper === "SELECT" || upper === "EXAMINE") {
+      const name = args.replace(/^"|"$/g, "");
+      selected = mailboxes.find((mailbox) => mailbox.name === name);
+      if (!selected) {
+        io.send(`${tag} NO [NONEXISTENT] no such mailbox\r\n`);
+        return;
+      }
+      io.send(
+        `* FLAGS (\\Seen \\Flagged \\Answered \\Draft \\Deleted)\r\n` +
+          `* OK [PERMANENTFLAGS (\\Seen \\Flagged \\Answered \\Draft \\*)] ok\r\n` +
+          `* ${selected.messages.length} EXISTS\r\n` +
+          `* OK [UIDVALIDITY ${selected.uidValidity}] ok\r\n` +
+          `* OK [UIDNEXT ${selected.uidNext}] ok\r\n` +
+          `${tag} OK [${upper === "EXAMINE" ? "READ-ONLY" : "READ-WRITE"}] done\r\n`,
+      );
+    } else if (upper === "UID" && sub === "SEARCH") {
+      const uids = selected?.messages.map((message) => message.uid) ?? [];
+      io.send(`* SEARCH ${uids.join(" ")}\r\n${tag} OK done\r\n`);
+    } else if (upper === "UID" && sub === "FETCH" && selected) {
+      const set = rest[1] ?? "";
+      const items = rest.slice(2).join(" ");
+      const matches = inUidSet(
+        set,
+        selected.messages.map((message) => message.uid),
+      );
+      const out = selected.messages.flatMap((message, index) => {
+        if (!matches(message.uid)) return [];
+        const parts = [`UID ${message.uid}`];
+        if (/\bFLAGS\b/i.test(items)) parts.push(`FLAGS (${[...message.flags].join(" ")})`);
+        if (/RFC822\.SIZE/i.test(items)) parts.push(`RFC822.SIZE ${message.raw.length}`);
+        for (const match of items.matchAll(SECTION)) {
+          const [, section = "", start, length] = match;
+          let content = sectionOf(message.raw, section);
+          if (start !== undefined)
+            content = content.slice(Number(start), Number(start) + Number(length));
+          parts.push(
+            `BODY[${section}]${start === undefined ? "" : `<${start}>`} {${Buffer.byteLength(content)}}\r\n${content}`,
+          );
+        }
+        return [`* ${index + 1} FETCH (${parts.join(" ")})\r\n`];
+      });
+      io.send(`${out.join("")}${tag} OK done\r\n`);
+    } else if (upper === "LOGOUT") {
+      io.send(`* BYE bye\r\n${tag} OK done\r\n`);
+      io.close();
+    } else io.send(`${tag} OK done\r\n`);
+  };
+  return { respond, greeting: `* OK [CAPABILITY ${capabilities}] ready\r\n` };
+};
