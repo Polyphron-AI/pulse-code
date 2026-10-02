@@ -69,7 +69,7 @@ const makeStubRegistry = (
   };
 };
 
-for (const mode of ["portable", "native", "failure", "empty", "busy"] as const) {
+for (const mode of ["portable", "native", "native-empty", "failure", "empty", "busy"] as const) {
   it.effect(`separates source compaction from destination structuring (${mode})`, () =>
     Effect.gen(function* () {
       const sourceSelection = createModelSelection(
@@ -87,6 +87,8 @@ for (const mode of ["portable", "native", "failure", "empty", "busy"] as const) 
         makeStubTextGeneration({
           compactThreadHandoff: (input) => {
             calls.push({ stage: "native", input });
+            if (mode === "native-empty")
+              return Effect.succeed({ summary: "", usedNativeContext: true });
             if (mode === "native")
               return Effect.succeed({
                 summary: "Source compacted state",
@@ -199,9 +201,11 @@ for (const mode of ["portable", "native", "failure", "empty", "busy"] as const) 
           expect(result.success.capabilityNotice).toContain(
             mode === "native"
               ? "Native copy"
-              : "Native compaction on a safe session copy is unavailable",
+              : "Native compaction on a safe session copy or readable export is unavailable",
           );
       }
+      if (mode === "native-empty")
+        expect(calls.filter((call) => call.stage === "portable")).toHaveLength(1);
       expect(draft.model).toBe("gpt-6-sol");
       expect(draft.options).toEqual([{ id: "reasoningEffort", value: "xhigh" }]);
       if (mode === "busy") expect(calls.some((call) => call.stage === "native")).toBe(false);

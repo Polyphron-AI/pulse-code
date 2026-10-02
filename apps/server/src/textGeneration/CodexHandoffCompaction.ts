@@ -125,15 +125,9 @@ export const compactCopiedCodexThread = Effect.fn("compactCopiedCodexThread")(fu
   yield* finishExport();
   const raw = yield* Deferred.await(completed);
   const summary = yield* decodeExport(raw).pipe(
-    Effect.mapError(
-      (cause) =>
-        new TextGenerationError({
-          operation: "generateThreadHandoff",
-          detail: "The copied source session did not export readable continuation state.",
-          cause,
-        }),
-    ),
+    Effect.catchTag("SchemaError", () => Effect.succeed(undefined)),
   );
+  if (!summary?.summary.trim()) return undefined;
   return {
     summary: summary.summary,
     usedNativeContext: true,

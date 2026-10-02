@@ -248,12 +248,16 @@ export const make = Effect.gen(function* () {
         if (input.source.nativeEligible && source.compactThreadHandoff) {
           sourceResult = yield* source.compactThreadHandoff(sourceInput);
         }
-        if (!sourceResult) {
+        if (!sourceResult?.summary.trim()) {
           sourceResult = yield* source.generateThreadHandoff(sourceInput);
           sourceResult = {
             ...sourceResult,
-            capabilityNotice:
-              "Native compaction on a safe session copy is unavailable. The source provider compacted the supplied conversation before the destination structured the brief.",
+            capabilityNotice: [
+              "Native compaction on a safe session copy or readable export is unavailable. The source provider compacted the supplied conversation before the destination structured the brief.",
+              sourceResult.capabilityNotice,
+            ]
+              .filter(Boolean)
+              .join(" "),
           };
         }
         if (!sourceResult.summary.trim()) {

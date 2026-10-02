@@ -90,18 +90,23 @@ export const compactCopiedClaudeSession = Effect.fn("compactCopiedClaudeSession"
   const output = yield* Effect.tryPromise({
     try: async () => {
       let receivedCompaction = false;
+      let completedCompaction = false;
       for await (const message of runtime) {
         if (message.session_id === resume)
           throw new Error("The provider did not create an isolated source session copy.");
         if (message.type === "system" && message.subtype === "compact_boundary") {
           receivedCompaction = true;
-          requestExport?.();
         }
         if (message.type === "result") {
           if (message.subtype !== "success") throw new Error(message.errors.join("; "));
-          if (receivedCompaction && message.structured_output !== undefined) {
-            return message.structured_output;
+          // The SDK ends each input with a result, including /compact itself.
+          if (!completedCompaction) {
+            if (!receivedCompaction) return undefined;
+            completedCompaction = true;
+            requestExport?.();
+            continue;
           }
+          return message.structured_output;
         }
       }
       throw new Error(
@@ -115,16 +120,11 @@ export const compactCopiedClaudeSession = Effect.fn("compactCopiedClaudeSession"
         cause,
       }),
   });
+  if (output === undefined) return undefined;
   const decoded = yield* decodeExport(output).pipe(
-    Effect.mapError(
-      (cause) =>
-        new TextGenerationError({
-          operation: "generateThreadHandoff",
-          detail: "The copied source session did not export readable continuation state.",
-          cause,
-        }),
-    ),
+    Effect.catchTag("SchemaError", () => Effect.succeed(undefined)),
   );
+  if (!decoded?.summary.trim()) return undefined;
   return {
     summary: decoded.summary,
     usedNativeContext: true,

@@ -19,7 +19,7 @@ const input = {
   },
 };
 
-function fakeClient(fail = false) {
+function fakeClient(fail = false, exportText = '{"summary":"Continue exact next step"}') {
   const calls: Array<{ method: string; params: unknown }> = [];
   const handlers = new Map<string, (event: unknown) => Effect.Effect<void>>();
   const emit = (method: string, event: unknown) => handlers.get(method)?.(event) ?? Effect.void;
@@ -68,7 +68,7 @@ function fakeClient(fail = false) {
           yield* emit("item/completed", {
             threadId: "copy",
             turnId: "export",
-            item: { type: "agentMessage", text: '{"summary":"Continue exact next step"}' },
+            item: { type: "agentMessage", text: exportText },
           });
           yield* emit("turn/completed", {
             threadId: "copy",
@@ -118,3 +118,12 @@ it.effect(
       expect(calls.some((call) => call.method === "turn/start")).toBe(false);
     }),
 );
+
+for (const text of ["not readable JSON", '{"summary":""}', ""]) {
+  it.effect(`returns native unavailable after successful unreadable export (${text})`, () =>
+    Effect.gen(function* () {
+      const { client } = fakeClient(false, text);
+      expect(yield* compactCopiedCodexThread(client, input)).toBeUndefined();
+    }),
+  );
+}

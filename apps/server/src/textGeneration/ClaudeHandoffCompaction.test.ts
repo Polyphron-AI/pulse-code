@@ -24,7 +24,14 @@ const input = {
   },
 };
 
-function fakeQuery(failure = false, original = false, early = false) {
+function fakeQuery(
+  failure = false,
+  original = false,
+  early = false,
+  exportResult = { structured_output: { summary: "Continue exactly here" } } as {
+    structured_output?: unknown;
+  },
+) {
   let closed = false;
   let options: Options | undefined;
   const prompts: string[] = [];
@@ -47,13 +54,14 @@ function fakeQuery(failure = false, original = false, early = false) {
         subtype: "compact_boundary",
         session_id: original ? "original" : "copy",
       };
+      yield { type: "result", subtype: "success", session_id: "copy" };
       const exportPrompt = await iterator.next();
       prompts.push(String(exportPrompt.value?.message.content));
       yield {
         type: "result",
         subtype: "success",
         session_id: "copy",
-        structured_output: { summary: "Continue exactly here" },
+        ...exportResult,
       };
     })();
     return Object.assign(stream, {
@@ -120,12 +128,12 @@ it.effect("rejects original session reuse and closes the runtime", () =>
   }),
 );
 
-it.effect("ignores structured state before the native compaction receipt", () =>
+it.effect("returns native unavailable for a successful result without a compaction receipt", () =>
   Effect.gen(function* () {
     const fake = fakeQuery(false, false, true);
     const result = yield* compactCopiedClaudeSession(input, {}, fake.runQuery).pipe(Effect.scoped);
-    expect(result?.summary).toBe("Continue exactly here");
-    expect(fake.prompts).toHaveLength(2);
+    expect(result).toBeUndefined();
+    expect(fake.wasClosed()).toBe(true);
   }),
 );
 
@@ -147,6 +155,7 @@ it.effect("aborts and closes the copied runtime when interrupted during export",
       const stream = (async function* () {
         await iterator.next();
         yield { type: "system", subtype: "compact_boundary", session_id: "copy" };
+        yield { type: "result", subtype: "success", session_id: "copy" };
         await iterator.next();
         startedExport();
         await pending;
@@ -168,3 +177,22 @@ it.effect("aborts and closes the copied runtime when interrupted during export",
     expect(options?.abortController?.signal.aborted).toBe(true);
   }),
 );
+
+for (const exportResult of [
+  {},
+  { structured_output: { summary: "" } },
+  { structured_output: { encrypted_content: "opaque" } },
+]) {
+  it.effect(
+    `returns native unavailable and closes after successful unreadable export (${JSON.stringify(exportResult)})`,
+    () =>
+      Effect.gen(function* () {
+        const fake = fakeQuery(false, false, false, exportResult);
+        const result = yield* compactCopiedClaudeSession(input, {}, fake.runQuery).pipe(
+          Effect.scoped,
+        );
+        expect(result).toBeUndefined();
+        expect(fake.wasClosed()).toBe(true);
+      }),
+  );
+}
