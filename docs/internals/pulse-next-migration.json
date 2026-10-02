@@ -1,10 +1,17 @@
 {
   "active": {
     "policyVersion": "2026-09-17",
-    "state": "reviewing",
+    "state": "idle",
+    "nextAction": "No active implementation. Provider summary handoff compaction is implemented locally on qb/feat-provider-summary-handoff; no PR or deployment requested.",
+    "updatedAt": "2026-10-02"
+  },
+  "providerSummaryHandoffCompaction": {
+    "policyVersion": "2026-09-17",
+    "state": "implemented-locally",
     "feature": "provider-summary-handoff-compaction",
     "branch": "qb/feat-provider-summary-handoff",
     "baseRevision": "cf2fd80e0f1e06941dd75b250593dd8b0fe49ab5",
+    "implementationRevision": "4bd5e024932e4c29e188ac33c87733d70a07057a",
     "acceptance": [
       "Native compaction operates on an isolated copied source session where supported; source conversation is unchanged",
       "If native compaction or readable export is unsupported, a portable source-provider pass compacts the conversation before destination structuring",
@@ -12,8 +19,8 @@
       "Brief preserves goals, decisions, completed work, outstanding verification, exact next action and workspace; fallback and truncation remain visible",
       "Failure and cancellation release temporary resources without mutating source or creating a misleading draft"
     ],
-    "evidence": "Owner reports 63 focused tests, server typecheck and changed-path lint passing; seven native tests passed after schema compiler hoisting. Native provider behavior is synthetic, no live provider execution authorized.",
-    "nextAction": "Parent runs combined handoff checks. compact_handoff_spec and compact_handoff_standards each review the frozen compaction revision once, read-only. Fix supported findings as one batch and rerun affected checks; no PR or deployment requested.",
+    "evidence": "Parent final combined checks passed 153 server tests (one skipped) and 26 web tests. Server typecheck and scoped lint passed. Standards review PASS on 0a12b2ff; specification's unreadable-export finding repaired with red/green tests. Parent inspected repairs and Claude turn sequencing, then reran the combined server checks. User-doc prose lint passed for one eligible file; diff check passed. Native provider behavior is synthetic; live provider, browser and device verification remain unrun.",
+    "nextAction": "No required implementation remains. Live provider and client verification remain separate from the passing synthetic checks. No PR, push or deployment requested.",
     "updatedAt": "2026-10-02"
   },
   "wardenCredentials": {
