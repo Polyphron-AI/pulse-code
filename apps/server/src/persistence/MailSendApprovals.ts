@@ -14,6 +14,13 @@ export type MailSendApprovalRepositoryError = PersistenceSqlError | PersistenceD
 
 const MailSendApprovalError = Schema.Struct({ code: Schema.String, message: Schema.String });
 
+/** The draft a send came from, with its MODSEQ at prepare time when the server has CONDSTORE. */
+export const MailSourceDraft = Schema.Struct({
+  ...MailMessageRef.fields,
+  modseq: Schema.optionalKey(Schema.String),
+});
+export type MailSourceDraft = typeof MailSourceDraft.Type;
+
 /** A stored approval without its MIME bytes, which only `beginSubmit` hands out. */
 export const MailSendApprovalRecord = Schema.Struct({
   id: Schema.String,
@@ -23,7 +30,7 @@ export const MailSendApprovalRecord = Schema.Struct({
   accountId: Schema.String,
   snapshot: Schema.fromJsonString(MailSendSnapshot),
   digest: Schema.String,
-  sourceDraft: Schema.NullOr(Schema.fromJsonString(MailMessageRef)),
+  sourceDraft: Schema.NullOr(Schema.fromJsonString(MailSourceDraft)),
   status: MailSendApprovalStatus,
   error: Schema.NullOr(Schema.fromJsonString(MailSendApprovalError)),
   createdAt: Schema.String,
@@ -34,7 +41,7 @@ export const MailSendApprovalRecord = Schema.Struct({
 export type MailSendApprovalRecord = typeof MailSendApprovalRecord.Type;
 
 const encodeSnapshot = Schema.encodeSync(Schema.fromJsonString(MailSendSnapshot));
-const encodeRef = Schema.encodeSync(Schema.fromJsonString(MailMessageRef));
+const encodeRef = Schema.encodeSync(Schema.fromJsonString(MailSourceDraft));
 const encodeError = Schema.encodeSync(Schema.fromJsonString(MailSendApprovalError));
 
 const ClaimedRow = Schema.Struct({ ...MailSendApprovalRecord.fields, mime: Schema.Uint8Array });
@@ -49,7 +56,7 @@ export interface InsertPendingMailSendApproval {
   readonly snapshot: MailSendSnapshot;
   readonly mime: Uint8Array;
   readonly digest: string;
-  readonly sourceDraft: MailMessageRef | null;
+  readonly sourceDraft: MailSourceDraft | null;
   readonly createdAt: string;
   readonly expiresAt: string;
 }

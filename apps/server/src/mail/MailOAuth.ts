@@ -16,6 +16,7 @@ import * as Semaphore from "effect/Semaphore";
 import { HttpClient, HttpClientRequest } from "effect/unstable/http";
 
 import { MailConfigService, type StoredMailAccount } from "./MailConfigService.ts";
+import type { MailLogin } from "./MailConnection.ts";
 
 const FLOW_LIFETIME = Duration.minutes(10);
 const HTTP_TIMEOUT = Duration.seconds(15);
@@ -96,6 +97,8 @@ export class MailOAuth extends Context.Service<
     ) => Effect.Effect<MailAccount, MailError>;
     /** A current access token, refreshed when it expires within five minutes. Never a password. */
     readonly accessToken: (accountId: string) => Effect.Effect<string, MailError>;
+    /** The sign-in for one IMAP or SMTP connection: the stored password or a current token. */
+    readonly login: (accountId: string) => Effect.Effect<MailLogin, MailError>;
   }
 >()("t3/mail/MailOAuth") {}
 
@@ -332,7 +335,20 @@ export const make = Effect.gen(function* () {
       }),
     );
 
-  return MailOAuth.of({ startOAuth, completeOAuth, accessToken });
+  const login = (accountId: string) =>
+    Effect.gen(function* () {
+      const account = yield* config.getAccount(accountId);
+      if (account.auth.kind !== "password") {
+        return { type: "oauth", accessToken: yield* accessToken(accountId) } satisfies MailLogin;
+      }
+      const stored = yield* config.readCredential(accountId);
+      if (Option.isNone(stored) || stored.value.type !== "password") {
+        return yield* fail("auth-failed", "Set a password for this account in Email settings.");
+      }
+      return { type: "password", password: stored.value.password } satisfies MailLogin;
+    });
+
+  return MailOAuth.of({ startOAuth, completeOAuth, accessToken, login });
 });
 
 export const layer = Layer.effect(MailOAuth, make);

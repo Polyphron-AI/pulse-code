@@ -361,3 +361,55 @@ export const readAttachment = (
       };
     }),
   );
+
+/** Cap for reading a whole draft to send; matches the outgoing MIME limit. */
+const SEND_SOURCE_CAP = 25 * 1024 * 1024;
+
+const modseqOf = (message: { readonly modseq?: bigint | undefined }) =>
+  message.modseq === undefined ? {} : { modseq: String(message.modseq) };
+
+/** A whole message parsed for sending, with its MODSEQ when the server has CONDSTORE. */
+export const readMessageSource = (
+  account: StoredMailAccount,
+  login: MailLogin,
+  ref: MailMessageRef,
+  options: MailConnectionOptions = {},
+) =>
+  session(account, login, options, (client) =>
+    Effect.gen(function* () {
+      yield* openChecked(client, ref, true);
+      const message = yield* imapCall(() =>
+        client.fetchOne(
+          String(ref.uid),
+          { uid: true, source: { maxLength: SEND_SOURCE_CAP } },
+          { uid: true },
+        ),
+      );
+      if (!message || !message.source) {
+        return yield* fail("not-found", "This draft is no longer in the mailbox.");
+      }
+      if (message.source.length >= SEND_SOURCE_CAP) {
+        return yield* fail("limit-exceeded", "This draft is larger than 25 MiB.");
+      }
+      return { parsed: yield* parse(message.source), ...modseqOf(message) };
+    }),
+  );
+
+/** Whether a message is still present under its UIDVALIDITY, with its current MODSEQ. */
+export const messageVersion = (
+  account: StoredMailAccount,
+  login: MailLogin,
+  ref: MailMessageRef,
+  options: MailConnectionOptions = {},
+) =>
+  session(account, login, options, (client) =>
+    Effect.gen(function* () {
+      yield* openChecked(client, ref, true);
+      const message = yield* imapCall(() =>
+        client.fetchOne(String(ref.uid), { uid: true, flags: true }, { uid: true }),
+      );
+      return message
+        ? { present: true as const, ...modseqOf(message) }
+        : { present: false as const };
+    }),
+  );

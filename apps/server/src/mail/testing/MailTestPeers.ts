@@ -174,6 +174,8 @@ export interface FakeImapMessage {
   readonly uid: number;
   flags: Set<string>;
   readonly raw: string;
+  /** Reported as MODSEQ when the client enabled CONDSTORE. */
+  modseq?: number;
 }
 
 export interface FakeImapMailbox {
@@ -235,7 +237,10 @@ export const fakeImap = (
     const sub = rest[0]?.toUpperCase();
     if (upper === "CAPABILITY") io.send(`* CAPABILITY ${capabilities}\r\n${tag} OK done\r\n`);
     else if (upper === "AUTHENTICATE" || upper === "LOGIN") io.send(`${tag} OK signed in\r\n`);
-    else if ((upper === "LIST" || upper === "LSUB") && args.endsWith('""')) {
+    else if (upper === "ENABLE") {
+      const enabled = rest.filter((name) => capabilities.split(" ").includes(name.toUpperCase()));
+      io.send(`* ENABLED ${enabled.join(" ")}\r\n${tag} OK done\r\n`);
+    } else if ((upper === "LIST" || upper === "LSUB") && args.endsWith('""')) {
       // An empty pattern asks for the hierarchy delimiter only.
       io.send(`* ${upper} (\\Noselect) "/" ""\r\n${tag} OK done\r\n`);
     } else if (upper === "LIST" || upper === "LSUB") {
@@ -245,7 +250,7 @@ export const fakeImap = (
       );
       io.send(`${lines.join("")}${tag} OK done\r\n`);
     } else if (upper === "SELECT" || upper === "EXAMINE") {
-      const name = args.replace(/^"|"$/g, "");
+      const name = args.replace(/ \(CONDSTORE\)$/i, "").replace(/^"|"$/g, "");
       selected = mailboxes.find((mailbox) => mailbox.name === name);
       if (!selected) {
         io.send(`${tag} NO [NONEXISTENT] no such mailbox\r\n`);
@@ -329,6 +334,7 @@ export const fakeImap = (
         const parts = [`UID ${message.uid}`];
         if (/\bFLAGS\b/i.test(items)) parts.push(`FLAGS (${[...message.flags].join(" ")})`);
         if (/RFC822\.SIZE/i.test(items)) parts.push(`RFC822.SIZE ${message.raw.length}`);
+        if (/\bMODSEQ\b/i.test(items)) parts.push(`MODSEQ (${message.modseq ?? 1})`);
         for (const match of items.matchAll(SECTION)) {
           const [, section = "", start, length] = match;
           let content = sectionOf(message.raw, section);
