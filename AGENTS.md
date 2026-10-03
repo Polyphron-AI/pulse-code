@@ -7,6 +7,30 @@ are preserved under `archive/2026-09-14/`, including `pulse-code-old`. Read
 `docs/operations/pulse-next-branches.md` before porting selected old changes.
 `main` remains the unchanged production target, not a feature branch base.
 
+<!-- product-ops: user-question-routing:start -->
+
+**User questions by runtime:** On OpenAI hosts, including Codex and T3 using
+OpenAI, use `functions.request_user_input_async`. `AskUserQuestion` is Claude-only;
+every mention below maps to the OpenAI tool on those hosts. Use `questions` with
+`title` and optional string-array `options`; put the recommendation first and
+include its rationale in the option text. Free text is built in. Do not send
+Claude's `header`, `multiSelect`, option objects, or `annotations` schema.
+For independent toggles, ask separate questions. The async call returns before
+the answer: continue independent work, keep dependent work pending, and wait for
+the user's later reply before recording or applying a choice. A preselected
+option or elapsed time is not consent. If the tool is unavailable, report that
+limit and ask one concise plain-text question; never fall back to Claude's tool
+or substitute the Plan-only `functions.request_user_input`. Existing user
+authorization remains valid; ask only for missing information or a new decision.
+These runtime rules override tool-specific examples below.
+
+**When to ask:** Any choice with two or more viable options, any approval
+request, and any next step that needs the user's OK goes through the host
+question tool, never as a numbered or bulleted list in prose. Give the context
+as text first, then make the question call the last action of the turn. A
+report may end with a question, never with a decision list.
+<!-- product-ops: user-question-routing:end -->
+
 T3 Code is a minimal GUI for coding agents. A Node WebSocket server wraps provider CLIs and agents (Codex, Claude Code, Cursor, Grok, OpenCode, Antigravity) and serves web, desktop, and mobile clients.
 
 You can think of T3 Code as an open source "bring-your-own-subscription" alternative to apps like Claude Desktop, Codex App, Cursor Glass and Conductor.
