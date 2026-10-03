@@ -9,7 +9,12 @@ import {
   buildThreadHandoffTargets,
   type ThreadHandoffTarget,
 } from "@t3tools/client-runtime/state/thread-handoff";
-import type { EnvironmentId, ProviderInstanceId, ScopedThreadRef } from "@t3tools/contracts";
+import type {
+  EnvironmentId,
+  ModelSelection,
+  ProviderInstanceId,
+  ScopedThreadRef,
+} from "@t3tools/contracts";
 import { useCallback, useMemo } from "react";
 
 import { toastManager } from "../components/ui/toast";
@@ -36,10 +41,12 @@ export function useThreadHandoffTargets(
   }, [environmentId, serverConfigs]);
 }
 
+const pendingHandoffs = new Set<string>();
+
 /**
  * Move an in-flight thread to another provider. Providers cannot be swapped
  * inside a live thread (each holds its own session), so the work moves instead:
- * the thread's own provider writes a handoff brief, and that brief lands in a
+ * the destination provider writes a handoff brief, and that brief lands in a
  * fresh draft on the chosen provider for the user to review and send.
  */
 export function useThreadHandoff() {
@@ -53,73 +60,112 @@ export function useThreadHandoff() {
     async (input: {
       readonly threadRef: ScopedThreadRef;
       readonly instanceId: ProviderInstanceId;
+      readonly modelSelection?: ModelSelection;
     }): Promise<void> => {
-      const thread = readThreadShell(input.threadRef);
-      if (!thread) return;
-      const providers = serverConfigs.get(input.threadRef.environmentId)?.providers ?? [];
-      const model = getDefaultProviderInstanceModel(providers, input.instanceId);
-      if (!model) {
-        toastManager.add({
-          type: "error",
-          title: "Could not continue in that provider",
-          description: "That provider has no model available on this server.",
-        });
-        return;
-      }
-
-      const pendingToastId = toastManager.add({
-        type: "loading",
-        title: "Summarizing thread…",
-        description: "Its current provider is writing a handoff brief.",
-        timeout: 0,
-      });
-
-      const generated = await generateHandoff({
-        environmentId: input.threadRef.environmentId,
-        input: { threadId: input.threadRef.threadId },
-      });
-      toastManager.close(pendingToastId);
-      if (generated._tag === "Failure") {
-        if (!isAtomCommandInterrupted(generated)) {
-          const error = squashAtomCommandFailure(generated);
+      const key = `${input.threadRef.environmentId}:${input.threadRef.threadId}`;
+      if (pendingHandoffs.has(key)) return;
+      pendingHandoffs.add(key);
+      try {
+        const thread = readThreadShell(input.threadRef);
+        if (!thread) return;
+        const providers = serverConfigs.get(input.threadRef.environmentId)?.providers ?? [];
+        const model =
+          input.modelSelection?.model ??
+          getDefaultProviderInstanceModel(providers, input.instanceId);
+        const config = serverConfigs.get(input.threadRef.environmentId);
+        const target = buildThreadHandoffTargets(
+          providers,
+          config?.settings ?? DEFAULT_SERVER_SETTINGS,
+        ).find((target) => target.instanceId === input.instanceId);
+        if (
+          !model ||
+          !target ||
+          target.disabled ||
+          (input.modelSelection && input.modelSelection.instanceId !== input.instanceId)
+        ) {
           toastManager.add({
             type: "error",
-            title: "Could not summarize this thread",
-            description:
-              error instanceof Error ? error.message : "The handoff summary could not be written.",
+            title: "Could not continue in that provider",
+            description: "That provider has no model available on this server.",
           });
+          return;
         }
-        return;
-      }
 
-      const opened = await settlePromise(() =>
-        handleNewThread(scopeProjectRef(input.threadRef.environmentId, thread.projectId)),
-      );
-      if (opened._tag === "Failure" || opened.value === null) {
-        toastManager.add({
-          type: "error",
-          title: "Could not open the new thread",
-          description: "The handoff summary was written but no draft could be opened for it.",
+        const modelSelection = input.modelSelection ?? { instanceId: input.instanceId, model };
+        const pendingToastId = toastManager.add({
+          type: "loading",
+          title: "Summarizing thread…",
+          description: "The destination provider is writing a handoff brief.",
+          timeout: 0,
         });
-        return;
-      }
 
-      // The draft is seeded rather than sent: the brief is a starting point the
-      // user edits, and the provider choice only takes effect on that send.
-      const store = useComposerDraftStore.getState();
-      const draftId = opened.value.draftId;
-      store.setModelSelection(draftId, { instanceId: input.instanceId, model }, { explicit: true });
-      if ((store.getComposerDraft(draftId)?.prompt ?? "").trim().length === 0) {
+        const generated = await generateHandoff({
+          environmentId: input.threadRef.environmentId,
+          input: { threadId: input.threadRef.threadId, destination: modelSelection },
+        });
+        toastManager.close(pendingToastId);
+        if (generated._tag === "Failure") {
+          if (!isAtomCommandInterrupted(generated)) {
+            const error = squashAtomCommandFailure(generated);
+            toastManager.add({
+              type: "error",
+              title: "Could not summarize this thread",
+              description:
+                error instanceof Error
+                  ? error.message
+                  : "The handoff summary could not be written.",
+            });
+          }
+          return;
+        }
+
+        const opened = await settlePromise(() =>
+          handleNewThread(scopeProjectRef(input.threadRef.environmentId, thread.projectId), {
+            branch: thread.branch,
+            worktreePath: thread.worktreePath,
+            envMode: thread.worktreePath ? "worktree" : "local",
+          }),
+        );
+        if (opened._tag === "Failure" || opened.value === null) {
+          toastManager.add({
+            type: "error",
+            title: "Could not open the new thread",
+            description: "The handoff summary was written but no draft could be opened for it.",
+          });
+          return;
+        }
+
+        // The draft is seeded rather than sent: the brief is a starting point the
+        // user edits, and the provider choice only takes effect on that send.
+        const store = useComposerDraftStore.getState();
+        const draftId = opened.value.draftId;
+        if ((store.getComposerDraft(draftId)?.prompt ?? "").trim().length > 0) {
+          toastManager.add({
+            type: "error",
+            title: "Could not prepare the new thread",
+            description:
+              "The draft changed while the summary was being prepared. Retry to open a fresh draft.",
+          });
+          return;
+        }
+        store.setModelSelection(draftId, modelSelection, { explicit: true, replaceOptions: true });
         store.setPrompt(draftId, generated.value.summary);
-      }
 
-      toastManager.add({
-        type: "success",
-        title: "Handoff ready",
-        description: generated.value.truncated
-          ? "This thread was long, so earlier content was left out. Review the brief, then send it."
-          : "Review the brief, then send it to start the new thread.",
-      });
+        toastManager.add({
+          type: "success",
+          title: "Handoff ready",
+          description: [
+            generated.value.capabilityNotice,
+            generated.value.truncated
+              ? "This thread was long, so earlier content was left out. Review the brief, then send it."
+              : "Review the brief, then send it to start the new thread.",
+          ]
+            .filter(Boolean)
+            .join(" "),
+        });
+      } finally {
+        pendingHandoffs.delete(key);
+      }
     },
     [generateHandoff, handleNewThread, serverConfigs],
   );

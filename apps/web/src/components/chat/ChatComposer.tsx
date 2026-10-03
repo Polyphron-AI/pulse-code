@@ -1,3 +1,4 @@
+import { useThreadHandoff } from "../../hooks/useThreadHandoff";
 import { DESKTOP_PASTE_AS_TEXT_EVENT } from "../../lib/desktopPasteAsText";
 import { isLocalEnvironmentDisabled } from "../../localEnvironment";
 import { usePrimaryEnvironmentId } from "../../state/environments";
@@ -1704,6 +1705,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const nonPersistedComposerImageIds = attachmentDraft.nonPersistedImageIds;
   const uploadsByImageId = useAttachmentUploadStore((state) => state.uploadsByImageId);
   const openPrLink = useOpenPrLink(routeThreadRef);
+  const handoffThread = useThreadHandoff();
   const [previewFileId, setPreviewFileId] = useState<string | null>(null);
   const previewFile = composerFiles.find((file) => file.id === previewFileId);
   const composerContextActions = useMemo(
@@ -5256,6 +5258,19 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           : {})}
         onOpenChange={setIsComposerModelPickerOpen}
         getModelDisabledReason={getModelDisabledReason}
+        {...(routeKind === "server"
+          ? {
+              onStartThreadFromSummary: (instanceId: ProviderInstanceId, model: string) => {
+                const saved = useComposerDraftStore.getState().getComposerDraft(routeThreadRef)
+                  ?.modelSelectionByProvider[instanceId];
+                void handoffThread({
+                  threadRef: routeThreadRef,
+                  instanceId,
+                  modelSelection: createModelSelection(instanceId, model, saved?.options),
+                });
+              },
+            }
+          : {})}
         onInstanceModelChange={(instanceId, model) => {
           setMultipleModelSelections(null);
           onProviderModelSelect(instanceId, model);

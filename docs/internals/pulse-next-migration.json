@@ -1,12 +1,27 @@
 {
   "active": {
     "policyVersion": "2026-09-17",
-    "feature": "release-0.0.44-pulse.1",
-    "state": "building-windows-installer",
-    "version": "0.0.44-pulse.1",
-    "completionBlockers": ["Packaged installer build, identity check and SHA-256 record pending"],
-    "nextAction": "v0.0.44 is published to origin/develop with thread output speed and dictation push-to-talk. Build the Windows x64 NSIS installer from develop, check packaged identity and version, and record the SHA-256 with the commit.",
-    "updatedAt": "2026-10-01"
+    "state": "idle",
+    "nextAction": "No active implementation. Provider summary handoff compaction is implemented locally on qb/feat-provider-summary-handoff; no PR or deployment requested.",
+    "updatedAt": "2026-10-02"
+  },
+  "providerSummaryHandoffCompaction": {
+    "policyVersion": "2026-09-17",
+    "state": "implemented-locally",
+    "feature": "provider-summary-handoff-compaction",
+    "branch": "qb/feat-provider-summary-handoff",
+    "baseRevision": "cf2fd80e0f1e06941dd75b250593dd8b0fe49ab5",
+    "implementationRevision": "4bd5e024932e4c29e188ac33c87733d70a07057a",
+    "acceptance": [
+      "Native compaction operates on an isolated copied source session where supported; source conversation is unchanged",
+      "If native compaction or readable export is unsupported, a portable source-provider pass compacts the conversation before destination structuring",
+      "The destination small model structures continuation state without restarting settled work; selected destination draft model remains unchanged",
+      "Brief preserves goals, decisions, completed work, outstanding verification, exact next action and workspace; fallback and truncation remain visible",
+      "Failure and cancellation release temporary resources without mutating source or creating a misleading draft"
+    ],
+    "evidence": "Parent final combined checks passed 153 server tests (one skipped) and 26 web tests. Server typecheck and scoped lint passed. Standards review PASS on 0a12b2ff; specification's unreadable-export finding repaired with red/green tests. Parent inspected repairs and Claude turn sequencing, then reran the combined server checks. User-doc prose lint passed for one eligible file; diff check passed. Native provider behavior is synthetic; live provider, browser and device verification remain unrun.",
+    "nextAction": "No required implementation remains. Live provider and client verification remain separate from the passing synthetic checks. No PR, push or deployment requested.",
+    "updatedAt": "2026-10-02"
   },
   "wardenCredentials": {
     "policyVersion": "2026-09-17",
@@ -1242,6 +1257,128 @@
       "nextAction": "Fast-forward local develop to the merge commit. Remote push and PR creation were not requested; no browser, real-provider, native/package build, installer or live-install verification was run.",
       "updatedAt": "2026-10-01",
       "usage": "Task-bounded token telemetry unavailable. Three bounded conflict-resolution agents; two production builds because the first PowerShell wrapper returned failure despite successful build output. Final build used a captured child-process exit receipt."
+    }
+  ],
+  "history": [
+    {
+      "record": "prior-active-preserved-before-provider-handoff",
+      "active": {
+        "policyVersion": "2026-09-17",
+        "feature": "release-0.0.44-pulse.1",
+        "state": "building-windows-installer",
+        "version": "0.0.44-pulse.1",
+        "completionBlockers": [
+          "Packaged installer build, identity check and SHA-256 record pending"
+        ],
+        "nextAction": "v0.0.44 is published to origin/develop with thread output speed and dictation push-to-talk. Build the Windows x64 NSIS installer from develop, check packaged identity and version, and record the SHA-256 with the commit.",
+        "updatedAt": "2026-10-01"
+      }
+    },
+    {
+      "policyVersion": "2026-09-17",
+      "feature": "provider-summary-handoff",
+      "taskId": "B-2026-10-01-001",
+      "state": "implemented-locally",
+      "owner": "implement_handoff",
+      "baseRevision": "cf2fd80e0f",
+      "branch": "qb/feat-provider-summary-handoff",
+      "worktree": "F:/Dev Ops/T3/Pulse Code/.worktrees/provider-summary-handoff",
+      "ponytail": "full",
+      "acceptance": [
+        "Provider picker offers new thread from summary for incompatible available destination models.",
+        "Summary uses destination instance: Luna for OpenAI, Haiku for Anthropic, Flash for Google, medium thinking when supported.",
+        "New draft retains selected destination model and options, editable summary, original thread unchanged.",
+        "Existing compatible switches and thread-menu handoffs remain functional on web, desktop and native mobile.",
+        "Failures, retry, duplicate clicks, reload, environment/workspace routing and older clients covered by focused checks."
+      ],
+      "verificationScope": {
+        "webDesktop": "Focused tests, types and production web build; browser not authorized.",
+        "nativeMobile": "Shared routing and existing handoff updated; device verification not authorized.",
+        "providers": "Synthetic checks only, no paid provider calls.",
+        "connections": "Environment-scoped RPC retained for local/remote/tunnel.",
+        "queuedRunningThreads": "Snapshot current conversation; never modify source provider session.",
+        "sourceEvidence": "User attachment inspected; no matching Pulse tickets/reports under provider or summary."
+      },
+      "completionBlockers": [],
+      "nextAction": "No implementation work remains. Local branch available for review; PR and deployment were not requested.",
+      "updatedAt": "2026-10-01",
+      "acceptedCapabilityException": "User confirmed Haiku Thinking enabled with visible notice that Medium is unavailable; Luna and Flash use Medium.",
+      "implementationRevision": "6047dcf713a040522df88b124af95263088668f3",
+      "verification": {
+        "server": {
+          "command": "vp test run src/textGeneration/TextGeneration.test.ts src/orchestration/threadHandoffContext.test.ts",
+          "cwd": "apps/server",
+          "tests": 14,
+          "exit": 0,
+          "author": "root"
+        },
+        "web": {
+          "command": "vp test run src/components/chat/ModelPickerContent.test.ts src/components/chat/ProviderModelPicker.summary.test.tsx src/hooks/useThreadHandoff.test.tsx",
+          "cwd": "apps/web",
+          "tests": 26,
+          "exit": 0,
+          "author": "root"
+        },
+        "shared": {
+          "command": "vp test run src/state/threadHandoff.test.ts",
+          "cwd": "packages/client-runtime",
+          "tests": 2,
+          "exit": 0,
+          "author": "root"
+        },
+        "mobile": {
+          "command": "vp test run src/features/threads/thread-settings-sheet-state.test.ts src/features/threads/threadHandoffMenu.test.ts",
+          "cwd": "apps/mobile",
+          "tests": 14,
+          "exit": 0,
+          "author": "implement_handoff"
+        },
+        "contracts": {
+          "command": "vp test run src/orchestration.test.ts",
+          "cwd": "packages/contracts",
+          "tests": 65,
+          "exit": 0,
+          "author": "implement_handoff"
+        },
+        "typechecks": {
+          "command": "vp run typecheck",
+          "packages": [
+            "apps/server",
+            "apps/web",
+            "apps/mobile",
+            "packages/contracts",
+            "packages/client-runtime"
+          ],
+          "exit": 0,
+          "author": "implement_handoff"
+        },
+        "lint": {
+          "scope": "16 changed source/test files; narrow repair rerun",
+          "exit": 0,
+          "warnings": "Existing React suggestions; no blocking findings."
+        },
+        "webBuild": {
+          "command": "vp run build",
+          "cwd": "apps/web",
+          "exit": 0,
+          "author": "root"
+        },
+        "uiDetector": {
+          "command": "impeccable.cmd detect --json on changed picker/composer/settings surfaces",
+          "exit": 0,
+          "findings": 0
+        },
+        "reviews": {
+          "revision": "6047dcf713a040522df88b124af95263088668f3",
+          "standards": "PASS, standards_review, no findings",
+          "specification": "PASS, spec_review, no findings"
+        },
+        "unrun": [
+          "Browser and native-device verification, not authorized.",
+          "Live provider calls, no paid synthetic tests.",
+          "Packaged desktop installation and local/relay/tunnel client journeys."
+        ]
+      }
     }
   ]
 }

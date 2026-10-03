@@ -2327,18 +2327,21 @@ export const OrchestrationSearchThreadsResult = Schema.Struct({
 export type OrchestrationSearchThreadsResult = typeof OrchestrationSearchThreadsResult.Type;
 
 /**
- * Ask the thread's own provider to write a handoff summary of the work so far.
+ * Ask a provider to write a handoff summary of the work so far.
  * The caller seeds a new thread's composer with the result, which is how a
  * user moves an in-flight thread to a provider the current one is locked out of.
  */
 export const OrchestrationGenerateThreadHandoffInput = Schema.Struct({
   threadId: ThreadId,
+  /** Omitted by older clients, which retain source-provider generation. */
+  destination: Schema.optional(ModelSelection),
 });
 export type OrchestrationGenerateThreadHandoffInput =
   typeof OrchestrationGenerateThreadHandoffInput.Type;
 
 export const OrchestrationGenerateThreadHandoffResult = Schema.Struct({
   summary: TrimmedNonEmptyString,
+  capabilityNotice: Schema.optional(TrimmedNonEmptyString),
   /** True when the thread was long enough that earlier content was dropped. */
   truncated: Schema.Boolean,
 });

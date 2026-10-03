@@ -4,7 +4,7 @@
  * flow (summarize, open a draft, seed it) stays per-client because each
  * surface opens new threads its own way.
  */
-import type { ProviderInstanceId, ServerProvider } from "@t3tools/contracts";
+import type { ModelSelection, ProviderInstanceId, ServerProvider } from "@t3tools/contracts";
 
 import {
   applyProviderInstanceSettings,
@@ -39,4 +39,36 @@ export function buildThreadHandoffTargets(
       label: entry.displayName,
       disabled: !isProviderInstancePickerReady(entry),
     }));
+}
+
+/** A started session can only continue on compatible harnesses and model-change capabilities. */
+export function threadModelSelectionNeedsSummary(input: {
+  providers: ReadonlyArray<ServerProvider>;
+  currentModelSelection: ModelSelection;
+  currentProviderInstanceId?: ProviderInstanceId | null;
+  nextModelSelection: ModelSelection;
+  hasStartedSession: boolean;
+}): boolean {
+  if (!input.hasStartedSession) return false;
+  const currentId = input.currentProviderInstanceId ?? input.currentModelSelection.instanceId;
+  if (
+    currentId === input.nextModelSelection.instanceId &&
+    input.currentModelSelection.model === input.nextModelSelection.model
+  )
+    return false;
+  const source = input.providers.find((provider) => provider.instanceId === currentId);
+  const destination = input.providers.find(
+    (provider) => provider.instanceId === input.nextModelSelection.instanceId,
+  );
+  if (!source || !destination) return true;
+  return (
+    source.driver !== destination.driver ||
+    Boolean(
+      source.continuation?.groupKey &&
+      destination.continuation?.groupKey &&
+      source.continuation.groupKey !== destination.continuation.groupKey,
+    ) ||
+    source.requiresNewThreadForModelChange === true ||
+    destination.requiresNewThreadForModelChange === true
+  );
 }

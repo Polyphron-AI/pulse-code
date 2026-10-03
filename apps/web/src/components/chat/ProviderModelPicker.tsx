@@ -55,6 +55,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
   onOpenChange?: (open: boolean) => void;
   onOpenProviderSetup?: (instanceId: ProviderInstanceId) => void;
   getModelDisabledReason?: (instanceId: ProviderInstanceId, model: string) => string | null;
+  onStartThreadFromSummary?: (instanceId: ProviderInstanceId, model: string) => void;
   onInstanceModelChange: (instanceId: ProviderInstanceId, model: string) => void;
 }) {
   const composerFloatingLayerProps = useComposerMenuProps();
@@ -306,6 +307,15 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
           {...(props.onOpenProviderSetup ? { onOpenProviderSetup: props.onOpenProviderSetup } : {})}
           {...(props.getModelDisabledReason
             ? { getModelDisabledReason: props.getModelDisabledReason }
+            : {})}
+          {...(props.onStartThreadFromSummary
+            ? {
+                onStartThreadFromSummary: (instanceId: ProviderInstanceId, model: string) => {
+                  if (props.disabled) return;
+                  props.onStartThreadFromSummary?.(instanceId, model);
+                  setIsMenuOpen(false);
+                },
+              }
             : {})}
           onInstanceModelChange={handleInstanceModelChange}
         />

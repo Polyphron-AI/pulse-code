@@ -5,7 +5,12 @@ import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
 import { describe, expect } from "vite-plus/test";
 
-import { ProviderInstanceId } from "@t3tools/contracts";
+import {
+  ProviderInstanceId,
+  ProviderDriverKind,
+  TextGenerationError,
+  type ServerProvider,
+} from "@t3tools/contracts";
 import { createModelSelection } from "@t3tools/shared/model";
 
 import type { ProviderInstance } from "../provider/ProviderDriver.ts";
@@ -63,6 +68,150 @@ const makeStubRegistry = (
     ),
   };
 };
+
+for (const mode of ["portable", "native", "native-empty", "failure", "empty", "busy"] as const) {
+  it.effect(`separates source compaction from destination structuring (${mode})`, () =>
+    Effect.gen(function* () {
+      const sourceSelection = createModelSelection(
+        ProviderInstanceId.make("source"),
+        "gpt-6-astra",
+        [{ id: "reasoningEffort", value: "high" }],
+      );
+      const draft = createModelSelection(ProviderInstanceId.make("destination"), "gpt-6-sol", [
+        { id: "reasoningEffort", value: "xhigh" },
+      ]);
+      const calls: Array<{ stage: string; input: TextGeneration.ThreadHandoffGenerationInput }> =
+        [];
+      const source = makeStubInstance(
+        sourceSelection.instanceId,
+        makeStubTextGeneration({
+          compactThreadHandoff: (input) => {
+            calls.push({ stage: "native", input });
+            if (mode === "native-empty")
+              return Effect.succeed({ summary: "", usedNativeContext: true });
+            if (mode === "native")
+              return Effect.succeed({
+                summary: "Source compacted state",
+                usedNativeContext: true,
+                capabilityNotice: "Native copy compacted.",
+              });
+            return Effect.succeed(undefined);
+          },
+          generateThreadHandoff: (input) => {
+            calls.push({ stage: "portable", input });
+            return mode === "failure"
+              ? Effect.fail(
+                  new TextGenerationError({
+                    operation: "generateThreadHandoff",
+                    detail: "Source authentication expired",
+                  }),
+                )
+              : Effect.succeed({ summary: mode === "empty" ? "" : "Source compacted state" });
+          },
+        }),
+      );
+      const destination = makeStubInstance(
+        draft.instanceId,
+        makeStubTextGeneration({
+          generateThreadHandoff: (input) => {
+            calls.push({ stage: "destination", input });
+            return Effect.succeed({ summary: "Final continuation brief" });
+          },
+        }),
+      );
+      const snapshot: ServerProvider = {
+        instanceId: draft.instanceId,
+        driver: ProviderDriverKind.make("codex"),
+        enabled: true,
+        installed: true,
+        version: null,
+        status: "ready",
+        auth: { status: "authenticated" },
+        checkedAt: "2026-10-01T00:00:00.000Z",
+        slashCommands: [],
+        skills: [],
+        models: [
+          {
+            slug: "gpt-6-luna",
+            name: "Luna",
+            isCustom: false,
+            capabilities: {
+              optionDescriptors: [
+                {
+                  id: "reasoningEffort",
+                  label: "Thinking",
+                  type: "select",
+                  options: [{ id: "medium", label: "Medium" }],
+                },
+              ],
+            },
+          },
+        ],
+      };
+      const generation = yield* TextGeneration.make.pipe(
+        Effect.provideService(
+          ProviderInstanceRegistry.ProviderInstanceRegistry,
+          makeStubRegistry([
+            source,
+            {
+              ...destination,
+              snapshot: { ...destination.snapshot, getSnapshot: Effect.succeed(snapshot) },
+            },
+          ]),
+        ),
+        Effect.provide(
+          Layer.mock(SourceControlProviderRegistry.SourceControlProviderRegistry)({
+            resolveLink: () => Effect.die("No links expected"),
+          }),
+        ),
+      );
+      const result = yield* generation
+        .generateThreadHandoff({
+          cwd: process.cwd(),
+          threadContext: "Original full visible source",
+          modelSelection: draft,
+          useSummaryModel: true,
+          source: {
+            modelSelection: sourceSelection,
+            nativeEligible: mode !== "busy",
+            resumeCursor: { threadId: "original" },
+          },
+        })
+        .pipe(Effect.result);
+      const sourceCall = calls.find(
+        (call) => call.stage === (mode === "native" ? "native" : "portable"),
+      );
+      expect(sourceCall?.input.modelSelection).toEqual(sourceSelection);
+      expect(sourceCall?.input.phase).toBe("compact");
+      expect(sourceCall?.input.threadContext).toBe("Original full visible source");
+      const structured = calls.find((call) => call.stage === "destination");
+      if (mode === "failure" || mode === "empty") {
+        expect(Result.isFailure(result)).toBe(true);
+        expect(structured).toBeUndefined();
+      } else {
+        expect(structured?.input.threadContext).toBe("Source compacted state");
+        expect(structured?.input.phase).toBe("structure");
+        expect(structured?.input.modelSelection).toEqual({
+          instanceId: draft.instanceId,
+          model: "gpt-6-luna",
+          options: [{ id: "reasoningEffort", value: "medium" }],
+        });
+        expect(Result.isSuccess(result)).toBe(true);
+        if (Result.isSuccess(result))
+          expect(result.success.capabilityNotice).toContain(
+            mode === "native"
+              ? "Native copy"
+              : "Native compaction on a safe session copy or readable export is unavailable",
+          );
+      }
+      if (mode === "native-empty")
+        expect(calls.filter((call) => call.stage === "portable")).toHaveLength(1);
+      expect(draft.model).toBe("gpt-6-sol");
+      expect(draft.options).toEqual([{ id: "reasoningEffort", value: "xhigh" }]);
+      if (mode === "busy") expect(calls.some((call) => call.stage === "native")).toBe(false);
+    }),
+  );
+}
 
 describe("TextGeneration.make", () => {
   it.effect("retains supplied subject context in the provider prompt", () =>
@@ -179,3 +328,216 @@ describe("TextGeneration.make", () => {
     }),
   );
 });
+
+describe("destination handoff generation", () => {
+  it.effect("uses the destination instance's Luna with medium reasoning", () =>
+    Effect.gen(function* () {
+      const destination = ProviderInstanceId.make("codex_personal");
+      let received: TextGeneration.ThreadHandoffGenerationInput | undefined;
+      const instance = makeStubInstance(
+        destination,
+        makeStubTextGeneration({
+          generateThreadHandoff: (input) => {
+            received = input;
+            return Effect.succeed({ summary: "Continue fixing the tests." });
+          },
+        }),
+      );
+      const provider = {
+        instanceId: destination,
+        driver: ProviderDriverKind.make("codex"),
+        enabled: true,
+        installed: true,
+        status: "ready",
+        availability: "available",
+        version: null,
+        auth: { status: "authenticated" },
+        checkedAt: "2026-10-01T00:00:00.000Z",
+        slashCommands: [],
+        skills: [],
+        models: [
+          {
+            slug: "openai.gpt-6-luna",
+            name: "Luna",
+            isCustom: false,
+            capabilities: {
+              optionDescriptors: [
+                {
+                  id: "reasoningEffort",
+                  label: "Thinking",
+                  type: "select",
+                  options: [{ id: "medium", label: "Medium" }],
+                },
+              ],
+            },
+          },
+        ],
+      } satisfies ServerProvider;
+      const tg = yield* TextGeneration.make.pipe(
+        Effect.provideService(
+          ProviderInstanceRegistry.ProviderInstanceRegistry,
+          makeStubRegistry([
+            {
+              ...instance,
+              driverKind: provider.driver,
+              snapshot: { ...instance.snapshot, getSnapshot: Effect.succeed(provider) },
+            },
+          ]),
+        ),
+        Effect.provide(
+          Layer.mock(SourceControlProviderRegistry.SourceControlProviderRegistry)({
+            resolveLink: () => Effect.die("No links expected"),
+          }),
+        ),
+      );
+      const result = yield* tg.generateThreadHandoff({
+        cwd: process.cwd(),
+        threadContext: "user: Fix tests",
+        modelSelection: createModelSelection(destination, "gpt-6-astra", [
+          { id: "reasoningEffort", value: "high" },
+        ]),
+        useSummaryModel: true,
+      });
+      expect(result.summary).toBe("Continue fixing the tests.");
+      expect(received?.modelSelection).toEqual({
+        instanceId: destination,
+        model: "openai.gpt-6-luna",
+        options: [{ id: "reasoningEffort", value: "medium" }],
+      });
+    }),
+  );
+});
+
+describe("summary model capabilities", () => {
+  const provider = (driver: string, models: ServerProvider["models"]): ServerProvider => ({
+    instanceId: ProviderInstanceId.make("destination"),
+    driver: ProviderDriverKind.make(driver),
+    enabled: true,
+    installed: true,
+    version: null,
+    status: "ready",
+    auth: { status: "authenticated" },
+    checkedAt: "2026-10-01T00:00:00.000Z",
+    models,
+    slashCommands: [],
+    skills: [],
+  });
+  it("uses Haiku thinking and explicitly reports that medium is unavailable", () => {
+    expect(
+      TextGeneration.resolveHandoffSummaryModel(
+        provider("claudeAgent", [
+          {
+            slug: "claude-haiku-4-5",
+            name: "Haiku",
+            isCustom: false,
+            isLegacy: true,
+            capabilities: {
+              optionDescriptors: [{ id: "thinking", label: "Thinking", type: "boolean" }],
+            },
+          },
+        ]),
+        createModelSelection(ProviderInstanceId.make("destination"), "claude-fable-5-1"),
+      ),
+    ).toEqual({
+      modelSelection: {
+        instanceId: "destination",
+        model: "claude-haiku-4-5",
+        options: [{ id: "thinking", value: true }],
+      },
+      capabilityNotice:
+        "Haiku supports Thinking enabled, but Medium is unavailable. Review the brief, then send it.",
+    });
+  });
+  it("selects only Flash Medium for Antigravity", () => {
+    const models = ["gemini-3.8-flash-high", "gemini-3.8-flash-medium", "gemini-3.8-flash-low"].map(
+      (slug) => ({ slug, name: slug, isCustom: false, capabilities: null }),
+    );
+    expect(
+      TextGeneration.resolveHandoffSummaryModel(
+        provider("antigravity", models),
+        createModelSelection(ProviderInstanceId.make("destination"), models[0]!.slug),
+      ),
+    ).toEqual({
+      modelSelection: { instanceId: "destination", model: "gemini-3.8-flash-medium" },
+    });
+  });
+  it("preserves unmapped providers' existing generation and explains the limitation", () => {
+    const selection = createModelSelection(ProviderInstanceId.make("destination"), "composer-2");
+    expect(
+      TextGeneration.resolveHandoffSummaryModel(
+        provider("cursor", [
+          { slug: "composer-2", name: "Composer", isCustom: false, capabilities: null },
+        ]),
+        selection,
+      ),
+    ).toEqual({
+      modelSelection: selection,
+      capabilityNotice:
+        "This provider has no mapped small summary model. Its selected model wrote the brief. Review it, then send it.",
+    });
+  });
+});
+
+for (const driver of ["cursor", "grok", "opencode"]) {
+  it.effect(
+    `preserves ${driver} handoffs when its inferred family lacks a supported small model`,
+    () =>
+      Effect.gen(function* () {
+        const instanceId = ProviderInstanceId.make(`${driver}_work`);
+        const selection = createModelSelection(instanceId, "openai/gpt-5", [
+          { id: "variant", value: "high" },
+        ]);
+        let received: TextGeneration.ThreadHandoffGenerationInput | undefined;
+        const instance = makeStubInstance(
+          instanceId,
+          makeStubTextGeneration({
+            generateThreadHandoff: (input) => {
+              received = input;
+              return Effect.succeed({ summary: "Continue from this brief." });
+            },
+          }),
+        );
+        const snapshot: ServerProvider = {
+          instanceId,
+          driver: ProviderDriverKind.make(driver),
+          enabled: true,
+          installed: true,
+          version: null,
+          status: "ready",
+          auth: { status: "authenticated" },
+          checkedAt: "2026-10-01T00:00:00.000Z",
+          models: [{ slug: "openai/gpt-5", name: "GPT 5", isCustom: false, capabilities: null }],
+          slashCommands: [],
+          skills: [],
+        };
+        const generation = yield* TextGeneration.make.pipe(
+          Effect.provideService(
+            ProviderInstanceRegistry.ProviderInstanceRegistry,
+            makeStubRegistry([
+              {
+                ...instance,
+                driverKind: snapshot.driver,
+                snapshot: { ...instance.snapshot, getSnapshot: Effect.succeed(snapshot) },
+              },
+            ]),
+          ),
+          Effect.provide(
+            Layer.mock(SourceControlProviderRegistry.SourceControlProviderRegistry)({
+              resolveLink: () => Effect.die("No links expected"),
+            }),
+          ),
+        );
+        const result = yield* generation.generateThreadHandoff({
+          cwd: process.cwd(),
+          threadContext: "user: Continue the fix",
+          modelSelection: selection,
+          useSummaryModel: true,
+        });
+        expect(result.summary).toBe("Continue from this brief.");
+        expect(result.capabilityNotice).toBe(
+          "This provider has no supported small summary model for the selected family. Its selected model wrote the brief. Review it, then send it.",
+        );
+        expect(received?.modelSelection).toEqual(selection);
+      }),
+  );
+}

@@ -20,6 +20,8 @@ import { resolveSpawnCommand } from "@t3tools/shared/shell";
 
 import { TextGenerationError } from "@t3tools/contracts";
 import * as TextGeneration from "./TextGeneration.ts";
+import { compactCopiedClaudeSession } from "./ClaudeHandoffCompaction.ts";
+import { resolveClaudeSdkExecutablePath } from "../provider/Drivers/ClaudeExecutable.ts";
 import {
   buildBranchNamePrompt,
   buildCommitMessagePrompt,
@@ -36,6 +38,7 @@ import {
 } from "./TextGenerationUtils.ts";
 import {
   getModelSelectionStringOptionValue,
+  getModelSelectionBooleanOptionValue,
   getProviderOptionDescriptors,
 } from "@t3tools/shared/model";
 import {
@@ -79,6 +82,10 @@ export const makeClaudeTextGeneration = Effect.fn("makeClaudeTextGeneration")(fu
   const commandSpawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const fileSystem = yield* FileSystem.FileSystem;
   const claudeEnvironment = yield* makeClaudeEnvironment(claudeSettings, environment);
+  const sdkExecutable = yield* resolveClaudeSdkExecutablePath(
+    claudeSettings.binaryPath || "claude",
+    claudeEnvironment,
+  );
   const scopedModelCatalog = modelCatalog.pipe(
     Effect.map((catalog) => scopeClaudeModelCatalog(catalog, claudeSettings.customModels)),
   );
@@ -416,6 +423,7 @@ export const makeClaudeTextGeneration = Effect.fn("makeClaudeTextGeneration")(fu
   const generateThreadHandoff: TextGeneration.TextGeneration["Service"]["generateThreadHandoff"] =
     Effect.fn("ClaudeTextGeneration.generateThreadHandoff")(function* (input) {
       const { prompt, outputSchema } = buildThreadHandoffPrompt({
+        phase: input.phase,
         threadContext: input.threadContext,
         threadTitle: input.threadTitle,
         attachments: input.attachments,
@@ -440,5 +448,60 @@ export const makeClaudeTextGeneration = Effect.fn("makeClaudeTextGeneration")(fu
     generateBranchName,
     generateThreadTitle,
     generateThreadHandoff,
+    compactThreadHandoff: (input) =>
+      Effect.gen(function* () {
+        const catalog = yield* scopedModelCatalog;
+        const resolvedModelSelection = {
+          ...input.modelSelection,
+          model: resolveClaudeModelSlug(catalog, input.modelSelection.model),
+        };
+        const effort = normalizeClaudeCatalogEffort(
+          catalog,
+          resolveClaudeCatalogEffort(
+            catalog,
+            resolvedModelSelection.model,
+            getModelSelectionStringOptionValue(input.modelSelection, "effort"),
+          ),
+          resolvedModelSelection.model,
+        );
+        return yield* compactCopiedClaudeSession(input, {
+          cwd: input.cwd,
+          env: claudeEnvironment,
+          pathToClaudeCodeExecutable: sdkExecutable,
+          model: resolveClaudeCatalogApiModelId(catalog, resolvedModelSelection),
+          settings: {
+            alwaysThinkingEnabled:
+              getModelSelectionBooleanOptionValue(input.modelSelection, "thinking") ?? true,
+          },
+          ...(effort === "low" ||
+          effort === "medium" ||
+          effort === "high" ||
+          effort === "xhigh" ||
+          effort === "max"
+            ? { effort }
+            : {}),
+          outputFormat: {
+            type: "json_schema",
+            schema: {
+              type: "object",
+              properties: { summary: { type: "string" } },
+              required: ["summary"],
+              additionalProperties: false,
+            },
+          },
+        });
+      }).pipe(
+        Effect.scoped,
+        Effect.timeout("180 seconds"),
+        Effect.mapError((cause) =>
+          cause._tag === "TextGenerationError"
+            ? cause
+            : new TextGenerationError({
+                operation: "generateThreadHandoff",
+                detail: "Source compaction timed out.",
+                cause,
+              }),
+        ),
+      ),
   } satisfies TextGeneration.TextGeneration["Service"];
 });

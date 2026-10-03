@@ -266,6 +266,7 @@ export const makeCursorTextGeneration = Effect.fn("makeCursorTextGeneration")(fu
   const generateThreadHandoff: TextGeneration.TextGeneration["Service"]["generateThreadHandoff"] =
     Effect.fn("CursorTextGeneration.generateThreadHandoff")(function* (input) {
       const { prompt, outputSchema } = buildThreadHandoffPrompt({
+        phase: input.phase,
         threadContext: input.threadContext,
         threadTitle: input.threadTitle,
         attachments: input.attachments,

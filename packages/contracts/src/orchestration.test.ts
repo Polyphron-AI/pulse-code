@@ -5,6 +5,8 @@ import * as Schema from "effect/Schema";
 import { CommandId, ProjectId, ThreadId } from "./baseSchemas.ts";
 
 import {
+  OrchestrationGenerateThreadHandoffInput,
+  OrchestrationGenerateThreadHandoffResult,
   ProjectIconOverride,
   DEFAULT_PROVIDER_INTERACTION_MODE,
   DEFAULT_RUNTIME_MODE,
@@ -1709,3 +1711,29 @@ it.effect("encodes compatible icons inside snapshots and client commands", () =>
     assert.deepEqual(yield* decodeNightlyIcon(command.projectIcon), fallback);
   }),
 );
+
+it("keeps legacy handoff requests and responses readable while accepting destination routing", () => {
+  const decode = Schema.decodeSync(OrchestrationGenerateThreadHandoffInput);
+  assert.deepEqual(decode({ threadId: ThreadId.make("source") }), {
+    threadId: ThreadId.make("source"),
+  });
+  const destination = {
+    instanceId: ProviderInstanceId.make("codex_work"),
+    model: "gpt-6-astra",
+    options: [{ id: "reasoningEffort", value: "high" }],
+  };
+  assert.deepEqual(
+    Schema.decodeSync(OrchestrationGenerateThreadHandoffInput)({
+      threadId: ThreadId.make("source"),
+      destination,
+    }),
+    { threadId: ThreadId.make("source"), destination },
+  );
+  assert.deepEqual(
+    Schema.decodeSync(OrchestrationGenerateThreadHandoffResult)({
+      summary: "Review the brief",
+      truncated: false,
+    }),
+    { summary: "Review the brief", truncated: false },
+  );
+});

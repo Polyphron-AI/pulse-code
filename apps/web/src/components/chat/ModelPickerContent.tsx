@@ -1,3 +1,4 @@
+import { threadModelSelectionNeedsSummary } from "@t3tools/client-runtime/state/thread-handoff";
 import {
   ANTIGRAVITY_DEFAULT_MODEL,
   type ProviderInstanceId,
@@ -180,16 +181,21 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
   onRequestClose?: () => void;
   onOpenProviderSetup?: (instanceId: ProviderInstanceId) => void;
   getModelDisabledReason?: (instanceId: ProviderInstanceId, model: string) => string | null;
+  onStartThreadFromSummary?: (instanceId: ProviderInstanceId, model: string) => void;
   onInstanceModelChange: (instanceId: ProviderInstanceId, model: string) => void;
 }) {
   const {
     keybindings: providedKeybindings,
     modelOptionsByInstance,
     instanceEntries,
-    getModelDisabledReason,
+    getModelDisabledReason: originalModelDisabledReason,
     onInstanceModelChange,
     onToggleModel,
   } = props;
+  const [summaryModel, setSummaryModel] = useState<{
+    instanceId: ProviderInstanceId;
+    model: string;
+  } | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [showTopScrollFade, setShowTopScrollFade] = useState(false);
   const [showBottomScrollFade, setShowBottomScrollFade] = useState(false);
@@ -328,6 +334,50 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
     [props.lockedContinuationGroupKey, props.lockedProvider],
   );
 
+  const needsSummary = useCallback(
+    (instanceId: ProviderInstanceId, model: string) => {
+      const entry = instanceEntries.find((entry) => entry.instanceId === instanceId);
+      const option = modelOptionsByInstance
+        .get(instanceId)
+        ?.find((option) => option.slug === model);
+      return (
+        props.onStartThreadFromSummary !== undefined &&
+        option !== undefined &&
+        !option.isUnavailable &&
+        entry !== undefined &&
+        isProviderInstancePickerReady(entry) &&
+        (!matchesLockedProvider(entry) ||
+          threadModelSelectionNeedsSummary({
+            providers: instanceEntries.map((entry) => entry.snapshot),
+            currentModelSelection: { instanceId: props.activeInstanceId, model: props.model },
+            nextModelSelection: { instanceId, model },
+            hasStartedSession: props.lockedProvider !== null,
+          }))
+      );
+    },
+    [
+      instanceEntries,
+      matchesLockedProvider,
+      modelOptionsByInstance,
+      props.activeInstanceId,
+      props.model,
+      props.lockedProvider,
+      props.onStartThreadFromSummary,
+    ],
+  );
+  const getModelDisabledReason = useCallback(
+    (instanceId: ProviderInstanceId, model: string) => {
+      const option = modelOptionsByInstance
+        .get(instanceId)
+        ?.find((option) => option.slug === model);
+      if (option?.isUnavailable) return "This model is unavailable. Choose another model.";
+      return needsSummary(instanceId, model)
+        ? null
+        : (originalModelDisabledReason?.(instanceId, model) ?? null);
+    },
+    [needsSummary, modelOptionsByInstance, originalModelDisabledReason],
+  );
+
   const selectableUnavailableInstanceIds = useMemo(() => {
     const instanceIds = new Set<ProviderInstanceId>();
     if (activeInstanceHasSelectableUnavailableModel) {
@@ -399,7 +449,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
   const isLocked = props.lockedProvider !== null;
   const isSearching = searchQuery.trim().length > 0;
   const lockedDisabledInstanceIds = useMemo(() => {
-    if (!isLocked) {
+    if (!isLocked || props.onStartThreadFromSummary) {
       return undefined;
     }
     const disabled = new Set<ProviderInstanceId>();
@@ -409,7 +459,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
       }
     }
     return disabled;
-  }, [instanceEntries, isLocked, matchesLockedProvider]);
+  }, [instanceEntries, isLocked, matchesLockedProvider, props.onStartThreadFromSummary]);
   const sidebarInstanceEntries = useMemo(() => {
     const enabledEntries = instanceEntries.filter(isProviderInstancePickerVisible);
     if (!isLocked) {
@@ -475,7 +525,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
       // When searching, we only respect locked provider (by driver kind),
       // ignoring sidebar selection so account-scoped searches can find a
       // model before the user chooses a specific instance rail item.
-      if (props.lockedProvider !== null) {
+      if (props.lockedProvider !== null && !props.onStartThreadFromSummary) {
         const lockedProviderMatches: Array<(typeof rankedMatches)[number]> = [];
         for (const rankedModel of rankedMatches) {
           if (matchesLockedProvider(rankedModel.model)) {
@@ -510,7 +560,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
         .map((rankedModel) => rankedModel.model);
     }
 
-    if (props.lockedProvider !== null) {
+    if (props.lockedProvider !== null && !props.onStartThreadFromSummary) {
       result = result.filter((m) => matchesLockedProvider(m));
       if (selectedInstanceId === "favorites") {
         result = result.filter((m) => favoritesSet.has(providerModelKey(m.instanceId, m.slug)));
@@ -534,6 +584,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
     instanceOrder,
     matchesLockedProvider,
     props.lockedProvider,
+    props.onStartThreadFromSummary,
     searchQuery,
     selectedInstanceId,
   ]);
@@ -612,6 +663,11 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
       // normalization rules, so pass the driver kind here.
       const resolvedModel = resolveSelectableModel(entry.driverKind, modelSlug, options);
       if (resolvedModel) {
+        if (needsSummary(instanceId, resolvedModel)) {
+          setSummaryModel({ instanceId, model: resolvedModel });
+          return;
+        }
+        setSummaryModel(null);
         if (additive && onToggleModel) {
           onToggleModel(instanceId, resolvedModel);
         } else {
@@ -625,6 +681,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
       modelOptionsByInstance,
       onInstanceModelChange,
       onToggleModel,
+      needsSummary,
     ],
   );
 
@@ -1024,6 +1081,18 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
                 />
               </ComboboxListVirtualized>
             </div>
+            {summaryModel ? (
+              <div className="shrink-0 border-t border-border/70 p-2">
+                <InlineButton
+                  onClick={() => {
+                    if (!needsSummary(summaryModel.instanceId, summaryModel.model)) return;
+                    props.onStartThreadFromSummary?.(summaryModel.instanceId, summaryModel.model);
+                  }}
+                >
+                  Start a new thread from a summary
+                </InlineButton>
+              </div>
+            ) : null}
             {providerSetupEntries.length > 0 ? (
               <div className="max-h-44 shrink-0 overflow-y-auto border-t border-border/70 p-2">
                 {providerSetupEntries.map((entry) => (

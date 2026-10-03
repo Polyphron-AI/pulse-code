@@ -74,10 +74,10 @@ function limitFirstUserSection(section: string): string {
   if (section.length <= MAX_FIRST_USER_SECTION_CHARS) {
     return section;
   }
-  return `${section.slice(
-    0,
-    MAX_FIRST_USER_SECTION_CHARS - FIRST_USER_TRUNCATION_MARKER.length,
-  )}${FIRST_USER_TRUNCATION_MARKER}`;
+  // A continuation brief usually ends with its precise next action.
+  const retained = MAX_FIRST_USER_SECTION_CHARS - FIRST_USER_TRUNCATION_MARKER.length;
+  const head = Math.floor(retained / 2);
+  return `${section.slice(0, head)}${FIRST_USER_TRUNCATION_MARKER}${section.slice(-(retained - head))}`;
 }
 
 export function formatThreadHandoffContext(

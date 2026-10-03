@@ -240,6 +240,8 @@ type ThreadSettingsSessionProps = {
   readonly providerGroups: ReadonlyArray<ProviderGroup>;
   readonly selectedModel: ModelSelection | null;
   readonly onSelectModel: (option: ModelOption) => void;
+  readonly requiresSummary?: (option: ModelOption) => boolean;
+  readonly onStartThreadFromSummary?: (option: ModelOption) => void;
   readonly optionDescriptors: ReadonlyArray<ProviderOptionDescriptor>;
   readonly onUpdateOptionSelections: (selections: ReadonlyArray<ProviderOptionSelection>) => void;
   readonly runtimeMode: RuntimeMode;
@@ -300,6 +302,7 @@ type ThreadSettingsSessionValue = {
   readonly providerExpansionOverrides: ReadonlySet<string>;
   readonly hasLegacyModels: boolean;
   readonly pendingModel: ModelOption | null;
+  readonly pendingModelNeedsSummary: boolean;
   readonly providerFilter: string | null;
   readonly searchQuery: string;
   readonly showLegacy: boolean;
@@ -398,10 +401,20 @@ function ThreadSettingsSessionProvider(
         return false;
       }
       void Haptics.selectionAsync();
-      props.onSelectModel(pendingModel);
+      if (props.requiresSummary?.(pendingModel)) {
+        props.onStartThreadFromSummary?.(pendingModel);
+      } else {
+        props.onSelectModel(pendingModel);
+      }
     }
     return true;
-  }, [pendingModel, props.onSelectModel, props.providerGroups]);
+  }, [
+    pendingModel,
+    props.onSelectModel,
+    props.providerGroups,
+    props.requiresSummary,
+    props.onStartThreadFromSummary,
+  ]);
 
   const applyOptionChange = useCallback(
     (id: string, value: string | boolean) => {
@@ -458,6 +471,8 @@ function ThreadSettingsSessionProvider(
       providerExpansionOverrides,
       hasLegacyModels,
       pendingModel,
+      pendingModelNeedsSummary:
+        pendingModel !== null && props.requiresSummary?.(pendingModel) === true,
       providerFilter,
       searchQuery,
       showLegacy: showLegacyToggle,
@@ -488,6 +503,7 @@ function ThreadSettingsSessionProvider(
       pressModel,
       providerFilter,
       props.onUpdateRuntimeMode,
+      props.requiresSummary,
       props.providerGroups,
       props.runtimeMode,
       searchQuery,
@@ -1135,7 +1151,7 @@ function ThreadSettingsModelsScreen() {
                   />
                 )}
               </AndroidAnchoredMenu>
-              {session.pendingModel ? (
+              {session.pendingModel && !session.pendingModelNeedsSummary ? (
                 <MaterialButton label="Save" tone="text" onPress={commitAndClose} />
               ) : null}
             </View>
@@ -1182,6 +1198,15 @@ function ThreadSettingsModelsScreen() {
         }}
       />
       <MaterialScreenContent>
+        {session.pendingModelNeedsSummary ? (
+          <View className="px-4 py-3">
+            <MaterialButton
+              fullWidth
+              label="Start a new thread from a summary"
+              onPress={commitAndClose}
+            />
+          </View>
+        ) : null}
         <ThreadSettingsMainContent
           onOpenSubmenu={(submenu) => {
             const title =
@@ -1203,8 +1228,16 @@ function ThreadSettingsModelsScreen() {
       </NativeHeaderToolbar>
       <NativeHeaderToolbar placement="right">
         <NativeHeaderToolbar.Button
-          accessibilityLabel={session.pendingModel ? "Save thread settings" : "Done"}
-          label={session.pendingModel ? "Save" : "Done"}
+          accessibilityLabel={
+            session.pendingModelNeedsSummary
+              ? "Start a new thread from a summary"
+              : session.pendingModel
+                ? "Save thread settings"
+                : "Done"
+          }
+          label={
+            session.pendingModelNeedsSummary ? "Start" : session.pendingModel ? "Save" : "Done"
+          }
           onPress={commitAndClose}
         />
       </NativeHeaderToolbar>
