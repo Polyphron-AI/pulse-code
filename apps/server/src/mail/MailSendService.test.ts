@@ -289,6 +289,14 @@ describe("MailSendService", () => {
       const first = yield* service.prepare({ threadId, content });
       yield* service.prepare({ threadId, content: { ...content, subject: "Again" } });
       expect((yield* service.status(first.id)).status).toBe("invalidated");
+      expect(dispatched).toContainEqual(
+        expect.objectContaining({
+          activity: expect.objectContaining({
+            kind: "mail.send-approval.resolved",
+            payload: { approvalId: first.id },
+          }),
+        }),
+      );
     }).pipe(Effect.scoped, Effect.provide(baseLayer())),
   );
 

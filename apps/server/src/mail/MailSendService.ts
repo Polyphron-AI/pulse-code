@@ -245,6 +245,20 @@ export const make = (
         })
         .pipe(Effect.mapError(() => fail("unavailable", "Pulse could not record the approval.")));
 
+    /** Rows that left pending without an answer still close on every client. */
+    const announceResolved = (
+      rows: ReadonlyArray<{ readonly id: string; readonly threadId: string }>,
+    ) =>
+      Effect.flatMap(now, (at) =>
+        Effect.forEach(
+          rows,
+          (row) => appendApprovalActivity(ThreadId.make(row.threadId), row.id, at, true),
+          {
+            discard: true,
+          },
+        ),
+      ).pipe(Effect.catch((error) => Effect.logWarning("mail approval activity failed", error)));
+
     const prepare = (input: MailPrepareInput) =>
       Effect.gen(function* () {
         if ((input.draftRef === undefined) === (input.content === undefined)) {
@@ -339,7 +353,11 @@ export const make = (
         const createdMs = yield* Clock.currentTimeMillis;
         const createdAt = isoAt(createdMs);
         const id = `mail_${NodeCrypto.randomUUID().replaceAll("-", "")}`;
-        yield* store(repo.supersedeForThread({ threadId, accountId: account.id, now: createdAt }));
+        yield* announceResolved(
+          yield* store(
+            repo.supersedeForThread({ threadId, accountId: account.id, now: createdAt }),
+          ),
+        );
         yield* store(
           repo.insertPending({
             id,
@@ -376,7 +394,7 @@ export const make = (
 
     const invalidate = (id: string, error: MailError) =>
       Effect.gen(function* () {
-        yield* store(repo.invalidate({ id }, yield* now));
+        yield* announceResolved(yield* store(repo.invalidate({ id }, yield* now)));
         return yield* error;
       });
 
@@ -498,6 +516,7 @@ export const make = (
       Effect.forever(
         PubSub.take(changes).pipe(
           Effect.flatMap((change) => Effect.flatMap(now, (at) => repo.invalidate(change, at))),
+          Effect.flatMap(announceResolved),
           Effect.catch((error) => Effect.logWarning("mail approval invalidation failed", error)),
         ),
       ),
