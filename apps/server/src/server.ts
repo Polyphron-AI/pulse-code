@@ -74,6 +74,10 @@ import * as TextGeneration from "./textGeneration/TextGeneration.ts";
 import { ProviderInstanceRegistryHydrationLive } from "./provider/Layers/ProviderInstanceRegistryHydration.ts";
 import * as TerminalManager from "./terminal/Manager.ts";
 import * as McpHttpServer from "./mcp/McpHttpServer.ts";
+import * as MailConfigService from "./mail/MailConfigService.ts";
+import * as MailOAuth from "./mail/MailOAuth.ts";
+import * as MailSendService from "./mail/MailSendService.ts";
+import * as MailSendApprovals from "./persistence/MailSendApprovals.ts";
 import * as McpSessionRegistry from "./mcp/McpSessionRegistry.ts";
 import * as PulseMcpConfig from "./mcp/PulseMcpConfigService.ts";
 import * as PreviewAutomationBroker from "./mcp/PreviewAutomationBroker.ts";
@@ -597,6 +601,13 @@ const commandReadinessLayer = HttpRouter.middleware(
   { global: true },
 );
 
+/** One mail stack shared by the MCP toolkit and the mail RPCs. */
+const MailLayerLive = MailSendService.layer().pipe(
+  Layer.provide(MailSendApprovals.layer),
+  Layer.provideMerge(MailOAuth.layer),
+  Layer.provideMerge(MailConfigService.layer),
+);
+
 export const makeRoutesLayer = Layer.mergeAll(
   Layer.mergeAll(
     HttpApiBuilder.layer(EnvironmentHttpApi).pipe(
@@ -622,6 +633,7 @@ export const makeRoutesLayer = Layer.mergeAll(
   // Both transports consume the same service instance, so caches single-flight across clients
   // and mutations observed on WebSocket invalidate patches subsequently read over HTTP.
   Layer.provide(PullRequestServiceLive),
+  Layer.provide(MailLayerLive),
   Layer.provide(PreviewAutomationBroker.layer),
   Layer.provide(ServerSelfUpdate.layer.pipe(Layer.provide(DesktopAppUpdateLayerLive))),
   Layer.provide(commandReadinessLayer),

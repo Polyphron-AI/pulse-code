@@ -53,22 +53,22 @@ const fail = (kind: MailError["kind"], message: string) => new MailError({ kind,
 /** New message content when the send does not come from a saved draft. */
 export interface MailComposeContent {
   readonly to: ReadonlyArray<MailAddress>;
-  readonly cc?: ReadonlyArray<MailAddress>;
-  readonly bcc?: ReadonlyArray<MailAddress>;
+  readonly cc?: ReadonlyArray<MailAddress> | undefined;
+  readonly bcc?: ReadonlyArray<MailAddress> | undefined;
   readonly subject: string;
   readonly text: string;
-  readonly inReplyTo?: string;
-  readonly references?: ReadonlyArray<string>;
+  readonly inReplyTo?: string | undefined;
+  readonly references?: ReadonlyArray<string> | undefined;
 }
 
 export interface MailPrepareInput {
   readonly threadId: ThreadId;
-  readonly selector?: string;
+  readonly selector?: string | undefined;
   /** Send this saved draft as it is now. Exclusive with `content`. */
-  readonly draftRef?: MailMessageRef;
-  readonly content?: MailComposeContent;
+  readonly draftRef?: MailMessageRef | undefined;
+  readonly content?: MailComposeContent | undefined;
   /** Project-relative paths. Each must resolve inside the project root. */
-  readonly attachments?: ReadonlyArray<string>;
+  readonly attachments?: ReadonlyArray<string> | undefined;
 }
 
 export class MailSendService extends Context.Service<

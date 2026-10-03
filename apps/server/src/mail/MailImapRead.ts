@@ -113,15 +113,15 @@ export interface MailMessageSummary {
 }
 
 export interface MailSearchQuery {
-  readonly from?: string;
-  readonly to?: string;
-  readonly subject?: string;
-  readonly text?: string;
+  readonly from?: string | undefined;
+  readonly to?: string | undefined;
+  readonly subject?: string | undefined;
+  readonly text?: string | undefined;
   /** ISO dates. */
-  readonly since?: string;
-  readonly before?: string;
-  readonly unseen?: boolean;
-  readonly flagged?: boolean;
+  readonly since?: string | undefined;
+  readonly before?: string | undefined;
+  readonly unseen?: boolean | undefined;
+  readonly flagged?: boolean | undefined;
 }
 
 const toSearchObject = (query: MailSearchQuery = {}): SearchObject => {

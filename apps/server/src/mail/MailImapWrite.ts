@@ -137,12 +137,12 @@ export const appendSent = (
   );
 
 export interface MailFlagChange {
-  readonly seen?: boolean;
-  readonly flagged?: boolean;
-  readonly answered?: boolean;
+  readonly seen?: boolean | undefined;
+  readonly flagged?: boolean | undefined;
+  readonly answered?: boolean | undefined;
   readonly keywords?: {
-    readonly add?: ReadonlyArray<string>;
-    readonly remove?: ReadonlyArray<string>;
+    readonly add?: ReadonlyArray<string> | undefined;
+    readonly remove?: ReadonlyArray<string> | undefined;
   };
 }
 
@@ -194,7 +194,10 @@ export const setLabels = (
   account: StoredMailAccount,
   login: MailLogin,
   ref: MailMessageRef,
-  change: { readonly add?: ReadonlyArray<string>; readonly remove?: ReadonlyArray<string> },
+  change: {
+    readonly add?: ReadonlyArray<string> | undefined;
+    readonly remove?: ReadonlyArray<string> | undefined;
+  },
   options: MailConnectionOptions = {},
 ) =>
   session(account, login, options, (client) =>
