@@ -20,7 +20,23 @@ import {
   type ProviderApprovalDecision,
   type UserInputQuestion,
 } from "@t3tools/contracts";
-import { Atom } from "effect/unstable/reactivity";
+import { Atom, AsyncResult } from "effect/unstable/reactivity";
+import * as Effect from "effect/Effect";
+import * as Predicate from "effect/Predicate";
+import * as Schema from "effect/Schema";
+import { EnvironmentSupervisor } from "@t3tools/client-runtime/connection";
+import {
+  derivePendingMailApprovalIds,
+  fetchMailApproval,
+  respondToMailApproval,
+} from "@t3tools/client-runtime/mail/approvals";
+import {
+  createEnvironmentCommand,
+  squashAtomCommandFailure,
+} from "@t3tools/client-runtime/state/runtime";
+import type { MailApprovalId, MailSendApproval } from "@t3tools/contracts";
+
+import { connectionAtomRuntime } from "../connection/runtime";
 
 import { threadEnvironment } from "../state/threads";
 import { scopedRequestKey } from "../lib/scopedEntities";
@@ -341,4 +357,136 @@ export function useSelectedThreadRequests() {
     onSubmitUserInput,
     onDismissUserInput,
   };
+}
+
+const mailApprovalCommands = {
+  fetch: createEnvironmentCommand(connectionAtomRuntime, {
+    label: "mobile:mail-approval:fetch",
+    execute: (approvalId: MailApprovalId) =>
+      EnvironmentSupervisor.pipe(Effect.flatMap((env) => fetchMailApproval(env, approvalId))),
+  }),
+  respond: createEnvironmentCommand(connectionAtomRuntime, {
+    label: "mobile:mail-approval:respond",
+    execute: (input: { approval: MailSendApproval; decision: "approve" | "decline" }) =>
+      EnvironmentSupervisor.pipe(Effect.flatMap((env) => respondToMailApproval(env, input))),
+  }),
+};
+
+export type MailApprovalEntry =
+  | { readonly kind: "loading" }
+  | { readonly kind: "loaded"; readonly approval: MailSendApproval }
+  /** The server sent a snapshot this app version cannot decode (A15). */
+  | { readonly kind: "outdated" }
+  | { readonly kind: "error" };
+
+/** True when a failure came from decoding the server's reply rather than from the connection. */
+function isDecodeFailure(error: unknown): boolean {
+  let current: unknown = error;
+  for (let depth = 0; depth < 5 && Predicate.isObject(current); depth += 1) {
+    if (Schema.isSchemaError(current) || ("_tag" in current && current._tag === "SchemaError")) {
+      return true;
+    }
+    current = "cause" in current ? current.cause : undefined;
+  }
+  return false;
+}
+
+/**
+ * Mail send approvals for the selected thread. An approval stays listed after it leaves the
+ * pending set, refetched once, so the user sees its terminal state until they leave the thread.
+ */
+export function useSelectedThreadMailApprovals() {
+  const fetchApproval = useAtomCommand(mailApprovalCommands.fetch, {
+    label: "mail approval fetch",
+    reportFailure: false,
+  });
+  const respond = useAtomCommand(mailApprovalCommands.respond, "mail approval response");
+  const { selectedThread: selectedThreadShell } = useThreadSelection();
+  const selectedThread = useSelectedThreadDetail();
+  const environmentId = selectedThreadShell?.environmentId ?? null;
+  const threadKey = selectedThreadShell
+    ? `${selectedThreadShell.environmentId}:${selectedThreadShell.id}`
+    : null;
+  const pendingIds = useMemo(
+    () => derivePendingMailApprovalIds(selectedThread?.activities ?? []),
+    [selectedThread?.activities],
+  );
+  const [entries, setEntries] = useState<{
+    readonly threadKey: string | null;
+    readonly byId: ReadonlyMap<MailApprovalId, MailApprovalEntry>;
+  }>({ threadKey: null, byId: new Map() });
+  const [respondingId, setRespondingId] = useState<MailApprovalId | null>(null);
+  const fetchedAsPending = useRef(new Map<MailApprovalId, boolean>());
+  const fetchedThreadKey = useRef<string | null>(null);
+
+  const load = useCallback(
+    async (approvalId: MailApprovalId) => {
+      if (environmentId === null) return;
+      const key = threadKey;
+      const result = await fetchApproval({ environmentId, input: approvalId });
+      const entry: MailApprovalEntry = AsyncResult.isSuccess(result)
+        ? { kind: "loaded", approval: result.value }
+        : isDecodeFailure(squashAtomCommandFailure(result))
+          ? { kind: "outdated" }
+          : { kind: "error" };
+      setEntries((current) => ({
+        threadKey: key,
+        byId: new Map(current.threadKey === key ? current.byId : []).set(approvalId, entry),
+      }));
+    },
+    [environmentId, fetchApproval, threadKey],
+  );
+
+  useEffect(() => {
+    if (fetchedThreadKey.current !== threadKey) {
+      fetchedThreadKey.current = threadKey;
+      fetchedAsPending.current = new Map();
+    }
+    const pending = new Set(pendingIds);
+    for (const id of pending) {
+      if (fetchedAsPending.current.get(id) === true) continue;
+      fetchedAsPending.current.set(id, true);
+      void load(id);
+    }
+    // Resolved elsewhere or by us: refetch once to show the terminal state.
+    for (const [id, wasPending] of fetchedAsPending.current) {
+      if (!wasPending || pending.has(id)) continue;
+      fetchedAsPending.current.set(id, false);
+      void load(id);
+    }
+  }, [load, pendingIds, threadKey]);
+
+  const onRespond = useCallback(
+    async (approval: MailSendApproval, decision: "approve" | "decline") => {
+      if (environmentId === null) return;
+      const key = threadKey;
+      setRespondingId(approval.id);
+      const result = await respond({ environmentId, input: { approval, decision } });
+      setRespondingId((current) => (current === approval.id ? null : current));
+      if (AsyncResult.isSuccess(result)) {
+        setEntries((current) =>
+          current.threadKey === key
+            ? {
+                threadKey: key,
+                byId: new Map(current.byId).set(approval.id, {
+                  kind: "loaded",
+                  approval: result.value,
+                }),
+              }
+            : current,
+        );
+      } else {
+        // A digest mismatch or expiry changed the approval; show the server's current view.
+        void load(approval.id);
+      }
+    },
+    [environmentId, load, respond, threadKey],
+  );
+
+  const byId = entries.threadKey === threadKey ? entries.byId : new Map();
+  const approvals: Array<readonly [MailApprovalId, MailApprovalEntry]> = [...byId];
+  for (const id of pendingIds) {
+    if (!byId.has(id)) approvals.push([id, { kind: "loading" }]);
+  }
+  return { approvals, respondingId, onRespond, onRetry: load };
 }
