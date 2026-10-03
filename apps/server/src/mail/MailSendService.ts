@@ -4,6 +4,7 @@ import {
   CommandId,
   EventId,
   MAIL_SEND_APPROVAL_ACTIVITY_KIND,
+  MAIL_SEND_APPROVAL_RESOLVED_ACTIVITY_KIND,
   MailError,
   ProjectId,
   ThreadId,
@@ -218,7 +219,12 @@ export const make = (
         );
       });
 
-    const appendApprovalActivity = (threadId: ThreadId, approvalId: string, createdAt: string) =>
+    const appendApprovalActivity = (
+      threadId: ThreadId,
+      approvalId: string,
+      createdAt: string,
+      resolved = false,
+    ) =>
       engine
         .dispatch({
           type: "thread.activity.append",
@@ -226,9 +232,11 @@ export const make = (
           threadId,
           activity: {
             id: EventId.make(NodeCrypto.randomUUID()),
-            tone: "approval",
-            kind: MAIL_SEND_APPROVAL_ACTIVITY_KIND,
-            summary: "Email waiting for approval",
+            tone: resolved ? "info" : "approval",
+            kind: resolved
+              ? MAIL_SEND_APPROVAL_RESOLVED_ACTIVITY_KIND
+              : MAIL_SEND_APPROVAL_ACTIVITY_KIND,
+            summary: resolved ? "Email approval answered" : "Email waiting for approval",
             payload: { approvalId },
             turnId: null,
             createdAt,
@@ -456,7 +464,7 @@ export const make = (
       readonly decision: "approve" | "decline";
       readonly digest: string;
     }) =>
-      input.decision === "approve"
+      (input.decision === "approve"
         ? approve(input.approvalId, input.digest)
         : Effect.gen(function* () {
             const declined = yield* store(repo.decline({ id: input.approvalId, now: yield* now }));
@@ -464,7 +472,17 @@ export const make = (
               return yield* fail("conflict", "This send is no longer pending.");
             }
             return yield* status(input.approvalId);
-          });
+          })
+      ).pipe(
+        // The decision already stands; a missed activity only delays other clients' refresh.
+        Effect.tap((approval) =>
+          Effect.flatMap(now, (at) =>
+            appendApprovalActivity(approval.threadId, approval.id, at, true),
+          ).pipe(
+            Effect.catch((error) => Effect.logWarning("mail approval activity failed", error)),
+          ),
+        ),
+      );
 
     const listThread = (threadId: ThreadId) =>
       Effect.all([store(repo.listForThread(threadId)), now]).pipe(

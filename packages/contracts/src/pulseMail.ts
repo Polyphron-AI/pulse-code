@@ -179,6 +179,9 @@ export type MailSendApproval = typeof MailSendApproval.Type;
 /** Activity kind appended to a thread when a send needs approval. Its payload is `{ approvalId }` only. */
 export const MAIL_SEND_APPROVAL_ACTIVITY_KIND = "mail.send-approval";
 
+/** Activity kind appended when the user approves or declines, so every client closes the request. */
+export const MAIL_SEND_APPROVAL_RESOLVED_ACTIVITY_KIND = "mail.send-approval.resolved";
+
 export const MailErrorKind = Schema.Literals([
   "access-denied",
   "ambiguous-account",

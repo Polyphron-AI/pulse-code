@@ -235,6 +235,9 @@ describe("MailSendService", () => {
         digest: approval.digest,
       });
       expect(accepted.status).toBe("accepted");
+      expect(dispatched.at(-1)).toMatchObject({
+        activity: { kind: "mail.send-approval.resolved", payload: { approvalId: approval.id } },
+      });
       expect(dataCommands(smtp)).toBe(1);
       const recipients = smtp.received.filter(({ line }) => /^RCPT/i.test(line));
       expect(recipients).toHaveLength(3);
