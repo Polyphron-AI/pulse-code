@@ -54,6 +54,23 @@
     ],
     "updatedAt": "2026-09-19"
   },
+  "mailIntegration": {
+    "policyVersion": "2026-09-17",
+    "feature": "imap-mail-integration",
+    "state": "implemented-awaiting-review",
+    "branch": "qb/feat-imap-mail",
+    "plan": "P-2026-10-02-imap-mail-integration",
+    "acceptance": [
+      "A01-A25 from the IMAP/SMTP integration design: per-environment accounts with no secret readback; project grants and thread selection with no fallback; read, search, draft, flag, label, move, archive with no delete or Trash path; exact-snapshot send approval at most once with outcome unknown kept non-retryable; private networks opt-in per account; mail tools for Codex, Claude, Cursor, Grok, Antigravity and locally managed OpenCode, external OpenCode unsupported"
+    ],
+    "completionBlockers": [
+      "Frozen-revision review pending",
+      "No real client, real mailbox or real provider verification run"
+    ],
+    "evidence": "Focused server mail, MCP toolkit, RPC and integration tests, client-runtime approval tests, and web mailState tests pass against mock IMAP and SMTP peers; scoped server, contracts, client-runtime, web and mobile typechecks pass.",
+    "nextAction": "Run one frozen-revision review of the branch, fix confirmed findings, then attest G1-G25.",
+    "updatedAt": "2026-10-03"
+  },
   "schemaVersion": 1,
   "project": "Pulse Next",
   "updatedAt": "2026-09-17",
