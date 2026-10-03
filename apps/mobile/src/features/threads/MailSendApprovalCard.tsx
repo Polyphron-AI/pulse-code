@@ -1,4 +1,5 @@
 import type { MailAddress, MailSendApproval, MailSendApprovalStatus } from "@t3tools/contracts";
+import { useEffect, useState } from "react";
 import { ScrollView, View } from "react-native";
 
 import { AppText as Text } from "../../components/AppText";
@@ -52,6 +53,20 @@ function CardShell(props: { readonly children: React.ReactNode }) {
   );
 }
 
+/** A pending approval flips to expired at its deadline without waiting for a refetch. */
+function useMailApprovalStatus(approval: MailSendApproval) {
+  const [expired, setExpired] = useState(false);
+  useEffect(() => {
+    if (approval.status !== "pending") return;
+    const timer = setTimeout(
+      () => setExpired(true),
+      Math.max(0, Date.parse(approval.expiresAt) - Date.now()),
+    );
+    return () => clearTimeout(timer);
+  }, [approval.status, approval.expiresAt]);
+  return expired && approval.status === "pending" ? "expired" : approval.status;
+}
+
 function ApprovalBody(props: {
   readonly approval: MailSendApproval;
   readonly responding: boolean;
@@ -59,7 +74,8 @@ function ApprovalBody(props: {
 }) {
   const { approval } = props;
   const { snapshot } = approval;
-  const statusCopy = TERMINAL_COPY[approval.status];
+  const status = useMailApprovalStatus(approval);
+  const statusCopy = TERMINAL_COPY[status];
   return (
     <CardShell>
       <Text className="font-t3-bold text-lg text-foreground">
@@ -90,7 +106,7 @@ function ApprovalBody(props: {
           {attachment.sha256.slice(0, 12)}
         </Text>
       ))}
-      {approval.status === "pending" ? (
+      {status === "pending" ? (
         <View className="flex-row flex-wrap gap-2.5">
           <RequestActionButton
             label="Approve once"

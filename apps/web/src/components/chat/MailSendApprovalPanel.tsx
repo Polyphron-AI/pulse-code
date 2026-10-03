@@ -17,7 +17,7 @@ import type {
   OrchestrationThreadActivity,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
-import { Fragment, memo, useMemo, useState } from "react";
+import { Fragment, memo, useEffect, useMemo, useState } from "react";
 
 import { connectionAtomRuntime } from "../../connection/runtime";
 import { useEnvironmentQuery } from "../../state/query";
@@ -72,6 +72,20 @@ function formatSize(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+/** A pending approval flips to expired at its deadline without waiting for a refetch. */
+function useMailApprovalStatus(approval: MailSendApproval | null | undefined) {
+  const [expired, setExpired] = useState(false);
+  useEffect(() => {
+    if (approval?.status !== "pending") return;
+    const timer = setTimeout(
+      () => setExpired(true),
+      Math.max(0, Date.parse(approval.expiresAt) - Date.now()),
+    );
+    return () => clearTimeout(timer);
+  }, [approval?.status, approval?.expiresAt]);
+  return expired && approval?.status === "pending" ? "expired" : approval?.status;
+}
+
 /** Mail sends awaiting approval in a thread, derived from activities plus the server snapshot. */
 export const MailSendApprovals = memo(function MailSendApprovals({
   environmentId,
@@ -124,6 +138,8 @@ const MailSendApprovalCard = memo(function MailSendApprovalCard({
   const [error, setError] = useState<string | null>(null);
   const approval = answer ?? query.data;
 
+  const status = useMailApprovalStatus(approval);
+
   if (!approval) {
     return (
       <Alert variant={query.error ? "error" : "default"}>
@@ -152,7 +168,7 @@ const MailSendApprovalCard = memo(function MailSendApprovalCard({
   };
 
   const { snapshot } = approval;
-  const copy = STATUS_COPY[approval.status];
+  const copy = STATUS_COPY[status ?? approval.status];
   const recipients: Array<[string, ReadonlyArray<MailAddress>]> = [
     ["To", snapshot.to],
     ["CC", snapshot.cc],
@@ -198,7 +214,7 @@ const MailSendApprovalCard = memo(function MailSendApprovalCard({
         {copy.note ? <p className="mt-2 text-xs">{copy.note}</p> : null}
         {approval.error ? <p className="mt-2 text-xs">{approval.error.message}</p> : null}
         {error ? <p className="mt-2 text-xs">{error}</p> : null}
-        {approval.status === "pending" ? (
+        {status === "pending" ? (
           <div className="mt-3 flex gap-2">
             <Button size="sm" disabled={inFlight} onClick={() => void decide("approve")}>
               Approve once
