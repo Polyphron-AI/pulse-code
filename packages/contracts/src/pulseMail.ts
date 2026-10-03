@@ -218,6 +218,7 @@ export const PULSE_MAIL_METHODS = {
   listAccounts: "pulse.mail.listAccounts",
   upsertAccount: "pulse.mail.upsertAccount",
   removeAccount: "pulse.mail.removeAccount",
+  disconnectAccount: "pulse.mail.disconnectAccount",
   testAccount: "pulse.mail.testAccount",
   setPassword: "pulse.mail.setPassword",
   startOAuth: "pulse.mail.startOAuth",
@@ -245,6 +246,11 @@ export const PulseMailRpcs = [
   Rpc.make(PULSE_MAIL_METHODS.removeAccount, {
     payload: AccountRef,
     success: Schema.Void,
+    error: errors,
+  }),
+  Rpc.make(PULSE_MAIL_METHODS.disconnectAccount, {
+    payload: AccountRef,
+    success: MailAccount,
     error: errors,
   }),
   Rpc.make(PULSE_MAIL_METHODS.testAccount, {

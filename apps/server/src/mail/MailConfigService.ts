@@ -142,6 +142,8 @@ export class MailConfigService extends Context.Service<
     readonly getAccount: (accountId: string) => Effect.Effect<StoredMailAccount, MailError>;
     readonly upsertAccount: (input: MailAccountInput) => Effect.Effect<MailAccount, MailError>;
     readonly removeAccount: (accountId: string) => Effect.Effect<void, MailError>;
+    /** Deletes the stored sign-in but keeps the account, its grants, and its nickname. */
+    readonly disconnectAccount: (accountId: string) => Effect.Effect<MailAccount, MailError>;
     readonly setCredential: (
       accountId: string,
       credential: MailCredential,
@@ -405,6 +407,23 @@ export const make = Effect.gen(function* () {
       }),
     );
 
+  const disconnectAccount = (accountId: string) =>
+    lock.withPermits(1)(
+      Effect.gen(function* () {
+        const state = yield* load;
+        const { credentialRef, ...account } = yield* requireAccount(state, accountId);
+        const next: StoredMailAccount = {
+          ...account,
+          health: { status: "reauth-required", message: "Signed out. Sign in again to use it." },
+        };
+        yield* persist({ ...state, accounts: { ...state.accounts, [accountId]: next } });
+        yield* removeSecrets([credentialRef]);
+        // Pending sends for this account become unusable (A05).
+        yield* publish({ accountId });
+        return toPublic(next);
+      }),
+    );
+
   const setCredential = (accountId: string, credential: MailCredential) =>
     lock.withPermits(1)(
       Effect.gen(function* () {
@@ -609,6 +628,7 @@ export const make = Effect.gen(function* () {
     getAccount: (accountId) => readOnly((state) => requireAccount(state, accountId)),
     upsertAccount,
     removeAccount,
+    disconnectAccount,
     setCredential,
     readCredential,
     readClientSecret,

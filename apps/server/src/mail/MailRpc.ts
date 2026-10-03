@@ -64,6 +64,8 @@ export const mailRpcHandlers = (
     upsertAccount: redactInput(config.upsertAccount),
     removeAccount: (input: { readonly accountId: string }) =>
       redact(config.removeAccount(input.accountId)),
+    disconnectAccount: (input: { readonly accountId: string }) =>
+      redact(config.disconnectAccount(input.accountId)),
     testAccount: (input: { readonly accountId: string }) => redact(testAccount(input.accountId)),
     setPassword: (input: { readonly accountId: string; readonly password: string }) =>
       redact(config.setCredential(input.accountId, { type: "password", password: input.password })),

@@ -2560,6 +2560,14 @@ const makeWsRpcLayer = (
           observeRpcEffect(WS_METHODS.pulseMailRemoveAccount, pulseMail.removeAccount(input), {
             "rpc.aggregate": "pulse.mail",
           }),
+        [WS_METHODS.pulseMailDisconnectAccount]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.pulseMailDisconnectAccount,
+            pulseMail.disconnectAccount(input),
+            {
+              "rpc.aggregate": "pulse.mail",
+            },
+          ),
         [WS_METHODS.pulseMailTestAccount]: (input) =>
           observeRpcEffect(WS_METHODS.pulseMailTestAccount, pulseMail.testAccount(input), {
             "rpc.aggregate": "pulse.mail",

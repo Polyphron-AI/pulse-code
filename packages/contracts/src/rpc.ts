@@ -292,6 +292,7 @@ export const WS_METHODS = {
   pulseMailListAccounts: PULSE_MAIL_METHODS.listAccounts,
   pulseMailUpsertAccount: PULSE_MAIL_METHODS.upsertAccount,
   pulseMailRemoveAccount: PULSE_MAIL_METHODS.removeAccount,
+  pulseMailDisconnectAccount: PULSE_MAIL_METHODS.disconnectAccount,
   pulseMailTestAccount: PULSE_MAIL_METHODS.testAccount,
   pulseMailSetPassword: PULSE_MAIL_METHODS.setPassword,
   pulseMailStartOAuth: PULSE_MAIL_METHODS.startOAuth,

@@ -485,6 +485,34 @@ describe("mailRpcHandlers", () => {
     }).pipe(Effect.scoped, Effect.provide(baseLayer())),
   );
 
+  it.effect(
+    "disconnect keeps the account, drops the sign-in, and voids pending sends (A01, A05)",
+    () =>
+      Effect.gen(function* () {
+        const { rpc: handlers, service, account, smtp, config } = yield* rpc;
+        const approval = yield* service.prepare({ threadId, content });
+        const disconnected = yield* handlers.disconnectAccount({ accountId: account.id });
+        expect(disconnected).toMatchObject({
+          id: account.id,
+          health: { status: "reauth-required" },
+        });
+        expect(Option.isNone(yield* config.readCredential(account.id))).toBe(true);
+        expect((yield* handlers.listAccounts()).map(({ id }) => id)).toEqual([account.id]);
+        const kind = yield* kindOf(
+          handlers.respondApproval({
+            approvalId: approval.id,
+            decision: "approve",
+            digest: approval.digest,
+          }),
+        );
+        expect(kind).not.toBe("ok");
+        expect((yield* handlers.getApproval({ approvalId: approval.id })).status).toBe(
+          "invalidated",
+        );
+        expect(smtp.connections()).toBe(0);
+      }).pipe(Effect.scoped, Effect.provide(baseLayer())),
+  );
+
   it.effect("turns a defect into a generic error", () =>
     Effect.gen(function* () {
       const { config, service } = yield* rpc;

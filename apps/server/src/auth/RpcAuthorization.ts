@@ -34,6 +34,7 @@ export const RPC_REQUIRED_SCOPES = {
   [WS_METHODS.pulseMailListAccounts]: AuthOrchestrationReadScope,
   [WS_METHODS.pulseMailUpsertAccount]: AuthOrchestrationOperateScope,
   [WS_METHODS.pulseMailRemoveAccount]: AuthOrchestrationOperateScope,
+  [WS_METHODS.pulseMailDisconnectAccount]: AuthOrchestrationOperateScope,
   [WS_METHODS.pulseMailTestAccount]: AuthOrchestrationOperateScope,
   [WS_METHODS.pulseMailSetPassword]: AuthOrchestrationOperateScope,
   [WS_METHODS.pulseMailStartOAuth]: AuthOrchestrationOperateScope,
