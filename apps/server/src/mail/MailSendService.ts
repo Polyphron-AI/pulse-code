@@ -457,7 +457,10 @@ export const make = (
           );
         }
         return yield* status(approvalId);
-      });
+      }).pipe(
+        // A dropped client must not strand a claimed send in submitting; every step has a timeout.
+        Effect.uninterruptible,
+      );
 
     const respond = (input: {
       readonly approvalId: string;

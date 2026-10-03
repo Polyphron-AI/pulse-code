@@ -190,7 +190,7 @@ export const make = Effect.gen(function* () {
     execute: ({ id, now }) => sql`
       UPDATE mail_send_approvals
       SET status = 'declined', decided_at = ${now}
-      WHERE id = ${id} AND status = 'pending'
+      WHERE id = ${id} AND status = 'pending' AND expires_at > ${now}
       RETURNING ${columns}
     `,
   });

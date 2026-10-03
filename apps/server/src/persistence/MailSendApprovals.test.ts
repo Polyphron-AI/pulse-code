@@ -66,6 +66,7 @@ layer("MailSendApprovalRepository", (it) => {
 
       yield* insert("old", { expiresAt: "2026-10-02T10:01:00.000Z" });
       expect(Option.isNone(yield* repo.beginSubmit({ id: "old", digest, now }))).toBe(true);
+      expect(Option.isNone(yield* repo.decline({ id: "old", now }))).toBe(true);
 
       yield* insert("declined");
       expect(Option.isSome(yield* repo.decline({ id: "declined", now }))).toBe(true);

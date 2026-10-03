@@ -14,6 +14,7 @@ import {
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as TestClock from "effect/testing/TestClock";
@@ -334,6 +335,36 @@ describe("MailSendService", () => {
       expect(["access-denied", "conflict"]).toContain(kind);
       expect((yield* service.status(approval.id)).status).toBe("invalidated");
       expect(smtp.connections()).toBe(0);
+    }).pipe(Effect.scoped, Effect.provide(baseLayer())),
+  );
+
+  it.effect("records the result when the approving client drops mid-send", () =>
+    Effect.gen(function* () {
+      const { options } = yield* setup();
+      let reachedData!: () => void;
+      const dataSeen = new Promise<void>((resolve) => (reachedData = resolve));
+      const smtp = yield* MailTestPeers.smtp({
+        implicitTls: true,
+        greeting: "220 mail.test ESMTP\r\n",
+        respond: ({ line }, io: MailPeerIo) => {
+          if (/^EHLO/i.test(line)) io.send("250-mail.test\r\n250 AUTH PLAIN\r\n");
+          else if (/^AUTH/i.test(line)) io.send("235 2.7.0 Accepted\r\n");
+          else if (/^(MAIL|RCPT)/i.test(line)) io.send("250 OK\r\n");
+          else if (/^DATA$/i.test(line)) {
+            io.send("354 Go ahead\r\n");
+            reachedData();
+          } else if (/^QUIT/i.test(line)) io.close();
+          else if (line === ".") io.send("250 2.0.0 Queued\r\n");
+        },
+      });
+      const service = yield* MailSend.make({ ...options, smtp: peerOptions(smtp) });
+      const approval = yield* service.prepare({ threadId, content });
+      const fiber = yield* Effect.forkChild(
+        service.respond({ approvalId: approval.id, decision: "approve", digest: approval.digest }),
+      );
+      yield* Effect.promise(() => dataSeen);
+      yield* Fiber.interrupt(fiber);
+      expect((yield* service.status(approval.id)).status).not.toBe("submitting");
     }).pipe(Effect.scoped, Effect.provide(baseLayer())),
   );
 
