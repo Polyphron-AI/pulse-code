@@ -28,6 +28,7 @@ import * as MailSendApprovals from "../persistence/MailSendApprovals.ts";
 import * as MailConfig from "./MailConfigService.ts";
 import type { MailLookup } from "./MailNetworkPolicy.ts";
 import { MailOAuth } from "./MailOAuth.ts";
+import { mailRpcHandlers } from "./MailRpc.ts";
 import * as MailSend from "./MailSendService.ts";
 import {
   MAIL_TEST_CA,
@@ -420,6 +421,80 @@ describe("MailSendService", () => {
       expect(
         yield* kindOf(service.prepare({ threadId, content, attachments: ["missing.txt"] })),
       ).toBe("not-found");
+    }).pipe(Effect.scoped, Effect.provide(baseLayer())),
+  );
+});
+
+describe("mailRpcHandlers", () => {
+  const rpc = Effect.gen(function* () {
+    const ctx = yield* setup();
+    const oauth = yield* MailOAuth;
+    return { ...ctx, rpc: mailRpcHandlers(ctx.config, oauth, ctx.service) };
+  });
+
+  it.effect("refuses a stale digest and never sends (A12)", () =>
+    Effect.gen(function* () {
+      const { rpc: handlers, service, smtp } = yield* rpc;
+      const approval = yield* service.prepare({ threadId, content });
+      const kind = yield* kindOf(
+        handlers.respondApproval({
+          approvalId: approval.id,
+          decision: "approve",
+          digest: "0".repeat(64),
+        }),
+      );
+      expect(kind).not.toBe("ok");
+      expect((yield* handlers.getApproval({ approvalId: approval.id })).status).toBe("pending");
+      expect(smtp.connections()).toBe(0);
+    }).pipe(Effect.scoped, Effect.provide(baseLayer())),
+  );
+
+  it.effect("returns no credential bytes from any account response (A21)", () =>
+    Effect.gen(function* () {
+      const { rpc: handlers, account } = yield* rpc;
+      const responses = [
+        yield* handlers.setPassword({ accountId: account.id, password: "s3cret-pass" }),
+        yield* handlers.listAccounts(),
+        yield* handlers.upsertAccount({ ...accountInput, id: account.id }),
+      ];
+      // @effect-diagnostics-next-line preferSchemaOverJson:off -- scans the serialized responses
+      const wire = JSON.stringify(responses);
+      expect(wire).not.toContain("s3cret-pass");
+      expect(wire).not.toContain("hunter2");
+    }).pipe(Effect.scoped, Effect.provide(baseLayer())),
+  );
+
+  it.effect("invalidates pending approvals when the account is removed (A25)", () =>
+    Effect.gen(function* () {
+      const { rpc: handlers, service, account, smtp } = yield* rpc;
+      const approval = yield* service.prepare({ threadId, content });
+      yield* handlers.removeAccount({ accountId: account.id });
+      const kind = yield* kindOf(
+        handlers.respondApproval({
+          approvalId: approval.id,
+          decision: "approve",
+          digest: approval.digest,
+        }),
+      );
+      expect(kind).not.toBe("ok");
+      expect((yield* handlers.getApproval({ approvalId: approval.id })).status).toBe("invalidated");
+      expect(smtp.connections()).toBe(0);
+    }).pipe(Effect.scoped, Effect.provide(baseLayer())),
+  );
+
+  it.effect("turns a defect into a generic error", () =>
+    Effect.gen(function* () {
+      const { config, service } = yield* rpc;
+      const handlers = mailRpcHandlers(
+        config,
+        MailOAuth.of({
+          startOAuth: () => Effect.die(new Error("token=abc123 leaked")),
+        } as never),
+        service,
+      );
+      const error = yield* Effect.flip(handlers.startOAuth({ accountId: "any" }));
+      expect(error.kind).toBe("unavailable");
+      expect(error.message).not.toContain("abc123");
     }).pipe(Effect.scoped, Effect.provide(baseLayer())),
   );
 });

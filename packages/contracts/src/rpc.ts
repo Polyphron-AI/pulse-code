@@ -9,6 +9,7 @@ import * as Schema from "effect/Schema";
 import * as Rpc from "effect/unstable/rpc/Rpc";
 import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 import { PULSE_SKILLS_METHODS, PulseSkillsRpcs } from "./pulseSkills.ts";
+import { PULSE_MAIL_METHODS, PulseMailRpcs } from "./pulseMail.ts";
 import { PULSE_MCP_METHODS, PulseMcpRpcs } from "./pulseMcp.ts";
 import { NonNegativeInt, TrimmedNonEmptyString } from "./baseSchemas.ts";
 import {
@@ -288,6 +289,20 @@ import {
 import { VcsError } from "./vcs.ts";
 
 export const WS_METHODS = {
+  pulseMailListAccounts: PULSE_MAIL_METHODS.listAccounts,
+  pulseMailUpsertAccount: PULSE_MAIL_METHODS.upsertAccount,
+  pulseMailRemoveAccount: PULSE_MAIL_METHODS.removeAccount,
+  pulseMailTestAccount: PULSE_MAIL_METHODS.testAccount,
+  pulseMailSetPassword: PULSE_MAIL_METHODS.setPassword,
+  pulseMailStartOAuth: PULSE_MAIL_METHODS.startOAuth,
+  pulseMailCompleteOAuth: PULSE_MAIL_METHODS.completeOAuth,
+  pulseMailGetProjectAccess: PULSE_MAIL_METHODS.getProjectAccess,
+  pulseMailSetProjectAccess: PULSE_MAIL_METHODS.setProjectAccess,
+  pulseMailGetThreadSelection: PULSE_MAIL_METHODS.getThreadSelection,
+  pulseMailSetThreadSelection: PULSE_MAIL_METHODS.setThreadSelection,
+  pulseMailListThreadApprovals: PULSE_MAIL_METHODS.listThreadApprovals,
+  pulseMailGetApproval: PULSE_MAIL_METHODS.getApproval,
+  pulseMailRespondApproval: PULSE_MAIL_METHODS.respondApproval,
   pulseMcpList: PULSE_MCP_METHODS.list,
   pulseMcpUpsert: PULSE_MCP_METHODS.upsert,
   pulseMcpRemove: PULSE_MCP_METHODS.remove,
@@ -1462,6 +1477,7 @@ const WsSubscribeResourceTelemetryRpc = Rpc.make(WS_METHODS.subscribeResourceTel
 });
 
 export const WsRpcGroup = RpcGroup.make(
+  ...PulseMailRpcs,
   ...PulseMcpRpcs,
   ...PulseSkillsRpcs,
   WsServerProbeRpc,
