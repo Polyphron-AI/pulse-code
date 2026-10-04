@@ -1,7 +1,7 @@
 {
   "active": {
     "policyVersion": "2026-09-17",
-    "state": "verifying-installer",
+    "state": "awaiting-installer-completion",
     "feature": "upstream-nightly-20261004",
     "branch": "qb/sync-nightly-20261004",
     "sourceRevision": "58a8f792f0",
@@ -11,7 +11,7 @@
     "artifact": "release/nightly-20261004/verified/Pulse-Next-0.0.44-nightly.20261004.2-x64.exe",
     "artifactSha256": "5b609b3e5f4142f3b042e70ca49fbda9583825b11a67454596e7f261663d149d",
     "limitations": "Live provider turns, microphone capture, native mobile and WSL were not tested. Scoped lint retains existing Node import/process conventions in packaging scripts; those lines were unchanged by the fix.",
-    "nextAction": "Corrected installer is open. Finish its setup and verify the installed runtime reports Nightly. Preserve stable develop and its separate branch.",
+    "nextAction": "Corrected installer is open (PID 4008); Windows still reports 0.0.44-pulse.2-nightly.20261004.1. Finish setup and verify installed version/title. Corrected packaged app booted with isolated state (PID 83944); dev browser is localhost:7232. Preserve stable develop and its separate branch.",
     "updatedAt": "2026-10-04"
   },
   "providerSummaryHandoffCompaction": {
