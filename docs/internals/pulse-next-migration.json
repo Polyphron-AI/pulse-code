@@ -4,12 +4,14 @@
     "state": "verifying-installer",
     "feature": "upstream-nightly-20261004",
     "branch": "qb/sync-nightly-20261004",
-    "sourceRevision": "5122e0b2d5a945b209769b8ecc79383540a76e5b",
+    "sourceRevision": "58a8f792f0",
     "stableBranch": "qb/sync-stable-20261004",
     "installerVersion": "0.0.44-nightly.20261004.2",
-    "evidence": ".t3/upstream-updates/features/result.json: 48 suites and 523 passing test results; Windows package payload validated; isolated packaged startup and browser MCP save/reload/remove passed. Version/channel checks: 13 passing tests.",
-    "limitations": "Live provider turns, microphone capture, native mobile and WSL were not tested.",
-    "nextAction": "Finish the installer rebuild with aligned release manifests, install it, and verify the installed runtime reports Nightly. Preserve stable develop and its separate branch.",
+    "evidence": ".t3/upstream-updates/features/result.json: 48 unchanged core suites and 523 passing test results. Release/version/model checks: 22 passing tests; runner checks: 8 passing tests; scripts typecheck passed. Corrected Windows package validated 57 payload files and 16 native modules, including the checksum-pinned voice model. Isolated packaged startup and browser MCP save/reload/remove passed.",
+    "artifact": "release/nightly-20261004/verified/Pulse-Next-0.0.44-nightly.20261004.2-x64.exe",
+    "artifactSha256": "5b609b3e5f4142f3b042e70ca49fbda9583825b11a67454596e7f261663d149d",
+    "limitations": "Live provider turns, microphone capture, native mobile and WSL were not tested. Scoped lint retains existing Node import/process conventions in packaging scripts; those lines were unchanged by the fix.",
+    "nextAction": "Corrected installer is open. Finish its setup and verify the installed runtime reports Nightly. Preserve stable develop and its separate branch.",
     "updatedAt": "2026-10-04"
   },
   "providerSummaryHandoffCompaction": {
