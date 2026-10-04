@@ -5,7 +5,11 @@ import type {
 } from "@t3tools/contracts";
 
 export type McpSubmissionPreparation =
-  | { readonly status: "ready"; readonly preparationId?: PulseMcpPreparationId }
+  | {
+      readonly status: "ready";
+      readonly preparationId?: PulseMcpPreparationId;
+      readonly selectedConnectionIds?: ReadonlyArray<string>;
+    }
   | { readonly status: "cancelled" };
 
 export type PrepareComposerMcp = (

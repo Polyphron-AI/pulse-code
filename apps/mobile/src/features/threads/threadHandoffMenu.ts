@@ -22,7 +22,7 @@ export function resolveThreadHandoffTargets(
   thread: EnvironmentThreadShell,
 ): ReadonlyArray<ThreadHandoffTarget> {
   const config = serverConfigs.get(thread.environmentId);
-  const current = thread.session?.providerInstanceId ?? thread.modelSelection.instanceId;
+  const current = thread.runtime?.providerInstanceId ?? thread.modelSelection.instanceId;
   return buildThreadHandoffTargets(
     config?.providers ?? [],
     config?.settings ?? DEFAULT_SERVER_SETTINGS,

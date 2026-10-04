@@ -8,7 +8,7 @@ import {
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import type { ProviderNativeMcpStatus } from "../provider/Services/ProviderAdapter.ts";
+import type { ProviderNativeMcpStatus } from "../provider/PulseProviderTypes.ts";
 
 import type {
   PulseMcpConfigError,
@@ -23,7 +23,7 @@ import {
   type PulseWardenAccess,
   type PulseWardenClientShape,
 } from "./PulseWardenClient.ts";
-import type { ProviderServiceShape } from "../provider/Services/ProviderService.ts";
+import type { PulseProviderServiceShape } from "./PulseProviderService.ts";
 import type { PulseMcpDiscoveryService } from "./PulseMcpDiscoveryService.ts";
 
 const publicValue = (value: PulseMcpStoredValue) =>
@@ -132,7 +132,7 @@ const decodeCredentials = (value: unknown, grantsValue: unknown) => {
 /** Config-only RPC handlers. The caller must share one service instance across all connections. */
 export function pulseMcpHandlers(
   service: PulseMcpConfigServiceShape,
-  providerService?: ProviderServiceShape,
+  providerService?: Pick<PulseProviderServiceShape, "preparePulseMcp" | "readNativeMcpInventory">,
   discovery?: PulseMcpDiscoveryService,
   options: { readonly wardenClient?: (access: PulseWardenAccess) => PulseWardenClientShape } = {},
 ) {

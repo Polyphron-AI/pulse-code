@@ -2,7 +2,12 @@ import * as Schema from "effect/Schema";
 import * as Rpc from "effect/unstable/rpc/Rpc";
 
 import { EnvironmentAuthorizationError } from "./auth.ts";
-import { ProjectId, PulseMcpPreparationId, ThreadId } from "./baseSchemas.ts";
+import {
+  ProjectId,
+  PulseMcpPreparationId,
+  PulseMcpConnectionIds,
+  ThreadId,
+} from "./baseSchemas.ts";
 import { ProviderInstanceId } from "./providerInstance.ts";
 import { ProviderSessionStartInput } from "./provider.ts";
 
@@ -85,7 +90,7 @@ export const PulseMcpDiscoveryCandidate = Schema.Struct({
 });
 export type PulseMcpDiscoveryCandidate = typeof PulseMcpDiscoveryCandidate.Type;
 
-const ConnectionIds = Schema.Array(ConnectionId).check(Schema.isMaxLength(128));
+const ConnectionIds = PulseMcpConnectionIds;
 const Connections = Schema.Array(PulseMcpConnection).check(Schema.isMaxLength(128));
 
 export class PulseMcpError extends Schema.TaggedError<PulseMcpError>()("PulseMcpError", {

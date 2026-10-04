@@ -1,4 +1,5 @@
 import type * as ServerConfig from "./config.ts";
+import { ORCHESTRATION_PROTOCOL_HEADER } from "@t3tools/contracts";
 
 export const browserApiCorsAllowedMethods = ["GET", "POST", "OPTIONS"] as const;
 export const browserApiCorsAllowedHeaders = [
@@ -7,6 +8,7 @@ export const browserApiCorsAllowedHeaders = [
   "traceparent",
   "content-type",
   "dpop",
+  ORCHESTRATION_PROTOCOL_HEADER,
 ] as const;
 
 export const desktopRendererOrigins = ["t3code://app", "t3code-dev://app"] as const;

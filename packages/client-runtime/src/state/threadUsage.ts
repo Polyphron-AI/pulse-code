@@ -3,7 +3,45 @@
  *
  * @module state/threadUsage
  */
-import type { OrchestrationThreadActivity } from "@t3tools/contracts";
+import type { OrchestrationV2ThreadProjection } from "@t3tools/contracts";
+import * as DateTime from "effect/DateTime";
+
+type UsageActivity = { readonly kind: string; readonly payload?: unknown };
+type UsageSource =
+  | ReadonlyArray<UsageActivity>
+  | Pick<OrchestrationV2ThreadProjection, "providerTurns" | "providerThreads">
+  | null;
+
+function usageActivities(source: UsageSource): ReadonlyArray<UsageActivity> {
+  if (source === null) return [];
+  if (!("providerTurns" in source)) return source;
+  const activities: Array<UsageActivity> = [];
+  let previousThread: string | undefined;
+  for (const turn of source.providerTurns.toSorted(
+    (a, b) =>
+      DateTime.toEpochMillis(a.startedAt ?? a.completedAt ?? DateTime.makeUnsafe(0)) -
+        DateTime.toEpochMillis(b.startedAt ?? b.completedAt ?? DateTime.makeUnsafe(0)) ||
+      a.ordinal - b.ordinal,
+  )) {
+    if (turn.providerThreadId !== previousThread) {
+      activities.push({ kind: "provider.handoff" });
+      previousThread = turn.providerThreadId;
+    }
+    const duration =
+      turn.startedAt && turn.completedAt
+        ? DateTime.toEpochMillis(turn.completedAt) - DateTime.toEpochMillis(turn.startedAt)
+        : undefined;
+    activities.push({
+      kind: "context-window.updated",
+      payload: {
+        costUsd: turn.tokenUsage?.costUsd,
+        turnOutputTokens: turn.turnTokenUsage?.outputTokens ?? turn.tokenUsage?.outputTokens,
+        turnDurationMs: duration,
+      },
+    });
+  }
+  return activities;
+}
 
 /**
  * Activity kind that starts a fresh provider session mid-thread. Pulse Next
@@ -28,9 +66,21 @@ const THREAD_HANDOFF_ACTIVITY_KIND = "provider.handoff";
  * sums the segments. Cost is money already spent, so nothing before a handoff
  * is ever discarded.
  */
-export function deriveThreadCostUsd(
-  activities: ReadonlyArray<OrchestrationThreadActivity>,
-): number | null {
+export function deriveThreadCostUsd(source: UsageSource): number | null {
+  if (source !== null && "providerTurns" in source) {
+    const costs = new Map<string, Array<UsageActivity>>();
+    for (const turn of source.providerTurns.toSorted((a, b) => a.ordinal - b.ordinal)) {
+      const activities = costs.get(turn.providerThreadId) ?? [];
+      activities.push({
+        kind: "context-window.updated",
+        payload: { costUsd: turn.tokenUsage?.costUsd },
+      });
+      costs.set(turn.providerThreadId, activities);
+    }
+    const totals = [...costs.values()].map(deriveThreadCostUsd).filter((value) => value !== null);
+    return totals.length === 0 ? null : totals.reduce((sum, value) => sum + value, 0);
+  }
+  const activities = usageActivities(source);
   let total = 0;
   let sawCost = false;
 
@@ -98,9 +148,8 @@ const OUTPUT_RATE_MIN_DURATION_MS = 30_000;
  * is wall clock from start to completion, so tool runs and approvals count:
  * this is the rate the user sees work arrive, not raw model decode speed.
  */
-export function deriveOutputTokensPerSecond(
-  activities: ReadonlyArray<OrchestrationThreadActivity>,
-): number | null {
+export function deriveOutputTokensPerSecond(source: UsageSource): number | null {
+  const activities = usageActivities(source);
   let tokens = 0;
   let durationMs = 0;
   let turns = 0;

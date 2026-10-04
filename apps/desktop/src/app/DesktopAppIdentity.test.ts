@@ -122,6 +122,7 @@ const withIdentity = <A, E, R>(
   return effect.pipe(
     Effect.provide(
       DesktopAppIdentity.layer.pipe(
+        Layer.provide(NodePath.layerPosix),
         Layer.provideMerge(
           FileSystem.layerNoop({
             // Any T3 Code directory the host happens to have is reported as

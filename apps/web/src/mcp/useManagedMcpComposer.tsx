@@ -466,6 +466,9 @@ export function useManagedMcpComposer(input: {
           pendingPreparation.resolve({
             status: "ready",
             preparationId: result.value.preparationId,
+            ...(result.value.selectedConnectionIds !== undefined
+              ? { selectedConnectionIds: result.value.selectedConnectionIds }
+              : {}),
           });
           pendingRef.current = null;
           setPending(null);

@@ -3,12 +3,14 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 
 import * as ElectronApp from "../electron/ElectronApp.ts";
 import * as DesktopAssets from "./DesktopAssets.ts";
 import * as DesktopEnvironment from "./DesktopEnvironment.ts";
+import * as DesktopUserData from "./DesktopUserData.ts";
 
 const COMMIT_HASH_PATTERN = /^[0-9a-f]{7,40}$/i;
 const COMMIT_HASH_DISPLAY_LENGTH = 12;
@@ -17,18 +19,6 @@ const AppPackageMetadata = Schema.Struct({
   t3codeCommitHash: Schema.optional(Schema.String),
 });
 const decodeAppPackageMetadata = Schema.decodeEffect(Schema.fromJsonString(AppPackageMetadata));
-
-export class DesktopUserDataPathResolutionError extends Schema.TaggedError<DesktopUserDataPathResolutionError>()(
-  "DesktopUserDataPathResolutionError",
-  {
-    legacyPath: Schema.String,
-    cause: Schema.Defect(),
-  },
-) {
-  override get message(): string {
-    return `Failed to inspect legacy desktop user-data path at "${this.legacyPath}".`;
-  }
-}
 
 export class DesktopAppIdentity extends Context.Service<
   DesktopAppIdentity,
@@ -45,21 +35,13 @@ const normalizeCommitHash = (value: string): Option.Option<string> => {
     : Option.none();
 };
 
-// Pulse Next resolves its user-data directory from its own identity only. It
-// deliberately does not look for, adopt or migrate T3 Code's directories
-// (t3code, "T3 Code (Alpha)", "T3 Code (Dev)"), so installing Pulse Next beside
-// T3 Code never reads or writes that application's roaming state.
-export const resolveUserDataPath = Effect.gen(function* () {
-  const environment = yield* DesktopEnvironment.DesktopEnvironment;
-  return environment.path.join(environment.appDataDirectory, environment.userDataDirName);
-}).pipe(Effect.withSpan("desktop.appIdentity.resolveUserDataPath"));
-
 /** @public Service construction is part of the canonical Effect module API. */
 export const make = Effect.gen(function* () {
   const assets = yield* DesktopAssets.DesktopAssets;
   const electronApp = yield* ElectronApp.ElectronApp;
   const environment = yield* DesktopEnvironment.DesktopEnvironment;
   const fileSystem = yield* FileSystem.FileSystem;
+  const userDataContext = yield* Effect.context<Path.Path>();
   const commitHashCache = yield* Ref.make<Option.Option<Option.Option<string>>>(Option.none());
 
   const resolveEmbeddedCommitHash = Effect.gen(function* () {
@@ -100,8 +82,8 @@ export const make = Effect.gen(function* () {
     return commitHash;
   });
 
-  const userDataPath = resolveUserDataPath.pipe(
-    Effect.provide(yield* Effect.context<DesktopEnvironment.DesktopEnvironment>()),
+  const userDataPath = DesktopUserData.resolveUserDataPath(environment).pipe(
+    Effect.provide(userDataContext),
   );
 
   const configure = Effect.gen(function* () {

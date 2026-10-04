@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -22,31 +22,36 @@ export const featureSuites = [
   { id: "managed-skills-contracts", file: "packages/contracts/src/pulseSkills.test.ts" },
   { id: "managed-skills-settings", file: "apps/web/src/skills/ManagedSkillsSettings.test.tsx" },
   { id: "managed-skills-drafts", file: "apps/web/src/composerDraftStore.test.ts" },
-  { id: "pulse-queued-messages", file: "apps/web/src/queuedMessageStore.test.ts" },
+  {
+    id: "pulse-queued-messages",
+    file: "apps/server/src/orchestration-v2/Orchestrator.control-reads.test.ts",
+    testNamePattern: "persists Pulse selections",
+  },
   { id: "managed-skills-picker", file: "apps/web/src/skills/managedSkillPicker.test.ts" },
   {
     id: "managed-skills-subprocess",
-    file: "apps/server/src/provider/Layers/CodexCollabRuntime.integration.test.ts",
-    testNamePattern: "skill",
+    file: "apps/server/src/orchestration-v2/Adapters/CodexAdapterV2.test.ts",
+    testNamePattern: "sends currency-sigil skill mentions to Codex",
   },
   {
     id: "managed-skills-events",
-    file: "apps/server/src/orchestration/decider.projectScripts.test.ts",
+    file: "apps/server/src/orchestration-v2/Orchestrator.control-reads.test.ts",
+    testNamePattern: "persists Pulse selections",
   },
   {
     id: "managed-skills-provider",
-    file: "apps/server/src/provider/Layers/ProviderService.test.ts",
-    testNamePattern: "skill",
+    file: "apps/server/src/orchestration-v2/ProviderTurnStartService.test.ts",
+    testNamePattern: "rejects unavailable managed skills before opening the provider",
   },
   {
     id: "managed-skills-adapter",
-    file: "apps/server/src/provider/Layers/CodexAdapter.test.ts",
-    testNamePattern: "skill",
+    file: "apps/server/src/orchestration-v2/Adapters/CodexAdapterV2.test.ts",
+    testNamePattern: "skill mentions",
   },
   {
     id: "managed-skills-native-input",
-    file: "apps/server/src/provider/Layers/CodexSessionRuntime.test.ts",
-    testNamePattern: "skill",
+    file: "apps/server/src/orchestration-v2/Adapters/ClaudeAdapterV2.test.ts",
+    testNamePattern: "managed.*skill",
   },
   { id: "mcp-contracts", file: "packages/contracts/src/pulseMcp.test.ts" },
   { id: "mcp-rpc", file: "apps/server/src/mcp/PulseMcpRpc.test.ts" },
@@ -58,35 +63,44 @@ export const featureSuites = [
   { id: "mcp-draft-boundary", file: "apps/web/src/mcp/prepareMcpSubmission.test.ts" },
   {
     id: "thread-handoff-context",
-    file: "apps/server/src/orchestration/threadHandoffContext.test.ts",
+    file: "apps/server/src/orchestration-v2/threadHandoffContext.test.ts",
+  },
+  {
+    id: "thread-handoff-service",
+    file: "apps/server/src/orchestration-v2/ThreadHandoffService.test.ts",
   },
   { id: "mcp-pinned-submission", file: "apps/web/src/mcp/preparePinnedMcpSubmission.test.ts" },
   { id: "mcp-composer-lifecycle", file: "apps/web/src/mcp/useManagedMcpComposer.test.tsx" },
   { id: "mcp-preparation", file: "apps/server/src/mcp/PulseMcpPreparation.test.ts" },
   {
     id: "mcp-provider-admission",
-    file: "apps/server/src/provider/Layers/ProviderService.test.ts",
-    testNamePattern: "managed MCP",
+    file: "apps/server/src/mcp/PulseProviderService.test.ts",
+    testNamePattern: "Pulse provider MCP admission",
+  },
+  {
+    id: "mcp-queued-admission",
+    file: "apps/server/src/orchestration-v2/ProviderTurnStartService.test.ts",
+    testNamePattern: "rejects unavailable queued MCP selections before opening the provider",
   },
   {
     id: "mcp-provider-configuration",
-    file: "apps/server/src/provider/Layers/CodexAdapter.test.ts",
+    file: "apps/server/src/orchestration-v2/Adapters/CodexAdapterV2.test.ts",
     testNamePattern: "managed MCP",
   },
   {
     id: "mcp-claude-provider-configuration",
-    file: "apps/server/src/provider/Layers/ClaudeAdapter.test.ts",
+    file: "apps/server/src/orchestration-v2/Adapters/ClaudeAdapterV2.test.ts",
     testNamePattern: "managed MCP",
   },
   {
     id: "mcp-opencode-provider-configuration",
-    file: "apps/server/src/provider/Layers/OpenCodeAdapter.test.ts",
-    testNamePattern: "managed MCP",
+    file: "apps/server/src/orchestration-v2/Adapters/OpenCodeAdapterV2.test.ts",
+    testNamePattern: "confirms managed MCP readiness only for an owned connected server",
   },
   {
     id: "mcp-native-readiness",
-    file: "apps/server/src/provider/Layers/CodexCollabRuntime.integration.test.ts",
-    testNamePattern: "native MCP startup",
+    file: "apps/server/src/orchestration-v2/Adapters/ClaudeAdapterV2.test.ts",
+    testNamePattern: "managed MCP preflight",
   },
   { id: "dictation-http", file: "apps/server/src/voice/http.test.ts" },
   {
@@ -99,9 +113,9 @@ export const featureSuites = [
   },
   { id: "rpc-authorization", file: "apps/server/src/auth/RpcAuthorization.test.ts" },
   {
-    id: "managed-skills-websocket",
-    file: "apps/server/src/server.test.ts",
-    testNamePattern: "managed skill|Pulse MCP|Pulse dictation",
+    id: "websocket-protocol",
+    file: "apps/server/src/ws.test.ts",
+    testNamePattern: "accepts only the current orchestration protocol before websocket RPC setup",
   },
 ];
 
@@ -113,6 +127,9 @@ export function featureTestArgs(root, suite) {
     "run",
     suite.file,
     ...(suite.testNamePattern ? ["-t", suite.testNamePattern] : []),
+    "--reporter=json",
+    "--outputFile",
+    join(root, ".t3", "upstream-updates", "features", `${suite.id}.tests.json`),
     "--exclude",
     "**/.t3/**",
   ];
@@ -123,7 +140,14 @@ export function runFeatureSuites(root, run, exists = existsSync) {
     if (!exists(join(root, suite.file))) return { ...suite, state: "missing" };
     try {
       const result = run(suite);
-      return { ...suite, state: result.status === 0 ? "passed" : "failed" };
+      if (result.status !== 0) return { ...suite, state: "failed" };
+      const report = result.testReport ?? JSON.parse(result.stdout);
+      const passedTests = report.numPassedTests;
+      return {
+        ...suite,
+        state: passedTests > 0 ? "passed" : "uncovered",
+        passedTests,
+      };
     } catch (error) {
       return { ...suite, state: "failed", error: error.message };
     }
@@ -135,6 +159,7 @@ export function runFeatureSuites(root, run, exists = existsSync) {
     releaseEligible: false,
     suites,
     remaining: [
+      "V2 websocket-integrated managed skills, Pulse MCP and dictation acceptance",
       "Managed skills release acceptance on packaged desktop",
       "MCP real-provider and packaged acceptance; new-worktree preparation",
       "Dictation real-model and physical-device acceptance",
@@ -148,6 +173,8 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const directory = join(root, ".t3", "upstream-updates", "features");
   mkdirSync(directory, { recursive: true });
   const report = runFeatureSuites(root, (suite) => {
+    const testReportFile = join(directory, `${suite.id}.tests.json`);
+    rmSync(testReportFile, { force: true });
     const result = spawnSync(process.execPath, featureTestArgs(root, suite), {
       cwd: root,
       encoding: "utf8",
@@ -160,6 +187,9 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       join(directory, `${suite.id}.log`),
       `${result.stdout ?? ""}\n${result.stderr ?? ""}\n${result.error?.message ?? ""}`,
     );
+    if (existsSync(testReportFile)) {
+      result.testReport = JSON.parse(readFileSync(testReportFile, "utf8"));
+    }
     return result;
   });
   Object.assign(report, {

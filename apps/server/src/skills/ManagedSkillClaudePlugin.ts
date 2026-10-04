@@ -4,7 +4,7 @@ import * as NodeFSP from "node:fs/promises";
 import * as NodePath from "node:path";
 import type { ThreadId } from "@t3tools/contracts";
 import { parse, stringify } from "yaml";
-import type { ProviderResolvedSkill } from "../provider/Services/ProviderAdapter.ts";
+import type { ProviderResolvedSkill } from "../provider/PulseProviderTypes.ts";
 
 export async function stageClaudeManagedSkills(input: {
   readonly stateDir: string;

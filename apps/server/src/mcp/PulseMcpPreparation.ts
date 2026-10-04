@@ -13,7 +13,7 @@ import * as Semaphore from "effect/Semaphore";
 import type {
   ProviderManagedMcpServer,
   ProviderManagedMcpStatus,
-} from "../provider/Services/ProviderAdapter.ts";
+} from "../provider/PulseProviderTypes.ts";
 
 export interface Record {
   readonly id: PulseMcpPreparationId;

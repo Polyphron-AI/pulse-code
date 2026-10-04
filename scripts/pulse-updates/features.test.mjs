@@ -2,6 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { featureSuites, featureTestArgs, runFeatureSuites } from "./features.mjs";
 
+const passed = { status: 0, stdout: JSON.stringify({ numPassedTests: 1 }) };
+
 test("host tests exclude prepared upstream candidate worktrees", () => {
   const args = featureTestArgs("/fixture", {
     file: "apps/server/src/skills/ManagedSkillRpc.test.ts",
@@ -20,16 +22,19 @@ test("missing features block without attempting a runner", () => {
   assert.equal(report.state, "blocked");
   assert.ok(report.suites.every((suite) => suite.state === "missing"));
 });
-test("integrated websocket suite runs only its named Pulse cases", () => {
-  const suite = featureSuites.find((suite) => suite.file === "apps/server/src/server.test.ts");
+test("websocket protocol suite runs its named acceptance case", () => {
+  const suite = featureSuites.find((suite) => suite.file === "apps/server/src/ws.test.ts");
   assert.ok(suite);
   const args = featureTestArgs("/fixture", suite);
-  assert.equal(args[args.indexOf("-t") + 1], "managed skill|Pulse MCP|Pulse dictation");
+  assert.equal(
+    args[args.indexOf("-t") + 1],
+    "accepts only the current orchestration protocol before websocket RPC setup",
+  );
 });
 test("one failed test blocks the combined foundation result", () => {
   const report = runFeatureSuites(
     "/fixture",
-    (suite) => ({ status: suite.id === "mcp-preflight" ? 1 : 0 }),
+    (suite) => (suite.id === "mcp-preflight" ? { status: 1 } : passed),
     () => true,
   );
   assert.equal(report.state, "blocked");
@@ -52,7 +57,7 @@ test("MCP gates include the composer, admission and native readiness boundaries"
   }
   assert.equal(
     featureSuites.find((suite) => suite.id === "mcp-native-readiness")?.testNamePattern,
-    "native MCP startup",
+    "managed MCP preflight",
   );
 });
 test("timeouts and process failures cannot pass", () => {
@@ -63,13 +68,34 @@ test("timeouts and process failures cannot pass", () => {
   );
   assert.equal(report.state, "blocked");
 });
+
+test("a filter matching no tests cannot pass a feature boundary", () => {
+  const report = runFeatureSuites(
+    "/fixture",
+    (suite) =>
+      suite.id === "mcp-native-readiness"
+        ? { status: 0, stdout: JSON.stringify({ numPassedTests: 0, numPendingTests: 20 }) }
+        : passed,
+    () => true,
+  );
+  assert.equal(report.state, "blocked");
+  assert.equal(
+    report.suites.find((suite) => suite.id === "mcp-native-readiness").state,
+    "uncovered",
+  );
+});
 test("passing foundations never certifies the release", () => {
   const report = runFeatureSuites(
     "/fixture",
-    () => ({ status: 0 }),
+    () => passed,
     () => true,
   );
   assert.equal(report.state, "foundations-passed");
   assert.equal(report.releaseEligible, false);
   assert.ok(report.remaining.includes("Packaged-app and Windows verification"));
+  assert.ok(
+    report.remaining.includes(
+      "V2 websocket-integrated managed skills, Pulse MCP and dictation acceptance",
+    ),
+  );
 });

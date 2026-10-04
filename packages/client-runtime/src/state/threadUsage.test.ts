@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vite-plus/test";
-import type { OrchestrationThreadActivity } from "@t3tools/contracts";
+type OrchestrationThreadActivity = {
+  readonly id: string;
+  readonly kind: string;
+  readonly createdAt: string;
+  readonly payload: Record<string, unknown>;
+};
 
 /** Pulse Next has no handoff activity yet; the derive still segments on it. */
 const THREAD_HANDOFF_ACTIVITY_KIND = "provider.handoff";
@@ -108,4 +113,63 @@ describe("deriveOutputTokensPerSecond", () => {
     // 5,000 tokens over 41 seconds, not the 280 tok/s mean of per-turn rates.
     expect(deriveOutputTokensPerSecond(activities)).toBeCloseTo(5_000 / 41, 10);
   });
+});
+
+import {
+  ProviderTurnId,
+  ProviderThreadId,
+  NodeId,
+  type OrchestrationV2ProviderTurn,
+} from "@t3tools/contracts";
+import * as DateTime from "effect/DateTime";
+
+function v2Turn(index: number, costUsd: number, provider = "first"): OrchestrationV2ProviderTurn {
+  return {
+    id: ProviderTurnId.make(`turn-${index}`),
+    providerThreadId: ProviderThreadId.make(provider),
+    nodeId: NodeId.make(`node-${index}`),
+    runAttemptId: null,
+    nativeTurnRef: null,
+    ordinal: index + 1,
+    status: "completed",
+    startedAt: DateTime.makeUnsafe(index * 20_000),
+    completedAt: DateTime.makeUnsafe((index + 1) * 20_000),
+    tokenUsage: {
+      usedTokens: 2_000,
+      costUsd,
+      outputTokens: 10_000,
+      updatedAt: "2026-10-04T00:00:00Z",
+    },
+    turnTokenUsage: {
+      usageStatus: "complete",
+      usageScope: "main_agent",
+      hasSubagents: false,
+      inputTokens: 100,
+      outputTokens: 2_000,
+    },
+  };
+}
+
+it("derives v2 cost across provider transitions and rate from per-turn usage", () => {
+  const projection = {
+    providerThreads: [],
+    providerTurns: [v2Turn(0, 1), v2Turn(1, 2), v2Turn(2, 3, "second")],
+  };
+  expect(deriveThreadCostUsd(projection)).toBe(5);
+  expect(deriveOutputTokensPerSecond(projection)).toBe(100);
+  expect(deriveThreadCostUsd(null)).toBeNull();
+});
+
+it("counts interleaved cumulative provider counters independently", () => {
+  expect(
+    deriveThreadCostUsd({
+      providerThreads: [],
+      providerTurns: [
+        v2Turn(0, 1),
+        v2Turn(1, 0.5, "subagent"),
+        v2Turn(2, 2),
+        v2Turn(3, 1, "subagent"),
+      ],
+    }),
+  ).toBe(3);
 });

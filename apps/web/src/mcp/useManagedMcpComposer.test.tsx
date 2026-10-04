@@ -670,7 +670,11 @@ describe("useManagedMcpComposer", () => {
       await Promise.resolve();
     });
     const outcome = await promise;
-    expect(outcome).toEqual({ status: "ready", preparationId: "prep-1" });
+    expect(outcome).toEqual({
+      status: "ready",
+      preparationId: "prep-1",
+      selectedConnectionIds: [],
+    });
     expect(mocks.prepare.mock.calls[1]?.[0].input.excludedConnectionIds).toEqual(["linear"]);
   });
 
@@ -717,7 +721,11 @@ describe("useManagedMcpComposer", () => {
       await Promise.resolve();
     });
 
-    expect(await promise).toEqual({ status: "ready", preparationId: "prep-queued" });
+    expect(await promise).toEqual({
+      status: "ready",
+      preparationId: "prep-queued",
+      selectedConnectionIds: ["queued"],
+    });
     expect(mocks.prepare.mock.calls.map((call) => call[0].input.connectionIds)).toEqual([
       ["queued"],
       ["queued"],
@@ -1021,7 +1029,11 @@ describe("useManagedMcpComposer", () => {
         providerInstanceId: ProviderInstanceId.make("codex"),
         runtimeMode: "full-access",
       }),
-    ).resolves.toEqual({ status: "ready", preparationId: "prepared" });
+    ).resolves.toEqual({
+      status: "ready",
+      preparationId: "prepared",
+      selectedConnectionIds: ["linear"],
+    });
     expect(mocks.setOverride).toHaveBeenCalledWith({
       environmentId: EnvironmentId.make("env-1"),
       input: { threadId: actualThreadId, connectionIds: ["linear"] },
@@ -1084,7 +1096,11 @@ describe("useManagedMcpComposer", () => {
     await act(async () =>
       (mocks.result!.pause as { props: { onRetry: () => void } }).props.onRetry(),
     );
-    await expect(outcome).resolves.toEqual({ status: "ready", preparationId: "retried" });
+    await expect(outcome).resolves.toEqual({
+      status: "ready",
+      preparationId: "retried",
+      selectedConnectionIds: ["linear"],
+    });
     expect(mocks.setOverride).toHaveBeenCalledTimes(2);
     expect(mocks.prepare).toHaveBeenCalledOnce();
   });
