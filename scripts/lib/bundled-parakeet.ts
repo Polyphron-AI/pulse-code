@@ -66,7 +66,7 @@ async function download(target: string, expected: (typeof files)[number]): Promi
 }
 
 export function isPulseNextVersion(version: string): boolean {
-  return /^\d+\.\d+\.\d+-pulse\.\d+$/.test(version);
+  return /^\d+\.\d+\.\d+-(?:pulse\.\d+|nightly\.\d{8}\.\d+)$/.test(version);
 }
 
 export async function stageBundledParakeet(repoRoot: string, clientDir: string): Promise<void> {

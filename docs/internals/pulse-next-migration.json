@@ -1,9 +1,16 @@
 {
   "active": {
     "policyVersion": "2026-09-17",
-    "state": "idle",
-    "nextAction": "No active implementation. Provider summary handoff compaction is implemented locally on qb/feat-provider-summary-handoff; no PR or deployment requested.",
-    "updatedAt": "2026-10-02"
+    "state": "verifying-installer",
+    "feature": "upstream-nightly-20261004",
+    "branch": "qb/sync-nightly-20261004",
+    "sourceRevision": "5122e0b2d5a945b209769b8ecc79383540a76e5b",
+    "stableBranch": "qb/sync-stable-20261004",
+    "installerVersion": "0.0.44-nightly.20261004.2",
+    "evidence": ".t3/upstream-updates/features/result.json: 48 suites and 523 passing test results; Windows package payload validated; isolated packaged startup and browser MCP save/reload/remove passed. Version/channel checks: 13 passing tests.",
+    "limitations": "Live provider turns, microphone capture, native mobile and WSL were not tested.",
+    "nextAction": "Finish the installer rebuild with aligned release manifests, install it, and verify the installed runtime reports Nightly. Preserve stable develop and its separate branch.",
+    "updatedAt": "2026-10-04"
   },
   "providerSummaryHandoffCompaction": {
     "policyVersion": "2026-09-17",

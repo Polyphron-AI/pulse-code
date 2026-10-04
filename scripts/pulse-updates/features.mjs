@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { git, writeJson } from "./pipeline.mjs";
 
 export const featureSuites = [
+  { id: "bundled-voice-packaging", file: "scripts/lib/bundled-parakeet.test.ts" },
   { id: "managed-skills", file: "apps/server/src/skills/ManagedSkillStore.test.ts" },
   { id: "mcp-preflight", file: "apps/server/src/mcp/PulseMcpPreflight.test.ts" },
   { id: "mcp-connections", file: "apps/server/src/mcp/PulseMcpConfigService.test.ts" },
