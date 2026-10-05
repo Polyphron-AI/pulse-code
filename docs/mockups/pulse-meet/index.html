@@ -1,0 +1,396 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pulse Meet: built vs proposed</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body id="top">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-chat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+  <symbol id="i-audio" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 10v3M6 6v11M10 3v18M14 8v7M18 5v13M22 10v3"/></symbol>
+  <symbol id="i-mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M19 10v1a7 7 0 0 1-14 0v-1M12 18v4"/></symbol>
+  <symbol id="i-square" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2zM12 7v6M9 10h6"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></symbol>
+  <symbol id="i-history" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l3 2"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 17 17 7M8 7h9v9"/></symbol>
+</svg>
+
+<div class="page">
+<nav class="toc" aria-label="Screens">
+  <h1>Pulse Meet</h1>
+  <p>Mockups of branch <code>qb/feat-pulse-voice</code>. Not merged, not released.</p>
+  <h2>Built (on the branch)</h2>
+  <a href="#meetings-list"><span class="tag built">Built</span> Meetings list</a>
+  <a href="#recording"><span class="tag built">Built</span> Recording a meeting</a>
+  <a href="#meeting-detail"><span class="tag built">Built</span> Meeting detail</a>
+  <a href="#voice-settings"><span class="tag built">Built</span> Voice settings</a>
+  <a href="#pill"><span class="tag built">Built</span> Dictate into any app</a>
+  <a href="#composer"><span class="tag built">Built</span> Composer dictation</a>
+  <a href="#mobile"><span class="tag built">Built</span> Mobile</a>
+  <h2>Asked for, not built</h2>
+  <a href="#models"><span class="tag proposed">Proposed</span> Choose models</a>
+  <a href="#history"><span class="tag proposed">Proposed</span> Dictation history</a>
+  <a href="#speakers"><span class="tag proposed">Proposed</span> Speaker labels</a>
+  <a href="#questions">Decisions for you</a>
+</nav>
+
+<main>
+<div class="intro">
+  <h2>Is Pulse Meet ready to use? Not yet.</h2>
+  <ul>
+    <li><b>Where it is:</b> the code is on <code>qb/feat-pulse-voice</code> with its tests passing, but it is not merged and not in any installer. Your installed 0.0.44-pulse.1 has none of it.</li>
+    <li><b>Not tried for real:</b> no one has run it on Windows yet (T12): the hotkey, pasting, a second monitor, reloading mid-meeting.</li>
+    <li><b>Can't ship yet:</b> the voice engine branch <code>pulse/headless</code> has to be pushed before an installer can be built.</li>
+    <li><b>Meetily:</b> only Meetily's Rust audio and transcription engine came across, as a background process. Meetily's own screens did not. The screens below are Pulse Code screens built on the app's existing components.</li>
+    <li><b>Not built:</b> choosing models and dictation history were never in scope, so they are drawn here as proposals.</li>
+  </ul>
+  <div class="legend">
+    <span><span class="tag built">Built</span> matches the branch code</span>
+    <span><span class="tag proposed">Proposed</span> new design, nothing built</span>
+    <span><span class="tag gap">Known gap</span> a limitation of what is built</span>
+  </div>
+</div>
+
+<!-- 1. Meetings list -->
+<section class="screen" id="meetings-list">
+  <div class="screen-head"><span class="tag built">Built</span><h3>Meetings list</h3></div>
+  <p class="screen-note">Open it from <strong>Meetings</strong> in the sidebar or <strong>Open meetings</strong> in the command palette. <strong>Record meeting</strong> only shows in the Windows desktop app once the voice engine is running. If you have more than one environment connected, the breadcrumb lets you switch between them. Click <strong>Record meeting</strong> to see the recording state.</p>
+  <div class="window">
+    <div class="titlebar">Pulse Code<span class="dots"><i></i><i></i><i></i></span></div>
+    <div class="app">
+      <aside class="sidebar">
+        <a class="sb-item"><svg><use href="#i-plus"/></svg>New thread</a>
+        <a class="sb-item active"><svg><use href="#i-audio"/></svg>Meetings</a>
+        <a class="sb-item"><svg><use href="#i-gear"/></svg>Settings</a>
+        <div class="sb-label">Pulse Code</div>
+        <div class="sb-thread">Voice pill on second monitor</div>
+        <div class="sb-thread">Meetings reload resume</div>
+        <div class="sb-thread">Release 0.0.44 notes</div>
+        <div class="sb-label">IMAP mail</div>
+        <div class="sb-thread">Plan review</div>
+      </aside>
+      <div class="content">
+        <div class="header">
+          <div class="crumbs"><span class="cur">Meetings</span><span class="sep">/</span><select class="select ghost" aria-label="Environment"><option>This device</option><option>Build box (Tailscale)</option></select></div>
+          <div class="spacer"></div>
+          <div data-recorder></div>
+        </div>
+        <div class="scroll"><div class="container">
+          <ul class="rows">
+            <li><a class="row" href="#meeting-detail"><span class="title">Untitled meeting <span class="badge info">Recording</span></span><span class="meta">Today 14:02</span></a></li>
+            <li><a class="row" href="#meeting-detail"><span class="title">Pulse Voice T12 test plan</span><span class="meta">Today 10:30 · 24 min</span><span class="preview">Agreed to run the hotkey and second monitor checks first, then a reload in the middle of a meeting. Quinton owns pushing the engine branch once the run passes.</span></a></li>
+            <li><a class="row" href="#meeting-detail"><span class="title">IMAP mail scope <span class="badge info">Summarizing</span></span><span class="meta">Yesterday 16:12 · 41 min</span></a></li>
+            <li><a class="row" href="#meeting-detail"><span class="title">Customer call: Acme rollout <span class="badge error">Summary failed</span></span><span class="meta">Oct 1 09:00 · 32 min</span></a></li>
+            <li><a class="row" href="#meeting-detail"><span class="title">Weekly sync</span><span class="meta">Sep 29 11:00 · 58 min</span><span class="preview">Upstream 0.0.44 merged with Pulse compatibility. Dictation push-to-talk fixed. Next: meetings and voice, then the installer sweep.</span></a></li>
+          </ul>
+        </div></div>
+      </div>
+    </div>
+  </div>
+  <a class="back" href="#top">Back to top</a>
+</section>
+
+<!-- 2. Recording states -->
+<section class="screen" id="recording">
+  <div class="screen-head"><span class="tag built">Built</span><h3>Recording a meeting: every header state</h3></div>
+  <p class="screen-note">Recording captures your microphone, plus other participants' audio from your speakers unless you turn that off. Each finished sentence is saved to the environment as you talk. You can move to other pages while it records. Stopping saves the rest of the transcript, then the environment writes a summary with your <strong>Text generation</strong> model and names the meeting from it.</p>
+  <div class="window"><div class="content">
+    <div class="header"><div class="crumbs"><span class="cur">Meetings</span></div><div class="spacer"></div><button class="btn"><svg><use href="#i-mic"/></svg>Record meeting</button></div>
+    <div class="header"><div class="crumbs"><span class="cur">Meetings</span></div><div class="spacer"></div><button class="btn" disabled><svg><use href="#i-mic"/></svg>Starting…</button></div>
+    <div class="header"><div class="crumbs"><span class="cur">Meetings</span></div><div class="spacer"></div><span class="status"><span class="rec-dot"></span>Recording · 42 segments</span><button class="btn danger"><svg><use href="#i-square"/></svg>Stop</button></div>
+    <div class="header"><div class="crumbs"><span class="cur">Meetings</span></div><div class="spacer"></div><span class="status">Not saved yet: connection lost. Retrying.</span><button class="btn danger"><svg><use href="#i-square"/></svg>Stop</button></div>
+    <div class="header"><div class="crumbs"><span class="cur">Meetings</span></div><div class="spacer"></div><span class="status">Saving…</span><button class="btn danger" disabled><svg><use href="#i-square"/></svg>Stop</button></div>
+    <div class="header"><div class="crumbs"><span class="cur">Meetings</span></div><div class="spacer"></div><span class="small err">Could not save the meeting.</span><button class="btn">Retry save</button><button class="btn ghost">Discard</button></div>
+  </div></div>
+  <p class="screen-note" style="margin-top:12px"><span class="tag gap">Known gap</span> If you reload the window mid-meeting, recording carries on, but sentences finished during the reload itself are lost. If the app crashes, the meeting is stuck in the Recording state and can only be deleted.</p>
+  <a class="back" href="#top">Back to top</a>
+</section>
+
+<!-- 3. Meeting detail -->
+<section class="screen" id="meeting-detail">
+  <div class="screen-head"><span class="tag built">Built</span><h3>Meeting detail</h3></div>
+  <p class="screen-note">Rename by editing the title. <strong>Send to thread</strong> opens a new thread in the project you pick, with the summary and transcript already in the composer for you to review before sending. Delete applies to every device. <strong>Regenerate</strong> writes the summary again. While a meeting records, the transcript updates live here and on other devices.</p>
+  <div class="window">
+    <div class="titlebar">Pulse Code<span class="dots"><i></i><i></i><i></i></span></div>
+    <div class="app tall">
+      <aside class="sidebar">
+        <a class="sb-item"><svg><use href="#i-plus"/></svg>New thread</a>
+        <a class="sb-item active"><svg><use href="#i-audio"/></svg>Meetings</a>
+        <a class="sb-item"><svg><use href="#i-gear"/></svg>Settings</a>
+      </aside>
+      <div class="content rel">
+        <div class="header"><div class="crumbs"><a class="link" href="#meetings-list">Meetings</a><span class="sep">/</span><span class="cur">Pulse Voice T12 test plan</span></div></div>
+        <div class="scroll"><div class="container">
+          <div class="stack">
+            <input class="input" value="Pulse Voice T12 test plan" aria-label="Meeting title">
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap" class="small muted">
+              <span>Today 10:30</span><span>24 min</span>
+              <span class="spacer"></span>
+              <select class="select ghost" aria-label="Project"><option>Pulse Code</option><option>IMAP mail</option></select>
+              <button class="btn" data-open="send-dialog"><svg><use href="#i-send"/></svg>Send to thread</button>
+              <button class="btn ghost icon" aria-label="Delete meeting" data-open="delete-dialog"><svg><use href="#i-trash"/></svg></button>
+            </div>
+          </div>
+          <div class="stack">
+            <div style="display:flex;align-items:center;gap:8px"><h4>Summary</h4><button class="btn ghost xs"><svg><use href="#i-refresh"/></svg>Regenerate</button></div>
+            <div class="summary">
+              <p><b>Decisions</b></p>
+              <ul><li>Run T12 on the dev desktop build before cutting an installer.</li><li>Keep Parakeet TDT v3 as the single model until the benchmark is done.</li></ul>
+              <p><b>Action items</b></p>
+              <ul><li>Quinton: approve pushing <code>pulse/headless</code>.</li><li>Agent: fix the dev desktop first-load failure that leaves a blank window.</li></ul>
+            </div>
+          </div>
+          <div class="stack">
+            <h4>Transcript</h4>
+            <ol class="transcript">
+              <li><span class="t">00:04</span><span>Okay, so the plan for today is the Windows run of the voice branch.</span></li>
+              <li><span class="t">00:11</span><span>First the hotkey with something like Notepad focused, then on the second screen.</span></li>
+              <li><span class="t">00:19</span><span>The pill should show up on whichever monitor the focused window is on.</span></li>
+              <li><span class="t">00:31</span><span>After that, start a meeting, reload the window halfway through, and see that it keeps saving.</span></li>
+              <li><span class="t">00:44</span><span>If that all passes we push the engine branch and build the installer.</span></li>
+            </ol>
+          </div>
+        </div></div>
+        <div class="modal-wrap" id="delete-dialog" hidden>
+          <div class="modal"><h4>Delete this meeting?</h4><p class="help">The transcript and summary are removed from this environment for every device.</p>
+          <div class="foot"><button class="btn" data-close>Cancel</button><button class="btn danger" data-close>Delete</button></div></div>
+        </div>
+        <div class="modal-wrap" id="send-dialog" hidden>
+          <div class="modal"><h4>New thread in Pulse Code</h4><p class="help">Not a real dialog. The button opens a new thread and puts this into its composer, so you can edit it before sending:</p>
+          <div class="notice small" style="margin-top:10px;white-space:pre-line">Meeting: Pulse Voice T12 test plan (Today 10:30, 24 min)
+
+Summary
+- Run T12 on the dev desktop build…
+
+Transcript
+[00:04] Okay, so the plan for today…</div>
+          <div class="foot"><button class="btn" data-close>Close</button></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <a class="back" href="#top">Back to top</a>
+</section>
+
+<!-- 4. Voice settings -->
+<section class="screen" id="voice-settings">
+  <div class="screen-head"><span class="tag built">Built</span><h3>Settings → Integrations → Voice dictation</h3></div>
+  <p class="screen-note">This is where everything voice-related is configured today. The <strong>Dictate into any app</strong> section only appears in the Windows desktop app. There is <strong>no model picker</strong>: one bundled model, Parakeet TDT 0.6B v3, handles both dictation and meetings. Tick and untick the boxes to see the sections open and close.</p>
+  <div class="window"><div class="app tall" style="grid-template-columns:1fr">
+    <div class="settings">
+      <nav class="settings-nav">
+        <span class="h">Settings</span><a>General</a><a>Providers</a><a>Text generation</a><a class="active">Integrations</a><a>Connections</a>
+      </nav>
+      <div class="settings-body">
+        <h2>Voice dictation</h2>
+        <div class="stack lg">
+          <label class="check strong"><input type="checkbox" checked data-toggle="composer-opts"> Enable dictation in the composer</label>
+          <div class="stack" id="composer-opts">
+            <p class="help">Choose where recordings will be transcribed. Use the microphone in the composer to record, then review the inserted text before sending.</p>
+            <label class="radio-card"><input type="radio" name="backend" checked><span><b>Parakeet on this device</b><span class="d">Audio stays in this browser. The model downloads only when you choose setup.</span></span></label>
+            <label class="radio-card"><input type="radio" name="backend"><span><b>Groq through an environment</b><span class="d">The recording goes to the selected Pulse environment, then to Groq.</span></span></label>
+            <div class="notice"><b>Parakeet is ready in the desktop app</b><span class="help">Click the microphone to record. Click it again to stop and transcribe.</span></div>
+          </div>
+          <div class="group stack">
+            <label class="check strong"><input type="checkbox" checked data-toggle="anywhere-opts"> Dictate into any app with a shortcut</label>
+            <p class="help">Press the shortcut anywhere on this computer, speak, and the text is pasted into the focused app. Parakeet runs on this device; audio never leaves it.</p>
+            <div class="stack lg" id="anywhere-opts">
+              <div><div class="field-label">Shortcut</div><select class="select" aria-label="Dictation shortcut"><option>Ctrl + Win</option><option>Ctrl + Shift + Space</option><option>Ctrl + Alt + Space</option></select></div>
+              <div class="stack">
+                <label class="check"><input type="radio" name="mode" checked> Hold the shortcut while speaking</label>
+                <label class="check"><input type="radio" name="mode"> Press once to start, again to stop</label>
+              </div>
+              <div><div class="field-label">Microphone</div><select class="select" aria-label="Dictation microphone"><option>System default</option><option>Shure MV7</option><option>Laptop microphone array</option></select></div>
+              <label class="check"><input type="checkbox" checked> Show the voice pill on the active screen while dictating</label>
+              <p class="help small">Press Escape to cancel a dictation.</p>
+            </div>
+            <label class="check"><input type="checkbox" checked> Include other participants' audio when recording meetings</label>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div></div>
+  <a class="back" href="#top">Back to top</a>
+</section>
+
+<!-- 5. Pill -->
+<section class="screen" id="pill">
+  <div class="screen-head"><span class="tag built">Built</span><h3>Dictate into any app: the voice pill</h3></div>
+  <p class="screen-note">Hold the shortcut with any app in front. The pill shows at the bottom of whichever monitor that app is on and never takes keyboard focus away from it. When you let go, the text is pasted into the app and your clipboard is put back the way it was. Use the buttons below the screen to switch the pill between its three states.</p>
+  <div class="desktop">
+    <div class="notepad"><div class="bar">notes.txt - Notepad</div><div class="doc" id="np-doc">Meeting follow-ups:<br><span id="np-insert"></span><span class="caret"></span></div></div>
+    <div class="pill recording" id="pill-el"><span class="dot"></span><span class="bars"><i style="height:9px"></i><i style="height:15px"></i><i style="height:19px"></i><i style="height:13px"></i><i style="height:8px"></i></span><span id="pill-label">Listening</span></div>
+  </div>
+  <div class="pill-states">
+    <button class="btn xs" data-pill="recording">Listening</button>
+    <button class="btn xs" data-pill="transcribing">Transcribing</button>
+    <button class="btn xs" data-pill="pasted">Release (pastes)</button>
+    <button class="btn xs" data-pill="error">Error</button>
+  </div>
+  <a class="back" href="#top">Back to top</a>
+</section>
+
+<!-- 6. Composer -->
+<section class="screen" id="composer">
+  <div class="screen-head"><span class="tag built">Built</span><h3>Composer dictation inside a thread</h3></div>
+  <p class="screen-note">In the desktop app, the composer microphone uses the same engine, so there's nothing to download. Dictated text goes into the composer for you to edit before you send. <span class="tag gap">Known gap</span> Nothing records that a message was dictated, and dictations into other apps aren't saved anywhere, so there is no history to look back on. That's covered by the <a href="#history">Dictation history</a> proposal.</p>
+  <div class="window"><div class="content" style="height:300px">
+    <div class="header"><div class="crumbs"><span class="link">Pulse Code</span><span class="sep">/</span><span class="cur">Voice pill on second monitor</span></div></div>
+    <div class="scroll"><div class="msg"><div class="you">The pill showed on the wrong monitor when Teams was full screen on the left one. Can you check how the focused window is resolved?</div></div></div>
+    <div class="composer"><div class="ph" id="composer-text">Ask anything…</div><div class="tools"><span class="spacer"></span><button class="btn ghost icon" aria-label="Dictate" data-dictate><svg><use href="#i-mic"/></svg></button><button class="btn primary xs">Send</button></div></div>
+  </div></div>
+  <a class="back" href="#top">Back to top</a>
+</section>
+
+<!-- 7. Mobile -->
+<section class="screen" id="mobile">
+  <div class="screen-head"><span class="tag built">Built</span><h3>Mobile: Settings → Meetings</h3></div>
+  <p class="screen-note">On the phone you can read, rename, delete, and send a meeting to a thread, but recording is desktop only. Updates arrive live while a meeting is being recorded elsewhere. <span class="tag gap">Known gap</span> On Android the meetings row has no icon yet, and the send sheet may stack on top of other sheets, which hasn't been checked yet.</p>
+  <div class="phones">
+    <div><div class="phone"><div class="sbar"><span>9:41</span><span>5G</span></div><div class="nav"><span class="muted">‹ Settings</span></div><div class="nav" style="padding-top:0"><b>Meetings</b></div>
+      <div class="body"><ul class="rows">
+        <li><div class="row"><span class="title">Untitled meeting <span class="badge info">Recording</span></span><span class="meta">Today 14:02</span></div></li>
+        <li><div class="row"><span class="title">Pulse Voice T12 test plan</span><span class="meta">Today 10:30 · 24 min</span><span class="preview">Agreed to run the hotkey and second monitor checks first…</span></div></li>
+        <li><div class="row"><span class="title">IMAP mail scope <span class="badge info">Summarizing</span></span><span class="meta">Yesterday 16:12 · 41 min</span></div></li>
+        <li><div class="row"><span class="title">Weekly sync</span><span class="meta">Sep 29 11:00 · 58 min</span></div></li>
+      </ul></div></div><p class="caption">List</p></div>
+    <div><div class="phone"><div class="sbar"><span>9:41</span><span>5G</span></div><div class="nav"><span class="muted">‹ Meetings</span><span class="spacer"></span><span class="muted">•••</span></div>
+      <div class="body stack">
+        <b style="font-size:17px">Pulse Voice T12 test plan</b>
+        <span class="small muted">Today 10:30 · 24 min</span>
+        <button class="btn"><svg><use href="#i-send"/></svg>Send to thread</button>
+        <h4>Summary</h4>
+        <p class="small" style="margin:0">Run T12 on the dev desktop build before cutting an installer. Keep Parakeet TDT v3 until the benchmark is done.</p>
+        <h4>Transcript</h4>
+        <ol class="transcript"><li><span class="t">00:04</span><span>Okay, so the plan for today is the Windows run…</span></li><li><span class="t">00:11</span><span>First the hotkey with Notepad focused…</span></li></ol>
+      </div></div><p class="caption">Detail</p></div>
+  </div>
+  <a class="back" href="#top">Back to top</a>
+</section>
+
+<!-- 8. Models (proposed) -->
+<section class="screen" id="models">
+  <div class="screen-head"><span class="tag proposed">Proposed</span><h3>Choose models</h3></div>
+  <p class="screen-note">This would be a new <strong>Models</strong> block in Voice dictation, with one choice for dictation and one for meetings, because the two need different things. Dictation needs speed and text that appears as you speak. Meetings need accuracy on long recordings and who said what. Any model other than the bundled one downloads when you pick it. The figures come from the published benchmarks I found earlier and haven't been measured on your PC yet.</p>
+  <div class="window"><div class="app tall" style="grid-template-columns:1fr">
+    <div class="settings">
+      <nav class="settings-nav"><span class="h">Settings</span><a>General</a><a>Text generation</a><a class="active">Integrations</a></nav>
+      <div class="settings-body">
+        <h2>Voice dictation · Models</h2>
+        <div class="stack lg">
+          <div class="stack">
+            <div class="field-label">Dictation model</div>
+            <label class="radio-card"><input type="radio" name="dm" checked><span><b>Parakeet TDT v3 <span class="badge neutral">Bundled</span></b><span class="d">25 languages. Text arrives when you stop speaking. About 6.3% of words wrong on the public test sets.</span></span></label>
+            <label class="radio-card"><input type="radio" name="dm"><span><b>Nemotron Streaming EN <span class="badge neutral">670 MB download</span></b><span class="d">English only. Words appear while you talk, about half a second behind you. About 7% wrong.</span><span class="pill-row"><span class="badge info">Live text</span></span></span></label>
+            <label class="radio-card"><input type="radio" name="dm"><span><b>Parakeet TDT v2 <span class="badge neutral">Download</span></b><span class="d">English only, slightly more accurate than v3 (about 6.1% wrong).</span></span></label>
+          </div>
+          <div class="group stack">
+            <div class="field-label">Meeting transcription</div>
+            <select class="select" aria-label="Meeting model"><option>Same as dictation (Parakeet TDT v3)</option><option>Parakeet TDT v2 (English)</option></select>
+            <label class="check"><input type="checkbox" checked> Label who is speaking <span class="badge neutral">Nemotron 3 Diarization · download</span></label>
+            <p class="help">Splits the transcript by speaker (up to 8). Runs on this computer after the meeting ends.</p>
+          </div>
+          <div class="group stack">
+            <div class="field-label">Summary model</div>
+            <select class="select" aria-label="Summary model"><option>Use Text generation setting (Claude Sonnet)</option><option>Codex · gpt-5.x</option><option>Claude Opus</option></select>
+            <p class="help">Built today: summaries always use the <b>Text generation</b> model. This setting would let meetings use a different one.</p>
+          </div>
+          <table class="compare">
+            <tr><th>Model</th><th>Words wrong</th><th>Meetings (AMI)</th><th>Live text</th><th>On your PC</th></tr>
+            <tr><td>Parakeet TDT v3</td><td>6.34%</td><td>11.3%</td><td>No</td><td>Not measured</td></tr>
+            <tr><td>Parakeet TDT v2</td><td>6.05%</td><td>n/a</td><td>No</td><td>Not measured</td></tr>
+            <tr><td>Nemotron Streaming EN</td><td>6.9% to 7.3%</td><td>n/a</td><td>Yes, 0.56 s</td><td>Not measured</td></tr>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div></div>
+  <a class="back" href="#top">Back to top</a>
+</section>
+
+<!-- 9. History (proposed) -->
+<section class="screen" id="history">
+  <div class="screen-head"><span class="tag proposed">Proposed</span><h3>Dictation history</h3></div>
+  <p class="screen-note">This would be a new <strong>Dictations</strong> page, next to Meetings in the sidebar. It lists everything you've dictated, grouped by where it went: a chat thread, or the app you dictated into. From each entry you can copy it again, insert it into the current composer, or jump back to that thread. One decision for you: should history stay on this computer only (global dictations can include anything you typed into other apps), or be saved to the environment like meetings so you can see it on your phone? Click a chat on the left to filter.</p>
+  <div class="window">
+    <div class="titlebar">Pulse Code<span class="dots"><i></i><i></i><i></i></span></div>
+    <div class="app tall">
+      <aside class="sidebar">
+        <a class="sb-item"><svg><use href="#i-plus"/></svg>New thread</a>
+        <a class="sb-item"><svg><use href="#i-audio"/></svg>Meetings</a>
+        <a class="sb-item active"><svg><use href="#i-history"/></svg>Dictations</a>
+        <a class="sb-item"><svg><use href="#i-gear"/></svg>Settings</a>
+      </aside>
+      <div class="content">
+        <div class="header"><div class="crumbs"><span class="cur">Dictations</span></div><div class="spacer"></div><input class="search" placeholder="Search dictations" data-search aria-label="Search dictations"></div>
+        <div class="hist">
+          <div class="hist-filter" data-filters>
+            <button class="active" data-filter="all">All <span class="count">7</span></button>
+            <span class="h">Chats</span>
+            <button data-filter="t-pill">Voice pill on second monitor <span class="count">2</span></button>
+            <button data-filter="t-imap">IMAP mail plan review <span class="count">2</span></button>
+            <button data-filter="t-rel">Release 0.0.44 notes <span class="count">1</span></button>
+            <span class="h">Other apps</span>
+            <button data-filter="a-outlook">Outlook <span class="count">1</span></button>
+            <button data-filter="a-slack">Slack <span class="count">1</span></button>
+          </div>
+          <div class="hist-list" data-list>
+            <div class="day">Today</div>
+            <div class="dict" data-k="t-pill"><div class="dict-top"><svg width="13" height="13"><use href="#i-chat"/></svg><span class="where">Voice pill on second monitor</span><span>· Pulse Code · 14:21</span></div><div class="dict-text">The pill showed on the wrong monitor when Teams was full screen on the left one. Can you check how the focused window is resolved?</div><div class="dict-actions"><button class="btn ghost xs"><svg><use href="#i-copy"/></svg>Copy</button><button class="btn ghost xs"><svg><use href="#i-plus"/></svg>Insert into composer</button><button class="btn ghost xs"><svg><use href="#i-arrow"/></svg>Open thread</button><span class="spacer"></span><button class="btn ghost xs icon" aria-label="Delete"><svg><use href="#i-trash"/></svg></button></div></div>
+            <div class="dict" data-k="a-outlook"><div class="dict-top"><svg width="13" height="13"><use href="#i-mic"/></svg><span class="where">Outlook</span><span>· shortcut · 13:05</span></div><div class="dict-text">Hi Sam, thanks for the call. I'll send the rollout plan by Friday and loop in the platform team for the SSO piece.</div><div class="dict-actions"><button class="btn ghost xs"><svg><use href="#i-copy"/></svg>Copy</button><button class="btn ghost xs"><svg><use href="#i-plus"/></svg>Insert into composer</button><span class="spacer"></span><button class="btn ghost xs icon" aria-label="Delete"><svg><use href="#i-trash"/></svg></button></div></div>
+            <div class="dict" data-k="t-pill"><div class="dict-top"><svg width="13" height="13"><use href="#i-chat"/></svg><span class="where">Voice pill on second monitor</span><span>· Pulse Code · 11:48</span></div><div class="dict-text">Also make sure it still works when the second screen is set to a hundred and fifty percent scaling.</div><div class="dict-actions"><button class="btn ghost xs"><svg><use href="#i-copy"/></svg>Copy</button><button class="btn ghost xs"><svg><use href="#i-plus"/></svg>Insert into composer</button><button class="btn ghost xs"><svg><use href="#i-arrow"/></svg>Open thread</button><span class="spacer"></span><button class="btn ghost xs icon" aria-label="Delete"><svg><use href="#i-trash"/></svg></button></div></div>
+            <div class="day">Yesterday</div>
+            <div class="dict" data-k="t-imap"><div class="dict-top"><svg width="13" height="13"><use href="#i-chat"/></svg><span class="where">IMAP mail plan review</span><span>· IMAP mail · 17:30</span></div><div class="dict-text">Drafts should save to the server's Drafts folder, not locally, and attachments over twenty five megabytes should be refused with a clear message.</div><div class="dict-actions"><button class="btn ghost xs"><svg><use href="#i-copy"/></svg>Copy</button><button class="btn ghost xs"><svg><use href="#i-plus"/></svg>Insert into composer</button><button class="btn ghost xs"><svg><use href="#i-arrow"/></svg>Open thread</button><span class="spacer"></span><button class="btn ghost xs icon" aria-label="Delete"><svg><use href="#i-trash"/></svg></button></div></div>
+            <div class="dict" data-k="a-slack"><div class="dict-top"><svg width="13" height="13"><use href="#i-mic"/></svg><span class="where">Slack</span><span>· shortcut · 16:02</span></div><div class="dict-text">Installer for 0.0.44 pulse one is up, please try the dictation shortcut and tell me if push to talk feels right.</div><div class="dict-actions"><button class="btn ghost xs"><svg><use href="#i-copy"/></svg>Copy</button><button class="btn ghost xs"><svg><use href="#i-plus"/></svg>Insert into composer</button><span class="spacer"></span><button class="btn ghost xs icon" aria-label="Delete"><svg><use href="#i-trash"/></svg></button></div></div>
+            <div class="dict" data-k="t-imap"><div class="dict-top"><svg width="13" height="13"><use href="#i-chat"/></svg><span class="where">IMAP mail plan review</span><span>· IMAP mail · 15:44</span></div><div class="dict-text">Private hosts are fine as long as the user confirms the certificate the first time.</div><div class="dict-actions"><button class="btn ghost xs"><svg><use href="#i-copy"/></svg>Copy</button><button class="btn ghost xs"><svg><use href="#i-plus"/></svg>Insert into composer</button><button class="btn ghost xs"><svg><use href="#i-arrow"/></svg>Open thread</button><span class="spacer"></span><button class="btn ghost xs icon" aria-label="Delete"><svg><use href="#i-trash"/></svg></button></div></div>
+            <div class="day">Sep 30</div>
+            <div class="dict" data-k="t-rel"><div class="dict-top"><svg width="13" height="13"><use href="#i-chat"/></svg><span class="where">Release 0.0.44 notes</span><span>· Pulse Code · 10:12</span></div><div class="dict-text">Lead the notes with push to talk dictation and the output speed in the context meter.</div><div class="dict-actions"><button class="btn ghost xs"><svg><use href="#i-copy"/></svg>Copy</button><button class="btn ghost xs"><svg><use href="#i-plus"/></svg>Insert into composer</button><button class="btn ghost xs"><svg><use href="#i-arrow"/></svg>Open thread</button><span class="spacer"></span><button class="btn ghost xs icon" aria-label="Delete"><svg><use href="#i-trash"/></svg></button></div></div>
+            <p class="help small" data-empty hidden>No dictations match.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="screen-note" style="margin-top:12px">It would also add to Settings: <b>Keep dictation history</b> (on or off), <b>Delete after</b> (7 days, 30 days, or forever), and <b>Clear history</b>, so there's always a way to see it and a way to remove it.</p>
+  <a class="back" href="#top">Back to top</a>
+</section>
+
+<!-- 10. Speakers (proposed) -->
+<section class="screen" id="speakers">
+  <div class="screen-head"><span class="tag proposed">Proposed</span><h3>Meeting transcript with speaker labels</h3></div>
+  <p class="screen-note">With <b>Label who is speaking</b> turned on, the transcript is split by speaker after the meeting ends. Click a label to rename it, for example Speaker 1 to Quinton, and the summary can then assign action items to people.</p>
+  <div class="window"><div class="content"><div class="container">
+    <div style="display:flex;gap:8px;align-items:center"><h4>Transcript</h4><span class="badge neutral">3 speakers</span></div>
+    <ol class="transcript">
+      <li><span class="t">00:04</span><span class="spk a">Quinton</span><span>Okay, so the plan for today is the Windows run of the voice branch.</span></li>
+      <li><span class="t">00:11</span><span class="spk b">Speaker 2</span><span>Do we test on the laptop screen or the external one first?</span></li>
+      <li><span class="t">00:16</span><span class="spk a">Quinton</span><span>External first, it's at a hundred and fifty percent scaling.</span></li>
+      <li><span class="t">00:23</span><span class="spk c">Speaker 3</span><span>I'll take notes on anything that looks off with the pill.</span></li>
+    </ol>
+  </div></div></div>
+  <a class="back" href="#top">Back to top</a>
+</section>
+
+<section class="questions" id="questions">
+  <h3 style="margin:0">Decisions for you</h3>
+  <ol>
+    <li><b>Ship what's built first?</b> Run T12, push <code>pulse/headless</code>, and build an installer with the current Meetings and dictation. Then add models and history in a follow-up.</li>
+    <li><b>Dictation history storage:</b> keep it on this computer only (private, desktop only), or save it to the environment like meetings (visible on web and mobile)?</li>
+    <li><b>Models:</b> add the picker now with the three models above, or run the local benchmark first and only offer models that do well on your PC?</li>
+    <li><b>Name:</b> call it <b>Pulse Meet</b> in the app? It's labeled "Meetings" today.</li>
+  </ol>
+  <a class="back" href="#top">Back to top</a>
+</section>
+</main>
+</div>
+<a class="totop" href="#top">Back to top</a>
+<script src="app.js"></script>
+</body>
+</html>
