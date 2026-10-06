@@ -293,6 +293,193 @@ export function serializeTableElementToCsv(table: Element): string {
   return lines.join("\n");
 }
 
+export type TableClipboardFormat = "markdown" | "csv" | "html" | "png";
+
+const TABLE_EXPORT_TAGS = new Set([
+  "TABLE",
+  "THEAD",
+  "TBODY",
+  "TFOOT",
+  "TR",
+  "TH",
+  "TD",
+  "CAPTION",
+  "STRONG",
+  "B",
+  "EM",
+  "I",
+  "DEL",
+  "S",
+  "CODE",
+  "BR",
+  "P",
+  "A",
+  "SUB",
+  "SUP",
+]);
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+/** Portable table markup: no chat chrome, clipping CSS, or external image/font resources. */
+function serializeTableExportNode(node: Node): string {
+  if (node.nodeType === Node.TEXT_NODE) return escapeHtml(node.textContent ?? "");
+  if (node.nodeType !== Node.ELEMENT_NODE) return "";
+  const element = node as HTMLElement;
+  if (isSkippedElement(element) || ["IFRAME", "OBJECT", "EMBED"].includes(element.tagName))
+    return "";
+  if (element.tagName === "IMG") return escapeHtml(element.getAttribute("alt") ?? "");
+  const content = [...node.childNodes].map(serializeTableExportNode).join("");
+  if (!TABLE_EXPORT_TAGS.has(element.tagName)) return content;
+  const tag = element.tagName.toLowerCase();
+  let attributes = "";
+  if (tag === "table") {
+    attributes =
+      ' style="border-collapse:collapse;background:#fff;color:#111;font:14px/1.5 Arial,sans-serif;width:max-content"';
+  } else if (tag === "td" || tag === "th") {
+    const alignment = element.style?.textAlign || element.getAttribute("align");
+    const textAlign = alignment === "center" || alignment === "right" ? alignment : "left";
+    attributes = ` style="border:1px solid #d1d5db;padding:8px 12px;text-align:${textAlign};vertical-align:top;white-space:normal;overflow-wrap:anywhere;max-width:384px${tag === "th" ? ";background:#f3f4f6;font-weight:600" : ""}"`;
+    for (const name of ["colspan", "rowspan"]) {
+      const value = element.getAttribute(name);
+      if (value && /^\d+$/.test(value)) attributes += ` ${name}="${value}"`;
+    }
+  } else if (tag === "a") {
+    const href = element.getAttribute("href") ?? "";
+    if (/^https?:\/\//i.test(href)) attributes = ` href="${escapeHtml(href)}"`;
+  }
+  return tag === "br" ? "<br />" : `<${tag}${attributes}>${content}</${tag}>`;
+}
+
+export function serializeTableElementToHtml(table: Element): string {
+  return `<meta charset="utf-8">${serializeTableExportNode(table)}`;
+}
+
+/** Measure the complete portable table outside the chat's scroll/clipping containers. */
+export async function renderTableElementToPng(table: Element): Promise<Blob> {
+  const container = document.createElement("div");
+  container.style.cssText =
+    "position:fixed;left:-100000px;top:0;width:max-content;background:#fff;padding:12px;pointer-events:none";
+  container.setAttribute("aria-hidden", "true");
+  container.innerHTML = serializeTableElementToHtml(table);
+  document.body.append(container);
+  try {
+    const width = Math.ceil(container.getBoundingClientRect().width);
+    const height = Math.ceil(container.getBoundingClientRect().height);
+    const scale = Math.min(window.devicePixelRatio || 1, 2);
+    // Fail explicitly instead of silently cropping or creating an unusable oversized canvas.
+    if (
+      !width ||
+      !height ||
+      width * scale > 16384 ||
+      height * scale > 16384 ||
+      width * height * scale * scale > 32_000_000
+    ) {
+      throw new Error("This table is too large to copy as PNG. Try Copy as HTML instead.");
+    }
+    const content = document.createElement("div");
+    content.style.cssText = "background:#fff;padding:12px;width:max-content";
+    content.append(container.querySelector("table")!.cloneNode(true));
+    const markup = new XMLSerializer().serializeToString(content);
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><foreignObject width="100%" height="100%">${markup}</foreignObject></svg>`;
+    const image = new Image();
+    const loaded = new Promise<void>((resolve, reject) => {
+      image.addEventListener("load", () => resolve(), { once: true });
+      image.addEventListener(
+        "error",
+        () => reject(new Error("Could not render this table as PNG. Try Copy as HTML instead.")),
+        { once: true },
+      );
+    });
+    // A data URL keeps the self-contained SVG origin-clean for canvas export.
+    image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+    await loaded;
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.ceil(width * scale);
+    canvas.height = Math.ceil(height * scale);
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("PNG export is unavailable. Try Copy as HTML instead.");
+    context.scale(scale, scale);
+    context.drawImage(image, 0, 0);
+    return await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob(
+        (blob) => (blob ? resolve(blob) : reject(new Error("Could not encode this table as PNG."))),
+        "image/png",
+      );
+    });
+  } finally {
+    container.remove();
+  }
+}
+
+export async function writeTableToClipboard(
+  table: Element,
+  format: TableClipboardFormat,
+): Promise<void> {
+  const clipboard = typeof navigator === "undefined" ? undefined : navigator.clipboard;
+  if (!clipboard)
+    throw new Error("Clipboard access is unavailable. Use a secure connection and try again.");
+  const canWriteRich =
+    typeof clipboard.write === "function" && typeof ClipboardItem !== "undefined";
+  if (format === "png") {
+    if (
+      !canWriteRich ||
+      (typeof ClipboardItem.supports === "function" && !ClipboardItem.supports("image/png"))
+    ) {
+      throw new Error("Copy as PNG is unavailable in this browser. Try Copy as HTML instead.");
+    }
+    // Call write during the click, before rendering awaits image decoding (Safari activation).
+    const png = renderTableElementToPng(table);
+    void png.catch(() => {});
+    await clipboard.write([new ClipboardItem({ "image/png": png })]);
+    return;
+  }
+  if (
+    format === "html" &&
+    canWriteRich &&
+    (typeof ClipboardItem.supports !== "function" || ClipboardItem.supports("text/html"))
+  ) {
+    await clipboard.write([
+      new ClipboardItem({
+        "text/html": new Blob([serializeTableElementToHtml(table)], { type: "text/html" }),
+        "text/plain": new Blob([serializeTableExportPlainText(table)], { type: "text/plain" }),
+      }),
+    ]);
+    return;
+  }
+  if (typeof clipboard.writeText !== "function")
+    throw new Error("Clipboard text copying is unavailable in this browser.");
+  const text =
+    format === "html"
+      ? serializeTableElementToHtml(table)
+      : format === "markdown"
+        ? serializeTableElementToMarkdown(table)
+        : serializeTableElementToCsv(table);
+  await clipboard.writeText(text);
+}
+
+function serializeTableExportPlainText(node: Node): string {
+  if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? "";
+  if (node.nodeType !== Node.ELEMENT_NODE || isSkippedElement(node as Element)) return "";
+  const element = node as Element;
+  if (["IFRAME", "OBJECT", "EMBED"].includes(element.tagName)) return "";
+  if (element.tagName === "IMG") return element.getAttribute("alt") ?? "";
+  if (element.tagName === "BR") return "\n";
+  const isRow = element.tagName === "TR";
+  const children = [...node.childNodes].filter(
+    (child) =>
+      !isRow ||
+      (child.nodeType === Node.ELEMENT_NODE && ["TD", "TH"].includes((child as Element).tagName)),
+  );
+  const content = children.map(serializeTableExportPlainText).join(isRow ? "\t" : "");
+  return content + (element.tagName === "TR" ? "\n" : "");
+}
+
 function sanitizedHtmlFrom(container: Element): string {
   for (const node of container.querySelectorAll(SANITIZED_HTML_SELECTOR)) {
     if (

@@ -69,8 +69,8 @@ import { useTheme } from "../hooks/useTheme";
 import { getClientSettings } from "../hooks/useSettings";
 import {
   chatMarkdownClipboardPayload,
-  serializeTableElementToCsv,
-  serializeTableElementToMarkdown,
+  writeTableToClipboard,
+  type TableClipboardFormat,
 } from "../markdown-clipboard";
 import { remarkNormalizeListItemIndentation } from "../markdown-list-indentation";
 import {
@@ -132,7 +132,7 @@ const MAX_HIGHLIGHT_CACHE_MEMORY_BYTES = 50 * 1024 * 1024;
 interface MarkdownActionFailureContext {
   readonly operation: string;
   readonly target?: string;
-  readonly format?: "markdown" | "csv";
+  readonly format?: TableClipboardFormat;
   readonly language?: string;
   readonly fenceTitle?: string;
   readonly copyTarget?: string;
@@ -428,17 +428,10 @@ function MarkdownTable({ children, ...props }: React.ComponentProps<"table">) {
     setExpanded((value) => !value);
   }
 
-  const handleCopy = useCallback((format: "markdown" | "csv") => {
-    const table = containerRef.current?.querySelector("table");
-    if (!table || typeof navigator === "undefined" || navigator.clipboard == null) {
-      return;
-    }
-    const text =
-      format === "markdown"
-        ? serializeTableElementToMarkdown(table)
-        : serializeTableElementToCsv(table);
-    void navigator.clipboard
-      .writeText(text)
+  const handleCopy = useCallback((format: TableClipboardFormat) => {
+    const table = tableRef.current;
+    if (!table) return;
+    void writeTableToClipboard(table, format)
       .then(() => {
         if (copiedTimerRef.current != null) {
           clearTimeout(copiedTimerRef.current);
@@ -451,6 +444,12 @@ function MarkdownTable({ children, ...props }: React.ComponentProps<"table">) {
       })
       .catch((cause) => {
         reportMarkdownActionFailure({ operation: "copy-table", format }, cause);
+        toastManager.add({
+          type: "error",
+          title: "Could not copy table",
+          description:
+            cause instanceof Error ? cause.message : "Please try copying the table again.",
+        });
       });
   }, []);
 
@@ -523,6 +522,8 @@ function MarkdownTable({ children, ...props }: React.ComponentProps<"table">) {
           <MenuPopup align="end">
             <MenuItem onClick={() => handleCopy("markdown")}>Copy as Markdown</MenuItem>
             <MenuItem onClick={() => handleCopy("csv")}>Copy as CSV</MenuItem>
+            <MenuItem onClick={() => handleCopy("html")}>Copy as HTML</MenuItem>
+            <MenuItem onClick={() => handleCopy("png")}>Copy as PNG</MenuItem>
           </MenuPopup>
         </Menu>
       </div>
