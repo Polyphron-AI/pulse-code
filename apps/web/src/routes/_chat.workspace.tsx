@@ -2,11 +2,13 @@ import { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import { createFileRoute } from "@tanstack/react-router";
 
 import { OfficeWorkspace } from "../components/workspace/OfficeWorkspace";
+import { CommunicationsWorkspace } from "../components/workspace/CommunicationsWorkspace";
 
 import { OrcaWorkspace } from "../components/workspace/OrcaWorkspace";
 
 export interface WorkspaceSearch {
   readonly space?: "office";
+  readonly officeView?: "communications";
   readonly prepare?: boolean;
   readonly sourceEnvironmentId?: EnvironmentId;
   readonly sourceThreadId?: ThreadId;
@@ -24,6 +26,9 @@ export function parseWorkspaceSearch(raw: Record<string, unknown>): WorkspaceSea
       : undefined;
   return {
     ...(!prepare && raw.space === "office" ? { space: "office" as const } : {}),
+    ...(!prepare && raw.space === "office" && raw.officeView === "communications"
+      ? { officeView: "communications" as const }
+      : {}),
     ...(prepare ? { prepare: true } : {}),
     ...(sourceEnvironmentId && sourceThreadId ? { sourceEnvironmentId, sourceThreadId } : {}),
   };
@@ -38,7 +43,13 @@ function OrcaWorkspaceRouteView() {
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
 
-  if (search.space === "office") return <OfficeWorkspace />;
+  if (search.space === "office") {
+    return search.officeView === "communications" ? (
+      <CommunicationsWorkspace />
+    ) : (
+      <OfficeWorkspace />
+    );
+  }
 
   return (
     <OrcaWorkspace

@@ -3,6 +3,20 @@ import { describe, expect, it } from "vite-plus/test";
 import { parseWorkspaceSearch } from "./_chat.workspace";
 
 describe("parseWorkspaceSearch", () => {
+  it("selects the communications demo only within Office without a Code handoff", () => {
+    expect(parseWorkspaceSearch({ space: "office", officeView: "communications" })).toEqual({
+      space: "office",
+      officeView: "communications",
+    });
+    expect(parseWorkspaceSearch({ officeView: "communications" })).toEqual({});
+    expect(parseWorkspaceSearch({ space: "code", officeView: "communications" })).toEqual({});
+    expect(parseWorkspaceSearch({ space: "office", officeView: "unknown" })).toEqual({
+      space: "office",
+    });
+    expect(
+      parseWorkspaceSearch({ space: "office", officeView: "communications", prepare: "true" }),
+    ).toEqual({ prepare: true });
+  });
   it("selects Office only for a supported space and preserves Code handoffs", () => {
     expect(parseWorkspaceSearch({ space: "office" })).toEqual({ space: "office" });
     expect(parseWorkspaceSearch({ space: "unknown" })).toEqual({});
