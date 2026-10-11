@@ -637,6 +637,9 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
       "!apps/desktop/prod-resources/wsl-runtime.tar.gz.sha256",
       "!apps/desktop/gnome-extension",
       "!apps/desktop/gnome-extension/**/*",
+      "!apps/desktop/prod-resources/talk",
+      "!apps/desktop/prod-resources/talk/**/*",
+      "!apps/desktop/prod-resources/office-oauth.json",
     ]);
     assert.equal(WINDOWS_SERVER_RESOURCE_SOURCE_DIR, "apps/desktop/prod-resources/windows-server");
     assert.deepStrictEqual(WINDOWS_SERVER_EXTRA_RESOURCES, [
@@ -711,6 +714,8 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
           to: "resource-monitor",
         },
         ...WINDOWS_SERVER_EXTRA_RESOURCES,
+        { from: "apps/desktop/prod-resources/talk", to: "talk" },
+        { from: "apps/desktop/prod-resources/office-oauth.json", to: "office-oauth.json" },
         ...WSL_RUNTIME_EXTRA_RESOURCES,
       ]);
       // No Linux CLI archive means staging never writes the runtime, so
@@ -721,6 +726,8 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
           to: "resource-monitor",
         },
         ...WINDOWS_SERVER_EXTRA_RESOURCES,
+        { from: "apps/desktop/prod-resources/talk", to: "talk" },
+        { from: "apps/desktop/prod-resources/office-oauth.json", to: "office-oauth.json" },
       ]);
       assert.deepStrictEqual(win.nsis, { differentialPackage: true });
       // The Claude SDK platform packages and .bin shims never ship.
