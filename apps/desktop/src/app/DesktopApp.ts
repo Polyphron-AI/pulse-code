@@ -12,6 +12,7 @@ import * as ElectronDialog from "../electron/ElectronDialog.ts";
 import * as ElectronProtocol from "../electron/ElectronProtocol.ts";
 import * as ElectronSafeStorage from "../electron/ElectronSafeStorage.ts";
 import { installDesktopIpcHandlers } from "../ipc/DesktopIpcHandlers.ts";
+import { installOfficeRuntime } from "../office/OfficeRuntime.ts";
 import * as DesktopAppActivation from "./DesktopAppActivation.ts";
 import * as DesktopAppIdentity from "./DesktopAppIdentity.ts";
 import * as DesktopClerk from "./DesktopClerk.ts";
@@ -34,6 +35,7 @@ import * as DesktopSnapShot from "../snapShot/DesktopSnapShot.ts";
 import * as DesktopWslBackend from "../wsl/DesktopWslBackend.ts";
 
 const DEFAULT_DESKTOP_BACKEND_PORT = 3773;
+let officeRuntime: Awaited<ReturnType<typeof installOfficeRuntime>> | undefined;
 const MAX_TCP_PORT = 65_535;
 const DESKTOP_BACKEND_PORT_PROBE_HOSTS = ["127.0.0.1", "0.0.0.0", "::"] as const;
 
@@ -178,6 +180,15 @@ const bootstrap = Effect.gen(function* () {
     clerkFrontendApiHostname: DesktopClerk.desktopClerkFrontendApiHostname,
   });
   yield* installDesktopIpcHandlers();
+  const appIdentity = yield* DesktopAppIdentity.DesktopAppIdentity;
+  const officeStateDir = yield* appIdentity.resolveUserDataPath;
+  officeRuntime = yield* Effect.promise(() =>
+    installOfficeRuntime({
+      stateDir: officeStateDir,
+      platform: environment.platform,
+      scheme: ElectronProtocol.getDesktopScheme(environment.isDevelopment),
+    }),
+  );
   yield* logBootstrapInfo("bootstrap ipc handlers registered");
 
   yield* snapShot.initialize;
@@ -344,7 +355,10 @@ const scopedProgram = Effect.scoped(
       // cascade, so leaving the WSL instance for its parent scope
       // finalizer means it gets hard-killed by the OS instead of
       // receiving SIGTERM + grace.
-      stopAllPoolInstances().pipe(Effect.ensuring(shutdown.markComplete)),
+      Effect.promise(async () => {
+        await officeRuntime?.close();
+        officeRuntime = undefined;
+      }).pipe(Effect.ensuring(stopAllPoolInstances()), Effect.ensuring(shutdown.markComplete)),
     );
 
     yield* startup;
