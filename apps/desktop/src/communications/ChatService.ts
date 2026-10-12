@@ -4,7 +4,7 @@ import * as Schema from "effect/Schema";
 import { ChatAccount, ChatRequest, ChatResult } from "@t3tools/contracts";
 import { ChatError, type ChatAdapter } from "./ChatAdapter.ts";
 import { connectRestChat, restoreRestChat } from "./RestChatAdapter.ts";
-import { beginTelegram, restoreTelegram, type TelegramLogin } from "./TelegramAdapter.ts";
+import type { TelegramLogin } from "./TelegramAdapter.ts";
 
 const Document = Schema.Struct({
   version: Schema.Literal(1),
@@ -17,7 +17,14 @@ const decodeDocument = Schema.decodeUnknownSync(Document);
 const decodeRequest = Schema.decodeUnknownSync(ChatRequest);
 const decodeResult = Schema.decodeUnknownSync(ChatResult);
 const CHALLENGE_LIFETIME = 10 * 60 * 1000;
-const DEFAULT_FACTORIES = { connectRestChat, restoreRestChat, beginTelegram, restoreTelegram };
+const DEFAULT_FACTORIES = {
+  connectRestChat,
+  restoreRestChat,
+  beginTelegram: async (input: { apiId: number; apiHash: string; phone: string }) =>
+    (await import("./TelegramAdapter.ts")).beginTelegram(input),
+  restoreTelegram: async (credentials: unknown) =>
+    (await import("./TelegramAdapter.ts")).restoreTelegram(credentials),
+};
 
 export class ChatService {
   private document: typeof Document.Type | undefined;
