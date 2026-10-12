@@ -402,6 +402,14 @@ export class OfficeService {
         await this.connected(request.accountId);
         return { ok: true, message };
       }
+      case "mail.thread": {
+        const thread = await this.providers.thread(
+          await this.context(request.accountId, "mail"),
+          request.messageId,
+        );
+        await this.connected(request.accountId);
+        return { ok: true, thread };
+      }
       case "drafts.list":
         return {
           ok: true,
@@ -423,9 +431,11 @@ export class OfficeService {
             "unsupported",
             "Remove an old local draft before creating another.",
           );
+        const sourceMessageId = request.sourceMessageId ?? existing?.sourceMessageId;
         const draft: OfficeDraft = {
           id: request.id ?? this.id(),
           accountId: request.accountId,
+          ...(sourceMessageId ? { sourceMessageId } : {}),
           to: request.to,
           subject: request.subject,
           text: request.text,

@@ -110,5 +110,10 @@ describe("Office IMAP read adapter", () => {
       unread: true,
     });
     expect(mock.mailboxOptions).toEqual({ readOnly: true });
+    expect(await providers.thread(context(), "42:7")).toMatchObject({
+      messages: [{ id: "42:7", text: "Plain body" }],
+      grouping: "single-message",
+      truncated: false,
+    });
   });
 });

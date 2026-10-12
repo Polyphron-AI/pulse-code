@@ -458,6 +458,7 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
           electron: "41.5.0",
           "electron-updater": "^6.6.2",
           "ffi-rs": "1.3.2",
+          cifrante: "0.5.1",
           "playwright-core": "1.60.0",
         },
         {
@@ -472,6 +473,7 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
         "@crowecawcaw/xa11y": "0.13.0",
         "@napi-rs/keyring": "^1.3.0",
         "ffi-rs": "1.3.2",
+        cifrante: "0.5.1",
         "playwright-core": "1.60.0",
       },
     );

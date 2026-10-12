@@ -48,4 +48,5 @@ export * from "./pulseSkills.ts";
 export * from "./pulseMcp.ts";
 export * from "./pulseDictation.ts";
 export * from "./office.ts";
+export * from "./communications.ts";
 export * from "./talk.ts";

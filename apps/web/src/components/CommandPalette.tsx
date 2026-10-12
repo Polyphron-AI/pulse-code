@@ -1764,7 +1764,7 @@ function OpenCommandPaletteDialog(props: {
     kind: "action",
     value: "action:open-communications",
     searchTerms: ["office", "communications", "discord", "telegram", "slack", "email"],
-    title: "Open Communications concept",
+    title: "Open Communications",
     icon: <MessageSquareIcon className={ITEM_ICON_CLASS} />,
     run: async () => {
       await navigate({
