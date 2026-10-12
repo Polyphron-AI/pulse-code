@@ -8,4 +8,4 @@ In the Windows desktop app, Office supports connected calendar and email account
 
 Local Talk recording and transcription require a desktop build that includes the native Talk worker. Office shows when the worker is unavailable. This does not affect Code dictation.
 
-Communications is an interactive concept using sample conversations. It does not connect to live email, Discord, Slack or Telegram accounts. Messages and saved items in this view last until you leave it.
+Communications reads email from your connected desktop accounts. Email access is read-only, replies save as local drafts, and Later keeps message references on this device. Slack and personal Telegram accounts support text history and replies. Discord connects to bot-accessible team channels and active threads. Unconnected services show no sample conversations.

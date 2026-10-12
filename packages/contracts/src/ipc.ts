@@ -1122,6 +1122,9 @@ export const SystemSettingsPaneSchema = Schema.Literals(["full-disk-access"]);
 export type SystemSettingsPane = typeof SystemSettingsPaneSchema.Type;
 
 export interface DesktopBridge {
+  communicationsInvoke?: (
+    request: import("./communications.ts").ChatRequest,
+  ) => Promise<import("./communications.ts").ChatResult>;
   officeInvoke?: (
     request: import("./office.ts").OfficeRequest,
   ) => Promise<import("./office.ts").OfficeResult>;

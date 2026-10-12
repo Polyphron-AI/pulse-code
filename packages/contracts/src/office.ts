@@ -36,6 +36,7 @@ export type OfficeEvent = typeof OfficeEvent.Type;
 export const OfficeMessage = Schema.Struct({
   id: Id,
   accountId: Id,
+  conversationId: Schema.optionalKey(Id),
   subject: ShortText,
   from: ShortText,
   to: ShortText,
@@ -45,9 +46,16 @@ export const OfficeMessage = Schema.Struct({
   text: Schema.optionalKey(Body),
 });
 export type OfficeMessage = typeof OfficeMessage.Type;
+export const OfficeMailThread = Schema.Struct({
+  messages: Schema.Array(OfficeMessage).check(Schema.isMaxLength(50)),
+  grouping: Schema.Literals(["provider", "single-message"]),
+  truncated: Schema.Boolean,
+});
+export type OfficeMailThread = typeof OfficeMailThread.Type;
 export const OfficeDraft = Schema.Struct({
   id: Id,
   accountId: Id,
+  sourceMessageId: Schema.optionalKey(Id),
   to: ShortText,
   subject: ShortText,
   text: Body,
@@ -90,10 +98,12 @@ export const OfficeRequest = Schema.Union([
   Schema.Struct({ operation: Schema.Literal("calendars.refresh"), ...EventInput }),
   Schema.Struct({ operation: Schema.Literal("mail.list"), ...PageInput }),
   Schema.Struct({ operation: Schema.Literal("mail.get"), ...AccountInput, messageId: Id }),
+  Schema.Struct({ operation: Schema.Literal("mail.thread"), ...AccountInput, messageId: Id }),
   Schema.Struct({ operation: Schema.Literal("drafts.list"), accountId: Schema.optionalKey(Id) }),
   Schema.Struct({
     operation: Schema.Literal("drafts.save"),
     ...AccountInput,
+    sourceMessageId: Schema.optionalKey(Id),
     id: Schema.optionalKey(Id),
     to: ShortText,
     subject: ShortText,
@@ -113,6 +123,7 @@ export const OfficeResult = Schema.Union([
     events: Schema.optionalKey(Schema.Array(OfficeEvent)),
     messages: Schema.optionalKey(Schema.Array(OfficeMessage)),
     message: Schema.optionalKey(OfficeMessage),
+    thread: Schema.optionalKey(OfficeMailThread),
     drafts: Schema.optionalKey(Schema.Array(OfficeDraft)),
     nextCursor: Schema.optionalKey(Schema.String),
   }),

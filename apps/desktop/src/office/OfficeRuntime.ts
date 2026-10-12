@@ -3,7 +3,15 @@ import { app, dialog, globalShortcut, ipcMain, safeStorage, shell } from "electr
 import * as NodeFSP from "node:fs/promises";
 import * as NodePath from "node:path";
 import * as Schema from "effect/Schema";
-import { OfficeRequest, OfficeResult, TalkRequest, TalkResult } from "@t3tools/contracts";
+import {
+  OfficeRequest,
+  OfficeResult,
+  TalkRequest,
+  TalkResult,
+  ChatRequest,
+  ChatResult,
+} from "@t3tools/contracts";
+import { ChatService } from "../communications/ChatService.ts";
 import { OfficeService } from "./OfficeService.ts";
 import { encryptedOfficeStorage } from "./EncryptedOfficeStorage.ts";
 import { TalkWorkerClient } from "../talk/TalkWorkerClient.ts";
@@ -13,6 +21,9 @@ import { readDictationHistory } from "../talk/TalkDictationHistory.ts";
 import { createDictationIndicator } from "../talk/TalkDictationIndicator.ts";
 import { loadOfficeOAuthConfiguration } from "./OfficeOAuthConfig.ts";
 import { recordingAudioPath } from "../talk/TalkAudioPath.ts";
+
+const decodeChatRequest = Schema.decodeUnknownSync(ChatRequest);
+const decodeChatResult = Schema.decodeUnknownSync(ChatResult);
 
 const decodeOfficeRequest = Schema.decodeUnknownSync(OfficeRequest);
 
@@ -59,6 +70,19 @@ export async function installOfficeRuntime(options: {
     }),
     openExternal: (url) => shell.openExternal(url),
     oauth,
+  });
+  const chat = new ChatService({
+    storage: encryptedOfficeStorage(
+      NodePath.join(options.stateDir, "office", "chat-accounts.bin"),
+      {
+        available: () =>
+          safeStorage.isEncryptionAvailable() &&
+          (options.platform !== "linux" ||
+            safeStorage.getSelectedStorageBackend() !== "basic_text"),
+        encrypt: (value) => safeStorage.encryptString(value),
+        decrypt: (value) => safeStorage.decryptString(Buffer.from(value)),
+      },
+    ),
   });
   const dataDir = NodePath.join(options.stateDir, "talk");
   const workerPath =
@@ -136,6 +160,23 @@ export async function installOfficeRuntime(options: {
       return { ok: false, error: { code: "setup_required", message: oauthError } };
     return decodeOfficeResult(await office.invoke(request));
   });
+  ipcMain.handle("pulse:communications", async (event, raw: unknown) => {
+    if (
+      !isTrustedOfficeFrame(
+        event.senderFrame?.url ?? "",
+        event.senderFrame === event.sender.mainFrame,
+        options.scheme,
+      )
+    )
+      return denied;
+    let request: ChatRequest;
+    try {
+      request = decodeChatRequest(raw);
+    } catch {
+      return denied;
+    }
+    return decodeChatResult(await chat.invoke(request));
+  });
   ipcMain.handle("pulse:talk", async (event, raw: unknown) => {
     if (
       !isTrustedOfficeFrame(
@@ -157,7 +198,8 @@ export async function installOfficeRuntime(options: {
     async close() {
       ipcMain.removeHandler("pulse:office");
       ipcMain.removeHandler("pulse:talk");
-      await Promise.allSettled([talk.close(), office.close()]);
+      ipcMain.removeHandler("pulse:communications");
+      await Promise.allSettled([talk.close(), office.close(), chat.close()]);
     },
   };
 }

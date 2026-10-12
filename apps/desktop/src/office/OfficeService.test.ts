@@ -43,6 +43,22 @@ function fixture(overrides: Partial<OfficeServiceOptions> = {}) {
       text: "Hello",
       unread: true,
     }),
+    thread: async ({ account }, id) => ({
+      messages: [
+        {
+          id,
+          accountId: account.id,
+          subject: "Thread",
+          from: "sender@example.com",
+          to: account.email,
+          date: "",
+          preview: "",
+          unread: true,
+        },
+      ],
+      grouping: "provider",
+      truncated: false,
+    }),
     close: async () => {
       calls.push("close");
     },
@@ -79,6 +95,32 @@ const connect = (service: OfficeService) =>
   });
 
 describe("OfficeService", () => {
+  it("reads threads only through the selected mail account and rejects unknown accounts", async () => {
+    const setup = fixture();
+    await connect(setup.service);
+    expect(
+      await setup.service.invoke({
+        operation: "mail.thread",
+        accountId: "id-1",
+        messageId: "selected",
+      }),
+    ).toMatchObject({
+      ok: true,
+      thread: {
+        messages: [{ id: "selected", accountId: "id-1" }],
+        grouping: "provider",
+        truncated: false,
+      },
+    });
+    expect(
+      await setup.service.invoke({
+        operation: "mail.thread",
+        accountId: "missing",
+        messageId: "selected",
+      }),
+    ).toMatchObject({ ok: false, error: { code: "not_found" } });
+    await setup.service.close();
+  });
   it("persists protected host state across restart without exposing tokens to the renderer", async () => {
     const setup = fixture();
     const result = await connect(setup.service);
@@ -144,15 +186,19 @@ describe("OfficeService", () => {
     expect(
       await setup.service.invoke({
         operation: "drafts.save",
+        sourceMessageId: "42:7",
         accountId: "id-1",
         to: "recipient@example.com",
         subject: "Local",
         text: "Do not send",
       }),
-    ).toMatchObject({ ok: true, drafts: [{ id: "id-2", text: "Do not send" }] });
+    ).toMatchObject({
+      ok: true,
+      drafts: [{ id: "id-2", text: "Do not send", sourceMessageId: "42:7" }],
+    });
     const restarted = new OfficeService(setup.options);
     expect(await restarted.invoke({ operation: "drafts.list" })).toMatchObject({
-      drafts: [{ id: "id-2" }],
+      drafts: [{ id: "id-2", sourceMessageId: "42:7" }],
     });
     expect(setup.calls).toEqual([]);
     await restarted.invoke({ operation: "accounts.disconnect", accountId: "id-1" });

@@ -119,8 +119,9 @@ tested against. An installer with no recorded hash is not evidence.
 
 ### Office and optional Talk worker
 
-Windows builds include Office and the Communications concept. Communications
-uses sample data and does not send messages to external services.
+Windows builds include Office and Communications. Communications reads connected
+Office mail accounts through desktop IPC and saves replies as local drafts. It
+does not send email or populate unconnected services with sample messages.
 
 Set `PULSE_TALK_WORKER_DIR` to a Windows x64 Talk worker package to include local
 Office recording and transcription. The package must contain `manifest.json`

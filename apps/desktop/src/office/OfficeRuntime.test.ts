@@ -44,6 +44,27 @@ describe("Office IPC caller isolation", () => {
           message: expect.stringContaining("configuration is invalid"),
         },
       });
+      const chatHandler = vi
+        .mocked(ipcMain.handle)
+        .mock.calls.find(([channel]) => channel === "pulse:communications")?.[1];
+      expect(chatHandler).toBeDefined();
+      const foreignFrame = { url: "https://slack.com/" };
+      expect(
+        await chatHandler!(
+          {
+            senderFrame: foreignFrame,
+            sender: { mainFrame: foreignFrame },
+          } as unknown as Parameters<NonNullable<typeof chatHandler>>[0],
+          { operation: "accounts.list" },
+        ),
+      ).toMatchObject({ ok: false, error: { code: "invalid_request" } });
+      expect(
+        await chatHandler!(event, {
+          operation: "accounts.connectToken",
+          provider: "discord",
+          token: "",
+        }),
+      ).toMatchObject({ ok: false, error: { code: "invalid_request" } });
     } finally {
       await runtime.close();
       config.mockRestore();

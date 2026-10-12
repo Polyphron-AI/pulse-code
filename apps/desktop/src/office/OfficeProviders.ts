@@ -1,4 +1,11 @@
-import type { OfficeAccount, OfficeCalendar, OfficeEvent, OfficeMessage } from "@t3tools/contracts";
+// @effect-diagnostics globalDate:off -- Provider adapters normalize source timestamps without a runtime clock.
+import type {
+  OfficeAccount,
+  OfficeCalendar,
+  OfficeEvent,
+  OfficeMailThread,
+  OfficeMessage,
+} from "@t3tools/contracts";
 import { OfficeError, items, object, responseJson, string } from "./OfficeErrors.ts";
 import type { OAuthTokens } from "./OfficeOAuth.ts";
 
@@ -32,6 +39,7 @@ export interface OfficeProviders {
     limit: number,
   ) => Promise<MessagePage>;
   message: (context: ProviderContext, id: string) => Promise<OfficeMessage>;
+  thread: (context: ProviderContext, id: string) => Promise<OfficeMailThread>;
   close: () => Promise<void>;
 }
 const text = (value: unknown, max = 4096) => string(value).slice(0, max);
@@ -75,6 +83,13 @@ export function createOfficeProviders(
       context,
       `https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(id)}?${query}`,
     );
+    return mapGoogleMessage(context, result, full);
+  };
+  const mapGoogleMessage = (
+    context: ProviderContext,
+    result: Record<string, unknown>,
+    full: boolean,
+  ): OfficeMessage => {
     const payload = object(result.payload);
     const headers = items(payload.headers).map(object);
     const header = (name: string) =>
@@ -92,10 +107,15 @@ export function createOfficeProviders(
     return {
       id: safeId(result.id),
       accountId: context.account.id,
+      ...(result.threadId ? { conversationId: safeId(result.threadId) } : {}),
       subject: header("subject"),
       from: header("from"),
       to: header("to"),
-      date: header("date"),
+      date:
+        /^\d+$/.test(string(result.internalDate)) &&
+        Number.isFinite(new Date(Number(result.internalDate)).getTime())
+          ? new Date(Number(result.internalDate)).toISOString()
+          : header("date"),
       preview: text(result.snippet),
       unread: items(result.labelIds).includes("UNREAD"),
       ...(full
@@ -114,6 +134,7 @@ export function createOfficeProviders(
   ): OfficeMessage => ({
     id: safeId(result.id),
     accountId: context.account.id,
+    ...(result.conversationId ? { conversationId: safeId(result.conversationId) } : {}),
     subject: text(result.subject),
     from: address(result.from),
     to: items(result.toRecipients).map(address).join(", ").slice(0, 4096),
@@ -179,7 +200,7 @@ export function createOfficeProviders(
       throw new OfficeError("authentication", "Reconnect the IMAP account.");
     return context.credentials.imap;
   };
-  return {
+  const providers: OfficeProviders = {
     verifyImap: (input, signal) => withImap(input, signal, async () => {}),
     calendars: async (context) => {
       if (context.account.provider !== "google")
@@ -277,7 +298,7 @@ export function createOfficeProviders(
         };
       }
       if (context.account.provider === "microsoft") {
-        const initial = `https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages?${new URLSearchParams({ $top: String(limit), $orderby: "receivedDateTime desc", $select: "id,subject,from,toRecipients,receivedDateTime,bodyPreview,isRead" })}`;
+        const initial = `https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages?${new URLSearchParams({ $top: String(limit), $orderby: "receivedDateTime desc", $select: "id,conversationId,subject,from,toRecipients,receivedDateTime,bodyPreview,isRead" })}`;
         const url = new URL(cursor || initial);
         if (
           url.origin !== "https://graph.microsoft.com" ||
@@ -334,7 +355,7 @@ export function createOfficeProviders(
           context,
           await get(
             context,
-            `https://graph.microsoft.com/v1.0/me/messages/${encodeURIComponent(id)}?$select=id,subject,from,toRecipients,receivedDateTime,bodyPreview,isRead,body`,
+            `https://graph.microsoft.com/v1.0/me/messages/${encodeURIComponent(id)}?$select=id,conversationId,subject,from,toRecipients,receivedDateTime,bodyPreview,isRead,body`,
             { Prefer: 'outlook.body-content-type="text"' },
           ),
           true,
@@ -379,9 +400,49 @@ export function createOfficeProviders(
         };
       });
     },
+    thread: async (context, id) => {
+      const selected = await providers.message(context, id);
+      if (!selected.conversationId || context.account.provider === "imap")
+        return { messages: [selected], grouping: "single-message", truncated: false };
+      let messages: OfficeMessage[];
+      let truncated: boolean;
+      if (context.account.provider === "google") {
+        const result = await get(
+          context,
+          `https://gmail.googleapis.com/gmail/v1/users/me/threads/${encodeURIComponent(selected.conversationId)}?format=full`,
+        );
+        const rows = items(result.messages).map(object);
+        // Bound decoded bodies while retaining the newest source-ordered messages.
+        rows.sort((a, b) => Number(a.internalDate) - Number(b.internalDate));
+        messages = rows.slice(-50).map((row) => mapGoogleMessage(context, row, true));
+        truncated = rows.length > 50;
+      } else {
+        const query = new URLSearchParams({
+          $top: "50",
+          $orderby: "receivedDateTime desc",
+          $filter: `receivedDateTime ge 0001-01-01T00:00:00Z and conversationId eq '${selected.conversationId.replaceAll("'", "''")}'`,
+          $select:
+            "id,conversationId,subject,from,toRecipients,receivedDateTime,bodyPreview,isRead,body",
+        });
+        const result = await get(context, `https://graph.microsoft.com/v1.0/me/messages?${query}`, {
+          Prefer: 'outlook.body-content-type="text"',
+        });
+        const rows = items(result.value);
+        messages = rows.slice(0, 50).map((row) => graphMessage(context, object(row), true));
+        truncated = rows.length > 50 || Boolean(result["@odata.nextLink"]);
+      }
+      if (!messages.length)
+        throw new OfficeError(
+          "not_found",
+          "This conversation is no longer available. Refresh the inbox.",
+        );
+      messages.sort((a, b) => (Date.parse(a.date) || 0) - (Date.parse(b.date) || 0));
+      return { messages, grouping: "provider", truncated };
+    },
     close: async () => {
       for (const client of activeImap) client.close();
       activeImap.clear();
     },
   };
+  return providers;
 }

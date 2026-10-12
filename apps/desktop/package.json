@@ -1,6 +1,6 @@
 {
   "name": "@t3tools/desktop",
-  "version": "0.0.44-pulse.2",
+  "version": "0.0.44-pulse.3",
   "private": true,
   "type": "module",
   "main": "dist-electron/boot.cjs",
@@ -22,6 +22,7 @@
     "@t3tools/shared": "workspace:*",
     "@t3tools/ssh": "workspace:*",
     "@t3tools/tailscale": "workspace:*",
+    "cifrante": "0.5.1",
     "dbus-next": "0.10.2",
     "effect": "catalog:",
     "electron": "44.4.2",
@@ -31,7 +32,8 @@
     "imapflow": "^1.7.8",
     "mailparser": "^3.9.22",
     "playwright-core": "1.60.0",
-    "react-grab": "^0.1.32"
+    "react-grab": "^0.1.32",
+    "teleproto": "1.230.0"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",

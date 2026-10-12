@@ -17,6 +17,74 @@ function context(provider: "google" | "microsoft" = "google"): ProviderContext {
 }
 
 describe("Office read adapters", () => {
+  it("loads a Gmail thread by native identity and bounds chronological plain-text messages", async () => {
+    const providers = createOfficeProviders(async (input) => {
+      const url = new URL(String(input));
+      if (url.pathname.includes("/messages/"))
+        return Response.json({ id: "selected", threadId: "native-thread", payload: {} });
+      expect(url.pathname).toBe("/gmail/v1/users/me/threads/native-thread");
+      expect(url.searchParams.get("format")).toBe("full");
+      return Response.json({
+        messages: Array.from({ length: 51 }, (_, index) => ({
+          id: String(index),
+          threadId: "native-thread",
+          internalDate: String(index * 1000),
+          payload: {
+            mimeType: "text/plain",
+            body: { data: Buffer.from(`Body ${index}`).toString("base64url") },
+          },
+        })).toReversed(),
+      });
+    });
+    const thread = await providers.thread(context(), "selected");
+    expect(thread).toMatchObject({ grouping: "provider", truncated: true });
+    expect(thread.messages).toHaveLength(50);
+    expect(thread.messages[0]).toMatchObject({
+      id: "1",
+      text: "Body 1",
+      conversationId: "native-thread",
+    });
+    expect(thread.messages.at(-1)?.id).toBe("50");
+  });
+
+  it("escapes Graph conversation filters, requests text bodies and reports partial threads", async () => {
+    const row = {
+      id: "selected",
+      conversationId: "native'conversation",
+      receivedDateTime: "2026-09-08T00:00:00Z",
+      body: { contentType: "text", content: "Selected body" },
+    };
+    const providers = createOfficeProviders(async (input, init) => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith("/selected")) return Response.json(row);
+      expect(url.pathname).toBe("/v1.0/me/messages");
+      expect(url.searchParams.get("$filter")).toBe(
+        "receivedDateTime ge 0001-01-01T00:00:00Z and conversationId eq 'native''conversation'",
+      );
+      expect(url.searchParams.get("$top")).toBe("50");
+      expect(new Headers(init?.headers).get("Prefer")).toBe('outlook.body-content-type="text"');
+      return Response.json({
+        value: [row],
+        "@odata.nextLink": "https://graph.microsoft.com/v1.0/me/messages?$skip=50",
+      });
+    });
+    expect(await providers.thread(context("microsoft"), "selected")).toMatchObject({
+      grouping: "provider",
+      truncated: true,
+      messages: [{ text: "Selected body", conversationId: "native'conversation" }],
+    });
+  });
+
+  it("does not invent a conversation from a missing native thread identity", async () => {
+    const providers = createOfficeProviders(async () =>
+      Response.json({ id: "selected", payload: {} }),
+    );
+    expect(await providers.thread(context(), "selected")).toMatchObject({
+      grouping: "single-message",
+      truncated: false,
+      messages: [{ id: "selected" }],
+    });
+  });
   it("paginates Google calendars and events, expands recurrences and omits cancelled events", async () => {
     const urls: URL[] = [];
     const providers = createOfficeProviders(async (input, init) => {
