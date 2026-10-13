@@ -10,6 +10,7 @@ import * as Path from "effect/Path";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
 import * as PubSub from "effect/PubSub";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
@@ -386,6 +387,159 @@ it.layer(Layer.mergeAll(TestNodeServices, ServerSettingsModule.layerTest(), Test
   "ProviderRegistry",
   (it) => {
     describe("checkCodexProviderStatus", () => {
+      it.effect("keeps the Codex response deadline at 20 seconds and awaits probe cleanup", () => {
+        const warnings: Array<unknown> = [];
+        const logger = Logger.make<unknown, void>(({ logLevel, message }) => {
+          if (logLevel === "Warn") warnings.push(message);
+        });
+        return Effect.gen(function* () {
+          const started = yield* Deferred.make<void>();
+          const cleaning = yield* Deferred.make<void>();
+          const finishCleanup = yield* Deferred.make<void>();
+          let completed = false;
+          const statusFiber = yield* checkCodexProviderStatus(defaultCodexSettings, () =>
+            Effect.gen(function* () {
+              yield* Effect.addFinalizer(() =>
+                Deferred.succeed(cleaning, undefined).pipe(
+                  Effect.andThen(Deferred.await(finishCleanup)),
+                ),
+              );
+              yield* Deferred.succeed(started, undefined);
+              return yield* Effect.never;
+            }),
+          ).pipe(
+            Effect.tap(() =>
+              Effect.sync(() => {
+                completed = true;
+              }),
+            ),
+            Effect.forkChild,
+          );
+          yield* Effect.gen(function* () {
+            yield* Deferred.await(started);
+            yield* TestClock.adjust(9_999);
+            assert.deepStrictEqual(warnings, []);
+            assert.isFalse(yield* Deferred.isDone(cleaning));
+            yield* TestClock.adjust(1);
+            assert.deepStrictEqual(warnings, [
+              [
+                "Codex provider status response is taking longer than 10 seconds.",
+                {
+                  elapsedMs: 10_000,
+                  responseTimeoutMs: 20_000,
+                },
+              ],
+            ]);
+            assert.isFalse(completed);
+            assert.isFalse(yield* Deferred.isDone(cleaning));
+            yield* TestClock.adjust(9_999);
+            assert.isFalse(yield* Deferred.isDone(cleaning));
+            yield* TestClock.adjust(1);
+            yield* Deferred.await(cleaning);
+            assert.isFalse(completed);
+            yield* Deferred.succeed(finishCleanup, undefined);
+            const status = yield* Fiber.join(statusFiber);
+            assert.strictEqual(status.status, "error");
+            assert.strictEqual(
+              status.message,
+              "Timed out while checking Codex app-server provider status.",
+            );
+            assert.lengthOf(warnings, 1);
+          }).pipe(Effect.ensuring(Deferred.succeed(finishCleanup, undefined)));
+        }).pipe(Effect.provide(Logger.layer([logger], { mergeWithExisting: false })));
+      });
+
+      it.effect.each([
+        { responseMs: 1_000, cleanupMs: 0, warningCount: 0 },
+        { responseMs: 15_000, cleanupMs: 0, warningCount: 1 },
+        { responseMs: 1_000, cleanupMs: 25_000, warningCount: 0 },
+      ])(
+        "returns ready for response $responseMs ms and cleanup $cleanupMs ms",
+        ({ responseMs, cleanupMs, warningCount }) => {
+          const warnings: Array<unknown> = [];
+          const logger = Logger.make<unknown, void>(({ logLevel, message }) => {
+            if (logLevel === "Warn") warnings.push(message);
+          });
+          return Effect.gen(function* () {
+            const started = yield* Deferred.make<void>();
+            const cleaning = yield* Deferred.make<void>();
+            const cleaned = yield* Ref.make(false);
+            const statusFiber = yield* checkCodexProviderStatus(defaultCodexSettings, () =>
+              Effect.gen(function* () {
+                yield* Effect.addFinalizer(() =>
+                  Deferred.succeed(cleaning, undefined).pipe(
+                    Effect.andThen(Effect.sleep(cleanupMs)),
+                    Effect.andThen(Ref.set(cleaned, true)),
+                  ),
+                );
+                yield* Deferred.succeed(started, undefined);
+                yield* Effect.sleep(responseMs);
+                return makeCodexProbeSnapshot();
+              }),
+            ).pipe(Effect.forkChild);
+            yield* Deferred.await(started);
+            yield* TestClock.adjust(responseMs);
+            yield* Deferred.await(cleaning);
+            yield* TestClock.adjust(cleanupMs);
+            const status = yield* Fiber.join(statusFiber);
+            assert.strictEqual(status.status, "ready");
+            assert.strictEqual(status.auth.status, "authenticated");
+            assert.strictEqual(yield* Ref.get(cleaned), true);
+            assert.lengthOf(warnings, warningCount);
+            yield* TestClock.adjust("30 seconds");
+            assert.lengthOf(warnings, warningCount);
+          }).pipe(Effect.provide(Logger.layer([logger], { mergeWithExisting: false })));
+        },
+      );
+
+      it.effect("cleans up a failed response and stops the slow-response flag", () => {
+        const warnings: Array<unknown> = [];
+        const logger = Logger.make<unknown, void>(({ logLevel, message }) => {
+          if (logLevel === "Warn") warnings.push(message);
+        });
+        return Effect.gen(function* () {
+          const cleaned = yield* Ref.make(false);
+          const status = yield* checkCodexProviderStatus(defaultCodexSettings, () =>
+            Effect.gen(function* () {
+              yield* Effect.addFinalizer(() => Ref.set(cleaned, true));
+              return yield* Effect.fail(
+                new CodexErrors.CodexAppServerSpawnError({
+                  command: "codex app-server",
+                  cause: new Error("spawn ENOENT"),
+                }),
+              );
+            }),
+          );
+          assert.strictEqual(status.status, "error");
+          assert.strictEqual(yield* Ref.get(cleaned), true);
+          yield* TestClock.adjust("30 seconds");
+          assert.deepStrictEqual(warnings, []);
+        }).pipe(Effect.provide(Logger.layer([logger], { mergeWithExisting: false })));
+      });
+
+      it.effect("cleans up a cancelled response and stops the slow-response flag", () => {
+        const warnings: Array<unknown> = [];
+        const logger = Logger.make<unknown, void>(({ logLevel, message }) => {
+          if (logLevel === "Warn") warnings.push(message);
+        });
+        return Effect.gen(function* () {
+          const started = yield* Deferred.make<void>();
+          const cleaned = yield* Ref.make(false);
+          const statusFiber = yield* checkCodexProviderStatus(defaultCodexSettings, () =>
+            Effect.gen(function* () {
+              yield* Effect.addFinalizer(() => Ref.set(cleaned, true));
+              yield* Deferred.succeed(started, undefined);
+              return yield* Effect.never;
+            }),
+          ).pipe(Effect.forkChild);
+          yield* Deferred.await(started);
+          yield* Fiber.interrupt(statusFiber);
+          assert.strictEqual(yield* Ref.get(cleaned), true);
+          yield* TestClock.adjust("30 seconds");
+          assert.deepStrictEqual(warnings, []);
+        }).pipe(Effect.provide(Logger.layer([logger], { mergeWithExisting: false })));
+      });
+
       it.effect("uses the app-server account and model list for provider status", () =>
         Effect.gen(function* () {
           const status = yield* checkCodexProviderStatus(defaultCodexSettings, () =>
@@ -575,7 +729,7 @@ it.layer(Layer.mergeAll(TestNodeServices, ServerSettingsModule.layerTest(), Test
           );
 
           yield* Effect.yieldNow;
-          yield* TestClock.adjust("11 seconds");
+          yield* TestClock.adjust("21 seconds");
           yield* Effect.yieldNow;
 
           const status = yield* Fiber.join(statusFiber);

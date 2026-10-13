@@ -33,7 +33,6 @@ import {
 import { resolveSpawnCommand } from "@t3tools/shared/shell";
 import { codexAppServerArgs, resolveCodexLaunchArgs } from "./codexLaunchArgs.ts";
 import {
-  AUTH_PROBE_TIMEOUT_MS,
   buildServerProvider,
   COMPACT_SLASH_COMMAND,
   type ServerProviderDraft,
@@ -49,6 +48,9 @@ import {
 import packageJson from "../../../package.json" with { type: "json" };
 const isCodexAppServerSpawnError = Schema.is(CodexErrors.CodexAppServerSpawnError);
 const RATE_LIMITS_PROBE_TIMEOUT_MS = 3_000;
+// Operator-selected on 2026-10-13: flag slow responses at 10s, allow up to 20s.
+const CODEX_PROBE_WARNING_AFTER_MS = 10_000;
+const CODEX_PROBE_RESPONSE_TIMEOUT_MS = 20_000;
 
 type CodexRateLimitsProbe =
   | {
@@ -623,8 +625,20 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
     environment: resolvedEnvironment,
     ...(managedAuth ? { skipNativeUsage: true } : {}),
   }).pipe(
+    Effect.raceFirst(
+      Effect.sleep(Duration.millis(CODEX_PROBE_WARNING_AFTER_MS)).pipe(
+        Effect.andThen(
+          Effect.logWarning("Codex provider status response is taking longer than 10 seconds.", {
+            elapsedMs: CODEX_PROBE_WARNING_AFTER_MS,
+            responseTimeoutMs: CODEX_PROBE_RESPONSE_TIMEOUT_MS,
+          }),
+        ),
+        Effect.andThen(Effect.never),
+      ),
+    ),
+    // Cleanup still runs to completion, but cannot discard a successful response.
+    Effect.timeoutOption(Duration.millis(CODEX_PROBE_RESPONSE_TIMEOUT_MS)),
     Effect.scoped,
-    Effect.timeoutOption(Duration.millis(AUTH_PROBE_TIMEOUT_MS)),
     Effect.result,
   );
 
