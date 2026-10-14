@@ -61,6 +61,48 @@ function setup() {
 }
 
 describe("native communications account ownership", () => {
+  it("routes membership to its account and reports unsupported adapters", async () => {
+    const s = setup();
+    await s.service.invoke({
+      operation: "accounts.connectToken",
+      provider: "slack",
+      token: "private-token",
+    });
+    expect(
+      await s.service.invoke({
+        operation: "members.list",
+        accountId: "id-1",
+        conversationId: "C1",
+      }),
+    ).toMatchObject({ ok: false, error: { code: "unsupported" } });
+    s.adapter.members = vi.fn(async () => ({
+      scope: "channel" as const,
+      title: "Channel",
+      members: [{ id: "U1", displayName: "Alex" }],
+      note: "Source membership",
+      nextCursor: "next",
+    }));
+    expect(
+      await s.service.invoke({
+        operation: "members.list",
+        accountId: "id-1",
+        conversationId: "C1",
+        cursor: "page",
+      }),
+    ).toMatchObject({
+      ok: true,
+      membership: { scope: "channel", members: [{ id: "U1" }], nextCursor: "next" },
+    });
+    expect(s.adapter.members).toHaveBeenCalledWith("id-1", "C1", "page");
+    expect(
+      await s.service.invoke({
+        operation: "members.list",
+        accountId: "missing",
+        conversationId: "C1",
+      }),
+    ).toMatchObject({ ok: false, error: { code: "not_found" } });
+    await s.service.close();
+  });
   it("stores credentials privately and restores accounts without exposing credentials", async () => {
     const s = setup();
     const connected = await s.service.invoke({

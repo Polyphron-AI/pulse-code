@@ -2,6 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import type { ChatMessage } from "@t3tools/contracts";
 import {
   chatReferenceKey,
+  chatTextParts,
   createRequestQueue,
   mergeChatMessages,
   sendAttempt,
@@ -16,6 +17,20 @@ const message = (id: string, date: string, text: string): ChatMessage => ({
   author: "Alex",
 });
 describe("communications chat state", () => {
+  it("routes web links while preserving surrounding message text and punctuation", () => {
+    const input =
+      "Review https://github.com/team/repo/pull/42, then <https://docs.google.com/document/d/123|brief>.";
+    const parts = chatTextParts(input);
+    expect(parts.map((part) => part.text).join("")).toBe(input);
+    expect(parts.flatMap((part) => (part.href ? [part.href] : []))).toEqual([
+      "https://github.com/team/repo/pull/42",
+      "https://docs.google.com/document/d/123",
+    ]);
+  });
+  it("leaves executable, local and malformed links as plain text", () => {
+    const input = "javascript:alert(1) file:///private data:text/html,x https:// https://%";
+    expect(chatTextParts(input)).toEqual([{ text: input }]);
+  });
   it("keeps provider and colon-bearing IDs distinct in local saved references", () => {
     const base = { provider: "slack", accountId: "a:b", conversationId: "c", messageId: "d" };
     expect(chatReferenceKey(base)).not.toBe(

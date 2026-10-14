@@ -1,4 +1,9 @@
-import type { ChatAccount, ChatConversation, ChatMessage } from "@t3tools/contracts";
+import type {
+  ChatAccount,
+  ChatConversation,
+  ChatMessage,
+  ChatMembership,
+} from "@t3tools/contracts";
 
 export interface ChatAdapter {
   account: Omit<ChatAccount, "id">;
@@ -7,6 +12,12 @@ export interface ChatAdapter {
     accountId: string,
     cursor?: string,
   ): Promise<{ conversations: ChatConversation[]; nextCursor?: string }>;
+  members?(
+    accountId: string,
+    conversationId: string,
+    cursor?: string,
+    channelOnly?: boolean,
+  ): Promise<ChatMembership>;
   messages(
     accountId: string,
     conversationId: string,

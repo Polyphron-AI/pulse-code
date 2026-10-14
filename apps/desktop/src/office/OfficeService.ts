@@ -206,7 +206,10 @@ export class OfficeService {
       throw new OfficeError("not_found", "The Office account was disconnected or does not exist.");
     return entry;
   }
-  private async context(id: string, capability: "mail" | "calendar"): Promise<ProviderContext> {
+  private async context(
+    id: string,
+    capability: OfficeAccount["capabilities"][number],
+  ): Promise<ProviderContext> {
     let entry = this.find(id);
     if (!entry.account.capabilities.includes(capability))
       throw new OfficeError("unsupported", `This account is not connected for ${capability}.`);
@@ -268,11 +271,31 @@ export class OfficeService {
         return this.accounts();
       case "accounts.connectOAuth": {
         oauthEndpoints(request.provider, this.options.oauth ?? {});
-        const capabilities = [...new Set(request.capabilities)];
+        const target = request.accountId ? this.find(request.accountId).account : undefined;
+        if (target && target.provider !== request.provider)
+          throw new OfficeError("invalid_request", "Choose an account from the selected provider.");
+        const capabilities = [
+          ...new Set([...request.capabilities, ...(target?.capabilities ?? [])]),
+        ];
         oauthScopes(request.provider, capabilities);
         const authorization = await (this.options.authorize ?? authorizeOfficeOAuth)(
           this.oauthInput(request.provider, capabilities),
         );
+        if (target && target.email.toLowerCase() !== authorization.email.toLowerCase())
+          throw new OfficeError(
+            "invalid_request",
+            "The selected account did not match the account being reconnected. Existing connections were preserved.",
+          );
+        const existing = this.current().accounts.find(
+          (entry) =>
+            entry.account.provider === request.provider &&
+            entry.account.email.toLowerCase() === authorization.email.toLowerCase(),
+        );
+        if (existing?.account.capabilities.some((capability) => !capabilities.includes(capability)))
+          throw new OfficeError(
+            "invalid_request",
+            "Reconnect the existing account to add permissions without removing its current connections.",
+          );
         return this.addAccount(
           {
             id: this.id(),
@@ -384,6 +407,66 @@ export class OfficeService {
         );
         await this.connected(request.accountId);
         return { ok: true, events };
+      }
+      case "drive.list": {
+        const page = await this.providers.driveFiles(
+          await this.context(request.accountId, "drive"),
+          request.folderId ?? "root",
+          request.cursor,
+          request.query,
+          request.limit ?? 50,
+        );
+        await this.connected(request.accountId);
+        return { ok: true, ...page };
+      }
+      case "drive.exportNote": {
+        const file = await this.providers.exportNote(
+          await this.context(request.accountId, "driveWrite"),
+          request.folderId,
+          request.title,
+          request.text,
+        );
+        return { ok: true, file };
+      }
+      case "drive.get": {
+        const file = await this.providers.driveFile(
+          await this.context(request.accountId, "drive"),
+          request.fileId,
+        );
+        await this.connected(request.accountId);
+        return { ok: true, file };
+      }
+      case "calendars.create": {
+        const event = await this.providers.createEvent(
+          await this.context(request.accountId, "calendarWrite"),
+          request.calendarId,
+          request.event,
+        );
+        return { ok: true, event };
+      }
+      case "calendars.update": {
+        const event = await this.providers.updateEvent(
+          await this.context(request.accountId, "calendarWrite"),
+          request.calendarId,
+          request.eventId,
+          request.event,
+        );
+        return { ok: true, event };
+      }
+      case "calendars.delete": {
+        await this.providers.deleteEvent(
+          await this.context(request.accountId, "calendarWrite"),
+          request.calendarId,
+          request.eventId,
+        );
+        return { ok: true };
+      }
+      case "mail.send": {
+        await this.providers.sendMail(
+          await this.context(request.accountId, "mailSend"),
+          request.message,
+        );
+        return { ok: true, sent: true };
       }
       case "mail.list": {
         const page = await this.providers.messages(

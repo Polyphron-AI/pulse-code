@@ -50,3 +50,5 @@ export * from "./pulseDictation.ts";
 export * from "./office.ts";
 export * from "./communications.ts";
 export * from "./talk.ts";
+export * from "./tasks.ts";
+export * from "./meetingNotes.ts";

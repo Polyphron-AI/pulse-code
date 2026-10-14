@@ -3,10 +3,16 @@ import type {
   OfficeAccount,
   OfficeCalendar,
   OfficeEvent,
+  OfficeEventInput,
+  OfficeMailSendInput,
+  OfficeDriveFile,
   OfficeMailThread,
   OfficeMessage,
 } from "@t3tools/contracts";
 import { OfficeError, items, object, responseJson, string } from "./OfficeErrors.ts";
+import { createCalendarProvider } from "./OfficeCalendar.ts";
+import { createMailSender } from "./OfficeMailSend.ts";
+import { createDriveProvider } from "./OfficeDrive.ts";
 import type { OAuthTokens } from "./OfficeOAuth.ts";
 
 export interface ImapCredentials {
@@ -40,6 +46,33 @@ export interface OfficeProviders {
   ) => Promise<MessagePage>;
   message: (context: ProviderContext, id: string) => Promise<OfficeMessage>;
   thread: (context: ProviderContext, id: string) => Promise<OfficeMailThread>;
+  driveFiles: (
+    context: ProviderContext,
+    folderId: string,
+    cursor: string | undefined,
+    query: string | undefined,
+    limit: number,
+  ) => Promise<{ files: OfficeDriveFile[]; nextCursor?: string }>;
+  driveFile: (context: ProviderContext, id: string) => Promise<OfficeDriveFile>;
+  exportNote: (
+    context: ProviderContext,
+    folderId: string,
+    title: string,
+    text: string,
+  ) => Promise<OfficeDriveFile>;
+  sendMail: (context: ProviderContext, message: OfficeMailSendInput) => Promise<void>;
+  createEvent: (
+    context: ProviderContext,
+    calendarId: string,
+    event: OfficeEventInput,
+  ) => Promise<OfficeEvent>;
+  updateEvent: (
+    context: ProviderContext,
+    calendarId: string,
+    eventId: string,
+    event: OfficeEventInput,
+  ) => Promise<OfficeEvent>;
+  deleteEvent: (context: ProviderContext, calendarId: string, eventId: string) => Promise<void>;
   close: () => Promise<void>;
 }
 const text = (value: unknown, max = 4096) => string(value).slice(0, max);
@@ -110,6 +143,7 @@ export function createOfficeProviders(
       ...(result.threadId ? { conversationId: safeId(result.threadId) } : {}),
       subject: header("subject"),
       from: header("from"),
+      ...(header("reply-to") ? { replyTo: header("reply-to") } : {}),
       to: header("to"),
       date:
         /^\d+$/.test(string(result.internalDate)) &&
@@ -137,6 +171,9 @@ export function createOfficeProviders(
     ...(result.conversationId ? { conversationId: safeId(result.conversationId) } : {}),
     subject: text(result.subject),
     from: address(result.from),
+    ...(items(result.replyTo).length
+      ? { replyTo: items(result.replyTo).map(address).join(", ").slice(0, 4096) }
+      : {}),
     to: items(result.toRecipients).map(address).join(", ").slice(0, 4096),
     date: text(result.receivedDateTime),
     preview: text(result.bodyPreview),
@@ -201,80 +238,10 @@ export function createOfficeProviders(
     return context.credentials.imap;
   };
   const providers: OfficeProviders = {
+    ...createDriveProvider(fetcher),
     verifyImap: (input, signal) => withImap(input, signal, async () => {}),
-    calendars: async (context) => {
-      if (context.account.provider !== "google")
-        throw new OfficeError("unsupported", "Calendar currently supports Google accounts.");
-      const calendars: OfficeCalendar[] = [];
-      let cursor = "";
-      do {
-        const result = await get(
-          context,
-          `https://www.googleapis.com/calendar/v3/users/me/calendarList?${new URLSearchParams({ maxResults: "250", ...(cursor ? { pageToken: cursor } : {}) })}`,
-        );
-        for (const item of items(result.items)) {
-          const row = object(item);
-          const id = safeId(row.id);
-          calendars.push({
-            id,
-            accountId: context.account.id,
-            name: text(row.summaryOverride) || text(row.summary),
-            selected: context.account.selectedCalendarIds.includes(id),
-          });
-        }
-        cursor = string(result.nextPageToken);
-        if (calendars.length > 2000)
-          throw new OfficeError(
-            "unsupported",
-            "This account has too many calendars to load in this version.",
-          );
-      } while (cursor);
-      return calendars;
-    },
-    events: async (context, timeMin, timeMax) => {
-      const events: OfficeEvent[] = [];
-      for (const calendarId of context.account.selectedCalendarIds) {
-        let cursor = "";
-        do {
-          const query = new URLSearchParams({
-            timeMin,
-            timeMax,
-            singleEvents: "true",
-            orderBy: "startTime",
-            maxResults: "250",
-            ...(cursor ? { pageToken: cursor } : {}),
-          });
-          const result = await get(
-            context,
-            `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?${query}`,
-          );
-          for (const item of items(result.items)) {
-            const row = object(item);
-            if (row.status === "cancelled") continue;
-            const start = object(row.start);
-            const end = object(row.end);
-            const meetingUrl = text(row.hangoutLink);
-            events.push({
-              id: safeId(row.id),
-              accountId: context.account.id,
-              calendarId,
-              title: text(row.summary) || "Untitled event",
-              start: text(start.dateTime) || text(start.date),
-              end: text(end.dateTime) || text(end.date),
-              ...(row.location ? { location: text(row.location) } : {}),
-              ...(meetingUrl.startsWith("https://") ? { meetingUrl } : {}),
-            });
-          }
-          cursor = string(result.nextPageToken);
-          if (events.length > 5000)
-            throw new OfficeError(
-              "unsupported",
-              "Choose a smaller date range to load this calendar.",
-            );
-        } while (cursor);
-      }
-      return events.sort((a, b) => a.start.localeCompare(b.start));
-    },
+    ...createCalendarProvider(fetcher),
+    sendMail: createMailSender(fetcher),
     messages: async (context, cursor, limit) => {
       if (context.account.provider === "google") {
         const result = await get(
@@ -298,7 +265,7 @@ export function createOfficeProviders(
         };
       }
       if (context.account.provider === "microsoft") {
-        const initial = `https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages?${new URLSearchParams({ $top: String(limit), $orderby: "receivedDateTime desc", $select: "id,conversationId,subject,from,toRecipients,receivedDateTime,bodyPreview,isRead" })}`;
+        const initial = `https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages?${new URLSearchParams({ $top: String(limit), $orderby: "receivedDateTime desc", $select: "id,conversationId,subject,from,replyTo,toRecipients,receivedDateTime,bodyPreview,isRead" })}`;
         const url = new URL(cursor || initial);
         if (
           url.origin !== "https://graph.microsoft.com" ||
@@ -355,7 +322,7 @@ export function createOfficeProviders(
           context,
           await get(
             context,
-            `https://graph.microsoft.com/v1.0/me/messages/${encodeURIComponent(id)}?$select=id,conversationId,subject,from,toRecipients,receivedDateTime,bodyPreview,isRead,body`,
+            `https://graph.microsoft.com/v1.0/me/messages/${encodeURIComponent(id)}?$select=id,conversationId,subject,from,replyTo,toRecipients,receivedDateTime,bodyPreview,isRead,body`,
             { Prefer: 'outlook.body-content-type="text"' },
           ),
           true,
@@ -422,7 +389,7 @@ export function createOfficeProviders(
           $orderby: "receivedDateTime desc",
           $filter: `receivedDateTime ge 0001-01-01T00:00:00Z and conversationId eq '${selected.conversationId.replaceAll("'", "''")}'`,
           $select:
-            "id,conversationId,subject,from,toRecipients,receivedDateTime,bodyPreview,isRead,body",
+            "id,conversationId,subject,from,replyTo,toRecipients,receivedDateTime,bodyPreview,isRead,body",
         });
         const result = await get(context, `https://graph.microsoft.com/v1.0/me/messages?${query}`, {
           Prefer: 'outlook.body-content-type="text"',

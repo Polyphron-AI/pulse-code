@@ -7,6 +7,7 @@ import {
   EventId,
   MessageId,
   ProjectId,
+  ProjectOffice,
   ThreadId,
   type ThreadPullRequestSnapshot,
   ThreadLinkedPullRequest,
@@ -63,6 +64,7 @@ const exists = (filePath: string) =>
   });
 
 const BaseTestLayer = makeProjectionPipelinePrefixedTestLayer("t3-projection-pipeline-test-");
+const decodeProjectOffice = Schema.decodeEffect(Schema.fromJsonString(ProjectOffice));
 const encodeThreadLinkedPullRequest = Schema.encodeSync(
   Schema.fromJsonString(ThreadLinkedPullRequest),
 );
@@ -4535,6 +4537,68 @@ engineLayer("OrchestrationProjectionPipeline via engine dispatch", (it) => {
           projectIcon: '{"kind":"emoji","emoji":"🚀"}',
         },
       ]);
+    }),
+  );
+
+  it.effect("persists project Office connections across snapshots, updates and removal", () =>
+    Effect.gen(function* () {
+      const engine = yield* OrchestrationEngineService;
+      const sql = yield* SqlClient.SqlClient;
+      const projectId = ProjectId.make("project-office");
+      yield* engine.dispatch({
+        type: "project.create",
+        commandId: CommandId.make("office-create"),
+        projectId,
+        title: "SynKEK",
+        workspaceRoot: "/tmp/project-office",
+        createdAt: "2026-01-01T00:00:00.000Z",
+      });
+      const office = {
+        drive: { accountId: "google-1", folderId: "folder-1", folderName: "SynKEK" },
+        conversations: [
+          {
+            provider: "slack" as const,
+            accountId: "slack-1",
+            conversationId: "channel-1",
+            title: "Marketing",
+          },
+        ],
+        agentThreadIds: [],
+      };
+      yield* engine.dispatch({
+        type: "project.meta.update",
+        commandId: CommandId.make("office-link"),
+        projectId,
+        office,
+      });
+      yield* engine.dispatch({
+        type: "project.meta.update",
+        commandId: CommandId.make("office-rename"),
+        projectId,
+        title: "SynKEK team",
+      });
+      const saved = yield* sql<{
+        office: string;
+      }>`SELECT office_json AS office FROM projection_projects WHERE project_id = ${projectId}`;
+      assert.deepEqual(yield* decodeProjectOffice(saved[0]!.office), office);
+      const query = yield* ProjectionSnapshotQuery;
+      const snapshot = yield* query.getSnapshot();
+      assert.deepEqual(
+        snapshot.projects.find((project) => project.id === projectId)?.office,
+        office,
+      );
+      const shell = yield* query.getShellSnapshot();
+      assert.deepEqual(shell.projects.find((project) => project.id === projectId)?.office, office);
+      yield* engine.dispatch({
+        type: "project.meta.update",
+        commandId: CommandId.make("office-detach"),
+        projectId,
+        office: null,
+      });
+      const cleared = yield* sql<{
+        office: string | null;
+      }>`SELECT office_json AS office FROM projection_projects WHERE project_id = ${projectId}`;
+      assert.deepEqual(cleared, [{ office: null }]);
     }),
   );
 

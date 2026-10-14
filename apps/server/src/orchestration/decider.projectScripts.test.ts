@@ -20,6 +20,161 @@ const asEventId = (value: string): EventId => EventId.make(value);
 const asProjectId = (value: string): ProjectId => ProjectId.make(value);
 const asMessageId = (value: string): MessageId => MessageId.make(value);
 it.layer(NodeServices.layer)("decider project scripts", (it) => {
+  it.effect("rejects missing agent references and duplicate Office conversations", () =>
+    Effect.gen(function* () {
+      const now = "2026-01-01T00:00:00.000Z";
+      const projectId = ProjectId.make("office-validation");
+      const readModel = {
+        ...createEmptyReadModel(now),
+        projects: [
+          {
+            id: projectId,
+            title: "Office",
+            workspaceRoot: "/tmp/office-validation",
+            defaultModelSelection: null,
+            scripts: [],
+            createdAt: now,
+            updatedAt: now,
+            deletedAt: null,
+          },
+        ],
+      };
+      const conversation = {
+        provider: "slack" as const,
+        accountId: "account",
+        conversationId: "channel",
+        title: "Team",
+      };
+      for (const office of [
+        { conversations: [], agentThreadIds: [ThreadId.make("missing")] },
+        { conversations: [conversation, conversation], agentThreadIds: [] },
+        {
+          conversations: [],
+          agentThreadIds: [],
+          taskColumns: [
+            { id: "review", name: "Review", status: "review" as const },
+            { id: "review", name: "Second", status: "todo" as const },
+          ],
+        },
+      ]) {
+        const exit = yield* Effect.exit(
+          decideOrchestrationCommand({
+            command: {
+              type: "project.meta.update",
+              commandId: CommandId.make("office-invalid"),
+              projectId,
+              office,
+            },
+            readModel,
+          }),
+        );
+        expect(exit._tag).toBe("Failure");
+      }
+    }),
+  );
+
+  it.effect(
+    "accepts a project browser thread and rejects missing, deleted or other-project threads",
+    () =>
+      Effect.gen(function* () {
+        const now = "2026-01-01T00:00:00.000Z";
+        const projectId = ProjectId.make("browser-project");
+        const threadId = ThreadId.make("browser-thread");
+        const readModel = yield* projectEvent(
+          {
+            ...createEmptyReadModel(now),
+            projects: [
+              {
+                id: projectId,
+                title: "Browser",
+                workspaceRoot: "/tmp/browser",
+                defaultModelSelection: null,
+                scripts: [],
+                createdAt: now,
+                updatedAt: now,
+                deletedAt: null,
+              },
+            ],
+          },
+          {
+            sequence: 1,
+            eventId: EventId.make("browser-thread-created"),
+            aggregateKind: "thread",
+            aggregateId: threadId,
+            type: "thread.created",
+            occurredAt: now,
+            commandId: CommandId.make("browser-create"),
+            causationEventId: null,
+            correlationId: null,
+            metadata: {},
+            payload: {
+              threadId,
+              projectId,
+              title: "Project browser",
+              modelSelection: {
+                instanceId: ProviderInstanceId.make("codex"),
+                model: "gpt-5-codex",
+              },
+              interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+              runtimeMode: "approval-required",
+              branch: null,
+              worktreePath: null,
+              createdAt: now,
+              updatedAt: now,
+            },
+          },
+        );
+        const command = {
+          type: "project.meta.update" as const,
+          commandId: CommandId.make("browser-link"),
+          projectId,
+          office: { browserThreadId: threadId, conversations: [], agentThreadIds: [] },
+        };
+        const result = yield* decideOrchestrationCommand({ command, readModel });
+        const event = Array.isArray(result) ? result[0] : result;
+        expect(event.payload).toMatchObject({ office: command.office });
+        const deletedThreads = readModel.threads.map((thread) => ({ ...thread, deletedAt: now }));
+        const retainedOffice = { ...command.office, agentThreadIds: [threadId] };
+        const previouslyLinked = {
+          ...readModel,
+          threads: deletedThreads,
+          projects: readModel.projects.map((project) => ({
+            ...project,
+            office: {
+              ...retainedOffice,
+              drive: { accountId: "google", folderId: "folder", folderName: "Marketing" },
+            },
+          })),
+        };
+        const detachedDrive = yield* decideOrchestrationCommand({
+          command: { ...command, office: retainedOffice },
+          readModel: previouslyLinked,
+        });
+        const detachedEvent = Array.isArray(detachedDrive) ? detachedDrive[0] : detachedDrive;
+        expect(detachedEvent.payload).toMatchObject({ office: retainedOffice });
+        const newlyAssignedDeleted = yield* Effect.exit(
+          decideOrchestrationCommand({
+            command: { ...command, office: { conversations: [], agentThreadIds: [threadId] } },
+            readModel: { ...readModel, threads: deletedThreads },
+          }),
+        );
+        expect(newlyAssignedDeleted._tag).toBe("Failure");
+        for (const threads of [
+          [],
+          readModel.threads.map((thread) => ({ ...thread, deletedAt: now })),
+          readModel.threads.map((thread) => ({
+            ...thread,
+            projectId: ProjectId.make("another-project"),
+          })),
+        ]) {
+          const exit = yield* Effect.exit(
+            decideOrchestrationCommand({ command, readModel: { ...readModel, threads } }),
+          );
+          expect(exit._tag).toBe("Failure");
+        }
+      }),
+  );
+
   it.effect("emits empty scripts on project.create", () =>
     Effect.gen(function* () {
       const now = "2026-01-01T00:00:00.000Z";

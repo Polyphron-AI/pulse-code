@@ -32,6 +32,21 @@ export const ChatMessage = Schema.Struct({
   threadId: Schema.optionalKey(Id),
 });
 export type ChatMessage = typeof ChatMessage.Type;
+export const ChatMember = Schema.Struct({
+  id: Id,
+  displayName: Text,
+  roles: Schema.optionalKey(Schema.Array(Text).check(Schema.isMaxLength(250))),
+  isBot: Schema.optionalKey(Schema.Boolean),
+});
+export type ChatMember = typeof ChatMember.Type;
+export const ChatMembership = Schema.Struct({
+  scope: Schema.Literals(["channel", "workspace"]),
+  title: Text,
+  members: Schema.Array(ChatMember).check(Schema.isMaxLength(50)),
+  nextCursor: Schema.optionalKey(Id),
+  note: Text,
+});
+export type ChatMembership = typeof ChatMembership.Type;
 export const ChatChallenge = Schema.Struct({
   id: Id,
   prompt: Schema.Literals(["code", "password"]),
@@ -66,6 +81,12 @@ export const ChatRequest = Schema.Union([
     cursor: Schema.optionalKey(Id),
   }),
   Schema.Struct({
+    operation: Schema.Literal("members.list"),
+    ...ConversationInput,
+    cursor: Schema.optionalKey(Id),
+    channelOnly: Schema.optionalKey(Schema.Boolean),
+  }),
+  Schema.Struct({
     operation: Schema.Literal("messages.list"),
     ...ConversationInput,
     cursor: Schema.optionalKey(Id),
@@ -90,6 +111,7 @@ export const ChatResult = Schema.Union([
     ),
     messages: Schema.optionalKey(Schema.Array(ChatMessage).check(Schema.isMaxLength(100))),
     message: Schema.optionalKey(ChatMessage),
+    membership: Schema.optionalKey(ChatMembership),
     nextCursor: Schema.optionalKey(Id),
     challenge: Schema.optionalKey(ChatChallenge),
   }),

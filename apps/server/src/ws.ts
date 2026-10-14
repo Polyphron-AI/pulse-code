@@ -1,3 +1,5 @@
+import { makePulseTasks, type PulseTasks } from "./tasks/PulseTasks.ts";
+import { makeMeetingNotes, type MeetingNotes } from "./tasks/MeetingNotes.ts";
 import {
   sameUsageLimitCommandCoverage,
   withUsageLimitsCommands,
@@ -509,6 +511,8 @@ function readClientAnalyticsProps(request: HttpServerRequest.HttpServerRequest) 
 }
 
 const makeWsRpcLayer = (
+  tasks: PulseTasks,
+  meetingNotes: MeetingNotes,
   currentSession: EnvironmentAuth.AuthenticatedSession,
   clientOrigin: OrchestrationClientOrigin,
   clientAnalyticsProps: Readonly<Record<string, unknown>>,
@@ -2586,6 +2590,22 @@ const makeWsRpcLayer = (
           observeRpcEffect(WS_METHODS.serverProbe, Effect.succeed({}), {
             "rpc.aggregate": "server",
           }),
+        [WS_METHODS.tasksSubscribe]: () =>
+          observeRpcStream(WS_METHODS.tasksSubscribe, tasks.subscribe, {
+            "rpc.aggregate": "tasks",
+          }),
+        [WS_METHODS.meetingNotesSubscribe]: (input) =>
+          observeRpcStream(WS_METHODS.meetingNotesSubscribe, meetingNotes.subscribe(input), {
+            "rpc.aggregate": "meetingNotes",
+          }),
+        [WS_METHODS.meetingNotesSave]: (input) =>
+          observeRpcEffect(WS_METHODS.meetingNotesSave, meetingNotes.save(input), {
+            "rpc.aggregate": "meetingNotes",
+          }),
+        [WS_METHODS.tasksMutate]: (input) =>
+          observeRpcEffect(WS_METHODS.tasksMutate, tasks.mutate(input), {
+            "rpc.aggregate": "tasks",
+          }),
         [WS_METHODS.pulseSkillsList]: () =>
           observeRpcEffect(WS_METHODS.pulseSkillsList, pulseSkills.list(), {
             "rpc.aggregate": "pulse.skills",
@@ -4180,6 +4200,8 @@ export const websocketRpcRouteLayer = Layer.unwrap(
           ),
         ),
     });
+    const tasks = yield* makePulseTasks;
+    const meetingNotes = yield* makeMeetingNotes;
     const pullRequests = yield* PullRequestService.PullRequestService;
     const sql = yield* SqlClient.SqlClient;
     return HttpRouter.add(
@@ -4216,6 +4238,8 @@ export const websocketRpcRouteLayer = Layer.unwrap(
         }).pipe(
           Effect.provide(
             makeWsRpcLayer(
+              tasks,
+              meetingNotes,
               session,
               clientOrigin,
               clientAnalyticsProps,

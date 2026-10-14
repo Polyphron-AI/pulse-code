@@ -61,16 +61,32 @@ export function oauthScopes(
   capabilities: OfficeAccount["capabilities"],
 ): string {
   if (provider === "microsoft") {
-    if (capabilities.includes("calendar"))
-      throw new OfficeError(
-        "unsupported",
-        "Calendar currently supports Google accounts. Connect Microsoft for email.",
-      );
-    return "openid profile email offline_access User.Read Mail.Read";
+    if (capabilities.includes("drive") || capabilities.includes("driveWrite"))
+      throw new OfficeError("unsupported", "Google Drive requires a Google account.");
+    return [
+      "openid",
+      "profile",
+      "email",
+      "offline_access",
+      "User.Read",
+      ...(capabilities.includes("mail") ? ["Mail.Read"] : []),
+      ...(capabilities.includes("mailSend") ? ["Mail.Send"] : []),
+      ...(capabilities.includes("calendarWrite")
+        ? ["Calendars.ReadWrite"]
+        : capabilities.includes("calendar")
+          ? ["Calendars.Read"]
+          : []),
+    ].join(" ");
   }
   return [
     "openid",
     "email",
+    ...(capabilities.includes("mailSend") ? ["https://www.googleapis.com/auth/gmail.send"] : []),
+    ...(capabilities.includes("calendarWrite")
+      ? ["https://www.googleapis.com/auth/calendar.events"]
+      : []),
+    ...(capabilities.includes("driveWrite") ? ["https://www.googleapis.com/auth/drive.file"] : []),
+    ...(capabilities.includes("drive") ? ["https://www.googleapis.com/auth/drive.readonly"] : []),
     ...(capabilities.includes("mail") ? ["https://www.googleapis.com/auth/gmail.readonly"] : []),
     ...(capabilities.includes("calendar")
       ? ["https://www.googleapis.com/auth/calendar.readonly"]
@@ -228,11 +244,15 @@ export async function authorizeOfficeOAuth(input: OAuthInput): Promise<OAuthAuth
       );
       const required = scope
         .split(" ")
-        .filter((entry) => entry.includes("googleapis.com") || entry === "Mail.Read");
+        .filter(
+          (entry) =>
+            entry.includes("googleapis.com") ||
+            ["Mail.Read", "Mail.Send", "Calendars.Read", "Calendars.ReadWrite"].includes(entry),
+        );
       if (required.some((entry) => !scopes.has(entry)))
         throw new OfficeError(
           "authentication",
-          "The requested mailbox or calendar permissions were not granted.",
+          "The requested Office permissions were not granted.",
         );
     }
     const result = tokens(granted, input.now());

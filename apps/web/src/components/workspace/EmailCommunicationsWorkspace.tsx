@@ -1,28 +1,39 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useImperativeHandle,
+  type Ref,
+  type ReactNode,
+} from "react";
 import * as Schema from "effect/Schema";
 import type { OfficeAccount, OfficeMailThread, OfficeMessage } from "@t3tools/contracts";
 import {
   BellIcon,
   BookmarkIcon,
-  HomeIcon,
-  MailIcon,
-  MessageCircleIcon,
+  InboxIcon,
   SearchIcon,
   RefreshCwIcon,
+  FolderIcon,
 } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Textarea } from "../ui/textarea";
 import { useLocalStorage } from "../../hooks/useLocalStorage";
+import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
+import { OfficeSubnav } from "./OfficeSubnav";
+import { GlobalFilesPanel } from "./GlobalFilesPanel";
+import { OfficeModuleTabs } from "./OfficeModuleTabs";
 import { cn } from "../../lib/utils";
 import { RequestState, useOfficeRequest } from "./office/shared";
+import { communicationTaskDraft, type CommunicationTaskDraft } from "./communicationsSource";
 import { mailConversations, mailMessageKey } from "./communicationsMail";
 
-type View = "home" | "activity" | "later" | "dms";
+type View = "home" | "activity" | "later";
 const views = [
-  { id: "home", label: "Home", icon: HomeIcon },
-  { id: "activity", label: "Activity", icon: BellIcon },
-  { id: "dms", label: "DMs", icon: MessageCircleIcon },
+  { id: "home", label: "Inbox", icon: InboxIcon },
+  { id: "activity", label: "Unread", icon: BellIcon },
   { id: "later", label: "Later", icon: BookmarkIcon },
 ] as const;
 const ReferenceId = Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(1024));
@@ -41,80 +52,242 @@ function messageDate(date: string) {
   return Number.isNaN(parsed.getTime()) ? date || "Date unavailable" : parsed.toLocaleString();
 }
 
-function DraftReply({
+export type DraftReplyHandle = { insertLink: (name: string, url: string) => boolean };
+
+export function DraftReply({
   account,
   message,
   disabled,
+  ref,
 }: {
   account: OfficeAccount;
-  message: OfficeMessage;
+  message?: OfficeMessage;
   disabled: boolean;
+  ref?: Ref<DraftReplyHandle>;
 }) {
   const { run, busy, error } = useOfficeRequest();
   const [text, setText] = useState("");
+  const [to, setTo] = useState(
+    () =>
+      (message?.replyTo || message?.from || "").match(/[^\s<>,;"]+@[^\s<>,;"]+/g)?.join(", ") ?? "",
+  );
+  const [subject, setSubject] = useState(
+    message ? (/^re:/i.test(message.subject) ? message.subject : `Re: ${message.subject}`) : "",
+  );
   const [draftId, setDraftId] = useState<string>();
   const [notice, setNotice] = useState("");
+  const [review, setReview] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [sendEnabled, setSendEnabled] = useState(account.capabilities.includes("mailSend"));
   const edited = useRef(false);
+  const submitting = useRef(false);
   useEffect(() => {
     void (async () => {
       const result = await run({ operation: "drafts.list", accountId: account.id });
-      const existing = result?.drafts?.findLast((draft) => draft.sourceMessageId === message.id);
+      const existing = result?.drafts?.findLast((draft) => draft.sourceMessageId === message?.id);
       if (!existing || edited.current) return;
       setText(existing.text);
+      setTo(existing.to);
+      setSubject(existing.subject);
       setDraftId(existing.id);
     })();
-  }, [run, account.id, message.id]);
-  const subject = /^re:/i.test(message.subject) ? message.subject : `Re: ${message.subject}`;
+  }, [run, account.id, message?.id]);
+  const locked = busy || disabled || sending;
+  function edit() {
+    edited.current = true;
+    setReview(false);
+    setSent(false);
+    setNotice("");
+  }
+  useImperativeHandle(
+    ref,
+    () => ({
+      insertLink(name, url) {
+        if (locked) return false;
+        edit();
+        setText((current) => `${current}${current ? "\n\n" : ""}${name}\n${url}`);
+        setNotice("File link added. Google Drive sharing permissions are unchanged.");
+        return true;
+      },
+    }),
+    [locked],
+  );
+  async function save() {
+    const result = await run({
+      operation: "drafts.save",
+      accountId: account.id,
+      ...(draftId ? { id: draftId } : {}),
+      to,
+      subject,
+      text,
+      ...(message ? { sourceMessageId: message.id } : {}),
+    });
+    const saved = result?.drafts?.find((draft) => draft.id === draftId) ?? result?.drafts?.at(-1);
+    if (!saved) {
+      setNotice("The draft could not be confirmed. Your text has been kept.");
+      return;
+    }
+    setDraftId(saved.id);
+    setNotice("Draft saved on this computer. It has not been sent.");
+    return saved.id;
+  }
+  async function send() {
+    if (submitting.current || locked || sent) return;
+    submitting.current = true;
+    setSending(true);
+    setNotice("");
+    try {
+      const savedId = await save();
+      if (!savedId) return;
+      const result = await run({
+        operation: "mail.send",
+        accountId: account.id,
+        message: {
+          to: to
+            .split(",")
+            .map((entry) => entry.trim())
+            .filter(Boolean),
+          subject,
+          text,
+          ...(message ? { sourceMessageId: message.id } : {}),
+        },
+      });
+      if (!result?.sent) {
+        setNotice(
+          "Sending was not confirmed. Your draft is saved. Check Sent mail before trying again.",
+        );
+        return;
+      }
+      setSent(true);
+      setReview(false);
+      setText("");
+      setDraftId(undefined);
+      const removed = await run({ operation: "drafts.delete", id: savedId });
+      setNotice(
+        removed
+          ? "Email accepted by the provider for sending."
+          : "Email accepted for sending. The local draft could not be removed; do not send it again.",
+      );
+    } finally {
+      submitting.current = false;
+      setSending(false);
+    }
+  }
+  async function enableSending() {
+    if (account.provider === "imap") return;
+    const result = await run({
+      operation: "accounts.connectOAuth",
+      accountId: account.id,
+      provider: account.provider,
+      capabilities: ["mail", "mailSend"],
+    });
+    setSendEnabled(
+      Boolean(
+        result?.accounts
+          ?.find((entry) => entry.id === account.id)
+          ?.capabilities.includes("mailSend"),
+      ),
+    );
+  }
   return (
     <form
       className="shrink-0 space-y-3 border-t border-border p-4"
       onSubmit={(event) => {
         event.preventDefault();
-        void (async () => {
-          const result = await run({
-            operation: "drafts.save",
-            accountId: account.id,
-            ...(draftId ? { id: draftId } : {}),
-            to: message.from,
-            subject,
-            text,
-            sourceMessageId: message.id,
-          });
-          if (!result) return;
-          const saved =
-            result.drafts?.find((draft) => draft.id === draftId) ?? result.drafts?.at(-1);
-          if (!saved) {
-            setNotice("The draft could not be confirmed. Your text has been kept.");
-            return;
-          }
-          setDraftId(saved.id);
-          setNotice("Draft saved on this computer. It has not been sent.");
-        })();
+        if (!locked) void save();
       }}
     >
       <p className="text-xs text-muted-foreground">
-        Draft reply to {message.from} · from {account.email}
+        {message ? "Reply" : "New email"} ? from {account.email}
       </p>
+      <label className="block text-xs">
+        To
+        <Input
+          aria-label="Email recipients"
+          placeholder="person@example.com, teammate@example.com"
+          value={to}
+          disabled={locked}
+          onChange={(event) => {
+            edit();
+            setTo(event.target.value);
+          }}
+        />
+      </label>
+      <label className="block text-xs">
+        Subject
+        <Input
+          aria-label="Email subject"
+          value={subject}
+          disabled={locked || Boolean(message)}
+          onChange={(event) => {
+            edit();
+            setSubject(event.target.value);
+          }}
+        />
+      </label>
       <Textarea
         aria-label="Email reply draft"
-        placeholder="Write a local draft…"
+        placeholder="Write your email?"
         value={text}
-        disabled={busy || disabled}
+        disabled={locked}
         onChange={(event) => {
-          edited.current = true;
+          edit();
           setText(event.target.value);
-          setNotice("");
         }}
       />
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-xs text-muted-foreground">
-          Email access is read-only. Drafts stay on this computer.
-        </p>
-        <Button size="sm" type="submit" disabled={!text.trim() || busy || disabled}>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" variant="outline" type="submit" disabled={!text.trim() || locked || sent}>
           Save local draft
         </Button>
+        {sendEnabled ? (
+          <Button
+            size="sm"
+            type="button"
+            disabled={!to.trim() || !text.trim() || locked || sent}
+            onClick={() => setReview(true)}
+          >
+            Review and send
+          </Button>
+        ) : account.provider === "imap" ? (
+          <p className="text-xs text-muted-foreground">
+            Sending is not configured for IMAP accounts.
+          </p>
+        ) : (
+          <Button
+            size="sm"
+            type="button"
+            variant="outline"
+            disabled={locked}
+            onClick={() => void enableSending()}
+          >
+            Enable email sending
+          </Button>
+        )}
       </div>
-      <RequestState busy={busy} error={error} />
+      {review && (
+        <div className="space-y-2 rounded-md border p-3">
+          <p className="break-words text-sm">
+            Send from {account.email} to {to}?
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Your message and linked files above will be sent by {providerNames[account.provider]}.
+          </p>
+          <Button size="sm" type="button" disabled={locked || sent} onClick={() => void send()}>
+            Send email
+          </Button>
+          <Button
+            size="sm"
+            type="button"
+            variant="ghost"
+            disabled={locked}
+            onClick={() => setReview(false)}
+          >
+            Keep editing
+          </Button>
+        </div>
+      )}
+      <RequestState busy={locked} error={error} />
       {notice && (
         <p role="status" className="text-xs text-muted-foreground">
           {notice}
@@ -126,9 +299,21 @@ function DraftReply({
 
 export function EmailCommunicationsWorkspace({
   requestedAccountId,
+  requestedMessageId,
+  onCreateTask,
+  onConfigureProject,
+  tasksPanel,
 }: {
   requestedAccountId?: string;
+  requestedMessageId?: string | undefined;
+  onCreateTask?: ((draft: CommunicationTaskDraft) => void) | undefined;
+  onConfigureProject?: (project: EnvironmentProject) => void;
+  tasksPanel?: ReactNode;
 }) {
+  const draft = useRef<DraftReplyHandle>(null);
+  const sourceEmail = useRef<HTMLElement>(null);
+  const [filesOpen, setFilesOpen] = useState(true);
+  const [resource, setResource] = useState<"Files" | "Tasks">("Files");
   const available = typeof window.desktopBridge?.officeInvoke === "function";
   const { run, busy, error } = useOfficeRequest();
   const [accounts, setAccounts] = useState<readonly OfficeAccount[]>([]);
@@ -136,6 +321,7 @@ export function EmailCommunicationsWorkspace({
   const [messages, setMessages] = useState<readonly OfficeMessage[]>([]);
   const [cursor, setCursor] = useState<string>();
   const [selected, setSelected] = useState<OfficeMessage>();
+  const [composing, setComposing] = useState(false);
   const [thread, setThread] = useState<OfficeMailThread>();
   const [loaded, setLoaded] = useState(false);
   const [view, setView] = useState<View>("home");
@@ -148,6 +334,8 @@ export function EmailCommunicationsWorkspace({
   const mounted = useRef(true);
   const selectedAccount = useRef<string | undefined>(requestedAccountId);
   const account = accounts.find((item) => item.id === accountId);
+  const appliedSource = useRef<string | undefined>(undefined);
+  const [sourceNotice, setSourceNotice] = useState("");
 
   const loadInbox = useCallback(
     async (id: string, nextCursor?: string) => {
@@ -201,8 +389,65 @@ export function EmailCommunicationsWorkspace({
     };
   }, [available, refresh]);
 
+  useEffect(() => {
+    if (!requestedMessageId || !account || !loaded || busy) return;
+    const key = JSON.stringify([account.id, requestedMessageId]);
+    if (appliedSource.current === key) return;
+    appliedSource.current = key;
+    setSourceNotice("Opening the linked email?");
+    setSelected(undefined);
+    setThread(undefined);
+    setComposing(false);
+    void (async () => {
+      const result = await run({
+        operation: "mail.get",
+        accountId: account.id,
+        messageId: requestedMessageId,
+      });
+      if (
+        !mounted.current ||
+        selectedAccount.current !== account.id ||
+        appliedSource.current !== key
+      )
+        return;
+      if (
+        !result?.message ||
+        result.message.id !== requestedMessageId ||
+        result.message.accountId !== account.id
+      ) {
+        setSourceNotice(
+          "The linked email could not be opened. Check that its account is connected on this computer.",
+        );
+        return;
+      }
+      setSelected(result.message);
+      const full = await run({
+        operation: "mail.thread",
+        accountId: account.id,
+        messageId: requestedMessageId,
+      });
+      if (
+        !mounted.current ||
+        selectedAccount.current !== account.id ||
+        appliedSource.current !== key
+      )
+        return;
+      setThread(full?.thread);
+      setSourceNotice(
+        full?.thread
+          ? ""
+          : "The linked email loaded, but its conversation could not be loaded. Select it again to retry.",
+      );
+    })();
+  }, [requestedMessageId, account, loaded, busy, run]);
+
+  useEffect(() => {
+    sourceEmail.current?.scrollIntoView({ block: "center" });
+  }, [thread, requestedMessageId]);
+
   async function chooseAccount(id: string) {
     if (busy) return;
+    setComposing(false);
     selectedAccount.current = id;
     setAccountId(id);
     setMessages([]);
@@ -214,6 +459,8 @@ export function EmailCommunicationsWorkspace({
   }
   async function openMessage(message: OfficeMessage) {
     if (busy) return;
+    setComposing(false);
+    setSourceNotice("");
     setSelected(message);
     if (!selected || mailMessageKey(selected) !== mailMessageKey(message)) setThread(undefined);
     const result = await run({
@@ -265,7 +512,6 @@ export function EmailCommunicationsWorkspace({
       ? messages.filter((message) => saved.some((item) => referenceKey(item) === savedKey(message)))
       : messages,
   ).filter(({ message, unread }) => {
-    if (view === "dms") return false;
     if (view === "activity" && !unread) return false;
     return [message.subject, message.from, message.preview].some((value) =>
       value.toLowerCase().includes(query.toLowerCase()),
@@ -275,69 +521,22 @@ export function EmailCommunicationsWorkspace({
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       <div className="relative flex min-h-0 flex-1 overflow-hidden">
-        <nav
-          aria-label="Communications views"
-          className="flex w-14 shrink-0 flex-col items-center gap-3 border-r border-border bg-sidebar py-4"
+        <OfficeSubnav
+          label="Communications views"
+          items={views}
+          value={view}
+          onChange={(id) => {
+            if (id !== "home" && id !== "activity" && id !== "later") return;
+            setComposing(false);
+            setView(id);
+            setSelected(undefined);
+            setThread(undefined);
+          }}
+        />
+        <section
+          aria-label="Email conversations"
+          className="flex w-80 min-w-0 shrink-0 flex-col border-r border-border max-md:w-full"
         >
-          {views.map(({ id, label, icon: Icon }) => (
-            <button
-              key={id}
-              type="button"
-              aria-current={view === id ? "page" : undefined}
-              className={cn(
-                "flex w-12 flex-col items-center gap-1 rounded-md px-1 py-2 text-3xs hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring",
-                view === id && "bg-sidebar-row-active",
-              )}
-              onClick={() => {
-                setView(id);
-                setSelected(undefined);
-                setThread(undefined);
-              }}
-            >
-              <Icon className="size-4" />
-              {label}
-            </button>
-          ))}
-        </nav>
-        <aside
-          aria-label="Connected accounts"
-          className="hidden w-52 shrink-0 flex-col border-r border-border bg-sidebar lg:flex"
-        >
-          <div className="border-b border-border p-4">
-            <h2 className="text-sm font-semibold">Connected accounts</h2>
-            <p className="mt-1 text-xs text-muted-foreground">Conversations from your services</p>
-          </div>
-          <div className="min-h-0 flex-1 overflow-y-auto p-2">
-            {accounts.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                disabled={busy}
-                aria-current={item.id === accountId ? "page" : undefined}
-                className={cn(
-                  "my-1 flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm hover:bg-sidebar-row-hover focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-60",
-                  item.id === accountId && "bg-sidebar-row-active",
-                )}
-                onClick={() => void chooseAccount(item.id)}
-              >
-                <MailIcon className="size-4 shrink-0" />
-                <span className="min-w-0">
-                  <span className="block truncate">{item.email}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {providerNames[item.provider]}
-                  </span>
-                </span>
-              </button>
-            ))}
-            {loaded && accounts.length === 0 && (
-              <p className="p-2 text-sm text-muted-foreground">No email accounts connected.</p>
-            )}
-          </div>
-          <p className="border-t border-border p-3 text-xs text-muted-foreground">
-            Email · connected accounts only
-          </p>
-        </aside>
-        <section aria-label="Email conversations" className="flex min-w-0 flex-1 flex-col">
           <div className="space-y-3 border-b border-border p-4">
             <div className="flex items-center justify-between gap-3">
               <h1 className="truncate text-lg font-semibold">
@@ -347,16 +546,14 @@ export function EmailCommunicationsWorkspace({
                     ? "Later"
                     : view === "activity"
                       ? "Unread email"
-                      : view === "dms"
-                        ? "Direct messages"
-                        : (account?.email ?? "Communications")}
+                      : "Inbox"}
               </h1>
               <span className="text-xs text-muted-foreground">
                 {account && providerNames[account.provider]}
               </span>
             </div>
             {accounts.length > 0 && (
-              <label className="block lg:hidden">
+              <label className="block">
                 <span className="sr-only">Email account</span>
                 <select
                   aria-label="Email account"
@@ -393,7 +590,33 @@ export function EmailCommunicationsWorkspace({
               <RefreshCwIcon />
               Refresh email
             </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setFilesOpen((open) => !open)}
+              aria-expanded={filesOpen}
+            >
+              <FolderIcon /> {filesOpen ? "Hide resources" : "Files and tasks"}
+            </Button>
+            {account && (
+              <Button
+                size="sm"
+                disabled={busy}
+                onClick={() => {
+                  setComposing(true);
+                  setSelected(undefined);
+                  setThread(undefined);
+                }}
+              >
+                New email
+              </Button>
+            )}
             <RequestState busy={busy} error={error} />
+            {sourceNotice && (
+              <p role="status" className="text-xs text-muted-foreground">
+                {sourceNotice}
+              </p>
+            )}
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto">
             {!available ? (
@@ -417,10 +640,6 @@ export function EmailCommunicationsWorkspace({
                   Use Manage accounts to connect Gmail, Microsoft or an IMAP mailbox.
                 </p>
               </div>
-            ) : view === "dms" ? (
-              <p className="p-6 text-sm text-muted-foreground">
-                No direct-message service is connected. Your email remains available in Home.
-              </p>
             ) : rows.length === 0 ? (
               <p className="p-6 text-sm text-muted-foreground">
                 {view === "later"
@@ -488,7 +707,7 @@ export function EmailCommunicationsWorkspace({
                 </article>
               ))
             )}
-            {cursor && accountId && view !== "dms" && (
+            {cursor && accountId && (
               <div className="p-4">
                 <Button
                   variant="outline"
@@ -501,10 +720,28 @@ export function EmailCommunicationsWorkspace({
             )}
           </div>
         </section>
-        {selected && account && (
-          <aside
+        {composing && account ? (
+          <section
+            aria-label="Compose email"
+            className="flex min-w-0 flex-1 flex-col bg-background max-md:absolute max-md:inset-0 max-md:z-20"
+          >
+            <div className="flex items-center justify-between border-b p-4">
+              <h2 className="font-semibold">New email</h2>
+              <Button size="sm" variant="ghost" onClick={() => setComposing(false)}>
+                Close
+              </Button>
+            </div>
+            <DraftReply
+              key={`compose:${account.id}`}
+              ref={draft}
+              account={account}
+              disabled={busy}
+            />
+          </section>
+        ) : selected && account ? (
+          <section
             aria-label="Email conversation"
-            className="absolute inset-y-0 right-0 z-30 flex w-full max-w-xl flex-col border-l border-border bg-background shadow-xl lg:static lg:w-96 lg:shrink-0 lg:shadow-none"
+            className="flex min-w-0 flex-1 flex-col bg-background max-md:absolute max-md:inset-0 max-md:z-20"
           >
             <div className="flex items-start justify-between gap-3 border-b border-border p-4">
               <div className="min-w-0">
@@ -542,7 +779,13 @@ export function EmailCommunicationsWorkspace({
               {(thread?.messages ?? []).map((message) => (
                 <article
                   key={mailMessageKey(message)}
-                  className="space-y-3 border-b border-border p-4"
+                  ref={message.id === requestedMessageId ? sourceEmail : undefined}
+                  data-source-message={message.id === requestedMessageId || undefined}
+                  className={cn(
+                    "space-y-3 border-b border-border p-4",
+                    message.id === requestedMessageId &&
+                      "bg-accent ring-1 ring-inset ring-primary/30",
+                  )}
                 >
                   <div>
                     <strong className="break-words text-sm font-semibold">{message.from}</strong>
@@ -556,17 +799,82 @@ export function EmailCommunicationsWorkspace({
                   <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
                     {message.text ?? message.preview}
                   </p>
+                  {onCreateTask && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        onCreateTask(
+                          communicationTaskDraft({
+                            provider: account.provider,
+                            accountId: account.id,
+                            conversationId: message.conversationId ?? message.id,
+                            messageId: message.id,
+                            email: true,
+                            title: message.subject || "Follow up on email",
+                            text: message.text ?? message.preview,
+                          }),
+                        );
+                        setFilesOpen(true);
+                        setResource("Tasks");
+                      }}
+                    >
+                      Create task
+                    </Button>
+                  )}
                 </article>
               ))}
             </div>
             {thread && (
               <DraftReply
+                ref={draft}
                 key={mailMessageKey(selected)}
                 account={account}
-                message={selected}
+                message={thread.messages.find((item) => item.id === selected.id) ?? selected}
                 disabled={busy}
               />
             )}
+          </section>
+        ) : (
+          <section
+            aria-label="Email reader"
+            className="hidden min-w-0 flex-1 items-center justify-center p-6 text-sm text-muted-foreground md:flex"
+          >
+            Select an email to read and draft a reply.
+          </section>
+        )}
+        {filesOpen && (
+          <aside
+            aria-label="Email resources"
+            className="flex w-[460px] shrink-0 flex-col border-l border-border bg-muted/20 max-xl:absolute max-xl:inset-y-0 max-xl:right-0 max-xl:z-30 max-xl:shadow-xl max-sm:w-full"
+          >
+            <div className="flex h-12 shrink-0 items-center border-b px-4">
+              <span className="text-sm font-semibold">Workspace resources</span>
+              <Button
+                className="ml-auto"
+                size="sm"
+                variant="ghost"
+                onClick={() => setFilesOpen(false)}
+              >
+                Close
+              </Button>
+            </div>
+            <OfficeModuleTabs
+              value={resource}
+              items={tasksPanel ? ["Files", "Tasks"] : ["Files"]}
+              onChange={(name) => setResource(name === "Tasks" ? "Tasks" : "Files")}
+            />
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              {resource === "Tasks" && tasksPanel ? (
+                tasksPanel
+              ) : (
+                <GlobalFilesPanel
+                  onConfigureProject={onConfigureProject}
+                  canInsert={Boolean((composing || (thread && selected)) && account && !busy)}
+                  onInsertLink={(name, url) => draft.current?.insertLink(name, url) ?? false}
+                />
+              )}
+            </div>
           </aside>
         )}
       </div>

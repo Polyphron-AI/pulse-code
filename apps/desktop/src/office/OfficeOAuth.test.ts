@@ -9,6 +9,33 @@ import {
 } from "./OfficeOAuth.ts";
 
 describe("Office native OAuth", () => {
+  it("rejects a Google grant that omits the requested Drive scope", async () => {
+    await expect(
+      authorizeOfficeOAuth({
+        provider: "google",
+        capabilities: ["drive"],
+        configuration: { googleClientId: "client" },
+        now: () => 0,
+        signal: new AbortController().signal,
+        openExternal: async (href) => {
+          const url = new URL(href);
+          const callback = new URL(url.searchParams.get("redirect_uri") ?? "");
+          callback.search = new URLSearchParams({
+            code: "code",
+            state: url.searchParams.get("state") ?? "",
+          }).toString();
+          await globalThis.fetch(callback);
+        },
+        fetch: async () =>
+          Response.json({
+            access_token: "secret",
+            refresh_token: "secret",
+            expires_in: 3600,
+            scope: "openid email",
+          }),
+      }),
+    ).rejects.toMatchObject({ code: "authentication" });
+  });
   it("uses PKCE, rejects mismatched state, and closes its loopback listener", async () => {
     let callback = "";
     let challenge = "";
@@ -106,4 +133,13 @@ describe("Office native OAuth", () => {
     expect(oauthScopes("microsoft", ["mail"])).not.toContain("Mail.Send");
     expect(oauthScopes("google", ["mail"])).not.toContain("calendar");
   });
+});
+it("requests write scopes only when selected explicitly", () => {
+  expect(oauthScopes("google", ["mail", "calendar"])).not.toContain("gmail.send");
+  expect(oauthScopes("google", ["mail", "mailSend"])).toContain(
+    "https://www.googleapis.com/auth/gmail.send",
+  );
+  expect(oauthScopes("microsoft", ["mail", "mailSend"])).toContain("Mail.Read Mail.Send");
+  expect(oauthScopes("microsoft", ["calendar"])).toContain("Calendars.Read");
+  expect(oauthScopes("microsoft", ["calendarWrite"])).toContain("Calendars.ReadWrite");
 });

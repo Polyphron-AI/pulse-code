@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import * as Schema from "effect/Schema";
 import type { ChatAccount, ChatConversation, ChatMessage } from "@t3tools/contracts";
 import {
   BookmarkIcon,
+  ArrowLeftIcon,
   HashIcon,
   HomeIcon,
   MessageCircleIcon,
@@ -12,6 +13,7 @@ import {
   SendIcon,
   XIcon,
 } from "lucide-react";
+import { OfficeSubnav } from "./OfficeSubnav";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Textarea } from "../ui/textarea";
@@ -19,7 +21,13 @@ import { cn, randomUUID } from "../../lib/utils";
 import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { RequestState } from "./office/shared";
 import { useCommunicationsRequest } from "./useCommunicationsRequest";
-import { chatReferenceKey, mergeChatMessages, sendAttempt } from "./communicationsChat";
+import { communicationTaskDraft, type CommunicationTaskDraft } from "./communicationsSource";
+import {
+  chatReferenceKey,
+  chatTextParts,
+  mergeChatMessages,
+  sendAttempt,
+} from "./communicationsChat";
 
 const SavedReference = Schema.Struct({
   provider: Schema.String,
@@ -158,7 +166,33 @@ function ChatComposer({
   );
 }
 
-export function ChatCommunicationsWorkspace({ account }: { account: ChatAccount }) {
+interface ChatCommunicationsWorkspaceProps {
+  account: ChatAccount;
+  projectSidebar?: ReactNode;
+  requestedConversationId?: string | undefined;
+  requestedMessageId?: string | undefined;
+  requestedThreadId?: string | undefined;
+  onCreateTask?: ((draft: CommunicationTaskDraft) => void) | undefined;
+  onConversationSelected?: (conversation: ChatConversation) => void;
+  onConversationsChanged?: (conversations: readonly ChatConversation[]) => void;
+  onOpenLink?: (url: string) => void;
+}
+
+export function ChatCommunicationsWorkspace(props: ChatCommunicationsWorkspaceProps) {
+  return <AccountChatWorkspace key={props.account.id} {...props} />;
+}
+
+function AccountChatWorkspace({
+  account,
+  projectSidebar,
+  requestedConversationId,
+  requestedMessageId,
+  requestedThreadId,
+  onCreateTask,
+  onConversationSelected,
+  onConversationsChanged,
+  onOpenLink,
+}: ChatCommunicationsWorkspaceProps) {
   const { run, busy, error } = useCommunicationsRequest();
   const [conversations, setConversations] = useState<readonly ChatConversation[]>([]);
   const [conversationCursor, setConversationCursor] = useState<string>();
@@ -184,6 +218,11 @@ export function ChatCommunicationsWorkspace({ account }: { account: ChatAccount 
   const root = useRef<HTMLDivElement>(null);
   const historyEnd = useRef<HTMLDivElement>(null);
   const threadEnd = useRef<HTMLDivElement>(null);
+  const appliedRequest = useRef<string | undefined>(undefined);
+  const sourcePages = useRef({ key: "", cursors: new Set<string>(), threadLoaded: false });
+  const sourceElement = useRef<HTMLElement>(null);
+  const scrolledSource = useRef("");
+  const requestedPages = useRef({ id: requestedConversationId, cursors: new Set<string>() });
 
   const loadConversations = useCallback(
     async (cursor?: string) => {
@@ -215,6 +254,9 @@ export function ChatCommunicationsWorkspace({ account }: { account: ChatAccount 
     };
   }, [loadConversations]);
   useEffect(() => {
+    onConversationsChanged?.(conversations);
+  }, [conversations, onConversationsChanged]);
+  useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (
         (event.ctrlKey || event.metaKey) &&
@@ -233,30 +275,154 @@ export function ChatCommunicationsWorkspace({ account }: { account: ChatAccount 
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
   }, []);
-  async function loadMessages(selected: ChatConversation, cursor?: string) {
-    const result = await run({
-      operation: "messages.list",
-      accountId: account.id,
-      conversationId: selected.id,
-      ...(cursor ? { cursor } : {}),
-    });
-    if (!result || !active.current || destination.current !== selected.id) return;
-    setMessages((previous) => mergeChatMessages(cursor ? previous : [], result.messages ?? []));
-    setMessageCursor(result.nextCursor);
-  }
-  async function openConversation(selected: ChatConversation) {
-    if (busy) return;
-    const changed = destination.current !== selected.id;
-    destination.current = selected.id;
-    setConversation(selected);
-    setReplyTo(undefined);
-    setThread(undefined);
-    threadDestination.current = undefined;
-    if (changed) {
-      setMessages([]);
-      setMessageCursor(undefined);
+  const loadMessages = useCallback(
+    async (selected: ChatConversation, cursor?: string) => {
+      const result = await run({
+        operation: "messages.list",
+        accountId: account.id,
+        conversationId: selected.id,
+        ...(cursor ? { cursor } : {}),
+      });
+      if (!result || !active.current || destination.current !== selected.id) return;
+      setMessages((previous) => mergeChatMessages(cursor ? previous : [], result.messages ?? []));
+      setMessageCursor(result.nextCursor);
+    },
+    [account.id, run],
+  );
+  const openConversation = useCallback(
+    async (selected: ChatConversation) => {
+      if (busy) return;
+      const changed = destination.current !== selected.id;
+      destination.current = selected.id;
+      setConversation(selected);
+      setReplyTo(undefined);
+      setThread(undefined);
+      threadDestination.current = undefined;
+      if (changed) {
+        setMessages([]);
+        setMessageCursor(undefined);
+      }
+      await loadMessages(selected);
+    },
+    [busy, loadMessages],
+  );
+  useEffect(() => {
+    if (requestedPages.current.id !== requestedConversationId) {
+      requestedPages.current = { id: requestedConversationId, cursors: new Set() };
     }
-    await loadMessages(selected);
+    if (!requestedConversationId) {
+      appliedRequest.current = undefined;
+      return;
+    }
+    if (busy || appliedRequest.current === requestedConversationId) return;
+    const selected = conversations.find(
+      (item) => item.id === requestedConversationId && item.accountId === account.id,
+    );
+    if (!selected) {
+      if (
+        conversationCursor &&
+        requestedPages.current.cursors.size < 20 &&
+        !requestedPages.current.cursors.has(conversationCursor)
+      ) {
+        requestedPages.current.cursors.add(conversationCursor);
+        void loadConversations(conversationCursor);
+      }
+      return;
+    }
+    appliedRequest.current = requestedConversationId;
+    setView("home");
+    void openConversation(selected);
+  }, [
+    account.id,
+    busy,
+    conversations,
+    conversationCursor,
+    requestedConversationId,
+    openConversation,
+    loadConversations,
+  ]);
+  useEffect(() => {
+    if (
+      !requestedMessageId ||
+      !conversation ||
+      (requestedConversationId && conversation.id !== requestedConversationId) ||
+      busy ||
+      error
+    )
+      return;
+    const key = JSON.stringify([
+      account.id,
+      conversation.id,
+      requestedMessageId,
+      requestedThreadId,
+    ]);
+    if (sourcePages.current.key !== key)
+      sourcePages.current = { key, cursors: new Set(), threadLoaded: false };
+    if (requestedThreadId && !sourcePages.current.threadLoaded) {
+      sourcePages.current.threadLoaded = true;
+      threadDestination.current = requestedThreadId;
+      void (async () => {
+        const result = await run({
+          operation: "messages.list",
+          accountId: account.id,
+          conversationId: conversation.id,
+          threadId: requestedThreadId,
+        });
+        if (
+          !active.current ||
+          sourcePages.current.key !== key ||
+          destination.current !== conversation.id
+        )
+          return;
+        const rows = result?.messages ?? [];
+        const rootMessage =
+          rows.find((message) => message.id === requestedThreadId) ??
+          rows.find((message) => message.id === requestedMessageId) ??
+          rows[0];
+        if (rootMessage) setThread(rootMessage);
+        setThreadMessages(rows);
+        setThreadCursor(result?.nextCursor);
+      })();
+      return;
+    }
+    const rows = requestedThreadId ? threadMessages : messages;
+    if (rows.some((message) => message.id === requestedMessageId)) {
+      if (scrolledSource.current !== key && sourceElement.current) {
+        sourceElement.current.scrollIntoView({ block: "center" });
+        scrolledSource.current = key;
+      }
+      return;
+    }
+    const cursor = requestedThreadId ? threadCursor : messageCursor;
+    if (
+      !cursor ||
+      sourcePages.current.cursors.size >= 10 ||
+      sourcePages.current.cursors.has(cursor)
+    )
+      return;
+    sourcePages.current.cursors.add(cursor);
+    if (requestedThreadId && thread) void loadThread(thread, cursor);
+    else if (!requestedThreadId) void loadMessages(conversation, cursor);
+  }, [
+    requestedMessageId,
+    requestedConversationId,
+    requestedThreadId,
+    account.id,
+    conversation,
+    busy,
+    error,
+    messages,
+    threadMessages,
+    messageCursor,
+    threadCursor,
+    thread,
+    run,
+    loadMessages,
+  ]);
+
+  function selectGeneralConversation(selected: ChatConversation) {
+    onConversationSelected?.(selected);
+    void openConversation(selected);
   }
   async function loadThread(selected: ChatMessage, cursor?: string) {
     if (!conversation) return;
@@ -336,9 +502,19 @@ export function ChatCommunicationsWorkspace({ account }: { account: ChatAccount 
       ),
   );
   const visibleMessages = messages.filter((message) => view !== "later" || isSaved(message));
+  const waitingForRequestedConversation =
+    !!requestedConversationId && conversation?.id !== requestedConversationId;
   function renderMessage(message: ChatMessage, inThread = false) {
     return (
-      <article key={message.id} className="group flex gap-3 border-b border-border/50 px-4 py-3">
+      <article
+        key={message.id}
+        ref={message.id === requestedMessageId ? sourceElement : undefined}
+        data-source-message={message.id === requestedMessageId || undefined}
+        className={cn(
+          "group flex gap-3 border-b border-border/50 px-4 py-3",
+          message.id === requestedMessageId && "bg-accent ring-1 ring-inset ring-primary/30",
+        )}
+      >
         <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-muted text-xs font-semibold">
           {message.author.slice(0, 2).toUpperCase() || "?"}
         </span>
@@ -355,9 +531,54 @@ export function ChatCommunicationsWorkspace({ account }: { account: ChatAccount 
             </p>
           )}
           <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-relaxed">
-            {message.text || "This message has no text. Open the source app to view its media."}
+            {message.text
+              ? chatTextParts(message.text).map(({ text, href }, index) =>
+                  href ? (
+                    <a
+                      key={index}
+                      href={href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary underline underline-offset-2"
+                      onClick={
+                        onOpenLink
+                          ? (event) => {
+                              event.preventDefault();
+                              onOpenLink(href);
+                            }
+                          : undefined
+                      }
+                    >
+                      {text}
+                    </a>
+                  ) : (
+                    text
+                  ),
+                )
+              : "This message has no text. Open the source app to view its media."}
           </p>
           <div className="mt-2 flex gap-1">
+            {onCreateTask && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() =>
+                  onCreateTask(
+                    communicationTaskDraft({
+                      provider: account.provider,
+                      accountId: account.id,
+                      conversationId: message.conversationId,
+                      messageId: message.id,
+                      threadId: account.provider === "slack" ? message.threadId : undefined,
+                      title: message.text.split("\n")[0] || `Follow up with ${message.author}`,
+                      text: message.text,
+                    }),
+                  )
+                }
+              >
+                Create task
+              </Button>
+            )}
             <Button
               size="icon-xs"
               variant={isSaved(message) ? "secondary" : "ghost-muted"}
@@ -400,32 +621,18 @@ export function ChatCommunicationsWorkspace({ account }: { account: ChatAccount 
   }
   return (
     <div ref={root} className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
-      <nav
-        aria-label="Chat views"
-        className="flex w-14 shrink-0 flex-col items-center gap-3 border-r border-border bg-sidebar py-4"
-      >
-        {[
+      <OfficeSubnav
+        label="Chat views"
+        items={[
           { id: "home", label: "Home", icon: HomeIcon },
           { id: "dms", label: "DMs", icon: MessageCircleIcon },
           { id: "later", label: "Later", icon: BookmarkIcon },
-        ].map(({ id, label, icon: Icon }) => (
-          <button
-            type="button"
-            key={id}
-            aria-current={view === id ? "page" : undefined}
-            className={cn(
-              "flex w-12 flex-col items-center gap-1 rounded-md px-1 py-2 text-3xs hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring",
-              view === id && "bg-sidebar-row-active",
-            )}
-            onClick={() => {
-              if (id === "home" || id === "dms" || id === "later") setView(id);
-            }}
-          >
-            <Icon className="size-4" />
-            {label}
-          </button>
-        ))}
-      </nav>
+        ]}
+        value={view}
+        onChange={(id) => {
+          if (id === "home" || id === "dms" || id === "later") setView(id);
+        }}
+      />
       <aside
         aria-label="Channels and direct messages"
         className="hidden w-52 shrink-0 flex-col border-r border-border bg-sidebar lg:flex"
@@ -437,6 +644,7 @@ export function ChatCommunicationsWorkspace({ account }: { account: ChatAccount 
           </p>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-2">
+          <h3 className="px-2 py-2 text-xs font-medium text-muted-foreground">General</h3>
           {visibleConversations.map((item) => (
             <button
               type="button"
@@ -447,7 +655,7 @@ export function ChatCommunicationsWorkspace({ account }: { account: ChatAccount 
                 "my-1 flex w-full items-start gap-2 rounded-md px-2 py-2 text-left text-sm hover:bg-sidebar-row-hover focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-60",
                 conversation?.id === item.id && "bg-sidebar-row-active",
               )}
-              onClick={() => void openConversation(item)}
+              onClick={() => selectGeneralConversation(item)}
             >
               {item.kind === "dm" ? (
                 <MessageCircleIcon className="mt-0.5 size-4 shrink-0" />
@@ -475,6 +683,7 @@ export function ChatCommunicationsWorkspace({ account }: { account: ChatAccount 
               Load more conversations
             </Button>
           )}
+          {projectSidebar}
         </div>
         <p className="border-t border-border p-3 text-xs text-muted-foreground">
           {account.provider === "discord"
@@ -484,12 +693,22 @@ export function ChatCommunicationsWorkspace({ account }: { account: ChatAccount 
               : "Token permissions apply"}
         </p>
       </aside>
-      <section aria-label="Chat history" className="flex min-w-0 flex-1 flex-col">
+      <section
+        aria-label="Chat history"
+        className={cn(
+          "flex min-w-0 flex-1 flex-col",
+          thread && !waitingForRequestedConversation && "hidden",
+        )}
+      >
         <div className="space-y-3 border-b border-border p-4">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <h1 className="truncate text-lg font-semibold">
-                {view === "later" ? "Later" : (conversation?.title ?? "Choose a conversation")}
+                {waitingForRequestedConversation
+                  ? "Opening project conversation"
+                  : view === "later"
+                    ? "Later"
+                    : (conversation?.title ?? "Choose a conversation")}
               </h1>
               <p className="mt-1 text-xs text-muted-foreground">
                 {providerNames[account.provider]} · {account.identity}
@@ -528,7 +747,7 @@ export function ChatCommunicationsWorkspace({ account }: { account: ChatAccount 
               value={conversation?.id ?? ""}
               onChange={(event) => {
                 const selected = conversations.find((item) => item.id === event.target.value);
-                if (selected) void openConversation(selected);
+                if (selected) selectGeneralConversation(selected);
               }}
             >
               <option value="">Choose a conversation</option>
@@ -552,6 +771,22 @@ export function ChatCommunicationsWorkspace({ account }: { account: ChatAccount 
             </div>
           )}
           <RequestState busy={busy} error={error} />
+          {requestedConversationId &&
+            conversation?.id !== requestedConversationId &&
+            loaded &&
+            !busy && (
+              <p role="status" className="text-xs text-muted-foreground">
+                {conversationCursor
+                  ? "The linked channel is not loaded yet. Load more conversations to continue searching."
+                  : "This connection cannot find the linked channel. Check its access or reconnect it in project settings."}
+              </p>
+            )}
+          {projectSidebar && (
+            <details className="lg:hidden">
+              <summary className="cursor-pointer text-sm">Projects</summary>
+              {projectSidebar}
+            </details>
+          )}
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto">
           {!loaded ? (
@@ -560,6 +795,10 @@ export function ChatCommunicationsWorkspace({ account }: { account: ChatAccount 
                 ? "Conversations could not be loaded. Use Refresh to retry."
                 : "Loading conversations…"}
             </p>
+          ) : waitingForRequestedConversation ? (
+            <p className="p-6 text-sm text-muted-foreground">
+              Looking for the linked channel in this connection’s accessible conversations.
+            </p>
           ) : !conversation ? (
             <p className="p-6 text-sm text-muted-foreground">
               Choose a channel or direct message to load its history. Activity notifications and
@@ -567,6 +806,16 @@ export function ChatCommunicationsWorkspace({ account }: { account: ChatAccount 
             </p>
           ) : (
             <>
+              {requestedMessageId &&
+                !busy &&
+                !(requestedThreadId ? threadMessages : messages).some(
+                  (message) => message.id === requestedMessageId,
+                ) && (
+                  <p role="status" className="border-b p-4 text-sm text-muted-foreground">
+                    The linked message is not in the loaded history. Load earlier messages or check
+                    access in the source service.
+                  </p>
+                )}
               {messageCursor && view !== "later" && (
                 <div className="p-4">
                   <Button
@@ -595,7 +844,7 @@ export function ChatCommunicationsWorkspace({ account }: { account: ChatAccount 
             </>
           )}
         </div>
-        {conversation && view !== "later" && (
+        {conversation && view !== "later" && !waitingForRequestedConversation && (
           <ChatComposer
             key={JSON.stringify([account.id, conversation.id])}
             account={account}
@@ -606,11 +855,8 @@ export function ChatCommunicationsWorkspace({ account }: { account: ChatAccount 
           />
         )}
       </section>
-      {thread && conversation && (
-        <aside
-          aria-label="Message thread"
-          className="absolute inset-y-0 right-0 z-30 flex w-full max-w-md flex-col border-l border-border bg-background shadow-xl xl:static xl:w-80 xl:shrink-0 xl:shadow-none"
-        >
+      {thread && conversation && !waitingForRequestedConversation && (
+        <section aria-label="Message thread" className="flex min-w-0 flex-1 flex-col bg-background">
           <div className="flex shrink-0 items-start justify-between gap-3 border-b border-border p-4">
             <div className="min-w-0">
               <h2 className="text-sm font-semibold">Thread</h2>
@@ -628,22 +874,23 @@ export function ChatCommunicationsWorkspace({ account }: { account: ChatAccount 
               <RefreshCwIcon />
             </Button>
             <Button
-              size="icon-sm"
+              size="sm"
               variant="ghost"
-              aria-label="Close thread"
+              aria-label="Back to channel"
               onClick={() => {
                 setThread(undefined);
                 threadDestination.current = undefined;
               }}
             >
-              <XIcon />
+              <ArrowLeftIcon />
+              Back to channel
             </Button>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto">
             <div className="px-4 pt-3">
               <RequestState busy={busy} error={error} />
             </div>
-            <p className="border-b border-border p-4 text-sm">{thread.text}</p>
+            {renderMessage(thread, true)}
             {threadCursor && (
               <div className="p-4">
                 <Button
@@ -680,7 +927,7 @@ export function ChatCommunicationsWorkspace({ account }: { account: ChatAccount 
               permission is checked on that thread.
             </p>
           )}
-        </aside>
+        </section>
       )}
     </div>
   );

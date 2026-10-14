@@ -1,5 +1,25 @@
 import type { ChatMessage } from "@t3tools/contracts";
 
+/** Recognize web links without interpreting provider message text as markup. */
+export function chatTextParts(text: string): { text: string; href?: string }[] {
+  const parts: { text: string; href?: string }[] = [];
+  let offset = 0;
+  for (const match of text.matchAll(/https?:\/\/[^\s<>"|]+/gi)) {
+    const raw = match[0].replace(/[.,;:!?\])]+$/, "");
+    try {
+      const url = new URL(raw);
+      if (url.protocol !== "https:" && url.protocol !== "http:") continue;
+      if (match.index > offset) parts.push({ text: text.slice(offset, match.index) });
+      parts.push({ text: raw, href: url.href });
+      offset = match.index + raw.length;
+    } catch {
+      // Malformed URLs remain ordinary message text.
+    }
+  }
+  if (offset < text.length) parts.push({ text: text.slice(offset) });
+  return parts;
+}
+
 export interface SavedChatReference {
   provider: string;
   accountId: string;

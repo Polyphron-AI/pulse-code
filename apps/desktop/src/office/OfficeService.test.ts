@@ -8,6 +8,36 @@ function fixture(overrides: Partial<OfficeServiceOptions> = {}) {
   let sequence = 0;
   const calls: string[] = [];
   const providers: OfficeProviders = {
+    exportNote: async (_context, folderId, name) => ({
+      id: "export",
+      name,
+      parents: [folderId],
+      mimeType: "text/plain",
+      webViewLink: "https://drive.google.com/file/d/export/view",
+    }),
+    sendMail: async () => {
+      calls.push("mail.send");
+    },
+    createEvent: async ({ account }, calendarId, event) => ({
+      ...event,
+      id: "created",
+      accountId: account.id,
+      calendarId,
+    }),
+    updateEvent: async ({ account }, calendarId, id, event) => ({
+      ...event,
+      id,
+      accountId: account.id,
+      calendarId,
+    }),
+    deleteEvent: async () => {},
+    driveFiles: async () => ({ files: [] }),
+    driveFile: async (_context, id) => ({
+      id,
+      name: "Folder",
+      mimeType: "application/vnd.google-apps.folder",
+      parents: [],
+    }),
     verifyImap: async () => {
       calls.push("imap.verify");
     },
@@ -95,6 +125,81 @@ const connect = (service: OfficeService) =>
   });
 
 describe("OfficeService", () => {
+  it("adds Drive without losing existing mail/calendar connections and validates Drive requests", async () => {
+    const setup = fixture();
+    await connect(setup.service);
+    expect(
+      await setup.service.invoke({ operation: "drive.list", accountId: "id-1" }),
+    ).toMatchObject({ ok: false, error: { code: "unsupported" } });
+    const upgraded = await setup.service.invoke({
+      operation: "accounts.connectOAuth",
+      provider: "google",
+      accountId: "id-1",
+      capabilities: ["drive"],
+    });
+    expect(upgraded).toMatchObject({
+      ok: true,
+      accounts: [{ id: "id-1", capabilities: ["drive", "mail", "calendar"] }],
+    });
+    expect(await setup.service.invoke({ operation: "drive.list", accountId: "id-1" })).toEqual({
+      ok: true,
+      files: [],
+    });
+    expect(
+      await setup.service.invoke({ operation: "drive.get", accountId: "id-1", fileId: "selected" }),
+    ).toMatchObject({ ok: true, file: { id: "selected" } });
+    expect(
+      await setup.service.invoke({ operation: "drive.list", accountId: "missing" }),
+    ).toMatchObject({ ok: false, error: { code: "not_found" } });
+    expect(
+      await setup.service.invoke({ operation: "drive.list", accountId: "id-1", limit: 101 }),
+    ).toMatchObject({ ok: false, error: { code: "invalid_request" } });
+    expect(JSON.stringify(upgraded)).not.toContain("secret-");
+    await setup.service.close();
+  });
+  it("does not widen new-account scopes and preserves connections on mismatched upgrades", async () => {
+    let email = "first@example.com";
+    const requested: string[][] = [];
+    const setup = fixture({
+      authorize: async (input) => {
+        requested.push([...input.capabilities]);
+        return { email, accessToken: "token", refreshToken: "refresh", expiresAt: 900000 };
+      },
+    });
+    await connect(setup.service);
+    email = "second@example.com";
+    expect(
+      await setup.service.invoke({
+        operation: "accounts.connectOAuth",
+        provider: "google",
+        capabilities: ["drive"],
+      }),
+    ).toMatchObject({ ok: true });
+    expect(requested[1]).toEqual(["drive"]);
+    expect(
+      await setup.service.invoke({
+        operation: "accounts.connectOAuth",
+        provider: "google",
+        accountId: "id-1",
+        capabilities: ["drive"],
+      }),
+    ).toMatchObject({ ok: false, error: { code: "invalid_request" } });
+    email = "first@example.com";
+    expect(
+      await setup.service.invoke({
+        operation: "accounts.connectOAuth",
+        provider: "google",
+        capabilities: ["drive"],
+      }),
+    ).toMatchObject({ ok: false, error: { code: "invalid_request" } });
+    expect(await setup.service.invoke({ operation: "accounts.list" })).toMatchObject({
+      accounts: [
+        { id: "id-1", capabilities: ["mail", "calendar"] },
+        { id: "id-2", capabilities: ["drive"] },
+      ],
+    });
+    await setup.service.close();
+  });
   it("reads threads only through the selected mail account and rejects unknown accounts", async () => {
     const setup = fixture();
     await connect(setup.service);
@@ -342,4 +447,55 @@ describe("OfficeService", () => {
       error: { code: "closed" },
     });
   });
+});
+it("requires an explicit send upgrade and preserves existing read grants", async () => {
+  const setup = fixture();
+  await connect(setup.service);
+  const request = {
+    operation: "mail.send" as const,
+    accountId: "id-1",
+    message: { to: ["recipient@example.com"], subject: "Proposal", text: "Hello" },
+  };
+  expect(await setup.service.invoke(request)).toMatchObject({
+    ok: false,
+    error: { code: "unsupported" },
+  });
+  expect(
+    await setup.service.invoke({
+      operation: "accounts.connectOAuth",
+      provider: "google",
+      accountId: "id-1",
+      capabilities: ["mailSend"],
+    }),
+  ).toMatchObject({ ok: true, accounts: [{ capabilities: ["mailSend", "mail", "calendar"] }] });
+  expect(await setup.service.invoke(request)).toMatchObject({ ok: true, sent: true });
+  await setup.service.close();
+});
+it("requires explicit Drive export consent and retains the old read grants", async () => {
+  const setup = fixture();
+  await connect(setup.service);
+  const request = {
+    operation: "drive.exportNote" as const,
+    accountId: "id-1",
+    folderId: "folder",
+    title: "Notes",
+    text: "Decisions",
+  };
+  expect(await setup.service.invoke(request)).toMatchObject({
+    ok: false,
+    error: { code: "unsupported" },
+  });
+  expect(
+    await setup.service.invoke({
+      operation: "accounts.connectOAuth",
+      provider: "google",
+      accountId: "id-1",
+      capabilities: ["driveWrite"],
+    }),
+  ).toMatchObject({ ok: true, accounts: [{ capabilities: ["driveWrite", "mail", "calendar"] }] });
+  expect(await setup.service.invoke(request)).toMatchObject({
+    ok: true,
+    file: { id: "export", parents: ["folder"] },
+  });
+  await setup.service.close();
 });

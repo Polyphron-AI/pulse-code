@@ -275,6 +275,56 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           detail: "Project monograms must contain at most two characters.",
         });
       }
+      if (command.office) {
+        const browserThreadId = command.office.browserThreadId;
+        if (
+          browserThreadId !== undefined &&
+          browserThreadId !== project.office?.browserThreadId &&
+          !readModel.threads.some(
+            (thread) =>
+              thread.id === browserThreadId &&
+              thread.projectId === command.projectId &&
+              thread.deletedAt === null,
+          )
+        ) {
+          return yield* new OrchestrationCommandInvariantError({
+            commandType: command.type,
+            detail: "The project browser must reference an existing thread in this project.",
+          });
+        }
+
+        const conversationKeys = command.office.conversations.map((entry) =>
+          JSON.stringify([entry.provider, entry.accountId, entry.conversationId]),
+        );
+        const columnIds = command.office.taskColumns?.map((column) => column.id) ?? [];
+        if (new Set(columnIds).size !== columnIds.length) {
+          return yield* new OrchestrationCommandInvariantError({
+            commandType: command.type,
+            detail: "Project task columns must have unique IDs.",
+          });
+        }
+        if (
+          new Set(conversationKeys).size !== conversationKeys.length ||
+          new Set(command.office.agentThreadIds).size !== command.office.agentThreadIds.length
+        ) {
+          return yield* new OrchestrationCommandInvariantError({
+            commandType: command.type,
+            detail: "Project connections must not contain duplicate conversations or agents.",
+          });
+        }
+        const existingAgentIds = new Set(project.office?.agentThreadIds ?? []);
+        for (const threadId of command.office.agentThreadIds) {
+          if (
+            !existingAgentIds.has(threadId) &&
+            !readModel.threads.some((thread) => thread.id === threadId && thread.deletedAt === null)
+          ) {
+            return yield* new OrchestrationCommandInvariantError({
+              commandType: command.type,
+              detail: "Assigned agents must reference an existing thread in this environment.",
+            });
+          }
+        }
+      }
       if (command.scripts !== undefined) {
         // Persisted IDs predate shortcut validation. Let users edit or remove them
         // without allowing another invalid ID to enter the project.
@@ -318,6 +368,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           ...(command.autoPull !== undefined ? { autoPull: command.autoPull } : {}),
           ...(command.faviconPath !== undefined ? { faviconPath: command.faviconPath } : {}),
           ...(command.projectIcon !== undefined ? { projectIcon: command.projectIcon } : {}),
+          ...(command.office !== undefined ? { office: command.office } : {}),
           ...(command.scripts !== undefined ? { scripts: command.scripts } : {}),
           updatedAt: occurredAt,
         },

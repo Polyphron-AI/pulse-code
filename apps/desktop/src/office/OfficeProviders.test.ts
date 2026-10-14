@@ -92,7 +92,8 @@ describe("Office read adapters", () => {
       urls.push(url);
       expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer secret");
       if (url.pathname.endsWith("calendarList"))
-        return Response.json({ items: [{ id: "primary", summary: "Work" }] });
+        return Response.json({ items: [{ id: "primary", summary: "Work", accessRole: "owner" }] });
+      if (url.pathname.endsWith("/calendars/primary")) return Response.json({ id: "primary" });
       return url.searchParams.has("pageToken")
         ? Response.json({
             items: [
@@ -118,7 +119,7 @@ describe("Office read adapters", () => {
           });
     });
     expect(await providers.calendars(context())).toEqual([
-      { id: "primary", accountId: "account", name: "Work", selected: true },
+      { id: "primary", accountId: "account", name: "Work", selected: true, writable: true },
     ]);
     const events = await providers.events(
       context(),
@@ -126,8 +127,8 @@ describe("Office read adapters", () => {
       "2026-09-10T00:00:00Z",
     );
     expect(events.map((event) => event.id)).toEqual(["first", "second"]);
-    expect(urls[1]?.searchParams.get("singleEvents")).toBe("true");
-    expect(urls[2]?.searchParams.get("pageToken")).toBe("page2");
+    expect(urls[2]?.searchParams.get("singleEvents")).toBe("true");
+    expect(urls[3]?.searchParams.get("pageToken")).toBe("page2");
   });
 
   it("returns Gmail inbox summaries with the next cursor and reads plain text only", async () => {

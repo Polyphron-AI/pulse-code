@@ -5,7 +5,14 @@ const ShortText = Schema.String.check(Schema.isMaxLength(4096));
 const Body = Schema.String.check(Schema.isMaxLength(2_000_000));
 const Limit = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(100));
 export const OfficeProvider = Schema.Literals(["google", "microsoft", "imap"]);
-export const OfficeCapability = Schema.Literals(["mail", "calendar"]);
+export const OfficeCapability = Schema.Literals([
+  "mail",
+  "calendar",
+  "drive",
+  "driveWrite",
+  "mailSend",
+  "calendarWrite",
+]);
 export const OfficeAccount = Schema.Struct({
   id: Id,
   provider: OfficeProvider,
@@ -20,6 +27,7 @@ export const OfficeCalendar = Schema.Struct({
   accountId: Id,
   name: ShortText,
   selected: Schema.Boolean,
+  writable: Schema.optionalKey(Schema.Boolean),
 });
 export type OfficeCalendar = typeof OfficeCalendar.Type;
 export const OfficeEvent = Schema.Struct({
@@ -31,14 +39,37 @@ export const OfficeEvent = Schema.Struct({
   end: ShortText,
   location: Schema.optionalKey(ShortText),
   meetingUrl: Schema.optionalKey(ShortText),
+  description: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(20000))),
+  attendees: Schema.optionalKey(Schema.Array(ShortText).check(Schema.isMaxLength(100))),
+  allDay: Schema.optionalKey(Schema.Boolean),
+  editable: Schema.optionalKey(Schema.Boolean),
 });
 export type OfficeEvent = typeof OfficeEvent.Type;
+export const OfficeEventInput = Schema.Struct({
+  title: Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(4096)),
+  start: ShortText,
+  end: ShortText,
+  description: Schema.String.check(Schema.isMaxLength(20000)),
+  location: ShortText,
+  attendees: Schema.Array(ShortText).check(Schema.isMaxLength(100)),
+  createMeeting: Schema.Boolean,
+  allDay: Schema.optionalKey(Schema.Boolean),
+});
+export type OfficeEventInput = typeof OfficeEventInput.Type;
+export const OfficeMailSendInput = Schema.Struct({
+  to: Schema.Array(ShortText).check(Schema.isMinLength(1), Schema.isMaxLength(100)),
+  subject: ShortText,
+  text: Body,
+  sourceMessageId: Schema.optionalKey(Id),
+});
+export type OfficeMailSendInput = typeof OfficeMailSendInput.Type;
 export const OfficeMessage = Schema.Struct({
   id: Id,
   accountId: Id,
   conversationId: Schema.optionalKey(Id),
   subject: ShortText,
   from: ShortText,
+  replyTo: Schema.optionalKey(ShortText),
   to: ShortText,
   date: ShortText,
   preview: ShortText,
@@ -52,6 +83,19 @@ export const OfficeMailThread = Schema.Struct({
   truncated: Schema.Boolean,
 });
 export type OfficeMailThread = typeof OfficeMailThread.Type;
+export const OfficeDriveFile = Schema.Struct({
+  id: Id,
+  name: ShortText,
+  mimeType: ShortText,
+  parents: Schema.Array(Id),
+  modifiedTime: Schema.optionalKey(ShortText),
+  size: Schema.optionalKey(ShortText),
+  webViewLink: Schema.optionalKey(ShortText),
+  capabilities: Schema.optionalKey(Schema.Struct({ canComment: Schema.Boolean })),
+  text: Schema.optionalKey(Body),
+  textTruncated: Schema.optionalKey(Schema.Boolean),
+});
+export type OfficeDriveFile = typeof OfficeDriveFile.Type;
 export const OfficeDraft = Schema.Struct({
   id: Id,
   accountId: Id,
@@ -73,10 +117,11 @@ export const OfficeRequest = Schema.Union([
   Schema.Struct({ operation: Schema.Literal("accounts.list") }),
   Schema.Struct({
     operation: Schema.Literal("accounts.connectOAuth"),
+    accountId: Schema.optionalKey(Id),
     provider: Schema.Literals(["google", "microsoft"]),
     capabilities: Schema.Array(OfficeCapability).check(
       Schema.isMinLength(1),
-      Schema.isMaxLength(2),
+      Schema.isMaxLength(6),
     ),
   }),
   Schema.Struct({
@@ -96,6 +141,44 @@ export const OfficeRequest = Schema.Union([
   }),
   Schema.Struct({ operation: Schema.Literal("calendars.events"), ...EventInput }),
   Schema.Struct({ operation: Schema.Literal("calendars.refresh"), ...EventInput }),
+  Schema.Struct({
+    operation: Schema.Literal("drive.list"),
+    ...PageInput,
+    folderId: Schema.optionalKey(Id),
+    query: Schema.optionalKey(ShortText),
+  }),
+  Schema.Struct({ operation: Schema.Literal("drive.get"), ...AccountInput, fileId: Id }),
+  Schema.Struct({
+    operation: Schema.Literal("drive.exportNote"),
+    ...AccountInput,
+    folderId: Id,
+    title: Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(4096)),
+    text: Body,
+  }),
+  Schema.Struct({
+    operation: Schema.Literal("calendars.create"),
+    ...AccountInput,
+    calendarId: Id,
+    event: OfficeEventInput,
+  }),
+  Schema.Struct({
+    operation: Schema.Literal("calendars.update"),
+    ...AccountInput,
+    calendarId: Id,
+    eventId: Id,
+    event: OfficeEventInput,
+  }),
+  Schema.Struct({
+    operation: Schema.Literal("calendars.delete"),
+    ...AccountInput,
+    calendarId: Id,
+    eventId: Id,
+  }),
+  Schema.Struct({
+    operation: Schema.Literal("mail.send"),
+    ...AccountInput,
+    message: OfficeMailSendInput,
+  }),
   Schema.Struct({ operation: Schema.Literal("mail.list"), ...PageInput }),
   Schema.Struct({ operation: Schema.Literal("mail.get"), ...AccountInput, messageId: Id }),
   Schema.Struct({ operation: Schema.Literal("mail.thread"), ...AccountInput, messageId: Id }),
@@ -119,8 +202,12 @@ export const OfficeResult = Schema.Union([
     configuration: Schema.optionalKey(
       Schema.Struct({ google: Schema.Boolean, microsoft: Schema.Boolean, imap: Schema.Boolean }),
     ),
+    files: Schema.optionalKey(Schema.Array(OfficeDriveFile)),
+    file: Schema.optionalKey(OfficeDriveFile),
     calendars: Schema.optionalKey(Schema.Array(OfficeCalendar)),
     events: Schema.optionalKey(Schema.Array(OfficeEvent)),
+    event: Schema.optionalKey(OfficeEvent),
+    sent: Schema.optionalKey(Schema.Boolean),
     messages: Schema.optionalKey(Schema.Array(OfficeMessage)),
     message: Schema.optionalKey(OfficeMessage),
     thread: Schema.optionalKey(OfficeMailThread),

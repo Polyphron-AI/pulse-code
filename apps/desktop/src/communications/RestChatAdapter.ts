@@ -1,6 +1,6 @@
 // @effect-diagnostics nodeBuiltinImport:off globalDate:off globalTimers:off -- Native Promise REST adapters own fetch cancellation and provider rate-limit deadlines outside Effect.
 import * as NodeCrypto from "node:crypto";
-import type { ChatConversation, ChatMessage } from "@t3tools/contracts";
+import type { ChatConversation, ChatMessage, ChatMember, ChatMembership } from "@t3tools/contracts";
 import { ChatError, type ChatAdapter } from "./ChatAdapter.ts";
 
 type Provider = "slack" | "discord";
@@ -311,6 +311,101 @@ class SlackAdapter implements ChatAdapter {
     if (!conversation)
       throw new ChatError("not_found", "Reload Slack conversations before opening this channel.");
     return conversation;
+  }
+
+  async members(
+    _accountId: string,
+    conversationId: string,
+    cursor?: string,
+    _channelOnly = false,
+  ): Promise<ChatMembership> {
+    id(conversationId, "slack");
+    const conversation = record(
+      record(await this.transport.request("conversations.info", { channel: conversationId }))
+        .channel,
+    );
+    if (id(conversation.id, "slack") !== conversationId)
+      throw new ChatError("network", "Slack returned an unexpected conversation identity.");
+    const result = record(
+      await this.transport.request("conversations.members", {
+        channel: conversationId,
+        limit: "50",
+        ...(cursor ? { cursor } : {}),
+      }),
+    );
+    if (!Array.isArray(result.members) || result.members.length > 50)
+      throw new ChatError("network", "Slack returned an invalid member list.");
+    const memberIds = result.members.map((value) => id(value, "slack"));
+    const members: ChatMember[] = [];
+    let profilesUnavailable = !this.transport.scopes?.has("users:read");
+    let stopProfiles = profilesUnavailable;
+    // Five concurrent profile reads keep channel lists bounded without serial network waits.
+    for (let offset = 0; offset < memberIds.length; offset += 5) {
+      members.push(
+        ...(await Promise.all(
+          memberIds.slice(offset, offset + 5).map(async (userId): Promise<ChatMember> => {
+            const fallback = { id: userId, displayName: this.authors.get(userId) ?? userId };
+            if (stopProfiles) return fallback;
+            try {
+              const profileResult = record(
+                await this.transport.request("users.info", { user: userId }),
+              );
+              const user = record(profileResult.user);
+              if (id(user.id, "slack") !== userId)
+                throw new ChatError("network", "Slack returned an unexpected member identity.");
+              const profile = record(user.profile ?? {});
+              const displayName =
+                optionalString(profile.display_name) ||
+                optionalString(profile.real_name) ||
+                optionalString(user.name) ||
+                userId;
+              this.authors.set(userId, displayName);
+              const roles =
+                user.is_primary_owner === true
+                  ? ["Workspace primary owner"]
+                  : user.is_owner === true
+                    ? ["Workspace owner"]
+                    : user.is_admin === true
+                      ? ["Workspace admin"]
+                      : user.is_ultra_restricted === true
+                        ? ["Single-channel guest"]
+                        : user.is_restricted === true
+                          ? ["Multi-channel guest"]
+                          : [
+                                user.is_owner,
+                                user.is_admin,
+                                user.is_restricted,
+                                user.is_ultra_restricted,
+                              ].every((value) => value === false)
+                            ? ["Workspace member"]
+                            : undefined;
+              if (!roles) profilesUnavailable = true;
+              return {
+                id: userId,
+                displayName,
+                ...(roles ? { roles } : {}),
+                ...(typeof user.is_bot === "boolean" ? { isBot: user.is_bot } : {}),
+              };
+            } catch (error) {
+              if (!(error instanceof ChatError)) throw error;
+              profilesUnavailable = true;
+              if (["permission", "rate_limit", "authentication"].includes(error.code))
+                stopProfiles = true;
+              return fallback;
+            }
+          }),
+        )),
+      );
+    }
+    const nextCursor = optionalString(record(result.response_metadata ?? {}).next_cursor);
+    return {
+      scope: "channel",
+      title:
+        optionalString(conversation.name) || optionalString(conversation.user) || conversationId,
+      members,
+      ...(nextCursor ? { nextCursor } : {}),
+      note: `Slack channel members. Role labels describe source workspace roles, not Pulse permissions.${profilesUnavailable ? " Some profile or role information is unavailable; users:read access may be required." : ""}`,
+    };
   }
 
   private async author(message: Row): Promise<string> {
@@ -629,6 +724,117 @@ class DiscordAdapter implements ChatAdapter {
     if (!conversation)
       throw new ChatError("not_found", "Reload Discord conversations before opening this channel.");
     return conversation;
+  }
+
+  async members(
+    _accountId: string,
+    conversationId: string,
+    cursor?: string,
+    channelOnly = false,
+  ): Promise<ChatMembership> {
+    id(conversationId, "discord");
+    const channel = record(await this.transport.request(`channels/${conversationId}`));
+    if (id(channel.id, "discord") !== conversationId)
+      throw new ChatError("network", "Discord returned an unexpected channel identity.");
+    if (channel.guild_id === undefined)
+      throw new ChatError(
+        "unsupported",
+        "Server membership is available for Discord server channels only.",
+      );
+    const guildId = id(channel.guild_id, "discord");
+    const isThread = channel.type === 10 || channel.type === 11 || channel.type === 12;
+    const permissionChannel =
+      channelOnly && isThread
+        ? record(await this.transport.request(`channels/${id(channel.parent_id, "discord")}`))
+        : channel;
+    if (
+      channelOnly &&
+      isThread &&
+      (permissionChannel.id !== channel.parent_id || permissionChannel.guild_id !== guildId)
+    )
+      throw new ChatError("network", "Discord returned an unexpected parent channel.");
+    const guild = record(await this.transport.request(`guilds/${guildId}`));
+    if (id(guild.id, "discord") !== guildId)
+      throw new ChatError("network", "Discord returned an unexpected server identity.");
+    let result: Row[];
+    try {
+      result = rows(
+        await this.transport.request(
+          channelOnly && isThread
+            ? `channels/${conversationId}/thread-members`
+            : `guilds/${guildId}/members`,
+          {
+            limit: "50",
+            ...(channelOnly && isThread ? { with_member: "true" } : {}),
+            ...(cursor ? { after: id(cursor, "discord") } : {}),
+          },
+        ),
+      );
+      if (channelOnly && isThread)
+        result = result.map((entry) => {
+          const member = record(entry.member);
+          if (id(record(member.user).id, "discord") !== id(entry.user_id, "discord"))
+            throw new ChatError("network", "Discord returned an unexpected thread member.");
+          return member;
+        });
+    } catch (error) {
+      if (error instanceof ChatError && error.code === "permission")
+        throw new ChatError(
+          "permission",
+          "Discord server members are unavailable. Enable Server Members Intent for this bot and check its server access.",
+        );
+      throw error;
+    }
+    if (result.length > 50)
+      throw new ChatError("network", "Discord returned an invalid member list.");
+    const roleRows = rows(await this.transport.request(`guilds/${guildId}/roles`));
+    const roleNames = new Map(roleRows.map((role) => [id(role.id, "discord"), string(role.name)]));
+    let unavailableRoles = false;
+    const members = result
+      .map((member): ChatMember | null => {
+        const user = record(member.user);
+        const userId = id(user.id, "discord");
+        if (!Array.isArray(member.roles) || member.roles.length > 250)
+          throw new ChatError("network", "Discord returned invalid member roles.");
+        const roleIds = member.roles.map((role) => id(role, "discord"));
+        if (
+          channelOnly &&
+          (user.bot === true ||
+            (guild.owner_id !== userId &&
+              (permissions(guildId, new Set(roleIds), roleRows, permissionChannel, userId) &
+                VIEW) ===
+                0n))
+        )
+          return null;
+        const roles = roleIds.map((roleId) => roleNames.get(roleId));
+        const missing = roles.some((role) => role === undefined);
+        if (missing) unavailableRoles = true;
+        return {
+          id: userId,
+          displayName:
+            optionalString(member.nick) ||
+            optionalString(user.global_name) ||
+            string(user.username),
+          ...(!missing
+            ? { roles: roles.filter((role): role is string => role !== undefined) }
+            : {}),
+          ...(typeof user.bot === "boolean" ? { isBot: user.bot } : {}),
+        };
+      })
+      .filter((member): member is ChatMember => member !== null);
+    const highestId = result.reduce((highest, member) => {
+      const memberId = id(record(member.user).id, "discord");
+      return BigInt(memberId) > BigInt(highest) ? memberId : highest;
+    }, "0");
+    return {
+      scope: channelOnly ? "channel" : "workspace",
+      title: string(channelOnly ? channel.name : guild.name),
+      members,
+      ...(result.length === 50 ? { nextCursor: highestId } : {}),
+      note: channelOnly
+        ? "People with current access to this channel; thread results include joined members only. Source access can change after assignment."
+        : `Discord server members and assigned server roles. This does not establish channel or thread access; channel overrides still apply.${unavailableRoles ? " Some role information is unavailable." : ""}`,
+    };
   }
 
   private message(accountId: string, conversationId: string, value: Row): ChatMessage {

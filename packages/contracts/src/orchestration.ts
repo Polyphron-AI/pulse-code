@@ -26,6 +26,7 @@ import {
 } from "./baseSchemas.ts";
 import { ProviderInstanceId } from "./providerInstance.ts";
 import { PulseSkillSelectionList } from "./pulseSkills.ts";
+import { PulseTaskColumn } from "./tasks.ts";
 import {
   PullRequestActor,
   PullRequestChecksState,
@@ -541,6 +542,28 @@ export const ProjectIconOverride = Schema.Union([
 );
 export type ProjectIconOverride = typeof ProjectIconOverride.Type;
 
+export const ProjectOffice = Schema.Struct({
+  taskColumns: Schema.optional(Schema.Array(PulseTaskColumn).check(Schema.isMaxLength(20))),
+  browserThreadId: Schema.optional(ThreadId),
+  drive: Schema.optional(
+    Schema.Struct({
+      accountId: TrimmedNonEmptyString,
+      folderId: TrimmedNonEmptyString,
+      folderName: TrimmedNonEmptyString,
+    }),
+  ),
+  conversations: Schema.Array(
+    Schema.Struct({
+      provider: Schema.Literals(["slack", "discord", "telegram"]),
+      accountId: TrimmedNonEmptyString,
+      conversationId: TrimmedNonEmptyString,
+      title: TrimmedNonEmptyString,
+    }),
+  ).check(Schema.isMaxLength(100)),
+  agentThreadIds: Schema.Array(ThreadId).check(Schema.isMaxLength(100)),
+});
+export type ProjectOffice = typeof ProjectOffice.Type;
+
 export const OrchestrationProject = Schema.Struct({
   id: ProjectId,
   title: TrimmedNonEmptyString,
@@ -556,6 +579,7 @@ export const OrchestrationProject = Schema.Struct({
   // Optional on the wire so cached snapshots from older servers still decode.
   faviconPath: Schema.optional(Schema.NullOr(ProjectFaviconPath)),
   projectIcon: Schema.optional(Schema.NullOr(ProjectIconOverride)),
+  office: Schema.optional(Schema.NullOr(ProjectOffice)),
   scripts: Schema.Array(ProjectScript),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
@@ -878,6 +902,7 @@ export const OrchestrationProjectShell = Schema.Struct({
   // Optional on the wire so cached snapshots from older servers still decode.
   faviconPath: Schema.optional(Schema.NullOr(ProjectFaviconPath)),
   projectIcon: Schema.optional(Schema.NullOr(ProjectIconOverride)),
+  office: Schema.optional(Schema.NullOr(ProjectOffice)),
   scripts: Schema.Array(ProjectScript),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
@@ -1109,6 +1134,7 @@ const ProjectMetaUpdateCommand = Schema.Struct({
   autoPull: Schema.optional(Schema.Boolean),
   faviconPath: Schema.optional(Schema.NullOr(ProjectFaviconPath)),
   projectIcon: Schema.optional(Schema.NullOr(ProjectIconOverride)),
+  office: Schema.optional(Schema.NullOr(ProjectOffice)),
   scripts: Schema.optional(Schema.Array(ProjectScript)),
 });
 
@@ -1744,6 +1770,7 @@ export const ProjectCreatedPayload = Schema.Struct({
   // Optional so persisted events from older servers still decode.
   faviconPath: Schema.optional(Schema.NullOr(ProjectFaviconPath)),
   projectIcon: Schema.optional(Schema.NullOr(ProjectIconOverride)),
+  office: Schema.optional(Schema.NullOr(ProjectOffice)),
   scripts: Schema.Array(ProjectScript),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
@@ -1759,6 +1786,7 @@ export const ProjectMetaUpdatedPayload = Schema.Struct({
   autoPull: Schema.optional(Schema.Boolean),
   faviconPath: Schema.optional(Schema.NullOr(ProjectFaviconPath)),
   projectIcon: Schema.optional(Schema.NullOr(ProjectIconOverride)),
+  office: Schema.optional(Schema.NullOr(ProjectOffice)),
   scripts: Schema.optional(Schema.Array(ProjectScript)),
   updatedAt: IsoDateTime,
 });

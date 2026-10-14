@@ -360,6 +360,7 @@ export function projectEvent(
             autoPull: false,
             faviconPath: payload.faviconPath ?? null,
             projectIcon: payload.projectIcon ?? null,
+            office: payload.office ?? null,
             scripts: payload.scripts,
             createdAt: payload.createdAt,
             updatedAt: payload.updatedAt,
@@ -402,6 +403,7 @@ export function projectEvent(
                   ...(payload.projectIcon !== undefined
                     ? { projectIcon: payload.projectIcon }
                     : {}),
+                  ...(payload.office !== undefined ? { office: payload.office } : {}),
                   ...(payload.scripts !== undefined ? { scripts: payload.scripts } : {}),
                   updatedAt: payload.updatedAt,
                 }

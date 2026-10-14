@@ -1,3 +1,5 @@
+import { PULSE_TASKS_METHODS, PulseTasksRpcs } from "./tasks.ts";
+import { MEETING_NOTES_METHODS, MeetingNotesRpcs } from "./meetingNotes.ts";
 import {
   ChatGptReconnectProfileInput,
   ChatGptReconnectProfile,
@@ -288,6 +290,8 @@ import {
 import { VcsError } from "./vcs.ts";
 
 export const WS_METHODS = {
+  ...PULSE_TASKS_METHODS,
+  ...MEETING_NOTES_METHODS,
   pulseMcpList: PULSE_MCP_METHODS.list,
   pulseMcpUpsert: PULSE_MCP_METHODS.upsert,
   pulseMcpRemove: PULSE_MCP_METHODS.remove,
@@ -1463,6 +1467,8 @@ const WsSubscribeResourceTelemetryRpc = Rpc.make(WS_METHODS.subscribeResourceTel
 
 export const WsRpcGroup = RpcGroup.make(
   ...PulseMcpRpcs,
+  ...PulseTasksRpcs,
+  ...MeetingNotesRpcs,
   ...PulseSkillsRpcs,
   WsServerProbeRpc,
   WsServerGetConfigRpc,

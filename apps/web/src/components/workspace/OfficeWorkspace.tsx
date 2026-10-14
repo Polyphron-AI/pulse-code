@@ -3,8 +3,10 @@ import {
   BriefcaseBusinessIcon,
   CalendarDaysIcon,
   MailIcon,
+  ListTodoIcon,
   MicIcon,
   MessagesSquareIcon,
+  FolderIcon,
   SettingsIcon,
 } from "lucide-react";
 import { isElectron } from "../../env";
@@ -17,7 +19,7 @@ import { cn } from "../../lib/utils";
 
 export function OfficeSidebar() {
   const search = useSearch({ strict: false });
-  const communicationsActive = search.officeView === "communications";
+  const workspaceActive = !search.officeView;
   const { isMobile, setOpenMobile } = useSidebar();
   const closeMobileSidebar = () => {
     if (isMobile) setOpenMobile(false);
@@ -32,10 +34,10 @@ export function OfficeSidebar() {
               onClick={closeMobileSidebar}
               to="/workspace"
               search={{ space: "office" }}
-              aria-current={!communicationsActive ? "page" : undefined}
+              aria-current={workspaceActive ? "page" : undefined}
               className={cn(
                 "flex h-8 items-center gap-2 rounded-md px-2 text-sm",
-                !communicationsActive
+                workspaceActive
                   ? "bg-sidebar-row-active font-medium"
                   : "text-sidebar-muted-foreground hover:bg-sidebar-row-hover",
               )}
@@ -44,51 +46,37 @@ export function OfficeSidebar() {
               Workspace
             </Link>
             <span className="px-2 pt-4 pb-1 text-xs text-sidebar-muted-foreground">Office</span>
-            <Link
-              onClick={closeMobileSidebar}
-              to="/workspace"
-              search={{ space: "office", officeView: "communications" }}
-              aria-current={communicationsActive ? "page" : undefined}
-              className={cn(
-                "flex h-8 items-center gap-2 rounded-md px-2 text-sm",
-                communicationsActive
-                  ? "bg-sidebar-row-active font-medium"
-                  : "text-sidebar-muted-foreground hover:bg-sidebar-row-hover",
-              )}
-            >
-              <MessagesSquareIcon className="size-4" />
-              Communications
-            </Link>
-            <Link
-              onClick={closeMobileSidebar}
-              to="/workspace"
-              search={{ space: "office" }}
-              hash="office-meetings"
-              className="flex h-8 items-center gap-2 rounded-md px-2 text-sm text-sidebar-muted-foreground hover:bg-sidebar-row-hover"
-            >
-              <MicIcon className="size-4" />
-              Meetings
-            </Link>
-            <Link
-              onClick={closeMobileSidebar}
-              to="/workspace"
-              search={{ space: "office" }}
-              hash="office-calendar"
-              className="flex h-8 items-center gap-2 rounded-md px-2 text-sm text-sidebar-muted-foreground hover:bg-sidebar-row-hover"
-            >
-              <CalendarDaysIcon className="size-4" />
-              Calendar
-            </Link>
-            <Link
-              onClick={closeMobileSidebar}
-              to="/workspace"
-              search={{ space: "office" }}
-              hash="office-email"
-              className="flex h-8 items-center gap-2 rounded-md px-2 text-sm text-sidebar-muted-foreground hover:bg-sidebar-row-hover"
-            >
-              <MailIcon className="size-4" />
-              Email
-            </Link>
+            {(
+              [
+                ["communications", "Communications", MessagesSquareIcon],
+                ["meetings", "Meetings", MicIcon],
+                ["calendar", "Calendar", CalendarDaysIcon],
+                ["email", "Email", MailIcon],
+                ["tasks", "Tasks", ListTodoIcon],
+                ["projects", "Projects", FolderIcon],
+              ] as const
+            ).map(([view, label, Icon]) => (
+              <Link
+                key={view}
+                onClick={closeMobileSidebar}
+                to="/workspace"
+                search={{
+                  space: "office",
+                  officeView: view,
+                  ...(search.demo ? { demo: search.demo } : {}),
+                }}
+                aria-current={search.officeView === view ? "page" : undefined}
+                className={cn(
+                  "flex h-8 items-center gap-2 rounded-md px-2 text-sm",
+                  search.officeView === view
+                    ? "bg-sidebar-row-active font-medium"
+                    : "text-sidebar-muted-foreground hover:bg-sidebar-row-hover",
+                )}
+              >
+                <Icon className="size-4" />
+                {label}
+              </Link>
+            ))}
           </div>
         </SidebarGroup>
         <div className="mt-auto p-2">

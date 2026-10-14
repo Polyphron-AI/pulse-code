@@ -260,6 +260,21 @@ export class ChatService {
         await this.refreshCredentials(request.accountId, adapter);
         return { ok: true, ...page };
       }
+      case "members.list": {
+        const adapter = await this.adapter(request.accountId);
+        if (!adapter.members)
+          throw new ChatError(
+            "unsupported",
+            "Member and role information currently supports linked Slack and Discord conversations.",
+          );
+        const membership = await adapter.members(
+          request.accountId,
+          request.conversationId,
+          request.cursor,
+          request.channelOnly,
+        );
+        return { ok: true, membership };
+      }
       case "messages.list": {
         const adapter = await this.adapter(request.accountId);
         const page = await adapter.messages(
