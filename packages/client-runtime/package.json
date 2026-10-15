@@ -207,6 +207,10 @@
       "types": "./src/state/pullRequests.ts",
       "default": "./src/state/pullRequests.ts"
     },
+    "./state/workspace-links": {
+      "types": "./src/state/workspaceLinks.ts",
+      "default": "./src/state/workspaceLinks.ts"
+    },
     "./state/project-grouping": {
       "types": "./src/state/projectGrouping.ts",
       "default": "./src/state/projectGrouping.ts"
