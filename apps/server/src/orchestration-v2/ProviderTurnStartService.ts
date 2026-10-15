@@ -1,5 +1,7 @@
 import * as ManagedSkillProviderSession from "../skills/ManagedSkillProviderSession.ts";
 import * as PulseProviderService from "../mcp/PulseProviderService.ts";
+import { linkedItemsFor, withLinkedItems } from "../workspace/linkedItemsContext.ts";
+import { WorkspaceLinks } from "../workspace/WorkspaceLinks.ts";
 import { modelSelectionsEqual } from "@t3tools/shared/model";
 import { projectComposerContextForProvider } from "@t3tools/shared/composerContextReferences";
 import {
@@ -110,6 +112,7 @@ export const layer: Layer.Layer<
     const projectionStore = yield* ProjectionStore.ProjectionStoreV2;
     const providerSessions = yield* ProviderSessionManager.ProviderSessionManagerV2;
     const pulseProviders = yield* Effect.serviceOption(PulseProviderService.PulseProviderService);
+    const workspaceLinks = yield* Effect.serviceOption(WorkspaceLinks);
     const runExecution = yield* RunExecutionService.RunExecutionServiceV2;
     const runtimePolicy = yield* RuntimePolicy.RuntimePolicyV2;
 
@@ -1004,10 +1007,19 @@ export const layer: Layer.Layer<
       const routableSubagents = projection.subagents.filter((subagent) =>
         RunExecutionService.canRouteRelatedSubagent(subagent.status),
       );
-      const userText = projectComposerContextForProvider({
-        text: message.text,
-        records: message.context?.records ?? [],
-      });
+      // Linked items go to the provider only. The stored user message stays as typed.
+      const userText = withLinkedItems(
+        projectComposerContextForProvider({
+          text: message.text,
+          records: message.context?.records ?? [],
+        }),
+        Option.isNone(workspaceLinks)
+          ? ""
+          : yield* linkedItemsFor(workspaceLinks.value.contextFor, {
+              threadId: projection.thread.id,
+              projectId: projection.thread.projectId,
+            }),
+      );
       // Delivered once: this run's provider turn marks the work as told. A
       // restart continuation is prompted by its own text or resumes natively.
       const noteContinuation = isRestartNoteContinuation(
