@@ -38,6 +38,34 @@ describe("normalizeLinkUrl", () => {
     );
     expect(normalizeLinkUrl("https://a.test/p?utm_source=x")).toBe("https://a.test/p");
   });
+  it("keeps the query exactly as written when nothing is tracked", () => {
+    for (const url of [
+      "https://a.test/p?q=a%20b",
+      "https://a.test/p?flag",
+      "https://a.test/p?x=a~b",
+      "https://a.test/p?q=a+b&p=100%25&q=c%2Bd",
+      "https://a.test/p?",
+      "https://a.test/p??flag",
+      "https://a.test/p?id=1&?utm_source=x",
+    ]) {
+      expect(normalizeLinkUrl(url)).toBe(url);
+    }
+  });
+  it("drops tracking keys by decoded name and keeps the other segments in order", () => {
+    expect(
+      normalizeLinkUrl(
+        "https://a.test/p?flag&utm_source=x&q=a%20b&%55tm_medium=y&q=c+d&x=a~b&p=100%25#f",
+      ),
+    ).toBe("https://a.test/p?flag&q=a%20b&q=c+d&x=a~b&p=100%25");
+  });
+  it("keeps a leading question mark in a surviving parameter", () => {
+    expect(normalizeLinkUrl("https://a.test/p?utm_source=x&?flag")).toBe("https://a.test/p??flag");
+  });
+  it("keeps question marks in parameter names when filtering tracking keys", () => {
+    expect(normalizeLinkUrl("https://a.test/p?utm_source=x&?utm_medium=y")).toBe(
+      "https://a.test/p??utm_medium=y",
+    );
+  });
   it("rejects anything but http and https", () => {
     expect(normalizeLinkUrl("javascript:alert(1)")).toBeUndefined();
     expect(normalizeLinkUrl("file:///etc/passwd")).toBeUndefined();

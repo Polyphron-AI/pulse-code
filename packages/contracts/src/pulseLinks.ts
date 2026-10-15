@@ -25,9 +25,15 @@ export function normalizeLinkUrl(raw: string): string | undefined {
   }
   if (url.protocol !== "http:" && url.protocol !== "https:") return undefined;
   url.hash = "";
-  url.search = new URLSearchParams(
-    [...url.searchParams].filter(([key]) => !key.toLowerCase().startsWith("utm_")),
-  ).toString();
+  // Filter raw segments so the surviving query keeps its original bytes and order.
+  const segments = url.search.slice(1).split("&");
+  const kept = segments.filter((segment) => {
+    const [key = ""] = new URLSearchParams(`?${segment}`).keys();
+    return !key.toLowerCase().startsWith("utm_");
+  });
+  if (kept.length !== segments.length) {
+    url.search = kept.length === 0 ? "" : `?${kept.join("&")}`;
+  }
   const normalized = url.toString();
   return normalized.length > URL_MAX ? undefined : normalized;
 }
