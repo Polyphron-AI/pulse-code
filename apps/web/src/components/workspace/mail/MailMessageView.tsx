@@ -37,6 +37,9 @@ export function MailMessageView(props: MailMessageViewProps) {
         )
       ) : (
         <>
+          {message.error !== null ? (
+            <MailError message={message.error} onRetry={message.refresh} />
+          ) : null}
           <header className="flex flex-col gap-2">
             <h1 className="text-lg font-semibold">{mailItemTitle(data.subject)}</h1>
             <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-sm">
@@ -121,6 +124,7 @@ function MailBodyChunk(props: MailBodyChunkProps) {
   }
   return (
     <>
+      {chunk.error !== null ? <MailError message={chunk.error} onRetry={chunk.refresh} /> : null}
       <pre className="whitespace-pre-wrap break-words font-sans text-sm">
         {chunk.data.body.text}
       </pre>

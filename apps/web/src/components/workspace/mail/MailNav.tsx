@@ -45,6 +45,13 @@ export function MailNav() {
       <SidebarContent>
         <SidebarGroup>
           <div className="flex flex-col gap-1">
+            {accounts.error !== null ? (
+              <MailError
+                className="px-2 text-xs"
+                message={accounts.error}
+                onRetry={accounts.refresh}
+              />
+            ) : null}
             {accounts.data !== null && accounts.data.length > 1 ? (
               <>
                 <span className="px-2 pb-1 text-xs text-sidebar-muted-foreground">Accounts</span>
@@ -68,7 +75,7 @@ export function MailNav() {
                 <span className="px-2 pt-4 pb-1 text-xs text-sidebar-muted-foreground">
                   Folders
                 </span>
-                {folders.data === null && folders.error !== null ? (
+                {folders.error !== null ? (
                   <MailError
                     className="px-2 text-xs"
                     message={folders.error}

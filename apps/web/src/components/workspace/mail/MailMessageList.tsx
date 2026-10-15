@@ -95,15 +95,16 @@ function MailPage(props: MailPageProps) {
       <MailNotice>Loading…</MailNotice>
     );
   }
-  if (props.first && page.data.messages.length === 0) {
-    return (
-      <MailNotice>{props.query ? "No messages match this search." : "No messages."}</MailNotice>
-    );
-  }
   const selectedKey = props.selected === null ? null : workspaceItemKey(props.selected);
   const nextCursor = page.data.nextCursor;
   return (
     <>
+      {page.error !== null ? (
+        <MailError className="p-3" message={page.error} onRetry={page.refresh} />
+      ) : null}
+      {props.first && page.data.messages.length === 0 ? (
+        <MailNotice>{props.query ? "No messages match this search." : "No messages."}</MailNotice>
+      ) : null}
       {page.data.messages.map((message) => {
         const item = mailItemRef(message);
         return (

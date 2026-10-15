@@ -33,6 +33,9 @@ export function MailSpace() {
       >
         {account === undefined ? "Mail" : `Mail / ${mailFolderLabel(folder)}`}
       </header>
+      {accounts.data !== null && accounts.error !== null ? (
+        <MailError className="p-5 sm:p-8" message={accounts.error} onRetry={accounts.refresh} />
+      ) : null}
       {environmentId === null ? (
         <MailNotice>No environment is connected.</MailNotice>
       ) : !ready ? (
