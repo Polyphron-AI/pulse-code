@@ -32,6 +32,16 @@ describe("visibleMailApprovals", () => {
     ]);
   });
 
+  it("shows a send another device started, then keeps its outcome once seen", () => {
+    expect(ids(visibleMailApprovals([approval("a1", "submitting")], new Set(), new Map()))).toEqual(
+      ["a1:submitting"],
+    );
+    const seen = new Set(["a1"]);
+    expect(ids(visibleMailApprovals([approval("a1", "accepted")], seen, new Map()))).toEqual([
+      "a1:accepted",
+    ]);
+  });
+
   it("keeps an approval already shown after another client resolves it", () => {
     const seen = new Set(["a1"]);
     expect(ids(visibleMailApprovals([approval("a1", "declined")], seen, new Map()))).toEqual([

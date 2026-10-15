@@ -8,8 +8,8 @@ import { request } from "../rpc/client.ts";
 import { createEnvironmentRpcSubscriptionAtomFamily } from "../state/runtime.ts";
 
 /**
- * A thread's live send approvals, newest first, pushed again whenever one of them changes. Live
- * means pending or submitting, plus any this subscription already received, so its outcome arrives.
+ * A thread's send approvals, newest first, pushed again whenever one of them changes: pending and
+ * submitting ones, plus any resolved in the last 30 minutes, so a resubscribe still gets an outcome.
  */
 export function createThreadMailApprovalsAtomFamily<R, E>(
   runtime: Atom.AtomRuntime<EnvironmentRegistry | R, E>,
@@ -22,9 +22,10 @@ export function createThreadMailApprovalsAtomFamily<R, E>(
 }
 
 /**
- * What a thread view lists, oldest first. Pending approvals always show; one the view has already
- * shown (`seen`) stays after it resolves, so the user sees the outcome until leaving the thread.
- * This client's own answer stands in for a pushed copy that still says pending.
+ * What a thread view lists, oldest first. Pending and submitting approvals always show, so a device
+ * that opens the thread mid-send shows the card too; one the view has already shown (`seen`) stays
+ * after it resolves, so the user sees the outcome until leaving the thread. This client's own
+ * answer stands in for a pushed copy that still says pending.
  */
 export function visibleMailApprovals(
   listed: ReadonlyArray<MailSendApproval>,
@@ -37,7 +38,11 @@ export function visibleMailApprovals(
     const answer = answered.get(approval.id);
     if (answer !== undefined) {
       visible.push(approval.status === "pending" ? answer : approval);
-    } else if (approval.status === "pending" || seen.has(approval.id)) {
+    } else if (
+      approval.status === "pending" ||
+      approval.status === "submitting" ||
+      seen.has(approval.id)
+    ) {
       visible.push(approval);
     }
   }
