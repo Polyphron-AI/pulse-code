@@ -16,6 +16,7 @@ import * as Schema from "effect/Schema";
 import * as Rpc from "effect/unstable/rpc/Rpc";
 import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 import { PULSE_SKILLS_METHODS, PulseSkillsRpcs } from "./pulseSkills.ts";
+import { PULSE_LINKS_METHODS, PulseLinksRpcs } from "./pulseLinks.ts";
 import { PULSE_MAIL_METHODS, PulseMailRpcs } from "./pulseMail.ts";
 import { PULSE_MCP_METHODS, PulseMcpRpcs } from "./pulseMcp.ts";
 import * as RpcMiddleware from "effect/unstable/rpc/RpcMiddleware";
@@ -381,6 +382,7 @@ export const WS_METHODS = {
   pulseMcpWardenTest: PULSE_MCP_METHODS.wardenTest,
   pulseMcpWardenListCredentials: PULSE_MCP_METHODS.wardenListCredentials,
   ...PULSE_SKILLS_METHODS,
+  ...PULSE_LINKS_METHODS,
   // Project registry methods
   projectsList: "projects.list",
   projectsAdd: "projects.add",
@@ -1750,6 +1752,7 @@ export const WsRpcGroup = RpcGroup.make(
   ...PulseMailRpcs,
   ...PulseMcpRpcs,
   ...PulseSkillsRpcs,
+  ...PulseLinksRpcs,
   WsServerProbeRpc,
   WsServerGetConfigRpc,
   WsServerRefreshProvidersRpc,

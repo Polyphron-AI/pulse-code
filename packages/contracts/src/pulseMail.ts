@@ -15,7 +15,7 @@ export const MailAddressString = Schema.String.check(
   Schema.isPattern(/^[^\s@<>]+@[^\s@<>]+$/),
 );
 const Host = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(253));
-const MailboxName = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(1_024));
+export const MailboxName = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(1_024));
 const ClientId = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(512));
 const Tenant = Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9.-]{1,128}$/));
 
@@ -116,6 +116,19 @@ export const MailMessageRef = Schema.Struct({
   uid: PositiveInt,
 });
 export type MailMessageRef = typeof MailMessageRef.Type;
+
+/** A Message-ID header as `<inner>`, or undefined when it cannot serve as a stable key. */
+export function normalizeMessageId(raw: string): string | undefined {
+  const inner = raw.trim().replace(/^</, "").replace(/>$/, "").trim();
+  if (inner.length === 0 || inner.length > 996 || /[\s<>]/.test(inner)) return undefined;
+  return `<${inner}>`;
+}
+
+export const MailMessageIdHeader = Schema.String.check(
+  Schema.makeFilter(
+    (value) => normalizeMessageId(value) === value || "Expected a Message-ID such as <id@host>.",
+  ),
+);
 
 export const MailAddress = Schema.Struct({
   name: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(256))),

@@ -98,7 +98,9 @@ import {
   type TerminalEvent,
   type TerminalMetadataStreamEvent,
   type PullRequestRef,
+  PulseLinksRpcs,
   PulseMailRpcs,
+  WorkspaceLinksError,
   WS_METHODS,
   WsRpcGroup,
 } from "@t3tools/contracts";
@@ -562,9 +564,13 @@ const ServerWsRpcGroup = WsRpcGroup;
 // in a single toLayer call exceeds TypeScript's instantiation depth limit, which
 // silently widens the layer's requirements to `any`. RpcServer still serves the
 // full ServerWsRpcGroup and resolves each handler by tag, so the two layers
-// together cover the group.
+// together cover the group. Workspace link handlers are split out the same way.
 const MailWsRpcGroup = RpcGroup.make(...PulseMailRpcs);
-const CoreWsRpcGroup = ServerWsRpcGroup.omit(...PulseMailRpcs.map((rpc) => rpc._tag));
+const LinksWsRpcGroup = RpcGroup.make(...PulseLinksRpcs);
+const CoreWsRpcGroup = ServerWsRpcGroup.omit(
+  ...PulseMailRpcs.map((rpc) => rpc._tag),
+  ...PulseLinksRpcs.map((rpc) => rpc._tag),
+);
 // When a resuming client's cursor is more than this many events behind the
 // current head, skip the per-event catch-up replay and send a fresh shell
 // snapshot instead. Replaying each intervening event costs a shell refetch;
@@ -1280,6 +1286,24 @@ const mailWsRpcLayer = MailWsRpcGroup.toLayer(
           "rpc.aggregate": "pulse.mail",
         }),
     });
+  }),
+);
+
+const linksWsRpcLayer = LinksWsRpcGroup.toLayer(
+  LinksWsRpcGroup.of({
+    [WS_METHODS.pulseLinksList]: () =>
+      Effect.fail(
+        new WorkspaceLinksError({ kind: "unsupported", message: "Links are not ready." }),
+      ),
+    [WS_METHODS.pulseLinksLink]: () =>
+      Effect.fail(
+        new WorkspaceLinksError({ kind: "unsupported", message: "Links are not ready." }),
+      ),
+    [WS_METHODS.pulseLinksUnlink]: () =>
+      Effect.fail(
+        new WorkspaceLinksError({ kind: "unsupported", message: "Links are not ready." }),
+      ),
+    [WS_METHODS.pulseLinksSubscribeChanges]: () => Stream.empty,
   }),
 );
 
@@ -4110,6 +4134,7 @@ export const websocketRpcRouteLayer = Layer.unwrap(
               previewAutomationBroker,
             ).pipe(
               Layer.merge(mailWsRpcLayer),
+              Layer.merge(linksWsRpcLayer),
               Layer.provideMerge(RpcSerialization.layerJson),
               Layer.provide(Layer.succeed(ManagedSkills, managedSkills)),
               Layer.provide(
