@@ -100,7 +100,6 @@ import {
   type PullRequestRef,
   PulseLinksRpcs,
   PulseMailRpcs,
-  WorkspaceLinksError,
   WS_METHODS,
   WsRpcGroup,
 } from "@t3tools/contracts";
@@ -210,6 +209,7 @@ import * as WorkspaceEntries from "./workspace/WorkspaceEntries.ts";
 import * as WorkspaceFileSystem from "./workspace/WorkspaceFileSystem.ts";
 import { readWorkflowScript } from "./orchestration-v2/workflowScriptQuery.ts";
 import * as WorkspacePaths from "./workspace/WorkspacePaths.ts";
+import { WorkspaceLinks } from "./workspace/WorkspaceLinks.ts";
 import * as VcsStatusBroadcaster from "./vcs/VcsStatusBroadcaster.ts";
 import * as VcsProvisioningService from "./vcs/VcsProvisioningService.ts";
 import * as GitWorkflowService from "./git/GitWorkflowService.ts";
@@ -1290,20 +1290,26 @@ const mailWsRpcLayer = MailWsRpcGroup.toLayer(
 );
 
 const linksWsRpcLayer = LinksWsRpcGroup.toLayer(
-  LinksWsRpcGroup.of({
-    [WS_METHODS.pulseLinksList]: () =>
-      Effect.fail(
-        new WorkspaceLinksError({ kind: "unsupported", message: "Links are not ready." }),
-      ),
-    [WS_METHODS.pulseLinksLink]: () =>
-      Effect.fail(
-        new WorkspaceLinksError({ kind: "unsupported", message: "Links are not ready." }),
-      ),
-    [WS_METHODS.pulseLinksUnlink]: () =>
-      Effect.fail(
-        new WorkspaceLinksError({ kind: "unsupported", message: "Links are not ready." }),
-      ),
-    [WS_METHODS.pulseLinksSubscribeChanges]: () => Stream.empty,
+  Effect.gen(function* () {
+    const workspaceLinks = yield* WorkspaceLinks;
+    return LinksWsRpcGroup.of({
+      [WS_METHODS.pulseLinksList]: (input) =>
+        observeRpcEffect(WS_METHODS.pulseLinksList, workspaceLinks.list(input.item), {
+          "rpc.aggregate": "pulse.links",
+        }),
+      [WS_METHODS.pulseLinksLink]: (input) =>
+        observeRpcEffect(WS_METHODS.pulseLinksLink, workspaceLinks.link(input), {
+          "rpc.aggregate": "pulse.links",
+        }),
+      [WS_METHODS.pulseLinksUnlink]: (input) =>
+        observeRpcEffect(WS_METHODS.pulseLinksUnlink, workspaceLinks.unlink(input.id), {
+          "rpc.aggregate": "pulse.links",
+        }),
+      [WS_METHODS.pulseLinksSubscribeChanges]: () =>
+        observeRpcStream(WS_METHODS.pulseLinksSubscribeChanges, workspaceLinks.changes, {
+          "rpc.aggregate": "pulse.links",
+        }),
+    });
   }),
 );
 
@@ -1860,6 +1866,7 @@ const makeWsRpcLayer = (
               openCodeManagedSkills: true,
               mcpManagement: true,
               mailManagement: true,
+              workspaceLinks: true,
               mcpCreateOnly: true,
               mcpDiscovery: true,
               mcpNativeInventory: true,
