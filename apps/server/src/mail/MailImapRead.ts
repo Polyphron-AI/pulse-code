@@ -266,11 +266,13 @@ export const search = (
           );
         }
         const before = cursor ? Number(cursor[2]) : Number.POSITIVE_INFINITY;
-        const uids = (
-          (yield* imapCall(() => client.search(toSearchObject(input.query), { uid: true }))) || []
-        )
-          .filter((uid) => uid < before)
-          .sort((a, b) => b - a);
+        const result = yield* imapCall(() =>
+          client.search(toSearchObject(input.query), { uid: true }),
+        );
+        if (result === false) {
+          return yield* fail("unavailable", "The folder could not be searched.");
+        }
+        const uids = (result ?? []).filter((uid) => uid < before).sort((a, b) => b - a);
         const page = uids.slice(0, limit);
         const fetched =
           page.length === 0

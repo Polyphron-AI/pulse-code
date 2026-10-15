@@ -90,6 +90,28 @@ const kindOf = <A>(effect: Effect.Effect<A, { kind: string }>) =>
   );
 
 describe("search", () => {
+  it.effect("reports a refused folder search as unavailable", () =>
+    Effect.gen(function* () {
+      const { options } = yield* serve([inbox(3)], undefined, (respond) => (command, io) => {
+        const { tag, command: line } = imapTag(command.line);
+        if (/^UID SEARCH /i.test(line)) io.send(`${tag} NO search refused\r\n`);
+        else respond(command, io);
+      });
+      const error = yield* search(account, login, { mailbox: "INBOX" }, options).pipe(Effect.flip);
+      expect(error.kind).toBe("unavailable");
+      expect(error.message).toBe("The folder could not be searched.");
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("returns a successful empty page for an empty folder", () =>
+    Effect.gen(function* () {
+      const { options } = yield* serve([inbox(0)]);
+      expect(yield* search(account, login, { mailbox: "INBOX" }, options)).toEqual({
+        messages: [],
+      });
+    }).pipe(Effect.scoped),
+  );
+
   it.effect("pages a 120-message mailbox newest first at 50 per page (A08)", () =>
     Effect.gen(function* () {
       const { options } = yield* serve([inbox(120)]);
