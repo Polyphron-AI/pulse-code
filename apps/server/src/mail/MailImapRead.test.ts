@@ -307,6 +307,36 @@ const folder = (
 const linkedAt = { accountId: "acct_test", mailbox: "INBOX", uidValidity: 7, uid: 3 };
 
 describe("fetchByReference", () => {
+  it.effect.each(["brief@example.com", "< brief@example.com >"])(
+    "finds a moved message whose raw Message-ID is %s and rejects substring candidates",
+    (rawId) =>
+      Effect.gen(function* () {
+        const source = folder("INBOX", 7, [{ uid: 3, raw: withId(rawId, "Q3 brief") }]);
+        const archive = folder("Archive", 9, [], "\\Archive");
+        const { peer, options } = yield* serve([source, archive]);
+        const original = yield* fetchMessage(account, login, linkedAt, {}, options);
+        expect(original.messageId).toBe("<brief@example.com>");
+        const moved = source.messages.pop()!;
+        archive.messages.push(
+          { ...moved, uid: 12 },
+          { uid: 30, raw: withId("<prefix-brief@example.com>", "Different ID"), flags: new Set() },
+        );
+        archive.uidNext = 31;
+        const found = yield* fetchByReference(
+          account,
+          login,
+          { messageId: original.messageId, location: original.ref },
+          options,
+        );
+        expect(found.ref).toEqual({ ...linkedAt, mailbox: "Archive", uidValidity: 9, uid: 12 });
+        expect(found.messageId).toBe(original.messageId);
+        expect(found.subject).toBe("Q3 brief");
+        expect(
+          peer.received.flatMap(({ line }) => / UID FETCH (\d+) /i.exec(line)?.[1] ?? []),
+        ).toEqual(["3", "3", "30", "12"]);
+      }).pipe(Effect.scoped),
+  );
+
   it.effect(
     "finds a Gmail-archived message in All Mail, never the message now at its old UID",
     () =>
@@ -811,6 +841,11 @@ describe("shared Message-ID lookup", () => {
           ),
         ),
       ).toBe("outcome-unknown");
+      expect(peer.received.filter(({ line }) => / UID SEARCH /i.test(line))).toEqual([
+        expect.objectContaining({
+          line: expect.stringMatching(/HEADER MESSAGE-ID "?<brief@example\.com>/),
+        }),
+      ]);
       expect(peer.connections()).toBe(1);
     }).pipe(Effect.scoped),
   );

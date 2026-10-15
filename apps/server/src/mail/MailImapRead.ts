@@ -485,9 +485,10 @@ export const fetchByReference = (
         // ponytail: cap full-message candidate reads at SCAN_MAX plus the cached read; use paged
         // header verification if actual accounts need more.
         let remaining = SCAN_MAX;
+        const searchId = messageId.trim().replace(/^</, "").replace(/>$/, "").trim();
         for (const mailbox of order) {
           const hit: Option.Option<Effect.Success<ReturnType<typeof searchByMessageId>>> =
-            yield* Effect.option(searchByMessageId(client, mailbox, messageId, true));
+            yield* Effect.option(searchByMessageId(client, mailbox, searchId, true));
           if (Option.isNone(hit)) {
             incomplete = true;
             continue;
