@@ -504,7 +504,7 @@ describe("mailRpcHandlers", () => {
         }),
       );
       expect(kind).not.toBe("ok");
-      expect((yield* handlers.getApproval({ approvalId: approval.id })).status).toBe("pending");
+      expect((yield* service.status(approval.id)).status).toBe("pending");
       expect(smtp.connections()).toBe(0);
     }).pipe(Effect.scoped, Effect.provide(baseLayer())),
   );
@@ -537,7 +537,7 @@ describe("mailRpcHandlers", () => {
         }),
       );
       expect(kind).not.toBe("ok");
-      expect((yield* handlers.getApproval({ approvalId: approval.id })).status).toBe("invalidated");
+      expect((yield* service.status(approval.id)).status).toBe("invalidated");
       expect(smtp.connections()).toBe(0);
     }).pipe(Effect.scoped, Effect.provide(baseLayer())),
   );
@@ -563,9 +563,7 @@ describe("mailRpcHandlers", () => {
           }),
         );
         expect(kind).not.toBe("ok");
-        expect((yield* handlers.getApproval({ approvalId: approval.id })).status).toBe(
-          "invalidated",
-        );
+        expect((yield* service.status(approval.id)).status).toBe("invalidated");
         expect(smtp.connections()).toBe(0);
       }).pipe(Effect.scoped, Effect.provide(baseLayer())),
   );

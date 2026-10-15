@@ -81,9 +81,6 @@ export class MailSendService extends Context.Service<
       readonly digest: string;
     }) => Effect.Effect<MailSendApproval, MailError>;
     readonly status: (approvalId: string) => Effect.Effect<MailSendApproval, MailError>;
-    readonly listThread: (
-      threadId: ThreadId,
-    ) => Effect.Effect<ReadonlyArray<MailSendApproval>, MailError>;
     /** The thread's approvals now, then again after each change to any of them. */
     readonly subscribeThread: (
       threadId: ThreadId,
@@ -504,7 +501,7 @@ export const make = (
       ),
     );
 
-    return MailSendService.of({ prepare, respond, status, listThread, subscribeThread });
+    return MailSendService.of({ prepare, respond, status, subscribeThread });
   });
 
 export const layer = (options?: Parameters<typeof make>[0]) =>

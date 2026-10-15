@@ -92,11 +92,8 @@ export const mailRpcHandlers = (
       readonly threadId: ThreadId;
       readonly accountId: string | null;
     }) => redact(config.setThreadSelection(input.threadId, input.accountId)),
-    listThreadApprovals: (input: { readonly threadId: ThreadId }) =>
-      redact(send.listThread(input.threadId)),
     subscribeThreadApprovals: (input: { readonly threadId: ThreadId }) =>
       redactStream(send.subscribeThread(input.threadId)),
-    getApproval: (input: { readonly approvalId: string }) => redact(send.status(input.approvalId)),
     respondApproval: (input: Parameters<typeof send.respond>[0]) => redact(send.respond(input)),
   };
 };

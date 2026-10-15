@@ -1269,24 +1269,12 @@ const mailWsRpcLayer = MailWsRpcGroup.toLayer(
             "rpc.aggregate": "pulse.mail",
           },
         ),
-      [WS_METHODS.pulseMailListThreadApprovals]: (input) =>
-        observeRpcEffect(
-          WS_METHODS.pulseMailListThreadApprovals,
-          pulseMail.listThreadApprovals(input),
-          {
-            "rpc.aggregate": "pulse.mail",
-          },
-        ),
       [WS_METHODS.pulseMailSubscribeThreadApprovals]: (input) =>
         observeRpcStream(
           WS_METHODS.pulseMailSubscribeThreadApprovals,
           pulseMail.subscribeThreadApprovals(input),
           { "rpc.aggregate": "pulse.mail" },
         ),
-      [WS_METHODS.pulseMailGetApproval]: (input) =>
-        observeRpcEffect(WS_METHODS.pulseMailGetApproval, pulseMail.getApproval(input), {
-          "rpc.aggregate": "pulse.mail",
-        }),
       [WS_METHODS.pulseMailRespondApproval]: (input) =>
         observeRpcEffect(WS_METHODS.pulseMailRespondApproval, pulseMail.respondApproval(input), {
           "rpc.aggregate": "pulse.mail",

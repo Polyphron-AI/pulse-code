@@ -221,9 +221,7 @@ export const PULSE_MAIL_METHODS = {
   setProjectAccess: "pulse.mail.setProjectAccess",
   getThreadSelection: "pulse.mail.getThreadSelection",
   setThreadSelection: "pulse.mail.setThreadSelection",
-  listThreadApprovals: "pulse.mail.listThreadApprovals",
   subscribeThreadApprovals: "pulse.mail.subscribeThreadApprovals",
-  getApproval: "pulse.mail.getApproval",
   respondApproval: "pulse.mail.respondApproval",
 } as const;
 
@@ -294,22 +292,12 @@ export const PulseMailRpcs = [
     success: Schema.Void,
     error: errors,
   }),
-  Rpc.make(PULSE_MAIL_METHODS.listThreadApprovals, {
-    payload: Schema.Struct({ threadId: ThreadId }),
-    success: Schema.Array(MailSendApproval),
-    error: errors,
-  }),
   /** The thread's approvals on subscribe, then again after each change to any of them. */
   Rpc.make(PULSE_MAIL_METHODS.subscribeThreadApprovals, {
     payload: Schema.Struct({ threadId: ThreadId }),
     success: Schema.Array(MailSendApproval),
     error: errors,
     stream: true,
-  }),
-  Rpc.make(PULSE_MAIL_METHODS.getApproval, {
-    payload: Schema.Struct({ approvalId: MailApprovalId }),
-    success: MailSendApproval,
-    error: errors,
   }),
   Rpc.make(PULSE_MAIL_METHODS.respondApproval, {
     payload: Schema.Struct({
