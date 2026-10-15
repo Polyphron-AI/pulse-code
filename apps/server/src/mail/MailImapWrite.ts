@@ -9,7 +9,12 @@ import {
   type MailConnectionOptions,
   type MailLogin,
 } from "./MailConnection.ts";
-import { openChecked, readSpecialUse, type MailSpecialUse } from "./MailImapRead.ts";
+import {
+  findByMessageId,
+  openChecked,
+  readSpecialUse,
+  type MailSpecialUse,
+} from "./MailImapRead.ts";
 
 /*
  * Pulse never deletes mail. Nothing here sets \Deleted, targets Trash, expunges, or deletes a
@@ -36,18 +41,6 @@ const session = <A>(
 
 const appendTo = (client: ImapFlow, mailbox: string, mime: Uint8Array, flags: Array<string>) =>
   imapCall(() => client.append(mailbox, Buffer.from(mime), flags));
-
-const findByMessageId = (client: ImapFlow, mailbox: string, messageId: string) =>
-  imapCall(() => client.mailboxOpen(mailbox, { readOnly: true })).pipe(
-    Effect.flatMap((opened) =>
-      imapCall(() => client.search({ header: { "message-id": messageId } }, { uid: true })).pipe(
-        Effect.map((uids) => {
-          const uid = uids ? uids.at(-1) : undefined;
-          return uid === undefined ? undefined : { uid, uidValidity: Number(opened.uidValidity) };
-        }),
-      ),
-    ),
-  );
 
 const draftsOf = (special: MailSpecialUse) =>
   special.drafts === undefined || isTrash(special.drafts, special)

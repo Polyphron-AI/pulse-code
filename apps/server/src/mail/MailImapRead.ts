@@ -1,11 +1,13 @@
-import { MailError, type MailMessageRef } from "@t3tools/contracts";
+import { MailError, normalizeMessageId, type MailMessageRef } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import type { ImapFlow, SearchObject } from "imapflow";
 import { simpleParser, type ParsedMail } from "mailparser";
 
 import type { StoredMailAccount } from "./MailConfigService.ts";
 import {
   imapCall,
+  toMailError,
   withImap,
   type MailConnectionOptions,
   type MailLogin,
@@ -95,6 +97,33 @@ export const openChecked = (
     ),
   );
 
+/**
+ * The newest UID carrying `messageId`, with the mailbox UIDVALIDITY. Linked reads require a
+ * complete search; draft recovery retains its existing empty-result handling for refused searches.
+ */
+export const findByMessageId = (
+  client: ImapFlow,
+  mailbox: string,
+  messageId: string,
+  requireComplete = false,
+) =>
+  imapCall(() => client.mailboxOpen(mailbox, { readOnly: true })).pipe(
+    Effect.flatMap((opened) =>
+      imapCall(() => client.search({ header: { "message-id": messageId } }, { uid: true })).pipe(
+        Effect.flatMap((uids) => {
+          // imapflow returns false for a refused search, distinct from a successful empty result.
+          if (!uids && requireComplete) {
+            return Effect.fail(fail("unavailable", "The folder could not be searched."));
+          }
+          const uid = uids ? uids.at(-1) : undefined;
+          return Effect.succeed(
+            uid === undefined ? undefined : { uid, uidValidity: Number(opened.uidValidity) },
+          );
+        }),
+      ),
+    ),
+  );
+
 const openMailbox = (client: ImapFlow, mailbox: string) =>
   imapCall(() => client.mailboxOpen(mailbox, { readOnly: true })).pipe(
     Effect.mapError(() => fail("not-found", `Mailbox "${mailbox}" was not found.`)),
@@ -102,6 +131,7 @@ const openMailbox = (client: ImapFlow, mailbox: string) =>
 
 export interface MailMessageSummary {
   readonly ref: MailMessageRef;
+  readonly messageId?: string;
   readonly subject?: string;
   readonly from?: string;
   readonly date?: string;
@@ -240,15 +270,22 @@ export const search = (
             : yield* imapCall(() =>
                 client.fetchAll(
                   page.join(","),
-                  { uid: true, flags: true, size: true, headers: ["subject", "from", "date"] },
+                  {
+                    uid: true,
+                    flags: true,
+                    size: true,
+                    headers: ["subject", "from", "date", "message-id"],
+                  },
                   { uid: true },
                 ),
               );
         const messages: Array<MailMessageSummary> = [];
         for (const message of fetched.sort((a, b) => b.uid - a.uid)) {
           const headers = message.headers ? yield* parse(message.headers) : undefined;
+          const messageId = headers?.messageId ? normalizeMessageId(headers.messageId) : undefined;
           messages.push({
             ...flagState(account.id, input.mailbox, uidValidity, message),
+            ...(messageId ? { messageId } : {}),
             ...(headers?.subject ? { subject: headers.subject } : {}),
             ...(headers?.from?.text ? { from: headers.from.text } : {}),
             ...(headers?.date ? { date: headers.date.toISOString() } : {}),
@@ -299,6 +336,40 @@ const attachmentsOf = (parsed: ParsedMail) =>
     size: attachment.size,
   }));
 
+/** One message read inside an open session. Its Message-ID is normalised for matching. */
+const readIn = (
+  client: ImapFlow,
+  account: StoredMailAccount,
+  ref: MailMessageRef,
+  offset: number,
+) =>
+  fetchParsed(client, ref).pipe(
+    Effect.map(({ message, parsed, rawTruncated }) => {
+      const to = addressText(parsed.to);
+      const cc = addressText(parsed.cc);
+      const references = parsed.references;
+      const messageId = parsed.messageId ? normalizeMessageId(parsed.messageId) : undefined;
+      return {
+        ...flagState(account.id, ref.mailbox, ref.uidValidity, message),
+        ...(parsed.subject ? { subject: parsed.subject } : {}),
+        ...(parsed.from?.text ? { from: parsed.from.text } : {}),
+        ...(to ? { to } : {}),
+        ...(cc ? { cc } : {}),
+        ...(parsed.date ? { date: parsed.date.toISOString() } : {}),
+        ...(messageId ? { messageId } : {}),
+        ...(parsed.inReplyTo ? { inReplyTo: parsed.inReplyTo } : {}),
+        ...(references
+          ? { references: Array.isArray(references) ? references : [references] }
+          : {}),
+        body: sliceUtf8(parsed.text ?? "", offset, TEXT_BUDGET),
+        attachments: attachmentsOf(parsed),
+        ...(rawTruncated ? { sourceTruncated: true } : {}),
+      };
+    }),
+  );
+
+export type MailMessageDetail = Effect.Success<ReturnType<typeof readIn>>;
+
 /** One message with its text body paged by byte offset. Attachment bytes are never included. */
 export const fetchMessage = (
   account: StoredMailAccount,
@@ -306,32 +377,123 @@ export const fetchMessage = (
   ref: MailMessageRef,
   input: { readonly offset?: number } = {},
   options: MailConnectionOptions = {},
-) =>
-  session(account, login, options, (client) =>
-    fetchParsed(client, ref).pipe(
-      Effect.map(({ message, parsed, rawTruncated }) => {
-        const to = addressText(parsed.to);
-        const cc = addressText(parsed.cc);
-        const references = parsed.references;
-        return {
-          ...flagState(account.id, ref.mailbox, ref.uidValidity, message),
-          ...(parsed.subject ? { subject: parsed.subject } : {}),
-          ...(parsed.from?.text ? { from: parsed.from.text } : {}),
-          ...(to ? { to } : {}),
-          ...(cc ? { cc } : {}),
-          ...(parsed.date ? { date: parsed.date.toISOString() } : {}),
-          ...(parsed.messageId ? { messageId: parsed.messageId } : {}),
-          ...(parsed.inReplyTo ? { inReplyTo: parsed.inReplyTo } : {}),
-          ...(references
-            ? { references: Array.isArray(references) ? references : [references] }
-            : {}),
-          body: sliceUtf8(parsed.text ?? "", input.offset ?? 0, TEXT_BUDGET),
-          attachments: attachmentsOf(parsed),
-          ...(rawTruncated ? { sourceTruncated: true } : {}),
-        };
+) => session(account, login, options, (client) => readIn(client, account, ref, input.offset ?? 0));
+
+/** How many folders a moved message is searched for in, at most. */
+export const SCAN_MAX = 50;
+const SCAN_RANK = ["\\All", "\\Archive", "\\Inbox", "\\Sent", "\\Junk"];
+const UNSELECTABLE = /^\\(noselect|nonexistent)$/i;
+const selectable = (mailbox: { readonly flags?: ReadonlySet<string> | undefined }) =>
+  ![...(mailbox.flags ?? [])].some((flag) => UNSELECTABLE.test(flag));
+
+/**
+ * Folders to search for a moved message, best guesses first: where it was last seen, then All
+ * Mail, Archive, Inbox, Sent and Junk, then the rest in server order.
+ */
+export const scanOrder = (
+  mailboxes: ReadonlyArray<{
+    readonly path: string;
+    readonly specialUse?: string | undefined;
+    readonly flags?: ReadonlySet<string> | undefined;
+  }>,
+  hint: string | undefined,
+) => {
+  const rank = (mailbox: (typeof mailboxes)[number]) => {
+    if (mailbox.path === hint) return 0;
+    const use = mailbox.path.toUpperCase() === "INBOX" ? "\\Inbox" : mailbox.specialUse;
+    const index = use === undefined ? -1 : SCAN_RANK.indexOf(use);
+    return index < 0 ? SCAN_RANK.length + 1 : index + 1;
+  };
+  return mailboxes
+    .filter(selectable)
+    .map((mailbox, index) => ({ path: mailbox.path, rank: rank(mailbox), index }))
+    .sort((a, b) => a.rank - b.rank || a.index - b.index)
+    .slice(0, SCAN_MAX)
+    .map((entry) => entry.path);
+};
+
+const LOCATION_LOST =
+  "This message moved or was deleted. It was linked without a Message-ID, so it cannot be found again.";
+
+/** True when the server answered NO, as opposed to the connection failing. */
+const refused = (cause: unknown) =>
+  typeof cause === "object" &&
+  cause !== null &&
+  (cause as { readonly responseStatus?: unknown }).responseStatus === "NO";
+
+/**
+ * Reads a linked message wherever it now is, in one IMAP session. A stored location is only
+ * trusted when the message there has the same Message-ID; otherwise folders are searched by
+ * Message-ID in `scanOrder`. A message linked without a Message-ID can only be read where it was.
+ */
+export const fetchByReference = (
+  account: StoredMailAccount,
+  login: MailLogin,
+  reference: {
+    readonly messageId?: string | undefined;
+    readonly location?: MailMessageRef | undefined;
+    readonly offset?: number | undefined;
+  },
+  options: MailConnectionOptions = {},
+): Effect.Effect<MailMessageDetail, MailError> =>
+  Effect.gen(function* () {
+    const { messageId, location } = reference;
+    const offset = reference.offset ?? 0;
+    if (messageId === undefined && location === undefined) {
+      return yield* fail("invalid-input", "A message reference needs a Message-ID or a location.");
+    }
+    return yield* session(account, login, options, (client) =>
+      Effect.gen(function* () {
+        if (messageId === undefined) {
+          if (location === undefined) {
+            return yield* fail(
+              "invalid-input",
+              "A message reference needs a Message-ID or a location.",
+            );
+          }
+          const ref = location;
+          yield* Effect.tryPromise({
+            try: () => client.mailboxOpen(ref.mailbox, { readOnly: true }),
+            catch: (cause) =>
+              refused(cause) ? fail("not-found", LOCATION_LOST) : toMailError(cause),
+          });
+          return yield* readIn(client, account, ref, offset).pipe(
+            Effect.mapError((error) =>
+              error.kind === "not-found" || error.kind === "stale-reference"
+                ? fail("not-found", LOCATION_LOST)
+                : error,
+            ),
+          );
+        }
+        if (location !== undefined) {
+          const there = yield* Effect.option(readIn(client, account, location, offset));
+          if (Option.isSome(there) && there.value.messageId === messageId) return there.value;
+        }
+        const mailboxes = yield* imapCall(() => client.list());
+        const order = scanOrder(mailboxes, location?.mailbox);
+        let incomplete = mailboxes.filter(selectable).length > order.length;
+        for (const mailbox of order) {
+          const hit: Option.Option<Effect.Success<ReturnType<typeof findByMessageId>>> =
+            yield* Effect.option(findByMessageId(client, mailbox, messageId, true));
+          if (Option.isNone(hit)) {
+            incomplete = true;
+            continue;
+          }
+          if (hit.value === undefined) continue;
+          const ref: MailMessageRef = { accountId: account.id, mailbox, ...hit.value };
+          const found = yield* Effect.option(readIn(client, account, ref, offset));
+          if (Option.isNone(found)) incomplete = true;
+          else if (found.value.messageId === messageId) return found.value;
+        }
+        return yield* incomplete
+          ? fail("unavailable", "Some folders could not be searched. Try again.")
+          : fail(
+              "not-found",
+              "This message was not found in any folder. It may have been deleted.",
+            );
       }),
-    ),
-  );
+    );
+  });
 
 const isText = (contentType: string) =>
   /^text\//i.test(contentType) || /^application\/(json|xml)\b/i.test(contentType);
