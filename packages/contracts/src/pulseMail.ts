@@ -176,12 +176,6 @@ export const MailSendApproval = Schema.Struct({
 });
 export type MailSendApproval = typeof MailSendApproval.Type;
 
-/** Activity kind appended to a thread when a send needs approval. Its payload is `{ approvalId }` only. */
-export const MAIL_SEND_APPROVAL_ACTIVITY_KIND = "mail.send-approval";
-
-/** Activity kind appended when the user approves or declines, so every client closes the request. */
-export const MAIL_SEND_APPROVAL_RESOLVED_ACTIVITY_KIND = "mail.send-approval.resolved";
-
 export const MailErrorKind = Schema.Literals([
   "access-denied",
   "ambiguous-account",
@@ -228,6 +222,7 @@ export const PULSE_MAIL_METHODS = {
   getThreadSelection: "pulse.mail.getThreadSelection",
   setThreadSelection: "pulse.mail.setThreadSelection",
   listThreadApprovals: "pulse.mail.listThreadApprovals",
+  subscribeThreadApprovals: "pulse.mail.subscribeThreadApprovals",
   getApproval: "pulse.mail.getApproval",
   respondApproval: "pulse.mail.respondApproval",
 } as const;
@@ -303,6 +298,13 @@ export const PulseMailRpcs = [
     payload: Schema.Struct({ threadId: ThreadId }),
     success: Schema.Array(MailSendApproval),
     error: errors,
+  }),
+  /** The thread's approvals on subscribe, then again after each change to any of them. */
+  Rpc.make(PULSE_MAIL_METHODS.subscribeThreadApprovals, {
+    payload: Schema.Struct({ threadId: ThreadId }),
+    success: Schema.Array(MailSendApproval),
+    error: errors,
+    stream: true,
   }),
   Rpc.make(PULSE_MAIL_METHODS.getApproval, {
     payload: Schema.Struct({ approvalId: MailApprovalId }),

@@ -1,12 +1,4 @@
-import {
-  EnvironmentId,
-  EventId,
-  MAIL_SEND_APPROVAL_ACTIVITY_KIND,
-  MAIL_SEND_APPROVAL_RESOLVED_ACTIVITY_KIND,
-  WS_METHODS,
-  type MailSendApproval,
-  type OrchestrationThreadActivity,
-} from "@t3tools/contracts";
+import { EnvironmentId, WS_METHODS, type MailSendApproval } from "@t3tools/contracts";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -20,39 +12,42 @@ import {
 import * as EnvironmentSupervisor from "../connection/supervisor.ts";
 import type * as RpcSession from "../rpc/session.ts";
 import type { WsRpcProtocolClient } from "../rpc/protocol.ts";
-import { derivePendingMailApprovalIds, respondToMailApproval } from "./mailApprovals.ts";
+import { respondToMailApproval, visibleMailApprovals } from "./mailApprovals.ts";
 
-const activity = (kind: string, approvalId: string, at: string): OrchestrationThreadActivity => ({
-  id: EventId.make(`${kind}:${approvalId}`),
-  tone: "approval",
-  kind,
-  summary: "Email waiting for approval",
-  payload: { approvalId },
-  turnId: null,
-  createdAt: at,
-});
+const approval = (id: string, status: MailSendApproval["status"]) =>
+  ({ id, status }) as MailSendApproval;
+const ids = (approvals: ReadonlyArray<MailSendApproval>) =>
+  approvals.map((entry) => `${entry.id}:${entry.status}`);
 
-describe("derivePendingMailApprovalIds", () => {
-  it("drops an approval resolved on another client at the next activity update", () => {
-    const requested = [
-      activity(MAIL_SEND_APPROVAL_ACTIVITY_KIND, "a1", "2026-10-03T00:00:00Z"),
-      activity(MAIL_SEND_APPROVAL_ACTIVITY_KIND, "a2", "2026-10-03T00:00:01Z"),
+describe("visibleMailApprovals", () => {
+  it("lists pending approvals oldest first and hides resolved ones never shown", () => {
+    const listed = [
+      approval("a3", "pending"),
+      approval("a2", "accepted"),
+      approval("a1", "pending"),
     ];
-    expect(derivePendingMailApprovalIds(requested)).toEqual(["a1", "a2"]);
-    const updated = [
-      ...requested,
-      activity(MAIL_SEND_APPROVAL_RESOLVED_ACTIVITY_KIND, "a1", "2026-10-03T00:00:02Z"),
-    ];
-    expect(derivePendingMailApprovalIds(updated)).toEqual(["a2"]);
+    expect(ids(visibleMailApprovals(listed, new Set(), new Map()))).toEqual([
+      "a1:pending",
+      "a3:pending",
+    ]);
   });
 
-  it("keeps a resolution final when it arrives before the request", () => {
-    expect(
-      derivePendingMailApprovalIds([
-        activity(MAIL_SEND_APPROVAL_RESOLVED_ACTIVITY_KIND, "a1", "2026-10-03T00:00:00Z"),
-        activity(MAIL_SEND_APPROVAL_ACTIVITY_KIND, "a1", "2026-10-03T00:00:01Z"),
-      ]),
-    ).toEqual([]);
+  it("keeps an approval already shown after another client resolves it", () => {
+    const seen = new Set(["a1"]);
+    expect(ids(visibleMailApprovals([approval("a1", "declined")], seen, new Map()))).toEqual([
+      "a1:declined",
+    ]);
+  });
+
+  it("shows this client's answer until the pushed list catches up", () => {
+    const answer = approval("a1", "submitting");
+    const answered = new Map([[answer.id, answer]]);
+    expect(ids(visibleMailApprovals([approval("a1", "pending")], new Set(), answered))).toEqual([
+      "a1:submitting",
+    ]);
+    expect(ids(visibleMailApprovals([approval("a1", "accepted")], new Set(), answered))).toEqual([
+      "a1:accepted",
+    ]);
   });
 });
 

@@ -1,22 +1,23 @@
 import {
-  derivePendingMailApprovalIds,
-  fetchMailApproval,
+  createThreadMailApprovalsAtomFamily,
   respondToMailApproval,
+  visibleMailApprovals,
 } from "@t3tools/client-runtime/mail/approvals";
 import { EnvironmentSupervisor } from "@t3tools/client-runtime/connection";
 import {
   createEnvironmentCommand,
-  createEnvironmentQueryAtomFamily,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
-import type {
-  EnvironmentId,
-  MailAddress,
-  MailApprovalId,
-  MailSendApproval,
-  OrchestrationThreadActivity,
+import {
+  MailError,
+  type EnvironmentId,
+  type MailAddress,
+  type MailApprovalId,
+  type MailSendApproval,
+  type ThreadId,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import { Fragment, memo, useEffect, useMemo, useState } from "react";
 
 import { connectionAtomRuntime } from "../../connection/runtime";
@@ -26,19 +27,18 @@ import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 
-const mailApproval = createEnvironmentQueryAtomFamily(connectionAtomRuntime, {
-  label: "environment-data:pulse-mail:approval",
-  staleTimeMs: 30_000,
-  idleTtlMs: 60_000,
-  execute: (approvalId: MailApprovalId) =>
-    Effect.flatMap(EnvironmentSupervisor, (env) => fetchMailApproval(env, approvalId)),
-});
+const threadMailApprovals = createThreadMailApprovalsAtomFamily(connectionAtomRuntime);
 
 const respondMailApproval = createEnvironmentCommand(connectionAtomRuntime, {
   label: "environment-data:pulse-mail:respond-approval",
   execute: (input: { approval: MailSendApproval; decision: "approve" | "decline" }) =>
-    Effect.flatMap(EnvironmentSupervisor, (env) => respondToMailApproval(env, input)),
+    Effect.flatMap(EnvironmentSupervisor.EnvironmentSupervisor, (env) =>
+      respondToMailApproval(env, input),
+    ),
 });
+
+const isMailError = Schema.is(MailError);
+const NO_APPROVALS: ReadonlyArray<MailSendApproval> = [];
 
 const STATUS_COPY: Record<
   MailSendApproval["status"],
@@ -73,48 +73,62 @@ function formatSize(bytes: number) {
 }
 
 /** A pending approval flips to expired at its deadline without waiting for a refetch. */
-function useMailApprovalStatus(approval: MailSendApproval | null | undefined) {
+function useMailApprovalStatus(approval: MailSendApproval) {
   const [expired, setExpired] = useState(false);
   useEffect(() => {
-    if (approval?.status !== "pending") return;
+    if (approval.status !== "pending") return;
     const timer = setTimeout(
       () => setExpired(true),
       Math.max(0, Date.parse(approval.expiresAt) - Date.now()),
     );
     return () => clearTimeout(timer);
-  }, [approval?.status, approval?.expiresAt]);
-  return expired && approval?.status === "pending" ? "expired" : approval?.status;
+  }, [approval.status, approval.expiresAt]);
+  return expired && approval.status === "pending" ? "expired" : approval.status;
 }
 
-/** Mail sends awaiting approval in a thread, derived from activities plus the server snapshot. */
+/**
+ * Mail sends awaiting approval in a thread, pushed by the server. Mount one per thread: what it
+ * has shown stays listed after it resolves, until the user leaves the thread.
+ */
 export const MailSendApprovals = memo(function MailSendApprovals({
   environmentId,
-  activities,
+  threadId,
 }: {
   environmentId: EnvironmentId;
-  activities: ReadonlyArray<OrchestrationThreadActivity>;
+  threadId: ThreadId;
 }) {
-  const pendingIds = useMemo(() => derivePendingMailApprovalIds(activities), [activities]);
-  // Answers given in this view stay visible so the user sees the server's outcome.
+  const query = useEnvironmentQuery(threadMailApprovals({ environmentId, input: { threadId } }));
+  const listed = query.data ?? NO_APPROVALS;
+  const [seen, setSeen] = useState<ReadonlySet<MailApprovalId>>(() => new Set());
+  // Answers given in this view show at once, before the server pushes the new list.
   const [answered, setAnswered] = useState<ReadonlyMap<MailApprovalId, MailSendApproval>>(
     () => new Map(),
   );
-  const ids = useMemo(
-    () => [...new Set([...pendingIds, ...answered.keys()])],
-    [pendingIds, answered],
+  const approvals = useMemo(
+    () => visibleMailApprovals(listed, seen, answered),
+    [listed, seen, answered],
   );
-  if (ids.length === 0) return null;
+  useEffect(() => {
+    if (approvals.some((approval) => !seen.has(approval.id))) {
+      // oxlint-disable-next-line react/set-state-in-effect -- Remembers what was shown so it stays after resolving.
+      setSeen(new Set([...seen, ...approvals.map((approval) => approval.id)]));
+    }
+  }, [approvals, seen]);
+  const failure = isMailError(query.failure) ? query.failure : null;
+  if (approvals.length === 0 && failure === null) return null;
   return (
     <div className="mb-2 flex max-h-[50vh] flex-col gap-2 overflow-y-auto">
-      {ids.map((id) => (
+      {failure ? (
+        <Alert variant="error">
+          <AlertDescription>Could not load email approvals: {failure.message}</AlertDescription>
+        </Alert>
+      ) : null}
+      {approvals.map((approval) => (
         <MailSendApprovalCard
-          key={id}
+          key={approval.id}
           environmentId={environmentId}
-          approvalId={id}
-          answer={answered.get(id) ?? null}
-          onAnswered={(approval) =>
-            setAnswered((current) => new Map(current).set(approval.id, approval))
-          }
+          approval={approval}
+          onAnswered={(answer) => setAnswered((current) => new Map(current).set(answer.id, answer))}
         />
       ))}
     </div>
@@ -123,34 +137,18 @@ export const MailSendApprovals = memo(function MailSendApprovals({
 
 const MailSendApprovalCard = memo(function MailSendApprovalCard({
   environmentId,
-  approvalId,
-  answer,
+  approval,
   onAnswered,
 }: {
   environmentId: EnvironmentId;
-  approvalId: MailApprovalId;
-  answer: MailSendApproval | null;
+  approval: MailSendApproval;
   onAnswered: (approval: MailSendApproval) => void;
 }) {
-  const query = useEnvironmentQuery(mailApproval({ environmentId, input: approvalId }));
   const respond = useAtomCommand(respondMailApproval, { reportFailure: false });
   const [inFlight, setInFlight] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const approval = answer ?? query.data;
 
   const status = useMailApprovalStatus(approval);
-
-  if (!approval) {
-    return (
-      <Alert variant={query.error ? "error" : "default"}>
-        <AlertDescription>
-          {query.error
-            ? `Could not load the email approval: ${query.error}`
-            : "Loading email approval"}
-        </AlertDescription>
-      </Alert>
-    );
-  }
 
   const decide = async (decision: "approve" | "decline") => {
     setInFlight(true);
@@ -163,12 +161,11 @@ const MailSendApprovalCard = memo(function MailSendApprovalCard({
       setError(
         failure instanceof Error ? failure.message : "The server could not record this answer.",
       );
-      query.refresh();
     }
   };
 
   const { snapshot } = approval;
-  const copy = STATUS_COPY[status ?? approval.status];
+  const copy = STATUS_COPY[status];
   const recipients: Array<[string, ReadonlyArray<MailAddress>]> = [
     ["To", snapshot.to],
     ["CC", snapshot.cc],

@@ -1,46 +1,44 @@
-import {
-  MAIL_SEND_APPROVAL_ACTIVITY_KIND,
-  MAIL_SEND_APPROVAL_RESOLVED_ACTIVITY_KIND,
-  MailApprovalId,
-  type MailSendApproval,
-  type OrchestrationThreadActivity,
-  WS_METHODS,
-} from "@t3tools/contracts";
+import { type MailApprovalId, type MailSendApproval, WS_METHODS } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
-import * as Predicate from "effect/Predicate";
-import * as Schema from "effect/Schema";
+import { Atom } from "effect/unstable/reactivity";
 
+import type { EnvironmentRegistry } from "../connection/registry.ts";
 import { EnvironmentSupervisor } from "../connection/supervisor.ts";
 import { request } from "../rpc/client.ts";
+import { createEnvironmentRpcSubscriptionAtomFamily } from "../state/runtime.ts";
 
-const isApprovalId = Schema.is(MailApprovalId);
-
-/** Approval IDs in a thread that still need a decision, oldest first. A resolution stays final in any order. */
-export function derivePendingMailApprovalIds(
-  activities: ReadonlyArray<OrchestrationThreadActivity>,
-): MailApprovalId[] {
-  const pending = new Set<MailApprovalId>();
-  const closed = new Set<MailApprovalId>();
-  for (const activity of activities) {
-    const payload = Predicate.isObject(activity.payload) ? activity.payload : undefined;
-    if (!payload || !isApprovalId(payload.approvalId)) continue;
-    if (activity.kind === MAIL_SEND_APPROVAL_ACTIVITY_KIND) {
-      if (!closed.has(payload.approvalId)) pending.add(payload.approvalId);
-    } else if (activity.kind === MAIL_SEND_APPROVAL_RESOLVED_ACTIVITY_KIND) {
-      closed.add(payload.approvalId);
-      pending.delete(payload.approvalId);
-    }
-  }
-  return [...pending];
+/** A thread's send approvals, newest first, pushed again whenever one of them changes. */
+export function createThreadMailApprovalsAtomFamily<R, E>(
+  runtime: Atom.AtomRuntime<EnvironmentRegistry | R, E>,
+) {
+  return createEnvironmentRpcSubscriptionAtomFamily(runtime, {
+    label: "environment-data:pulse-mail:thread-approvals",
+    tag: WS_METHODS.pulseMailSubscribeThreadApprovals,
+    idleTtlMs: 60_000,
+  });
 }
 
-export function fetchMailApproval(
-  env: EnvironmentSupervisor["Service"],
-  approvalId: MailApprovalId,
-) {
-  return request(WS_METHODS.pulseMailGetApproval, { approvalId }).pipe(
-    Effect.provideService(EnvironmentSupervisor, env),
-  );
+/**
+ * What a thread view lists, oldest first. Pending approvals always show; one the view has already
+ * shown (`seen`) stays after it resolves, so the user sees the outcome until leaving the thread.
+ * This client's own answer stands in for a pushed copy that still says pending.
+ */
+export function visibleMailApprovals(
+  listed: ReadonlyArray<MailSendApproval>,
+  seen: ReadonlySet<MailApprovalId>,
+  answered: ReadonlyMap<MailApprovalId, MailSendApproval>,
+): MailSendApproval[] {
+  const visible: MailSendApproval[] = [];
+  for (let index = listed.length - 1; index >= 0; index -= 1) {
+    const approval = listed[index]!;
+    const answer = answered.get(approval.id);
+    if (answer !== undefined) {
+      visible.push(approval.status === "pending" ? answer : approval);
+    } else if (approval.status === "pending" || seen.has(approval.id)) {
+      visible.push(approval);
+    }
+  }
+  return visible;
 }
 
 /** Sends the digest of the snapshot the user saw, so a changed send is rejected instead of approved. */

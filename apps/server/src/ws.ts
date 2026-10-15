@@ -2228,6 +2228,12 @@ const makeWsRpcLayer = (
               "rpc.aggregate": "pulse.mail",
             },
           ),
+        [WS_METHODS.pulseMailSubscribeThreadApprovals]: (input) =>
+          observeRpcStream(
+            WS_METHODS.pulseMailSubscribeThreadApprovals,
+            pulseMail.subscribeThreadApprovals(input),
+            { "rpc.aggregate": "pulse.mail" },
+          ),
         [WS_METHODS.pulseMailGetApproval]: (input) =>
           observeRpcEffect(WS_METHODS.pulseMailGetApproval, pulseMail.getApproval(input), {
             "rpc.aggregate": "pulse.mail",

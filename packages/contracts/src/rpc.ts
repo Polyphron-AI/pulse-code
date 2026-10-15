@@ -359,6 +359,7 @@ export const WS_METHODS = {
   pulseMailGetThreadSelection: PULSE_MAIL_METHODS.getThreadSelection,
   pulseMailSetThreadSelection: PULSE_MAIL_METHODS.setThreadSelection,
   pulseMailListThreadApprovals: PULSE_MAIL_METHODS.listThreadApprovals,
+  pulseMailSubscribeThreadApprovals: PULSE_MAIL_METHODS.subscribeThreadApprovals,
   pulseMailGetApproval: PULSE_MAIL_METHODS.getApproval,
   pulseMailRespondApproval: PULSE_MAIL_METHODS.respondApproval,
   pulseMcpList: PULSE_MCP_METHODS.list,

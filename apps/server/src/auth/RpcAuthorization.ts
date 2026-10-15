@@ -49,6 +49,7 @@ export const RPC_REQUIRED_SCOPES = {
   [WS_METHODS.pulseMailGetThreadSelection]: AuthOrchestrationReadScope,
   [WS_METHODS.pulseMailSetThreadSelection]: AuthOrchestrationOperateScope,
   [WS_METHODS.pulseMailListThreadApprovals]: AuthOrchestrationReadScope,
+  [WS_METHODS.pulseMailSubscribeThreadApprovals]: AuthOrchestrationReadScope,
   [WS_METHODS.pulseMailGetApproval]: AuthOrchestrationReadScope,
   [WS_METHODS.pulseMailRespondApproval]: AuthOrchestrationOperateScope,
   [WS_METHODS.pulseMcpSetThreadOverride]: AuthOrchestrationOperateScope,

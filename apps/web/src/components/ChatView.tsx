@@ -11382,8 +11382,9 @@ export default function ChatView(props: ChatViewProps) {
                   ) : null}
                   {activeThread && !isDraftHeroState ? (
                     <MailSendApprovals
+                      key={`${activeThread.environmentId}:${activeThread.id}`}
                       environmentId={activeThread.environmentId}
-                      activities={threadActivities}
+                      threadId={activeThread.id}
                     />
                   ) : null}
                   <div

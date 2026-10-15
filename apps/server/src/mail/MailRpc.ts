@@ -8,6 +8,7 @@ import {
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 
 import type { MailConfigService } from "./MailConfigService.ts";
 import { withImap, type MailConnectionOptions } from "./MailConnection.ts";
@@ -27,6 +28,13 @@ const redact = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, MailError> 
   effect.pipe(
     Effect.mapError((error) => (isMailError(error) ? error : unavailable())),
     Effect.catchDefect(() => Effect.fail(unavailable())),
+  );
+
+/** `redact` for streams. */
+const redactStream = <A, E>(stream: Stream.Stream<A, E>): Stream.Stream<A, MailError> =>
+  stream.pipe(
+    Stream.mapError((error) => (isMailError(error) ? error : unavailable())),
+    Stream.catchDefect(() => Stream.fail(unavailable())),
   );
 
 const healthFor = (kind: MailErrorKind): MailAccountHealth["status"] =>
@@ -86,6 +94,8 @@ export const mailRpcHandlers = (
     }) => redact(config.setThreadSelection(input.threadId, input.accountId)),
     listThreadApprovals: (input: { readonly threadId: ThreadId }) =>
       redact(send.listThread(input.threadId)),
+    subscribeThreadApprovals: (input: { readonly threadId: ThreadId }) =>
+      redactStream(send.subscribeThread(input.threadId)),
     getApproval: (input: { readonly approvalId: string }) => redact(send.status(input.approvalId)),
     respondApproval: (input: Parameters<typeof send.respond>[0]) => redact(send.respond(input)),
   };

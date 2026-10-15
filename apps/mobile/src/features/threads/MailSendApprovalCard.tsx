@@ -138,17 +138,11 @@ function EntryCard(props: {
   readonly onRetry: () => void;
 }) {
   switch (props.entry.kind) {
-    case "loading":
-      return (
-        <CardShell>
-          <Text className="font-sans text-sm text-foreground-secondary">Loading email...</Text>
-        </CardShell>
-      );
     case "outdated":
       return (
         <CardShell>
           <Text className="font-sans text-sm leading-normal text-foreground">
-            Update the app to approve this email.
+            Update the app to approve emails from this thread.
           </Text>
         </CardShell>
       );
@@ -156,7 +150,7 @@ function EntryCard(props: {
       return (
         <CardShell>
           <Text className="font-sans text-sm leading-normal text-foreground-secondary">
-            Could not load this email.
+            Could not load email approvals.
           </Text>
           <View className="flex-row">
             <RequestActionButton label="Retry" tone="secondary" onPress={props.onRetry} />
@@ -186,7 +180,7 @@ export function MailSendApprovalCards() {
           entry={entry}
           responding={respondingId === id}
           onRespond={(approval, decision) => void onRespond(approval, decision)}
-          onRetry={() => void onRetry(id)}
+          onRetry={onRetry}
         />
       ))}
     </View>
