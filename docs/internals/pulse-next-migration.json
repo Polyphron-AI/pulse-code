@@ -1,18 +1,15 @@
 {
   "active": {
     "policyVersion": "2026-09-17",
-    "state": "awaiting-installer-completion",
-    "feature": "upstream-nightly-20261004",
-    "branch": "qb/sync-nightly-20261004",
-    "sourceRevision": "58a8f792f0",
-    "stableBranch": "qb/sync-stable-20261004",
-    "installerVersion": "0.0.44-nightly.20261004.2",
-    "evidence": ".t3/upstream-updates/features/result.json: 48 unchanged core suites and 523 passing test results. Release/version/model checks: 22 passing tests; runner checks: 8 passing tests; scripts typecheck passed. Corrected Windows package validated 57 payload files and 16 native modules, including the checksum-pinned voice model. Isolated packaged startup and browser MCP save/reload/remove passed.",
-    "artifact": "release/nightly-20261004/verified/Pulse-Next-0.0.44-nightly.20261004.2-x64.exe",
-    "artifactSha256": "5b609b3e5f4142f3b042e70ca49fbda9583825b11a67454596e7f261663d149d",
-    "limitations": "Live provider turns, microphone capture, native mobile and WSL were not tested. Scoped lint retains existing Node import/process conventions in packaging scripts; those lines were unchanged by the fix.",
-    "nextAction": "Corrected installer is open (PID 4008); Windows still reports 0.0.44-pulse.2-nightly.20261004.1. Finish setup and verify installed version/title. Corrected packaged app booted with isolated state (PID 83944); dev browser is localhost:7232. Preserve stable develop and its separate branch.",
-    "updatedAt": "2026-10-04"
+    "state": "in-progress",
+    "feature": "unified-workspace",
+    "branch": "qb/feat-unified-workspace",
+    "baseRevision": "090dc9cd7b",
+    "spec": "docs/superpowers/specs/2026-10-14-unified-workspace-design.md",
+    "plan": "docs/superpowers/plans/2026-10-14-unified-workspace.md",
+    "acceptance": "In a remote browser over Tailscale, read Inbox from a real account, link a message to a project, archive the message in Gmail, and the link still opens it.",
+    "nextAction": "Wave 1, Task 2: link contracts.",
+    "updatedAt": "2026-10-15"
   },
   "providerSummaryHandoffCompaction": {
     "policyVersion": "2026-09-17",
@@ -1224,6 +1221,21 @@
     "publishedAssetVerified": "Downloaded GitHub asset matches local installer size (598735743 bytes) and SHA-256; SHA256SUMS.txt and verification.json uploaded."
   },
   "priorActiveWork": [
+    {
+      "policyVersion": "2026-09-17",
+      "state": "awaiting-installer-completion",
+      "feature": "upstream-nightly-20261004",
+      "branch": "qb/sync-nightly-20261004",
+      "sourceRevision": "58a8f792f0",
+      "stableBranch": "qb/sync-stable-20261004",
+      "installerVersion": "0.0.44-nightly.20261004.2",
+      "evidence": ".t3/upstream-updates/features/result.json: 48 unchanged core suites and 523 passing test results. Release/version/model checks: 22 passing tests; runner checks: 8 passing tests; scripts typecheck passed. Corrected Windows package validated 57 payload files and 16 native modules, including the checksum-pinned voice model. Isolated packaged startup and browser MCP save/reload/remove passed.",
+      "artifact": "release/nightly-20261004/verified/Pulse-Next-0.0.44-nightly.20261004.2-x64.exe",
+      "artifactSha256": "5b609b3e5f4142f3b042e70ca49fbda9583825b11a67454596e7f261663d149d",
+      "limitations": "Live provider turns, microphone capture, native mobile and WSL were not tested. Scoped lint retains existing Node import/process conventions in packaging scripts; those lines were unchanged by the fix.",
+      "nextAction": "Corrected installer is open (PID 4008); Windows still reports 0.0.44-pulse.2-nightly.20261004.1. Finish setup and verify installed version/title. Corrected packaged app booted with isolated state (PID 83944); dev browser is localhost:7232. Preserve stable develop and its separate branch.",
+      "updatedAt": "2026-10-04"
+    },
     {
       "policyVersion": "2026-09-17",
       "feature": "thread-skill-selection-status",
