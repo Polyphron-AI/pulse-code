@@ -6,6 +6,7 @@ import * as NodeCrypto from "node:crypto";
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Encoding from "effect/Encoding";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
@@ -117,6 +118,10 @@ import { PulseProviderServiceLayerLive } from "./orchestration-v2/runtimeLayer.t
 import * as ServerConfig from "./config.ts";
 import * as PulseMcpConfig from "./mcp/PulseMcpConfigService.ts";
 import { pulseMcpHandlers } from "./mcp/PulseMcpRpc.ts";
+import { MailConfigService } from "./mail/MailConfigService.ts";
+import { MailOAuth } from "./mail/MailOAuth.ts";
+import { mailRpcHandlers } from "./mail/MailRpc.ts";
+import { MailSendService } from "./mail/MailSendService.ts";
 import { makeNodePulseMcpDiscoveryService } from "./mcp/PulseMcpDiscoveryService.ts";
 import {
   ManagedSkills,
@@ -1298,6 +1303,11 @@ const makeWsRpcLayer = (
           Effect.forkScoped,
         );
       const pulseMcp = pulseMcpHandlers(pulseMcpConfig, providerService, pulseMcpDiscovery);
+      const pulseMail = mailRpcHandlers(
+        yield* MailConfigService,
+        yield* MailOAuth,
+        yield* MailSendService,
+      );
       const lifecycleEvents = yield* ServerLifecycleEvents.ServerLifecycleEvents;
       const serverSettings = yield* ServerSettings.ServerSettingsService;
       const startup = yield* ServerRuntimeStartup.ServerRuntimeStartup;
@@ -1740,6 +1750,7 @@ const makeWsRpcLayer = (
               claudeManagedSkills: true,
               openCodeManagedSkills: true,
               mcpManagement: true,
+              mailManagement: true,
               mcpCreateOnly: true,
               mcpDiscovery: true,
               mcpNativeInventory: true,
@@ -2140,6 +2151,90 @@ const makeWsRpcLayer = (
         [WS_METHODS.pulseSkillsList]: () =>
           observeRpcEffect(WS_METHODS.pulseSkillsList, pulseSkills.list(), {
             "rpc.aggregate": "pulse.skills",
+          }),
+        [WS_METHODS.pulseMailListAccounts]: () =>
+          observeRpcEffect(WS_METHODS.pulseMailListAccounts, pulseMail.listAccounts(), {
+            "rpc.aggregate": "pulse.mail",
+          }),
+        [WS_METHODS.pulseMailUpsertAccount]: (input) =>
+          observeRpcEffect(WS_METHODS.pulseMailUpsertAccount, pulseMail.upsertAccount(input), {
+            "rpc.aggregate": "pulse.mail",
+          }),
+        [WS_METHODS.pulseMailRemoveAccount]: (input) =>
+          observeRpcEffect(WS_METHODS.pulseMailRemoveAccount, pulseMail.removeAccount(input), {
+            "rpc.aggregate": "pulse.mail",
+          }),
+        [WS_METHODS.pulseMailDisconnectAccount]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.pulseMailDisconnectAccount,
+            pulseMail.disconnectAccount(input),
+            {
+              "rpc.aggregate": "pulse.mail",
+            },
+          ),
+        [WS_METHODS.pulseMailTestAccount]: (input) =>
+          observeRpcEffect(WS_METHODS.pulseMailTestAccount, pulseMail.testAccount(input), {
+            "rpc.aggregate": "pulse.mail",
+          }),
+        [WS_METHODS.pulseMailSetPassword]: (input) =>
+          observeRpcEffect(WS_METHODS.pulseMailSetPassword, pulseMail.setPassword(input), {
+            "rpc.aggregate": "pulse.mail",
+          }),
+        [WS_METHODS.pulseMailStartOAuth]: (input) =>
+          observeRpcEffect(WS_METHODS.pulseMailStartOAuth, pulseMail.startOAuth(input), {
+            "rpc.aggregate": "pulse.mail",
+          }),
+        [WS_METHODS.pulseMailCompleteOAuth]: (input) =>
+          observeRpcEffect(WS_METHODS.pulseMailCompleteOAuth, pulseMail.completeOAuth(input), {
+            "rpc.aggregate": "pulse.mail",
+          }),
+        [WS_METHODS.pulseMailGetProjectAccess]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.pulseMailGetProjectAccess,
+            pulseMail.getProjectAccess(input),
+            {
+              "rpc.aggregate": "pulse.mail",
+            },
+          ),
+        [WS_METHODS.pulseMailSetProjectAccess]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.pulseMailSetProjectAccess,
+            pulseMail.setProjectAccess(input),
+            {
+              "rpc.aggregate": "pulse.mail",
+            },
+          ),
+        [WS_METHODS.pulseMailGetThreadSelection]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.pulseMailGetThreadSelection,
+            pulseMail.getThreadSelection(input),
+            {
+              "rpc.aggregate": "pulse.mail",
+            },
+          ),
+        [WS_METHODS.pulseMailSetThreadSelection]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.pulseMailSetThreadSelection,
+            pulseMail.setThreadSelection(input),
+            {
+              "rpc.aggregate": "pulse.mail",
+            },
+          ),
+        [WS_METHODS.pulseMailListThreadApprovals]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.pulseMailListThreadApprovals,
+            pulseMail.listThreadApprovals(input),
+            {
+              "rpc.aggregate": "pulse.mail",
+            },
+          ),
+        [WS_METHODS.pulseMailGetApproval]: (input) =>
+          observeRpcEffect(WS_METHODS.pulseMailGetApproval, pulseMail.getApproval(input), {
+            "rpc.aggregate": "pulse.mail",
+          }),
+        [WS_METHODS.pulseMailRespondApproval]: (input) =>
+          observeRpcEffect(WS_METHODS.pulseMailRespondApproval, pulseMail.respondApproval(input), {
+            "rpc.aggregate": "pulse.mail",
           }),
         [WS_METHODS.pulseMcpList]: () =>
           observeRpcEffect(WS_METHODS.pulseMcpList, pulseMcp.list(), {
@@ -3954,6 +4049,10 @@ export const websocketRpcRouteLayer = Layer.unwrap(
     const pulseProviderService = yield* PulseProviderService.PulseProviderService;
     const threadHandoffService = yield* ThreadHandoffService.ThreadHandoffService;
     const pulseMcpConfig = yield* PulseMcpConfig.PulseMcpConfigService;
+    const mailServices = Context.make(MailConfigService, yield* MailConfigService).pipe(
+      Context.add(MailOAuth, yield* MailOAuth),
+      Context.add(MailSendService, yield* MailSendService),
+    );
     const previewAutomationBroker = yield* PreviewAutomationBroker.PreviewAutomationBroker;
     const serverSelfUpdate = yield* ServerSelfUpdate.ServerSelfUpdate;
     const pullRequests = yield* PullRequestService.PullRequestService;
@@ -4018,6 +4117,7 @@ export const websocketRpcRouteLayer = Layer.unwrap(
                 Layer.succeed(ThreadHandoffService.ThreadHandoffService, threadHandoffService),
               ),
               Layer.provide(Layer.succeed(PulseMcpConfig.PulseMcpConfigService, pulseMcpConfig)),
+              Layer.provide(Layer.succeedContext(mailServices)),
               Layer.provide(Layer.succeed(SqlClient.SqlClient, sql)),
               Layer.provide(AgentSessionScanner.layer),
               Layer.provide(ProviderMaintenanceRunner.layer),

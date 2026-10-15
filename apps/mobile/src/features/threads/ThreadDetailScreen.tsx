@@ -103,6 +103,7 @@ import type {
   ThreadFeedEntry,
   ThreadFeedLatestRun,
 } from "../../lib/threadActivity";
+import { MailSendApprovalCards } from "./MailSendApprovalCard";
 import { PendingApprovalCard } from "./PendingApprovalCard";
 import { ComposerFeedback } from "./ComposerFeedback";
 import { ComposerUsageLimits } from "./ComposerUsageLimits";
@@ -1211,6 +1212,7 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
                     />
                   </Animated.View>
                 ) : null}
+                <MailSendApprovalCards />
                 {props.activePendingApproval || props.activePendingUserInput ? (
                   <Animated.View
                     className="shrink-0 gap-3 px-4 pb-3"

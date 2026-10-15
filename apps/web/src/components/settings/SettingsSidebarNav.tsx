@@ -21,6 +21,7 @@ import {
   PanelsTopLeftIcon,
   KeyboardIcon,
   Link2Icon,
+  MailIcon,
   PaletteIcon,
   SearchIcon,
   Settings2Icon,
@@ -56,6 +57,7 @@ import {
 } from "./settingsSearch";
 import { useAvailableSettingsSearchItems } from "./useAvailableSettingsSearchItems";
 import { validateSettingsScopeSearch } from "./settingsScope";
+import { useServerConfigs } from "../../state/entities";
 import { INTEGRATIONS_SETTINGS_SECTIONS } from "./integrationsSettingsSections";
 import {
   getVisibleSettingsSectionIds,
@@ -97,6 +99,7 @@ const SETTINGS_SECTION_ICONS: Readonly<
   "/settings/providers": BotIcon,
   "/settings/integrations": BlocksIcon,
   "/settings/scheduled-tasks": CalendarClockIcon,
+  "/settings/email": MailIcon,
   "/settings/source-control": GitBranchIcon,
   "/settings/storage": HardDriveIcon,
   "/settings/connections": Link2Icon,
@@ -140,8 +143,20 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
   const currentSearch = useLocation({ select: (location) => location.search });
   const resolvedPathname = useRouterState({ select: (state) => state.resolvedLocation?.pathname });
   const scopeSearch = useMemo(() => validateSettingsScopeSearch(currentSearch), [currentSearch]);
+  // Email only appears once a connected environment advertises mail management;
+  // the page itself further gates on the session's operate scope.
+  const serverConfigs = useServerConfigs();
+  const hasMailManagement = useMemo(
+    () =>
+      [...serverConfigs.values()].some(
+        (config) => config.pulseCapabilities?.mailManagement === true,
+      ),
+    [serverConfigs],
+  );
   const navItems = SETTINGS_NAV_ITEMS.filter(
-    (item) => item.to !== "/settings/projects" || isSettingsOverviewVisible(scopeSearch),
+    (item) =>
+      (item.to !== "/settings/projects" || isSettingsOverviewVisible(scopeSearch)) &&
+      (item.to !== "/settings/email" || hasMailManagement),
   );
   const { isMobile, setOpenMobile, open, setOpen } = useSidebar();
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -150,7 +165,14 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
   const [sectionVisibility, setSectionVisibility] = useState<SettingsSectionVisibilityState | null>(
     null,
   );
-  const searchableItems = useAvailableSettingsSearchItems(scopeSearch);
+  const availableSearchItems = useAvailableSettingsSearchItems(scopeSearch);
+  const searchableItems = useMemo(
+    () =>
+      hasMailManagement
+        ? availableSearchItems
+        : availableSearchItems.filter((item) => !item.mailManagementOnly),
+    [availableSearchItems, hasMailManagement],
+  );
   const results = useMemo(() => searchSettings(query, searchableItems), [query, searchableItems]);
   const isSearching = query.trim().length > 0;
   const hasResults = results.length > 0;

@@ -62,6 +62,7 @@ export * from "./rpc.ts";
 export * from "./worktreeSetup.ts";
 export * from "./pulseSkills.ts";
 export * from "./pulseMcp.ts";
+export * from "./pulseMail.ts";
 export * from "./pulseDictation.ts";
 
 export * from "./threadHandoff.ts";

@@ -467,6 +467,7 @@ import {
   ProviderStatusBanner,
   shouldShowProviderStatusBanner,
 } from "./chat/ProviderStatusBanner";
+import { MailSendApprovals } from "./chat/MailSendApprovalPanel";
 import {
   dismissThreadErrorBannerForSession,
   getThreadErrorBannerKey,
@@ -11378,6 +11379,12 @@ export default function ChatView(props: ChatViewProps) {
                         />
                       </div>
                     </div>
+                  ) : null}
+                  {activeThread && !isDraftHeroState ? (
+                    <MailSendApprovals
+                      environmentId={activeThread.environmentId}
+                      activities={threadActivities}
+                    />
                   ) : null}
                   <div
                     ref={draftHeroTransition.composerAnchorRef}
