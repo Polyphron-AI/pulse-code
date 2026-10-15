@@ -18,12 +18,12 @@ import {
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import { Fragment, memo, useEffect, useMemo, useState } from "react";
+import { Fragment, memo, useCallback, useEffect, useMemo, useState } from "react";
 
 import { connectionAtomRuntime } from "../../connection/runtime";
 import { useEnvironmentQuery } from "../../state/query";
 import { useAtomCommand } from "../../state/use-atom-command";
-import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
+import { Alert, AlertAction, AlertDescription, AlertTitle } from "../ui/alert";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 
@@ -114,6 +114,10 @@ export const MailSendApprovals = memo(function MailSendApprovals({
       setSeen(new Set([...seen, ...approvals.map((approval) => approval.id)]));
     }
   }, [approvals, seen]);
+  const onAnswered = useCallback(
+    (answer: MailSendApproval) => setAnswered((current) => new Map(current).set(answer.id, answer)),
+    [],
+  );
   const failure = isMailError(query.failure) ? query.failure : null;
   if (approvals.length === 0 && failure === null) return null;
   return (
@@ -121,6 +125,11 @@ export const MailSendApprovals = memo(function MailSendApprovals({
       {failure ? (
         <Alert variant="error">
           <AlertDescription>Could not load email approvals: {failure.message}</AlertDescription>
+          <AlertAction>
+            <Button size="sm" variant="outline" onClick={query.refresh}>
+              Try again
+            </Button>
+          </AlertAction>
         </Alert>
       ) : null}
       {approvals.map((approval) => (
@@ -128,7 +137,7 @@ export const MailSendApprovals = memo(function MailSendApprovals({
           key={approval.id}
           environmentId={environmentId}
           approval={approval}
-          onAnswered={(answer) => setAnswered((current) => new Map(current).set(answer.id, answer))}
+          onAnswered={onAnswered}
         />
       ))}
     </div>

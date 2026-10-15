@@ -11380,7 +11380,9 @@ export default function ChatView(props: ChatViewProps) {
                       </div>
                     </div>
                   ) : null}
-                  {activeThread && !isDraftHeroState ? (
+                  {activeThread &&
+                  !isDraftHeroState &&
+                  serverConfig?.pulseCapabilities?.mailManagement === true ? (
                     <MailSendApprovals
                       key={`${activeThread.environmentId}:${activeThread.id}`}
                       environmentId={activeThread.environmentId}

@@ -407,15 +407,20 @@ function isDecodeFailure(error: unknown): boolean {
 }
 
 /**
- * Mail send approvals for the selected thread, pushed by the server. An approval stays listed
- * after it leaves the pending set, so the user sees its terminal state until they leave the thread.
+ * Mail send approvals for the selected thread, pushed by servers that advertise mail. An approval
+ * stays listed after it leaves the pending set, so the user sees its terminal state until they
+ * leave the thread.
  */
 export function useSelectedThreadMailApprovals() {
   const respond = useAtomCommand(respondMailApproval, "mail approval response");
   const { selectedThread } = useThreadSelection();
+  const serverConfigs = useServerConfigs();
   const environmentId = selectedThread?.environmentId ?? null;
   const threadKey = selectedThread ? `${selectedThread.environmentId}:${selectedThread.id}` : null;
-  const atom = selectedThread
+  const hasMail =
+    selectedThread !== null &&
+    serverConfigs.get(selectedThread.environmentId)?.pulseCapabilities?.mailManagement === true;
+  const atom = hasMail
     ? threadMailApprovals({
         environmentId: selectedThread.environmentId,
         input: { threadId: selectedThread.id },
@@ -437,8 +442,10 @@ export function useSelectedThreadMailApprovals() {
     [listed, seen, answered],
   );
 
+  // Opening another thread starts over, so returning to this one does not bring back its
+  // resolved approvals.
   useEffect(() => {
-    if (visible.some((approval) => !seen.has(approval.id))) {
+    if (local.threadKey !== threadKey || visible.some((approval) => !seen.has(approval.id))) {
       // oxlint-disable-next-line react/set-state-in-effect -- Remembers what was shown so it stays after resolving.
       setLocal({
         threadKey,
@@ -446,7 +453,7 @@ export function useSelectedThreadMailApprovals() {
         answered,
       });
     }
-  }, [answered, seen, threadKey, visible]);
+  }, [answered, local.threadKey, seen, threadKey, visible]);
 
   const onRespond = useCallback(
     async (approval: MailSendApproval, decision: "approve" | "decline") => {
