@@ -14,7 +14,7 @@ Communications reads email from your connected desktop accounts. Email access is
 
 Mail runs on the server, so you can read it in the desktop app or in a browser, including on another device connected to this computer. It uses your primary connected environment. You can also open it from the command palette with Open Mail.
 
-Choose a folder in the sidebar to see its messages, newest first. Search looks in the open folder. Messages show as plain text, and attachments are listed by name and size.
+Choose a folder in the sidebar to see its messages, newest first. Search looks in the open folder. Refresh reloads the open folder from the newest messages. Messages show as plain text, and attachments are listed by name and size.
 
 ## Linking messages to projects
 

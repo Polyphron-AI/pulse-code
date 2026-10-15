@@ -1,5 +1,6 @@
 import { workspaceItemKey, type EnvironmentId, type MailMessageListItem } from "@t3tools/contracts";
 import { useState, type FormEvent, type MouseEvent } from "react";
+import { RefreshCwIcon } from "lucide-react";
 
 import { readLocalApi } from "../../../localApi";
 import { useProjects } from "../../../state/entities";
@@ -27,13 +28,30 @@ interface MailListProps {
 export function MailMessageList(props: MailListProps) {
   const [draft, setDraft] = useState("");
   const [query, setQuery] = useState("");
+  const [revision, setRevision] = useState(0);
+  const firstPage = useEnvironmentQuery(
+    pulseMailMessages({
+      environmentId: props.environmentId,
+      input: mailMessagesInput({ accountId: props.accountId, mailbox: props.folder, query }),
+    }),
+  );
+  const refresh = () => {
+    setRevision((current) => current + 1);
+    firstPage.refresh();
+  };
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    setQuery(draft.trim());
+    const next = draft.trim();
+    if (next === query) refresh();
+    else setQuery(next);
   };
   return (
     <div className="flex flex-col">
-      <form role="search" onSubmit={submit} className="border-b border-border p-2">
+      <form
+        role="search"
+        onSubmit={submit}
+        className="flex items-center gap-1 border-b border-border p-2"
+      >
         <Input
           type="search"
           size="sm"
@@ -48,8 +66,18 @@ export function MailMessageList(props: MailListProps) {
           placeholder="Search this folder"
           aria-label="Search this folder"
         />
+        <Button
+          type="button"
+          size="icon-sm"
+          variant="ghost"
+          aria-label="Refresh"
+          disabled={firstPage.isPending}
+          onClick={refresh}
+        >
+          <RefreshCwIcon />
+        </Button>
       </form>
-      <MailPages key={query} {...props} query={query} />
+      <MailPages key={`${query}:${revision}`} {...props} query={query} />
     </div>
   );
 }
