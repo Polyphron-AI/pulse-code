@@ -17,7 +17,7 @@ import * as Schema from "effect/Schema";
 import * as Rpc from "effect/unstable/rpc/Rpc";
 import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 import { PULSE_SKILLS_METHODS, PulseSkillsRpcs } from "./pulseSkills.ts";
-import { PULSE_LINKS_METHODS, PulseLinksRpcs } from "./pulseLinks.ts";
+import { PULSE_LINKS_METHODS, PulseLinksRpcs, PulseLinkSuggestionRpcs } from "./pulseLinks.ts";
 import {
   PULSE_MAIL_METHODS,
   PulseMailRpcs,
@@ -1769,6 +1769,7 @@ export const WsRpcGroup = RpcGroup.make(
   ...PulseMcpRpcs,
   ...PulseSkillsRpcs,
   ...PulseLinksRpcs,
+  ...PulseLinkSuggestionRpcs,
   WsServerProbeRpc,
   WsServerGetConfigRpc,
   WsServerRefreshProvidersRpc,

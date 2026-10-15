@@ -54,6 +54,102 @@ const kindOf = <A>(effect: Effect.Effect<A, WorkspaceLinksError>) =>
   );
 
 it.layer(testLayer())("WorkspaceLinks", (it) => {
+  it.effect(
+    "preserves another item's cached symmetric suggestion when opening or refreshing its target",
+    () =>
+      Effect.gen(function* () {
+        const links = yield* WorkspaceLinks;
+        const batch = {
+          item: threadItem(902),
+          suggestions: [{ item: mailItem(902), reason: "Related review" }],
+          model: "chosen",
+          modelKey: "selection",
+          revision: "revision",
+          incomplete: false,
+        };
+        yield* links.saveSuggestions(batch);
+        const id = (yield* links.list(threadItem(902).ref)).suggested[0]!.id;
+        yield* links.saveSuggestions({ ...batch, item: mailItem(902), suggestions: [] });
+        assert.equal((yield* links.list(threadItem(902).ref)).suggested[0]?.id, id);
+        assert.equal((yield* links.list(mailItem(902).ref)).suggested[0]?.id, id);
+        yield* links.saveSuggestions({ ...batch, suggestions: [] });
+        assert.lengthOf((yield* links.list(mailItem(902).ref)).suggested, 0);
+      }),
+  );
+  it.effect(
+    "keeps suggestions outside context, accepts with model provenance, and preserves dismissals",
+    () =>
+      Effect.gen(function* () {
+        const links = yield* WorkspaceLinks;
+        const batch = {
+          item: threadItem(900),
+          suggestions: [{ item: mailItem(900), reason: "Same launch review" }],
+          model: "chosen-model",
+          modelKey: "selection-1",
+          revision: "revision-1",
+          incomplete: false,
+        };
+        yield* links.saveSuggestions(batch);
+        const initial = yield* links.list(threadItem(900).ref);
+        assert.lengthOf(initial.linked, 0);
+        assert.lengthOf(initial.suggested, 1);
+        assert.lengthOf((yield* links.contextFor({ threadId: ThreadId.make("t900") })).items, 0);
+        assert.isTrue(
+          Option.isNone(
+            yield* links.resolveLinked(
+              { threadId: ThreadId.make("t900") },
+              workspaceItemKey(mailItem(900).ref),
+            ),
+          ),
+        );
+        const id = initial.suggested[0]!.id;
+        yield* links.acceptSuggestion({ id, viewing: threadItem(900) });
+        const accepted = (yield* links.list(threadItem(900).ref)).linked[0]!;
+        assert.deepEqual(accepted.source, {
+          type: "model",
+          model: "chosen-model",
+          reason: "Same launch review",
+        });
+        assert.deepEqual(accepted.origin?.viewing, threadItem(900));
+        assert.lengthOf((yield* links.contextFor({ threadId: ThreadId.make("t900") })).items, 1);
+        yield* links.saveSuggestions({ ...batch, model: "new-model" });
+        assert.deepEqual(
+          (yield* links.list(threadItem(900).ref)).linked[0]?.source,
+          accepted.source,
+        );
+        yield* links.unlink(id);
+        yield* links.saveSuggestions(batch);
+        assert.lengthOf((yield* links.list(threadItem(900).ref)).suggested, 0);
+        yield* links.link({ a: threadItem(900), b: mailItem(900) });
+        const manual = (yield* links.list(threadItem(900).ref)).linked[0]!;
+        assert.deepEqual(manual.source, { type: "user" });
+        assert.deepEqual(manual.origin, accepted.origin);
+      }),
+  );
+
+  it.effect("dismisses a suggestion durably and makes a concurrent stale acceptance fail", () =>
+    Effect.gen(function* () {
+      const links = yield* WorkspaceLinks;
+      const batch = {
+        item: threadItem(901),
+        suggestions: [{ item: mailItem(901), reason: "Related project" }],
+        model: "chosen",
+        modelKey: "selection",
+        revision: "revision",
+        incomplete: true,
+      };
+      yield* links.saveSuggestions(batch);
+      const id = (yield* links.list(threadItem(901).ref)).suggested[0]!.id;
+      yield* links.dismissSuggestion(id);
+      assert.equal(
+        yield* kindOf(links.acceptSuggestion({ id, viewing: threadItem(901) })),
+        "not-found",
+      );
+      yield* links.saveSuggestions(batch);
+      assert.lengthOf((yield* links.list(threadItem(901).ref)).suggested, 0);
+      assert.lengthOf((yield* links.contextFor({ threadId: ThreadId.make("t901") })).items, 0);
+    }),
+  );
   it.effect("shows a link from both sides with what the user was viewing", () =>
     Effect.gen(function* () {
       const links = yield* WorkspaceLinks;

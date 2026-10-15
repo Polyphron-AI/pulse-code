@@ -104,6 +104,9 @@ import * as WorkspaceEntries from "./workspace/WorkspaceEntries.ts";
 import * as WorkspaceFileSystem from "./workspace/WorkspaceFileSystem.ts";
 import * as WorkspacePaths from "./workspace/WorkspacePaths.ts";
 import { WorkspaceLinksLive } from "./workspace/WorkspaceLinks.ts";
+import * as WorkspaceSuggestions from "./workspace/WorkspaceSuggestions.ts";
+import * as WorkspaceSuggestionCandidates from "./workspace/WorkspaceSuggestionCandidates.ts";
+import * as WorkspaceLinksRepository from "./persistence/WorkspaceLinks.ts";
 import * as GitVcsDriver from "./vcs/GitVcsDriver.ts";
 import * as VcsDriverRegistry from "./vcs/VcsDriverRegistry.ts";
 import * as VcsProjectConfig from "./vcs/VcsProjectConfig.ts";
@@ -649,6 +652,11 @@ const TelegramLayerLive = TelegramService.layer().pipe(
   Layer.provide(TelegramBotApi.layer),
 );
 
+const SuggestionsLayerLive = WorkspaceSuggestions.layer.pipe(
+  Layer.provide(WorkspaceSuggestionCandidates.layer()),
+  Layer.provide(WorkspaceLinksRepository.layer),
+);
+
 /** One mail stack shared by the MCP toolkit and the mail RPCs. */
 const MailLayerLive = MailSendService.layer().pipe(
   Layer.provide(MailSendApprovals.layer),
@@ -689,6 +697,7 @@ const makeRoutesLayer = Layer.mergeAll(
   // Both transports consume the same service instance, so caches single-flight across clients
   // and mutations observed on WebSocket invalidate patches subsequently read over HTTP.
   Layer.provide(PullRequestServiceLive),
+  Layer.provide(SuggestionsLayerLive),
   Layer.provide(MailLayerLive),
   Layer.provide(TelegramLayerLive),
   Layer.provide(PreviewAutomationBroker.layer),

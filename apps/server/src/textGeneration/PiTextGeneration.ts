@@ -25,6 +25,7 @@ import {
   buildCommitMessagePrompt,
   buildPrContentPrompt,
   buildThreadTitlePrompt,
+  buildWorkspaceSuggestionsPrompt,
   buildThreadHandoffPrompt,
 } from "./TextGenerationPrompts.ts";
 import {
@@ -55,6 +56,7 @@ export const makePiTextGeneration = Effect.fn("makePiTextGeneration")(function* 
       | "generatePrContent"
       | "generateBranchName"
       | "generateThreadTitle"
+      | "generateWorkspaceSuggestions"
       | "generateThreadHandoff";
     cwd: string;
     prompt: string;
@@ -230,6 +232,18 @@ export const makePiTextGeneration = Effect.fn("makePiTextGeneration")(function* 
       };
     });
 
+  const generateWorkspaceSuggestions: TextGeneration.TextGeneration["Service"]["generateWorkspaceSuggestions"] =
+    Effect.fn("PiTextGeneration.generateWorkspaceSuggestions")(function* (input) {
+      const { prompt, outputSchema } = buildWorkspaceSuggestionsPrompt(input);
+      return yield* runPiJson({
+        operation: "generateWorkspaceSuggestions",
+        prompt,
+        outputSchemaJson: outputSchema,
+        modelSelection: input.modelSelection,
+        cwd: input.cwd,
+      });
+    });
+
   const generateThreadTitle: TextGeneration.TextGeneration["Service"]["generateThreadTitle"] =
     Effect.fn("PiTextGeneration.generateThreadTitle")(function* (input) {
       const { prompt, outputSchema } = buildThreadTitlePrompt({
@@ -272,5 +286,6 @@ export const makePiTextGeneration = Effect.fn("makePiTextGeneration")(function* 
     generatePrContent,
     generateBranchName,
     generateThreadTitle,
+    generateWorkspaceSuggestions,
   } satisfies TextGeneration.TextGeneration["Service"];
 });

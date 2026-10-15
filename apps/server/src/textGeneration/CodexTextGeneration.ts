@@ -30,6 +30,7 @@ import {
   buildPrContentPrompt,
   buildThreadHandoffPrompt,
   buildThreadTitlePrompt,
+  buildWorkspaceSuggestionsPrompt,
 } from "./TextGenerationPrompts.ts";
 import {
   normalizeCliError,
@@ -125,6 +126,7 @@ export const makeCodexTextGeneration = Effect.fn("makeCodexTextGeneration")(func
       | "generatePrContent"
       | "generateBranchName"
       | "generateThreadTitle"
+      | "generateWorkspaceSuggestions"
       | "generateThreadHandoff",
     value: unknown,
   ): Effect.Effect<string, TextGenerationError> =>
@@ -145,6 +147,7 @@ export const makeCodexTextGeneration = Effect.fn("makeCodexTextGeneration")(func
       | "generatePrContent"
       | "generateBranchName"
       | "generateThreadTitle"
+      | "generateWorkspaceSuggestions"
       | "generateThreadHandoff",
     attachments: TextGeneration.BranchNameGenerationInput["attachments"],
   ): Effect.fn.Return<MaterializedImageAttachments, TextGenerationError> {
@@ -188,6 +191,7 @@ export const makeCodexTextGeneration = Effect.fn("makeCodexTextGeneration")(func
       | "generatePrContent"
       | "generateBranchName"
       | "generateThreadTitle"
+      | "generateWorkspaceSuggestions"
       | "generateThreadHandoff";
     cwd: string;
     prompt: string;
@@ -441,6 +445,19 @@ export const makeCodexTextGeneration = Effect.fn("makeCodexTextGeneration")(func
       };
     });
 
+  const generateWorkspaceSuggestions: TextGeneration.TextGeneration["Service"]["generateWorkspaceSuggestions"] =
+    Effect.fn("CodexTextGeneration.generateWorkspaceSuggestions")(function* (input) {
+      const { prompt, outputSchema } = buildWorkspaceSuggestionsPrompt(input);
+      return yield* runCodexJson({
+        operation: "generateWorkspaceSuggestions",
+        prompt,
+        outputSchemaJson: outputSchema,
+        modelSelection: input.modelSelection,
+        cwd: input.cwd,
+        imagePaths: [],
+      });
+    });
+
   const generateThreadTitle: TextGeneration.TextGeneration["Service"]["generateThreadTitle"] =
     Effect.fn("CodexTextGeneration.generateThreadTitle")(function* (input) {
       const { imagePaths } = yield* materializeImageAttachments(
@@ -501,6 +518,7 @@ export const makeCodexTextGeneration = Effect.fn("makeCodexTextGeneration")(func
     generatePrContent,
     generateBranchName,
     generateThreadTitle,
+    generateWorkspaceSuggestions,
     generateThreadHandoff,
     compactThreadHandoff: (input) =>
       Effect.gen(function* () {

@@ -46,6 +46,22 @@ export interface WorkspaceContext {
 export class WorkspaceLinks extends Context.Service<
   WorkspaceLinks,
   {
+    readonly saveSuggestions: (input: {
+      readonly item: WorkspaceLinkEndpoint;
+      readonly suggestions: ReadonlyArray<{
+        readonly item: WorkspaceLinkEndpoint;
+        readonly reason: string;
+      }>;
+      readonly model: string;
+      readonly modelKey: string;
+      readonly revision: string;
+      readonly incomplete: boolean;
+    }) => Effect.Effect<void, WorkspaceLinksError>;
+    readonly acceptSuggestion: (input: {
+      readonly id: WorkspaceLinkId;
+      readonly viewing: WorkspaceLinkEndpoint;
+    }) => Effect.Effect<void, WorkspaceLinksError>;
+    readonly dismissSuggestion: (id: WorkspaceLinkId) => Effect.Effect<void, WorkspaceLinksError>;
     readonly list: (
       item: WorkspaceItemRef,
     ) => Effect.Effect<WorkspaceLinkList, WorkspaceLinksError>;
@@ -111,6 +127,63 @@ const make = Effect.gen(function* () {
   const changed = SubscriptionRef.update(counter, (count) => count + 1);
 
   return WorkspaceLinks.of({
+    saveSuggestions: (input) =>
+      Effect.gen(function* () {
+        const item = yield* sideOf(input.item);
+        const suggestions = yield* Effect.forEach(input.suggestions, (candidate) =>
+          Effect.gen(function* () {
+            const target = yield* sideOf(candidate.item);
+            const uuid = yield* crypto.randomUUIDv4.pipe(
+              Effect.catch(storeFailed("Suggestions could not be saved.")),
+            );
+            return {
+              id: `wl_${uuid}` as WorkspaceLinkId,
+              target,
+              source: {
+                type: "model" as const,
+                model: input.model.slice(0, 128),
+                reason: candidate.reason,
+              },
+            };
+          }),
+        );
+        yield* repository
+          .saveSuggestions({
+            item,
+            suggestions,
+            revision: input.revision,
+            model: input.modelKey,
+            incomplete: input.incomplete,
+            now: yield* nowIso,
+          })
+          .pipe(Effect.catch(storeFailed("Suggestions could not be saved. Try again.")));
+        yield* changed;
+      }),
+    acceptSuggestion: (input) =>
+      Effect.gen(function* () {
+        const viewing = yield* sideOf(input.viewing);
+        const result = yield* repository
+          .acceptSuggestion(input.id, viewing, yield* nowIso)
+          .pipe(Effect.catch(storeFailed("The suggestion could not be accepted. Try again.")));
+        if (Option.isNone(result))
+          return yield* new WorkspaceLinksError({
+            kind: "not-found",
+            message: "This suggestion is no longer available. Refresh the list.",
+          });
+        yield* changed;
+      }),
+    dismissSuggestion: (id) =>
+      Effect.gen(function* () {
+        const result = yield* repository
+          .dismissSuggestion(id, yield* nowIso)
+          .pipe(Effect.catch(storeFailed("The suggestion could not be dismissed. Try again.")));
+        if (Option.isNone(result))
+          return yield* new WorkspaceLinksError({
+            kind: "not-found",
+            message: "This suggestion is no longer available. Refresh the list.",
+          });
+        yield* changed;
+      }),
     list: (item) =>
       Effect.gen(function* () {
         const { key } = yield* sideOf({ ref: item });

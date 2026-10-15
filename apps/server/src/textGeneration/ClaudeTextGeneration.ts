@@ -28,6 +28,7 @@ import {
   buildPrContentPrompt,
   buildThreadHandoffPrompt,
   buildThreadTitlePrompt,
+  buildWorkspaceSuggestionsPrompt,
 } from "./TextGenerationPrompts.ts";
 import {
   normalizeCliError,
@@ -111,6 +112,7 @@ export const makeClaudeTextGeneration = Effect.fn("makeClaudeTextGeneration")(fu
       | "generatePrContent"
       | "generateBranchName"
       | "generateThreadTitle"
+      | "generateWorkspaceSuggestions"
       | "generateThreadHandoff",
     value: unknown,
     detail: string,
@@ -142,6 +144,7 @@ export const makeClaudeTextGeneration = Effect.fn("makeClaudeTextGeneration")(fu
       | "generatePrContent"
       | "generateBranchName"
       | "generateThreadTitle"
+      | "generateWorkspaceSuggestions"
       | "generateThreadHandoff";
     cwd: string;
     prompt: string;
@@ -398,6 +401,18 @@ export const makeClaudeTextGeneration = Effect.fn("makeClaudeTextGeneration")(fu
       };
     });
 
+  const generateWorkspaceSuggestions: TextGeneration.TextGeneration["Service"]["generateWorkspaceSuggestions"] =
+    Effect.fn("ClaudeTextGeneration.generateWorkspaceSuggestions")(function* (input) {
+      const { prompt, outputSchema } = buildWorkspaceSuggestionsPrompt(input);
+      return yield* runClaudeJson({
+        operation: "generateWorkspaceSuggestions",
+        prompt,
+        outputSchemaJson: outputSchema,
+        modelSelection: input.modelSelection,
+        cwd: input.cwd,
+      });
+    });
+
   const generateThreadTitle: TextGeneration.TextGeneration["Service"]["generateThreadTitle"] =
     Effect.fn("ClaudeTextGeneration.generateThreadTitle")(function* (input) {
       const { prompt, outputSchema } = buildThreadTitlePrompt({
@@ -448,6 +463,7 @@ export const makeClaudeTextGeneration = Effect.fn("makeClaudeTextGeneration")(fu
     generatePrContent,
     generateBranchName,
     generateThreadTitle,
+    generateWorkspaceSuggestions,
     generateThreadHandoff,
     compactThreadHandoff: (input) =>
       Effect.gen(function* () {

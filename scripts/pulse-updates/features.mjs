@@ -5,6 +5,35 @@ import { fileURLToPath } from "node:url";
 import { git, writeJson } from "./pipeline.mjs";
 
 export const featureSuites = [
+  {
+    id: "workspace-suggestion-selected-model",
+    file: "apps/server/src/textGeneration/TextGeneration.test.ts",
+    testNamePattern: "workspace suggestions",
+  },
+  {
+    id: "workspace-suggestion-structured-cli",
+    file: "apps/server/src/textGeneration/CodexTextGeneration.test.ts",
+    testNamePattern: "workspace suggestions",
+  },
+  {
+    id: "workspace-suggestion-remote-decision",
+    file: "packages/client-runtime/src/state/workspaceLinks.test.ts",
+    testNamePattern: "model suggestion",
+  },
+  { id: "workspace-suggestions", file: "apps/server/src/workspace/WorkspaceSuggestions.test.ts" },
+  {
+    id: "workspace-suggestion-discovery",
+    file: "apps/server/src/workspace/WorkspaceSuggestionCandidates.test.ts",
+  },
+  {
+    id: "workspace-suggestion-lifecycle",
+    file: "apps/server/src/workspace/WorkspaceLinks.test.ts",
+    testNamePattern: "suggestion",
+  },
+  {
+    id: "workspace-suggestion-client",
+    file: "apps/web/src/components/workspace/SuggestedSection.test.tsx",
+  },
   { id: "telegram-api-boundary", file: "apps/server/src/telegram/TelegramBotApi.test.ts" },
   {
     id: "telegram-reader-client",

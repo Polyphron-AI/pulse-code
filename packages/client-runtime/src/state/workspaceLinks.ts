@@ -26,6 +26,30 @@ export function createWorkspaceLinkAtoms<R, E>(
     key: ({ environmentId }: { readonly environmentId: string }) => environmentId,
   } as const;
   return {
+    suggestions: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "workspace-links:suggestions",
+      tag: WS_METHODS.pulseLinksSuggest,
+      staleTimeMs: 0,
+      idleTtlMs: 0,
+    }),
+    refreshSuggestions: createEnvironmentRpcCommand(runtime, {
+      label: "workspace-links:refresh-suggestions",
+      tag: WS_METHODS.pulseLinksSuggest,
+      scheduler,
+      concurrency: serialPerEnvironment,
+    }),
+    acceptSuggestion: createEnvironmentRpcCommand(runtime, {
+      label: "workspace-links:accept-suggestion",
+      tag: WS_METHODS.pulseLinksAcceptSuggestion,
+      scheduler,
+      concurrency: serialPerEnvironment,
+    }),
+    dismissSuggestion: createEnvironmentRpcCommand(runtime, {
+      label: "workspace-links:dismiss-suggestion",
+      tag: WS_METHODS.pulseLinksDismissSuggestion,
+      scheduler,
+      concurrency: serialPerEnvironment,
+    }),
     changes,
     projectHub: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "environment-data:workspace-links:project-hub",

@@ -32,6 +32,7 @@ import {
 import { MailError } from "./MailNotice";
 import { linkErrorText, useMailLinks } from "./useMailLinks";
 import { useMailCapabilities } from "./useMailCapabilities";
+import { SuggestedSection } from "../SuggestedSection";
 
 interface LinkedSectionProps {
   readonly environmentId: EnvironmentId;
@@ -43,10 +44,27 @@ interface LinkedSectionProps {
   readonly onOpen: (ref: WorkspaceItemRef) => void;
 }
 
-/** What is linked to one item, with Link to project and Unlink. Hidden when the server has no links. */
+/** Confirmed links and optional suggestions for the selected item. */
 export function LinkedSection(props: LinkedSectionProps) {
-  const { workspaceLinks: available } = useMailCapabilities(props.environmentId);
-  return available ? <LinkedList {...props} /> : null;
+  const {
+    workspaceLinks: available,
+    workspaceSuggestions,
+    textGenerationSelection,
+  } = useMailCapabilities(props.environmentId);
+  return available ? (
+    <>
+      <LinkedList {...props} />
+      {workspaceSuggestions ? (
+        <SuggestedSection
+          key={`${props.environmentId}:${workspaceItemKey(props.item)}:${JSON.stringify(textGenerationSelection)}`}
+          environmentId={props.environmentId}
+          item={{ ref: props.item, title: endpointTitle(props.title) }}
+          model={textGenerationSelection?.model}
+          onOpen={props.onOpen}
+        />
+      ) : null}
+    </>
+  ) : null;
 }
 
 function LinkedList(props: LinkedSectionProps) {

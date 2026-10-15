@@ -23,6 +23,7 @@ import {
   buildPrContentPrompt,
   buildThreadHandoffPrompt,
   buildThreadTitlePrompt,
+  buildWorkspaceSuggestionsPrompt,
 } from "./TextGenerationPrompts.ts";
 import {
   sanitizeCommitSubject,
@@ -40,6 +41,7 @@ type CursorTextGenerationOperation =
   | "generatePrContent"
   | "generateBranchName"
   | "generateThreadTitle"
+  | "generateWorkspaceSuggestions"
   | "generateThreadHandoff";
 
 function cursorSdkResultDetail(result: RunResult): string {
@@ -311,6 +313,17 @@ export const makeCursorTextGeneration = Effect.fn("makeCursorTextGeneration")(fu
       };
     });
 
+  const generateWorkspaceSuggestions: TextGeneration.TextGeneration["Service"]["generateWorkspaceSuggestions"] =
+    Effect.fn("CursorTextGeneration.generateWorkspaceSuggestions")(function* (input) {
+      const { prompt, outputSchema } = buildWorkspaceSuggestionsPrompt(input);
+      return yield* runCursorJson({
+        operation: "generateWorkspaceSuggestions",
+        prompt,
+        outputSchemaJson: outputSchema,
+        modelSelection: input.modelSelection,
+      });
+    });
+
   const generateThreadTitle: TextGeneration.TextGeneration["Service"]["generateThreadTitle"] =
     Effect.fn("CursorTextGeneration.generateThreadTitle")(function* (input) {
       const { prompt, outputSchema } = buildThreadTitlePrompt({
@@ -359,6 +372,7 @@ export const makeCursorTextGeneration = Effect.fn("makeCursorTextGeneration")(fu
     generatePrContent,
     generateBranchName,
     generateThreadTitle,
+    generateWorkspaceSuggestions,
     generateThreadHandoff,
   } satisfies TextGeneration.TextGeneration["Service"];
 });

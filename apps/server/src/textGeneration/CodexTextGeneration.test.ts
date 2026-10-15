@@ -170,6 +170,31 @@ function withFakeCodexEnv<A, E, R>(
 }
 
 it.layer(CodexTextGenerationTestLayer)("CodexTextGeneration", (it) => {
+  it.effect("runs structured workspace suggestions through the existing selected-model CLI", () =>
+    withFakeCodexEnv(
+      {
+        output: JSON.stringify({
+          suggestions: [{ key: "project:launch", reason: "Same launch review" }],
+        }),
+        requireArg: "--model selected-model",
+      },
+      (textGeneration) =>
+        Effect.gen(function* () {
+          const result = yield* textGeneration.generateWorkspaceSuggestions({
+            cwd: process.cwd(),
+            modelSelection: createModelSelection(
+              ProviderInstanceId.make("codex"),
+              "selected-model",
+            ),
+            source: { key: "mail:source", type: "mail", title: "Launch", snippet: "Source text" },
+            candidates: [{ key: "project:launch", type: "project", title: "Launch" }],
+          });
+          expect(result).toEqual({
+            suggestions: [{ key: "project:launch", reason: "Same launch review" }],
+          });
+        }),
+    ),
+  );
   it.effect.each(["gpt-5.6-luna", "openai.gpt-5.6-luna"])(
     "dispatches the qualified live model for %s",
     (selectedModel) =>

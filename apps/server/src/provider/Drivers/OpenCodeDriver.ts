@@ -168,6 +168,11 @@ function selectOpenCodeRuntimeTextGeneration(
         v1: v1.generateThreadHandoff(input),
         v2: v2.generateThreadHandoff(input),
       }),
+    generateWorkspaceSuggestions: (input) =>
+      byOpenCodeRuntime(probe.get, {
+        v1: v1.generateWorkspaceSuggestions(input),
+        v2: v2.generateWorkspaceSuggestions(input),
+      }),
     generateThreadTitle: (input) =>
       byOpenCodeRuntime(probe.get, {
         v1: v1.generateThreadTitle(input),

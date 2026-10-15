@@ -20,6 +20,7 @@ import {
   buildPrContentPrompt,
   buildThreadHandoffPrompt,
   buildThreadTitlePrompt,
+  buildWorkspaceSuggestionsPrompt,
 } from "./TextGenerationPrompts.ts";
 import * as TextGeneration from "./TextGeneration.ts";
 import {
@@ -35,6 +36,7 @@ const OpenCodeTextGenerationOperation = Schema.Literals([
   "generatePrContent",
   "generateBranchName",
   "generateThreadTitle",
+  "generateWorkspaceSuggestions",
   "generateThreadHandoff",
 ]);
 
@@ -450,6 +452,18 @@ export function makeOpenCodeOperations(
       };
     });
 
+  const generateWorkspaceSuggestions: TextGeneration.TextGeneration["Service"]["generateWorkspaceSuggestions"] =
+    Effect.fn("OpenCodeTextGeneration.generateWorkspaceSuggestions")(function* (input) {
+      const { prompt, outputSchema } = buildWorkspaceSuggestionsPrompt(input);
+      return yield* runOpenCodeJson({
+        operation: "generateWorkspaceSuggestions",
+        prompt,
+        outputSchemaJson: outputSchema,
+        modelSelection: input.modelSelection,
+        cwd: input.cwd,
+      });
+    });
+
   const generateThreadTitle: TextGeneration.TextGeneration["Service"]["generateThreadTitle"] =
     Effect.fn("OpenCodeTextGeneration.generateThreadTitle")(function* (input) {
       const { prompt, outputSchema } = buildThreadTitlePrompt({
@@ -501,6 +515,7 @@ export function makeOpenCodeOperations(
     generatePrContent,
     generateBranchName,
     generateThreadTitle,
+    generateWorkspaceSuggestions,
     generateThreadHandoff,
   } satisfies TextGeneration.TextGeneration["Service"];
 }

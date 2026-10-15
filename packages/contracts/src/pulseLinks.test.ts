@@ -7,12 +7,33 @@ import {
   normalizeWorkspaceItemRef,
   WorkspaceItemRef,
   workspaceItemKey,
+  PulseLinkSuggestionRpcs,
+  WorkspaceSuggestionState,
 } from "./pulseLinks.ts";
 import { MailMessageIdHeader, normalizeMessageId } from "./pulseMail.ts";
 
 const decodeRef = Schema.decodeUnknownSync(WorkspaceItemRef);
 const decodeMessageId = Schema.decodeUnknownSync(MailMessageIdHeader);
+const isSuggestionState = Schema.is(WorkspaceSuggestionState);
 const location = { accountId: "acct_1", mailbox: "INBOX", uidValidity: 4, uid: 7 };
+
+it("keeps suggestion reads and decisions in a separate optional RPC family with honest empty/failure states", () => {
+  expect(PulseLinkSuggestionRpcs.map((rpc) => rpc._tag)).toEqual([
+    "pulse.links.suggest",
+    "pulse.links.acceptSuggestion",
+    "pulse.links.dismissSuggestion",
+  ]);
+  expect(isSuggestionState({ status: "ready", cached: true, incomplete: false })).toBe(true);
+  expect(
+    isSuggestionState({
+      status: "failed",
+      message: "Model unavailable",
+      cached: false,
+      incomplete: false,
+    }),
+  ).toBe(true);
+  expect(isSuggestionState({ status: "confirmed", cached: true, incomplete: false })).toBe(false);
+});
 
 describe("normalizeMessageId", () => {
   it("wraps a bare id and keeps a wrapped one", () => {

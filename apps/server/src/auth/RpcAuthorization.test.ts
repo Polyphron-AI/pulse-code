@@ -19,6 +19,17 @@ import {
 } from "./RpcAuthorization.ts";
 
 describe("RPC authorization scopes", () => {
+  it("allows user-side suggestion discovery with read access and requires operate access for confirmation", () => {
+    expect(requiredScopeForRpcMethod(WS_METHODS.pulseLinksSuggest)).toBe(
+      AuthOrchestrationReadScope,
+    );
+    expect(requiredScopeForRpcMethod(WS_METHODS.pulseLinksAcceptSuggestion)).toBe(
+      AuthOrchestrationOperateScope,
+    );
+    expect(requiredScopeForRpcMethod(WS_METHODS.pulseLinksDismissSuggestion)).toBe(
+      AuthOrchestrationOperateScope,
+    );
+  });
   it("requires operate access for Telegram connection and pairing changes, read access for content", () => {
     for (const method of [
       WS_METHODS.telegramConnect,

@@ -82,6 +82,24 @@ export interface ThreadTitleGenerationResult {
   needsRefinement?: boolean | undefined;
 }
 
+export interface WorkspaceSuggestionMetadata {
+  readonly key: string;
+  readonly title: string;
+  readonly type: string;
+  readonly sender?: string | undefined;
+  readonly owner?: string | undefined;
+  readonly date?: string | undefined;
+}
+export interface WorkspaceSuggestionsGenerationInput {
+  readonly cwd: string;
+  readonly modelSelection: ModelSelection;
+  readonly source: WorkspaceSuggestionMetadata & { readonly snippet: string };
+  readonly candidates: ReadonlyArray<WorkspaceSuggestionMetadata>;
+}
+export interface WorkspaceSuggestionsGenerationResult {
+  readonly suggestions: ReadonlyArray<{ readonly key: string; readonly reason: string }>;
+}
+
 export interface ThreadHandoffGenerationInput {
   source?: {
     modelSelection: ModelSelection;
@@ -139,6 +157,9 @@ export class TextGeneration extends Context.Service<
     readonly generateThreadTitle: (
       input: ThreadTitleGenerationInput,
     ) => Effect.Effect<ThreadTitleGenerationResult, TextGenerationError>;
+    readonly generateWorkspaceSuggestions: (
+      input: WorkspaceSuggestionsGenerationInput,
+    ) => Effect.Effect<WorkspaceSuggestionsGenerationResult, TextGenerationError>;
 
     /** Summarize a thread so its work can continue in a new thread on another provider. */
     readonly generateThreadHandoff: (
@@ -152,6 +173,7 @@ export class TextGeneration extends Context.Service<
 >()("t3/textGeneration/TextGeneration") {}
 
 type TextGenerationOp =
+  | "generateWorkspaceSuggestions"
   | "generateCommitMessage"
   | "generatePrContent"
   | "generateBranchName"
@@ -181,6 +203,14 @@ export const make = Effect.gen(function* () {
   const registry = yield* ProviderInstanceRegistry.ProviderInstanceRegistry;
   const sourceControl = yield* SourceControlProviderRegistry.SourceControlProviderRegistry;
   return TextGeneration.of({
+    generateWorkspaceSuggestions: (input) =>
+      resolveInstance(
+        registry,
+        "generateWorkspaceSuggestions",
+        input.modelSelection.instanceId,
+      ).pipe(
+        Effect.flatMap((textGeneration) => textGeneration.generateWorkspaceSuggestions(input)),
+      ),
     generateCommitMessage: (input) =>
       resolveInstance(registry, "generateCommitMessage", input.modelSelection.instanceId).pipe(
         Effect.flatMap((textGeneration) => textGeneration.generateCommitMessage(input)),

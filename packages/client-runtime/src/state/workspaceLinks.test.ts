@@ -86,6 +86,53 @@ const LINK: WorkspaceLinkView = {
   updatedAt: "2026-10-14T09:00:00.000Z",
 };
 
+it.effect(
+  "refreshes a model suggestion accepted on another device without losing its provenance",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const counter = yield* SubscriptionRef.make(0);
+        let accepted = false;
+        const modelLink: WorkspaceLinkView = {
+          ...LINK,
+          source: { type: "model", model: "selected", reason: "Same launch" },
+        };
+        const client = {
+          [WS_METHODS.pulseLinksSubscribeChanges]: () =>
+            SubscriptionRef.changes(counter).pipe(Stream.filter((count) => count > 0)),
+          [WS_METHODS.pulseLinksList]: () =>
+            Effect.sync(() => ({
+              linked: accepted ? [modelLink] : [],
+              suggested: accepted ? [] : [{ ...modelLink, status: "suggested" }],
+              truncated: false,
+            })),
+        } as unknown as WsRpcProtocolClient;
+        const { atoms, registry } = yield* makeTestRuntime(client);
+        const list = atoms.list({
+          environmentId: TARGET.environmentId,
+          input: { item: { type: "project", projectId: ProjectId.make("project-1") } },
+        });
+        const unmount = registry.mount(list);
+        yield* Effect.addFinalizer(() => Effect.sync(unmount));
+        const initial = yield* Effect.promise(() => executeAtomQuery(registry, list));
+        expect(AsyncResult.isSuccess(initial) && initial.value.suggested.length).toBe(1);
+        const receipt = Latch.makeUnsafe();
+        const stop = registry.subscribe(list, (result) => {
+          if (AsyncResult.isSuccess(result) && result.value.linked[0]?.source.type === "model")
+            receipt.openUnsafe();
+        });
+        yield* Effect.addFinalizer(() => Effect.sync(stop));
+        accepted = true;
+        yield* SubscriptionRef.set(counter, 1);
+        yield* receipt.await;
+        const updated = yield* Effect.promise(() => executeAtomQuery(registry, list));
+        expect(AsyncResult.isSuccess(updated) && updated.value.linked[0]?.source).toEqual(
+          modelLink.source,
+        );
+      }),
+    ),
+);
+
 it.effect("refetches an open list when a link changes anywhere in the environment", () =>
   Effect.scoped(
     Effect.gen(function* () {

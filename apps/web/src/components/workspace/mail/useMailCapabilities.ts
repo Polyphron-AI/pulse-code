@@ -31,6 +31,8 @@ export function useMailCapabilities(targetEnvironmentId?: EnvironmentId) {
     mailConversations: config?.pulseCapabilities?.mailConversations === true,
     mailRead: config?.pulseCapabilities?.mailRead === true,
     workspaceLinks: config?.pulseCapabilities?.workspaceLinks === true,
+    workspaceSuggestions: config?.pulseCapabilities?.workspaceSuggestions === true,
+    textGenerationSelection: config?.settings.textGenerationModelSelection,
     workspaceItemContext: config?.pulseCapabilities?.workspaceItemContext === true,
   };
 }

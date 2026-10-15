@@ -28,6 +28,7 @@ const makeStubTextGeneration = (
       Effect.die("generateCommitMessage stub not configured for this test"),
     generatePrContent: () => Effect.die("generatePrContent stub not configured for this test"),
     generateBranchName: () => Effect.die("generateBranchName stub not configured for this test"),
+    generateWorkspaceSuggestions: () => Effect.die("suggestions stub not configured"),
     generateThreadTitle: () => Effect.die("generateThreadTitle stub not configured for this test"),
     generateThreadHandoff: () =>
       Effect.die("generateThreadHandoff stub not configured for this test"),
@@ -214,6 +215,46 @@ for (const mode of ["portable", "native", "native-empty", "failure", "empty", "b
 }
 
 describe("TextGeneration.make", () => {
+  it.effect(
+    "routes workspace suggestions to the selected instance and preserves the exact model",
+    () =>
+      Effect.gen(function* () {
+        const selected = createModelSelection(
+          ProviderInstanceId.make("selected-instance"),
+          "selected-model",
+        );
+        let received: TextGeneration.WorkspaceSuggestionsGenerationInput | undefined;
+        const instance = makeStubInstance(
+          selected.instanceId,
+          makeStubTextGeneration({
+            generateWorkspaceSuggestions: (input) => {
+              received = input;
+              return Effect.succeed({ suggestions: [] });
+            },
+          }),
+        );
+        const generation = yield* TextGeneration.make.pipe(
+          Effect.provideService(
+            ProviderInstanceRegistry.ProviderInstanceRegistry,
+            makeStubRegistry([instance]),
+          ),
+          Effect.provide(
+            Layer.mock(SourceControlProviderRegistry.SourceControlProviderRegistry)({
+              resolveLink: () =>
+                Effect.die("Suggestion metadata must not fetch source control content"),
+            }),
+          ),
+        );
+        const input = {
+          cwd: process.cwd(),
+          modelSelection: selected,
+          source: { key: "mail:source", type: "mail", title: "Launch", snippet: "Bounded source" },
+          candidates: [{ key: "project:launch", type: "project", title: "Launch project" }],
+        };
+        expect(yield* generation.generateWorkspaceSuggestions(input)).toEqual({ suggestions: [] });
+        expect(received).toEqual(input);
+      }),
+  );
   it.effect("retains supplied subject context in the provider prompt", () =>
     Effect.gen(function* () {
       const instanceId = ProviderInstanceId.make("codex");

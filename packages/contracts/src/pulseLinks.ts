@@ -206,6 +206,9 @@ export class WorkspaceLinksError extends Schema.TaggedError<WorkspaceLinksError>
 ) {}
 
 export const PULSE_LINKS_METHODS = {
+  pulseLinksSuggest: "pulse.links.suggest",
+  pulseLinksAcceptSuggestion: "pulse.links.acceptSuggestion",
+  pulseLinksDismissSuggestion: "pulse.links.dismissSuggestion",
   pulseLinksListMany: "pulse.links.listMany",
   pulseLinksList: "pulse.links.list",
   pulseLinksProjectHub: "pulse.links.projectHub",
@@ -215,6 +218,35 @@ export const PULSE_LINKS_METHODS = {
 } as const;
 
 const LinksError = Schema.Union([WorkspaceLinksError, EnvironmentAuthorizationError]);
+
+export const WorkspaceSuggestionState = Schema.Struct({
+  status: Schema.Literals(["ready", "no-model", "failed"]),
+  model: Schema.optionalKey(Schema.String),
+  message: Schema.optionalKey(Schema.String),
+  cached: Schema.Boolean,
+  incomplete: Schema.Boolean,
+});
+export type WorkspaceSuggestionState = typeof WorkspaceSuggestionState.Type;
+export const PulseLinkSuggestionRpcs = [
+  Rpc.make(PULSE_LINKS_METHODS.pulseLinksSuggest, {
+    payload: Schema.Struct({
+      item: WorkspaceLinkEndpoint,
+      refresh: Schema.optionalKey(Schema.Boolean),
+    }),
+    success: WorkspaceSuggestionState,
+    error: LinksError,
+  }),
+  Rpc.make(PULSE_LINKS_METHODS.pulseLinksAcceptSuggestion, {
+    payload: Schema.Struct({ id: WorkspaceLinkId, viewing: WorkspaceLinkEndpoint }),
+    success: Schema.Void,
+    error: LinksError,
+  }),
+  Rpc.make(PULSE_LINKS_METHODS.pulseLinksDismissSuggestion, {
+    payload: Schema.Struct({ id: WorkspaceLinkId }),
+    success: Schema.Void,
+    error: LinksError,
+  }),
+] as const;
 
 export const PulseLinksRpcs = [
   Rpc.make(PULSE_LINKS_METHODS.pulseLinksListMany, {

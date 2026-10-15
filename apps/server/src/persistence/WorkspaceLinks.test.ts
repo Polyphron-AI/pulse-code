@@ -1,6 +1,7 @@
 import { assert, it } from "@effect/vitest";
 import { ProjectId, ThreadId, type WorkspaceLinkId } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
@@ -33,6 +34,59 @@ const id = (n: number) =>
 const user = { type: "user" as const };
 
 layer("WorkspaceLinksRepository", (it) => {
+  it.effect(
+    "persists an empty bounded result across repository recreation and rolls cache back with failed links",
+    () =>
+      Effect.gen(function* () {
+        const repo = yield* WorkspaceLinks.WorkspaceLinksRepository;
+        const sql = yield* SqlClient.SqlClient;
+        const item = {
+          key: "thread:cache-proof",
+          endpoint: { ref: { type: "thread" as const, threadId: ThreadId.make("cache-proof") } },
+        };
+        const batch = {
+          item,
+          suggestions: [],
+          revision: "rev1",
+          model: "selected-model",
+          now: "2026-10-15T10:00:00.000Z",
+          incomplete: true,
+        };
+        yield* repo.saveSuggestions(batch);
+        const context = yield* Layer.build(WorkspaceLinks.layer);
+        const restarted = Context.get(context, WorkspaceLinks.WorkspaceLinksRepository);
+        assert.deepEqual(
+          yield* restarted.suggestionsCached(item.key, "rev1", "selected-model"),
+          Option.some({ incomplete: true }),
+        );
+        assert.isTrue(
+          Option.isNone(yield* restarted.suggestionsCached(item.key, "rev2", "selected-model")),
+        );
+        yield* sql`CREATE TRIGGER suggestion_cache_failure BEFORE INSERT ON workspace_links WHEN NEW.link_id = 'wl_00000000-0000-4000-8000-000000000600' BEGIN SELECT RAISE(ABORT, 'fixture failure'); END`;
+        const result = yield* repo
+          .saveSuggestions({
+            ...batch,
+            revision: "rev2",
+            suggestions: [
+              {
+                id: id(600),
+                target: project,
+                source: { type: "model", model: "chosen", reason: "Related" },
+              },
+            ],
+          })
+          .pipe(Effect.result);
+        assert.equal(result._tag, "Failure");
+        assert.isTrue(
+          Option.isNone(yield* repo.suggestionsCached(item.key, "rev2", "selected-model")),
+        );
+        assert.deepEqual(
+          yield* repo.suggestionsCached(item.key, "rev1", "selected-model"),
+          Option.some({ incomplete: true }),
+        );
+        yield* sql`DROP TRIGGER suggestion_cache_failure`;
+      }).pipe(Effect.scoped),
+  );
   it.effect("keeps one row per pair whichever way round it is linked", () =>
     Effect.gen(function* () {
       const repo = yield* WorkspaceLinks.WorkspaceLinksRepository;

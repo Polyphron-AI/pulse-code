@@ -72,6 +72,8 @@ import Migration0055 from "./Migrations/055_OrchestrationV2.ts";
 import Migration0056 from "./Migrations/056_RemoveRedundantProjectionIndexes.ts";
 import Migration0057 from "./Migrations/057_MailSendApprovals.ts";
 import Migration0060 from "./Migrations/060_TelegramReader.ts";
+import Migration0061 from "./Migrations/061_WorkspaceSuggestions.ts";
+import Migration0062 from "./Migrations/062_WorkspaceSuggestionOwnership.ts";
 import Migration0059 from "./Migrations/059_MailSentLinks.ts";
 import Migration0058 from "./Migrations/058_WorkspaceLinks.ts";
 
@@ -148,6 +150,8 @@ export const migrationEntries = [
   [58, "WorkspaceLinks", Migration0058],
   [59, "MailSentLinks", Migration0059],
   [60, "TelegramReader", Migration0060],
+  [61, "WorkspaceSuggestions", Migration0061],
+  [62, "WorkspaceSuggestionOwnership", Migration0062],
 ] as const;
 
 export const migrationManifest = migrationEntries.map(([id, name]) => [id, name] as const);

@@ -44,6 +44,18 @@ export interface StoredWorkspaceLinkPage {
   readonly links: ReadonlyArray<StoredWorkspaceLink>;
   readonly truncated: boolean;
 }
+export interface StoredSuggestionBatch {
+  readonly incomplete: boolean;
+  readonly item: StoredWorkspaceLinkSide;
+  readonly suggestions: ReadonlyArray<{
+    readonly id: WorkspaceLinkId;
+    readonly target: StoredWorkspaceLinkSide;
+    readonly source: WorkspaceLinkSource;
+  }>;
+  readonly revision: string;
+  readonly model: string;
+  readonly now: string;
+}
 
 /**
  * The link record. One row per unordered pair of item keys, never deleted: unlink marks the row
@@ -52,6 +64,34 @@ export interface StoredWorkspaceLinkPage {
 export class WorkspaceLinksRepository extends Context.Service<
   WorkspaceLinksRepository,
   {
+    readonly suggestionsCached: (
+      key: string,
+      revision: string,
+      model: string,
+    ) => Effect.Effect<
+      Option.Option<{ readonly incomplete: boolean }>,
+      WorkspaceLinksRepositoryError
+    >;
+    readonly saveSuggestions: (
+      input: StoredSuggestionBatch,
+    ) => Effect.Effect<void, WorkspaceLinksRepositoryError>;
+    readonly acceptSuggestion: (
+      id: WorkspaceLinkId,
+      viewing: StoredWorkspaceLinkSide,
+      now: string,
+    ) => Effect.Effect<Option.Option<StoredWorkspaceLink>, WorkspaceLinksRepositoryError>;
+    readonly dismissSuggestion: (
+      id: WorkspaceLinkId,
+      now: string,
+    ) => Effect.Effect<Option.Option<StoredWorkspaceLink>, WorkspaceLinksRepositoryError>;
+    readonly knownEndpoints: Effect.Effect<
+      ReadonlyArray<StoredWorkspaceLinkSide>,
+      WorkspaceLinksRepositoryError
+    >;
+    readonly blockedCandidates: (
+      key: string,
+      candidateKeys: ReadonlyArray<string>,
+    ) => Effect.Effect<ReadonlyArray<string>, WorkspaceLinksRepositoryError>;
     readonly confirm: (input: {
       readonly id: WorkspaceLinkId;
       readonly first: StoredWorkspaceLinkSide;
@@ -224,6 +264,73 @@ const make = Effect.gen(function* () {
     readable(rows).pipe(Effect.map((links) => Option.fromNullishOr(links[0])));
 
   return WorkspaceLinksRepository.of({
+    suggestionsCached: (key, revision, model) =>
+      sql<{
+        incomplete: number;
+      }>`SELECT incomplete FROM workspace_suggestion_cache WHERE item_key = ${key} AND revision = ${revision} AND model = ${model}`.pipe(
+        Effect.map((rows) =>
+          rows[0] ? Option.some({ incomplete: rows[0].incomplete === 1 }) : Option.none(),
+        ),
+        Effect.mapError(toSqlOrDecodeError("readSuggestionCache", "WorkspaceLink")),
+      ),
+    saveSuggestions: (input) =>
+      sql
+        .withTransaction(
+          Effect.gen(function* () {
+            // Unaccepted model rows are a replaceable result. Confirmed and dismissed pairs are durable.
+            yield* sql`DELETE FROM workspace_links WHERE status = 'suggested' AND suggestion_owner_key = ${input.item.key}`;
+            for (const suggestion of input.suggestions) {
+              const [a, b] =
+                input.item.key < suggestion.target.key
+                  ? [input.item, suggestion.target]
+                  : [suggestion.target, input.item];
+              yield* sql`INSERT INTO workspace_links (link_id, key_a, key_b, ref_a_json, ref_b_json, title_a, title_b, status, source_json, origin_json, created_at, updated_at, suggestion_owner_key) VALUES (${suggestion.id}, ${a.key}, ${b.key}, ${encodeRef(a.endpoint.ref)}, ${encodeRef(b.endpoint.ref)}, ${a.endpoint.title ?? null}, ${b.endpoint.title ?? null}, 'suggested', ${encodeSource(suggestion.source)}, NULL, ${input.now}, ${input.now}, ${input.item.key}) ON CONFLICT(key_a, key_b) DO NOTHING`;
+            }
+            yield* sql`INSERT INTO workspace_suggestion_cache (item_key, revision, model, completed_at, incomplete) VALUES (${input.item.key}, ${input.revision}, ${input.model}, ${input.now}, ${input.incomplete ? 1 : 0}) ON CONFLICT(item_key) DO UPDATE SET revision = excluded.revision, model = excluded.model, completed_at = excluded.completed_at, incomplete = excluded.incomplete`;
+          }),
+        )
+        .pipe(Effect.mapError(toSqlOrDecodeError("saveSuggestions", "WorkspaceLink"))),
+    acceptSuggestion: (id, viewing, now) =>
+      sql
+        .withTransaction(
+          Effect.gen(function* () {
+            yield* sql`UPDATE workspace_links SET status = 'confirmed', origin_json = COALESCE(origin_json, ${encodeOrigin({ confirmedAt: now, viewing: viewing.endpoint })}), updated_at = ${now} WHERE link_id = ${id} AND status = 'suggested' AND (key_a = ${viewing.key} OR key_b = ${viewing.key})`;
+            const rows = yield* byId(id);
+            return yield* first(
+              rows.filter(
+                (row) =>
+                  row.status === "confirmed" &&
+                  (row.key_a === viewing.key || row.key_b === viewing.key),
+              ),
+            );
+          }),
+        )
+        .pipe(Effect.mapError(toSqlOrDecodeError("acceptSuggestion", "WorkspaceLink"))),
+    dismissSuggestion: (id, now) =>
+      sql<LinkRow>`UPDATE workspace_links SET status = 'dismissed', updated_at = ${now} WHERE link_id = ${id} AND status = 'suggested' RETURNING *`.pipe(
+        Effect.flatMap(first),
+        Effect.mapError(toSqlOrDecodeError("dismissSuggestion", "WorkspaceLink")),
+      ),
+    knownEndpoints:
+      sql<LinkRow>`SELECT * FROM workspace_links WHERE status = 'confirmed' ORDER BY updated_at DESC LIMIT 100`.pipe(
+        Effect.flatMap(readable),
+        Effect.map((rows) => [
+          ...new Map(
+            rows.flatMap((row) => [row.a, row.b]).map((side) => [side.key, side]),
+          ).values(),
+        ]),
+        Effect.mapError(toSqlOrDecodeError("knownWorkspaceItems", "WorkspaceLink")),
+      ),
+    blockedCandidates: (key, candidateKeys) =>
+      candidateKeys.length === 0
+        ? Effect.succeed([])
+        : sql<{
+            key_a: string;
+            key_b: string;
+          }>`SELECT key_a, key_b FROM workspace_links WHERE status IN ('confirmed', 'dismissed') AND ((key_a = ${key} AND ${sql.in("key_b", candidateKeys)}) OR (key_b = ${key} AND ${sql.in("key_a", candidateKeys)}))`.pipe(
+            Effect.map((rows) => rows.map((row) => (row.key_a === key ? row.key_b : row.key_a))),
+            Effect.mapError(toSqlOrDecodeError("excludedSuggestionPairs", "WorkspaceLink")),
+          ),
     // An existing pair keeps its id, its first origin, and its source while it stays confirmed.
     // Titles keep the latest provided snapshot.
     confirm: (input) => {
