@@ -97,15 +97,12 @@ export const openChecked = (
     ),
   );
 
-/**
- * The newest UID carrying `messageId`, with the mailbox UIDVALIDITY. Linked reads require a
- * complete search; draft recovery retains its existing empty-result handling for refused searches.
- */
-export const findByMessageId = (
+/** Search candidates with the mailbox UIDVALIDITY; header matches still need identity checks. */
+const searchByMessageId = (
   client: ImapFlow,
   mailbox: string,
   messageId: string,
-  requireComplete = false,
+  requireComplete: boolean,
 ) =>
   imapCall(() => client.mailboxOpen(mailbox, { readOnly: true })).pipe(
     Effect.flatMap((opened) =>
@@ -115,13 +112,24 @@ export const findByMessageId = (
           if (!uids && requireComplete) {
             return Effect.fail(fail("unavailable", "The folder could not be searched."));
           }
-          const uid = uids ? uids.at(-1) : undefined;
-          return Effect.succeed(
-            uid === undefined ? undefined : { uid, uidValidity: Number(opened.uidValidity) },
-          );
+          return Effect.succeed({ uids: uids || [], uidValidity: Number(opened.uidValidity) });
         }),
       ),
     ),
+  );
+
+/** The newest candidate UID; draft recovery retains empty-result handling for refused searches. */
+export const findByMessageId = (
+  client: ImapFlow,
+  mailbox: string,
+  messageId: string,
+  requireComplete = false,
+) =>
+  searchByMessageId(client, mailbox, messageId, requireComplete).pipe(
+    Effect.map(({ uids, uidValidity }) => {
+      const uid = uids.at(-1);
+      return uid === undefined ? undefined : { uid, uidValidity };
+    }),
   );
 
 const openMailbox = (client: ImapFlow, mailbox: string) =>
@@ -472,18 +480,33 @@ export const fetchByReference = (
         const mailboxes = yield* imapCall(() => client.list());
         const order = scanOrder(mailboxes, location?.mailbox);
         let incomplete = mailboxes.filter(selectable).length > order.length;
+        // ponytail: cap full-message candidate reads at SCAN_MAX plus the cached read; use paged
+        // header verification if actual accounts need more.
+        let remaining = SCAN_MAX;
         for (const mailbox of order) {
-          const hit: Option.Option<Effect.Success<ReturnType<typeof findByMessageId>>> =
-            yield* Effect.option(findByMessageId(client, mailbox, messageId, true));
+          const hit: Option.Option<Effect.Success<ReturnType<typeof searchByMessageId>>> =
+            yield* Effect.option(searchByMessageId(client, mailbox, messageId, true));
           if (Option.isNone(hit)) {
             incomplete = true;
             continue;
           }
-          if (hit.value === undefined) continue;
-          const ref: MailMessageRef = { accountId: account.id, mailbox, ...hit.value };
-          const found = yield* Effect.option(readIn(client, account, ref, offset));
-          if (Option.isNone(found)) incomplete = true;
-          else if (found.value.messageId === messageId) return found.value;
+          const { uids, uidValidity } = hit.value;
+          for (let index = uids.length - 1; index >= 0; index -= 1) {
+            if (remaining === 0) {
+              incomplete = true;
+              break;
+            }
+            remaining -= 1;
+            const ref: MailMessageRef = {
+              accountId: account.id,
+              mailbox,
+              uidValidity,
+              uid: uids[index]!,
+            };
+            const found = yield* Effect.option(readIn(client, account, ref, offset));
+            if (Option.isNone(found)) incomplete = true;
+            else if (found.value.messageId === messageId) return found.value;
+          }
         }
         return yield* incomplete
           ? fail("unavailable", "Some folders could not be searched. Try again.")

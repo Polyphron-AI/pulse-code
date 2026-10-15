@@ -441,6 +441,155 @@ describe("search Message-IDs", () => {
 
 describe("fetchByReference completeness", () => {
   it.effect.each([
+    { newestUnreadable: true, earlierExact: true, kind: "ok" },
+    { newestUnreadable: false, earlierExact: false, kind: "not-found" },
+    { newestUnreadable: true, earlierExact: false, kind: "unavailable" },
+  ])(
+    "returns $kind with newestUnreadable=$newestUnreadable and earlierExact=$earlierExact in one folder",
+    ({ newestUnreadable, earlierExact, kind }) =>
+      Effect.gen(function* () {
+        const { peer, options } = yield* serve(
+          [
+            folder("INBOX", 7, [
+              {
+                uid: 3,
+                raw: withId(
+                  earlierExact ? "<brief@example.com>" : "<BRIEF@example.com>",
+                  "Earlier",
+                ),
+              },
+              { uid: 30, raw: withId("<BRIEF@example.com>", "Newest") },
+            ]),
+          ],
+          undefined,
+          (respond) => (command, io) => {
+            const { tag, command: line } = imapTag(command.line);
+            if (/^UID SEARCH /i.test(line)) {
+              respond(command, {
+                ...io,
+                send: (text) => io.send(text.replace(/\* SEARCH[^\r]*\r\n/, "* SEARCH 3 30\r\n")),
+              });
+            } else if (newestUnreadable && /^UID FETCH 30 /i.test(line)) {
+              io.send(`${tag} NO message temporarily unreadable\r\n`);
+            } else respond(command, io);
+          },
+        );
+        const result = fetchByReference(
+          account,
+          login,
+          { messageId: "<brief@example.com>" },
+          options,
+        );
+        if (kind === "ok") {
+          const found = yield* result;
+          expect(found.ref).toEqual(linkedAt);
+          expect(found.messageId).toBe("<brief@example.com>");
+        } else expect(yield* kindOf(result)).toBe(kind);
+        expect(
+          peer.received.flatMap(({ line }) => / UID FETCH (\d+) /i.exec(line)?.[1] ?? []),
+        ).toEqual(["30", "3"]);
+        expect(peer.connections()).toBe(1);
+      }).pipe(Effect.scoped),
+  );
+
+  it.effect.each([
+    { counts: [50], exact: false, cached: false, kind: "not-found" },
+    { counts: [51], exact: false, cached: false, kind: "unavailable" },
+    { counts: [25, 25], exact: false, cached: false, kind: "not-found" },
+    { counts: [25, 26], exact: true, cached: false, kind: "unavailable" },
+    { counts: [25, 25], exact: true, cached: true, kind: "ok" },
+  ])(
+    "bounds candidate reads across $counts with exact=$exact, cached=$cached and result=$kind",
+    ({ counts, exact, cached, kind }) =>
+      Effect.gen(function* () {
+        let searches = 0;
+        const { peer, options } = yield* serve(
+          counts.map((count, index) =>
+            folder(
+              `F${index}`,
+              7,
+              Array.from({ length: count }, (_, uidIndex) => ({
+                uid: uidIndex + 1,
+                raw: withId(
+                  exact && index === counts.length - 1 && uidIndex === 0
+                    ? "<brief@example.com>"
+                    : "<BRIEF@example.com>",
+                  "Candidate",
+                ),
+              })),
+            ),
+          ),
+          undefined,
+          (respond) => (command, io) => {
+            const { command: line } = imapTag(command.line);
+            if (/^UID SEARCH /i.test(line)) {
+              const uids = Array.from({ length: counts[searches++]! }, (_, i) => i + 1);
+              respond(command, {
+                ...io,
+                send: (text) =>
+                  io.send(text.replace(/\* SEARCH[^\r]*\r\n/, `* SEARCH ${uids.join(" ")}\r\n`)),
+              });
+            } else respond(command, io);
+          },
+        );
+        const result = fetchByReference(
+          account,
+          login,
+          {
+            messageId: "<brief@example.com>",
+            ...(cached ? { location: { ...linkedAt, mailbox: "F0", uid: counts[0]! } } : {}),
+          },
+          options,
+        );
+        if (kind === "ok") {
+          const found = yield* result;
+          expect(found.ref).toEqual({ ...linkedAt, mailbox: "F1", uid: 1 });
+          expect(found.messageId).toBe("<brief@example.com>");
+        } else expect(yield* kindOf(result)).toBe(kind);
+        expect(peer.received.filter(({ line }) => / UID FETCH /i.test(line))).toHaveLength(
+          50 + Number(cached),
+        );
+        expect(peer.connections()).toBe(1);
+      }).pipe(Effect.scoped),
+  );
+
+  it.effect("finds an earlier exact ID after rejecting a newer case-insensitive search hit", () =>
+    Effect.gen(function* () {
+      const { peer, options } = yield* serve(
+        [
+          folder("INBOX", 7, [
+            { uid: 3, raw: withId("<brief@example.com>", "Q3 brief") },
+            { uid: 30, raw: withId("<BRIEF@example.com>", "Different ID") },
+          ]),
+        ],
+        undefined,
+        (respond) => (command, io) => {
+          const { command: line } = imapTag(command.line);
+          if (/^UID SEARCH /i.test(line)) {
+            respond(command, {
+              ...io,
+              send: (text) => io.send(text.replace(/\* SEARCH[^\r]*\r\n/, "* SEARCH 3 30\r\n")),
+            });
+          } else respond(command, io);
+        },
+      );
+      const found = yield* fetchByReference(
+        account,
+        login,
+        { messageId: "<brief@example.com>" },
+        options,
+      );
+      expect(found.ref).toEqual(linkedAt);
+      expect(found.messageId).toBe("<brief@example.com>");
+      expect(found.subject).toBe("Q3 brief");
+      expect(
+        peer.received.flatMap(({ line }) => / UID FETCH (\d+) /i.exec(line)?.[1] ?? []),
+      ).toEqual(["30", "3"]);
+      expect(peer.connections()).toBe(1);
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect.each([
     { count: 50, kind: "not-found" },
     { count: 51, kind: "unavailable" },
   ])("reports $kind after scanning $count selectable folders", ({ count, kind }) =>
