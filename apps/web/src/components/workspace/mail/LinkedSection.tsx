@@ -1,3 +1,4 @@
+import { DriveSearch, DriveFileAccess } from "../DriveFiles";
 import {
   workspaceItemKey,
   workspaceItemFromUrl,
@@ -181,7 +182,7 @@ function LinkedList(props: LinkedSectionProps) {
           onClick={() => setPicking(!picking)}
         >
           <LinkIcon />
-          Link to project…
+          Link to
         </Button>
       </div>
       <p className="text-xs text-muted-foreground">
@@ -211,6 +212,13 @@ function LinkedList(props: LinkedSectionProps) {
               </li>
             ))}
           </ul>
+          <DriveSearch
+            environmentId={props.environmentId}
+            onLink={async (endpoint) => {
+              await linkItem({ ref: props.item, title: endpointTitle(props.title) }, endpoint);
+              setPicking(false);
+            }}
+          />
           {candidates.length === 0 ? (
             <p className="text-xs text-muted-foreground">No matching projects or threads.</p>
           ) : null}
@@ -334,6 +342,9 @@ function LinkedRow({
           Unlink
         </Button>
       </WorkspaceItemMenu>
+      {view.item.ref.type === "file" ? (
+        <DriveFileAccess environmentId={environmentId} fileId={view.item.ref.fileId} />
+      ) : null}
       {label.unavailable !== undefined ? (
         <span className="text-xs text-muted-foreground">{label.unavailable}</span>
       ) : null}

@@ -1,3 +1,4 @@
+import { DriveService } from "../drive/DriveService.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
@@ -120,4 +121,56 @@ it.effect(
       expect(fetches.filter((command) => /BODY\.PEEK\[\]/i.test(command.line))).toHaveLength(1);
       expect(fetches.some((command) => /HEADER\.FIELDS/i.test(command.line))).toBe(true);
     }).pipe(Effect.provide(testLayer()), Effect.scoped),
+);
+
+it.effect(
+  "adds bounded Drive metadata from explicit user connections without binding or reading candidate bodies",
+  () =>
+    Effect.gen(function* () {
+      let searches = 0;
+      const drive = Layer.mock(DriveService)({
+        listConnections: Effect.succeed(
+          Array.from({ length: 4 }, (_, index) => ({
+            id: `drv_${index}`,
+            nickname: `Drive ${index}`,
+            clientId: "fixture",
+            clientSecretConfigured: false,
+            connected: true,
+          })),
+        ),
+        search: ({ limit }) => {
+          searches++;
+          expect(limit).toBe(20);
+          return Effect.succeed({
+            files: Array.from({ length: 20 }, (_, index) => ({
+              id: `file-${index}`,
+              name: `Launch ${index}`,
+              mimeType: "text/plain",
+              url: `https://drive.google.com/file/d/file-${index}/view`,
+              owner: "Owner",
+            })),
+            incomplete: true,
+          });
+        },
+        readFile: () => Effect.die("Candidate bodies must not be read"),
+        bindFile: () => Effect.die("Suggestions must not bind accounts"),
+      });
+      const discovery = yield* Candidates.make().pipe(Effect.provide(drive));
+      const result = yield* discovery.candidates({
+        key: "url:https://example.test",
+        title: "Launch",
+        type: "url",
+      });
+      expect(searches).toBe(1);
+      expect(result.items).toHaveLength(20);
+      expect(result.incomplete).toBe(true);
+      expect(
+        result.items.every(
+          (value) =>
+            value.item.ref.type === "file" &&
+            value.metadata.owner === "Owner" &&
+            !("snippet" in value.metadata),
+        ),
+      ).toBe(true);
+    }).pipe(Effect.scoped, Effect.provide(testLayer())),
 );

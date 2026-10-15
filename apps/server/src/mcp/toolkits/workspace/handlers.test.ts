@@ -1,3 +1,4 @@
+import { DriveService } from "../../../drive/DriveService.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import {
   EnvironmentId,
@@ -181,6 +182,73 @@ const mailRef = (accountId: string): WorkspaceItemRef => ({
 });
 
 describe("workspace MCP toolkit", () => {
+  it.effect("reads only the exact confirmed Drive file and stops after unlink", () =>
+    Effect.gen(function* () {
+      const links = yield* WorkspaceLinks;
+      const ref: WorkspaceItemRef = {
+        type: "file",
+        provider: "google-drive",
+        fileId: "drive-file",
+      };
+      const sibling: WorkspaceItemRef = { ...ref, fileId: "unlinked-file" };
+      const linked = yield* links.link({ a: { ref: { type: "thread", threadId } }, b: { ref } });
+      let reads = 0;
+      const context = yield* Layer.build(
+        McpServer.toolkit(WorkspaceToolkit).pipe(
+          Layer.provide(WorkspaceHandlers.layer()),
+          Layer.provide(
+            Layer.mock(DriveService)({
+              readFile: ({ fileId }) => {
+                reads++;
+                expect(fileId).toBe("drive-file");
+                return Effect.succeed({
+                  connectionId: "drv_00000000-0000-0000-0000-000000000001",
+                  file: {
+                    id: fileId,
+                    name: "Brief",
+                    mimeType: "text/plain",
+                    url: "https://drive.google.com/file/d/drive-file/view",
+                  },
+                  body: { text: "Inert source data", truncated: false },
+                });
+              },
+            }),
+          ),
+          Layer.provideMerge(McpServer.McpServer.layer),
+        ),
+      );
+      const server = Context.get(context, McpServer.McpServer);
+      const read = (item: WorkspaceItemRef) =>
+        server
+          .callTool({ name: "workspace_read_item", arguments: { key: workspaceItemKey(item) } })
+          .pipe(
+            Effect.provideService(McpInvocationContext.McpInvocationContext, {
+              environmentId: EnvironmentId.make("env"),
+              threadId,
+              providerSessionId: "fixture",
+              providerInstanceId: ProviderInstanceId.make("codex"),
+              capabilities: new Set<McpInvocationContext.McpCapability>(["workspace"]),
+              issuedAt: 1,
+            }),
+            Effect.provideService(McpSchema.McpServerClient, client),
+          );
+      expect(errorText(yield* read(sibling))).toContain("not linked");
+      expect(reads).toBe(0);
+      expect((yield* read(ref)).isError).not.toBe(true);
+      expect(reads).toBe(1);
+      yield* links.unlink(linked.id);
+      expect(errorText(yield* read(ref))).toContain("not linked");
+      expect(reads).toBe(1);
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        WorkspaceLinksLive.pipe(
+          Layer.provide(SqlitePersistenceMemory),
+          Layer.provideMerge(baseLayer()),
+        ),
+      ),
+    ),
+  );
   it.effect(
     "reads exactly confirmed Telegram message or chat links and revokes reads on removal",
     () =>

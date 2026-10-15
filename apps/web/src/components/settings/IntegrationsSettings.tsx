@@ -1,3 +1,4 @@
+import { DriveSettings } from "./DriveSettings";
 import { TelegramSettings } from "./TelegramSettings";
 import { DeviceHostUpdates } from "../device/DeviceHostUpdates";
 import { DeviceToolVersions } from "../device/DeviceToolVersions";
@@ -1450,6 +1451,7 @@ export function IntegrationsSettingsPanel() {
   );
   const sectionContent = {
     telegram: <TelegramSettings />,
+    drive: <DriveSettings />,
     skills: <ManagedSkillsSettings />,
     mcp: <McpConnectionsSettings />,
     dictation: <DictationSettings />,

@@ -191,3 +191,24 @@ describe("RPC scope middleware", () => {
     }).pipe(Effect.scoped),
   );
 });
+
+it("requires explicit read or operate scopes for every Drive action", () => {
+  for (const method of [
+    WS_METHODS.driveListConnections,
+    WS_METHODS.driveSearch,
+    WS_METHODS.driveGetBinding,
+    WS_METHODS.driveReadFile,
+    WS_METHODS.driveSubscribeChanges,
+  ])
+    expect(requiredScopeForRpcMethod(method)).toBe(AuthOrchestrationReadScope);
+  for (const method of [
+    WS_METHODS.driveUpsertConnection,
+    WS_METHODS.driveDisconnectConnection,
+    WS_METHODS.driveRemoveConnection,
+    WS_METHODS.driveStartOAuth,
+    WS_METHODS.driveCompleteOAuth,
+    WS_METHODS.driveCancelOAuth,
+    WS_METHODS.driveBindFile,
+  ])
+    expect(requiredScopeForRpcMethod(method)).toBe(AuthOrchestrationOperateScope);
+});

@@ -74,6 +74,7 @@ import Migration0057 from "./Migrations/057_MailSendApprovals.ts";
 import Migration0060 from "./Migrations/060_TelegramReader.ts";
 import Migration0061 from "./Migrations/061_WorkspaceSuggestions.ts";
 import Migration0062 from "./Migrations/062_WorkspaceSuggestionOwnership.ts";
+import Migration0063 from "./Migrations/063_DriveReader.ts";
 import Migration0059 from "./Migrations/059_MailSentLinks.ts";
 import Migration0058 from "./Migrations/058_WorkspaceLinks.ts";
 
@@ -152,6 +153,7 @@ export const migrationEntries = [
   [60, "TelegramReader", Migration0060],
   [61, "WorkspaceSuggestions", Migration0061],
   [62, "WorkspaceSuggestionOwnership", Migration0062],
+  [63, "DriveReader", Migration0063],
 ] as const;
 
 export const migrationManifest = migrationEntries.map(([id, name]) => [id, name] as const);

@@ -1,3 +1,4 @@
+import { DriveService } from "../drive/DriveService.ts";
 import {
   ProjectId,
   ThreadId,
@@ -52,6 +53,7 @@ export const make = (options: { readonly imap?: MailConnectionOptions } = {}) =>
     const sql = yield* SqlClient.SqlClient;
     const config = yield* MailConfigService;
     const oauth = yield* MailOAuth;
+    const drive = yield* Effect.serviceOption(DriveService);
     const telegram = yield* Effect.serviceOption(TelegramService);
     const links = yield* WorkspaceLinksRepository;
     const local = Effect.gen(function* () {
@@ -127,6 +129,19 @@ export const make = (options: { readonly imap?: MailConnectionOptions } = {}) =>
             revision: content,
           };
         }
+        if (ref.type === "file" && Option.isSome(drive)) {
+          const content = yield* drive.value.readFile({ fileId: ref.fileId });
+          const endpoint = { ref, title: content.file.name };
+          return {
+            item: endpoint,
+            metadata: {
+              ...metadata(endpoint, { date: content.file.modifiedTime }),
+              ...(content.file.owner ? { owner: content.file.owner } : {}),
+            },
+            snippet: content.body.text,
+            revision: { file: content.file, body: content.body },
+          };
+        }
         const known = (yield* local).find(
           (candidate) => workspaceItemKey(candidate.item.ref) === workspaceItemKey(ref),
         );
@@ -196,6 +211,42 @@ export const make = (options: { readonly imap?: MailConnectionOptions } = {}) =>
             }
             incomplete ||= result.success.nextCursor !== undefined;
           }
+        if (Option.isSome(drive) && queryText) {
+          const connections = yield* drive.value.listConnections.pipe(
+            Effect.orElseSucceed(() => []),
+          );
+          const connected = connections.filter((value) => value.connected);
+          let count = 0;
+          incomplete ||= connected.length > 3;
+          for (const connection of connected.slice(0, 3)) {
+            if (count >= 20) {
+              incomplete = true;
+              break;
+            }
+            const result = yield* drive.value
+              .search({ connectionId: connection.id, query: queryText, limit: 20 - count })
+              .pipe(Effect.result);
+            if (result._tag === "Failure") {
+              incomplete = true;
+              continue;
+            }
+            incomplete ||= result.success.incomplete;
+            for (const file of result.success.files) {
+              const item: WorkspaceLinkEndpoint = {
+                ref: { type: "file", provider: "google-drive", fileId: file.id },
+                title: file.name,
+              };
+              items.push({
+                item,
+                metadata: {
+                  ...metadata(item, { date: file.modifiedTime }),
+                  ...(file.owner ? { owner: file.owner } : {}),
+                },
+              });
+              count++;
+            }
+          }
+        }
         const unique = [
           ...new Map(
             items

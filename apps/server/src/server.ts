@@ -1,3 +1,7 @@
+import * as DriveService from "./drive/DriveService.ts";
+import * as DriveStore from "./drive/DriveStore.ts";
+import * as DriveApi from "./drive/DriveApi.ts";
+import * as DriveOAuth from "./drive/DriveOAuth.ts";
 import type { RelayManagedEndpointRuntimeConfig } from "@t3tools/contracts/relay";
 import * as Clock from "effect/Clock";
 import * as Random from "effect/Random";
@@ -647,6 +651,12 @@ const commandReadinessLayer = HttpRouter.middleware(
 );
 
 /** One Telegram reader shared by workspace MCP and remote clients. */
+const DriveLayerLive = DriveService.layer.pipe(
+  Layer.provide(DriveOAuth.layer),
+  Layer.provide(DriveApi.layer),
+  Layer.provide(DriveStore.layer),
+);
+
 const TelegramLayerLive = TelegramService.layer().pipe(
   Layer.provide(TelegramStore.layer),
   Layer.provide(TelegramBotApi.layer),
@@ -698,6 +708,7 @@ const makeRoutesLayer = Layer.mergeAll(
   // and mutations observed on WebSocket invalidate patches subsequently read over HTTP.
   Layer.provide(PullRequestServiceLive),
   Layer.provide(SuggestionsLayerLive),
+  Layer.provide(DriveLayerLive),
   Layer.provide(MailLayerLive),
   Layer.provide(TelegramLayerLive),
   Layer.provide(PreviewAutomationBroker.layer),

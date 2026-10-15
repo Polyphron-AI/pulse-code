@@ -5,6 +5,15 @@ import { fileURLToPath } from "node:url";
 import { git, writeJson } from "./pipeline.mjs";
 
 export const featureSuites = [
+  { id: "drive-picker-client", file: "apps/web/src/components/workspace/DriveFiles.test.tsx" },
+  { id: "drive-reader-lifecycle", file: "apps/server/src/drive/DriveService.test.ts" },
+  { id: "drive-settings-client", file: "apps/web/src/components/settings/DriveSettings.test.tsx" },
+  { id: "drive-remote-binding", file: "packages/client-runtime/src/state/drive.test.ts" },
+  {
+    id: "drive-confirmed-mcp",
+    file: "apps/server/src/mcp/toolkits/workspace/handlers.test.ts",
+    testNamePattern: "Drive",
+  },
   {
     id: "workspace-suggestion-selected-model",
     file: "apps/server/src/textGeneration/TextGeneration.test.ts",

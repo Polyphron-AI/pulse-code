@@ -1,4 +1,5 @@
 import {
+  DriveError,
   TelegramError,
   MailError,
   McpCapabilityUnavailableError,
@@ -19,6 +20,7 @@ const NO_AUTHORITY =
 export const WorkspaceToolResult = Schema.Record(Schema.String, Schema.Unknown);
 
 export const WorkspaceToolError = Schema.Union([
+  DriveError,
   TelegramError,
   McpCapabilityUnavailableError,
   WorkspaceLinksError,
@@ -64,7 +66,7 @@ export const WorkspaceToolkit = Toolkit.make(
   LinkedItemsTool,
   tool("workspace_read_item", {
     title: "Read a linked item",
-    description: `Read one linked item by its key. A mail message returns headers and a text body; pass body.nextOffset as offset to continue. A Telegram message returns only that received message. A Telegram chat returns a bounded page of received messages; pass nextOffset as offset to continue. A web page returns its address. ${NO_AUTHORITY}`,
+    description: `Read one linked item by its key. A mail message returns headers and a text body; pass body.nextOffset as offset to continue. A Telegram message returns only that received message. A Telegram chat returns a bounded page of received messages; pass nextOffset as offset to continue. A Drive file returns bounded plain text using the connection explicitly chosen by the user; unsupported files stay unavailable. A web page returns its address. ${NO_AUTHORITY}`,
     parameters: {
       key: Schema.String.check(Schema.isMaxLength(8_192)).annotate({
         description: "A key from <linked_items> or workspace_linked_items.",

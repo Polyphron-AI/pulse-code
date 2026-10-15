@@ -1,0 +1,13 @@
+# Google Drive
+
+In **Settings > Integrations > Google Drive**, choose the environment and save a named connection with your own Google OAuth client ID. Create a Desktop app client in Google Cloud and enable the Drive API. Supply the client secret if Google provides one. Test apps may need your account added as a test user; Google may require verification before other people can authorize your app.
+
+Select **Connect Google**, then **Authorize read-only Google Drive access**. Pulse Code requests read-only Drive access. The return address is a loopback callback on the environment's server. When signing in from another device, the return page may not load: copy its full address into **Google sign-in return URL** and select **Finish Google sign-in**. Sign-ins expire after ten minutes and can be canceled. Credentials stay in the environment's secret store.
+
+Use **Link to** beside Linked to choose a connection and search by file name. Searches return up to twenty files; narrow the search when more matches exist. Selecting a result verifies access, saves the chosen connection for that file, and links it. Suggestions can also include file metadata. They do not choose an account or grant access until you act.
+
+You can paste a Drive, Docs, Sheets, or Slides link without connecting Google. It opens externally and keeps its stable file identity. Select **Read file** on a linked file to choose the account allowed to read it. A pasted or suggested file stays unbound until you explicitly choose a connection. An existing binding is reused; Pulse Code never switches to the first available account. Changing a connection to another Google identity requires a separate named connection.
+
+The reader supports plain text files, text exports of Google Docs and Slides, and CSV exports of the first sheet of a Google spreadsheet. Unsupported files, removed files, and lost permissions show an error; they remain available as external links. Reads use bounded pages and stop at 256 KiB. **Read more** continues a page; an incomplete notice identifies content beyond the limit. Pulse Code does not upload, modify, sync, or delete Drive files.
+
+Agents can read only files explicitly linked to their thread or project, through the account chosen for each file. Suggestions alone do not grant access. Disconnecting or removing a Drive connection removes its local tokens and makes its reads unavailable, while preserving file links and their chosen-account history. Reconnect the same Google identity or explicitly choose a different connection for a file. Disconnecting Pulse Code does not revoke the app's Google consent; that can be managed in your Google account.

@@ -27,6 +27,18 @@ type WsRpcMethod = RpcGroup.Rpcs<typeof WsRpcGroup>["_tag"];
  * runtime failure.
  */
 export const RPC_REQUIRED_SCOPES = {
+  [WS_METHODS.driveListConnections]: AuthOrchestrationReadScope,
+  [WS_METHODS.driveSubscribeChanges]: AuthOrchestrationReadScope,
+  [WS_METHODS.driveSearch]: AuthOrchestrationReadScope,
+  [WS_METHODS.driveGetBinding]: AuthOrchestrationReadScope,
+  [WS_METHODS.driveReadFile]: AuthOrchestrationReadScope,
+  [WS_METHODS.driveUpsertConnection]: AuthOrchestrationOperateScope,
+  [WS_METHODS.driveDisconnectConnection]: AuthOrchestrationOperateScope,
+  [WS_METHODS.driveRemoveConnection]: AuthOrchestrationOperateScope,
+  [WS_METHODS.driveStartOAuth]: AuthOrchestrationOperateScope,
+  [WS_METHODS.driveCompleteOAuth]: AuthOrchestrationOperateScope,
+  [WS_METHODS.driveCancelOAuth]: AuthOrchestrationOperateScope,
+  [WS_METHODS.driveBindFile]: AuthOrchestrationOperateScope,
   [WS_METHODS.pulseLinksSuggest]: AuthOrchestrationReadScope,
   [WS_METHODS.pulseLinksAcceptSuggestion]: AuthOrchestrationOperateScope,
   [WS_METHODS.pulseLinksDismissSuggestion]: AuthOrchestrationOperateScope,

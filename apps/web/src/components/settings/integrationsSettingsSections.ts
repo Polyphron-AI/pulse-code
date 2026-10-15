@@ -3,6 +3,7 @@ export const INTEGRATIONS_SETTINGS_SECTIONS = [
   { label: "MCP", targetId: "mcp" },
   { label: "Voice dictation", targetId: "dictation" },
   { label: "Telegram", targetId: "telegram" },
+  { label: "Google Drive", targetId: "drive" },
   { label: "Browser", targetId: "browser" },
 ] as const;
 

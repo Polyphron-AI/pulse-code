@@ -1,3 +1,4 @@
+import { DriveService } from "../../../drive/DriveService.ts";
 import { WorkspaceLinksError } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -33,6 +34,7 @@ const fitList = (items: ReadonlyArray<Record<string, unknown>>, truncated: boole
 export const make = (options: { readonly imap?: MailConnectionOptions } = {}) =>
   Effect.gen(function* () {
     const links = yield* WorkspaceLinks;
+    const drive = yield* Effect.serviceOption(DriveService);
     const telegram = yield* Effect.serviceOption(TelegramService);
     const orchestrator = yield* Orchestrator.OrchestratorV2;
     const config = yield* MailConfigService;
@@ -101,6 +103,15 @@ export const make = (options: { readonly imap?: MailConnectionOptions } = {}) =>
               return yield* new WorkspaceLinksError({
                 kind: "unsupported",
                 message: "This source is not available for reading on this server.",
+              });
+            case "file":
+              if (Option.isSome(drive))
+                return yield* drive.value
+                  .readFile({ fileId: ref.fileId, ...(offset !== undefined ? { offset } : {}) })
+                  .pipe(Effect.flatMap((content) => bounded({ key, type: "file", ...content })));
+              return yield* new WorkspaceLinksError({
+                kind: "unsupported",
+                message: "Drive reading is not available on this server.",
               });
             case "url":
               return { key, type: "url", url: ref.url, ...(title !== undefined ? { title } : {}) };

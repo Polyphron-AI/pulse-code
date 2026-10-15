@@ -1,3 +1,5 @@
+import { PulseDriveRpcs } from "@t3tools/contracts";
+import { DriveService } from "./drive/DriveService.ts";
 import { OrchestrationDispatchCommandError } from "@t3tools/contracts";
 import * as Crypto from "effect/Crypto";
 import * as Orchestrator from "./orchestration-v2/Orchestrator.ts";
@@ -576,6 +578,7 @@ const ServerWsRpcGroup = WsRpcGroup;
 // silently widens the layer's requirements to `any`. RpcServer still serves the
 // full ServerWsRpcGroup and resolves each handler by tag, so the two layers
 // together cover the group. Workspace link handlers are split out the same way.
+const DriveWsRpcGroup = RpcGroup.make(...PulseDriveRpcs);
 const TelegramWsRpcGroup = RpcGroup.make(...PulseTelegramRpcs);
 const SuggestionWsRpcGroup = RpcGroup.make(...PulseLinkSuggestionRpcs);
 const MailWsRpcGroup = RpcGroup.make(
@@ -585,6 +588,7 @@ const MailWsRpcGroup = RpcGroup.make(
 );
 const LinksWsRpcGroup = RpcGroup.make(...PulseLinksRpcs);
 const CoreWsRpcGroup = ServerWsRpcGroup.omit(
+  ...PulseDriveRpcs.map((rpc) => rpc._tag),
   ...PulseLinkSuggestionRpcs.map((rpc) => rpc._tag),
   ...PulseTelegramRpcs.map((rpc) => rpc._tag),
   ...PulseMailRpcs.map((rpc) => rpc._tag),
@@ -1226,6 +1230,26 @@ export const subscribeOrchestrationV2Shell = Effect.fn("ws.orchestrationV2.subsc
       ),
     );
   },
+);
+
+const driveWsRpcLayer = DriveWsRpcGroup.toLayer(
+  Effect.gen(function* () {
+    const drive = yield* DriveService;
+    return DriveWsRpcGroup.of({
+      [WS_METHODS.driveListConnections]: () => drive.listConnections,
+      [WS_METHODS.driveUpsertConnection]: drive.upsertConnection,
+      [WS_METHODS.driveDisconnectConnection]: drive.disconnectConnection,
+      [WS_METHODS.driveRemoveConnection]: drive.removeConnection,
+      [WS_METHODS.driveStartOAuth]: drive.startOAuth,
+      [WS_METHODS.driveCompleteOAuth]: drive.completeOAuth,
+      [WS_METHODS.driveCancelOAuth]: drive.cancelOAuth,
+      [WS_METHODS.driveSearch]: drive.search,
+      [WS_METHODS.driveGetBinding]: drive.getBinding,
+      [WS_METHODS.driveBindFile]: drive.bindFile,
+      [WS_METHODS.driveReadFile]: drive.readFile,
+      [WS_METHODS.driveSubscribeChanges]: () => drive.changes,
+    });
+  }),
 );
 
 const telegramWsRpcLayer = TelegramWsRpcGroup.toLayer(
@@ -1962,6 +1986,7 @@ const makeWsRpcLayer = (
               mailRead: true,
               telegramRead: true,
               workspaceSuggestions: true,
+              driveRead: true,
               mailConversations: true,
               mailReply: true,
               workspaceLinks: true,
@@ -4184,6 +4209,7 @@ export const websocketRpcRouteLayer = Layer.unwrap(
       Context.add(MailOAuth, yield* MailOAuth),
       Context.add(MailSendService, yield* MailSendService),
       Context.add(TelegramService, yield* TelegramService),
+      Context.add(DriveService, yield* DriveService),
       Context.add(WorkspaceSuggestions, yield* WorkspaceSuggestions),
     );
     const previewAutomationBroker = yield* PreviewAutomationBroker.PreviewAutomationBroker;
@@ -4242,6 +4268,7 @@ export const websocketRpcRouteLayer = Layer.unwrap(
               previewAutomationBroker,
             ).pipe(
               Layer.merge(telegramWsRpcLayer),
+              Layer.merge(driveWsRpcLayer),
               Layer.merge(suggestionWsRpcLayer),
               Layer.merge(mailWsRpcLayer.pipe(Layer.provide(layerFromProviderInstanceRegistry))),
               Layer.merge(linksWsRpcLayer),
