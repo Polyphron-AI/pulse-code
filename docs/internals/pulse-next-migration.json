@@ -1266,6 +1266,65 @@
       "nextAction": "Fast-forward local develop to the merge commit. Remote push and PR creation were not requested; no browser, real-provider, native/package build, installer or live-install verification was run.",
       "updatedAt": "2026-10-01",
       "usage": "Task-bounded token telemetry unavailable. Three bounded conflict-resolution agents; two production builds because the first PowerShell wrapper returned failure despite successful build output. Final build used a captured child-process exit receipt."
+    },
+    {
+      "policyVersion": "2026-09-17",
+      "feature": "upstream-nightly-20261004-refresh",
+      "state": "integrated-locally",
+      "branch": "qb/sync-nightly-20261004-refresh",
+      "worktree": "C:/Users/qblaa/.t3/worktrees/Pulse Code/unified-workspace",
+      "baseRevision": "68b29c9b17",
+      "baseBranch": "qb/sync-nightly-20261004",
+      "upstreamRevision": "737993303d36e10674c54b95e5bd3826682c99c7",
+      "upstreamTag": "v0.0.46-nightly.20261004.2644",
+      "mergedRevisions": {
+        "develop": "be411773c2",
+        "mail": "4c27bc2604"
+      },
+      "headRevision": "9a6fdf54c7",
+      "commits": [
+        "3cb206f727 merge(upstream): bring origin/develop onto the nightly 20261004 sync",
+        "c11e6fff40 merge: bring server mail onto the synced base",
+        "02375d08f2 fix(mail): port server mail to OrchestratorV2",
+        "982dc2d6f1 feat(mail): stream thread approvals to clients",
+        "836507c9c4 fix(web,mobile): retry approval loads and subscribe only when the server has mail",
+        "d539df8035 fix(server): split mail WS handlers so the RPC layer keeps its types",
+        "927ddbc523 refactor(mail): drop the unused one-shot approval RPCs",
+        "5ca7f8b584 fix(mail): announce every approval outcome and push only live approvals",
+        "086ab5a09b fix(mail): keep recent approval outcomes across reconnects",
+        "9a6fdf54c7 fix(client-runtime): show a send another device already started"
+      ],
+      "conflictsResolved": [
+        "develop merge: package versions keep the nightly version; the contracts index keeps both sides' exports; the sidebar keeps upstream's header layout and brand width probe and adds develop's Office sidebar and space selector; the licenses config keeps both sides' overrides; the lockfile was regenerated with vp i.",
+        "mail merge: mail's migration moves from 055 to 057 because upstream took 055 (OrchestrationV2) and 056; MCP sessions keep upstream's orchestration and worktree capabilities and add mail; Settings keeps both Scheduled Tasks and Email; server.test.ts stays deleted as upstream removed it, and mail's only change there was a ServerEnvironmentIdentity mock.",
+        "OrchestratorV2 port: mail finds a thread's project through OrchestratorV2.getThreadShell and denies a missing or deleted thread; send approvals reach clients through the pulse.mail.subscribeThreadApprovals stream instead of thread activities, which V2 no longer has.",
+        "WS handler split: the mail merge grew the main ws.ts handler object from 197 to 212 handlers, past TypeScript's instantiation limit (TS2589), which typed the layer's requirements as any (36 TS377030 errors). Mail handlers now live in their own mailWsRpcLayer."
+      ],
+      "acceptance": [
+        "Bring origin/develop and server mail onto the nightly 20261004 sync, preserving Pulse features.",
+        "Port server mail to OrchestratorV2 and address the port review findings.",
+        "Run maintained Pulse suites, the mail, migration, MCP and auth server suites, desktop communications tests and scoped typechecks."
+      ],
+      "completionBlockers": [],
+      "evidence": "At 9a6fdf54c7: maintained Pulse suites (scripts/pulse-updates/features.mjs) 49/49 suites, 524 tests passed, state foundations-passed (dirty only for untracked docs). apps/server vp test run src/mail src/persistence/Migrations src/persistence/MailSendApprovals.test.ts src/mcp/toolkits/mail src/mcp/toolkits/worktree src/mcp/McpSessionRegistry.test.ts src/auth/RpcAuthorization.test.ts: 36 files, 127 tests passed. packages/client-runtime src/mail: 1 file, 5 tests passed. apps/desktop src/communications: 3 files, 34 tests passed. Typechecks: contracts, client-runtime, web, mobile and desktop 0 errors; apps/server 1 error, labelled below.",
+      "failures": [
+        {
+          "check": "apps/server vp run typecheck",
+          "error": "../../vite.config.ts(4,30) TS377057 effect(nodeBuiltinImport): node:child_process import",
+          "label": "pre-existing",
+          "note": "vite.config.ts is unchanged since the nightly sync merge d41f263dc8."
+        }
+      ],
+      "untested": [
+        "Browser walk of web and desktop UI",
+        "Real provider turns",
+        "Real IMAP/SMTP accounts",
+        "Packaged desktop app and installer",
+        "Mobile on a device or simulator",
+        "Live install"
+      ],
+      "nextAction": "Fast-forward qb/feat-unified-workspace onto this branch for the unified workspace Wave 1. Landing on develop (local or origin) needs the maintainer's go-ahead. Catching up to upstream main (923 commits past the nightly) is a later import.",
+      "updatedAt": "2026-10-15"
     }
   ],
   "history": [
