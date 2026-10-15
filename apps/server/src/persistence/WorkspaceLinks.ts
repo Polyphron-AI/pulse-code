@@ -102,6 +102,7 @@ const decodeId = Schema.decodeUnknownOption(WorkspaceLinkId);
 const encodeRef = Schema.encodeSync(RefJson);
 const encodeSource = Schema.encodeSync(SourceJson);
 const encodeOrigin = Schema.encodeSync(OriginJson);
+const isPersistenceDecodeError = Schema.is(PersistenceDecodeError);
 
 const side = (key: string, refJson: string, title: string | null) =>
   decodeRef(refJson).pipe(
@@ -158,10 +159,14 @@ const readable = (rows: ReadonlyArray<LinkRow>) =>
   );
 
 function toSqlOrDecodeError(sqlOperation: string, decodeOperation: string) {
-  return (cause: unknown): WorkspaceLinksRepositoryError =>
-    Schema.isSchemaError(cause)
+  return (cause: unknown): WorkspaceLinksRepositoryError => {
+    if (isPersistenceDecodeError(cause)) {
+      return cause;
+    }
+    return Schema.isSchemaError(cause)
       ? PersistenceDecodeError.fromSchemaError(decodeOperation, cause)
       : new PersistenceSqlError({ operation: sqlOperation, cause });
+  };
 }
 
 const make = Effect.gen(function* () {
@@ -206,7 +211,8 @@ const make = Effect.gen(function* () {
       WHERE status = 'confirmed'
         AND ((${sql.in("key_a", owners)} AND key_b = ${other})
           OR (${sql.in("key_b", owners)} AND key_a = ${other}))
-      LIMIT 1
+      ORDER BY key_a, key_b
+      LIMIT ${new Set(owners).size}
     `,
   });
 
@@ -215,7 +221,7 @@ const make = Effect.gen(function* () {
       Effect.map((links) => ({ links, truncated: rows.length > max })),
     );
   const first = (rows: ReadonlyArray<LinkRow>) =>
-    readable(rows.slice(0, 1)).pipe(Effect.map((links) => Option.fromNullishOr(links[0])));
+    readable(rows).pipe(Effect.map((links) => Option.fromNullishOr(links[0])));
 
   return WorkspaceLinksRepository.of({
     // An existing pair keeps its id, its first origin, and its source while it stays confirmed.
@@ -252,7 +258,12 @@ const make = Effect.gen(function* () {
             const link = yield* first(rows);
             return yield* Option.match(link, {
               onNone: () =>
-                Effect.die(new Error("A confirmed workspace link could not be read back.")),
+                Effect.fail(
+                  new PersistenceDecodeError({
+                    operation: "WorkspaceLink",
+                    issue: "A confirmed workspace link could not be read back.",
+                  }),
+                ),
               onSome: Effect.succeed,
             });
           }),
@@ -286,7 +297,7 @@ const make = Effect.gen(function* () {
 
     findConfirmed: (ownerKeys, otherKey) =>
       ownerKeys.length === 0
-        ? Effect.succeed(Option.none())
+        ? Effect.succeedNone
         : confirmedPair({ owners: ownerKeys, other: otherKey }).pipe(
             Effect.flatMap(first),
             Effect.mapError(toSqlOrDecodeError("findWorkspaceLink", "WorkspaceLink")),

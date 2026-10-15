@@ -1,10 +1,13 @@
 import { assert, it } from "@effect/vitest";
 import { ProjectId, ThreadId, type WorkspaceLinkId } from "@t3tools/contracts";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
+import { PersistenceDecodeError } from "./Errors.ts";
 import { SqlitePersistenceMemory } from "./Layers/Sqlite.ts";
 import * as WorkspaceLinks from "./WorkspaceLinks.ts";
 
@@ -180,6 +183,115 @@ layer("WorkspaceLinksRepository", (it) => {
       assert.strictEqual(context.truncated, true);
       assert.strictEqual(new Set(context.links.map((link) => link.id)).size, context.links.length);
     }),
+  );
+
+  it.effect("finds a readable confirmed pair after a corrupt candidate", () =>
+    Effect.gen(function* () {
+      const repo = yield* WorkspaceLinks.WorkspaceLinksRepository;
+      const sql = yield* SqlClient.SqlClient;
+      const other = {
+        key: "url:shared",
+        endpoint: { ref: { type: "url" as const, url: "https://example.test/shared" } },
+      };
+      yield* repo.confirm({
+        id: id(20),
+        first: {
+          key: "project:a",
+          endpoint: { ref: { type: "project", projectId: ProjectId.make("a") } },
+        },
+        second: other,
+        source: user,
+        origin: { confirmedAt: "2026-10-14T10:00:00.000Z" },
+        now: "2026-10-14T10:00:00.000Z",
+      });
+      yield* sql`UPDATE workspace_links SET ref_a_json = '{bad' WHERE link_id = ${id(20)}`;
+      const valid = yield* repo.confirm({
+        id: id(21),
+        first: {
+          key: "thread:z",
+          endpoint: { ref: { type: "thread", threadId: ThreadId.make("z") } },
+        },
+        second: other,
+        source: user,
+        origin: { confirmedAt: "2026-10-14T10:00:00.000Z" },
+        now: "2026-10-14T10:00:00.000Z",
+      });
+      assert.deepStrictEqual(
+        yield* repo.findConfirmed(["project:a", "thread:z", "project:a"], other.key),
+        Option.some(valid),
+      );
+      assert.deepStrictEqual(
+        yield* repo.findConfirmed([other.key], "thread:z"),
+        Option.some(valid),
+      );
+      assert.strictEqual(Option.isNone(yield* repo.findConfirmed(["project:a"], other.key)), true);
+      assert.strictEqual(Option.isNone(yield* repo.findConfirmed([], other.key)), true);
+    }),
+  );
+
+  it.effect.each(["origin", "source"] as const)(
+    "rolls back confirm with a typed decode error for corrupt preserved %s",
+    (metadata) =>
+      Effect.gen(function* () {
+        const repo = yield* WorkspaceLinks.WorkspaceLinksRepository;
+        const sql = yield* SqlClient.SqlClient;
+        const first = {
+          key: `project:corrupt-${metadata}`,
+          endpoint: {
+            ref: { type: "project" as const, projectId: ProjectId.make(`corrupt-${metadata}`) },
+            title: "Original project",
+          },
+        };
+        const second = {
+          key: `url:corrupt-${metadata}`,
+          endpoint: {
+            ref: { type: "url" as const, url: `https://example.test/corrupt-${metadata}` },
+            title: "Original page",
+          },
+        };
+        const made = yield* repo.confirm({
+          id: id(metadata === "origin" ? 30 : 31),
+          first,
+          second,
+          source: user,
+          origin: { confirmedAt: "2026-10-14T10:00:00.000Z", viewing: first.endpoint },
+          now: "2026-10-14T10:00:00.000Z",
+        });
+        if (metadata === "origin") {
+          yield* repo.unlink(made.id, "2026-10-14T11:00:00.000Z");
+          yield* sql`UPDATE workspace_links SET origin_json = '{bad' WHERE link_id = ${made.id}`;
+        } else {
+          yield* sql`UPDATE workspace_links SET source_json = '{bad' WHERE link_id = ${made.id}`;
+        }
+        const before = yield* sql`SELECT * FROM workspace_links WHERE link_id = ${made.id}`;
+        const result = yield* Effect.exit(
+          repo.confirm({
+            id: id(32),
+            first: { ...first, endpoint: { ...first.endpoint, title: "Changed project" } },
+            second: { ...second, endpoint: { ...second.endpoint, title: "Changed page" } },
+            source: { type: "action", action: "add-to-project" },
+            origin: { confirmedAt: "2026-10-15T10:00:00.000Z" },
+            now: "2026-10-15T10:00:00.000Z",
+          }),
+        );
+        assert.deepStrictEqual(
+          yield* sql`SELECT * FROM workspace_links WHERE link_id = ${made.id}`,
+          before,
+          "failed confirmation preserves every stored field, including history and status",
+        );
+        if (!Exit.isFailure(result)) {
+          return assert.fail("corrupt preserved metadata must fail confirmation");
+        }
+        assert.strictEqual(
+          Cause.hasDies(result.cause),
+          false,
+          "decode failure must not be a defect",
+        );
+        const error = Option.getOrThrow(Cause.findErrorOption(result.cause));
+        assert.instanceOf(error, PersistenceDecodeError);
+        assert.strictEqual(error._tag, "PersistenceDecodeError");
+        assert.strictEqual(error.operation, "WorkspaceLink");
+      }),
   );
 
   it.effect("skips a row it cannot read instead of failing the list", () =>
