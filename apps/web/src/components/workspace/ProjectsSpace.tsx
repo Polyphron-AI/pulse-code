@@ -1,4 +1,5 @@
 import { ProjectTasks, ProjectWorkspaceSettings } from "./ProjectTasks";
+import { COMPACT_WORKSPACE_HEADER_INSET_CLASS } from "../../workspaceTitlebar";
 import { workspaceTools } from "../../state/workspaceTools";
 import { useNavigate } from "@tanstack/react-router";
 import { parseTaskLocation } from "./useWorkspaceItemOpener";
@@ -76,7 +77,9 @@ export function ProjectsSpace() {
   };
   return (
     <SidebarInset className="min-w-0 overflow-y-auto">
-      <header className="flex h-[var(--workspace-topbar-height)] shrink-0 items-center border-b border-border px-4 text-sm">
+      <header
+        className={`flex h-[var(--workspace-topbar-height)] shrink-0 items-center border-b border-border px-4 text-sm ${COMPACT_WORKSPACE_HEADER_INSET_CLASS}`}
+      >
         Projects
       </header>
       <WorkspaceEngagement

@@ -8,6 +8,7 @@ import {
 } from "@t3tools/contracts";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { useState } from "react";
+import { COMPACT_WORKSPACE_HEADER_INSET_CLASS } from "../../workspaceTitlebar";
 import { telegram } from "../../state/telegram";
 import { useEnvironmentQuery } from "../../state/query";
 import { SidebarInset } from "../ui/sidebar";
@@ -35,7 +36,9 @@ export function TelegramWorkspace() {
   const environmentId = capability.environmentId;
   return (
     <SidebarInset className="min-w-0">
-      <header className="flex h-[var(--workspace-topbar-height)] shrink-0 items-center gap-3 border-b border-border px-4">
+      <header
+        className={`flex h-[var(--workspace-topbar-height)] shrink-0 items-center gap-3 border-b border-border px-4 ${COMPACT_WORKSPACE_HEADER_INSET_CLASS}`}
+      >
         <span className="min-w-0 flex-1 truncate text-sm">Telegram</span>
         <Link
           to="/settings/integrations"

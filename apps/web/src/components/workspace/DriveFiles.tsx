@@ -6,7 +6,7 @@ import {
   type WorkspaceLinkEndpoint,
 } from "@t3tools/contracts";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { drive } from "../../state/drive";
 import { useEnvironmentQuery } from "../../state/query";
 import { useAtomCommand } from "../../state/use-atom-command";
@@ -201,6 +201,26 @@ export function DriveFileAccess({
   ) : null;
 }
 function DriveReader({ environmentId, fileId }: { environmentId: EnvironmentId; fileId: string }) {
+  const binding = useEnvironmentQuery(drive.binding({ environmentId, input: { fileId } }));
+  const connectionId = binding.data?.binding?.connectionId;
+  return (
+    <DriveReaderContent
+      key={connectionId ?? "unbound"}
+      environmentId={environmentId}
+      fileId={fileId}
+      savedConnectionId={connectionId}
+    />
+  );
+}
+function DriveReaderContent({
+  environmentId,
+  fileId,
+  savedConnectionId,
+}: {
+  environmentId: EnvironmentId;
+  fileId: string;
+  savedConnectionId: string | undefined;
+}) {
   const { connections, canOperate } = useDriveAccess(environmentId);
   const binding = useEnvironmentQuery(drive.binding({ environmentId, input: { fileId } }));
   const bind = useAtomCommand(drive.bind, { reportFailure: false });
@@ -210,13 +230,26 @@ function DriveReader({ environmentId, fileId }: { environmentId: EnvironmentId; 
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const active = useRef(true);
+  useEffect(() => {
+    active.current = true;
+    return () => {
+      active.current = false;
+    };
+  }, []);
   const load = async (offset = 0) => {
     setBusy(true);
     setError(null);
     const response = await read({ environmentId, input: { fileId, offset } });
+    if (!active.current) return;
     setBusy(false);
     if (response._tag === "Failure") setError(errorText(response));
-    else {
+    else if (response.value.connectionId !== savedConnectionId) {
+      setResult(null);
+      setText("");
+      setError("The file connection changed. Read the file again using its chosen connection.");
+      binding.refresh();
+    } else {
       setResult(response.value);
       setText((previous) =>
         offset === 0 ? response.value.body.text : previous + response.value.body.text,

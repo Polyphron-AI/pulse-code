@@ -5,6 +5,10 @@ import { fileURLToPath } from "node:url";
 import { git, writeJson } from "./pipeline.mjs";
 
 export const featureSuites = [
+  {
+    id: "mail-linked-task-navigation",
+    file: "apps/web/src/components/workspace/mail/MailSpace.test.tsx",
+  },
   { id: "workspace-basic-tasks", file: "apps/server/src/workspace/WorkspaceTools.test.ts" },
   {
     id: "workspace-automation-binding",

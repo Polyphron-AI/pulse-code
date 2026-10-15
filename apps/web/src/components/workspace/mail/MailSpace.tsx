@@ -24,7 +24,10 @@ import { pulseMailAccounts } from "../../../mail/mailState";
 import { useAllEnvironmentProjectSnapshotsReady, useProjects } from "../../../state/entities";
 import { useEnvironmentQuery } from "../../../state/query";
 import { buildThreadRouteParams } from "../../../threadRoutes";
-import { COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS } from "../../../workspaceTitlebar";
+import {
+  COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS,
+  COMPACT_WORKSPACE_HEADER_INSET_CLASS,
+} from "../../../workspaceTitlebar";
 import { SidebarInset } from "../../ui/sidebar";
 import { MailMessageList } from "./MailMessageList";
 import { MailMessageView } from "./MailMessageView";
@@ -132,6 +135,7 @@ export function MailSpace() {
         className={cn(
           "flex h-[var(--workspace-topbar-height)] shrink-0 items-center border-b border-border px-4 text-sm text-muted-foreground",
           COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS,
+          COMPACT_WORKSPACE_HEADER_INSET_CLASS,
         )}
       >
         <span className="truncate">{heading}</span>
@@ -192,6 +196,7 @@ function MailPanes(props: MailPanesProps) {
           params: buildThreadRouteParams(scopeThreadRef(props.environmentId, ref.threadId)),
         });
         return;
+      case "task":
       case "provider-resource":
         openOtherItem(ref);
         return;
