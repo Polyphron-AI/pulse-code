@@ -1122,6 +1122,15 @@ export const SystemSettingsPaneSchema = Schema.Literals(["full-disk-access"]);
 export type SystemSettingsPane = typeof SystemSettingsPaneSchema.Type;
 
 export interface DesktopBridge {
+  communicationsInvoke?: (
+    request: import("./communications.ts").ChatRequest,
+  ) => Promise<import("./communications.ts").ChatResult>;
+  officeInvoke?: (
+    request: import("./office.ts").OfficeRequest,
+  ) => Promise<import("./office.ts").OfficeResult>;
+  talkInvoke?: (
+    request: import("./talk.ts").TalkRequest,
+  ) => Promise<import("./talk.ts").TalkResult>;
   getAppBranding: () => DesktopAppBranding | null;
   /** Absolute path of a dropped or picked file; absent on desktop builds predating it. */
   getPathForFile?: (file: File) => string;

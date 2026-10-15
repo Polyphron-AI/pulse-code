@@ -117,6 +117,25 @@ git rev-parse HEAD
 Keep the version, commit and SHA-256 together with whatever state the install was
 tested against. An installer with no recorded hash is not evidence.
 
+### Office and optional Talk worker
+
+Windows builds include Office and Communications. Communications reads connected
+Office mail accounts through desktop IPC and saves replies as local drafts. It
+does not send email or populate unconnected services with sample messages.
+
+Set `PULSE_TALK_WORKER_DIR` to a Windows x64 Talk worker package to include local
+Office recording and transcription. The package must contain `manifest.json`
+with target `x86_64-pc-windows-msvc`, and artifact names, byte sizes and SHA-256
+checksums including `pulse-talk-worker.exe`. Staging validates the manifest,
+checksums and executable before copying it. With no worker configured, the
+installer still builds and Office reports that Talk is unavailable; Code's
+existing dictation is independent.
+
+Office OAuth app registrations are optional public metadata selected from
+`PULSE_GOOGLE_CLIENT_ID`, the optional native registration field
+`PULSE_GOOGLE_CLIENT_SECRET`, `PULSE_MICROSOFT_CLIENT_ID` and
+`PULSE_MICROSOFT_TENANT`. Account tokens and credentials are not bundled.
+
 ## Where state lives after installing
 
 - `%APPDATA%\pulsenext` holds the Electron user data, including the Clerk

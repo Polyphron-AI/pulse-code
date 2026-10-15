@@ -46,6 +46,7 @@ import * as Option from "effect/Option";
 import {
   ArrowLeftIcon,
   BotIcon,
+  BriefcaseBusinessIcon,
   ChartNoAxesColumnIcon,
   CheckIcon,
   ChevronRightIcon,
@@ -1883,6 +1884,29 @@ function OpenCommandPaletteDialog(props: {
   ]);
 
   const actionItems: Array<CommandPaletteActionItem | CommandPaletteSubmenuItem> = [];
+  actionItems.push({
+    kind: "action",
+    value: "action:open-office",
+    searchTerms: ["office", "meetings", "calendar", "email"],
+    title: "Open Office workspace",
+    icon: <BriefcaseBusinessIcon className={ITEM_ICON_CLASS} />,
+    run: async () => {
+      await navigate({ to: "/workspace", search: { space: "office" } });
+    },
+  });
+  actionItems.push({
+    kind: "action",
+    value: "action:open-communications",
+    searchTerms: ["office", "communications", "discord", "telegram", "slack", "email"],
+    title: "Open Communications",
+    icon: <MessageSquareIcon className={ITEM_ICON_CLASS} />,
+    run: async () => {
+      await navigate({
+        to: "/workspace",
+        search: { space: "office", officeView: "communications" },
+      });
+    },
+  });
 
   if (projects.length > 0) {
     const activeProjectTitle =

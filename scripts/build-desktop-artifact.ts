@@ -44,6 +44,8 @@ import {
   selectCliRuntimeExternalDependencies,
 } from "./lib/cli-external-packages.ts";
 import { loadRepoEnv } from "./lib/public-config.ts";
+import { stageTalkWorker } from "./lib/talk-worker-package.ts";
+import { officeOAuthConfigurationFromEnvironment } from "../apps/desktop/src/office/OfficeOAuthConfig.ts";
 import { selectDesktopRuntimeExternalDependencies } from "./lib/desktop-external-packages.ts";
 import { resolveCatalogDependencies } from "./lib/resolve-catalog.ts";
 
@@ -981,6 +983,9 @@ export const DESKTOP_FILE_EXCLUSIONS = [
   "!apps/desktop/prod-resources/wsl-runtime.tar.gz.sha256",
   "!apps/desktop/gnome-extension",
   "!apps/desktop/gnome-extension/**/*",
+  "!apps/desktop/prod-resources/talk",
+  "!apps/desktop/prod-resources/talk/**/*",
+  "!apps/desktop/prod-resources/office-oauth.json",
 ] as const;
 // Windows terminal helpers cannot run on macOS and slow signing and notarization.
 export const MAC_FILE_EXCLUSIONS = [
@@ -2718,6 +2723,12 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       ...(platform === "linux" ? LINUX_CAPTURE_EXTRA_RESOURCES : []),
       ...(platform === "linux" ? LINUX_BROWSER_SECRET_EXTRA_RESOURCES : []),
       ...(platform === "win" ? WINDOWS_SERVER_EXTRA_RESOURCES : []),
+      ...(platform === "win"
+        ? [
+            { from: "apps/desktop/prod-resources/talk", to: "talk" },
+            { from: "apps/desktop/prod-resources/office-oauth.json", to: "office-oauth.json" },
+          ]
+        : []),
       ...(platform === "win" && wslRuntimeBundled ? WSL_RUNTIME_EXTRA_RESOURCES : []),
     ],
   };
@@ -3675,6 +3686,28 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
   // electron-builder is filtering out stageResourcesDir directory in the AppImage for production
   const stageProdResourcesDir = path.join(stageAppDir, "apps/desktop/prod-resources");
   yield* fs.copy(stageResourcesDir, stageProdResourcesDir);
+  if (options.platform === "win") {
+    const talkWorkerDir = Option.getOrUndefined(
+      yield* Config.option(Config.String("PULSE_TALK_WORKER_DIR")),
+    );
+    if (talkWorkerDir && options.arch !== "x64")
+      return yield* Effect.die(
+        new Error("The unified Talk worker is currently packaged for Windows x64 only."),
+      );
+    yield* Effect.promise(() =>
+      stageTalkWorker(talkWorkerDir, path.join(stageProdResourcesDir, "talk")),
+    );
+    yield* Effect.log(
+      talkWorkerDir
+        ? "[desktop-artifact] Verified and staged the native Talk worker."
+        : "[desktop-artifact] No native Talk worker configured; Talk recording and transcription are unavailable.",
+    );
+    const officeOAuth = officeOAuthConfigurationFromEnvironment(loadRepoEnv({ repoRoot }));
+    yield* fs.writeFileString(
+      path.join(stageProdResourcesDir, "office-oauth.json"),
+      yield* encodeJsonString(officeOAuth),
+    );
+  }
 
   const configuredMacPasskeySigning =
     options.platform === "mac" && options.signed
