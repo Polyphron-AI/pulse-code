@@ -13,7 +13,7 @@ import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as ServerConfig from "../config.ts";
-import { ProjectionSnapshotQuery } from "../orchestration/Services/ProjectionSnapshotQuery.ts";
+import * as Orchestrator from "../orchestration-v2/Orchestrator.ts";
 import * as MailConfig from "./MailConfigService.ts";
 import * as MailOAuth from "./MailOAuth.ts";
 
@@ -48,7 +48,7 @@ const makeLayer = (endpoint: TokenEndpoint) => {
   const mailConfig = MailConfig.layer.pipe(
     Layer.provide(ServerSecretStore.layer.pipe(Layer.provide(configLayer))),
     Layer.provide(configLayer),
-    Layer.provide(Layer.mock(ProjectionSnapshotQuery)({})),
+    Layer.provide(Layer.mock(Orchestrator.OrchestratorV2)({})),
   );
   return MailOAuth.layer.pipe(
     Layer.provideMerge(mailConfig),

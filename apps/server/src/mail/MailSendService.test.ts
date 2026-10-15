@@ -9,7 +9,7 @@ import {
   ProjectId,
   ThreadId,
   type MailAccountInput,
-  type OrchestrationCommand,
+  type MailSendApproval,
 } from "@t3tools/contracts";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
@@ -17,15 +17,17 @@ import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Queue from "effect/Queue";
+import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
 
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as ServerConfig from "../config.ts";
 import { ServerEnvironmentIdentity } from "../environment/ServerEnvironment.ts";
-import { OrchestrationEngineService } from "../orchestration/Services/OrchestrationEngine.ts";
-import { ProjectionSnapshotQuery } from "../orchestration/Services/ProjectionSnapshotQuery.ts";
+import * as Orchestrator from "../orchestration-v2/Orchestrator.ts";
 import { SqlitePersistenceMemory } from "../persistence/Layers/Sqlite.ts";
 import * as MailSendApprovals from "../persistence/MailSendApprovals.ts";
+import * as ProjectService from "../project/ProjectService.ts";
 import * as MailConfig from "./MailConfigService.ts";
 import type { MailLookup } from "./MailNetworkPolicy.ts";
 import { MailOAuth } from "./MailOAuth.ts";
@@ -48,38 +50,29 @@ NodeFS.writeFileSync(NodePath.join(workspaceRoot, "notes.txt"), "project notes")
 NodeFS.writeFileSync(NodePath.join(outsideRoot, "secret.txt"), "not for mail");
 NodeFS.symlinkSync(outsideRoot, NodePath.join(workspaceRoot, "escape"), "junction");
 
-const dispatched: Array<OrchestrationCommand> = [];
-
 const baseLayer = () => {
   const configLayer = ServerConfig.layerTest(process.cwd(), { prefix: "pulse-mail-send-test-" });
-  const snapshots = Layer.mock(ProjectionSnapshotQuery)({
-    getThreadShellById: (id) =>
-      Effect.succeed(id === threadId ? Option.some({ projectId } as never) : Option.none()),
-    getThreadCheckpointContext: (id) =>
+  const orchestrator = Layer.mock(Orchestrator.OrchestratorV2)({
+    getThreadShell: (id) =>
       Effect.succeed(
-        id === threadId
-          ? Option.some({ threadId, projectId, workspaceRoot, worktreePath: null, checkpoints: [] })
-          : Option.none(),
+        id === threadId ? ({ projectId, worktreePath: null, deletedAt: null } as never) : null,
       ),
   });
   const mailConfig = MailConfig.layer.pipe(
     Layer.provide(ServerSecretStore.layer.pipe(Layer.provide(configLayer))),
     Layer.provide(configLayer),
-    Layer.provide(snapshots),
+    Layer.provide(orchestrator),
   );
   return Layer.mergeAll(
     mailConfig,
-    snapshots,
+    orchestrator,
+    Layer.mock(ProjectService.ProjectService)({
+      getById: (id) =>
+        id === projectId ? Effect.succeedSome({ workspaceRoot } as never) : Effect.succeedNone,
+    }),
     MailSendApprovals.layer.pipe(Layer.provideMerge(SqlitePersistenceMemory)),
     Layer.mock(MailOAuth)({
       login: () => Effect.succeed({ type: "password", password: "hunter2" }),
-    }),
-    Layer.mock(OrchestrationEngineService)({
-      dispatch: (command) =>
-        Effect.sync(() => {
-          dispatched.push(command);
-          return { sequence: dispatched.length };
-        }),
     }),
     Layer.succeed(
       ServerEnvironmentIdentity,
@@ -186,6 +179,20 @@ const setup = (mailboxes: Array<FakeImapMailbox> = [], capabilities = "UIDPLUS")
     return { config, account, service, smtp, sent, afterData, options };
   });
 
+/** Every list the service pushes for the thread, starting with the one sent on subscribe. */
+const watchThread = (service: MailSend.MailSendService["Service"]) =>
+  Effect.gen(function* () {
+    const pushed = yield* Queue.unbounded<ReadonlyArray<MailSendApproval>>();
+    yield* service.subscribeThread(threadId).pipe(
+      Stream.runForEach((approvals) => Queue.offer(pushed, approvals)),
+      Effect.forkScoped({ startImmediately: true }),
+    );
+    return pushed;
+  });
+
+const statuses = (approvals: ReadonlyArray<MailSendApproval>) =>
+  approvals.map((approval) => [approval.id, approval.status]);
+
 const kindOf = <A>(effect: Effect.Effect<A, { kind: string }>) =>
   effect.pipe(
     Effect.map(() => "ok"),
@@ -211,16 +218,6 @@ describe("MailSendService", () => {
         },
       ]);
       expect(smtp.connections()).toBe(0);
-      const activity = dispatched.at(-1);
-      expect(activity).toMatchObject({
-        type: "thread.activity.append",
-        threadId,
-        activity: {
-          tone: "approval",
-          kind: "mail.send-approval",
-          payload: { approvalId: approval.id },
-        },
-      });
 
       const wrong = "0".repeat(64);
       expect(
@@ -236,14 +233,29 @@ describe("MailSendService", () => {
         digest: approval.digest,
       });
       expect(accepted.status).toBe("accepted");
-      expect(dispatched.at(-1)).toMatchObject({
-        activity: { kind: "mail.send-approval.resolved", payload: { approvalId: approval.id } },
-      });
       expect(dataCommands(smtp)).toBe(1);
       const recipients = smtp.received.filter(({ line }) => /^RCPT/i.test(line));
       expect(recipients).toHaveLength(3);
       expect(smtp.received.some(({ line }) => /^bcc:/i.test(line))).toBe(false);
       expect(sent.messages).toHaveLength(1);
+    }).pipe(Effect.scoped, Effect.provide(baseLayer())),
+  );
+
+  it.effect("pushes the thread's approvals on subscribe and after each change", () =>
+    Effect.gen(function* () {
+      const { service } = yield* setup();
+      const pushed = yield* watchThread(service);
+      expect(yield* Queue.take(pushed)).toEqual([]);
+
+      const approval = yield* service.prepare({ threadId, content });
+      expect(statuses(yield* Queue.take(pushed))).toEqual([[approval.id, "pending"]]);
+
+      yield* service.respond({
+        approvalId: approval.id,
+        decision: "decline",
+        digest: approval.digest,
+      });
+      expect(statuses(yield* Queue.take(pushed))).toEqual([[approval.id, "declined"]]);
     }).pipe(Effect.scoped, Effect.provide(baseLayer())),
   );
 
@@ -287,16 +299,22 @@ describe("MailSendService", () => {
     Effect.gen(function* () {
       const { service } = yield* setup();
       const first = yield* service.prepare({ threadId, content });
-      yield* service.prepare({ threadId, content: { ...content, subject: "Again" } });
+      const pushed = yield* watchThread(service);
+      yield* Queue.take(pushed);
+      const second = yield* service.prepare({
+        threadId,
+        content: { ...content, subject: "Again" },
+      });
       expect((yield* service.status(first.id)).status).toBe("invalidated");
-      expect(dispatched).toContainEqual(
-        expect.objectContaining({
-          activity: expect.objectContaining({
-            kind: "mail.send-approval.resolved",
-            payload: { approvalId: first.id },
-          }),
-        }),
-      );
+      // Subscribers see the earlier approval close once the new one is listed.
+      let latest = yield* Queue.take(pushed);
+      while (!latest.some((approval) => approval.id === second.id)) {
+        latest = yield* Queue.take(pushed);
+      }
+      expect(Object.fromEntries(statuses(latest))).toEqual({
+        [first.id]: "invalidated",
+        [second.id]: "pending",
+      });
     }).pipe(Effect.scoped, Effect.provide(baseLayer())),
   );
 

@@ -24,7 +24,7 @@ import type * as Scope from "effect/Scope";
 
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as ServerConfig from "../config.ts";
-import { ProjectionSnapshotQuery } from "../orchestration/Services/ProjectionSnapshotQuery.ts";
+import * as Orchestrator from "../orchestration-v2/Orchestrator.ts";
 
 const CONFIG_FILE = "pulse-mail.json";
 const MAX_ACCOUNTS = 32;
@@ -204,7 +204,7 @@ export const make = Effect.gen(function* () {
   const crypto = yield* Crypto.Crypto;
   const config = yield* ServerConfig.ServerConfig;
   const secrets = yield* ServerSecretStore.ServerSecretStore;
-  const snapshots = yield* ProjectionSnapshotQuery;
+  const orchestrator = yield* Orchestrator.OrchestratorV2;
   const lock = yield* Semaphore.make(1);
   const changes = yield* PubSub.unbounded<MailAccessChange>();
   const configPath = path.join(config.stateDir, CONFIG_FILE);
@@ -552,13 +552,12 @@ export const make = Effect.gen(function* () {
     );
 
   const projectOfThread = (threadId: ThreadId) =>
-    snapshots.getThreadShellById(threadId).pipe(
+    orchestrator.getThreadShell(threadId).pipe(
       Effect.mapError(() => fail("unavailable", "Could not read the thread.")),
-      Effect.flatMap(
-        Option.match({
-          onNone: () => Effect.fail(fail("access-denied", "This thread is not available.")),
-          onSome: (thread) => Effect.succeed(thread.projectId),
-        }),
+      Effect.flatMap((thread) =>
+        thread === null || thread.deletedAt !== null
+          ? Effect.fail(fail("access-denied", "This thread is not available."))
+          : Effect.succeed(thread.projectId),
       ),
     );
 

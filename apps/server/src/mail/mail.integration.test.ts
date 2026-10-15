@@ -15,7 +15,6 @@ import { describe, expect, it } from "@effect/vitest";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 import { McpSchema, McpServer } from "effect/unstable/ai";
 
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
@@ -24,10 +23,10 @@ import { ServerEnvironmentIdentity } from "../environment/ServerEnvironment.ts";
 import * as McpInvocationContext from "../mcp/McpInvocationContext.ts";
 import * as MailHandlers from "../mcp/toolkits/mail/handlers.ts";
 import { MailToolkit } from "../mcp/toolkits/mail/tools.ts";
-import { OrchestrationEngineService } from "../orchestration/Services/OrchestrationEngine.ts";
-import { ProjectionSnapshotQuery } from "../orchestration/Services/ProjectionSnapshotQuery.ts";
+import * as Orchestrator from "../orchestration-v2/Orchestrator.ts";
 import { SqlitePersistenceMemory } from "../persistence/Layers/Sqlite.ts";
 import * as MailSendApprovals from "../persistence/MailSendApprovals.ts";
+import * as ProjectService from "../project/ProjectService.ts";
 import * as MailConfig from "./MailConfigService.ts";
 import type { MailLookup } from "./MailNetworkPolicy.ts";
 import { MailOAuth } from "./MailOAuth.ts";
@@ -49,29 +48,26 @@ const workspaceRoot = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "pulse-m
 /** One environment: its own state dir, secret store, mail config, and approval store. */
 const baseLayer = (prefix: string) => {
   const configLayer = ServerConfig.layerTest(process.cwd(), { prefix });
-  const snapshots = Layer.mock(ProjectionSnapshotQuery)({
-    getThreadShellById: (id) =>
-      Effect.succeed(id === threadId ? Option.some({ projectId } as never) : Option.none()),
-    getThreadCheckpointContext: (id) =>
+  const orchestrator = Layer.mock(Orchestrator.OrchestratorV2)({
+    getThreadShell: (id) =>
       Effect.succeed(
-        id === threadId
-          ? Option.some({ threadId, projectId, workspaceRoot, worktreePath: null, checkpoints: [] })
-          : Option.none(),
+        id === threadId ? ({ projectId, worktreePath: null, deletedAt: null } as never) : null,
       ),
   });
   return Layer.mergeAll(
     MailConfig.layer.pipe(
       Layer.provide(ServerSecretStore.layer.pipe(Layer.provide(configLayer))),
       Layer.provide(configLayer),
-      Layer.provide(snapshots),
+      Layer.provide(orchestrator),
     ),
-    snapshots,
+    orchestrator,
+    Layer.mock(ProjectService.ProjectService)({
+      getById: (id) =>
+        id === projectId ? Effect.succeedSome({ workspaceRoot } as never) : Effect.succeedNone,
+    }),
     MailSendApprovals.layer.pipe(Layer.provideMerge(SqlitePersistenceMemory)),
     Layer.mock(MailOAuth)({
       login: () => Effect.succeed({ type: "password", password: "hunter2" }),
-    }),
-    Layer.mock(OrchestrationEngineService)({
-      dispatch: () => Effect.succeed({ sequence: 1 }),
     }),
     Layer.succeed(
       ServerEnvironmentIdentity,

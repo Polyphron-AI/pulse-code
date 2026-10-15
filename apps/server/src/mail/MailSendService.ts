@@ -1,10 +1,6 @@
 import * as NodeCrypto from "node:crypto";
 
 import {
-  CommandId,
-  EventId,
-  MAIL_SEND_APPROVAL_ACTIVITY_KIND,
-  MAIL_SEND_APPROVAL_RESOLVED_ACTIVITY_KIND,
   MailError,
   ProjectId,
   ThreadId,
@@ -23,18 +19,19 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as PubSub from "effect/PubSub";
+import * as Stream from "effect/Stream";
 import type { AddressObject, ParsedMail } from "mailparser";
 import MailComposer from "nodemailer/lib/mail-composer";
 import { detectMimeType } from "nodemailer/lib/mime-funcs";
 
-import { OrchestrationEngineService } from "../orchestration/Services/OrchestrationEngine.ts";
-import { ProjectionSnapshotQuery } from "../orchestration/Services/ProjectionSnapshotQuery.ts";
 import { ServerEnvironmentIdentity } from "../environment/ServerEnvironment.ts";
+import * as Orchestrator from "../orchestration-v2/Orchestrator.ts";
 import {
   MailSendApprovalRepository,
   type MailSendApprovalRecord,
   type MailSourceDraft,
 } from "../persistence/MailSendApprovals.ts";
+import * as ProjectService from "../project/ProjectService.ts";
 import { MailConfigService } from "./MailConfigService.ts";
 import type { MailConnectionOptions } from "./MailConnection.ts";
 import { messageVersion, readMessageSource } from "./MailImapRead.ts";
@@ -87,6 +84,10 @@ export class MailSendService extends Context.Service<
     readonly listThread: (
       threadId: ThreadId,
     ) => Effect.Effect<ReadonlyArray<MailSendApproval>, MailError>;
+    /** The thread's approvals now, then again after each change to any of them. */
+    readonly subscribeThread: (
+      threadId: ThreadId,
+    ) => Stream.Stream<ReadonlyArray<MailSendApproval>, MailError>;
   }
 >()("t3/mail/MailSendService") {}
 
@@ -168,8 +169,8 @@ export const make = (
     const config = yield* MailConfigService;
     const oauth = yield* MailOAuth;
     const repo = yield* MailSendApprovalRepository;
-    const engine = yield* OrchestrationEngineService;
-    const projections = yield* ProjectionSnapshotQuery;
+    const orchestrator = yield* Orchestrator.OrchestratorV2;
+    const projects = yield* ProjectService.ProjectService;
     const environment = yield* ServerEnvironmentIdentity;
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
@@ -180,12 +181,16 @@ export const make = (
     const readAttachments = (threadId: ThreadId, paths: ReadonlyArray<string>) =>
       Effect.gen(function* () {
         if (paths.length === 0) return [];
-        const context = yield* projections
-          .getThreadCheckpointContext(threadId)
+        const thread = yield* orchestrator
+          .getThreadShell(threadId)
           .pipe(Effect.mapError(storeError));
-        if (Option.isNone(context)) return yield* fail("not-found", "This thread was not found.");
+        if (thread === null || thread.deletedAt !== null) {
+          return yield* fail("not-found", "This thread was not found.");
+        }
+        const project = yield* projects.getById(thread.projectId).pipe(Effect.mapError(storeError));
+        if (Option.isNone(project)) return yield* fail("not-found", "This project was not found.");
         const root = yield* fs
-          .realPath(context.value.worktreePath ?? context.value.workspaceRoot)
+          .realPath(thread.worktreePath ?? project.value.workspaceRoot)
           .pipe(Effect.mapError(() => fail("not-found", "The project folder is missing.")));
         return yield* Effect.forEach(paths, (relative) =>
           Effect.gen(function* () {
@@ -219,45 +224,17 @@ export const make = (
         );
       });
 
-    const appendApprovalActivity = (
-      threadId: ThreadId,
-      approvalId: string,
-      createdAt: string,
-      resolved = false,
-    ) =>
-      engine
-        .dispatch({
-          type: "thread.activity.append",
-          commandId: CommandId.make(`server:mail-send-approval:${NodeCrypto.randomUUID()}`),
-          threadId,
-          activity: {
-            id: EventId.make(NodeCrypto.randomUUID()),
-            tone: resolved ? "info" : "approval",
-            kind: resolved
-              ? MAIL_SEND_APPROVAL_RESOLVED_ACTIVITY_KIND
-              : MAIL_SEND_APPROVAL_ACTIVITY_KIND,
-            summary: resolved ? "Email approval answered" : "Email waiting for approval",
-            payload: { approvalId },
-            turnId: null,
-            createdAt,
-          },
-          createdAt,
-        })
-        .pipe(Effect.mapError(() => fail("unavailable", "Pulse could not record the approval.")));
+    /** Threads whose approvals changed. Subscribers re-read the list on each one. */
+    const threadChanges = yield* PubSub.unbounded<ThreadId>();
+    const announce = (threadId: ThreadId) => PubSub.publish(threadChanges, threadId);
 
     /** Rows that left pending without an answer still close on every client. */
-    const announceResolved = (
-      rows: ReadonlyArray<{ readonly id: string; readonly threadId: string }>,
-    ) =>
-      Effect.flatMap(now, (at) =>
-        Effect.forEach(
-          rows,
-          (row) => appendApprovalActivity(ThreadId.make(row.threadId), row.id, at, true),
-          {
-            discard: true,
-          },
-        ),
-      ).pipe(Effect.catch((error) => Effect.logWarning("mail approval activity failed", error)));
+    const announceResolved = (rows: ReadonlyArray<{ readonly threadId: string }>) =>
+      Effect.forEach(
+        new Set(rows.map((row) => row.threadId)),
+        (threadId) => announce(ThreadId.make(threadId)),
+        { discard: true },
+      );
 
     const prepare = (input: MailPrepareInput) =>
       Effect.gen(function* () {
@@ -373,7 +350,7 @@ export const make = (
             expiresAt: isoAt(createdMs + APPROVAL_TTL_MS),
           }),
         );
-        yield* appendApprovalActivity(threadId, id, createdAt);
+        yield* announce(threadId);
         return yield* status(id);
       });
 
@@ -494,20 +471,25 @@ export const make = (
             }
             return yield* status(input.approvalId);
           })
-      ).pipe(
-        // The decision already stands; a missed activity only delays other clients' refresh.
-        Effect.tap((approval) =>
-          Effect.flatMap(now, (at) =>
-            appendApprovalActivity(approval.threadId, approval.id, at, true),
-          ).pipe(
-            Effect.catch((error) => Effect.logWarning("mail approval activity failed", error)),
-          ),
-        ),
-      );
+      ).pipe(Effect.tap((approval) => announce(approval.threadId)));
 
     const listThread = (threadId: ThreadId) =>
       Effect.all([store(repo.listForThread(threadId)), now]).pipe(
         Effect.map(([records, at]) => records.map((record) => toApproval(record, at))),
+      );
+
+    const subscribeThread = (threadId: ThreadId) =>
+      Stream.unwrap(
+        Effect.gen(function* () {
+          // Subscribe before the first read so a change during it is not missed.
+          const subscription = yield* PubSub.subscribe(threadChanges);
+          return Stream.concat(
+            Stream.make(threadId),
+            Stream.fromSubscription(subscription).pipe(
+              Stream.filter((changed) => changed === threadId),
+            ),
+          ).pipe(Stream.mapEffect(() => listThread(threadId)));
+        }),
       );
 
     yield* store(repo.sweepAfterRestart(yield* now));
@@ -522,7 +504,7 @@ export const make = (
       ),
     );
 
-    return MailSendService.of({ prepare, respond, status, listThread });
+    return MailSendService.of({ prepare, respond, status, listThread, subscribeThread });
   });
 
 export const layer = (options?: Parameters<typeof make>[0]) =>

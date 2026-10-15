@@ -12,7 +12,7 @@ import * as PubSub from "effect/PubSub";
 
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as ServerConfig from "../config.ts";
-import { ProjectionSnapshotQuery } from "../orchestration/Services/ProjectionSnapshotQuery.ts";
+import * as Orchestrator from "../orchestration-v2/Orchestrator.ts";
 import * as MailConfig from "./MailConfigService.ts";
 
 const projectA = ProjectId.make("project-a");
@@ -21,12 +21,12 @@ const threadA = ThreadId.make("thread-a");
 const threadB = ThreadId.make("thread-b");
 const threadProjects: Record<string, ProjectId> = { [threadA]: projectA, [threadB]: projectB };
 
-const snapshotLayer = Layer.mock(ProjectionSnapshotQuery)({
-  getThreadShellById: (threadId) =>
+const orchestratorLayer = Layer.mock(Orchestrator.OrchestratorV2)({
+  getThreadShell: (threadId) =>
     Effect.succeed(
       threadProjects[threadId]
-        ? Option.some({ projectId: threadProjects[threadId] } as never)
-        : Option.none(),
+        ? ({ projectId: threadProjects[threadId], deletedAt: null } as never)
+        : null,
     ),
 });
 
@@ -36,7 +36,7 @@ const makeLayer = (fileSystem?: FileSystem.FileSystem) => {
   const base = MailConfig.layer.pipe(
     Layer.provide(secretLayer),
     Layer.provide(configLayer),
-    Layer.provide(snapshotLayer),
+    Layer.provide(orchestratorLayer),
   );
   const mail = fileSystem
     ? base.pipe(Layer.provide(Layer.succeed(FileSystem.FileSystem, fileSystem)))

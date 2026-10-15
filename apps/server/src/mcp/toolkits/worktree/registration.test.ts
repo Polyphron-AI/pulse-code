@@ -13,6 +13,9 @@ import { HttpBody, HttpClient, HttpRouter } from "effect/unstable/http";
 
 import * as ServerEnvironment from "../../../environment/ServerEnvironment.ts";
 import * as GitWorkflowService from "../../../git/GitWorkflowService.ts";
+import { MailConfigService } from "../../../mail/MailConfigService.ts";
+import { MailOAuth } from "../../../mail/MailOAuth.ts";
+import { MailSendService } from "../../../mail/MailSendService.ts";
 import * as ProviderAdapterRegistry from "../../../orchestration-v2/ProviderAdapterRegistry.ts";
 import * as ThreadManagementService from "../../../orchestration-v2/ThreadManagementService.ts";
 import * as ProjectService from "../../../project/ProjectService.ts";
@@ -38,6 +41,9 @@ const StubServicesLive = Layer.mergeAll(
   Layer.mock(GitWorkflowService.GitWorkflowService)({}),
   Layer.mock(ProjectSetupScriptRunner.ProjectSetupScriptRunner)({}),
   Layer.mock(VcsStatusBroadcaster.VcsStatusBroadcaster)({}),
+  Layer.mock(MailConfigService)({}),
+  Layer.mock(MailOAuth)({}),
+  Layer.mock(MailSendService)({}),
 );
 
 const ToolsListPayload = Schema.fromJsonString(
