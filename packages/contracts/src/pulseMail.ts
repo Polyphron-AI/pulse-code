@@ -292,7 +292,10 @@ export const PulseMailRpcs = [
     success: Schema.Void,
     error: errors,
   }),
-  /** The thread's live approvals on subscribe, then again after each change to any of them. */
+  /**
+   * The thread's pending and submitting approvals plus any resolved in the last 30 minutes, on
+   * subscribe and again after each change to any of them.
+   */
   Rpc.make(PULSE_MAIL_METHODS.subscribeThreadApprovals, {
     payload: Schema.Struct({ threadId: ThreadId }),
     success: Schema.Array(MailSendApproval),

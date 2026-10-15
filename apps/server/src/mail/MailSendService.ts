@@ -82,8 +82,9 @@ export class MailSendService extends Context.Service<
     }) => Effect.Effect<MailSendApproval, MailError>;
     readonly status: (approvalId: string) => Effect.Effect<MailSendApproval, MailError>;
     /**
-     * The thread's live approvals now, then again after each change to any of them. An approval
-     * this stream already sent keeps updating after it resolves; older history is never sent.
+     * The thread's pending and submitting approvals, plus any resolved in the last 30 minutes, now
+     * and again after each change to any of them. A client that subscribes again, for example after
+     * a reconnect, still gets the outcome of a recent send; older history is never sent.
      */
     readonly subscribeThread: (
       threadId: ThreadId,
@@ -110,6 +111,10 @@ const toApproval = (record: MailSendApprovalRecord, now: string): MailSendApprov
   ...(record.completedAt === null ? {} : { completedAt: record.completedAt }),
   ...(record.error === null ? {} : { error: record.error }),
 });
+
+/** When an approval stopped waiting: its send finished, someone decided it, or it expired. */
+const resolvedAt = (approval: MailSendApproval) =>
+  approval.completedAt ?? approval.decidedAt ?? approval.expiresAt;
 
 const addressesOf = (field: AddressObject | Array<AddressObject> | undefined) =>
   (field === undefined ? [] : Array.isArray(field) ? field : [field]).flatMap((group) =>
@@ -483,9 +488,22 @@ export const make = (
         ? approve(input.approvalId, input.digest)
         : decline(input.approvalId);
 
+    // Resolved approvals stay for one approval lifetime: long enough for a reconnecting client to
+    // get the outcome, short enough to keep each push small.
     const listThread = (threadId: ThreadId) =>
-      Effect.all([store(repo.listForThread(threadId)), now]).pipe(
-        Effect.map(([records, at]) => records.map((record) => toApproval(record, at))),
+      Effect.all([store(repo.listForThread(threadId)), Clock.currentTimeMillis]).pipe(
+        Effect.map(([records, nowMs]) => {
+          const at = isoAt(nowMs);
+          const since = isoAt(nowMs - APPROVAL_TTL_MS);
+          return records
+            .map((record) => toApproval(record, at))
+            .filter(
+              (approval) =>
+                approval.status === "pending" ||
+                approval.status === "submitting" ||
+                resolvedAt(approval) > since,
+            );
+        }),
       );
 
     const subscribeThread = (threadId: ThreadId) =>
@@ -493,25 +511,12 @@ export const make = (
         Effect.gen(function* () {
           // Subscribe before the first read so a change during it is not missed.
           const subscription = yield* PubSub.subscribe(threadChanges);
-          const sent = new Set<string>();
           return Stream.concat(
             Stream.make(threadId),
             Stream.fromSubscription(subscription).pipe(
               Stream.filter((changed) => changed === threadId),
             ),
-          ).pipe(
-            Stream.mapEffect(() => listThread(threadId)),
-            Stream.map((approvals) => {
-              const live = approvals.filter(
-                (approval) =>
-                  approval.status === "pending" ||
-                  approval.status === "submitting" ||
-                  sent.has(approval.id),
-              );
-              for (const approval of live) sent.add(approval.id);
-              return live;
-            }),
-          );
+          ).pipe(Stream.mapEffect(() => listThread(threadId)));
         }),
       );
 

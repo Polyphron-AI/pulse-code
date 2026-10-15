@@ -12,6 +12,7 @@ import {
   type MailSendApproval,
 } from "@t3tools/contracts";
 import { describe, expect, it } from "@effect/vitest";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
@@ -25,6 +26,7 @@ import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as ServerConfig from "../config.ts";
 import { ServerEnvironmentIdentity } from "../environment/ServerEnvironment.ts";
 import * as Orchestrator from "../orchestration-v2/Orchestrator.ts";
+import { PersistenceSqlError } from "../persistence/Errors.ts";
 import { SqlitePersistenceMemory } from "../persistence/Layers/Sqlite.ts";
 import * as MailSendApprovals from "../persistence/MailSendApprovals.ts";
 import * as ProjectService from "../project/ProjectService.ts";
@@ -198,6 +200,23 @@ const watchThread = (service: MailSend.MailSendService["Service"]) =>
     return pushed;
   });
 
+/** A send service over the real store with some of its calls replaced by the test. */
+const makeWithStore = (
+  options: Parameters<typeof MailSend.make>[0],
+  replace: (
+    store: MailSendApprovals.MailSendApprovalRepository["Service"],
+  ) => Partial<MailSendApprovals.MailSendApprovalRepository["Service"]>,
+) =>
+  Effect.gen(function* () {
+    const store = yield* MailSendApprovals.MailSendApprovalRepository;
+    return yield* MailSend.make(options).pipe(
+      Effect.provideService(MailSendApprovals.MailSendApprovalRepository, {
+        ...store,
+        ...replace(store),
+      }),
+    );
+  });
+
 const statuses = (approvals: ReadonlyArray<MailSendApproval>) =>
   approvals.map((approval) => [approval.id, approval.status]);
 
@@ -267,21 +286,33 @@ describe("MailSendService", () => {
     }).pipe(Effect.scoped, Effect.provide(baseLayer())),
   );
 
-  it.effect("pushes only live approvals and keeps updating the ones it sent", () =>
+  it.effect("pushes live approvals plus those resolved in the last 30 minutes", () =>
     Effect.gen(function* () {
       const { service } = yield* setup();
       const old = yield* service.prepare({ threadId, content });
       yield* service.respond({ approvalId: old.id, decision: "decline", digest: old.digest });
+      yield* TestClock.adjust("31 minutes");
+      // Declined longer ago than the window, so it is left out.
       const pushed = yield* watchThread(service);
       expect(yield* Queue.take(pushed)).toEqual([]);
 
-      const shown = yield* service.prepare({ threadId, content });
-      expect(statuses(yield* Queue.take(pushed))).toEqual([[shown.id, "pending"]]);
-      yield* service.respond({ approvalId: shown.id, decision: "decline", digest: shown.digest });
-      expect(statuses(yield* Queue.take(pushed))).toEqual([[shown.id, "declined"]]);
+      const recent = yield* service.prepare({ threadId, content });
+      expect(statuses(yield* Queue.take(pushed))).toEqual([[recent.id, "pending"]]);
+      yield* service.respond({ approvalId: recent.id, decision: "decline", digest: recent.digest });
+      expect(statuses(yield* Queue.take(pushed))).toEqual([[recent.id, "declined"]]);
 
-      // A new subscriber never saw it pending, so it gets no resolved history.
-      expect(yield* Queue.take(yield* watchThread(service))).toEqual([]);
+      // A client that subscribes again after the decision, as on a reconnect, still gets it.
+      yield* TestClock.adjust("29 minutes");
+      expect(statuses(yield* Queue.take(yield* watchThread(service)))).toEqual([
+        [recent.id, "declined"],
+      ]);
+
+      // One that expired undecided counts from its expiry.
+      const expiring = yield* service.prepare({ threadId, content });
+      yield* TestClock.adjust("31 minutes");
+      expect(statuses(yield* Queue.take(yield* watchThread(service)))).toEqual([
+        [expiring.id, "expired"],
+      ]);
     }).pipe(Effect.scoped, Effect.provide(baseLayer())),
   );
 
@@ -461,12 +492,71 @@ describe("MailSendService", () => {
         service.respond({ approvalId: approval.id, decision: "approve", digest: approval.digest }),
       );
       expect(statuses(yield* Queue.take(pushed))).toEqual([[approval.id, "submitting"]]);
-      // The client drops while the server is still answering.
+      // The client drops mid-send. The interrupt may land before SMTP even connects; the whole
+      // approve is uninterruptible, so the send completes either way.
       const dropped = yield* Effect.forkChild(Fiber.interrupt(fiber), { startImmediately: true });
       release();
       yield* Fiber.join(dropped);
       expect(statuses(yield* Queue.take(pushed))).toEqual([[approval.id, "accepted"]]);
       expect((yield* service.status(approval.id)).status).toBe("accepted");
+    }).pipe(Effect.scoped, Effect.provide(baseLayer())),
+  );
+
+  it.effect("records and announces a decline when the client drops mid-way", () =>
+    Effect.gen(function* () {
+      const { options } = yield* setup();
+      const entered = yield* Deferred.make<void>();
+      const proceed = yield* Deferred.make<void>();
+      const service = yield* makeWithStore(options, (store) => ({
+        decline: (input) =>
+          Deferred.succeed(entered, undefined).pipe(
+            Effect.andThen(Deferred.await(proceed)),
+            Effect.andThen(store.decline(input)),
+          ),
+      }));
+      const pushed = yield* watchThread(service);
+      yield* Queue.take(pushed);
+      const approval = yield* service.prepare({ threadId, content });
+      expect(statuses(yield* Queue.take(pushed))).toEqual([[approval.id, "pending"]]);
+
+      const fiber = yield* Effect.forkChild(
+        service.respond({ approvalId: approval.id, decision: "decline", digest: approval.digest }),
+      );
+      yield* Deferred.await(entered);
+      // The client drops while the decline is being stored.
+      const dropped = yield* Effect.forkChild(Fiber.interrupt(fiber), { startImmediately: true });
+      yield* Deferred.succeed(proceed, undefined);
+      yield* Fiber.join(dropped);
+      expect((yield* service.status(approval.id)).status).toBe("declined");
+      expect(statuses(yield* Queue.take(pushed))).toEqual([[approval.id, "declined"]]);
+    }).pipe(Effect.scoped, Effect.provide(baseLayer())),
+  );
+
+  it.effect("announces a supersede once even when the new approval cannot be saved", () =>
+    Effect.gen(function* () {
+      const { options } = yield* setup();
+      let insertFails = false;
+      const service = yield* makeWithStore(options, (store) => ({
+        insertPending: (input) =>
+          insertFails
+            ? Effect.fail(new PersistenceSqlError({ operation: "insertMailSendApproval" }))
+            : store.insertPending(input),
+      }));
+      const first = yield* service.prepare({ threadId, content });
+      const pushed = yield* watchThread(service);
+      expect(statuses(yield* Queue.take(pushed))).toEqual([[first.id, "pending"]]);
+
+      insertFails = true;
+      expect(yield* kindOf(service.prepare({ threadId, content }))).toBe("unavailable");
+      expect(statuses(yield* Queue.take(pushed))).toEqual([[first.id, "invalidated"]]);
+
+      // The failed prepare pushed once, so the next push is this prepare's.
+      insertFails = false;
+      const third = yield* service.prepare({ threadId, content });
+      expect(Object.fromEntries(statuses(yield* Queue.take(pushed)))).toEqual({
+        [first.id]: "invalidated",
+        [third.id]: "pending",
+      });
     }).pipe(Effect.scoped, Effect.provide(baseLayer())),
   );
 
