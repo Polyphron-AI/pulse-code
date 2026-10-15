@@ -40,6 +40,7 @@ it.each([cachedMessage, null])("shows a read failure and retry with data %j", (d
       environmentId={EnvironmentId.make("env_1")}
       item={{ type: "mail", accountId: "acct_1", messageId: "<message@example.com>" }}
       onBack={() => {}}
+      onOpen={() => {}}
     />,
   );
 

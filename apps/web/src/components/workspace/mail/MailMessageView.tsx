@@ -1,17 +1,25 @@
-import type { EnvironmentId } from "@t3tools/contracts";
+import type { EnvironmentId, WorkspaceItemRef } from "@t3tools/contracts";
 import { ArrowLeftIcon, PaperclipIcon } from "lucide-react";
 import { useState } from "react";
 
 import { pulseMailMessage } from "../../../mail/mailReadState";
 import { useEnvironmentQuery } from "../../../state/query";
 import { Button } from "../../ui/button";
-import { mailItemTitle, mailLinkMayBreak, mailReadInput, type MailItemRef } from "./mailItemRef";
+import { LinkedSection } from "./LinkedSection";
+import {
+  mailItemRef,
+  mailItemTitle,
+  mailLinkMayBreak,
+  mailReadInput,
+  type MailItemRef,
+} from "./mailItemRef";
 import { MailError } from "./MailNotice";
 
 interface MailMessageViewProps {
   readonly environmentId: EnvironmentId;
   readonly item: MailItemRef;
   readonly onBack: () => void;
+  readonly onOpen: (ref: WorkspaceItemRef) => void;
 }
 
 /** The reader. It reads by the item's ref, so a linked message opens even after it moved. */
@@ -52,6 +60,12 @@ export function MailMessageView(props: MailMessageViewProps) {
               />
             </dl>
           </header>
+          <LinkedSection
+            environmentId={props.environmentId}
+            item={mailItemRef(data)}
+            title={mailItemTitle(data.subject)}
+            onOpen={props.onOpen}
+          />
           {mailLinkMayBreak(props.item) ? (
             <p className="text-xs text-muted-foreground">
               This message has no Message-ID, so a link to it may break if it moves.
