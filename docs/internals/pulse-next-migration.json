@@ -1,15 +1,49 @@
 {
   "active": {
     "policyVersion": "2026-09-17",
-    "state": "in-progress",
+    "state": "implemented-awaiting-live-acceptance",
     "feature": "unified-workspace",
     "branch": "qb/feat-unified-workspace",
     "baseRevision": "090dc9cd7b",
     "spec": "docs/superpowers/specs/2026-10-14-unified-workspace-design.md",
     "plan": "docs/superpowers/plans/2026-10-14-unified-workspace.md",
     "acceptance": "In a remote browser over Tailscale, read Inbox from a real account, link a message to a project, archive the message in Gmail, and the link still opens it.",
-    "nextAction": "Wave 1, Task 2: link contracts.",
-    "updatedAt": "2026-10-15"
+    "executionPlan": ".superpowers/sdd/2026-10-14-unified-workspace/waves-2-3-execution.md",
+    "authority": "Finish Waves 2 and 3 on this branch; GPT only for parent and children. Isolated dev preview and browser verification with sample data approved; do not ask again. No PR, push, merge or deployment requested.",
+    "evidence": "Wave1 f3921cb2ba reviewed,160 tests. Waves2/3 source checkpoints7a854e84d7,aca4ca0022,cb6caf3748,e416061ade,e88d4c1e76,688a34d99f; repair9705b53cbf. Parent combined server23files298,web25files436,contracts6files53,runtime5files12,shared1file18 unique tests green across receipts (one stale web expectation corrected15/15). Affected repair recheck5webfiles23 passed, including new actual Mail Linked task/deleted route and remote Drive binding/late response cases. Server/web/contracts/runtime/shared scoped types passed; final production web rebuild exit0 with incumbent chunk/plugin timing warnings. One frozen review raised2P2 client findings; those and measured compactheader overlap repaired together. Parent actual synthetic UI/SQL/scoped MCP covers exact approved SMTP once, paired Telegram only, suggestions/cache/manual recovery, Drive OAuth/search20/account choice/disconnect/two-client reader clearing, automation cancel/no writes/idempotent idle thread+links before manual fixture run, task CRUD/settings and Browser newtab. Final desktopwidth/compact browser and raw geometry proofs passed; Impeccable[] including affected recheck, user prose4clean, diffcheckclean. Five incumbent registry lint errors remain; no new source lint errors. No real services/paid provider/physical other-device/native packaged app/human pilot tested.",
+    "slices": {
+      "workspaceInteractions": "checkpointed; Code native menu group included",
+      "conversationsAndReply": "checkpointed; synthetic IMAP/SMTP/scoped MCP/browser passed",
+      "telegramBot": "checkpointed; synthetic receive/read/scoped MCP/browser passed",
+      "suggestions": "checkpointed; selected model/cache/dismiss/manual/failure proofs passed",
+      "driveReadSearch": "checkpointed; explicit binding/search/read/OAuth and two-client rebind proofs passed",
+      "automationBrowserTasks": "checkpointed; idle-link-before-run/cancel/retry/task CRUD/browser proofs passed",
+      "integratedAcceptance": "complete for synthetic software checks; real-account, native/other-device and human pilot unrun"
+    },
+    "previewState": ".superpowers/sdd/2026-10-14-unified-workspace/preview-state.md",
+    "modelPolicy": "Parent gpt-6.1-sol high for integration; implementation/review gpt-6.1-sol low per repository policy. No Claude/Opus fallback. At most three agents for this continuation: two completed read-only discovery tasks, one implementation owner; reuse completed discovery only for a ledger-named frozen review.",
+    "nextAction": "No required software implementation remains. Keep isolated synthetic preview for review; live acceptance and human pilot remain explicitly unrun. No PR, push, merge, deployment or outreach requested.",
+    "updatedAt": "2026-10-16",
+    "implementationRevision": "9705b53cbfd31a69c092937c0909921d03f12694",
+    "requiredRemainingIntegration": "Slice6 must add workspace actions as a group in incumbent Code sidebar row menus, preserving native operations; finish accepted Browser/Files/Agents tools below Linked/Suggested using existing linked data/actions. Sequencing, not scope deferral.",
+    "frozenReview": {
+      "agent": "waves_services_reuse",
+      "baseRevision": "f3921cb2bad60de6eb61b93e5f6cdbba41750045",
+      "revision": "688a34d99f125c9d1ddfa66f085de7afee80086d",
+      "scope": "One combined Standards and Specification review; read-only, no browser/server/children",
+      "modelDeviation": "Reuse completed GPT discovery agent at inherited high effort rather than spawning a fourth agent; implementation remains GPT low.",
+      "report": ".superpowers/sdd/2026-10-14-unified-workspace/final-frozen-review.md",
+      "standards": "concerns: Mail task opener; remote Drive reader binding invalidation",
+      "specification": "concerns on same two supported triggers",
+      "resolution": "Both frozen P2 findings plus parent C1 repaired in9705b53cbf. Parent inspected patch, affected tests and one actual confirmation batch. Original Standards/Specification CONCERNS remain the immutable pre-repair verdicts; no second broad review."
+    },
+    "integratedChecks": "Combined server298/web436/contracts53/runtime12/shared18 unique tests green across receipts; web stale task expectation fixed15/15. Scoped types green; production web build exit0 with incumbent chunk/plugin warnings. Impeccable detector[]; prose4 clean.",
+    "parentVisualFinding": "compact workspace title overlaps sidebar toggle at390x844; measuredProjectsbaseline saved compact-header-baseline.json. Repair affected Mail/Projects/Telegram headers together.",
+    "completionBlockers": [
+      "Original real-mailbox remote acceptance remains unrun: read/link/archive externally/reopen with real account.",
+      "Real Google consent/provider/Telegram, physical other-device/native clients and human usability pilot remain unrun; pilot protocol prepared only."
+    ],
+    "verificationReport": ".superpowers/sdd/2026-10-14-unified-workspace/final-controller-report.md"
   },
   "providerSummaryHandoffCompaction": {
     "policyVersion": "2026-09-17",
