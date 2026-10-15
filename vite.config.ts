@@ -1,7 +1,9 @@
 import "vite-plus/test/config";
 import { defineConfig } from "vite-plus";
 import * as NodeURL from "node:url";
-import { execFileSync } from "node:child_process";
+import * as NodeProcess from "node:process";
+// @effect-diagnostics-next-line nodeBuiltinImport:off - The Windows staged formatter hook runs synchronously in build tooling, outside any Effect runtime.
+import * as NodeChildProcess from "node:child_process";
 
 /** Import restrictions every file keeps, including the one module exempt from the glyph rule. */
 const RESTRICTED_IMPORT_PATHS = [
@@ -81,12 +83,12 @@ export default defineConfig({
   staged: {
     // Formatter only for now — no lint or typecheck on commit.
     "*":
-      process.platform === "win32"
+      NodeProcess.platform === "win32"
         ? {
             title: "Format staged files in Windows-sized batches",
             task: (files) => {
               for (let offset = 0; offset < files.length; offset += 20) {
-                execFileSync(
+                NodeChildProcess.execFileSync(
                   "vp.exe",
                   ["fmt", "--no-error-on-unmatched-pattern", ...files.slice(offset, offset + 20)],
                   { stdio: "inherit" },
