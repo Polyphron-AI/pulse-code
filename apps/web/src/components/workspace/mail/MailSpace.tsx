@@ -215,7 +215,7 @@ function MailPanes(props: MailPanesProps) {
         props.source.type === "folder" ? (
           <div>
             <div
-              className="flex gap-1 border-b border-border p-2"
+              className="flex min-w-0 flex-wrap gap-1 border-b border-border p-2"
               role="group"
               aria-label="Mail view"
             >

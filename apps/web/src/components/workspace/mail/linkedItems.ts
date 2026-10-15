@@ -88,6 +88,7 @@ export function linkedItemLabel(
 /** Items this client can open today. Others still show, so agents' links stay visible. */
 export function canOpenLinkedItem(ref: WorkspaceItemRef): boolean {
   return (
+    ref.type === "task" ||
     ref.type === "mail" ||
     ref.type === "project" ||
     ref.type === "thread" ||

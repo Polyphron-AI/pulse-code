@@ -39,8 +39,13 @@ export function MailConversationList(props: Props) {
   };
   return (
     <div>
-      <form role="search" onSubmit={submit} className="flex gap-1 border-b border-border p-2">
+      <form
+        role="search"
+        onSubmit={submit}
+        className="flex min-w-0 flex-wrap gap-1 border-b border-border p-2"
+      >
         <Input
+          className="basis-full"
           size="sm"
           type="search"
           aria-label="Search conversations in this folder"

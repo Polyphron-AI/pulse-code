@@ -73,3 +73,5 @@ export * from "./talk.ts";
 
 export * from "./pulseTelegram.ts";
 export * from "./pulseDrive.ts";
+
+export * from "./pulseWorkspaceTools.ts";

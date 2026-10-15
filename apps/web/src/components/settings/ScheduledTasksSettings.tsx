@@ -1,3 +1,6 @@
+import { workspaceTools } from "../../state/workspaceTools";
+import { randomUUID } from "../../lib/utils";
+import type { WorkspaceLinkEndpoint } from "@t3tools/contracts";
 import { useAtomValue } from "@effect/atom-react";
 import {
   Clock3Icon,
@@ -470,12 +473,18 @@ function ScheduledTaskRow({
   );
 }
 
-function ScheduledTaskEditorDialog({
+export function ScheduledTaskEditorDialog({
   initialEnvironmentId,
   task,
   onClose,
+  workspaceSeed,
 }: {
   readonly initialEnvironmentId: EnvironmentId;
+  readonly workspaceSeed?: {
+    readonly source: WorkspaceLinkEndpoint;
+    readonly projectId: ProjectId;
+    readonly prompt: string;
+  };
   readonly task: ScheduledTask | null;
   readonly onClose: () => void;
 }) {
@@ -503,6 +512,8 @@ function ScheduledTaskEditorDialog({
   const upsertTask = useAtomCommand(serverEnvironment.upsertScheduledTask, {
     label: "scheduled task upsert",
   });
+  const saveAutomation = useAtomCommand(workspaceTools.saveAutomation, { reportFailure: false });
+  const [requestId] = useState(randomUUID);
   const instanceEntries = useMemo(
     () =>
       sortProviderInstanceEntries(
@@ -511,7 +522,23 @@ function ScheduledTaskEditorDialog({
     [providers, settings],
   );
   const [draft, setDraft] = useState<DraftState>(() =>
-    task ? taskToDraft(task) : { ...EMPTY_DRAFT, projectId: projects[0]?.id ?? "" },
+    task
+      ? taskToDraft(task)
+      : {
+          ...EMPTY_DRAFT,
+          projectId: workspaceSeed?.projectId ?? projects[0]?.id ?? "",
+          ...(workspaceSeed
+            ? {
+                title:
+                  `Work on ${workspaceSeed.source.title ?? workspaceSeed.source.ref.type}`.slice(
+                    0,
+                    200,
+                  ),
+                prompt: workspaceSeed.prompt,
+                workspaceMode: "root" as const,
+              }
+            : {}),
+        },
   );
   const [saving, setSaving] = useState(false);
   const submissionPending = useRef(false);
@@ -612,7 +639,12 @@ function ScheduledTaskEditorDialog({
     // Lock before React renders, and keep successful creates locked until the form closes.
     submissionPending.current = true;
     setSaving(true);
-    const result = await upsertTask({ environmentId, input });
+    const result = workspaceSeed
+      ? await saveAutomation({
+          environmentId,
+          input: { requestId, source: workspaceSeed.source, task: input },
+        })
+      : await upsertTask({ environmentId, input });
     setSaving(false);
     if (result._tag === "Failure") {
       submissionPending.current = false;
@@ -633,7 +665,9 @@ function ScheduledTaskEditorDialog({
     >
       <DialogPopup className="max-w-xl">
         <DialogHeader>
-          <DialogTitle>{draft.editingId ? "Edit task" : "New task"}</DialogTitle>
+          <DialogTitle>
+            {workspaceSeed ? "Start automation" : draft.editingId ? "Edit task" : "New task"}
+          </DialogTitle>
           <DialogDescription>
             Run a prompt automatically — on an interval or at a fixed time.
           </DialogDescription>
@@ -647,7 +681,7 @@ function ScheduledTaskEditorDialog({
             <Field label="Runs on" htmlFor="scheduled-task-environment">
               <Select
                 value={environmentId}
-                disabled={task !== null || saving}
+                disabled={task !== null || workspaceSeed !== undefined || saving}
                 onValueChange={(id) => {
                   const next = connectedEnvironments.find((entry) => entry.environmentId === id);
                   if (!next) return;

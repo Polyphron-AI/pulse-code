@@ -1,3 +1,10 @@
+import {
+  WorkspaceNativeActionsDialog,
+  workspaceNativeMenu,
+  workspaceProjectNativeMenu,
+  workspaceNativeAction,
+  type WorkspaceNativeRequest,
+} from "./workspace/WorkspaceNativeActions";
 import { ThreadHoverCard, ThreadHoverCardPopup } from "./ThreadHoverCard";
 import { CollapsibleSectionHeader } from "./ui/collapsible-section-header";
 import { setThreadChangeRequestSnapshot } from "./ThreadStatusIndicators";
@@ -2315,6 +2322,7 @@ const SidebarSearchResultRow = memo(function SidebarSearchResultRow(props: {
 });
 
 export default function Sidebar() {
+  const [workspaceRequest, setWorkspaceRequest] = useState<WorkspaceNativeRequest | null>(null);
   const projects = useProjects();
   const projectOrder = useUiStateStore((store) => store.projectOrder);
   const threads = useThreadShells();
@@ -2659,9 +2667,43 @@ export default function Sidebar() {
       event.stopPropagation();
       suppressNextScopeChangeRef.current = true;
       dispatchProjectScopeMenu({ type: "project-settings-opened" });
-      openProjectSettings(projectGroup);
+      if (event.type !== "contextmenu") {
+        openProjectSettings(projectGroup);
+        return;
+      }
+      const members = projectGroup.memberProjectRefs;
+      const actions = workspaceProjectNativeMenu(
+        members.map((member) => ({
+          label: environmentLabelById.get(member.environmentId) ?? member.environmentId,
+          capabilities: serverConfigs.get(member.environmentId)?.pulseCapabilities ?? {},
+        })),
+      );
+      const rect = event.currentTarget.getBoundingClientRect();
+      void readLocalApi()
+        ?.contextMenu.show([{ id: "project-settings", label: "Project settings" }, ...actions], {
+          x: rect.left,
+          y: rect.bottom,
+        })
+        .then((choice) => {
+          if (choice === "project-settings") {
+            openProjectSettings(projectGroup);
+            return;
+          }
+          const match = /^member:(\d+):(.*)$/.exec(choice ?? "");
+          const member = members[match ? Number(match[1]) : 0];
+          const action = workspaceNativeAction(match?.[2] ?? choice);
+          if (member && action)
+            setWorkspaceRequest({
+              environmentId: member.environmentId,
+              item: {
+                ref: { type: "project", projectId: member.projectId },
+                title: projectGroup.displayName,
+              },
+              action,
+            });
+        });
     },
-    [openProjectSettings],
+    [openProjectSettings, serverConfigs, environmentLabelById],
   );
 
   // Keep a dropped row at its destination while its server applies the
@@ -4467,35 +4509,47 @@ export default function Sidebar() {
           ) ?? null;
         const clicked = await settlePromise(() =>
           api.contextMenu.show(
-            buildThreadActionMenuItems({
-              branch: thread.branch ?? null,
-              projectFilter: threadProjectGroup
-                ? {
-                    label: threadProjectGroup.displayName,
-                    isActive: projectScopeKey === threadProjectGroup.projectKey,
-                  }
-                : null,
-              isPinned,
-              isSettled,
-              autoSettleEnabled: thread.autoSettleDisabledAt == null,
-              isSnoozed,
-              canSnoozeNow: canSnooze(thread, { now: new Date().toISOString() }),
-              isRegeneratingTitle,
-              isRunning: !threadRuntimeCanArchive(thread.runtime),
-              supports: {
-                settlement: supportsSettlement,
-                autoSettleOptOut: supportsAutoSettleOptOut,
-                snooze: supportsSnooze,
-                pinning: supportsPinning,
-                titleRegeneration: supportsTitleRegeneration,
-              },
-              snoozePresets,
-              handoffTargets,
-            }),
+            [
+              ...buildThreadActionMenuItems({
+                branch: thread.branch ?? null,
+                projectFilter: threadProjectGroup
+                  ? {
+                      label: threadProjectGroup.displayName,
+                      isActive: projectScopeKey === threadProjectGroup.projectKey,
+                    }
+                  : null,
+                isPinned,
+                isSettled,
+                autoSettleEnabled: thread.autoSettleDisabledAt == null,
+                isSnoozed,
+                canSnoozeNow: canSnooze(thread, { now: new Date().toISOString() }),
+                isRegeneratingTitle,
+                isRunning: !threadRuntimeCanArchive(thread.runtime),
+                supports: {
+                  settlement: supportsSettlement,
+                  autoSettleOptOut: supportsAutoSettleOptOut,
+                  snooze: supportsSnooze,
+                  pinning: supportsPinning,
+                  titleRegeneration: supportsTitleRegeneration,
+                },
+                snoozePresets,
+                handoffTargets,
+              }),
+              ...workspaceNativeMenu(false, threadServerConfig?.pulseCapabilities ?? {}),
+            ],
             position,
           ),
         );
         if (clicked._tag === "Failure") return;
+        const workspaceAction = workspaceNativeAction(clicked.value);
+        if (workspaceAction) {
+          setWorkspaceRequest({
+            environmentId: thread.environmentId,
+            item: { ref: { type: "thread", threadId: thread.id }, title: thread.title },
+            action: workspaceAction,
+          });
+          return;
+        }
         if (clicked.value?.startsWith("continue-in:")) {
           const instanceId = clicked.value.slice("continue-in:".length);
           const target = handoffTargets.find((candidate) => candidate.instanceId === instanceId);
@@ -4834,6 +4888,12 @@ export default function Sidebar() {
   const newThreadInProjectShortcutLabel = shortcutLabelForCommand(keybindings, "chat.newLocal");
   return (
     <>
+      {workspaceRequest ? (
+        <WorkspaceNativeActionsDialog
+          request={workspaceRequest}
+          onClose={() => setWorkspaceRequest(null)}
+        />
+      ) : null}
       <ThreadContextDragGhost />
       <SidebarChromeHeader isElectron={isElectron} />
       <SidebarContent

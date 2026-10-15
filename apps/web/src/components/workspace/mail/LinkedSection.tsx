@@ -1,3 +1,4 @@
+import { WorkspaceToolsPanel } from "../WorkspaceToolsPanel";
 import { DriveSearch, DriveFileAccess } from "../DriveFiles";
 import {
   workspaceItemKey,
@@ -50,6 +51,7 @@ export function LinkedSection(props: LinkedSectionProps) {
   const {
     workspaceLinks: available,
     workspaceSuggestions,
+    workspaceTools,
     textGenerationSelection,
   } = useMailCapabilities(props.environmentId);
   return available ? (
@@ -61,6 +63,15 @@ export function LinkedSection(props: LinkedSectionProps) {
           environmentId={props.environmentId}
           item={{ ref: props.item, title: endpointTitle(props.title) }}
           model={textGenerationSelection?.model}
+          onOpen={props.onOpen}
+        />
+      ) : null}
+      {workspaceTools ? (
+        <WorkspaceToolsPanel
+          key={workspaceItemKey(props.item)}
+          environmentId={props.environmentId}
+          item={{ ref: props.item, title: props.title }}
+          {...(props.linkedData ? { linkedData: props.linkedData } : {})}
           onOpen={props.onOpen}
         />
       ) : null}

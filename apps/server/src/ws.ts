@@ -1,3 +1,6 @@
+import { PulseWorkspaceToolsRpcs } from "@t3tools/contracts";
+import { WorkspaceTools } from "./workspace/WorkspaceTools.ts";
+import { WorkspaceAutomation } from "./workspace/WorkspaceAutomation.ts";
 import { PulseDriveRpcs } from "@t3tools/contracts";
 import { DriveService } from "./drive/DriveService.ts";
 import { OrchestrationDispatchCommandError } from "@t3tools/contracts";
@@ -578,6 +581,7 @@ const ServerWsRpcGroup = WsRpcGroup;
 // silently widens the layer's requirements to `any`. RpcServer still serves the
 // full ServerWsRpcGroup and resolves each handler by tag, so the two layers
 // together cover the group. Workspace link handlers are split out the same way.
+const WorkspaceToolsWsRpcGroup = RpcGroup.make(...PulseWorkspaceToolsRpcs);
 const DriveWsRpcGroup = RpcGroup.make(...PulseDriveRpcs);
 const TelegramWsRpcGroup = RpcGroup.make(...PulseTelegramRpcs);
 const SuggestionWsRpcGroup = RpcGroup.make(...PulseLinkSuggestionRpcs);
@@ -588,6 +592,7 @@ const MailWsRpcGroup = RpcGroup.make(
 );
 const LinksWsRpcGroup = RpcGroup.make(...PulseLinksRpcs);
 const CoreWsRpcGroup = ServerWsRpcGroup.omit(
+  ...PulseWorkspaceToolsRpcs.map((rpc) => rpc._tag),
   ...PulseDriveRpcs.map((rpc) => rpc._tag),
   ...PulseLinkSuggestionRpcs.map((rpc) => rpc._tag),
   ...PulseTelegramRpcs.map((rpc) => rpc._tag),
@@ -1230,6 +1235,23 @@ export const subscribeOrchestrationV2Shell = Effect.fn("ws.orchestrationV2.subsc
       ),
     );
   },
+);
+
+const workspaceToolsWsRpcLayer = WorkspaceToolsWsRpcGroup.toLayer(
+  Effect.gen(function* () {
+    const tools = yield* WorkspaceTools;
+    const automation = yield* WorkspaceAutomation;
+    return WorkspaceToolsWsRpcGroup.of({
+      [WS_METHODS.workspaceGetProjectConfig]: ({ projectId }) => tools.config(projectId),
+      [WS_METHODS.workspaceSaveProjectConfig]: tools.saveConfig,
+      [WS_METHODS.workspaceListTasks]: ({ projectId }) => tools.listTasks(projectId),
+      [WS_METHODS.workspaceGetTask]: ({ id }) => tools.getTask(id),
+      [WS_METHODS.workspaceUpsertTask]: tools.upsertTask,
+      [WS_METHODS.workspaceDeleteTask]: ({ id }) => tools.deleteTask(id),
+      [WS_METHODS.workspaceSubscribeChanges]: () => tools.changes,
+      [WS_METHODS.workspaceSaveAutomation]: automation.save,
+    });
+  }),
 );
 
 const driveWsRpcLayer = DriveWsRpcGroup.toLayer(
@@ -1987,6 +2009,7 @@ const makeWsRpcLayer = (
               telegramRead: true,
               workspaceSuggestions: true,
               driveRead: true,
+              workspaceTools: true,
               mailConversations: true,
               mailReply: true,
               workspaceLinks: true,
@@ -4210,6 +4233,8 @@ export const websocketRpcRouteLayer = Layer.unwrap(
       Context.add(MailSendService, yield* MailSendService),
       Context.add(TelegramService, yield* TelegramService),
       Context.add(DriveService, yield* DriveService),
+      Context.add(WorkspaceTools, yield* WorkspaceTools),
+      Context.add(WorkspaceAutomation, yield* WorkspaceAutomation),
       Context.add(WorkspaceSuggestions, yield* WorkspaceSuggestions),
     );
     const previewAutomationBroker = yield* PreviewAutomationBroker.PreviewAutomationBroker;
@@ -4269,6 +4294,7 @@ export const websocketRpcRouteLayer = Layer.unwrap(
             ).pipe(
               Layer.merge(telegramWsRpcLayer),
               Layer.merge(driveWsRpcLayer),
+              Layer.merge(workspaceToolsWsRpcLayer),
               Layer.merge(suggestionWsRpcLayer),
               Layer.merge(mailWsRpcLayer.pipe(Layer.provide(layerFromProviderInstanceRegistry))),
               Layer.merge(linksWsRpcLayer),

@@ -1,3 +1,4 @@
+import { WorkspaceTools } from "../../../workspace/WorkspaceTools.ts";
 import { DriveService } from "../../../drive/DriveService.ts";
 import { WorkspaceLinksError } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
@@ -34,6 +35,7 @@ const fitList = (items: ReadonlyArray<Record<string, unknown>>, truncated: boole
 export const make = (options: { readonly imap?: MailConnectionOptions } = {}) =>
   Effect.gen(function* () {
     const links = yield* WorkspaceLinks;
+    const tools = yield* Effect.serviceOption(WorkspaceTools);
     const drive = yield* Effect.serviceOption(DriveService);
     const telegram = yield* Effect.serviceOption(TelegramService);
     const orchestrator = yield* Orchestrator.OrchestratorV2;
@@ -103,6 +105,15 @@ export const make = (options: { readonly imap?: MailConnectionOptions } = {}) =>
               return yield* new WorkspaceLinksError({
                 kind: "unsupported",
                 message: "This source is not available for reading on this server.",
+              });
+            case "task":
+              if (Option.isSome(tools))
+                return yield* tools.value
+                  .getTask(ref.taskId)
+                  .pipe(Effect.flatMap((task) => bounded({ key, type: "task", ...task })));
+              return yield* new WorkspaceLinksError({
+                kind: "unsupported",
+                message: "Tasks are not available on this server.",
               });
             case "file":
               if (Option.isSome(drive))

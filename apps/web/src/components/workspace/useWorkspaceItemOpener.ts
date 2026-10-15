@@ -17,6 +17,16 @@ export function parseMailLocation(raw: string | undefined) {
   }
 }
 
+export function parseTaskLocation(raw: string | undefined) {
+  if (raw === undefined) return null;
+  try {
+    const ref: unknown = JSON.parse(raw);
+    return isWorkspaceItem(ref) && ref.type === "task" ? ref : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Open an item in its own environment, preserving the exact source-message reference. */
 export function useWorkspaceItemOpener(environmentId: EnvironmentId) {
   const navigate = useNavigate();
@@ -30,6 +40,11 @@ export function useWorkspaceItemOpener(environmentId: EnvironmentId) {
       void navigate({
         to: "/workspace",
         search: { space: "projects", environment: environmentId, project: ref.projectId },
+      });
+    if (ref.type === "task")
+      void navigate({
+        to: "/workspace",
+        search: { space: "projects", environment: environmentId, item: JSON.stringify(ref) },
       });
     if (ref.type === "mail")
       void navigate({

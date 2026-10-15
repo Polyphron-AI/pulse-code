@@ -1514,3 +1514,26 @@ describe("Usage shortcuts", () => {
     );
   });
 });
+
+it("resolves selected-item automation without stealing editable or terminal focus", () => {
+  const shortcut = event({ key: "r", ctrlKey: true, altKey: true });
+  assert.equal(
+    resolveShortcutCommand(shortcut, DEFAULT_RESOLVED_KEYBINDINGS, {
+      platform: "Linux",
+      context: { terminalFocus: false, editableFocus: false },
+    }),
+    "workspace.startAutomation",
+  );
+  assert.isNull(
+    resolveShortcutCommand(shortcut, DEFAULT_RESOLVED_KEYBINDINGS, {
+      platform: "Linux",
+      context: { terminalFocus: true, editableFocus: false },
+    }),
+  );
+  assert.isNull(
+    resolveShortcutCommand(shortcut, DEFAULT_RESOLVED_KEYBINDINGS, {
+      platform: "Linux",
+      context: { terminalFocus: false, editableFocus: true },
+    }),
+  );
+});

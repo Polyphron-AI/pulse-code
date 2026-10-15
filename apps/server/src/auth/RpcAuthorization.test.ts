@@ -212,3 +212,20 @@ it("requires explicit read or operate scopes for every Drive action", () => {
   ])
     expect(requiredScopeForRpcMethod(method)).toBe(AuthOrchestrationOperateScope);
 });
+
+it("separates workspace settings and task writes from reads", () => {
+  for (const method of [
+    WS_METHODS.workspaceGetProjectConfig,
+    WS_METHODS.workspaceListTasks,
+    WS_METHODS.workspaceGetTask,
+    WS_METHODS.workspaceSubscribeChanges,
+  ])
+    expect(requiredScopeForRpcMethod(method)).toBe(AuthOrchestrationReadScope);
+  for (const method of [
+    WS_METHODS.workspaceSaveProjectConfig,
+    WS_METHODS.workspaceUpsertTask,
+    WS_METHODS.workspaceDeleteTask,
+    WS_METHODS.workspaceSaveAutomation,
+  ])
+    expect(requiredScopeForRpcMethod(method)).toBe(AuthOrchestrationOperateScope);
+});

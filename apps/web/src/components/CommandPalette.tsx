@@ -1924,6 +1924,7 @@ function OpenCommandPaletteDialog(props: {
     ["startThread", "Start thread from selected item", "workspace.startThread"],
     ["addToProject", "Add selected item to project", "workspace.addToProject"],
     ["startProject", "Start project from selected item", "workspace.startProject"],
+    ["startAutomation", "Start automation from selected item", "workspace.startAutomation"],
   ] as const) {
     const button =
       typeof document === "undefined"

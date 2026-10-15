@@ -84,11 +84,13 @@ describe("canOpenLinkedItem", () => {
       canOpenLinkedItem({ type: "provider-resource", provider: "telegram", resourceId: "2" }),
     ).toBe(false);
   });
-  it("opens what Wave 1 can show and nothing else", () => {
+  it("opens supported workspace items including basic tasks", () => {
     expect(canOpenLinkedItem(MESSAGE)).toBe(true);
     expect(canOpenLinkedItem(projectItemRef(ONE))).toBe(true);
     expect(canOpenLinkedItem({ type: "url", url: "https://a.test/brief" })).toBe(true);
-    expect(canOpenLinkedItem({ type: "task", taskId: "task-1" })).toBe(false);
+    expect(
+      canOpenLinkedItem({ type: "task", taskId: "wskt_00000000-0000-0000-0000-000000000001" }),
+    ).toBe(true);
   });
 });
 

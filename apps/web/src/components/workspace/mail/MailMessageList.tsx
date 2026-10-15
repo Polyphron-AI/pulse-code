@@ -45,9 +45,10 @@ export function MailMessageList(props: MailListProps) {
       <form
         role="search"
         onSubmit={submit}
-        className="flex items-center gap-1 border-b border-border p-2"
+        className="flex min-w-0 flex-wrap items-center gap-1 border-b border-border p-2"
       >
         <Input
+          className="min-w-0 flex-1 basis-20"
           type="search"
           size="sm"
           maxLength={200}

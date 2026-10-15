@@ -1,3 +1,5 @@
+import * as WorkspaceTools from "../../../workspace/WorkspaceTools.ts";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { DriveService } from "../../../drive/DriveService.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import {
@@ -182,6 +184,61 @@ const mailRef = (accountId: string): WorkspaceItemRef => ({
 });
 
 describe("workspace MCP toolkit", () => {
+  it.effect("reads only a confirmed basic task and retains its links when deleted", () =>
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`INSERT INTO projection_projects(project_id,title,workspace_root,scripts_json,created_at,updated_at) VALUES(${projectId},'Tasks','/synthetic','[]','2026-10-15T12:00:00Z','2026-10-15T12:00:00Z')`;
+      const tools = yield* WorkspaceTools.WorkspaceTools;
+      const task = yield* tools.upsertTask({ projectId, title: "Launch task", column: "To do" });
+      const sibling = yield* tools.upsertTask({
+        projectId,
+        title: "Unlinked sibling",
+        column: "To do",
+      });
+      const links = yield* WorkspaceLinks;
+      const ref: WorkspaceItemRef = { type: "task", taskId: task.id };
+      yield* links.link({
+        a: { ref: { type: "thread", threadId } },
+        b: { ref, title: task.title },
+      });
+      const context = yield* Layer.build(
+        McpServer.toolkit(WorkspaceToolkit).pipe(
+          Layer.provide(WorkspaceHandlers.layer()),
+          Layer.provideMerge(McpServer.McpServer.layer),
+        ),
+      );
+      const server = Context.get(context, McpServer.McpServer);
+      const read = (item: WorkspaceItemRef) =>
+        server
+          .callTool({ name: "workspace_read_item", arguments: { key: workspaceItemKey(item) } })
+          .pipe(
+            Effect.provideService(McpInvocationContext.McpInvocationContext, {
+              environmentId: EnvironmentId.make("env"),
+              threadId,
+              providerSessionId: "fixture",
+              providerInstanceId: ProviderInstanceId.make("codex"),
+              capabilities: new Set<McpInvocationContext.McpCapability>(["workspace"]),
+              issuedAt: 1,
+            }),
+            Effect.provideService(McpSchema.McpServerClient, client),
+          );
+      expect(errorText(yield* read({ type: "task", taskId: sibling.id }))).toContain("not linked");
+      const result = yield* read(ref);
+      expect(result.isError).not.toBe(true);
+      expect(result.content[0]?.type === "text" && result.content[0].text).toContain("Launch task");
+      yield* tools.deleteTask(task.id);
+      expect(errorText(yield* read(ref))).toContain("unavailable");
+      expect((yield* links.list(ref)).linked).toHaveLength(1);
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        Layer.mergeAll(WorkspaceLinksLive, WorkspaceTools.layer).pipe(
+          Layer.provideMerge(SqlitePersistenceMemory),
+          Layer.provideMerge(baseLayer()),
+        ),
+      ),
+    ),
+  );
   it.effect("reads only the exact confirmed Drive file and stops after unlink", () =>
     Effect.gen(function* () {
       const links = yield* WorkspaceLinks;

@@ -3,6 +3,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./state/workspaceTools": {
+      "types": "./src/state/workspaceTools.ts",
+      "default": "./src/state/workspaceTools.ts"
+    },
     "./state/drive": {
       "types": "./src/state/drive.ts",
       "default": "./src/state/drive.ts"

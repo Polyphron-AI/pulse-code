@@ -1,3 +1,4 @@
+import { ProjectId } from "@t3tools/contracts";
 import {
   ComposerContextId,
   workspaceItemKey,
@@ -9,7 +10,7 @@ import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { useRouter } from "@tanstack/react-router";
 import { isTerminalFocused } from "../../lib/terminalFocus";
 import { useAtomValue } from "@effect/atom-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, lazy, Suspense, type ReactNode } from "react";
 import { primaryServerKeybindingsAtom } from "../../state/server";
 import { resolveShortcutCommand, shortcutLabelForCommand } from "../../keybindings";
 import { isEditableFocused } from "../../lib/editableFocus";
@@ -36,6 +37,8 @@ import { MailDraftReply } from "./mail/MailDraftReply";
 import { linkErrorText, useMailLinks } from "./mail/useMailLinks";
 import { useMailCapabilities } from "./mail/useMailCapabilities";
 
+const WorkspaceAutomationEditor = lazy(() => import("./WorkspaceAutomationEditor"));
+
 const EMPTY_CONFIRMED: ReadonlyArray<WorkspaceLinkEndpoint> = [];
 
 /** Shared header, keyboard, touch and context-menu entrances into item actions. */
@@ -43,12 +46,14 @@ type ItemActionProps = {
   environmentId: EnvironmentId;
   item: WorkspaceLinkEndpoint;
   shortcuts?: boolean;
+  onlyStartThread?: boolean;
+  initialAction?: import("./WorkspaceNativeActions.logic").WorkspaceNativeAction;
   confirmed?: ReadonlyArray<WorkspaceLinkEndpoint>;
 };
 export function WorkspaceItemActions(props: ItemActionProps) {
   return useMailCapabilities(props.environmentId).workspaceLinks ? (
     <AvailableWorkspaceItemActions
-      key={`${props.environmentId}:${workspaceItemKey(props.item.ref)}`}
+      key={`${props.environmentId}:${workspaceItemKey(props.item.ref)}:${props.initialAction ?? ""}`}
       {...props}
     />
   ) : null;
@@ -57,6 +62,8 @@ function AvailableWorkspaceItemActions({
   environmentId,
   item,
   shortcuts = false,
+  onlyStartThread = false,
+  initialAction,
   confirmed = EMPTY_CONFIRMED,
 }: ItemActionProps) {
   const router = useRouter();
@@ -64,6 +71,7 @@ function AvailableWorkspaceItemActions({
   const threadButton = useRef<HTMLButtonElement>(null);
   const addButton = useRef<HTMLButtonElement>(null);
   const projectButton = useRef<HTMLButtonElement>(null);
+  const automationButton = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (!shortcuts) return;
     const keydown = (event: KeyboardEvent) => {
@@ -76,9 +84,11 @@ function AvailableWorkspaceItemActions({
           ? threadButton.current
           : command === "workspace.addToProject"
             ? addButton.current
-            : command === "workspace.startProject"
-              ? projectButton.current
-              : null;
+            : command === "workspace.startAutomation"
+              ? automationButton.current
+              : command === "workspace.startProject"
+                ? projectButton.current
+                : null;
       if (button === null || button.disabled) return;
       event.preventDefault();
       button.click();
@@ -112,6 +122,7 @@ function AvailableWorkspaceItemActions({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [automationProject, setAutomationProject] = useState<ProjectId | null>(null);
   const [createdProject, setCreatedProject] = useState<ScopedProjectRef | null>(null);
   const [name, setName] = useState("");
   const run = async (operation: () => Promise<void>) => {
@@ -125,7 +136,10 @@ function AvailableWorkspaceItemActions({
       setBusy(false);
     }
   };
-  const choose = async (target: HTMLElement, action: "start-thread" | "add-to-project") => {
+  const choose = async (
+    target: HTMLElement,
+    action: "start-thread" | "add-to-project" | "start-automation",
+  ) => {
     if (busy) return;
     if (action === "start-thread" && (!capability.workspaceItemContext || links.data === null)) {
       setError(
@@ -134,15 +148,26 @@ function AvailableWorkspaceItemActions({
       return;
     }
     const rect = target.getBoundingClientRect();
-    const linkedProject = links.data?.linked.find((view) => view.item.ref.type === "project")?.item
-      .ref;
+    const sourceRef = item.ref;
+    const linkedIds = new Set(
+      (links.data?.linked ?? []).flatMap((view) =>
+        view.item.ref.type === "project" ? [view.item.ref.projectId] : [],
+      ),
+    );
+    if (sourceRef.type === "thread") {
+      const own = threads.find((thread) => thread.id === sourceRef.threadId);
+      if (own) linkedIds.add(own.projectId);
+    }
+    for (const endpoint of confirmed)
+      if (endpoint.ref.type === "project") linkedIds.add(endpoint.ref.projectId);
+    const linkedProjects = projects.filter((project) => linkedIds.has(project.id));
     const implicitProject =
-      action === "start-thread"
-        ? projects.find((candidate) =>
-            item.ref.type === "project"
-              ? candidate.id === item.ref.projectId
-              : linkedProject?.type === "project" && candidate.id === linkedProject.projectId,
-          )
+      action !== "add-to-project"
+        ? sourceRef.type === "project"
+          ? projects.find((project) => project.id === sourceRef.projectId)
+          : linkedProjects.length === 1
+            ? linkedProjects[0]
+            : undefined
         : undefined;
     const choice =
       implicitProject === undefined
@@ -153,6 +178,10 @@ function AvailableWorkspaceItemActions({
         : null;
     const project = implicitProject ?? pickedProject(projects, choice ?? null);
     if (!project) return;
+    if (action === "start-automation") {
+      setAutomationProject(project.id);
+      return;
+    }
     // Capture the endpoints before navigation or draft creation can change the active reader.
     const source = { ...item, title: labelFor(item) };
     const endpoints = [
@@ -187,6 +216,27 @@ function AvailableWorkspaceItemActions({
       );
     });
   };
+  const initialTriggered = useRef(false);
+  useEffect(() => {
+    if (!initialAction || initialTriggered.current || links.data === null) return;
+    if (
+      (initialAction === "start-thread" && !capability.workspaceItemContext) ||
+      (initialAction === "start-automation" && !capability.workspaceTools)
+    )
+      return;
+    const button =
+      initialAction === "start-thread"
+        ? threadButton.current
+        : initialAction === "add-to-project"
+          ? addButton.current
+          : initialAction === "start-project"
+            ? projectButton.current
+            : automationButton.current;
+    if (button && !button.disabled) {
+      initialTriggered.current = true;
+      button.click();
+    }
+  }, [initialAction, links.data, capability.workspaceTools, capability.workspaceItemContext]);
   if (!capability.workspaceLinks) return null;
   return (
     <div
@@ -211,6 +261,11 @@ function AvailableWorkspaceItemActions({
                 label: "Start thread",
                 disabled: !capability.workspaceItemContext || links.data === null || busy,
               },
+              {
+                id: "automation",
+                label: "Start automation",
+                disabled: !capability.workspaceTools || busy,
+              },
               ...(item.ref.type === "project"
                 ? []
                 : [
@@ -221,7 +276,8 @@ function AvailableWorkspaceItemActions({
             { x: event.clientX, y: event.clientY },
           )
           .then((action) => {
-            if (action === "reply")
+            if (action === "automation") void choose(target, "start-automation");
+            else if (action === "reply")
               target.querySelector<HTMLButtonElement>("[data-workspace-reply]")?.click();
             else if (action === "new-project") setCreating(true);
             else if (action)
@@ -248,7 +304,7 @@ function AvailableWorkspaceItemActions({
             : "Update this server to start a thread with workspace context"}
         </TooltipPopup>
       </Tooltip>
-      {item.ref.type !== "project" ? (
+      {!onlyStartThread && item.ref.type !== "project" ? (
         <Tooltip>
           <TooltipTrigger render={<span />}>
             <Button
@@ -267,7 +323,7 @@ function AvailableWorkspaceItemActions({
           </TooltipPopup>
         </Tooltip>
       ) : null}
-      {item.ref.type !== "project" ? (
+      {!onlyStartThread && item.ref.type !== "project" ? (
         <Tooltip>
           <TooltipTrigger render={<span />}>
             <Button
@@ -286,7 +342,31 @@ function AvailableWorkspaceItemActions({
           </TooltipPopup>
         </Tooltip>
       ) : null}
-      {item.ref.type === "mail" ? (
+      {!onlyStartThread ? (
+        <Button
+          ref={automationButton}
+          data-workspace-action={shortcuts ? "startAutomation" : undefined}
+          size="sm"
+          variant="ghost"
+          disabled={busy || !capability.workspaceTools || links.data === null}
+          onClick={(event) => void choose(event.currentTarget, "start-automation")}
+        >
+          Start automation
+        </Button>
+      ) : null}
+      {automationProject !== null ? (
+        <Suspense
+          fallback={<p className="text-sm text-muted-foreground">Loading automation editor...</p>}
+        >
+          <WorkspaceAutomationEditor
+            environmentId={environmentId}
+            projectId={automationProject}
+            item={{ ...item, title: labelFor(item) }}
+            onClose={() => setAutomationProject(null)}
+          />
+        </Suspense>
+      ) : null}
+      {!onlyStartThread && item.ref.type === "mail" ? (
         <MailDraftReply
           environmentId={environmentId}
           item={item}

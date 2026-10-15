@@ -5,6 +5,29 @@ import { fileURLToPath } from "node:url";
 import { git, writeJson } from "./pipeline.mjs";
 
 export const featureSuites = [
+  { id: "workspace-basic-tasks", file: "apps/server/src/workspace/WorkspaceTools.test.ts" },
+  {
+    id: "workspace-automation-binding",
+    file: "apps/server/src/workspace/WorkspaceAutomation.test.ts",
+  },
+  {
+    id: "workspace-automation-real-launch",
+    file: "apps/server/src/orchestration-v2/ThreadLaunchService.test.ts",
+    testNamePattern: "workspace automation idle",
+  },
+  { id: "workspace-task-client", file: "apps/web/src/components/workspace/ProjectTasks.test.tsx" },
+  {
+    id: "workspace-tools-client",
+    file: "apps/web/src/components/workspace/WorkspaceToolsPanel.test.tsx",
+  },
+  {
+    id: "workspace-code-native-menu",
+    file: "apps/web/src/components/workspace/WorkspaceNativeActions.test.ts",
+  },
+  {
+    id: "workspace-tools-remote-refresh",
+    file: "packages/client-runtime/src/state/workspaceTools.test.ts",
+  },
   { id: "drive-picker-client", file: "apps/web/src/components/workspace/DriveFiles.test.tsx" },
   { id: "drive-reader-lifecycle", file: "apps/server/src/drive/DriveService.test.ts" },
   { id: "drive-settings-client", file: "apps/web/src/components/settings/DriveSettings.test.tsx" },

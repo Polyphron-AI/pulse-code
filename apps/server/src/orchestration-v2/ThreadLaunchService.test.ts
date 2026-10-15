@@ -1,3 +1,7 @@
+import * as WorkspaceAutomation from "../workspace/WorkspaceAutomation.ts";
+import * as WorkspaceTools from "../workspace/WorkspaceTools.ts";
+import { WorkspaceLinksLive, WorkspaceLinks } from "../workspace/WorkspaceLinks.ts";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as Scheduler from "../scheduling/Scheduler.ts";
 import * as WorktreeSetupTracker from "../project/WorktreeSetupTracker.ts";
 import * as ProjectCloneTracker from "../project/ProjectCloneTracker.ts";
@@ -2215,4 +2219,53 @@ it.effect.each([0, 1])("releases an async setup before its completion with exit 
       );
     }).pipe(Effect.provide(harness.layer));
   }),
+);
+
+it.effect(
+  "creates and replays a workspace automation idle thread through the real launch receipt",
+  () => {
+    const harness = makeHarness();
+    const schedules = ScheduledTasks.layer.pipe(
+      Layer.provide(Layer.mergeAll(harness.layer, NodeCrypto.layer, Scheduler.layer)),
+    );
+    const dependencies = Layer.mergeAll(schedules, WorkspaceTools.layer, WorkspaceLinksLive).pipe(
+      Layer.provideMerge(harness.layer),
+      Layer.provide(NodeCrypto.layer),
+    );
+    return Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`INSERT OR IGNORE INTO projection_projects(project_id,title,workspace_root,scripts_json,created_at,updated_at) VALUES(${projectId},'Launch','/repo','[]','2026-10-15T12:00:00Z','2026-10-15T12:00:00Z')`;
+      const automation = yield* WorkspaceAutomation.make;
+      const input = {
+        requestId: "00000000-0000-0000-0000-000000000006",
+        source: {
+          ref: { type: "url" as const, url: "https://example.test/source" },
+          title: "Source",
+        },
+        task: {
+          title: "Scheduled source",
+          prompt: "Review source",
+          enabled: false,
+          schedule: { type: "interval" as const, everyMs: 60000 },
+          projectId,
+          modelSelection,
+          runtimeMode: "full-access" as const,
+          interactionMode: "default" as const,
+          workspaceStrategy: { type: "root" as const },
+        },
+      };
+      const saved = yield* automation.save(input);
+      const replayed = yield* automation.save(input);
+      assert.equal(replayed.task.threadId, saved.task.threadId);
+      const threads = yield* ThreadManagement.ThreadManagementService;
+      const list = yield* threads.listProjectThreads({ projectId, includeSubagents: false });
+      assert.lengthOf(list, 1);
+      const projection = yield* threads.getThreadProjection(saved.task.threadId!);
+      assert.lengthOf(projection.messages, 0);
+      assert.lengthOf(projection.runs, 0);
+      const links = yield* WorkspaceLinks;
+      assert.lengthOf((yield* links.list(input.source.ref)).linked, 1);
+      assert.lengthOf((yield* (yield* ScheduledTasks.ScheduledTaskService).list()).tasks, 1);
+    }).pipe(Effect.scoped, Effect.provide(dependencies));
+  },
 );

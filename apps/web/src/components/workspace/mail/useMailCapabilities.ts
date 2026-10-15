@@ -26,6 +26,7 @@ export function useMailCapabilities(targetEnvironmentId?: EnvironmentId) {
   return {
     environmentId,
     ready: config !== null,
+    workspaceTools: config?.pulseCapabilities?.workspaceTools === true,
     driveRead: config?.pulseCapabilities?.driveRead === true,
     telegramRead: config?.pulseCapabilities?.telegramRead === true,
     mailReply: config?.pulseCapabilities?.mailReply === true,

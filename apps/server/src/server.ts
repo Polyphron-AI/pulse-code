@@ -1,3 +1,5 @@
+import * as WorkspaceTools from "./workspace/WorkspaceTools.ts";
+import * as WorkspaceAutomation from "./workspace/WorkspaceAutomation.ts";
 import * as DriveService from "./drive/DriveService.ts";
 import * as DriveStore from "./drive/DriveStore.ts";
 import * as DriveApi from "./drive/DriveApi.ts";
@@ -651,6 +653,10 @@ const commandReadinessLayer = HttpRouter.middleware(
 );
 
 /** One Telegram reader shared by workspace MCP and remote clients. */
+const WorkspaceToolsLayerLive = WorkspaceAutomation.layer.pipe(
+  Layer.provideMerge(WorkspaceTools.layer),
+);
+
 const DriveLayerLive = DriveService.layer.pipe(
   Layer.provide(DriveOAuth.layer),
   Layer.provide(DriveApi.layer),
@@ -709,6 +715,7 @@ const makeRoutesLayer = Layer.mergeAll(
   Layer.provide(PullRequestServiceLive),
   Layer.provide(SuggestionsLayerLive),
   Layer.provide(DriveLayerLive),
+  Layer.provide(WorkspaceToolsLayerLive),
   Layer.provide(MailLayerLive),
   Layer.provide(TelegramLayerLive),
   Layer.provide(PreviewAutomationBroker.layer),
