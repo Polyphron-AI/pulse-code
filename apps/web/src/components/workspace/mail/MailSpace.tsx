@@ -4,15 +4,21 @@ import {
   workspaceItemKey,
   EnvironmentId,
   type ProjectId,
+  type MailConversation,
   type WorkspaceItemRef,
 } from "@t3tools/contracts";
-import { useState, type ReactNode } from "react";
+import * as Schema from "effect/Schema";
+import { useLocalStorage } from "../../../hooks/useLocalStorage";
+import { Button } from "../../ui/button";
+import { MailConversationList } from "./MailConversationList";
+import { useCallback, useState, type ReactNode } from "react";
 
 import { parseMailLocation } from "../useWorkspaceItemOpener";
 import { WorkspaceEngagement } from "../WorkspaceEngagement";
 import { LinkedSection } from "./LinkedSection";
 import { cn } from "../../../lib/utils";
 import { readLocalApi } from "../../../localApi";
+import { workspaceLinks } from "../../../state/workspaceLinks";
 import { pulseMailMessage } from "../../../mail/mailReadState";
 import { pulseMailAccounts } from "../../../mail/mailState";
 import { useAllEnvironmentProjectSnapshotsReady, useProjects } from "../../../state/entities";
@@ -33,6 +39,8 @@ import {
 } from "./mailItemRef";
 import { ProjectMailList } from "./ProjectMailList";
 import { useMailCapabilities } from "./useMailCapabilities";
+
+const MailViewMode = Schema.Literals(["conversations", "messages"]);
 
 /** Where the message list comes from: a folder, or the mail linked to a project. */
 type MailSource =
@@ -145,6 +153,21 @@ interface MailPanesProps {
 function MailPanes(props: MailPanesProps) {
   const [selected, setSelected] = useState<MailItemRef | null>(props.initialItem ?? null);
   const navigate = useNavigate();
+  const { mailConversations, workspaceLinks: linksAvailable } = useMailCapabilities(
+    props.environmentId,
+  );
+  const [view, setView] = useLocalStorage("pulse:mail:list-view:v1", "conversations", MailViewMode);
+  const [conversation, setConversation] = useState<MailConversation | null>(null);
+  const updateConversation = useCallback(
+    (next: MailConversation) =>
+      setConversation((current) => (current?.id === next.id ? next : current)),
+    [],
+  );
+  const selectMessage = (item: MailItemRef) => {
+    setConversation(null);
+    setSelected(item);
+  };
+
   const selectedMessage = useEnvironmentQuery(
     selected === null
       ? null
@@ -154,7 +177,7 @@ function MailPanes(props: MailPanesProps) {
   const open = (ref: WorkspaceItemRef) => {
     switch (ref.type) {
       case "mail":
-        setSelected(canonicalMailRef(ref));
+        selectMessage(canonicalMailRef(ref));
         return;
       case "project":
         void navigate({
@@ -186,24 +209,80 @@ function MailPanes(props: MailPanesProps) {
       selected={selected !== null}
       list={
         props.source.type === "folder" ? (
-          <MailMessageList
-            environmentId={props.environmentId}
-            accountId={props.source.accountId}
-            folder={props.source.folder}
-            selected={selected}
-            onSelect={setSelected}
-          />
+          <div>
+            <div
+              className="flex gap-1 border-b border-border p-2"
+              role="group"
+              aria-label="Mail view"
+            >
+              <Button
+                size="sm"
+                variant={view === "conversations" && mailConversations ? "secondary" : "ghost"}
+                disabled={!mailConversations}
+                onClick={() => {
+                  setView("conversations");
+                  setSelected(null);
+                  setConversation(null);
+                }}
+              >
+                Conversations
+              </Button>
+              <Button
+                size="sm"
+                variant={view === "messages" || !mailConversations ? "secondary" : "ghost"}
+                onClick={() => {
+                  setView("messages");
+                  if (conversation) setSelected(mailItemRef(conversation.newest));
+                  setConversation(null);
+                }}
+              >
+                Messages
+              </Button>
+            </div>
+            {!mailConversations ? (
+              <p className="p-2 text-xs text-muted-foreground">
+                Conversations need a newer server. Messages remain available.
+              </p>
+            ) : null}
+            {view === "conversations" && mailConversations ? (
+              <MailConversationList
+                environmentId={props.environmentId}
+                accountId={props.source.accountId}
+                folder={props.source.folder}
+                selectedId={conversation?.id}
+                onUpdate={updateConversation}
+                onSelect={(next) => {
+                  setConversation(next);
+                  setSelected(mailItemRef(next.newest));
+                }}
+              />
+            ) : (
+              <MailMessageList
+                environmentId={props.environmentId}
+                accountId={props.source.accountId}
+                folder={props.source.folder}
+                selected={selected}
+                onSelect={selectMessage}
+              />
+            )}
+          </div>
         ) : (
           <ProjectMailList
             environmentId={props.environmentId}
             projectId={props.source.projectId}
             selected={selected}
-            onSelect={setSelected}
+            onSelect={selectMessage}
           />
         )
       }
       linked={
-        selected === null ? null : (
+        selected === null || !linksAvailable ? null : conversation !== null ? (
+          <ConversationLinked
+            environmentId={props.environmentId}
+            conversation={conversation}
+            onOpen={open}
+          />
+        ) : (
           <LinkedSection
             key={workspaceItemKey(selected)}
             environmentId={props.environmentId}
@@ -220,6 +299,22 @@ function MailPanes(props: MailPanesProps) {
     >
       {selected === null ? (
         <MailNotice>Select a message to read it.</MailNotice>
+      ) : conversation !== null ? (
+        <div>
+          {conversation.messages.map((message, index) => (
+            <ConversationMessage
+              key={workspaceItemKey(mailItemRef(message))}
+              message={message}
+              newest={index === 0}
+              environmentId={props.environmentId}
+              onBack={() => {
+                setSelected(null);
+                setConversation(null);
+              }}
+              onOpen={open}
+            />
+          ))}
+        </div>
       ) : (
         <MailMessageView
           key={workspaceItemKey(selected)}
@@ -231,5 +326,72 @@ function MailPanes(props: MailPanesProps) {
         />
       )}
     </WorkspaceEngagement>
+  );
+}
+
+function ConversationMessage(props: {
+  message: MailConversation["messages"][number];
+  newest: boolean;
+  environmentId: EnvironmentId;
+  onBack: () => void;
+  onOpen: (item: WorkspaceItemRef) => void;
+}) {
+  const [expanded, setExpanded] = useState(props.newest);
+  return (
+    <section className="border-b border-border">
+      <Button
+        variant="ghost"
+        size="sm-multiline"
+        className="w-full justify-start text-left"
+        aria-expanded={expanded}
+        onClick={() => setExpanded((value) => !value)}
+      >
+        {props.message.from ?? "Unknown sender"} / {mailItemTitle(props.message.subject)}
+        {props.newest ? " (newest)" : ""}
+      </Button>
+      {expanded ? (
+        <MailMessageView
+          environmentId={props.environmentId}
+          item={mailItemRef(props.message)}
+          onBack={props.onBack}
+          onOpen={props.onOpen}
+          showLinked={false}
+        />
+      ) : null}
+    </section>
+  );
+}
+
+function ConversationLinked(props: {
+  environmentId: EnvironmentId;
+  conversation: MailConversation;
+  onOpen: (ref: WorkspaceItemRef) => void;
+}) {
+  const result = useEnvironmentQuery(
+    workspaceLinks.listMany({
+      environmentId: props.environmentId,
+      input: { items: props.conversation.messages.map(mailItemRef) },
+    }),
+  );
+  if (result.data === null)
+    return result.error ? (
+      <MailError message={result.error} onRetry={result.refresh} />
+    ) : (
+      <MailNotice>Loading conversation links...</MailNotice>
+    );
+  return (
+    <div>
+      <p className="mb-2 text-xs text-muted-foreground">
+        Links from every loaded message. New links attach to the newest message.
+      </p>
+      {result.error ? <MailError message={result.error} onRetry={result.refresh} /> : null}
+      <LinkedSection
+        environmentId={props.environmentId}
+        item={mailItemRef(props.conversation.newest)}
+        title={mailItemTitle(props.conversation.newest.subject)}
+        linkedData={result.data}
+        onOpen={props.onOpen}
+      />
+    </div>
   );
 }

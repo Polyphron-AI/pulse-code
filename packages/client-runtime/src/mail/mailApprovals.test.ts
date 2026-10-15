@@ -20,6 +20,18 @@ const ids = (approvals: ReadonlyArray<MailSendApproval>) =>
   approvals.map((entry) => `${entry.id}:${entry.status}`);
 
 describe("visibleMailApprovals", () => {
+  it("shows accepted sends with unfinished links after reload and hides fully saved outcomes", () => {
+    const pendingLinks = { ...approval("recover", "accepted"), sentLinksPending: true };
+    const saved = { ...approval("saved", "accepted"), sentLinksPending: false };
+    expect(ids(visibleMailApprovals([saved, pendingLinks], new Set(), new Map()))).toEqual([
+      "recover:accepted",
+    ]);
+    expect(
+      ids(
+        visibleMailApprovals([{ ...pendingLinks, sentLinksPending: false }], new Set(), new Map()),
+      ),
+    ).toEqual([]);
+  });
   it("lists pending approvals oldest first and hides resolved ones never shown", () => {
     const listed = [
       approval("a3", "pending"),

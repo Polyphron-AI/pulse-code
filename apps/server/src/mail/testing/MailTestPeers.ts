@@ -174,6 +174,7 @@ export interface FakeImapMessage {
   readonly uid: number;
   flags: Set<string>;
   readonly raw: string;
+  readonly gmailThreadId?: string;
   /** Reported as MODSEQ when the client enabled CONDSTORE. */
   modseq?: number;
 }
@@ -228,8 +229,9 @@ export const fakeImap = (
   options: { readonly capabilities?: string } = {},
 ) => {
   const capabilities = `IMAP4rev1 AUTH=PLAIN SASL-IR ${options.capabilities ?? ""}`.trim();
-  let selected: FakeImapMailbox | undefined;
+  const selections = new WeakMap<MailPeerIo["close"], FakeImapMailbox>();
   const respond = ({ line }: MailPeerCommand, io: MailPeerIo) => {
+    let selected = selections.get(io.close);
     const { tag, command } = imapTag(line);
     const [verb = "", ...rest] = command.split(" ");
     const upper = verb.toUpperCase();
@@ -252,6 +254,8 @@ export const fakeImap = (
     } else if (upper === "SELECT" || upper === "EXAMINE") {
       const name = args.replace(/ \(CONDSTORE\)$/i, "").replace(/^"|"$/g, "");
       selected = mailboxes.find((mailbox) => mailbox.name === name);
+      if (selected) selections.set(io.close, selected);
+      else selections.delete(io.close);
       if (!selected) {
         io.send(`${tag} NO [NONEXISTENT] no such mailbox\r\n`);
         return;
@@ -332,6 +336,8 @@ export const fakeImap = (
       const out = selected.messages.flatMap((message, index) => {
         if (!matches(message.uid)) return [];
         const parts = [`UID ${message.uid}`];
+        if (/X-GM-THRID/i.test(items) && message.gmailThreadId)
+          parts.push(`X-GM-THRID ${message.gmailThreadId}`);
         if (/\bFLAGS\b/i.test(items)) parts.push(`FLAGS (${[...message.flags].join(" ")})`);
         if (/RFC822\.SIZE/i.test(items)) parts.push(`RFC822.SIZE ${message.raw.length}`);
         if (/\bMODSEQ\b/i.test(items)) parts.push(`MODSEQ (${message.modseq ?? 1})`);

@@ -1,6 +1,7 @@
 import * as Schema from "effect/Schema";
 import * as Rpc from "effect/unstable/rpc/Rpc";
 
+import { ModelSelection } from "./modelSelection.ts";
 import { EnvironmentAuthorizationError } from "./auth.ts";
 import { IsoDateTime, NonNegativeInt, PositiveInt, ProjectId, ThreadId } from "./baseSchemas.ts";
 
@@ -206,6 +207,20 @@ export const MailAttachmentSummary = Schema.Struct({
 export type MailAttachmentSummary = typeof MailAttachmentSummary.Type;
 
 /** The exact outgoing message a user approves. The server submits only the bytes it digested. */
+export const MailReplyTarget = Schema.Struct({
+  accountId: MailAccountId,
+  messageId: Schema.optionalKey(MailMessageIdHeader),
+  location: Schema.optionalKey(MailMessageRef),
+}).check(
+  Schema.makeFilter(
+    (value) =>
+      ((value.messageId !== undefined || value.location !== undefined) &&
+        (value.location === undefined || value.location.accountId === value.accountId)) ||
+      "A reply target needs an identity in its account.",
+  ),
+);
+export type MailReplyTarget = typeof MailReplyTarget.Type;
+
 export const MailSendSnapshot = Schema.Struct({
   accountId: MailAccountId,
   accountNickname: Nickname,
@@ -219,6 +234,10 @@ export const MailSendSnapshot = Schema.Struct({
   references: Schema.optionalKey(Schema.Array(Schema.String)),
   attachments: Schema.Array(MailAttachmentSummary),
   sourceDraft: Schema.optionalKey(MailMessageRef),
+  /** Prepared once with the exact MIME; optional for approvals stored by older servers. */
+  messageId: Schema.optionalKey(MailMessageIdHeader),
+  replyOriginal: Schema.optionalKey(MailReplyTarget),
+  replyOriginalTitle: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(300))),
 });
 export type MailSendSnapshot = typeof MailSendSnapshot.Type;
 
@@ -241,6 +260,10 @@ export const MailSendApproval = Schema.Struct({
   accountId: MailAccountId,
   status: MailSendApprovalStatus,
   snapshot: MailSendSnapshot,
+  sentMessage: Schema.optionalKey(
+    Schema.Struct({ accountId: MailAccountId, messageId: MailMessageIdHeader }),
+  ),
+  sentLinksPending: Schema.optionalKey(Schema.Boolean),
   digest: Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/)),
   createdAt: Schema.String,
   expiresAt: Schema.String,
@@ -412,6 +435,52 @@ export const PulseMailRpcs = [
       offset: Schema.optionalKey(NonNegativeInt),
     }),
     success: MailMessageContent,
+    error: errors,
+  }),
+] as const;
+
+/** Separate optional family; mailRead alone does not promise conversations. */
+export const MailConversation = Schema.Struct({
+  id: Schema.String,
+  newest: MailMessageListItem,
+  messages: Schema.Array(MailMessageListItem),
+});
+export type MailConversation = typeof MailConversation.Type;
+export const MailConversationPage = Schema.Struct({
+  conversations: Schema.Array(MailConversation),
+  nextCursor: Schema.optionalKey(Schema.String),
+  scannedMessages: NonNegativeInt,
+  incomplete: Schema.Boolean,
+});
+export const PulseMailConversationRpcs = [
+  Rpc.make("pulse.mail.listConversations", {
+    payload: Schema.Struct({
+      accountId: MailAccountId,
+      mailbox: MailboxName,
+      query: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(200))),
+      cursor: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(64))),
+      limit: Schema.optionalKey(PositiveInt),
+    }),
+    success: MailConversationPage,
+    error: errors,
+  }),
+] as const;
+
+/** Optional accepted-send persistence recovery, never a send retry. */
+export const PulseMailReplyRpcs = [
+  Rpc.make("pulse.mail.replyReadiness", {
+    payload: Schema.Struct({ projectId: ProjectId, accountId: MailAccountId }),
+    success: Schema.Struct({
+      choices: Schema.Array(
+        Schema.Struct({ label: Schema.String, modelSelection: ModelSelection }),
+      ),
+      unavailable: Schema.Array(Schema.String),
+    }),
+    error: errors,
+  }),
+  Rpc.make("pulse.mail.recoverSentLinks", {
+    payload: Schema.Struct({ approvalId: MailApprovalId }),
+    success: MailSendApproval,
     error: errors,
   }),
 ] as const;

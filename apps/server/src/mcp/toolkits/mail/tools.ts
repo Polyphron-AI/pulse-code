@@ -1,4 +1,5 @@
 import {
+  MailReplyTarget,
   MailAddress,
   MailApprovalId,
   MailError,
@@ -187,6 +188,7 @@ export const MailToolkit = Toolkit.make(
     parameters: {
       account,
       draftRef: Schema.optional(ref),
+      replyTo: Schema.optional(MailReplyTarget),
       to: Schema.optional(addresses),
       cc: Schema.optional(addresses),
       bcc: Schema.optional(addresses),

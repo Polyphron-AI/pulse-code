@@ -169,7 +169,7 @@ interface MailRowProps {
   readonly onSelect: () => void;
 }
 
-function MailRow({ environmentId, message, active, onSelect }: MailRowProps) {
+export function MailRow({ environmentId, message, active, onSelect }: MailRowProps) {
   return (
     <div className="border-b border-border">
       <WorkspaceItemMenu

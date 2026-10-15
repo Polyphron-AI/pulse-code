@@ -561,3 +561,44 @@ it.effect("steering confirms retained workspace refs before invoking the running
     assert.include(result.steered[0]!.message.text, "steer-key");
   }),
 );
+
+it.effect(
+  "reply reuse ignores an already seeded self reference and starts the provider with retained sources",
+  () =>
+    Effect.gen(function* () {
+      const source = {
+        ...workspaceRecord("reply_source", "https://example.test/reply-source"),
+        action: "draft-reply" as const,
+      };
+      const self: WorkspaceItemContextRecord = {
+        ...workspaceRecord("reply_self", "https://example.test/unused"),
+        action: "draft-reply",
+        item: { ref: { type: "thread", threadId } },
+      };
+      const linked: WorkspaceLinkEndpoint[] = [];
+      const result = yield* runTurn(
+        "workspace-reply-reuse",
+        `${workspaceText(source)} ${workspaceText(self)}`,
+        () => Effect.succeed({ items: [], truncated: false }),
+        undefined,
+        {
+          context: { version: 1, records: [source, self] },
+          link: (input) => {
+            if (input.b.ref.type === "thread" && input.b.ref.threadId === threadId)
+              return Effect.fail(
+                new WorkspaceLinksError({
+                  kind: "invalid-input",
+                  message: "An item cannot be linked to itself.",
+                }),
+              );
+            linked.push(input.b);
+            assert.deepEqual(input.source, { type: "action", action: "draft-reply" });
+            return Effect.succeed({ id: "wl_00000000-0000-4000-8000-000000000001" as const });
+          },
+        },
+      );
+      assert.deepEqual(linked, [source.item]);
+      assert.lengthOf(result.started, 1);
+      assert.include(result.started[0]!.message.text, "https://example.test/reply-source");
+    }),
+);

@@ -8,6 +8,8 @@ import {
   EnvironmentId,
   ProjectId,
   ThreadId,
+  workspaceItemKey,
+  WorkspaceLinksError,
   type MailAccountInput,
   type MailSendApproval,
 } from "@t3tools/contracts";
@@ -28,6 +30,8 @@ import { ServerEnvironmentIdentity } from "../environment/ServerEnvironment.ts";
 import * as Orchestrator from "../orchestration-v2/Orchestrator.ts";
 import { PersistenceSqlError } from "../persistence/Errors.ts";
 import { SqlitePersistenceMemory } from "../persistence/Layers/Sqlite.ts";
+import * as WorkspaceLinkRepository from "../persistence/WorkspaceLinks.ts";
+import * as WorkspaceLinkService from "../workspace/WorkspaceLinks.ts";
 import * as MailSendApprovals from "../persistence/MailSendApprovals.ts";
 import * as ProjectService from "../project/ProjectService.ts";
 import * as MailConfig from "./MailConfigService.ts";
@@ -81,6 +85,10 @@ const baseLayer = (threadDeletedAt: () => string | null = () => null) => {
         id === projectId ? Effect.succeedSome({ workspaceRoot } as never) : Effect.succeedNone,
     }),
     MailSendApprovals.layer.pipe(Layer.provideMerge(SqlitePersistenceMemory)),
+    WorkspaceLinkService.layer.pipe(
+      Layer.provide(WorkspaceLinkRepository.layer),
+      Layer.provide(SqlitePersistenceMemory),
+    ),
     Layer.mock(MailOAuth)({
       login: () => Effect.succeed({ type: "password", password: "hunter2" }),
     }),
@@ -767,5 +775,161 @@ describe("mailRpcHandlers", () => {
         expect(error.message).not.toContain("abc123");
       }
     }).pipe(Effect.scoped, Effect.provide(baseLayer())),
+  );
+});
+
+describe("accepted reply links", () => {
+  it.effect("requires an exact confirmed reply target, including location-only mail", () =>
+    Effect.gen(function* () {
+      const { service, account, smtp } = yield* setup();
+      const replyTo = {
+        accountId: account.id,
+        location: { accountId: account.id, mailbox: "INBOX", uidValidity: 7, uid: 5 },
+      };
+      expect(yield* kindOf(service.prepare({ threadId, content, replyTo }))).toBe("access-denied");
+      const links = yield* WorkspaceLinkService.WorkspaceLinks;
+      yield* links.link({
+        a: { ref: { type: "thread", threadId } },
+        b: { ref: { type: "mail", ...replyTo } },
+      });
+      const prepared = yield* service.prepare({ threadId, content, replyTo });
+      expect(prepared.snapshot.replyOriginal).toEqual(replyTo);
+      const declined = yield* service.respond({
+        approvalId: prepared.id,
+        decision: "decline",
+        digest: prepared.digest,
+      });
+      expect(declined.sentMessage).toBeUndefined();
+      expect(dataCommands(smtp)).toBe(0);
+      expect(
+        (yield* links.list({
+          type: "mail",
+          accountId: account.id,
+          messageId: prepared.snapshot.messageId!,
+        })).linked,
+      ).toEqual([]);
+    }).pipe(Effect.provide(baseLayer()), Effect.scoped),
+  );
+
+  it.effect(
+    "captures exact MIME identity and recovers links after failure without submitting again",
+    () =>
+      Effect.gen(function* () {
+        const { service, account, smtp, options, sent } = yield* setup();
+        const links = yield* WorkspaceLinkService.WorkspaceLinks;
+        const original = {
+          type: "mail" as const,
+          accountId: account.id,
+          messageId: "<original@test>",
+        };
+        yield* links.link({
+          a: { ref: { type: "thread", threadId } },
+          b: { ref: original, title: "Original subject" },
+        });
+        const prepared = yield* service.prepare({
+          threadId,
+          content: { ...content, inReplyTo: original.messageId, references: [original.messageId] },
+        });
+        expect(prepared.snapshot.replyOriginal).toEqual({
+          accountId: account.id,
+          messageId: original.messageId,
+        });
+        expect(prepared.sentMessage).toBeUndefined();
+        let linkWrites = 0;
+        const broken = yield* MailSend.make(options).pipe(
+          Effect.provideService(WorkspaceLinkService.WorkspaceLinks, {
+            ...links,
+            link: (input) =>
+              ++linkWrites % 2 === 0
+                ? Effect.fail(
+                    new WorkspaceLinksError({ kind: "unavailable", message: "store offline" }),
+                  )
+                : links.link(input),
+          }),
+        );
+        const accepted = yield* broken.respond({
+          approvalId: prepared.id,
+          decision: "approve",
+          digest: prepared.digest,
+        });
+        expect(accepted.status).toBe("accepted");
+        expect(accepted.sentLinksPending).toBe(true);
+        expect((yield* links.list({ type: "mail", ...accepted.sentMessage! })).linked).toEqual([]);
+        const mime = smtp.received.find(({ line }) => /Message-ID:/i.test(line))?.line;
+        expect(mime).toContain(`Message-ID: ${prepared.snapshot.messageId}`);
+        expect(sent.messages[0]?.raw).toContain(`Message-ID: ${prepared.snapshot.messageId}`);
+        expect(accepted.sentMessage?.messageId).toBe(prepared.snapshot.messageId);
+        yield* TestClock.adjust("31 minutes");
+        const pendingAfterReload = Option.getOrThrow(
+          yield* broken.subscribeThread(threadId).pipe(Stream.runHead),
+        );
+        expect(pendingAfterReload.find((entry) => entry.id === prepared.id)?.sentLinksPending).toBe(
+          true,
+        );
+        const restarted = yield* MailSend.make(options);
+        const recovered = yield* restarted.status(prepared.id);
+        expect(recovered.sentLinksPending).toBe(false);
+        const linked = yield* links.list({ type: "mail", ...recovered.sentMessage! });
+        expect(linked.linked.map(({ item }) => workspaceItemKey(item.ref)).sort()).toEqual(
+          [workspaceItemKey(original), workspaceItemKey({ type: "thread", threadId })].sort(),
+        );
+        expect(
+          linked.linked.every(
+            ({ source }) => source.type === "action" && source.action === "draft-reply",
+          ),
+        ).toBe(true);
+        expect(linked.linked.find(({ item }) => item.ref.type === "mail")?.item.title).toBe(
+          "Original subject",
+        );
+        const ids = linked.linked.map(({ id }) => id).sort();
+        yield* restarted.status(prepared.id);
+        expect(
+          (yield* links.list({ type: "mail", ...recovered.sentMessage! })).linked
+            .map(({ id }) => id)
+            .sort(),
+        ).toEqual(ids);
+        yield* links.unlink(linked.linked[0]!.id);
+        yield* restarted.status(prepared.id);
+        expect(
+          (yield* links.list({ type: "mail", ...recovered.sentMessage! })).linked,
+        ).toHaveLength(1);
+        expect(dataCommands(smtp)).toBe(1);
+        expect(
+          yield* kindOf(
+            restarted.respond({
+              approvalId: prepared.id,
+              decision: "approve",
+              digest: prepared.digest,
+            }),
+          ),
+        ).toBe("conflict");
+        expect(dataCommands(smtp)).toBe(1);
+      }).pipe(Effect.provide(baseLayer()), Effect.scoped),
+  );
+  it.effect.each(["reject", "drop"] as const)(
+    "%s never creates a sent reference or link",
+    (outcome) =>
+      Effect.gen(function* () {
+        const { service, smtp, afterData } = yield* setup();
+        afterData.current = outcome;
+        const prepared = yield* service.prepare({ threadId, content });
+        const result = yield* service.respond({
+          approvalId: prepared.id,
+          decision: "approve",
+          digest: prepared.digest,
+        });
+        expect(result.status).toBe(outcome === "drop" ? "outcome_unknown" : "failed");
+        expect(result.sentMessage).toBeUndefined();
+        const links = yield* WorkspaceLinkService.WorkspaceLinks;
+        expect(
+          (yield* links.list({
+            type: "mail",
+            accountId: result.accountId,
+            messageId: prepared.snapshot.messageId!,
+          })).linked,
+        ).toEqual([]);
+        yield* service.status(prepared.id);
+        expect(dataCommands(smtp)).toBe(1);
+      }).pipe(Effect.provide(baseLayer()), Effect.scoped),
   );
 });

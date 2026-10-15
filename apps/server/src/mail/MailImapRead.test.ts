@@ -7,6 +7,7 @@ import type { StoredMailAccount } from "./MailConfigService.ts";
 import type { MailLogin } from "./MailConnection.ts";
 import {
   discoverSpecialUse,
+  conversations,
   fetchByReference,
   fetchMessage,
   readAttachment,
@@ -847,6 +848,79 @@ describe("shared Message-ID lookup", () => {
         }),
       ]);
       expect(peer.connections()).toBe(1);
+    }).pipe(Effect.scoped),
+  );
+});
+
+describe("conversations", () => {
+  it.effect(
+    "groups reply headers across raw page boundaries without grouping subjects or fetching bodies",
+    () =>
+      Effect.gen(function* () {
+        const box = inbox(4);
+        box.messages = box.messages.map((message) => ({
+          ...message,
+          raw: [
+            `Message-ID: <m${message.uid}@test>`,
+            "Subject: Same subject",
+            ...(message.uid === 4 ? ["References: <m1@test>", "In-Reply-To: <m1@test>"] : []),
+            "",
+            "private body",
+            "",
+          ].join("\r\n"),
+        }));
+        const { peer, options } = yield* serve([box]);
+        const first = yield* conversations(account, login, { mailbox: "INBOX", limit: 1 }, options);
+        expect(first.conversations[0]?.messages.map((message) => message.ref.uid)).toEqual([4, 1]);
+        expect(first.incomplete).toBe(false);
+        box.messages.push({
+          uid: 5,
+          flags: new Set(),
+          raw: "Message-ID: <a@test>\r\nReferences: <m1@test>\r\nSubject: New reply\r\n\r\nBody\r\n",
+        });
+        box.uidNext = 6;
+        const refreshed = yield* conversations(
+          account,
+          login,
+          { mailbox: "INBOX", limit: 1 },
+          options,
+        );
+        expect(refreshed.conversations[0]?.id).toBe(first.conversations[0]?.id);
+        expect(refreshed.conversations[0]?.newest.ref.uid).toBe(5);
+        const second = yield* conversations(
+          account,
+          login,
+          { mailbox: "INBOX", limit: 1, cursor: first.nextCursor! },
+          options,
+        );
+        expect(second.conversations[0]?.messages.map((message) => message.ref.uid)).toEqual([3]);
+        expect(
+          peer.received
+            .filter(({ line }) => /UID FETCH/.test(line))
+            .every(({ line }) => !/BODY\.PEEK\[\]/.test(line)),
+        ).toBe(true);
+        box.uidValidity += 1;
+        expect(
+          yield* kindOf(
+            conversations(account, login, { mailbox: "INBOX", cursor: first.nextCursor! }, options),
+          ),
+        ).toBe("stale-reference");
+      }).pipe(Effect.scoped),
+  );
+  it.effect("uses Gmail thread IDs and reports a bounded incomplete scan", () =>
+    Effect.gen(function* () {
+      const box = inbox(501);
+      box.messages = box.messages.map((message) => ({
+        ...message,
+        gmailThreadId: "12345678901234567",
+      }));
+      const { options } = yield* serve([box], "X-GM-EXT-1");
+      const page = yield* conversations(account, login, { mailbox: "INBOX" }, options);
+      expect(page.scannedMessages).toBe(500);
+      expect(page.incomplete).toBe(true);
+      expect(page.conversations).toHaveLength(1);
+      expect(page.conversations[0]?.id).toBe("gmail:12345678901234567");
+      expect(page.conversations[0]?.messages).toHaveLength(500);
     }).pipe(Effect.scoped),
   );
 });

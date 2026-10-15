@@ -6,7 +6,12 @@ import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as SqlSchema from "effect/unstable/sql/SqlSchema";
 
-import { MailMessageRef, MailSendApprovalStatus, MailSendSnapshot } from "@t3tools/contracts";
+import {
+  type WorkspaceLinksError,
+  MailMessageRef,
+  MailSendApprovalStatus,
+  MailSendSnapshot,
+} from "@t3tools/contracts";
 
 import { PersistenceDecodeError, PersistenceSqlError } from "./Errors.ts";
 
@@ -37,6 +42,7 @@ export const MailSendApprovalRecord = Schema.Struct({
   expiresAt: Schema.String,
   decidedAt: Schema.NullOr(Schema.String),
   completedAt: Schema.NullOr(Schema.String),
+  sentLinksSavedAt: Schema.NullOr(Schema.String),
 });
 export type MailSendApprovalRecord = typeof MailSendApprovalRecord.Type;
 
@@ -77,6 +83,12 @@ export class MailSendApprovalRepository extends Context.Service<
     readonly insertPending: (
       input: InsertPendingMailSendApproval,
     ) => Effect.Effect<void, MailSendApprovalRepositoryError>;
+    /** Links and completion marker commit together, so later unlinks stay removed. */
+    readonly saveAcceptedLinks: (
+      id: string,
+      at: string,
+      persist: Effect.Effect<void, WorkspaceLinksError>,
+    ) => Effect.Effect<void, MailSendApprovalRepositoryError | WorkspaceLinksError>;
     readonly get: (
       id: string,
     ) => Effect.Effect<Option.Option<MailSendApprovalRecord>, MailSendApprovalRepositoryError>;
@@ -150,7 +162,8 @@ export const make = Effect.gen(function* () {
     created_at AS "createdAt",
     expires_at AS "expiresAt",
     decided_at AS "decidedAt",
-    completed_at AS "completedAt"
+    completed_at AS "completedAt",
+    sent_links_saved_at AS "sentLinksSavedAt"
   `;
 
   const getRow = SqlSchema.findOneOption({
@@ -247,6 +260,25 @@ export const make = Effect.gen(function* () {
           ${input.createdAt}, ${input.expiresAt}
         )
       `.pipe(Effect.asVoid, Effect.mapError(toError("insertMailSendApproval"))),
+
+    saveAcceptedLinks: (id, at, persist) =>
+      sql
+        .withTransaction(
+          Effect.gen(function* () {
+            const rows = yield* sql<{
+              status: string;
+              saved: string | null;
+            }>`SELECT status, sent_links_saved_at AS saved FROM mail_send_approvals WHERE id = ${id}`;
+            if (rows[0]?.status !== "accepted" || rows[0].saved !== null) return;
+            yield* persist;
+            yield* sql`UPDATE mail_send_approvals SET sent_links_saved_at = ${at} WHERE id = ${id} AND status = 'accepted'`;
+          }),
+        )
+        .pipe(
+          Effect.mapError((error) =>
+            error._tag === "WorkspaceLinksError" ? error : toError("saveAcceptedMailLinks")(error),
+          ),
+        ),
 
     get: (id) => getRow(id).pipe(Effect.mapError(toError("getMailSendApproval"))),
 

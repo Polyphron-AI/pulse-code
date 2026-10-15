@@ -41,6 +41,7 @@ export function visibleMailApprovals(
     } else if (
       approval.status === "pending" ||
       approval.status === "submitting" ||
+      (approval.status === "accepted" && approval.sentLinksPending === true) ||
       seen.has(approval.id)
     ) {
       visible.push(approval);

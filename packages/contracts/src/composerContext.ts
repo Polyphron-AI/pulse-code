@@ -236,6 +236,7 @@ export type ThreadContextRecord = typeof ThreadContextRecord.Type;
 
 /** Removable item reference. A retained reference confirms a link only when its message runs. */
 export const WorkspaceItemContextRecord = Schema.Struct({
+  action: Schema.optionalKey(Schema.Literals(["start-thread", "draft-reply"])),
   ...recordBase,
   kind: Schema.Literal("workspace-item"),
   item: WorkspaceLinkEndpoint,

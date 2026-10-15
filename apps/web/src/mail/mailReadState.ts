@@ -25,3 +25,10 @@ export const pulseMailMessage = createEnvironmentRpcQueryAtomFamily(connectionAt
   staleTimeMs: 60_000,
   idleTtlMs: 60_000,
 });
+
+export const pulseMailConversations = createEnvironmentRpcQueryAtomFamily(connectionAtomRuntime, {
+  label: "environment-data:pulse-mail:conversations",
+  tag: WS_METHODS.pulseMailListConversations,
+  staleTimeMs: 30_000,
+  idleTtlMs: 60_000,
+});

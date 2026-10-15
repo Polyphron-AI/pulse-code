@@ -32,6 +32,7 @@ import {
   pickedProject,
   projectMenuItems,
 } from "./mail/linkedItems";
+import { MailDraftReply } from "./mail/MailDraftReply";
 import { linkErrorText, useMailLinks } from "./mail/useMailLinks";
 import { useMailCapabilities } from "./mail/useMailCapabilities";
 
@@ -196,6 +197,15 @@ function AvailableWorkspaceItemActions({
         void readLocalApi()
           ?.contextMenu.show(
             [
+              ...(item.ref.type === "mail"
+                ? [
+                    {
+                      id: "reply",
+                      label: "Draft reply with agent",
+                      disabled: !capability.mailReply || busy || links.data === null,
+                    },
+                  ]
+                : []),
               {
                 id: "thread",
                 label: "Start thread",
@@ -211,7 +221,9 @@ function AvailableWorkspaceItemActions({
             { x: event.clientX, y: event.clientY },
           )
           .then((action) => {
-            if (action === "new-project") setCreating(true);
+            if (action === "reply")
+              target.querySelector<HTMLButtonElement>("[data-workspace-reply]")?.click();
+            else if (action === "new-project") setCreating(true);
             else if (action)
               void choose(target, action === "thread" ? "start-thread" : "add-to-project");
           });
@@ -273,6 +285,13 @@ function AvailableWorkspaceItemActions({
             {shortcutLabelForCommand(keybindings, "workspace.startProject") ?? "Start project"}
           </TooltipPopup>
         </Tooltip>
+      ) : null}
+      {item.ref.type === "mail" ? (
+        <MailDraftReply
+          environmentId={environmentId}
+          item={item}
+          linked={links.data?.linked.map((view) => view.item) ?? null}
+        />
       ) : null}
       {creating ? (
         <form

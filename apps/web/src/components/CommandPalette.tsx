@@ -1942,6 +1942,21 @@ function OpenCommandPaletteDialog(props: {
         },
       });
   }
+  const replyButton =
+    typeof document === "undefined"
+      ? null
+      : document.querySelector<HTMLButtonElement>("[data-workspace-reply]");
+  if (replyButton && !replyButton.disabled)
+    actionItems.push({
+      kind: "action",
+      value: "action:workspace-draft-reply",
+      title: "Draft reply to selected mail with agent",
+      searchTerms: ["mail", "email", "reply", "agent"],
+      icon: <MailIcon className={ITEM_ICON_CLASS} />,
+      run: async () => {
+        if (replyButton.isConnected && !replyButton.disabled) replyButton.click();
+      },
+    });
   if (mailReadAvailable) {
     actionItems.push({
       kind: "action",

@@ -216,6 +216,20 @@ describe.each([
     },
   );
 
+  it("abandons a delayed item action when its source unmounts without a route change", async () => {
+    testState.reset(draft);
+    let current = true;
+    const pending = useNewThreadHandler()(
+      { environmentId: "environment-ssh", projectId: "project-remote" } as never,
+      { isCurrent: () => current },
+    );
+    current = false;
+    testState.completeProjectFileRead(null);
+    expect(await pending).toBeNull();
+    expect(testState.router.navigate).not.toHaveBeenCalled();
+    expect(testState.draftStore.setLogicalProjectDraftThreadId).not.toHaveBeenCalled();
+  });
+
   it("abandons a delayed draft open when the user navigates elsewhere", async () => {
     testState.reset(draft);
     const openThread = useNewThreadHandler();

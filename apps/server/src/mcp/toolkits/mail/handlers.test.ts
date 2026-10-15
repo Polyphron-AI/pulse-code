@@ -15,6 +15,7 @@ import { describe, expect, it } from "@effect/vitest";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Tool from "effect/unstable/ai/Tool";
 import { McpSchema, McpServer } from "effect/unstable/ai";
 
 import * as ServerSecretStore from "../../../auth/ServerSecretStore.ts";
@@ -325,4 +326,9 @@ describe("mail MCP toolkit", () => {
       expect(errorText(both)).toBe("Pass draftRef or new content, not both.");
     }).pipe(Effect.scoped, Effect.provide(baseLayer())),
   );
+});
+
+it("publishes the optional exact reply target through the real MCP input schema", () => {
+  const schema = Tool.getJsonSchema(MailToolkit.tools.mail_prepare_send);
+  expect(schema).toMatchObject({ properties: { replyTo: expect.anything() } });
 });

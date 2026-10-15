@@ -127,11 +127,13 @@ export const confirmWorkspaceMessageContext = (
 ) =>
   Effect.gen(function* () {
     for (const record of retainedWorkspaceMessageContext(message)) {
+      if (record.item.ref.type === "thread" && record.item.ref.threadId === owner.threadId)
+        continue;
       yield* link({
         a: { ref: { type: "thread", threadId: owner.threadId } },
         b: record.item,
         viewing: record.viewing,
-        source: { type: "action", action: "start-thread" },
+        source: { type: "action", action: record.action ?? "start-thread" },
       });
     }
   });

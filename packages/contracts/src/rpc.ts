@@ -17,7 +17,12 @@ import * as Rpc from "effect/unstable/rpc/Rpc";
 import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 import { PULSE_SKILLS_METHODS, PulseSkillsRpcs } from "./pulseSkills.ts";
 import { PULSE_LINKS_METHODS, PulseLinksRpcs } from "./pulseLinks.ts";
-import { PULSE_MAIL_METHODS, PulseMailRpcs } from "./pulseMail.ts";
+import {
+  PULSE_MAIL_METHODS,
+  PulseMailRpcs,
+  PulseMailConversationRpcs,
+  PulseMailReplyRpcs,
+} from "./pulseMail.ts";
 import { PULSE_MCP_METHODS, PulseMcpRpcs } from "./pulseMcp.ts";
 import * as RpcMiddleware from "effect/unstable/rpc/RpcMiddleware";
 import { NonNegativeInt, TrimmedNonEmptyString } from "./baseSchemas.ts";
@@ -362,6 +367,9 @@ export const WS_METHODS = {
   pulseMailSubscribeThreadApprovals: PULSE_MAIL_METHODS.subscribeThreadApprovals,
   pulseMailRespondApproval: PULSE_MAIL_METHODS.respondApproval,
   pulseMailListFolders: PULSE_MAIL_METHODS.listFolders,
+  pulseMailReplyReadiness: "pulse.mail.replyReadiness",
+  pulseMailRecoverSentLinks: "pulse.mail.recoverSentLinks",
+  pulseMailListConversations: "pulse.mail.listConversations",
   pulseMailListMessages: PULSE_MAIL_METHODS.listMessages,
   pulseMailReadMessage: PULSE_MAIL_METHODS.readMessage,
   pulseMcpList: PULSE_MCP_METHODS.list,
@@ -1753,6 +1761,8 @@ export class RpcScopeAuthorization extends RpcMiddleware.Service<RpcScopeAuthori
 
 export const WsRpcGroup = RpcGroup.make(
   ...PulseMailRpcs,
+  ...PulseMailConversationRpcs,
+  ...PulseMailReplyRpcs,
   ...PulseMcpRpcs,
   ...PulseSkillsRpcs,
   ...PulseLinksRpcs,

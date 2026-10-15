@@ -67,7 +67,7 @@ export function linkedItemLabel(
         : { title: title ?? "Project", unavailable: "Unavailable: this project was removed." };
     }
     case "mail":
-      return { title: mailItemTitle(title) };
+      return { title: title === undefined ? "Mail message" : mailItemTitle(title) };
     case "thread":
       return { title: threadTitles?.get(ref.threadId) ?? title ?? "Thread" };
     case "url":
@@ -146,7 +146,7 @@ export function workspaceEndpointTitle(endpoint: WorkspaceLinkEndpoint): string 
   if (endpoint.title?.trim()) return endpointTitle(endpoint.title);
   switch (endpoint.ref.type) {
     case "mail":
-      return mailItemTitle(endpoint.title);
+      return endpoint.title === undefined ? "Mail message" : mailItemTitle(endpoint.title);
     case "file":
       return "Drive file";
     case "project":

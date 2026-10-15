@@ -34,6 +34,13 @@ export function createWorkspaceLinkAtoms<R, E>(
       idleTtlMs: 60_000,
       refreshTrigger: ({ environmentId }) => changes({ environmentId, input: {} }),
     }),
+    listMany: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:workspace-links:list-many",
+      tag: WS_METHODS.pulseLinksListMany,
+      staleTimeMs: 30_000,
+      idleTtlMs: 60_000,
+      refreshTrigger: ({ environmentId }) => changes({ environmentId, input: {} }),
+    }),
     list: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "environment-data:workspace-links:list",
       tag: WS_METHODS.pulseLinksList,

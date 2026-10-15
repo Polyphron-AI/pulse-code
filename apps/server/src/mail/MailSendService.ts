@@ -2,11 +2,14 @@ import * as NodeCrypto from "node:crypto";
 
 import {
   MailError,
+  normalizeMessageId,
+  workspaceItemKey,
   ProjectId,
   ThreadId,
   type MailAddress,
   type MailAttachmentSummary,
   type MailMessageRef,
+  type MailReplyTarget,
   type MailSendApproval,
   type MailSendSnapshot,
 } from "@t3tools/contracts";
@@ -34,6 +37,7 @@ import {
 import * as ProjectService from "../project/ProjectService.ts";
 import { MailConfigService } from "./MailConfigService.ts";
 import type { MailConnectionOptions } from "./MailConnection.ts";
+import { WorkspaceLinks } from "../workspace/WorkspaceLinks.ts";
 import { messageVersion, readMessageSource } from "./MailImapRead.ts";
 import { appendSent } from "./MailImapWrite.ts";
 import { MailOAuth } from "./MailOAuth.ts";
@@ -67,6 +71,7 @@ export interface MailPrepareInput {
   readonly content?: MailComposeContent | undefined;
   /** Project-relative paths. Each must resolve inside the project root. */
   readonly attachments?: ReadonlyArray<string> | undefined;
+  readonly replyTo?: MailReplyTarget | undefined;
 }
 
 export class MailSendService extends Context.Service<
@@ -80,7 +85,10 @@ export class MailSendService extends Context.Service<
       readonly decision: "approve" | "decline";
       readonly digest: string;
     }) => Effect.Effect<MailSendApproval, MailError>;
-    readonly status: (approvalId: string) => Effect.Effect<MailSendApproval, MailError>;
+    readonly status: (
+      approvalId: string,
+      ownerThreadId?: ThreadId,
+    ) => Effect.Effect<MailSendApproval, MailError>;
     /**
      * The thread's pending and submitting approvals, plus any resolved in the last 30 minutes, now
      * and again after each change to any of them. A client that subscribes again, for example after
@@ -172,6 +180,7 @@ export const make = (
 ) =>
   Effect.gen(function* () {
     const config = yield* MailConfigService;
+    const workspaceLinks = yield* Effect.serviceOption(WorkspaceLinks);
     const oauth = yield* MailOAuth;
     const repo = yield* MailSendApprovalRepository;
     const orchestrator = yield* Orchestrator.OrchestratorV2;
@@ -284,7 +293,43 @@ export const make = (
           ...(yield* readAttachments(threadId, attachmentPaths)),
         ];
 
+        const messageId = `<${NodeCrypto.randomUUID()}@pulse.local>`;
+        // Only a confirmed exact original in this account can establish reply provenance.
+        const replyId = message.inReplyTo ? normalizeMessageId(message.inReplyTo) : undefined;
+        const target =
+          input.replyTo ?? (replyId ? { accountId: account.id, messageId: replyId } : undefined);
+        if (
+          target &&
+          (target.accountId !== account.id || (replyId && target.messageId !== replyId))
+        )
+          return yield* fail(
+            "invalid-input",
+            "The reply target must match this account and In-Reply-To header.",
+          );
+        const original =
+          Option.isSome(workspaceLinks) && target
+            ? yield* workspaceLinks.value
+                .resolveLinked(
+                  { threadId, projectId },
+                  workspaceItemKey({ type: "mail", ...target }),
+                )
+                .pipe(Effect.mapError(storeError))
+            : Option.none();
+        if (input.replyTo && Option.isNone(original))
+          return yield* fail(
+            "access-denied",
+            "Link the exact original message to this thread before preparing a reply.",
+          );
         const snapshot: MailSendSnapshot = {
+          messageId,
+          ...(Option.isSome(original) && target
+            ? {
+                replyOriginal: target,
+                ...(original.value.title
+                  ? { replyOriginalTitle: original.value.title.slice(0, 300) }
+                  : {}),
+              }
+            : {}),
           accountId: account.id,
           accountNickname: account.nickname,
           from: { address: account.address },
@@ -310,6 +355,7 @@ export const make = (
         const mime = yield* Effect.tryPromise({
           try: () =>
             new MailComposer({
+              messageId,
               from: snapshot.from,
               to: composerAddresses(snapshot.to),
               cc: composerAddresses(snapshot.cc),
@@ -373,9 +419,56 @@ export const make = (
         ),
       );
 
-    const status = (approvalId: string) =>
+    /** Accepted identity is the recovery record. Retrying this path cannot reach SMTP. */
+    const recoverAcceptedLinks = (record: MailSendApprovalRecord, at: string) =>
+      Effect.gen(function* () {
+        const approval = toApproval(record, at);
+        if (record.status !== "accepted" || !record.snapshot.messageId) return approval;
+        const sentMessage = { accountId: record.accountId, messageId: record.snapshot.messageId };
+        const a = {
+          ref: { type: "mail" as const, ...sentMessage },
+          title: record.snapshot.subject.slice(0, 300),
+        };
+        if (record.sentLinksSavedAt !== null)
+          return { ...approval, sentMessage, sentLinksPending: false };
+        if (Option.isNone(workspaceLinks))
+          return { ...approval, sentMessage, sentLinksPending: true };
+        const result = yield* repo
+          .saveAcceptedLinks(
+            record.id,
+            at,
+            Effect.gen(function* () {
+              const viewing = record.snapshot.replyOriginal
+                ? {
+                    ref: { type: "mail" as const, ...record.snapshot.replyOriginal },
+                    title: record.snapshot.replyOriginalTitle ?? "Mail message",
+                  }
+                : { ref: { type: "thread" as const, threadId: ThreadId.make(record.threadId) } };
+              yield* workspaceLinks.value.link({
+                a,
+                b: { ref: { type: "thread", threadId: ThreadId.make(record.threadId) } },
+                viewing,
+                source: { type: "action", action: "draft-reply" },
+              });
+              if (record.snapshot.replyOriginal)
+                yield* workspaceLinks.value.link({
+                  a,
+                  b: viewing,
+                  viewing,
+                  source: { type: "action", action: "draft-reply" },
+                });
+            }),
+          )
+          .pipe(Effect.result);
+        return { ...approval, sentMessage, sentLinksPending: result._tag === "Failure" };
+      });
+    const status = (approvalId: string, ownerThreadId?: ThreadId) =>
       Effect.all([getRecord(approvalId), now]).pipe(
-        Effect.map(([record, at]) => toApproval(record, at)),
+        Effect.flatMap(([record, at]) =>
+          ownerThreadId !== undefined && record.threadId !== ownerThreadId
+            ? Effect.fail(fail("not-found", "That send approval was not found."))
+            : recoverAcceptedLinks(record, at),
+        ),
       );
 
     const invalidate = (id: string, error: MailError) =>
@@ -492,17 +585,20 @@ export const make = (
     // get the outcome, short enough to keep each push small.
     const listThread = (threadId: ThreadId) =>
       Effect.all([store(repo.listForThread(threadId)), Clock.currentTimeMillis]).pipe(
-        Effect.map(([records, nowMs]) => {
+        Effect.flatMap(([records, nowMs]) => {
           const at = isoAt(nowMs);
           const since = isoAt(nowMs - APPROVAL_TTL_MS);
-          return records
-            .map((record) => toApproval(record, at))
-            .filter(
-              (approval) =>
-                approval.status === "pending" ||
-                approval.status === "submitting" ||
-                resolvedAt(approval) > since,
-            );
+          return Effect.forEach(records, (record) => recoverAcceptedLinks(record, at)).pipe(
+            Effect.map((approvals) =>
+              approvals.filter(
+                (approval) =>
+                  approval.status === "pending" ||
+                  approval.status === "submitting" ||
+                  (approval.status === "accepted" && approval.sentLinksPending === true) ||
+                  resolvedAt(approval) > since,
+              ),
+            ),
+          );
         }),
       );
 

@@ -4,6 +4,8 @@ import * as Option from "effect/Option";
 import type { ImapFlow, SearchObject } from "imapflow";
 import { simpleParser, type ParsedMail } from "mailparser";
 
+import { groupConversations, type ConversationMessage } from "./MailConversations.ts";
+
 import type { StoredMailAccount } from "./MailConfigService.ts";
 import {
   imapCall,
@@ -599,5 +601,102 @@ export const messageVersion = (
       return message
         ? { present: true as const, ...modseqOf(message) }
         : { present: false as const };
+    }),
+  );
+
+/** Snapshot-pinned, header-only scan before conversation paging. Older unscanned mail is explicit. */
+export const conversations = (
+  account: StoredMailAccount,
+  login: MailLogin,
+  input: {
+    readonly mailbox: string;
+    readonly query?: MailSearchQuery;
+    readonly cursor?: string;
+    readonly limit?: number;
+  },
+  options: MailConnectionOptions = {},
+) =>
+  session(account, login, options, (client) =>
+    Effect.gen(function* () {
+      const limit = input.limit ?? PAGE_DEFAULT;
+      if (!Number.isInteger(limit) || limit < 1 || limit > PAGE_MAX)
+        return yield* fail("limit-exceeded", "A page holds 1 to 50 conversations.");
+      const cursor =
+        input.cursor === undefined ? undefined : /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(input.cursor);
+      if (cursor === null)
+        return yield* fail("invalid-input", "This conversation cursor is not valid.");
+      const mailbox = yield* openMailbox(client, input.mailbox);
+      const uidValidity = Number(mailbox.uidValidity);
+      if (cursor && Number(cursor[1]) !== uidValidity)
+        return yield* fail("stale-reference", "This mailbox changed. Refresh conversations.");
+      const found = yield* imapCall(() =>
+        client.search(toSearchObject(input.query), { uid: true }),
+      );
+      if (found === false) return yield* fail("unavailable", "The folder could not be searched.");
+      const ceiling = cursor
+        ? Number(cursor[2])
+        : (found ?? []).reduce((maximum, uid) => Math.max(maximum, uid), 0);
+      const candidates = (found ?? []).filter((uid) => uid <= ceiling).sort((a, b) => b - a);
+      if (cursor && Number(cursor[4]) !== candidates.length)
+        return yield* fail(
+          "stale-reference",
+          "Messages changed while paging. Refresh conversations.",
+        );
+      const uids = candidates.slice(0, 500);
+      const fetched =
+        uids.length === 0
+          ? []
+          : yield* imapCall(() =>
+              client.fetchAll(
+                uids.join(","),
+                {
+                  uid: true,
+                  flags: true,
+                  size: true,
+                  threadId: client.capabilities.has("X-GM-EXT-1"),
+                  headers: ["subject", "from", "date", "message-id", "references", "in-reply-to"],
+                },
+                { uid: true },
+              ),
+            );
+      const messages: Array<ConversationMessage> = [];
+      for (const message of fetched) {
+        if ((message.headers?.byteLength ?? 0) > 64_000)
+          return yield* fail(
+            "limit-exceeded",
+            "A message has oversized headers. Use Messages to read it separately.",
+          );
+        const headers = message.headers ? yield* parse(message.headers) : undefined;
+        const messageId = headers?.messageId ? normalizeMessageId(headers.messageId) : undefined;
+        messages.push({
+          ...flagState(account.id, input.mailbox, uidValidity, message),
+          ...(messageId ? { messageId } : {}),
+          ...(client.capabilities.has("X-GM-EXT-1") && message.threadId
+            ? { gmailThreadId: String(message.threadId) }
+            : {}),
+          ...(headers?.references
+            ? {
+                references: Array.isArray(headers.references)
+                  ? headers.references
+                  : [headers.references],
+              }
+            : {}),
+          ...(headers?.inReplyTo ? { inReplyTo: headers.inReplyTo } : {}),
+          ...(headers?.subject ? { subject: headers.subject } : {}),
+          ...(headers?.from?.text ? { from: headers.from.text } : {}),
+          ...(headers?.date ? { date: headers.date.toISOString() } : {}),
+          ...(message.size === undefined ? {} : { size: message.size }),
+        });
+      }
+      const grouped = groupConversations(messages);
+      const offset = cursor ? Number(cursor[3]) : 0;
+      return {
+        conversations: grouped.slice(offset, offset + limit),
+        scannedMessages: messages.length,
+        incomplete: candidates.length > uids.length || fetched.length !== uids.length,
+        ...(offset + limit < grouped.length
+          ? { nextCursor: `${uidValidity}.${ceiling}.${offset + limit}.${candidates.length}` }
+          : {}),
+      };
     }),
   );

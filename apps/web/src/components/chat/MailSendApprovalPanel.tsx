@@ -6,10 +6,12 @@ import {
 import { EnvironmentSupervisor } from "@t3tools/client-runtime/connection";
 import {
   createEnvironmentCommand,
+  createEnvironmentRpcCommand,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
 import {
   MailError,
+  WS_METHODS,
   type EnvironmentId,
   type MailAddress,
   type MailApprovalId,
@@ -37,6 +39,11 @@ const respondMailApproval = createEnvironmentCommand(connectionAtomRuntime, {
     ),
 });
 
+const recoverSentLinks = createEnvironmentRpcCommand(connectionAtomRuntime, {
+  label: "mail-recover-sent-links",
+  tag: WS_METHODS.pulseMailRecoverSentLinks,
+});
+
 const isMailError = Schema.is(MailError);
 const NO_APPROVALS: ReadonlyArray<MailSendApproval> = [];
 
@@ -50,7 +57,7 @@ const STATUS_COPY: Record<
   failed: { title: "Send failed", variant: "error" },
   outcome_unknown: {
     title: "Outcome unknown",
-    note: "The server may have sent this message. Check the Sent folder before retrying.",
+    note: "The server may have sent this message. Check the Sent folder. This approval cannot send again.",
     variant: "warning",
   },
   declined: { title: "Declined", variant: "default" },
@@ -153,6 +160,7 @@ const MailSendApprovalCard = memo(function MailSendApprovalCard({
   approval: MailSendApproval;
   onAnswered: (approval: MailSendApproval) => void;
 }) {
+  const recover = useAtomCommand(recoverSentLinks, { reportFailure: false });
   const respond = useAtomCommand(respondMailApproval, { reportFailure: false });
   const [inFlight, setInFlight] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -216,6 +224,31 @@ const MailSendApprovalCard = memo(function MailSendApprovalCard({
               </li>
             ))}
           </ul>
+        ) : null}
+        {status === "accepted" && approval.sentLinksPending ? (
+          <div className="mt-2 text-xs">
+            <p>
+              The message was accepted. Its workspace links still need saving. Retrying saves links
+              only.
+            </p>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={inFlight}
+              onClick={async () => {
+                setInFlight(true);
+                const result = await recover({ environmentId, input: { approvalId: approval.id } });
+                setInFlight(false);
+                if (result._tag === "Success") onAnswered(result.value);
+                else
+                  setError(
+                    "Could not save sent links. Retry or reconnect; the message will not be sent again.",
+                  );
+              }}
+            >
+              Save sent links
+            </Button>
+          </div>
         ) : null}
         {copy.note ? <p className="mt-2 text-xs">{copy.note}</p> : null}
         {approval.error ? <p className="mt-2 text-xs">{approval.error.message}</p> : null}

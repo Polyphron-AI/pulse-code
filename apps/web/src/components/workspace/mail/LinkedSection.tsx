@@ -5,6 +5,7 @@ import {
   type EnvironmentId,
   type WorkspaceItemRef,
   type WorkspaceLinkView,
+  type WorkspaceLinkList,
 } from "@t3tools/contracts";
 import { LinkIcon, InfoIcon } from "lucide-react";
 import { useId, useMemo, useState, type ReactNode } from "react";
@@ -36,6 +37,7 @@ interface LinkedSectionProps {
   readonly environmentId: EnvironmentId;
   readonly item: WorkspaceItemRef;
   readonly title: string;
+  readonly linkedData?: WorkspaceLinkList;
   readonly additionalLinks?: ReactNode;
   readonly nativeLinkedUrls?: ReadonlySet<string>;
   readonly onOpen: (ref: WorkspaceItemRef) => void;
@@ -49,9 +51,13 @@ export function LinkedSection(props: LinkedSectionProps) {
 
 function LinkedList(props: LinkedSectionProps) {
   const headingId = useId();
-  const list = useEnvironmentQuery(
-    workspaceLinks.list({ environmentId: props.environmentId, input: { item: props.item } }),
+  const query = useEnvironmentQuery(
+    props.linkedData === undefined
+      ? workspaceLinks.list({ environmentId: props.environmentId, input: { item: props.item } })
+      : null,
   );
+  const list =
+    props.linkedData === undefined ? query : { ...query, data: props.linkedData, error: null };
   const allProjects = useProjects();
   const projectsReady = useAllEnvironmentProjectSnapshotsReady();
   const projects = useMemo(

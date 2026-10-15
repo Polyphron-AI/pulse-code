@@ -17,6 +17,7 @@ import type { MailConfigService, StoredMailAccount } from "./MailConfigService.t
 import { withImap, type MailConnectionOptions, type MailLogin } from "./MailConnection.ts";
 import {
   fetchByReference,
+  conversations,
   listMailboxes,
   search,
   type MailMessageDetail,
@@ -146,11 +147,44 @@ export const mailRpcHandlers = (
     }) => redact(config.setThreadSelection(input.threadId, input.accountId)),
     subscribeThreadApprovals: (input: { readonly threadId: ThreadId }) =>
       redactStream(send.subscribeThread(input.threadId)),
+    recoverSentLinks: (input: { readonly approvalId: string }) =>
+      redact(send.status(input.approvalId)),
     respondApproval: (input: Parameters<typeof send.respond>[0]) => redact(send.respond(input)),
     listFolders: (input: { readonly accountId: string }) =>
       redact(
         withAccount(input.accountId, (account, login) => listMailboxes(account, login, imap)).pipe(
           Effect.map(({ mailboxes, truncated }) => ({ folders: mailboxes, truncated })),
+        ),
+      ),
+    listConversations: (input: {
+      readonly accountId: string;
+      readonly mailbox: string;
+      readonly query?: string | undefined;
+      readonly cursor?: string | undefined;
+      readonly limit?: number | undefined;
+    }) =>
+      redact(
+        withAccount(input.accountId, (account, login) =>
+          conversations(
+            account,
+            login,
+            {
+              mailbox: input.mailbox,
+              ...(input.query?.trim() ? { query: { text: input.query.trim() } } : {}),
+              ...(input.cursor === undefined ? {} : { cursor: input.cursor }),
+              ...(input.limit === undefined ? {} : { limit: input.limit }),
+            },
+            imap,
+          ),
+        ).pipe(
+          Effect.map((page) => ({
+            ...page,
+            conversations: page.conversations.map((conversation) => ({
+              id: conversation.id,
+              newest: toListItem(conversation.newest),
+              messages: conversation.messages.map(toListItem),
+            })),
+          })),
         ),
       ),
     listMessages: (input: {

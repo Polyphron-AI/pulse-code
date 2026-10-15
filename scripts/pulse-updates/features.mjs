@@ -6,6 +6,29 @@ import { git, writeJson } from "./pipeline.mjs";
 
 export const featureSuites = [
   {
+    id: "mail-approval-recovery-client",
+    file: "packages/client-runtime/src/mail/mailApprovals.test.ts",
+  },
+  {
+    id: "mail-reply-client",
+    file: "apps/web/src/components/workspace/mail/MailDraftReply.test.tsx",
+  },
+  {
+    id: "mail-conversation-client",
+    file: "apps/web/src/components/workspace/mail/MailConversationList.test.tsx",
+  },
+  {
+    id: "mail-conversations",
+    file: "apps/server/src/mail/MailImapRead.test.ts",
+    testNamePattern: "conversations",
+  },
+  { id: "mail-reply-readiness", file: "apps/server/src/mail/MailReply.test.ts" },
+  {
+    id: "mail-accepted-reply-links",
+    file: "apps/server/src/mail/MailSendService.test.ts",
+    testNamePattern: "accepted reply links",
+  },
+  {
     id: "workspace-item-actions",
     file: "apps/web/src/components/workspace/WorkspaceItemActions.test.tsx",
   },

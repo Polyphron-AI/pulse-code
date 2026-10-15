@@ -67,3 +67,23 @@ twice. T3 Code never retries a send on its own.
 Codex, Claude, Cursor, Grok, Antigravity, and locally managed OpenCode receive
 the email tools in every thread. OpenCode connected to an external server can't
 use them.
+
+## Conversations and replies
+
+Mail starts in Conversations view and remembers your Messages or Conversations choice on this device.
+Conversations use Gmail thread IDs or reply headers, never matching subjects alone. The list groups
+up to the newest 500 matching messages before paging conversations. A notice identifies incomplete
+scans; narrow the search or switch to Messages for older mail. Older bodies load when expanded.
+Links belong to individual messages. The conversation's Linked panel combines their saved links;
+new links and list actions target its newest message. Expand a specific message to act on it instead.
+
+Choose **Draft reply with agent**, choose a project if needed, then choose an available model whose
+adapter supports the mail tools. The project must have access to that email account. The action
+opens a draft or reuses a compatible linked thread with an empty composer. Review the prompt and
+removable source references, then send it to the agent. This does not send email. The agent prepares
+the exact message for the existing approval card, where you approve or decline it.
+
+After your server accepts the message, Pulse Code saves links from its exact Message-ID to the
+thread and confirmed original. If link persistence fails, **Save sent links** retries only those
+local writes. Reconnecting also recovers unfinished link writes. It never submits SMTP again.
+An unknown SMTP outcome has no send-retry button; check Sent before deciding on any new send.

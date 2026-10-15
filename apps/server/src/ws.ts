@@ -100,6 +100,8 @@ import {
   type PullRequestRef,
   PulseLinksRpcs,
   PulseMailRpcs,
+  PulseMailConversationRpcs,
+  PulseMailReplyRpcs,
   WS_METHODS,
   WsRpcGroup,
 } from "@t3tools/contracts";
@@ -181,6 +183,11 @@ import {
   observeRpcStream,
   observeRpcStreamEffect,
 } from "./observability/RpcInstrumentation.ts";
+import {
+  ProviderAdapterRegistryV2,
+  layerFromProviderInstanceRegistry,
+} from "./orchestration-v2/ProviderAdapterRegistry.ts";
+import { replyReadiness } from "./mail/MailReply.ts";
 import * as ProviderRegistry from "./provider/Services/ProviderRegistry.ts";
 import * as ProviderInstanceRegistry from "./provider/Services/ProviderInstanceRegistry.ts";
 import * as AcpRegistrySupport from "./provider/acp/AcpRegistrySupport.ts";
@@ -565,10 +572,16 @@ const ServerWsRpcGroup = WsRpcGroup;
 // silently widens the layer's requirements to `any`. RpcServer still serves the
 // full ServerWsRpcGroup and resolves each handler by tag, so the two layers
 // together cover the group. Workspace link handlers are split out the same way.
-const MailWsRpcGroup = RpcGroup.make(...PulseMailRpcs);
+const MailWsRpcGroup = RpcGroup.make(
+  ...PulseMailRpcs,
+  ...PulseMailConversationRpcs,
+  ...PulseMailReplyRpcs,
+);
 const LinksWsRpcGroup = RpcGroup.make(...PulseLinksRpcs);
 const CoreWsRpcGroup = ServerWsRpcGroup.omit(
   ...PulseMailRpcs.map((rpc) => rpc._tag),
+  ...PulseMailConversationRpcs.map((rpc) => rpc._tag),
+  ...PulseMailReplyRpcs.map((rpc) => rpc._tag),
   ...PulseLinksRpcs.map((rpc) => rpc._tag),
 );
 // When a resuming client's cursor is more than this many events behind the
@@ -1214,7 +1227,12 @@ const mailWsRpcLayer = MailWsRpcGroup.toLayer(
       yield* MailOAuth,
       yield* MailSendService,
     );
+    const replyConfig = yield* MailConfigService;
+    const replyProviders = yield* ProviderRegistry.ProviderRegistry;
+    const replyAdapters = yield* ProviderAdapterRegistryV2;
     return MailWsRpcGroup.of({
+      [WS_METHODS.pulseMailReplyReadiness]: (input) =>
+        replyReadiness(replyConfig, replyProviders, replyAdapters, input),
       [WS_METHODS.pulseMailListAccounts]: () =>
         observeRpcEffect(WS_METHODS.pulseMailListAccounts, pulseMail.listAccounts(), {
           "rpc.aggregate": "pulse.mail",
@@ -1289,6 +1307,13 @@ const mailWsRpcLayer = MailWsRpcGroup.toLayer(
         observeRpcEffect(WS_METHODS.pulseMailListFolders, pulseMail.listFolders(input), {
           "rpc.aggregate": "pulse.mail",
         }),
+      [WS_METHODS.pulseMailRecoverSentLinks]: (input) => pulseMail.recoverSentLinks(input),
+      [WS_METHODS.pulseMailListConversations]: (input) =>
+        observeRpcEffect(
+          WS_METHODS.pulseMailListConversations,
+          pulseMail.listConversations(input),
+          { "rpc.aggregate": "pulse.mail" },
+        ),
       [WS_METHODS.pulseMailListMessages]: (input) =>
         observeRpcEffect(WS_METHODS.pulseMailListMessages, pulseMail.listMessages(input), {
           "rpc.aggregate": "pulse.mail",
@@ -1305,6 +1330,20 @@ const linksWsRpcLayer = LinksWsRpcGroup.toLayer(
   Effect.gen(function* () {
     const workspaceLinks = yield* WorkspaceLinks;
     return LinksWsRpcGroup.of({
+      [WS_METHODS.pulseLinksListMany]: (input) =>
+        Effect.gen(function* () {
+          const lists = yield* Effect.forEach(input.items, workspaceLinks.list, { concurrency: 8 });
+          const all = [
+            ...new Map(
+              lists.flatMap((list) => list.linked).map((view) => [view.id, view]),
+            ).values(),
+          ];
+          return {
+            linked: all.slice(0, 100),
+            suggested: [],
+            truncated: all.length > 100 || lists.some((list) => list.truncated),
+          };
+        }),
       [WS_METHODS.pulseLinksProjectHub]: (input) =>
         observeRpcEffect(WS_METHODS.pulseLinksProjectHub, projectHub(workspaceLinks.list, input), {
           "rpc.aggregate": "pulse.links",
@@ -1883,6 +1922,8 @@ const makeWsRpcLayer = (
               mcpManagement: true,
               mailManagement: true,
               mailRead: true,
+              mailConversations: true,
+              mailReply: true,
               workspaceLinks: true,
               workspaceItemContext: true,
               mcpCreateOnly: true,
@@ -4158,7 +4199,7 @@ export const websocketRpcRouteLayer = Layer.unwrap(
               clientAnalyticsProps,
               previewAutomationBroker,
             ).pipe(
-              Layer.merge(mailWsRpcLayer),
+              Layer.merge(mailWsRpcLayer.pipe(Layer.provide(layerFromProviderInstanceRegistry))),
               Layer.merge(linksWsRpcLayer),
               Layer.provideMerge(RpcSerialization.layerJson),
               Layer.provide(Layer.succeed(ManagedSkills, managedSkills)),

@@ -26,6 +26,8 @@ export function useMailCapabilities(targetEnvironmentId?: EnvironmentId) {
   return {
     environmentId,
     ready: config !== null,
+    mailReply: config?.pulseCapabilities?.mailReply === true,
+    mailConversations: config?.pulseCapabilities?.mailConversations === true,
     mailRead: config?.pulseCapabilities?.mailRead === true,
     workspaceLinks: config?.pulseCapabilities?.workspaceLinks === true,
     workspaceItemContext: config?.pulseCapabilities?.workspaceItemContext === true,

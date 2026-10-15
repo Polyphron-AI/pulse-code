@@ -20,6 +20,7 @@ interface MailMessageViewProps {
   readonly environmentId: EnvironmentId;
   readonly item: MailItemRef;
   readonly showLinked?: boolean;
+  readonly showActions?: boolean;
   readonly onBack: () => void;
   readonly onOpen: (ref: WorkspaceItemRef) => void;
 }
@@ -62,12 +63,14 @@ export function MailMessageView(props: MailMessageViewProps) {
               />
             </dl>
           </header>
-          <WorkspaceItemActions
-            shortcuts
-            key={JSON.stringify(props.item)}
-            environmentId={props.environmentId}
-            item={{ ref: mailItemRef(data), title: mailItemTitle(data.subject) }}
-          />
+          {props.showActions !== false ? (
+            <WorkspaceItemActions
+              shortcuts
+              key={JSON.stringify(props.item)}
+              environmentId={props.environmentId}
+              item={{ ref: mailItemRef(data), title: mailItemTitle(data.subject) }}
+            />
+          ) : null}
           {props.showLinked !== false ? (
             <LinkedSection
               environmentId={props.environmentId}

@@ -163,7 +163,7 @@ export const make = (options: { readonly imap?: MailConnectionOptions } = {}) =>
         onRef(ref, ({ account, login }) => MailImapWrite.move(account, login, ref, mailbox, imap)),
       mail_archive: ({ ref }) =>
         onRef(ref, ({ account, login }) => MailImapWrite.archive(account, login, ref, imap)),
-      mail_prepare_send: ({ account: selector, draftRef, attachments, ...content }) =>
+      mail_prepare_send: ({ account: selector, draftRef, replyTo, attachments, ...content }) =>
         Effect.gen(function* () {
           const { threadId } = yield* scope;
           if (draftRef !== undefined && (content.to !== undefined || content.text !== undefined)) {
@@ -171,6 +171,7 @@ export const make = (options: { readonly imap?: MailConnectionOptions } = {}) =>
           }
           const approval = yield* send.prepare({
             threadId,
+            ...(replyTo ? { replyTo } : {}),
             ...((draftRef?.accountId ?? selector) !== undefined
               ? { selector: draftRef?.accountId ?? selector }
               : {}),
@@ -194,7 +195,7 @@ export const make = (options: { readonly imap?: MailConnectionOptions } = {}) =>
       mail_send_status: ({ approvalId }) =>
         Effect.gen(function* () {
           const { threadId } = yield* scope;
-          const approval = yield* send.status(approvalId);
+          const approval = yield* send.status(approvalId, threadId);
           // Another thread's approval is reported as missing, not forbidden.
           if (approval.threadId !== threadId) {
             return yield* fail("not-found", "That send approval was not found.");
@@ -211,6 +212,9 @@ const statusView = (
   approvalId: approval.id,
   status: approval.status,
   accountId: approval.accountId,
+  ...(approval.sentMessage
+    ? { sentMessage: approval.sentMessage, sentLinksPending: approval.sentLinksPending }
+    : {}),
   to: approval.snapshot.to,
   cc: approval.snapshot.cc,
   bcc: approval.snapshot.bcc,

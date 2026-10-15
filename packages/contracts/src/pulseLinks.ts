@@ -206,6 +206,7 @@ export class WorkspaceLinksError extends Schema.TaggedError<WorkspaceLinksError>
 ) {}
 
 export const PULSE_LINKS_METHODS = {
+  pulseLinksListMany: "pulse.links.listMany",
   pulseLinksList: "pulse.links.list",
   pulseLinksProjectHub: "pulse.links.projectHub",
   pulseLinksLink: "pulse.links.link",
@@ -216,6 +217,13 @@ export const PULSE_LINKS_METHODS = {
 const LinksError = Schema.Union([WorkspaceLinksError, EnvironmentAuthorizationError]);
 
 export const PulseLinksRpcs = [
+  Rpc.make(PULSE_LINKS_METHODS.pulseLinksListMany, {
+    payload: Schema.Struct({
+      items: Schema.Array(WorkspaceItemRef).check(Schema.isMaxLength(500)),
+    }),
+    success: WorkspaceLinkList,
+    error: LinksError,
+  }),
   Rpc.make(PULSE_LINKS_METHODS.pulseLinksProjectHub, {
     payload: Schema.Struct({
       projectId: ProjectId,

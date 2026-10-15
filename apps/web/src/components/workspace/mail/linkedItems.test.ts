@@ -44,6 +44,10 @@ describe("originText", () => {
 });
 
 describe("linkedItemLabel", () => {
+  it("does not claim a missing subject when mail endpoint metadata is absent", () => {
+    expect(linkedItemLabel(view({ ref: MESSAGE }), null).title).toBe("Mail message");
+    expect(workspaceEndpointTitle({ ref: MESSAGE })).toBe("Mail message");
+  });
   const project = view({ ref: projectItemRef(ONE), title: "Old name" });
 
   it("shows a project's current name", () => {
@@ -62,7 +66,7 @@ describe("linkedItemLabel", () => {
 
   it("never shows an empty title", () => {
     expect(linkedItemLabel(view({ ref: MESSAGE }), null)).toEqual({
-      title: "Message with no subject",
+      title: "Mail message",
     });
   });
 });
