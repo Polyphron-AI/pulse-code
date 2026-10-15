@@ -2,7 +2,7 @@ import * as Schema from "effect/Schema";
 import * as Rpc from "effect/unstable/rpc/Rpc";
 
 import { EnvironmentAuthorizationError } from "./auth.ts";
-import { NonNegativeInt, PositiveInt, ProjectId, ThreadId } from "./baseSchemas.ts";
+import { IsoDateTime, NonNegativeInt, PositiveInt, ProjectId, ThreadId } from "./baseSchemas.ts";
 
 export const MailAccountId = Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9_-]{1,64}$/));
 export type MailAccountId = typeof MailAccountId.Type;
@@ -130,6 +130,67 @@ export const MailMessageIdHeader = Schema.String.check(
   ),
 );
 
+export const MailFolder = Schema.Struct({
+  name: MailboxName,
+  specialUse: Schema.optionalKey(Schema.String),
+});
+export type MailFolder = typeof MailFolder.Type;
+
+export const MailFolderList = Schema.Struct({
+  folders: Schema.Array(MailFolder),
+  truncated: Schema.Boolean,
+});
+export type MailFolderList = typeof MailFolderList.Type;
+
+/** One row of a folder listing. `messageId` is what a link to this message stores. */
+export const MailMessageListItem = Schema.Struct({
+  ref: MailMessageRef,
+  messageId: Schema.optionalKey(MailMessageIdHeader),
+  subject: Schema.optionalKey(Schema.String),
+  from: Schema.optionalKey(Schema.String),
+  date: Schema.optionalKey(IsoDateTime),
+  seen: Schema.Boolean,
+  flagged: Schema.Boolean,
+  answered: Schema.Boolean,
+  size: Schema.optionalKey(NonNegativeInt),
+});
+export type MailMessageListItem = typeof MailMessageListItem.Type;
+
+export const MailMessagePage = Schema.Struct({
+  messages: Schema.Array(MailMessageListItem),
+  nextCursor: Schema.optionalKey(Schema.String),
+});
+export type MailMessagePage = typeof MailMessagePage.Type;
+
+/** One message as the reader shows it. `ref` is where it was actually found. */
+export const MailMessageContent = Schema.Struct({
+  ref: MailMessageRef,
+  messageId: Schema.optionalKey(MailMessageIdHeader),
+  subject: Schema.optionalKey(Schema.String),
+  from: Schema.optionalKey(Schema.String),
+  to: Schema.optionalKey(Schema.String),
+  cc: Schema.optionalKey(Schema.String),
+  date: Schema.optionalKey(IsoDateTime),
+  seen: Schema.Boolean,
+  flagged: Schema.Boolean,
+  answered: Schema.Boolean,
+  body: Schema.Struct({
+    text: Schema.String,
+    truncated: Schema.Boolean,
+    nextOffset: Schema.optionalKey(NonNegativeInt),
+  }),
+  attachments: Schema.Array(
+    Schema.Struct({
+      partId: Schema.String,
+      name: Schema.String,
+      contentType: Schema.String,
+      size: NonNegativeInt,
+    }),
+  ),
+  sourceTruncated: Schema.optionalKey(Schema.Boolean),
+});
+export type MailMessageContent = typeof MailMessageContent.Type;
+
 export const MailAddress = Schema.Struct({
   name: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(256))),
   address: MailAddressString,
@@ -236,6 +297,9 @@ export const PULSE_MAIL_METHODS = {
   setThreadSelection: "pulse.mail.setThreadSelection",
   subscribeThreadApprovals: "pulse.mail.subscribeThreadApprovals",
   respondApproval: "pulse.mail.respondApproval",
+  listFolders: "pulse.mail.listFolders",
+  listMessages: "pulse.mail.listMessages",
+  readMessage: "pulse.mail.readMessage",
 } as const;
 
 export const PulseMailRpcs = [
@@ -322,6 +386,32 @@ export const PulseMailRpcs = [
       digest: Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/)),
     }),
     success: MailSendApproval,
+    error: errors,
+  }),
+  Rpc.make(PULSE_MAIL_METHODS.listFolders, {
+    payload: AccountRef,
+    success: MailFolderList,
+    error: errors,
+  }),
+  Rpc.make(PULSE_MAIL_METHODS.listMessages, {
+    payload: Schema.Struct({
+      accountId: MailAccountId,
+      mailbox: MailboxName,
+      query: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(200))),
+      cursor: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(64))),
+      limit: Schema.optionalKey(PositiveInt),
+    }),
+    success: MailMessagePage,
+    error: errors,
+  }),
+  Rpc.make(PULSE_MAIL_METHODS.readMessage, {
+    payload: Schema.Struct({
+      accountId: MailAccountId,
+      messageId: Schema.optionalKey(MailMessageIdHeader),
+      location: Schema.optionalKey(MailMessageRef),
+      offset: Schema.optionalKey(NonNegativeInt),
+    }),
+    success: MailMessageContent,
     error: errors,
   }),
 ] as const;

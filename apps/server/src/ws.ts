@@ -1285,6 +1285,18 @@ const mailWsRpcLayer = MailWsRpcGroup.toLayer(
         observeRpcEffect(WS_METHODS.pulseMailRespondApproval, pulseMail.respondApproval(input), {
           "rpc.aggregate": "pulse.mail",
         }),
+      [WS_METHODS.pulseMailListFolders]: (input) =>
+        observeRpcEffect(WS_METHODS.pulseMailListFolders, pulseMail.listFolders(input), {
+          "rpc.aggregate": "pulse.mail",
+        }),
+      [WS_METHODS.pulseMailListMessages]: (input) =>
+        observeRpcEffect(WS_METHODS.pulseMailListMessages, pulseMail.listMessages(input), {
+          "rpc.aggregate": "pulse.mail",
+        }),
+      [WS_METHODS.pulseMailReadMessage]: (input) =>
+        observeRpcEffect(WS_METHODS.pulseMailReadMessage, pulseMail.readMessage(input), {
+          "rpc.aggregate": "pulse.mail",
+        }),
     });
   }),
 );
@@ -1866,6 +1878,7 @@ const makeWsRpcLayer = (
               openCodeManagedSkills: true,
               mcpManagement: true,
               mailManagement: true,
+              mailRead: true,
               workspaceLinks: true,
               mcpCreateOnly: true,
               mcpDiscovery: true,

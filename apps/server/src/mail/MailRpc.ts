@@ -2,6 +2,9 @@ import {
   MailError,
   type MailAccountHealth,
   type MailErrorKind,
+  type MailMessageContent,
+  type MailMessageListItem,
+  type MailMessageRef,
   type ProjectId,
   type ThreadId,
 } from "@t3tools/contracts";
@@ -10,8 +13,15 @@ import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 
-import type { MailConfigService } from "./MailConfigService.ts";
-import { withImap, type MailConnectionOptions } from "./MailConnection.ts";
+import type { MailConfigService, StoredMailAccount } from "./MailConfigService.ts";
+import { withImap, type MailConnectionOptions, type MailLogin } from "./MailConnection.ts";
+import {
+  fetchByReference,
+  listMailboxes,
+  search,
+  type MailMessageDetail,
+  type MailMessageSummary,
+} from "./MailImapRead.ts";
 import type { MailOAuth } from "./MailOAuth.ts";
 import type { MailSendService } from "./MailSendService.ts";
 
@@ -44,6 +54,38 @@ const healthFor = (kind: MailErrorKind): MailAccountHealth["status"] =>
       ? "unreachable"
       : "error";
 
+/** Display text cut to `max` characters, so one odd header cannot bloat a page. */
+const clip = (text: string, max: number) =>
+  text.length > max ? `${text.slice(0, max - 1)}…` : text;
+
+const toListItem = (summary: MailMessageSummary): MailMessageListItem => ({
+  ref: summary.ref,
+  seen: summary.seen,
+  flagged: summary.flagged,
+  answered: summary.answered,
+  ...(summary.messageId ? { messageId: summary.messageId } : {}),
+  ...(summary.subject ? { subject: clip(summary.subject, 300) } : {}),
+  ...(summary.from ? { from: clip(summary.from, 300) } : {}),
+  ...(summary.date ? { date: summary.date } : {}),
+  ...(summary.size === undefined ? {} : { size: summary.size }),
+});
+
+const toContent = (detail: MailMessageDetail): MailMessageContent => ({
+  ref: detail.ref,
+  seen: detail.seen,
+  flagged: detail.flagged,
+  answered: detail.answered,
+  ...(detail.messageId ? { messageId: detail.messageId } : {}),
+  ...(detail.subject ? { subject: clip(detail.subject, 1_000) } : {}),
+  ...(detail.from ? { from: clip(detail.from, 1_000) } : {}),
+  ...(detail.to ? { to: clip(detail.to, 2_000) } : {}),
+  ...(detail.cc ? { cc: clip(detail.cc, 2_000) } : {}),
+  ...(detail.date ? { date: detail.date } : {}),
+  body: detail.body,
+  attachments: detail.attachments,
+  ...(detail.sourceTruncated ? { sourceTruncated: true } : {}),
+});
+
 export const mailRpcHandlers = (
   config: MailConfigService["Service"],
   oauth: MailOAuth["Service"],
@@ -66,6 +108,16 @@ export const mailRpcHandlers = (
           : { status: healthFor(result.failure.kind), message: result.failure.message, checkedAt },
       );
     });
+
+  /** Signs in to `accountId` and runs `use` with its stored settings. */
+  const withAccount = Effect.fnUntraced(function* <A>(
+    accountId: string,
+    use: (account: StoredMailAccount, login: MailLogin) => Effect.Effect<A, MailError>,
+  ) {
+    const account = yield* config.getAccount(accountId);
+    const login = yield* oauth.login(accountId);
+    return yield* use(account, login);
+  });
 
   return {
     listAccounts: () => redact(config.listAccounts),
@@ -95,6 +147,59 @@ export const mailRpcHandlers = (
     subscribeThreadApprovals: (input: { readonly threadId: ThreadId }) =>
       redactStream(send.subscribeThread(input.threadId)),
     respondApproval: (input: Parameters<typeof send.respond>[0]) => redact(send.respond(input)),
+    listFolders: (input: { readonly accountId: string }) =>
+      redact(
+        withAccount(input.accountId, (account, login) => listMailboxes(account, login, imap)).pipe(
+          Effect.map(({ mailboxes, truncated }) => ({ folders: mailboxes, truncated })),
+        ),
+      ),
+    listMessages: (input: {
+      readonly accountId: string;
+      readonly mailbox: string;
+      readonly query?: string | undefined;
+      readonly cursor?: string | undefined;
+      readonly limit?: number | undefined;
+    }) => {
+      const text = input.query?.trim();
+      return redact(
+        withAccount(input.accountId, (account, login) =>
+          search(
+            account,
+            login,
+            {
+              mailbox: input.mailbox,
+              ...(text ? { query: { text } } : {}),
+              ...(input.cursor === undefined ? {} : { cursor: input.cursor }),
+              ...(input.limit === undefined ? {} : { limit: input.limit }),
+            },
+            imap,
+          ),
+        ).pipe(
+          Effect.map((page) => ({
+            messages: page.messages.map(toListItem),
+            ...(page.nextCursor === undefined ? {} : { nextCursor: page.nextCursor }),
+          })),
+        ),
+      );
+    },
+    readMessage: (input: {
+      readonly accountId: string;
+      readonly messageId?: string | undefined;
+      readonly location?: MailMessageRef | undefined;
+      readonly offset?: number | undefined;
+    }) =>
+      redact(
+        input.location !== undefined && input.location.accountId !== input.accountId
+          ? Effect.fail(
+              new MailError({
+                kind: "invalid-input",
+                message: "This message belongs to another account.",
+              }),
+            )
+          : withAccount(input.accountId, (account, login) =>
+              fetchByReference(account, login, input, imap),
+            ).pipe(Effect.map(toContent)),
+      ),
   };
 };
 

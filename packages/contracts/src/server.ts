@@ -611,6 +611,7 @@ export const ServerConfig = Schema.Struct({
       openCodeManagedSkills: Schema.optionalKey(Schema.Boolean),
       mcpManagement: Schema.optionalKey(Schema.Boolean),
       mailManagement: Schema.optionalKey(Schema.Boolean),
+      mailRead: Schema.optionalKey(Schema.Boolean),
       workspaceLinks: Schema.optionalKey(Schema.Boolean),
       mcpCreateOnly: Schema.optionalKey(Schema.Boolean),
       mcpDiscovery: Schema.optionalKey(Schema.Boolean),
