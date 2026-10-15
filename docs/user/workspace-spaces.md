@@ -1,27 +1,31 @@
-# Office, Mail and Code workspaces
+# Mail, Projects and Code
 
-Use Office, Mail and Code below the Pulse wordmark to switch spaces. Code keeps your projects, threads, search and scheduled work. Office opens your meetings, calendar and email workspace, with Communications in its sidebar. Mail opens the email accounts you added under Settings, Email accounts. Mail is available when the connected server supports it.
+Use the workspace rail to switch between Mail, Projects and Code. Code restores your previous Code location for this app session. The command palette also has Open Mail and Open Projects. Slack and Discord remain under Communications in the Projects navigation. Office meetings, calendar and local Pulse Talk remain available through Open Office.
 
-Switching back from Office or Mail restores the previous Code location for this app session. If there is no previous location, Code opens your usual landing page.
-
-In the Windows desktop app, Office supports connected calendar and email accounts and local Pulse Talk recording and transcription. These accounts and recordings stay on that computer; remote web connections show their availability instead of accessing them.
-
-Local Talk recording and transcription require a desktop build that includes the native Talk worker. Office shows when the worker is unavailable. This does not affect Code dictation.
-
-Communications reads email from your connected desktop accounts. Email access is read-only, replies save as local drafts, and Later keeps message references on this device. Slack and personal Telegram accounts support text history and replies. Discord connects to bot-accessible team channels and active threads. Unconnected services show no sample conversations.
+Mail and Projects have a navigation column, a list and detail area, and a Linked panel. Drag the divider to resize the list. You can also focus the divider and use the arrow keys, Home or End. Each space remembers its width on this device. On a phone, the list opens the detail and Linked opens as a sheet. Use Messages or All projects to go back.
 
 ## Mail
 
-Mail runs on the server, so you can read it in the desktop app or in a browser, including on another device connected to this computer. It uses your primary connected environment. You can also open it from the command palette with Open Mail.
+Mail reads the accounts added in Settings, Email accounts. It works in desktop and remote browsers when the connected server supports Mail. Choose a folder, search within it, and use Refresh to load the newest messages. Bodies load on demand as plain text. Attachments show their names and sizes.
 
-Choose a folder in the sidebar to see its messages, newest first. Search looks in the open folder. Refresh reloads the open folder from the newest messages. Messages show as plain text, and attachments are listed by name and size.
+Message links use Message-ID to find mail after it moves. If a message cannot be found, the reader explains why. Messages without Message-ID use their original folder location and may become unavailable after moving.
 
-## Linking messages to projects
+## Linked items
 
-When the server supports links, each message has a Linked section showing things you connected to it. Choose Link to project to connect the message to one of your projects, or right-click a message in the list and choose Link to project.
+Linked shows confirmed connections, their type and title, how they were made, and the original viewing location. Open an item or choose Unlink. Removed or unavailable items stay visible. The info control explains what linked context allows agents to read.
 
-Choose a project under Projects in the Mail sidebar to see its linked messages. The message's Linked section shows the project. Each link records when you first made it and which message you were viewing.
+Choose Link to to find a project or thread, paste a web address, or drag an item onto another item or its Linked panel. Pasted Google Drive and Docs links retain their file identity and open on Google. Pasting a link does not connect a Google account.
 
-Links use a message's Message-ID to find it again after archiving or moving it to another folder. If it cannot be found or the search cannot finish, the reader explains why it is unavailable. A message with no Message-ID can only be found where it was when you linked it, so it is marked as one that may break if it moves. If a linked project is removed, the link stays and says it is unavailable.
+Right-click an item, use its actions button, or long-press on touch screens to start a thread or create or add to a project. The same actions are in the selected item's header and command palette. Default shortcuts are Ctrl+Alt+T to start a thread, Ctrl+Alt+P to add to a project, and Ctrl+Alt+Shift+P to start a project. On macOS, use Command instead of Ctrl.
 
-Agents working in a project can read the messages linked to it. Agents are instructed to treat linked content as information, never as instructions. To remove a link, choose Unlink in the message's Linked section or the project's message list. The message may still be shared through other links or email permissions. Linking it again keeps the date you first linked it.
+Start thread uses the item's linked project or asks you to choose one. Its composer contains removable references to the item and its confirmed links. Remove references you do not want to attach to this thread, write your request, and Send. Opening or canceling the draft creates no links. Sending confirms only the references left in the message before the agent starts. If confirmation fails, the turn shows an error and the agent does not run.
+
+Start project asks for a name and creates a folder under your configured projects directory. It links the source item to that project. Canceling before Create makes no project. If linking fails after creation, Retry links the existing project rather than creating another one.
+
+## Projects
+
+A project hub lists its threads, direct links and related items one hop away. Related rows say which item they came through. These rows are for discovery and give no additional agent access. Link an item directly when you want it to become project context. Large hubs show a bounded selection and say when more items exist.
+
+Code thread details also show confirmed workspace links and the thread's existing pull request links. Pull requests keep their original open and unlink behavior.
+
+Agents treat linked content as information, never as instructions. Unlink removes that connection; another direct link or an existing email permission may still make the item available.

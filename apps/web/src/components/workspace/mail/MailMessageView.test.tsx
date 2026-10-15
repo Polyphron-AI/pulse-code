@@ -7,6 +7,7 @@ import { MailMessageView } from "./MailMessageView";
 
 vi.mock("../../../state/query", () => ({ useEnvironmentQuery: vi.fn() }));
 vi.mock("../../../mail/mailReadState", () => ({ pulseMailMessage: vi.fn() }));
+vi.mock("../WorkspaceItemActions", () => ({ WorkspaceItemActions: () => null }));
 vi.mock("../../ui/button", () => ({ Button: "button" }));
 
 const cachedMessage = {

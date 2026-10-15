@@ -37,7 +37,13 @@ import ThreadSidebar from "./Sidebar";
 import { SettingsSidebarNav } from "./settings/SettingsSidebarNav";
 import { SidebarBrandWidthProbe, SidebarChromeHeader } from "./sidebar/SidebarChrome";
 import { OfficeSidebar } from "./workspace/OfficeWorkspace";
-import { useMailSpace, useOfficeSpace } from "./workspace/WorkspaceSpaceSelector";
+import {
+  WorkspaceSpaceSelector,
+  useProjectsSpace,
+  useMailSpace,
+  useOfficeSpace,
+} from "./workspace/WorkspaceSpaceSelector";
+import { ProjectsNav } from "./workspace/ProjectsNav";
 import { MailNav } from "./workspace/mail/MailNav";
 import { MainAppLocationTracker } from "./sidebar/mainAppLocation";
 import { useSidebarStageBackdropVariant } from "./SidebarStageBackdrop";
@@ -223,6 +229,7 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const officeSpace = useOfficeSpace();
   const mailSpace = useMailSpace();
+  const projectsSpace = useProjectsSpace();
   const legacySidebarEnabled = useLegacySidebarEnabled();
   const { active: panelAnimationsActive, durationMs: panelAnimationDurationMs } =
     usePanelAnimationSettings();
@@ -312,13 +319,25 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
       >
         <SidebarBrandWidthProbe onWidthChange={setBrandWidth} />
         <ProjectProjectionRetention />
+        <div className="hidden md:flex">
+          <WorkspaceSpaceSelector rail />
+        </div>
         <Sidebar
+          className="md:left-16"
           side="left"
           collapsible="offcanvas"
           data-app-sidebar=""
           role="navigation"
           aria-label={
-            isOnSettings ? "Settings" : officeSpace ? "Office" : mailSpace ? "Mail" : "Threads"
+            isOnSettings
+              ? "Settings"
+              : officeSpace
+                ? "Office"
+                : mailSpace
+                  ? "Mail"
+                  : projectsSpace
+                    ? "Projects"
+                    : "Threads"
           }
           resizable={{
             maxWidth: sidebarMaximumWidth,
@@ -337,6 +356,8 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
             </>
           ) : officeSpace ? (
             <OfficeSidebar />
+          ) : projectsSpace ? (
+            <ProjectsNav />
           ) : mailSpace ? (
             <MailNav />
           ) : legacySidebarEnabled ? (

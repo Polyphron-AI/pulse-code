@@ -1,3 +1,4 @@
+import { EnvironmentId } from "@t3tools/contracts";
 import { Link, useSearch } from "@tanstack/react-router";
 import { FolderIcon, FolderKanbanIcon, InboxIcon, MailIcon, SettingsIcon } from "lucide-react";
 
@@ -24,7 +25,11 @@ const rowClass = (active: boolean) =>
 /** The Mail space's sidebar: accounts when there are several, then the account's folders. */
 export function MailNav() {
   const search = useSearch({ strict: false });
-  const { environmentId, mailRead, workspaceLinks: linksAvailable } = useMailCapabilities();
+  const {
+    environmentId,
+    mailRead,
+    workspaceLinks: linksAvailable,
+  } = useMailCapabilities(search.environment ? EnvironmentId.make(search.environment) : undefined);
   const projects = useProjects().filter((project) => project.environmentId === environmentId);
   const { isMobile, setOpenMobile } = useSidebar();
   const closeMobileSidebar = () => {
@@ -62,7 +67,11 @@ export function MailNav() {
                     key={candidate.id}
                     onClick={closeMobileSidebar}
                     to="/workspace"
-                    search={{ space: "mail", account: candidate.id }}
+                    search={{
+                      space: "mail",
+                      ...(environmentId === null ? {} : { environment: environmentId }),
+                      account: candidate.id,
+                    }}
                     aria-current={candidate.id === account?.id ? "page" : undefined}
                     className={rowClass(candidate.id === account?.id)}
                   >
@@ -91,7 +100,12 @@ export function MailNav() {
                       key={candidate.name}
                       onClick={closeMobileSidebar}
                       to="/workspace"
-                      search={{ space: "mail", account: account.id, folder: candidate.name }}
+                      search={{
+                        space: "mail",
+                        ...(environmentId === null ? {} : { environment: environmentId }),
+                        account: account.id,
+                        folder: candidate.name,
+                      }}
                       aria-current={active ? "page" : undefined}
                       className={rowClass(active)}
                     >
@@ -118,7 +132,11 @@ export function MailNav() {
                       key={project.id}
                       onClick={closeMobileSidebar}
                       to="/workspace"
-                      search={{ space: "mail", project: project.id }}
+                      search={{
+                        space: "mail",
+                        ...(environmentId === null ? {} : { environment: environmentId }),
+                        project: project.id,
+                      }}
                       aria-current={active ? "page" : undefined}
                       className={rowClass(active)}
                     >

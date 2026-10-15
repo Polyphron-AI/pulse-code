@@ -1,5 +1,7 @@
 import * as Schema from "effect/Schema";
 
+import { WorkspaceLinkEndpoint } from "./pulseLinks.ts";
+
 import {
   EnvironmentId,
   ForwardCompatibleArray,
@@ -28,6 +30,7 @@ export const COMPOSER_CONTEXT_KINDS = [
   "mention",
   "skill",
   "thread",
+  "workspace-item",
 ] as const;
 export type KnownComposerContextKind = (typeof COMPOSER_CONTEXT_KINDS)[number];
 
@@ -231,6 +234,22 @@ export const ThreadContextRecord = Schema.Struct({
 });
 export type ThreadContextRecord = typeof ThreadContextRecord.Type;
 
+/** Removable item reference. A retained reference confirms a link only when its message runs. */
+export const WorkspaceItemContextRecord = Schema.Struct({
+  ...recordBase,
+  kind: Schema.Literal("workspace-item"),
+  item: WorkspaceLinkEndpoint,
+  viewing: WorkspaceLinkEndpoint,
+});
+export type WorkspaceItemContextRecord = typeof WorkspaceItemContextRecord.Type;
+
+/** Identity-only context records share the composer's established removable reference storage. */
+export const LinkedComposerContextRecord = Schema.Union([
+  ThreadContextRecord,
+  WorkspaceItemContextRecord,
+]);
+export type LinkedComposerContextRecord = typeof LinkedComposerContextRecord.Type;
+
 /**
  * Catch-all for kinds this build does not know. Known discriminators are excluded so a
  * malformed known record fails its own schema instead of sliding through unchecked.
@@ -262,6 +281,7 @@ export const KnownComposerContextRecord = Schema.Union([
   MentionContextRecord,
   SkillContextRecord,
   ThreadContextRecord,
+  WorkspaceItemContextRecord,
 ]);
 export type KnownComposerContextRecord = typeof KnownComposerContextRecord.Type;
 

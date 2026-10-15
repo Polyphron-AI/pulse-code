@@ -19,7 +19,7 @@ import {
   type ServerProvider,
   type ScopedProjectRef,
   type ScopedThreadRef,
-  type ThreadContextRecord,
+  type LinkedComposerContextRecord as ThreadContextRecord,
   type ThreadId,
   type ThreadLinkedPullRequest,
   type RunId,

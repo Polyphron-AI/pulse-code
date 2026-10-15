@@ -4,7 +4,7 @@ import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
-import type { EnvironmentId } from "@t3tools/contracts";
+import type { EnvironmentId, ScopedProjectRef } from "@t3tools/contracts";
 import { useCallback } from "react";
 
 import { stackedThreadToast, toastManager } from "~/components/ui/toast";
@@ -78,6 +78,8 @@ export function useNewProject() {
       readonly environmentId: EnvironmentId;
       readonly name: string;
       readonly github: { readonly account: string | null } | null;
+      readonly openThread?: boolean;
+      readonly onCreated?: (project: ScopedProjectRef) => Promise<void>;
     }): Promise<boolean> => {
       const result = await createNew({
         environmentId: input.environmentId,
@@ -118,6 +120,7 @@ export function useNewProject() {
       }
 
       const projectRef = scopeProjectRef(input.environmentId, projectId);
+      await input.onCreated?.(projectRef);
       // Drafts key off the project's stored path, so wait for the create event
       // to reach the store before opening one.
       const project = await waitForProject(projectRef).catch((error: unknown) => {
@@ -131,6 +134,7 @@ export function useNewProject() {
         return null;
       });
       if (project === null) return true;
+      if (input.openThread === false) return true;
       await handleNewThread(projectRef).catch((error: unknown) => {
         toastManager.add(
           stackedThreadToast({

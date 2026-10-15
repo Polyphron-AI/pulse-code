@@ -16,7 +16,8 @@ import type {
   ReviewCommentContextRecord,
   ScopedThreadRef,
   TerminalContextRecord,
-  ThreadContextRecord,
+  LinkedComposerContextRecord as ThreadContextRecord,
+  ThreadContextRecord as ActualThreadContextRecord,
   ThreadId,
 } from "@t3tools/contracts";
 import { upgradeLegacyContextMessage } from "@t3tools/shared/composerContextLegacy";
@@ -163,10 +164,13 @@ function threadContextId(threadId: ThreadId): ComposerContextId {
 }
 
 export function threadContextReference(record: ThreadContextRecord): ComposerContextReference {
-  return { kind: "thread", contextId: record.contextId, label: record.label };
+  return { kind: record.kind, contextId: record.contextId, label: record.label };
 }
 
-export function threadContextRecord(ref: ScopedThreadRef, title: string): ThreadContextRecord {
+export function threadContextRecord(
+  ref: ScopedThreadRef,
+  title: string,
+): ActualThreadContextRecord {
   const label = sanitizeComposerContextLabel(title, "thread");
   return {
     version: 1,

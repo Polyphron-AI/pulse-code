@@ -20,6 +20,13 @@ const decodeCommand = Schema.decodeUnknownSync(OrchestrationV2Command);
 const base = { version: 1, contextId: "ctx_1" } as const;
 
 const knownRecords: Record<(typeof COMPOSER_CONTEXT_KINDS)[number], Record<string, unknown>> = {
+  "workspace-item": {
+    ...base,
+    kind: "workspace-item",
+    label: "Brief",
+    item: { ref: { type: "url", url: "https://example.com/brief" } },
+    viewing: { ref: { type: "url", url: "https://example.com/source" } },
+  },
   image: {
     ...base,
     kind: "image",

@@ -1,6 +1,10 @@
+import { WorkspaceItemIcon } from "./workspace/WorkspaceItemIcon";
 import ChatMarkdown from "./ChatMarkdown";
 import { ReadOnlySourcePreview } from "./files/AttachmentFilePreview";
-import type { PreviewAnnotationPayload, ThreadContextRecord } from "@t3tools/contracts";
+import type {
+  PreviewAnnotationPayload,
+  LinkedComposerContextRecord as ThreadContextRecord,
+} from "@t3tools/contracts";
 import { formatAttachmentSize } from "@t3tools/client-runtime/state/attachments";
 import { videoMimeType } from "@t3tools/shared/video";
 import { MessageCircleIcon, MousePointerClickIcon } from "lucide-react";
@@ -58,7 +62,7 @@ export type ComposerDraftContextRecord =
   | { kind: "preview-annotation"; record: PreviewAnnotationPayload }
   | { kind: "image"; record: ComposerImageAttachment; upload?: AttachmentUploadState | undefined }
   | { kind: "file"; record: ComposerFileAttachment; upload?: AttachmentUploadState | undefined }
-  | { kind: "thread"; record: ThreadContextRecord };
+  | { kind: "thread" | "workspace-item"; record: ThreadContextRecord };
 
 /** What a chip can do beyond showing itself; the composer supplies the handlers. */
 export interface ComposerContextActions {
@@ -126,7 +130,7 @@ export function composerContextRecordsFromDraft(input: {
     records.set(previewAnnotationContextId(record.id), { kind: "preview-annotation", record });
   }
   for (const record of input.threadContexts ?? []) {
-    records.set(record.contextId, { kind: "thread", record });
+    records.set(record.contextId, { kind: record.kind, record });
   }
   return records;
 }
@@ -333,8 +337,34 @@ const composerContextPresentationRegistry = createContextPresentationRegistry<
   ComposerContextRenderContext,
   ReactElement
 >({
-  requiredKinds: ["image", "file", "terminal", "review-comment", "preview-annotation", "thread"],
+  requiredKinds: [
+    "image",
+    "file",
+    "terminal",
+    "review-comment",
+    "preview-annotation",
+    "thread",
+    "workspace-item",
+  ],
   handlers: [
+    {
+      kind: "workspace-item",
+      canRender: (entry) => entry.kind === "workspace-item",
+      render: (entry, context) => (
+        <ContextChipShell
+          kind="neutral"
+          icon={
+            entry.kind === "workspace-item" && entry.record.kind === "workspace-item" ? (
+              <WorkspaceItemIcon item={entry.record.item.ref} />
+            ) : (
+              <MessageCircleIcon />
+            )
+          }
+          label={context.label}
+          tooltip="Linked workspace item"
+        />
+      ),
+    },
     {
       kind: "terminal",
       canRender: (entry) => entry.kind === "terminal",
@@ -419,7 +449,11 @@ const composerContextPresentationRegistry = createContextPresentationRegistry<
       canRender: (entry) => entry.kind === "thread",
       render: (entry, context) =>
         entry.kind === "thread" ? (
-          <ThreadContextChip record={entry.record} />
+          entry.record.kind === "thread" ? (
+            <ThreadContextChip record={entry.record} />
+          ) : (
+            <UnresolvedContextChip label={entry.record.label} />
+          )
         ) : (
           <UnresolvedContextChip label={context.label} />
         ),

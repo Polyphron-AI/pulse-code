@@ -1,6 +1,12 @@
-import type { WorkspaceItemRef } from "@t3tools/contracts";
+import {
+  WorkspaceItemContextRecord,
+  type OrchestrationMessageContext,
+  type WorkspaceItemRef,
+} from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import { collectComposerContextReferences } from "@t3tools/shared/composerContextReferences";
 
 import type { WorkspaceContext, WorkspaceLinkOwner, WorkspaceLinks } from "./WorkspaceLinks.ts";
 
@@ -98,3 +104,34 @@ export const linkedItemsFor = (
     Effect.catchDefect(leaveOut),
   );
 };
+
+/** Only references retained in the exact submitted document authorize new links. */
+export const retainedWorkspaceMessageContext = (message: {
+  readonly text: string;
+  readonly context?: OrchestrationMessageContext | undefined;
+}) => {
+  const retained = new Set(
+    collectComposerContextReferences(message.text).map((entry) => entry.contextId),
+  );
+  const isWorkspace = Schema.is(WorkspaceItemContextRecord);
+  return (message.context?.records ?? [])
+    .filter(isWorkspace)
+    .filter((record) => retained.has(record.contextId));
+};
+
+/** Confirm only retained chips from the exact dispatched message, before provider context reads. */
+export const confirmWorkspaceMessageContext = (
+  link: WorkspaceLinks["Service"]["link"],
+  owner: WorkspaceLinkOwner,
+  message: { readonly text: string; readonly context?: OrchestrationMessageContext | undefined },
+) =>
+  Effect.gen(function* () {
+    for (const record of retainedWorkspaceMessageContext(message)) {
+      yield* link({
+        a: { ref: { type: "thread", threadId: owner.threadId } },
+        b: record.item,
+        viewing: record.viewing,
+        source: { type: "action", action: "start-thread" },
+      });
+    }
+  });

@@ -200,3 +200,45 @@ const make = Effect.gen(function* () {
 export const layer = Layer.effect(WorkspaceLinks, make);
 
 export const WorkspaceLinksLive = layer.pipe(Layer.provide(Repository.layer));
+
+/** Bounded one-hop display rows. These never become confirmed links or agent context. */
+export const projectHub = (
+  list: WorkspaceLinks["Service"]["list"],
+  input: { readonly projectId: ProjectId; readonly threadIds: ReadonlyArray<ThreadId> },
+) =>
+  Effect.gen(function* () {
+    const project: WorkspaceLinkEndpoint = { ref: { type: "project", projectId: input.projectId } };
+    const direct = yield* list(project.ref);
+    const seen = new Set([
+      workspaceItemKey(project.ref),
+      ...direct.linked.map((view) => workspaceItemKey(view.item.ref)),
+      ...input.threadIds.map((threadId) => workspaceItemKey({ type: "thread", threadId })),
+    ]);
+    const vias = [
+      ...new Map(
+        [
+          ...direct.linked.map((view) => view.item),
+          ...input.threadIds
+            .slice(0, 30)
+            .map((threadId): WorkspaceLinkEndpoint => ({ ref: { type: "thread", threadId } })),
+        ].map((endpoint) => [workspaceItemKey(endpoint.ref), endpoint]),
+      ).values(),
+    ];
+    const related: Array<{ item: WorkspaceLinkEndpoint; via: WorkspaceLinkEndpoint }> = [];
+    let truncated = direct.truncated || vias.length > 30;
+    for (const via of vias.slice(0, 30)) {
+      const page = yield* list(via.ref);
+      truncated ||= page.truncated;
+      for (const view of page.linked) {
+        const key = workspaceItemKey(view.item.ref);
+        if (seen.has(key)) continue;
+        if (related.length >= 100) {
+          truncated = true;
+          continue;
+        }
+        seen.add(key);
+        related.push({ item: view.item, via });
+      }
+    }
+    return { related, truncated };
+  });

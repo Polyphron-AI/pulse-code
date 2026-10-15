@@ -45,6 +45,7 @@ export interface ResizableWidthHandlers {
  */
 export function useResizableWidth(options: UseResizableWidthOptions): {
   readonly width: number;
+  readonly setWidth: (value: number) => void;
   readonly handlers: ResizableWidthHandlers;
 } {
   const { storageKey, defaultWidth, minWidth, maxWidth, edge } = options;
@@ -59,13 +60,13 @@ export function useResizableWidth(options: UseResizableWidthOptions): {
 
   // No cross-tab subscription: panel width is per-window state.
   const readWidth = () => {
-    if (typeof window === "undefined") return defaultWidth;
+    if (typeof window === "undefined") return null;
     try {
       const stored = getLocalStorageItem(storageKey, WidthSchema);
-      return clamp(stored ?? defaultWidth);
+      return stored === null ? null : clamp(stored);
     } catch (error) {
       console.error("Could not read persisted panel width.", error);
-      return defaultWidth;
+      return null;
     }
   };
   const [widthState, setWidthState] = useState(() => ({ storageKey, width: readWidth() }));
@@ -74,7 +75,7 @@ export function useResizableWidth(options: UseResizableWidthOptions): {
     setWidthState({ storageKey, width: readWidth() });
   }
 
-  const clampedWidth = clamp(widthState.width);
+  const clampedWidth = clamp(widthState.width ?? defaultWidth);
   const latestOptions = useRef({ clamp, storageKey });
   useLayoutEffect(() => {
     latestOptions.current = { clamp, storageKey };
@@ -101,5 +102,13 @@ export function useResizableWidth(options: UseResizableWidthOptions): {
     storageKey,
   );
 
-  return { width: clampedWidth, handlers };
+  return {
+    width: clampedWidth,
+    handlers,
+    setWidth: (value) => {
+      const next = clamp(value);
+      setWidthState({ storageKey, width: next });
+      setLocalStorageItem(storageKey, next, WidthSchema);
+    },
+  };
 }

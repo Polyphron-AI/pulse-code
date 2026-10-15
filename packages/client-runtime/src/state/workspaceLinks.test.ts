@@ -126,3 +126,50 @@ it.effect("refetches an open list when a link changes anywhere in the environmen
     }),
   ),
 );
+
+it.effect("refetches project hub display rows after a remote link change", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const counter = yield* SubscriptionRef.make(0);
+      let connected = false;
+      const client = {
+        [WS_METHODS.pulseLinksSubscribeChanges]: () =>
+          SubscriptionRef.changes(counter).pipe(Stream.filter((count) => count > 0)),
+        [WS_METHODS.pulseLinksProjectHub]: () =>
+          Effect.sync(() => ({
+            related: connected
+              ? [
+                  {
+                    item: LINK.item,
+                    via: {
+                      ref: { type: "project" as const, projectId: ProjectId.make("project-1") },
+                    },
+                  },
+                ]
+              : [],
+            truncated: false,
+          })),
+      } as unknown as WsRpcProtocolClient;
+      const { atoms, registry } = yield* makeTestRuntime(client);
+      const hub = atoms.projectHub({
+        environmentId: TARGET.environmentId,
+        input: { projectId: ProjectId.make("project-1"), threadIds: [] },
+      });
+      const unmount = registry.mount(hub);
+      yield* Effect.addFinalizer(() => Effect.sync(unmount));
+      const initial = yield* Effect.promise(() => executeAtomQuery(registry, hub));
+      expect(AsyncResult.isSuccess(initial)).toBe(true);
+      if (!AsyncResult.isSuccess(initial)) return yield* Effect.die("hub did not load");
+      expect(initial.value.related).toEqual([]);
+      const refreshed = Latch.makeUnsafe();
+      const stop = registry.subscribe(hub, (result) => {
+        if (AsyncResult.isSuccess(result) && result.value.related.length === 1)
+          refreshed.openUnsafe();
+      });
+      yield* Effect.addFinalizer(() => Effect.sync(stop));
+      connected = true;
+      yield* SubscriptionRef.set(counter, 1);
+      yield* refreshed.await;
+    }),
+  ),
+);

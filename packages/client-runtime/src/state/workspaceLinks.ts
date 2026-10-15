@@ -27,6 +27,13 @@ export function createWorkspaceLinkAtoms<R, E>(
   } as const;
   return {
     changes,
+    projectHub: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:workspace-links:project-hub",
+      tag: WS_METHODS.pulseLinksProjectHub,
+      staleTimeMs: 30_000,
+      idleTtlMs: 60_000,
+      refreshTrigger: ({ environmentId }) => changes({ environmentId, input: {} }),
+    }),
     list: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "environment-data:workspace-links:list",
       tag: WS_METHODS.pulseLinksList,

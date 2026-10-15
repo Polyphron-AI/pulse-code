@@ -1,3 +1,4 @@
+import { workspaceItemFromUrl } from "./pulseLinks.ts";
 import { describe, expect, it } from "vite-plus/test";
 import * as Schema from "effect/Schema";
 
@@ -117,5 +118,29 @@ describe("workspaceItemKey", () => {
     expect(workspaceItemKey(ref!)).toBe(
       workspaceItemKey(decodeRef({ type: "url", url: "https://a.test/p?utm_campaign=z" })),
     );
+  });
+});
+
+describe("pasted workspace URLs", () => {
+  it.each([
+    "https://drive.google.com/file/d/file_123/view?usp=sharing",
+    "https://docs.google.com/document/d/file_123/edit#heading=test",
+    "https://docs.google.com/spreadsheets/d/file_123/edit",
+    "https://docs.google.com/presentation/d/file_123/edit",
+    "https://drive.google.com/open?id=file_123",
+    "https://drive.google.com/drive/u/1/folders/file_123",
+    "https://docs.google.com/document/u/1/d/file_123/edit",
+  ])("uses stable Drive identity for %s", (url) => {
+    expect(workspaceItemFromUrl(url)).toEqual({
+      type: "file",
+      provider: "google-drive",
+      fileId: "file_123",
+    });
+  });
+  it("keeps unrelated hosts as URLs and rejects non-web addresses", () => {
+    expect(
+      workspaceItemFromUrl("https://docs.google.com.evil.test/document/d/file_123/edit"),
+    ).toEqual({ type: "url", url: "https://docs.google.com.evil.test/document/d/file_123/edit" });
+    expect(workspaceItemFromUrl("javascript:alert(1)")).toBeUndefined();
   });
 });

@@ -1,13 +1,8 @@
 import { workspaceItemKey, type EnvironmentId, type MailMessageListItem } from "@t3tools/contracts";
-import { useState, type FormEvent, type MouseEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { RefreshCwIcon } from "lucide-react";
 
-import { readLocalApi } from "../../../localApi";
-import { useProjects } from "../../../state/entities";
-import { stackedThreadToast, toastManager } from "../../ui/toast";
-import { pickedProject, projectMenuItems } from "./linkedItems";
-import { linkErrorText, useMailLinks } from "./useMailLinks";
-import { useMailCapabilities } from "./useMailCapabilities";
+import { WorkspaceItemMenu } from "../WorkspaceItemActions";
 import { cn } from "../../../lib/utils";
 import { pulseMailMessages } from "../../../mail/mailReadState";
 import { useEnvironmentQuery } from "../../../state/query";
@@ -110,47 +105,6 @@ interface MailPageProps extends MailListProps {
   readonly onMore: (cursor: string) => void;
 }
 
-/** Right-click on a message: Open, or Link to project. Undefined when the server has no links. */
-function useMailRowMenu(environmentId: EnvironmentId, onSelect: (item: MailItemRef) => void) {
-  const { workspaceLinks: available } = useMailCapabilities();
-  const allProjects = useProjects();
-  const { linkToProject } = useMailLinks(environmentId);
-  if (!available) return undefined;
-  return async (event: MouseEvent<HTMLButtonElement>, message: MailMessageListItem) => {
-    const api = readLocalApi();
-    if (api === undefined) return;
-    event.preventDefault();
-    const item = mailItemRef(message);
-    const projects = allProjects.filter((project) => project.environmentId === environmentId);
-    const choice = await api.contextMenu.show(
-      [
-        { id: "open", label: "Open" },
-        // Linking an already linked pair is harmless: the server keeps one link per pair.
-        { id: "link", label: "Link to project", children: projectMenuItems(projects, new Set()) },
-      ],
-      { x: event.clientX, y: event.clientY },
-    );
-    if (choice === "open") {
-      onSelect(item);
-      return;
-    }
-    const project = pickedProject(projects, choice);
-    if (project === undefined) return;
-    try {
-      await linkToProject({ ref: item, title: mailItemTitle(message.subject) }, project);
-      toastManager.add({ type: "success", title: `Linked to ${project.title}` });
-    } catch (cause) {
-      toastManager.add(
-        stackedThreadToast({
-          type: "error",
-          title: "Could not link message",
-          description: linkErrorText(cause),
-        }),
-      );
-    }
-  };
-}
-
 function MailPage(props: MailPageProps) {
   const page = useEnvironmentQuery(
     pulseMailMessages({
@@ -163,7 +117,6 @@ function MailPage(props: MailPageProps) {
       }),
     }),
   );
-  const rowMenu = useMailRowMenu(props.environmentId, props.onSelect);
   if (page.data === null) {
     return page.error !== null ? (
       <MailError className="p-3" message={page.error} onRetry={page.refresh} />
@@ -186,12 +139,10 @@ function MailPage(props: MailPageProps) {
         return (
           <MailRow
             key={`${message.ref.mailbox}:${message.ref.uidValidity}:${message.ref.uid}`}
+            environmentId={props.environmentId}
             message={message}
             active={workspaceItemKey(item) === selectedKey}
             onSelect={() => props.onSelect(item)}
-            onContextMenu={
-              rowMenu === undefined ? undefined : (event) => void rowMenu(event, message)
-            }
           />
         );
       })}
@@ -212,34 +163,42 @@ function MailPage(props: MailPageProps) {
 }
 
 interface MailRowProps {
+  readonly environmentId: EnvironmentId;
   readonly message: MailMessageListItem;
   readonly active: boolean;
   readonly onSelect: () => void;
-  readonly onContextMenu: ((event: MouseEvent<HTMLButtonElement>) => void) | undefined;
 }
 
-function MailRow({ message, active, onSelect, onContextMenu }: MailRowProps) {
+function MailRow({ environmentId, message, active, onSelect }: MailRowProps) {
   return (
-    <button
-      type="button"
-      onClick={onSelect}
-      onContextMenu={onContextMenu}
-      aria-current={active ? "true" : undefined}
-      className={cn(
-        "flex w-full flex-col gap-0.5 border-b border-border px-3 py-2 text-left text-sm",
-        active ? "bg-accent" : "hover:bg-accent/50",
-      )}
-    >
-      <span className="flex items-baseline gap-2">
-        <span className={cn("min-w-0 flex-1 truncate", !message.seen && "font-semibold")}>
-          {message.from ?? "Unknown sender"}
-        </span>
-        {message.date !== undefined ? (
-          <span className="shrink-0 text-xs text-muted-foreground">{shortDate(message.date)}</span>
-        ) : null}
-      </span>
-      <span className="truncate text-muted-foreground">{mailItemTitle(message.subject)}</span>
-    </button>
+    <div className="border-b border-border">
+      <WorkspaceItemMenu
+        environmentId={environmentId}
+        item={{ ref: mailItemRef(message), title: mailItemTitle(message.subject) }}
+      >
+        <button
+          type="button"
+          onClick={onSelect}
+          aria-current={active ? "true" : undefined}
+          className={cn(
+            "flex min-w-0 flex-1 flex-col gap-0.5 px-3 py-2 text-left text-sm",
+            active ? "bg-accent" : "hover:bg-accent/50",
+          )}
+        >
+          <span className="flex items-baseline gap-2">
+            <span className={cn("min-w-0 flex-1 truncate", !message.seen && "font-semibold")}>
+              {message.from ?? "Unknown sender"}
+            </span>
+            {message.date !== undefined ? (
+              <span className="shrink-0 text-xs text-muted-foreground">
+                {shortDate(message.date)}
+              </span>
+            ) : null}
+          </span>
+          <span className="truncate text-muted-foreground">{mailItemTitle(message.subject)}</span>
+        </button>
+      </WorkspaceItemMenu>
+    </div>
   );
 }
 

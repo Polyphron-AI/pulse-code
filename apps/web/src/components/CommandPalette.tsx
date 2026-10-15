@@ -1910,6 +1910,38 @@ function OpenCommandPaletteDialog(props: {
       });
     },
   });
+  actionItems.push({
+    kind: "action",
+    value: "action:open-projects",
+    searchTerms: ["projects", "workspace", "hub"],
+    title: "Open Projects",
+    icon: <MailIcon className={ITEM_ICON_CLASS} />,
+    run: async () => {
+      await navigate({ to: "/workspace", search: { space: "projects" } });
+    },
+  });
+  for (const [action, title, command] of [
+    ["startThread", "Start thread from selected item", "workspace.startThread"],
+    ["addToProject", "Add selected item to project", "workspace.addToProject"],
+    ["startProject", "Start project from selected item", "workspace.startProject"],
+  ] as const) {
+    const button =
+      typeof document === "undefined"
+        ? null
+        : document.querySelector<HTMLButtonElement>(`[data-workspace-action="${action}"]`);
+    if (button !== null && !button.disabled)
+      actionItems.push({
+        kind: "action",
+        value: `action:workspace-${action}`,
+        searchTerms: ["workspace", "item", "link", title],
+        title,
+        shortcutCommand: command,
+        icon: <MailIcon className={ITEM_ICON_CLASS} />,
+        run: async () => {
+          if (button.isConnected && !button.disabled) button.click();
+        },
+      });
+  }
   if (mailReadAvailable) {
     actionItems.push({
       kind: "action",

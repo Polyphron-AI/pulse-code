@@ -1,10 +1,16 @@
 import * as ManagedSkillProviderSession from "../skills/ManagedSkillProviderSession.ts";
 import * as PulseProviderService from "../mcp/PulseProviderService.ts";
-import { linkedItemsFor, withLinkedItems } from "../workspace/linkedItemsContext.ts";
+import {
+  confirmWorkspaceMessageContext,
+  retainedWorkspaceMessageContext,
+  linkedItemsFor,
+  withLinkedItems,
+} from "../workspace/linkedItemsContext.ts";
 import { WorkspaceLinks } from "../workspace/WorkspaceLinks.ts";
 import { modelSelectionsEqual } from "@t3tools/shared/model";
 import { projectComposerContextForProvider } from "@t3tools/shared/composerContextReferences";
 import {
+  WorkspaceLinksError,
   CommandId,
   type OrchestrationV2DomainEvent,
   type OrchestrationV2ExecutionNode,
@@ -374,6 +380,41 @@ export const layer: Layer.Layer<
           });
         },
       );
+      const workspaceConfirmation = yield* Effect.result(
+        Option.isSome(workspaceLinks)
+          ? confirmWorkspaceMessageContext(
+              workspaceLinks.value.link,
+              { threadId: projection.thread.id, projectId: projection.thread.projectId },
+              message,
+            )
+          : retainedWorkspaceMessageContext(message).length === 0
+            ? Effect.void
+            : Effect.fail(
+                new WorkspaceLinksError({
+                  kind: "unsupported",
+                  message:
+                    "Workspace context is unavailable on this server. Remove these references or update the server.",
+                }),
+              ),
+      );
+      if (workspaceConfirmation._tag === "Failure") {
+        yield* settleRunBeforeStart({
+          signal: "workspace-context",
+          status: "failed",
+          now: yield* DateTime.now,
+          providerInstanceId: run.providerInstanceId,
+          itemProviderThreadId: providerThread.id,
+          item: {
+            type: "error",
+            title: "Could not link workspace context",
+            failure: makeProviderFailure({
+              class: "validation_error",
+              message: workspaceConfirmation.failure.message,
+            }),
+          },
+        });
+        return;
+      }
       if (message.attachments.length === 0 && message.text.trimStart().startsWith("/")) {
         const isEmptyCompaction =
           message.text.trim().toLowerCase() === "/compact" && !projection.hasConversation;

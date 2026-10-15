@@ -19,7 +19,7 @@ import {
   type PreviewAnnotationPayload,
   type PulseSkillRecord,
   RuntimeMode,
-  ThreadContextRecord,
+  LinkedComposerContextRecord as ThreadContextRecord,
   type ServerProvider,
   type ScopedProjectRef,
   type ScopedThreadRef,

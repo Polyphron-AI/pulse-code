@@ -1,6 +1,9 @@
+import * as Schema from "effect/Schema";
+import { WorkspaceLinkEndpoint, type EnvironmentId } from "@t3tools/contracts";
 import type {
   ContextMenuItem,
   ProjectId,
+  ThreadId,
   WorkspaceItemRef,
   WorkspaceLinkOrigin,
   WorkspaceLinkView,
@@ -52,6 +55,7 @@ export interface LinkedItemLabel {
 export function linkedItemLabel(
   view: WorkspaceLinkView,
   projectTitles: ReadonlyMap<ProjectId, string> | null,
+  threadTitles?: ReadonlyMap<ThreadId, string>,
 ): LinkedItemLabel {
   const { ref, title } = view.item;
   switch (ref.type) {
@@ -65,7 +69,7 @@ export function linkedItemLabel(
     case "mail":
       return { title: mailItemTitle(title) };
     case "thread":
-      return { title: title ?? "Thread" };
+      return { title: threadTitles?.get(ref.threadId) ?? title ?? "Thread" };
     case "url":
       return { title: title ?? ref.url };
     case "file":
@@ -80,7 +84,11 @@ export function linkedItemLabel(
 /** Items this client can open today. Others still show, so agents' links stay visible. */
 export function canOpenLinkedItem(ref: WorkspaceItemRef): boolean {
   return (
-    ref.type === "mail" || ref.type === "project" || ref.type === "thread" || ref.type === "url"
+    ref.type === "mail" ||
+    ref.type === "project" ||
+    ref.type === "thread" ||
+    ref.type === "url" ||
+    ref.type === "file"
   );
 }
 
@@ -109,4 +117,47 @@ export function pickedProject<P extends { readonly id: ProjectId }>(
   if (choice === null || !choice.startsWith(PROJECT_MENU_PREFIX)) return undefined;
   const id = choice.slice(PROJECT_MENU_PREFIX.length);
   return projects.find((project) => project.id === id);
+}
+
+const isWorkspaceEndpoint = Schema.is(WorkspaceLinkEndpoint);
+
+/** Dragged references are checked locally before the server validates the link mutation. */
+export function parseWorkspaceItemDrag(
+  raw: string,
+  environmentId: EnvironmentId,
+): WorkspaceLinkEndpoint | undefined {
+  try {
+    const payload: unknown = JSON.parse(raw);
+    return typeof payload === "object" &&
+      payload !== null &&
+      "environmentId" in payload &&
+      payload.environmentId === environmentId &&
+      "item" in payload &&
+      isWorkspaceEndpoint(payload.item)
+      ? payload.item
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Human labels shared by Linked rows and removable composer references. */
+export function workspaceEndpointTitle(endpoint: WorkspaceLinkEndpoint): string {
+  if (endpoint.title?.trim()) return endpointTitle(endpoint.title);
+  switch (endpoint.ref.type) {
+    case "mail":
+      return mailItemTitle(endpoint.title);
+    case "file":
+      return "Drive file";
+    case "project":
+      return "Project";
+    case "thread":
+      return "Thread";
+    case "task":
+      return "Task";
+    case "url":
+      return endpoint.ref.url;
+    case "provider-resource":
+      return endpoint.ref.resourceId;
+  }
 }

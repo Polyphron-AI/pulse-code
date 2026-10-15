@@ -1,6 +1,10 @@
 import { assert, it } from "@effect/vitest";
 import {
   CommandId,
+  ComposerContextId,
+  type OrchestrationMessageContext,
+  type WorkspaceLinkEndpoint,
+  type WorkspaceItemContextRecord,
   MessageId,
   ProjectId,
   ProviderDriverKind,
@@ -24,6 +28,7 @@ import type {
   ProviderAdapterV2Event,
   ProviderAdapterV2Shape,
   ProviderAdapterV2TurnInput,
+  ProviderAdapterV2SteerInput,
 } from "../orchestration-v2/ProviderAdapter.ts";
 import * as ProviderAdapterRegistry from "../orchestration-v2/ProviderAdapterRegistry.ts";
 import { makeOrchestratorV2ReplayLayerWithRegistry } from "../orchestration-v2/testkit/ProviderReplayHarness.ts";
@@ -46,12 +51,20 @@ const runTurn = (
   text: string,
   contextFor?: WorkspaceLinks["Service"]["contextFor"],
   nextText?: string,
+  options?: {
+    readonly context?: OrchestrationMessageContext;
+    readonly nextContext?: OrchestrationMessageContext;
+    readonly link?: WorkspaceLinks["Service"]["link"];
+    readonly expectStart?: boolean;
+    readonly nextMode?: "steer";
+  },
 ) =>
   Effect.scoped(
     Effect.gen(function* () {
       const cwd = yield* checkpointWorkspace(name);
       const events = yield* Queue.unbounded<ProviderAdapterV2Event>();
       const started: Array<ProviderAdapterV2TurnInput> = [];
+      const steered: Array<ProviderAdapterV2SteerInput> = [];
       const adapter: ProviderAdapterV2Shape = {
         instanceId,
         driver,
@@ -119,7 +132,10 @@ const runTurn = (
                     },
                   });
                 }),
-              steerTurn: () => Effect.die("unused"),
+              steerTurn: (turn) =>
+                Effect.sync(() => {
+                  steered.push(turn);
+                }),
               interruptTurn: () => Effect.void,
               respondToRuntimeRequest: () => Effect.void,
               readThreadSnapshot: () => Effect.die("unused"),
@@ -151,6 +167,7 @@ const runTurn = (
           threadId,
           messageId,
           text,
+          ...(options?.context ? { context: options.context } : {}),
           attachments: [],
           dispatchMode: { type: "start_immediately" },
           createdBy: "user",
@@ -165,8 +182,8 @@ const runTurn = (
           Effect.forkScoped,
         );
         yield* worker.drain();
-        assert.lengthOf(started, 1);
-        yield* Fiber.join(running);
+        assert.lengthOf(started, options?.expectStart === false ? 0 : 1);
+        if (options?.expectStart !== false) yield* Fiber.join(running);
         if (nextText !== undefined) {
           yield* orchestrator.dispatch({
             type: "message.dispatch",
@@ -174,61 +191,69 @@ const runTurn = (
             threadId,
             messageId: MessageId.make("message:next"),
             text: nextText,
+            ...(options?.nextContext ? { context: options.nextContext } : {}),
             attachments: [],
-            dispatchMode: { type: "queue_after_active" },
+            dispatchMode:
+              options?.nextMode === "steer"
+                ? { type: "steer_active", targetRunId: started[0]!.runId }
+                : { type: "queue_after_active" },
             createdBy: "user",
             creationSource: "web",
           });
           yield* worker.drain();
           assert.lengthOf(started, 1);
-          const settled = yield* orchestrator.streamDomainEvents.pipe(
-            Stream.filter(
-              (event) =>
-                event.type === "run.updated" &&
-                event.payload.id === started[0]!.runId &&
-                event.payload.status === "waiting",
-            ),
-            Stream.take(1),
-            Stream.runDrain,
-            Effect.forkScoped,
-          );
-          const turn = (yield* orchestrator.getThreadProjection(threadId)).providerTurns[0]!;
-          yield* Queue.offer(events, {
-            type: "provider_turn.updated",
-            driver,
-            providerTurn: { ...turn, status: "completed", completedAt: yield* DateTime.now },
-          });
-          yield* Queue.offer(events, {
-            type: "turn.terminal",
-            driver,
-            providerThreadId: turn.providerThreadId,
-            providerTurnId: turn.id,
-            runOrdinal: started[0]!.runOrdinal,
-            status: "completed",
-            failure: null,
-            threadDisposition: "reusable",
-          });
-          yield* Fiber.join(settled);
-          const nextRunning = yield* orchestrator.streamDomainEvents.pipe(
-            Stream.filter(
-              (event) =>
-                event.type === "provider-turn.updated" &&
-                event.payload.status === "running" &&
-                event.payload.runAttemptId !== turn.runAttemptId,
-            ),
-            Stream.take(1),
-            Stream.runDrain,
-            Effect.forkScoped,
-          );
-          yield* worker.drain();
-          yield* orchestrator.resumeQueuedRuns;
-          yield* worker.drain();
-          assert.lengthOf(started, 2);
-          yield* Fiber.join(nextRunning);
+          if (options?.nextMode !== "steer") {
+            const settled = yield* orchestrator.streamDomainEvents.pipe(
+              Stream.filter(
+                (event) =>
+                  event.type === "run.updated" &&
+                  event.payload.id === started[0]!.runId &&
+                  event.payload.status === "waiting",
+              ),
+              Stream.take(1),
+              Stream.runDrain,
+              Effect.forkScoped,
+            );
+            const turn = (yield* orchestrator.getThreadProjection(threadId)).providerTurns[0]!;
+            yield* Queue.offer(events, {
+              type: "provider_turn.updated",
+              driver,
+              providerTurn: { ...turn, status: "completed", completedAt: yield* DateTime.now },
+            });
+            yield* Queue.offer(events, {
+              type: "turn.terminal",
+              driver,
+              providerThreadId: turn.providerThreadId,
+              providerTurnId: turn.id,
+              runOrdinal: started[0]!.runOrdinal,
+              status: "completed",
+              failure: null,
+              threadDisposition: "reusable",
+            });
+            yield* Fiber.join(settled);
+            const nextRunning = yield* orchestrator.streamDomainEvents.pipe(
+              Stream.filter(
+                (event) =>
+                  event.type === "provider-turn.updated" &&
+                  event.payload.status === "running" &&
+                  event.payload.runAttemptId !== turn.runAttemptId,
+              ),
+              Stream.take(1),
+              Stream.runDrain,
+              Effect.forkScoped,
+            );
+            yield* worker.drain();
+            yield* orchestrator.resumeQueuedRuns;
+            yield* worker.drain();
+            assert.lengthOf(started, 2);
+            yield* Fiber.join(nextRunning);
+          }
         }
         const projection = yield* orchestrator.getThreadProjection(threadId);
         return {
           started,
+          steered,
+          runs: projection.runs,
           stored: projection.messages.find((message) => message.id === messageId)?.text,
           storedNext: projection.messages.find(
             (message) => message.id === MessageId.make("message:next"),
@@ -242,7 +267,12 @@ const runTurn = (
             { runEffectWorker: false },
           ).pipe(
             Layer.provide(
-              contextFor === undefined ? Layer.empty : Layer.mock(WorkspaceLinks)({ contextFor }),
+              contextFor === undefined
+                ? Layer.empty
+                : Layer.mock(WorkspaceLinks)({
+                    contextFor,
+                    ...(options?.link ? { link: options.link } : {}),
+                  }),
             ),
           ),
         ),
@@ -381,5 +411,153 @@ it.effect("loads current linked items again when a queued normal turn starts", (
     assert.notInclude(started[1]!.message.text, '"Brief 1"');
     assert.equal(stored, "First message");
     assert.equal(storedNext, "Second message");
+  }),
+);
+
+const workspaceRecord = (id: string, url: string): WorkspaceItemContextRecord => ({
+  version: 1,
+  kind: "workspace-item",
+  contextId: ComposerContextId.make(id),
+  label: id,
+  item: { ref: { type: "url", url }, title: id },
+  viewing: {
+    ref: { type: "mail", accountId: "captured-account", messageId: "<captured@example.test>" },
+    title: "Captured source",
+  },
+});
+const workspaceText = (record: WorkspaceItemContextRecord) =>
+  `Read [${record.label}](t3-context://v1/workspace-item/${record.contextId})`;
+
+it.effect(
+  "confirms retained workspace refs before provider context, leaving removed refs unlinked",
+  () =>
+    Effect.gen(function* () {
+      const source = workspaceRecord("source", "https://example.test/source");
+      const removed = workspaceRecord("removed", "https://example.test/removed");
+      const confirmed: WorkspaceLinkEndpoint[] = [];
+      const order: string[] = [];
+      const text = workspaceText(source);
+      const result = yield* runTurn(
+        "workspace-context-retained",
+        text,
+        () => {
+          order.push("context");
+          return Effect.succeed({
+            items: confirmed.map((item) => ({ key: "captured-key", item })),
+            truncated: false,
+          });
+        },
+        undefined,
+        {
+          context: { version: 1, records: [source, removed] },
+          link: (input) =>
+            Effect.sync(() => {
+              order.push("confirm");
+              confirmed.push(input.b);
+              assert.deepEqual(input.viewing, source.viewing);
+              assert.deepEqual(input.source, { type: "action", action: "start-thread" });
+              return { id: "wl_00000000-0000-4000-8000-000000000001" as const };
+            }),
+        },
+      );
+      assert.deepEqual(confirmed, [source.item]);
+      assert.deepEqual(order, ["confirm", "context"]);
+      assert.equal(result.stored, text);
+      assert.include(result.started[0]!.message.text, "captured-key");
+      assert.notInclude(result.started[0]!.message.text, "https://example.test/removed");
+    }),
+);
+
+it.effect(
+  "queued workspace sends retain their dispatched source instead of current navigation",
+  () =>
+    Effect.gen(function* () {
+      const captured = workspaceRecord("queued_source", "https://example.test/original");
+      const confirmed: WorkspaceLinkEndpoint[] = [];
+      const result = yield* runTurn(
+        "workspace-context-queued",
+        "First",
+        () =>
+          Effect.succeed({
+            items: confirmed.map((item) => ({ key: "queued-key", item })),
+            truncated: false,
+          }),
+        workspaceText(captured),
+        {
+          nextContext: { version: 1, records: [captured] },
+          link: (input) =>
+            Effect.sync(() => {
+              confirmed.push(input.b);
+              assert.deepEqual(input.viewing, captured.viewing);
+              return { id: "wl_00000000-0000-4000-8000-000000000001" as const };
+            }),
+        },
+      );
+      assert.deepEqual(confirmed, [captured.item]);
+      assert.notInclude(result.started[0]!.message.text, "queued-key");
+      assert.include(result.started[1]!.message.text, "queued-key");
+      assert.equal(result.storedNext, workspaceText(captured));
+    }),
+);
+
+it.effect(
+  "workspace confirmation failure prevents provider execution and surfaces a failed run",
+  () =>
+    Effect.gen(function* () {
+      const source = workspaceRecord("source", "https://example.test/source");
+      const result = yield* runTurn(
+        "workspace-context-failure",
+        workspaceText(source),
+        () => Effect.succeed({ items: [], truncated: false }),
+        undefined,
+        {
+          context: { version: 1, records: [source] },
+          expectStart: false,
+          link: () =>
+            Effect.fail(
+              new WorkspaceLinksError({
+                kind: "unavailable",
+                message: "Link confirmation failed. Retry this turn.",
+              }),
+            ),
+        },
+      );
+      assert.lengthOf(result.started, 0);
+      assert.isTrue(result.runs.some((run) => run.status === "failed"));
+    }),
+);
+
+it.effect("steering confirms retained workspace refs before invoking the running provider", () =>
+  Effect.gen(function* () {
+    const source = workspaceRecord("steer_source", "https://example.test/steer");
+    const confirmed: WorkspaceLinkEndpoint[] = [];
+    const order: string[] = [];
+    const result = yield* runTurn(
+      "workspace-context-steer",
+      "Initial",
+      () => {
+        order.push("context");
+        return Effect.succeed({
+          items: confirmed.map((item) => ({ key: "steer-key", item })),
+          truncated: false,
+        });
+      },
+      workspaceText(source),
+      {
+        nextMode: "steer",
+        nextContext: { version: 1, records: [source] },
+        link: (input) =>
+          Effect.sync(() => {
+            order.push("confirm");
+            confirmed.push(input.b);
+            return { id: "wl_00000000-0000-4000-8000-000000000001" as const };
+          }),
+      },
+    );
+    assert.deepEqual(confirmed, [source.item]);
+    assert.deepEqual(order, ["context", "confirm", "context"]);
+    assert.lengthOf(result.started, 1);
+    assert.lengthOf(result.steered, 1);
+    assert.include(result.steered[0]!.message.text, "steer-key");
   }),
 );

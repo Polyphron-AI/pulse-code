@@ -96,6 +96,29 @@ export function normalizeWorkspaceItemRef(ref: WorkspaceItemRef): WorkspaceItemR
   return url === undefined ? undefined : { type: "url", url };
 }
 
+/** Pasted web links retain Drive identity even without a connected Drive account. */
+export function workspaceItemFromUrl(raw: string): WorkspaceItemRef | undefined {
+  const normalized = normalizeLinkUrl(raw);
+  if (normalized === undefined) return undefined;
+  const url = new URL(normalized);
+  if (url.hostname === "drive.google.com" || url.hostname === "docs.google.com") {
+    const pathId = url.pathname.match(
+      /^\/(?:file|document|spreadsheets|presentation|forms|drawings)(?:\/u\/\d+)?\/d\/([A-Za-z0-9_-]{1,256})(?:\/|$)/,
+    )?.[1];
+    const folderId = url.pathname.match(
+      /^\/drive(?:\/u\/\d+)?\/folders\/([A-Za-z0-9_-]{1,256})(?:\/|$)/,
+    )?.[1];
+    const id =
+      (url.pathname.startsWith("/forms/d/e/") ? undefined : pathId) ??
+      folderId ??
+      (url.pathname === "/open" ? url.searchParams.get("id") : null);
+    if (id !== null && id !== undefined && /^[A-Za-z0-9_-]{1,256}$/.test(id)) {
+      return { type: "file", provider: "google-drive", fileId: id };
+    }
+  }
+  return { type: "url", url: normalized };
+}
+
 const part = encodeURIComponent;
 
 /** The stable key a link stores for an item. Normalise the ref first. */
@@ -184,6 +207,7 @@ export class WorkspaceLinksError extends Schema.TaggedError<WorkspaceLinksError>
 
 export const PULSE_LINKS_METHODS = {
   pulseLinksList: "pulse.links.list",
+  pulseLinksProjectHub: "pulse.links.projectHub",
   pulseLinksLink: "pulse.links.link",
   pulseLinksUnlink: "pulse.links.unlink",
   pulseLinksSubscribeChanges: "pulse.links.subscribeChanges",
@@ -192,6 +216,19 @@ export const PULSE_LINKS_METHODS = {
 const LinksError = Schema.Union([WorkspaceLinksError, EnvironmentAuthorizationError]);
 
 export const PulseLinksRpcs = [
+  Rpc.make(PULSE_LINKS_METHODS.pulseLinksProjectHub, {
+    payload: Schema.Struct({
+      projectId: ProjectId,
+      threadIds: Schema.Array(ThreadId).check(Schema.isMaxLength(30)),
+    }),
+    success: Schema.Struct({
+      related: Schema.Array(
+        Schema.Struct({ item: WorkspaceLinkEndpoint, via: WorkspaceLinkEndpoint }),
+      ),
+      truncated: Schema.Boolean,
+    }),
+    error: LinksError,
+  }),
   Rpc.make(PULSE_LINKS_METHODS.pulseLinksList, {
     payload: Schema.Struct({ item: WorkspaceItemRef }),
     success: WorkspaceLinkList,

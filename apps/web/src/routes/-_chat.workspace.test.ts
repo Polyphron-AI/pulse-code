@@ -2,6 +2,11 @@ import { describe, expect, it } from "vite-plus/test";
 import { parseWorkspaceSearch } from "./_chat.workspace";
 
 describe("parseWorkspaceSearch", () => {
+  it("opens a project hub", () =>
+    expect(parseWorkspaceSearch({ space: "projects", project: "project-1" })).toEqual({
+      space: "projects",
+      project: "project-1",
+    }));
   it("opens the Office communications view", () => {
     expect(parseWorkspaceSearch({ space: "office", officeView: "communications" })).toEqual({
       space: "office",

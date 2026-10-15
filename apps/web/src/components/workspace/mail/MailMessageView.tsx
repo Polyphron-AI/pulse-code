@@ -5,6 +5,7 @@ import { useState } from "react";
 import { pulseMailMessage } from "../../../mail/mailReadState";
 import { useEnvironmentQuery } from "../../../state/query";
 import { Button } from "../../ui/button";
+import { WorkspaceItemActions } from "../WorkspaceItemActions";
 import { LinkedSection } from "./LinkedSection";
 import {
   mailItemRef,
@@ -18,6 +19,7 @@ import { MailError } from "./MailNotice";
 interface MailMessageViewProps {
   readonly environmentId: EnvironmentId;
   readonly item: MailItemRef;
+  readonly showLinked?: boolean;
   readonly onBack: () => void;
   readonly onOpen: (ref: WorkspaceItemRef) => void;
 }
@@ -60,12 +62,20 @@ export function MailMessageView(props: MailMessageViewProps) {
               />
             </dl>
           </header>
-          <LinkedSection
+          <WorkspaceItemActions
+            shortcuts
+            key={JSON.stringify(props.item)}
             environmentId={props.environmentId}
-            item={mailItemRef(data)}
-            title={mailItemTitle(data.subject)}
-            onOpen={props.onOpen}
+            item={{ ref: mailItemRef(data), title: mailItemTitle(data.subject) }}
           />
+          {props.showLinked !== false ? (
+            <LinkedSection
+              environmentId={props.environmentId}
+              item={mailItemRef(data)}
+              title={mailItemTitle(data.subject)}
+              onOpen={props.onOpen}
+            />
+          ) : null}
           {mailLinkMayBreak(props.item) ? (
             <p className="text-xs text-muted-foreground">
               This message has no Message-ID, so a link to it may break if it moves.

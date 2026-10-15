@@ -1,3 +1,4 @@
+import { parseScopedProjectKey } from "@t3tools/client-runtime/environment";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/projects/$projectKey")({
@@ -8,9 +9,14 @@ export const Route = createFileRoute("/projects/$projectKey")({
     ) {
       throw redirect({ to: "/pair", replace: true });
     }
+    const ref = parseScopedProjectKey(params.projectKey);
     throw redirect({
-      to: "/settings/projects",
-      search: { project: params.projectKey, machine: undefined },
+      to: "/workspace",
+      search: {
+        space: "projects",
+        project: ref?.projectId ?? params.projectKey,
+        ...(ref ? { environment: ref.environmentId } : {}),
+      },
       replace: true,
     });
   },

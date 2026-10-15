@@ -28,7 +28,7 @@ import type {
   PullRequestListInput,
   PreviewAnnotationPayload,
   ProviderApprovalDecision,
-  ThreadContextRecord,
+  LinkedComposerContextRecord as ThreadContextRecord,
   ProviderInteractionMode,
   PulseSkillSelection,
   ResolvedKeybindingsConfig,
@@ -3375,6 +3375,14 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
               appendReference: false,
             });
             rewritten.set(record.contextId, previewAnnotationContextId(annotation.id));
+            break;
+          }
+          case "workspace-item": {
+            if (sourceEnvironmentId !== environmentId) break;
+            addComposerDraftThreadContexts(composerDraftTarget, [record], {
+              appendReference: false,
+            });
+            rewritten.set(record.contextId, record.contextId);
             break;
           }
           case "thread": {

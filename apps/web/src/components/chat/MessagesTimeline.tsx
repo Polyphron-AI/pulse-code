@@ -1,3 +1,4 @@
+import { WorkspaceItemIcon } from "../workspace/WorkspaceItemIcon";
 import { ComputerUseAppIcon } from "~/components/Icons";
 import { useChatCanvas } from "./ChatCanvasContext";
 import { WorkLogBlock, WorkLogButton, WorkLogDetails, WorkLogList, WorkLogRow } from "./WorkLog";
@@ -4076,6 +4077,26 @@ const userMessageContextPresentationRegistry = createContextPresentationRegistry
 >({
   requiredKinds: COMPOSER_CONTEXT_KINDS,
   handlers: [
+    {
+      kind: "workspace-item",
+      canRender: (record) => record.kind === "workspace-item",
+      render: (record, context) => (
+        <UserMessageContextChip
+          icon={
+            record.kind === "workspace-item" ? (
+              <WorkspaceItemIcon item={record.item.ref} />
+            ) : (
+              <MessageCircleIcon />
+            )
+          }
+          label={record.label}
+          kindLabel="Workspace item"
+          tooltip="Confirmed workspace reference"
+          copyMarkdown={context.copyMarkdown}
+          kind="neutral"
+        />
+      ),
+    },
     {
       kind: "mention",
       canRender: (record) => record.kind === "mention",

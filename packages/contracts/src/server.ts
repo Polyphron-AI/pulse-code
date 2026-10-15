@@ -613,6 +613,7 @@ export const ServerConfig = Schema.Struct({
       mailManagement: Schema.optionalKey(Schema.Boolean),
       mailRead: Schema.optionalKey(Schema.Boolean),
       workspaceLinks: Schema.optionalKey(Schema.Boolean),
+      workspaceItemContext: Schema.optionalKey(Schema.Boolean),
       mcpCreateOnly: Schema.optionalKey(Schema.Boolean),
       mcpDiscovery: Schema.optionalKey(Schema.Boolean),
       mcpNativeInventory: Schema.optionalKey(Schema.Boolean),

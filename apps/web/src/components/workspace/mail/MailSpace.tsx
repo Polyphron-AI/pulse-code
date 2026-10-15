@@ -2,14 +2,18 @@ import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import {
   workspaceItemKey,
-  type EnvironmentId,
+  EnvironmentId,
   type ProjectId,
   type WorkspaceItemRef,
 } from "@t3tools/contracts";
 import { useState, type ReactNode } from "react";
 
+import { parseMailLocation } from "../useWorkspaceItemOpener";
+import { WorkspaceEngagement } from "../WorkspaceEngagement";
+import { LinkedSection } from "./LinkedSection";
 import { cn } from "../../../lib/utils";
 import { readLocalApi } from "../../../localApi";
+import { pulseMailMessage } from "../../../mail/mailReadState";
 import { pulseMailAccounts } from "../../../mail/mailState";
 import { useAllEnvironmentProjectSnapshotsReady, useProjects } from "../../../state/entities";
 import { useEnvironmentQuery } from "../../../state/query";
@@ -19,7 +23,14 @@ import { SidebarInset } from "../../ui/sidebar";
 import { MailMessageList } from "./MailMessageList";
 import { MailMessageView } from "./MailMessageView";
 import { MailError, MailNotice } from "./MailNotice";
-import { canonicalMailRef, mailFolderLabel, type MailItemRef } from "./mailItemRef";
+import {
+  canonicalMailRef,
+  mailFolderLabel,
+  mailReadInput,
+  mailItemRef,
+  mailItemTitle,
+  type MailItemRef,
+} from "./mailItemRef";
 import { ProjectMailList } from "./ProjectMailList";
 import { useMailCapabilities } from "./useMailCapabilities";
 
@@ -31,7 +42,12 @@ type MailSource =
 /** The Mail space: messages beside the reader. On a phone, one pane at a time. */
 export function MailSpace() {
   const search = useSearch({ strict: false });
-  const { environmentId, ready, mailRead, workspaceLinks: linksAvailable } = useMailCapabilities();
+  const {
+    environmentId,
+    ready,
+    mailRead,
+    workspaceLinks: linksAvailable,
+  } = useMailCapabilities(search.environment ? EnvironmentId.make(search.environment) : undefined);
   const accounts = useEnvironmentQuery(
     environmentId !== null && mailRead ? pulseMailAccounts({ environmentId, input: {} }) : null,
   );
@@ -94,9 +110,10 @@ export function MailSpace() {
     }
     return (
       <MailPanes
-        key={`${account.id}\n${folder}`}
+        key={`${account.id}\n${folder}\n${search.item ?? ""}`}
         environmentId={environmentId}
         source={{ type: "folder", accountId: account.id, folder }}
+        initialItem={parseMailLocation(search.item)}
       />
     );
   };
@@ -122,11 +139,17 @@ export function MailSpace() {
 interface MailPanesProps {
   readonly environmentId: EnvironmentId;
   readonly source: MailSource;
+  readonly initialItem?: MailItemRef | null;
 }
 
 function MailPanes(props: MailPanesProps) {
-  const [selected, setSelected] = useState<MailItemRef | null>(null);
+  const [selected, setSelected] = useState<MailItemRef | null>(props.initialItem ?? null);
   const navigate = useNavigate();
+  const selectedMessage = useEnvironmentQuery(
+    selected === null
+      ? null
+      : pulseMailMessage({ environmentId: props.environmentId, input: mailReadInput(selected) }),
+  );
   // Opens a linked item where it lives. canOpenLinkedItem keeps other types from offering Open.
   const open = (ref: WorkspaceItemRef) => {
     switch (ref.type) {
@@ -134,13 +157,21 @@ function MailPanes(props: MailPanesProps) {
         setSelected(canonicalMailRef(ref));
         return;
       case "project":
-        void navigate({ to: "/workspace", search: { space: "mail", project: ref.projectId } });
+        void navigate({
+          to: "/workspace",
+          search: { space: "projects", environment: props.environmentId, project: ref.projectId },
+        });
         return;
       case "thread":
         void navigate({
           to: "/$environmentId/$threadId",
           params: buildThreadRouteParams(scopeThreadRef(props.environmentId, ref.threadId)),
         });
+        return;
+      case "file":
+        void readLocalApi()?.shell.openExternal(
+          `https://drive.google.com/file/d/${encodeURIComponent(ref.fileId)}/view`,
+        );
         return;
       case "url":
         void readLocalApi()?.shell.openExternal(ref.url);
@@ -150,15 +181,11 @@ function MailPanes(props: MailPanesProps) {
     }
   };
   return (
-    <div className="flex min-h-0 flex-1">
-      <section
-        aria-label="Messages"
-        className={cn(
-          "min-h-0 w-full overflow-y-auto md:w-80 md:shrink-0 md:border-r md:border-border",
-          selected !== null && "hidden md:block",
-        )}
-      >
-        {props.source.type === "folder" ? (
+    <WorkspaceEngagement
+      space="mail"
+      selected={selected !== null}
+      list={
+        props.source.type === "folder" ? (
           <MailMessageList
             environmentId={props.environmentId}
             accountId={props.source.accountId}
@@ -173,27 +200,36 @@ function MailPanes(props: MailPanesProps) {
             selected={selected}
             onSelect={setSelected}
           />
-        )}
-      </section>
-      <section
-        aria-label="Message"
-        className={cn(
-          "min-h-0 min-w-0 flex-1 overflow-y-auto",
-          selected === null && "hidden md:block",
-        )}
-      >
-        {selected === null ? (
-          <MailNotice>Select a message to read it.</MailNotice>
-        ) : (
-          <MailMessageView
+        )
+      }
+      linked={
+        selected === null ? null : (
+          <LinkedSection
             key={workspaceItemKey(selected)}
             environmentId={props.environmentId}
-            item={selected}
-            onBack={() => setSelected(null)}
+            item={selectedMessage.data === null ? selected : mailItemRef(selectedMessage.data)}
+            title={
+              selectedMessage.data === null
+                ? "Message"
+                : mailItemTitle(selectedMessage.data.subject)
+            }
             onOpen={open}
           />
-        )}
-      </section>
-    </div>
+        )
+      }
+    >
+      {selected === null ? (
+        <MailNotice>Select a message to read it.</MailNotice>
+      ) : (
+        <MailMessageView
+          key={workspaceItemKey(selected)}
+          environmentId={props.environmentId}
+          item={selected}
+          onBack={() => setSelected(null)}
+          onOpen={open}
+          showLinked={false}
+        />
+      )}
+    </WorkspaceEngagement>
   );
 }

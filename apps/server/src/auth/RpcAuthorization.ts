@@ -67,6 +67,7 @@ export const RPC_REQUIRED_SCOPES = {
   [WS_METHODS.pulseSkillsList]: AuthOrchestrationReadScope,
   [WS_METHODS.pulseSkillsMutate]: AuthOrchestrationOperateScope,
   [WS_METHODS.pulseSkillsResolveGitHub]: AuthOrchestrationReadScope,
+  [WS_METHODS.pulseLinksProjectHub]: AuthOrchestrationReadScope,
   [WS_METHODS.pulseLinksList]: AuthOrchestrationReadScope,
   [WS_METHODS.pulseLinksLink]: AuthOrchestrationOperateScope,
   [WS_METHODS.pulseLinksUnlink]: AuthOrchestrationOperateScope,

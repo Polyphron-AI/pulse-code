@@ -1,0 +1,221 @@
+import { Link, useSearch } from "@tanstack/react-router";
+import { EnvironmentId, type WorkspaceItemRef } from "@t3tools/contracts";
+import { useState } from "react";
+import { useProjects, useThreadShells } from "../../state/entities";
+import { useNewProject } from "../../hooks/useNewProject";
+import { SidebarInset } from "../ui/sidebar";
+import { Button } from "../ui/button";
+import { Input } from "../ui/input";
+import { useEnvironmentQuery } from "../../state/query";
+import { workspaceLinks } from "../../state/workspaceLinks";
+import { WorkspaceItemActions, WorkspaceItemMenu } from "./WorkspaceItemActions";
+import { useWorkspaceItemOpener } from "./useWorkspaceItemOpener";
+import { WorkspaceEngagement } from "./WorkspaceEngagement";
+import { workspaceEndpointTitle } from "./mail/linkedItems";
+import { LinkedSection } from "./mail/LinkedSection";
+import { useMailCapabilities } from "./mail/useMailCapabilities";
+
+/** Project folders, their threads, and confirmed workspace links. */
+export function ProjectsSpace() {
+  const search = useSearch({ strict: false });
+  const { environmentId, workspaceItemContext } = useMailCapabilities(
+    search.environment ? EnvironmentId.make(search.environment) : undefined,
+  );
+  const projects = useProjects().filter((project) => project.environmentId === environmentId);
+  const threads = useThreadShells();
+  const selected = projects.find((project) => project.id === search.project);
+  const projectThreads = threads.filter(
+    (thread) => thread.environmentId === environmentId && thread.projectId === selected?.id,
+  );
+  const hub = useEnvironmentQuery(
+    environmentId !== null && selected !== undefined && workspaceItemContext
+      ? workspaceLinks.projectHub({
+          environmentId,
+          input: {
+            projectId: selected.id,
+            threadIds: projectThreads.slice(0, 30).map((thread) => thread.id),
+          },
+        })
+      : null,
+  );
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const create = useNewProject();
+  const openKnown = useWorkspaceItemOpener(environmentId ?? EnvironmentId.make("unavailable"));
+  const open = (ref: WorkspaceItemRef) => {
+    if (environmentId !== null) openKnown(ref);
+    return;
+  };
+  return (
+    <SidebarInset className="min-w-0 overflow-y-auto">
+      <header className="flex h-[var(--workspace-topbar-height)] shrink-0 items-center border-b border-border px-4 text-sm">
+        Projects
+      </header>
+      <WorkspaceEngagement
+        space="projects"
+        selected={selected !== undefined}
+        list={
+          <div className="flex flex-col gap-3 p-3">
+            <form
+              className="flex flex-col gap-2"
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (environmentId === null || busy || !name.trim()) return;
+                setBusy(true);
+                void create({ environmentId, name: name.trim(), github: null })
+                  .then((created) => {
+                    if (created) setName("");
+                  })
+                  .finally(() => setBusy(false));
+              }}
+            >
+              <Input
+                aria-label="Project name"
+                placeholder="New project name"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+              />
+              <Button
+                type="submit"
+                size="sm"
+                disabled={busy || !name.trim() || environmentId === null}
+              >
+                Create project
+              </Button>
+            </form>
+            {projects.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No projects yet.</p>
+            ) : (
+              projects.map((project) => (
+                <Link
+                  key={project.id}
+                  to="/workspace"
+                  search={{
+                    space: "projects",
+                    project: project.id,
+                    ...(environmentId === null ? {} : { environment: environmentId }),
+                  }}
+                  className="truncate rounded-md p-2 text-sm hover:bg-accent"
+                  aria-current={selected?.id === project.id ? "page" : undefined}
+                >
+                  {project.title}
+                </Link>
+              ))
+            )}
+          </div>
+        }
+        linked={
+          selected === undefined || environmentId === null ? null : (
+            <LinkedSection
+              key={selected.id}
+              environmentId={environmentId}
+              item={{ type: "project", projectId: selected.id }}
+              title={selected.title}
+              onOpen={open}
+            />
+          )
+        }
+      >
+        {selected === undefined || environmentId === null ? (
+          <p className="p-4 text-sm text-muted-foreground">
+            Select a project to see its threads and linked items.
+          </p>
+        ) : (
+          <section className="min-w-0 p-4" aria-label="Project threads">
+            <Link
+              to="/workspace"
+              search={{
+                space: "projects",
+                ...(environmentId === null ? {} : { environment: environmentId }),
+              }}
+              className="mb-3 block text-sm underline md:hidden"
+            >
+              All projects
+            </Link>
+            <div className="mb-4 flex items-center gap-3">
+              <h1 className="min-w-0 flex-1 truncate text-lg font-semibold">{selected.title}</h1>
+            </div>
+            <WorkspaceItemActions
+              shortcuts
+              environmentId={environmentId}
+              item={{ ref: { type: "project", projectId: selected.id }, title: selected.title }}
+            />
+            {projectThreads.length === 0 ? (
+              <p className="mt-4 text-sm text-muted-foreground">
+                No threads yet. Start a thread to work on this project.
+              </p>
+            ) : null}
+            <ul className="mt-4 flex flex-col gap-1">
+              {projectThreads.map((thread) => (
+                <li key={thread.id}>
+                  <WorkspaceItemMenu
+                    environmentId={environmentId}
+                    item={{ ref: { type: "thread", threadId: thread.id }, title: thread.title }}
+                  >
+                    <button
+                      type="button"
+                      className="w-full truncate rounded-md p-2 text-left text-sm hover:bg-accent"
+                      onClick={() => open({ type: "thread", threadId: thread.id })}
+                    >
+                      {thread.title}
+                    </button>
+                  </WorkspaceItemMenu>
+                </li>
+              ))}
+            </ul>
+            <h2 className="mt-6 mb-2 text-sm font-medium">Related through linked items</h2>
+            <p className="mb-2 text-xs text-muted-foreground">
+              Shown for discovery. These items are not project context until you link them directly.
+            </p>
+            {hub.error !== null ? (
+              <Button size="sm" variant="ghost" onClick={hub.refresh}>
+                Retry related items
+              </Button>
+            ) : null}
+            {hub.data !== null && hub.data.related.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No related items yet.</p>
+            ) : null}
+            {!workspaceItemContext ? (
+              <p className="text-sm text-muted-foreground">
+                Update this server to show related items.
+              </p>
+            ) : hub.data === null && hub.error === null ? (
+              <p className="text-sm text-muted-foreground">Loading related items...</p>
+            ) : null}
+            <ul>
+              {hub.data?.related.map((row) => (
+                <li key={JSON.stringify(row.item.ref)} className="py-2 text-sm">
+                  <WorkspaceItemMenu
+                    environmentId={environmentId}
+                    item={row.item}
+                    provenance={
+                      <p className="mb-2 text-xs text-muted-foreground">
+                        Via {workspaceEndpointTitle(row.via)}
+                      </p>
+                    }
+                  >
+                    <button
+                      type="button"
+                      className="hover:underline"
+                      onClick={() => open(row.item.ref)}
+                    >
+                      {workspaceEndpointTitle(row.item)}
+                    </button>
+                    <p className="text-xs text-muted-foreground">
+                      Via {workspaceEndpointTitle(row.via)}
+                    </p>
+                  </WorkspaceItemMenu>
+                </li>
+              ))}
+            </ul>
+            {hub.data?.truncated || projectThreads.length > 30 ? (
+              <p className="text-xs text-muted-foreground">
+                Showing a bounded selection of related items.
+              </p>
+            ) : null}
+          </section>
+        )}
+      </WorkspaceEngagement>
+    </SidebarInset>
+  );
+}

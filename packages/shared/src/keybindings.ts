@@ -26,6 +26,13 @@ export const DEFAULT_KEYBINDINGS: ReadonlyArray<KeybindingRule> = [
   { key: "mod+alt+b", command: "rightPanel.toggle" },
   { key: "mod+d", command: "terminal.split", when: "terminalFocus" },
   { key: "mod+shift+d", command: "terminal.splitVertical", when: "terminalFocus" },
+  { key: "mod+alt+t", command: "workspace.startThread", when: "!terminalFocus && !editableFocus" },
+  { key: "mod+alt+p", command: "workspace.addToProject", when: "!terminalFocus && !editableFocus" },
+  {
+    key: "mod+alt+shift+p",
+    command: "workspace.startProject",
+    when: "!terminalFocus && !editableFocus",
+  },
   { key: "mod+n", command: "terminal.new", when: "terminalFocus" },
   { key: "mod+w", command: "terminal.close", when: "terminalFocus" },
   { key: "mod+w", command: "rightPanel.close", when: "!terminalFocus" },

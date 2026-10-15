@@ -1,3 +1,9 @@
+import {
+  confirmWorkspaceMessageContext,
+  linkedItemsFor,
+  withLinkedItems,
+} from "../workspace/linkedItemsContext.ts";
+import { WorkspaceLinks } from "../workspace/WorkspaceLinks.ts";
 import { projectComposerContextForProvider } from "@t3tools/shared/composerContextReferences";
 import {
   MessageId,
@@ -78,6 +84,7 @@ export const layer: Layer.Layer<
   Effect.gen(function* () {
     const projections = yield* ProjectionStore.ProjectionStoreV2;
     const sessions = yield* ProviderSessionManager.ProviderSessionManagerV2;
+    const workspaceLinks = yield* Effect.serviceOption(WorkspaceLinks);
 
     const load = (input: {
       readonly threadId: ThreadId;
@@ -293,6 +300,29 @@ export const layer: Layer.Layer<
               cause: "The persisted steering message or target run is missing.",
             });
           }
+          const owner = { threadId: input.threadId };
+          if (Option.isSome(workspaceLinks)) {
+            yield* confirmWorkspaceMessageContext(workspaceLinks.value.link, owner, message).pipe(
+              Effect.mapError(
+                (cause) =>
+                  new ProviderTurnControlError({
+                    threadId: input.threadId,
+                    operation: "steer",
+                    providerTurnId: input.providerTurnId,
+                    cause,
+                  }),
+              ),
+            );
+          }
+          const text = withLinkedItems(
+            projectComposerContextForProvider({
+              text: message.text,
+              records: message.context?.records ?? [],
+            }),
+            Option.isSome(workspaceLinks)
+              ? yield* linkedItemsFor(workspaceLinks.value.contextFor, owner)
+              : "",
+          );
           yield* loaded.session.value
             .steerTurn({
               threadId: input.threadId,
@@ -301,10 +331,7 @@ export const layer: Layer.Layer<
               providerTurnId: loaded.providerTurn.id,
               message: {
                 messageId: message.id,
-                text: projectComposerContextForProvider({
-                  text: message.text,
-                  records: message.context?.records ?? [],
-                }),
+                text,
                 attachments: message.attachments,
                 createdBy: message.createdBy,
                 creationSource: message.creationSource,

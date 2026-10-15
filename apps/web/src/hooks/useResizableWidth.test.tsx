@@ -241,3 +241,15 @@ describe("panel width storage changes", () => {
     expect(result.width).toBe(400);
   });
 });
+
+it("keyboard resizing persists independently for each workspace space", async () => {
+  await act(() => renderer.update(<Panel storageKey="mail-width" />));
+  await act(() => result.setWidth(300));
+  expect(savedWidths.get("mail-width")).toBe("300");
+  await act(() => renderer.update(<Panel storageKey="projects-width" />));
+  expect(result.width).toBe(400);
+  await act(() => result.setWidth(500));
+  await act(() => renderer.update(<Panel storageKey="mail-width" />));
+  expect(result.width).toBe(300);
+  expect(savedWidths.get("projects-width")).toBe("500");
+});

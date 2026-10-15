@@ -4,6 +4,8 @@ import type {
   ProjectId,
   WorkspaceItemRef,
   WorkspaceLinkId,
+  WorkspaceLinkEndpoint,
+  WorkspaceLinkSource,
 } from "@t3tools/contracts";
 import { useCallback } from "react";
 
@@ -23,6 +25,7 @@ export function useMailLinks(environmentId: EnvironmentId) {
     async (
       message: { readonly ref: WorkspaceItemRef; readonly title: string },
       project: { readonly id: ProjectId; readonly title: string },
+      source?: Extract<WorkspaceLinkSource, { type: "action" }>,
     ) => {
       const endpoint = { ref: message.ref, title: endpointTitle(message.title) };
       const result = await link({
@@ -32,6 +35,7 @@ export function useMailLinks(environmentId: EnvironmentId) {
           b: { ref: projectItemRef(project.id), title: endpointTitle(project.title) },
           // The message is what the user had open, so it is the origin's "while viewing".
           viewing: endpoint,
+          ...(source === undefined ? {} : { source }),
         },
       });
       if (result._tag === "Failure") throw squashAtomCommandFailure(result);
@@ -45,5 +49,9 @@ export function useMailLinks(environmentId: EnvironmentId) {
     },
     [environmentId, unlink],
   );
-  return { linkToProject, unlink: unlinkLink };
+  const linkItem = async (a: WorkspaceLinkEndpoint, b: WorkspaceLinkEndpoint) => {
+    const result = await link({ environmentId, input: { a, b, viewing: a } });
+    if (result._tag === "Failure") throw squashAtomCommandFailure(result);
+  };
+  return { linkToProject, linkItem, unlink: unlinkLink };
 }

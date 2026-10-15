@@ -6,6 +6,7 @@ import {
 } from "@t3tools/client-runtime/environment";
 import * as Schema from "effect/Schema";
 import {
+  ComposerContextId,
   defaultInstanceIdForDriver,
   EnvironmentId,
   MessageId,
@@ -3662,5 +3663,35 @@ describe("composerDraftStore attachment references", () => {
     expect(merged.draftsByThreadKey[threadKeyFor(threadId, TEST_ENVIRONMENT_ID)]?.prompt).toBe(
       prompt,
     );
+  });
+});
+
+describe("workspace item draft references", () => {
+  beforeEach(resetComposerDraftStore);
+  it("keeps source refs removable without confirming a link during draft creation", () => {
+    const store = useComposerDraftStore.getState();
+    const ref = scopeThreadRef(TEST_ENVIRONMENT_ID, ThreadId.make("workspace-draft"));
+    const item = {
+      ref: { type: "url" as const, url: "https://example.test/brief" },
+      title: "Brief",
+    };
+    const record = {
+      version: 1 as const,
+      kind: "workspace-item" as const,
+      contextId: ComposerContextId.make("workspace_source"),
+      label: "Brief",
+      item,
+      viewing: item,
+    };
+    store.addThreadContexts(ref, [record]);
+    expect(store.getComposerDraft(ref)?.threadContexts).toEqual([record]);
+    expect(store.getComposerDraft(ref)?.prompt).toContain(
+      "t3-context://v1/workspace-item/workspace_source",
+    );
+    store.setThreadContexts(ref, []);
+    expect(store.getComposerDraft(ref)?.threadContexts ?? []).toEqual([]);
+    expect(store.getComposerDraft(ref)?.prompt ?? "").not.toContain("workspace_source");
+    store.clearComposerContent(ref);
+    expect(store.getComposerDraft(ref)?.threadContexts ?? []).toEqual([]);
   });
 });

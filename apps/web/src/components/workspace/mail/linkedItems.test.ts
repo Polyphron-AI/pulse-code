@@ -1,4 +1,4 @@
-import { ProjectId, type WorkspaceLinkView } from "@t3tools/contracts";
+import { EnvironmentId, ThreadId, ProjectId, type WorkspaceLinkView } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
@@ -6,6 +6,8 @@ import {
   endpointTitle,
   linkedItemLabel,
   originText,
+  workspaceEndpointTitle,
+  parseWorkspaceItemDrag,
   pickedProject,
   projectItemRef,
   projectMenuItems,
@@ -111,4 +113,49 @@ describe("endpointTitle", () => {
     expect(title.endsWith("…")).toBe(true);
     expect(endpointTitle("Q3 brief")).toBe("Q3 brief");
   });
+});
+
+describe("workspace item drag", () => {
+  const environmentId = EnvironmentId.make("env_a");
+  const item = { ref: { type: "url", url: "https://example.test/brief" }, title: "Brief" };
+  it("accepts a checked reference in its own environment", () =>
+    expect(parseWorkspaceItemDrag(JSON.stringify({ environmentId, item }), environmentId)).toEqual(
+      item,
+    ));
+  it("rejects foreign references, malformed data and unsafe URLs", () => {
+    expect(
+      parseWorkspaceItemDrag(JSON.stringify({ environmentId: "env_b", item }), environmentId),
+    ).toBeUndefined();
+    expect(parseWorkspaceItemDrag("{", environmentId)).toBeUndefined();
+    expect(
+      parseWorkspaceItemDrag(
+        JSON.stringify({
+          environmentId,
+          item: { ref: { type: "url", url: "javascript:alert(1)" } },
+        }),
+        environmentId,
+      ),
+    ).toBeUndefined();
+  });
+});
+
+it("uses recognizable fallback labels for removable workspace references", () => {
+  expect(
+    workspaceEndpointTitle({ ref: { type: "file", provider: "google-drive", fileId: "brief" } }),
+  ).toBe("Drive file");
+  expect(workspaceEndpointTitle({ ref: { type: "url", url: "https://example.test/brief" } })).toBe(
+    "https://example.test/brief",
+  );
+  expect(
+    workspaceEndpointTitle({ ref: { type: "project", projectId: ONE }, title: "Launch" }),
+  ).toBe("Launch");
+});
+
+it("prefers a live thread title after Send and keeps the saved fallback when unavailable", () => {
+  const threadId = ThreadId.make("generated-thread");
+  const row = view({ ref: { type: "thread", threadId }, title: "Saved title" });
+  expect(linkedItemLabel(row, null, new Map([[threadId, "Launch plan"]]))).toEqual({
+    title: "Launch plan",
+  });
+  expect(linkedItemLabel(row, null, new Map())).toEqual({ title: "Saved title" });
 });

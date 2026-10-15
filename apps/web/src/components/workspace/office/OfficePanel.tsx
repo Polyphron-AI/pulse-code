@@ -3,7 +3,6 @@ import type { OfficeAccount, OfficeCalendar, OfficeEvent } from "@t3tools/contra
 import { Button } from "../../ui/button";
 import { CalendarDaysIcon, ChevronDownIcon, LinkIcon } from "lucide-react";
 import { fieldClass, RequestState, useOfficeRequest } from "./shared";
-import { MailPanel } from "./MailPanel";
 
 export function OfficePanel() {
   const { run, busy, error } = useOfficeRequest();
@@ -164,7 +163,7 @@ export function OfficePanel() {
           </div>
         )}
       </section>
-      <MailPanel key={accounts.map((account) => account.id).join("|")} accounts={accounts} />
+
       <details id="office-accounts" className="group rounded-xl border border-border p-5">
         <summary className="flex cursor-pointer list-none items-center gap-2 rounded-md text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
           <LinkIcon className="size-4 text-muted-foreground" />

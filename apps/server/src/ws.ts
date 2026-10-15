@@ -209,7 +209,7 @@ import * as WorkspaceEntries from "./workspace/WorkspaceEntries.ts";
 import * as WorkspaceFileSystem from "./workspace/WorkspaceFileSystem.ts";
 import { readWorkflowScript } from "./orchestration-v2/workflowScriptQuery.ts";
 import * as WorkspacePaths from "./workspace/WorkspacePaths.ts";
-import { WorkspaceLinks } from "./workspace/WorkspaceLinks.ts";
+import { projectHub, WorkspaceLinks } from "./workspace/WorkspaceLinks.ts";
 import * as VcsStatusBroadcaster from "./vcs/VcsStatusBroadcaster.ts";
 import * as VcsProvisioningService from "./vcs/VcsProvisioningService.ts";
 import * as GitWorkflowService from "./git/GitWorkflowService.ts";
@@ -1305,6 +1305,10 @@ const linksWsRpcLayer = LinksWsRpcGroup.toLayer(
   Effect.gen(function* () {
     const workspaceLinks = yield* WorkspaceLinks;
     return LinksWsRpcGroup.of({
+      [WS_METHODS.pulseLinksProjectHub]: (input) =>
+        observeRpcEffect(WS_METHODS.pulseLinksProjectHub, projectHub(workspaceLinks.list, input), {
+          "rpc.aggregate": "pulse.links",
+        }),
       [WS_METHODS.pulseLinksList]: (input) =>
         observeRpcEffect(WS_METHODS.pulseLinksList, workspaceLinks.list(input.item), {
           "rpc.aggregate": "pulse.links",
@@ -1880,6 +1884,7 @@ const makeWsRpcLayer = (
               mailManagement: true,
               mailRead: true,
               workspaceLinks: true,
+              workspaceItemContext: true,
               mcpCreateOnly: true,
               mcpDiscovery: true,
               mcpNativeInventory: true,

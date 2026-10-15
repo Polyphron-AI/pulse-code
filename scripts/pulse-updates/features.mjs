@@ -5,6 +5,32 @@ import { fileURLToPath } from "node:url";
 import { git, writeJson } from "./pipeline.mjs";
 
 export const featureSuites = [
+  {
+    id: "workspace-item-actions",
+    file: "apps/web/src/components/workspace/WorkspaceItemActions.test.tsx",
+  },
+  {
+    id: "workspace-shared-rail",
+    file: "apps/web/src/components/workspace/WorkspaceSpaceSelector.test.tsx",
+  },
+  {
+    id: "workspace-live-link-labels",
+    file: "apps/web/src/components/workspace/mail/linkedItems.test.ts",
+  },
+  {
+    id: "workspace-item-send",
+    file: "apps/server/src/workspace/linkedItemsTurn.integration.test.ts",
+  },
+  {
+    id: "workspace-project-hub",
+    file: "apps/server/src/workspace/WorkspaceLinks.test.ts",
+    testNamePattern: "one hop",
+  },
+  {
+    id: "workspace-drive-paste",
+    file: "packages/contracts/src/pulseLinks.test.ts",
+    testNamePattern: "pasted workspace URLs",
+  },
   { id: "managed-skills", file: "apps/server/src/skills/ManagedSkillStore.test.ts" },
   { id: "mcp-preflight", file: "apps/server/src/mcp/PulseMcpPreflight.test.ts" },
   { id: "mcp-connections", file: "apps/server/src/mcp/PulseMcpConfigService.test.ts" },

@@ -26,6 +26,7 @@ import type { ComponentProps } from "react";
 import { ThreadDetailsCard } from "./ThreadDetailsCard";
 import { OpenInPicker } from "./OpenInPicker";
 import { ThreadDetailsSection } from "./ThreadDetailsSection";
+import { ThreadWorkspaceLinks } from "../workspace/ThreadWorkspaceLinks";
 import { ThreadAutomationsPanel } from "./ThreadAutomationsPanel";
 import { ThreadRelationshipsPanel } from "./ThreadRelationshipsControl";
 
@@ -122,6 +123,9 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
     >
       {(density) => (
         <>
+          {!props.draftId ? (
+            <ThreadWorkspaceLinks environmentId={props.environmentId} threadId={props.threadId} />
+          ) : null}
           <ThreadDetailsSection
             headingId="thread-details-workspace-heading"
             title="Workspace"

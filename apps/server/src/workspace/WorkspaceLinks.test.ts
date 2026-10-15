@@ -1,6 +1,7 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
 import {
+  ComposerContextId,
   ProjectId,
   ThreadId,
   workspaceItemKey,
@@ -16,7 +17,8 @@ import * as Stream from "effect/Stream";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import { SqlitePersistenceMemory } from "../persistence/Layers/Sqlite.ts";
-import { WorkspaceLinks, WorkspaceLinksLive } from "./WorkspaceLinks.ts";
+import { confirmWorkspaceMessageContext } from "./linkedItemsContext.ts";
+import { projectHub, WorkspaceLinks, WorkspaceLinksLive } from "./WorkspaceLinks.ts";
 
 const testLayer = () =>
   WorkspaceLinksLive.pipe(
@@ -306,6 +308,77 @@ it.layer(
         assert.strictEqual(error.message, message);
       }
       assert.strictEqual(Option.getOrThrow(yield* Stream.runHead(links.changes)), 1);
+    }),
+  );
+});
+
+it.layer(testLayer())("project hub", (it) => {
+  it.effect("a removed source grants no access and repeated confirmation is idempotent", () =>
+    Effect.gen(function* () {
+      const links = yield* WorkspaceLinks;
+      const source = {
+        version: 1 as const,
+        kind: "workspace-item" as const,
+        contextId: ComposerContextId.make("source"),
+        label: "Source",
+        item: mailItem(1),
+        viewing: mailItem(1),
+      };
+      const retained = {
+        ...source,
+        contextId: ComposerContextId.make("retained"),
+        label: "Retained file",
+        item: urlItem(1),
+      };
+      const message = {
+        text: "Read [Retained](t3-context://v1/workspace-item/retained)",
+        context: { version: 1 as const, records: [source, retained] },
+      };
+      const owner = { threadId: ThreadId.make("t1") };
+      yield* confirmWorkspaceMessageContext(links.link, owner, message);
+      yield* confirmWorkspaceMessageContext(links.link, owner, message);
+      const confirmed = yield* links.list(threadItem(1).ref);
+      assert.lengthOf(confirmed.linked, 1);
+      assert.deepEqual(confirmed.linked[0]?.item, retained.item);
+      assert.deepEqual(confirmed.linked[0]?.origin?.viewing, source.item);
+      assert.isTrue(
+        Option.isNone(yield* links.resolveLinked(owner, workspaceItemKey(source.item.ref))),
+      );
+      assert.isTrue(
+        Option.isSome(yield* links.resolveLinked(owner, workspaceItemKey(retained.item.ref))),
+      );
+    }),
+  );
+
+  it.effect("shows one hop through project threads without granting indirect context", () =>
+    Effect.gen(function* () {
+      const links = yield* WorkspaceLinks;
+      yield* links.link({ a: projectItem(1), b: mailItem(1) });
+      yield* links.link({ a: mailItem(1), b: urlItem(1) });
+      yield* links.link({ a: threadItem(1), b: mailItem(2) });
+      yield* links.link({ a: urlItem(1), b: urlItem(2) });
+      const hub = yield* projectHub(links.list, {
+        projectId: ProjectId.make("p1"),
+        threadIds: [ThreadId.make("t1")],
+      });
+      assert.deepEqual(
+        new Set(hub.related.map((row) => workspaceItemKey(row.item.ref))),
+        new Set([workspaceItemKey(urlItem(1).ref), workspaceItemKey(mailItem(2).ref)]),
+      );
+      assert.isTrue(
+        hub.related.some(
+          (row) => workspaceItemKey(row.via.ref) === workspaceItemKey(threadItem(1).ref),
+        ),
+      );
+      const context = yield* links.contextFor({
+        threadId: ThreadId.make("other"),
+        projectId: ProjectId.make("p1"),
+      });
+      assert.deepEqual(
+        context.items.map((row) => row.key),
+        [workspaceItemKey(mailItem(1).ref)],
+      );
+      assert.isFalse(hub.truncated);
     }),
   );
 });
