@@ -51,6 +51,8 @@ import { PullRequestsToolkitHandlersLive } from "./toolkits/pullRequests/handler
 import { PullRequestsToolkit } from "./toolkits/pullRequests/tools.ts";
 import * as MailToolkitHandlers from "./toolkits/mail/handlers.ts";
 import { MailToolkit } from "./toolkits/mail/tools.ts";
+import * as WorkspaceToolkitHandlers from "./toolkits/workspace/handlers.ts";
+import { WorkspaceToolkit } from "./toolkits/workspace/tools.ts";
 import {
   DeviceScreenshotToolkitHandlersLive,
   DeviceStandardToolkitHandlersLive,
@@ -702,6 +704,11 @@ export const MailToolkitRegistrationLive = McpServer.toolkit(MailToolkit).pipe(
   Layer.provide(MailToolkitHandlers.layer()),
 );
 
+/** Requires WorkspaceLinks and the mail services; server.ts provides them. */
+export const WorkspaceToolkitRegistrationLive = McpServer.toolkit(WorkspaceToolkit).pipe(
+  Layer.provide(WorkspaceToolkitHandlers.layer()),
+);
+
 const DeviceStandardToolkitRegistrationLive = McpServer.toolkit(DeviceStandardToolkit).pipe(
   Layer.provide(DeviceStandardToolkitHandlersLive),
 );
@@ -733,5 +740,6 @@ export const layer = Layer.mergeAll(
   WorktreeToolkitRegistrationLive,
   PullRequestsToolkitRegistrationLive,
   MailToolkitRegistrationLive,
+  WorkspaceToolkitRegistrationLive,
   DeviceToolkitRegistrationLive,
 ).pipe(Layer.provideMerge(McpTransportLive));

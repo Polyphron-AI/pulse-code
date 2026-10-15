@@ -17,7 +17,8 @@ export const RESULT_MAX_BYTES = 32_000;
 
 const fail = (kind: MailError["kind"], message: string) => new MailError({ kind, message });
 
-const bounded = (value: object) => {
+/** Fails with limit-exceeded when a result would not fit an agent's context. */
+export const bounded = (value: object) => {
   // @effect-diagnostics preferSchemaOverJson:off -- measures the payload McpServer will serialize
   const size = Buffer.byteLength(JSON.stringify(value));
   return size > RESULT_MAX_BYTES

@@ -49,7 +49,7 @@ it.effect("stores only a token hash, resolves the bearer token, and revokes by t
     const resolved = yield* registry.resolve(token);
     expect(resolved?.threadId).toBe(threadId);
     expect(resolved?.capabilities).toEqual(
-      new Set(["preview", "orchestration", "worktree", "pull-requests", "mail"]),
+      new Set(["preview", "orchestration", "worktree", "pull-requests", "mail", "workspace"]),
     );
 
     yield* registry.revokeThread(threadId);
@@ -60,7 +60,7 @@ it.effect("stores only a token hash, resolves the bearer token, and revokes by t
 );
 
 it.effect(
-  "always grants pull-requests and mail and gates browser and device access independently",
+  "always grants pull-requests, mail and workspace and gates browser and device access independently",
   () =>
     Effect.gen(function* () {
       const registry = yield* makeRegistry(() => 1_000);
@@ -89,12 +89,14 @@ it.effect(
         "orchestration",
         "preview",
         "pull-requests",
+        "workspace",
         "worktree",
       ]);
       expect(yield* capabilitiesOf(withoutPreview)).toEqual([
         "mail",
         "orchestration",
         "pull-requests",
+        "workspace",
         "worktree",
       ]);
       expect(yield* capabilitiesOf(withDevice)).toEqual([
@@ -102,6 +104,7 @@ it.effect(
         "mail",
         "orchestration",
         "pull-requests",
+        "workspace",
         "worktree",
       ]);
     }),
