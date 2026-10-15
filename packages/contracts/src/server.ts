@@ -611,6 +611,7 @@ export const ServerConfig = Schema.Struct({
       openCodeManagedSkills: Schema.optionalKey(Schema.Boolean),
       mcpManagement: Schema.optionalKey(Schema.Boolean),
       mailManagement: Schema.optionalKey(Schema.Boolean),
+      telegramRead: Schema.optionalKey(Schema.Boolean),
       mailRead: Schema.optionalKey(Schema.Boolean),
       mailReply: Schema.optionalKey(Schema.Boolean),
       mailConversations: Schema.optionalKey(Schema.Boolean),

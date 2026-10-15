@@ -72,6 +72,18 @@ describe("linkedItemLabel", () => {
 });
 
 describe("canOpenLinkedItem", () => {
+  it("opens only valid Telegram resource identities", () => {
+    expect(
+      canOpenLinkedItem({
+        type: "provider-resource",
+        provider: "telegram",
+        resourceId: "telegram_1000/-42/2",
+      }),
+    ).toBe(true);
+    expect(
+      canOpenLinkedItem({ type: "provider-resource", provider: "telegram", resourceId: "2" }),
+    ).toBe(false);
+  });
   it("opens what Wave 1 can show and nothing else", () => {
     expect(canOpenLinkedItem(MESSAGE)).toBe(true);
     expect(canOpenLinkedItem(projectItemRef(ONE))).toBe(true);

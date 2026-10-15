@@ -70,3 +70,5 @@ export * from "./threadHandoff.ts";
 export * from "./office.ts";
 export * from "./communications.ts";
 export * from "./talk.ts";
+
+export * from "./pulseTelegram.ts";

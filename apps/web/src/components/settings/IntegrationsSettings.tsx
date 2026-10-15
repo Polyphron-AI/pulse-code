@@ -1,3 +1,4 @@
+import { TelegramSettings } from "./TelegramSettings";
 import { DeviceHostUpdates } from "../device/DeviceHostUpdates";
 import { DeviceToolVersions } from "../device/DeviceToolVersions";
 import { useScopedSettings, useUpdateScopedSettings } from "./useScopedSettings";
@@ -1448,6 +1449,7 @@ export function IntegrationsSettingsPanel() {
     </>
   );
   const sectionContent = {
+    telegram: <TelegramSettings />,
     skills: <ManagedSkillsSettings />,
     mcp: <McpConnectionsSettings />,
     dictation: <DictationSettings />,

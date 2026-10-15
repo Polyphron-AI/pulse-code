@@ -5,6 +5,27 @@ import { fileURLToPath } from "node:url";
 import { git, writeJson } from "./pipeline.mjs";
 
 export const featureSuites = [
+  { id: "telegram-api-boundary", file: "apps/server/src/telegram/TelegramBotApi.test.ts" },
+  {
+    id: "telegram-reader-client",
+    file: "apps/web/src/components/workspace/TelegramWorkspace.test.tsx",
+  },
+  {
+    id: "telegram-settings-client",
+    file: "apps/web/src/components/settings/TelegramSettings.test.tsx",
+  },
+  { id: "telegram-received-cache", file: "apps/server/src/telegram/TelegramService.test.ts" },
+  {
+    id: "telegram-linked-read",
+    file: "apps/server/src/mcp/toolkits/workspace/handlers.test.ts",
+    testNamePattern: "Telegram",
+  },
+  { id: "telegram-remote-refresh", file: "packages/client-runtime/src/state/telegram.test.ts" },
+  {
+    id: "telegram-personal-retirement",
+    file: "apps/desktop/src/communications/ChatService.test.ts",
+    testNamePattern: "retires personal Telegram",
+  },
   {
     id: "mail-approval-recovery-client",
     file: "packages/client-runtime/src/mail/mailApprovals.test.ts",

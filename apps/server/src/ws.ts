@@ -100,6 +100,7 @@ import {
   type PullRequestRef,
   PulseLinksRpcs,
   PulseMailRpcs,
+  PulseTelegramRpcs,
   PulseMailConversationRpcs,
   PulseMailReplyRpcs,
   WS_METHODS,
@@ -188,6 +189,7 @@ import {
   layerFromProviderInstanceRegistry,
 } from "./orchestration-v2/ProviderAdapterRegistry.ts";
 import { replyReadiness } from "./mail/MailReply.ts";
+import { TelegramService } from "./telegram/TelegramService.ts";
 import * as ProviderRegistry from "./provider/Services/ProviderRegistry.ts";
 import * as ProviderInstanceRegistry from "./provider/Services/ProviderInstanceRegistry.ts";
 import * as AcpRegistrySupport from "./provider/acp/AcpRegistrySupport.ts";
@@ -572,6 +574,7 @@ const ServerWsRpcGroup = WsRpcGroup;
 // silently widens the layer's requirements to `any`. RpcServer still serves the
 // full ServerWsRpcGroup and resolves each handler by tag, so the two layers
 // together cover the group. Workspace link handlers are split out the same way.
+const TelegramWsRpcGroup = RpcGroup.make(...PulseTelegramRpcs);
 const MailWsRpcGroup = RpcGroup.make(
   ...PulseMailRpcs,
   ...PulseMailConversationRpcs,
@@ -579,6 +582,7 @@ const MailWsRpcGroup = RpcGroup.make(
 );
 const LinksWsRpcGroup = RpcGroup.make(...PulseLinksRpcs);
 const CoreWsRpcGroup = ServerWsRpcGroup.omit(
+  ...PulseTelegramRpcs.map((rpc) => rpc._tag),
   ...PulseMailRpcs.map((rpc) => rpc._tag),
   ...PulseMailConversationRpcs.map((rpc) => rpc._tag),
   ...PulseMailReplyRpcs.map((rpc) => rpc._tag),
@@ -1218,6 +1222,24 @@ export const subscribeOrchestrationV2Shell = Effect.fn("ws.orchestrationV2.subsc
       ),
     );
   },
+);
+
+const telegramWsRpcLayer = TelegramWsRpcGroup.toLayer(
+  Effect.gen(function* () {
+    const telegram = yield* TelegramService;
+    return TelegramWsRpcGroup.of({
+      [WS_METHODS.telegramListConnections]: () => telegram.listConnections,
+      [WS_METHODS.telegramConnect]: telegram.connect,
+      [WS_METHODS.telegramDisconnect]: telegram.disconnect,
+      [WS_METHODS.telegramStartPairing]: telegram.startPairing,
+      [WS_METHODS.telegramCancelPairing]: telegram.cancelPairing,
+      [WS_METHODS.telegramListChats]: telegram.listChats,
+      [WS_METHODS.telegramRemoveChat]: telegram.removeChat,
+      [WS_METHODS.telegramListMessages]: telegram.listMessages,
+      [WS_METHODS.telegramReadMessage]: telegram.readMessage,
+      [WS_METHODS.telegramSubscribeChanges]: () => telegram.changes,
+    });
+  }),
 );
 
 const mailWsRpcLayer = MailWsRpcGroup.toLayer(
@@ -1922,6 +1944,7 @@ const makeWsRpcLayer = (
               mcpManagement: true,
               mailManagement: true,
               mailRead: true,
+              telegramRead: true,
               mailConversations: true,
               mailReply: true,
               workspaceLinks: true,
@@ -4143,6 +4166,7 @@ export const websocketRpcRouteLayer = Layer.unwrap(
     const mailServices = Context.make(MailConfigService, yield* MailConfigService).pipe(
       Context.add(MailOAuth, yield* MailOAuth),
       Context.add(MailSendService, yield* MailSendService),
+      Context.add(TelegramService, yield* TelegramService),
     );
     const previewAutomationBroker = yield* PreviewAutomationBroker.PreviewAutomationBroker;
     const serverSelfUpdate = yield* ServerSelfUpdate.ServerSelfUpdate;
@@ -4199,6 +4223,7 @@ export const websocketRpcRouteLayer = Layer.unwrap(
               clientAnalyticsProps,
               previewAutomationBroker,
             ).pipe(
+              Layer.merge(telegramWsRpcLayer),
               Layer.merge(mailWsRpcLayer.pipe(Layer.provide(layerFromProviderInstanceRegistry))),
               Layer.merge(linksWsRpcLayer),
               Layer.provideMerge(RpcSerialization.layerJson),

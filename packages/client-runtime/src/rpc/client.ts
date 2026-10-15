@@ -63,6 +63,7 @@ export type EnvironmentSubscriptionRpcTag =
   | typeof WS_METHODS.pullRequestsSubscribeRefreshes
   | typeof WS_METHODS.pulseMailSubscribeThreadApprovals
   | typeof WS_METHODS.pulseLinksSubscribeChanges
+  | typeof WS_METHODS.telegramSubscribeChanges
   | typeof WS_METHODS.previewAutomationConnect
   | typeof WS_METHODS.subscribeVcsStatus
   | typeof WS_METHODS.subscribeWorktreeSetup

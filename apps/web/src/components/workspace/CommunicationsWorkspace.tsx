@@ -1,5 +1,5 @@
 ﻿import { useCallback, useEffect, useRef, useState } from "react";
-import { Link } from "@tanstack/react-router";
+import { Link, useSearch } from "@tanstack/react-router";
 import type { ChatAccount } from "@t3tools/contracts";
 import { PlusIcon, RefreshCwIcon, UnplugIcon } from "lucide-react";
 import { Button } from "../ui/button";
@@ -9,11 +9,24 @@ import { cn } from "../../lib/utils";
 import { RequestState } from "./office/shared";
 import { useCommunicationsRequest } from "./useCommunicationsRequest";
 import { ChatCommunicationsWorkspace } from "./ChatCommunicationsWorkspace";
+import { TelegramWorkspace } from "./TelegramWorkspace";
 import { ConnectCommunicationsDialog } from "./ConnectCommunicationsDialog";
 
 const key = (provider: string, id: string) => JSON.stringify([provider, id]);
-const providerNames = { slack: "Slack", discord: "Discord", telegram: "Telegram" };
+const providerNames = {
+  slack: "Slack",
+  discord: "Discord",
+  telegram: "Telegram (personal login retired)",
+};
 export function CommunicationsWorkspace() {
+  const search = useSearch({ strict: false });
+  return search.communicationProvider === "telegram" ? (
+    <TelegramWorkspace key={`${search.environment}:${search.account}:${search.item}`} />
+  ) : (
+    <DesktopCommunicationsWorkspace />
+  );
+}
+function DesktopCommunicationsWorkspace() {
   const { run, available, busy, error } = useCommunicationsRequest();
   const [chatAccounts, setChatAccounts] = useState<readonly ChatAccount[]>([]);
   const [selectedKey, setSelectedKey] = useState("");
@@ -113,6 +126,17 @@ export function CommunicationsWorkspace() {
           <PlusIcon />
           <span className="hidden sm:inline">Connect chat</span>
         </Button>
+        <Link
+          to="/workspace"
+          search={{
+            space: "office",
+            officeView: "communications",
+            communicationProvider: "telegram",
+          }}
+          className="shrink-0 text-sm underline underline-offset-4"
+        >
+          Telegram bots
+        </Link>
         <Link to="/settings/email" className="shrink-0 text-xs underline underline-offset-4">
           Email accounts
         </Link>
@@ -122,7 +146,18 @@ export function CommunicationsWorkspace() {
           <RequestState busy={busy} error={error} />
         </div>
       )}
-      {selectedChat ? (
+      {selectedChat?.provider === "telegram" ? (
+        <main className="space-y-3 p-6">
+          <h1 className="text-lg font-semibold">Personal Telegram login has been retired</h1>
+          <p className="text-sm text-muted-foreground">
+            Your saved personal account record and credentials have been retained. Connect a server
+            bot and pair the chats you want to read.
+          </p>
+          <Link to="/settings/integrations" hash="telegram" className="text-sm underline">
+            Connect Telegram in Settings
+          </Link>
+        </main>
+      ) : selectedChat ? (
         <ChatCommunicationsWorkspace
           key={JSON.stringify([selectedChat.provider, selectedChat.id])}
           account={selectedChat}
@@ -135,10 +170,10 @@ export function CommunicationsWorkspace() {
               ? "Open Pulse desktop to connect your accounts. Credentials and sessions stay on that computer; this web connection cannot access them."
               : !loaded
                 ? "Loading connected accounts…"
-                : "Choose an account above, connect Slack or Telegram, or add a Discord bot."}
+                : "Choose an account above, connect Slack, or add a Discord bot. Connect Telegram bots in Settings."}
           </p>
           <p className="mt-3 max-w-xl text-xs leading-relaxed text-muted-foreground">
-            Slack uses your token permissions. Telegram connects your personal account and its
+            Slack uses your token permissions. Telegram bots read received messages from paired
             chats. Discord exposes bot-accessible team channels, not a personal inbox. Read mail in
             the Mail space.
           </p>

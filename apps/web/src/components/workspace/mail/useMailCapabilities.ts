@@ -26,6 +26,7 @@ export function useMailCapabilities(targetEnvironmentId?: EnvironmentId) {
   return {
     environmentId,
     ready: config !== null,
+    telegramRead: config?.pulseCapabilities?.telegramRead === true,
     mailReply: config?.pulseCapabilities?.mailReply === true,
     mailConversations: config?.pulseCapabilities?.mailConversations === true,
     mailRead: config?.pulseCapabilities?.mailRead === true,

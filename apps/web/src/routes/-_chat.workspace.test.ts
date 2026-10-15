@@ -2,6 +2,20 @@ import { describe, expect, it } from "vite-plus/test";
 import { parseWorkspaceSearch } from "./_chat.workspace";
 
 describe("parseWorkspaceSearch", () => {
+  it("preserves the environment and exact Telegram source when opening a remote linked message", () => {
+    const search = {
+      space: "office",
+      officeView: "communications",
+      communicationProvider: "telegram",
+      environment: "remote-env",
+      account: "telegram_1000",
+      item: "telegram_1000/-42/2",
+    };
+    expect(parseWorkspaceSearch(search)).toEqual(search);
+    expect(parseWorkspaceSearch({ ...search, space: "mail" })).not.toHaveProperty(
+      "communicationProvider",
+    );
+  });
   it("opens a project hub", () =>
     expect(parseWorkspaceSearch({ space: "projects", project: "project-1" })).toEqual({
       space: "projects",

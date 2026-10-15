@@ -1,6 +1,6 @@
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { useNavigate } from "@tanstack/react-router";
-import { WorkspaceItemRef, type EnvironmentId } from "@t3tools/contracts";
+import { WorkspaceItemRef, parseTelegramResourceId, type EnvironmentId } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import { readLocalApi } from "../../localApi";
 import { buildThreadRouteParams } from "../../threadRoutes";
@@ -41,6 +41,21 @@ export function useWorkspaceItemOpener(environmentId: EnvironmentId) {
           item: JSON.stringify(ref),
         },
       });
+    if (ref.type === "provider-resource" && ref.provider === "telegram") {
+      const resource = parseTelegramResourceId(ref.resourceId);
+      if (resource)
+        void navigate({
+          to: "/workspace",
+          search: {
+            space: "office",
+            officeView: "communications",
+            communicationProvider: "telegram",
+            environment: environmentId,
+            account: resource.connectionId,
+            item: ref.resourceId,
+          },
+        });
+    }
     if (ref.type === "url" || ref.type === "file")
       void readLocalApi()?.shell.openExternal(
         ref.type === "url"

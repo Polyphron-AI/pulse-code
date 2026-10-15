@@ -207,6 +207,10 @@
       "types": "./src/state/pullRequests.ts",
       "default": "./src/state/pullRequests.ts"
     },
+    "./state/telegram": {
+      "types": "./src/state/telegram.ts",
+      "default": "./src/state/telegram.ts"
+    },
     "./state/workspace-links": {
       "types": "./src/state/workspaceLinks.ts",
       "default": "./src/state/workspaceLinks.ts"

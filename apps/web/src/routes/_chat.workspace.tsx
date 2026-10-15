@@ -8,6 +8,7 @@ import { OfficeWorkspace } from "../components/workspace/OfficeWorkspace";
 export interface WorkspaceSearch {
   readonly space?: "office" | "mail" | "projects";
   readonly officeView?: "communications";
+  readonly communicationProvider?: "telegram";
   readonly account?: string;
   readonly folder?: string;
   readonly project?: string;
@@ -34,7 +35,22 @@ export function parseWorkspaceSearch(raw: Record<string, unknown>): WorkspaceSea
       ...(item !== undefined ? { item } : {}),
     };
   }
+  const telegram =
+    raw.space === "office" &&
+    raw.officeView === "communications" &&
+    raw.communicationProvider === "telegram";
+  const environment = text(raw.environment);
+  const account = text(raw.account);
+  const item = text(raw.item);
   return {
+    ...(telegram
+      ? {
+          communicationProvider: "telegram" as const,
+          ...(environment ? { environment } : {}),
+          ...(account ? { account } : {}),
+          ...(item ? { item } : {}),
+        }
+      : {}),
     ...(raw.space === "office" ? { space: "office" as const } : {}),
     ...(raw.space === "office" && raw.officeView === "communications"
       ? { officeView: "communications" as const }

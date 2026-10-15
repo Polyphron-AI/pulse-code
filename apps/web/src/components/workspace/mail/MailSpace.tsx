@@ -13,7 +13,7 @@ import { Button } from "../../ui/button";
 import { MailConversationList } from "./MailConversationList";
 import { useCallback, useState, type ReactNode } from "react";
 
-import { parseMailLocation } from "../useWorkspaceItemOpener";
+import { useWorkspaceItemOpener, parseMailLocation } from "../useWorkspaceItemOpener";
 import { WorkspaceEngagement } from "../WorkspaceEngagement";
 import { LinkedSection } from "./LinkedSection";
 import { cn } from "../../../lib/utils";
@@ -153,6 +153,7 @@ interface MailPanesProps {
 function MailPanes(props: MailPanesProps) {
   const [selected, setSelected] = useState<MailItemRef | null>(props.initialItem ?? null);
   const navigate = useNavigate();
+  const openOtherItem = useWorkspaceItemOpener(props.environmentId);
   const { mailConversations, workspaceLinks: linksAvailable } = useMailCapabilities(
     props.environmentId,
   );
@@ -190,6 +191,9 @@ function MailPanes(props: MailPanesProps) {
           to: "/$environmentId/$threadId",
           params: buildThreadRouteParams(scopeThreadRef(props.environmentId, ref.threadId)),
         });
+        return;
+      case "provider-resource":
+        openOtherItem(ref);
         return;
       case "file":
         void readLocalApi()?.shell.openExternal(

@@ -1,5 +1,9 @@
 import * as Schema from "effect/Schema";
-import { WorkspaceLinkEndpoint, type EnvironmentId } from "@t3tools/contracts";
+import {
+  parseTelegramResourceId,
+  WorkspaceLinkEndpoint,
+  type EnvironmentId,
+} from "@t3tools/contracts";
 import type {
   ContextMenuItem,
   ProjectId,
@@ -88,7 +92,10 @@ export function canOpenLinkedItem(ref: WorkspaceItemRef): boolean {
     ref.type === "project" ||
     ref.type === "thread" ||
     ref.type === "url" ||
-    ref.type === "file"
+    ref.type === "file" ||
+    (ref.type === "provider-resource" &&
+      ref.provider === "telegram" &&
+      parseTelegramResourceId(ref.resourceId) !== undefined)
   );
 }
 

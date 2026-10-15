@@ -4,7 +4,6 @@ import { ChatError, type ChatAdapter } from "./ChatAdapter.ts";
 
 function setup() {
   let saved: string | null = null;
-  let now = 0;
   let identifier = 0;
   const message = {
     id: "123",
@@ -22,12 +21,6 @@ function setup() {
     send: vi.fn(async () => message),
     close: vi.fn(async () => {}),
   };
-  const login = {
-    complete: vi.fn(async (): Promise<{ adapter: ChatAdapter } | { prompt: "password" }> => ({
-      adapter,
-    })),
-    close: vi.fn(async () => {}),
-  };
   const storage = {
     read: vi.fn(async () => saved),
     write: vi.fn(async (value: string) => {
@@ -37,26 +30,19 @@ function setup() {
   const factories = {
     connectRestChat: vi.fn(async () => adapter),
     restoreRestChat: vi.fn(async () => adapter),
-    restoreTelegram: vi.fn(async () => adapter),
-    beginTelegram: vi.fn(async () => login),
   };
   const service = new ChatService({
     storage,
     factories,
-    now: () => now,
     id: () => `id-${++identifier}`,
   });
   return {
     service,
     adapter,
-    login,
     storage,
     factories,
     message,
     saved: () => saved,
-    advance: () => {
-      now += 600001;
-    },
   };
 }
 
@@ -126,57 +112,59 @@ describe("native communications account ownership", () => {
     });
     await s.service.close();
   });
-  it("keeps code/password answers transient and cancels expired challenges", async () => {
-    const s = setup();
-    await s.service.invoke({
-      operation: "accounts.telegram.begin",
-      apiId: 123,
-      apiHash: "api-hash",
-      phone: "+123456789",
+  it("retires personal Telegram login while preserving saved account records and credentials", async () => {
+    const record = JSON.stringify({
+      version: 1,
+      accounts: [
+        {
+          account: {
+            id: "legacy",
+            provider: "telegram",
+            label: "Saved personal",
+            identity: "Personal account",
+          },
+          credentials: {
+            session: "saved-private-session",
+            apiId: 123,
+            apiHash: "saved-private-hash",
+          },
+        },
+      ],
     });
-    s.login.complete.mockResolvedValueOnce({ prompt: "password" });
-    expect(
-      await s.service.invoke({
-        operation: "accounts.telegram.complete",
-        challengeId: "id-1",
-        code: "654321",
-      }),
-    ).toMatchObject({ ok: true, challenge: { prompt: "password" } });
-    expect(s.saved()).toBeNull();
-    s.advance();
-    expect(
-      await s.service.invoke({
-        operation: "accounts.telegram.complete",
-        challengeId: "id-1",
-        password: "private-password",
-      }),
-    ).toMatchObject({ ok: false, error: { code: "authentication" } });
-    expect(s.login.close).toHaveBeenCalled();
-    expect(s.login.complete).toHaveBeenCalledTimes(1);
-    await s.service.close();
-  });
-  it("rejects sign-in success that arrives after expiry and closes its adapter", async () => {
-    const s = setup();
-    await s.service.invoke({
-      operation: "accounts.telegram.begin",
-      apiId: 123,
-      apiHash: "api-hash",
-      phone: "+123456789",
+    const storage = { read: vi.fn(async () => record), write: vi.fn(async (_value: string) => {}) };
+    const service = new ChatService({ storage });
+    expect(await service.invoke({ operation: "accounts.list" })).toMatchObject({
+      ok: true,
+      accounts: [{ id: "legacy", provider: "telegram" }],
     });
-    s.login.complete.mockImplementationOnce(async () => {
-      s.advance();
-      return { adapter: s.adapter };
-    });
+    for (const request of [
+      {
+        operation: "accounts.telegram.begin",
+        apiId: 123,
+        apiHash: "new-hash",
+        phone: "+123456789",
+      },
+      { operation: "accounts.telegram.complete", challengeId: "old", code: "12345" },
+      { operation: "messages.list", accountId: "legacy", conversationId: "42" },
+      {
+        operation: "messages.send",
+        accountId: "legacy",
+        conversationId: "42",
+        text: "blocked",
+        nonce: "once",
+      },
+    ] as const) {
+      expect(await service.invoke(request)).toMatchObject({
+        ok: false,
+        error: { code: "unsupported", message: expect.stringContaining("retired") },
+      });
+    }
     expect(
-      await s.service.invoke({
-        operation: "accounts.telegram.complete",
-        challengeId: "id-1",
-        code: "654321",
-      }),
-    ).toMatchObject({ ok: false, error: { code: "authentication" } });
-    expect(s.adapter.close).toHaveBeenCalled();
-    expect(s.saved()).toBeNull();
-    await s.service.close();
+      await service.invoke({ operation: "accounts.telegram.cancel", challengeId: "old" }),
+    ).toEqual({ ok: true });
+    expect(storage.write).not.toHaveBeenCalled();
+    expect(await storage.read()).toBe(record);
+    await service.close();
   });
   it("refreshes migrated session credentials without losing a confirmed send on storage failure", async () => {
     const s = setup();

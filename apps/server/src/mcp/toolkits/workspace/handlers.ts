@@ -2,6 +2,7 @@ import { WorkspaceLinksError } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 
+import { TelegramService } from "../../../telegram/TelegramService.ts";
 import { MailConfigService } from "../../../mail/MailConfigService.ts";
 import type { MailConnectionOptions } from "../../../mail/MailConnection.ts";
 import * as MailImapRead from "../../../mail/MailImapRead.ts";
@@ -32,6 +33,7 @@ const fitList = (items: ReadonlyArray<Record<string, unknown>>, truncated: boole
 export const make = (options: { readonly imap?: MailConnectionOptions } = {}) =>
   Effect.gen(function* () {
     const links = yield* WorkspaceLinks;
+    const telegram = yield* Effect.serviceOption(TelegramService);
     const orchestrator = yield* Orchestrator.OrchestratorV2;
     const config = yield* MailConfigService;
     const oauth = yield* MailOAuth;
@@ -89,6 +91,17 @@ export const make = (options: { readonly imap?: MailConnectionOptions } = {}) =>
               );
               return yield* bounded({ key, type: "mail", ...message });
             }
+            case "provider-resource":
+              if (ref.provider === "telegram" && Option.isSome(telegram))
+                return yield* telegram.value
+                  .readResource(ref.resourceId, offset)
+                  .pipe(
+                    Effect.flatMap((content) => bounded({ key, type: "telegram", ...content })),
+                  );
+              return yield* new WorkspaceLinksError({
+                kind: "unsupported",
+                message: "This source is not available for reading on this server.",
+              });
             case "url":
               return { key, type: "url", url: ref.url, ...(title !== undefined ? { title } : {}) };
             default:

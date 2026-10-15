@@ -1,3 +1,4 @@
+import { PULSE_TELEGRAM_METHODS, PulseTelegramRpcs } from "./pulseTelegram.ts";
 import {
   PULSE_ORCHESTRATION_WS_METHODS,
   OrchestrationGenerateThreadHandoffInput,
@@ -352,6 +353,7 @@ import { VcsError } from "./vcs.ts";
 import { Project, ProjectMutation, ProjectMutationError } from "./project.ts";
 
 export const WS_METHODS = {
+  ...PULSE_TELEGRAM_METHODS,
   pulseMailListAccounts: PULSE_MAIL_METHODS.listAccounts,
   pulseMailUpsertAccount: PULSE_MAIL_METHODS.upsertAccount,
   pulseMailRemoveAccount: PULSE_MAIL_METHODS.removeAccount,
@@ -1760,6 +1762,7 @@ export class RpcScopeAuthorization extends RpcMiddleware.Service<RpcScopeAuthori
 ) {}
 
 export const WsRpcGroup = RpcGroup.make(
+  ...PulseTelegramRpcs,
   ...PulseMailRpcs,
   ...PulseMailConversationRpcs,
   ...PulseMailReplyRpcs,

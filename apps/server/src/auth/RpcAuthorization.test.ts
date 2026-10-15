@@ -19,6 +19,24 @@ import {
 } from "./RpcAuthorization.ts";
 
 describe("RPC authorization scopes", () => {
+  it("requires operate access for Telegram connection and pairing changes, read access for content", () => {
+    for (const method of [
+      WS_METHODS.telegramConnect,
+      WS_METHODS.telegramDisconnect,
+      WS_METHODS.telegramStartPairing,
+      WS_METHODS.telegramCancelPairing,
+      WS_METHODS.telegramRemoveChat,
+    ])
+      expect(requiredScopeForRpcMethod(method)).toBe(AuthOrchestrationOperateScope);
+    for (const method of [
+      WS_METHODS.telegramListConnections,
+      WS_METHODS.telegramListChats,
+      WS_METHODS.telegramListMessages,
+      WS_METHODS.telegramReadMessage,
+      WS_METHODS.telegramSubscribeChanges,
+    ])
+      expect(requiredScopeForRpcMethod(method)).toBe(AuthOrchestrationReadScope);
+  });
   it("requires operate access to change managed skills and read access to list them", () => {
     expect(requiredScopeForRpcMethod(WS_METHODS.pulseSkillsList)).toBe(AuthOrchestrationReadScope);
     expect(requiredScopeForRpcMethod(WS_METHODS.pulseSkillsMutate)).toBe(

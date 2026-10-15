@@ -4,7 +4,6 @@ import * as Schema from "effect/Schema";
 import { ChatAccount, ChatRequest, ChatResult } from "@t3tools/contracts";
 import { ChatError, type ChatAdapter } from "./ChatAdapter.ts";
 import { connectRestChat, restoreRestChat } from "./RestChatAdapter.ts";
-import type { TelegramLogin } from "./TelegramAdapter.ts";
 
 const Document = Schema.Struct({
   version: Schema.Literal(1),
@@ -16,23 +15,14 @@ const decodeAccount = Schema.decodeUnknownSync(ChatAccount);
 const decodeDocument = Schema.decodeUnknownSync(Document);
 const decodeRequest = Schema.decodeUnknownSync(ChatRequest);
 const decodeResult = Schema.decodeUnknownSync(ChatResult);
-const CHALLENGE_LIFETIME = 10 * 60 * 1000;
 const DEFAULT_FACTORIES = {
   connectRestChat,
   restoreRestChat,
-  beginTelegram: async (input: { apiId: number; apiHash: string; phone: string }) =>
-    (await import("./TelegramAdapter.ts")).beginTelegram(input),
-  restoreTelegram: async (credentials: unknown) =>
-    (await import("./TelegramAdapter.ts")).restoreTelegram(credentials),
 };
 
 export class ChatService {
   private document: typeof Document.Type | undefined;
   private adapters = new Map<string, ChatAdapter>();
-  private challenges = new Map<
-    string,
-    { login: TelegramLogin; expiresAt: number; timer: ReturnType<typeof setTimeout> }
-  >();
   private pending: Promise<unknown> = Promise.resolve();
   private closed = false;
 
@@ -41,7 +31,6 @@ export class ChatService {
   constructor(options: {
     storage: { read(): Promise<string | null>; write(value: string): Promise<void> };
     factories?: typeof DEFAULT_FACTORIES;
-    now?: () => number;
     id?: () => string;
   }) {
     this.options = options;
@@ -111,9 +100,6 @@ export class ChatService {
   private factories() {
     return this.options.factories ?? DEFAULT_FACTORIES;
   }
-  private now() {
-    return this.options.now?.() ?? Date.now();
-  }
   private id() {
     return this.options.id?.() ?? NodeCrypto.randomUUID();
   }
@@ -143,10 +129,15 @@ export class ChatService {
     if (existing) return existing;
     const saved = this.document!.accounts.find((item) => item.account.id === accountId);
     if (!saved) throw new ChatError("not_found", "This account is no longer connected.");
-    const adapter =
-      saved.account.provider === "telegram"
-        ? await this.factories().restoreTelegram(saved.credentials)
-        : await this.factories().restoreRestChat(saved.account.provider, saved.credentials);
+    if (saved.account.provider === "telegram")
+      throw new ChatError(
+        "unsupported",
+        "Personal Telegram login has been retired. Connect a bot in Settings > Integrations > Telegram. Your saved personal account data has been retained.",
+      );
+    const adapter = await this.factories().restoreRestChat(
+      saved.account.provider,
+      saved.credentials,
+    );
     if (this.closed) {
       await adapter.close();
       throw new Error("closed");
@@ -165,82 +156,19 @@ export class ChatService {
       ),
     });
   }
-  private async cancel(id: string) {
-    const challenge = this.challenges.get(id);
-    if (!challenge) return;
-    this.challenges.delete(id);
-    clearTimeout(challenge.timer);
-    await challenge.login.close();
-  }
   private async handle(request: ChatRequest): Promise<ChatResult> {
     switch (request.operation) {
       case "accounts.list":
         return { ok: true, accounts: this.accounts() };
       case "accounts.connectToken":
         return this.add(await this.factories().connectRestChat(request.provider, request.token));
-      case "accounts.telegram.begin": {
-        if (this.challenges.size >= 3)
-          throw new ChatError(
-            "unsupported",
-            "Finish or cancel the current Telegram sign-in first.",
-          );
-        const login = await this.factories().beginTelegram(request);
-        if (this.closed) {
-          await login.close();
-          throw new Error("closed");
-        }
-        const id = this.id();
-        const expiresAt = this.now() + CHALLENGE_LIFETIME;
-        const timer = setTimeout(() => {
-          void this.cancel(id).catch(() => undefined);
-        }, CHALLENGE_LIFETIME);
-        timer.unref?.();
-        this.challenges.set(id, { login, expiresAt, timer });
-        return {
-          ok: true,
-          challenge: { id, prompt: "code", expiresAt: new Date(expiresAt).toISOString() },
-        };
-      }
-      case "accounts.telegram.complete": {
-        const challenge = this.challenges.get(request.challengeId);
-        if (!challenge || challenge.expiresAt <= this.now()) {
-          await this.cancel(request.challengeId);
-          throw new ChatError(
-            "authentication",
-            "Telegram sign-in expired. Start again to request a new code.",
-          );
-        }
-        const result = await challenge.login.complete({
-          ...(request.code ? { code: request.code } : {}),
-          ...(request.password ? { password: request.password } : {}),
-        });
-        if (
-          this.closed ||
-          this.challenges.get(request.challengeId) !== challenge ||
-          challenge.expiresAt <= this.now()
-        ) {
-          if ("adapter" in result) await result.adapter.close();
-          await this.cancel(request.challengeId);
-          throw new ChatError(
-            "authentication",
-            "Telegram sign-in expired. Start again to request a new code.",
-          );
-        }
-        if ("prompt" in result)
-          return {
-            ok: true,
-            challenge: {
-              id: request.challengeId,
-              prompt: result.prompt,
-              expiresAt: new Date(challenge.expiresAt).toISOString(),
-            },
-          };
-        this.challenges.delete(request.challengeId);
-        clearTimeout(challenge.timer);
-        return this.add(result.adapter);
-      }
+      case "accounts.telegram.begin":
+      case "accounts.telegram.complete":
+        throw new ChatError(
+          "unsupported",
+          "Personal Telegram login has been retired. Connect a bot in Settings > Integrations > Telegram. Your saved personal account data has been retained.",
+        );
       case "accounts.telegram.cancel":
-        await this.cancel(request.challengeId);
         return { ok: true };
       case "accounts.disconnect": {
         if (!this.document!.accounts.some((item) => item.account.id === request.accountId))
@@ -288,10 +216,7 @@ export class ChatService {
   }
   async close() {
     this.closed = true;
-    await Promise.allSettled([
-      ...[...this.adapters.values()].map((adapter) => adapter.close()),
-      ...[...this.challenges.keys()].map((id) => this.cancel(id)),
-    ]);
+    await Promise.allSettled([...this.adapters.values()].map((adapter) => adapter.close()));
     await this.pending;
     this.adapters.clear();
   }

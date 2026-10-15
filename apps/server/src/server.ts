@@ -65,6 +65,9 @@ import * as TextGeneration from "./textGeneration/TextGeneration.ts";
 import { ProviderInstanceRegistryHydrationLive } from "./provider/Layers/ProviderInstanceRegistryHydration.ts";
 import * as TerminalManager from "./terminal/Manager.ts";
 import * as McpHttpServer from "./mcp/McpHttpServer.ts";
+import * as TelegramService from "./telegram/TelegramService.ts";
+import * as TelegramStore from "./telegram/TelegramStore.ts";
+import * as TelegramBotApi from "./telegram/TelegramBotApi.ts";
 import * as MailConfigService from "./mail/MailConfigService.ts";
 import * as MailOAuth from "./mail/MailOAuth.ts";
 import * as MailSendService from "./mail/MailSendService.ts";
@@ -640,6 +643,12 @@ const commandReadinessLayer = HttpRouter.middleware(
   { global: true },
 );
 
+/** One Telegram reader shared by workspace MCP and remote clients. */
+const TelegramLayerLive = TelegramService.layer().pipe(
+  Layer.provide(TelegramStore.layer),
+  Layer.provide(TelegramBotApi.layer),
+);
+
 /** One mail stack shared by the MCP toolkit and the mail RPCs. */
 const MailLayerLive = MailSendService.layer().pipe(
   Layer.provide(MailSendApprovals.layer),
@@ -681,6 +690,7 @@ const makeRoutesLayer = Layer.mergeAll(
   // and mutations observed on WebSocket invalidate patches subsequently read over HTTP.
   Layer.provide(PullRequestServiceLive),
   Layer.provide(MailLayerLive),
+  Layer.provide(TelegramLayerLive),
   Layer.provide(PreviewAutomationBroker.layer),
   Layer.provide(ServerSelfUpdate.layer.pipe(Layer.provide(DesktopAppUpdateLayerLive))),
   Layer.provide(commandReadinessLayer),

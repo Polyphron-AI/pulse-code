@@ -27,6 +27,16 @@ type WsRpcMethod = RpcGroup.Rpcs<typeof WsRpcGroup>["_tag"];
  * runtime failure.
  */
 export const RPC_REQUIRED_SCOPES = {
+  [WS_METHODS.telegramListConnections]: AuthOrchestrationReadScope,
+  [WS_METHODS.telegramListChats]: AuthOrchestrationReadScope,
+  [WS_METHODS.telegramListMessages]: AuthOrchestrationReadScope,
+  [WS_METHODS.telegramReadMessage]: AuthOrchestrationReadScope,
+  [WS_METHODS.telegramSubscribeChanges]: AuthOrchestrationReadScope,
+  [WS_METHODS.telegramConnect]: AuthOrchestrationOperateScope,
+  [WS_METHODS.telegramDisconnect]: AuthOrchestrationOperateScope,
+  [WS_METHODS.telegramCancelPairing]: AuthOrchestrationOperateScope,
+  [WS_METHODS.telegramStartPairing]: AuthOrchestrationOperateScope,
+  [WS_METHODS.telegramRemoveChat]: AuthOrchestrationOperateScope,
   [WS_METHODS.pulseMcpList]: AuthOrchestrationReadScope,
   [WS_METHODS.pulseMcpUpsert]: AuthOrchestrationOperateScope,
   [WS_METHODS.pulseMcpRemove]: AuthOrchestrationOperateScope,
