@@ -44,18 +44,26 @@ import {
 
 const projectId = ProjectId.make("project-mail");
 const threadId = ThreadId.make("thread-mail");
+const otherThreadId = ThreadId.make("thread-other");
 const workspaceRoot = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "pulse-mail-send-"));
 const outsideRoot = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "pulse-mail-outside-"));
 NodeFS.writeFileSync(NodePath.join(workspaceRoot, "notes.txt"), "project notes");
 NodeFS.writeFileSync(NodePath.join(outsideRoot, "secret.txt"), "not for mail");
 NodeFS.symlinkSync(outsideRoot, NodePath.join(workspaceRoot, "escape"), "junction");
 
-const baseLayer = () => {
+/** `threadDeletedAt` lets a test delete the main thread part way through. */
+const baseLayer = (threadDeletedAt: () => string | null = () => null) => {
   const configLayer = ServerConfig.layerTest(process.cwd(), { prefix: "pulse-mail-send-test-" });
   const orchestrator = Layer.mock(Orchestrator.OrchestratorV2)({
     getThreadShell: (id) =>
       Effect.succeed(
-        id === threadId ? ({ projectId, worktreePath: null, deletedAt: null } as never) : null,
+        id === threadId || id === otherThreadId
+          ? ({
+              projectId,
+              worktreePath: null,
+              deletedAt: id === threadId ? threadDeletedAt() : null,
+            } as never)
+          : null,
       ),
   });
   const mailConfig = MailConfig.layer.pipe(
@@ -259,6 +267,40 @@ describe("MailSendService", () => {
     }).pipe(Effect.scoped, Effect.provide(baseLayer())),
   );
 
+  it.effect("pushes only live approvals and keeps updating the ones it sent", () =>
+    Effect.gen(function* () {
+      const { service } = yield* setup();
+      const old = yield* service.prepare({ threadId, content });
+      yield* service.respond({ approvalId: old.id, decision: "decline", digest: old.digest });
+      const pushed = yield* watchThread(service);
+      expect(yield* Queue.take(pushed)).toEqual([]);
+
+      const shown = yield* service.prepare({ threadId, content });
+      expect(statuses(yield* Queue.take(pushed))).toEqual([[shown.id, "pending"]]);
+      yield* service.respond({ approvalId: shown.id, decision: "decline", digest: shown.digest });
+      expect(statuses(yield* Queue.take(pushed))).toEqual([[shown.id, "declined"]]);
+
+      // A new subscriber never saw it pending, so it gets no resolved history.
+      expect(yield* Queue.take(yield* watchThread(service))).toEqual([]);
+    }).pipe(Effect.scoped, Effect.provide(baseLayer())),
+  );
+
+  it.effect("does not push a change on another thread", () =>
+    Effect.gen(function* () {
+      const { service } = yield* setup();
+      const pushed = yield* watchThread(service);
+      expect(yield* Queue.take(pushed)).toEqual([]);
+
+      yield* service.prepare({ threadId: otherThreadId, content });
+      const mine = yield* service.prepare({ threadId, content });
+      // Each push below is this thread's own change, in order; a push for the other thread
+      // would arrive first and break the sequence.
+      expect(statuses(yield* Queue.take(pushed))).toEqual([[mine.id, "pending"]]);
+      yield* service.respond({ approvalId: mine.id, decision: "decline", digest: mine.digest });
+      expect(statuses(yield* Queue.take(pushed))).toEqual([[mine.id, "declined"]]);
+    }).pipe(Effect.scoped, Effect.provide(baseLayer())),
+  );
+
   it.effect("refuses an expired or declined approval (A12)", () =>
     Effect.gen(function* () {
       const { service, smtp } = yield* setup();
@@ -300,20 +342,21 @@ describe("MailSendService", () => {
       const { service } = yield* setup();
       const first = yield* service.prepare({ threadId, content });
       const pushed = yield* watchThread(service);
-      yield* Queue.take(pushed);
+      expect(statuses(yield* Queue.take(pushed))).toEqual([[first.id, "pending"]]);
       const second = yield* service.prepare({
         threadId,
         content: { ...content, subject: "Again" },
       });
       expect((yield* service.status(first.id)).status).toBe("invalidated");
-      // Subscribers see the earlier approval close once the new one is listed.
-      let latest = yield* Queue.take(pushed);
-      while (!latest.some((approval) => approval.id === second.id)) {
-        latest = yield* Queue.take(pushed);
-      }
-      expect(Object.fromEntries(statuses(latest))).toEqual({
+      // One push closes the earlier approval and lists the new one; the next is the decline.
+      expect(Object.fromEntries(statuses(yield* Queue.take(pushed)))).toEqual({
         [first.id]: "invalidated",
         [second.id]: "pending",
+      });
+      yield* service.respond({ approvalId: second.id, decision: "decline", digest: second.digest });
+      expect(Object.fromEntries(statuses(yield* Queue.take(pushed)))).toEqual({
+        [first.id]: "invalidated",
+        [second.id]: "declined",
       });
     }).pipe(Effect.scoped, Effect.provide(baseLayer())),
   );
@@ -364,11 +407,36 @@ describe("MailSendService", () => {
     }).pipe(Effect.scoped, Effect.provide(baseLayer())),
   );
 
-  it.effect("records the result when the approving client drops mid-send", () =>
+  it.effect("refuses a missing or deleted thread and voids its pending approval", () => {
+    let deletedAt: string | null = null;
+    return Effect.gen(function* () {
+      const { service, smtp } = yield* setup();
+      expect(
+        yield* kindOf(service.prepare({ threadId: ThreadId.make("thread-missing"), content })),
+      ).toBe("access-denied");
+
+      const approval = yield* service.prepare({ threadId, content });
+      deletedAt = "2026-10-15T00:00:00.000Z";
+      expect(yield* kindOf(service.prepare({ threadId, content }))).toBe("access-denied");
+      expect(
+        yield* kindOf(
+          service.respond({
+            approvalId: approval.id,
+            decision: "approve",
+            digest: approval.digest,
+          }),
+        ),
+      ).toBe("access-denied");
+      expect((yield* service.status(approval.id)).status).toBe("invalidated");
+      expect(smtp.connections()).toBe(0);
+    }).pipe(Effect.scoped, Effect.provide(baseLayer(() => deletedAt)));
+  });
+
+  it.effect("records and announces the result when the approving client drops mid-send", () =>
     Effect.gen(function* () {
       const { options } = yield* setup();
-      let reachedData!: () => void;
-      const dataSeen = new Promise<void>((resolve) => (reachedData = resolve));
+      let release!: () => void;
+      const released = new Promise<void>((resolve) => (release = resolve));
       const smtp = yield* MailTestPeers.smtp({
         implicitTls: true,
         greeting: "220 mail.test ESMTP\r\n",
@@ -376,21 +444,29 @@ describe("MailSendService", () => {
           if (/^EHLO/i.test(line)) io.send("250-mail.test\r\n250 AUTH PLAIN\r\n");
           else if (/^AUTH/i.test(line)) io.send("235 2.7.0 Accepted\r\n");
           else if (/^(MAIL|RCPT)/i.test(line)) io.send("250 OK\r\n");
-          else if (/^DATA$/i.test(line)) {
-            io.send("354 Go ahead\r\n");
-            reachedData();
-          } else if (/^QUIT/i.test(line)) io.close();
-          else if (line === ".") io.send("250 2.0.0 Queued\r\n");
+          else if (/^DATA$/i.test(line)) io.send("354 Go ahead\r\n");
+          else if (/^QUIT/i.test(line)) io.close();
+          // The message body arrives as one line. The server holds its reply until the test has
+          // seen the send in progress.
+          else void released.then(() => io.send("250 2.0.0 Queued\r\n"));
         },
       });
       const service = yield* MailSend.make({ ...options, smtp: peerOptions(smtp) });
+      const pushed = yield* watchThread(service);
+      yield* Queue.take(pushed);
       const approval = yield* service.prepare({ threadId, content });
+      expect(statuses(yield* Queue.take(pushed))).toEqual([[approval.id, "pending"]]);
+
       const fiber = yield* Effect.forkChild(
         service.respond({ approvalId: approval.id, decision: "approve", digest: approval.digest }),
       );
-      yield* Effect.promise(() => dataSeen);
-      yield* Fiber.interrupt(fiber);
-      expect((yield* service.status(approval.id)).status).not.toBe("submitting");
+      expect(statuses(yield* Queue.take(pushed))).toEqual([[approval.id, "submitting"]]);
+      // The client drops while the server is still answering.
+      const dropped = yield* Effect.forkChild(Fiber.interrupt(fiber), { startImmediately: true });
+      release();
+      yield* Fiber.join(dropped);
+      expect(statuses(yield* Queue.take(pushed))).toEqual([[approval.id, "accepted"]]);
+      expect((yield* service.status(approval.id)).status).toBe("accepted");
     }).pipe(Effect.scoped, Effect.provide(baseLayer())),
   );
 
@@ -581,6 +657,25 @@ describe("mailRpcHandlers", () => {
       const error = yield* Effect.flip(handlers.startOAuth({ accountId: "any" }));
       expect(error.kind).toBe("unavailable");
       expect(error.message).not.toContain("abc123");
+    }).pipe(Effect.scoped, Effect.provide(baseLayer())),
+  );
+
+  it.effect("turns a stream's other errors and defects into a generic error", () =>
+    Effect.gen(function* () {
+      const { config, service } = yield* rpc;
+      const oauth = yield* MailOAuth;
+      const leak = new Error("token=abc123 leaked");
+      for (const broken of [Stream.fail(leak), Stream.die(leak)]) {
+        const handlers = mailRpcHandlers(config, oauth, {
+          ...service,
+          subscribeThread: () => broken as never,
+        });
+        const error = yield* Effect.flip(
+          Stream.runDrain(handlers.subscribeThreadApprovals({ threadId })),
+        );
+        expect(error.kind).toBe("unavailable");
+        expect(error.message).not.toContain("abc123");
+      }
     }).pipe(Effect.scoped, Effect.provide(baseLayer())),
   );
 });

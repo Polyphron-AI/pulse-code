@@ -81,7 +81,10 @@ export class MailSendService extends Context.Service<
       readonly digest: string;
     }) => Effect.Effect<MailSendApproval, MailError>;
     readonly status: (approvalId: string) => Effect.Effect<MailSendApproval, MailError>;
-    /** The thread's approvals now, then again after each change to any of them. */
+    /**
+     * The thread's live approvals now, then again after each change to any of them. An approval
+     * this stream already sent keeps updating after it resolves; older history is never sent.
+     */
     readonly subscribeThread: (
       threadId: ThreadId,
     ) => Stream.Stream<ReadonlyArray<MailSendApproval>, MailError>;
@@ -327,27 +330,31 @@ export const make = (
         const createdMs = yield* Clock.currentTimeMillis;
         const createdAt = isoAt(createdMs);
         const id = `mail_${NodeCrypto.randomUUID().replaceAll("-", "")}`;
-        yield* announceResolved(
-          yield* store(
-            repo.supersedeForThread({ threadId, accountId: account.id, now: createdAt }),
-          ),
-        );
+        const environmentId = yield* environment.getEnvironmentId;
+        // One push covers the superseded approvals and the new one, even if the insert fails.
         yield* store(
-          repo.insertPending({
-            id,
-            environmentId: yield* environment.getEnvironmentId,
-            projectId,
-            threadId,
-            accountId: account.id,
-            snapshot,
-            mime,
-            digest: digestOf(envelope, mime),
-            sourceDraft: sourceDraft ?? null,
-            createdAt,
-            expiresAt: isoAt(createdMs + APPROVAL_TTL_MS),
-          }),
+          repo.supersedeForThread({ threadId, accountId: account.id, now: createdAt }),
+        ).pipe(
+          Effect.andThen(
+            store(
+              repo.insertPending({
+                id,
+                environmentId,
+                projectId,
+                threadId,
+                accountId: account.id,
+                snapshot,
+                mime,
+                digest: digestOf(envelope, mime),
+                sourceDraft: sourceDraft ?? null,
+                createdAt,
+                expiresAt: isoAt(createdMs + APPROVAL_TTL_MS),
+              }),
+            ),
+          ),
+          Effect.ensuring(announce(threadId)),
+          Effect.uninterruptible,
         );
-        yield* announce(threadId);
         return yield* status(id);
       });
 
@@ -420,6 +427,8 @@ export const make = (
         if (Option.isNone(claimed)) {
           return yield* fail("conflict", "This send was already approved or is no longer pending.");
         }
+        // Other devices drop their Approve button now, and see the outcome once it is stored.
+        yield* announce(threadId);
         const result = yield* submit(
           resolved.account,
           login,
@@ -441,7 +450,7 @@ export const make = (
                 : {}),
             now: yield* now,
           }),
-        );
+        ).pipe(Effect.ensuring(announce(threadId)));
         if (result.kind === "accepted" && resolved.account.appendToSent) {
           // The message is already sent; a missing Sent copy must not turn that into a failure.
           yield* appendSent(resolved.account, login, claimed.value.mime, options.imap).pipe(
@@ -450,25 +459,29 @@ export const make = (
         }
         return yield* status(approvalId);
       }).pipe(
-        // A dropped client must not strand a claimed send in submitting; every step has a timeout.
+        // A dropped client must not strand a claimed send in submitting or leave other devices
+        // unaware of the outcome; every step has a timeout.
         Effect.uninterruptible,
       );
+
+    const decline = (approvalId: string) =>
+      Effect.gen(function* () {
+        const declined = yield* store(repo.decline({ id: approvalId, now: yield* now }));
+        if (Option.isNone(declined)) {
+          return yield* fail("conflict", "This send is no longer pending.");
+        }
+        yield* announce(ThreadId.make(declined.value.threadId));
+        return yield* status(approvalId);
+      }).pipe(Effect.uninterruptible);
 
     const respond = (input: {
       readonly approvalId: string;
       readonly decision: "approve" | "decline";
       readonly digest: string;
     }) =>
-      (input.decision === "approve"
+      input.decision === "approve"
         ? approve(input.approvalId, input.digest)
-        : Effect.gen(function* () {
-            const declined = yield* store(repo.decline({ id: input.approvalId, now: yield* now }));
-            if (Option.isNone(declined)) {
-              return yield* fail("conflict", "This send is no longer pending.");
-            }
-            return yield* status(input.approvalId);
-          })
-      ).pipe(Effect.tap((approval) => announce(approval.threadId)));
+        : decline(input.approvalId);
 
     const listThread = (threadId: ThreadId) =>
       Effect.all([store(repo.listForThread(threadId)), now]).pipe(
@@ -480,12 +493,25 @@ export const make = (
         Effect.gen(function* () {
           // Subscribe before the first read so a change during it is not missed.
           const subscription = yield* PubSub.subscribe(threadChanges);
+          const sent = new Set<string>();
           return Stream.concat(
             Stream.make(threadId),
             Stream.fromSubscription(subscription).pipe(
               Stream.filter((changed) => changed === threadId),
             ),
-          ).pipe(Stream.mapEffect(() => listThread(threadId)));
+          ).pipe(
+            Stream.mapEffect(() => listThread(threadId)),
+            Stream.map((approvals) => {
+              const live = approvals.filter(
+                (approval) =>
+                  approval.status === "pending" ||
+                  approval.status === "submitting" ||
+                  sent.has(approval.id),
+              );
+              for (const approval of live) sent.add(approval.id);
+              return live;
+            }),
+          );
         }),
       );
 

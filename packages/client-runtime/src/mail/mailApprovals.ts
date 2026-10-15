@@ -7,7 +7,10 @@ import { EnvironmentSupervisor } from "../connection/supervisor.ts";
 import { request } from "../rpc/client.ts";
 import { createEnvironmentRpcSubscriptionAtomFamily } from "../state/runtime.ts";
 
-/** A thread's send approvals, newest first, pushed again whenever one of them changes. */
+/**
+ * A thread's live send approvals, newest first, pushed again whenever one of them changes. Live
+ * means pending or submitting, plus any this subscription already received, so its outcome arrives.
+ */
 export function createThreadMailApprovalsAtomFamily<R, E>(
   runtime: Atom.AtomRuntime<EnvironmentRegistry | R, E>,
 ) {

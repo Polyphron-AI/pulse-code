@@ -19,13 +19,21 @@ const projectA = ProjectId.make("project-a");
 const projectB = ProjectId.make("project-b");
 const threadA = ThreadId.make("thread-a");
 const threadB = ThreadId.make("thread-b");
-const threadProjects: Record<string, ProjectId> = { [threadA]: projectA, [threadB]: projectB };
+const threadDeleted = ThreadId.make("thread-deleted");
+const threadProjects: Record<string, ProjectId> = {
+  [threadA]: projectA,
+  [threadB]: projectB,
+  [threadDeleted]: projectA,
+};
 
 const orchestratorLayer = Layer.mock(Orchestrator.OrchestratorV2)({
   getThreadShell: (threadId) =>
     Effect.succeed(
       threadProjects[threadId]
-        ? ({ projectId: threadProjects[threadId], deletedAt: null } as never)
+        ? ({
+            projectId: threadProjects[threadId],
+            deletedAt: threadId === threadDeleted ? "2026-10-15T00:00:00.000Z" : null,
+          } as never)
         : null,
     ),
 });
@@ -121,6 +129,27 @@ describe("MailConfigService", () => {
       expect(yield* kindOf(mail.resolveAccount({ threadId: threadA, selector: "Work" }))).toBe(
         "ambiguous-account",
       );
+    }).pipe(Effect.provide(makeLayer())),
+  );
+
+  it.effect("refuses a missing or deleted thread, even in a project with a grant", () =>
+    Effect.gen(function* () {
+      const mail = yield* MailConfig.MailConfigService;
+      const work = yield* mail.upsertAccount(account("Work"));
+      yield* mail.setProjectAccess({
+        projectId: projectA,
+        accountIds: [work.id],
+        defaultAccountId: work.id,
+      });
+      expect((yield* mail.resolveAccount({ threadId: threadA })).account.id).toBe(work.id);
+
+      for (const threadId of [threadDeleted, ThreadId.make("thread-missing")]) {
+        expect(yield* kindOf(mail.resolveAccount({ threadId }))).toBe("access-denied");
+        expect(yield* kindOf(mail.resolveAccount({ threadId, selector: work.id }))).toBe(
+          "access-denied",
+        );
+        expect(yield* kindOf(mail.listThreadAccounts(threadId))).toBe("access-denied");
+      }
     }).pipe(Effect.provide(makeLayer())),
   );
 
