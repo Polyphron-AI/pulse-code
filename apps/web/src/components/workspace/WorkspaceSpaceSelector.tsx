@@ -1,8 +1,9 @@
 import { useEffect } from "react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
-import { BriefcaseBusinessIcon, Code2Icon } from "lucide-react";
+import { BriefcaseBusinessIcon, Code2Icon, MailIcon } from "lucide-react";
 import { useSidebar } from "../ui/sidebar";
 import { Button } from "../ui/button";
+import { useMailCapabilities } from "./mail/useMailCapabilities";
 
 let lastCodeHref = "/";
 
@@ -12,16 +13,27 @@ export function useOfficeSpace() {
   });
 }
 
+export function useMailSpace() {
+  return useLocation({
+    select: (location) => location.pathname === "/workspace" && location.search.space === "mail",
+  });
+}
+
 export function WorkspaceSpaceSelector() {
   const office = useOfficeSpace();
+  const mail = useMailSpace();
+  const mailAvailable = useMailCapabilities().mailRead;
   const navigate = useNavigate();
   const location = useLocation();
   const { isMobile, setOpenMobile } = useSidebar();
   const settings = location.pathname.startsWith("/settings");
+  const inCode = !office && !mail && !settings;
   useEffect(() => {
-    if (!office && !settings && location.pathname !== "/") lastCodeHref = location.href;
-  }, [office, settings, location.pathname, location.href]);
-  const closeMobileSidebar = () => {
+    if (inCode && location.pathname !== "/") lastCodeHref = location.href;
+  }, [inCode, location.pathname, location.href]);
+  // Only a Code location is worth returning to; Office and Mail are one click away.
+  const leave = () => {
+    if (inCode && location.pathname !== "/") lastCodeHref = location.href;
     if (isMobile) setOpenMobile(false);
   };
   return (
@@ -37,23 +49,36 @@ export function WorkspaceSpaceSelector() {
           aria-pressed={office}
           className="min-w-0 flex-1"
           onClick={() => {
-            if (!office && !location.pathname.startsWith("/settings") && location.pathname !== "/")
-              lastCodeHref = location.href;
-            closeMobileSidebar();
+            leave();
             void navigate({ to: "/workspace", search: { space: "office" } });
           }}
         >
           <BriefcaseBusinessIcon className="size-3.5" />
           Office
         </Button>
+        {mailAvailable || mail ? (
+          <Button
+            size="xs"
+            variant={mail ? "secondary" : "ghost"}
+            aria-pressed={mail}
+            className="min-w-0 flex-1"
+            onClick={() => {
+              leave();
+              if (!mail) void navigate({ to: "/workspace", search: { space: "mail" } });
+            }}
+          >
+            <MailIcon className="size-3.5" />
+            Mail
+          </Button>
+        ) : null}
         <Button
           size="xs"
-          variant={!office && !settings ? "secondary" : "ghost"}
-          aria-pressed={!office && !settings}
+          variant={inCode ? "secondary" : "ghost"}
+          aria-pressed={inCode}
           className="min-w-0 flex-1"
           onClick={() => {
-            closeMobileSidebar();
-            if (office || settings) void navigate({ href: lastCodeHref });
+            leave();
+            if (!inCode) void navigate({ href: lastCodeHref });
           }}
         >
           <Code2Icon className="size-3.5" />

@@ -57,6 +57,7 @@ import {
   FolderPlusIcon,
   MessageSquareDashedIcon,
   LinkIcon,
+  MailIcon,
   MessageSquareIcon,
   MonitorIcon,
   MoonIcon,
@@ -200,6 +201,7 @@ import {
 } from "./ThreadCommandSubtitle";
 import { ThreadRowLeadingStatus, ThreadRowTrailingStatus } from "./ThreadStatusIndicators";
 import { primaryServerKeybindingsAtom, primaryServerProvidersAtom } from "../state/server";
+import { useMailCapabilities } from "./workspace/mail/useMailCapabilities";
 import {
   applyProviderInstanceSettings,
   deriveProviderInstanceEntries,
@@ -794,6 +796,7 @@ function OpenCommandPaletteDialog(props: {
   const projectOrder = useUiStateStore((store) => store.projectOrder);
   const threads = useThreadShells();
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
+  const mailReadAvailable = useMailCapabilities().mailRead;
   const {
     theme,
     themeHalves,
@@ -1907,6 +1910,18 @@ function OpenCommandPaletteDialog(props: {
       });
     },
   });
+  if (mailReadAvailable) {
+    actionItems.push({
+      kind: "action",
+      value: "action:open-mail",
+      searchTerms: ["mail", "email", "inbox"],
+      title: "Open Mail",
+      icon: <MailIcon className={ITEM_ICON_CLASS} />,
+      run: async () => {
+        await navigate({ to: "/workspace", search: { space: "mail" } });
+      },
+    });
+  }
 
   if (projects.length > 0) {
     const activeProjectTitle =

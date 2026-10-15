@@ -37,7 +37,8 @@ import ThreadSidebar from "./Sidebar";
 import { SettingsSidebarNav } from "./settings/SettingsSidebarNav";
 import { SidebarBrandWidthProbe, SidebarChromeHeader } from "./sidebar/SidebarChrome";
 import { OfficeSidebar } from "./workspace/OfficeWorkspace";
-import { useOfficeSpace } from "./workspace/WorkspaceSpaceSelector";
+import { useMailSpace, useOfficeSpace } from "./workspace/WorkspaceSpaceSelector";
+import { MailNav } from "./workspace/mail/MailNav";
 import { MainAppLocationTracker } from "./sidebar/mainAppLocation";
 import { useSidebarStageBackdropVariant } from "./SidebarStageBackdrop";
 import { useProjects } from "../state/entities";
@@ -221,6 +222,7 @@ function ProjectProjectionRetention() {
 export function AppSidebarLayout({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const officeSpace = useOfficeSpace();
+  const mailSpace = useMailSpace();
   const legacySidebarEnabled = useLegacySidebarEnabled();
   const { active: panelAnimationsActive, durationMs: panelAnimationDurationMs } =
     usePanelAnimationSettings();
@@ -315,7 +317,9 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
           collapsible="offcanvas"
           data-app-sidebar=""
           role="navigation"
-          aria-label={isOnSettings ? "Settings" : officeSpace ? "Office" : "Threads"}
+          aria-label={
+            isOnSettings ? "Settings" : officeSpace ? "Office" : mailSpace ? "Mail" : "Threads"
+          }
           resizable={{
             maxWidth: sidebarMaximumWidth,
             minWidth: sidebarMinimumWidth,
@@ -333,6 +337,8 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
             </>
           ) : officeSpace ? (
             <OfficeSidebar />
+          ) : mailSpace ? (
+            <MailNav />
           ) : legacySidebarEnabled ? (
             <LegacyThreadSidebar />
           ) : (
