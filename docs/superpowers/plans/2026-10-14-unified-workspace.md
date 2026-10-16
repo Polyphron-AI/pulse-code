@@ -6466,30 +6466,219 @@ If any step fails, record what failed in the ledger's `nextAction` instead, fix 
 
 ---
 
-## Wave 2 (weeks 3-4): the workspace layout and right-click actions
+## Wave 2 (weeks 3-4): shipped workspace core
 
-Outline only. Wave 2 gets its own detailed plan after Wave 1's acceptance, written against the code Wave 1 actually shipped. Spec acceptance: "Demo steps 1, 3 and 4 pass on desktop and in a remote browser, with links made by hand. The project page shows the mail, a pasted Drive link and the thread."
+Shipped software, inclusive commits `7a854e84d7` through `cb6caf3748`, with the shared integration repair `9705b53cbf` and completion record `6363a7913b`. Waves 2 and 3 together span inclusive commits `7a854e84d7` through `6363a7913b`. The original acceptance remains visible: "Demo steps 1, 3 and 4 pass on desktop and in a remote browser, with links made by hand. The project page shows the mail, a pasted Drive link and the thread." Software completion does not establish the still-unrun real-account, packaged-client, physical other-device or human-pilot acceptance. The presentation audit records that boundary.
 
-1. **Layout.** Rail, nav bar and 20/80 list and detail, with the side panel; on a phone, one pane at a time. Mail moves into it; the Wave 1 Mail screen is its first tenant.
-2. **Conversations (A4).** A conversations RPC and the Messages and Conversations toggle in the Mail list. Links still attach to messages.
-3. **Start thread.** Right-click a message, Start thread. The thread is seeded with the message and its links, and the link is recorded with source `action: start-thread`.
-4. **Start or add to project.** Right-click, Start project or Add to project, recorded as `start-project` or `add-to-project`.
-5. **Draft reply with agent (A5).** The agent drafts, the user approves the exact send on the approval card, and the sent message's Message-ID is captured so the reply can be linked. Draft reply support is decided per provider adapter.
-6. **Projects as hubs.** The project page lists its linked mail, files, threads and the sent reply, one hop and labelled with how each item got there.
-7. **Drive as pasted links.** Paste a Drive URL to link a `file` item.
-8. **Replace Office Communications** with the workspace (decision 5), and replace `docs/user/workspace-spaces.md` with one workspace page. Slack and Discord keep a place to open them.
-9. **Telegram bot (A9).** Port the server-side Bot API module (`packages/workspace-telegram` with its BotApi, Poller, Outbox, Store, Pairing and UpdateRouter, from `t3code/add-unified-workspace-modules`) onto the synced base without the rest of that branch's module framework. The bot token lives in server secrets. Messages the bot receives are stored on the server and become linkable items (`provider-resource`, provider `telegram`) that `workspace_read_item` can read. Retire the desktop personal-account login (`apps/desktop/src/communications/TelegramAdapter.ts` and the teleproto dependency). The user doc explains that the bot sees only its own chats and groups it is added to.
+1. **Layout.** Intent: rail, nav, 20/80 list/detail, side panel and phone collapse. **Shipped narrower than the mockup** in `7a854e84d7`; Wave 3b corrects the current shell and Wave 4 completes the shared presentation frame.
+2. **Conversations (A4).** Intent: grouped conversations RPC and Messages/Conversations toggle, with message-level links. **Shipped** in `aca4ca0022`; Wave 11 polishes the list without changing that identity.
+3. **Start thread.** Intent: right-click seeds a thread with the message and confirmed links, source `start-thread`. **Shipped** in `7a854e84d7`, including retained composer-context confirmation.
+4. **Start or add to project.** Intent: right-click creates or chooses a project and records `start-project` or `add-to-project`. **Shipped** in `7a854e84d7`.
+5. **Draft reply with agent (A5).** Intent: agent drafts, human approves the exact send, captured sent Message-ID supports reply links and provider support is explicit. **Shipped** in `aca4ca0022`; Wave 11 adds the mockup's manual inline composer using the same approval.
+6. **Projects as hubs.** Intent: threads, linked mail/files/sent reply and labelled display-only one-hop discovery. **Shipped narrower than the mockup** in `7a854e84d7`; Wave 8 adds project cards and Docs/PR resources, with people scope still decision-gated.
+7. **Drive as pasted links.** Intent: paste a Drive URL to link a stable `file` item. **Shipped** in `7a854e84d7`; folder exploration is separate Wave 7 work.
+8. **Replace Office Communications and user guidance.** Intent: workspace replaces the old path while Slack/Discord remain openable. **Shipped narrower than the mockup** in `7a854e84d7` and `6363a7913b`; retained desktop Communications remains separate, completed by bounded Wave 9 work rather than provider-wide rebuilding.
+9. **Telegram bot (A9).** Intent: port Bot API receive/store/pair/read behavior and retire personal-account login without importing the old module framework. **Shipped narrower than the mockup** in `cb6caf3748` as server-owned paired bot reads, service at `apps/server/src/telegram/TelegramService.ts:41`; Wave 9 completes the stream look, optional W12-T7 covers human bot replies. The old package-shaped Poller/Outbox framework was not ported.
 
-## Wave 3 (weeks 5-6): suggestions and the rest
+## Wave 3 (weeks 5-6): shipped suggestions and linked tools
 
-Outline only, planned after Wave 2's acceptance. Spec acceptance: "All five demo steps pass, including step 5 on a phone. The pilot has started." Cut order if late, from the spec: Browser panel, then basic tasks, then the conversations toggle, then Drive search, then Start automation. Never cut: links, mail, Start thread, Draft reply, Suggested links.
+Shipped software, inclusive commits `e416061ade` through `6363a7913b`, including `e88d4c1e76`, `688a34d99f` and repair `9705b53cbf`. Original acceptance: "All five demo steps pass, including step 5 on a phone. The pilot has started." The synthetic software checks and pilot readiness shipped; the real-account, physical other-device, packaged-client and human-pilot outcomes remain unrun. The original cut order was Browser, basic tasks, conversations, Drive search, then automation; it did not silently remove the narrower capabilities that shipped.
 
-1. **Suggested links first (A2).** Use the user's text generation model setting. At most three per item, each with a reason; accept or dismiss; a dismissed pair never returns (decision 6).
-2. **Drive search.** Mail and Drive search side by side; pasted links stay if this is cut.
-3. **Start automation (A10).** Opens upstream's scheduled task editor with a prompt that references the item and the project taken from its links; the task's thread links to the item.
-4. **Browser panel** on desktop, linking pages as `url` items.
-5. **Basic tasks** as `task` items.
-6. **Start the pilot**, with baselines from the maintainer's week 1 use and no message bodies in telemetry.
+1. **Suggested links first (A2).** Intent: selected text-generation model, at most three reasoned suggestions, explicit accept/dismiss and persistent dismissal. **Shipped** in `e416061ade`.
+2. **Drive search.** Intent: search mail and Drive, retaining pasted links as fallback. **Shipped narrower than the mockup** in `e88d4c1e76`, with explicit-account search and bounded linked-file reads; Wave 7 adds folders/filters and Wave 8 adds formatted Docs/comments.
+3. **Start automation (A10).** Intent: upstream scheduled-task editor carries the item/project and links its thread. **Shipped** in `688a34d99f`, with cancel/no-write and idempotent save before dispatch.
+4. **Browser panel.** Intent: desktop browser and linkable `url` pages. **Shipped narrower than the mockup** in `688a34d99f` as the existing desktop preview tool and web/phone external fallback; Wave 10 completes the inline resource composition.
+5. **Basic tasks.** Intent: project title/column/link tasks with stable `task` refs. **Shipped narrower than the mockup** in `688a34d99f`; Wave 5 adds global/list/Board/completion/date/owner and the resource body.
+6. **Start the pilot.** Intent: measure maintainer baselines and run the human usability pilot without message-body telemetry. **Cut from the shipped software scope**, with readiness prepared and actual pilot execution unrun. It remains a separate human release-acceptance obligation; later wave completion cannot substitute for it.
+
+## Wave 3b: shell correction (in working tree)
+
+B-2026-10-16-001 is implemented and uncommitted on top of `6363a7913b`. It removes projects from Mail navigation, adds the searchable Projects dropdown, keeps context visible before selection with compact sheet parity, and offers Workspace/Code inside Code while retaining its project/thread controls. Preserve these edits. The audit at `.superpowers/sdd/2026-10-14-unified-workspace/presentation-audit-2026-10-16.md` records its existing verification; this wave-planning task did not rerun it. Wave 4 extends this baseline to the full mockup frame rather than treating the correction as complete presentation parity.
+
+## Later-wave planning contract
+
+The eight original SynKEK Office PNGs under `docs/superpowers/workspace-mockups/mockups/` are the target for rendered look and function. The canonical deduplicated task graph, source-report crosswalk, file ownership, per-task tests, exact regions and maintainer decisions are in [wave-map.md](../workspace-mockups/mockup-waves/wave-map.md). Spec amendment A13 records this scope change.
+
+Each numbered item below is one separately tested planning task, using its stable W<N>-T<N> ID or suffixed family child in the map. Parent families are not dispatchable. There are 64 default-path tasks and 10 conditional tasks, 74 total, with decisions D01-D29. W4-T0 schedules committing the existing shell correction before isolated dispatch; this planning pass performs no commit. Recommended defaults are **default assumed, confirm**; conditional Wave 12 work stays held until affirmative approval. These outlines authorize no code execution, account connection, sends or publication. Shell owns the resource frame/tabs, modules own contents; Calendar/Meetings share events, Meetings/Docs share notes and renderer, all spaces share Files, and Mail/chat Later share saved refs. Preserve optional capabilities, environment scoping, performance and phone web behavior. No new React Native screens or full provider rebuild. Existing mobile mail approvals remain an affected surface in W11-T5.
+
+Every visual acceptance below requires the dev/test-only W4-T7 fixture: pinned Tue 13 Oct 2026 clock, isolated non-writing SynKEK states, visible sample marker, dark/system-font V1 contract and per-PNG 1280x800 recipe. The tracked map gives every task a pixel box, corrected gap-report line range, pass criteria and live substitution list. Shared RPC/migration/context and UI serial chains are scheduler constraints, not connector-consent prerequisites. Each final wave gate includes internals/glossary review alongside changed user guidance.
+
+## Wave 4: Shared workspace shell
+
+Outline only. Goal: Give every space the same navigation, headers and independently selected project resources. Preserve B-2026-10-16-001.
+
+Mockup PNG references: 01-email-files.png through 08-calendar-tasks.png. Under `docs/superpowers/workspace-mockups/mockups/`.
+
+Spec acceptance: W4-T7 fixture and map V1 are prerequisites. Compare all eight PNGs at 1280x800: boundaries near x207/259/940, 26px breadcrumb, 52px header, 340px resources and six icon tabs. Email/Communications split the 681px center near x429; other spaces use its full width. Demo every destination, Code return, project choice before item selection, Linked context, close/reopen and compact Back. Module bodies are accepted in their owning waves.
+
+Detailed task ownership, dependencies, serial slots, decisions and individual test cycles: [wave-map.md](../workspace-mockups/mockup-waves/wave-map.md), Wave 4. Proposed per-wave detailed plan, not yet created: `docs/superpowers/plans/2026-10-16-workspace-wave-4-shell.md`.
+
+W4 includes the sample-to-live chrome table, eight pinned capture recipes, D25 brand/mode defaults and preserved baseline commit task.
+
+1. **W4-T0: Commit B-2026-10-16-001 shell correction.**
+2. **W4-T7: Isolated sample workspace fixture and eight capture recipes.**
+3. **W4-T1: Typed destinations and scoped mode return.**
+4. **W4-T2: Persistent navigation and per-space rail slots.**
+5. **W4-T3: Shared headers and center sizing.**
+6. **W4-T4a: Project resource frame, selection and six lazy tabs.**
+7. **W4-T4b: Linked context entrance and retained provenance.**
+8. **W4-T5: Shared item actions, project settings and truthful footer.**
+9. **W4-T6: Compact shell and single-body regression.**
+
+## Wave 5: Tasks list, board and resource tab
+
+Outline only. Goal: Extend existing task identity and service into a global/project task space, with reversible completion, dates, area and accountable owner.
+
+Mockup PNG references: 03-tasks.png, 08-calendar-tasks.png. Under `docs/superpowers/workspace-mockups/mockups/`.
+
+Spec acceptance: W4-T7 fixture and map V1 are prerequisites. Compare 03 center: 59px rows, checkbox/title/area/due/19px initials, search, Board and 4 open of 5. Compare 08 right Tasks body at 340px using the same records. Demo filter, edit, complete, reopen and Board movement on two subscribed clients. The Board body is a proposed design requiring review because no open Board PNG exists. Four named coworkers and followers remain explicit D05/D06 departures in live mode.
+
+Detailed task ownership, dependencies, serial slots, decisions and individual test cycles: [wave-map.md](../workspace-mockups/mockup-waves/wave-map.md), Wave 5. Proposed per-wave detailed plan, not yet created: `docs/superpowers/plans/2026-10-16-workspace-wave-5-tasks.md`.
+
+1. **W5-T1: Completion semantics and revision-safe moves.**
+2. **W5-T2: Date-only due dates, area and display timezone.**
+3. **W5-T3: Environment owner display profile.**
+4. **W5-T4: Paged all-task summaries and the open total.**
+5. **W5-T5a: Tasks list, status rail and scope filters.**
+6. **W5-T5b: Task detail, creation and revision-safe editing.**
+7. **W5-T6: Board using configured project columns.**
+8. **W5-T7: Shared project Tasks resource body.**
+
+## Wave 6: Shared Calendar and Meetings
+
+Outline only. Goal: Use one server-owned event/range service for Agenda and Upcoming, plus external Join/Schedule and explicit meeting-note links.
+
+Mockup PNG references: 07-meetings-notes.png, 08-calendar-tasks.png. Under `docs/superpowers/workspace-mockups/mockups/`.
+
+Spec acceptance: W4-T7 fixture and map V1 are prerequisites. Compare 07/08 center x259..940: selected T 13, seven-day strip, 09:00/14:00/16:30 gutter and three content-sized cards. Demo day-chip selection and the reviewed date-heading picker, the same fake/local occurrence in both spaces and each admitted provider separately, external Join on the requesting device, notes round-trip and Tasks completion. Both 07 and 08 toolbars show + Schedule; every conference card shows Join meeting. Formatted note/comment parity completes in Wave 8; Recordings publication is conditional Wave 12. No provider-labelled events are fabricated in an unconnected environment.
+
+Detailed task ownership, dependencies, serial slots, decisions and individual test cycles: [wave-map.md](../workspace-mockups/mockup-waves/wave-map.md), Wave 6. Proposed per-wave detailed plan, not yet created: `docs/superpowers/plans/2026-10-16-workspace-wave-6-calendar-meetings.md`.
+
+1. **W6-T1a: Shared event contract, storage and bounded range service.**
+2. **W6-T1b: Calendar change stream, due-task projection and shared atoms.**
+3. **W6-T2a: Google Calendar OAuth and account lifecycle.**
+4. **W6-T2b: Paged Google event normalization and explicit Refresh.**
+5. **W6-T3: Openable linked events and bounded agent reads.**
+6. **W6-T4: Reusable day agenda for Calendar and Upcoming.**
+7. **W6-T5: Week view from the same event ranges.**
+8. **W6-T6: External Join and Schedule handoffs.**
+9. **W6-T7: Bounded native notes with revision-safe lifecycle.**
+10. **W6-T8: Meeting-note relationships, opener and read grants.**
+11. **W6-T9: Calendar/Meetings compatibility and reconnect proof.**
+
+## Wave 7: Read-only project Drive explorer
+
+Outline only. Goal: Supply one explicit project root and one reusable, paged explorer for every resource tab and later reply picker.
+
+Mockup PNG references: 01-email-files.png, 02-communications-files.png, 03-tasks.png, 04-projects.png. Under `docs/superpowers/workspace-mockups/mockups/`.
+
+Spec acceptance: W4-T7 fixture and map V1 are prerequisites. Compare right body at x953..1267: search y149, Project Drive breadcrumb y205, Type/People y229, Name/Modified y276, four folders/four Docs at 43px pitch and neutral live sharing copy. Demo choose/replace/clear root, nested folder/back, filter, sort, next page, list/grid and explicit link. No browsing action creates a link or Drive write.
+
+Detailed task ownership, dependencies, serial slots, decisions and individual test cycles: [wave-map.md](../workspace-mockups/mockup-waves/wave-map.md), Wave 7. Proposed per-wave detailed plan, not yet created: `docs/superpowers/plans/2026-10-16-workspace-wave-7-drive-explorer.md`.
+
+1. **W7-T1: Explicit confirmed root and account designation.**
+2. **W7-T2: Paged child reads, scoped search and metadata filters.**
+3. **W7-T3: One explorer component across spaces.**
+
+## Wave 8: Projects, Docs and PR resources
+
+Outline only. Goal: Match project cards and formatted note reading, add real comments and a bounded project PR collection without new project or PR identity models.
+
+Mockup PNG references: 04-projects.png, 07-meetings-notes.png; all eight resource tab strips. Under `docs/superpowers/workspace-mockups/mockups/`.
+
+Spec acceptance: W4-T7 fixture and map V1 are prerequisites. Compare 04 center cards/search/New project and 07 Docs card at x953/y178/w314/h345, true headings/list, next steps and comment divider around y536. Demo project card/dropdown agreement, create without opening Code, Notes & agenda to Docs, safe read/edit/revision, comment read and project PR open/unlink. PR-open content has no source PNG and requires a reviewed proposed capture. Roster/permission substitutions are recorded against D05/D11 rather than counted as exact production parity.
+
+Detailed task ownership, dependencies, serial slots, decisions and individual test cycles: [wave-map.md](../workspace-mockups/mockup-waves/wave-map.md), Wave 8. Proposed per-wave detailed plan, not yet created: `docs/superpowers/plans/2026-10-16-workspace-wave-8-projects-docs-prs.md`.
+
+1. **W8-T1a: Persist bounded project descriptions in existing config.**
+2. **W8-T1b: One paged project overview read for cards.**
+3. **W8-T2: Searchable project cards and explicit creation.**
+4. **W8-T3a: Docs list and account-bound Drive reads.**
+5. **W8-T3b: Native-note entrance in the shared Docs panel.**
+6. **W8-T4: Shared safe formatted document and note renderer.**
+7. **W8-T5: Native note comments with explicit author semantics.**
+8. **W8-T6: Read-only provider comments and supported sharing metadata.**
+9. **W8-T7: Linked project PR collection and existing detail viewer.**
+10. **W8-T8: Truthful people, sharing and project resource integration.**
+
+## Wave 9: Communications and shared saved items
+
+Outline only. Goal: Render one linked conversation stream with bounded server readers and truthful known-message unread/saved state. Preserve desktop sends and A9 bot boundaries.
+
+Mockup PNG references: 02-communications-files.png, 05-browser-module.png, 06-agents-module.png. Under `docs/superpowers/workspace-mockups/mockups/`.
+
+Spec acceptance: W4-T7 fixture and map V1 are prerequisites. Compare x259/429 list/stream boundary, marketing groups, 30px avatars, 260x53 document card, chronological messages/replies and composer at x442/y687/w485/h100. Demo each independently accepted reader, exact-message actions, replies distinct from agent threads, Drive handoff and shared Later. Remote send is read-only under the default; desktop acknowledged human sends remain. Telegram remains paired bot received-only unless W12-T7 is confirmed. This is a recorded functional departure from the sample composer.
+
+Detailed task ownership, dependencies, serial slots, decisions and individual test cycles: [wave-map.md](../workspace-mockups/mockup-waves/wave-map.md), Wave 9. Proposed per-wave detailed plan, not yet created: `docs/superpowers/plans/2026-10-16-workspace-wave-9-communications.md`.
+
+Cut order: W9-T8 read-marker behavior with final integration/docs gate retained, W9-T3a/b/c Discord server parity, then Slack DM exposure. One accepted reader suffices; do not gate Browser/Agents behind both connectors. Reads are on-demand plus explicit Refresh, with no polling or unread history fanout.
+
+1. **W9-T1: Stable conversation/message endpoints and Teams URL handoff.**
+2. **W9-T2a: Slack server connection and secrets.**
+3. **W9-T2b: Slack paged channel, history and reply reads.**
+4. **W9-T2c: Slack exact linked reads and provider turn labels.**
+5. **W9-T3a: Discord server connection and secrets.**
+6. **W9-T3b: Discord paged channel, history and reply reads.**
+7. **W9-T3c: Discord exact linked reads and provider turn labels.**
+8. **W9-T4: Conversation navigation, groups and header.**
+9. **W9-T5: Chronological stream, provider replies and document cards.**
+10. **W9-T6: Composer layout with acknowledged desktop send.**
+11. **W9-T7: Cross-device saved item references for Later.**
+12. **W9-T8: Known-message read markers and final Communications wiring.**
+
+## Wave 10: Browser and project agents
+
+Outline only. Goal: Put existing desktop preview inside the resource body and show project agents as confirmed linked threads with real status.
+
+Mockup PNG references: 05-browser-module.png, 06-agents-module.png. Under `docs/superpowers/workspace-mockups/mockups/`.
+
+Spec acceptance: W4-T7 fixture and map V1 are prerequisites. Compare 05 address pill y149 and website card x953/y191/w314, using a controlled site fixture; compare 06 Project agents with 29px monograms, 85px row pitch, static status dots and Open conversation links. Correct selected tabs to Browser and Agents. Demo desktop session survival across Code/Workspace, web external fallback, explicit URL link/unlink, thread assignment/open/unassign and no paid run from merely opening a tab.
+
+Detailed task ownership, dependencies, serial slots, decisions and individual test cycles: [wave-map.md](../workspace-mockups/mockup-waves/wave-map.md), Wave 10. Proposed per-wave detailed plan, not yet created: `docs/superpowers/plans/2026-10-16-workspace-wave-10-browser-agents.md`.
+
+1. **W10-T1: Inline desktop Browser using existing preview lease.**
+2. **W10-T2: Truthful web and phone external-tab Browser.**
+3. **W10-T3: Captured page actions and linked-page search.**
+4. **W10-T4: Project agents as real linked-thread cards.**
+
+## Wave 11: Email reading and reply polish
+
+Outline only. Goal: Match the inbox/reader/reply composition while retaining stable mail references, conversations and exact-send approval.
+
+Mockup PNG references: 01-email-files.png. Under `docs/superpowers/workspace-mockups/mockups/`.
+
+Spec acceptance: W4-T7 fixture and map V1 are prerequisites. Compare 01 170px list, compact sender/time/preview/chips, subject y142, 29px sender avatar, body spacing, related Marketing folder card x449/y518 and reply box x449/y591/w471/h143. Fix selected Maya/Nina disagreement. Demo typed filters, moved-message star, Later save/remove, folder navigation, manual review/approve/decline/edit and Drive link insertion. Live action is Review reply; required exact approval and link-only attachment are declared departures from demo copy.
+
+Detailed task ownership, dependencies, serial slots, decisions and individual test cycles: [wave-map.md](../workspace-mockups/mockup-waves/wave-map.md), Wave 11. Proposed per-wave detailed plan, not yet created: `docs/superpowers/plans/2026-10-16-workspace-wave-11-email-polish.md`.
+
+1. **W11-T1: Bounded presentation metadata and typed mail filters.**
+2. **W11-T2: Stable-reference mail flag mutation.**
+3. **W11-T3: Inbox/Unread/Later rail and enriched mail rows.**
+4. **W11-T4: Compact reader and explicit related-folder handoff.**
+5. **W11-T5: Manual prepare-reply entrance to exact approval.**
+6. **W11-T6: Inline composer and shared approval card.**
+7. **W11-T7: Project Drive link picker and Email integration.**
+
+## Wave 12: Conditional collaboration, scheduling and capture
+
+Outline only. Goal: Retain explicit opt-in units for report proposals beyond the recommended default release. These are scheduled holds, not permission to connect accounts, invite people, publish audio or send provider messages.
+
+Mockup PNG references: 03-tasks.png followers, 04-projects.png roster, 07-meetings-notes.png Schedule/Recordings/notes, 02-communications-files.png composer, 08-calendar-tasks.png source labels; new states need reviewed references. Under `docs/superpowers/workspace-mockups/mockups/`.
+
+Spec acceptance: W4-T7 fixture and map V1 are prerequisites. No blanket completion claim. Approve each named decision and missing-state design before admitting its task. Compare the applicable original PNG region and then demonstrate its full create/change/reverse/error lifecycle. Rejected extensions remain an explicit accepted departure in the decision record; they never block the default waves as a group.
+
+Detailed task ownership, dependencies, serial slots, decisions and individual test cycles: [wave-map.md](../workspace-mockups/mockup-waves/wave-map.md), Wave 12. Proposed per-wave detailed plan, not yet created: `docs/superpowers/plans/2026-10-16-workspace-wave-12-conditional-extensions.md`.
+
+1. **W12-T1: Optional Outlook read-only calendar adapter.**
+2. **W12-T2: Optional personal server-local event editor.**
+3. **W12-T3: Optional Google invitation create/update/cancel.**
+4. **W12-T4: Local recording consent, sources and retention policy.**
+5. **W12-T5: Publish selected transcript text to Recordings.**
+6. **W12-T6: Optional read-only Slack project roster.**
+7. **W12-T7: Optional human Telegram bot send/reply.**
+8. **W12-T8: Optional project follow/unfollow.**
+9. **W12-T9: Optional remote human Slack text sends.**
+10. **W12-T10: Optional remote human Discord bot text sends.**
 
 ## Surface checklist
 
