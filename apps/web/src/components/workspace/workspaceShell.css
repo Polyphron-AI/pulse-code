@@ -11,7 +11,6 @@
   --workspace-active: var(--sidebar-row-active);
   --workspace-selected: var(--accent);
   --workspace-blue: var(--primary);
-  font-family: "Segoe UI", system-ui, sans-serif;
 }
 .dark
   :is(
@@ -50,7 +49,7 @@
   height: 44px;
   align-items: center;
   gap: 10px;
-  padding: 0 13px;
+  padding: 0 13px 0 calc(var(--workspace-controls-left, 12px) + 1px);
 }
 [data-workspace-navigation-brand] > span {
   position: relative;

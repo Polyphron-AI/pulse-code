@@ -6,7 +6,6 @@ import { cn } from "../../../lib/utils";
 import { pulseMailFolders } from "../../../mail/mailReadState";
 import { pulseMailAccounts } from "../../../mail/mailState";
 import { useEnvironmentQuery } from "../../../state/query";
-import { useSidebar } from "../../ui/sidebar";
 import { useState } from "react";
 import { Popover, PopoverTrigger, PopoverPopup, PopoverTitle } from "../../ui/popover";
 import { Button } from "../../ui/button";
@@ -24,6 +23,7 @@ const rowClass = (active: boolean) =>
 
 /** Account/folder reads stay dormant until the user opens the disclosure. */
 export function MailNav() {
+  const search = useSearch({ strict: false });
   const [open, setOpen] = useState(false);
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -32,7 +32,7 @@ export function MailNav() {
         aria-label="Email accounts and folders"
       >
         <InboxIcon className="size-3" />
-        Folders
+        {mailFolderLabel(search.folder ?? "INBOX")}
       </PopoverTrigger>
       <PopoverPopup align="start" width="sm" padding="compact">
         <PopoverTitle>Email accounts and folders</PopoverTitle>
@@ -47,10 +47,6 @@ function MailAccountFolders({ onSelectFolder }: { readonly onSelectFolder: () =>
   const { environmentId, mailRead } = useMailCapabilities(
     search.environment ? EnvironmentId.make(search.environment) : undefined,
   );
-  const { isMobile, setOpenMobile } = useSidebar();
-  const closeMobileSidebar = () => {
-    if (isMobile) setOpenMobile(false);
-  };
   const accounts = useEnvironmentQuery(
     environmentId !== null && mailRead ? pulseMailAccounts({ environmentId, input: {} }) : null,
   );
@@ -79,7 +75,6 @@ function MailAccountFolders({ onSelectFolder }: { readonly onSelectFolder: () =>
               {accounts.data.map((candidate) => (
                 <Link
                   key={candidate.id}
-                  onClick={closeMobileSidebar}
                   to="/workspace"
                   search={{
                     space: "mail",
@@ -111,7 +106,6 @@ function MailAccountFolders({ onSelectFolder }: { readonly onSelectFolder: () =>
                   <Link
                     key={candidate.name}
                     onClick={() => {
-                      closeMobileSidebar();
                       onSelectFolder();
                     }}
                     to="/workspace"
@@ -140,7 +134,6 @@ function MailAccountFolders({ onSelectFolder }: { readonly onSelectFolder: () =>
       <div className="mt-3 border-t border-border pt-2">
         <Link
           onClick={() => {
-            closeMobileSidebar();
             onSelectFolder();
           }}
           to="/settings/email"

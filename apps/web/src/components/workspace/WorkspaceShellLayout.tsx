@@ -16,13 +16,12 @@ export function WorkspaceShellLayout({
 }: WorkspaceShellLayoutProps) {
   return (
     <div data-workspace-shell="" className="flex min-h-0 min-w-0 flex-1">
-      <nav
-        aria-label="Workspace navigation"
+      <div
         data-workspace-shell-navigation=""
         className="w-[207px] shrink-0 border-r border-sidebar-border bg-sidebar"
       >
         {navigation}
-      </nav>
+      </div>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {breadcrumb}
         <div className="flex min-h-0 min-w-0 flex-1">

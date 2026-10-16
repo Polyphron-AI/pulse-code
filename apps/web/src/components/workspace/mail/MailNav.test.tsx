@@ -13,12 +13,9 @@ import { afterEach, expect, it, vi } from "vite-plus/test";
 import { MailNav } from "./MailNav";
 import { parseWorkspaceSearch } from "../workspaceNavigation";
 
-// Fake only the environment's external account/folder reads and compact-sidebar state.
+// Fake only the environment's external account/folder reads.
 vi.mock("./useMailCapabilities", () => ({
   useMailCapabilities: () => ({ environmentId: "remote", mailRead: true }),
-}));
-vi.mock("../../ui/sidebar", () => ({
-  useSidebar: () => ({ isMobile: false, setOpenMobile: vi.fn() }),
 }));
 vi.mock("../../../mail/mailState", () => ({ pulseMailAccounts: () => ({ kind: "accounts" }) }));
 vi.mock("../../../mail/mailReadState", () => ({
@@ -68,6 +65,7 @@ it("opens account/folder disclosure, selects Sent on account two and restores tr
   await act(async () => root.render(<RouterProvider router={router} />));
   expect(queryByRole(document.body, "link", { name: "Second account" })).toBeNull();
   const trigger = getByRole(node, "button", { name: "Email accounts and folders" });
+  expect(trigger.textContent).toBe("Inbox");
   trigger.focus();
   await act(async () => trigger.click());
   await act(async () => getByRole(document.body, "link", { name: "Second account" }).click());
@@ -80,6 +78,7 @@ it("opens account/folder disclosure, selects Sent on account two and restores tr
     folder: "Sent",
   });
   expect(queryByRole(document.body, "link", { name: "Sent" })).toBeNull();
+  expect(trigger.textContent).toBe("Sent");
   expect(document.activeElement).toBe(trigger);
   expect(queryByRole(document.body, "button", { name: "Choose project" })).toBeNull();
 });

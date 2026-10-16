@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from "react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import { useSidebar } from "../ui/sidebar";
-import { WorkspaceModeSwitch, WorkspaceNavigation } from "./WorkspaceNavigation.tsx";
+import { WorkspaceModeSwitch } from "./WorkspaceNavigationView";
 import { useMailCapabilities } from "./mail/useMailCapabilities";
 import { useWorkspaceEnvironment } from "./useWorkspaceEnvironment";
 import {
@@ -35,7 +35,7 @@ export function useWorkspaceNavigation() {
     environmentId,
     search,
     workspace,
-    mode: workspace ? ("workspace" as const) : ("code" as const),
+    mode: workspace ? ("workspace" as const) : inCode ? ("code" as const) : undefined,
     ...(!mailRead && search?.space !== "mail"
       ? { unavailableDestinations: { mail: "Email is unavailable on this server." } }
       : {}),
@@ -75,21 +75,8 @@ export function WorkspaceNavigationTracker() {
 }
 
 /** Code uses a compact two-mode switch; Workspace keeps its destination navigation. */
-export function WorkspaceSpaceSelector({ rail = false }: { readonly rail?: boolean }) {
+export function WorkspaceSpaceSelector() {
   const navigation = useWorkspaceNavigation();
-  if (rail && navigation.workspace && navigation.environmentId) {
-    return (
-      <WorkspaceNavigation
-        {...navigation}
-        environmentId={navigation.environmentId}
-        destination={
-          navigation.search?.space === "office"
-            ? "projects"
-            : (navigation.search?.space ?? "projects")
-        }
-      />
-    );
-  }
   return (
     <div className="relative z-[1] px-2 pb-1">
       <WorkspaceModeSwitch mode={navigation.mode} onModeChange={navigation.onModeChange} />

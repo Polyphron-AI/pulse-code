@@ -10,6 +10,7 @@ import {
 import { useLocation, useNavigate, useParams } from "@tanstack/react-router";
 
 import { isElectron } from "../env";
+import { APP_BASE_NAME } from "../branding";
 import { getLocalStorageItem, removeLocalStorageItem } from "../hooks/useLocalStorage";
 import {
   isRichTextBoldShortcut,
@@ -38,10 +39,10 @@ import { SettingsSidebarNav } from "./settings/SettingsSidebarNav";
 import { SidebarBrandWidthProbe, SidebarChromeHeader } from "./sidebar/SidebarChrome";
 import {
   WorkspaceNavigationTracker,
-  WorkspaceSpaceSelector,
   useWorkspaceNavigation,
 } from "./workspace/WorkspaceSpaceSelector";
-import { WorkspaceNavigation } from "./workspace/WorkspaceNavigation.tsx";
+import { WorkspaceNavigation } from "./workspace/WorkspaceNavigationView";
+import { workspaceDestinations } from "./workspace/workspaceNavigation";
 import { WorkspaceShellLayout } from "./workspace/WorkspaceShellLayout";
 import { WorkspaceViewRail, workspaceRailItems } from "./workspace/WorkspaceViewRail";
 import { ProjectsNav } from "./workspace/ProjectsNav";
@@ -233,17 +234,31 @@ function WorkspaceLiveShell({ children }: { readonly children: ReactNode }) {
   const navigation = useWorkspaceNavigation();
   const navigate = useNavigate();
   const { isMobile, open } = useSidebar();
+  const environmentIdentificationMode = useEnvironmentIdentificationMode();
+  const backdropVariant = useSidebarStageBackdropVariant(
+    environmentIdentificationMode === "artwork",
+  );
   const destination =
-    navigation.search?.space === "office" ? "projects" : (navigation.search?.space ?? "projects");
-  const selected = navigation.search?.view ?? workspaceRailItems[destination][0]!.id;
-  const content = navigation.environmentId ? (
+    navigation.environmentId && navigation.search?.space !== "office"
+      ? (navigation.search?.space ?? "projects")
+      : undefined;
+  const content = (
     <WorkspaceNavigation
       {...navigation}
-      environmentId={navigation.environmentId}
       destination={destination}
+      labels={{ brand: APP_BASE_NAME }}
+      backdropVariant={backdropVariant}
+      unavailableDestinations={
+        navigation.environmentId
+          ? navigation.unavailableDestinations
+          : Object.fromEntries(
+              workspaceDestinations.map(({ id }) => [
+                id,
+                "Connect an environment to open this destination.",
+              ]),
+            )
+      }
     />
-  ) : (
-    <WorkspaceSpaceSelector />
   );
   return (
     <div
@@ -253,7 +268,7 @@ function WorkspaceLiveShell({ children }: { readonly children: ReactNode }) {
       <WorkspaceShellLayout
         navigation={
           isMobile ? (
-            <Sidebar role="navigation" aria-label="Workspace menu" data-app-sidebar="">
+            <Sidebar aria-label="Workspace menu" data-app-sidebar="">
               {content}
             </Sidebar>
           ) : (
@@ -270,21 +285,23 @@ function WorkspaceLiveShell({ children }: { readonly children: ReactNode }) {
           </div>
         }
         rail={
-          <WorkspaceViewRail
-            items={workspaceRailItems[destination]}
-            selected={selected}
-            onSelect={(view) => {
-              void navigate({
-                to: "/workspace",
-                search: {
-                  ...navigation.search,
-                  space: destination,
-                  view,
-                  ...(navigation.environmentId ? { environment: navigation.environmentId } : {}),
-                },
-              });
-            }}
-          />
+          destination ? (
+            <WorkspaceViewRail
+              items={workspaceRailItems[destination]}
+              selected={navigation.search?.view ?? workspaceRailItems[destination][0]!.id}
+              onSelect={(view) => {
+                void navigate({
+                  to: "/workspace",
+                  search: {
+                    ...navigation.search,
+                    space: destination,
+                    view,
+                    ...(navigation.environmentId ? { environment: navigation.environmentId } : {}),
+                  },
+                });
+              }}
+            />
+          ) : null
         }
         engagement={children}
       />

@@ -13,7 +13,12 @@ import {
 } from "@tanstack/react-router";
 import { getByRole } from "@testing-library/dom";
 import { afterEach, beforeEach, expect, it, vi } from "vite-plus/test";
-import { WorkspaceNavigationTracker, WorkspaceSpaceSelector } from "./WorkspaceSpaceSelector";
+import {
+  WorkspaceNavigationTracker,
+  WorkspaceSpaceSelector,
+  useWorkspaceNavigation,
+} from "./WorkspaceSpaceSelector";
+import { WorkspaceNavigation } from "./WorkspaceNavigationView";
 import { useWorkspaceEnvironment } from "./useWorkspaceEnvironment";
 import { useMailCapabilities } from "./mail/useMailCapabilities";
 import {
@@ -49,8 +54,14 @@ vi.mock("../ui/tooltip", () => ({
     children,
   }: {
     render: React.ReactElement;
-    children: React.ReactNode;
-  }) => ({ ...render, props: { ...(render.props as object), children } }),
+    children?: React.ReactNode;
+  }) => ({
+    ...render,
+    props: {
+      ...(render.props as { children?: React.ReactNode }),
+      ...(children === undefined ? {} : { children }),
+    },
+  }),
   TooltipPopup: () => null,
 }));
 
@@ -91,7 +102,16 @@ function PaletteDestinationProbe() {
 
 function SelectorHost({ hideCodeSidebar }: { hideCodeSidebar: boolean }) {
   const pathname = useLocation({ select: (location) => location.pathname });
-  return hideCodeSidebar && pathname !== "/workspace" ? null : <WorkspaceSpaceSelector rail />;
+  const navigation = useWorkspaceNavigation();
+  if (hideCodeSidebar && pathname !== "/workspace") return null;
+  return navigation.workspace ? (
+    <WorkspaceNavigation
+      {...navigation}
+      destination={navigation.search?.space === "office" ? undefined : navigation.search?.space}
+    />
+  ) : (
+    <WorkspaceSpaceSelector />
+  );
 }
 
 async function mount(href: string, probePalette = false, hideCodeSidebar = false) {
@@ -361,4 +381,12 @@ it("remembers Code before palette navigation when the compact sidebar is unmount
   );
   await click("Code");
   expect(router.state.location.href).toBe("/compact-hidden/thread-a?diff=1#change");
+});
+
+it("keeps both modes unpressed in Settings", async () => {
+  await mount("/settings/email");
+  expect(getByRole(node, "button", { name: "Workspace" }).getAttribute("aria-pressed")).toBe(
+    "false",
+  );
+  expect(getByRole(node, "button", { name: "Code" }).getAttribute("aria-pressed")).toBe("false");
 });

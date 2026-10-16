@@ -7,7 +7,7 @@ import {
   RouterProvider,
 } from "@tanstack/react-router";
 import { createContext, useContext, useLayoutEffect, useState } from "react";
-import { WorkspaceNavigation } from "../WorkspaceNavigation.tsx";
+import { WorkspaceNavigation } from "../WorkspaceNavigationView";
 import { WorkspaceViewRail, workspaceRailItems } from "../WorkspaceViewRail";
 import { WorkspaceShellLayout } from "../WorkspaceShellLayout";
 import type { WorkspaceMockupModule, WorkspaceMockupSession } from "./workspaceMockupFixtures";
@@ -41,6 +41,7 @@ function FixtureReport() {
           destination={session.recipe.space}
           environmentId={session.environmentId}
           mode="workspace"
+          backdropVariant="dev"
           labels={{ brand: "Pulse Next", workspaceMode: "Office", group: "Office" }}
           onModeChange={(mode) => recordNavigation(`mode:${mode}`)}
           onNavigate={(destination) => recordNavigation(`space:${destination}`)}

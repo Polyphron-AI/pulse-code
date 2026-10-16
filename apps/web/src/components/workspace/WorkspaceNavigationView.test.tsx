@@ -14,7 +14,7 @@ import {
 } from "@tanstack/react-router";
 import { EnvironmentId } from "@t3tools/contracts";
 import { afterEach, beforeEach, expect, it, vi } from "vite-plus/test";
-import { WorkspaceNavigation, WorkspaceModeSwitch } from "./WorkspaceNavigation.tsx";
+import { WorkspaceNavigation, WorkspaceModeSwitch } from "./WorkspaceNavigationView";
 import { WorkspaceViewRail, workspaceRailItems } from "./WorkspaceViewRail";
 import { WorkspaceShellLayout } from "./WorkspaceShellLayout";
 import { Sidebar, SidebarProvider, useSidebar } from "../ui/sidebar";
@@ -202,9 +202,7 @@ it("keeps each rail registry in canonical order and shares all layout regions", 
       engagement={<main>Engagement</main>}
     />,
   );
-  expect(getByRole(node, "navigation", { name: "Workspace navigation" }).textContent).toBe(
-    "Navigation",
-  );
+  expect(node.querySelector("[data-workspace-shell-navigation]")?.textContent).toBe("Navigation");
   expect(node.textContent).toBe("NavigationBreadcrumbRailEngagement");
 });
 
@@ -308,4 +306,31 @@ it("dismisses the compact menu after navigation and returns focus to its trigger
   expect(getByRole(node, "main", { name: "Current destination" }).textContent).toBe("meetings");
   expect(queryByRole(document.body, "dialog")).toBeNull();
   expect(document.activeElement).toBe(trigger);
+});
+
+it("blocks modified and auxiliary clicks on unavailable destinations", async () => {
+  const navigate = vi.fn();
+  await render(
+    <WorkspaceNavigation
+      destination="projects"
+      environmentId={EnvironmentId.make("a")}
+      mode="workspace"
+      onModeChange={() => {}}
+      onNavigate={navigate}
+      unavailableDestinations={{ mail: "Email is unavailable on this server." }}
+    />,
+  );
+  const email = getByRole(node, "link", { name: "Email" });
+  for (const options of [{ ctrlKey: true }, { metaKey: true }, { shiftKey: true }, { button: 1 }]) {
+    const event = new MouseEvent(options.button === 1 ? "auxclick" : "click", {
+      ...options,
+      bubbles: true,
+      cancelable: true,
+    });
+    await act(async () => {
+      email.dispatchEvent(event);
+    });
+    expect(event.defaultPrevented).toBe(true);
+  }
+  expect(navigate).not.toHaveBeenCalled();
 });

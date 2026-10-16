@@ -30,7 +30,7 @@ it("mounts the shared shell and recipe navigation for all eight samples without 
       ),
     );
     expect(node.querySelectorAll("[data-workspace-shell]")).toHaveLength(1);
-    expect(getByRole(node, "navigation", { name: "Workspace navigation" }).textContent).toContain(
+    expect(node.querySelector("[data-workspace-shell-navigation]")?.textContent).toContain(
       "Pulse Next",
     );
     expect(getByRole(node, "button", { name: "Office" }).getAttribute("aria-pressed")).toBe("true");
