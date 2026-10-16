@@ -1,4 +1,4 @@
-import { AuthOrchestrationOperateScope, ProjectId } from "@t3tools/contracts";
+import { ProjectId } from "@t3tools/contracts";
 import {
   ComposerContextId,
   workspaceItemKey,
@@ -44,7 +44,7 @@ import {
 import { MailDraftReply } from "./mail/MailDraftReply";
 import { linkErrorText, useMailLinks } from "./mail/useMailLinks";
 import { useMailCapabilities } from "./mail/useMailCapabilities";
-import { useEnvironmentSessionState } from "../../state/session";
+import { useWorkspaceCanOperate } from "./ProjectTasks";
 
 const WorkspaceAutomationEditor = lazy(() => import("./WorkspaceAutomationEditor"));
 
@@ -61,18 +61,14 @@ type ItemActionProps = {
 };
 export function WorkspaceItemActions(props: ItemActionProps) {
   const capability = useMailCapabilities(props.environmentId);
-  const session = useEnvironmentSessionState(props.environmentId);
+  const canOperate = useWorkspaceCanOperate(props.environmentId);
   const [captured, setCaptured] = useState<ItemActionProps | null>(null);
-  const canOperate =
-    !session.isPending &&
-    session.data?.authenticated === true &&
-    session.data.scopes?.includes(AuthOrchestrationOperateScope) === true;
   if (captured && (captured.environmentId !== props.environmentId || !capability.workspaceLinks))
     setCaptured(null);
   const active = captured?.environmentId === props.environmentId ? captured : props;
-  const current = useRef({ environmentId: props.environmentId, capability, session });
+  const current = useRef({ environmentId: props.environmentId, capability, canOperate });
   useLayoutEffect(() => {
-    current.current = { environmentId: props.environmentId, capability, session };
+    current.current = { environmentId: props.environmentId, capability, canOperate };
   });
   const mounted = useRef(true);
   useEffect(() => {
@@ -87,9 +83,7 @@ export function WorkspaceItemActions(props: ItemActionProps) {
       mounted.current &&
       live.environmentId === props.environmentId &&
       live.capability.workspaceLinks &&
-      !live.session.isPending &&
-      live.session.data?.authenticated === true &&
-      live.session.data.scopes?.includes(AuthOrchestrationOperateScope) === true &&
+      live.canOperate &&
       (action !== "start-thread" || live.capability.workspaceItemContext) &&
       (action !== "start-automation" || live.capability.workspaceTools)
     );
@@ -573,12 +567,8 @@ export function WorkspaceItemMenu({
   const [captured, setCaptured] = useState<(ItemActionProps & { provenance?: ReactNode }) | null>(
     null,
   );
-  const session = useEnvironmentSessionState(props.environmentId);
+  const canOperate = useWorkspaceCanOperate(props.environmentId);
   const capability = useMailCapabilities(props.environmentId);
-  const canOperate =
-    !session.isPending &&
-    session.data?.authenticated === true &&
-    session.data.scopes?.includes(AuthOrchestrationOperateScope) === true;
   const available = capability.workspaceLinks && canOperate;
   if (captured && (!capability.workspaceLinks || captured.environmentId !== props.environmentId))
     setCaptured(null);

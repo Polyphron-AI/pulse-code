@@ -7,7 +7,7 @@ import {
   type WorkspaceLinkList,
 } from "@t3tools/contracts";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
-import { useState, lazy, Suspense } from "react";
+import { useContext, useState, lazy, Suspense } from "react";
 import { useProjects, useThreadShells } from "../../state/entities";
 import { useEnvironmentQuery } from "../../state/query";
 import { useAtomCommand } from "../../state/use-atom-command";
@@ -30,6 +30,7 @@ import { useMailLinks } from "./mail/useMailLinks";
 import { useWorkspaceCanOperate, workspaceToolsError } from "./ProjectTasks";
 import { useMailCapabilities } from "./mail/useMailCapabilities";
 import type { WorkspaceResourceScope } from "./workspaceResourceState";
+import { WorkspaceResourcesCloseFocusContext } from "./workspaceResourceState";
 import type { WorkspaceResourceBodyProps } from "./WorkspaceResourceBody";
 import { ProjectPickerView } from "./ProjectPickerView";
 export function WorkspaceToolsPanel({
@@ -239,6 +240,8 @@ export function WorkspaceBrowser({
   const canOperate = useWorkspaceCanOperate(environmentId);
   const [address, setAddress] = useState("");
   const [opened, setOpened] = useState(false);
+  const hidden = useContext(WorkspaceResourcesCloseFocusContext)?.hidden ?? false;
+  if (hidden && opened) setOpened(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const desktop = isPreviewSupportedInRuntime();
@@ -330,7 +333,7 @@ export function WorkspaceBrowser({
           {error ?? config.error}
         </p>
       ) : null}
-      {desktop && threadRef ? (
+      {desktop && threadRef && !hidden ? (
         <Dialog open={opened} onOpenChange={setOpened}>
           <DialogPopup className="w-full max-w-5xl">
             <DialogHeader>

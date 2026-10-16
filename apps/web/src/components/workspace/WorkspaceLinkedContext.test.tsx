@@ -24,6 +24,7 @@ const mocks = vi.hoisted(() => ({
   dismiss: vi.fn(),
   refresh: vi.fn(),
   related: [] as { item: WorkspaceLinkEndpoint; via: WorkspaceLinkEndpoint }[],
+  taskLoading: false,
 }));
 vi.mock("../../state/workspaceLinks", () => ({
   workspaceLinks: {
@@ -50,12 +51,14 @@ vi.mock("../../state/query", () => ({
             : query?.kind === "hub"
               ? { related: mocks.related, truncated: false }
               : query?.kind === "task"
-                ? {
-                    id: "wskt_00000000-0000-0000-0000-000000000001",
-                    projectId: "p",
-                    title: "Task",
-                    column: "To do",
-                  }
+                ? mocks.taskLoading
+                  ? null
+                  : {
+                      id: "wskt_00000000-0000-0000-0000-000000000001",
+                      projectId: "p",
+                      title: "Task",
+                      column: "To do",
+                    }
                 : null,
       error: null,
       refresh: vi.fn(),
@@ -135,6 +138,7 @@ afterEach(async () => {
   root = undefined;
   node?.remove();
   mocks.related = [];
+  mocks.taskLoading = false;
   vi.clearAllMocks();
   vi.unstubAllGlobals();
 });
@@ -348,6 +352,26 @@ it("captures item A through header context while resource project B changes inde
   await act(() => root!.render(<App env={EnvironmentId.make("b")} />));
   expect(queryByRole(node, "heading", { name: "Linked context" })).toBeNull();
   expect(node.textContent).not.toContain("Page A");
+});
+it("shows loading while finding the selected task's project, then its related items", async () => {
+  mocks.taskLoading = true;
+  const task: WorkspaceLinkEndpoint = {
+    ref: { type: "task", taskId: "wskt_00000000-0000-0000-0000-000000000001" },
+    title: "Task",
+  };
+  await mount(
+    <WorkspaceLinkedContext environmentId={environmentId} item={task} onOpen={() => {}} />,
+  );
+  expect(node.textContent).toContain("Finding this task's project...");
+  expect(queryByRole(node, "region", { name: "Related through linked items" })).toBeNull();
+  mocks.taskLoading = false;
+  await act(() =>
+    root!.render(
+      <WorkspaceLinkedContext environmentId={environmentId} item={task} onOpen={() => {}} />,
+    ),
+  );
+  expect(node.textContent).not.toContain("Finding this task's project...");
+  expect(getByRole(node, "region", { name: "Related through linked items" })).toBeDefined();
 });
 it("shows the selected task's project discovery once, labelled through its original item", async () => {
   const onOpen = vi.fn();

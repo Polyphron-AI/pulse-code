@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { act, useSyncExternalStore, type ReactNode } from "react";
 import { create, type ReactTestRenderer } from "react-test-renderer";
 import { createRoot } from "react-dom/client";
+import { getByRole } from "@testing-library/dom";
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { DEFAULT_RESOLVED_KEYBINDINGS } from "@t3tools/shared/keybindings";
@@ -221,38 +222,95 @@ it("keeps a native menu's project editor on A after selection changes to B", asy
     await act(() => view.unmount());
   }
 });
-it.each(["permission", "revalidation"])(
-  "retains a held project draft while disabling actions during %s",
-  async (change) => {
-    let view!: ReactTestRenderer;
-    await act(() => {
-      view = create(<WorkspaceItemActions environmentId={environmentId} item={a} />);
-    });
+it("retains a held project draft while disabling actions after permission loss", async () => {
+  let view!: ReactTestRenderer;
+  await act(() => {
+    view = create(<WorkspaceItemActions environmentId={environmentId} item={a} />);
+  });
+  try {
+    await act(() =>
+      view.root
+        .findAllByType("button")
+        .find((button) => button.props.children === "Start project")!
+        .props.onClick(),
+    );
+    expect(view.root.findAllByType("form")).toHaveLength(1);
+    await act(() =>
+      view.root.findByType("input").props.onChange({ target: { value: "Half typed" } }),
+    );
+    mocks.operate = false;
+    await act(() => view.update(<WorkspaceItemActions environmentId={environmentId} item={b} />));
+    expect(view.root.findByType("input").props.value).toBe("Half typed");
+    expect(view.root.findByType("input").props.disabled).toBe(true);
+    await act(() => view.root.findByType("form").props.onSubmit({ preventDefault() {} }));
+    expect(mocks.createProject).not.toHaveBeenCalled();
+    mocks.operate = true;
+    mocks.pending = false;
+    await act(() => view.update(<WorkspaceItemActions environmentId={environmentId} item={b} />));
+    expect(view.root.findByType("input").props.value).toBe("Half typed");
+    expect(view.root.findByType("input").props.disabled).toBe(false);
+  } finally {
+    await act(() => view.unmount());
+  }
+});
+it.each(["header", "row menu"])(
+  "keeps the %s project input focused and its draft editable during session revalidation",
+  async (entrance) => {
+    const node = document.createElement("div");
+    document.body.append(node);
+    const root = createRoot(node);
+    mocks.createProject.mockResolvedValue(false);
     try {
       await act(() =>
-        view.root
-          .findAllByType("button")
-          .find((button) => button.props.children === "Start project")!
-          .props.onClick(),
+        root.render(
+          entrance === "header" ? (
+            <WorkspaceItemActions environmentId={environmentId} item={a} />
+          ) : (
+            <WorkspaceItemMenu environmentId={environmentId} item={a}>
+              <button>Item A</button>
+            </WorkspaceItemMenu>
+          ),
+        ),
       );
-      expect(view.root.findAllByType("form")).toHaveLength(1);
+      if (entrance === "row menu")
+        await act(() =>
+          node
+            .querySelector('[draggable="true"]')!
+            .dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true })),
+        );
+      await act(() => getByRole(node, "button", { name: "Start project" }).click());
+      const input = getByRole<HTMLInputElement>(node, "textbox", { name: "New project name" });
+      input.focus();
+      const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+      await act(() => {
+        setValue.call(input, "Half typed");
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+      expect(input.value).toBe("Half typed");
+      expect(document.activeElement).toBe(input);
+      await act(() => {
+        mocks.pending = true;
+        for (const notify of mocks.sessionListeners) notify();
+      });
+      expect(document.activeElement).toBe(input);
+      expect(input.value).toBe("Half typed");
+      expect(input.disabled).toBe(false);
+      await act(() => {
+        setValue.call(input, "Half typed project");
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      });
       await act(() =>
-        view.root.findByType("input").props.onChange({ target: { value: "Half typed" } }),
+        input
+          .closest("form")!
+          .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
       );
-      if (change === "permission") mocks.operate = false;
-      else mocks.pending = true;
-      await act(() => view.update(<WorkspaceItemActions environmentId={environmentId} item={b} />));
-      expect(view.root.findByType("input").props.value).toBe("Half typed");
-      expect(view.root.findByType("input").props.disabled).toBe(true);
-      await act(() => view.root.findByType("form").props.onSubmit({ preventDefault() {} }));
-      expect(mocks.createProject).not.toHaveBeenCalled();
-      mocks.operate = true;
-      mocks.pending = false;
-      await act(() => view.update(<WorkspaceItemActions environmentId={environmentId} item={b} />));
-      expect(view.root.findByType("input").props.value).toBe("Half typed");
-      expect(view.root.findByType("input").props.disabled).toBe(false);
+      expect(mocks.createProject).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "Half typed project" }),
+      );
+      expect(document.activeElement).toBe(input);
     } finally {
-      await act(() => view.unmount());
+      await act(() => root.unmount());
+      node.remove();
     }
   },
 );
@@ -377,7 +435,7 @@ it("retains an open row menu and its error while permission revalidates", async 
     expect(view.root.findByProps({ role: "alert" }).children.join("")).toContain(
       "Link unavailable",
     );
-    expect(add(view).props.disabled).toBe(true);
+    expect(add(view).props.disabled).toBe(false);
   } finally {
     await act(() => view.unmount());
   }

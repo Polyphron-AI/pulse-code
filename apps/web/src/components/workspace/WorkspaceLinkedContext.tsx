@@ -83,7 +83,9 @@ function TaskProjectRelatedItems(props: {
     </div>
   ) : task.error ? (
     <MailError message={task.error} onRetry={task.refresh} />
-  ) : null;
+  ) : (
+    <p className="text-sm text-muted-foreground">Finding this task's project...</p>
+  );
 }
 function ProjectRelatedItems(props: {
   environmentId: EnvironmentId;

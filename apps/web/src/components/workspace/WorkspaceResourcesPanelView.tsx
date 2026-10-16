@@ -32,7 +32,7 @@ const resourceTabs = [
 /** Dev-safe chrome. The caller supplies exactly one live or fixture body. */
 export function WorkspaceResourcesPanelView(props: WorkspaceResourcesPanelViewProps): ReactNode {
   const id = useId();
-  const restoreFocus = useContext(WorkspaceResourcesCloseFocusContext);
+  const resources = useContext(WorkspaceResourcesCloseFocusContext);
   const buttons = useRef<(HTMLButtonElement | null)[]>([]);
   const [focused, setFocused] = useState<WorkspaceResourceTab>(props.tab);
   const [selected, setSelected] = useState(props.tab);
@@ -60,7 +60,7 @@ export function WorkspaceResourcesPanelView(props: WorkspaceResourcesPanelViewPr
           aria-label="Close resources"
           onClick={() => {
             props.onClose();
-            restoreFocus?.();
+            resources?.restoreFocus();
           }}
         >
           <XIcon />

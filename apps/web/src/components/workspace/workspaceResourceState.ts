@@ -310,7 +310,10 @@ export function useWorkspaceResourceState(
 }
 
 export const WorkspaceResourcesContext = createContext<WorkspaceResourcesState | null>(null);
-export const WorkspaceResourcesCloseFocusContext = createContext<(() => void) | null>(null);
+export const WorkspaceResourcesCloseFocusContext = createContext<{
+  readonly restoreFocus: () => void;
+  readonly hidden: boolean;
+} | null>(null);
 export function WorkspaceResourcesProvider(props: {
   readonly value: WorkspaceResourcesState;
   readonly children: ReactNode;

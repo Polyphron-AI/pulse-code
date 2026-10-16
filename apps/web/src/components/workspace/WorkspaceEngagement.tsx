@@ -54,7 +54,7 @@ export type WorkspaceEngagementProps = WorkspaceEngagementCommonProps &
       }
   );
 
-/** Item editors invalidate a held capture after deleting or moving its target out of scope. */
+/** Item editors invalidate a held capture after deleting its target. */
 export const WorkspaceItemMutationContext = createContext<
   ((environmentId: EnvironmentId, item: WorkspaceItemRef) => void) | null
 >(null);
@@ -174,7 +174,9 @@ export function WorkspaceEngagement(props: WorkspaceEngagementProps) {
           closeFocus={() => closeFocus.current ?? false}
         >
           {state.open ? (
-            <WorkspaceResourcesCloseFocusContext value={restoreResourcesFocus}>
+            <WorkspaceResourcesCloseFocusContext
+              value={{ restoreFocus: restoreResourcesFocus, hidden: context !== null }}
+            >
               <div
                 key={props.environmentId}
                 ref={resourcesBody}

@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { act, useEffect, useLayoutEffect, useSyncExternalStore } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { getByRole } from "@testing-library/dom";
+import { getByRole, queryByRole } from "@testing-library/dom";
 import { EnvironmentId, ProjectId, type WorkspaceLinkEndpoint } from "@t3tools/contracts";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import { WorkspaceProjectResources } from "./WorkspaceResourcesPanel";
@@ -354,7 +354,7 @@ it("does not steal environment-selector focus when the next environment has Reso
   expect(resources.open).toBe(false);
   expect(document.activeElement).toBe(selector);
 });
-it("retains the actual Browser address and acquired preview across context and compact resize", async () => {
+it("retains the Browser address while closing its preview across context and compact resize", async () => {
   boundary.desktop = true;
   boundary.command.mockResolvedValue({ _tag: "Success", value: {} });
   await mount();
@@ -376,6 +376,8 @@ it("retains the actual Browser address and acquired preview across context and c
   });
   expect(boundary.acquire).toHaveBeenCalledTimes(1);
   await act(() => getByRole(node, "button", { name: "Linked context", hidden: true }).click());
+  expect(queryByRole(document.body, "dialog", { name: "Project Browser" })).toBeNull();
+  expect(boundary.release).toHaveBeenCalledTimes(1);
   for (const width of [1279, 1024, 768, 390, 1280]) {
     await act(() => {
       (
@@ -385,25 +387,20 @@ it("retains the actual Browser address and acquired preview across context and c
       ).happyDOM.setWindowSize({ width, height: 844 });
     });
     expect(boundary.acquire).toHaveBeenCalledTimes(1);
-    expect(boundary.release).not.toHaveBeenCalled();
-  }
-  await act(() => getByRole(document.body, "button", { name: "Close" }).click());
-  const released = boundary.release.mock.calls.length;
-  for (const width of [1279, 1024, 768, 390, 1280]) {
-    await act(() => {
-      (
-        window as unknown as {
-          happyDOM: { setWindowSize(size: { width: number; height: number }): void };
-        }
-      ).happyDOM.setWindowSize({ width, height: 844 });
-    });
+    expect(boundary.release).toHaveBeenCalledTimes(1);
+    expect(queryByRole(document.body, "dialog", { name: "Project Browser" })).toBeNull();
   }
   await act(() => getByRole(node, "button", { name: "Back to resources" }).click());
   expect(getByRole(node, "textbox", { name: "Browser page address" })).toBe(address);
   expect(address.value).toBe("https://example.invalid/keep");
+  expect(queryByRole(document.body, "dialog", { name: "Project Browser" })).toBeNull();
   expect(boundary.acquire).toHaveBeenCalledTimes(1);
-  expect(boundary.release).toHaveBeenCalledTimes(released);
+  expect(boundary.release).toHaveBeenCalledTimes(1);
   expect(boundary.command).toHaveBeenCalledTimes(1);
+  await act(() => getByRole(node, "button", { name: "Open Browser" }).click());
+  expect(getByRole(document.body, "dialog", { name: "Project Browser" })).toBeDefined();
+  expect(boundary.acquire).toHaveBeenCalledTimes(2);
+  expect(boundary.command).toHaveBeenCalledTimes(2);
 });
 it("uses the same mounted shell for local, direct, opaque relay/tunnel, disconnected and old-server states", async () => {
   await mount();

@@ -26,7 +26,6 @@ export const workspaceToolsError = (result: Parameters<typeof squashAtomCommandF
 export function useWorkspaceCanOperate(environmentId: EnvironmentId) {
   const session = useEnvironmentSessionState(environmentId);
   return (
-    !session.isPending &&
     session.data?.authenticated === true &&
     session.data.scopes?.includes(AuthOrchestrationOperateScope) === true
   );

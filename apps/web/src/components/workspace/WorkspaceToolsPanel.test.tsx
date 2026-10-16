@@ -5,6 +5,8 @@ import { getByRole, queryByRole } from "@testing-library/dom";
 import { create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import { EnvironmentId, ProjectId } from "@t3tools/contracts";
+import { WorkspaceEngagement } from "./WorkspaceEngagement";
+import { useWorkspaceResourceState, WorkspaceResourcesProvider } from "./workspaceResourceState";
 import {
   WorkspaceToolsPanel,
   WorkspaceBrowser,
@@ -123,13 +125,6 @@ vi.mock("../preview/openPreviewSession", () => ({
 vi.mock("../preview/PreviewPanel", () => ({ PreviewPanel: () => <div>Incumbent Browser</div> }));
 vi.mock("../ui/button", () => ({ Button: "button" }));
 vi.mock("../ui/input", () => ({ Input: "input" }));
-vi.mock("../ui/dialog", () => ({
-  Dialog: ({ open, children }: { open: boolean; children: unknown }) => (open ? children : null),
-  DialogPopup: "section",
-  DialogHeader: "header",
-  DialogTitle: "h2",
-  DialogPanel: "div",
-}));
 let renderer: ReactTestRenderer | undefined;
 let domRoot: Root | undefined;
 let node: HTMLDivElement | undefined;
@@ -220,18 +215,24 @@ it("lists confirmed Files and Agents, uses live thread titles, and links the cur
 it("opens the incumbent desktop preview through the configured environment-local Browser thread", async () => {
   mocks.desktop = true;
   mocks.preview.mockResolvedValue({ _tag: "Success", value: {} });
-  await mount();
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  node = document.createElement("div");
+  document.body.append(node);
+  domRoot = createRoot(node);
   await act(() =>
-    renderer!.root
-      .findByProps({ "aria-label": "Browser page address" })
-      .props.onChange({ target: { value: "https://example.test/page" } }),
+    domRoot!.render(
+      <WorkspaceToolsPanel environmentId={environmentId} item={item} onOpen={() => {}} />,
+    ),
   );
-  await act(() =>
-    renderer!.root
-      .findAllByType("button")
-      .find((button) => button.props.children === "Open Browser")!
-      .props.onClick(),
-  );
+  const input = getByRole<HTMLInputElement>(node, "textbox", { name: "Browser page address" });
+  await act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
+      input,
+      "https://example.test/page",
+    );
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(() => getByRole(node!, "button", { name: "Open Browser" }).click());
   expect(mocks.preview).toHaveBeenCalledWith(
     expect.objectContaining({
       threadRef: { environmentId: "remote", threadId: "t" },
@@ -239,6 +240,57 @@ it("opens the incumbent desktop preview through the configured environment-local
     }),
   );
   expect(mocks.external).not.toHaveBeenCalled();
+});
+
+it("closes the portaled Browser dialog in Linked context and returns without an orphan dialog", async () => {
+  mocks.desktop = true;
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  (
+    window as unknown as {
+      happyDOM: { setWindowSize: (size: { width: number; height: number }) => void };
+    }
+  ).happyDOM.setWindowSize({ width: 1280, height: 800 });
+  node = document.createElement("div");
+  document.body.append(node);
+  domRoot = createRoot(node);
+  function App() {
+    const state = useWorkspaceResourceState(environmentId, {
+      storage: { getItem: () => null, setItem: () => {} },
+    });
+    return (
+      <WorkspaceResourcesProvider value={state}>
+        <WorkspaceEngagement
+          environmentId={environmentId}
+          space="projects"
+          layout="full"
+          header={{ title: "Projects", environmentLabel: "Remote", spaceLabel: "Projects" }}
+          linkedContext={{ item, render: () => <p>Item links</p> }}
+          resources={
+            <WorkspaceBrowser
+              environmentId={environmentId}
+              projectId={item.ref.projectId}
+              selectedItem={null}
+              request={null}
+              onOpen={() => {}}
+            />
+          }
+        >
+          <p>Project content</p>
+        </WorkspaceEngagement>
+      </WorkspaceResourcesProvider>
+    );
+  }
+  await act(() => domRoot!.render(<App />));
+  await act(() => getByRole(node!, "button", { name: "Show Browser" }).click());
+  const dialog = getByRole(document.body, "dialog", { name: "Project Browser" });
+  expect(node.contains(dialog)).toBe(false);
+  expect(dialog.textContent).toContain("Incumbent Browser");
+  await act(() => getByRole(node!, "button", { name: "Linked context", hidden: true }).click());
+  expect(queryByRole(document.body, "dialog", { name: "Project Browser" })).toBeNull();
+  await act(() => getByRole(node!, "button", { name: "Back to resources" }).click());
+  expect(queryByRole(document.body, "dialog", { name: "Project Browser" })).toBeNull();
+  await act(() => getByRole(node!, "button", { name: "Show Browser" }).click());
+  expect(getByRole(document.body, "dialog", { name: "Project Browser" })).toBeDefined();
 });
 
 it("reads Files through the resource project rather than the selected item", async () => {
