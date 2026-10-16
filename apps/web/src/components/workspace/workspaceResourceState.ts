@@ -31,6 +31,7 @@ export interface WorkspaceResourcesState {
   readonly selectTab: (tab: WorkspaceResourceTab) => void;
   readonly close: () => void;
   readonly reopen: () => void;
+  /** Throws on invalid destinations or malformed/mismatched refs. UI wrappers must validate first. */
   readonly openResource: (input: OpenWorkspaceResourceInput) => void;
 }
 export interface WorkspaceResourceStateOptions {
@@ -167,7 +168,7 @@ export function useWorkspaceResourceState(
       generation: session.generation + 1,
     });
   } else if (session.presentation !== presentation) {
-    setSession({ ...session, presentation });
+    setSession({ ...session, presentation, open: presentation === "dock" && session.wideOpen });
   }
   const currentGeneration = session.generation;
   useEffect(() => {

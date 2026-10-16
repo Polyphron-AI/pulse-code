@@ -35,7 +35,6 @@ export function TelegramWorkspace() {
   );
   const environmentId = capability.environmentId;
   const header = useWorkspaceHeaderModel(environmentId, "Telegram", "Communications");
-  const [resourcesOpen, setResourcesOpen] = useState(false);
   const controls = (
     <div className="flex flex-wrap gap-3 border-b border-border p-2">
       <Link to="/settings/integrations" hash="telegram" className="text-sm underline">
@@ -67,8 +66,6 @@ export function TelegramWorkspace() {
       space="communications"
       layout="full"
       header={header}
-      resourcesOpen={resourcesOpen}
-      onResourcesChange={setResourcesOpen}
       resources={<WorkspaceProjectResources />}
     >
       {controls}
@@ -121,7 +118,6 @@ function TelegramReader({
       },
     });
   };
-  const [resourcesOpen, setResourcesOpen] = useState(false);
   const header = useWorkspaceHeaderModel(
     environmentId,
     chat?.title ?? "Telegram",
@@ -134,8 +130,6 @@ function TelegramReader({
       space="communications"
       layout="full"
       header={header}
-      resourcesOpen={resourcesOpen}
-      onResourcesChange={setResourcesOpen}
       resources={<WorkspaceProjectResources />}
     >
       {controls}
@@ -164,8 +158,6 @@ function TelegramReader({
       environmentId={environmentId}
       layout="split"
       header={header}
-      resourcesOpen={resourcesOpen}
-      onResourcesChange={setResourcesOpen}
       onBack={() =>
         void navigate({
           to: "/workspace",

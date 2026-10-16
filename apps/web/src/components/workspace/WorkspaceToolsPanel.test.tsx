@@ -1,4 +1,7 @@
+// @vitest-environment happy-dom
 import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { getByRole, queryByRole } from "@testing-library/dom";
 import { create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import { EnvironmentId, ProjectId } from "@t3tools/contracts";
@@ -14,9 +17,15 @@ const mocks = vi.hoisted(() => ({
   preview: vi.fn(),
   query: vi.fn(),
   linksQuery: vi.fn(),
+  configQuery: vi.fn(),
+  relatedIds: [] as string[],
 }));
 vi.mock("../../state/entities", () => ({
-  useProjects: () => [{ id: "p", environmentId: "remote", title: "Project" }],
+  useProjects: () => [
+    { id: "p", environmentId: "remote", title: "Project" },
+    { id: "q", environmentId: "remote", title: "Second project" },
+    { id: "other", environmentId: "other", title: "Other environment" },
+  ],
   useThreadShells: () => [
     { id: "t", projectId: "p", environmentId: "remote", title: "Live thread title" },
   ],
@@ -30,7 +39,13 @@ vi.mock("../../state/workspaceLinks", () => ({
   },
 }));
 vi.mock("../../state/workspaceTools", () => ({
-  workspaceTools: { config: () => "config", task: () => "task" },
+  workspaceTools: {
+    config: (input: unknown) => {
+      mocks.configQuery(input);
+      return "config";
+    },
+    task: () => "task",
+  },
 }));
 vi.mock("../../state/query", () => ({
   useEnvironmentQuery: (input: unknown) => {
@@ -42,6 +57,10 @@ vi.mock("../../state/query", () => ({
           : input === "links"
             ? {
                 linked: [
+                  ...mocks.relatedIds.map((projectId) => ({
+                    id: projectId,
+                    item: { ref: { type: "project", projectId } },
+                  })),
                   {
                     id: "f",
                     item: {
@@ -112,6 +131,8 @@ vi.mock("../ui/dialog", () => ({
   DialogPanel: "div",
 }));
 let renderer: ReactTestRenderer | undefined;
+let domRoot: Root | undefined;
+let node: HTMLDivElement | undefined;
 const item = {
   ref: { type: "project" as const, projectId: ProjectId.make("p") },
   title: "Project",
@@ -119,10 +140,41 @@ const item = {
 const environmentId = EnvironmentId.make("remote");
 afterEach(async () => {
   if (renderer) await act(() => renderer?.unmount());
+  if (domRoot) await act(() => domRoot?.unmount());
+  domRoot = undefined;
+  node?.remove();
   renderer = undefined;
   mocks.desktop = false;
+  mocks.relatedIds = [];
   vi.clearAllMocks();
   vi.unstubAllGlobals();
+});
+it.each([
+  { count: 0, ids: [] },
+  { count: 2, ids: ["p", "q"] },
+])("lets legacy Browser callers choose a project with $count related projects", async ({ ids }) => {
+  mocks.relatedIds = ids;
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  node = document.createElement("div");
+  document.body.append(node);
+  domRoot = createRoot(node);
+  await act(() =>
+    domRoot!.render(
+      <WorkspaceToolsPanel
+        environmentId={environmentId}
+        item={{ ref: { type: "url", url: "https://example.test/item" } }}
+        tool="browser"
+        onOpen={() => {}}
+      />,
+    ),
+  );
+  expect(node.textContent).toContain("Choose the project whose browser you want to use.");
+  await act(() => getByRole(node!, "combobox", { name: "Choose project" }).click());
+  expect(queryByRole(document.body, "option", { name: "Other environment" })).toBeNull();
+  await act(() => getByRole(document.body, "option", { name: "Second project" }).click());
+  expect(getByRole(node!, "textbox", { name: "Browser page address" })).toBeDefined();
+  expect(node.textContent).not.toContain("Choose the project whose browser you want to use.");
+  expect(mocks.configQuery).toHaveBeenCalledWith({ environmentId, input: { projectId: "q" } });
 });
 const mount = async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -144,7 +196,7 @@ it("lists confirmed Files and Agents, uses live thread titles, and links the cur
   expect(text).not.toContain("Suggested only");
   await act(() =>
     renderer!.root
-      .findByType("input")
+      .findByProps({ "aria-label": "Browser page address" })
       .props.onChange({ target: { value: "https://example.test/page?utm_source=fixture" } }),
   );
   await act(() =>
@@ -171,7 +223,7 @@ it("opens the incumbent desktop preview through the configured environment-local
   await mount();
   await act(() =>
     renderer!.root
-      .findByType("input")
+      .findByProps({ "aria-label": "Browser page address" })
       .props.onChange({ target: { value: "https://example.test/page" } }),
   );
   await act(() =>
@@ -225,7 +277,7 @@ it("allows browsing without selection and disables linking with a reason", async
   });
   await act(() =>
     renderer!.root
-      .findByType("input")
+      .findByProps({ "aria-label": "Browser page address" })
       .props.onChange({ target: { value: "https://example.test/page" } }),
   );
   const buttons = renderer!.root.findAllByType("button");

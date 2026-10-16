@@ -6,6 +6,7 @@ import { EnvironmentId, ProjectId } from "@t3tools/contracts";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import { WorkspaceResourcesPanel } from "./WorkspaceResourcesPanel";
 import { WorkspaceEngagement } from "./WorkspaceEngagement";
+import { useMediaQuery } from "../../hooks/useMediaQuery";
 import {
   useWorkspaceResourceState,
   useWorkspaceResources,
@@ -19,6 +20,7 @@ const bodies = vi.hoisted(() => ({
   browser: vi.fn(),
   writes: vi.fn(),
   start: vi.fn(),
+  toolsAvailable: true,
 }));
 function Body({
   name,
@@ -59,7 +61,7 @@ vi.mock("./WorkspaceToolsPanel", () => ({
 }));
 vi.mock("./ProjectTasks", () => ({ ProjectTasks: () => <Body name="Tasks" /> }));
 vi.mock("./mail/useMailCapabilities", () => ({
-  useMailCapabilities: () => ({ workspaceTools: true, workspaceLinks: true }),
+  useMailCapabilities: () => ({ workspaceTools: bodies.toolsAvailable, workspaceLinks: true }),
 }));
 vi.mock("./mail/useMailLinks", () => ({ useMailLinks: () => ({ linkItem: bodies.writes }) }));
 vi.mock("../../state/use-atom-command", () => ({ useAtomCommand: () => bodies.start }));
@@ -68,6 +70,7 @@ const p = ProjectId.make("project");
 let root: Root | undefined;
 let node: HTMLDivElement;
 const storage = { getItem: () => null, setItem: () => {} };
+const retainedLinkedPage = <p>Retained linked page</p>;
 afterEach(async () => {
   if (root) await act(() => root!.unmount());
   root = undefined;
@@ -75,6 +78,7 @@ afterEach(async () => {
   vi.clearAllMocks();
   bodies.active = 0;
   bodies.max = 0;
+  bodies.toolsAvailable = true;
   vi.unstubAllGlobals();
 });
 function Opener() {
@@ -96,11 +100,17 @@ function Opener() {
 function App({
   environmentId = a,
   unavailable = false,
+  linked = retainedLinkedPage,
 }: {
   environmentId?: EnvironmentId;
   unavailable?: boolean;
+  linked?: ReactNode;
 }) {
-  const state = useWorkspaceResourceState(environmentId, { storage });
+  const wide = useMediaQuery("xl");
+  const state = useWorkspaceResourceState(environmentId, {
+    storage,
+    presentation: wide ? "dock" : "sheet",
+  });
   return (
     <WorkspaceResourcesProvider value={state}>
       <WorkspaceEngagement
@@ -108,8 +118,6 @@ function App({
         space="projects"
         layout="full"
         header={{ title: "Projects", spaceLabel: "Projects", environmentLabel: environmentId }}
-        resourcesOpen={state.open}
-        onResourcesChange={(open) => (open ? state.reopen() : state.close())}
         resources={
           <WorkspaceResourcesPanel
             environmentId={environmentId}
@@ -130,7 +138,7 @@ function App({
             footer={<p>Connection status unavailable</p>}
           />
         }
-        linked={<p>Retained linked page</p>}
+        linked={linked}
       >
         <Opener />
       </WorkspaceEngagement>
@@ -153,9 +161,7 @@ it("chooses resources before selection, mounts one lazy body, retains linked ite
   await mount();
   expect(bodies.files).not.toHaveBeenCalled();
   expect(bodies.browser).not.toHaveBeenCalled();
-  expect(getByRole(node, "complementary", { name: "Linked items" }).textContent).toContain(
-    "Retained linked page",
-  );
+  expect(queryByRole(node, "complementary", { name: "Linked items" })).toBeNull();
   await act(() => getByRole(node, "combobox", { name: "Choose project" }).click());
   await act(() => getByRole(document.body, "option", { name: "a project" }).click());
   expect(getByRole(node, "tabpanel").textContent).toContain("Files a");
@@ -187,6 +193,33 @@ it("chooses resources before selection, mounts one lazy body, retains linked ite
   expect(bodies.writes).not.toHaveBeenCalled();
   expect(bodies.start).not.toHaveBeenCalled();
 });
+it("shares one dock between live resources and linked items through header controls", async () => {
+  await mount();
+  const engagement = node.querySelector("[data-workspace-engagement]")!;
+  const linked = getByRole(node, "button", { name: "Linked items" });
+  const resources = getByRole(node, "button", { name: "Resources" });
+  expect(getAllByRole(node, "complementary")).toHaveLength(1);
+  expect(linked.closest("[data-workspace-header-controls]")).not.toBeNull();
+  expect(linked.getAttribute("aria-expanded")).toBe("false");
+  await act(() => linked.click());
+  expect(getAllByRole(node, "complementary")).toHaveLength(1);
+  expect(getByRole(node, "complementary", { name: "Linked items" }).textContent).toContain(
+    "Retained linked page",
+  );
+  expect(resources.getAttribute("aria-expanded")).toBe("false");
+  expect(engagement.getAttribute("data-workspace-dock-open")).toBe("true");
+  await act(() => linked.click());
+  await act(() => getByRole(node, "button", { name: "Close resources" }).click());
+  expect(
+    getAllByRole(node, "complementary", { hidden: true }).filter((dock) => !dock.hidden),
+  ).toHaveLength(0);
+  expect(engagement.getAttribute("data-workspace-dock-open")).toBe("false");
+  await act(() => linked.click());
+  expect(engagement.getAttribute("data-workspace-dock-open")).toBe("true");
+  await act(() => resources.click());
+  expect(getAllByRole(node, "complementary")).toHaveLength(1);
+  expect(getByRole(node, "complementary", { name: "Resources" })).toBeDefined();
+});
 it("hands a request through the shared provider without changing the selected item", async () => {
   await mount();
   await act(() => getByRole(node, "button", { name: "Open file" }).click());
@@ -196,6 +229,74 @@ it("hands a request through the shared provider without changing the selected it
   expect(queryByRole(node, "tabpanel")?.textContent).not.toContain("Files a");
   expect(node.textContent).not.toContain("handoff");
 });
+it("moves the tab stop to the selected tab after an external resource handoff", async () => {
+  await mount();
+  const browser = getByRole(node, "tab", { name: "Browser" });
+  await act(() => {
+    browser.focus();
+    browser.click();
+  });
+  await act(() => getByRole(node, "button", { name: "Open file" }).click());
+  expect(getByRole(node, "tab", { name: "Files" }).tabIndex).toBe(0);
+  expect(getByRole(node, "tab", { name: "Browser" }).tabIndex).toBe(-1);
+});
+it("returns dock close focus to the Resources header trigger", async () => {
+  await mount();
+  const close = getByRole(node, "button", { name: "Close resources" });
+  await act(() => {
+    close.focus();
+    close.click();
+  });
+  expect(document.activeElement).toBe(getByRole(node, "button", { name: "Resources" }));
+});
+it("keeps the empty linked-items explanation reachable beside live resources", async () => {
+  await mount(<App linked={null} />);
+  await act(() => getByRole(node, "button", { name: "Linked items" }).click());
+  expect(getByRole(node, "complementary", { name: "Linked items" }).textContent).toContain(
+    "Select an item to see its linked items.",
+  );
+  expect(getAllByRole(node, "complementary")).toHaveLength(1);
+});
+it("keeps sheets closed on resize and restores the saved wide visibility", async () => {
+  await mount();
+  // Prime happy-dom's media listeners with the initial wide match before resizing.
+  await act(() => window.dispatchEvent(new Event("resize")));
+  const resize = async (width: number) => {
+    await act(() => {
+      (
+        window as unknown as {
+          happyDOM: { setWindowSize: (size: { width: number; height: number }) => void };
+        }
+      ).happyDOM.setWindowSize({ width, height: 800 });
+    });
+  };
+  await resize(390);
+  expect(queryByRole(document.body, "dialog")).toBeNull();
+  expect(getByRole(node, "button", { name: "Resources" }).getAttribute("aria-expanded")).toBe(
+    "false",
+  );
+  await resize(1280);
+  expect(getByRole(node, "complementary", { name: "Resources" })).toBeDefined();
+  await act(() => getByRole(node, "button", { name: "Close resources" }).click());
+  await resize(390);
+  await act(() => getByRole(node, "button", { name: "Resources" }).click());
+  expect(getByRole(document.body, "dialog", { name: "Resources" })).toBeDefined();
+  await resize(1280);
+  expect(queryByRole(document.body, "dialog")).toBeNull();
+  expect(queryByRole(node, "complementary", { name: "Resources" })).toBeNull();
+});
+it.each(["Tasks", "Docs", "PRs"])(
+  "styles the %s fallback with existing muted text tokens",
+  async (tab) => {
+    bodies.toolsAvailable = false;
+    await mount();
+    await act(() => getByRole(node, "button", { name: "Open file" }).click());
+    await act(() => getByRole(node, "tab", { name: tab }).click());
+    const paragraph = getByRole(node, "tabpanel").querySelector("p")!;
+    expect(paragraph.classList.contains("text-sm")).toBe(true);
+    expect(paragraph.classList.contains("text-muted-foreground")).toBe(true);
+  },
+);
 it("keeps deleted selections unavailable until explicitly recovered", async () => {
   await mount();
   await act(() => getByRole(node, "button", { name: "Open file" }).click());

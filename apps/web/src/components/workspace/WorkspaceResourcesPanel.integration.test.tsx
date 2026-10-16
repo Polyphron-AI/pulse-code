@@ -1,12 +1,16 @@
 // @vitest-environment happy-dom
-import { act, useSyncExternalStore } from "react";
+import { act, useLayoutEffect, useSyncExternalStore } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { getByRole, queryByRole } from "@testing-library/dom";
+import { getByRole } from "@testing-library/dom";
 import { EnvironmentId, ProjectId, type WorkspaceLinkEndpoint } from "@t3tools/contracts";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import { WorkspaceProjectResources } from "./WorkspaceResourcesPanel";
 import { WorkspaceEngagement } from "./WorkspaceEngagement";
-import { useWorkspaceResourceState, WorkspaceResourcesProvider } from "./workspaceResourceState";
+import {
+  useWorkspaceResourceState,
+  WorkspaceResourcesProvider,
+  type WorkspaceResourcesState,
+} from "./workspaceResourceState";
 
 const boundary = vi.hoisted(() => ({
   revision: 0,
@@ -110,7 +114,14 @@ vi.mock("../../localApi", () => ({
 
 let root: Root | undefined;
 let node: HTMLDivElement;
-const storage = { getItem: () => null, setItem: () => {} };
+let resources: WorkspaceResourcesState;
+const saved = new Map<string, string>();
+const storage = {
+  getItem: (key: string) => saved.get(key) ?? null,
+  setItem: (key: string, value: string) => {
+    saved.set(key, value);
+  },
+};
 function App({
   environmentId = EnvironmentId.make("a"),
   item = null,
@@ -119,6 +130,9 @@ function App({
   item?: WorkspaceLinkEndpoint | null;
 }) {
   const state = useWorkspaceResourceState(environmentId, { storage });
+  useLayoutEffect(() => {
+    resources = state;
+  }, [state]);
   return (
     <WorkspaceResourcesProvider value={state}>
       <WorkspaceEngagement
@@ -126,8 +140,6 @@ function App({
         space="projects"
         layout="full"
         header={{ title: "Projects", spaceLabel: "Projects", environmentLabel: "Environment" }}
-        resourcesOpen={state.open}
-        onResourcesChange={(open) => (open ? state.reopen() : state.close())}
         resources={<WorkspaceProjectResources selectedItem={item} />}
       >
         <p>Center selection</p>
@@ -151,6 +163,7 @@ afterEach(async () => {
   if (root) await act(() => root!.unmount());
   root = undefined;
   node?.remove();
+  saved.clear();
   boundary.ready = true;
   boundary.taskA = null;
   boundary.projects = [
@@ -205,24 +218,40 @@ it("does not write links, start providers or change roots through actual picker 
   expect(boundary.linkQuery).toHaveBeenCalledTimes(linkQueries);
 });
 
-it("ignores suggestions and a late A task response after switching to B with the same project id", async () => {
+it("ignores suggestions and late resource handoffs across A/B/A generations with equal project ids", async () => {
   await mount(<App item={{ ref: { type: "task", taskId: "task-a" }, title: "A task" }} />);
   expect(node.textContent).toContain("Choose a project to see its resources.");
-  await act(() => root!.render(<App environmentId={EnvironmentId.make("b")} />));
+  const openFromA = resources.openResource;
   let resolve!: () => void;
   const result = new Promise<void>((done) => {
     resolve = done;
+  }).then(() => {
+    openFromA({
+      projectId: ProjectId.make("same"),
+      tab: "browser",
+      request: { type: "url", url: "https://example.invalid/late-a" },
+    });
   });
+  await act(() => root!.render(<App environmentId={EnvironmentId.make("b")} />));
+  await act(() => resources.openResource({ projectId: ProjectId.make("same"), tab: "files" }));
+  expect(getByRole(node, "combobox", { name: "Choose project" }).textContent).toContain(
+    "B project",
+  );
+  await act(() => root!.render(<App />));
   await act(async () => {
     resolve();
     await result;
-    boundary.taskA = { projectId: "same" };
-    boundary.revision++;
-    boundary.listeners.forEach((listener) => listener());
   });
-  expect(node.textContent).not.toContain("A project");
+  expect(resources.projectId).toBeNull();
+  expect(resources.selectedTab).toBe("files");
+  expect(resources.request).toBeNull();
   expect(getByRole(node, "tabpanel").textContent).toContain("Choose a project");
-  expect(queryByRole(node, "button", { name: "Project brief" })).toBeNull();
+  await act(() => root!.render(<App environmentId={EnvironmentId.make("b")} />));
+  expect(resources).toMatchObject({ projectId: "same", selectedTab: "files", request: null });
+  expect(getByRole(node, "combobox", { name: "Choose project" }).textContent).toContain(
+    "B project",
+  );
+  expect(node.textContent).not.toContain("A project");
 });
 
 it("renders real disconnected, loading, empty and deleted-project states", async () => {

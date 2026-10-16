@@ -1,4 +1,5 @@
 import { FolderIcon, LinkIcon } from "lucide-react";
+import type { Ref } from "react";
 import { WorkspacePageHeader } from "../WorkspacePageHeader";
 
 export interface WorkspaceHeaderModel {
@@ -14,7 +15,10 @@ export interface WorkspaceHeaderProps {
   readonly resourcesOpen: boolean;
   readonly resourcesLabel?: string;
   readonly onResources: () => void;
+  readonly resourcesTriggerRef?: Ref<HTMLButtonElement>;
   readonly onLinkedContext?: () => void;
+  readonly linkedContextLabel?: string;
+  readonly linkedContextOpen?: boolean;
 }
 
 export function WorkspaceHeader({
@@ -22,7 +26,10 @@ export function WorkspaceHeader({
   resourcesOpen,
   resourcesLabel = "Resources",
   onResources,
+  resourcesTriggerRef,
   onLinkedContext,
+  linkedContextLabel = "Linked context",
+  linkedContextOpen,
 }: WorkspaceHeaderProps) {
   return (
     <WorkspacePageHeader variant="workspace" data-workspace-engagement-header="">
@@ -32,11 +39,17 @@ export function WorkspaceHeader({
       </div>
       <div data-workspace-header-controls="">
         {onLinkedContext ? (
-          <button type="button" aria-label="Linked context" onClick={onLinkedContext}>
+          <button
+            type="button"
+            aria-label={linkedContextLabel}
+            aria-expanded={linkedContextOpen}
+            onClick={onLinkedContext}
+          >
             <LinkIcon />
           </button>
         ) : null}
         <button
+          ref={resourcesTriggerRef}
           data-workspace-resources-trigger={resourcesLabel === "Resources" ? "" : undefined}
           type="button"
           aria-expanded={resourcesOpen}

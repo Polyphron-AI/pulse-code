@@ -30,6 +30,11 @@ export function WorkspaceResourcesPanelView(props: WorkspaceResourcesPanelViewPr
   const id = useId();
   const buttons = useRef<(HTMLButtonElement | null)[]>([]);
   const [focused, setFocused] = useState<WorkspaceResourceTab>(props.tab);
+  const [selected, setSelected] = useState(props.tab);
+  if (selected !== props.tab) {
+    setSelected(props.tab);
+    setFocused(props.tab);
+  }
   return (
     <div data-workspace-resource-frame="" data-resource-status={props.status}>
       <header data-workspace-resource-project="">

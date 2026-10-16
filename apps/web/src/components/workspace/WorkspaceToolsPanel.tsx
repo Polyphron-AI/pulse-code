@@ -1,6 +1,7 @@
 import {
   normalizeLinkUrl,
   type EnvironmentId,
+  type ProjectId,
   type WorkspaceLinkEndpoint,
   type WorkspaceItemRef,
   type WorkspaceLinkList,
@@ -30,6 +31,7 @@ import { useWorkspaceCanOperate, workspaceToolsError } from "./ProjectTasks";
 import { useMailCapabilities } from "./mail/useMailCapabilities";
 import type { WorkspaceResourceScope } from "./workspaceResourceState";
 import type { WorkspaceResourceBodyProps } from "./WorkspaceResourceBody";
+import { ProjectPickerView } from "./ProjectPickerView";
 export function WorkspaceToolsPanel({
   environmentId,
   item,
@@ -47,6 +49,10 @@ export function WorkspaceToolsPanel({
   scope?: WorkspaceResourceScope;
   selectedItem?: WorkspaceLinkEndpoint | null;
 }) {
+  const [choice, setChoice] = useState<{
+    environmentId: EnvironmentId;
+    projectId: ProjectId;
+  } | null>(null);
   const ref = scope ? { type: "project" as const, projectId: scope.projectId } : item.ref;
   const target = selectedItem === undefined ? item : selectedItem;
   const query = useEnvironmentQuery(
@@ -71,11 +77,12 @@ export function WorkspaceToolsPanel({
     if (owner) ids.add(owner.projectId);
   }
   const related = projects.filter((project) => ids.has(project.id));
+  const candidates = related.length === 0 ? projects : related;
   const project = scope
     ? projects.find((project) => project.id === scope.projectId)
-    : related.length === 1
-      ? related[0]
-      : undefined;
+    : (candidates.find(
+        (project) => choice?.environmentId === environmentId && project.id === choice.projectId,
+      ) ?? (related.length === 1 ? related[0] : undefined));
   const files = links.data?.linked.filter((view) => view.item.ref.type === "file") ?? [];
   const agents = links.data?.linked.filter((view) => view.item.ref.type === "thread") ?? [];
   return (
@@ -86,6 +93,15 @@ export function WorkspaceToolsPanel({
           aria-label="Browser tool"
         >
           <h2 className="text-sm font-medium">Browser</h2>
+          {!scope && candidates.length > 0 ? (
+            <ProjectPickerView
+              projects={candidates}
+              selectedProjectId={project?.id ?? null}
+              onChooseProject={(projectId) => {
+                if (projectId !== null) setChoice({ environmentId, projectId });
+              }}
+            />
+          ) : null}
           {project ? (
             <WorkspaceBrowser
               key={project.id}
@@ -97,7 +113,11 @@ export function WorkspaceToolsPanel({
             />
           ) : (
             <p className="text-xs text-muted-foreground">
-              Choose the project whose browser you want to use.
+              {scope
+                ? "This project is unavailable."
+                : candidates.length === 0
+                  ? "No projects available for Browser."
+                  : "Choose the project whose browser you want to use."}
             </p>
           )}
         </section>

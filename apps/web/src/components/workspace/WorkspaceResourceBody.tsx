@@ -37,7 +37,7 @@ const Tasks = lazy(async () => {
           }}
         />
       ) : (
-        <p>Tasks are not available on this server yet.</p>
+        <p className="text-sm text-muted-foreground">Tasks are not available on this server yet.</p>
       );
     },
   };
@@ -60,11 +60,23 @@ export function WorkspaceResourceBody(props: WorkspaceResourceBodySwitchProps): 
       body = <Tasks {...props} />;
       break;
     case "docs":
-      body = <p>Documents are not available on this server yet.</p>;
+      body = (
+        <p className="text-sm text-muted-foreground">
+          Documents are not available on this server yet.
+        </p>
+      );
       break;
     case "prs":
-      body = <p>Project pull requests are not available in this view yet.</p>;
+      body = (
+        <p className="text-sm text-muted-foreground">
+          Project pull requests are not available in this view yet.
+        </p>
+      );
       break;
   }
-  return <Suspense fallback={<p>Loading resources...</p>}>{body}</Suspense>;
+  return (
+    <Suspense fallback={<p className="text-sm text-muted-foreground">Loading resources...</p>}>
+      {body}
+    </Suspense>
+  );
 }

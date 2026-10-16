@@ -1,28 +1,44 @@
 import { act, type ReactNode } from "react";
 import { create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, expect, it, vi } from "vite-plus/test";
-import { EnvironmentId } from "@t3tools/contracts";
+import { EnvironmentId, type MailConversation, type MailMessageListItem } from "@t3tools/contracts";
 import { MailSpace } from "./MailSpace";
 import { ProjectsSpace } from "../ProjectsSpace";
 import { LinkedSection } from "./LinkedSection";
 import { WorkspaceHeader, type WorkspaceHeaderModel } from "../WorkspaceHeader";
+import { WorkspaceProjectResources } from "../WorkspaceResourcesPanel";
+import { MailMessageView } from "./MailMessageView";
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   environment: "remote-env" as string | null,
   search: {} as Record<string, string>,
+  view: "messages",
 }));
+const message = (uid: number): MailMessageListItem => ({
+  ref: { accountId: "account", mailbox: "INBOX", uidValidity: 1, uid },
+  subject: `Message ${uid}`,
+  seen: true,
+  flagged: false,
+  answered: false,
+});
+const conversation: MailConversation = {
+  id: "conversation",
+  messages: [message(1), message(2)],
+  newest: message(2),
+};
 const task = { type: "task" as const, taskId: "wskt_00000000-0000-0000-0000-000000000001" };
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => mocks.navigate,
   useSearch: () => mocks.search,
   Link: "a",
 }));
-vi.mock("../../../hooks/useLocalStorage", () => ({ useLocalStorage: () => ["messages", vi.fn()] }));
+vi.mock("../../../hooks/useLocalStorage", () => ({ useLocalStorage: () => [mocks.view, vi.fn()] }));
 vi.mock("./useMailCapabilities", () => ({
   useMailCapabilities: () => ({
     environmentId: mocks.environment === null ? null : EnvironmentId.make(mocks.environment),
     ready: true,
     mailRead: true,
+    mailConversations: true,
     workspaceLinks: true,
     workspaceTools: true,
   }),
@@ -43,7 +59,11 @@ vi.mock("../../../hooks/useNewProject", () => ({ useNewProject: () => vi.fn() })
 vi.mock("../../../mail/mailState", () => ({ pulseMailAccounts: () => "accounts" }));
 vi.mock("../../../mail/mailReadState", () => ({ pulseMailMessage: () => "message" }));
 vi.mock("../../../state/workspaceLinks", () => ({
-  workspaceLinks: { list: () => "links", projectHub: () => null },
+  workspaceLinks: {
+    list: () => "links",
+    listMany: () => "conversation-links",
+    projectHub: () => null,
+  },
 }));
 vi.mock("../../../state/workspaceTools", () => ({ workspaceTools: { task: () => "task" } }));
 vi.mock("../../../state/query", () => ({
@@ -115,15 +135,41 @@ vi.mock("../../ui/popover", () => ({
 }));
 vi.mock("./MailMessageView", () => ({ MailMessageView: () => null }));
 vi.mock("./MailMessageList", () => ({ MailMessageList: () => null }));
-vi.mock("./MailConversationList", () => ({ MailConversationList: () => null }));
+vi.mock("./MailConversationList", () => ({
+  MailConversationList: ({ onSelect }: { onSelect: (next: MailConversation) => void }) => (
+    <button onClick={() => onSelect(conversation)}>Select conversation</button>
+  ),
+}));
 vi.mock("./ProjectMailList", () => ({ ProjectMailList: () => null }));
 let renderer: ReactTestRenderer | undefined;
 afterEach(async () => {
   if (renderer) await act(() => renderer?.unmount());
   renderer = undefined;
   mocks.environment = "remote-env";
+  mocks.view = "messages";
   vi.clearAllMocks();
   vi.unstubAllGlobals();
+});
+it("infers resources from the newest conversation message that the reader expands", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  mocks.view = "conversations";
+  mocks.search = { environment: "remote-env", account: "account" };
+  await act(() => {
+    renderer = create(<MailSpace />);
+  });
+  await act(() =>
+    renderer!.root
+      .findAllByType("button")
+      .find((button) => button.props.children === "Select conversation")!
+      .props.onClick(),
+  );
+  expect(renderer!.root.findByType(WorkspaceProjectResources).props.selectedItem).toMatchObject({
+    ref: { type: "mail", location: { uid: 2 } },
+    title: "Message 2",
+  });
+  const readers = renderer!.root.findAllByType(MailMessageView);
+  expect(readers).toHaveLength(1);
+  expect(readers[0]!.props.item.location.uid).toBe(2);
 });
 it("opens a Mail Linked task through its environment-scoped Projects route and shows deleted-task unavailability", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);

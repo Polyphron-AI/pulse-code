@@ -1155,6 +1155,7 @@ export interface WorkspaceResourcesState {
   readonly selectTab: (tab: WorkspaceResourceTab) => void;
   readonly close: () => void;
   readonly reopen: () => void;
+  /** Throws on invalid destinations or malformed/mismatched refs. UI wrappers must validate first. */
   readonly openResource: (input: OpenWorkspaceResourceInput) => void;
 }
 export interface WorkspaceResourceStateOptions {
@@ -1237,7 +1238,7 @@ export function WorkspaceResourcesPanel(props: WorkspaceResourcesPanelProps): Re
 
 Use type imports from React/contracts and type-only sibling imports. `workspaceResourceState.ts` uses createElement for its provider, so it stays a .ts file. It imports no live queries or route tree. AppSidebarLayout's workspace branch owns exactly ONE useWorkspaceResourceState per environment and wraps navigation, engagement and all active spaces in WorkspaceResourcesProvider. Nested consumers call useWorkspaceResources, which throws a clear missing-provider error rather than creating another hook instance. The fixture root supplies the same provider with session.storage and fixture project data. Environment switches replace the provider's state and cancel stale requests.
 
-The provider owner passes presentation dock/sheet from the same >=1280 viewport breakpoint used by the resource host, including in the fixture. Omission defaults to dock in isolated hook tests. `state.open` is the effective visibility in that presentation. The hook keeps the saved wide-open preference and transient sheet visibility separate internally: initial sheet entry is closed, compact close/reopen changes only transient visibility, and wide close/reopen persists the wide preference. On dock/sheet transitions transfer the currently visible body in one state transition without a false-open gap. This does not change the split/full center layout discriminant.
+The provider owner passes presentation dock/sheet from the same >=1280 viewport breakpoint used by the resource host, including in the fixture. Omission defaults to dock in isolated hook tests. `state.open` is the effective visibility in that presentation. The hook keeps the saved wide-open preference and transient sheet visibility separate internally: initial sheet entry is closed, compact close/reopen changes only transient visibility, and wide close/reopen persists the wide preference. Entering dock presentation restores the saved wide preference; entering sheet presentation closes it until explicitly requested. This does not change the split/full center layout discriminant.
 
 `openResource({ tab, projectId, request })` atomically selects the explicit project/tab, stores request or null, and makes the dock or compact sheet visible. Its environment is captured by the provider, never inferred from a requested item's origin. Request is transient navigation intent, separate from selectedItem, confirmed links and access grants. Do not persist request. Clear it on another tab/project, environment change or a new handoff with no request; ordinary close/reopen preserves it within that session. Reject malformed refs and an item obviously inconsistent with the requested tab; providers still validate reachability. When projects are loaded, unknown/deleted explicit choices show unavailable rather than silently choosing another. Async work captures both environment/project and generation so late A results cannot replace B.
 
@@ -1829,6 +1830,8 @@ No finding is disputed. Runtime/build/render checks above are future task requir
 ## Canonical seams for Waves 5-11
 
 All paths below are under `apps/web/src/` unless prefixed otherwise. These are planned exports, not claims they already exist at this HEAD.
+
+`useWorkspaceResources().openResource` throws on invalid project/tab input, malformed request refs and refs inconsistent with the requested tab. UI wrappers and click handlers must validate first, including W6-T8, W7's `openFiles` and W9 consumers. The throw is a programmer error, not user-facing validation feedback; providers still check reachability.
 
 | Path                                                                                                              | Exported names and types later waves use                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

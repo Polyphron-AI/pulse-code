@@ -72,14 +72,13 @@ export function MailSpace() {
           (candidate) =>
             candidate.environmentId === environmentId && candidate.id === search.project,
         );
-  const [resourcesOpen, setResourcesOpen] = useState(false);
   const header = useWorkspaceHeaderModel(
     environmentId,
     search.project !== undefined ? (project?.title ?? "Project mail") : mailFolderLabel(folder),
     "Email",
     account?.address,
   );
-  const shell = { header, resourcesOpen, onResourcesChange: setResourcesOpen };
+  const shell = { header };
 
   const content = (): ReactNode => {
     if (environmentId === null) return <MailNotice>No environment is connected.</MailNotice>;
@@ -166,8 +165,6 @@ interface MailPanesProps {
   readonly environmentId: EnvironmentId;
   readonly source: MailSource;
   readonly header: WorkspaceHeaderModel;
-  readonly resourcesOpen: boolean;
-  readonly onResourcesChange: (open: boolean) => void;
   readonly initialItem?: MailItemRef | null;
 }
 
@@ -235,15 +232,13 @@ function MailPanes(props: MailPanesProps) {
       environmentId={props.environmentId}
       layout="split"
       header={props.header}
-      resourcesOpen={props.resourcesOpen}
-      onResourcesChange={props.onResourcesChange}
       resources={
         <WorkspaceProjectResources
           selectedItem={
-            conversation?.messages[0]
+            conversation?.newest
               ? {
-                  ref: mailItemRef(conversation.messages[0]),
-                  title: mailItemTitle(conversation.messages[0].subject),
+                  ref: mailItemRef(conversation.newest),
+                  title: mailItemTitle(conversation.newest.subject),
                 }
               : selected === null
                 ? null
@@ -359,11 +354,14 @@ function MailPanes(props: MailPanesProps) {
         <MailNotice>Select a message to read it.</MailNotice>
       ) : conversation !== null ? (
         <div>
-          {conversation.messages.map((message, index) => (
+          {conversation.messages.map((message) => (
             <ConversationMessage
               key={workspaceItemKey(mailItemRef(message))}
               message={message}
-              newest={index === 0}
+              newest={
+                workspaceItemKey(mailItemRef(message)) ===
+                workspaceItemKey(mailItemRef(conversation.newest))
+              }
               environmentId={props.environmentId}
               onBack={() => {
                 setSelected(null);

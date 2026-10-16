@@ -71,7 +71,6 @@ export function ProjectsSpace() {
   const [busy, setBusy] = useState(false);
   const create = useNewProject();
   const open = useWorkspaceItemOpener(environmentId);
-  const [resourcesOpen, setResourcesOpen] = useState(false);
   const header = useWorkspaceHeaderModel(environmentId, "Projects", "Projects", selected?.title);
   const projectList = (
     <div className="flex flex-col gap-3 p-3">
@@ -140,8 +139,6 @@ export function ProjectsSpace() {
       space="projects"
       layout="full"
       header={header}
-      resourcesOpen={resourcesOpen}
-      onResourcesChange={setResourcesOpen}
       resources={
         <WorkspaceProjectResources
           {...(selected ? { owningProjectId: selected.id } : {})}

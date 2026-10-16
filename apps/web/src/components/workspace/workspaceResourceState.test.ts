@@ -149,16 +149,22 @@ it("isolates equal project ids, cancels old callbacks and clears requests on env
   expect(state).toMatchObject({ projectId: p, selectedTab: "browser", request: null });
 });
 
-it("keeps sheet visibility transient while transferring visibility on presentation changes", async () => {
-  await mount(a, "sheet");
+it("restores the wide preference and never opens a sheet just because presentation changes", async () => {
+  await mount();
+  expect(state.open).toBe(true);
+  await act(() => renderer!.update(createElement(App, { presentation: "sheet" })));
   expect(state.open).toBe(false);
   await act(() => state.reopen());
+  expect(state.open).toBe(true);
+  await act(() => state.close());
   await act(() => renderer!.update(createElement(App, { presentation: "dock" })));
   expect(state.open).toBe(true);
   await act(() => state.close());
   await act(() => renderer!.update(createElement(App, { presentation: "sheet" })));
   expect(state.open).toBe(false);
   await act(() => state.reopen());
+  await act(() => renderer!.update(createElement(App, { presentation: "dock" })));
+  expect(state.open).toBe(false);
   await act(() => renderer!.unmount());
   renderer = undefined;
   await mount();
