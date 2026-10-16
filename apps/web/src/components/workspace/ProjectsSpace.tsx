@@ -114,7 +114,21 @@ export function ProjectsSpace() {
                 Create project
               </Button>
             </form>
-            {projects.length === 0 ? (
+            {selected ? (
+              <div className="space-y-2 text-sm">
+                <p className="truncate font-medium">{selected.title}</p>
+                <Link
+                  to="/workspace"
+                  search={{
+                    space: "projects",
+                    ...(environmentId === null ? {} : { environment: environmentId }),
+                  }}
+                  className="block text-muted-foreground hover:underline"
+                >
+                  All projects
+                </Link>
+              </div>
+            ) : projects.length === 0 ? (
               <p className="text-sm text-muted-foreground">No projects yet.</p>
             ) : (
               projects.map((project) => (
@@ -127,7 +141,6 @@ export function ProjectsSpace() {
                     ...(environmentId === null ? {} : { environment: environmentId }),
                   }}
                   className="truncate rounded-md p-2 text-sm hover:bg-accent"
-                  aria-current={selected?.id === project.id ? "page" : undefined}
                 >
                   {project.title}
                 </Link>

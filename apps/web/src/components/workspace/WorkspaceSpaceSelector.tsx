@@ -47,7 +47,7 @@ export function WorkspaceSpaceSelector({ rail = false }: { readonly rail?: boole
     if (inCode && location.pathname !== "/") lastCodeHref = location.href;
     if (isMobile) setOpenMobile(false);
   };
-  const spaces = [
+  const workspaceSpaces = [
     {
       id: "mail",
       label: "Mail",
@@ -90,6 +90,22 @@ export function WorkspaceSpaceSelector({ rail = false }: { readonly rail?: boole
       },
     },
   ];
+  const spaces = inCode
+    ? [
+        {
+          id: "workspace",
+          label: "Workspace",
+          Icon: BriefcaseBusinessIcon,
+          active: false,
+          disabled: false,
+          run: () => {
+            leave();
+            void navigate({ to: "/workspace", search: { space: "projects" } });
+          },
+        },
+        workspaceSpaces[2]!,
+      ]
+    : workspaceSpaces;
   if (rail)
     return (
       <nav

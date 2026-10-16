@@ -1,12 +1,11 @@
 import { EnvironmentId } from "@t3tools/contracts";
 import { Link, useSearch } from "@tanstack/react-router";
-import { FolderIcon, FolderKanbanIcon, InboxIcon, MailIcon, SettingsIcon } from "lucide-react";
+import { FolderIcon, InboxIcon, MailIcon, SettingsIcon } from "lucide-react";
 
 import { isElectron } from "../../../env";
 import { cn } from "../../../lib/utils";
 import { pulseMailFolders } from "../../../mail/mailReadState";
 import { pulseMailAccounts } from "../../../mail/mailState";
-import { useProjects } from "../../../state/entities";
 import { useEnvironmentQuery } from "../../../state/query";
 import { SidebarChromeHeader } from "../../sidebar/SidebarChrome";
 import { SidebarContent, SidebarGroup, useSidebar } from "../../ui/sidebar";
@@ -25,12 +24,9 @@ const rowClass = (active: boolean) =>
 /** The Mail space's sidebar: accounts when there are several, then the account's folders. */
 export function MailNav() {
   const search = useSearch({ strict: false });
-  const {
-    environmentId,
-    mailRead,
-    workspaceLinks: linksAvailable,
-  } = useMailCapabilities(search.environment ? EnvironmentId.make(search.environment) : undefined);
-  const projects = useProjects().filter((project) => project.environmentId === environmentId);
+  const { environmentId, mailRead } = useMailCapabilities(
+    search.environment ? EnvironmentId.make(search.environment) : undefined,
+  );
   const { isMobile, setOpenMobile } = useSidebar();
   const closeMobileSidebar = () => {
     if (isMobile) setOpenMobile(false);
@@ -115,33 +111,6 @@ export function MailNav() {
                         <FolderIcon className="size-4" />
                       )}
                       <span className="truncate">{mailFolderLabel(candidate.name)}</span>
-                    </Link>
-                  );
-                })}
-              </>
-            ) : null}
-            {linksAvailable && projects.length > 0 ? (
-              <>
-                <span className="px-2 pt-4 pb-1 text-xs text-sidebar-muted-foreground">
-                  Projects
-                </span>
-                {projects.map((project) => {
-                  const active = search.project === project.id;
-                  return (
-                    <Link
-                      key={project.id}
-                      onClick={closeMobileSidebar}
-                      to="/workspace"
-                      search={{
-                        space: "mail",
-                        ...(environmentId === null ? {} : { environment: environmentId }),
-                        project: project.id,
-                      }}
-                      aria-current={active ? "page" : undefined}
-                      className={rowClass(active)}
-                    >
-                      <FolderKanbanIcon className="size-4" />
-                      <span className="truncate">{project.title}</span>
                     </Link>
                   );
                 })}

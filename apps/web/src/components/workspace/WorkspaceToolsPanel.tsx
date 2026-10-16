@@ -32,11 +32,13 @@ export function WorkspaceToolsPanel({
   item,
   onOpen,
   linkedData,
+  tool,
 }: {
   environmentId: EnvironmentId;
   item: WorkspaceLinkEndpoint;
   onOpen: (ref: WorkspaceItemRef) => void;
   linkedData?: WorkspaceLinkList;
+  tool?: "browser" | "files" | "agents";
 }) {
   const ref = item.ref;
   const query = useEnvironmentQuery(
@@ -71,83 +73,92 @@ export function WorkspaceToolsPanel({
   const agents = links.data?.linked.filter((view) => view.item.ref.type === "thread") ?? [];
   return (
     <div className="flex flex-col gap-3">
-      <section className="space-y-2 rounded-lg border border-border p-3" aria-label="Browser tool">
-        <h2 className="text-sm font-medium">Browser</h2>
-        {related.length !== 1 || chosen ? (
-          <select
-            aria-label="Browser project"
-            className="w-full rounded-md border border-input bg-background p-2 text-sm"
-            value={project?.id ?? ""}
-            onChange={(event) => setChosen(event.target.value)}
-          >
-            <option value="">Choose a project</option>
-            {projects.map((project) => (
-              <option key={project.id} value={project.id}>
-                {project.title}
-              </option>
-            ))}
-          </select>
-        ) : null}
-        {project ? (
-          <WorkspaceBrowser
-            key={project.id}
-            environmentId={environmentId}
-            projectId={project.id}
-            item={item}
-          />
-        ) : (
-          <p className="text-xs text-muted-foreground">
-            Choose the project whose browser you want to use.
-          </p>
-        )}
-      </section>
-      <section className="space-y-2 rounded-lg border border-border p-3" aria-label="Files tool">
-        <h2 className="text-sm font-medium">Files</h2>
-        {files.length === 0 ? (
-          <p className="text-xs text-muted-foreground">No Drive files linked to this item.</p>
-        ) : (
-          <ul className="space-y-2">
-            {files.map((view) => (
-              <li key={view.id} className="text-sm">
-                <button
-                  className="max-w-full truncate text-left hover:underline"
-                  type="button"
-                  onClick={() => onOpen(view.item.ref)}
-                >
-                  {workspaceEndpointTitle(view.item)}
-                </button>
-                {view.item.ref.type === "file" ? (
-                  <DriveFileAccess environmentId={environmentId} fileId={view.item.ref.fileId} />
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-      <section className="space-y-2 rounded-lg border border-border p-3" aria-label="Agents tool">
-        <h2 className="text-sm font-medium">Agents</h2>
-        {agents.length === 0 ? (
-          <p className="text-xs text-muted-foreground">No threads linked to this item.</p>
-        ) : (
-          <ul className="space-y-1">
-            {agents.map((view) => (
-              <li key={view.id}>
-                <button
-                  className="max-w-full truncate text-left text-sm hover:underline"
-                  type="button"
-                  onClick={() => onOpen(view.item.ref)}
-                >
-                  {view.item.ref.type === "thread"
-                    ? (threadTitles.get(view.item.ref.threadId) ??
-                      workspaceEndpointTitle(view.item))
-                    : workspaceEndpointTitle(view.item)}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-        <WorkspaceItemActions environmentId={environmentId} item={item} onlyStartThread />
-      </section>
+      {!tool || tool === "browser" ? (
+        <section
+          className="space-y-2 rounded-lg border border-border p-3"
+          aria-label="Browser tool"
+        >
+          <h2 className="text-sm font-medium">Browser</h2>
+          {related.length !== 1 || chosen ? (
+            <select
+              aria-label="Browser project"
+              className="w-full rounded-md border border-input bg-background p-2 text-sm"
+              value={project?.id ?? ""}
+              onChange={(event) => setChosen(event.target.value)}
+            >
+              <option value="">Choose a project</option>
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.title}
+                </option>
+              ))}
+            </select>
+          ) : null}
+          {project ? (
+            <WorkspaceBrowser
+              key={project.id}
+              environmentId={environmentId}
+              projectId={project.id}
+              item={item}
+            />
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Choose the project whose browser you want to use.
+            </p>
+          )}
+        </section>
+      ) : null}
+      {!tool || tool === "files" ? (
+        <section className="space-y-2 rounded-lg border border-border p-3" aria-label="Files tool">
+          <h2 className="text-sm font-medium">Files</h2>
+          {files.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No Drive files linked to this item.</p>
+          ) : (
+            <ul className="space-y-2">
+              {files.map((view) => (
+                <li key={view.id} className="text-sm">
+                  <button
+                    className="max-w-full truncate text-left hover:underline"
+                    type="button"
+                    onClick={() => onOpen(view.item.ref)}
+                  >
+                    {workspaceEndpointTitle(view.item)}
+                  </button>
+                  {view.item.ref.type === "file" ? (
+                    <DriveFileAccess environmentId={environmentId} fileId={view.item.ref.fileId} />
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      ) : null}
+      {!tool || tool === "agents" ? (
+        <section className="space-y-2 rounded-lg border border-border p-3" aria-label="Agents tool">
+          <h2 className="text-sm font-medium">Agents</h2>
+          {agents.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No threads linked to this item.</p>
+          ) : (
+            <ul className="space-y-1">
+              {agents.map((view) => (
+                <li key={view.id}>
+                  <button
+                    className="max-w-full truncate text-left text-sm hover:underline"
+                    type="button"
+                    onClick={() => onOpen(view.item.ref)}
+                  >
+                    {view.item.ref.type === "thread"
+                      ? (threadTitles.get(view.item.ref.threadId) ??
+                        workspaceEndpointTitle(view.item))
+                      : workspaceEndpointTitle(view.item)}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <WorkspaceItemActions environmentId={environmentId} item={item} onlyStartThread />
+        </section>
+      ) : null}
       {links.error ? (
         <p role="alert" className="text-xs text-destructive">
           {links.error}

@@ -4,6 +4,7 @@ import { afterEach, expect, it, vi } from "vite-plus/test";
 import { EnvironmentId } from "@t3tools/contracts";
 import { MailSpace } from "./MailSpace";
 import { ProjectsSpace } from "../ProjectsSpace";
+import { LinkedSection } from "./LinkedSection";
 const mocks = vi.hoisted(() => ({ navigate: vi.fn(), search: {} as Record<string, string> }));
 const task = { type: "task" as const, taskId: "wskt_00000000-0000-0000-0000-000000000001" };
 vi.mock("@tanstack/react-router", () => ({
@@ -117,4 +118,34 @@ it("opens a Mail Linked task through its environment-scoped Projects route and s
     renderer!.update(<ProjectsSpace />);
   });
   expect(JSON.stringify(renderer!.toJSON())).toContain("This task is unavailable.");
+});
+
+it("keeps Projects context linking scoped to project items", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  await act(() => {
+    renderer = create(
+      <LinkedSection
+        environmentId={EnvironmentId.make("remote-env")}
+        item={{ type: "mail", accountId: "account", messageId: "<fixture@test>" }}
+        title="Mail"
+        onOpen={() => {}}
+      />,
+    );
+  });
+  await act(() =>
+    renderer!.root
+      .findAllByType("button")
+      .find((node) => node.props.children === "Projects")!
+      .props.onClick(),
+  );
+  expect(renderer!.root.findAllByProps({ "aria-label": "Paste a link" })).toHaveLength(0);
+  await act(() =>
+    renderer!.root
+      .findAllByType("button")
+      .find((node) => node.children.includes("Link to"))!
+      .props.onClick(),
+  );
+  expect(
+    renderer!.root.findByProps({ "aria-label": "Find an item to link" }).props.placeholder,
+  ).toBe("Find a project");
 });

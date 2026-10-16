@@ -1,12 +1,12 @@
 # Mail, Projects and Code
 
-Use the workspace rail to switch between Mail, Projects and Code. Code restores your previous Code location for this app session. The command palette also has Open Mail and Open Projects. On desktop, Slack and Discord remain under Communications in the Projects navigation. Office meetings, calendar and local Pulse Talk remain available through Open Office.
+Use the workspace rail to switch between Mail, Projects and Code. Inside Code, the space controls offer Workspace and Code while keeping your project and thread navigation. Code restores your previous Code location for this app session. The command palette also has Open Mail and Open Projects. On desktop, choose Slack and Discord in the Projects navigation to open Communications. Office meetings, calendar and local Pulse Talk remain available through Open Office.
 
-Mail and Projects have a navigation column, a list and detail area, and a Linked panel. Drag the divider to resize the list. You can also focus the divider and use the arrow keys, Home or End. Each space remembers its width on this device. On a phone, the list opens the detail and Linked opens as a sheet. Use Messages or All projects to go back.
+Mail and Projects have a navigation column, a list and detail area, and a context panel. Drag the divider to resize the list. You can also focus the divider and use the arrow keys, Home or End. Each space remembers its width on this device. On a phone, the list opens the detail and Context opens as a sheet. Use Messages or All projects to go back.
 
 ## Mail
 
-Mail reads the accounts added in Settings, Email accounts. It works in desktop and remote browsers when the connected server supports Mail. Choose a folder, search within it, and use Refresh to load the newest messages. Bodies load on demand as plain text. Attachments show their names and sizes.
+Mail reads the accounts added in Settings, Email accounts. It works in desktop and remote browsers when the connected server supports Mail. Its navigation contains your accounts and folders. Choose a folder, search within it, and use Refresh to load the newest messages. Bodies load on demand as plain text. Attachments show their names and sizes.
 
 The Conversations view groups messages by their provider thread or reply headers. Messages with the same subject can still be separate conversations. Switch to Messages to see individual rows. Your device remembers the choice. When a folder is too large to scan completely, the list says that counts and conversations may be incomplete.
 
@@ -52,11 +52,11 @@ Chats and messages can link to projects and threads. An agent can read confirmed
 
 ## Projects
 
-A project hub lists its threads, direct links and related items one hop away. Related rows say which item they came through. These rows are for discovery and give no additional agent access. Link an item directly when you want it to become project context. Large hubs show a bounded selection and say when more items exist.
+Use the searchable project dropdown to choose a project or return to All projects. A project hub lists its threads, direct links and related items one hop away. Related rows say which item they came through. These rows are for discovery and give no additional agent access. Link an item directly when you want it to become project context. Large hubs show a bounded selection and say when more items exist.
 
 Code thread details also show confirmed workspace links and the thread's existing pull request links. Pull requests keep their original open and unlink behavior.
 
-Below Linked and Suggested, Browser opens a page, Files lists the item's confirmed Drive files, and Agents opens linked threads or starts one with the selected item as context.
+The context panel's Links view contains Linked and Suggested. Projects shows confirmed project links. Browser opens a page, Files lists the item's confirmed Drive files, and Agents opens linked threads or starts one with the selected item as context. Before you select an item, the panel explains how to open its context.
 
 ## Automations, browser and tasks
 

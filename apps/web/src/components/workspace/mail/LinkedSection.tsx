@@ -48,6 +48,7 @@ interface LinkedSectionProps {
 
 /** Confirmed links and optional suggestions for the selected item. */
 export function LinkedSection(props: LinkedSectionProps) {
+  const [tab, setTab] = useState("links");
   const {
     workspaceLinks: available,
     workspaceSuggestions,
@@ -56,8 +57,25 @@ export function LinkedSection(props: LinkedSectionProps) {
   } = useMailCapabilities(props.environmentId);
   return available ? (
     <>
-      <LinkedList {...props} />
-      {workspaceSuggestions ? (
+      <div role="group" aria-label="Context views" className="mb-3 flex flex-wrap gap-1">
+        {["links", "projects", ...(workspaceTools ? ["browser", "files", "agents"] : [])].map(
+          (name) => (
+            <Button
+              key={name}
+              size="xs"
+              variant={tab === name ? "secondary" : "ghost"}
+              aria-pressed={tab === name}
+              onClick={() => setTab(name)}
+            >
+              {name[0]!.toUpperCase() + name.slice(1)}
+            </Button>
+          ),
+        )}
+      </div>
+      {tab === "links" || tab === "projects" ? (
+        <LinkedList {...props} projectsOnly={tab === "projects"} />
+      ) : null}
+      {tab === "links" && workspaceSuggestions ? (
         <SuggestedSection
           key={`${props.environmentId}:${workspaceItemKey(props.item)}:${JSON.stringify(textGenerationSelection)}`}
           environmentId={props.environmentId}
@@ -66,20 +84,23 @@ export function LinkedSection(props: LinkedSectionProps) {
           onOpen={props.onOpen}
         />
       ) : null}
-      {workspaceTools ? (
+      {workspaceTools && (tab === "browser" || tab === "files" || tab === "agents") ? (
         <WorkspaceToolsPanel
           key={workspaceItemKey(props.item)}
           environmentId={props.environmentId}
+          tool={tab}
           item={{ ref: props.item, title: props.title }}
           {...(props.linkedData ? { linkedData: props.linkedData } : {})}
           onOpen={props.onOpen}
         />
       ) : null}
     </>
-  ) : null;
+  ) : (
+    <p className="text-sm text-muted-foreground">Workspace links need a newer server.</p>
+  );
 }
 
-function LinkedList(props: LinkedSectionProps) {
+function LinkedList(props: LinkedSectionProps & { projectsOnly?: boolean }) {
   const headingId = useId();
   const query = useEnvironmentQuery(
     props.linkedData === undefined
@@ -120,8 +141,11 @@ function LinkedList(props: LinkedSectionProps) {
       setBusy(false);
     }
   };
-  const linked = (list.data?.linked ?? []).filter(
-    (view) => view.item.ref.type !== "url" || !props.nativeLinkedUrls?.has(view.item.ref.url),
+  const confirmed = list.data?.linked ?? [];
+  const linked = confirmed.filter(
+    (view) =>
+      (!props.projectsOnly || view.item.ref.type === "project" || view.item.ref.type === "task") &&
+      (view.item.ref.type !== "url" || !props.nativeLinkedUrls?.has(view.item.ref.url)),
   );
   const itemKey = workspaceItemKey(props.item);
   const candidates = [
@@ -137,7 +161,8 @@ function LinkedList(props: LinkedSectionProps) {
     .filter(
       (endpoint) =>
         workspaceItemKey(endpoint.ref) !== itemKey &&
-        !linked.some(
+        (!props.projectsOnly || endpoint.ref.type === "project") &&
+        !confirmed.some(
           (view) => workspaceItemKey(view.item.ref) === workspaceItemKey(endpoint.ref),
         ) &&
         endpoint.title.toLocaleLowerCase().includes(filter.toLocaleLowerCase()),
@@ -163,6 +188,10 @@ function LinkedList(props: LinkedSectionProps) {
         );
         if (source === undefined) {
           setError("Drop an item from this environment.");
+          return;
+        }
+        if (props.projectsOnly && source.ref.type !== "project" && source.ref.type !== "task") {
+          setError("Drop a project or task in this view.");
           return;
         }
         void linkEndpoint(source);
@@ -204,7 +233,7 @@ function LinkedList(props: LinkedSectionProps) {
           <Input
             autoFocus
             aria-label="Find an item to link"
-            placeholder="Find a project or thread"
+            placeholder={props.projectsOnly ? "Find a project" : "Find a project or thread"}
             value={filter}
             onChange={(event) => setFilter(event.target.value)}
           />
@@ -223,43 +252,54 @@ function LinkedList(props: LinkedSectionProps) {
               </li>
             ))}
           </ul>
-          <DriveSearch
-            environmentId={props.environmentId}
-            onLink={async (endpoint) => {
-              await linkItem({ ref: props.item, title: endpointTitle(props.title) }, endpoint);
-              setPicking(false);
-            }}
-          />
+          {!props.projectsOnly ? (
+            <DriveSearch
+              environmentId={props.environmentId}
+              onLink={async (endpoint) => {
+                await linkItem({ ref: props.item, title: endpointTitle(props.title) }, endpoint);
+                setPicking(false);
+              }}
+            />
+          ) : null}
           {candidates.length === 0 ? (
-            <p className="text-xs text-muted-foreground">No matching projects or threads.</p>
+            <p className="text-xs text-muted-foreground">
+              {props.projectsOnly ? "No matching projects." : "No matching projects or threads."}
+            </p>
           ) : null}
         </div>
       ) : null}
-      <form
-        className="flex gap-2"
-        onSubmit={(event) => {
-          event.preventDefault();
-          const ref = workspaceItemFromUrl(address);
-          if (ref === undefined) {
-            setError("Enter an http or https link.");
-            return;
-          }
-          void run(async () => {
-            await linkItem({ ref: props.item, title: endpointTitle(props.title) }, { ref });
-            setAddress("");
-          });
-        }}
-      >
-        <Input
-          aria-label="Paste a link"
-          placeholder="Paste a link"
-          value={address}
-          onChange={(event) => setAddress(event.target.value)}
-        />
-        <Button size="sm" variant="outline" disabled={busy || address.trim() === ""} type="submit">
-          Link
-        </Button>
-      </form>
+      {!props.projectsOnly ? (
+        <form
+          className="flex gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const ref = workspaceItemFromUrl(address);
+            if (ref === undefined) {
+              setError("Enter an http or https link.");
+              return;
+            }
+            void run(async () => {
+              await linkItem({ ref: props.item, title: endpointTitle(props.title) }, { ref });
+              setAddress("");
+            });
+          }}
+        >
+          <Input
+            aria-label="Paste a link"
+            placeholder="Paste a link"
+            value={address}
+            onChange={(event) => setAddress(event.target.value)}
+          />
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={busy || address.trim() === ""}
+            type="submit"
+          >
+            Link
+          </Button>
+        </form>
+      ) : null}
       {error !== null ? <MailError className="text-xs" message={error} /> : null}
       {list.data !== null && list.error !== null ? (
         <MailError className="text-xs" message={list.error} onRetry={list.refresh} />
