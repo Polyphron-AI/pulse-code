@@ -12,6 +12,7 @@ import { WorkspaceViewRail, workspaceRailItems } from "../WorkspaceViewRail";
 import { WorkspaceShellLayout } from "../WorkspaceShellLayout";
 import { WorkspaceEngagement } from "../WorkspaceEngagement";
 import { WorkspaceResourcesPanelView } from "../WorkspaceResourcesPanelView";
+import { WorkspaceResourceFooter } from "../WorkspaceResourceFooter";
 import { WorkspaceResourcesProvider, useWorkspaceResourceState } from "../workspaceResourceState";
 import { useMediaQuery } from "../../../hooks/useMediaQuery";
 import type { WorkspaceHeaderModel } from "../WorkspaceHeader";
@@ -31,7 +32,7 @@ function FixtureReport() {
   useLayoutEffect(() => {
     runtime?.onCommit({
       shellReady: false,
-      incompleteRegions: ["shell.footer"],
+      incompleteRegions: ["shell.responsive"],
     });
   }, [runtime]);
   const wide = useMediaQuery("xl");
@@ -137,7 +138,21 @@ function FixtureReport() {
                     <p>Choose the recipe project and tab to view its sample resource.</p>
                   )
                 }
-                footer={<span>Sample project connections</span>}
+                footer={
+                  selectedProject ? (
+                    <WorkspaceResourceFooter
+                      scope={{
+                        environmentId: session.environmentId,
+                        projectId: selectedProject.id,
+                      }}
+                      observations={[]}
+                      sample
+                      onSettings={() => recordNavigation("project-settings")}
+                    />
+                  ) : (
+                    <span>Connection status unavailable</span>
+                  )
+                }
                 onClose={resources.close}
               />
             }

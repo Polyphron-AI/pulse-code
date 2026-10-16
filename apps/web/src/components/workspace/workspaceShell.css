@@ -546,6 +546,43 @@
   height: auto;
   padding-bottom: env(safe-area-inset-bottom);
 }
+[data-workspace-resource-health] {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 6px;
+}
+[data-workspace-connection-dot] {
+  width: 5px;
+  height: 5px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--workspace-secondary);
+}
+[data-workspace-resource-health="connected"] [data-workspace-connection-dot] {
+  background: var(--workspace-blue);
+}
+[data-workspace-resource-health] > button {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  margin-left: auto;
+  margin-right: -10px;
+  place-items: center;
+}
+[data-workspace-resource-health] svg {
+  width: 10px;
+  height: 10px;
+}
+@media (pointer: coarse) {
+  [data-workspace-resource-footer] {
+    min-height: 44px;
+  }
+  [data-workspace-resource-health] > button {
+    width: 44px;
+    height: 44px;
+  }
+}
 @media (pointer: coarse) {
   [data-workspace-resource-project] {
     min-height: 56px;

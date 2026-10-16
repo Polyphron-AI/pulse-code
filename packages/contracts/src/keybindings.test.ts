@@ -22,6 +22,15 @@ const decode = <S extends Schema.Top>(
 const decodeResolvedRule = Schema.decodeUnknownEffect(ResolvedKeybindingRule as never);
 const encodeResolvedKeybindings = Schema.encodeEffect(ResolvedKeybindingsConfig);
 
+it.effect("parses workspace panel commands", () =>
+  Effect.gen(function* () {
+    for (const command of ["workspace.resources", "workspace.linkedContext"]) {
+      const parsed = yield* decode(KeybindingRule, { key: "mod+alt+l", command });
+      assert.strictEqual(parsed.command, command);
+    }
+  }),
+);
+
 it.effect("parses keybinding rules", () =>
   Effect.gen(function* () {
     const parsed = yield* decode(KeybindingRule, {

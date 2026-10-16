@@ -78,11 +78,19 @@ it("mounts the shared shell and recipe navigation for all eight samples without 
     );
     expect(onCommit).toHaveBeenLastCalledWith({
       shellReady: false,
-      incompleteRegions: ["shell.footer"],
+      incompleteRegions: ["shell.responsive"],
     });
     await act(async () => getByRole(node, "link", { name: "Meetings" }).click());
     await session.settled();
     expect(session.operations).toEqual([{ kind: "navigate", item: null, value: "space:meetings" }]);
+    expect(node.textContent).toContain("Sample project connections");
+    await act(() => getByRole(node, "button", { name: "Project workspace settings" }).click());
+    await session.settled();
+    expect(session.operations.at(-1)).toEqual({
+      kind: "navigate",
+      item: null,
+      value: "project-settings",
+    });
     session.dispose();
   }
 });

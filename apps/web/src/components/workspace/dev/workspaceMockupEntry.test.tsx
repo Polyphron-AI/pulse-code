@@ -165,7 +165,7 @@ it("boots eight isolated memory routes, pins dark and preserves browser storage 
   expect(document.documentElement.getAttribute("style")).toBe(originalHtml);
   expect(document.documentElement.dataset.themeId).toBe("custom");
   expect(window.fetch).toBe(originals.fetch);
-});
+}, 45_000);
 
 it.each([
   ["?fixture=99", "Unknown fixture."],

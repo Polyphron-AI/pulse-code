@@ -14,6 +14,7 @@ export interface WorkspaceResourcesPanelViewProps {
   readonly onTabChange: (tab: WorkspaceResourceTab) => void;
   readonly onChooseProject: (id: ProjectId) => void;
   readonly onAutoProject?: () => void;
+  readonly automatic?: boolean;
   readonly renderProjectActions?: (id: ProjectId, row: ReactNode) => ReactNode;
   readonly body: ReactNode;
   readonly footer: ReactNode;
@@ -45,6 +46,7 @@ export function WorkspaceResourcesPanelView(props: WorkspaceResourcesPanelViewPr
         <ProjectPickerView
           projects={props.projects}
           selectedProjectId={props.selectedProjectId}
+          automatic={props.automatic ?? false}
           {...(props.onAutoProject ? { onAutoProject: props.onAutoProject } : {})}
           {...(props.renderProjectActions
             ? { renderProjectActions: props.renderProjectActions }

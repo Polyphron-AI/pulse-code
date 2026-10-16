@@ -7,7 +7,9 @@ import type {
   WorkspaceLinkEndpoint,
   WorkspaceLinkSource,
 } from "@t3tools/contracts";
-import { useCallback } from "react";
+import { AuthOrchestrationOperateScope } from "@t3tools/contracts";
+import { useCallback, useLayoutEffect, useRef } from "react";
+import { useEnvironmentSessionState } from "../../../state/session";
 
 import { useAtomCommand } from "../../../state/use-atom-command";
 import { workspaceLinks } from "../../../state/workspaceLinks";
@@ -19,6 +21,21 @@ export const linkErrorText = (cause: unknown) =>
 
 /** Link and unlink from Mail. Both reject with the server's reason for the caller to show. */
 export function useMailLinks(environmentId: EnvironmentId) {
+  const session = useEnvironmentSessionState(environmentId);
+  const current = useRef({ environmentId, session });
+  useLayoutEffect(() => {
+    current.current = { environmentId, session };
+  });
+  const requireOperate = useCallback(() => {
+    const live = current.current;
+    if (
+      live.environmentId !== environmentId ||
+      live.session.isPending ||
+      live.session.data?.authenticated !== true ||
+      live.session.data.scopes?.includes(AuthOrchestrationOperateScope) !== true
+    )
+      throw new Error("You need operate permission in this environment to change links.");
+  }, [environmentId]);
   const link = useAtomCommand(workspaceLinks.link, { reportFailure: false });
   const unlink = useAtomCommand(workspaceLinks.unlink, { reportFailure: false });
   const linkToProject = useCallback(
@@ -27,6 +44,7 @@ export function useMailLinks(environmentId: EnvironmentId) {
       project: { readonly id: ProjectId; readonly title: string },
       source?: Extract<WorkspaceLinkSource, { type: "action" }>,
     ) => {
+      requireOperate();
       const endpoint = { ref: message.ref, title: endpointTitle(message.title) };
       const result = await link({
         environmentId,
@@ -40,16 +58,18 @@ export function useMailLinks(environmentId: EnvironmentId) {
       });
       if (result._tag === "Failure") throw squashAtomCommandFailure(result);
     },
-    [environmentId, link],
+    [environmentId, link, requireOperate],
   );
   const unlinkLink = useCallback(
     async (id: WorkspaceLinkId) => {
+      requireOperate();
       const result = await unlink({ environmentId, input: { id } });
       if (result._tag === "Failure") throw squashAtomCommandFailure(result);
     },
-    [environmentId, unlink],
+    [environmentId, unlink, requireOperate],
   );
   const linkItem = async (a: WorkspaceLinkEndpoint, b: WorkspaceLinkEndpoint) => {
+    requireOperate();
     const result = await link({ environmentId, input: { a, b, viewing: a } });
     if (result._tag === "Failure") throw squashAtomCommandFailure(result);
   };

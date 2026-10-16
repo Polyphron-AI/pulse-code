@@ -3,10 +3,16 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  createContext,
   type CSSProperties,
   type ReactNode,
 } from "react";
-import type { EnvironmentId, WorkspaceLinkEndpoint } from "@t3tools/contracts";
+import {
+  workspaceItemKey,
+  type EnvironmentId,
+  type WorkspaceLinkEndpoint,
+  type WorkspaceItemRef,
+} from "@t3tools/contracts";
 import { useResizableWidth } from "../../hooks/useResizableWidth";
 import { cn } from "../../lib/utils";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
@@ -48,7 +54,10 @@ export type WorkspaceEngagementProps = WorkspaceEngagementCommonProps &
       }
   );
 
-const emptyLinkedContext = { item: null, render: () => null };
+/** Item editors invalidate a held capture after deleting or moving its target. */
+export const WorkspaceItemMutationContext = createContext<
+  ((environmentId: EnvironmentId, item: WorkspaceItemRef) => void) | null
+>(null);
 
 export function WorkspaceEngagement(props: WorkspaceEngagementProps) {
   const wide = useMediaQuery("xl");
@@ -60,9 +69,20 @@ export function WorkspaceEngagement(props: WorkspaceEngagementProps) {
   } | null>(null);
   if (
     contextTarget &&
-    (contextTarget.environmentId !== props.environmentId || contextTarget.presentation !== wide)
+    (contextTarget.environmentId !== props.environmentId ||
+      contextTarget.presentation !== wide ||
+      !props.linkedContext)
   ) {
     setContextTarget(null);
+  }
+  if (
+    contextTarget &&
+    !contextTarget.context.item &&
+    props.linkedContext?.item &&
+    contextTarget.environmentId === props.environmentId &&
+    contextTarget.presentation === wide
+  ) {
+    setContextTarget({ ...contextTarget, context: props.linkedContext });
   }
   const context =
     contextTarget?.environmentId === props.environmentId && contextTarget.presentation === wide
@@ -70,103 +90,159 @@ export function WorkspaceEngagement(props: WorkspaceEngagementProps) {
       : null;
   const resourcesTrigger = useRef<HTMLButtonElement>(null);
   const contextTrigger = useRef<HTMLButtonElement>(null);
+  const resourcesBody = useRef<HTMLDivElement>(null);
+  const focusResourceBody = useRef(false);
+  const closeFocus = useRef<HTMLElement | null>(null);
+  useLayoutEffect(() => {
+    if (!focusResourceBody.current || context) return;
+    focusResourceBody.current = false;
+    (
+      resourcesBody.current?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]') ??
+      resourcesBody.current
+    )?.focus();
+  });
   const restoreResourcesFocus = useCallback(() => resourcesTrigger.current?.focus(), []);
   const close = () => {
-    state.close();
+    closeFocus.current = (context ? contextTrigger : resourcesTrigger).current;
+    if (!context) state.close();
     setContextTarget(null);
     if (wide) (context ? contextTrigger : resourcesTrigger).current?.focus();
+    else if (context && state.open) focusResourceBody.current = true;
   };
   const backToResources = () => {
     setContextTarget(null);
     state.reopen();
-    restoreResourcesFocus();
+    if (wide) restoreResourcesFocus();
+    else focusResourceBody.current = true;
   };
   const open = context !== null || state.open;
+  const invalidateItem = useCallback((environmentId: EnvironmentId, item: WorkspaceItemRef) => {
+    setContextTarget((target) =>
+      target?.environmentId === environmentId &&
+      target.context.item &&
+      workspaceItemKey(target.context.item.ref) === workspaceItemKey(item)
+        ? null
+        : target,
+    );
+  }, []);
   return (
-    <div
-      data-workspace-engagement=""
-      data-workspace-dock-open={wide && open}
-      className="flex min-h-0 min-w-0 flex-1"
-    >
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <WorkspaceHeader
-          model={props.header}
-          resourcesOpen={context === null && state.open}
-          resourcesTriggerRef={resourcesTrigger}
-          onResources={() => {
-            setContextTarget(null);
-            if (context || !state.open) state.reopen();
-            else state.close();
-          }}
-          linkedContextTriggerRef={contextTrigger}
-          linkedContextOpen={context !== null}
-          onLinkedContext={() => {
-            if (context) setContextTarget(null);
-            else
-              setContextTarget({
-                environmentId: props.environmentId,
-                presentation: wide,
-                context: props.linkedContext ?? emptyLinkedContext,
-              });
-          }}
-        />
-        {props.layout === "split" ? (
-          <WorkspaceSplit {...props} />
-        ) : (
-          <section
-            aria-label="Workspace content"
-            className="min-h-0 min-w-0 flex-1 overflow-y-auto"
-          >
-            {props.children}
-          </section>
-        )}
-      </div>
-      <WorkspaceResourcesHost
-        wide={wide}
-        open={open}
-        onOpenChange={(value) => {
-          if (!value) close();
-        }}
-        label={context ? "Linked context" : "Resources"}
+    <WorkspaceItemMutationContext value={invalidateItem}>
+      <div
+        data-workspace-engagement=""
+        data-workspace-dock-open={wide && open}
+        className="flex min-h-0 min-w-0 flex-1"
       >
-        {context ? (
-          <div data-workspace-linked-context="" className="flex h-full min-h-0 flex-col">
-            <header className="flex shrink-0 items-center gap-2 border-b border-border p-3">
-              <h2 className="min-w-0 flex-1 text-sm font-medium">Linked context</h2>
-              <button
-                type="button"
-                aria-label="Close linked context"
-                className="flex size-7 items-center justify-center"
-                onClick={close}
-              >
-                <XIcon className="size-3" />
-              </button>
-            </header>
-            <div className="min-h-0 flex-1 overflow-y-auto p-3">
-              <button type="button" className="mb-3 text-sm underline" onClick={backToResources}>
-                Back to resources
-              </button>
-              {context.item ? (
-                <>
-                  <h3 className="mb-3 break-words text-sm font-medium">
-                    {workspaceEndpointTitle(context.item)}
-                  </h3>
-                  {context.render(context.item)}
-                </>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  Select an item to see its linked context.
-                </p>
-              )}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <WorkspaceHeader
+            model={props.header}
+            resourcesOpen={context === null && state.open}
+            resourcesTriggerRef={resourcesTrigger}
+            onResources={() => {
+              closeFocus.current = context || !state.open ? null : resourcesTrigger.current;
+              setContextTarget(null);
+              if (context || !state.open) state.reopen();
+              else state.close();
+            }}
+            linkedContextTriggerRef={contextTrigger}
+            linkedContextOpen={context !== null}
+            onLinkedContext={
+              props.linkedContext
+                ? () => {
+                    closeFocus.current = context ? contextTrigger.current : null;
+                    if (context) setContextTarget(null);
+                    else
+                      setContextTarget({
+                        environmentId: props.environmentId,
+                        presentation: wide,
+                        context: props.linkedContext!,
+                      });
+                  }
+                : undefined
+            }
+          />
+          {props.layout === "split" ? (
+            <WorkspaceSplit {...props} />
+          ) : (
+            <section
+              aria-label="Workspace content"
+              className="min-h-0 min-w-0 flex-1 overflow-y-auto"
+            >
+              {props.children}
+            </section>
+          )}
+        </div>
+        <WorkspaceResourcesHost
+          wide={wide}
+          open={open}
+          onOpenChange={(value) => {
+            if (!value) close();
+          }}
+          label={context ? "Linked context" : "Resources"}
+          closeFocus={() => closeFocus.current ?? false}
+        >
+          {context ? (
+            <div data-workspace-linked-context="" className="flex h-full min-h-0 flex-col">
+              <header className="flex shrink-0 items-center gap-2 border-b border-border p-3">
+                <h2 className="min-w-0 flex-1 text-sm font-medium">Linked context</h2>
+                <button
+                  type="button"
+                  aria-label="Close linked context"
+                  className="flex size-7 items-center justify-center"
+                  onClick={close}
+                >
+                  <XIcon className="size-3" />
+                </button>
+              </header>
+              <div className="min-h-0 flex-1 overflow-y-auto p-3">
+                <button type="button" className="mb-3 text-sm underline" onClick={backToResources}>
+                  Back to resources
+                </button>
+                {context.item ? (
+                  <>
+                    <h3 className="mb-3 break-words text-sm font-medium">
+                      {workspaceEndpointTitle(context.item)}
+                    </h3>
+                    {!props.linkedContext?.item ||
+                    workspaceItemKey(context.item.ref) !==
+                      workspaceItemKey(props.linkedContext.item.ref) ? (
+                      <p className="mb-3 text-xs text-muted-foreground">
+                        Held item. Selection has changed.
+                        {props.linkedContext?.item ? (
+                          <button
+                            type="button"
+                            className="ml-2 underline"
+                            onClick={() =>
+                              setContextTarget({
+                                environmentId: props.environmentId,
+                                presentation: wide,
+                                context: props.linkedContext!,
+                              })
+                            }
+                          >
+                            Show current item
+                          </button>
+                        ) : null}
+                      </p>
+                    ) : null}
+                    {context.render(context.item)}
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    Select an item to see its linked context.
+                  </p>
+                )}
+              </div>
             </div>
-          </div>
-        ) : (
-          <WorkspaceResourcesCloseFocusContext value={restoreResourcesFocus}>
-            {props.resources}
-          </WorkspaceResourcesCloseFocusContext>
-        )}
-      </WorkspaceResourcesHost>
-    </div>
+          ) : (
+            <WorkspaceResourcesCloseFocusContext value={restoreResourcesFocus}>
+              <div ref={resourcesBody} tabIndex={-1} className="h-full min-h-0">
+                {props.resources}
+              </div>
+            </WorkspaceResourcesCloseFocusContext>
+          )}
+        </WorkspaceResourcesHost>
+      </div>
+    </WorkspaceItemMutationContext>
   );
 }
 

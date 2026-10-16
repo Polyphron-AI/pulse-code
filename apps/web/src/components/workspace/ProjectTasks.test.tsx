@@ -1,9 +1,14 @@
 import * as Cause from "effect/Cause";
+// @vitest-environment happy-dom
 import { act } from "react";
+import { createRoot } from "react-dom/client";
+import { getByRole, queryByRole } from "@testing-library/dom";
 import { create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import { EnvironmentId, ProjectId } from "@t3tools/contracts";
 import { ProjectTasks, ProjectWorkspaceSettings } from "./ProjectTasks";
+import { WorkspaceEngagement } from "./WorkspaceEngagement";
+import { useWorkspaceResourceState, WorkspaceResourcesProvider } from "./workspaceResourceState";
 const mocks = vi.hoisted(() => ({ command: vi.fn(), operate: true }));
 vi.mock("../../state/session", () => ({
   useEnvironmentSessionState: () => ({
@@ -98,4 +103,94 @@ it("does not silently clear an unavailable browser thread while editing columns"
       browserThreadId: "missing-thread",
     },
   });
+});
+it.each(["delete", "move"])(
+  "cancels the held task capture after a successful %s",
+  async (action) => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    (
+      window as unknown as {
+        happyDOM: { setWindowSize(size: { width: number; height: number }): void };
+      }
+    ).happyDOM.setWindowSize({ width: 1280, height: 800 });
+    const task = {
+      id: "wskt_00000000-0000-0000-0000-000000000001",
+      projectId,
+      title: "Captured task",
+      column: "To do",
+    };
+    mocks.command.mockResolvedValue({ _tag: "Success", value: task });
+    function App() {
+      const state = useWorkspaceResourceState(environmentId, {
+        storage: { getItem: () => null, setItem() {} },
+      });
+      return (
+        <WorkspaceResourcesProvider value={state}>
+          <WorkspaceEngagement
+            environmentId={environmentId}
+            space="projects"
+            layout="full"
+            header={{ title: "Projects", environmentLabel: "Remote", spaceLabel: "Projects" }}
+            resources={<p>Resources</p>}
+            linkedContext={{
+              item: { ref: { type: "task", taskId: task.id }, title: task.title },
+              render: () => <p>Task links</p>,
+            }}
+          >
+            <ProjectTasks
+              environmentId={environmentId}
+              projectId={projectId}
+              selected={task}
+              onSelect={() => {}}
+            />
+          </WorkspaceEngagement>
+        </WorkspaceResourcesProvider>
+      );
+    }
+    const node = document.createElement("div");
+    document.body.append(node);
+    const root = createRoot(node);
+    try {
+      await act(() => root.render(<App />));
+      await act(() => getByRole(node, "button", { name: "Linked context" }).click());
+      expect(getByRole(node, "complementary", { name: "Linked context" }).textContent).toContain(
+        "Task links",
+      );
+      if (action === "move")
+        await act(() => {
+          const select = getByRole(node, "combobox", { name: "Task column" }) as HTMLSelectElement;
+          select.value = "Done";
+          select.dispatchEvent(new Event("change", { bubbles: true }));
+        });
+      await act(() =>
+        getByRole(node, "button", {
+          name: action === "delete" ? "Delete task" : "Save task",
+        }).click(),
+      );
+      expect(mocks.command).toHaveBeenCalledWith(
+        expect.objectContaining({ environmentId, input: expect.objectContaining({ id: task.id }) }),
+      );
+      expect(queryByRole(node, "complementary", { name: "Linked context" })).toBeNull();
+      expect(getByRole(node, "complementary", { name: "Resources" })).toBeDefined();
+    } finally {
+      await act(() => root.unmount());
+      node.remove();
+    }
+  },
+);
+it("revalidates settings permission at submit", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  await act(() => {
+    renderer = create(
+      <ProjectWorkspaceSettings environmentId={environmentId} projectId={projectId} />,
+    );
+  });
+  mocks.operate = false;
+  await act(() =>
+    renderer!.update(
+      <ProjectWorkspaceSettings environmentId={environmentId} projectId={projectId} />,
+    ),
+  );
+  await act(() => renderer!.root.findByType("form").props.onSubmit({ preventDefault() {} }));
+  expect(mocks.command).not.toHaveBeenCalled();
 });

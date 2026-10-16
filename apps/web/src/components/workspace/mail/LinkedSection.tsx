@@ -206,9 +206,15 @@ function LinkedList(props: LinkedSectionProps & { projectsOnly?: boolean }) {
       className="flex flex-col gap-2 rounded-lg border border-border p-3"
     >
       <div className="flex items-center gap-2">
-        <h2 id={headingId} className="text-sm font-medium">
-          Linked
-        </h2>
+        {props.mode === "context" ? (
+          <h3 id={headingId} className="text-sm font-medium">
+            Linked
+          </h3>
+        ) : (
+          <h2 id={headingId} className="text-sm font-medium">
+            Linked
+          </h2>
+        )}
         <Popover open={infoOpen} onOpenChange={setInfoOpen}>
           <PopoverTrigger
             render={<Button size="icon-xs" variant="ghost" aria-label="About linked items" />}

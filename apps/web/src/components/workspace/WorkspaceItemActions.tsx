@@ -1,4 +1,4 @@
-import { ProjectId } from "@t3tools/contracts";
+import { AuthOrchestrationOperateScope, ProjectId } from "@t3tools/contracts";
 import {
   ComposerContextId,
   workspaceItemKey,
@@ -10,7 +10,15 @@ import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { useRouter } from "@tanstack/react-router";
 import { isTerminalFocused } from "../../lib/terminalFocus";
 import { useAtomValue } from "@effect/atom-react";
-import { useEffect, useRef, useState, lazy, Suspense, type ReactNode } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  lazy,
+  Suspense,
+  type ReactNode,
+} from "react";
 import { primaryServerKeybindingsAtom } from "../../state/server";
 import { resolveShortcutCommand, shortcutLabelForCommand } from "../../keybindings";
 import { isEditableFocused } from "../../lib/editableFocus";
@@ -36,6 +44,7 @@ import {
 import { MailDraftReply } from "./mail/MailDraftReply";
 import { linkErrorText, useMailLinks } from "./mail/useMailLinks";
 import { useMailCapabilities } from "./mail/useMailCapabilities";
+import { useEnvironmentSessionState } from "../../state/session";
 
 const WorkspaceAutomationEditor = lazy(() => import("./WorkspaceAutomationEditor"));
 
@@ -51,10 +60,51 @@ type ItemActionProps = {
   confirmed?: ReadonlyArray<WorkspaceLinkEndpoint>;
 };
 export function WorkspaceItemActions(props: ItemActionProps) {
-  return useMailCapabilities(props.environmentId).workspaceLinks ? (
+  const capability = useMailCapabilities(props.environmentId);
+  const session = useEnvironmentSessionState(props.environmentId);
+  const [captured, setCaptured] = useState<ItemActionProps | null>(null);
+  const canOperate =
+    !session.isPending &&
+    session.data?.authenticated === true &&
+    session.data.scopes?.includes(AuthOrchestrationOperateScope) === true;
+  if (
+    captured &&
+    (captured.environmentId !== props.environmentId || !canOperate || !capability.workspaceLinks)
+  )
+    setCaptured(null);
+  const active = captured?.environmentId === props.environmentId && canOperate ? captured : props;
+  const current = useRef({ environmentId: props.environmentId, capability, session });
+  useLayoutEffect(() => {
+    current.current = { environmentId: props.environmentId, capability, session };
+  });
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  const canAct = (action?: "start-thread" | "start-automation") => {
+    const live = current.current;
+    return (
+      mounted.current &&
+      live.environmentId === props.environmentId &&
+      live.capability.workspaceLinks &&
+      !live.session.isPending &&
+      live.session.data?.authenticated === true &&
+      live.session.data.scopes?.includes(AuthOrchestrationOperateScope) === true &&
+      (action !== "start-thread" || live.capability.workspaceItemContext) &&
+      (action !== "start-automation" || live.capability.workspaceTools)
+    );
+  };
+  return capability.workspaceLinks ? (
     <AvailableWorkspaceItemActions
-      key={`${props.environmentId}:${workspaceItemKey(props.item.ref)}:${props.initialAction ?? ""}`}
-      {...props}
+      key={`${active.environmentId}:${workspaceItemKey(active.item.ref)}:${active.initialAction ?? ""}:${canOperate}:${capability.workspaceTools}`}
+      {...active}
+      canAct={canAct}
+      canOperate={canOperate}
+      hold={() => setCaptured((target) => target ?? props)}
+      release={() => setCaptured(null)}
     />
   ) : null;
 }
@@ -65,7 +115,16 @@ function AvailableWorkspaceItemActions({
   onlyStartThread = false,
   initialAction,
   confirmed = EMPTY_CONFIRMED,
-}: ItemActionProps) {
+  canAct,
+  canOperate,
+  hold,
+  release,
+}: ItemActionProps & {
+  canAct: (action?: "start-thread" | "start-automation") => boolean;
+  canOperate: boolean;
+  hold: () => void;
+  release: () => void;
+}) {
   const router = useRouter();
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
   const threadButton = useRef<HTMLButtonElement>(null);
@@ -89,7 +148,7 @@ function AvailableWorkspaceItemActions({
               : command === "workspace.startProject"
                 ? projectButton.current
                 : null;
-      if (button === null || button.disabled) return;
+      if (button === null || !button.isConnected || button.disabled) return;
       event.preventDefault();
       button.click();
     };
@@ -126,6 +185,7 @@ function AvailableWorkspaceItemActions({
   const [createdProject, setCreatedProject] = useState<ScopedProjectRef | null>(null);
   const [name, setName] = useState("");
   const run = async (operation: () => Promise<void>) => {
+    if (!canAct()) return;
     setBusy(true);
     setError(null);
     try {
@@ -140,81 +200,90 @@ function AvailableWorkspaceItemActions({
     target: HTMLElement,
     action: "start-thread" | "add-to-project" | "start-automation",
   ) => {
-    if (busy) return;
-    if (action === "start-thread" && (!capability.workspaceItemContext || links.data === null)) {
-      setError(
-        "Wait for linked context to load, or update this server if workspace context is unavailable.",
-      );
-      return;
-    }
-    const rect = target.getBoundingClientRect();
-    const sourceRef = item.ref;
-    const linkedIds = new Set(
-      (links.data?.linked ?? []).flatMap((view) =>
-        view.item.ref.type === "project" ? [view.item.ref.projectId] : [],
-      ),
-    );
-    if (sourceRef.type === "thread") {
-      const own = threads.find((thread) => thread.id === sourceRef.threadId);
-      if (own) linkedIds.add(own.projectId);
-    }
-    for (const endpoint of confirmed)
-      if (endpoint.ref.type === "project") linkedIds.add(endpoint.ref.projectId);
-    const linkedProjects = projects.filter((project) => linkedIds.has(project.id));
-    const implicitProject =
-      action !== "add-to-project"
-        ? sourceRef.type === "project"
-          ? projects.find((project) => project.id === sourceRef.projectId)
-          : linkedProjects.length === 1
-            ? linkedProjects[0]
-            : undefined
-        : undefined;
-    const choice =
-      implicitProject === undefined
-        ? await readLocalApi()?.contextMenu.show(projectMenuItems(projects, new Set()), {
-            x: rect.left,
-            y: rect.bottom,
-          })
-        : null;
-    const project = implicitProject ?? pickedProject(projects, choice ?? null);
-    if (!project) return;
-    if (action === "start-automation") {
-      setAutomationProject(project.id);
-      return;
-    }
-    // Capture the endpoints before navigation or draft creation can change the active reader.
-    const source = { ...item, title: labelFor(item) };
-    const endpoints = [
-      source,
-      ...(links.data?.linked.map((view) => view.item) ?? []),
-      ...confirmed,
-    ];
-    const unique = [
-      ...new Map(endpoints.map((endpoint) => [workspaceItemKey(endpoint.ref), endpoint])).values(),
-    ].slice(0, 200);
-    await run(async () => {
-      if (action === "add-to-project") {
-        await linkToProject({ ref: source.ref, title: source.title }, project, {
-          type: "action",
-          action,
-        });
+    if (busy || !canAct(action === "add-to-project" ? undefined : action)) return;
+    hold();
+    let editing = false;
+    try {
+      if (action === "start-thread" && (!capability.workspaceItemContext || links.data === null)) {
+        setError(
+          "Wait for linked context to load, or update this server if workspace context is unavailable.",
+        );
         return;
       }
-      const draft = await startThread(scopeProjectRef(environmentId, project.id));
-      if (draft === null) throw new Error("This project is unavailable. Choose another project.");
-      useComposerDraftStore.getState().addThreadContexts(
-        draft.draftId,
-        unique.map((endpoint) => ({
-          version: 1,
-          kind: "workspace-item",
-          contextId: ComposerContextId.make(`workspace_${randomUUID().replaceAll("-", "")}`),
-          label: labelFor(endpoint).slice(0, 200),
-          item: endpoint,
-          viewing: source,
-        })),
-        { insertAtCaret: false },
+      const rect = target.getBoundingClientRect();
+      const sourceRef = item.ref;
+      const linkedIds = new Set(
+        (links.data?.linked ?? []).flatMap((view) =>
+          view.item.ref.type === "project" ? [view.item.ref.projectId] : [],
+        ),
       );
-    });
+      if (sourceRef.type === "thread") {
+        const own = threads.find((thread) => thread.id === sourceRef.threadId);
+        if (own) linkedIds.add(own.projectId);
+      }
+      for (const endpoint of confirmed)
+        if (endpoint.ref.type === "project") linkedIds.add(endpoint.ref.projectId);
+      const linkedProjects = projects.filter((project) => linkedIds.has(project.id));
+      const implicitProject =
+        action !== "add-to-project"
+          ? sourceRef.type === "project"
+            ? projects.find((project) => project.id === sourceRef.projectId)
+            : linkedProjects.length === 1
+              ? linkedProjects[0]
+              : undefined
+          : undefined;
+      const choice =
+        implicitProject === undefined
+          ? await readLocalApi()?.contextMenu.show(projectMenuItems(projects, new Set()), {
+              x: rect.left,
+              y: rect.bottom,
+            })
+          : null;
+      const project = implicitProject ?? pickedProject(projects, choice ?? null);
+      if (!project || !canAct(action === "add-to-project" ? undefined : action)) return;
+      if (action === "start-automation") {
+        editing = true;
+        setAutomationProject(project.id);
+        return;
+      }
+      // Capture the endpoints before navigation or draft creation can change the active reader.
+      const source = { ...item, title: labelFor(item) };
+      const endpoints = [
+        source,
+        ...(links.data?.linked.map((view) => view.item) ?? []),
+        ...confirmed,
+      ];
+      const unique = [
+        ...new Map(
+          endpoints.map((endpoint) => [workspaceItemKey(endpoint.ref), endpoint]),
+        ).values(),
+      ].slice(0, 200);
+      await run(async () => {
+        if (action === "add-to-project") {
+          await linkToProject({ ref: source.ref, title: source.title }, project, {
+            type: "action",
+            action,
+          });
+          return;
+        }
+        const draft = await startThread(scopeProjectRef(environmentId, project.id));
+        if (draft === null) throw new Error("This project is unavailable. Choose another project.");
+        useComposerDraftStore.getState().addThreadContexts(
+          draft.draftId,
+          unique.map((endpoint) => ({
+            version: 1,
+            kind: "workspace-item",
+            contextId: ComposerContextId.make(`workspace_${randomUUID().replaceAll("-", "")}`),
+            label: labelFor(endpoint).slice(0, 200),
+            item: endpoint,
+            viewing: source,
+          })),
+          { insertAtCaret: false },
+        );
+      });
+    } finally {
+      if (!editing) release();
+    }
   };
   const initialTriggered = useRef(false);
   useEffect(() => {
@@ -243,9 +312,12 @@ function AvailableWorkspaceItemActions({
       className="flex flex-wrap items-center gap-2"
       onContextMenu={(event) => {
         event.preventDefault();
+        const menu = readLocalApi()?.contextMenu;
+        if (!menu || !canAct()) return;
+        hold();
         const target = event.currentTarget;
-        void readLocalApi()
-          ?.contextMenu.show(
+        void menu
+          .show(
             [
               ...(item.ref.type === "mail"
                 ? [
@@ -276,12 +348,22 @@ function AvailableWorkspaceItemActions({
             { x: event.clientX, y: event.clientY },
           )
           .then((action) => {
+            if (!canAct()) {
+              release();
+              return;
+            }
             if (action === "automation") void choose(target, "start-automation");
-            else if (action === "reply")
+            else if (action === "reply") {
               target.querySelector<HTMLButtonElement>("[data-workspace-reply]")?.click();
-            else if (action === "new-project") setCreating(true);
+              release();
+            } else if (action === "new-project") setCreating(true);
             else if (action)
               void choose(target, action === "thread" ? "start-thread" : "add-to-project");
+            else release();
+          })
+          .catch((cause) => {
+            setError(linkErrorText(cause));
+            release();
           });
       }}
     >
@@ -292,7 +374,9 @@ function AvailableWorkspaceItemActions({
             data-workspace-action={shortcuts ? "startThread" : undefined}
             size="sm"
             variant="outline"
-            disabled={busy || links.data === null || !capability.workspaceItemContext}
+            disabled={
+              busy || !canOperate || links.data === null || !capability.workspaceItemContext
+            }
             onClick={(event) => void choose(event.currentTarget, "start-thread")}
           >
             Start thread
@@ -312,7 +396,7 @@ function AvailableWorkspaceItemActions({
               data-workspace-action={shortcuts ? "addToProject" : undefined}
               size="sm"
               variant="ghost"
-              disabled={busy}
+              disabled={busy || !canOperate}
               onClick={(event) => void choose(event.currentTarget, "add-to-project")}
             >
               Add to project
@@ -331,8 +415,11 @@ function AvailableWorkspaceItemActions({
               data-workspace-action={shortcuts ? "startProject" : undefined}
               size="sm"
               variant="ghost"
-              disabled={busy}
-              onClick={() => setCreating(true)}
+              disabled={busy || !canOperate}
+              onClick={() => {
+                hold();
+                setCreating(true);
+              }}
             >
               Start project
             </Button>
@@ -348,7 +435,7 @@ function AvailableWorkspaceItemActions({
           data-workspace-action={shortcuts ? "startAutomation" : undefined}
           size="sm"
           variant="ghost"
-          disabled={busy || !capability.workspaceTools || links.data === null}
+          disabled={busy || !canOperate || !capability.workspaceTools || links.data === null}
           onClick={(event) => void choose(event.currentTarget, "start-automation")}
         >
           Start automation
@@ -362,7 +449,10 @@ function AvailableWorkspaceItemActions({
             environmentId={environmentId}
             projectId={automationProject}
             item={{ ...item, title: labelFor(item) }}
-            onClose={() => setAutomationProject(null)}
+            onClose={() => {
+              setAutomationProject(null);
+              release();
+            }}
           />
         </Suspense>
       ) : null}
@@ -378,7 +468,7 @@ function AvailableWorkspaceItemActions({
           className="flex w-full gap-2"
           onSubmit={(event) => {
             event.preventDefault();
-            if (!name.trim()) return;
+            if (!name.trim() || !canAct()) return;
             const source = item;
             const requestingHref = router.state.location.href;
             void run(async () => {
@@ -393,6 +483,7 @@ function AvailableWorkspaceItemActions({
                 setCreating(false);
                 setName("");
                 setCreatedProject(null);
+                release();
                 return;
               }
               let createdRef: ScopedProjectRef | null = null;
@@ -402,6 +493,7 @@ function AvailableWorkspaceItemActions({
                 github: null,
                 openThread: false,
                 onCreated: async (project) => {
+                  if (!canAct()) return;
                   createdRef = project;
                   setCreatedProject(project);
                   await linkToProject(
@@ -417,6 +509,7 @@ function AvailableWorkspaceItemActions({
                 setCreating(false);
                 setName("");
                 setCreatedProject(null);
+                release();
               }
             });
           }}
@@ -435,7 +528,10 @@ function AvailableWorkspaceItemActions({
             variant="ghost"
             type="button"
             disabled={busy}
-            onClick={() => setCreating(false)}
+            onClick={() => {
+              setCreating(false);
+              release();
+            }}
           >
             Cancel
           </Button>
@@ -467,7 +563,20 @@ export function WorkspaceItemMenu({
   provenance,
   ...props
 }: ItemActionProps & { children: ReactNode; provenance?: ReactNode }) {
-  const [open, setOpen] = useState(false);
+  const [captured, setCaptured] = useState<(ItemActionProps & { provenance?: ReactNode }) | null>(
+    null,
+  );
+  const session = useEnvironmentSessionState(props.environmentId);
+  const capability = useMailCapabilities(props.environmentId);
+  const canOperate =
+    !session.isPending &&
+    session.data?.authenticated === true &&
+    session.data.scopes?.includes(AuthOrchestrationOperateScope) === true;
+  const available = capability.workspaceLinks && canOperate;
+  if (captured && (!available || captured.environmentId !== props.environmentId)) setCaptured(null);
+  const open = captured !== null && available && captured.environmentId === props.environmentId;
+  const setOpen = (value: boolean) =>
+    setCaptured(value && available ? { ...props, shortcuts: false, provenance } : null);
   const { linkItem } = useMailLinks(props.environmentId);
   const [dropError, setDropError] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -562,13 +671,13 @@ export function WorkspaceItemMenu({
         </PopoverTrigger>
       </div>
       <PopoverPopup>
-        {provenance}
+        {captured?.provenance}
         {dropError !== null ? (
           <p role="alert" className="mb-3 text-xs text-destructive">
             {dropError}
           </p>
         ) : null}
-        <WorkspaceItemActions {...props} />
+        {open && captured ? <WorkspaceItemActions {...captured} shortcuts={false} /> : null}
       </PopoverPopup>
     </Popover>
   );

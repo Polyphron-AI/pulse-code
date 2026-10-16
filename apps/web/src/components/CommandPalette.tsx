@@ -169,6 +169,7 @@ import {
   buildRootGroups,
   buildThreadActionItems,
   buildLinkedThreadActionItems,
+  buildWorkspaceActionItems,
   buildCommandPaletteRows,
   enumerateCommandPaletteItems,
   findHighlightedCommandPaletteItem,
@@ -1945,29 +1946,7 @@ function OpenCommandPaletteDialog(props: {
       },
     });
   }
-  for (const [action, title, command] of [
-    ["startThread", "Start thread from selected item", "workspace.startThread"],
-    ["addToProject", "Add selected item to project", "workspace.addToProject"],
-    ["startProject", "Start project from selected item", "workspace.startProject"],
-    ["startAutomation", "Start automation from selected item", "workspace.startAutomation"],
-  ] as const) {
-    const button =
-      typeof document === "undefined"
-        ? null
-        : document.querySelector<HTMLButtonElement>(`[data-workspace-action="${action}"]`);
-    if (button !== null && !button.disabled)
-      actionItems.push({
-        kind: "action",
-        value: `action:workspace-${action}`,
-        searchTerms: ["workspace", "item", "link", title],
-        title,
-        shortcutCommand: command,
-        icon: <MailIcon className={ITEM_ICON_CLASS} />,
-        run: async () => {
-          if (button.isConnected && !button.disabled) button.click();
-        },
-      });
-  }
+  actionItems.push(...buildWorkspaceActionItems(<MailIcon className={ITEM_ICON_CLASS} />));
   const replyButton =
     typeof document === "undefined"
       ? null

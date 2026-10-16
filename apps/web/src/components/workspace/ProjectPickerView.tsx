@@ -21,6 +21,7 @@ export interface ProjectPickerViewProps {
   readonly selectedProjectId: ProjectId | null;
   readonly allowAll?: boolean;
   readonly onAutoProject?: () => void;
+  readonly automatic?: boolean;
   readonly onChooseProject: (id: ProjectId | null) => void;
   readonly renderProjectActions?: (id: ProjectId, row: ReactNode) => ReactNode;
 }
@@ -31,6 +32,7 @@ export function ProjectPickerView({
   selectedProjectId,
   allowAll = false,
   onAutoProject,
+  automatic = false,
   onChooseProject,
   renderProjectActions,
 }: ProjectPickerViewProps): ReactNode {
@@ -48,7 +50,12 @@ export function ProjectPickerView({
         : []),
     ...projects,
   ];
-  const selected = items.find((item) => item.id === selectedProjectId) ?? null;
+  const project = projects.find((item) => item.id === selectedProjectId);
+  const selected =
+    onAutoProject && automatic && project
+      ? items.find((item) => item.id === null)!
+      : (items.find((item) => item.id === selectedProjectId && (item.id !== null || allowAll)) ??
+        null);
   return (
     <Combobox
       items={items}
@@ -75,8 +82,10 @@ export function ProjectPickerView({
       <ComboboxTrigger aria-label="Choose project" data-workspace-project-picker="">
         {selected?.icon ?? <FolderIcon />}
         <span>
-          {selected?.title ??
-            (selectedProjectId === null ? "Choose a project" : "Unavailable project")}
+          {automatic && project
+            ? `Auto: ${project.title}`
+            : (selected?.title ??
+              (selectedProjectId === null ? "Choose a project" : "Unavailable project"))}
         </span>
         <ChevronDownIcon />
       </ComboboxTrigger>

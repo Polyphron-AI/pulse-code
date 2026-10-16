@@ -18,7 +18,7 @@ export interface WorkspaceHeaderProps {
   readonly resourcesOpen: boolean;
   readonly onResources: () => void;
   readonly resourcesTriggerRef?: Ref<HTMLButtonElement>;
-  readonly onLinkedContext?: () => void;
+  readonly onLinkedContext?: (() => void) | undefined;
   readonly linkedContextTriggerRef?: Ref<HTMLButtonElement>;
   readonly linkedContextOpen?: boolean;
 }
@@ -48,6 +48,7 @@ export function WorkspaceHeader({
                   <button
                     ref={linkedContextTriggerRef}
                     data-workspace-linked-context-trigger=""
+                    data-workspace-action="linkedContext"
                     type="button"
                     aria-label="Linked context"
                     aria-expanded={linkedContextOpen}
@@ -60,26 +61,35 @@ export function WorkspaceHeader({
               <TooltipPopup>Linked context</TooltipPopup>
             </Tooltip>
           ) : (
-            <Menu>
-              <MenuTrigger
-                ref={linkedContextTriggerRef}
-                data-workspace-actions-trigger=""
-                aria-label="Workspace actions"
-              >
-                <EllipsisIcon />
-              </MenuTrigger>
-              <MenuPopup align="end">
-                <MenuItem onClick={onLinkedContext}>
-                  <LinkIcon />
-                  Linked context
-                </MenuItem>
-              </MenuPopup>
-            </Menu>
+            <>
+              <button
+                hidden
+                type="button"
+                data-workspace-action="linkedContext"
+                onClick={onLinkedContext}
+              />
+              <Menu>
+                <MenuTrigger
+                  ref={linkedContextTriggerRef}
+                  data-workspace-actions-trigger=""
+                  aria-label="Workspace actions"
+                >
+                  <EllipsisIcon />
+                </MenuTrigger>
+                <MenuPopup align="end">
+                  <MenuItem onClick={onLinkedContext}>
+                    <LinkIcon />
+                    Linked context
+                  </MenuItem>
+                </MenuPopup>
+              </Menu>
+            </>
           )
         ) : null}
         <button
           ref={resourcesTriggerRef}
           data-workspace-resources-trigger=""
+          data-workspace-action="resources"
           type="button"
           aria-expanded={resourcesOpen}
           onClick={onResources}

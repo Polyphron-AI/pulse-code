@@ -20,6 +20,38 @@ export const RECENT_THREAD_LIMIT = 12;
 export const ITEM_ICON_CLASS = "size-4 text-icon-muted";
 export const ADDON_ICON_CLASS = "size-4";
 
+/** Captures the selected action host. A closed palette cannot retarget a detached button. */
+export function buildWorkspaceActionItems(icon: ReactNode): CommandPaletteActionItem[] {
+  if (typeof document === "undefined") return [];
+  return (
+    [
+      ["startThread", "Start thread from selected item", "workspace.startThread"],
+      ["addToProject", "Add selected item to project", "workspace.addToProject"],
+      ["startProject", "Start project from selected item", "workspace.startProject"],
+      ["startAutomation", "Start automation from selected item", "workspace.startAutomation"],
+      ["resources", "Resources", "workspace.resources"],
+      ["linkedContext", "Linked context", "workspace.linkedContext"],
+    ] as const
+  ).flatMap(([action, title, command]) => {
+    const button = document.querySelector<HTMLButtonElement>(`[data-workspace-action="${action}"]`);
+    return button && !button.disabled
+      ? [
+          {
+            kind: "action" as const,
+            value: `action:workspace-${action}`,
+            searchTerms: ["workspace", "item", "link", title],
+            title,
+            shortcutCommand: command,
+            icon,
+            run: async () => {
+              if (button.isConnected && !button.disabled) button.click();
+            },
+          },
+        ]
+      : [];
+  });
+}
+
 /** A PR's relations include archived threads that normal palette search omits. */
 export function buildLinkedThreadActionItems(
   input: CommandPaletteLinkedThreads & {

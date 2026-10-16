@@ -22,12 +22,14 @@ export function WorkspaceResourcesHost({
   onOpenChange,
   label,
   children,
+  closeFocus,
 }: {
   readonly wide: boolean;
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
   readonly label: string;
   readonly children: ReactNode;
+  readonly closeFocus?: () => HTMLElement | false | null;
 }) {
   return wide ? (
     <aside aria-label={label} data-workspace-resources="" hidden={!open}>
@@ -35,7 +37,7 @@ export function WorkspaceResourcesHost({
     </aside>
   ) : (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetPopup data-workspace-resource-sheet="">
+      <SheetPopup data-workspace-resource-sheet="" finalFocus={closeFocus}>
         <SheetTitle className="sr-only">{label}</SheetTitle>
         {open ? children : null}
       </SheetPopup>

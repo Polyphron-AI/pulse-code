@@ -215,6 +215,22 @@ function NavigationHistoryShortcuts() {
           modelPickerOpen: isModelPickerOpen(),
         },
       });
+      const panelAction =
+        command === "workspace.resources"
+          ? "resources"
+          : command === "workspace.linkedContext"
+            ? "linkedContext"
+            : null;
+      if (panelAction) {
+        if (event.repeat) return;
+        const button = document.querySelector<HTMLButtonElement>(
+          `[data-workspace-action="${panelAction}"]`,
+        );
+        if (!button?.isConnected || button.disabled) return;
+        event.preventDefault();
+        button.click();
+        return;
+      }
       if (command !== "navigation.back" && command !== "navigation.forward") return;
 
       event.preventDefault();

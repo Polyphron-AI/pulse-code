@@ -1,11 +1,15 @@
+// @vitest-environment happy-dom
 import { renderToStaticMarkup } from "react-dom/server";
 import { act, type ReactNode } from "react";
 import { create, type ReactTestRenderer } from "react-test-renderer";
+import { createRoot } from "react-dom/client";
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
-import { describe, expect, it, vi } from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { DEFAULT_RESOLVED_KEYBINDINGS } from "@t3tools/shared/keybindings";
 import { EnvironmentId, ProjectId, type ScopedProjectRef } from "@t3tools/contracts";
-import { WorkspaceItemActions } from "./WorkspaceItemActions";
+import { WorkspaceItemActions, WorkspaceItemMenu } from "./WorkspaceItemActions";
+import { projectMenuItems } from "./mail/linkedItems";
+import { buildWorkspaceActionItems } from "../CommandPalette.logic";
 
 const mocks = vi.hoisted(() => ({
   createProject:
@@ -14,6 +18,17 @@ const mocks = vi.hoisted(() => ({
     >(),
   linkToProject: vi.fn<(...args: unknown[]) => Promise<void>>(),
   startThread: vi.fn(async () => null),
+  contextMenuShow: vi.fn(),
+  operate: true,
+}));
+vi.mock("../../localApi", () => ({
+  readLocalApi: () => ({ contextMenu: { show: mocks.contextMenuShow } }),
+}));
+vi.mock("../../state/session", () => ({
+  useEnvironmentSessionState: () => ({
+    isPending: false,
+    data: { authenticated: true, scopes: mocks.operate ? ["orchestration:operate"] : [] },
+  }),
 }));
 
 vi.mock("@tanstack/react-router", () => ({
@@ -21,7 +36,12 @@ vi.mock("@tanstack/react-router", () => ({
 }));
 vi.mock("@effect/atom-react", () => ({ useAtomValue: () => DEFAULT_RESOLVED_KEYBINDINGS }));
 vi.mock("../../state/server", () => ({ primaryServerKeybindingsAtom: {} }));
-vi.mock("../../state/entities", () => ({ useProjects: () => [], useThreadShells: () => [] }));
+vi.mock("../../state/entities", () => ({
+  useProjects: () => [
+    { id: ProjectId.make("project-a"), title: "A project", environmentId: EnvironmentId.make("a") },
+  ],
+  useThreadShells: () => [],
+}));
 vi.mock("../../state/query", () => ({
   useEnvironmentQuery: () => ({ data: { linked: [] }, error: null, refresh: vi.fn() }),
 }));
@@ -42,6 +62,270 @@ vi.mock("../ui/tooltip", () => ({
 }));
 vi.mock("../ui/button", () => ({ Button: "button" }));
 vi.mock("../ui/input", () => ({ Input: "input" }));
+vi.mock("../ui/popover", () => ({
+  Popover: ({ children }: { children: ReactNode }) => children,
+  PopoverTrigger: ({ render }: { render: ReactNode }) => render,
+  PopoverPopup: ({ children }: { children: ReactNode }) => children,
+}));
+beforeEach(() => {
+  mocks.operate = true;
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+});
+afterEach(() => {
+  vi.clearAllMocks();
+  vi.unstubAllGlobals();
+});
+
+const a = { ref: { type: "url" as const, url: "https://example.invalid/a" }, title: "A" };
+const b = { ref: { type: "url" as const, url: "https://example.invalid/b" }, title: "B" };
+const environmentId = EnvironmentId.make("a");
+const choiceId = projectMenuItems(
+  [{ id: ProjectId.make("project-a"), title: "A project" }],
+  new Set(),
+)[0]!.id;
+const target = document.createElement("button");
+function add(view: ReactTestRenderer) {
+  return view.root
+    .findAllByType("button")
+    .find((button) => button.props.children === "Add to project")!;
+}
+it.each(["choose", "cancel", "revoked", "environment"])(
+  "keeps the pending item chooser scoped: %s",
+  async (outcome) => {
+    let resolve!: (value: string | null) => void;
+    const choice = new Promise<string | null>((done) => {
+      resolve = done;
+    });
+    mocks.contextMenuShow.mockReturnValueOnce(choice);
+    mocks.linkToProject.mockResolvedValue(undefined);
+    let view!: ReactTestRenderer;
+    await act(() => {
+      view = create(<WorkspaceItemActions environmentId={environmentId} item={a} />);
+    });
+    try {
+      await act(async () => {
+        add(view).props.onClick({ currentTarget: target });
+      });
+      if (outcome === "revoked") mocks.operate = false;
+      await act(() => {
+        view.update(
+          <WorkspaceItemActions
+            environmentId={outcome === "environment" ? EnvironmentId.make("b") : environmentId}
+            item={b}
+          />,
+        );
+      });
+      await act(async () => {
+        resolve(outcome === "cancel" ? null : choiceId);
+        await choice;
+      });
+      if (outcome === "choose")
+        expect(mocks.linkToProject).toHaveBeenCalledWith(
+          a,
+          expect.objectContaining({ id: "project-a" }),
+          { type: "action", action: "add-to-project" },
+        );
+      else expect(mocks.linkToProject).not.toHaveBeenCalled();
+      expect(mocks.startThread).not.toHaveBeenCalled();
+      expect(mocks.createProject).not.toHaveBeenCalled();
+    } finally {
+      await act(() => view.unmount());
+    }
+  },
+);
+it("holds a row's item when selection changes while its menu is open", async () => {
+  let view!: ReactTestRenderer;
+  await act(() => {
+    view = create(
+      <WorkspaceItemMenu environmentId={environmentId} item={a}>
+        <button>A row</button>
+      </WorkspaceItemMenu>,
+    );
+  });
+  try {
+    await act(() =>
+      view.root.findByProps({ draggable: true }).props.onContextMenu({ preventDefault() {} }),
+    );
+    await act(() =>
+      view.update(
+        <WorkspaceItemMenu environmentId={environmentId} item={b}>
+          <button>B row</button>
+        </WorkspaceItemMenu>,
+      ),
+    );
+    mocks.contextMenuShow.mockResolvedValueOnce(choiceId);
+    mocks.linkToProject.mockResolvedValue(undefined);
+    await act(async () => {
+      add(view).props.onClick({ currentTarget: target });
+    });
+    expect(mocks.linkToProject).toHaveBeenCalledWith(a, expect.anything(), expect.anything());
+  } finally {
+    await act(() => view.unmount());
+  }
+});
+it("keeps a native menu's project editor on A after selection changes to B", async () => {
+  let resolve!: (value: string | null) => void;
+  const choice = new Promise<string | null>((done) => {
+    resolve = done;
+  });
+  mocks.contextMenuShow.mockReturnValueOnce(choice);
+  mocks.linkToProject.mockResolvedValue(undefined);
+  mocks.createProject.mockImplementation(async (input) => {
+    await input.onCreated?.(scopeProjectRef(environmentId, ProjectId.make("new")));
+    return true;
+  });
+  let view!: ReactTestRenderer;
+  await act(() => {
+    view = create(<WorkspaceItemActions environmentId={environmentId} item={a} />);
+  });
+  try {
+    await act(() =>
+      view.root
+        .findByProps({ className: "flex flex-wrap items-center gap-2" })
+        .props.onContextMenu({
+          preventDefault() {},
+          currentTarget: target,
+          clientX: 0,
+          clientY: 0,
+        }),
+    );
+    await act(() => view.update(<WorkspaceItemActions environmentId={environmentId} item={b} />));
+    await act(async () => {
+      resolve("new-project");
+      await choice;
+    });
+    await act(() => view.root.findByType("input").props.onChange({ target: { value: "New" } }));
+    await act(async () => {
+      view.root.findByType("form").props.onSubmit({ preventDefault() {} });
+    });
+    expect(mocks.linkToProject).toHaveBeenCalledWith(a, expect.anything(), {
+      type: "action",
+      action: "start-project",
+    });
+  } finally {
+    await act(() => view.unmount());
+  }
+});
+it("cancels an open project editor when operate permission is revoked for the same item", async () => {
+  let view!: ReactTestRenderer;
+  await act(() => {
+    view = create(<WorkspaceItemActions environmentId={environmentId} item={a} />);
+  });
+  try {
+    await act(() =>
+      view.root
+        .findAllByType("button")
+        .find((button) => button.props.children === "Start project")!
+        .props.onClick(),
+    );
+    expect(view.root.findAllByType("form")).toHaveLength(1);
+    mocks.operate = false;
+    await act(() => view.update(<WorkspaceItemActions environmentId={environmentId} item={a} />));
+    expect(view.root.findAllByType("form")).toHaveLength(0);
+    expect(mocks.createProject).not.toHaveBeenCalled();
+  } finally {
+    await act(() => view.unmount());
+  }
+});
+it.each(["long-press", "move", "cancel", "release", "unmount"])(
+  "handles the touch menu gesture: %s",
+  async (gesture) => {
+    vi.useFakeTimers();
+    let view!: ReactTestRenderer;
+    await act(() => {
+      view = create(
+        <WorkspaceItemMenu environmentId={environmentId} item={a}>
+          <button>A row</button>
+        </WorkspaceItemMenu>,
+      );
+    });
+    try {
+      const row = view.root.findByProps({ draggable: true });
+      await act(() => row.props.onPointerDown({ pointerType: "touch", clientX: 0, clientY: 0 }));
+      if (gesture === "move") await act(() => row.props.onPointerMove({ clientX: 11, clientY: 0 }));
+      if (gesture === "cancel") await act(() => row.props.onPointerCancel());
+      if (gesture === "release") await act(() => row.props.onPointerUp());
+      if (gesture === "unmount") await act(() => view.unmount());
+      else
+        await act(() =>
+          view.update(
+            <WorkspaceItemMenu environmentId={environmentId} item={b}>
+              <button>B row</button>
+            </WorkspaceItemMenu>,
+          ),
+        );
+      await act(() => vi.advanceTimersByTime(500));
+      if (gesture === "long-press") {
+        mocks.contextMenuShow.mockResolvedValueOnce(choiceId);
+        await act(async () => {
+          add(view).props.onClick({ currentTarget: target });
+        });
+        expect(mocks.linkToProject).toHaveBeenCalledWith(a, expect.anything(), expect.anything());
+      } else if (gesture !== "unmount")
+        expect(view.root.findAllByType(WorkspaceItemActions)).toHaveLength(0);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      if (gesture !== "unmount") await act(() => view.unmount());
+      vi.useRealTimers();
+    }
+  },
+);
+it("dispatches one selected-item shortcut beside an open resource menu and aborts detached palette targets", async () => {
+  const node = document.createElement("div");
+  document.body.append(node);
+  const root = createRoot(node);
+  function App({ selected }: { selected: typeof a }) {
+    return (
+      <>
+        <WorkspaceItemActions environmentId={environmentId} item={selected} shortcuts />
+        <WorkspaceItemMenu environmentId={environmentId} item={b} shortcuts>
+          <button>Resource B</button>
+        </WorkspaceItemMenu>
+      </>
+    );
+  }
+  mocks.contextMenuShow.mockResolvedValue(choiceId);
+  mocks.linkToProject.mockResolvedValue(undefined);
+  try {
+    await act(() => root.render(<App selected={a} />));
+    await act(() =>
+      node
+        .querySelector('[draggable="true"]')!
+        .dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true })),
+    );
+    await act(async () => {
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "p",
+          code: "KeyP",
+          ctrlKey: true,
+          altKey: true,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    });
+    expect(mocks.linkToProject).toHaveBeenCalledTimes(1);
+    expect(mocks.linkToProject).toHaveBeenCalledWith(a, expect.anything(), expect.anything());
+    const palette = buildWorkspaceActionItems(null).find(
+      (action) => action.shortcutCommand === "workspace.addToProject",
+    )!;
+    await act(() => root.render(<App selected={b} />));
+    mocks.linkToProject.mockClear();
+    await act(async () => palette.run());
+    expect(mocks.linkToProject).not.toHaveBeenCalled();
+    await act(async () =>
+      buildWorkspaceActionItems(null)
+        .find((action) => action.shortcutCommand === "workspace.addToProject")!
+        .run(),
+    );
+    expect(mocks.linkToProject).toHaveBeenCalledTimes(1);
+    expect(mocks.linkToProject).toHaveBeenCalledWith(b, expect.anything(), expect.anything());
+  } finally {
+    await act(() => root.unmount());
+    node.remove();
+  }
+});
 
 describe("workspace action entrances", () => {
   it("renders selected-item actions and shortcut labels without crashing the reader", () => {

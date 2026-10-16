@@ -1537,3 +1537,23 @@ it("resolves selected-item automation without stealing editable or terminal focu
     }),
   );
 });
+it.each([
+  ["o", "workspace.resources"],
+  ["l", "workspace.linkedContext"],
+])("resolves the %s panel shortcut outside editable and terminal focus", (key, command) => {
+  const shortcut = event({ key, ctrlKey: true, altKey: true });
+  assert.equal(
+    resolveShortcutCommand(shortcut, DEFAULT_RESOLVED_KEYBINDINGS, {
+      platform: "Linux",
+      context: { terminalFocus: false, editableFocus: false },
+    }),
+    command,
+  );
+  for (const context of [{ terminalFocus: true }, { editableFocus: true }])
+    assert.isNull(
+      resolveShortcutCommand(shortcut, DEFAULT_RESOLVED_KEYBINDINGS, {
+        platform: "Linux",
+        context,
+      }),
+    );
+});

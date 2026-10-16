@@ -7,7 +7,8 @@ import {
   ThreadId,
 } from "@t3tools/contracts";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
-import { useState } from "react";
+import { useContext, useState } from "react";
+import { WorkspaceItemMutationContext } from "./WorkspaceEngagement";
 import { useEnvironmentSessionState } from "../../state/session";
 import { useEnvironmentQuery } from "../../state/query";
 import { useAtomCommand } from "../../state/use-atom-command";
@@ -80,6 +81,7 @@ function ProjectWorkspaceSettingsForm({
       className="space-y-3"
       onSubmit={async (event) => {
         event.preventDefault();
+        if (busy || !canOperate) return;
         setBusy(true);
         setError(null);
         const result = await save({
@@ -272,6 +274,7 @@ function TaskEditor({
   onClose: () => void;
 }) {
   const canOperate = useWorkspaceCanOperate(environmentId);
+  const invalidateContext = useContext(WorkspaceItemMutationContext);
   const save = useAtomCommand(workspaceTools.upsertTask, { reportFailure: false });
   const remove = useAtomCommand(workspaceTools.deleteTask, { reportFailure: false });
   const [title, setTitle] = useState(task.title);
@@ -290,6 +293,7 @@ function TaskEditor({
         className="flex flex-wrap gap-2"
         onSubmit={async (event) => {
           event.preventDefault();
+          if (busy || !canOperate) return;
           setBusy(true);
           setError(null);
           const result = await save({
@@ -298,6 +302,8 @@ function TaskEditor({
           });
           setBusy(false);
           if (result._tag === "Failure") setError(workspaceToolsError(result));
+          else if (column !== task.column)
+            invalidateContext?.(environmentId, { type: "task", taskId: task.id });
         }}
       >
         <Input
@@ -326,12 +332,16 @@ function TaskEditor({
           variant="ghost"
           disabled={busy || !canOperate}
           onClick={async () => {
+            if (busy || !canOperate) return;
             setBusy(true);
             setError(null);
             const result = await remove({ environmentId, input: { id: task.id } });
             setBusy(false);
             if (result._tag === "Failure") setError(workspaceToolsError(result));
-            else onClose();
+            else {
+              invalidateContext?.(environmentId, { type: "task", taskId: task.id });
+              onClose();
+            }
           }}
         >
           Delete task

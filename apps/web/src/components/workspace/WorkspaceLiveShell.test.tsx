@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 // @effect-diagnostics nodeBuiltinImport:off - checks the shared desktop inset CSS alongside live shell state.
-import { act, type ReactNode } from "react";
+import { act, useState, type ReactNode } from "react";
+import { DEFAULT_RESOLVED_KEYBINDINGS } from "@t3tools/shared/keybindings";
 import { createRoot, type Root } from "react-dom/client";
 import { getByRole, getAllByRole, queryByRole } from "@testing-library/dom";
 import {
@@ -14,6 +15,7 @@ import {
 import { EnvironmentId } from "@t3tools/contracts";
 import { afterEach, beforeEach, expect, it, vi } from "vite-plus/test";
 import { AppSidebarLayout } from "../AppSidebarLayout";
+import { WorkspaceEngagement } from "./WorkspaceEngagement";
 import { parseWorkspaceSearch } from "./workspaceNavigation";
 import { useWorkspaceHeaderModel } from "./useWorkspaceHeaderModel";
 import * as NodeFS from "node:fs";
@@ -36,7 +38,7 @@ const state = vi.hoisted(() => ({
 }));
 // Isolate providers, settings and Code-only services. Keep the live router,
 // navigation hook, SidebarProvider, shell composition and rail unmocked.
-vi.mock("@effect/atom-react", () => ({ useAtomValue: () => [] }));
+vi.mock("@effect/atom-react", () => ({ useAtomValue: () => DEFAULT_RESOLVED_KEYBINDINGS }));
 vi.mock("../../state/server", () => ({ primaryServerKeybindingsAtom: {} }));
 vi.mock("../../state/entities", () => ({ useProjects: () => [] }));
 vi.mock("../../env", () => ({
@@ -117,8 +119,9 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-async function mount(href: string) {
+async function mount(href: string, panels = false) {
   function Module() {
+    const [selection, setSelection] = useState("A");
     state.moduleRendered();
     const header = useWorkspaceHeaderModel(
       EnvironmentId.make("module-id"),
@@ -127,7 +130,26 @@ async function mount(href: string) {
     );
     return (
       <main data-module-environment={header.environmentLabel} data-module-space={header.spaceLabel}>
-        Current workspace content
+        {panels ? (
+          <WorkspaceEngagement
+            environmentId={EnvironmentId.make("live-a")}
+            space="projects"
+            layout="full"
+            header={header}
+            resources={<p>Project resources</p>}
+            linkedContext={{
+              item: {
+                ref: { type: "url", url: `https://example.invalid/${selection}` },
+                title: `Item ${selection}`,
+              },
+              render: () => <p>Item links</p>,
+            }}
+          >
+            <button onClick={() => setSelection("B")}>Select B</button>
+          </WorkspaceEngagement>
+        ) : (
+          "Current workspace content"
+        )}
       </main>
     );
   }
@@ -156,6 +178,52 @@ async function mount(href: string) {
   await act(async () => root!.render(<RouterProvider router={router} />));
   return router;
 }
+
+it("routes panel keybindings through the header callbacks and keeps held context", async () => {
+  (
+    window as unknown as {
+      happyDOM: { setWindowSize(size: { width: number; height: number }): void };
+    }
+  ).happyDOM.setWindowSize({ width: 1280, height: 800 });
+  await mount("/workspace?space=projects&environment=live-a", true);
+  const shortcut = (key: string) =>
+    act(() => {
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key,
+          code: `Key${key.toUpperCase()}`,
+          metaKey: true,
+          altKey: true,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    });
+  await shortcut("o");
+  expect(queryByRole(node, "complementary", { name: "Resources" })).toBeNull();
+  await act(() => {
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "l",
+        code: "KeyL",
+        metaKey: true,
+        altKey: true,
+        repeat: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+  });
+  expect(queryByRole(node, "complementary", { name: "Linked context" })).toBeNull();
+  await shortcut("l");
+  expect(getByRole(node, "heading", { name: "Item A" })).toBeDefined();
+  await act(() => getByRole(node, "button", { name: "Select B" }).click());
+  expect(node.textContent).toContain("Held item");
+  await shortcut("o");
+  expect(getByRole(node, "complementary", { name: "Resources" })).toBeDefined();
+  await shortcut("l");
+  expect(getByRole(node, "heading", { name: "Item B" })).toBeDefined();
+});
 
 it.each([
   ["mail", "Email", ["Inbox", "Unread", "Later"], "Email accounts and folders", "button"],

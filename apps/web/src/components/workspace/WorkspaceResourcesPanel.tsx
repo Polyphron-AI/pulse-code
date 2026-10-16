@@ -4,7 +4,7 @@ import type {
   WorkspaceItemRef,
   WorkspaceLinkEndpoint,
 } from "@t3tools/contracts";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import {
   useAllEnvironmentProjectSnapshotsReady,
   useProjects,
@@ -19,11 +19,15 @@ import {
   resolveResourceProject,
   useWorkspaceResources,
   type WorkspaceResourceProject,
+  type WorkspaceResourceScope,
 } from "./workspaceResourceState";
 import { WorkspaceResourcesPanelView } from "./WorkspaceResourcesPanelView";
 import { WorkspaceResourceBody } from "./WorkspaceResourceBody";
 import type { WorkspaceProjectOption } from "./ProjectPickerView";
 import { WorkspaceItemMenu } from "./WorkspaceItemActions";
+import { WorkspaceResourceFooter } from "./WorkspaceResourceFooter";
+import { ProjectWorkspaceSettings } from "./ProjectTasks";
+import { Sheet, SheetPopup, SheetTitle } from "../ui/sheet";
 
 export interface WorkspaceResourcesPanelProps {
   readonly environmentId: EnvironmentId | null;
@@ -73,6 +77,7 @@ export function WorkspaceResourcesPanel(props: WorkspaceResourcesPanelProps): Re
       onTabChange={state.selectTab}
       onChooseProject={state.chooseProject}
       onAutoProject={state.resetProject}
+      automatic={state.projectId === null}
       {...(props.renderProjectActions ? { renderProjectActions: props.renderProjectActions } : {})}
       body={body}
       footer={props.footer}
@@ -98,7 +103,7 @@ export function WorkspaceProjectResources({
       projects={[]}
       selectedItem={null}
       onOpen={open}
-      footer={null}
+      footer={<span>Connection status unavailable</span>}
     />
   ) : (
     <ResolvedProjectResources
@@ -123,6 +128,7 @@ function ResolvedProjectResources({
 }): ReactNode {
   const state = useWorkspaceResources();
   const projects = useProjects();
+  const [settingsScope, setSettingsScope] = useState<WorkspaceResourceScope | null>(null);
   const ready = useAllEnvironmentProjectSnapshotsReady();
   const capability = useMailCapabilities(environmentId);
   const ref = selectedItem?.ref;
@@ -158,27 +164,61 @@ function ResolvedProjectResources({
       })
     : null;
   return (
-    <WorkspaceResourcesPanel
-      environmentId={environmentId}
-      project={project}
-      projects={projects.filter((candidate) => candidate.environmentId === environmentId)}
-      selectedItem={selectedItem}
-      onOpen={onOpen}
-      footer={<span>Connection status unavailable</span>}
-      renderProjectActions={(id, row) => (
-        <WorkspaceItemMenu
-          environmentId={environmentId}
-          item={{
-            ref: { type: "project", projectId: id },
-            title:
-              projects.find(
-                (candidate) => candidate.environmentId === environmentId && candidate.id === id,
-              )?.title ?? "Project",
-          }}
-        >
-          {row}
-        </WorkspaceItemMenu>
-      )}
-    />
+    <>
+      <WorkspaceResourcesPanel
+        environmentId={environmentId}
+        project={project}
+        projects={projects.filter((candidate) => candidate.environmentId === environmentId)}
+        selectedItem={selectedItem}
+        onOpen={onOpen}
+        footer={
+          project?.kind === "selected" ? (
+            <WorkspaceResourceFooter
+              scope={project.scope}
+              observations={[]}
+              sample={false}
+              onSettings={setSettingsScope}
+            />
+          ) : (
+            <span>Connection status unavailable</span>
+          )
+        }
+        renderProjectActions={(id, row) => (
+          <WorkspaceItemMenu
+            environmentId={environmentId}
+            item={{
+              ref: { type: "project", projectId: id },
+              title:
+                projects.find(
+                  (candidate) => candidate.environmentId === environmentId && candidate.id === id,
+                )?.title ?? "Project",
+            }}
+          >
+            {row}
+          </WorkspaceItemMenu>
+        )}
+      />
+      <Sheet
+        open={settingsScope !== null}
+        onOpenChange={(open) => {
+          if (!open) setSettingsScope(null);
+        }}
+      >
+        <SheetPopup>
+          <div className="p-4">
+            <SheetTitle>Project workspace settings</SheetTitle>
+          </div>
+          {settingsScope ? (
+            <div className="min-h-0 overflow-y-auto p-4">
+              {capability.workspaceTools ? (
+                <ProjectWorkspaceSettings {...settingsScope} />
+              ) : (
+                <p>Project settings need a newer server.</p>
+              )}
+            </div>
+          ) : null}
+        </SheetPopup>
+      </Sheet>
+    </>
   );
 }

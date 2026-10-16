@@ -79,3 +79,36 @@ it("returns from an explicit project to Auto without choosing another project", 
   expect(automatic).toHaveBeenCalledOnce();
   expect(choose).not.toHaveBeenCalled();
 });
+it("keeps Choose a project reachable and distinguishes inferred from manual selection", async () => {
+  await mount();
+  const props = {
+    projects: [{ id: ProjectId.make("a"), title: "Alpha" }],
+    onChooseProject: vi.fn(),
+    onAutoProject: vi.fn(),
+  };
+  await act(() =>
+    root!.render(<ProjectPickerView {...props} selectedProjectId={null} automatic />),
+  );
+  expect(getByRole(node, "combobox", { name: "Choose project" }).textContent).toContain(
+    "Choose a project",
+  );
+  await act(() =>
+    root!.render(
+      <ProjectPickerView {...props} selectedProjectId={ProjectId.make("a")} automatic />,
+    ),
+  );
+  expect(getByRole(node, "combobox", { name: "Choose project" }).textContent).toContain(
+    "Auto: Alpha",
+  );
+  await act(() => getByRole(node, "combobox", { name: "Choose project" }).click());
+  expect(getByRole(document.body, "option", { name: "Auto" }).getAttribute("aria-selected")).toBe(
+    "true",
+  );
+  await act(() => getByRole(document.body, "option", { name: "Alpha" }).click());
+  await act(() =>
+    root!.render(
+      <ProjectPickerView {...props} selectedProjectId={ProjectId.make("a")} automatic={false} />,
+    ),
+  );
+  expect(getByRole(node, "combobox", { name: "Choose project" }).textContent).toBe("Alpha");
+});

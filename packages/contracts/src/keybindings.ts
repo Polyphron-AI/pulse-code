@@ -99,6 +99,8 @@ export const STATIC_KEYBINDING_COMMANDS = [
   "workspace.addToProject",
   "workspace.startProject",
   "workspace.startAutomation",
+  "workspace.resources",
+  "workspace.linkedContext",
   "chat.new",
   "chat.newLocal",
   "chat.newWithoutProject",

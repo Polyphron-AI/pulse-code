@@ -33,6 +33,12 @@ export const DEFAULT_KEYBINDINGS: ReadonlyArray<KeybindingRule> = [
   },
   { key: "mod+alt+t", command: "workspace.startThread", when: "!terminalFocus && !editableFocus" },
   { key: "mod+alt+p", command: "workspace.addToProject", when: "!terminalFocus && !editableFocus" },
+  { key: "mod+alt+o", command: "workspace.resources", when: "!terminalFocus && !editableFocus" },
+  {
+    key: "mod+alt+l",
+    command: "workspace.linkedContext",
+    when: "!terminalFocus && !editableFocus",
+  },
   {
     key: "mod+alt+shift+p",
     command: "workspace.startProject",

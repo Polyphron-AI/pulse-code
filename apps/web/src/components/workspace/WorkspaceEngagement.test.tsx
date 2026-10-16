@@ -2,7 +2,7 @@
 import { act, useState, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { getByRole, queryByRole } from "@testing-library/dom";
-import { EnvironmentId } from "@t3tools/contracts";
+import { EnvironmentId, type WorkspaceLinkEndpoint } from "@t3tools/contracts";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import { WorkspaceEngagement } from "./WorkspaceEngagement";
 import { useWorkspaceResourceState, WorkspaceResourcesProvider } from "./workspaceResourceState";
@@ -23,7 +23,12 @@ async function mount(
   layout: "full" | "split" = "full",
   viewport = 1280,
   initialOpen = true,
-  options: { linked?: ReactNode; resources?: ReactNode; environmentId?: EnvironmentId | null } = {},
+  options: {
+    linked?: ReactNode;
+    item?: WorkspaceLinkEndpoint | null;
+    resources?: ReactNode;
+    environmentId?: EnvironmentId | null;
+  } = {},
 ) {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   (
@@ -40,7 +45,7 @@ async function mount(
     setItem: (key: string, value: string) => values.set(key, value),
   };
   const back = vi.fn();
-  function App() {
+  function App({ selectedItem }: { selectedItem?: WorkspaceLinkEndpoint | null | undefined }) {
     const wide = useMediaQuery("xl");
     const environmentId =
       options.environmentId === undefined ? EnvironmentId.make("a") : options.environmentId;
@@ -63,12 +68,14 @@ async function mount(
             ? {
                 linkedContext: {
                   item:
-                    options.linked === null
-                      ? null
-                      : {
-                          ref: { type: "url" as const, url: "https://example.invalid/a" },
-                          title: "Page A",
-                        },
+                    selectedItem !== undefined
+                      ? selectedItem
+                      : options.linked === null
+                        ? null
+                        : {
+                            ref: { type: "url" as const, url: "https://example.invalid/a" },
+                            title: "Page A",
+                          },
                   render: () => options.linked,
                 },
                 resources: <p>Project resources</p>,
@@ -84,8 +91,12 @@ async function mount(
       </WorkspaceResourcesProvider>
     );
   }
-  await act(async () => root.render(<App />));
-  return { values, back };
+  await act(async () => root.render(<App selectedItem={options.item} />));
+  return {
+    values,
+    back,
+    rerender: () => act(() => root.render(<App selectedItem={options.item} />)),
+  };
 }
 it("lets a full-width form work without subscribing to list sizing and keeps its state across Resources", async () => {
   const { values } = await mount();
@@ -234,4 +245,47 @@ it("returns compact context close to its overflow trigger", async () => {
   });
   expect(document.activeElement).toBe(trigger);
   expect(queryByRole(document.body, "dialog", { name: "Linked context" })).toBeNull();
+});
+it("hides Linked context in spaces that cannot supply a selected item", async () => {
+  await mount();
+  expect(queryByRole(node, "button", { name: "Linked context" })).toBeNull();
+});
+it("captures the first selection from an empty context and labels it held after selection changes", async () => {
+  const options = { linked: <p>Links</p>, item: null as WorkspaceLinkEndpoint | null };
+  const { rerender } = await mount("full", 1280, true, options);
+  await act(() => getByRole(node, "button", { name: "Linked context" }).click());
+  options.item = { ref: { type: "url", url: "https://example.invalid/a" }, title: "First item" };
+  await rerender();
+  expect(getByRole(node, "heading", { name: "First item" })).toBeDefined();
+  options.item = { ref: { type: "url", url: "https://example.invalid/b" }, title: "Next item" };
+  await rerender();
+  expect(node.textContent).toContain("Held item");
+  expect(getByRole(node, "heading", { name: "First item" })).toBeDefined();
+  await act(() => getByRole(node, "button", { name: "Show current item" }).click());
+  expect(getByRole(node, "heading", { name: "Next item" })).toBeDefined();
+});
+it("closes context with X without persisting Resources as closed", async () => {
+  await mount("full", 1280, true, { linked: <p>Links</p> });
+  await act(() => getByRole(node, "button", { name: "Linked context" }).click());
+  await act(() => getByRole(node, "button", { name: "Close linked context" }).click());
+  expect(getByRole(node, "complementary", { name: "Resources" })).toBeDefined();
+});
+it("keeps compact Back focus inside the resource sheet", async () => {
+  await mount("full", 390, false, {
+    linked: <p>Links</p>,
+    resources: (
+      <button role="tab" aria-selected="true">
+        Files
+      </button>
+    ),
+  });
+  await act(() => getByRole(node, "button", { name: "Workspace actions" }).click());
+  await act(() => getByRole(document.body, "menuitem", { name: "Linked context" }).click());
+  const back = getByRole(document.body, "button", { name: "Back to resources" });
+  await act(() => {
+    back.focus();
+    back.click();
+  });
+  const dialog = getByRole(document.body, "dialog", { name: "Resources" });
+  expect(dialog.contains(document.activeElement)).toBe(true);
 });

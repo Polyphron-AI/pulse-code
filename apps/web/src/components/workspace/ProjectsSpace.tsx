@@ -12,11 +12,9 @@ import { useNewProject } from "../../hooks/useNewProject";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { useEnvironmentQuery } from "../../state/query";
-import { workspaceLinks } from "../../state/workspaceLinks";
 import { WorkspaceItemActions, WorkspaceItemMenu } from "./WorkspaceItemActions";
 import { useWorkspaceItemOpener } from "./useWorkspaceItemOpener";
 import { WorkspaceEngagement } from "./WorkspaceEngagement";
-import { workspaceEndpointTitle } from "./mail/linkedItems";
 import { WorkspaceLinkedContext } from "./WorkspaceLinkedContext";
 import { useMailCapabilities } from "./mail/useMailCapabilities";
 
@@ -24,11 +22,9 @@ import { useMailCapabilities } from "./mail/useMailCapabilities";
 export function ProjectsSpace() {
   const search = useSearch({ strict: false });
   const navigate = useNavigate();
-  const {
-    environmentId,
-    workspaceItemContext,
-    workspaceTools: toolsAvailable,
-  } = useMailCapabilities(search.environment ? EnvironmentId.make(search.environment) : undefined);
+  const { environmentId, workspaceTools: toolsAvailable } = useMailCapabilities(
+    search.environment ? EnvironmentId.make(search.environment) : undefined,
+  );
   const projects = useProjects().filter((project) => project.environmentId === environmentId);
   const threads = useThreadShells();
   const taskRef = parseTaskLocation(search.item);
@@ -56,22 +52,16 @@ export function ProjectsSpace() {
   const projectThreads = threads.filter(
     (thread) => thread.environmentId === environmentId && thread.projectId === selected?.id,
   );
-  const hub = useEnvironmentQuery(
-    environmentId !== null && selected !== undefined && workspaceItemContext
-      ? workspaceLinks.projectHub({
-          environmentId,
-          input: {
-            projectId: selected.id,
-            threadIds: projectThreads.slice(0, 30).map((thread) => thread.id),
-          },
-        })
-      : null,
-  );
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const create = useNewProject();
   const open = useWorkspaceItemOpener(environmentId);
   const header = useWorkspaceHeaderModel(environmentId, "Projects", "Projects", selected?.title);
+  const contextItem = taskRef
+    ? { ref: taskRef, title: selectedTask?.title ?? "Unavailable task" }
+    : selected
+      ? { ref: { type: "project" as const, projectId: selected.id }, title: selected.title }
+      : null;
   const projectList = (
     <div className="flex flex-col gap-3 p-3">
       <form
@@ -142,30 +132,25 @@ export function ProjectsSpace() {
       resources={
         <WorkspaceProjectResources
           {...(selected ? { owningProjectId: selected.id } : {})}
-          selectedItem={
-            selected
-              ? {
-                  ref: selectedTask
-                    ? { type: "task", taskId: selectedTask.id }
-                    : { type: "project", projectId: selected.id },
-                  title: selectedTask?.title ?? selected.title,
-                }
-              : null
-          }
+          selectedItem={contextItem}
         />
       }
       linkedContext={{
-        item: selected
-          ? {
-              ref: selectedTask
-                ? { type: "task", taskId: selectedTask.id }
-                : { type: "project", projectId: selected.id },
-              title: selectedTask?.title ?? selected.title,
-            }
-          : null,
+        item: contextItem,
         render: (item) =>
           environmentId === null ? null : (
-            <WorkspaceLinkedContext environmentId={environmentId} item={item} onOpen={open} />
+            <WorkspaceLinkedContext
+              environmentId={environmentId}
+              item={item}
+              onOpen={open}
+              {...(taskRef && !selectedTask
+                ? {
+                    unavailableReason:
+                      taskQuery.error ??
+                      (taskQuery.isPending ? "Loading task..." : "This task is unavailable."),
+                  }
+                : {})}
+            />
           ),
       }}
     >
@@ -257,56 +242,6 @@ export function ProjectsSpace() {
               Tasks and workspace settings need a newer server.
             </p>
           )}
-          <h2 className="mt-6 mb-2 text-sm font-medium">Related through linked items</h2>
-          <p className="mb-2 text-xs text-muted-foreground">
-            Shown for discovery. These items are not project context until you link them directly.
-          </p>
-          {hub.error !== null ? (
-            <Button size="sm" variant="ghost" onClick={hub.refresh}>
-              Retry related items
-            </Button>
-          ) : null}
-          {hub.data !== null && hub.data.related.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No related items yet.</p>
-          ) : null}
-          {!workspaceItemContext ? (
-            <p className="text-sm text-muted-foreground">
-              Update this server to show related items.
-            </p>
-          ) : hub.data === null && hub.error === null ? (
-            <p className="text-sm text-muted-foreground">Loading related items...</p>
-          ) : null}
-          <ul>
-            {hub.data?.related.map((row) => (
-              <li key={JSON.stringify(row.item.ref)} className="py-2 text-sm">
-                <WorkspaceItemMenu
-                  environmentId={environmentId}
-                  item={row.item}
-                  provenance={
-                    <p className="mb-2 text-xs text-muted-foreground">
-                      Via {workspaceEndpointTitle(row.via)}
-                    </p>
-                  }
-                >
-                  <button
-                    type="button"
-                    className="hover:underline"
-                    onClick={() => open(row.item.ref)}
-                  >
-                    {workspaceEndpointTitle(row.item)}
-                  </button>
-                  <p className="text-xs text-muted-foreground">
-                    Via {workspaceEndpointTitle(row.via)}
-                  </p>
-                </WorkspaceItemMenu>
-              </li>
-            ))}
-          </ul>
-          {hub.data?.truncated || projectThreads.length > 30 ? (
-            <p className="text-xs text-muted-foreground">
-              Showing a bounded selection of related items.
-            </p>
-          ) : null}
         </section>
       )}
     </WorkspaceEngagement>
