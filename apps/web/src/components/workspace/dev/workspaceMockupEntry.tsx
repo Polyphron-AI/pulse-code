@@ -290,7 +290,9 @@ export async function startWorkspaceMockup(): Promise<void> {
     container.id = "workspace-mockup-root";
     container.style.height = "100%";
     // #root fills the viewport and body clips overflow, so a sibling would render off-screen.
-    (document.getElementById("root") ?? document.body).append(container);
+    const appRoot = document.getElementById("root");
+    if (!appRoot) throw new Error("Workspace fixture requires the #root mount point.");
+    appRoot.append(container);
     const splash = document.getElementById("boot-shell");
     const hidden = splash?.hidden;
     if (splash) splash.hidden = true;

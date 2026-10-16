@@ -59,7 +59,7 @@ beforeEach(() => {
   (window as unknown as { happyDOM: { setURL: (url: string) => void } }).happyDOM.setURL(
     "http://fixture.invalid/workspace?space=mail&fixture=01",
   );
-  document.body.innerHTML = '<div id="boot-shell"></div><div id="root"></div>';
+  document.body.innerHTML = '<div id="root"><div id="boot-shell"></div></div>';
   document.documentElement.className = "light developer-class";
   document.documentElement.dataset.themeId = "custom";
   document.documentElement.dataset.themeSelected = "true";
@@ -105,6 +105,9 @@ it("boots eight isolated memory routes, pins dark and preserves browser storage 
   const local = storageSnapshot(localStorage);
   const session = storageSnapshot(sessionStorage);
   const originalHtml = document.documentElement.getAttribute("style");
+  const appRoot = document.getElementById("root")!;
+  const splash = document.getElementById("boot-shell")!;
+  const splashHidden = splash.hidden;
   const capture = await boot();
   await expect(capture.ready()).rejects.toThrow("Capture host metadata is required.");
   capture.configureCapture(host);
@@ -164,13 +167,26 @@ it("boots eight isolated memory routes, pins dark and preserves browser storage 
   }
   expect(storageSnapshot(localStorage)).toEqual(local);
   expect(storageSnapshot(sessionStorage)).toEqual(session);
+  expect(splash.hidden).toBe(true);
   await act(async () => window.dispatchEvent(new Event("pagehide")));
+  expect(appRoot.querySelector("#workspace-mockup-root")).toBeNull();
+  expect(splash.hidden).toBe(splashHidden);
   expect(window.__workspaceMockupCapture).toBeUndefined();
   expect(document.documentElement.className).toBe("light developer-class");
   expect(document.documentElement.getAttribute("style")).toBe(originalHtml);
   expect(document.documentElement.dataset.themeId).toBe("custom");
   expect(window.fetch).toBe(originals.fetch);
 }, 45_000);
+
+it("rejects a fixture without the #root mount point", async () => {
+  document.getElementById("root")!.remove();
+  const { startWorkspaceMockup } = await import("./workspaceMockupEntry");
+  await expect(startWorkspaceMockup()).rejects.toThrow(
+    "Workspace fixture requires the #root mount point.",
+  );
+  expect(document.getElementById("workspace-mockup-root")).toBeNull();
+  expect(window.__workspaceMockupCapture).toBeUndefined();
+});
 
 it.each([
   ["?fixture=99", "Unknown fixture."],
