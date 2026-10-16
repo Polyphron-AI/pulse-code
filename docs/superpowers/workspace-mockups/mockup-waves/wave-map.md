@@ -250,7 +250,7 @@ Implementer commits end with a Co-Authored-By line naming the model that made th
 
 - Source: shell §5 S2; COMM-04 shell portion.
 - Mockup and region: all: x0..259 navigation.
-- Files: apps/web/src/components/AppSidebarLayout.tsx; UI/WorkspaceSpaceSelector.tsx; UI/OfficeWorkspace.tsx; UI/WorkspaceShellLayout.tsx proposed; UI/WorkspaceNavigation.tsx; UI/WorkspaceViewRail.tsx; UI/mail/MailNav.tsx; UI/ProjectsNav.tsx; apps/web/src/components/sidebar/SidebarChrome.tsx and focused tests.
+- Files: apps/web/src/components/AppSidebarLayout.tsx; UI/WorkspaceSpaceSelector.tsx; UI/OfficeWorkspace.tsx; UI/WorkspaceShellLayout.tsx proposed; UI/WorkspaceNavigationView.tsx; UI/WorkspaceViewRail.tsx; UI/mail/MailNav.tsx; UI/ProjectsNav.tsx; apps/web/src/components/sidebar/SidebarChrome.tsx and focused tests.
 - Dependencies: W4-T1.
 - Serial predecessors: W4-T1. Apply the admitted-task serial-slot rule above.
 - Decision state: default assumed, confirm D01. Common D24 applies to every task.
