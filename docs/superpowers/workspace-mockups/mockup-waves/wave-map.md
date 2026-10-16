@@ -127,13 +127,24 @@ Acquire one exclusive RPC/migration/context slot across all waves for contract e
 - W6 RPC/migrations/context: W6-T7 -> W6-T1a -> W6-T1b -> W6-T3 -> W6-T8 -> W6-T2a -> W6-T2b.
 - W7 RPC/migrations: W7-T1 -> W7-T2.
 - W8 RPC/migrations: W8-T1a -> W8-T1b -> W8-T5 -> W8-T6.
-- Docs UI: W8-T3a -> W8-T4 -> W8-T3b -> W8-T5 -> W8-T6 -> W8-T8.
+- Docs UI: W6-T8 -> W8-T3a -> W8-T4 -> W8-T3b -> W8-T5 -> W8-T6 -> W8-T8.
 - W9 RPC/migrations/context: W9-T1 -> W9-T7 -> W9-T2a -> W9-T2b -> W9-T2c -> W9-T3a -> W9-T3b -> W9-T3c -> W9-T8.
 - chat UI: W9-T4 -> W9-T5 -> W9-T6 -> W9-T8.
 - Browser/UI extraction: W10-T1 -> W10-T2 -> W10-T3 -> W10-T4.
-- W11 RPC: W11-T1 -> W11-T2 -> W11-T5.
+- W11 RPC: W11-T1 -> W11-T2 -> W11-T3 -> W11-T5.
 - W11 UI: W11-T3 -> W11-T4 -> W11-T6 -> W11-T7.
 - W12 admitted RPC/migrations: W12-T1 -> W12-T2 -> W12-T3 -> W12-T4 -> W12-T5 -> W12-T6 -> W12-T7 -> W12-T8 -> W12-T9 -> W12-T10.
+
+- UI/WorkspaceResourceBody.tsx: W4-T4a -> W5-T7 -> W6-T8 -> W7-T3 -> W8-T3a -> W8-T7 -> W8-T8 -> W10-T1 -> W10-T4. T6 changes the responsive host, not this switch. Each consumer lists the switch in Files and git add.
+- UI/ProjectTasks.tsx: W4-T5 -> W5-T1 -> W5-T2 -> W5-T3 -> W5-T4 (config) -> W7-T1 -> W8-T1a -> W5-T5b -> W5-T7.
+- UI/WorkspaceShellLayout.tsx: W4-T2 -> W4-T3 -> W4-T4a -> W4-T6. Both live AppSidebarLayout and the fixture mount it; no parallel fixture layout.
+- UI/workspaceNavigation.ts and UI/WorkspaceViewRail.tsx: W4-T1/T2 initial ownership -> W4-T6 gate where applicable -> W5-T5a -> W6-T4 -> W6-T5 -> W11-T3. Only admitted tasks touching that file take the slot; explicitly splice other parser/registry extensions into this chain before dispatch.
+- UI/dev/WorkspaceMockupApp.tsx prop/provider wiring: W4-T7 -> W4-T2 -> W4-T3 -> W4-T4a -> W4-T5. Region geometry is owned only by WorkspaceShellLayout, shared by live and fixture.
+- UI/workspaceResourceState.ts: W4-T4a -> W4-T6. W7 adds its convenience wrapper in UI/openFiles.ts instead of a second resource store.
+- UI/dev/tasksMockupModule.tsx: W4-T7 -> W5-T5a -> W5-T7.
+- UI/dev/notesMockupModule.tsx: W4-T7 -> W6-T8 -> W8-T4 -> W8-T5. W8-T3a preserves W6's native-note branch until T3b, which deletes meetings/WorkspaceNoteView.tsx and its test after repointing callers.
+- Each other UI/dev/<area>MockupModule.tsx: W4-T7 -> the owning task named in the W4 module-owner table, with any later edits explicitly spliced into that per-file chain.
+- docs gate: by wave number, admitted only. Shared docs/internals/glossary.md and docs/internals/overview.md: W4-T6 -> W5-T7 -> W6-T9 -> W7-T3 -> W8-T8 -> W9-T8 -> W10-T4 -> W11-T7; docs/user/workspace-spaces.md follows the same filtered order for tasks that edit it. Skipped/held waves do not block admitted docs updates.
 
 Cross-wave config slot: W5-T4 -> W7-T1 -> W8-T1a. New forward migrations choose their number only while holding the slot. Each admitted Wave 12 task carries its own documentation gate; W12-T10 is only the final aggregate if all optional units are chosen, never a dependency of another optional unit.
 
@@ -154,16 +165,18 @@ Cross-wave config slot: W5-T4 -> W7-T1 -> W8-T1a. New forward migrations choose 
 
 The route fragments below are proposed dev/test-only fixture selectors, not shipped public routes. Use the running isolated worktree origin only when a future capture is authorized. Each starts with a reset in-memory seed, the pinned V1 environment and open Resources at project fixture-synkek. No real account, live home or provider credential is loaded. The original PNGs remain unchanged. D03 corrects selection inconsistencies rather than storing contradictory UI state.
 
-| PNG under W/mockups         | Proposed route                             | Selected state and seeded data                                                                                                                                       | Resource tab                            |
-| --------------------------- | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
-| 01-email-files.png          | /workspace?space=mail&fixture=01           | Inbox, maya@synkek.com, Nina's launch-review stable message; first list sender corrected to Nina to match reader. Five mails, related Marketing folder, empty reply. | Files at SynKEK root                    |
-| 02-communications-files.png | /workspace?space=communications&fixture=02 | Slack marketing, 8 source-reported members, 3 known unread on loaded page, GENERAL/SynKEK/DM groups, four messages, two replies and strategy doc link.               | Files, corrected from Browser highlight |
-| 03-tasks.png                | /workspace?space=tasks&fixture=03          | All tasks, five exact titles, four open, Today then 16 Oct, MC/LM/NP/AM/MC; no rail badges.                                                                          | Files                                   |
-| 04-projects.png             | /workspace?space=projects&fixture=04       | SynKEK selected; Pulse website and Brand studio; exact descriptions, connection sample metadata and four provider-labelled roster rows.                              | Files                                   |
-| 05-browser-module.png       | /workspace?space=communications&fixture=05 | Same marketing conversation as 02; controlled inert site with SynKEK heading, comma-correct body and Explore products. No production synkek.com request.             | Browser, corrected from Agents          |
-| 06-agents-module.png        | /workspace?space=communications&fixture=06 | Same conversation; linked fixture threads SEO analyst, Content editor, Website developer; one static working and two idle dots.                                      | Agents, corrected from Files            |
-| 07-meetings-notes.png       | /workspace?space=meetings&fixture=07       | Upcoming, T 13, three 09:00/14:00/16:30 occurrences, validated fake Join links, + Schedule and exact subtitle; launch-review note with headings/list and NP comment. | Docs, launch-review note                |
-| 08-calendar-tasks.png       | /workspace?space=calendar&fixture=08       | Agenda, same T 13/events/attendees, + Schedule and week subtitle; same five tasks/completion as 03.                                                                  | Tasks                                   |
+| PNG under W/mockups         | Dev-only route                             | view     | centerArea     | resourceArea | Selected state and resource tab                                                                                                                 |
+| --------------------------- | ------------------------------------------ | -------- | -------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| 01-email-files.png          | /workspace?space=mail&fixture=01           | inbox    | mail           | drive        | Nina's mail-1, maya@synkek.com; typed recipients Maya/Leo/me and 10:24 AM; confirmed SynKEK chip and Marketing · SynKEK folder card; Files/root |
+| 02-communications-files.png | /workspace?space=communications&fixture=02 | chats    | communications | drive        | slack-marketing, 8 complete members, marker message-1, 3 known unread, four top-level messages/two replies; Files, corrected from Browser       |
+| 03-tasks.png                | /workspace?space=tasks&fixture=03          | all      | tasks          | drive        | Five tasks/four open; areaLabel/dueOn/owner plus display-only MC/LM/NP/AM/MC; sampleCopy.tasksFooter; Files                                     |
+| 04-projects.png             | /workspace?space=projects&fixture=04       | projects | projects       | drive        | fixture-synkek, Pulse website, Brand studio; complete sample counts/Drive link and four roster display rows; Files                              |
+| 05-browser-module.png       | /workspace?space=communications&fixture=05 | chats    | communications | browser      | Same marketing conversation; inert local SynKEK site, comma-correct body and sampleCopy.browserFooter; Browser, corrected from Agents           |
+| 06-agents-module.png        | /workspace?space=communications&fixture=06 | chats    | communications | agents       | Same conversation; three linked threads, one working/two idle; Agents, corrected from Files                                                     |
+| 07-meetings-notes.png       | /workspace?space=meetings&fixture=07       | upcoming | calendar       | notes        | event-review, T 13, 09:00/14:00/16:30 +02:00; Schedule; Docs request note-launch-review; format/comment remain incomplete until W8              |
+| 08-calendar-tasks.png       | /workspace?space=calendar&fixture=08       | agenda   | calendar       | tasks        | Same date/events and Schedule; Week uses Grid2X2; same five task records as 03; Tasks                                                           |
+
+These fields are the exact WorkspaceMockupRecipe slot mapping; requiredAreas is the union of centerArea/resourceArea, not their positional dispatch mechanism. A resourceArea of null means no adapter contributes a body. The eight recipes above all have a resourceArea. Titles Agenda/Upcoming are display labels, not URL view values. Fixture parser allows only space/fixture; the recipe supplies view/day/selected state. Unknown IDs/space mismatch/other query keys fail closed with W4-T7's exact errors. Reset uses a new seed, storage map and memory router. Capture requires measured resolvedLocale/resolvedTimeZone, font/OS/viewport plus pinned dark cleanup of index.html's earlier theme attributes. An enforced throwing/counting request guard allows only same-origin module/CSS/font GETs and vite-hmr; ready rejects any application attempt. Capture needs only a web-only Vite server, with no backend or pairing. Desktop dev with fixture is outside PNG acceptance.
 
 Files fixtures 01-04 seed four folders/four Docs with exact dates, a confirmed Marketing-to-SynKEK link for the blue glyph, and no opened folder row. Names, bodies, labels and ordering come from each corrected inventory, including the middle-dot launch-review title. Demo Schedule/Join/send use non-writing fakes. Capture from a fully settled receipt-driven state with focus/hover cleared and no pending request; record selected ref, resource project/tab, clock, theme, resolved font and manifest of allowed corrections beside each future capture. Do not copy or ship the 8 MB presentation HTML; the eight PNGs are the reference assets.
 
@@ -179,7 +192,27 @@ Mockups: 01-email-files.png through 08-calendar-tasks.png.
 
 Spec acceptance: Compare all eight PNGs at 1280x800: boundaries near x207/259/940, 26px breadcrumb, 52px header, 340px resources and six icon tabs. Email/Communications split the 681px center near x429; other spaces use its full width. Demo every destination, Code return, project choice before item selection, Linked context, close/reopen and compact Back. Module bodies are accepted in their owning waves.
 
-Detailed plan to be written later: `docs/superpowers/plans/2026-10-16-workspace-wave-4-shell.md`. This file is a named handoff, not created or validated by this assignment.
+Canonical detailed plan: `docs/superpowers/plans/2026-10-16-workspace-wave-4-shell.md`. Plan fix round 1 aligns this handoff at HEAD 1f0d9164de; implementation and rendered acceptance remain unrun.
+
+### Canonical module-owner handoff
+
+All paths here are under apps/web/src/components/workspace/. T7 creates the nine adapters below with empty readyRegions and transfers ownership. Each later task MUST name its exact adapter in Files and its explicit git add, export createWorkspaceMockupModule(session: WorkspaceMockupSession): WorkspaceMockupModule, mount the same pure presentation as live with fake reads/commands, and declare the center/resource regions it marks ready. Extra fake data stays in sibling dev files imported only by the adapter. There is a fixed dev import list and no registration call. No data-only or placeholder region can pass complete; outstanding 07.docs-format/07.docs-comments block the full Docs crop.
+
+| Adapter                            | Owning task             | Region                                |
+| ---------------------------------- | ----------------------- | ------------------------------------- |
+| dev/mailMockupModule.tsx           | W11-T3/gate             | 01 center                             |
+| dev/communicationsMockupModule.tsx | W9-T8                   | 02/05/06 center                       |
+| dev/tasksMockupModule.tsx          | W5-T5a -> W5-T7         | 03 center, 08 resource                |
+| dev/projectsMockupModule.tsx       | W8-T2                   | 04 center                             |
+| dev/driveMockupModule.tsx          | W7-T3                   | 01-04 resource                        |
+| dev/calendarMockupModule.tsx       | W6-T4                   | 07/08 center                          |
+| dev/notesMockupModule.tsx          | W6-T8 -> W8-T4 -> W8-T5 | 07 resource, then format and comments |
+| dev/browserMockupModule.tsx        | W10-T1                  | 05 resource                           |
+| dev/agentsMockupModule.tsx         | W10-T4                  | 06 resource                           |
+
+Later tasks wire Tasks/Docs/Files/PRs/Browser/Agents only in WorkspaceResourceBody.tsx under its serial chain and list it in Files/git add. W6's note handoff calls openResource with tab docs and request noteRef. W7 exports OpenFilesInput/OpenFiles/useOpenFiles from openFiles.ts; W9/W11 consume that wrapper and WorkspaceResourceBodyProps without redefining item?. W8-T3a preserves W6's interim native-note body until T3b replaces it with WorkspaceDocsPanel and deletes meetings/WorkspaceNoteView.tsx/test. W8 uses createWorkspaceNoteAtoms, the W6 producer name. W11 consumes W7's existing explorer pick mode. The controller amends those later detailed plans before dispatch; this two-file fix does not claim to have edited them.
+
+Implementer commits end with a Co-Authored-By line naming the model that made the commit; controller commits use the controller's attribution line.
 
 ### W4-T0. Commit B-2026-10-16-001 shell correction
 
@@ -195,10 +228,10 @@ Detailed plan to be written later: `docs/superpowers/plans/2026-10-16-workspace-
 
 - Source: shell §2 sample labels and all seven corrected inventories.
 - Mockup and region: 01..08: full [0,0,1280,800] state.
-- Files: dev/test-only UI/dev/workspaceMockupFixtures.ts and adjacent fixture tests, both proposed; module-local fake-boundary factories; docs/superpowers/workspace-mockups/capture-recipes.md proposed.
+- Files: dev/test-only UI/dev/workspaceMockupFixtures.ts, workspaceMockupEntry.tsx, WorkspaceMockupApp.tsx and adjacent fixture/entry/build tests; apps/web/src/bootstrap.ts; the nine exact dev adapters below; docs/superpowers/workspace-mockups/capture-recipes.md proposed.
 - Dependencies: W4-T0.
 - Decision state: default assumed, confirm D03, D25, D28. Common D24 applies to every task.
-- Work and acceptance: Build a dev/test-only entry with an injected clock fixed at Tuesday 2026-10-13T10:30:00+02:00, timezone Africa/Johannesburg and en-GB locale. Seed deterministic SynKEK mail, channels/DMs, messages/replies, tasks, projects, Drive root/files, calendar occurrences, note/comment and agent statuses for all eight PNGs, plus a controlled Browser site. Render Design preview · sample data and Sample project connections. All mutations use disposable in-memory fakes, including demo sends; no provider/SMTP/agent/network write. Reject any fixture state path outside this worktree sandbox and never open ~/.t3/userdata, including read-write connections, copies or symlinks. Production bundles omit the entry and sample data; production/old-server paths do not accept the fixture selector. Own the per-PNG recipe table below and keep module factories adjacent to their owners so parallel tasks do not all edit one fixture file.
+- Work and acceptance: Build a dev/test-only entry with an injected clock fixed at Tuesday 2026-10-13T10:30:00+02:00, timezone Africa/Johannesburg and en-GB locale. Seed deterministic SynKEK mail, channels/DMs, messages/replies, tasks, projects, Drive root/files, calendar occurrences, note/comment and agent statuses for all eight PNGs, plus a controlled Browser site. Render Design preview · sample data and Sample project connections. All mutations use disposable in-memory fakes, including demo sends; no provider/SMTP/agent/network write. Accept no state paths at all. All storage is injected per-session memory; never read/write browser storage or open userdata. Clear memory on dispose/reset. Pin dark after the inline boot script, use an isolated memory-history router, and enforce the throwing/counting zero-application-network guard. Build-exclusion tests use the real Vite config with only main stubbed, inspect output module IDs for /dev/ or .fixtures. and scan synkek.invalid/sample marker; a separate full production build scan runs outside unit tests. Production bundles omit the entry and sample data; production/old-server paths do not accept the fixture selector. Own the per-PNG recipe table below and keep module factories adjacent to their owners so parallel tasks do not all edit one fixture file.
 - Own test cycle: Test pinned dates across clock advances, seeded row identities/counts, sample marker on every state, no production entry, no real credentials/process sends and rejected live-home path. Each module contributes its missing typed fake state as it lands; fixture readiness is not module completion. Capture every recipe at 1280x800, then record 1024px/390px adaptations separately when browser use is authorized. Apply the focused test contract above.
 - Visual acceptance: Own W4-T7 fixture readiness, then V1; PNG 01-08, box [0,0,1280,800] at 1280x800; corrected inventory [gap-shell.md:15-107](gap-shell.md#L15). Pass: all eight recipes show marker, pinned Tue 13 date, exact seed rows and D03 corrected selection; V1 dark theme/font/2px criteria apply. Allowed substitutions: none in fixture captures; fixture must stay deterministic. The W4 live chrome table applies only to separate non-fixture captures.
 
@@ -209,7 +242,7 @@ Detailed plan to be written later: `docs/superpowers/plans/2026-10-16-workspace-
 - Files: ROUTES; UI/WorkspaceSpaceSelector.tsx; UI/OfficeWorkspace.tsx and focused route/selector tests.
 - Dependencies: W4-T0.
 - Decision state: default assumed, confirm D01, D03. Common D24 applies to every task.
-- Work and acceptance: Preserve legacy URLs and environment/account/project identity; add six destinations and view validation. Keep Projects as Workspace landing and restore the scoped Code thread. Unsupported capabilities explain availability without RPC calls.
+- Work and acceptance: Preserve legacy URLs and environment/account/project identity; add six destinations and the one canonical view key validated against exported workspaceViews. Later rail values extend that vocabulary/registry/parser tests under their file slots; taskLayout/day are separate bounded fields, not alternate rail keys. Keep Projects as Workspace landing and restore the scoped Code thread. Unsupported capabilities explain availability without RPC calls.
 - Own test cycle: Drive menu/palette/direct URL/back-forward transitions, invalid views, older server and environment changes; verify navigation starts no work. Apply the focused test contract above; visual acceptance follows the task-specific V1 record below.
 - Visual acceptance: W4-T7, then V1; PNG 01-08, box [0,0,259,800] at 1280x800; corrected inventory [gap-shell.md:15-53](gap-shell.md#L15). Pass: six destinations in order, exactly one selected, Inbox/Unread/Later visible in 01, mode and breadcrumb aligned; V1 dark theme/font/2px criteria apply. Allowed live substitutions: live brand/mode/environment names only per D25 and chrome table, plus the W4 chrome table.
 
@@ -217,11 +250,11 @@ Detailed plan to be written later: `docs/superpowers/plans/2026-10-16-workspace-
 
 - Source: shell §5 S2; COMM-04 shell portion.
 - Mockup and region: all: x0..259 navigation.
-- Files: apps/web/src/components/AppSidebarLayout.tsx; UI/WorkspaceSpaceSelector.tsx; UI/OfficeWorkspace.tsx; UI/mail/MailNav.tsx; UI/ProjectsNav.tsx; apps/web/src/components/sidebar/SidebarChrome.tsx and focused tests.
+- Files: apps/web/src/components/AppSidebarLayout.tsx; UI/WorkspaceSpaceSelector.tsx; UI/OfficeWorkspace.tsx; UI/WorkspaceShellLayout.tsx proposed; UI/WorkspaceNavigation.tsx; UI/WorkspaceViewRail.tsx; UI/mail/MailNav.tsx; UI/ProjectsNav.tsx; apps/web/src/components/sidebar/SidebarChrome.tsx and focused tests.
 - Dependencies: W4-T1.
 - Serial predecessors: W4-T1. Apply the admitted-task serial-slot rule above.
 - Decision state: default assumed, confirm D01. Common D24 applies to every task.
-- Work and acceptance: Compose the 207px sidebar and 52px rail. Space owners supply filter semantics. Keep Mail account/folder access and A12 searchable project dropdown; Code retains its native project/thread controls and both sidebar variants.
+- Work and acceptance: Compose the 207px sidebar and 52px rail. Space owners supply WorkspaceRailItem[] through workspaceRailItems, clearing unavailableReason when supported. No ReactNode rail slot. Mount the shared WorkspaceShellLayout in both AppSidebarLayout and the fixture. Keep Mail account/folder access and A12 searchable project dropdown; Code retains its native project/thread controls and both sidebar variants.
 - Own test cycle: Navigate each row by keyboard and pointer; test folder/account access, Settings and compact menu dismissal. Screenshot ordered six rows and one selected destination. Apply the focused test contract above; visual acceptance follows the task-specific V1 record below.
 - Visual acceptance: W4-T7, then V1; PNG 01-08, box [0,0,259,800] at 1280x800; corrected inventory [gap-shell.md:15-53](gap-shell.md#L15). Pass: six destinations in order, exactly one selected, Inbox/Unread/Later visible in 01, mode and breadcrumb aligned; V1 dark theme/font/2px criteria apply. Allowed live substitutions: live brand/mode/environment names only per D25 and chrome table, plus the W4 chrome table.
 
@@ -229,11 +262,11 @@ Detailed plan to be written later: `docs/superpowers/plans/2026-10-16-workspace-
 
 - Source: shell §5 S3.
 - Mockup and region: all: y0..78; center x259..940.
-- Files: UI/WorkspaceEngagement.tsx; apps/web/src/components/WorkspacePageHeader.tsx; apps/web/src/components/WorkspaceBreadcrumb.tsx; UI/mail/MailSpace.tsx; UI/ProjectsSpace.tsx; UI/CommunicationsWorkspace.tsx; UI/TelegramWorkspace.tsx and tests.
+- Files: UI/WorkspaceEngagement.tsx; apps/web/src/components/WorkspacePageHeader.tsx; apps/web/src/components/WorkspaceBreadcrumb.tsx; UI/mail/MailSpace.tsx; UI/ProjectsSpace.tsx; UI/CommunicationsWorkspace.tsx; UI/TelegramWorkspace.tsx; UI/WorkspaceShellLayout.tsx; apps/web/src/hooks/useResizableWidth.ts and its test; fixture entry test, fixture prop wiring and focused header/layout tests.
 - Dependencies: W4-T2.
 - Serial predecessors: W4-T2. Apply the admitted-task serial-slot rule above.
 - Decision state: default assumed, confirm D01, D03. Common D24 applies to every task.
-- Work and acceptance: Provide breadcrumb, title/subtitle, Resources and truthful identity. Support a split center or a wide module body; preserve keyboard resizing when applicable. Use semantic tokens and static artwork.
+- Work and acceptance: Spaces pass WorkspaceHeaderModel via WorkspaceEngagement.header. The shell renders one header and breadcrumb; no module renders a second WorkspacePageHeader. Inject storage into every divider read/write for clean fixture reset. Provide Resources and truthful identity. Support a split center or a wide module body; preserve keyboard resizing when applicable. Use semantic tokens and static artwork.
 - Own test cycle: Test route/account title updates, long names, no-list composition and Electron drag regions. Compare header baselines and width budget without adding a vacant list column. Apply the focused test contract above; visual acceptance follows the task-specific V1 record below.
 - Visual acceptance: W4-T7, then V1; PNG 01-08, box [207,0,1073,78] at 1280x800; corrected inventory [gap-shell.md:30-57](gap-shell.md#L30). Pass: one 26px breadcrumb and 52px header, split center only in mail/chat, Resources and avatar aligned; V1 dark theme/font/2px criteria apply. Allowed live substitutions: actual title/account/provider and configured owner initials, plus the W4 chrome table.
 
@@ -241,11 +274,11 @@ Detailed plan to be written later: `docs/superpowers/plans/2026-10-16-workspace-
 
 - Source: shell §5 S4; projects §5 P1; browser-agents §5 BA-1.
 - Mockup and region: all: x940..1280 resource frame.
-- Files: UI/WorkspaceEngagement.tsx; UI/WorkspaceToolsPanel.tsx; UI/ProjectsNav.tsx; UI/WorkspaceResourcesPanel.tsx proposed; focused selection tests.
+- Files: UI/WorkspaceEngagement.tsx; UI/WorkspaceToolsPanel.tsx; UI/ProjectsNav.tsx; UI/WorkspaceResourcesPanel.tsx; UI/WorkspaceResourcesPanelView.tsx; UI/ProjectPickerView.tsx; UI/workspaceResourceState.ts; UI/WorkspaceResourceBody.tsx; UI/WorkspaceShellLayout.tsx; apps/web/src/components/AppSidebarLayout.tsx; dev/WorkspaceMockupApp.tsx provider/frame wiring; focused selection/picker/isolation tests.
 - Dependencies: W4-T3.
 - Serial predecessors: W4-T3. Apply the admitted-task serial-slot rule above.
 - Decision state: default assumed, confirm D02, D03. Common D24 applies to every task.
-- Work and acceptance: Lift existing project resolution into one environment-scoped resource project independent of the center item. Own picker, X, Files/Browser/Agents/Tasks/Docs/PRs, default-open and close/reopen persistence. Mount only the selected lazy body. Unsupported slots are explained, never counted delivered.
+- Work and acceptance: Lift existing project resolution into one environment-scoped resource project independent of the center item. Own picker, X, Files/Browser/Agents/Tasks/Docs/PRs, default-open and close/reopen persistence. Mount only the selected lazy body through WorkspaceResourceBody.tsx, the sole switch. Expose openResource({ tab, projectId, request }) through WorkspaceResourcesContext/Provider and useWorkspaceResources; BodyProps includes nullable request and selectedItem. The frame view receives pure projects/callback/body/footer props; it imports no live container. Unsupported slots are explained, never counted delivered.
 - Own test cycle: Test zero/one/multiple projects before item selection, late reads after project/environment changes, close/reopen and exactly one mounted body without link writes. Apply the focused test contract above.
 - Visual acceptance: W4-T7, then V1; PNG 01-08, box [940,26,340,774] at 1280x800; corrected inventory [gap-shell.md:33-36](gap-shell.md#L33). Pass: six tabs in order, correct body-selected tab under D03, fixed footer and close/reopen project retention; V1 dark theme/font/2px criteria apply. Allowed live substitutions: actual project names and capability-unavailable body, plus the W4 chrome table.
 
@@ -265,11 +298,11 @@ Detailed plan to be written later: `docs/superpowers/plans/2026-10-16-workspace-
 
 - Source: shell §5 S5; COMM-10 shared portion.
 - Mockup and region: all: resource actions/footer; 04 card menus.
-- Files: UI/WorkspaceItemActions.tsx; UI/mail/LinkedSection.tsx; UI/mail/useMailLinks.ts; UI/WorkspaceResourcesPanel.tsx proposed; UI/ProjectTasks.tsx and tests.
+- Files: UI/WorkspaceItemActions.tsx; UI/mail/LinkedSection.tsx; UI/mail/useMailLinks.ts; UI/WorkspaceResourcesPanel.tsx proposed; UI/ProjectTasks.tsx; apps/web/src/components/AppSidebarLayout.tsx and dev/WorkspaceMockupApp.tsx footer-prop wiring; tests.
 - Dependencies: W4-T4a.
 - Serial predecessors: W4-T4b. Apply the admitted-task serial-slot rule above.
 - Decision state: default assumed, confirm D02, D03. Common D24 applies to every task.
-- Work and acceptance: Expose the same captured endpoint through context menu, detail/header, palette/keybinding and touch menu. Footer gear opens existing scoped project/integration settings. Keep direct/one-hop/suggested relationships distinct and handle unavailable targets.
+- Work and acceptance: Expose the same captured endpoint through context menu, detail/header, palette/keybinding and touch menu. Footer gear opens existing scoped project/integration settings. Release ProjectTasks.tsx to W5-T1 in its declared cross-wave file chain. Keep direct/one-hop/suggested relationships distinct and handle unavailable targets.
 - Own test cycle: Cancel creates nothing; switch selection during an action and verify the original endpoint; unlink/relink preserves origin; settings retains environment/project. Sample footer appears only in fixture mode. Apply the focused test contract above; visual acceptance follows the task-specific V1 record below.
 - Visual acceptance: W4-T7, then V1; PNG 01-08; 04 card menus, box [940,768,340,32] at 1280x800; corrected inventory [gap-shell.md:36-38](gap-shell.md#L36). Pass: footer dot/text/gear alignment, settings retains captured environment/project; unseen menus need review; V1 dark theme/font/2px criteria apply. Allowed live substitutions: supported live health labels from chrome table, plus the W4 chrome table.
 
@@ -277,7 +310,7 @@ Detailed plan to be written later: `docs/superpowers/plans/2026-10-16-workspace-
 
 - Source: shell §5 S6, S9; S7/S8 frame integration only.
 - Mockup and region: all: shared chrome; compact adaptation has no supplied PNG.
-- Files: UI/WorkspaceEngagement.tsx; shared headers/resources; focused workspace route and interaction tests; docs/user/workspace-spaces.md only for changed guidance; docs/internals/overview.md and docs/internals/glossary.md decision review at this wave gate.
+- Files: UI/WorkspaceEngagement.tsx; UI/WorkspaceShellLayout.tsx; shared headers/resources, excluding the body switch; focused workspace route and interaction tests; docs/user/workspace-spaces.md only for changed guidance; docs/internals/overview.md and docs/internals/glossary.md decision review at this wave gate.
 - Dependencies: W4-T5.
 - Serial predecessors: W4-T5. Apply the admitted-task serial-slot rule above.
 - Decision state: default assumed, confirm D24. Common D24 applies to every task.

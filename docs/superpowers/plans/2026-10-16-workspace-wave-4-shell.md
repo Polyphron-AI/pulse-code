@@ -12,7 +12,7 @@
 
 **Mockups:** All paths are under `docs/superpowers/workspace-mockups/mockups/`: `01-email-files.png`, `02-communications-files.png`, `03-tasks.png`, `04-projects.png`, `05-browser-module.png`, `06-agents-module.png`, `07-meetings-notes.png`, `08-calendar-tasks.png`.
 
-**Execution root:** `C:/Users/qblaa/.t3/worktrees/Pulse Code/unified-workspace`, branch `qb/feat-unified-workspace`. Source anchors below were read on 2026-10-16 at `6363a7913b` plus the correction. During writing, the shared checkout advanced to `d82b8004cca208df753e74e90c82fa94a69f0540`, which commits that same correction and both regression tests. W4-T0 is therefore an idempotent checkpoint verification plus remaining reference preparation. Re-read anchors when taking a task, since preceding tasks move lines. This document authorizes planning only. This writer performed no implementation, account operation, capture or commit.
+**Execution root:** `C:/Users/qblaa/.t3/worktrees/Pulse Code/unified-workspace`, branch `qb/feat-unified-workspace`. Source anchors below were read on 2026-10-16 at `6363a7913b` plus the correction. During writing, the shared checkout advanced to `d82b8004cca208df753e74e90c82fa94a69f0540`, which commits that same correction and both regression tests. W4-T0 is therefore an idempotent checkpoint verification plus remaining reference preparation. Re-read anchors when taking a task, since preceding tasks move lines. This document authorizes planning only. This writer performed no implementation, account operation, capture or commit. Plan fix round 1 rechecked source contracts at HEAD `1f0d9164de7fe6012dcc60ca13f17b61380fa226`; only this plan and the matching wave-map handoff are edited.
 
 ## Global Constraints
 
@@ -45,7 +45,7 @@ These relevant spec constraints are copied verbatim:
 - Apply ProductOps Build and Ponytail at full level. Reuse the current hooks, combobox, Sheet, links, actions and settings. Do not add infrastructure merely to make this plan's examples convenient.
 - The primary controller alone runs an integrated browser pass after explicit authorization, using `test-t3-app`. No implementation subagent starts a server or browser. Real accounts, packaged desktop, native mobile, physical remote access and a pilot have separate evidence states.
 - Never stage `docs/internals/pulse-next-migration.json` except the correction's specifically reviewed ledger hunk in W4-T0. W4-T0 owns no unrelated ledger entry. Every later commit lists its own files explicitly.
-- Keep other writers' Waves 5-11 plans untouched. A future controller may commit a reviewed reference checkpoint in W4-T0; this writer writes only this plan.
+- Keep other writers' Waves 5-11 plans untouched. A future controller may commit a reviewed reference checkpoint in W4-T0; this fix-round writer edits only this plan and the matching Wave 4 handoff, shared serial slots and capture recipes in wave-map.md.
 
 ## Merge Danger
 
@@ -98,7 +98,7 @@ Use Segoe UI, system-ui, sans-serif on the Windows capture host, normal letter s
 | 05     | Communications; Communications | Same three controls as 02                        | Same as 02                                          | Browser, correcting source Agents highlight |
 | 06     | Communications; Communications | Same three controls as 02                        | Same as 02                                          | Agents, correcting source Files highlight   |
 | 07     | Meetings; Meetings             | Upcoming/CalendarDays, Recordings/Mic            | Meetings; SynKEK · Brand & growth                   | Docs, launch-review note                    |
-| 08     | Calendar; Calendar             | Agenda/CalendarDays, Week/PanelsTopLeft          | Calendar; SynKEK · Brand & growth                   | Tasks                                       |
+| 08     | Calendar; Calendar             | Agenda/CalendarDays, Week/Grid2X2                | Calendar; SynKEK · Brand & growth                   | Tasks                                       |
 
 First rail entry is selected in every recipe. No badge on All tasks, Open, Done, Inbox, Unread or Later. Schedule exists in both 07 and 08 at `[847,102,76,24]`; their date chips belong inside the full center, not a shell list column. W6 owns behavior and exact subtitles. All eight show open Resources at `fixture-synkek`.
 
@@ -137,7 +137,7 @@ Hover uses a weaker neutral tint than selection; keyboard focus uses the existin
 
 Run W4-T0 first. W4-T7 may then establish the fixture interface; functional W4-T1 can start from T0, but no visual verdict precedes T7 readiness. Shell file serial chain is W4-T1 -> W4-T2 -> W4-T3 -> W4-T4a -> W4-T4b -> W4-T5 -> W4-T6. W4-T6 is the wave gate, not an extra renamed task. Reserve the global RPC/migration slot only if scope is explicitly expanded; none of the planned shell tasks needs it. Preserve all earlier and concurrent edits.
 
-For new files below, line range is `new`; existing ranges refer to the inspected baseline. Commit steps are future implementation instructions, not actions for this plan-writing pass. Use conventional titles and truthful model/harness attribution under the active delivery rules; the original main plan's fixed Claude attribution is historical and is not evidence of who implements this wave.
+For new files below, line range is `new`; existing ranges refer to the inspected baseline. Commit steps are future implementation instructions, not actions for this plan-writing pass. Use conventional titles. Implementer commits end with a Co-Authored-By line naming the model that made the commit; controller commits use the controller's attribution line.
 
 ### Task W4-T0: Commit B-2026-10-16-001 shell correction
 
@@ -162,11 +162,11 @@ Current checkpoint observed by this writer: `d82b8004cca208df753e74e90c82fa94a69
   Expected exit 0, including the existing Projects linking regression and single-tool regression. This is a baseline-preservation task, so do not invent a failing test or new production behavior to manufacture red. A failure blocks dispatch until diagnosed against the reviewed diff. Run server package `vp run typecheck` once and record its result.
 
 - [ ] Run targeted lint on the eleven explicit web paths and `git diff --check`. Reuse the audit's prior build/render evidence as historical evidence only. If a new build is required by active delivery policy, run web `vp run build` and distinguish incumbent warnings.
-- [ ] Stage only the reviewed correction, with this explicit future command list. Select only correction hunks in the interactive docs step. Inspect `git diff --cached --name-only` and `git diff --cached` before committing. Never stage an ignored audit blindly or stage another writer's output.
+- [ ] Stage only the reviewed correction, with this explicit future command list. Prepare a reviewed patch containing only the correction docs/ledger hunks and stage it non-interactively. Inspect `git diff --cached --name-only` and `git diff --cached` before committing. Never stage an ignored audit blindly or stage another writer's output.
 
   ```text
   git add -- apps/web/src/components/workspace/ProjectsNav.tsx apps/web/src/components/workspace/ProjectsSpace.tsx apps/web/src/components/workspace/WorkspaceEngagement.tsx apps/web/src/components/workspace/WorkspaceSpaceSelector.tsx apps/web/src/components/workspace/WorkspaceSpaceSelector.test.tsx apps/web/src/components/workspace/WorkspaceToolsPanel.tsx apps/web/src/components/workspace/mail/LinkedSection.tsx apps/web/src/components/workspace/mail/MailNav.tsx apps/web/src/components/workspace/mail/MailSpace.test.tsx apps/web/src/components/workspace/ProjectsNav.test.tsx apps/web/src/components/workspace/WorkspaceEngagement.test.tsx
-  git add -p -- docs/user/workspace-spaces.md docs/superpowers/specs/2026-10-14-unified-workspace-design.md docs/superpowers/plans/2026-10-14-unified-workspace.md docs/internals/pulse-next-migration.json
+  git apply --cached <reviewed-correction-docs.patch>
   git commit -m "fix(web): preserve workspace navigation and context"
   ```
 
@@ -205,7 +205,18 @@ Export these declarations from `workspaceMockupFixtures.ts`:
 
 ```ts
 import type { ReactNode } from "react";
-import type { EnvironmentId, ProjectId, WorkspaceItemRef } from "@t3tools/contracts";
+import type {
+  EnvironmentId,
+  ProjectId,
+  ThreadId,
+  MailAccountId,
+  MailMessageIdHeader,
+  WorkspaceItemRef,
+  WorkspaceLinkEndpoint,
+  WorkspaceLinkOrigin,
+  WorkspaceLinkSource,
+  WorkspaceLinkId,
+} from "@t3tools/contracts";
 
 export type WorkspaceMockupId = "01" | "02" | "03" | "04" | "05" | "06" | "07" | "08";
 export type WorkspaceMockupArea =
@@ -219,14 +230,30 @@ export type WorkspaceMockupArea =
   | "browser"
   | "agents";
 export type WorkspaceMockupTab = "files" | "browser" | "agents" | "tasks" | "docs" | "prs";
+export type WorkspaceMockupView =
+  | "chats"
+  | "unread"
+  | "later"
+  | "upcoming"
+  | "recordings"
+  | "agenda"
+  | "week"
+  | "inbox"
+  | "all"
+  | "open"
+  | "done"
+  | "projects"
+  | "linked";
 export type MockupMutation =
-  "link" | "unlink" | "save" | "send" | "schedule" | "join" | "open-thread";
+  "link" | "unlink" | "save" | "send" | "schedule" | "join" | "open-thread" | "navigate";
 export interface WorkspaceMockupRecipe {
   readonly id: WorkspaceMockupId;
   readonly png: string;
   readonly route: string;
   readonly space: "mail" | "communications" | "tasks" | "projects" | "meetings" | "calendar";
-  readonly view: string;
+  readonly view: WorkspaceMockupView | null;
+  readonly centerArea: WorkspaceMockupArea;
+  readonly resourceArea: WorkspaceMockupArea | null;
   readonly resourceTab: WorkspaceMockupTab;
   readonly selectedKey: string | null;
   readonly requiredAreas: readonly WorkspaceMockupArea[];
@@ -241,6 +268,7 @@ export interface WorkspaceMockupSession {
   readonly locale: "en-GB";
   readonly timeZone: "Africa/Johannesburg";
   readonly seed: WorkspaceMockupSeed;
+  readonly storage: Pick<Storage, "getItem" | "setItem">;
   readonly operations: ReadonlyArray<{
     readonly kind: MockupMutation;
     readonly item: WorkspaceItemRef | null;
@@ -264,21 +292,208 @@ export type CreateWorkspaceMockupModule = (
 ) => WorkspaceMockupModule;
 ```
 
-`WorkspaceMockupSeed` is an exported readonly object type with the exact properties and record fields in the seed table below. Arrays use readonly element interfaces without literal-length constraints. It is not `unknown`, `any`, a copy of future RPC responses or a mutable global. Export `workspaceMockupRecipes: Readonly<Record<WorkspaceMockupId, WorkspaceMockupRecipe>>`, `createWorkspaceMockupSession(id: WorkspaceMockupId): WorkspaceMockupSession`, `parseWorkspaceMockupRequest(url: URL, dev: boolean): WorkspaceMockupId | null` and `createWorkspaceMockupSeed(): WorkspaceMockupSeed`. Declare the seed interface before annotating the factory, avoiding a circular ReturnType definition.
+The complete seed contract follows. Date-only values pass a `YYYY-MM-DD` calendar round-trip check; instants parse as ISO timestamps with explicit `+02:00` offsets. Contract-branded IDs use their existing `.make` constructors. Export all declarations below from `apps/web/src/components/workspace/dev/workspaceMockupFixtures.ts`.
 
-Every domain adapter exports `createWorkspaceMockupModule: CreateWorkspaceMockupModule`. T7 creates the initial adapters with `readyRegions: []`, no live imports and no fabricated completed module. They can expose their in-memory query/mutation fake from the same file as their module lands. Use one fixed import list inside the dev-only entry, not a runtime-discovered product registry. The nine adapter files are:
+```ts
+export type WorkspaceMockupDate = `${number}-${number}-${number}`;
+export type WorkspaceMockupInstant = `${WorkspaceMockupDate}T${string}+02:00`;
+export type WorkspaceMockupPersonId = "maya" | "leo" | "nina" | "alex";
+export interface WorkspaceMockupPerson {
+  readonly id: WorkspaceMockupPersonId;
+  readonly name: string;
+  readonly initials: string;
+  readonly role: "Admin" | "Member";
+  readonly source: "slack";
+}
+export interface WorkspaceMockupProject {
+  readonly id: ProjectId;
+  readonly title: string;
+  readonly description: string;
+  readonly channelCount: number;
+  readonly memberCount: number;
+  readonly countsComplete: true;
+  readonly countsAsOf: WorkspaceMockupInstant;
+  readonly driveLinked: boolean;
+}
+export interface WorkspaceMockupMail {
+  readonly id: string;
+  readonly messageId: MailMessageIdHeader;
+  readonly accountId: MailAccountId;
+  readonly accountAddress: string;
+  readonly folder: "INBOX";
+  readonly uid: number;
+  readonly uidValidity: number;
+  readonly fromName: string;
+  readonly fromAddress: string;
+  readonly subject: string;
+  readonly preview: string;
+  readonly to: readonly string[];
+  readonly displayTime: string;
+  readonly listDisplayTime: string;
+  readonly body: string;
+}
+export interface WorkspaceMockupChannel {
+  readonly id: string;
+  readonly title: string;
+  readonly group: "general" | "project" | "direct";
+  readonly projectId: ProjectId | null;
+  readonly personId: WorkspaceMockupPersonId | null;
+  readonly knownUnread: number;
+  readonly memberCount: number | null;
+  readonly memberCountComplete: boolean;
+  readonly memberCountAsOf: WorkspaceMockupInstant | null;
+  readonly readMarkerMessageId: string | null;
+}
+export interface WorkspaceMockupMessage {
+  readonly id: string;
+  readonly channelId: string;
+  readonly personId: WorkspaceMockupPersonId;
+  readonly displayTime: string;
+  readonly text: string;
+  readonly replyIds: readonly string[];
+  readonly fileId: string | null;
+}
+export interface WorkspaceMockupTask {
+  readonly id: string;
+  readonly projectId: ProjectId;
+  readonly title: string;
+  readonly areaLabel: string | null;
+  readonly dueOn: WorkspaceMockupDate | null;
+  readonly owner: "environment-owner" | null;
+  readonly assigneeDisplayId: WorkspaceMockupPersonId | null;
+  readonly completed: boolean;
+}
+export interface WorkspaceMockupDriveFolder {
+  readonly id: string;
+  readonly title: string;
+  readonly modified: WorkspaceMockupDate;
+  readonly childIds: readonly string[];
+}
+export interface WorkspaceMockupDriveDocument {
+  readonly id: string;
+  readonly title: string;
+  readonly modified: WorkspaceMockupDate;
+  readonly mimeType: "application/vnd.google-apps.document";
+}
+export interface WorkspaceMockupDrive {
+  readonly rootId: string;
+  readonly connectionId: string;
+  readonly folders: readonly WorkspaceMockupDriveFolder[];
+  readonly documents: readonly WorkspaceMockupDriveDocument[];
+  readonly confirmedFolderId: string;
+}
+export interface WorkspaceMockupEvent {
+  readonly id: string;
+  readonly title: string;
+  readonly start: WorkspaceMockupInstant;
+  readonly durationMinutes: number;
+  readonly source: "Google Calendar" | "Google Meet";
+  readonly attendeeIds: readonly WorkspaceMockupPersonId[];
+  readonly description: string | null;
+  readonly joinUrl: string;
+  readonly noteId: string;
+}
+export interface WorkspaceMockupComment {
+  readonly id: string;
+  readonly personId: WorkspaceMockupPersonId;
+  readonly body: string;
+}
+export interface WorkspaceMockupNote {
+  readonly id: string;
+  readonly title: string;
+  readonly projectId: ProjectId;
+  readonly sharingCount: number;
+  readonly sharingCountComplete: true;
+  readonly body: string;
+  readonly comments: readonly WorkspaceMockupComment[];
+}
+export interface WorkspaceMockupAgent {
+  readonly threadId: ThreadId;
+  readonly projectId: ProjectId;
+  readonly title: string;
+  readonly monogram: string;
+  readonly status: "working" | "idle";
+  readonly activity: string;
+}
+export interface WorkspaceMockupBrowser {
+  readonly url: string;
+  readonly title: string;
+  readonly heading: string;
+  readonly body: string;
+  readonly actionLabel: string;
+}
+export interface WorkspaceMockupLink {
+  readonly id: WorkspaceLinkId;
+  readonly a: WorkspaceLinkEndpoint;
+  readonly b: WorkspaceLinkEndpoint;
+  readonly status: "confirmed" | "dismissed" | "suggested";
+  readonly origin: WorkspaceLinkOrigin;
+  readonly source: WorkspaceLinkSource;
+}
+export interface WorkspaceMockupSampleCopy {
+  readonly tasksFooter: "Shared statuses · One accountable owner · Project followers";
+  readonly browserFooter: "synkek.com · Website preview";
+  readonly filesSharing: "Shared with the SynKEK team. Files stay in Google Drive.";
+  readonly marker: "Design preview · sample data";
+  readonly connections: "Sample project connections";
+}
+export interface WorkspaceMockupSeed {
+  readonly environmentId: EnvironmentId;
+  readonly resourceProjectId: ProjectId;
+  readonly today: "2026-10-13";
+  readonly ownerDisplayId: WorkspaceMockupPersonId;
+  readonly people: readonly WorkspaceMockupPerson[];
+  readonly projects: readonly WorkspaceMockupProject[];
+  readonly mail: readonly WorkspaceMockupMail[];
+  readonly channels: readonly WorkspaceMockupChannel[];
+  readonly messages: readonly WorkspaceMockupMessage[];
+  readonly tasks: readonly WorkspaceMockupTask[];
+  readonly drive: WorkspaceMockupDrive;
+  readonly events: readonly WorkspaceMockupEvent[];
+  readonly note: WorkspaceMockupNote;
+  readonly agents: readonly WorkspaceMockupAgent[];
+  readonly browser: WorkspaceMockupBrowser;
+  readonly links: readonly WorkspaceMockupLink[];
+  readonly sampleCopy: WorkspaceMockupSampleCopy;
+}
+export const workspaceMockupRecipes: Readonly<Record<WorkspaceMockupId, WorkspaceMockupRecipe>>;
+export function createWorkspaceMockupSession(id: WorkspaceMockupId): WorkspaceMockupSession;
+export function parseWorkspaceMockupRequest(url: URL, dev: boolean): WorkspaceMockupId | null;
+export function createWorkspaceMockupSeed(): WorkspaceMockupSeed;
+```
 
-| Path relative to `apps/web/src/components/workspace/` | Owner after W4-T7    | Completion it contributes                                |
-| ----------------------------------------------------- | -------------------- | -------------------------------------------------------- |
-| `mail/dev/workspaceMockupModule.tsx`                  | W11                  | 01 center                                                |
-| `communications/dev/workspaceMockupModule.tsx`        | W9                   | 02/05/06 center                                          |
-| `tasks/dev/workspaceMockupModule.tsx`                 | W5                   | 03 center and 08 resource                                |
-| `projects/dev/workspaceMockupModule.tsx`              | W8                   | 04 center                                                |
-| `drive/dev/workspaceMockupModule.tsx`                 | W7                   | 01-04 resource                                           |
-| `calendar/dev/workspaceMockupModule.tsx`              | W6                   | 07/08 center                                             |
-| `notes/dev/workspaceMockupModule.tsx`                 | W6, then W8 serially | 07 Docs identity/plain note, then formatted card/comment |
-| `browser/dev/workspaceMockupModule.tsx`               | W10                  | 05 resource                                              |
-| `agents/dev/workspaceMockupModule.tsx`                | W10                  | 06 resource                                              |
+The last declarations specify required signatures; implementation supplies bodies/initializers. Arrays have no fixed-length type constraints; tests assert counts. `links.a` and `links.b` are real contract endpoints directly, with deterministic `wl_` UUIDs accepted by WorkspaceLinkId. `origin.confirmedAt` is the fixed instant and `origin.viewing` is the originating endpoint; preserve both on fake unlink/relink. Confirmed and dismissed rows use source `{ type: "user" }`. Suggested rows use `{ type: "model", model: "fixture", reason: "Fixture suggestion" }`. Suggested/dismissed examples use these same typed records outside resting PNG collections.
+
+Use W5's planned `areaLabel`, `dueOn` and `owner` names. The current task contract has not added them yet; W4 does not change that contract. Set owner to `environment-owner` for Maya's task-1/task-5 and null for the other three. `assigneeDisplayId` alone supplies sample MC/LM/NP/AM avatars, never a live owner or authorization identity. W5 maps to its production records and retains fixture coworkers only in presentation props.
+
+#### Module owner contract
+
+The only integration point for each area is its adapter below. The real module layout is flat under `apps/web/src/components/workspace/`, apart from existing mail/office directories, so place adapters together under `dev/`. Each exports the exact signature below, annotated as CreateWorkspaceMockupModule in its implementation. This is an API declaration for each adapter, not another shared implementation:
+
+```ts
+import type { WorkspaceMockupSession, WorkspaceMockupModule } from "./workspaceMockupFixtures";
+export declare function createWorkspaceMockupModule(
+  session: WorkspaceMockupSession,
+): WorkspaceMockupModule;
+```
+
+T7 creates all nine with `readyRegions: []`, no live imports and no fabricated completion. Use a fixed import list in the dev entry. There is no registration call or runtime discovery. Extra area data is a sibling `dev/<area>MockupData.ts` imported only by that area's adapter. W5 may keep sibling `dev/workspaceTaskFixtures.ts` as adapter-private data; W7 moves its proposed `ProjectDriveExplorer.fixtures.ts` to `dev/driveMockupData.ts`. Production containers never import these files.
+
+| Exact path under `apps/web/src/components/workspace/` | Owning task after T7          | Regions and readiness obligation                                                                                                                                                              |
+| ----------------------------------------------------- | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dev/mailMockupModule.tsx`                            | W11-T3, completed by its gate | `center` for 01, including recipients, SynKEK chip, Marketing card and reply presentation                                                                                                     |
+| `dev/communicationsMockupModule.tsx`                  | W9-T8                         | `center` for 02/05/06                                                                                                                                                                         |
+| `dev/tasksMockupModule.tsx`                           | W5-T5a -> W5-T7               | `center` for 03; `resource` for 08, same task records                                                                                                                                         |
+| `dev/projectsMockupModule.tsx`                        | W8-T2                         | `center` for 04                                                                                                                                                                               |
+| `dev/driveMockupModule.tsx`                           | W7-T3                         | `resource` for 01-04                                                                                                                                                                          |
+| `dev/calendarMockupModule.tsx`                        | W6-T4                         | `center` for 07/08                                                                                                                                                                            |
+| `dev/notesMockupModule.tsx`                           | W6-T8 -> W8-T4 -> W8-T5       | W6 mounts plain-note `resource` but retains `07.docs-format` and `07.docs-comments` in incompleteRegions; W8-T4 removes only format, W8-T5 removes comments after fake-backed rendering works |
+| `dev/browserMockupModule.tsx`                         | W10-T1                        | `resource` for 05, inert local site                                                                                                                                                           |
+| `dev/agentsMockupModule.tsx`                          | W10-T4                        | `resource` for 06                                                                                                                                                                             |
+
+`readyRegions` contains `center` or `resource` only when that adapter returns that slot's actual presentation component with module-local fake reads/commands and `settled()` covers all committed work. Data alone, a live container or placeholder copy leaves the region absent. `incompleteRegions` additionally names unfinished subregions even when the basic slot is ready. `ready()` computes required slots from `centerArea`/`resourceArea`, never requiredAreas order. A missing ready region or any required incomplete subregion prevents `complete`. Await only active adapters; dispose inactive ones.
+
+Every later owning task MUST list its adapter in Files and its explicit `git add`, state the readyRegions/subregions it changes, and use this signature. The controller patches these task plans before dispatch. Ownership transfers at T7. Multi-task adapter edits take the per-file serial slot.
 
 Each module uses the same presentation component as live mode with injected module-local fake reads/commands. It must not mount a live-connected container and then mask its requests. A component needing extraction gets a small presentational view in its owning wave. Shell T3/T4 similarly give `WorkspaceMockupApp` their actual navigation/header/resource presentation components. Until then the entry displays a marked readiness report and selected recipe, not a screenshot facsimile. The final rendered mockup never uses a PNG or HTML screenshot as its UI.
 
@@ -286,20 +501,24 @@ Each module uses the same presentation component as live mode with injected modu
 
 Use environment `fixture-environment`, resource project `fixture-synkek`, secondary projects `fixture-pulse-website`, `fixture-brand-studio`. Brand and mode are sample-only. Use factory-local arrays and new Date objects, reset on every recipe load. No shared mutation survives Reset or navigation to another fixture recipe.
 
-| Seed property and required record fields                                                                               | Exact values and relationships                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| ---------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `people`: id, name, initials, role, source                                                                             | `maya`/Maya Chen/MC/Admin/Slack; `leo`/Leo Martins/LM/Member/Slack; `nina`/Nina Patel/NP/Member/Slack; `alex`/Alex Morgan/AM/Member/Slack. Display fixture coworkers only. Header owner Maya.                                                                                                                                                                                                                                                                                                                                                                                          |
-| `projects`: id, title, description, channelCount, memberCount                                                          | SynKEK, `Brand, website and growth marketing`, 4, 8; Pulse website, `Shared team workspace`, 2, 4; Brand studio, same description, 2, 4. All sample `Drive linked`; complete provider count metadata. No Pulse role grants.                                                                                                                                                                                                                                                                                                                                                            |
-| `mail`: id, messageId, accountId, folder, uid, uidValidity, fromName, fromAddress, subject, preview, displayTime, body | Five stable rows `mail-1`..`mail-5`; Message-IDs `<fixture-1@synkek.invalid>`..5; account `fixture-mail-maya`, folder INBOX, uid 1..5, uidValidity 1. Account address maya@synkek.com. Selected first row Nina Patel/nina@synkek.com, D03 correction from source Maya. Subjects in order `SynKEK · October launch review`, `Your updated homepage designs`, `SEO report: September results`, `Product shoot · final selects`, `Weekly marketing catch-up`. Remaining senders Leo, Nina, Alex, Maya. Preview `Thanks team, sharing the latest ...`. First time 10:24, others Yesterday. |
-| `channels`: id, title, group, knownUnread, memberCount                                                                 | GENERAL team-updates/design/random; SynKEK marketing/website/seo/product-launch. Marketing id `slack-marketing`, 3 known unread in loaded page, 8 members complete/fresh at fixed clock. DIRECT MESSAGES Maya/Leo/Nina with matching people IDs. No live Slack grant implied.                                                                                                                                                                                                                                                                                                          |
-| `messages`: id, channelId, personId, displayTime, text, replyIds, fileId                                               | Four top-level ids `message-1`..4, marketing, maya/leo/nina/maya, 09:12/09:18/09:24/10:04. First links `doc-strategy` with two explicit reply records `reply-1`,`reply-2`. Marker at message-1 leaves three known unread. Exact text below.                                                                                                                                                                                                                                                                                                                                            |
-| `tasks`: id, projectId, title, area, dueDate, personId, completed                                                      | ids `task-1`..5, all SynKEK. Approve homepage copy/Marketing/2026-10-13/maya/false; Review October keyword plan/Website/2026-10-16/leo/false; Prepare product launch assets/Marketing/2026-10-16/nina/false; Publish campaign landing page/Website/2026-10-16/alex/false; Share weekly performance report/Marketing/2026-10-16/maya/true. Same objects feed 03 and 08; open total 4.                                                                                                                                                                                                   |
-| `drive`: rootId, connectionId, folders, documents, confirmedFolderId                                                   | root `drive-synkek`, connection `fixture-drive`, confirmed folder `folder-marketing`. Folder record id/title/modified: folder-seo/SEO/2026-10-10, folder-marketing/Marketing/2026-10-11, folder-website/Website/2026-10-12, folder-products/Products/2026-10-13. Document ids doc-strategy/doc-calendar/doc-brand/doc-checklist; titles Q4 marketing strategy/October content calendar/Brand guidelines/Website launch checklist; modified 12/11/10/9 Oct. Folder children arrays empty until a module's own browse test supplies them.                                                |
-| `events`: id, title, start, durationMinutes, source, attendeeIds, description, joinUrl, noteId                         | ids event-standup/event-review/event-handoff; Tuesday 2026-10-13 at 09:00/14:00/16:30 +02:00; Marketing stand-up/30/Google Calendar; SynKEK · Launch review/45/Google Meet; Website design handoff/30/Google Calendar. All attendees maya/leo/nina. Review description `Campaign readiness, homepage feedback and remaining launch tasks.` Others no description. All noteId note-launch-review. Join URLs https://meet.example.invalid/standup, /review, /handoff, intercepted by fake shell, never opened.                                                                           |
-| `note`: id, title, projectId, sharingCount, body, comments                                                             | note-launch-review, `Launch review · Meeting notes`, SynKEK, 8 complete fixture-only sharing metadata. Markdown exact headings/list below. One comment id comment-nina, person nina, exact body below.                                                                                                                                                                                                                                                                                                                                                                                 |
-| `agents`: threadId, projectId, title, monogram, status, activity                                                       | thread-seo/thread-content/thread-website, SynKEK, SEO analyst/Sa/working/Reviewing keyword opportunities; Content editor/Ce/idle/Ready for your next instruction; Website developer/Wd/idle/same. Opening records open-thread only. Status never launches a process.                                                                                                                                                                                                                                                                                                                   |
-| `browser`: url, title, heading, body, actionLabel                                                                      | https://synkek.example.invalid/, SynKEK, `Built for\nwhat's next.`, `Meet the new collection. Thoughtful products, made for everyday life.`, Explore products. Display footer `synkek.com · Website preview` is fixture artwork copy; no DNS request or iframe.                                                                                                                                                                                                                                                                                                                        |
-| `links`: id, a, b, status, origin, source                                                                              | Confirmed project-to-folder-marketing, marketing-message-1-to-doc-strategy, each agent-thread-to-project, review-event-to-note. Use real WorkspaceLinkEndpoint/ref shapes when adapters translate. Include one separate dismissed and one suggested URL in functional-only context scenarios; omit them from untouched PNG recipes. Fixed origin time and viewing endpoint survive unlink/relink.                                                                                                                                                                                      |
+| Seed property and required record fields                                                                                                    | Exact values and relationships                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| ------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `people`: id, name, initials, role, source                                                                                                  | `maya`/Maya Chen/MC/Admin/Slack; `leo`/Leo Martins/LM/Member/Slack; `nina`/Nina Patel/NP/Member/Slack; `alex`/Alex Morgan/AM/Member/Slack. Store source `slack`, display Slack. Display fixture coworkers only. Header owner Maya.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `projects`: id, title, description, channelCount, memberCount, countsComplete, countsAsOf, driveLinked                                      | SynKEK, `Brand, website and growth marketing`, 4, 8; Pulse website, `Shared team workspace`, 2, 4; Brand studio, same description, 2, 4. All driveLinked true, countsComplete true, countsAsOf at the fixed instant; display Drive linked. No Pulse role grants.                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `mail`: id, messageId, accountId, folder, uid, uidValidity, fromName, fromAddress, subject, preview, to, displayTime, listDisplayTime, body | Five stable rows `mail-1`..`mail-5`; Message-IDs `<fixture-1@synkek.invalid>`..5; account `fixture-mail-maya`, folder INBOX, uid 1..5, uidValidity 1. Account address maya@synkek.com. Selected first row Nina Patel/nina@synkek.com, D03 correction from source Maya. Subjects in order `SynKEK · October launch review`, `Your updated homepage designs`, `SEO report: September results`, `Product shoot · final selects`, `Weekly marketing catch-up`. Remaining senders Leo, Nina, Alex, Maya. Preview `Thanks team, sharing the latest ...`. First to `["Maya", "Leo", "me"]`, displayTime `10:24 AM`, listDisplayTime `10:24`; others to `["me"]`, both time fields Yesterday, body equal to each row's preview. |
+| `channels`: id, title, group, projectId, personId, knownUnread, memberCount, memberCountComplete, memberCountAsOf, readMarkerMessageId      | GENERAL ids slack-team-updates/slack-design/slack-random, group general, projectId null; SynKEK ids slack-marketing/slack-website/slack-seo/slack-product-launch, group project, projectId fixture-synkek. Titles omit the slack prefix. Marketing id `slack-marketing`, 3 known unread in loaded page, 8 members complete/fresh at fixed clock. DIRECT MESSAGES ids dm-maya/dm-leo/dm-nina, group direct, personId maya/leo/nina, projectId null. Other personId fields null. Marketing readMarkerMessageId message-1, complete memberCount 8 at the fixed instant; other channels have null marker/count/asOf, false completeness and zero knownUnread. No live Slack grant implied.                                  |
+| `messages`: id, channelId, personId, displayTime, text, replyIds, fileId                                                                    | Four top-level ids `message-1`..4, marketing, maya/leo/nina/maya, 09:12/09:18/09:24/10:04. First fileId doc-strategy and replyIds reply-1/reply-2. Other top-level fileId null, replyIds empty. Include those two replies in messages on slack-marketing, personId leo/nina, displayTime 09:14/09:16, empty replyIds and null fileId. Marker at message-1 leaves three known unread. Exact text below.                                                                                                                                                                                                                                                                                                                  |
+| `tasks`: id, projectId, title, areaLabel, dueOn, owner, assigneeDisplayId, completed                                                        | ids `task-1`..5, all SynKEK. Approve homepage copy/Marketing/2026-10-13/maya/false; Review October keyword plan/Website/2026-10-16/leo/false; Prepare product launch assets/Marketing/2026-10-16/nina/false; Publish campaign landing page/Website/2026-10-16/alex/false; Share weekly performance report/Marketing/2026-10-16/maya/true. The person values identify assigneeDisplayId; owner values are specified above. Same objects feed 03 and 08; open total 4.                                                                                                                                                                                                                                                    |
+| `drive`: rootId, connectionId, folders, documents, confirmedFolderId                                                                        | root `drive-synkek`, connection `fixture-drive`, confirmed folder `folder-marketing`. Folder record id/title/modified: folder-seo/SEO/2026-10-10, folder-marketing/Marketing/2026-10-11, folder-website/Website/2026-10-12, folder-products/Products/2026-10-13. Document mimeType application/vnd.google-apps.document. Document ids doc-strategy/doc-calendar/doc-brand/doc-checklist; titles Q4 marketing strategy/October content calendar/Brand guidelines/Website launch checklist; modified 12/11/10/9 Oct. Folder childIds arrays empty until a module's own browse test supplies them.                                                                                                                         |
+| `events`: id, title, start, durationMinutes, source, attendeeIds, description, joinUrl, noteId                                              | ids event-standup/event-review/event-handoff; `2026-10-13T09:00:00+02:00`, `2026-10-13T14:00:00+02:00`, `2026-10-13T16:30:00+02:00`; Marketing stand-up/30/Google Calendar; SynKEK · Launch review/45/Google Meet; Website design handoff/30/Google Calendar. All attendees maya/leo/nina. Review description `Campaign readiness, homepage feedback and remaining launch tasks.` Others description null. All noteId note-launch-review. Join URLs https://meet.example.invalid/standup, /review, /handoff, intercepted by fake shell, never opened.                                                                                                                                                                   |
+| `note`: id, title, projectId, sharingCount, sharingCountComplete, body, comments                                                            | note-launch-review, `Launch review · Meeting notes`, SynKEK, 8 complete fixture-only sharing metadata. Markdown exact headings/list below. One comment id comment-nina, person nina, exact body below.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `agents`: threadId, projectId, title, monogram, status, activity                                                                            | thread-seo/thread-content/thread-website, SynKEK, SEO analyst/Sa/working/Reviewing keyword opportunities; Content editor/Ce/idle/Ready for your next instruction; Website developer/Wd/idle/same. Opening records open-thread only. Status never launches a process.                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `browser`: url, title, heading, body, actionLabel                                                                                           | https://synkek.example.invalid/, SynKEK, `Built for\nwhat's next.`, `Meet the new collection. Thoughtful products, made for everyday life.`, Explore products. Footer sampleCopy.browserFooter is fixture artwork copy; no DNS request or iframe.                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `links`: id, a, b, status, origin, source                                                                                                   | Confirmed project-to-folder-marketing, **mail-1-to-project fixture-synkek**, **mail-1-to-file folder-marketing**, marketing-message-1-to-doc-strategy, each agent-thread-to-project, review-event-to-note. Store real WorkspaceLinkEndpoint/ref shapes directly. Include one separate dismissed and one suggested URL in functional-only context scenarios; omit them from untouched PNG recipes. Fixed origin time and viewing endpoint survive unlink/relink.                                                                                                                                                                                                                                                         |
+
+Root fields use the environment/resource-project IDs above, today `2026-10-13` and ownerDisplayId maya. `sampleCopy` holds every declared literal, including the 03 footer and 05 website footer. Folder/document modified values include the full date. Note sharingCountComplete is true.
+
+Endpoint refs are canonical: mail-1 has `{ type: "mail", accountId, messageId, location: { accountId, mailbox: "INBOX", uid: 1, uidValidity: 1 } }`; the chip is `{ type: "project", projectId }`; Marketing is `{ type: "file", provider: "google-drive", fileId: "folder-marketing" }`. Message refs use provider-resource provider slack and resourceId slack-marketing/message-1. W6 notes use provider workspace-note, resourceId note-launch-review; events use workspace-calendar with their event ID. Provider-resource identity implies no reader grant. The mail adapter resolves both links from seed.links, renders `SynKEK` and `Marketing · SynKEK / Open project folder`, then passes the file ref to the injected shell handoff.
 
 First mail body is exactly:
 
@@ -355,7 +574,7 @@ Comment `Looks good. Let's include the new keyword targets in the product pages.
 Export a test-only global from the dev entry, declared in that module only:
 
 ```ts
-interface WorkspaceMockupCaptureApi {
+export interface WorkspaceMockupCaptureApi {
   readonly configureCapture: (context: {
     readonly viewport: {
       readonly width: number;
@@ -365,6 +584,8 @@ interface WorkspaceMockupCaptureApi {
     };
     readonly resolvedFont: string;
     readonly os: string;
+    readonly resolvedLocale: string;
+    readonly resolvedTimeZone: string;
   }) => void;
   readonly reset: (id: WorkspaceMockupId) => Promise<void>;
   readonly ready: () => Promise<{
@@ -376,28 +597,87 @@ interface WorkspaceMockupCaptureApi {
 }
 ```
 
-Attach it as `window.__workspaceMockupCapture` only inside the DEV branch. `reset` disposes mounted adapters, creates a fresh session, rerenders, and resolves after React's committed layout signals and every active adapter's `settled()` promise. It does not poll the DOM or wait for arbitrary durations. Concurrent resets are serialized; only latest generation can resolve as current. StrictMode may remount views; operations remain idempotent and cleanup leaves zero retained subscriptions. Dispose aborts in-flight fake work and clears closure-owned memory. No page reload, credential/cache reuse or real storage is required.
+Attach it as `window.__workspaceMockupCapture` only inside the DEV branch. `reset` disposes mounted adapters, creates a fresh session, rerenders, and resolves after React's committed layout signals and every active adapter's `settled()` promise. It does not poll the DOM or wait for arbitrary durations. Concurrent resets are serialized; only latest generation can resolve as current. StrictMode may remount views; operations remain idempotent and cleanup leaves zero retained subscriptions. Dispose aborts in-flight fake work and clears closure-owned memory. No page reload or credential/cache reuse is required. Each session owns a new Map-backed `storage`; dispose clears that map. Inject it into every shell preference read and write, including divider drag-end, keyboard resize, Resources close/reopen, project selection and tabs. Fixture views never call browser localStorage/sessionStorage or the live useLocalStorage helpers. Live callers omit the injected storage and keep current persistence. Reset remounts the shell with the new session storage, not only a fresh seed.
 
-The capture controller calls configureCapture with its observed viewport/scale/zoom, resolved font and host OS before requesting a capture manifest. Reject unsupported scale/zoom or an unresolved font. Keep capture metadata through reset but recreate all product-like seed state. Before configureCapture, the dev page can show fixture readiness, but ready rejects a capture-manifest request with `Capture host metadata is required.` No manifest invents the host. The ready response's fixtureReady claim comes from seed validation, while incompleteRegions comes from actual module readiness. Count attempted application RPC/fetch/WebSocket/connector calls in networkRequests; same-origin Vite JS/CSS/font asset loading is outside that counter. A successful isolated manifest requires zero such application requests, including zero blocked attempts.
+The capture controller calls configureCapture with its observed viewport/scale/zoom, resolved font and host OS before requesting a capture manifest. Reject unsupported scale/zoom or an unresolved font. The controller measures `resolvedLocale` and `resolvedTimeZone` with `Intl.DateTimeFormat().resolvedOptions()` after configuring the capture runtime. configureCapture also checks the fixture runtime's resolved values; both must equal en-GB/Africa/Johannesburg or it rejects `Capture locale/time zone does not match fixture.` Record both measured values in the manifest. Injected formatters remain required; an accidental ambient formatter cannot silently pass. Keep capture metadata through reset but recreate all product-like seed state. Before configureCapture, the dev page can show fixture readiness, but ready rejects a capture-manifest request with `Capture host metadata is required.` No manifest invents the host. The ready response's fixtureReady claim comes from seed validation, while incompleteRegions comes from actual module readiness. Count attempted application RPC/fetch/WebSocket/connector calls in networkRequests; same-origin Vite JS/CSS/font asset loading is outside that counter. A successful isolated manifest requires zero such application requests, including zero blocked attempts.
 
-`WorkspaceMockupCaptureManifest` has exactly these fields: `version: 1`, `fixtureId`, `referencePng`, `route`, `viewport: { width, height, deviceScaleFactor: 1, zoom: 1 }`, `locale: "en-GB"`, `timeZone: "Africa/Johannesburg"`, `clock: "2026-10-13T10:30:00+02:00"`, `theme: "dark"`, `fontFamily`, `resolvedFont`, `os`, `selectedKey`, `resourceEnvironmentId`, `resourceProjectId`, `resourceTab`, `sampleMarker: true`, `corrections`, `incompleteRegions`, `readiness: "seed-only" | "shell" | "complete"`, `captureKind: "synthetic"`, `networkRequests: 0`, `pendingOperations: 0`. Measured host fields come from the capture controller; never manufacture them. Reject a final manifest missing measured font/OS or containing incomplete regions within the claimed crop.
+Export the manifest type from workspaceMockupFixtures.ts and import it type-only into the entry. No field is inferred from a desired host setting when a measurement is required.
+
+```ts
+export interface WorkspaceMockupCaptureManifest {
+  readonly version: 1;
+  readonly fixtureId: WorkspaceMockupId;
+  readonly referencePng: string;
+  readonly route: string;
+  readonly viewport: {
+    readonly width: number;
+    readonly height: number;
+    readonly deviceScaleFactor: 1;
+    readonly zoom: 1;
+  };
+  readonly locale: "en-GB";
+  readonly timeZone: "Africa/Johannesburg";
+  readonly resolvedLocale: string;
+  readonly resolvedTimeZone: string;
+  readonly clock: "2026-10-13T10:30:00+02:00";
+  readonly theme: "dark";
+  readonly fontFamily: string;
+  readonly resolvedFont: string;
+  readonly os: string;
+  readonly selectedKey: string | null;
+  readonly centerArea: WorkspaceMockupArea;
+  readonly resourceArea: WorkspaceMockupArea | null;
+  readonly resourceEnvironmentId: EnvironmentId;
+  readonly resourceProjectId: ProjectId;
+  readonly resourceTab: WorkspaceMockupTab;
+  readonly sampleMarker: true;
+  readonly corrections: WorkspaceMockupRecipe["corrections"];
+  readonly incompleteRegions: readonly string[];
+  readonly readiness: "seed-only" | "shell" | "complete";
+  readonly captureKind: "synthetic";
+  readonly networkRequests: 0;
+  readonly pendingOperations: 0;
+}
+```
+
+Measured fields come from the capture controller and actual runtime checks. Reject a final manifest missing measured font/OS, mismatching ambient locale/time zone, pending operations or incomplete regions in its claimed crop. The guard's internal count is number, not this manifest's success-only literal zero.
 
 `fixtureReady` means pinned seed/isolation/recipes pass. `shellReady` means W4 shell regions render with the actual shell components. `complete` means each required module region is ready, not merely mounted. For 07, plain note readiness from W6 cannot claim W8's formatted/comment crop. Record subregions `07.docs-format` and `07.docs-comments` until W8 supplies them. Shell crop claims can pass while module regions remain incomplete, but full-PNG parity cannot. Preserve D05/D06 held/live departures in live manifests separately.
 
 Write these routes and exact capture selections in `capture-recipes.md`:
 
-| ID  | Dev-only URL path/query                      | Selected key; resource state                                       | Required areas          |
-| --- | -------------------------------------------- | ------------------------------------------------------------------ | ----------------------- |
-| 01  | `/workspace?space=mail&fixture=01`           | mail-1 stable message, INBOX, fixture-mail-maya; SynKEK/Files/root | mail, drive             |
-| 02  | `/workspace?space=communications&fixture=02` | slack-marketing; SynKEK/Files/root                                 | communications, drive   |
-| 03  | `/workspace?space=tasks&fixture=03`          | no task detail, All tasks; SynKEK/Files/root                       | tasks, drive            |
-| 04  | `/workspace?space=projects&fixture=04`       | fixture-synkek card; SynKEK/Files/root                             | projects, drive         |
-| 05  | `/workspace?space=communications&fixture=05` | slack-marketing; SynKEK/Browser, controlled inert site             | communications, browser |
-| 06  | `/workspace?space=communications&fixture=06` | slack-marketing; SynKEK/Agents                                     | communications, agents  |
-| 07  | `/workspace?space=meetings&fixture=07`       | Upcoming, 2026-10-13; SynKEK/Docs/note-launch-review               | calendar, notes         |
-| 08  | `/workspace?space=calendar&fixture=08`       | Agenda, 2026-10-13; SynKEK/Tasks                                   | calendar, tasks         |
+| ID  | Dev-only URL path/query                      | view     | selectedKey     | resourceTab | centerArea     | resourceArea | requiredAreas           |
+| --- | -------------------------------------------- | -------- | --------------- | ----------- | -------------- | ------------ | ----------------------- |
+| 01  | `/workspace?space=mail&fixture=01`           | inbox    | mail-1          | files       | mail           | drive        | mail, drive             |
+| 02  | `/workspace?space=communications&fixture=02` | chats    | slack-marketing | files       | communications | drive        | communications, drive   |
+| 03  | `/workspace?space=tasks&fixture=03`          | all      | null            | files       | tasks          | drive        | tasks, drive            |
+| 04  | `/workspace?space=projects&fixture=04`       | projects | fixture-synkek  | files       | projects       | drive        | projects, drive         |
+| 05  | `/workspace?space=communications&fixture=05` | chats    | slack-marketing | browser     | communications | browser      | communications, browser |
+| 06  | `/workspace?space=communications&fixture=06` | chats    | slack-marketing | agents      | communications | agents       | communications, agents  |
+| 07  | `/workspace?space=meetings&fixture=07`       | upcoming | event-review    | docs        | calendar       | notes        | calendar, notes         |
+| 08  | `/workspace?space=calendar&fixture=08`       | agenda   | null            | tasks       | calendar       | tasks        | calendar, tasks         |
+
+All start with open Resources at fixture-synkek. Files starts at root. 07 carries note-launch-review as the Docs request and today 2026-10-13; 08 uses the same day. `view` stores the lowercase canonical URL value, never the displayed Agenda/Upcoming label. T7's isolated types require no future production file; T6 adds a type-level equality assertion between WorkspaceMockupView and WorkspaceView in WorkspaceShell.integration.test.tsx after both T7 and T1 exist. T1 can still run functionally before T7; no production file imports fixture types. Fixture selectors intentionally contain only space and fixture, with other state selected by the recipe.
+
+#### URL, theme and network isolation rules
+
+`parseWorkspaceMockupRequest(url, dev)` checks dev first: false always returns null. In dev, a request without fixture returns null. For a fixture request, allow exactly the keys space and fixture, one fixture value and at most one space value. Any other key, including homeDir, path, environment, view or a duplicate key, throws `Fixture state is in memory only.` An unknown or empty fixture ID throws `Unknown fixture.` An absent space uses recipe.space; a supplied space must equal it or throw `Fixture space does not match recipe NN.` where NN is the selected ID. Reject non-/workspace paths and nonempty hashes as `Unknown fixture.` An invalid dev fixture displays its error without importing main. Production search parsing strips fixture and never admits any fixture storage selector.
+
+`startWorkspaceMockup` corrects the earlier index.html inline boot script before rendering: add html.classList dark; delete html.dataset.themeId and themeSelected; remove html.style.backgroundColor and every inline property whose name starts `--boot-`. Import the normal semantic token CSS without mounting live theme providers. Do not write t3code:themes:v1, t3code:theme, t3code:theme-appearance-mode or any other browser storage key. The fixture root owns pinned dark tokens even if the saved developer theme was light/custom. Restore original DOM attributes/styles on final teardown; reset keeps dark pinned. Desktop dev with fixture is outside PNG acceptance.
+
+Before importing WorkspaceMockupApp, adapters or any presentation module, startWorkspaceMockup installs a counting, throwing guard on fetch, XMLHttpRequest.open, WebSocket construction, EventSource, navigator.sendBeacon, and every callable desktopBridge member, including nested command/shell.openExternal methods. A prohibited attempt increments a closure-owned number and throws immediately. Missing APIs stay missing; failure to guard an existing callable fails startup. No process-send/live connector module is imported. Dispose restores original descriptors and clears the counter; reset starts a fresh counter only after old views and pending fakes are disposed.
+
+The only exemptions are same-origin GETs for the actual Vite module/CSS/font asset URLs and the same-host/port WebSocket using exactly subprotocol `vite-hmr`. Define the asset allowlist from the fixture's served module/assets, exclude /api, /ws, /oauth and /.well-known even when the path ends .js, reject other methods/origins, and never exempt application RPCs or arbitrary same-origin fetches. Native browser module/CSS/font loading is allowed; presentation props prohibit external iframe/image/script/form navigation. Fixture Join/Send/Schedule/open-thread/external-open callbacks record operations only. Adapters do not receive raw desktopBridge or process APIs. The existing Vite HMR connection may predate the guard and is outside application requests.
+
+`ready()` reads the numeric counter before returning a manifest. If it is nonzero it rejects `Fixture attempted N application requests.` The successful manifest retains the literal `networkRequests: 0`; a blocked attempt cannot masquerade as zero. Guard tests cover every API, nested bridge methods, exact exemptions, restoration, pending work on reset and a nonzero counter even when a view catches the thrown error.
 
 Document V1 settings, receipt-driven readiness, clearing hover/focus, selected refs, exact output naming `<id>-<width>x<height>.png` plus adjacent `.manifest.json`, and corrected PNG comparison boxes. Outputs go to a disposable worktree-local evidence directory chosen by the controller, never the production home. Do not accept a `homeDir`, SQLite path or external state path in any fixture API. A relative asset URL must stay in the dev entry; reject absolute/parent-traversal file paths rather than opening them.
+
+#### Fixture presentation and router composition
+
+`WorkspaceMockupApp({ session }: { readonly session: WorkspaceMockupSession })` builds a dev-only TanStack router with createMemoryHistory initialized to session.recipe.route. Use createRootRoute with Outlet, plus one createRoute child at /workspace that renders the fixture shell; createRouter/RouterProvider use only that tiny route tree. Never import the live generated route tree, _chat layout, main, connection/auth providers or desktop state. The fixture does not mount SidebarProvider or a live sidebar wrapper. Its injected toggle/menu callbacks use fixture-local React state and never read sidebar preferences. A memory navigation records `navigate` and stays in that history; onOpen for a thread records open-thread. No callback assigns window.location or opens an external URL. The fixture's reset owner recreates the router/session together, so history cannot retain another recipe's state.
+
+The root mounts WorkspaceShellLayout, WorkspaceNavigation, WorkspaceViewRail, WorkspaceEngagement, WorkspaceHeader, WorkspaceResourcesPanelView, ProjectPickerView and WorkspaceResourceFooter only through their exact props in T2-T5. Header model comes from recipe/seed; body nodes come from the active centerArea/resourceArea adapters. It does not mount any live container. Until a shell component's task lands, show the incomplete report instead of drawing an alternate layout. Every later adapter's owning plan must name its pure presentation component and full props before marking readyRegions; its live container maps real data to that same component. Module presentation functions must not import their live container to obtain callbacks.
 
 #### Implementation cycle
 
@@ -443,7 +723,7 @@ Document V1 settings, receipt-driven readiness, clearing hover/focus, selected r
   });
   ```
 
-  Add cases for every recipe, fresh seed object identity, uid/Message-ID matching, four folders/four docs, Marketing confirmed relation, event/note refs, D03 tab corrections, invalid IDs and no unexpected `fixture` selector admitted into production search parsing.
+  Add cases for every recipe, fresh seed object identity, uid/Message-ID matching, four folders/four docs, Marketing confirmed relation, both mail-1 project/folder confirmed endpoints, `mail[0].to` exactly `["Maya", "Leo", "me"]`, displayTime `10:24 AM`, readMarkerMessageId, full ISO starts, areaLabel/dueOn/owner/assigneeDisplayId, both sampleCopy footer strings, all eight centerArea/resourceArea/view mappings, event/note refs, D03 tab corrections, invalid IDs and no unexpected `fixture` selector admitted into production search parsing.
 
 - [ ] Run from `apps/web`: `vp test run src/components/workspace/dev/workspaceMockupFixtures.test.ts`. Expected red because the factory does not exist. Do not run product services to establish red.
 - [ ] Implement the fixed clock and in-memory operation boundary with no live imports:
@@ -469,8 +749,7 @@ Document V1 settings, receipt-driven readiness, clearing hover/focus, selected r
   ```ts
   import { showBootError } from "./lib/bootError";
 
-  const fixtureRequested = new URL(window.location.href).searchParams.has("fixture");
-  if (import.meta.env.DEV && fixtureRequested) {
+  if (import.meta.env.DEV && new URL(window.location.href).searchParams.has("fixture")) {
     void import("./components/workspace/dev/workspaceMockupEntry")
       .then(({ startWorkspaceMockup }) => startWorkspaceMockup())
       .catch(showBootError);
@@ -481,8 +760,10 @@ Document V1 settings, receipt-driven readiness, clearing hover/focus, selected r
 
   `startWorkspaceMockup(): Promise<void>` validates request, renders only the isolated dev app and its CSS/presentation imports, pins theme/locale, publishes readiness, and shows the sample marker. Invalid dev requests render an error and do not fall through to main. Production ignores/rejects the selector through normal route parsing and never imports the dev entry. It must not preserve `fixture` in product URLs.
 
-- [ ] Add `workspaceMockupEntry.test.tsx` with happy-dom. Stub fetch, WebSocket, desktopBridge commands, shell.openExternal and process-send boundaries to throw on use; mock `./main` at bootstrap's actual import path with a spy. Import bootstrap in the fixture branch and await `startWorkspaceMockup`'s promise through a test export or module mock, then assert main was never imported and the marker appears for all eight reset results. Fire sample send/Join/Schedule actions after their adapters arrive and check operations only. No test opens a URL or talks to SMTP, OAuth, an agent or a real database.
-- [ ] Add `workspaceMockupBuild.test.ts` using the installed Vite build API with `write:false`, `configFile:false`, the actual bootstrap.ts as input and production define `"import.meta.env.DEV": "false"`. Use a test build plugin to supply an inert main module and boot-error module only; do not replace bootstrap or the fixture import. Assert output module IDs exclude `/components/workspace/dev/` and all nine module adapters. Also inspect the actual `vp run build` web manifest/chunks once, searching for the sample marker and unique seed Message-ID. A string search alone is supplementary; excluded module IDs from the real entry are the test's core proof. Preserve the normal main import failure handling.
+- [ ] Add `workspaceMockupEntry.test.tsx` with happy-dom. Set `window.happyDOM.setURL("http://fixture.invalid/workspace?space=mail&fixture=01")` before importing bootstrap. Mock main at its actual path with a spy; reset the module cache between entry cases. Run `await import("../../../bootstrap")`, then `await vi.dynamicImportSettled()` and await `window.__workspaceMockupCapture.ready()` after configuring measured host metadata. No production test export is added. Assert main is never evaluated, and the marker appears after every recipe reset. For invalid IDs/unknown keys/space mismatch, assert the exact error and no main fallback.
+- [ ] Seed localStorage with a light/custom developer theme and reproduce index.html's html dataset, class and inline background/boot-variable setup before entry. Assert dark class/tokens, removed theme datasets/background/boot properties and identical browser storage entries afterward. Exercise the guard's exact exemptions and each prohibited API; an application attempt must throw and make ready reject with its real count. After T3/T4a land, drag the divider in 01, select another tab, reset 03 and assert Files selected, a full-width center with no Item list/Resize item list regions, and the entire localStorage snapshot/length unchanged. Then reset 01 and assert its actual list/divider width is 170. A stored split width is not invented for 03, which has no split state. Confirm sessionStorage unchanged too.
+- [ ] Add `workspaceMockupBuild.test.ts` using the installed `build` API from vite-plus and the real `apps/web/vite.config.ts`. Keep its React/Babel/Tailwind/plugins, tsconfigPaths and normal HTML/bootstrap entry. Call `build({ root: webRoot, configFile: absoluteViteConfig, mode: "production", plugins: [stubMain], build: { write: false } })`. `stubMain` intercepts only `./main` when its importer is the actual bootstrap.ts and returns an inert module exporting a resolved startup promise. It must not replace bootstrap, bootError or any fixture import, and must not disable real configuration. Set this one test's timeout explicitly to 120_000 ms, leaving suite defaults intact. For every output chunk, normalize backslashes in Object.keys(chunk.modules) and assert no module ID matches `/\/dev\/|\.fixtures\./`; also assert no chunk contains `synkek.invalid` or `Design preview · sample data`. Fail on an empty chunk/module result so an accidental no-op build cannot pass.
+- [ ] Outside `vp test`, run the full web `vp run build` once and inspect its real manifest keys and source-map sources arrays for /dev/ or .fixtures. input IDs; scan emitted JS/CSS/map contents for `synkek.invalid`, the sample marker and seed Message-IDs. Do not mistake an eliminated import string in a bootstrap source map's sourcesContent for an included fixture module. This is an explicit separate build step, not a 15-second unit test. Record command, exit and scan findings. Keep normal main import failure handling intact. Both the test build and full build are implementation verification steps, not commands run by this plan-fix writer.
 - [ ] Run from `apps/web`:
 
   ```text
@@ -491,14 +772,14 @@ Document V1 settings, receipt-driven readiness, clearing hover/focus, selected r
   vp run build
   ```
 
-  Expected green and no fixture module/data in production chunks. Targeted lint all created TS/TSX paths and bootstrap. No server is required for these tests/build.
+  Expected green and no fixture module/data in production chunks. Targeted lint all created TS/TSX paths and bootstrap. No server is required for these tests/build. Later browser captures need only a web-only Vite dev server, with no backend, auth, connection runtime or live home. A backend-free fixture has no path to userdata. The primary controller starts it only after explicit authorization.
 
 - [ ] Surface checklist: all eight dev routes reset explicitly; fixtures cover web/desktop presentation and compact web without native screens; Codex/Claude/Cursor/Grok/OpenCode/ACP are all non-running fakes; no wire contract change; reset/dispose reverses state; local/direct/relay/tunnel use the same fake session without real connections; docs are contributor capture recipes, not shipped user promises.
 - [ ] Visual acceptance: establish seed/isolation readiness first. With future explicit browser authorization, capture all eight `[0,0,1280,800]` recipes, record missing module regions honestly, then let T3/T4 and later wave owners replace readiness-only regions with actual views. Compare only complete claimed regions under V1. No substitutions inside fixture crops except D03/D28 corrections recorded above. Capture 1024 and 390 separately as proposed adaptations. T7 readiness is a prerequisite, not a claim that all module screenshots passed.
 - [ ] Commit these seventeen explicit files after inspecting the diff. Do not include another owner's later adapter changes.
 
   ```text
-  git add -- apps/web/src/bootstrap.ts apps/web/src/components/workspace/dev/workspaceMockupFixtures.ts apps/web/src/components/workspace/dev/workspaceMockupFixtures.test.ts apps/web/src/components/workspace/dev/workspaceMockupEntry.tsx apps/web/src/components/workspace/dev/workspaceMockupEntry.test.tsx apps/web/src/components/workspace/dev/WorkspaceMockupApp.tsx apps/web/src/components/workspace/dev/workspaceMockupBuild.test.ts apps/web/src/components/workspace/mail/dev/workspaceMockupModule.tsx apps/web/src/components/workspace/communications/dev/workspaceMockupModule.tsx apps/web/src/components/workspace/tasks/dev/workspaceMockupModule.tsx apps/web/src/components/workspace/projects/dev/workspaceMockupModule.tsx apps/web/src/components/workspace/drive/dev/workspaceMockupModule.tsx apps/web/src/components/workspace/calendar/dev/workspaceMockupModule.tsx apps/web/src/components/workspace/notes/dev/workspaceMockupModule.tsx apps/web/src/components/workspace/browser/dev/workspaceMockupModule.tsx apps/web/src/components/workspace/agents/dev/workspaceMockupModule.tsx docs/superpowers/workspace-mockups/capture-recipes.md
+  git add -- apps/web/src/bootstrap.ts apps/web/src/components/workspace/dev/workspaceMockupFixtures.ts apps/web/src/components/workspace/dev/workspaceMockupFixtures.test.ts apps/web/src/components/workspace/dev/workspaceMockupEntry.tsx apps/web/src/components/workspace/dev/workspaceMockupEntry.test.tsx apps/web/src/components/workspace/dev/WorkspaceMockupApp.tsx apps/web/src/components/workspace/dev/workspaceMockupBuild.test.ts apps/web/src/components/workspace/dev/mailMockupModule.tsx apps/web/src/components/workspace/dev/communicationsMockupModule.tsx apps/web/src/components/workspace/dev/tasksMockupModule.tsx apps/web/src/components/workspace/dev/projectsMockupModule.tsx apps/web/src/components/workspace/dev/driveMockupModule.tsx apps/web/src/components/workspace/dev/calendarMockupModule.tsx apps/web/src/components/workspace/dev/notesMockupModule.tsx apps/web/src/components/workspace/dev/browserMockupModule.tsx apps/web/src/components/workspace/dev/agentsMockupModule.tsx docs/superpowers/workspace-mockups/capture-recipes.md
   git commit -m "test(web): add isolated workspace mockup fixtures"
   ```
 
@@ -506,7 +787,22 @@ Document V1 settings, receipt-driven readiness, clearing hover/focus, selected r
 
 **Files:** Modify `apps/web/src/routes/_chat.workspace.tsx:8-74`, `routes/-_chat.workspace.test.ts:1-65`, `components/workspace/WorkspaceSpaceSelector.tsx:10-164`, `WorkspaceSpaceSelector.test.tsx:1-45`, `OfficeWorkspace.tsx:18-107`, `components/CommandPalette.tsx:1891-1971`. Create `apps/web/src/components/workspace/workspaceNavigation.ts` and `workspaceNavigation.test.ts`, new. No changes to generated route tree are expected because the route path stays `/workspace`.
 
-**Consumes:** Existing EnvironmentId, route href/search, explicit environment or active scoped Code environment, live capability flags. **Produces:** `WorkspaceDestination = "communications" | "meetings" | "calendar" | "mail" | "tasks" | "projects"`; `workspaceDestinations` fixed ordered data; `workspaceDestinationSearch(destination, environmentId): WorkspaceSearch`; `rememberCodeLocation(environmentId, href): void`; `codeReturnHref(environmentId): string`; `parseWorkspaceSearch` extended with validated destination-specific `view`. Keep `WorkspaceSearch` exported from its current route or re-export if moved to avoid a circular import.
+**Consumes:** Existing EnvironmentId, route href/search, explicit environment or active scoped Code environment, live capability flags. **Produces:** `WorkspaceDestination = "communications" | "meetings" | "calendar" | "mail" | "tasks" | "projects"`; `workspaceDestinations` fixed ordered data; `workspaceDestinationSearch(destination, environmentId): WorkspaceSearch`; `rememberCodeLocation(environmentId, href): void`; `codeReturnHref(environmentId): string`; `parseWorkspaceSearch` extended with validated destination-specific `view`. Define and export WorkspaceDestination, WorkspaceView, WorkspaceSearch, workspaceViews, workspaceDestinations, parseWorkspaceSearch and the navigation helpers from `apps/web/src/components/workspace/workspaceNavigation.ts`. The existing route imports and re-exports parseWorkspaceSearch/WorkspaceSearch, preserving current consumers without importing route components into shared presentation.
+
+```ts
+export const workspaceViews = {
+  communications: ["chats", "unread", "later"],
+  meetings: ["upcoming", "recordings"],
+  calendar: ["agenda", "week"],
+  mail: ["inbox", "unread", "later"],
+  tasks: ["all", "open", "done"],
+  projects: ["projects", "linked"],
+} as const;
+export type WorkspaceDestination = keyof typeof workspaceViews;
+export type WorkspaceView = (typeof workspaceViews)[WorkspaceDestination][number];
+```
+
+`WorkspaceSearch` retains current legacy Office/mail/project/Telegram fields and adds optional `view: WorkspaceView`. The parser accepts a view only when it belongs to the normalized destination; it strips cross-space/unknown values, fixture and unknown fixture-state selectors. Absence selects that destination's first workspaceViews entry. All navigation, palette, rail and back/forward updates use the one `view` URL key. Do not add taskState, taskView, calendarView, meetingsView or mailView aliases/fallbacks. W5 may add taskLayout list/board and its bounded filters; W6 may add date-only day. To add a rail value, its owner edits workspaceViews, the corresponding registry entry and destination parser tests in the same task under the workspaceNavigation.ts slot, preserving legacy identity and other valid search fields. A day or layout key also needs an explicit parser/type/test extension under that slot; it is not a rail value.
 
 **Depends on:** W4-T0, and T7 before visual claims. **Serial slot:** Shell chain first; owns CommandPalette edits until complete. **Risk:** workspace, two-way.
 
@@ -553,14 +849,6 @@ Document V1 settings, receipt-driven readiness, clearing hover/focus, selected r
 - [ ] Implement a closed route/view vocabulary and environment-scoped return memory:
 
   ```ts
-  const views = {
-    communications: ["chats", "unread", "later"],
-    meetings: ["upcoming", "recordings"],
-    calendar: ["agenda", "week"],
-    mail: ["inbox", "unread", "later"],
-    tasks: ["all", "open", "done"],
-    projects: ["projects", "linked"],
-  } as const;
   const codeLocations = new Map<EnvironmentId, string>();
   export function rememberCodeLocation(environmentId: EnvironmentId, href: string) {
     const url = new URL(href, "https://workspace.invalid");
@@ -590,11 +878,60 @@ Document V1 settings, receipt-driven readiness, clearing hover/focus, selected r
 
 ### Task W4-T2: Persistent navigation and per-space rail slots
 
-**Files:** Modify `apps/web/src/components/AppSidebarLayout.tsx:228-377`, `components/sidebar/SidebarChrome.tsx:34-85`, `components/workspace/OfficeWorkspace.tsx:18-107`, `WorkspaceSpaceSelector.tsx:29-164`, `ProjectsNav.tsx:23-137`, `mail/MailNav.tsx:24-130`; selector tests `WorkspaceSpaceSelector.test.tsx:1-45` and `ProjectsNav.test.tsx:1-92` as needed. Create `WorkspaceNavigation.tsx`, `WorkspaceViewRail.tsx`, `WorkspaceNavigation.test.tsx`, all in `apps/web/src/components/workspace/`, new. Modify T7 `dev/WorkspaceMockupApp.tsx`. The shared ui/sidebar defaults are not to be changed for Code.
+**Files:** Modify `apps/web/src/components/AppSidebarLayout.tsx:228-377`, `components/sidebar/SidebarChrome.tsx:34-85`, `components/workspace/OfficeWorkspace.tsx:18-107`, `WorkspaceSpaceSelector.tsx:29-164`, `ProjectsNav.tsx:23-137`, `mail/MailNav.tsx:24-130`; selector tests `WorkspaceSpaceSelector.test.tsx:1-45` and `ProjectsNav.test.tsx:1-92` as needed. Create `WorkspaceNavigation.tsx`, `WorkspaceViewRail.tsx`, `WorkspaceShellLayout.tsx`, `WorkspaceNavigation.test.tsx`, all in `apps/web/src/components/workspace/`, new. Modify T7 `dev/WorkspaceMockupApp.tsx`. The shared ui/sidebar defaults are not to be changed for Code.
 
-**Consumes:** T1 canonical destination/route helpers, existing SidebarProvider, MailNav accounts/folders, ProjectsNav combobox. **Produces:** `WorkspaceNavigation({ destination, environmentId, mode, onNavigate, children? })` presentation and `WorkspaceViewRail({ items, selected, onSelect })`, with `WorkspaceRailItem = { id: string; label: string; Icon: LucideIcon; unavailableReason?: string }`. Space owners supply rail semantics and optional account/folder popover; shell supplies placement. `WorkspaceSpaceSelector` becomes the two-mode control and does not recursively include WorkspaceNavigation.
+**Consumes:** T1 canonical destination/route helpers, existing SidebarProvider and live disclosure containers. **Produces:** the following pure presentation interfaces in the named files. `WorkspaceSpaceSelector` retains its live Code/sidebar/router wrapper. Extract its controlled two-mode buttons as `WorkspaceModeSwitch` in pure WorkspaceNavigation.tsx; both the wrapper and WorkspaceNavigation use that view. The fixture never imports the live selector module, and neither view recursively mounts WorkspaceNavigation. Live AppSidebarLayout supplies route/Settings/sidebar callbacks; fixture callbacks record navigation only.
 
-`destination` is WorkspaceDestination, `environmentId` is EnvironmentId, `mode` is `"workspace" | "code"`, `onNavigate` accepts WorkspaceDestination and returns void. A separate `onModeChange(mode)` callback accepts that same two-value mode type. `children` is ReactNode for space-owned disclosures. The rail takes `items: readonly WorkspaceRailItem[]`, `selected: string`, `onSelect: (id: string) => void`. unavailableReason means visible explanation and no module RPC on activation.
+```ts
+// WorkspaceNavigation.tsx
+export interface WorkspaceNavigationProps {
+  readonly destination: WorkspaceDestination;
+  readonly environmentId: EnvironmentId;
+  readonly mode: "workspace" | "code";
+  readonly onModeChange: (mode: "workspace" | "code") => void;
+  readonly onNavigate: (destination: WorkspaceDestination) => void;
+  readonly onSettings?: () => void;
+  readonly onToggleSidebar?: () => void;
+  readonly labels?: {
+    readonly brand: string;
+    readonly workspaceMode: string;
+    readonly group: string;
+  };
+  readonly children?: ReactNode;
+}
+// WorkspaceNavigation.tsx
+export interface WorkspaceModeSwitchProps {
+  readonly mode: "workspace" | "code";
+  readonly onModeChange: (mode: "workspace" | "code") => void;
+  readonly labels?: { readonly workspace: string; readonly code: string };
+}
+// WorkspaceViewRail.tsx
+export interface WorkspaceRailItem {
+  readonly id: WorkspaceView;
+  readonly label: string;
+  readonly Icon: LucideIcon;
+  readonly unavailableReason?: string;
+}
+export interface WorkspaceViewRailProps {
+  readonly items: readonly WorkspaceRailItem[];
+  readonly selected: WorkspaceView;
+  readonly onSelect: (id: WorkspaceView) => void;
+}
+export const workspaceRailItems: Readonly<
+  Record<WorkspaceDestination, readonly WorkspaceRailItem[]>
+>;
+// WorkspaceShellLayout.tsx
+export interface WorkspaceShellLayoutProps {
+  readonly navigation: ReactNode;
+  readonly breadcrumb: ReactNode;
+  readonly rail: ReactNode;
+  readonly engagement: ReactNode;
+}
+```
+
+Export WorkspaceNavigation, WorkspaceModeSwitch, WorkspaceViewRail and WorkspaceShellLayout functions taking their respective Props. `workspaceRailItems` is the one data registry, with the per-PNG order/icons above; each destination's id order matches workspaceViews. `unavailableReason` keeps a control visible, explains it accessibly and prevents module RPCs. W5/W6/W11 add support by editing that destination's registry entries and removing the reason when the real view lands, under the registry file slot. TasksNav/CalendarNav/MeetingsRail become item providers or disappear; they do not pass ReactNode rails. Rich Mail folders and conversation lists belong in split list/disclosure content. WorkspaceEngagement has no rail prop.
+
+WorkspaceShellLayout owns the shared 207px navigation, breadcrumb, 52px rail and engagement placement. Engagement owns its one header/center/resource dock or sheet, so the layout includes all five regions through one composition. Mount WorkspaceShellLayout from BOTH AppSidebarLayout's workspace branch and WorkspaceMockupApp; do not duplicate the grid/flex structure in the fixture. Before T3/T4a the fixture passes explicit incomplete placeholders into its slots. After T2, T3/T4a/T5/T6 extend this shared layout and its children. T3/T4a/T5 may update WorkspaceMockupApp only to connect newly available props/providers/views, never to duplicate region markup or geometry. Those wiring edits are explicitly listed and serialized below. No shell view imports useProjects/useEnvironmentQuery/useAtomCommand, a live router tree or connector state. The existing live containers map their state to these props.
 
 **Depends on:** W4-T1 and W4-T7 for its dev-app integration file. T1's functional route work can precede T7. **Serial slot:** After T1; AppSidebarLayout/SidebarChrome/OfficeWorkspace/MailNav/ProjectsNav exclusive. **Risk:** workspace, two-way.
 
@@ -647,16 +984,16 @@ Document V1 settings, receipt-driven readiness, clearing hover/focus, selected r
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       {breadcrumb}
       <div className="flex min-h-0 min-w-0 flex-1">
-        <WorkspaceViewRail items={items} selected={view} onSelect={onSelectView} />
-        {children}
+        <div className="w-[52px] shrink-0">{rail}</div>
+        {engagement}
       </div>
     </div>
   </div>
   ```
 
-  Navigation/header tokens use the rendering table above. Keep this composition inside the existing workspace branch of AppSidebarLayout, not nested beneath its old 64px selector plus Code-width Sidebar. Use a `WorkspaceLayout` branch with fixed sidebar width; Code retains `--sidebar-width`, resizing, both current/legacy ThreadSidebar branches, SidebarControl and native window-control insets. The snippet illustrates composition; breadcrumb is added by T3. Do not render a duplicate breadcrumb in the final tree.
+  Navigation/header tokens use the rendering table above. Put this exact composition in WorkspaceShellLayout.tsx and mount it from AppSidebarLayout and the fixture. AppSidebarLayout's workspace branch supplies props rather than rebuilding it beneath the old 64px selector plus Code-width Sidebar; Code retains `--sidebar-width`, resizing, both current/legacy ThreadSidebar branches, SidebarControl and native window-control insets. The snippet illustrates composition; breadcrumb is added by T3. Do not render a duplicate breadcrumb in the final tree.
 
-- [ ] Reuse SidebarChromeHeader through an explicit `workspace` variant or a small workspace-only header. Never recursively mount its current WorkspaceSpaceSelector twice. Workspace static artwork gets a workspace-only size override; Code artwork and native control reservation remain. Keep existing sidebar toggle shortcut listener once at app level. Move Settings to y325 in wide Workspace mode, leaving Code utility layout intact.
+- [ ] Reuse static sidebar artwork and primitives through a pure workspace header inside WorkspaceNavigation. Live SidebarChromeHeader may wrap the same presentation, but fixture imports never reach its live wrapper. Never recursively mount its current WorkspaceSpaceSelector twice. Workspace static artwork gets a workspace-only size override; Code artwork and native control reservation remain. Keep existing sidebar toggle shortcut listener once at app level. Move Settings to y325 in wide Workspace mode, leaving Code utility layout intact.
 - [ ] Fit the Mail folder/account disclosure into the existing rail's Inbox affordance or adjacent accessible header control. In the default fixture its panel is closed, preserving the 52px rail and the three pictured labels. The disclosure body reuses MailNav's real account/folder reads and Email accounts link, with no SidebarChromeHeader/duplicate whole sidebar. Keep the Projects searchable picker on the project/resource chooser; do not add an always-visible flat list. Proposed open disclosures require review.
 - [ ] Render each rail as a nav with named controls and selected state. All pictured controls remain visible. Until its owner lands Unread/Later/Week/Recordings behavior, an unsupported control shows a reason and makes zero RPCs; do not simulate unread from a page or create fake Later storage. Do not mark those behaviors delivered in W4. T1's route parser rejects cross-space view values.
 - [ ] Wire dev `WorkspaceMockupApp` to the same navigation presentation with its exact recipe data and fixture labels. This is the first point the sample brand/mode may render; never import dev seeds into live SidebarChromeHeader. Run the same test command, expected green, then web typecheck and targeted lint on the owned paths.
@@ -665,17 +1002,64 @@ Document V1 settings, receipt-driven readiness, clearing hover/focus, selected r
 - [ ] Future commit:
 
   ```text
-  git add -- apps/web/src/components/AppSidebarLayout.tsx apps/web/src/components/sidebar/SidebarChrome.tsx apps/web/src/components/workspace/OfficeWorkspace.tsx apps/web/src/components/workspace/WorkspaceSpaceSelector.tsx apps/web/src/components/workspace/ProjectsNav.tsx apps/web/src/components/workspace/mail/MailNav.tsx apps/web/src/components/workspace/WorkspaceNavigation.tsx apps/web/src/components/workspace/WorkspaceViewRail.tsx apps/web/src/components/workspace/WorkspaceNavigation.test.tsx apps/web/src/components/workspace/WorkspaceSpaceSelector.test.tsx apps/web/src/components/workspace/ProjectsNav.test.tsx apps/web/src/components/workspace/dev/WorkspaceMockupApp.tsx
+  git add -- apps/web/src/components/AppSidebarLayout.tsx apps/web/src/components/sidebar/SidebarChrome.tsx apps/web/src/components/workspace/OfficeWorkspace.tsx apps/web/src/components/workspace/WorkspaceSpaceSelector.tsx apps/web/src/components/workspace/ProjectsNav.tsx apps/web/src/components/workspace/mail/MailNav.tsx apps/web/src/components/workspace/WorkspaceNavigation.tsx apps/web/src/components/workspace/WorkspaceViewRail.tsx apps/web/src/components/workspace/WorkspaceShellLayout.tsx apps/web/src/components/workspace/WorkspaceNavigation.test.tsx apps/web/src/components/workspace/WorkspaceSpaceSelector.test.tsx apps/web/src/components/workspace/ProjectsNav.test.tsx apps/web/src/components/workspace/dev/WorkspaceMockupApp.tsx
   git commit -m "feat(web): keep workspace navigation across spaces"
   ```
 
 ### Task W4-T3: Shared headers and center sizing
 
-**Files:** Modify `apps/web/src/components/workspace/WorkspaceEngagement.tsx:7-125` and `.test.tsx:1-45`, `apps/web/src/components/WorkspacePageHeader.tsx:7-28`, `WorkspaceBreadcrumb.tsx:5-77`, `components/workspace/mail/MailSpace.tsx:54-149,216-337`, `ProjectsSpace.tsx:78-305`, `CommunicationsWorkspace.tsx:21-27,69-197`, `TelegramWorkspace.tsx:31-67,124-292`, and `ChatCommunicationsWorkspace.tsx:161-346,488-577`. Create `components/workspace/WorkspaceHeader.tsx`, `WorkspaceHeader.test.tsx`, new. Modify dev `WorkspaceMockupApp.tsx` from T7.
+**Files:** Modify `apps/web/src/components/workspace/WorkspaceEngagement.tsx:7-125` and `.test.tsx:1-45`, `apps/web/src/components/WorkspacePageHeader.tsx:7-28`, `apps/web/src/components/WorkspaceBreadcrumb.tsx:5-77`, `components/workspace/mail/MailSpace.tsx:54-149,216-337`, `ProjectsSpace.tsx:78-305`, `CommunicationsWorkspace.tsx:21-27,69-197`, `TelegramWorkspace.tsx:31-67,124-292`, and `ChatCommunicationsWorkspace.tsx:161-346,488-577`. Create `apps/web/src/components/workspace/WorkspaceHeader.tsx`, `WorkspaceHeader.test.tsx`, new. Modify shared WorkspaceShellLayout.tsx; modify `apps/web/src/hooks/useResizableWidth.ts` and `apps/web/src/hooks/useResizableWidth.test.tsx` for storage injection. Modify dev/WorkspaceMockupApp.tsx only to replace the engagement readiness slot with WorkspaceEngagement/WorkspaceHeaderModel and inject session.storage; extend the fixture entry test for T7's storage/reset/theme assertions. Region markup stays in WorkspaceShellLayout.
 
-**Consumes:** T2 navigation, `useEnvironment(environmentId).label`, optional owner display, selected center item and module-provided title/subtitle. **Produces:** `WorkspaceHeaderModel = { title: string; subtitle?: string; environmentLabel: string; spaceLabel: string; owner?: { name: string; initials: string }; sample?: boolean }`; `WorkspaceHeader` and optional compact actions; `WorkspaceEngagement` discriminated layout props with `layout: "split" | "full"`, split-only `list`, `selected`, `onBack?`, common `children`, `resources`, `header`. Keep compatibility with old `linked` callers until T4b migrates them, then remove the alias in the same serial chain.
+**Consumes:** T2 navigation, live environment label and optional owner supplied by containers. **Produces:** these exact contracts. ReactNode header inputs are retired; every space, including W5/W6, passes a WorkspaceHeaderModel through WorkspaceEngagement.header and renders no second WorkspacePageHeader inside its body.
 
-Common engagement props also require `environmentId: EnvironmentId`, `space: WorkspaceDestination`; `children`, `resources` and `header` are ReactNode. Full layout has no required list or selected prop. Split layout requires `list: ReactNode`, `selected: boolean`, `onBack?: () => void`. Header action callbacks are injected; the header does not own resource queries. No fixture import enters these common types.
+```ts
+// WorkspaceHeader.tsx
+export interface WorkspaceHeaderModel {
+  readonly title: string;
+  readonly subtitle?: string;
+  readonly environmentLabel: string;
+  readonly spaceLabel: string;
+  readonly owner?: { readonly name: string; readonly initials: string };
+  readonly sample?: boolean;
+}
+export interface WorkspaceHeaderProps {
+  readonly model: WorkspaceHeaderModel;
+  readonly resourcesOpen: boolean;
+  readonly onResources: () => void;
+  readonly onLinkedContext?: () => void;
+}
+// WorkspaceEngagement.tsx
+export interface WorkspaceEngagementCommonProps {
+  readonly environmentId: EnvironmentId;
+  readonly space: WorkspaceDestination;
+  readonly header: WorkspaceHeaderModel;
+  readonly children: ReactNode;
+  readonly resources: ReactNode;
+  readonly resourcesOpen: boolean;
+  readonly onResourcesChange: (open: boolean) => void;
+  readonly onLinkedContext?: () => void;
+  readonly storage?: Pick<Storage, "getItem" | "setItem">;
+}
+export type WorkspaceEngagementProps = WorkspaceEngagementCommonProps &
+  (
+    | {
+        readonly layout: "full";
+        readonly list?: never;
+        readonly selected?: never;
+        readonly onBack?: never;
+      }
+    | {
+        readonly layout: "split";
+        readonly list: ReactNode;
+        readonly selected: boolean;
+        readonly onBack?: () => void;
+      }
+  );
+```
+
+Export WorkspaceHeader and WorkspaceEngagement with their corresponding Props. WorkspaceEngagement renders one WorkspaceHeader using header and injected callbacks. WorkspaceShellLayout's breadcrumb is derived from the same model through a pure `WorkspaceBreadcrumb` workspace variant, using props `environmentLabel: string`, `spaceLabel: string`, `sample?: boolean`, `onOpenWorkspace: () => void`; legacy props remain for Code callers. `apps/web/src/components/WorkspacePageHeader.tsx` gains only its workspace variant and remains an internal shell primitive. Neither primitive becomes a later wave's module-header API. Preserve old linked callers only during this serial migration, then remove the alias in T4b.
+
+Extend UseResizableWidthOptions with `storage?: Pick<Storage, "getItem" | "setItem">`. If present, use that object for EVERY read, drag finish and keyboard/setWidth write with the same finite-number validation/encoding as live storage. Never fall through to getLocalStorageItem/setLocalStorageItem when supplied. Track storage identity as well as storageKey when restoring width, and update the latest-options ref with it. Omission preserves current live behavior. The fixture injects session.storage into WorkspaceEngagement and resource state; dispose/reset replaces it. No shared global fallback map is reused between fixture sessions.
 
 **Depends on:** W4-T2. **Serial slot:** After T2, all named shared headers/containers exclusively. **Risk:** workspace, two-way.
 
@@ -694,7 +1078,9 @@ Common engagement props also require `environmentId: EnvironmentId`, `space: Wor
           environmentId={EnvironmentId.make("a")}
           space="projects"
           layout="full"
-          header={<h1>Projects</h1>}
+          header={{ title: "Projects", environmentLabel: "A", spaceLabel: "Projects" }}
+          resourcesOpen={true}
+          onResourcesChange={() => {}}
           resources={<p>Resources</p>}
         >
           <Counter />
@@ -715,7 +1101,7 @@ Common engagement props also require `environmentId: EnvironmentId`, `space: Wor
   ```
 
 - [ ] In `WorkspaceHeader.test.tsx`, render a long environment label, change Mail account and channel metadata, click Resources and verify only resource visibility changes. Owner absent renders no avatar/name claim; owner present exposes full accessible name. The marker exists only with injected `sample=true`. Use a memory router for breadcrumb navigation.
-- [ ] Run from web: `vp test run src/components/workspace/WorkspaceEngagement.test.tsx src/components/workspace/WorkspaceHeader.test.tsx src/components/workspace/mail/MailSpace.test.tsx`. Expected red on new layout/header APIs.
+- [ ] Run from web: `vp test run src/components/workspace/WorkspaceEngagement.test.tsx src/components/workspace/WorkspaceHeader.test.tsx src/components/workspace/mail/MailSpace.test.tsx src/hooks/useResizableWidth.test.tsx src/components/workspace/dev/workspaceMockupEntry.test.tsx`. Expected red on new layout/header APIs.
 - [ ] Implement the sizing model with a fixed wide default rather than old percentage:
 
   ```ts
@@ -725,13 +1111,14 @@ Common engagement props also require `environmentId: EnvironmentId`, `space: Wor
     minWidth: Math.min(160, hostWidth * 0.4),
     maxWidth: hostWidth * 0.6,
     edge: "right",
+    storage,
   });
   ```
 
-  Call hooks consistently, using a split child component when layout differs. Retain ResizeObserver cleanup. Use one CSS-pixel divider and a wider absolute hit area. First clean fixture render has a 170px list within the 681px center; old saved 20% widths do not override the fixture. Keyboard Left/Right by 20px and Home/End remain. Saved live widths are clamped after resize and separated by environment/space. Full layout never subscribes to unused list state.
+  Call hooks consistently, using a split child component when layout differs. Retain ResizeObserver cleanup. Use one CSS-pixel divider and a wider absolute hit area. Each new fixture session has a 170px list within the 681px center; every read and write uses its injected memory storage, so saved live widths never enter the fixture. Keyboard Left/Right by 20px and Home/End remain. Saved live widths are clamped after resize and separated by environment/space. Full layout never subscribes to unused list state.
 
 - [ ] Add a workspace-specific variant to WorkspacePageHeader/Breadcrumb so normal Code/Settings topbar height is unchanged. One 26px breadcrumb belongs above rail+center+resources, one 52px module header above center only. Give Electron's top strip drag-region, while buttons/links/inputs are no-drag through existing rules. Native controls remain reserved on macOS/Windows overlay clients; any required inset departure gets a separate desktop capture. Never globally set `--workspace-topbar-height:26px` for every Code header.
-- [ ] Introduce `WorkspaceHeader` title flex column with `min-width:0`, trailing controls fixed-size and `max-width` truncation. Header title/subtitle come from each module, not copied fixture labels. The Resources trigger is present with no selected item. Owner is optional until W5's configured profile exists; no email-name-derived MC. The dev app injects MC/Maya and the exact sample strings.
+- [ ] Introduce `WorkspaceHeader` title flex column with `min-width:0`, trailing controls fixed-size and `max-width` truncation. Header title/subtitle come from each module, not copied fixture labels. The Resources trigger is present with no selected item. Owner is optional until W5's configured profile exists; no email-name-derived MC. The dev app injects MC/Maya and the exact sample strings via WorkspaceHeaderModel. W4-T3 extends the shared shell composition used by both app and fixture.
 - [ ] Migrate Mail, Projects, Desktop Communications, Telegram and ChatCommunicationsWorkspace away from nested top headers/SidebarInsets. Telegram passes canonical space=communications to the typed engagement component; provider identity stays in its own ref/search fields. Keep desktop account connect/disconnect/Refresh and Telegram bot selector reachable through explicit module controls inside the center, not silently deleted to fit the mockup. Existing local legacy Office keeps its own route. Canonical unavailable Tasks/Meetings/Calendar use full layout. Projects remains a full-width center even before W8 redesigns its cards; its existing project list/detail can compose inside that center without forcing a 170px shell list.
 - [ ] Run the same test command, expected green. Add account/environment title update and long-name assertions to the tests, then web typecheck and targeted lint. Do not replace mail conversation newest-message link semantics while moving headers.
 - [ ] Surface checklist: Resources, breadcrumb, Back and separator keyboard paths; web/desktop drag/no-drag, phone one-pane composition; native contract unchanged; every provider uses existing item actions; no new contracts; list/detail Back and Resources close/reopen; explicit environment and no hardcoded origin for all connection modes; T6 docs.
@@ -739,37 +1126,131 @@ Common engagement props also require `environmentId: EnvironmentId`, `space: Wor
 - [ ] Future commit:
 
   ```text
-  git add -- apps/web/src/components/workspace/WorkspaceEngagement.tsx apps/web/src/components/workspace/WorkspaceEngagement.test.tsx apps/web/src/components/WorkspacePageHeader.tsx apps/web/src/components/WorkspaceBreadcrumb.tsx apps/web/src/components/workspace/WorkspaceHeader.tsx apps/web/src/components/workspace/WorkspaceHeader.test.tsx apps/web/src/components/workspace/mail/MailSpace.tsx apps/web/src/components/workspace/ProjectsSpace.tsx apps/web/src/components/workspace/CommunicationsWorkspace.tsx apps/web/src/components/workspace/TelegramWorkspace.tsx apps/web/src/components/workspace/ChatCommunicationsWorkspace.tsx apps/web/src/components/workspace/dev/WorkspaceMockupApp.tsx
+  git add -- apps/web/src/components/workspace/WorkspaceEngagement.tsx apps/web/src/components/workspace/WorkspaceEngagement.test.tsx apps/web/src/components/WorkspacePageHeader.tsx apps/web/src/components/WorkspaceBreadcrumb.tsx apps/web/src/components/workspace/WorkspaceHeader.tsx apps/web/src/components/workspace/WorkspaceHeader.test.tsx apps/web/src/components/workspace/WorkspaceShellLayout.tsx apps/web/src/hooks/useResizableWidth.ts apps/web/src/hooks/useResizableWidth.test.tsx apps/web/src/components/workspace/dev/workspaceMockupEntry.test.tsx apps/web/src/components/workspace/dev/WorkspaceMockupApp.tsx apps/web/src/components/workspace/mail/MailSpace.tsx apps/web/src/components/workspace/ProjectsSpace.tsx apps/web/src/components/workspace/CommunicationsWorkspace.tsx apps/web/src/components/workspace/TelegramWorkspace.tsx apps/web/src/components/workspace/ChatCommunicationsWorkspace.tsx
   git commit -m "feat(web): share workspace headers and center layouts"
   ```
 
 ### Task W4-T4a: Project resource frame, selection and six lazy tabs
 
-**Files:** Modify `apps/web/src/components/workspace/WorkspaceEngagement.tsx:8-107`, `.test.tsx:13-45`, `WorkspaceToolsPanel.tsx:30-168`, `ProjectsNav.tsx:23-137`. Create `WorkspaceResourcesPanel.tsx`, `WorkspaceResourcesPanel.test.tsx`, `workspaceResourceState.ts`, `workspaceResourceState.test.ts`, `WorkspaceResourceBody.tsx`, all in the same workspace directory, new. Modify `dev/WorkspaceMockupApp.tsx`. Reuse `ProjectsNav`'s combobox at baseline `:43-125`, but keep project selection in the resource frame separate from center route navigation.
+**Files:** Modify `apps/web/src/components/workspace/WorkspaceEngagement.tsx:8-107`, `.test.tsx:13-45`, `WorkspaceToolsPanel.tsx:30-168`, `ProjectsNav.tsx:23-137`. Create `WorkspaceResourcesPanel.tsx`, `WorkspaceResourcesPanelView.tsx`, `WorkspaceResourcesPanel.test.tsx`, `workspaceResourceState.ts`, `workspaceResourceState.test.ts`, `WorkspaceResourceBody.tsx`, `ProjectPickerView.tsx`, `ProjectPickerView.test.tsx`, all in the same workspace directory, new. Extend shared WorkspaceShellLayout.tsx, apps/web/src/components/AppSidebarLayout.tsx for the single provider, dev/WorkspaceMockupApp.tsx for provider/frame props only, and the dev entry isolation test. Reuse `ProjectsNav`'s combobox at baseline `:43-125`, but keep project selection in the resource frame separate from center route navigation.
 
 **Consumes:** `EnvironmentId`, environment-local project/thread projections, selected-item confirmed linked project refs and structural owner candidates from current WorkspaceToolsPanel. **Produces:** the following public web presentation types and functions:
 
 ```ts
+// workspaceResourceState.ts
 export type WorkspaceResourceTab = "files" | "browser" | "agents" | "tasks" | "docs" | "prs";
 export interface WorkspaceResourceScope {
   readonly environmentId: EnvironmentId;
   readonly projectId: ProjectId;
 }
-export interface WorkspaceResourceBodyProps extends WorkspaceResourceScope {
-  readonly selectedItem: WorkspaceLinkEndpoint | null;
-  readonly onOpen: (ref: WorkspaceItemRef) => void;
+export interface OpenWorkspaceResourceInput {
+  readonly tab: WorkspaceResourceTab;
+  readonly projectId: ProjectId;
+  readonly request?: WorkspaceItemRef | null;
 }
+export interface WorkspaceResourcesState {
+  readonly environmentId: EnvironmentId;
+  readonly open: boolean;
+  readonly projectId: ProjectId | null;
+  readonly selectedTab: WorkspaceResourceTab;
+  readonly request: WorkspaceItemRef | null;
+  readonly chooseProject: (projectId: ProjectId) => void;
+  readonly selectTab: (tab: WorkspaceResourceTab) => void;
+  readonly close: () => void;
+  readonly reopen: () => void;
+  readonly openResource: (input: OpenWorkspaceResourceInput) => void;
+}
+export interface WorkspaceResourceStateOptions {
+  readonly presentation?: "dock" | "sheet";
+  readonly storage?: Pick<Storage, "getItem" | "setItem">;
+}
+export function useWorkspaceResourceState(
+  environmentId: EnvironmentId,
+  options?: WorkspaceResourceStateOptions,
+): WorkspaceResourcesState;
+export const WorkspaceResourcesContext: Context<WorkspaceResourcesState | null>;
+export function WorkspaceResourcesProvider(props: {
+  readonly value: WorkspaceResourcesState;
+  readonly children: ReactNode;
+}): ReactNode;
+export function useWorkspaceResources(): WorkspaceResourcesState;
 export type WorkspaceResourceProject =
   | { readonly kind: "selected"; readonly scope: WorkspaceResourceScope; readonly title: string }
   | { readonly kind: "choose"; readonly candidates: readonly ProjectId[] }
   | { readonly kind: "unavailable"; readonly projectId: ProjectId };
+export function resolveResourceProject(input: {
+  readonly environmentId: EnvironmentId;
+  readonly projects: readonly {
+    readonly environmentId: EnvironmentId;
+    readonly id: ProjectId;
+    readonly title: string;
+  }[];
+  readonly explicitProjectId: ProjectId | null;
+  readonly owningProjectIds: readonly ProjectId[];
+  readonly confirmedProjectIds: readonly ProjectId[];
+}): WorkspaceResourceProject;
+// WorkspaceResourceBody.tsx
+export interface WorkspaceResourceBodyProps extends WorkspaceResourceScope {
+  readonly selectedItem: WorkspaceLinkEndpoint | null;
+  readonly request: WorkspaceItemRef | null;
+  readonly onOpen: (ref: WorkspaceItemRef) => void;
+}
+export interface WorkspaceResourceBodySwitchProps extends WorkspaceResourceBodyProps {
+  readonly tab: WorkspaceResourceTab;
+}
+export function WorkspaceResourceBody(props: WorkspaceResourceBodySwitchProps): ReactNode;
+// ProjectPickerView.tsx
+export interface WorkspaceProjectOption {
+  readonly id: ProjectId;
+  readonly title: string;
+  readonly icon?: ReactNode;
+}
+export interface ProjectPickerViewProps {
+  readonly projects: readonly WorkspaceProjectOption[];
+  readonly selectedProjectId: ProjectId | null;
+  readonly allowAll?: boolean;
+  readonly onChooseProject: (id: ProjectId | null) => void;
+  readonly renderProjectActions?: (id: ProjectId, row: ReactNode) => ReactNode;
+}
+export function ProjectPickerView(props: ProjectPickerViewProps): ReactNode;
+// WorkspaceResourcesPanelView.tsx
+export interface WorkspaceResourcesPanelViewProps {
+  readonly projects: readonly WorkspaceProjectOption[];
+  readonly selectedProjectId: ProjectId | null;
+  readonly status: "loading" | "choose" | "selected" | "unavailable";
+  readonly tab: WorkspaceResourceTab;
+  readonly onTabChange: (tab: WorkspaceResourceTab) => void;
+  readonly onChooseProject: (id: ProjectId) => void;
+  readonly body: ReactNode;
+  readonly footer: ReactNode;
+  readonly onClose: () => void;
+}
+export function WorkspaceResourcesPanelView(props: WorkspaceResourcesPanelViewProps): ReactNode;
+// WorkspaceResourcesPanel.tsx, live composition only
+export interface WorkspaceResourcesPanelProps {
+  readonly environmentId: EnvironmentId;
+  readonly project: WorkspaceResourceProject | null;
+  readonly projects: readonly WorkspaceProjectOption[];
+  readonly selectedItem: WorkspaceLinkEndpoint | null;
+  readonly onOpen: (ref: WorkspaceItemRef) => void;
+  readonly footer: ReactNode;
+}
+export function WorkspaceResourcesPanel(props: WorkspaceResourcesPanelProps): ReactNode;
 ```
 
-Export `resolveResourceProject({ environmentId, projects, explicitProjectId, owningProjectIds, confirmedProjectIds }): WorkspaceResourceProject`. `projects` is `readonly { environmentId: EnvironmentId; id: ProjectId; title: string }[]`; explicitProjectId is ProjectId|null; candidate arrays are readonly ProjectId[]. Produce `useWorkspaceResourceState(environmentId)` with `open`, `projectId`, `selectedTab`, `chooseProject`, `selectTab`, `close`, `reopen`. Persist open/project and each chosen project's tab in browser-local preferences, keyed by environment. Compact sheet visibility is transient and is not the persisted wide-open preference.
+Use type imports from React/contracts and type-only sibling imports. `workspaceResourceState.ts` uses createElement for its provider, so it stays a .ts file. It imports no live queries or route tree. AppSidebarLayout's workspace branch owns exactly ONE useWorkspaceResourceState per environment and wraps navigation, engagement and all active spaces in WorkspaceResourcesProvider. Nested consumers call useWorkspaceResources, which throws a clear missing-provider error rather than creating another hook instance. The fixture root supplies the same provider with session.storage and fixture project data. Environment switches replace the provider's state and cancel stale requests.
 
-Export `WorkspaceResourcesPanel` with scope/project resolution, controlled tab/open actions and selectedItem nullable. It renders the picker, close, tab strip, selected body and footer slot. `WorkspaceResourceBody` is a closed six-case switch, not an extensible registration system. Module owners consume `WorkspaceResourceBodyProps` and replace only their named case. Existing tool bodies remain usable with truthful limitations. Selected project does not become an agent read grant.
+The provider owner passes presentation dock/sheet from the same >=1280 viewport breakpoint used by the resource host, including in the fixture. Omission defaults to dock in isolated hook tests. `state.open` is the effective visibility in that presentation. The hook keeps the saved wide-open preference and transient sheet visibility separate internally: initial sheet entry is closed, compact close/reopen changes only transient visibility, and wide close/reopen persists the wide preference. On dock/sheet transitions transfer the currently visible body in one state transition without a false-open gap. This does not change the split/full center layout discriminant.
 
-**Depends on:** W4-T3. **Serial slot:** After T3, owns the four named shared source files. Subsequent module wiring into WorkspaceResourceBody must acquire that file's serial slot, one owner at a time. **Risk:** workspace, two-way.
+`openResource({ tab, projectId, request })` atomically selects the explicit project/tab, stores request or null, and makes the dock or compact sheet visible. Its environment is captured by the provider, never inferred from a requested item's origin. Request is transient navigation intent, separate from selectedItem, confirmed links and access grants. Do not persist request. Clear it on another tab/project, environment change or a new handoff with no request; ordinary close/reopen preserves it within that session. Reject malformed refs and an item obviously inconsistent with the requested tab; providers still validate reachability. When projects are loaded, unknown/deleted explicit choices show unavailable rather than silently choosing another. Async work captures both environment/project and generation so late A results cannot replace B.
+
+W6-T8 calls `useWorkspaceResources().openResource({ tab: "docs", projectId, request: noteRef })`. Its interim note branch is installed only in WorkspaceResourceBody's docs case. W8-T3a preserves it until W8-T3b repoints native-note dispatch to WorkspaceDocsPanel and deletes the interim renderer/test. W10 can use a URL request for Browser later. W7 owns the convenience wrapper in new `apps/web/src/components/workspace/openFiles.ts`, exporting OpenFilesInput, OpenFiles and useOpenFiles; W4 deliberately provides the generic producer rather than a bespoke openFiles function. The wrapper validates environmentId equals the context environment and folderId XOR fileId, maps either to the real Google Drive file ref, and invokes openResource with tab files. With neither, it opens the configured root with request null. W9-T5 and W11-T4 import from that exact W7 file.
+
+WorkspaceResourceBody.tsx is the SINGLE live tab-body switch. Module owners replace only their named case and list this path in both Files and `git add`. WorkspaceResourcesPanel is frame-only; it passes the switch result into WorkspaceResourcesPanelView.body, never chooses tab implementations. WorkspaceToolsPanel retains legacy bodies only until W7/W10 extract or remove them, with scope and nullable selectedItem adapted there. Later waves must not install a parallel switch in either file. W7's ProjectDriveExplorerProps extends WorkspaceResourceBodyProps plus its browse/pick union; delete FilesBodyInput and its item? alias. W11 consumes W7's existing pick mode instead of redefining it.
+
+ProjectPickerView extracts only the pure combobox from ProjectsNav. The live ProjectsNav container retains useSearch/useNavigate/useMailCapabilities/useProjects/useSidebar and maps its data/actions to view props. Null means All projects only when allowAll is true; the resource picker uses false and ignores null. Menu wrapping is an injected live renderProjectActions callback, absent in the fixture. WorkspaceResourcesPanel container receives resolved live data and context, while WorkspaceResourcesPanelView lives in its own file, imports no live state or container module, and mounts exactly the supplied body. Do not re-export it through WorkspaceResourcesPanel.tsx in dev imports, since that would evaluate the live body-switch dependencies. The fixture mounts the View, not ProjectsNav, WorkspaceResourcesPanel's live container or WorkspaceToolsPanel. W4 does not mount Browser's query/command container in the fixture; it remains incomplete until W10 extracts its presentation and supplies fakes. No request masking is accepted as isolation.
+
+**Depends on:** W4-T3. **Serial slot:** After T3, owns the named shared files. WorkspaceResourceBody chain is W4-T4a -> W5-T7 -> W6-T8 -> W7-T3 -> W8-T3a -> W8-T7 -> W8-T8 -> W10-T1 -> W10-T4, with admitted-task splicing. T6 changes only its shared host, not this switch; later UI tasks still respect their W4 gate dependencies. **Risk:** workspace, two-way.
 
 - [ ] Add a failing resolver test with real branded IDs:
 
@@ -805,7 +1286,7 @@ Export `WorkspaceResourcesPanel` with scope/project resolution, controlled tab/o
   Add zero/one/multiple valid candidates, explicit choice retained across item changes, structural task/thread ownership and an unavailable remembered choice. Wait until project projections are ready before declaring deleted; loading is a separate state supplied by the container.
 
 - [ ] Add `WorkspaceResourcesPanel.test.tsx` with two fake module bodies that increment/decrement active subscriptions in useEffect. Render with `selectedItem=null`, choose a project before any item, change Files to Browser, close and reopen. Assert max active bodies is one, inactive body loader was not invoked, same project/tab restored and link/start commands were never called. Resolve a deferred A query after switching to environment B and assert no A title/body appears. Test X releases the wide column and Resources reopens it.
-- [ ] Run from web: `vp test run src/components/workspace/workspaceResourceState.test.ts src/components/workspace/WorkspaceResourcesPanel.test.tsx src/components/workspace/WorkspaceEngagement.test.tsx`. Expected red on missing resolver/frame behavior.
+- [ ] Run from web: `vp test run src/components/workspace/workspaceResourceState.test.ts src/components/workspace/WorkspaceResourcesPanel.test.tsx src/components/workspace/WorkspaceEngagement.test.tsx src/components/workspace/ProjectPickerView.test.tsx src/components/workspace/dev/workspaceMockupEntry.test.tsx`. Expected red on missing resolver/frame behavior.
 - [ ] Implement the extracted resolver from the existing source, preserving its single-candidate rule:
 
   ```ts
@@ -826,17 +1307,17 @@ Export `WorkspaceResourcesPanel` with scope/project resolution, controlled tab/o
 
   Confirmed refs exclude model suggestions and one-hop discovery. With no item, a Projects page supplies its center project as a structural candidate; a previous explicit resource selection wins. With zero candidates show the picker, never default to any unrelated first project. Auto-resolution is recomputed only while no explicit resource choice exists. Deleted explicit projects remain visible as unavailable until the user chooses another. No root changes or link commands occur.
 
-- [ ] Use the existing local-storage hook with a versioned schema and defaults. A malformed saved tab falls back to Files, malformed project ID to no explicit choice, denied storage to in-memory state. Keys are `pulse.workspace.resources.v1:<environmentId>`; per-project tab map keys are ProjectId strings. Query requests and React body keys include both environmentId and projectId. Do not let a stale persisted availability flag override current capabilities. Project names are presentation, never cache identity.
+- [ ] Use a versioned schema and the injected storage boundary with live defaults. With options.storage supplied, route every getItem/setItem through it; no useLocalStorage hook or browser storage helper may bypass it. Without injection use the current browser persistence behavior. A malformed saved tab falls back to Files, malformed project ID to no explicit choice, denied storage to in-memory state. Keys are `pulse.workspace.resources.v1:<environmentId>`; per-project tab map keys are ProjectId strings. Query requests and React body keys include both environmentId and projectId. Do not let a stale persisted availability flag override current capabilities. Project names are presentation, never cache identity.
 - [ ] Build the 340px frame and combobox using the exact rendering table. Selected tab controls expose role=tab, aria-selected, matching aria-controls and a single role=tabpanel. Arrow/Home/End move focus; Enter/Space activates a tab, so merely traversing focus does not start each lazy module. Horizontal scroll is confined to the tab strip. X is `Close resources`; Resources trigger carries expanded state. Use a footer slot now, completed in T5.
-- [ ] Implement the closed lazy switch. Keep the existing Browser function in WorkspaceToolsPanel.tsx for W4, exporting it if the selected body needs a direct import and adapting its scope/nullable action target there. W10 owns its later extraction to WorkspaceBrowser.tsx and inline redesign. Existing Files/Agents continue as explicitly limited project-link lists until W7/W10 replace them. Project Tasks can reuse current ProjectTasks behind its capability gate; full mockup task behavior belongs to W5. Docs and PRs show `Documents are not available on this server yet.` and `Project pull requests are not available in this view yet.` until their owner lands. All six tabs remain visible and selection-consistent. No empty stub counts as module completion.
+- [ ] Implement the closed lazy switch. Keep the existing Browser function in WorkspaceToolsPanel.tsx for W4, exporting the live container only if the selected body needs a direct import and adapting scope/nullable action target there. It is never imported by a fixture adapter; W10 supplies its fake-backed presentational split before marking the Browser region ready. W10 owns its later extraction to WorkspaceBrowser.tsx and inline redesign. Existing Files/Agents continue as explicitly limited project-link lists until W7/W10 replace them. Project Tasks can reuse current ProjectTasks behind its capability gate; full mockup task behavior belongs to W5. Docs and PRs show `Documents are not available on this server yet.` and `Project pull requests are not available in this view yet.` until their owner lands. All six tabs remain visible and selection-consistent. No empty stub counts as module completion.
 - [ ] Remove Browser's private project `<select>` and selected-item-only project resolution from WorkspaceToolsPanel after callers pass the resolved scope. Browser configuration and project-thread lookup still require the selected environment/project. File/agent lists resolve project-confirmed links using the existing shared link query, not all items in the environment. If a selected-item action exists inside a resource, pass nullable selectedItem and disable that action with a reason when absent. Browsing project content must remain possible before selection.
-- [ ] Connect dev app to the same frame with fixture project records and chosen tab. Every recipe begins open with SynKEK, regardless of previously saved live localStorage. Run the same focused suite, expected green, web typecheck and targeted lint. Check no duplicate change subscription was introduced.
+- [ ] Extend WorkspaceShellLayout/its resource children so both live and fixture use the same frame view with their respective project records and chosen tab. Add provider-level tests with a nested consumer calling openResource for a file/note, asserting one shell state changes atomically, request reaches the body, selectedItem is unchanged, no link/root/account mutation occurs, and environment mismatch/late results cannot leak. Every recipe begins open with SynKEK using only session.storage; saved live localStorage is neither read nor written. Run the same focused suite, expected green, web typecheck and targeted lint. Check no duplicate change subscription was introduced.
 - [ ] Surface checklist: resource picker, tab keyboard controls, X and header trigger; web/desktop and phone sheet share state; native contract unchanged; no provider runs or reads beyond existing grants; no contract changes; close/reopen and deleted-selection recovery; local/direct/relay/tunnel requests/cache keys keep environment; T6 docs define resource frame and independent selection.
 - [ ] Visual acceptance: T7 all eight `[940,26,340,774]`, `gap-shell.md:33-36,60-107`. Fixed footer boundary, six ordered tabs, correct Files/Browser/Agents corrections, no second project selector, one selected lazy body. Actual project names/unavailable body and chrome substitutions allowed live. Picker, empty, deleted and closed states require reviewed proposed captures.
 - [ ] Future commit:
 
   ```text
-  git add -- apps/web/src/components/workspace/WorkspaceEngagement.tsx apps/web/src/components/workspace/WorkspaceEngagement.test.tsx apps/web/src/components/workspace/WorkspaceToolsPanel.tsx apps/web/src/components/workspace/ProjectsNav.tsx apps/web/src/components/workspace/WorkspaceResourcesPanel.tsx apps/web/src/components/workspace/WorkspaceResourcesPanel.test.tsx apps/web/src/components/workspace/workspaceResourceState.ts apps/web/src/components/workspace/workspaceResourceState.test.ts apps/web/src/components/workspace/WorkspaceResourceBody.tsx apps/web/src/components/workspace/dev/WorkspaceMockupApp.tsx
+  git add -- apps/web/src/components/workspace/WorkspaceEngagement.tsx apps/web/src/components/workspace/WorkspaceEngagement.test.tsx apps/web/src/components/workspace/WorkspaceToolsPanel.tsx apps/web/src/components/workspace/ProjectsNav.tsx apps/web/src/components/workspace/WorkspaceResourcesPanel.tsx apps/web/src/components/workspace/WorkspaceResourcesPanelView.tsx apps/web/src/components/workspace/WorkspaceResourcesPanel.test.tsx apps/web/src/components/workspace/workspaceResourceState.ts apps/web/src/components/workspace/workspaceResourceState.test.ts apps/web/src/components/workspace/WorkspaceResourceBody.tsx apps/web/src/components/workspace/ProjectPickerView.tsx apps/web/src/components/workspace/ProjectPickerView.test.tsx apps/web/src/components/workspace/WorkspaceShellLayout.tsx apps/web/src/components/workspace/dev/workspaceMockupEntry.test.tsx apps/web/src/components/workspace/dev/WorkspaceMockupApp.tsx apps/web/src/components/AppSidebarLayout.tsx
   git commit -m "feat(web): separate project resources from item selection"
   ```
 
@@ -909,15 +1390,51 @@ Export `WorkspaceResourcesPanel` with scope/project resolution, controlled tab/o
 
 ### Task W4-T5: Shared item actions, project settings and truthful footer
 
-**Files:** Modify `apps/web/src/components/workspace/WorkspaceItemActions.tsx:44-229,465-575`, `mail/LinkedSection.tsx:99-424`, `mail/useMailLinks.ts:21-57`, `ProjectTasks.tsx:33-141`, `WorkspaceResourcesPanel.tsx` from T4a, and `apps/web/src/components/CommandPalette.tsx:1923-1946` only if its existing selected-action dispatch needs adjustment. Create `WorkspaceItemActions.test.tsx`, `WorkspaceResourceFooter.tsx`, `WorkspaceResourceFooter.test.tsx`, new. Consume `mail/linkedItems.ts` drag/origin helpers and existing server link deduplication; no server change planned.
+**Files:** Modify `apps/web/src/components/workspace/WorkspaceItemActions.tsx:44-229,465-575`, `mail/LinkedSection.tsx:99-424`, `mail/useMailLinks.ts:21-57`, `ProjectTasks.tsx:33-141`, `WorkspaceResourcesPanel.tsx` from T4a, and `apps/web/src/components/CommandPalette.tsx:1923-1946` only if its existing selected-action dispatch needs adjustment. Create `WorkspaceItemActions.test.tsx`, `WorkspaceResourceFooter.tsx`, `WorkspaceResourceFooter.test.tsx`, new. Modify apps/web/src/components/AppSidebarLayout.tsx and dev/WorkspaceMockupApp.tsx only to inject the new footer and captured settings callback into their existing resource-frame props. Consume `mail/linkedItems.ts` drag/origin helpers and existing server link deduplication; no server change planned.
 
 **Consumes:** Captured `{ environmentId, item, confirmed }`, live read/operate capability, project-local known health observations and `ProjectWorkspaceSettings`. **Produces:** consistent selected/resource item actions through existing WorkspaceItemMenu/WorkspaceItemActions; `WorkspaceResourceFooter({ scope, observations, sample, onSettings })`. `observations` is `readonly { source: string; state: "connected" | "unavailable" | "unknown" }[]`, supplied only by mounted known sources. Export pure `resourceConnectionLabel(observations)` returning `Connected | Unavailable | Connection status unavailable`. Missing/empty information is unknown. Settings stays scoped and explicit.
 
-**Depends on:** W4-T4a. **Serial slot:** After W4-T4b, owns actions/links/ProjectTasks/frame and the small palette block. **Risk:** workspace, two-way.
+```ts
+// WorkspaceResourceFooter.tsx
+export interface WorkspaceResourceFooterProps {
+  readonly scope: WorkspaceResourceScope;
+  readonly observations: readonly {
+    readonly source: string;
+    readonly state: "connected" | "unavailable" | "unknown";
+  }[];
+  readonly sample: boolean;
+  readonly onSettings: (scope: WorkspaceResourceScope) => void;
+}
+export function WorkspaceResourceFooter(props: WorkspaceResourceFooterProps): ReactNode;
+```
+
+The live wrapper captures scope and opens settings on that explicit action. The fixture supplies a callback recording navigate with value project-settings only; the pure footer mounts no ProjectWorkspaceSettings or live queries.
+
+**Depends on:** W4-T4a. **Serial slot:** After W4-T4b, owns actions/links/ProjectTasks/frame and the small palette block. The ProjectTasks.tsx file chain starts W4-T5 -> W5-T1, then follows the wave-map config/UI chain; W5-T1 must not start its UI edits before W4-T5 releases this file. **Risk:** workspace, two-way.
 
 - [ ] Add a meaningful race test in `WorkspaceItemActions.test.tsx` using the existing react-test-renderer/act idiom and mocked local API boundary:
 
   ```ts
+  import { EnvironmentId, ProjectId } from "@t3tools/contracts";
+  import { vi, expect, it } from "vite-plus/test";
+  import { act, create, type ReactTestRenderer } from "react-test-renderer";
+  import { projectMenuItems } from "./mail/linkedItems";
+  import { WorkspaceItemActions } from "./WorkspaceItemActions";
+
+  const { contextMenuShow, linkToProject } = vi.hoisted(() => ({
+    contextMenuShow: vi.fn(),
+    linkToProject: vi.fn().mockResolvedValue(undefined),
+  }));
+  vi.mock("../../localApi", () => ({
+    readLocalApi: () => ({ contextMenu: { show: contextMenuShow } }),
+  }));
+  vi.mock("./mail/useMailLinks", () => ({ useMailLinks: () => ({ linkToProject }) }));
+  const environmentId = EnvironmentId.make("a");
+  const projectId = ProjectId.make("project-a");
+  const projectChoiceId = projectMenuItems([{ id: projectId, title: "A project" }], new Set())[0]!.id;
+  const targetElement = document.createElement("button");
+  targetElement.getBoundingClientRect = () => new DOMRect(10, 20, 40, 24);
+
   it("keeps the original item when its project chooser resolves after selection changes", async () => {
     let resolveChoice!: (value: string | null) => void;
     const choice = new Promise<string | null>((resolve) => { resolveChoice = resolve; });
@@ -944,7 +1461,7 @@ Export `WorkspaceResourcesPanel` with scope/project resolution, controlled tab/o
   });
   ```
 
-  Test setup uses real `EnvironmentId.make`/`ProjectId.make`, `projectMenuItems`' actual choice ID, a DOM target with getBoundingClientRect, mocked useMailCapabilities, existing project/query hooks and useMailLinks returning a spy. Declare the named spies in `vi.hoisted` or current file-scope mock style. Also resolve null and assert no link/project/thread. Test a menu opened for A whose row updates to B before choosing an action, and environment revocation while pending. Existing async closures may already satisfy part of the test; retain correct code and fix only the failing path.
+  Run this as a happy-dom .tsx test. Supply the existing router/atom test wrapper and mock useMailCapabilities with workspaceLinks/operate enabled, useProjects with that same environment/project record, useThreadShells empty and the link query with an empty ready list. These are the live container boundaries; the snippet declares every action/picker helper rather than assuming a test utility exists. JSX is intentional in this .tsx file. Reset both spies before each case. Also resolve null and assert no link/project/thread. Test a menu opened for A whose row updates to B before choosing an action, and environment revocation while pending. Existing async closures may already satisfy part of the test; retain correct code and fix only the failing path.
 
 - [ ] Add footer test cases: no observations, all connected, one unknown plus connected, one unavailable. Test sample label only with sample=true. Click the gear for project A/environment A, update current resource selection to B while settings is open and assert Save still calls saveConfig for A. Close/cancel produces no save. No new connection read may happen on footer mount.
 - [ ] Run web `vp test run src/components/workspace/WorkspaceItemActions.test.tsx src/components/workspace/WorkspaceResourceFooter.test.tsx src/components/workspace/mail/linkedItems.test.ts`. Expected red for the new footer and any demonstrated target-capture gap.
@@ -973,15 +1490,15 @@ Export `WorkspaceResourcesPanel` with scope/project resolution, controlled tab/o
 - [ ] Future commit:
 
   ```text
-  git add -- apps/web/src/components/workspace/WorkspaceItemActions.tsx apps/web/src/components/workspace/WorkspaceItemActions.test.tsx apps/web/src/components/workspace/mail/LinkedSection.tsx apps/web/src/components/workspace/mail/useMailLinks.ts apps/web/src/components/workspace/ProjectTasks.tsx apps/web/src/components/workspace/WorkspaceResourcesPanel.tsx apps/web/src/components/workspace/WorkspaceResourceFooter.tsx apps/web/src/components/workspace/WorkspaceResourceFooter.test.tsx apps/web/src/components/CommandPalette.tsx
+  git add -- apps/web/src/components/workspace/WorkspaceItemActions.tsx apps/web/src/components/workspace/WorkspaceItemActions.test.tsx apps/web/src/components/workspace/mail/LinkedSection.tsx apps/web/src/components/workspace/mail/useMailLinks.ts apps/web/src/components/workspace/ProjectTasks.tsx apps/web/src/components/workspace/WorkspaceResourcesPanel.tsx apps/web/src/components/workspace/WorkspaceResourceFooter.tsx apps/web/src/components/workspace/WorkspaceResourceFooter.test.tsx apps/web/src/components/CommandPalette.tsx apps/web/src/components/AppSidebarLayout.tsx apps/web/src/components/workspace/dev/WorkspaceMockupApp.tsx
   git commit -m "feat(web): keep resource actions scoped and connection status truthful"
   ```
 
 ### Task W4-T6: Compact shell, single-body regression and wave gate
 
-**Files:** Modify the now-shared `apps/web/src/components/workspace/WorkspaceEngagement.tsx` and `.test.tsx`, `WorkspaceHeader.tsx`, `WorkspaceResourcesPanel.tsx`, `WorkspaceViewRail.tsx`, `WorkspaceResourceBody.tsx`, `workspaceResourceState.ts`; modify `apps/web/src/components/AppSidebarLayout.tsx:228-377` only for workspace breakpoint/toggle integration. Create `apps/web/src/components/workspace/WorkspaceShell.integration.test.tsx`, new. Extend T7 `dev/WorkspaceMockupApp.tsx` and `capture-recipes.md` with readiness/capture outcomes. Docs gate paths are `docs/user/workspace-spaces.md:1-69`, `docs/internals/overview.md:1-42` and `docs/internals/glossary.md:6-20`. Existing Sheet implementation at `apps/web/src/components/ui/sheet.tsx:54-129` already supports keepMounted/transitionDurationMs; consume it without changing unrelated sheets.
+**Files:** Modify the now-shared `apps/web/src/components/workspace/WorkspaceEngagement.tsx` and `.test.tsx`, `WorkspaceHeader.tsx`, `WorkspaceShellLayout.tsx`, `WorkspaceResourcesPanel.tsx`, `WorkspaceViewRail.tsx`, `workspaceResourceState.ts`; modify `apps/web/src/components/AppSidebarLayout.tsx:228-377` only for workspace breakpoint/toggle integration. Create `apps/web/src/components/workspace/WorkspaceShell.integration.test.tsx`, new. Extend shared WorkspaceShellLayout.tsx and `capture-recipes.md` with readiness/capture outcomes; the fixture already mounts this shared composition. WorkspaceResourceBody.tsx needs no responsive edits and is not in T6's file slot. Docs gate paths are `docs/user/workspace-spaces.md:1-69`, `docs/internals/overview.md:1-42` and `docs/internals/glossary.md:6-20`. Existing Sheet implementation at `apps/web/src/components/ui/sheet.tsx:54-129` already supports keepMounted/transitionDurationMs; consume it without changing unrelated sheets.
 
-**Consumes:** T1-T5 shell, active fixture modules, actual width/media changes, existing Sheet focus/escape semantics and keyboard navigation. **Produces:** reviewed compact adaptation, one mounted active resource body across dock/sheet transitions, completed shell readiness, documentation changes and an explicit evidence matrix. `WorkspaceEngagement` uses full layout at >=1280 CSS px and sheet resources below 1280; under 768 the navigation becomes a menu and split center becomes one pane. 768-1279 retains usable navigation/rail but no persistent resource width. Do not interpret the main center's observed width as the viewport breakpoint.
+**Consumes:** T1-T5 shell, active fixture modules, actual width/media changes, existing Sheet focus/escape semantics and keyboard navigation. **Produces:** reviewed compact adaptation, one mounted active resource body across dock/sheet transitions, completed shell readiness, documentation changes and an explicit evidence matrix. `WorkspaceEngagement` uses the wide resource dock at >=1280 CSS px and sheet resources below 1280; under 768 the navigation becomes a menu and split center becomes one pane. 768-1279 retains usable navigation/rail but no persistent resource width. Do not interpret the main center's observed width as the viewport breakpoint.
 
 **Depends on:** W4-T5 plus T7 fixture readiness for visual checks. **Serial slot:** Last shell task; acquire every named shared UI file before integration. Module owners can extend only their local adapters in parallel after this interface lands. **Risk:** workspace, two-way.
 
@@ -1017,7 +1534,9 @@ Export `WorkspaceResourcesPanel` with scope/project resolution, controlled tab/o
           environmentId={EnvironmentId.make("a")}
           space="projects"
           layout="full"
-          header={<p>Projects</p>}
+          header={{ title: "Projects", environmentLabel: "A", spaceLabel: "Projects" }}
+          resourcesOpen={true}
+          onResourcesChange={() => {}}
           resources={<BodyProbe onActive={onActive} />}
         >
           <p>Center</p>
@@ -1039,7 +1558,94 @@ Export `WorkspaceResourcesPanel` with scope/project resolution, controlled tab/o
   });
   ```
 
-  `viewport` is a deterministic matchMedia/ResizeObserver test fake created in this file. Its `set(width: number)` synchronously updates innerWidth, dispatches matching media change callbacks and ResizeObserver entries, then resolves at the React act boundary. It must not start a browser or poll. For DOM-portal implementation use happy-dom/createRoot and getByRole instead of react-test-renderer for this case; drive the same input/change/resize/assert sequence. Never mock away the body host whose continuity the test measures.
+  Install this deterministic viewport fake before mounting, with happy-dom. The host width is a separate observed input, not a viewport-derived breakpoint. Drive set inside act; restore globals and original innerWidth/innerHeight descriptors after each case. This fake evaluates the min/max-width queries the shell uses and delivers real EventTarget notifications without timers.
+
+  ```ts
+  function createViewport() {
+    let width = 1280;
+    let centerWidth = 681;
+    const queries = new Set<MediaQueryList>();
+    const observers = new Map<
+      ResizeObserver,
+      { callback: ResizeObserverCallback; targets: Set<Element> }
+    >();
+    const matches = (query: string) =>
+      [...query.matchAll(/(min|max)-width:\s*(\d+)px/g)].every(([, bound, px]) =>
+        bound === "min" ? width >= Number(px) : width <= Number(px),
+      );
+    const notify = (observer: ResizeObserver) => {
+      const record = observers.get(observer)!;
+      const size = [{ inlineSize: centerWidth, blockSize: 722 }];
+      record.callback(
+        [...record.targets].map((target) => ({
+          target,
+          contentRect: new DOMRect(0, 0, centerWidth, 722),
+          borderBoxSize: size,
+          contentBoxSize: size,
+          devicePixelContentBoxSize: size,
+        })),
+        observer,
+      );
+    };
+    vi.stubGlobal("matchMedia", (media: string) => {
+      const query = new EventTarget() as MediaQueryList;
+      Object.defineProperties(query, {
+        media: { value: media },
+        matches: { get: () => matches(media) },
+        onchange: { value: null, writable: true },
+      });
+      query.addListener = (listener) => {
+        if (listener) query.addEventListener("change", listener);
+      };
+      query.removeListener = (listener) => {
+        if (listener) query.removeEventListener("change", listener);
+      };
+      queries.add(query);
+      return query;
+    });
+    vi.stubGlobal(
+      "ResizeObserver",
+      class implements ResizeObserver {
+        constructor(callback: ResizeObserverCallback) {
+          observers.set(this, { callback, targets: new Set() });
+        }
+        observe(target: Element) {
+          observers.get(this)!.targets.add(target);
+          notify(this);
+        }
+        unobserve(target: Element) {
+          observers.get(this)!.targets.delete(target);
+        }
+        disconnect() {
+          observers.delete(this);
+        }
+      },
+    );
+    return {
+      set(next: number, observedCenterWidth = 681) {
+        width = next;
+        centerWidth = observedCenterWidth;
+        Object.defineProperty(window, "innerWidth", { value: width, configurable: true });
+        Object.defineProperty(window, "innerHeight", { value: 844, configurable: true });
+        for (const query of queries) {
+          const event = new Event("change") as MediaQueryListEvent;
+          Object.defineProperties(event, {
+            matches: { value: query.matches },
+            media: { value: query.media },
+          });
+          query.dispatchEvent(event);
+          query.onchange?.call(query, event);
+        }
+        for (const observer of observers.keys()) notify(observer);
+        window.dispatchEvent(new Event("resize"));
+      },
+    };
+  }
+  const viewport = createViewport();
+  viewport.set(1280);
+  ```
+
+  Use happy-dom/createRoot/getByRole for a DOM-portal implementation and drive the same input/change/resize/assert sequence. The renderer-only example applies only if no DOM portal is required. Never mock away the body host whose continuity is measured. Add an integration assertion that live AppSidebarLayout and WorkspaceMockupApp each mount WorkspaceShellLayout with the same region tree; mock their data sources, not their layout.
 
 - [ ] Add keyboard/touch tests for 390x844, 768, 1024, 1279 and 1280: list -> detail -> Back retains search/scroll, Resources before selection opens, Escape and close return focus to trigger, 44px compact action targets, six-tab strip scrolls within itself, sheet-open resize restores wide boundaries and only one tool lease. Fake the preview boundary to count acquired/released leases, not the whole Browser body. No new preview can start merely from resizing.
 - [ ] Run web `vp test run src/components/workspace/WorkspaceShell.integration.test.tsx src/components/workspace/WorkspaceEngagement.test.tsx src/components/workspace/WorkspaceResourcesPanel.test.tsx`. Expected red for the continuity/responsive gaps.
@@ -1070,7 +1676,7 @@ Export `WorkspaceResourcesPanel` with scope/project resolution, controlled tab/o
 - [ ] Run the same three tests, expected green. Run the complete focused Wave 4 file set once from web:
 
   ```text
-  vp test run src/routes/-_chat.workspace.test.ts src/components/workspace/workspaceNavigation.test.ts src/components/workspace/WorkspaceSpaceSelector.test.tsx src/components/workspace/WorkspaceNavigation.test.tsx src/components/workspace/ProjectsNav.test.tsx src/components/workspace/WorkspaceHeader.test.tsx src/components/workspace/WorkspaceEngagement.test.tsx src/components/workspace/workspaceResourceState.test.ts src/components/workspace/WorkspaceResourcesPanel.test.tsx src/components/workspace/WorkspaceLinkedContext.test.tsx src/components/workspace/WorkspaceItemActions.test.tsx src/components/workspace/WorkspaceResourceFooter.test.tsx src/components/workspace/WorkspaceShell.integration.test.tsx src/components/workspace/mail/MailSpace.test.tsx src/components/workspace/mail/linkedItems.test.ts src/components/workspace/dev/workspaceMockupFixtures.test.ts src/components/workspace/dev/workspaceMockupEntry.test.tsx src/components/workspace/dev/workspaceMockupBuild.test.ts
+  vp test run src/routes/-_chat.workspace.test.ts src/components/workspace/workspaceNavigation.test.ts src/components/workspace/WorkspaceSpaceSelector.test.tsx src/components/workspace/WorkspaceNavigation.test.tsx src/components/workspace/ProjectsNav.test.tsx src/components/workspace/WorkspaceHeader.test.tsx src/components/workspace/WorkspaceEngagement.test.tsx src/components/workspace/workspaceResourceState.test.ts src/components/workspace/WorkspaceResourcesPanel.test.tsx src/components/workspace/WorkspaceLinkedContext.test.tsx src/components/workspace/WorkspaceItemActions.test.tsx src/components/workspace/WorkspaceResourceFooter.test.tsx src/components/workspace/WorkspaceShell.integration.test.tsx src/hooks/useResizableWidth.test.tsx src/components/workspace/ProjectPickerView.test.tsx src/components/workspace/mail/MailSpace.test.tsx src/components/workspace/mail/linkedItems.test.ts src/components/workspace/dev/workspaceMockupFixtures.test.ts src/components/workspace/dev/workspaceMockupEntry.test.tsx src/components/workspace/dev/workspaceMockupBuild.test.ts
   vp run typecheck
   ```
 
@@ -1088,14 +1694,14 @@ Export `WorkspaceResourcesPanel` with scope/project resolution, controlled tab/o
   Describe only accepted behavior. Keep manual reply/explorer/calendar/communications body claims at their existing delivered scope until their wave passes. Preserve the documented local Office tools path if retained. Do not put fixture URLs, source paths or test tooling in user docs.
 
 - [ ] Review `docs/internals/overview.md` for the cross-component constraint that resource browsing is independent view state and grants no linked-item access. Add one short ownership paragraph only if the existing workspace-links/connection docs do not already convey this boundary. Review/update `docs/internals/glossary.md` with one definition: `Resource frame` is the selected environment/project's Files, Browser, Agents, Tasks, Docs and PRs container; selecting/browsing it does not confirm links. Keep Linked items' grant semantics distinct. Record a concrete no-change reason in the gate evidence if an existing definition already suffices. Do not add field catalogs or document every component. Other waves own date-only task/calendar occurrence/workspace note/Drive root/PR collection/Later/read-marker definitions.
-- [ ] Visual acceptance, primary-controller wave gate only after explicit browser/server authorization: use `test-t3-app` with a disposable worktree environment and T7's non-writing entry. Reset each recipe; await its ready promise; set 1280x800 scale1/zoom1/dark/Segoe UI/en-GB/Africa-Johannesburg. Capture eight views `[0,0,1280,800]`, side-by-side and overlay each named shell crop against 01-08, using `gap-shell.md:101-107` and the rendering table. Measure x207/x259/x940, y26/y78/y135/y768, x429 only in split views. Check sample marker and all D03 corrections. Pass only within V1 tolerance. Module-incomplete regions remain explicitly unaccepted. Allowed live substitutions are only the chrome table; compact layouts have no original pixel target.
+- [ ] Visual acceptance, primary-controller wave gate only after explicit browser/server authorization: use T7's non-writing entry on a web-only Vite dev server. No backend, pairing token or disposable backend database is required. If using test-t3-app for lifecycle guidance, choose this fixture-only web path; never boot the live connection tree. Desktop dev with fixture is outside PNG acceptance. Reset each recipe; await its ready promise; set 1280x800 scale1/zoom1/dark/Segoe UI/en-GB/Africa-Johannesburg. Capture eight views `[0,0,1280,800]`, side-by-side and overlay each named shell crop against 01-08, using `gap-shell.md:101-107` and the rendering table. Measure x207/x259/x940, y26/y78/y135/y768, x429 only in split views. Check sample marker and all D03 corrections. Pass only within V1 tolerance. Module-incomplete regions remain explicitly unaccepted. Allowed live substitutions are only the chrome table; compact layouts have no original pixel target.
 - [ ] Capture 1024px and 390x844 proposed states in the same authorized pass. Check no page-level horizontal overflow, tab-only scroll, focus/back behavior and one resource body. Capture Code with current/legacy sidebar variants and long names; review new Linked context/project-picker/settings/unavailable states. Batch repairs, then one affected-case recheck. A 390px browser viewport is phone-web evidence, not React Native or physical-device evidence. Real desktop native window-control behavior needs its own packaged/host result.
-- [ ] Store synthetic capture manifests beside screenshots in the controller's approved disposable evidence directory and report eight shell-crop outcomes separately from full-module PNG outcomes. Never hand-write producer verification receipts. If browser use remains unauthorized, mark render gate `unrun, browser/server not authorized` and hand over code verification without claiming visual acceptance. A local HTTP request cannot prove another device reached the app. Preview links, if authorized later, follow the test-t3-app pairing and Tailscale instructions.
+- [ ] Store synthetic capture manifests beside screenshots in the controller's approved disposable evidence directory and report eight shell-crop outcomes separately from full-module PNG outcomes. Never hand-write producer verification receipts. If browser use remains unauthorized, mark render gate `unrun, browser/server not authorized` and hand over code verification without claiming visual acceptance. A local HTTP request cannot prove another device reached the app. Preview links, if authorized later, follow the current Tailscale hostname/listener checks. This isolated fixture has no pairing flow; normal live app previews still require test-t3-app pairing.
 - [ ] Surface checklist: six rows, account/folder/project disclosures, header/detail/menu/palette/keybindings/touch; shared web/desktop, responsive phone web, no new native screens; all six provider families preserve existing capability/grant behavior; no new wire contracts; cancel/Back/close/reopen/link/unlink/relink/settings return; local/direct/relay/tunnel/multi-environment/old server explicit; user docs, architecture review and glossary complete. All module content remains owned by its later wave.
 - [ ] Future commit with only changed members of this explicit list:
 
   ```text
-  git add -- apps/web/src/components/workspace/WorkspaceEngagement.tsx apps/web/src/components/workspace/WorkspaceEngagement.test.tsx apps/web/src/components/workspace/WorkspaceHeader.tsx apps/web/src/components/workspace/WorkspaceResourcesPanel.tsx apps/web/src/components/workspace/WorkspaceViewRail.tsx apps/web/src/components/workspace/WorkspaceResourceBody.tsx apps/web/src/components/workspace/workspaceResourceState.ts apps/web/src/components/workspace/WorkspaceShell.integration.test.tsx apps/web/src/components/AppSidebarLayout.tsx apps/web/src/components/workspace/dev/WorkspaceMockupApp.tsx docs/superpowers/workspace-mockups/capture-recipes.md docs/user/workspace-spaces.md docs/internals/overview.md docs/internals/glossary.md
+  git add -- apps/web/src/components/workspace/WorkspaceEngagement.tsx apps/web/src/components/workspace/WorkspaceEngagement.test.tsx apps/web/src/components/workspace/WorkspaceHeader.tsx apps/web/src/components/workspace/WorkspaceShellLayout.tsx apps/web/src/components/workspace/WorkspaceResourcesPanel.tsx apps/web/src/components/workspace/WorkspaceViewRail.tsx apps/web/src/components/workspace/workspaceResourceState.ts apps/web/src/components/workspace/WorkspaceShell.integration.test.tsx apps/web/src/components/AppSidebarLayout.tsx docs/superpowers/workspace-mockups/capture-recipes.md docs/user/workspace-spaces.md docs/internals/overview.md docs/internals/glossary.md
   git commit -m "feat(web): complete responsive workspace shell"
   ```
 
@@ -1133,16 +1739,119 @@ Every D decision remains `default assumed, confirm`; this plan is not account co
 - W4-T7 provides deterministic seed/isolation before later modules exist. W4 can certify shell crops; full 01-08 parity depends on module waves. 07 full formatted Docs/comments waits for W8, and live coworker/follower pixels remain conditional under D05/D06. No synthetic screenshot can establish real provider permission or API sufficiency.
 - Linked context's added header action, open project dropdown, PR-open, Board, Week, Recordings, compact and error states have no supplied reference PNG. Their owner/controller must review proposed captures before claiming those visual gates.
 - Environment-owner profile and project-level source health have no complete current shell source. Optional avatar/unknown footer are intentional live states, not invented identities or probes. Later producers must supply supported metadata through the declared props.
-- No existing graphify graph was present. Generating one or invoking context generation would violate this writer's one-file/no-network boundary. Code/spec/mockups were inspected directly. No server Effect edit is planned, so no Effect API is assumed here.
+- No existing graphify graph was present. Generating one or invoking context generation would violate this fix round's two-file/no-network boundary. Code/spec/mockups were inspected directly. No server Effect edit is planned, so no Effect API is assumed here.
 - The writer inspected source and images only. No application tests, network, browser, dev server, provider CLI, staging, commit or live userdata operation ran. New tests/code above are executable implementation instructions, not passing test receipts.
+
+### Required later-wave plan amendments before dispatch
+
+The canonical seams below supersede conflicting prose in Waves 5-11. This fix round owns only W4 and the map. The controller/later fixers must amend the named task's Files, explicit git add and tests before dispatch, using these exact paths and exports:
+
+- W5-T5a/T7 list dev/tasksMockupModule.tsx, use areaLabel/dueOn/owner plus assigneeDisplayId, set the two regions at their actual completion, pass WorkspaceHeaderModel, supply registry items, use view and taskLayout, and wire Tasks only in WorkspaceResourceBody.tsx. W5's dev/workspaceTaskFixtures.ts is private adapter data, not a loader.
+- W6-T4/T8 list dev/calendarMockupModule.tsx/dev/notesMockupModule.tsx, supply header/rail data, use view with day, and open notes through the context handoff. W6-T8 installs the interim note body in the Docs case, keeping format/comments incomplete. W8-T3a must preserve this branch until T3b. Both follow the corrected Docs UI chain.
+- W7-T3 lists dev/driveMockupModule.tsx and WorkspaceResourceBody.tsx. Replace all register-with-loader language and move ProjectDriveExplorer.fixtures.ts to dev/driveMockupData.ts. Export OpenFilesInput/OpenFiles/useOpenFiles from openFiles.ts; no W4-created openFiles exists. ProjectDriveExplorerProps extends WorkspaceResourceBodyProps plus W7's existing browse/pick discriminated union. Its request, not selectedItem or item?, carries folder/file navigation.
+- W8-T2 owns dev/projectsMockupModule.tsx. W8-T4/T5 own dev/notesMockupModule.tsx in order and clear only their completed subregions. W8-T3a/T7/T8 wire Docs/PRs in WorkspaceResourceBody.tsx, not the resource frame. W8-T3b lists meetings/WorkspaceNoteView.tsx and meetings/WorkspaceNoteView.test.tsx as deletions in Files and git add after repointing W6 callers to WorkspaceDocsPanel native dispatch. W8 consumes W6's `createWorkspaceNoteAtoms(runtime)`, never createWorkspaceNotesAtoms.
+- W9-T8 owns dev/communicationsMockupModule.tsx; W9-T5 imports useOpenFiles/OpenFilesInput from openFiles.ts. No extra shell state or loader is added.
+- W10-T1/T4 own dev/browserMockupModule.tsx/dev/agentsMockupModule.tsx and the Browser/Agents cases in WorkspaceResourceBody.tsx, with WorkspaceToolsPanel edits only to extract/remove legacy bodies. They declare pure presentation props before readiness; no live Browser container is mounted in a fixture.
+- W11-T3/gate owns dev/mailMockupModule.tsx, supplies mail registry items and uses view without mailView fallback. W11-T4 imports the W7 wrapper. W11-T7 consumes W7's existing ProjectDriveExplorer pick mode and owns only the dialog wrapper, loaded-file URL resolution and draft insertion, not another mode implementation. Any exceptional explorer change takes its existing file slot.
+- W5-T1 observes W4-T5 as ProjectTasks.tsx serial predecessor. All wave gates take the admitted docs chain in wave-map.md. W11-T3 holds the global slot for its byItem extension between W11-T2 and T5.
+
+W7's wrapper signatures, to be produced in `apps/web/src/components/workspace/openFiles.ts`, are:
+
+```ts
+export type OpenFilesInput = {
+  readonly environmentId: EnvironmentId;
+  readonly projectId: ProjectId;
+} & (
+  | { readonly folderId: string; readonly fileId?: never }
+  | { readonly fileId: string; readonly folderId?: never }
+  | { readonly folderId?: never; readonly fileId?: never }
+);
+export type OpenFiles = (input: OpenFilesInput) => void;
+export function useOpenFiles(): OpenFiles;
+```
+
+This is a shell navigation wrapper with runtime XOR/environment validation, not a new read grant or root mutation. W4 exports no OpenFiles names before W7.
 
 ### Writer checks
 
 - Nine tasks retain the exact requested IDs in dependency order: W4-T0, W4-T7, W4-T1, W4-T2, W4-T3, W4-T4a, W4-T4b, W4-T5, W4-T6.
 - Wave gate lives in W4-T6 and includes docs/user, architecture/glossary review, focused verification and all eight shell comparisons.
-- Only this plan is written in this assignment. Future implementation commit lists are explicit and exclude lockfile churn, unrelated ledger entries and other writers' plans.
-- Artifact prose check: `python C:/Users/qblaa/.codex/plugins/cache/product-ops-skill/product-ops/5.9.0/skills/product-ops/scripts/prose_lint.py docs/superpowers/plans/2026-10-16-workspace-wave-4-shell.md`, exit 0, one eligible file clean. A direct U+2014 scan found zero. These are document checks, not product verification. Recheck after the final edit.
+- Only this plan and wave-map.md are written in this fix round. Future implementation commit lists are explicit and exclude lockfile churn, unrelated ledger entries and other writers' plans.
+- The original writer recorded a passing prose lint and U+2014 scan. This fix round reruns document-only checks on both edited paths; its command/exit/findings are recorded in the review response log, separate from unrun implementation tests.
 
 ## Surfaced gaps
 
 No new product-scope decision beyond the wave map is assumed. Open implementation evidence is the baseline commit checkpoint, later module readiness, review of unpictured states and future authorized render/account/device verification. No tracker mutation or implementation is part of this handoff.
+
+## Review response log
+
+Plan fix round 1, source baseline 1f0d9164de. Review IDs are qualified by their review file so C1/I1/M1 cannot be confused. These are design/plan responses, not implementation or passing runtime evidence. Later-wave edits are mandatory handoffs above and remain outside this two-file assignment.
+
+| Finding ID                                  | Change                                                                                                                                                                                                                                                                                                                |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| review-w4/C1                                | T7 declares WorkspaceMockupSeed and every row type, real link endpoints/branded IDs, ISO/date-only formats, channels/DMs/read marker, typed recipients, both mail links and 03/05 sampleCopy. Tests assert them.                                                                                                      |
+| review-w4/C2                                | T7 module owner contract fixes all nine flat dev adapter paths, signature/readiness and private fake-data rules; requires adapter Files/git add entries. Self-review assigns W5/W7 and all later amendments before dispatch.                                                                                          |
+| review-w4/I1                                | T3 resize storage and T4a resource-state storage inject a per-session map. Reset/dispose clears it; the regression checks Files/full-width at reset 03, actual 170px divider after reset 01, and unchanged browser storage. This preserves 03's required full layout while testing the finding's isolation invariant. |
+| review-w4/I2                                | T7 entry overrides dark class/theme datasets/inline background/boot variables after index.html and leaves all theme storage untouched, with a stored-custom/light regression.                                                                                                                                         |
+| review-w4/I3                                | T2-T5 exact pure view props, separate picker/frame views, live wrappers kept out of dev imports, and T7's isolated TanStack memory router make the fixture mountable.                                                                                                                                                 |
+| review-w4/I4                                | T2 creates WorkspaceShellLayout and lists it in Files/git add. AppSidebarLayout and fixture both mount it; T3/T4a/T6 extend that shared composition; fixture prop/provider wiring stays explicit and contains no separate region layout.                                                                              |
+| review-w4/I5                                | T7 build test uses real Vite config, only main stubbed, normalized module IDs matching /dev/ or .fixtures., marker/synkek.invalid scans and a 120-second test timeout. Full build scan is separate.                                                                                                                   |
+| review-w4/I6                                | T7 states exact parser key/space/id/dev rules and errors; happy-dom URL is set before bootstrap import and dynamicImportSettled, with no new production export.                                                                                                                                                       |
+| review-w4/I7                                | Entry installs counting/throwing fetch/XHR/WebSocket/EventSource/beacon/bridge guards with exact asset/HMR exemptions. A numeric counter makes ready reject any application attempt before a success manifest.                                                                                                        |
+| review-w4/I8                                | Recipe type and both recipe tables specify centerArea/resourceArea and typed lowercase view values; fixtures tests assert all eight mappings.                                                                                                                                                                         |
+| review-w4/M1                                | T0 fallback uses reviewed non-interactive cached patch staging for mixed docs/ledger hunks.                                                                                                                                                                                                                           |
+| review-w4/M2                                | T2 declares onModeChange in WorkspaceNavigationProps and WorkspaceModeSwitchProps.                                                                                                                                                                                                                                    |
+| review-w4/M3                                | configureCapture/manifest include measured resolvedLocale/resolvedTimeZone and reject mismatches, including the actual ambient formatter values.                                                                                                                                                                      |
+| review-w4/M4                                | Inspected original PNG 08; its Week glyph is a 2x2 grid. Choose lucide Grid2X2 in the rail table/registry and map recipe; no design departure.                                                                                                                                                                        |
+| review-w4/M5                                | T5 race snippet declares hoisted spies, branded IDs, real projectMenuItems choice ID and DOM target; names the remaining container mocks.                                                                                                                                                                             |
+| review-w4/M6                                | T6 includes a deterministic matchMedia/ResizeObserver fake with synchronous notifications and explicit installation/cleanup.                                                                                                                                                                                          |
+| review-w4/M7                                | T7/T6 and map recipes state that web-only Vite is sufficient, with no backend or pairing; desktop dev fixture captures are out of scope.                                                                                                                                                                              |
+| review-cross-wave/R1, review-cross-wave/C1  | Fixed adapter names and owner tasks, completion semantics, private fake-data convention and required Files/git add amendments in T7/map/self-review.                                                                                                                                                                  |
+| review-cross-wave/R2, review-cross-wave/C2  | WorkspaceResourceBody.tsx is the sole body switch; map declares the exact cross-wave chain. T6 no longer lists it for unrelated responsive work.                                                                                                                                                                      |
+| review-cross-wave/R3, review-cross-wave/I1  | T4a produces openResource through context and nullable request in BodyProps; W7's exported wrapper has a fixed openFiles.ts home for W9/W11.                                                                                                                                                                          |
+| review-cross-wave/R4, review-cross-wave/I6  | W6 uses generic Docs handoff and switch case; Docs chain starts at W6-T8. W8 preserves the interim branch until native dispatch replaces it.                                                                                                                                                                          |
+| review-cross-wave/R5, review-cross-wave/I2  | WorkspaceEngagement.header is exactly WorkspaceHeaderModel; no ReactNode header or module-owned duplicate header.                                                                                                                                                                                                     |
+| review-cross-wave/R6, review-cross-wave/I3  | workspaceRailItems exports per-destination WorkspaceRailItem[]; later waves update data/availability under its slot rather than supply a ReactNode rail.                                                                                                                                                              |
+| review-cross-wave/R7, review-cross-wave/I5  | Self-review/map assign interim renderer/test deletion and caller repointing to W8-T3b, retaining W6 note support until then.                                                                                                                                                                                          |
+| review-cross-wave/R8, review-cross-wave/I4  | workspaceViews and WorkspaceView own the sole view key; parser/type/registry extension rule covers new values, taskLayout and day.                                                                                                                                                                                    |
+| review-cross-wave/R9, review-cross-wave/M4  | W7 extends WorkspaceResourceBodyProps with selectedItem/request and removes local FilesBodyInput.item?.                                                                                                                                                                                                               |
+| review-cross-wave/R10, review-cross-wave/I7 | W11 consumes W7's existing browse/pick props; only dialog/loaded URL/draft insertion belong to W11.                                                                                                                                                                                                                   |
+| review-cross-wave/R11, review-cross-wave/M1 | Self-review/map fix the later consumer to W6's producer name createWorkspaceNoteAtoms.                                                                                                                                                                                                                                |
+| review-cross-wave/R12, review-cross-wave/M2 | Seed uses W5's areaLabel/dueOn/owner; assigneeDisplayId is fixture-only display data.                                                                                                                                                                                                                                 |
+| review-cross-wave/R13, review-cross-wave/M3 | T5/map order ProjectTasks.tsx from W4-T5 before W5-T1 through config and later UI owners.                                                                                                                                                                                                                             |
+| review-cross-wave/M5                        | Map adds shared docs gate by wave number, admitted tasks only, for overview/glossary and filtered user-guide writers.                                                                                                                                                                                                 |
+| review-cross-wave/M6                        | Map inserts W11-T3 into the global RPC chain between T2 and T5.                                                                                                                                                                                                                                                       |
+
+No finding is disputed. Runtime/build/render checks above are future task requirements and remain unrun in this documentation-only round. Document-only validation commands for this round:
+
+- `python C:/Users/qblaa/.codex/plugins/cache/product-ops-skill/product-ops/5.9.0/skills/product-ops/scripts/prose_lint.py docs/superpowers/plans/2026-10-16-workspace-wave-4-shell.md docs/superpowers/workspace-mockups/mockup-waves/wave-map.md`: exit 0, two eligible files clean.
+- `git diff --check -- docs/superpowers/plans/2026-10-16-workspace-wave-4-shell.md docs/superpowers/workspace-mockups/mockup-waves/wave-map.md`: exit 0.
+- Git for Windows `grep -n` with the U+2014 character on those two paths: exit 1, zero matches. A separate grep check for interactive staging commands also has zero matches.
+- Read-only Python assertions check all 45 qualified finding IDs, exact adapter/recipe mappings, attribution text and added path:line anchors. The only newly qualified source citation is apps/web/src/components/WorkspaceBreadcrumb.tsx lines 5-77, verified against its 77-line source. Unrelated migration-ledger changes were present at entry and are untouched by this round.
+
+## Canonical seams for Waves 5-11
+
+All paths below are under `apps/web/src/` unless prefixed otherwise. These are planned exports, not claims they already exist at this HEAD.
+
+| Path                                                                                                              | Exported names and types later waves use                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| components/workspace/workspaceNavigation.ts                                                                       | WorkspaceDestination, WorkspaceView, WorkspaceSearch; workspaceViews, workspaceDestinations; parseWorkspaceSearch, workspaceDestinationSearch, rememberCodeLocation, codeReturnHref. Route re-exports preserve existing imports; view is the one rail URL key.                                                                                                                                                                               |
+| components/workspace/WorkspaceNavigation.tsx                                                                      | WorkspaceNavigation/WorkspaceNavigationProps and pure WorkspaceModeSwitch/WorkspaceModeSwitchProps. Live WorkspaceSpaceSelector remains its wrapper.                                                                                                                                                                                                                                                                                         |
+| components/workspace/WorkspaceViewRail.tsx                                                                        | WorkspaceRailItem, WorkspaceViewRailProps, WorkspaceViewRail, workspaceRailItems. Later tasks contribute data under the registry slot.                                                                                                                                                                                                                                                                                                       |
+| components/workspace/WorkspaceShellLayout.tsx                                                                     | WorkspaceShellLayoutProps, WorkspaceShellLayout. Shared live/fixture composition.                                                                                                                                                                                                                                                                                                                                                            |
+| components/workspace/WorkspaceHeader.tsx                                                                          | WorkspaceHeaderModel, WorkspaceHeaderProps, WorkspaceHeader. Modules pass the model via WorkspaceEngagement.header.                                                                                                                                                                                                                                                                                                                          |
+| components/workspace/WorkspaceEngagement.tsx                                                                      | WorkspaceEngagementCommonProps, WorkspaceEngagementProps, WorkspaceEngagement. Controlled header/resources and injectable memory storage; split/full union.                                                                                                                                                                                                                                                                                  |
+| components/WorkspaceBreadcrumb.tsx; components/WorkspacePageHeader.tsx                                            | Existing WorkspaceBreadcrumb/item/text/separator and WorkspacePageHeader exports remain shell internals with workspace variants, not module-header contracts.                                                                                                                                                                                                                                                                                |
+| hooks/useResizableWidth.ts                                                                                        | Existing UseResizableWidthOptions/ResizableWidthHandlers/useResizableWidth gain optional storage injection on options; no live default changes.                                                                                                                                                                                                                                                                                              |
+| components/workspace/workspaceResourceState.ts                                                                    | WorkspaceResourceTab, WorkspaceResourceScope, WorkspaceResourceProject, OpenWorkspaceResourceInput, WorkspaceResourceStateOptions, WorkspaceResourcesState; resolveResourceProject, useWorkspaceResourceState, WorkspaceResourcesContext, WorkspaceResourcesProvider, useWorkspaceResources. openResource is the state/context method, not a second store.                                                                                   |
+| components/workspace/WorkspaceResourceBody.tsx                                                                    | WorkspaceResourceBodyProps, WorkspaceResourceBodySwitchProps, WorkspaceResourceBody. One switch with request and nullable selectedItem; consumers edit only their case under its serial chain.                                                                                                                                                                                                                                               |
+| components/workspace/ProjectPickerView.tsx                                                                        | WorkspaceProjectOption, ProjectPickerViewProps, ProjectPickerView. Pure shared searchable picker.                                                                                                                                                                                                                                                                                                                                            |
+| components/workspace/WorkspaceResourcesPanelView.tsx; components/workspace/WorkspaceResourcesPanel.tsx            | WorkspaceResourcesPanelViewProps/WorkspaceResourcesPanelView are pure dev-safe frame exports; WorkspaceResourcesPanelProps/WorkspaceResourcesPanel compose the live body switch.                                                                                                                                                                                                                                                             |
+| components/workspace/WorkspaceResourceFooter.tsx                                                                  | WorkspaceResourceFooterProps, WorkspaceResourceFooter, resourceConnectionLabel. Pure known-health presentation with captured-scope callback.                                                                                                                                                                                                                                                                                                 |
+| components/workspace/dev/workspaceMockupFixtures.ts                                                               | WorkspaceMockupId, WorkspaceMockupArea, WorkspaceMockupTab, WorkspaceMockupView, WorkspaceMockupDate, WorkspaceMockupInstant, WorkspaceMockupPersonId; MockupMutation; WorkspaceMockupRecipe, WorkspaceMockupSession, WorkspaceMockupModule, WorkspaceMockupSeed, WorkspaceMockupCaptureManifest; CreateWorkspaceMockupModule; workspaceMockupRecipes, createWorkspaceMockupSession, createWorkspaceMockupSeed, parseWorkspaceMockupRequest. |
+| components/workspace/dev/workspaceMockupFixtures.ts                                                               | All readonly seed row interfaces: WorkspaceMockupPerson, WorkspaceMockupProject, WorkspaceMockupMail, WorkspaceMockupChannel, WorkspaceMockupMessage, WorkspaceMockupTask, WorkspaceMockupDriveFolder, WorkspaceMockupDriveDocument, WorkspaceMockupDrive, WorkspaceMockupEvent, WorkspaceMockupComment, WorkspaceMockupNote, WorkspaceMockupAgent, WorkspaceMockupBrowser, WorkspaceMockupLink, WorkspaceMockupSampleCopy.                  |
+| components/workspace/dev/workspaceMockupEntry.tsx; components/workspace/dev/WorkspaceMockupApp.tsx                | startWorkspaceMockup(): Promise<void>, WorkspaceMockupCaptureApi and window.__workspaceMockupCapture; WorkspaceMockupApp({ session }). Dev-only global/router/guard and actual shell views.                                                                                                                                                                                                                                                  |
+| components/workspace/dev/{mail,communications,tasks,projects,drive,calendar,notes,browser,agents}MockupModule.tsx | Each exports createWorkspaceMockupModule: CreateWorkspaceMockupModule, returning WorkspaceMockupModule with readyRegions. Exact paths/owners are in T7, not a runtime registry.                                                                                                                                                                                                                                                              |
+| components/workspace/openFiles.ts, produced by W7-T3                                                              | OpenFilesInput, OpenFiles, useOpenFiles. Folder/file XOR wrapper over the W4 context; W9/W11 import here.                                                                                                                                                                                                                                                                                                                                    |
+
+The body-switch, Docs UI, task/config, adapter and documentation serial chains are canonical in `docs/superpowers/workspace-mockups/mockup-waves/wave-map.md`. Later-wave fixers must amend their own Files/git add/test instructions to consume these exports before dispatch.
