@@ -1,11 +1,11 @@
 import { ProjectTasks, ProjectWorkspaceSettings } from "./ProjectTasks";
 import { useWorkspaceHeaderModel } from "./useWorkspaceHeaderModel";
-import { ProjectsNav } from "./ProjectsNav";
+import { WorkspaceProjectResources } from "./WorkspaceResourcesPanel";
 import { workspaceTools } from "../../state/workspaceTools";
 import { useNavigate } from "@tanstack/react-router";
 import { parseTaskLocation } from "./useWorkspaceItemOpener";
 import { Link, useSearch } from "@tanstack/react-router";
-import { EnvironmentId, type WorkspaceItemRef } from "@t3tools/contracts";
+import { EnvironmentId } from "@t3tools/contracts";
 import { useState } from "react";
 import { useProjects, useThreadShells } from "../../state/entities";
 import { useNewProject } from "../../hooks/useNewProject";
@@ -70,11 +70,7 @@ export function ProjectsSpace() {
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const create = useNewProject();
-  const openKnown = useWorkspaceItemOpener(environmentId);
-  const open = (ref: WorkspaceItemRef) => {
-    if (environmentId !== null) openKnown(ref);
-    return;
-  };
+  const open = useWorkspaceItemOpener(environmentId);
   const [resourcesOpen, setResourcesOpen] = useState(false);
   const header = useWorkspaceHeaderModel(environmentId, "Projects", "Projects", selected?.title);
   const projectList = (
@@ -117,7 +113,9 @@ export function ProjectsSpace() {
           </Link>
         </div>
       ) : projects.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No projects yet.</p>
+        <p className="text-sm text-muted-foreground">
+          {environmentId === null ? "Connect an environment to see projects." : "No projects yet."}
+        </p>
       ) : (
         projects.map((project) => (
           <Link
@@ -144,6 +142,21 @@ export function ProjectsSpace() {
       header={header}
       resourcesOpen={resourcesOpen}
       onResourcesChange={setResourcesOpen}
+      resources={
+        <WorkspaceProjectResources
+          {...(selected ? { owningProjectId: selected.id } : {})}
+          selectedItem={
+            selected
+              ? {
+                  ref: selectedTask
+                    ? { type: "task", taskId: selectedTask.id }
+                    : { type: "project", projectId: selected.id },
+                  title: selectedTask?.title ?? selected.title,
+                }
+              : null
+          }
+        />
+      }
       linked={
         selected === undefined || environmentId === null ? null : (
           <LinkedSection
@@ -156,9 +169,6 @@ export function ProjectsSpace() {
         )
       }
     >
-      <div className="p-2">
-        <ProjectsNav />
-      </div>
       {projectList}
       {selected === undefined || environmentId === null ? (
         <p className="p-4 text-sm text-muted-foreground">

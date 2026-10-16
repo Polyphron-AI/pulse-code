@@ -8,7 +8,7 @@ export const WorkspaceHeaderContext = createContext<Pick<
   "environmentLabel" | "spaceLabel"
 > | null>(null);
 
-/** Uses the selected environment's display name for live shell and module chrome. */
+/** Reads shell-owned environmentLabel/spaceLabel from WorkspaceHeaderContext; modules own title/subtitle/owner only. */
 export function useWorkspaceHeaderModel(
   environmentId: EnvironmentId | null,
   title: string,

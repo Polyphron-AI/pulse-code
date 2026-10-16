@@ -27,20 +27,28 @@ import { DriveFileAccess } from "./DriveFiles";
 import { workspaceEndpointTitle } from "./mail/linkedItems";
 import { useMailLinks } from "./mail/useMailLinks";
 import { useWorkspaceCanOperate, workspaceToolsError } from "./ProjectTasks";
+import { useMailCapabilities } from "./mail/useMailCapabilities";
+import type { WorkspaceResourceScope } from "./workspaceResourceState";
+import type { WorkspaceResourceBodyProps } from "./WorkspaceResourceBody";
 export function WorkspaceToolsPanel({
   environmentId,
   item,
   onOpen,
   linkedData,
   tool,
+  scope,
+  selectedItem,
 }: {
   environmentId: EnvironmentId;
   item: WorkspaceLinkEndpoint;
   onOpen: (ref: WorkspaceItemRef) => void;
   linkedData?: WorkspaceLinkList;
   tool?: "browser" | "files" | "agents";
+  scope?: WorkspaceResourceScope;
+  selectedItem?: WorkspaceLinkEndpoint | null;
 }) {
-  const ref = item.ref;
+  const ref = scope ? { type: "project" as const, projectId: scope.projectId } : item.ref;
+  const target = selectedItem === undefined ? item : selectedItem;
   const query = useEnvironmentQuery(
     linkedData === undefined ? workspaceLinks.list({ environmentId, input: { item: ref } }) : null,
   );
@@ -48,7 +56,6 @@ export function WorkspaceToolsPanel({
   const projects = useProjects().filter((project) => project.environmentId === environmentId);
   const threads = useThreadShells().filter((thread) => thread.environmentId === environmentId);
   const threadTitles = new Map(threads.map((thread) => [thread.id, thread.title]));
-  const [chosen, setChosen] = useState("");
   const task = useEnvironmentQuery(
     ref.type === "task" ? workspaceTools.task({ environmentId, input: { id: ref.taskId } }) : null,
   );
@@ -64,8 +71,8 @@ export function WorkspaceToolsPanel({
     if (owner) ids.add(owner.projectId);
   }
   const related = projects.filter((project) => ids.has(project.id));
-  const project = chosen
-    ? projects.find((project) => project.id === chosen)
+  const project = scope
+    ? projects.find((project) => project.id === scope.projectId)
     : related.length === 1
       ? related[0]
       : undefined;
@@ -79,27 +86,14 @@ export function WorkspaceToolsPanel({
           aria-label="Browser tool"
         >
           <h2 className="text-sm font-medium">Browser</h2>
-          {related.length !== 1 || chosen ? (
-            <select
-              aria-label="Browser project"
-              className="w-full rounded-md border border-input bg-background p-2 text-sm"
-              value={project?.id ?? ""}
-              onChange={(event) => setChosen(event.target.value)}
-            >
-              <option value="">Choose a project</option>
-              {projects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.title}
-                </option>
-              ))}
-            </select>
-          ) : null}
           {project ? (
             <WorkspaceBrowser
               key={project.id}
               environmentId={environmentId}
               projectId={project.id}
-              item={item}
+              selectedItem={target}
+              request={null}
+              onOpen={onOpen}
             />
           ) : (
             <p className="text-xs text-muted-foreground">
@@ -112,7 +106,11 @@ export function WorkspaceToolsPanel({
         <section className="space-y-2 rounded-lg border border-border p-3" aria-label="Files tool">
           <h2 className="text-sm font-medium">Files</h2>
           {files.length === 0 ? (
-            <p className="text-xs text-muted-foreground">No Drive files linked to this item.</p>
+            <p className="text-xs text-muted-foreground">
+              {scope
+                ? "No Drive files linked to this project."
+                : "No Drive files linked to this item."}
+            </p>
           ) : (
             <ul className="space-y-2">
               {files.map((view) => (
@@ -156,7 +154,13 @@ export function WorkspaceToolsPanel({
               ))}
             </ul>
           )}
-          <WorkspaceItemActions environmentId={environmentId} item={item} onlyStartThread />
+          {target ? (
+            <WorkspaceItemActions environmentId={environmentId} item={target} onlyStartThread />
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Select an item to start a linked thread.
+            </p>
+          )}
         </section>
       ) : null}
       {links.error ? (
@@ -167,15 +171,37 @@ export function WorkspaceToolsPanel({
     </div>
   );
 }
-function WorkspaceBrowser({
+export function WorkspaceProjectFiles(props: WorkspaceResourceBodyProps) {
+  const capability = useMailCapabilities(props.environmentId);
+  return capability.workspaceLinks ? (
+    <WorkspaceToolsPanel
+      {...props}
+      scope={props}
+      item={{ ref: { type: "project", projectId: props.projectId } }}
+      tool="files"
+    />
+  ) : (
+    <p>Project files are not available on this server yet.</p>
+  );
+}
+export function WorkspaceProjectAgents(props: WorkspaceResourceBodyProps) {
+  const capability = useMailCapabilities(props.environmentId);
+  return capability.workspaceLinks ? (
+    <WorkspaceToolsPanel
+      {...props}
+      scope={props}
+      item={{ ref: { type: "project", projectId: props.projectId } }}
+      tool="agents"
+    />
+  ) : (
+    <p>Project agents are not available on this server yet.</p>
+  );
+}
+export function WorkspaceBrowser({
   environmentId,
   projectId,
-  item,
-}: {
-  environmentId: EnvironmentId;
-  projectId: import("@t3tools/contracts").ProjectId;
-  item: WorkspaceLinkEndpoint;
-}) {
+  selectedItem: item,
+}: WorkspaceResourceBodyProps) {
   const config = useEnvironmentQuery(
     workspaceTools.config({ environmentId, input: { projectId } }),
   );
@@ -240,9 +266,9 @@ function WorkspaceBrowser({
         <Button
           size="xs"
           variant="ghost"
-          disabled={busy || !canOperate || !page}
+          disabled={busy || !canOperate || !page || item === null}
           onClick={async () => {
-            if (!page) return;
+            if (!page || item === null) return;
             setBusy(true);
             setError(null);
             try {
@@ -265,6 +291,9 @@ function WorkspaceBrowser({
           </Button>
         ) : null}
       </div>
+      {item === null ? (
+        <p className="text-xs text-muted-foreground">Select an item to link this page.</p>
+      ) : null}
       {desktop && !browserThread ? (
         <p className="text-xs text-muted-foreground">
           Choose an available Browser thread in this project's workspace settings.
@@ -300,9 +329,9 @@ function WorkspaceBrowser({
               <Button
                 size="sm"
                 variant="outline"
-                disabled={!page || !canOperate || busy}
+                disabled={!page || !canOperate || busy || item === null}
                 onClick={async () => {
-                  if (!page) return;
+                  if (!page || item === null) return;
                   setBusy(true);
                   setError(null);
                   try {

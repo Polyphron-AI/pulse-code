@@ -1146,7 +1146,7 @@ export interface OpenWorkspaceResourceInput {
   readonly request?: WorkspaceItemRef | null;
 }
 export interface WorkspaceResourcesState {
-  readonly environmentId: EnvironmentId;
+  readonly environmentId: EnvironmentId | null;
   readonly open: boolean;
   readonly projectId: ProjectId | null;
   readonly selectedTab: WorkspaceResourceTab;
@@ -1162,7 +1162,7 @@ export interface WorkspaceResourceStateOptions {
   readonly storage?: Pick<Storage, "getItem" | "setItem">;
 }
 export function useWorkspaceResourceState(
-  environmentId: EnvironmentId,
+  environmentId: EnvironmentId | null,
   options?: WorkspaceResourceStateOptions,
 ): WorkspaceResourcesState;
 export const WorkspaceResourcesContext: Context<WorkspaceResourcesState | null>;
@@ -1225,7 +1225,7 @@ export interface WorkspaceResourcesPanelViewProps {
 export function WorkspaceResourcesPanelView(props: WorkspaceResourcesPanelViewProps): ReactNode;
 // WorkspaceResourcesPanel.tsx, live composition only
 export interface WorkspaceResourcesPanelProps {
-  readonly environmentId: EnvironmentId;
+  readonly environmentId: EnvironmentId | null;
   readonly project: WorkspaceResourceProject | null;
   readonly projects: readonly WorkspaceProjectOption[];
   readonly selectedItem: WorkspaceLinkEndpoint | null;
@@ -1837,6 +1837,7 @@ All paths below are under `apps/web/src/` unless prefixed otherwise. These are p
 | components/workspace/WorkspaceViewRail.tsx                                                                        | WorkspaceRailItem, WorkspaceViewRailProps, WorkspaceViewRail, workspaceRailItems. Later tasks contribute data under the registry slot.                                                                                                                                                                                                                                                                                                                        |
 | components/workspace/WorkspaceShellLayout.tsx                                                                     | WorkspaceShellLayoutProps, WorkspaceShellLayout. Shared live/fixture composition.                                                                                                                                                                                                                                                                                                                                                                             |
 | components/workspace/WorkspaceHeader.tsx                                                                          | WorkspaceHeaderModel, WorkspaceHeaderProps, WorkspaceHeader. Modules pass the model via WorkspaceEngagement.header.                                                                                                                                                                                                                                                                                                                                           |
+| components/workspace/useWorkspaceHeaderModel.ts                                                                   | WorkspaceHeaderContext, useWorkspaceHeaderModel. The hook reads shell-owned environmentLabel/spaceLabel from WorkspaceHeaderContext; modules own title/subtitle/owner only. AppSidebarLayout memoizes the shared labels.                                                                                                                                                                                                                                      |
 | components/workspace/WorkspaceEngagement.tsx                                                                      | WorkspaceEngagementCommonProps, WorkspaceEngagementProps, WorkspaceEngagement. Controlled header/resources and injectable memory storage; split/full union.                                                                                                                                                                                                                                                                                                   |
 | components/WorkspaceBreadcrumb.tsx; components/WorkspacePageHeader.tsx                                            | Existing WorkspaceBreadcrumb/item/text/separator and WorkspacePageHeader exports remain shell internals with workspace variants, not module-header contracts.                                                                                                                                                                                                                                                                                                 |
 | hooks/useResizableWidth.ts                                                                                        | Existing UseResizableWidthOptions/ResizableWidthHandlers/useResizableWidth gain optional storage injection on options; no live default changes.                                                                                                                                                                                                                                                                                                               |

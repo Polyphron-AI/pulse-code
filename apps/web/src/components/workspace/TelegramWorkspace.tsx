@@ -13,6 +13,7 @@ import { telegram } from "../../state/telegram";
 import { useEnvironmentQuery } from "../../state/query";
 import { Button } from "../ui/button";
 import { WorkspaceEngagement } from "./WorkspaceEngagement";
+import { WorkspaceProjectResources } from "./WorkspaceResourcesPanel";
 import { WorkspaceItemActions, WorkspaceItemMenu } from "./WorkspaceItemActions";
 import { LinkedSection } from "./mail/LinkedSection";
 import { MailError, MailNotice } from "./mail/MailNotice";
@@ -68,7 +69,7 @@ export function TelegramWorkspace() {
       header={header}
       resourcesOpen={resourcesOpen}
       onResourcesChange={setResourcesOpen}
-      resources={null}
+      resources={<WorkspaceProjectResources />}
     >
       {controls}
       {content}
@@ -135,7 +136,7 @@ function TelegramReader({
       header={header}
       resourcesOpen={resourcesOpen}
       onResourcesChange={setResourcesOpen}
-      resources={null}
+      resources={<WorkspaceProjectResources />}
     >
       {controls}
       {children}
@@ -263,6 +264,7 @@ function TelegramReader({
           ) : null}
         </div>
       }
+      resources={<WorkspaceProjectResources selectedItem={item ? { ref: item, title } : null} />}
       linked={
         item ? (
           <LinkedSection

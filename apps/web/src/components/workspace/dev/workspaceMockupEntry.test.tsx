@@ -93,6 +93,15 @@ async function boot(): Promise<Capture> {
 
 it("boots eight isolated memory routes, pins dark and preserves browser storage through resets and teardown", async () => {
   localStorage.setItem("pulse.workspace.fixture-environment.mail.engagement-width.v2", "450");
+  localStorage.setItem(
+    "pulse.workspace.resources.v1:fixture-environment",
+    JSON.stringify({
+      version: 1,
+      open: false,
+      projectId: "live-choice",
+      tabs: { "live-choice": "prs" },
+    }),
+  );
   const local = storageSnapshot(localStorage);
   const session = storageSnapshot(sessionStorage);
   const originalHtml = document.documentElement.getAttribute("style");
@@ -129,6 +138,10 @@ it("boots eight isolated memory routes, pins dark and preserves browser storage 
     expect(document.body.textContent).toContain("Design preview · sample data");
     expect(document.body.textContent).toContain(`Recipe ${id}`);
     expect(result.incompleteRegions).not.toContain("shell.engagement");
+    expect(result.incompleteRegions).not.toContain("shell.resources");
+    expect(getByRole(document.body, "combobox", { name: "Choose project" }).textContent).toContain(
+      "SynKEK",
+    );
     if (id === "01" || id === "02" || id === "05" || id === "06") {
       const separator = getByRole(document.body, "separator", { name: "Resize item list" });
       expect(separator.getAttribute("aria-valuenow")).toBe("170");

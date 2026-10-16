@@ -8,7 +8,7 @@ import { LinkedSection } from "./LinkedSection";
 import { WorkspaceHeader, type WorkspaceHeaderModel } from "../WorkspaceHeader";
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
-  environment: "remote-env",
+  environment: "remote-env" as string | null,
   search: {} as Record<string, string>,
 }));
 const task = { type: "task" as const, taskId: "wskt_00000000-0000-0000-0000-000000000001" };
@@ -20,7 +20,7 @@ vi.mock("@tanstack/react-router", () => ({
 vi.mock("../../../hooks/useLocalStorage", () => ({ useLocalStorage: () => ["messages", vi.fn()] }));
 vi.mock("./useMailCapabilities", () => ({
   useMailCapabilities: () => ({
-    environmentId: EnvironmentId.make(mocks.environment),
+    environmentId: mocks.environment === null ? null : EnvironmentId.make(mocks.environment),
     ready: true,
     mailRead: true,
     workspaceLinks: true,
@@ -35,6 +35,10 @@ vi.mock("../../../state/entities", () => ({
 vi.mock("../../../state/environments", () => ({ useEnvironment: () => ({ label: "Remote" }) }));
 vi.mock("./MailNav", () => ({ MailNav: () => null }));
 vi.mock("../ProjectsNav", () => ({ ProjectsNav: () => null }));
+// The resource frame has its own provider/query integration suite.
+vi.mock("../WorkspaceResourcesPanel", () => ({
+  WorkspaceProjectResources: () => <p>Project resources</p>,
+}));
 vi.mock("../../../hooks/useNewProject", () => ({ useNewProject: () => vi.fn() }));
 vi.mock("../../../mail/mailState", () => ({ pulseMailAccounts: () => "accounts" }));
 vi.mock("../../../mail/mailReadState", () => ({ pulseMailMessage: () => "message" }));
@@ -83,7 +87,10 @@ vi.mock("../WorkspaceEngagement", () => ({
       <WorkspaceHeader model={header} resourcesOpen={false} onResources={() => {}} />
       {list}
       <div>{children}</div>
-      <aside>{resources ?? linked}</aside>
+      <aside>
+        {linked}
+        {resources}
+      </aside>
     </>
   ),
 }));
@@ -194,4 +201,23 @@ it("updates the shared Mail header on account and folder changes while retaining
       .findAllByType("button")
       .filter((button) => button.children.includes("Resources")),
   ).toHaveLength(1);
+});
+
+it("distinguishes disconnected Projects from a connected environment with no projects", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  mocks.environment = null;
+  mocks.search = {};
+  await act(() => {
+    renderer = create(<ProjectsSpace />);
+  });
+  expect(JSON.stringify(renderer!.toJSON())).toContain("Connect an environment to see projects.");
+  expect(JSON.stringify(renderer!.toJSON())).not.toContain("No projects yet.");
+  expect(
+    renderer!.root
+      .findAllByType("button")
+      .find((button) => button.children.includes("Create project"))!.props.disabled,
+  ).toBe(true);
+  mocks.environment = "remote-env";
+  await act(() => renderer!.update(<ProjectsSpace />));
+  expect(JSON.stringify(renderer!.toJSON())).toContain("No projects yet.");
 });

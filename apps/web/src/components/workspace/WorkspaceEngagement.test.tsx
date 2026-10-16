@@ -49,7 +49,7 @@ async function mount(
         header={{ title: "Projects", environmentLabel: "A", spaceLabel: "Projects" }}
         resourcesOpen={open}
         onResourcesChange={setOpen}
-        {...(options.linked
+        {...("linked" in options
           ? { linked: options.linked }
           : { resources: "resources" in options ? options.resources : <p>Project resources</p> })}
         storage={storage}
@@ -97,6 +97,13 @@ it("keeps compact linked items closed until requested", async () => {
   await act(async () => getByRole(node, "button", { name: "Linked items" }).click());
   expect(getByRole(document.body, "dialog", { name: "Linked items" }).textContent).toContain(
     "Linked page",
+  );
+});
+
+it("explains the empty linked dock instead of leaving a blank column", async () => {
+  await mount("full", 1280, false, { linked: null });
+  expect(getByRole(node, "complementary", { name: "Linked items" }).textContent).toContain(
+    "Select an item to see its linked items.",
   );
 });
 

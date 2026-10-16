@@ -2,13 +2,18 @@ import { act } from "react";
 import { create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import { EnvironmentId, ProjectId } from "@t3tools/contracts";
-import { WorkspaceToolsPanel } from "./WorkspaceToolsPanel";
+import {
+  WorkspaceToolsPanel,
+  WorkspaceBrowser,
+  WorkspaceProjectFiles,
+} from "./WorkspaceToolsPanel";
 const mocks = vi.hoisted(() => ({
   desktop: false,
   external: vi.fn(),
   link: vi.fn(),
   preview: vi.fn(),
   query: vi.fn(),
+  linksQuery: vi.fn(),
 }));
 vi.mock("../../state/entities", () => ({
   useProjects: () => [{ id: "p", environmentId: "remote", title: "Project" }],
@@ -16,7 +21,14 @@ vi.mock("../../state/entities", () => ({
     { id: "t", projectId: "p", environmentId: "remote", title: "Live thread title" },
   ],
 }));
-vi.mock("../../state/workspaceLinks", () => ({ workspaceLinks: { list: () => "links" } }));
+vi.mock("../../state/workspaceLinks", () => ({
+  workspaceLinks: {
+    list: (input: unknown) => {
+      mocks.linksQuery(input);
+      return "links";
+    },
+  },
+}));
 vi.mock("../../state/workspaceTools", () => ({
   workspaceTools: { config: () => "config", task: () => "task" },
 }));
@@ -78,6 +90,9 @@ vi.mock("./mail/useMailLinks", () => ({ useMailLinks: () => ({ linkItem: mocks.l
 vi.mock("./ProjectTasks", () => ({
   useWorkspaceCanOperate: () => true,
   workspaceToolsError: () => "Synthetic error",
+}));
+vi.mock("./mail/useMailCapabilities", () => ({
+  useMailCapabilities: () => ({ workspaceLinks: true, workspaceTools: true }),
 }));
 vi.mock("./WorkspaceItemActions", () => ({
   WorkspaceItemActions: () => <button>Start thread</button>,
@@ -172,4 +187,53 @@ it("opens the incumbent desktop preview through the configured environment-local
     }),
   );
   expect(mocks.external).not.toHaveBeenCalled();
+});
+
+it("reads Files through the resource project rather than the selected item", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  await act(() => {
+    renderer = create(
+      <WorkspaceProjectFiles
+        environmentId={environmentId}
+        projectId={ProjectId.make("p")}
+        selectedItem={null}
+        request={null}
+        onOpen={() => {}}
+      />,
+    );
+  });
+  expect(mocks.linksQuery).toHaveBeenCalledWith({
+    environmentId,
+    input: { item: { type: "project", projectId: "p" } },
+  });
+  expect(JSON.stringify(renderer!.toJSON())).toContain("Brief");
+  expect(mocks.link).not.toHaveBeenCalled();
+});
+
+it("allows browsing without selection and disables linking with a reason", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  await act(() => {
+    renderer = create(
+      <WorkspaceBrowser
+        environmentId={environmentId}
+        projectId={ProjectId.make("p")}
+        selectedItem={null}
+        request={null}
+        onOpen={() => {}}
+      />,
+    );
+  });
+  await act(() =>
+    renderer!.root
+      .findByType("input")
+      .props.onChange({ target: { value: "https://example.test/page" } }),
+  );
+  const buttons = renderer!.root.findAllByType("button");
+  expect(
+    buttons.find((button) => button.props.children === "Open in new tab")!.props.disabled,
+  ).toBe(false);
+  expect(buttons.find((button) => button.props.children === "Link this page")!.props.disabled).toBe(
+    true,
+  );
+  expect(JSON.stringify(renderer!.toJSON())).toContain("Select an item to link this page.");
 });

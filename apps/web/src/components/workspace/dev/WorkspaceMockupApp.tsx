@@ -11,6 +11,9 @@ import { WorkspaceNavigation } from "../WorkspaceNavigationView";
 import { WorkspaceViewRail, workspaceRailItems } from "../WorkspaceViewRail";
 import { WorkspaceShellLayout } from "../WorkspaceShellLayout";
 import { WorkspaceEngagement } from "../WorkspaceEngagement";
+import { WorkspaceResourcesPanelView } from "../WorkspaceResourcesPanelView";
+import { WorkspaceResourcesProvider, useWorkspaceResourceState } from "../workspaceResourceState";
+import { useMediaQuery } from "../../../hooks/useMediaQuery";
 import type { WorkspaceHeaderModel } from "../WorkspaceHeader";
 import type { WorkspaceMockupModule, WorkspaceMockupSession } from "./workspaceMockupFixtures";
 
@@ -28,10 +31,14 @@ function FixtureReport() {
   useLayoutEffect(() => {
     runtime?.onCommit({
       shellReady: false,
-      incompleteRegions: ["shell.resources", "shell.footer"],
+      incompleteRegions: ["shell.footer"],
     });
   }, [runtime]);
-  const [resourcesOpen, setResourcesOpen] = useState(true);
+  const wide = useMediaQuery("xl");
+  const resources = useWorkspaceResourceState(runtime?.session.environmentId ?? null, {
+    ...(runtime ? { storage: runtime.session.storage } : {}),
+    presentation: wide ? "dock" : "sheet",
+  });
   if (!runtime) return null;
   const { session } = runtime;
   const recordNavigation = (value: string) => {
@@ -72,56 +79,97 @@ function FixtureReport() {
       <p>Module body pending its owning wave.</p>
     </main>
   );
+  const selectedProject = session.seed.projects.find(
+    (project) => project.id === resources.projectId,
+  );
+  const resource = runtime.modules.find(
+    (module) => module.area === session.recipe.resourceArea,
+  )?.resource;
   return (
-    <WorkspaceShellLayout
-      navigation={
-        <WorkspaceNavigation
-          destination={session.recipe.space}
-          environmentId={session.environmentId}
-          mode="workspace"
-          backdropVariant="dev"
-          labels={{ brand: "Pulse Next", workspaceMode: "Office", group: "Office" }}
-          onModeChange={(mode) => recordNavigation(`mode:${mode}`)}
-          onNavigate={(destination) => recordNavigation(`space:${destination}`)}
-          onSettings={() => recordNavigation("settings")}
-          onToggleSidebar={() => recordNavigation("sidebar:toggle")}
-        />
-      }
-      header={header}
-      onOpenWorkspace={() => recordNavigation("space:projects")}
-      rail={
-        <WorkspaceViewRail
-          items={workspaceRailItems[session.recipe.space]}
-          selected={session.recipe.view ?? workspaceRailItems[session.recipe.space][0]!.id}
-          onSelect={(view) => recordNavigation(`view:${view}`)}
-        />
-      }
-      engagement={
-        <WorkspaceEngagement
-          environmentId={session.environmentId}
-          space={session.recipe.space}
-          header={header}
-          storage={session.storage}
-          resourcesOpen={resourcesOpen}
-          onResourcesChange={setResourcesOpen}
-          resources={<p className="p-3 text-xs">Resources pending W4-T4a.</p>}
-          {...(session.recipe.space === "mail" || session.recipe.space === "communications"
-            ? {
-                layout: "split" as const,
-                selected: true,
-                list: <p className="p-3 text-xs">List pending its owning wave.</p>,
-              }
-            : { layout: "full" as const })}
-        >
-          {center}
-        </WorkspaceEngagement>
-      }
-    />
+    <WorkspaceResourcesProvider value={resources}>
+      <WorkspaceShellLayout
+        navigation={
+          <WorkspaceNavigation
+            destination={session.recipe.space}
+            environmentId={session.environmentId}
+            mode="workspace"
+            backdropVariant="dev"
+            labels={{ brand: "Pulse Next", workspaceMode: "Office", group: "Office" }}
+            onModeChange={(mode) => recordNavigation(`mode:${mode}`)}
+            onNavigate={(destination) => recordNavigation(`space:${destination}`)}
+            onSettings={() => recordNavigation("settings")}
+            onToggleSidebar={() => recordNavigation("sidebar:toggle")}
+          />
+        }
+        header={header}
+        onOpenWorkspace={() => recordNavigation("space:projects")}
+        rail={
+          <WorkspaceViewRail
+            items={workspaceRailItems[session.recipe.space]}
+            selected={session.recipe.view ?? workspaceRailItems[session.recipe.space][0]!.id}
+            onSelect={(view) => recordNavigation(`view:${view}`)}
+          />
+        }
+        engagement={
+          <WorkspaceEngagement
+            environmentId={session.environmentId}
+            space={session.recipe.space}
+            header={header}
+            storage={session.storage}
+            resourcesOpen={resources.open}
+            onResourcesChange={(open) => (open ? resources.reopen() : resources.close())}
+            resources={
+              <WorkspaceResourcesPanelView
+                projects={session.seed.projects}
+                selectedProjectId={resources.projectId}
+                status={
+                  selectedProject
+                    ? "selected"
+                    : resources.projectId === null
+                      ? "choose"
+                      : "unavailable"
+                }
+                tab={resources.selectedTab}
+                onTabChange={resources.selectTab}
+                onChooseProject={resources.chooseProject}
+                body={
+                  selectedProject && resources.selectedTab === session.recipe.resourceTab ? (
+                    (resource ?? <p>Resource body pending its owning wave.</p>)
+                  ) : (
+                    <p>Choose the recipe project and tab to view its sample resource.</p>
+                  )
+                }
+                footer={<span>Sample project connections</span>}
+                onClose={resources.close}
+              />
+            }
+            {...(session.recipe.space === "mail" || session.recipe.space === "communications"
+              ? {
+                  layout: "split" as const,
+                  selected: true,
+                  list: <p className="p-3 text-xs">List pending its owning wave.</p>,
+                }
+              : { layout: "full" as const })}
+          >
+            {center}
+          </WorkspaceEngagement>
+        }
+      />
+    </WorkspaceResourcesProvider>
   );
 }
 
 export function WorkspaceMockupApp({ session }: { readonly session: WorkspaceMockupSession }) {
   const [router] = useState(() => {
+    session.storage.setItem(
+      `pulse.workspace.resources.v1:${session.environmentId}`,
+      JSON.stringify({
+        version: 1,
+        open: true,
+        projectId: session.resourceProjectId,
+        tabs: { [session.resourceProjectId]: session.recipe.resourceTab },
+      }),
+    );
     const root = createRootRoute({ component: Outlet });
     const workspace = createRoute({
       getParentRoute: () => root,

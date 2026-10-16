@@ -5,6 +5,11 @@ import { getByRole } from "@testing-library/dom";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import { CommunicationsWorkspace } from "./CommunicationsWorkspace";
 
+// Account/channel tests isolate the separately tested project-resource boundary.
+vi.mock("./WorkspaceResourcesPanel", () => ({
+  WorkspaceProjectResources: () => <p>Project resources</p>,
+}));
+
 const boundary = vi.hoisted(() => ({
   run: vi.fn(async (request: { operation: string }) => {
     if (request.operation === "accounts.list")

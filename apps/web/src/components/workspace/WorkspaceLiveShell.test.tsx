@@ -31,6 +31,7 @@ const state = vi.hoisted(() => ({
   mobile: false,
   artwork: true,
   fullscreen: false,
+  moduleRendered: vi.fn(),
   fullscreenChanged: undefined as ((value: boolean) => void) | undefined,
 }));
 // Isolate providers, settings and Code-only services. Keep the live router,
@@ -51,7 +52,10 @@ vi.mock("../../hooks/useSettings", () => ({
   useEnvironmentIdentificationMode: () => (state.artwork ? "artwork" : "none"),
   useLegacySidebarEnabled: () => false,
 }));
-vi.mock("../../hooks/useMediaQuery", () => ({ useIsMobile: () => state.mobile }));
+vi.mock("../../hooks/useMediaQuery", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../hooks/useMediaQuery")>()),
+  useIsMobile: () => state.mobile,
+}));
 vi.mock("../../hooks/useThreadVisitedMigration", () => ({ useThreadVisitedMigration: () => {} }));
 vi.mock("../../panelAnimations", () => ({
   PanelAnimationSuppressionProvider: ({ children }: { children: ReactNode }) => children,
@@ -117,12 +121,14 @@ afterEach(async () => {
   state.mobile = false;
   state.artwork = true;
   state.fullscreen = false;
+  state.moduleRendered.mockClear();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
 async function mount(href: string) {
   function Module() {
+    state.moduleRendered();
     const header = useWorkspaceHeaderModel(
       EnvironmentId.make("module-id"),
       "Module title",
@@ -211,6 +217,13 @@ it("insets the collapsed macOS engagement title past the fixed toggle and rail",
   expect(shellCss).toMatch(
     /\[data-workspace-sidebar="closed"\] \[data-workspace-engagement-header\]\s*\{\s*padding-left: max\(16px, calc\(var\(--workspace-titlebar-content-left\) - 52px\)\)/,
   );
+});
+
+it("does not rerender shared header consumers when only the sidebar changes", async () => {
+  await mount("/workspace?space=projects&environment=live-a");
+  const renders = state.moduleRendered.mock.calls.length;
+  await act(async () => getByRole(node, "button", { name: "Toggle main sidebar" }).click());
+  expect(state.moduleRendered).toHaveBeenCalledTimes(renders);
 });
 
 it("reserves the native caption width for the band below the 26px strip", async () => {

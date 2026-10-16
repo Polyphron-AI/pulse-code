@@ -12,6 +12,7 @@ import {
 import { EnvironmentId } from "@t3tools/contracts";
 import { useState } from "react";
 import { WorkspaceEngagement } from "../components/workspace/WorkspaceEngagement";
+import { WorkspaceProjectResources } from "../components/workspace/WorkspaceResourcesPanel";
 import { useWorkspaceHeaderModel } from "../components/workspace/useWorkspaceHeaderModel";
 import { useMailCapabilities } from "../components/workspace/mail/useMailCapabilities";
 
@@ -76,7 +77,7 @@ function UnavailableWorkspace({
       header={header}
       resourcesOpen={resourcesOpen}
       onResourcesChange={setResourcesOpen}
-      resources={null}
+      resources={<WorkspaceProjectResources />}
     >
       <main className="p-5 sm:p-8">
         <p className="mt-2 text-sm text-muted-foreground">

@@ -61,12 +61,24 @@ it("mounts the shared shell and recipe navigation for all eight samples without 
       }[recipe.space],
     );
     expect(node.querySelectorAll("[data-workspace-engagement-header]")).toHaveLength(1);
+    expect(getByRole(node, "combobox", { name: "Choose project" }).textContent).toContain("SynKEK");
+    expect(getAllByRole(node, "tab")).toHaveLength(6);
+    expect(node.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe(
+      {
+        files: "Files",
+        browser: "Browser",
+        agents: "Agents",
+        tasks: "Tasks",
+        docs: "Docs",
+        prs: "PRs",
+      }[recipe.resourceTab],
+    );
     expect(node.querySelectorAll('[aria-label="Resize item list"]')).toHaveLength(
       recipe.space === "mail" || recipe.space === "communications" ? 1 : 0,
     );
     expect(onCommit).toHaveBeenLastCalledWith({
       shellReady: false,
-      incompleteRegions: ["shell.resources", "shell.footer"],
+      incompleteRegions: ["shell.footer"],
     });
     await act(async () => getByRole(node, "link", { name: "Meetings" }).click());
     await session.settled();

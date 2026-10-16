@@ -22,6 +22,7 @@ import { useCommunicationsRequest } from "./useCommunicationsRequest";
 import { chatReferenceKey, mergeChatMessages, sendAttempt } from "./communicationsChat";
 
 import { WorkspaceEngagement } from "./WorkspaceEngagement";
+import { WorkspaceProjectResources } from "./WorkspaceResourcesPanel";
 import { useWorkspaceHeaderModel } from "./useWorkspaceHeaderModel";
 
 const SavedReference = Schema.Struct({
@@ -424,7 +425,7 @@ export function ChatCommunicationsWorkspace({
       header={header}
       resourcesOpen={resourcesOpen}
       onResourcesChange={setResourcesOpen}
-      resources={null}
+      resources={<WorkspaceProjectResources />}
       selected={conversation !== undefined}
       onBack={() => setConversation(undefined)}
       list={

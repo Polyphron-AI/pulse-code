@@ -1,9 +1,17 @@
-import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import {
+  useContext,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import type { EnvironmentId } from "@t3tools/contracts";
 import { useResizableWidth } from "../../hooks/useResizableWidth";
 import { cn } from "../../lib/utils";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
-import { Sheet, SheetPopup, SheetTitle } from "../ui/sheet";
+import { WorkspaceResourcesHost } from "./WorkspaceShellLayout";
+import { WorkspaceResourcesContext } from "./workspaceResourceState";
 import { WorkspaceHeader, type WorkspaceHeaderModel } from "./WorkspaceHeader";
 import type { WorkspaceDestination } from "./workspaceNavigation";
 
@@ -38,13 +46,22 @@ export type WorkspaceEngagementProps = WorkspaceEngagementCommonProps &
 
 export function WorkspaceEngagement(props: WorkspaceEngagementProps) {
   const wide = useMediaQuery("xl");
+  const state = useContext(WorkspaceResourcesContext);
   const linkedOnly = props.resources === undefined && props.linked !== undefined;
   const [linkedDockOpen, setLinkedDockOpen] = useState(true);
-  const resourcesOpen = linkedOnly && wide ? linkedDockOpen : props.resourcesOpen;
-  const resources = linkedOnly ? props.linked : props.resources;
-  const resourcesLabel = linkedOnly ? "Linked items" : "Resources";
+  const [linkedSheetOpen, setLinkedSheetOpen] = useState(false);
+  const resourcesOpen = state?.open ?? (linkedOnly && wide ? linkedDockOpen : props.resourcesOpen);
+  const resources = linkedOnly
+    ? (props.linked ?? (
+        <p className="p-3 text-sm text-muted-foreground">Select an item to see its linked items.</p>
+      ))
+    : props.resources;
+  const resourcesLabel = linkedOnly && !state ? "Linked items" : "Resources";
   const onResourcesChange = (open: boolean) => {
-    if (linkedOnly && wide) setLinkedDockOpen(open);
+    if (state) {
+      if (open) state.reopen();
+      else state.close();
+    } else if (linkedOnly && wide) setLinkedDockOpen(open);
     else props.onResourcesChange(open);
   };
   return (
@@ -61,6 +78,18 @@ export function WorkspaceEngagement(props: WorkspaceEngagementProps) {
           onResources={() => onResourcesChange(!resourcesOpen)}
           {...(props.onLinkedContext ? { onLinkedContext: props.onLinkedContext } : {})}
         />
+        {!linkedOnly && props.linked !== undefined ? (
+          <button
+            type="button"
+            className="px-3 text-left text-xs text-muted-foreground"
+            aria-expanded={wide ? linkedDockOpen : linkedSheetOpen}
+            onClick={() =>
+              wide ? setLinkedDockOpen(!linkedDockOpen) : setLinkedSheetOpen(!linkedSheetOpen)
+            }
+          >
+            Linked items
+          </button>
+        ) : null}
         {props.layout === "split" ? (
           <WorkspaceSplit {...props} />
         ) : (
@@ -72,18 +101,28 @@ export function WorkspaceEngagement(props: WorkspaceEngagementProps) {
           </section>
         )}
       </div>
-      {wide ? (
-        <aside aria-label={resourcesLabel} data-workspace-resources="" hidden={!resourcesOpen}>
-          {resourcesOpen ? resources : null}
-        </aside>
-      ) : (
-        <Sheet open={resourcesOpen} onOpenChange={onResourcesChange}>
-          <SheetPopup>
-            <SheetTitle>{resourcesLabel}</SheetTitle>
-            {resourcesOpen ? resources : null}
-          </SheetPopup>
-        </Sheet>
-      )}
+      {!linkedOnly && props.linked !== undefined ? (
+        <WorkspaceResourcesHost
+          wide={wide}
+          open={wide ? linkedDockOpen : linkedSheetOpen}
+          onOpenChange={wide ? setLinkedDockOpen : setLinkedSheetOpen}
+          label="Linked items"
+        >
+          {props.linked ?? (
+            <p className="p-3 text-sm text-muted-foreground">
+              Select an item to see its linked items.
+            </p>
+          )}
+        </WorkspaceResourcesHost>
+      ) : null}
+      <WorkspaceResourcesHost
+        wide={wide}
+        open={resourcesOpen}
+        onOpenChange={onResourcesChange}
+        label={resourcesLabel}
+      >
+        {resources}
+      </WorkspaceResourcesHost>
     </div>
   );
 }

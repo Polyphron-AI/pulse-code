@@ -3,6 +3,8 @@ import { create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import { TelegramWorkspace } from "./TelegramWorkspace";
 
+vi.mock("./WorkspaceResourcesPanel", () => ({ WorkspaceProjectResources: () => null }));
+
 const mocks = vi.hoisted(() => ({ navigate: vi.fn(), error: null as string | null, active: true }));
 vi.mock("@tanstack/react-router", () => ({
   useSearch: () => ({ environment: "remote", account: "telegram_1000", item: "telegram_1000/-42" }),

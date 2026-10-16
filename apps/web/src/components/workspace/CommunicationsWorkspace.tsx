@@ -4,6 +4,7 @@ import { EnvironmentId, type ChatAccount } from "@t3tools/contracts";
 import { PlusIcon, RefreshCwIcon, UnplugIcon } from "lucide-react";
 import { Button } from "../ui/button";
 import { WorkspaceEngagement } from "./WorkspaceEngagement";
+import { WorkspaceProjectResources } from "./WorkspaceResourcesPanel";
 import { useMailCapabilities } from "./mail/useMailCapabilities";
 import { useWorkspaceHeaderModel } from "./useWorkspaceHeaderModel";
 import { RequestState } from "./office/shared";
@@ -208,7 +209,7 @@ function DesktopCommunicationsWorkspace() {
       header={header}
       resourcesOpen={resourcesOpen}
       onResourcesChange={setResourcesOpen}
-      resources={null}
+      resources={<WorkspaceProjectResources />}
     >
       {controls}
       {content}

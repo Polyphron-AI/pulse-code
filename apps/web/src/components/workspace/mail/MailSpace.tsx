@@ -15,6 +15,7 @@ import { useCallback, useState, type ReactNode } from "react";
 
 import { useWorkspaceItemOpener, parseMailLocation } from "../useWorkspaceItemOpener";
 import { WorkspaceEngagement } from "../WorkspaceEngagement";
+import { WorkspaceProjectResources } from "../WorkspaceResourcesPanel";
 import { LinkedSection } from "./LinkedSection";
 import { readLocalApi } from "../../../localApi";
 import { workspaceLinks } from "../../../state/workspaceLinks";
@@ -151,7 +152,7 @@ export function MailSpace() {
           space="mail"
           layout="full"
           {...shell}
-          resources={null}
+          resources={<WorkspaceProjectResources />}
         >
           <MailNav />
           {body}
@@ -236,6 +237,28 @@ function MailPanes(props: MailPanesProps) {
       header={props.header}
       resourcesOpen={props.resourcesOpen}
       onResourcesChange={props.onResourcesChange}
+      resources={
+        <WorkspaceProjectResources
+          selectedItem={
+            conversation?.messages[0]
+              ? {
+                  ref: mailItemRef(conversation.messages[0]),
+                  title: mailItemTitle(conversation.messages[0].subject),
+                }
+              : selected === null
+                ? null
+                : {
+                    ref:
+                      selectedMessage.data === null ? selected : mailItemRef(selectedMessage.data),
+                    title:
+                      selectedMessage.data === null
+                        ? "Message"
+                        : mailItemTitle(selectedMessage.data.subject),
+                  }
+          }
+          {...(props.source.type === "project" ? { owningProjectId: props.source.projectId } : {})}
+        />
+      }
       onBack={() => {
         setSelected(null);
         setConversation(null);

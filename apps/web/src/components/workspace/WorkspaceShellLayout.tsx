@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import "./workspaceShell.css";
 import { WorkspaceBreadcrumb } from "../WorkspaceBreadcrumb";
 import type { WorkspaceHeaderModel } from "./WorkspaceHeader";
+import { Sheet, SheetPopup, SheetTitle } from "../ui/sheet";
 
 export interface WorkspaceShellLayoutProps {
   readonly navigation: ReactNode;
@@ -12,6 +13,34 @@ export interface WorkspaceShellLayoutProps {
   readonly electron?: boolean;
   readonly rail: ReactNode;
   readonly engagement: ReactNode;
+}
+
+/** One resource host shared by live and fixture engagements. */
+export function WorkspaceResourcesHost({
+  wide,
+  open,
+  onOpenChange,
+  label,
+  children,
+}: {
+  readonly wide: boolean;
+  readonly open: boolean;
+  readonly onOpenChange: (open: boolean) => void;
+  readonly label: string;
+  readonly children: ReactNode;
+}) {
+  return wide ? (
+    <aside aria-label={label} data-workspace-resources="" hidden={!open}>
+      {open ? children : null}
+    </aside>
+  ) : (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetPopup data-workspace-resource-sheet="">
+        <SheetTitle className="sr-only">{label}</SheetTitle>
+        {open ? children : null}
+      </SheetPopup>
+    </Sheet>
+  );
 }
 
 export function WorkspaceShellLayout({

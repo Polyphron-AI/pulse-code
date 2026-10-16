@@ -2,6 +2,7 @@ import { useAtomValue } from "@effect/atom-react";
 import * as Schema from "effect/Schema";
 import {
   useEffect,
+  useMemo,
   useState,
   useSyncExternalStore,
   type CSSProperties,
@@ -52,6 +53,11 @@ import {
 import { MainAppLocationTracker } from "./sidebar/mainAppLocation";
 import { useSidebarStageBackdropVariant } from "./SidebarStageBackdrop";
 import { useProjects } from "../state/entities";
+import { useMediaQuery } from "../hooks/useMediaQuery";
+import {
+  useWorkspaceResourceState,
+  WorkspaceResourcesProvider,
+} from "./workspace/workspaceResourceState";
 import {
   clampThreadSidebarWidth,
   resolveInitialThreadSidebarWidth,
@@ -250,6 +256,14 @@ function WorkspaceLiveShell({ children }: { readonly children: ReactNode }) {
       ? "Local Office tools"
       : "Workspace";
   const header = useWorkspaceHeaderModel(navigation.environmentId, spaceLabel, spaceLabel);
+  const headerLabels = useMemo(
+    () => ({ environmentLabel: header.environmentLabel, spaceLabel: header.spaceLabel }),
+    [header.environmentLabel, header.spaceLabel],
+  );
+  const wide = useMediaQuery("xl");
+  const resources = useWorkspaceResourceState(navigation.environmentId, {
+    presentation: wide ? "dock" : "sheet",
+  });
   const content = (
     <WorkspaceNavigation
       {...navigation}
@@ -273,43 +287,45 @@ function WorkspaceLiveShell({ children }: { readonly children: ReactNode }) {
       className="flex min-h-0 min-w-0 flex-1"
       data-workspace-sidebar={!isMobile && !open ? "closed" : "open"}
     >
-      <WorkspaceHeaderContext value={header}>
-        <WorkspaceShellLayout
-          navigation={
-            isMobile ? (
-              <Sidebar aria-label="Workspace menu" data-app-sidebar="">
-                {content}
-              </Sidebar>
-            ) : (
-              content
-            )
-          }
-          header={header}
-          electron={isElectron}
-          onOpenWorkspace={() => navigation.onNavigate("projects")}
-          rail={
-            destination ? (
-              <WorkspaceViewRail
-                items={workspaceRailItems[destination]}
-                selected={navigation.search?.view ?? workspaceRailItems[destination][0]!.id}
-                onSelect={(view) => {
-                  void navigate({
-                    to: "/workspace",
-                    search: {
-                      ...navigation.search,
-                      space: destination,
-                      view,
-                      ...(navigation.environmentId
-                        ? { environment: navigation.environmentId }
-                        : {}),
-                    },
-                  });
-                }}
-              />
-            ) : null
-          }
-          engagement={children}
-        />
+      <WorkspaceHeaderContext value={headerLabels}>
+        <WorkspaceResourcesProvider value={resources}>
+          <WorkspaceShellLayout
+            navigation={
+              isMobile ? (
+                <Sidebar aria-label="Workspace menu" data-app-sidebar="">
+                  {content}
+                </Sidebar>
+              ) : (
+                content
+              )
+            }
+            header={header}
+            electron={isElectron}
+            onOpenWorkspace={() => navigation.onNavigate("projects")}
+            rail={
+              destination ? (
+                <WorkspaceViewRail
+                  items={workspaceRailItems[destination]}
+                  selected={navigation.search?.view ?? workspaceRailItems[destination][0]!.id}
+                  onSelect={(view) => {
+                    void navigate({
+                      to: "/workspace",
+                      search: {
+                        ...navigation.search,
+                        space: destination,
+                        view,
+                        ...(navigation.environmentId
+                          ? { environment: navigation.environmentId }
+                          : {}),
+                      },
+                    });
+                  }}
+                />
+              ) : null
+            }
+            engagement={children}
+          />
+        </WorkspaceResourcesProvider>
       </WorkspaceHeaderContext>
     </div>
   );
