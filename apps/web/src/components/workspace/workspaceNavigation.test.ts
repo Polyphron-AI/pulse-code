@@ -3,6 +3,9 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   codeReturnHref,
   rememberCodeLocation,
+  getLastCodeEnvironmentId,
+  rememberWorkspaceLocation,
+  workspaceReturnSearch,
   workspaceDestinationSearch,
   workspaceDestinations,
   workspaceViews,
@@ -61,5 +64,70 @@ describe("workspace navigation", () => {
     rememberCodeLocation(environment, "/deleted/missing-thread");
     rememberCodeLocation(environment, "/workspace?space=projects");
     expect(codeReturnHref(environment)).toBe("/deleted/missing-thread");
+  });
+});
+
+it("changes the last Code environment only after storing a valid Code location", () => {
+  const a = EnvironmentId.make("last-code-a");
+  const b = EnvironmentId.make("last-code-b");
+  rememberCodeLocation(a, "/last-code-a/thread");
+  rememberCodeLocation(b, "/settings/email");
+  expect(getLastCodeEnvironmentId()).toBe(a);
+  rememberCodeLocation(b, "/pull-requests?state=open#review");
+  expect(getLastCodeEnvironmentId()).toBe(b);
+  expect(codeReturnHref(b)).toBe("/pull-requests?state=open#review");
+  expect(codeReturnHref(a)).toBe("/last-code-a/thread");
+});
+
+it("shares normalized Workspace returns by environment and defaults to Projects", () => {
+  const a = EnvironmentId.make("workspace-return-a");
+  const b = EnvironmentId.make("workspace-return-b");
+  rememberWorkspaceLocation(a, {
+    space: "office",
+    officeView: "communications",
+    communicationProvider: "telegram",
+    account: "bot-1",
+    item: "bot-1/-42/2",
+    environment: "stale-environment",
+  });
+  rememberWorkspaceLocation(b, { space: "mail", view: "later", account: "acct", folder: "Sent" });
+  expect(workspaceReturnSearch(a)).toEqual({
+    space: "communications",
+    communicationProvider: "telegram",
+    account: "bot-1",
+    item: "bot-1/-42/2",
+    environment: "workspace-return-a",
+  });
+  expect(workspaceReturnSearch(b)).toEqual({
+    space: "mail",
+    view: "later",
+    account: "acct",
+    folder: "Sent",
+    environment: "workspace-return-b",
+  });
+  expect(workspaceReturnSearch(EnvironmentId.make("workspace-unvisited"))).toEqual({
+    space: "projects",
+    view: "projects",
+    environment: "workspace-unvisited",
+  });
+  expect(workspaceReturnSearch()).toEqual({ space: "projects", view: "projects" });
+});
+
+it("does not replace a canonical Workspace return with legacy Office or invalid search", () => {
+  const environment = EnvironmentId.make("workspace-no-office");
+  rememberWorkspaceLocation(environment, { space: "tasks", view: "open" });
+  rememberWorkspaceLocation(environment, { space: "office" });
+  rememberWorkspaceLocation(environment, {});
+  expect(workspaceReturnSearch(environment)).toEqual({
+    space: "tasks",
+    view: "open",
+    environment: "workspace-no-office",
+  });
+  const unvisited = EnvironmentId.make("workspace-office-only");
+  rememberWorkspaceLocation(unvisited, { space: "office" });
+  expect(workspaceReturnSearch(unvisited)).toEqual({
+    space: "projects",
+    view: "projects",
+    environment: "workspace-office-only",
   });
 });

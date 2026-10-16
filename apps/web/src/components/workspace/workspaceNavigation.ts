@@ -87,6 +87,11 @@ export function workspaceDestinationSearch(
 }
 
 const codeLocations = new Map<EnvironmentId, string>();
+let lastCodeEnvironmentId: EnvironmentId | undefined;
+
+export function getLastCodeEnvironmentId(): EnvironmentId | undefined {
+  return lastCodeEnvironmentId;
+}
 
 export function rememberCodeLocation(environmentId: EnvironmentId, href: string): void {
   let url: URL;
@@ -114,12 +119,32 @@ export function rememberCodeLocation(environmentId: EnvironmentId, href: string)
   }
   if (
     url.pathname !== "/" &&
+    url.pathname !== "/pull-requests" &&
     (!target || (target.kind === "server" && target.threadRef.environmentId !== environmentId))
   )
     return;
   codeLocations.set(environmentId, `${url.pathname}${url.search}${url.hash}`);
+  lastCodeEnvironmentId = environmentId;
 }
 
 export function codeReturnHref(environmentId: EnvironmentId): string {
   return codeLocations.get(environmentId) ?? "/";
+}
+
+const workspaceLocations = new Map<EnvironmentId, WorkspaceSearch>();
+
+export function rememberWorkspaceLocation(
+  environmentId: EnvironmentId,
+  search: WorkspaceSearch,
+): void {
+  const normalized = parseWorkspaceSearch({ ...search });
+  if (!normalized.space || normalized.space === "office") return;
+  workspaceLocations.set(environmentId, { ...normalized, environment: environmentId });
+}
+
+export function workspaceReturnSearch(environmentId?: EnvironmentId | null): WorkspaceSearch {
+  return (
+    (environmentId ? workspaceLocations.get(environmentId) : undefined) ??
+    workspaceDestinationSearch("projects", environmentId)
+  );
 }

@@ -145,7 +145,13 @@ import {
   newProjectId,
 } from "../lib/utils";
 import { selectThreadTerminalUiState, useTerminalUiStateStore } from "../terminalUiStateStore";
-import { workspaceDestinations, workspaceDestinationSearch } from "./workspace/workspaceNavigation";
+import {
+  parseWorkspaceSearch,
+  workspaceDestinations,
+  workspaceDestinationSearch,
+  workspaceReturnSearch,
+} from "./workspace/workspaceNavigation";
+import { useWorkspaceEnvironment } from "./workspace/WorkspaceSpaceSelector";
 import { buildThreadRouteParams, resolveThreadRouteTarget } from "../threadRoutes";
 import { useAvailableSettingsSearchItems } from "./settings/useAvailableSettingsSearchItems";
 import {
@@ -698,7 +704,6 @@ function OpenCommandPaletteDialog(props: {
 }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const codeTarget = useParams({ strict: false, select: resolveThreadRouteTarget });
   const pathname = location.pathname;
   const { clearOpenIntent, openIntent, openOverlayMode, setOpen } = props;
   const [query, setQuery] = useState(openIntent?.kind === "search" ? openIntent.query : "");
@@ -799,13 +804,13 @@ function OpenCommandPaletteDialog(props: {
   const projectOrder = useUiStateStore((store) => store.projectOrder);
   const threads = useThreadShells();
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
-  const workspaceEnvironmentId =
-    location.pathname === "/workspace" && location.search.environment
-      ? EnvironmentId.make(location.search.environment)
-      : codeTarget?.kind === "server"
-        ? codeTarget.threadRef.environmentId
-        : (activeDraftThread?.environmentId ?? primaryEnvironmentId);
-  const mailReadAvailable = useMailCapabilities(workspaceEnvironmentId ?? undefined).mailRead;
+  const workspaceSearch = useMemo(
+    () => (location.pathname === "/workspace" ? parseWorkspaceSearch(location.search) : undefined),
+    [location.pathname, location.search],
+  );
+  const scopedEnvironmentId = useWorkspaceEnvironment(workspaceSearch);
+  const { mailRead: mailReadAvailable, environmentId: workspaceEnvironmentId } =
+    useMailCapabilities(scopedEnvironmentId);
   const {
     theme,
     themeHalves,
@@ -1905,7 +1910,7 @@ function OpenCommandPaletteDialog(props: {
     run: async () => {
       await navigate({
         to: "/workspace",
-        search: workspaceDestinationSearch("projects", workspaceEnvironmentId),
+        search: workspaceReturnSearch(workspaceEnvironmentId),
       });
     },
   });

@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useLocation, useNavigate, useParams } from "@tanstack/react-router";
 import { EnvironmentId } from "@t3tools/contracts";
 import { BriefcaseBusinessIcon, Code2Icon } from "lucide-react";
@@ -10,64 +10,72 @@ import { type DraftId, useComposerDraftStore } from "../../composerDraftStore";
 import { resolveThreadRouteTarget } from "../../threadRoutes";
 import {
   codeReturnHref,
+  getLastCodeEnvironmentId,
   parseWorkspaceSearch,
   rememberCodeLocation,
+  rememberWorkspaceLocation,
+  workspaceReturnSearch,
   workspaceDestinations,
   workspaceDestinationSearch,
   type WorkspaceSearch,
 } from "./workspaceNavigation";
 
-const workspaceLocations = new Map<EnvironmentId, WorkspaceSearch>();
-
 export function useOfficeSpace() {
   return useLocation({
-    select: (location) =>
-      location.pathname === "/workspace" &&
-      location.search.space !== "mail" &&
-      location.search.space !== "projects",
+    select: (location) => {
+      const search = parseWorkspaceSearch(location.search);
+      return (
+        location.pathname === "/workspace" && search.space !== "mail" && search.space !== "projects"
+      );
+    },
   });
 }
 export function useMailSpace() {
   return useLocation({
-    select: (location) => location.pathname === "/workspace" && location.search.space === "mail",
+    select: (location) =>
+      location.pathname === "/workspace" && parseWorkspaceSearch(location.search).space === "mail",
   });
 }
 export function useProjectsSpace() {
   return useLocation({
     select: (location) =>
-      location.pathname === "/workspace" && location.search.space === "projects",
+      location.pathname === "/workspace" &&
+      parseWorkspaceSearch(location.search).space === "projects",
   });
 }
 
-/** Desktop keeps the rail across every space; compact clients use the navigation menu. */
-export function WorkspaceSpaceSelector({ rail = false }: { readonly rail?: boolean }) {
-  const navigate = useNavigate();
-  const location = useLocation();
+/** Resolves explicit Workspace, thread and draft scope before session return scope. */
+export function useWorkspaceEnvironment(search?: WorkspaceSearch) {
   const target = useParams({ strict: false, select: resolveThreadRouteTarget });
   const draftEnvironmentId = useComposerDraftStore((store) =>
     target?.kind === "draft"
       ? store.getDraftThread(target.draftId as DraftId)?.environmentId
       : undefined,
   );
+  return search?.environment
+    ? EnvironmentId.make(search.environment)
+    : ((target?.kind === "server" ? target.threadRef.environmentId : draftEnvironmentId) ??
+        getLastCodeEnvironmentId());
+}
+
+/** Desktop keeps the rail across every space; compact clients use the navigation menu. */
+export function WorkspaceSpaceSelector({ rail = false }: { readonly rail?: boolean }) {
+  const navigate = useNavigate();
+  const location = useLocation();
   const workspace = location.pathname === "/workspace";
-  const codeEnvironmentId =
-    target?.kind === "server" ? target.threadRef.environmentId : draftEnvironmentId;
-  const explicitEnvironmentId =
-    workspace && location.search.environment
-      ? EnvironmentId.make(location.search.environment)
-      : codeEnvironmentId;
+  const workspaceSearch = useMemo(
+    () => (workspace ? parseWorkspaceSearch(location.search) : undefined),
+    [workspace, location.search],
+  );
+  const explicitEnvironmentId = useWorkspaceEnvironment(workspaceSearch);
   const { mailRead, environmentId } = useMailCapabilities(explicitEnvironmentId);
   const { isMobile, setOpenMobile } = useSidebar();
-  const inCode = !workspace && (location.pathname === "/" || target !== null);
+  const inCode = !workspace && !location.pathname.startsWith("/settings");
   useEffect(() => {
     if (!environmentId) return;
     if (inCode) rememberCodeLocation(environmentId, location.href);
-    if (workspace)
-      workspaceLocations.set(environmentId, {
-        ...parseWorkspaceSearch(location.search),
-        environment: environmentId,
-      });
-  }, [environmentId, inCode, workspace, location.href, location.search]);
+    if (workspaceSearch) rememberWorkspaceLocation(environmentId, workspaceSearch);
+  }, [environmentId, inCode, location.href, workspaceSearch]);
   const leave = () => {
     if (inCode && environmentId) rememberCodeLocation(environmentId, location.href);
     if (isMobile) setOpenMobile(false);
@@ -83,9 +91,7 @@ export function WorkspaceSpaceSelector({ rail = false }: { readonly rail?: boole
         leave();
         void navigate({
           to: "/workspace",
-          search:
-            (environmentId ? workspaceLocations.get(environmentId) : undefined) ??
-            workspaceDestinationSearch("projects", environmentId),
+          search: workspaceReturnSearch(environmentId),
         });
       },
     },
@@ -108,8 +114,8 @@ export function WorkspaceSpaceSelector({ rail = false }: { readonly rail?: boole
           id,
           label,
           Icon,
-          active: workspace && location.search.space === id,
-          disabled: id === "mail" && !mailRead && location.search.space !== "mail",
+          active: workspaceSearch?.space === id,
+          disabled: id === "mail" && !mailRead && workspaceSearch?.space !== "mail",
           run: () => {
             leave();
             void navigate({

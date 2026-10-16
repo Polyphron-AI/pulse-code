@@ -10,15 +10,13 @@ import {
   RouterProvider,
 } from "@tanstack/react-router";
 import { getByRole } from "@testing-library/dom";
-import { afterEach, expect, it, vi } from "vite-plus/test";
+import { afterEach, beforeEach, expect, it, vi } from "vite-plus/test";
 import { WorkspaceSpaceSelector } from "./WorkspaceSpaceSelector";
-import { parseWorkspaceSearch } from "./workspaceNavigation";
 
 const state = vi.hoisted(() => ({
   primary: "primary",
   mailRead: true,
   close: vi.fn(),
-  write: vi.fn(),
 }));
 vi.mock("../ui/sidebar", () => ({
   useSidebar: () => ({ isMobile: true, setOpenMobile: state.close }),
@@ -33,7 +31,6 @@ vi.mock("../../composerDraftStore", () => ({
   useComposerDraftStore: (select: (store: unknown) => unknown) =>
     select({ getDraftThread: () => ({ environmentId: "draft-env" }) }),
 }));
-vi.mock("../../state/use-atom-command", () => ({ useAtomCommand: () => state.write }));
 vi.mock("../ui/tooltip", () => ({
   Tooltip: ({ children }: { children: React.ReactNode }) => children,
   TooltipTrigger: ({
@@ -46,6 +43,10 @@ vi.mock("../ui/tooltip", () => ({
   TooltipPopup: () => null,
 }));
 
+beforeEach(() => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+});
+
 let root: Root | undefined;
 let node: HTMLDivElement;
 afterEach(async () => {
@@ -55,6 +56,7 @@ afterEach(async () => {
   state.primary = "primary";
   state.mailRead = true;
   vi.clearAllMocks();
+  vi.unstubAllGlobals();
 });
 
 async function mount(href: string, rail = true) {
@@ -73,13 +75,17 @@ async function mount(href: string, rail = true) {
   });
   const draft = createRoute({ getParentRoute: () => rootRoute, path: "/draft/$draftId" });
   const settings = createRoute({ getParentRoute: () => rootRoute, path: "/settings/email" });
+  const codePages = ["/pull-requests", "/usage", "/welcome"].map((path) =>
+    createRoute({ getParentRoute: () => rootRoute, path }),
+  );
   const workspace = createRoute({
     getParentRoute: () => rootRoute,
     path: "/workspace",
-    validateSearch: parseWorkspaceSearch,
+    // Keep raw search here so the selector must normalize legacy URLs itself.
+    validateSearch: (raw): Record<string, unknown> => raw,
   });
   const router = createRouter({
-    routeTree: rootRoute.addChildren([index, thread, draft, settings, workspace]),
+    routeTree: rootRoute.addChildren([index, thread, draft, settings, workspace, ...codePages]),
     history: createMemoryHistory({ initialEntries: [href] }),
   });
   await router.load();
@@ -93,7 +99,7 @@ async function click(name: string) {
   await act(async () => getByRole(node, "button", { name }).click());
 }
 
-it("routes all six destinations with one selection and no command writes", async () => {
+it("routes all six destinations with one selection", async () => {
   const router = await mount("/workspace?space=projects&environment=selector-a");
   for (const [label, space, view] of [
     ["Communications", "communications", "chats"],
@@ -108,7 +114,6 @@ it("routes all six destinations with one selection and no command writes", async
     expect(node.querySelectorAll('[aria-current="page"]')).toHaveLength(1);
   }
   expect(state.close).toHaveBeenCalledWith(false);
-  expect(state.write).not.toHaveBeenCalled();
 });
 
 it("enters Projects in the scoped Code environment and restores its exact href", async () => {
@@ -181,7 +186,7 @@ it("uses the draft environment and keeps Settings out of Code memory", async () 
   expect(router.state.location.search.environment).toBe("draft-env");
   await act(async () => router.navigate({ href: "/settings/email" }));
   await click("Code");
-  expect(router.state.location.pathname).toBe("/");
+  expect(router.state.location.pathname).toBe("/draft/draft-a");
 });
 
 it("keeps unsupported Mail visible without opening it on old servers", async () => {
@@ -206,7 +211,10 @@ it("dismisses compact navigation and uses the same scoped destinations", async (
 
 it("makes an unscoped legacy Workspace return explicit before the primary changes", async () => {
   state.primary = "legacy-primary";
-  const router = await mount("/workspace?space=mail&account=legacy-account&folder=Sent");
+  const router = await mount("/legacy-primary/thread-initial");
+  await act(async () =>
+    router.navigate({ href: "/workspace?space=mail&account=legacy-account&folder=Sent" }),
+  );
   await act(async () => router.navigate({ href: "/legacy-primary/thread-a" }));
   state.primary = "new-primary";
   await click("Workspace");
@@ -222,6 +230,10 @@ it("retains normalized Telegram source identity when returning from Code", async
   const router = await mount(
     "/workspace?space=office&officeView=communications&communicationProvider=telegram&environment=telegram-env&account=bot-1&item=bot-1%2F-42%2F2",
   );
+  expect(node.querySelectorAll('[aria-current="page"]')).toHaveLength(1);
+  expect(getByRole(node, "button", { name: "Communications" }).getAttribute("aria-current")).toBe(
+    "page",
+  );
   await act(async () => router.navigate({ href: "/telegram-env/thread-a" }));
   await click("Workspace");
   expect(router.state.location.search).toEqual({
@@ -230,5 +242,37 @@ it("retains normalized Telegram source identity when returning from Code", async
     environment: "telegram-env",
     account: "bot-1",
     item: "bot-1/-42/2",
+  });
+});
+
+it.each(["/pull-requests", "/usage", "/welcome"])("keeps Code active on %s", async (href) => {
+  await mount(href);
+  expect(getByRole(node, "button", { name: "Workspace" })).toBeDefined();
+  expect(getByRole(node, "button", { name: "Code" }).getAttribute("aria-current")).toBe("page");
+  expect(node.querySelectorAll('[aria-current="page"]')).toHaveLength(1);
+});
+
+it("drops a non-text environment before navigating to another destination", async () => {
+  const router = await mount("/numeric-primary/thread-a");
+  await act(async () => router.navigate({ href: "/workspace?space=projects&environment=1" }));
+  await click("Meetings");
+  expect(router.state.location.search).toEqual({
+    space: "meetings",
+    view: "upcoming",
+    environment: "numeric-primary",
+  });
+});
+
+it("does not reopen local Office tools through the Workspace mode switch", async () => {
+  const router = await mount("/office-return/thread-a");
+  await click("Workspace");
+  await click("Tasks");
+  await act(async () => router.navigate({ href: "/workspace?space=office" }));
+  await click("Code");
+  await click("Workspace");
+  expect(router.state.location.search).toEqual({
+    space: "tasks",
+    view: "all",
+    environment: "office-return",
   });
 });

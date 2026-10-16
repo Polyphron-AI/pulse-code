@@ -1,5 +1,24 @@
-import { describe, expect, it } from "vite-plus/test";
-import { parseWorkspaceSearch } from "./_chat.workspace";
+// @vitest-environment happy-dom
+import { act, createElement } from "react";
+import { createRoot } from "react-dom/client";
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  RouterProvider,
+} from "@tanstack/react-router";
+import { getByRole, getByText, queryByRole } from "@testing-library/dom";
+import { describe, expect, it, vi } from "vite-plus/test";
+import { parseWorkspaceSearch, Route } from "./_chat.workspace";
+
+// The unavailable containers never mount a data-backed destination.
+vi.mock("../components/workspace/CommunicationsWorkspace", () => ({
+  CommunicationsWorkspace: () => null,
+}));
+vi.mock("../components/workspace/mail/MailSpace", () => ({ MailSpace: () => null }));
+vi.mock("../components/workspace/ProjectsSpace", () => ({ ProjectsSpace: () => null }));
+vi.mock("../components/workspace/OfficeWorkspace", () => ({ OfficeWorkspace: () => null }));
 
 describe("parseWorkspaceSearch", () => {
   it("preserves the environment and exact Telegram source when opening a remote linked message", () => {
@@ -143,4 +162,42 @@ describe("parseWorkspaceSearch", () => {
       space: "mail",
     });
   });
+});
+
+it.each([
+  ["tasks", "Tasks", false],
+  ["meetings", "Meetings", true],
+  ["calendar", "Calendar", true],
+] as const)("renders the unavailable %s destination", async (space, heading, localTools) => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const rootRoute = createRootRoute();
+  const chatRoute = createRoute({ getParentRoute: () => rootRoute, id: "_chat" });
+  const workspaceRoute = createRoute({
+    getParentRoute: () => chatRoute,
+    path: "workspace",
+    validateSearch: parseWorkspaceSearch,
+    component: Route.options.component!,
+  });
+  const router = createRouter({
+    routeTree: rootRoute.addChildren([chatRoute.addChildren([workspaceRoute])]),
+    history: createMemoryHistory({
+      initialEntries: [`/workspace?space=${space}&environment=remote`],
+    }),
+  });
+  await router.load();
+  const node = document.createElement("div");
+  document.body.append(node);
+  const root = createRoot(node);
+  try {
+    await act(async () => root.render(createElement(RouterProvider, { router })));
+    expect(getByRole(node, "heading", { name: heading })).toBeDefined();
+    expect(getByText(node, "This view is not available on this server yet.")).toBeDefined();
+    const link = queryByRole(node, "link", { name: "Open local Office tools" });
+    if (localTools) expect(link?.getAttribute("href")).toBe("/workspace?space=office");
+    else expect(link).toBeNull();
+  } finally {
+    await act(async () => root.unmount());
+    node.remove();
+    vi.unstubAllGlobals();
+  }
 });
