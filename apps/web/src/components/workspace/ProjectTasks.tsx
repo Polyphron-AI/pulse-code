@@ -302,8 +302,6 @@ function TaskEditor({
           });
           setBusy(false);
           if (result._tag === "Failure") setError(workspaceToolsError(result));
-          else if (column !== task.column)
-            invalidateContext?.(environmentId, { type: "task", taskId: task.id });
         }}
       >
         <Input

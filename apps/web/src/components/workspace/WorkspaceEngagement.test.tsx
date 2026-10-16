@@ -191,7 +191,7 @@ it("uses one compact Resources sheet and retains the center form when it closes"
   expect(getByRole(node, "button", { name: "Saved 1" })).toBeDefined();
 });
 
-it("does not reopen a compact Linked context sheet after a wide round trip", async () => {
+it("retains compact Linked context through a wide round trip", async () => {
   await mount("full", 390, false, { linked: <p>Captured linked page</p> });
   await act(() => window.dispatchEvent(new Event("resize")));
   await act(() => getByRole(node, "button", { name: "Workspace actions" }).click());
@@ -207,7 +207,9 @@ it("does not reopen a compact Linked context sheet after a wide round trip", asy
     });
   await resize(1280);
   await resize(390);
-  expect(queryByRole(document.body, "dialog")).toBeNull();
+  expect(getByRole(document.body, "dialog", { name: "Linked context" }).textContent).toContain(
+    "Captured linked page",
+  );
 });
 
 it("keeps focus on the Linked context toggle and returns explicit close to that trigger", async () => {

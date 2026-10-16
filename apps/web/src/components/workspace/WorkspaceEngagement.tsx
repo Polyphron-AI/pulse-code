@@ -54,7 +54,7 @@ export type WorkspaceEngagementProps = WorkspaceEngagementCommonProps &
       }
   );
 
-/** Item editors invalidate a held capture after deleting or moving its target. */
+/** Item editors invalidate a held capture after deleting or moving its target out of scope. */
 export const WorkspaceItemMutationContext = createContext<
   ((environmentId: EnvironmentId, item: WorkspaceItemRef) => void) | null
 >(null);
@@ -64,14 +64,11 @@ export function WorkspaceEngagement(props: WorkspaceEngagementProps) {
   const state = useWorkspaceResources();
   const [contextTarget, setContextTarget] = useState<{
     readonly environmentId: EnvironmentId | null;
-    readonly presentation: boolean;
     readonly context: NonNullable<WorkspaceEngagementCommonProps["linkedContext"]>;
   } | null>(null);
   if (
     contextTarget &&
-    (contextTarget.environmentId !== props.environmentId ||
-      contextTarget.presentation !== wide ||
-      !props.linkedContext)
+    (contextTarget.environmentId !== props.environmentId || !props.linkedContext)
   ) {
     setContextTarget(null);
   }
@@ -79,15 +76,12 @@ export function WorkspaceEngagement(props: WorkspaceEngagementProps) {
     contextTarget &&
     !contextTarget.context.item &&
     props.linkedContext?.item &&
-    contextTarget.environmentId === props.environmentId &&
-    contextTarget.presentation === wide
+    contextTarget.environmentId === props.environmentId
   ) {
     setContextTarget({ ...contextTarget, context: props.linkedContext });
   }
   const context =
-    contextTarget?.environmentId === props.environmentId && contextTarget.presentation === wide
-      ? contextTarget.context
-      : null;
+    contextTarget?.environmentId === props.environmentId ? contextTarget.context : null;
   const resourcesTrigger = useRef<HTMLButtonElement>(null);
   const contextTrigger = useRef<HTMLButtonElement>(null);
   const resourcesBody = useRef<HTMLDivElement>(null);
@@ -153,7 +147,6 @@ export function WorkspaceEngagement(props: WorkspaceEngagementProps) {
                     else
                       setContextTarget({
                         environmentId: props.environmentId,
-                        presentation: wide,
                         context: props.linkedContext!,
                       });
                   }
@@ -180,6 +173,19 @@ export function WorkspaceEngagement(props: WorkspaceEngagementProps) {
           label={context ? "Linked context" : "Resources"}
           closeFocus={() => closeFocus.current ?? false}
         >
+          {state.open ? (
+            <WorkspaceResourcesCloseFocusContext value={restoreResourcesFocus}>
+              <div
+                key={props.environmentId}
+                ref={resourcesBody}
+                hidden={context !== null}
+                tabIndex={-1}
+                className="h-full min-h-0"
+              >
+                {props.resources}
+              </div>
+            </WorkspaceResourcesCloseFocusContext>
+          ) : null}
           {context ? (
             <div data-workspace-linked-context="" className="flex h-full min-h-0 flex-col">
               <header className="flex shrink-0 items-center gap-2 border-b border-border p-3">
@@ -214,7 +220,6 @@ export function WorkspaceEngagement(props: WorkspaceEngagementProps) {
                             onClick={() =>
                               setContextTarget({
                                 environmentId: props.environmentId,
-                                presentation: wide,
                                 context: props.linkedContext!,
                               })
                             }
@@ -233,13 +238,7 @@ export function WorkspaceEngagement(props: WorkspaceEngagementProps) {
                 )}
               </div>
             </div>
-          ) : (
-            <WorkspaceResourcesCloseFocusContext value={restoreResourcesFocus}>
-              <div ref={resourcesBody} tabIndex={-1} className="h-full min-h-0">
-                {props.resources}
-              </div>
-            </WorkspaceResourcesCloseFocusContext>
-          )}
+          ) : null}
         </WorkspaceResourcesHost>
       </div>
     </WorkspaceItemMutationContext>

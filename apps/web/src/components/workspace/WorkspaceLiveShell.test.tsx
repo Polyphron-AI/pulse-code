@@ -18,6 +18,8 @@ import { AppSidebarLayout } from "../AppSidebarLayout";
 import { WorkspaceEngagement } from "./WorkspaceEngagement";
 import { parseWorkspaceSearch } from "./workspaceNavigation";
 import { useWorkspaceHeaderModel } from "./useWorkspaceHeaderModel";
+import { WorkspaceMockupApp, WorkspaceMockupRenderContext } from "./dev/WorkspaceMockupApp";
+import { createWorkspaceMockupSession } from "./dev/workspaceMockupFixtures";
 import * as NodeFS from "node:fs";
 import * as NodeURL from "node:url";
 
@@ -413,4 +415,55 @@ it("renders a plain web breadcrumb without native controls or a sample marker", 
   expect(strip.className).not.toContain("workspace-native-controls-inset");
   expect(strip.textContent).toBe("Environment live-a/Calendar");
   expect(node.querySelector("[data-workspace-sample-marker]")).toBeNull();
+});
+it("uses the same navigation, breadcrumb, rail, engagement and resource region tree for live and fixture", async () => {
+  (
+    window as unknown as {
+      happyDOM: { setWindowSize(size: { width: number; height: number }): void };
+    }
+  ).happyDOM.setWindowSize({ width: 1280, height: 800 });
+  await mount("/workspace?space=projects&environment=live-a", true);
+  const regionTree = () => {
+    const shell = node.querySelector("[data-workspace-shell]")!;
+    return [
+      "navigation",
+      "breadcrumb-strip",
+      "view-rail",
+      "engagement",
+      "engagement-header",
+      "resources",
+    ].map((name) => {
+      const region = shell.querySelector(
+        `[data-workspace-${name === "navigation" ? "shell-navigation" : name}]`,
+      )!;
+      expect(region).not.toBeNull();
+      const parent = region.parentElement?.closest(
+        "[data-workspace-engagement], [data-workspace-shell]",
+      );
+      return parent?.hasAttribute("data-workspace-engagement") ? "engagement" : "shell";
+    });
+  };
+  const live = regionTree();
+  const session = createWorkspaceMockupSession("04");
+  await act(() =>
+    root!.render(
+      <WorkspaceMockupRenderContext value={{ session, modules: [], onCommit() {} }}>
+        <WorkspaceMockupApp session={session} />
+      </WorkspaceMockupRenderContext>,
+    ),
+  );
+  expect(regionTree()).toEqual(live);
+  session.dispose();
+});
+
+it("contains resource tab overflow and keeps compact shell controls at 44px without shrinking the footer", () => {
+  expect(compactShellCss).toContain(
+    "overflow-x:auto;max-width:100%;flex-shrink:0;overscroll-behavior-x:contain",
+  );
+  expect(compactShellCss).toContain("min-height:32px;flex-shrink:0");
+  expect(compactShellCss).toContain("min-width:44px;min-height:44px");
+  expect(compactShellCss).toContain("min-height:calc(44px+env(safe-area-inset-bottom))");
+  expect(compactShellCss).toContain(
+    "[data-workspace-fixture-menu-trigger]+[data-workspace-shell]{--workspace-titlebar-content-left:44px;}",
+  );
 });

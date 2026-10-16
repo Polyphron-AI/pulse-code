@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { getByRole, getAllByRole } from "@testing-library/dom";
+import { getByRole, getAllByRole, queryByRole } from "@testing-library/dom";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import { WorkspaceMockupApp, WorkspaceMockupRenderContext } from "./WorkspaceMockupApp";
 import { createWorkspaceMockupSession, workspaceMockupRecipes } from "./workspaceMockupFixtures";
@@ -12,6 +12,48 @@ afterEach(async () => {
   if (root) await act(async () => root.unmount());
   node?.remove();
   vi.unstubAllGlobals();
+});
+
+it("opens and dismisses the fixture navigation menu at 390px without live services", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  (
+    window as unknown as {
+      happyDOM: { setWindowSize(size: { width: number; height: number }): void };
+    }
+  ).happyDOM.setWindowSize({ width: 390, height: 844 });
+  const session = createWorkspaceMockupSession("01");
+  node = document.createElement("div");
+  document.body.append(node);
+  root = createRoot(node);
+  await act(() =>
+    root.render(
+      <WorkspaceMockupRenderContext value={{ session, modules: [], onCommit() {} }}>
+        <WorkspaceMockupApp session={session} />
+      </WorkspaceMockupRenderContext>,
+    ),
+  );
+  const trigger = getByRole(node, "button", { name: "Toggle workspace navigation" });
+  await act(() => {
+    trigger.focus();
+    trigger.click();
+  });
+  expect(
+    getAllByRole(getByRole(document.body, "dialog", { name: "Workspace menu" }), "link"),
+  ).toHaveLength(7);
+  await act(() => getByRole(document.body, "link", { name: "Meetings" }).click());
+  await session.settled();
+  expect(session.operations.at(-1)).toEqual({
+    kind: "navigate",
+    item: null,
+    value: "space:meetings",
+  });
+  expect(queryByRole(document.body, "dialog")).toBeNull();
+  expect(document.activeElement).toBe(trigger);
+  await act(() => getByRole(node, "button", { name: "Resources" }).click());
+  expect(
+    getAllByRole(getByRole(document.body, "dialog", { name: "Resources" }), "tab"),
+  ).toHaveLength(6);
+  session.dispose();
 });
 
 it("mounts the shared shell and recipe navigation for all eight samples without marking later regions ready", async () => {

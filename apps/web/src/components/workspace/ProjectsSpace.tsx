@@ -5,7 +5,7 @@ import { workspaceTools } from "../../state/workspaceTools";
 import { useNavigate } from "@tanstack/react-router";
 import { parseTaskLocation } from "./useWorkspaceItemOpener";
 import { Link, useSearch } from "@tanstack/react-router";
-import { EnvironmentId } from "@t3tools/contracts";
+import { EnvironmentId, type WorkspaceTask } from "@t3tools/contracts";
 import { useState } from "react";
 import { useProjects, useThreadShells } from "../../state/entities";
 import { useNewProject } from "../../hooks/useNewProject";
@@ -37,7 +37,7 @@ export function ProjectsSpace() {
     (project) => project.id === (taskQuery.data?.projectId ?? search.project),
   );
   const selectedTask = taskQuery.data?.projectId === selected?.id ? taskQuery.data : null;
-  const selectTask = (task: import("@t3tools/contracts").WorkspaceTask | null) => {
+  const selectTask = (task: WorkspaceTask | null) => {
     if (environmentId !== null && selected)
       void navigate({
         to: "/workspace",
@@ -160,7 +160,7 @@ export function ProjectsSpace() {
           {taskQuery.error ??
             (taskRef && !toolsAvailable
               ? "Tasks need a newer server."
-              : "Select a project to see its threads and linked items.")}
+              : "Select a project to see its threads and tasks. Open Linked context for links and related items.")}
         </p>
       ) : (
         <section className="min-w-0 p-4" aria-label="Project threads">

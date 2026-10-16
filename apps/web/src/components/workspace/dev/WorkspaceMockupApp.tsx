@@ -6,7 +6,9 @@ import {
   Outlet,
   RouterProvider,
 } from "@tanstack/react-router";
-import { createContext, useContext, useLayoutEffect, useState } from "react";
+import { createContext, useContext, useLayoutEffect, useRef, useState } from "react";
+import { PanelLeftIcon } from "lucide-react";
+import { Sheet, SheetPopup, SheetTitle } from "../../ui/sheet";
 import { WorkspaceNavigation } from "../WorkspaceNavigationView";
 import { WorkspaceViewRail, workspaceRailItems } from "../WorkspaceViewRail";
 import { WorkspaceShellLayout } from "../WorkspaceShellLayout";
@@ -29,6 +31,9 @@ export const WorkspaceMockupRenderContext = createContext<{
 
 function FixtureReport() {
   const runtime = useContext(WorkspaceMockupRenderContext);
+  const compact = useMediaQuery("max-md");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuTrigger = useRef<HTMLButtonElement>(null);
   useLayoutEffect(() => {
     runtime?.onCommit({
       shellReady: false,
@@ -43,6 +48,7 @@ function FixtureReport() {
   if (!runtime) return null;
   const { session } = runtime;
   const recordNavigation = (value: string) => {
+    setMenuOpen(false);
     void session.record("navigate", undefined, value);
   };
   const title = {
@@ -86,21 +92,44 @@ function FixtureReport() {
   const resource = runtime.modules.find(
     (module) => module.area === session.recipe.resourceArea,
   )?.resource;
+  const navigation = (
+    <WorkspaceNavigation
+      destination={session.recipe.space}
+      environmentId={session.environmentId}
+      mode="workspace"
+      backdropVariant="dev"
+      labels={{ brand: "Pulse Next", workspaceMode: "Office", group: "Office" }}
+      onModeChange={(mode) => recordNavigation(`mode:${mode}`)}
+      onNavigate={(destination) => recordNavigation(`space:${destination}`)}
+      onSettings={() => recordNavigation("settings")}
+      onToggleSidebar={() => setMenuOpen(false)}
+    />
+  );
   return (
     <WorkspaceResourcesProvider value={resources}>
+      {compact ? (
+        <button
+          ref={menuTrigger}
+          data-workspace-fixture-menu-trigger=""
+          type="button"
+          aria-label="Toggle workspace navigation"
+          onClick={() => setMenuOpen(true)}
+        >
+          <PanelLeftIcon />
+        </button>
+      ) : null}
       <WorkspaceShellLayout
         navigation={
-          <WorkspaceNavigation
-            destination={session.recipe.space}
-            environmentId={session.environmentId}
-            mode="workspace"
-            backdropVariant="dev"
-            labels={{ brand: "Pulse Next", workspaceMode: "Office", group: "Office" }}
-            onModeChange={(mode) => recordNavigation(`mode:${mode}`)}
-            onNavigate={(destination) => recordNavigation(`space:${destination}`)}
-            onSettings={() => recordNavigation("settings")}
-            onToggleSidebar={() => recordNavigation("sidebar:toggle")}
-          />
+          compact ? (
+            <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
+              <SheetPopup side="left" finalFocus={menuTrigger} transitionDurationMs={0}>
+                <SheetTitle className="sr-only">Workspace menu</SheetTitle>
+                {navigation}
+              </SheetPopup>
+            </Sheet>
+          ) : (
+            navigation
+          )
         }
         header={header}
         onOpenWorkspace={() => recordNavigation("space:projects")}

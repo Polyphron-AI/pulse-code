@@ -1,5 +1,6 @@
 import type {
   EnvironmentId,
+  ProjectId,
   WorkspaceItemRef,
   WorkspaceLinkEndpoint,
   WorkspaceLinkList,
@@ -7,6 +8,7 @@ import type {
 import { useThreadShells } from "../../state/entities";
 import { useEnvironmentQuery } from "../../state/query";
 import { workspaceLinks } from "../../state/workspaceLinks";
+import { workspaceTools } from "../../state/workspaceTools";
 import { LinkedSection } from "./mail/LinkedSection";
 import { MailError } from "./mail/MailNotice";
 import { useMailCapabilities } from "./mail/useMailCapabilities";
@@ -50,12 +52,42 @@ export function WorkspaceLinkedContext(props: {
           onOpen={props.onOpen}
         />
       ) : null}
+      {props.item.ref.type === "task" &&
+      capability.workspaceItemContext &&
+      capability.workspaceTools ? (
+        <TaskProjectRelatedItems
+          environmentId={props.environmentId}
+          taskId={props.item.ref.taskId}
+          onOpen={props.onOpen}
+        />
+      ) : null}
     </div>
   );
 }
+function TaskProjectRelatedItems(props: {
+  environmentId: EnvironmentId;
+  taskId: string;
+  onOpen: (ref: WorkspaceItemRef) => void;
+}) {
+  const task = useEnvironmentQuery(
+    workspaceTools.task({ environmentId: props.environmentId, input: { id: props.taskId } }),
+  );
+  return task.data ? (
+    <div>
+      <p className="mb-2 text-xs text-muted-foreground">Related to this task's project.</p>
+      <ProjectRelatedItems
+        environmentId={props.environmentId}
+        projectId={task.data.projectId}
+        onOpen={props.onOpen}
+      />
+    </div>
+  ) : task.error ? (
+    <MailError message={task.error} onRetry={task.refresh} />
+  ) : null;
+}
 function ProjectRelatedItems(props: {
   environmentId: EnvironmentId;
-  projectId: import("@t3tools/contracts").ProjectId;
+  projectId: ProjectId;
   onOpen: (ref: WorkspaceItemRef) => void;
 }) {
   const threads = useThreadShells();

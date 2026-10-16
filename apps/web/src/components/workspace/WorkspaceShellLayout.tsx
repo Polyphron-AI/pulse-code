@@ -1,5 +1,6 @@
 import { cn } from "../../lib/utils";
-import type { ReactNode } from "react";
+import { useCallback, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import "./workspaceShell.css";
 import { WorkspaceBreadcrumb } from "../WorkspaceBreadcrumb";
 import type { WorkspaceHeaderModel } from "./WorkspaceHeader";
@@ -31,17 +32,58 @@ export function WorkspaceResourcesHost({
   readonly children: ReactNode;
   readonly closeFocus?: () => HTMLElement | false | null;
 }) {
-  return wide ? (
+  const [container] = useState(() => {
+    if (typeof document === "undefined") return null;
+    const element = document.createElement("div");
+    element.className = "flex h-full min-h-0 min-w-0 flex-1 flex-col";
+    return element;
+  });
+  const retainedFocus = useRef<HTMLElement | null>(null);
+  const dockBody = useCallback(
+    (target: HTMLDivElement | null) => {
+      if (!container) return;
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && container.contains(active))
+        retainedFocus.current = active;
+      if (target) {
+        target.appendChild(container);
+        if (
+          retainedFocus.current &&
+          container.contains(retainedFocus.current) &&
+          !retainedFocus.current.closest("[hidden]")
+        )
+          retainedFocus.current.focus();
+      }
+    },
+    [container],
+  );
+  useLayoutEffect(() => () => container?.remove(), [container]);
+  const host = wide ? (
     <aside aria-label={label} data-workspace-resources="" hidden={!open}>
-      {open ? children : null}
+      <div ref={dockBody} className="flex h-full min-h-0 flex-col" />
     </aside>
   ) : (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetPopup data-workspace-resource-sheet="" finalFocus={closeFocus}>
+      <SheetPopup
+        data-workspace-resource-sheet=""
+        finalFocus={closeFocus}
+        transitionDurationMs={0}
+        initialFocus={() =>
+          retainedFocus.current?.isConnected && !retainedFocus.current.closest("[hidden]")
+            ? retainedFocus.current
+            : true
+        }
+      >
         <SheetTitle className="sr-only">{label}</SheetTitle>
-        {open ? children : null}
+        <div ref={dockBody} className="flex min-h-0 flex-1 flex-col" />
       </SheetPopup>
     </Sheet>
+  );
+  return (
+    <>
+      {host}
+      {open ? (container ? createPortal(children, container) : children) : null}
+    </>
   );
 }
 

@@ -67,12 +67,9 @@ export function WorkspaceItemActions(props: ItemActionProps) {
     !session.isPending &&
     session.data?.authenticated === true &&
     session.data.scopes?.includes(AuthOrchestrationOperateScope) === true;
-  if (
-    captured &&
-    (captured.environmentId !== props.environmentId || !canOperate || !capability.workspaceLinks)
-  )
+  if (captured && (captured.environmentId !== props.environmentId || !capability.workspaceLinks))
     setCaptured(null);
-  const active = captured?.environmentId === props.environmentId && canOperate ? captured : props;
+  const active = captured?.environmentId === props.environmentId ? captured : props;
   const current = useRef({ environmentId: props.environmentId, capability, session });
   useLayoutEffect(() => {
     current.current = { environmentId: props.environmentId, capability, session };
@@ -99,7 +96,7 @@ export function WorkspaceItemActions(props: ItemActionProps) {
   };
   return capability.workspaceLinks ? (
     <AvailableWorkspaceItemActions
-      key={`${active.environmentId}:${workspaceItemKey(active.item.ref)}:${active.initialAction ?? ""}:${canOperate}:${capability.workspaceTools}`}
+      key={`${active.environmentId}:${workspaceItemKey(active.item.ref)}:${active.initialAction ?? ""}`}
       {...active}
       canAct={canAct}
       canOperate={canOperate}
@@ -465,7 +462,8 @@ function AvailableWorkspaceItemActions({
       ) : null}
       {creating ? (
         <form
-          className="flex w-full gap-2"
+          className="flex w-full flex-wrap gap-2"
+          aria-label={`Start project from ${labelFor(item)}`}
           onSubmit={(event) => {
             event.preventDefault();
             if (!name.trim() || !canAct()) return;
@@ -493,14 +491,19 @@ function AvailableWorkspaceItemActions({
                 github: null,
                 openThread: false,
                 onCreated: async (project) => {
-                  if (!canAct()) return;
                   createdRef = project;
                   setCreatedProject(project);
-                  await linkToProject(
-                    { ref: source.ref, title: source.title ?? "Item" },
-                    { id: project.projectId, title: name.trim() },
-                    { type: "action", action: "start-project" },
-                  );
+                  try {
+                    await linkToProject(
+                      { ref: source.ref, title: source.title ?? "Item" },
+                      { id: project.projectId, title: name.trim() },
+                      { type: "action", action: "start-project" },
+                    );
+                  } catch (cause) {
+                    throw new Error(`Project created, link failed. ${linkErrorText(cause)}`, {
+                      cause,
+                    });
+                  }
                 },
               });
               if (created) {
@@ -514,13 +517,17 @@ function AvailableWorkspaceItemActions({
             });
           }}
         >
+          <p className="w-full text-xs text-muted-foreground">
+            Link the new project to {labelFor(item)}.
+          </p>
           <Input
-            disabled={busy || createdProject !== null}
+            disabled={busy || !canOperate || createdProject !== null}
             aria-label="New project name"
+            aria-description={`Link to ${labelFor(item)}`}
             value={name}
             onChange={(event) => setName(event.target.value)}
           />
-          <Button size="sm" type="submit" disabled={busy || !name.trim()}>
+          <Button size="sm" type="submit" disabled={busy || !canOperate || !name.trim()}>
             {createdProject === null ? "Create project" : "Retry linking created project"}
           </Button>
           <Button
@@ -573,8 +580,9 @@ export function WorkspaceItemMenu({
     session.data?.authenticated === true &&
     session.data.scopes?.includes(AuthOrchestrationOperateScope) === true;
   const available = capability.workspaceLinks && canOperate;
-  if (captured && (!available || captured.environmentId !== props.environmentId)) setCaptured(null);
-  const open = captured !== null && available && captured.environmentId === props.environmentId;
+  if (captured && (!capability.workspaceLinks || captured.environmentId !== props.environmentId))
+    setCaptured(null);
+  const open = captured !== null && captured.environmentId === props.environmentId;
   const setOpen = (value: boolean) =>
     setCaptured(value && available ? { ...props, shortcuts: false, provenance } : null);
   const { linkItem } = useMailLinks(props.environmentId);

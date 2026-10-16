@@ -169,7 +169,11 @@ export function useWorkspaceResourceState(
       generation: session.generation + 1,
     });
   } else if (session.presentation !== presentation) {
-    setSession({ ...session, presentation, open: presentation === "dock" && session.wideOpen });
+    setSession({
+      ...session,
+      presentation,
+      open: session.open || (presentation === "dock" && session.wideOpen),
+    });
   }
   const currentGeneration = session.generation;
   useEffect(() => {

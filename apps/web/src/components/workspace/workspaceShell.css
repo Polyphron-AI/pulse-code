@@ -489,6 +489,9 @@
   min-height: 57px;
   gap: 2px;
   overflow-x: auto;
+  max-width: 100%;
+  flex-shrink: 0;
+  overscroll-behavior-x: contain;
   padding: 6px 6px 7px;
   border-bottom: 1px solid var(--workspace-line);
 }
@@ -530,6 +533,7 @@
   display: flex;
   height: 32px;
   min-height: 32px;
+  flex-shrink: 0;
   align-items: center;
   padding: 0 13px;
   border-top: 1px solid var(--workspace-line);
@@ -581,6 +585,42 @@
   [data-workspace-resource-health] > button {
     width: 44px;
     height: 44px;
+  }
+}
+
+[data-workspace-fixture-menu-trigger] {
+  position: fixed;
+  inset: 0 auto auto 0;
+  z-index: var(--z-sheet, 40);
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+}
+[data-workspace-fixture-menu-trigger] svg {
+  width: 16px;
+  height: 16px;
+}
+[data-workspace-fixture-menu-trigger] + [data-workspace-shell] {
+  --workspace-titlebar-content-left: 44px;
+}
+@media (max-width: 767px) {
+  [data-workspace-navigation-brand] button,
+  [data-workspace-linked-context] button,
+  [data-workspace-resource-project] button,
+  [data-workspace-resource-health] > button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  [data-workspace-resource-footer] {
+    min-height: calc(44px + env(safe-area-inset-bottom));
+  }
+  [data-workspace-resource-project] {
+    min-height: 56px;
+  }
+  [data-workspace-resource-sheet] > button {
+    min-width: 44px;
+    min-height: 44px;
   }
 }
 @media (pointer: coarse) {

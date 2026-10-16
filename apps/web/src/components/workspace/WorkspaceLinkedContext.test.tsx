@@ -35,6 +35,9 @@ vi.mock("../../state/workspaceLinks", () => ({
     refreshSuggestions: "refresh",
   },
 }));
+vi.mock("../../state/workspaceTools", () => ({
+  workspaceTools: { task: (input: unknown) => ({ kind: "task", ...(input as object) }) },
+}));
 vi.mock("../../state/query", () => ({
   useEnvironmentQuery: (query: { kind: string } | null) => {
     mocks.queries(query);
@@ -46,7 +49,14 @@ vi.mock("../../state/query", () => ({
             ? { status: "ready", cached: true, incomplete: false }
             : query?.kind === "hub"
               ? { related: mocks.related, truncated: false }
-              : null,
+              : query?.kind === "task"
+                ? {
+                    id: "wskt_00000000-0000-0000-0000-000000000001",
+                    projectId: "p",
+                    title: "Task",
+                    column: "To do",
+                  }
+                : null,
       error: null,
       refresh: vi.fn(),
     };
@@ -338,4 +348,32 @@ it("captures item A through header context while resource project B changes inde
   await act(() => root!.render(<App env={EnvironmentId.make("b")} />));
   expect(queryByRole(node, "heading", { name: "Linked context" })).toBeNull();
   expect(node.textContent).not.toContain("Page A");
+});
+it("shows the selected task's project discovery once, labelled through its original item", async () => {
+  const onOpen = vi.fn();
+  const related = {
+    ref: { type: "url" as const, url: "https://example.invalid/discovery" },
+    title: "Project discovery",
+  };
+  mocks.related = [{ item: related, via: confirmed.item }];
+  await mount(
+    <WorkspaceLinkedContext
+      environmentId={environmentId}
+      item={{
+        ref: { type: "task", taskId: "wskt_00000000-0000-0000-0000-000000000001" },
+        title: "Task",
+      }}
+      onOpen={onOpen}
+    />,
+  );
+  expect(getAllByRole(node, "region", { name: "Related through linked items" })).toHaveLength(1);
+  expect(node.textContent).toContain("Via Linked page");
+  expect(node.textContent).toContain("this task's project");
+  expect(mocks.queries).toHaveBeenCalledWith(
+    expect.objectContaining({ kind: "hub", environmentId, input: { projectId: p, threadIds: [] } }),
+  );
+  await act(() => getByRole(node, "button", { name: "Project discovery" }).click());
+  expect(onOpen).toHaveBeenCalledWith(related.ref);
+  expect(mocks.linkItem).not.toHaveBeenCalled();
+  expect(mocks.accept).not.toHaveBeenCalled();
 });

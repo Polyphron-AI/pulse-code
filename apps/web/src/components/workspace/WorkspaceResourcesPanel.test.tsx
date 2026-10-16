@@ -256,13 +256,13 @@ it("returns dock close focus to the Resources header trigger", async () => {
   expect(document.activeElement).toBe(getByRole(node, "button", { name: "Resources" }));
 });
 
-it("unmounts the tool during Linked context and restores the same resource request on Back", async () => {
+it("retains the tool during Linked context and restores the same resource request on Back", async () => {
   await mount();
   await act(() => getByRole(node, "button", { name: "Open file" }).click());
   expect(bodies.active).toBe(1);
   expect(getByRole(node, "tabpanel").textContent).toContain("handoff");
   await act(() => getByRole(node, "button", { name: "Linked context" }).click());
-  expect(bodies.active).toBe(0);
+  expect(bodies.active).toBe(1);
   expect(queryByRole(node, "tabpanel")).toBeNull();
   await act(() => getByRole(node, "button", { name: "Back to resources" }).click());
   expect(bodies.active).toBe(1);
@@ -281,7 +281,7 @@ it("keeps the empty linked-context explanation reachable beside live resources",
   );
   expect(getAllByRole(node, "complementary")).toHaveLength(1);
 });
-it("keeps sheets closed on resize and restores the saved wide visibility", async () => {
+it("transfers open resources on resize and restores the saved wide visibility after compact dismissal", async () => {
   await mount();
   // Prime happy-dom's media listeners with the initial wide match before resizing.
   await act(() => window.dispatchEvent(new Event("resize")));
@@ -295,10 +295,10 @@ it("keeps sheets closed on resize and restores the saved wide visibility", async
     });
   };
   await resize(390);
-  expect(queryByRole(document.body, "dialog")).toBeNull();
-  expect(getByRole(node, "button", { name: "Resources" }).getAttribute("aria-expanded")).toBe(
-    "false",
-  );
+  expect(getByRole(document.body, "dialog", { name: "Resources" })).toBeDefined();
+  expect(
+    getByRole(node, "button", { name: "Resources", hidden: true }).getAttribute("aria-expanded"),
+  ).toBe("true");
   await resize(1280);
   expect(getByRole(node, "complementary", { name: "Resources" })).toBeDefined();
   await act(() => getByRole(node, "button", { name: "Close resources" }).click());
@@ -307,7 +307,7 @@ it("keeps sheets closed on resize and restores the saved wide visibility", async
   expect(getByRole(document.body, "dialog", { name: "Resources" })).toBeDefined();
   await resize(1280);
   expect(queryByRole(document.body, "dialog")).toBeNull();
-  expect(queryByRole(node, "complementary", { name: "Resources" })).toBeNull();
+  expect(getByRole(node, "complementary", { name: "Resources" })).toBeDefined();
 });
 it.each(["Tasks", "Docs", "PRs"])(
   "styles the %s fallback with existing muted text tokens",

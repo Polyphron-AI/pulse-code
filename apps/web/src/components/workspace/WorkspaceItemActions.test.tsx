@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { renderToStaticMarkup } from "react-dom/server";
-import { act, type ReactNode } from "react";
+import { act, useSyncExternalStore, type ReactNode } from "react";
 import { create, type ReactTestRenderer } from "react-test-renderer";
 import { createRoot } from "react-dom/client";
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
@@ -20,15 +20,29 @@ const mocks = vi.hoisted(() => ({
   startThread: vi.fn(async () => null),
   contextMenuShow: vi.fn(),
   operate: true,
+  pending: false,
+  sessionListeners: new Set<() => void>(),
 }));
 vi.mock("../../localApi", () => ({
   readLocalApi: () => ({ contextMenu: { show: mocks.contextMenuShow } }),
 }));
 vi.mock("../../state/session", () => ({
-  useEnvironmentSessionState: () => ({
-    isPending: false,
-    data: { authenticated: true, scopes: mocks.operate ? ["orchestration:operate"] : [] },
-  }),
+  useEnvironmentSessionState: () => {
+    useSyncExternalStore(
+      (listener) => {
+        mocks.sessionListeners.add(listener);
+        return () => {
+          mocks.sessionListeners.delete(listener);
+        };
+      },
+      () => `${mocks.operate}:${mocks.pending}`,
+      () => `${mocks.operate}:${mocks.pending}`,
+    );
+    return {
+      isPending: mocks.pending,
+      data: { authenticated: true, scopes: mocks.operate ? ["orchestration:operate"] : [] },
+    };
+  },
 }));
 
 vi.mock("@tanstack/react-router", () => ({
@@ -50,7 +64,7 @@ vi.mock("../../hooks/useHandleNewThread", () => ({ useNewThreadHandler: () => mo
 vi.mock("../../hooks/useNewProject", () => ({ useNewProject: () => mocks.createProject }));
 vi.mock("./mail/useMailLinks", () => ({
   useMailLinks: () => ({ linkToProject: mocks.linkToProject }),
-  linkErrorText: () => "Failed",
+  linkErrorText: (cause: unknown) => (cause instanceof Error ? cause.message : "Failed"),
 }));
 vi.mock("./mail/useMailCapabilities", () => ({
   useMailCapabilities: () => ({ workspaceLinks: true, workspaceItemContext: true }),
@@ -69,6 +83,7 @@ vi.mock("../ui/popover", () => ({
 }));
 beforeEach(() => {
   mocks.operate = true;
+  mocks.pending = false;
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
 });
 afterEach(() => {
@@ -206,7 +221,55 @@ it("keeps a native menu's project editor on A after selection changes to B", asy
     await act(() => view.unmount());
   }
 });
-it("cancels an open project editor when operate permission is revoked for the same item", async () => {
+it.each(["permission", "revalidation"])(
+  "retains a held project draft while disabling actions during %s",
+  async (change) => {
+    let view!: ReactTestRenderer;
+    await act(() => {
+      view = create(<WorkspaceItemActions environmentId={environmentId} item={a} />);
+    });
+    try {
+      await act(() =>
+        view.root
+          .findAllByType("button")
+          .find((button) => button.props.children === "Start project")!
+          .props.onClick(),
+      );
+      expect(view.root.findAllByType("form")).toHaveLength(1);
+      await act(() =>
+        view.root.findByType("input").props.onChange({ target: { value: "Half typed" } }),
+      );
+      if (change === "permission") mocks.operate = false;
+      else mocks.pending = true;
+      await act(() => view.update(<WorkspaceItemActions environmentId={environmentId} item={b} />));
+      expect(view.root.findByType("input").props.value).toBe("Half typed");
+      expect(view.root.findByType("input").props.disabled).toBe(true);
+      await act(() => view.root.findByType("form").props.onSubmit({ preventDefault() {} }));
+      expect(mocks.createProject).not.toHaveBeenCalled();
+      mocks.operate = true;
+      mocks.pending = false;
+      await act(() => view.update(<WorkspaceItemActions environmentId={environmentId} item={b} />));
+      expect(view.root.findByType("input").props.value).toBe("Half typed");
+      expect(view.root.findByType("input").props.disabled).toBe(false);
+    } finally {
+      await act(() => view.unmount());
+    }
+  },
+);
+it("records a project created during permission loss and retries its link against the held item", async () => {
+  let finish!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  const project = scopeProjectRef(environmentId, ProjectId.make("created"));
+  mocks.createProject.mockImplementation(async (input) => {
+    await pending;
+    await input.onCreated?.(project);
+    return true;
+  });
+  mocks.linkToProject.mockImplementation(async () => {
+    if (!mocks.operate) throw new Error("Operate unavailable");
+  });
   let view!: ReactTestRenderer;
   await act(() => {
     view = create(<WorkspaceItemActions environmentId={environmentId} item={a} />);
@@ -218,11 +281,103 @@ it("cancels an open project editor when operate permission is revoked for the sa
         .find((button) => button.props.children === "Start project")!
         .props.onClick(),
     );
-    expect(view.root.findAllByType("form")).toHaveLength(1);
+    await act(() => view.root.findByType("input").props.onChange({ target: { value: "Launch" } }));
+    await act(() => view.root.findByType("form").props.onSubmit({ preventDefault() {} }));
     mocks.operate = false;
-    await act(() => view.update(<WorkspaceItemActions environmentId={environmentId} item={a} />));
-    expect(view.root.findAllByType("form")).toHaveLength(0);
-    expect(mocks.createProject).not.toHaveBeenCalled();
+    await act(() => view.update(<WorkspaceItemActions environmentId={environmentId} item={b} />));
+    await act(async () => {
+      finish();
+      await pending;
+    });
+    expect(view.root.findByProps({ role: "alert" }).children.join("")).toContain(
+      "Project created, link failed",
+    );
+    mocks.operate = true;
+    await act(() => view.update(<WorkspaceItemActions environmentId={environmentId} item={b} />));
+    await act(() => view.root.findByType("form").props.onSubmit({ preventDefault() {} }));
+    expect(mocks.createProject).toHaveBeenCalledTimes(1);
+    expect(mocks.linkToProject).toHaveBeenLastCalledWith(
+      a,
+      { id: project.projectId, title: "Launch" },
+      { type: "action", action: "start-project" },
+    );
+    expect(mocks.startThread).toHaveBeenCalledWith(project);
+  } finally {
+    await act(() => view.unmount());
+  }
+});
+it("finishes the captured project link after the action host unmounts", async () => {
+  let finish!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  const project = scopeProjectRef(environmentId, ProjectId.make("created-after-unmount"));
+  let created!: Promise<boolean>;
+  mocks.createProject.mockImplementation((input) => {
+    created = pending.then(async () => {
+      await input.onCreated?.(project);
+      return true;
+    });
+    return created;
+  });
+  mocks.linkToProject.mockResolvedValue(undefined);
+  let view!: ReactTestRenderer;
+  await act(() => {
+    view = create(<WorkspaceItemActions environmentId={environmentId} item={a} />);
+  });
+  await act(() =>
+    view.root
+      .findAllByType("button")
+      .find((button) => button.props.children === "Start project")!
+      .props.onClick(),
+  );
+  await act(() => view.root.findByType("input").props.onChange({ target: { value: "Launch" } }));
+  await act(() => view.root.findByType("form").props.onSubmit({ preventDefault() {} }));
+  await act(() => view.unmount());
+  await act(async () => {
+    finish();
+    await created;
+  });
+  expect(mocks.linkToProject).toHaveBeenCalledWith(
+    a,
+    { id: project.projectId, title: "Launch" },
+    { type: "action", action: "start-project" },
+  );
+});
+it("retains an open row menu and its error while permission revalidates", async () => {
+  let view!: ReactTestRenderer;
+  await act(() => {
+    view = create(
+      <WorkspaceItemMenu environmentId={environmentId} item={a}>
+        <button>A row</button>
+      </WorkspaceItemMenu>,
+    );
+  });
+  try {
+    await act(() =>
+      view.root.findByProps({ draggable: true }).props.onContextMenu({ preventDefault() {} }),
+    );
+    mocks.contextMenuShow.mockResolvedValueOnce(choiceId);
+    mocks.linkToProject.mockRejectedValueOnce(new Error("Link unavailable"));
+    await act(async () => {
+      add(view).props.onClick({ currentTarget: target });
+    });
+    // A failed link retains the same host, even when the current row changes.
+    mocks.pending = true;
+    await act(() => {
+      for (const listener of mocks.sessionListeners) listener();
+    });
+    await act(() =>
+      view.update(
+        <WorkspaceItemMenu environmentId={environmentId} item={b}>
+          <button>B row</button>
+        </WorkspaceItemMenu>,
+      ),
+    );
+    expect(view.root.findByProps({ role: "alert" }).children.join("")).toContain(
+      "Link unavailable",
+    );
+    expect(add(view).props.disabled).toBe(true);
   } finally {
     await act(() => view.unmount());
   }

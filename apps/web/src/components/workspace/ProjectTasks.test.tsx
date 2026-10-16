@@ -7,7 +7,7 @@ import { create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import { EnvironmentId, ProjectId } from "@t3tools/contracts";
 import { ProjectTasks, ProjectWorkspaceSettings } from "./ProjectTasks";
-import { WorkspaceEngagement } from "./WorkspaceEngagement";
+import { WorkspaceEngagement, WorkspaceItemMutationContext } from "./WorkspaceEngagement";
 import { useWorkspaceResourceState, WorkspaceResourcesProvider } from "./workspaceResourceState";
 const mocks = vi.hoisted(() => ({ command: vi.fn(), operate: true }));
 vi.mock("../../state/session", () => ({
@@ -105,7 +105,7 @@ it("does not silently clear an unavailable browser thread while editing columns"
   });
 });
 it.each(["delete", "move"])(
-  "cancels the held task capture after a successful %s",
+  "invalidates a held task only for deletion, preserving links after %s",
   async (action) => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     (
@@ -170,8 +170,14 @@ it.each(["delete", "move"])(
       expect(mocks.command).toHaveBeenCalledWith(
         expect.objectContaining({ environmentId, input: expect.objectContaining({ id: task.id }) }),
       );
-      expect(queryByRole(node, "complementary", { name: "Linked context" })).toBeNull();
-      expect(getByRole(node, "complementary", { name: "Resources" })).toBeDefined();
+      if (action === "delete") {
+        expect(queryByRole(node, "complementary", { name: "Linked context" })).toBeNull();
+        expect(getByRole(node, "complementary", { name: "Resources" })).toBeDefined();
+      } else {
+        expect(getByRole(node, "complementary", { name: "Linked context" }).textContent).toContain(
+          "Task links",
+        );
+      }
     } finally {
       await act(() => root.unmount());
       node.remove();
@@ -193,4 +199,42 @@ it("revalidates settings permission at submit", async () => {
   );
   await act(() => renderer!.root.findByType("form").props.onSubmit({ preventDefault() {} }));
   expect(mocks.command).not.toHaveBeenCalled();
+});
+it("keeps the held task and editor after a failed delete", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const task = {
+    id: "wskt_00000000-0000-0000-0000-000000000001",
+    projectId,
+    title: "Retained task",
+    column: "To do",
+  };
+  const invalidate = vi.fn();
+  const onSelect = vi.fn();
+  mocks.command.mockResolvedValue({
+    _tag: "Failure",
+    cause: Cause.fail(new Error("Delete unavailable")),
+  });
+  await act(() => {
+    renderer = create(
+      <WorkspaceItemMutationContext value={invalidate}>
+        <ProjectTasks
+          environmentId={environmentId}
+          projectId={projectId}
+          selected={task}
+          onSelect={onSelect}
+        />
+      </WorkspaceItemMutationContext>,
+    );
+  });
+  await act(async () =>
+    renderer!.root
+      .findAllByType("button")
+      .find((button) => button.props.children === "Delete task")!
+      .props.onClick(),
+  );
+  expect(renderer!.root.findByProps({ role: "alert" }).children.join("")).toContain(
+    "Delete unavailable",
+  );
+  expect(invalidate).not.toHaveBeenCalled();
+  expect(onSelect).not.toHaveBeenCalled();
 });
