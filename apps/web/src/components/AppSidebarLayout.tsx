@@ -36,13 +36,14 @@ import { useThreadVisitedMigration } from "../hooks/useThreadVisitedMigration";
 import ThreadSidebar from "./Sidebar";
 import { SettingsSidebarNav } from "./settings/SettingsSidebarNav";
 import { SidebarBrandWidthProbe, SidebarChromeHeader } from "./sidebar/SidebarChrome";
-import { OfficeSidebar } from "./workspace/OfficeWorkspace";
 import {
+  WorkspaceNavigationTracker,
   WorkspaceSpaceSelector,
-  useProjectsSpace,
-  useMailSpace,
-  useOfficeSpace,
+  useWorkspaceNavigation,
 } from "./workspace/WorkspaceSpaceSelector";
+import { WorkspaceNavigation } from "./workspace/WorkspaceNavigation.tsx";
+import { WorkspaceShellLayout } from "./workspace/WorkspaceShellLayout";
+import { WorkspaceViewRail, workspaceRailItems } from "./workspace/WorkspaceViewRail";
 import { ProjectsNav } from "./workspace/ProjectsNav";
 import { MailNav } from "./workspace/mail/MailNav";
 import { MainAppLocationTracker } from "./sidebar/mainAppLocation";
@@ -92,7 +93,8 @@ function readInitialThreadSidebarWidth(): number {
 function SidebarControl() {
   const usagePageOpen = useLocation({ select: (location) => location.pathname === "/usage" });
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
-  const { toggleSidebar } = useSidebar();
+  const { toggleSidebar, isMobile } = useSidebar();
+  const workspace = useLocation({ select: (location) => location.pathname === "/workspace" });
   const isSidebarVisible = useSidebarVisibility();
   const environmentIdentificationMode = useEnvironmentIdentificationMode();
   const stageBackdropVariant = useSidebarStageBackdropVariant(
@@ -135,6 +137,8 @@ function SidebarControl() {
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [keybindings, toggleSidebar, usagePageOpen]);
+
+  if (workspace && isSidebarVisible && !isMobile) return null;
 
   return (
     // The right-side layout controls carry mr-px (border compensation inside
@@ -225,11 +229,71 @@ function ProjectProjectionRetention() {
   return null;
 }
 
+function WorkspaceLiveShell({ children }: { readonly children: ReactNode }) {
+  const navigation = useWorkspaceNavigation();
+  const navigate = useNavigate();
+  const { isMobile, open } = useSidebar();
+  const destination =
+    navigation.search?.space === "office" ? "projects" : (navigation.search?.space ?? "projects");
+  const selected = navigation.search?.view ?? workspaceRailItems[destination][0]!.id;
+  const content = navigation.environmentId ? (
+    <WorkspaceNavigation
+      {...navigation}
+      environmentId={navigation.environmentId}
+      destination={destination}
+    />
+  ) : (
+    <WorkspaceSpaceSelector />
+  );
+  return (
+    <div
+      className="flex min-h-0 min-w-0 flex-1"
+      data-workspace-sidebar={!isMobile && !open ? "closed" : "open"}
+    >
+      <WorkspaceShellLayout
+        navigation={
+          isMobile ? (
+            <Sidebar role="navigation" aria-label="Workspace menu" data-app-sidebar="">
+              {content}
+            </Sidebar>
+          ) : (
+            content
+          )
+        }
+        breadcrumb={
+          <div className="flex h-[26px] shrink-0 items-center gap-2 border-b border-border px-3">
+            {destination === "mail" ? (
+              <MailNav />
+            ) : destination === "projects" ? (
+              <ProjectsNav />
+            ) : null}
+          </div>
+        }
+        rail={
+          <WorkspaceViewRail
+            items={workspaceRailItems[destination]}
+            selected={selected}
+            onSelect={(view) => {
+              void navigate({
+                to: "/workspace",
+                search: {
+                  ...navigation.search,
+                  space: destination,
+                  view,
+                  ...(navigation.environmentId ? { environment: navigation.environmentId } : {}),
+                },
+              });
+            }}
+          />
+        }
+        engagement={children}
+      />
+    </div>
+  );
+}
+
 export function AppSidebarLayout({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
-  const officeSpace = useOfficeSpace();
-  const mailSpace = useMailSpace();
-  const projectsSpace = useProjectsSpace();
   const legacySidebarEnabled = useLegacySidebarEnabled();
   const { active: panelAnimationsActive, durationMs: panelAnimationDurationMs } =
     usePanelAnimationSettings();
@@ -319,55 +383,42 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
       >
         <SidebarBrandWidthProbe onWidthChange={setBrandWidth} />
         <ProjectProjectionRetention />
-        <div className="hidden md:flex">
-          <WorkspaceSpaceSelector rail />
-        </div>
-        <Sidebar
-          className="md:left-16"
-          side="left"
-          collapsible="offcanvas"
-          data-app-sidebar=""
-          role="navigation"
-          aria-label={
-            isOnSettings
-              ? "Settings"
-              : officeSpace
-                ? "Office"
-                : mailSpace
-                  ? "Mail"
-                  : projectsSpace
-                    ? "Projects"
-                    : "Threads"
-          }
-          resizable={{
-            maxWidth: sidebarMaximumWidth,
-            minWidth: sidebarMinimumWidth,
-            shouldAcceptWidth: ({ currentWidth, nextWidth, wrapper }) =>
-              nextWidth <= currentWidth ||
-              wrapper.clientWidth - nextWidth >= THREAD_MAIN_CONTENT_MIN_WIDTH,
-            storageKey: THREAD_SIDEBAR_WIDTH_STORAGE_KEY,
-            onResize: setSidebarWidth,
-          }}
-        >
-          {isOnSettings ? (
-            <>
-              <SidebarChromeHeader isElectron={isElectron} />
-              <SettingsSidebarNav pathname={pathname} />
-            </>
-          ) : officeSpace ? (
-            <OfficeSidebar />
-          ) : projectsSpace ? (
-            <ProjectsNav />
-          ) : mailSpace ? (
-            <MailNav />
-          ) : legacySidebarEnabled ? (
-            <LegacyThreadSidebar />
-          ) : (
-            <ThreadSidebar />
-          )}
-          <SidebarRail onDoubleClick={resetSidebarWidth} />
-        </Sidebar>
-        {children}
+        <WorkspaceNavigationTracker />
+        {pathname === "/workspace" ? (
+          <WorkspaceLiveShell>{children}</WorkspaceLiveShell>
+        ) : (
+          <>
+            <Sidebar
+              side="left"
+              collapsible="offcanvas"
+              data-app-sidebar=""
+              role="navigation"
+              aria-label={isOnSettings ? "Settings" : "Threads"}
+              resizable={{
+                maxWidth: sidebarMaximumWidth,
+                minWidth: sidebarMinimumWidth,
+                shouldAcceptWidth: ({ currentWidth, nextWidth, wrapper }) =>
+                  nextWidth <= currentWidth ||
+                  wrapper.clientWidth - nextWidth >= THREAD_MAIN_CONTENT_MIN_WIDTH,
+                storageKey: THREAD_SIDEBAR_WIDTH_STORAGE_KEY,
+                onResize: setSidebarWidth,
+              }}
+            >
+              {isOnSettings ? (
+                <>
+                  <SidebarChromeHeader isElectron={isElectron} />
+                  <SettingsSidebarNav pathname={pathname} />
+                </>
+              ) : legacySidebarEnabled ? (
+                <LegacyThreadSidebar />
+              ) : (
+                <ThreadSidebar />
+              )}
+              <SidebarRail onDoubleClick={resetSidebarWidth} />
+            </Sidebar>
+            {children}
+          </>
+        )}
         <SidebarControl />
         <NavigationHistoryShortcuts />
         <MainAppLocationTracker />

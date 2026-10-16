@@ -13,7 +13,8 @@ import {
 } from "@tanstack/react-router";
 import { getByRole } from "@testing-library/dom";
 import { afterEach, beforeEach, expect, it, vi } from "vite-plus/test";
-import { useWorkspaceEnvironment, WorkspaceSpaceSelector } from "./WorkspaceSpaceSelector";
+import { WorkspaceNavigationTracker, WorkspaceSpaceSelector } from "./WorkspaceSpaceSelector";
+import { useWorkspaceEnvironment } from "./useWorkspaceEnvironment";
 import { useMailCapabilities } from "./mail/useMailCapabilities";
 import {
   parseWorkspaceSearch,
@@ -88,11 +89,17 @@ function PaletteDestinationProbe() {
   );
 }
 
-async function mount(href: string, rail = true, probePalette = false) {
+function SelectorHost({ hideCodeSidebar }: { hideCodeSidebar: boolean }) {
+  const pathname = useLocation({ select: (location) => location.pathname });
+  return hideCodeSidebar && pathname !== "/workspace" ? null : <WorkspaceSpaceSelector rail />;
+}
+
+async function mount(href: string, probePalette = false, hideCodeSidebar = false) {
   const rootRoute = createRootRoute({
     component: () => (
       <>
-        <WorkspaceSpaceSelector rail={rail} />
+        <WorkspaceNavigationTracker />
+        <SelectorHost hideCodeSidebar={hideCodeSidebar} />
         {probePalette && <PaletteDestinationProbe />}
         <Outlet />
       </>
@@ -126,7 +133,12 @@ async function mount(href: string, rail = true, probePalette = false) {
   return router;
 }
 async function click(name: string) {
-  await act(async () => getByRole(node, "button", { name }).click());
+  await act(async () =>
+    (["Communications", "Meetings", "Calendar", "Email", "Tasks", "Projects"].includes(name)
+      ? getByRole(node, "link", { name })
+      : getByRole(node, "button", { name })
+    ).click(),
+  );
 }
 
 it("routes all six destinations with one selection", async () => {
@@ -224,10 +236,10 @@ it("keeps unsupported Mail visible without opening it on old servers", async () 
   const router = await mount("/workspace?space=projects&environment=old-server");
   await click("Email");
   expect(router.state.location.search.space).toBe("projects");
-  expect(getByRole(node, "button", { name: "Email" }).getAttribute("aria-disabled")).toBe("true");
+  expect(getByRole(node, "link", { name: "Email" }).getAttribute("aria-disabled")).toBe("true");
 });
 
-it("dismisses compact navigation and uses the same scoped destinations", async () => {
+it("dismisses navigation and uses the same scoped destinations", async () => {
   const router = await mount("/compact-env/thread-a", false);
   await click("Workspace");
   await click("Email");
@@ -259,7 +271,7 @@ it("makes an unscoped legacy Workspace return explicit before the primary change
 it("keeps rail and palette destinations on the primary after unscoped Mail", async () => {
   state.primary = "unscoped-primary";
   state.unavailableMailEnvironment = "unscoped-other";
-  const router = await mount("/unscoped-other/thread-a", true, true);
+  const router = await mount("/unscoped-other/thread-a", true);
   for (const [label, space, view] of [
     ["Communications", "communications", "chats"],
     ["Meetings", "meetings", "upcoming"],
@@ -285,9 +297,7 @@ it("keeps rail and palette destinations on the primary after unscoped Mail", asy
       view,
       environment: "unscoped-primary",
     });
-    expect(getByRole(node, "button", { name: "Email" }).getAttribute("aria-disabled")).toBe(
-      "false",
-    );
+    expect(getByRole(node, "link", { name: "Email" }).getAttribute("aria-disabled")).toBe("false");
   }
 });
 
@@ -296,7 +306,7 @@ it("retains normalized Telegram source identity when returning from Code", async
     "/workspace?space=office&officeView=communications&communicationProvider=telegram&environment=telegram-env&account=bot-1&item=bot-1%2F-42%2F2",
   );
   expect(node.querySelectorAll('[aria-current="page"]')).toHaveLength(1);
-  expect(getByRole(node, "button", { name: "Communications" }).getAttribute("aria-current")).toBe(
+  expect(getByRole(node, "link", { name: "Communications" }).getAttribute("aria-current")).toBe(
     "page",
   );
   await act(async () => router.navigate({ href: "/telegram-env/thread-a" }));
@@ -313,8 +323,8 @@ it("retains normalized Telegram source identity when returning from Code", async
 it.each(["/pull-requests", "/usage", "/welcome"])("keeps Code active on %s", async (href) => {
   await mount(href);
   expect(getByRole(node, "button", { name: "Workspace" })).toBeDefined();
-  expect(getByRole(node, "button", { name: "Code" }).getAttribute("aria-current")).toBe("page");
-  expect(node.querySelectorAll('[aria-current="page"]')).toHaveLength(1);
+  expect(getByRole(node, "button", { name: "Code" }).getAttribute("aria-pressed")).toBe("true");
+  expect(node.querySelectorAll('[aria-pressed="true"]')).toHaveLength(1);
 });
 
 it("drops a non-text environment before navigating to another destination", async () => {
@@ -342,4 +352,13 @@ it("does not reopen local Office tools through the Workspace mode switch", async
     view: "all",
     environment: "office-return",
   });
+});
+
+it("remembers Code before palette navigation when the compact sidebar is unmounted", async () => {
+  const router = await mount("/compact-hidden/thread-a?diff=1#change", false, true);
+  await act(async () =>
+    router.navigate({ href: "/workspace?space=projects&environment=compact-hidden" }),
+  );
+  await click("Code");
+  expect(router.state.location.href).toBe("/compact-hidden/thread-a?diff=1#change");
 });

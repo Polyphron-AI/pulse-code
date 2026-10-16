@@ -151,7 +151,7 @@ import {
   workspaceDestinationSearch,
   workspaceReturnSearch,
 } from "./workspace/workspaceNavigation";
-import { useWorkspaceEnvironment } from "./workspace/WorkspaceSpaceSelector";
+import { useWorkspaceEnvironment } from "./workspace/useWorkspaceEnvironment";
 import { buildThreadRouteParams, resolveThreadRouteTarget } from "../threadRoutes";
 import { useAvailableSettingsSearchItems } from "./settings/useAvailableSettingsSearchItems";
 import {

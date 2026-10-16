@@ -25,6 +25,11 @@
       }
     ]
   },
+  // Windows wildcard discovery prefers same-stem .ts helpers over .tsx views.
+  "files": [
+    "src/components/workspace/WorkspaceNavigation.tsx",
+    "src/components/workspace/WorkspaceNavigation.test.tsx"
+  ],
   "include": [
     "src",
     "vite",
