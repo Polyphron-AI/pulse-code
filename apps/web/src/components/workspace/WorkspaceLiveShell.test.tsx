@@ -15,11 +15,13 @@ import { EnvironmentId } from "@t3tools/contracts";
 import { afterEach, beforeEach, expect, it, vi } from "vite-plus/test";
 import { AppSidebarLayout } from "../AppSidebarLayout";
 import { parseWorkspaceSearch } from "./workspaceNavigation";
+import { useWorkspaceHeaderModel } from "./useWorkspaceHeaderModel";
 import * as NodeFS from "node:fs";
 import * as NodeURL from "node:url";
 
 const cssFile = "./workspaceShell.css";
 const shellCss = NodeFS.readFileSync(new NodeURL.URL(cssFile, import.meta.url), "utf8");
+const compactShellCss = shellCss.replace(/\s+/g, "");
 const indexCssFile = "../../index.css";
 const indexCss = NodeFS.readFileSync(new NodeURL.URL(indexCssFile, import.meta.url), "utf8");
 
@@ -120,6 +122,18 @@ afterEach(async () => {
 });
 
 async function mount(href: string) {
+  function Module() {
+    const header = useWorkspaceHeaderModel(
+      EnvironmentId.make("module-id"),
+      "Module title",
+      "Module fallback",
+    );
+    return (
+      <main data-module-environment={header.environmentLabel} data-module-space={header.spaceLabel}>
+        Current workspace content
+      </main>
+    );
+  }
   const parent = createRootRoute({
     component: () => (
       <AppSidebarLayout>
@@ -131,7 +145,7 @@ async function mount(href: string) {
     getParentRoute: () => parent,
     path: "/workspace",
     validateSearch: parseWorkspaceSearch,
-    component: () => <main>Current workspace content</main>,
+    component: Module,
   });
   const settings = createRoute({ getParentRoute: () => parent, path: "/settings" });
   const router = createRouter({
@@ -176,6 +190,40 @@ it("leaves destinations, rail and pickers unselected on local Office tools", asy
   expect(
     getAllByRole(getByRole(node, "navigation", { name: "Workspace destinations" }), "link"),
   ).toHaveLength(6);
+});
+
+it("derives module and breadcrumb labels from the same live header model", async () => {
+  const router = await mount("/workspace?space=mail&environment=live-a");
+  const module = node.querySelector("main")!;
+  expect(module.getAttribute("data-module-environment")).toBe("Environment live-a");
+  expect(module.getAttribute("data-module-space")).toBe("Email");
+  await act(async () =>
+    router.navigate({ href: "/workspace?space=communications&environment=live-b" }),
+  );
+  expect(module.getAttribute("data-module-environment")).toBe("Environment live-b");
+  expect(module.getAttribute("data-module-space")).toBe("Communications");
+});
+
+it("insets the collapsed macOS engagement title past the fixed toggle and rail", async () => {
+  await mount("/workspace?space=projects&environment=live-a");
+  await act(async () => getByRole(node, "button", { name: "Toggle main sidebar" }).click());
+  expect(node.querySelector('[data-workspace-sidebar="closed"]')).not.toBeNull();
+  expect(shellCss).toMatch(
+    /\[data-workspace-sidebar="closed"\] \[data-workspace-engagement-header\]\s*\{\s*padding-left: max\(16px, calc\(var\(--workspace-titlebar-content-left\) - 52px\)\)/,
+  );
+});
+
+it("reserves the native caption width for the band below the 26px strip", async () => {
+  vi.spyOn(navigator, "platform", "get").mockReturnValue("Win32");
+  await mount("/workspace?space=mail&environment=live-a");
+  const shell = node.querySelector<HTMLElement>("[data-workspace-shell]")!;
+  expect(shell.classList.contains("wco:[--workspace-caption-band:1]")).toBe(true);
+  expect(compactShellCss).toContain(
+    "[data-workspace-resources]{padding-top:calc(var(--workspace-caption-band,0)*max(0px,calc(var(--workspace-topbar-height)-26px)))",
+  );
+  expect(compactShellCss).toContain(
+    '[data-workspace-dock-open="false"][data-workspace-engagement-header]{padding-right:max(16px,calc(var(--workspace-caption-band,0)*var(--workspace-native-controls-inset,0px)))',
+  );
 });
 
 it("keeps environment and Mail identity when selecting a rail view", async () => {

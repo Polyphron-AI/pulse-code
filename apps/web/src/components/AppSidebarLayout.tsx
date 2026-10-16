@@ -45,7 +45,10 @@ import { WorkspaceNavigation } from "./workspace/WorkspaceNavigationView";
 import { workspaceDestinations } from "./workspace/workspaceNavigation";
 import { WorkspaceShellLayout } from "./workspace/WorkspaceShellLayout";
 import { WorkspaceViewRail, workspaceRailItems } from "./workspace/WorkspaceViewRail";
-import { useWorkspaceHeaderModel } from "./workspace/useWorkspaceHeaderModel";
+import {
+  useWorkspaceHeaderModel,
+  WorkspaceHeaderContext,
+} from "./workspace/useWorkspaceHeaderModel";
 import { MainAppLocationTracker } from "./sidebar/mainAppLocation";
 import { useSidebarStageBackdropVariant } from "./SidebarStageBackdrop";
 import { useProjects } from "../state/entities";
@@ -270,40 +273,44 @@ function WorkspaceLiveShell({ children }: { readonly children: ReactNode }) {
       className="flex min-h-0 min-w-0 flex-1"
       data-workspace-sidebar={!isMobile && !open ? "closed" : "open"}
     >
-      <WorkspaceShellLayout
-        navigation={
-          isMobile ? (
-            <Sidebar aria-label="Workspace menu" data-app-sidebar="">
-              {content}
-            </Sidebar>
-          ) : (
-            content
-          )
-        }
-        header={header}
-        electron={isElectron}
-        onOpenWorkspace={() => navigation.onNavigate("projects")}
-        rail={
-          destination ? (
-            <WorkspaceViewRail
-              items={workspaceRailItems[destination]}
-              selected={navigation.search?.view ?? workspaceRailItems[destination][0]!.id}
-              onSelect={(view) => {
-                void navigate({
-                  to: "/workspace",
-                  search: {
-                    ...navigation.search,
-                    space: destination,
-                    view,
-                    ...(navigation.environmentId ? { environment: navigation.environmentId } : {}),
-                  },
-                });
-              }}
-            />
-          ) : null
-        }
-        engagement={children}
-      />
+      <WorkspaceHeaderContext value={header}>
+        <WorkspaceShellLayout
+          navigation={
+            isMobile ? (
+              <Sidebar aria-label="Workspace menu" data-app-sidebar="">
+                {content}
+              </Sidebar>
+            ) : (
+              content
+            )
+          }
+          header={header}
+          electron={isElectron}
+          onOpenWorkspace={() => navigation.onNavigate("projects")}
+          rail={
+            destination ? (
+              <WorkspaceViewRail
+                items={workspaceRailItems[destination]}
+                selected={navigation.search?.view ?? workspaceRailItems[destination][0]!.id}
+                onSelect={(view) => {
+                  void navigate({
+                    to: "/workspace",
+                    search: {
+                      ...navigation.search,
+                      space: destination,
+                      view,
+                      ...(navigation.environmentId
+                        ? { environment: navigation.environmentId }
+                        : {}),
+                    },
+                  });
+                }}
+              />
+            ) : null
+          }
+          engagement={children}
+        />
+      </WorkspaceHeaderContext>
     </div>
   );
 }

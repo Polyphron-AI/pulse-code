@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act, useState } from "react";
+import { act, useState, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { getByRole, queryByRole } from "@testing-library/dom";
 import { EnvironmentId } from "@t3tools/contracts";
@@ -17,7 +17,12 @@ function Counter() {
   const [count, setCount] = useState(0);
   return <button onClick={() => setCount(count + 1)}>Saved {count}</button>;
 }
-async function mount(layout: "full" | "split" = "full", viewport = 1280, initialOpen = true) {
+async function mount(
+  layout: "full" | "split" = "full",
+  viewport = 1280,
+  initialOpen = true,
+  options: { linked?: ReactNode; resources?: ReactNode; environmentId?: EnvironmentId | null } = {},
+) {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   (
     window as unknown as {
@@ -37,12 +42,16 @@ async function mount(layout: "full" | "split" = "full", viewport = 1280, initial
     const [open, setOpen] = useState(initialOpen);
     return (
       <WorkspaceEngagement
-        environmentId={EnvironmentId.make("a")}
+        environmentId={
+          options.environmentId === undefined ? EnvironmentId.make("a") : options.environmentId
+        }
         space="projects"
         header={{ title: "Projects", environmentLabel: "A", spaceLabel: "Projects" }}
         resourcesOpen={open}
         onResourcesChange={setOpen}
-        resources={<p>Project resources</p>}
+        {...(options.linked
+          ? { linked: options.linked }
+          : { resources: "resources" in options ? options.resources : <p>Project resources</p> })}
         storage={storage}
         {...(layout === "full"
           ? { layout }
@@ -65,6 +74,44 @@ it("lets a full-width form work without subscribing to list sizing and keeps its
   expect(resources.getAttribute("aria-expanded")).toBe("false");
   await act(async () => resources.click());
   expect(getByRole(node, "button", { name: "Saved 1" })).toBeDefined();
+  expect(values.size).toBe(0);
+});
+
+it("shows linked items by default on wide screens with an honest toggle and supports close/reopen", async () => {
+  await mount("full", 1280, false, { linked: <p>Linked page</p> });
+  const dock = getByRole(node, "complementary", { name: "Linked items" });
+  expect(dock.textContent).toContain("Linked page");
+  const toggle = getByRole(node, "button", { name: "Linked items" });
+  expect(toggle.getAttribute("aria-expanded")).toBe("true");
+  await act(async () => toggle.click());
+  expect(queryByRole(node, "complementary", { name: "Linked items" })).toBeNull();
+  await act(async () => toggle.click());
+  expect(getByRole(node, "complementary", { name: "Linked items" }).textContent).toContain(
+    "Linked page",
+  );
+});
+
+it("keeps compact linked items closed until requested", async () => {
+  await mount("full", 390, false, { linked: <p>Linked page</p> });
+  expect(queryByRole(document.body, "dialog")).toBeNull();
+  await act(async () => getByRole(node, "button", { name: "Linked items" }).click());
+  expect(getByRole(document.body, "dialog", { name: "Linked items" }).textContent).toContain(
+    "Linked page",
+  );
+});
+
+it("renders explicit empty resources without telling spaces to choose a project", async () => {
+  await mount("full", 1280, true, { resources: null });
+  expect(getByRole(node, "complementary", { name: "Resources" }).textContent).toBe("");
+});
+
+it("keeps disconnected split widths in memory without persisting a fake environment", async () => {
+  const { values } = await mount("split", 1280, false, { environmentId: null });
+  const separator = getByRole(node, "separator", { name: "Resize item list" });
+  await act(async () =>
+    separator.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })),
+  );
+  expect(separator.getAttribute("aria-valuenow")).toBe("190");
   expect(values.size).toBe(0);
 });
 it("retains selection, Back and keyboard split sizing with scoped v2 storage", async () => {

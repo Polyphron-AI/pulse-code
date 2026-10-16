@@ -17,6 +17,7 @@ const encodeWidth = Schema.encodeSync(Schema.fromJsonString(WidthSchema));
 export interface UseResizableWidthOptions {
   /** localStorage key the persisted width is stored under. */
   readonly storageKey: string;
+  /** Keep this object referentially stable; replace it only when switching storage sessions. */
   readonly storage?: Pick<Storage, "getItem" | "setItem">;
   readonly defaultWidth: number;
   readonly minWidth: number;

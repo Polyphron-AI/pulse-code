@@ -43,14 +43,16 @@ function DesktopCommunicationsWorkspace() {
       if (response) chat = response.accounts ?? [];
     }
     if (!mounted.current) return;
-    if (chat) setChatAccounts(chat);
-    setSelectedKey((previous) =>
-      chat?.some((account) => key(account.provider, account.id) === previous)
-        ? previous
-        : chat?.[0]
-          ? key(chat[0].provider, chat[0].id)
-          : "",
-    );
+    if (chat) {
+      setChatAccounts(chat);
+      setSelectedKey((previous) =>
+        chat.some((account) => key(account.provider, account.id) === previous)
+          ? previous
+          : chat?.[0]
+            ? key(chat[0].provider, chat[0].id)
+            : "",
+      );
+    }
     setLoaded(true);
   }, [available, run]);
   useEffect(() => {
@@ -74,6 +76,11 @@ function DesktopCommunicationsWorkspace() {
   const [resourcesOpen, setResourcesOpen] = useState(false);
   const controls = (
     <div className="flex flex-wrap items-center gap-2 border-b border-border p-2">
+      {error && (
+        <div className="w-full">
+          <RequestState busy={busy} error={error} />
+        </div>
+      )}
       <label className="min-w-0 flex-1">
         <span className="sr-only">Connected communications account</span>
         <select
@@ -141,11 +148,6 @@ function DesktopCommunicationsWorkspace() {
   );
   const content = (
     <>
-      {error && (
-        <div className="border-b border-border px-4 py-2">
-          <RequestState busy={busy} error={error} />
-        </div>
-      )}
       {selectedChat?.provider === "telegram" ? (
         <main className="space-y-3 p-6">
           <h1 className="text-lg font-semibold">Personal Telegram login has been retired</h1>
@@ -161,7 +163,7 @@ function DesktopCommunicationsWorkspace() {
         <ChatCommunicationsWorkspace
           key={JSON.stringify([selectedChat.provider, selectedChat.id])}
           account={selectedChat}
-          environmentId={environmentId ?? EnvironmentId.make("unavailable")}
+          environmentId={environmentId}
           controls={controls}
         />
       ) : (
@@ -200,7 +202,7 @@ function DesktopCommunicationsWorkspace() {
     content
   ) : (
     <WorkspaceEngagement
-      environmentId={environmentId ?? EnvironmentId.make("unavailable")}
+      environmentId={environmentId}
       space="communications"
       layout="full"
       header={header}

@@ -69,11 +69,13 @@ vi.mock("../WorkspaceEngagement", () => ({
   WorkspaceEngagement: ({
     children,
     resources,
+    linked,
     header,
     list,
   }: {
     children: ReactNode;
     resources: ReactNode;
+    linked?: ReactNode;
     header: WorkspaceHeaderModel;
     list?: ReactNode;
   }) => (
@@ -81,7 +83,7 @@ vi.mock("../WorkspaceEngagement", () => ({
       <WorkspaceHeader model={header} resourcesOpen={false} onResources={() => {}} />
       {list}
       <div>{children}</div>
-      <aside>{resources}</aside>
+      <aside>{resources ?? linked}</aside>
     </>
   ),
 }));

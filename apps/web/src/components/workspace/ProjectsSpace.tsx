@@ -70,7 +70,7 @@ export function ProjectsSpace() {
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const create = useNewProject();
-  const openKnown = useWorkspaceItemOpener(environmentId ?? EnvironmentId.make("unavailable"));
+  const openKnown = useWorkspaceItemOpener(environmentId);
   const open = (ref: WorkspaceItemRef) => {
     if (environmentId !== null) openKnown(ref);
     return;
@@ -138,13 +138,13 @@ export function ProjectsSpace() {
   );
   return (
     <WorkspaceEngagement
-      environmentId={environmentId ?? EnvironmentId.make("unavailable")}
+      environmentId={environmentId}
       space="projects"
       layout="full"
       header={header}
       resourcesOpen={resourcesOpen}
       onResourcesChange={setResourcesOpen}
-      resources={
+      linked={
         selected === undefined || environmentId === null ? null : (
           <LinkedSection
             key={selected.id}

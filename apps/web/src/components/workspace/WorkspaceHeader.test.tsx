@@ -40,7 +40,7 @@ it("updates module metadata, exposes the full owner, and toggles Resources witho
         <WorkspaceBreadcrumb
           variant="workspace"
           {...model}
-          onOpenWorkspace={() => void navigate({ to: "/workspace" })}
+          onOpenWorkspace={() => void navigate({ to: "/workspace", search: { space: "projects" } })}
         />
         <WorkspaceHeader model={model} resourcesOpen={open} onResources={() => setOpen(!open)} />
       </>
@@ -50,7 +50,7 @@ it("updates module metadata, exposes the full owner, and toggles Resources witho
   const route = createRoute({ getParentRoute: () => parent, path: "/workspace", component: App });
   const router = createRouter({
     routeTree: parent.addChildren([route]),
-    history: createMemoryHistory({ initialEntries: ["/workspace"] }),
+    history: createMemoryHistory({ initialEntries: ["/workspace?space=mail"] }),
   });
   await router.load();
   node = document.createElement("div");
@@ -67,6 +67,7 @@ it("updates module metadata, exposes the full owner, and toggles Resources witho
     "true",
   );
   expect(router.state.location.pathname).toBe("/workspace");
+  expect(router.state.location.searchStr).toBe("?space=mail");
   await act(async () =>
     update({
       title: "# marketing",
@@ -84,4 +85,5 @@ it("updates module metadata, exposes the full owner, and toggles Resources witho
   expect(node.textContent).toContain("Design preview · sample data");
   await act(async () => getByRole(node, "button", { name: "Remote B" }).click());
   expect(router.state.location.pathname).toBe("/workspace");
+  expect(router.state.location.searchStr).toBe("?space=projects");
 });

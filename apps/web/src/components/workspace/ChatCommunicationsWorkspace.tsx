@@ -167,7 +167,7 @@ export function ChatCommunicationsWorkspace({
   controls,
 }: {
   account: ChatAccount;
-  environmentId: EnvironmentId;
+  environmentId: EnvironmentId | null;
   controls?: ReactNode;
 }) {
   const { run, busy, error } = useCommunicationsRequest();
@@ -531,7 +531,7 @@ export function ChatCommunicationsWorkspace({
                 onChange={(event) => setQuery(event.target.value)}
               />
             </div>
-            <label className="block lg:hidden">
+            <label className="block md:hidden">
               <span className="sr-only">Conversation</span>
               <select
                 className="w-full rounded-md border border-input bg-background px-2 py-1 text-sm"
@@ -551,7 +551,7 @@ export function ChatCommunicationsWorkspace({
               </select>
             </label>
             {conversationCursor && (
-              <div className="lg:hidden">
+              <div className="md:hidden">
                 <Button
                   size="sm"
                   variant="outline"

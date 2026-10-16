@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act } from "react";
+import { act, useCallback, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { getByRole } from "@testing-library/dom";
 import { afterEach, expect, it, vi } from "vite-plus/test";
@@ -32,12 +32,18 @@ const boundary = vi.hoisted(() => ({
   }),
 }));
 vi.mock("./useCommunicationsRequest", () => ({
-  useCommunicationsRequest: () => ({
-    run: boundary.run,
-    available: true,
-    busy: false,
-    error: null,
-  }),
+  useCommunicationsRequest: () => {
+    const [error, setError] = useState<string | null>(null);
+    const run = useCallback(async (request: { operation: string }) => {
+      try {
+        return await boundary.run(request);
+      } catch (cause) {
+        setError(String(cause));
+        return undefined;
+      }
+    }, []);
+    return { run, available: true, busy: false, error };
+  },
 }));
 vi.mock("./mail/useMailCapabilities", () => ({
   useMailCapabilities: () => ({ environmentId: "remote" }),
@@ -59,6 +65,21 @@ afterEach(async () => {
   node?.remove();
   boundary.run.mockClear();
   vi.unstubAllGlobals();
+});
+
+it("keeps a failed account refresh inside the chat list as a full-width banner", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  node = document.createElement("div");
+  document.body.append(node);
+  root = createRoot(node);
+  await act(async () => root.render(<CommunicationsWorkspace />));
+  await act(async () => getByRole(node, "button", { name: /# marketing/ }).click());
+  boundary.run.mockRejectedValueOnce(new Error("Account refresh failed"));
+  await act(async () => getByRole(node, "button", { name: "Refresh account list" }).click());
+  const list = getByRole(node, "region", { name: "Item list" });
+  expect(getByRole(list, "alert").textContent).toContain("Account refresh failed");
+  expect(getByRole(node, "heading", { name: "# marketing" })).toBeDefined();
+  expect(getByRole(list, "alert").closest(".w-full")).not.toBeNull();
 });
 it("keeps desktop account controls reachable and changes the one shared header when a channel opens", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);

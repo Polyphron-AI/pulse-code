@@ -8,11 +8,13 @@ import { WorkspaceHeader, type WorkspaceHeaderModel } from "./WorkspaceHeader";
 import type { WorkspaceDestination } from "./workspaceNavigation";
 
 export interface WorkspaceEngagementCommonProps {
-  readonly environmentId: EnvironmentId;
+  readonly environmentId: EnvironmentId | null;
   readonly space: WorkspaceDestination;
   readonly header: WorkspaceHeaderModel;
   readonly children: ReactNode;
-  readonly resources: ReactNode;
+  readonly resources?: ReactNode;
+  /** Temporary selected-item dock until W4-T4b installs Linked context. */
+  readonly linked?: ReactNode;
   readonly resourcesOpen: boolean;
   readonly onResourcesChange: (open: boolean) => void;
   readonly onLinkedContext?: () => void;
@@ -36,16 +38,27 @@ export type WorkspaceEngagementProps = WorkspaceEngagementCommonProps &
 
 export function WorkspaceEngagement(props: WorkspaceEngagementProps) {
   const wide = useMediaQuery("xl");
-  const resources = props.resources ?? (
-    <p className="p-3 text-sm text-muted-foreground">Choose a project to see its resources.</p>
-  );
+  const linkedOnly = props.resources === undefined && props.linked !== undefined;
+  const [linkedDockOpen, setLinkedDockOpen] = useState(true);
+  const resourcesOpen = linkedOnly && wide ? linkedDockOpen : props.resourcesOpen;
+  const resources = linkedOnly ? props.linked : props.resources;
+  const resourcesLabel = linkedOnly ? "Linked items" : "Resources";
+  const onResourcesChange = (open: boolean) => {
+    if (linkedOnly && wide) setLinkedDockOpen(open);
+    else props.onResourcesChange(open);
+  };
   return (
-    <div data-workspace-engagement="" className="flex min-h-0 min-w-0 flex-1">
+    <div
+      data-workspace-engagement=""
+      data-workspace-dock-open={wide && resourcesOpen}
+      className="flex min-h-0 min-w-0 flex-1"
+    >
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <WorkspaceHeader
           model={props.header}
-          resourcesOpen={props.resourcesOpen}
-          onResources={() => props.onResourcesChange(!props.resourcesOpen)}
+          resourcesOpen={resourcesOpen}
+          resourcesLabel={resourcesLabel}
+          onResources={() => onResourcesChange(!resourcesOpen)}
           {...(props.onLinkedContext ? { onLinkedContext: props.onLinkedContext } : {})}
         />
         {props.layout === "split" ? (
@@ -60,20 +73,22 @@ export function WorkspaceEngagement(props: WorkspaceEngagementProps) {
         )}
       </div>
       {wide ? (
-        <aside aria-label="Resources" data-workspace-resources="" hidden={!props.resourcesOpen}>
-          {props.resourcesOpen ? resources : null}
+        <aside aria-label={resourcesLabel} data-workspace-resources="" hidden={!resourcesOpen}>
+          {resourcesOpen ? resources : null}
         </aside>
       ) : (
-        <Sheet open={props.resourcesOpen} onOpenChange={props.onResourcesChange}>
+        <Sheet open={resourcesOpen} onOpenChange={onResourcesChange}>
           <SheetPopup>
-            <SheetTitle>Resources</SheetTitle>
-            {props.resourcesOpen ? resources : null}
+            <SheetTitle>{resourcesLabel}</SheetTitle>
+            {resourcesOpen ? resources : null}
           </SheetPopup>
         </Sheet>
       )}
     </div>
   );
 }
+
+const disconnectedStorage = { getItem: () => null, setItem: () => {} };
 
 function WorkspaceSplit({
   environmentId,
@@ -98,12 +113,15 @@ function WorkspaceSplit({
   const minWidth = Math.min(160, hostWidth * 0.4);
   const maxWidth = hostWidth * 0.6;
   const split = useResizableWidth({
-    storageKey: `pulse.workspace.${environmentId}.${space}.engagement-width.v2`,
+    storageKey:
+      environmentId === null
+        ? `pulse.workspace.disconnected.${space}.engagement-width.v2`
+        : `pulse.workspace.${environmentId}.${space}.engagement-width.v2`,
     defaultWidth: 170,
     minWidth,
     maxWidth,
     edge: "right",
-    ...(storage ? { storage } : {}),
+    ...(environmentId === null ? { storage: disconnectedStorage } : storage ? { storage } : {}),
   });
   return (
     <div ref={host} className="flex min-h-0 min-w-0 flex-1">

@@ -147,7 +147,7 @@ export function MailSpace() {
         body
       ) : (
         <WorkspaceEngagement
-          environmentId={environmentId ?? EnvironmentId.make("unavailable")}
+          environmentId={environmentId}
           space="mail"
           layout="full"
           {...shell}
@@ -310,7 +310,7 @@ function MailPanes(props: MailPanesProps) {
           />
         )
       }
-      resources={
+      linked={
         selected === null || !linksAvailable ? null : conversation !== null ? (
           <ConversationLinked
             environmentId={props.environmentId}

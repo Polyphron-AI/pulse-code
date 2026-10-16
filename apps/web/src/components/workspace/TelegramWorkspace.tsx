@@ -62,7 +62,7 @@ export function TelegramWorkspace() {
     content
   ) : (
     <WorkspaceEngagement
-      environmentId={environmentId ?? EnvironmentId.make("unavailable")}
+      environmentId={environmentId}
       space="communications"
       layout="full"
       header={header}
@@ -263,7 +263,7 @@ function TelegramReader({
           ) : null}
         </div>
       }
-      resources={
+      linked={
         item ? (
           <LinkedSection
             key={search.item}

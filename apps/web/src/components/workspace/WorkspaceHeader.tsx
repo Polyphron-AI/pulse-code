@@ -12,6 +12,7 @@ export interface WorkspaceHeaderModel {
 export interface WorkspaceHeaderProps {
   readonly model: WorkspaceHeaderModel;
   readonly resourcesOpen: boolean;
+  readonly resourcesLabel?: string;
   readonly onResources: () => void;
   readonly onLinkedContext?: () => void;
 }
@@ -19,6 +20,7 @@ export interface WorkspaceHeaderProps {
 export function WorkspaceHeader({
   model,
   resourcesOpen,
+  resourcesLabel = "Resources",
   onResources,
   onLinkedContext,
 }: WorkspaceHeaderProps) {
@@ -35,13 +37,13 @@ export function WorkspaceHeader({
           </button>
         ) : null}
         <button
-          data-workspace-resources-trigger=""
+          data-workspace-resources-trigger={resourcesLabel === "Resources" ? "" : undefined}
           type="button"
           aria-expanded={resourcesOpen}
           onClick={onResources}
         >
           <FolderIcon />
-          Resources
+          {resourcesLabel}
         </button>
         {model.owner ? (
           <span data-workspace-owner="" role="img" aria-label={model.owner.name}>

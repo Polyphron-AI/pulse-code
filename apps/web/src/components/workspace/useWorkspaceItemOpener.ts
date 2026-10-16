@@ -28,9 +28,10 @@ export function parseTaskLocation(raw: string | undefined) {
 }
 
 /** Open an item in its own environment, preserving the exact source-message reference. */
-export function useWorkspaceItemOpener(environmentId: EnvironmentId) {
+export function useWorkspaceItemOpener(environmentId: EnvironmentId | null) {
   const navigate = useNavigate();
   return (ref: WorkspaceItemRef) => {
+    if (environmentId === null) return;
     if (ref.type === "thread")
       void navigate({
         to: "/$environmentId/$threadId",
