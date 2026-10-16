@@ -57,7 +57,7 @@ Wave-specific constraints:
 - Backend changes require focused public service/RPC tests, old payload/config decoding and read/operate coverage. Await `Deferred`, a subscription receipt, a persisted event or worker drain. Never substitute screenshot assertions for behavior.
 - Run targeted lint with `vp lint` followed by the explicit changed source paths from the package directory. Run `vp run typecheck` in each changed package and `apps/server`. Run only named test files. No repository-wide commands.
 - Only the primary implementation controller may run the future integrated client pass, once integrated and separately authorized. W4-T7 fixture readiness is required for visual acceptance, not for independent service work.
-- Preserve parallel owners' changes. Do not stage `docs/internals/pulse-next-migration.json`, the lockfile, another wave's plan or unrelated correction files. Commits below are future implementer steps. The historical main-plan Claude coauthor footer is not evidence of authorship by this writer; use the actual implementer's required attribution.
+- Preserve parallel owners' changes. Do not stage `docs/internals/pulse-next-migration.json`, the lockfile, another wave's plan or unrelated correction files. Commits below are future implementer steps. Implementer commits end with a Co-Authored-By line naming the model that made the commit; controller commits use the controller's attribution line.
 
 ## Review Focus
 
@@ -142,21 +142,24 @@ Use compact static notices inside the body: No meetings on this day.; Connect a 
 
 ## Shared interfaces and admission
 
-Names CALENDAR, NOTES, RPC, TOOLS, ROUTES and OPENERS below are the exact file-set names from wave-map. Their expanded file paths are listed in each task. The map names responsibilities but does not freeze every future TypeScript prop name. Consume the completed W4/W5 exports at dispatch; preserve their names rather than invent parallel shell/query APIs.
+Names CALENDAR, NOTES, RPC, TOOLS, ROUTES and OPENERS below are the exact file-set names from wave-map. Their expanded file paths are listed in each task. Wave 4's "Canonical seams for Waves 5-11" section freezes shell exports and paths. W5 freezes queryTasks, workspaceQueryTasks and WorkspaceTaskQuery with inclusive date bounds. Consume those exact contracts at dispatch.
 
-| Consumed owner/name                                                       | Boundary and type                                                                                                                                                                       |
-| ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| W4-T1 ROUTES, `WorkspaceSearch`, `parseWorkspaceSearch`                   | Selected `EnvironmentId`, destination, view, project and stable item ref. Extend with validated `day?: string`, `calendarView?: "agenda"                                                | "week"`, `meetingsView?: "upcoming" | "recordings"`; preserve other destinations' keys. |
-| W4-T2 per-space rail slot                                                 | ReactNode rail body; Wave 6 supplies CalendarNav/MeetingsRail without a second sidebar.                                                                                                 |
-| W4-T3 `WorkspaceEngagement`, `WorkspacePageHeader`, `WorkspaceBreadcrumb` | Wide module body plus shared header, environment, selected endpoint and Resources opener. Use W4's finalized props; no local copy of the frame.                                         |
-| W4-T4a `WorkspaceResourcesPanel`, resource project/selected-body mounting | EnvironmentId plus ProjectId or no project, selected tab, single ReactNode body. Wave 6 selects Docs for an explicit note action, never changes project merely by reading a range.      |
-| W4-T4b Linked context entrance and W4-T5 `WorkspaceItemActions`           | `WorkspaceLinkEndpoint` plus captured environment, native/web/touch/palette actions and provenance. No automatic grants from opening an item.                                           |
-| W4-T7 isolated sample workspace fixture and eight capture recipes         | Clock, seeded refs, marker and non-writing boundaries. W6 reads recipe 07/08, never creates a second fixture mechanism.                                                                 |
-| W5-T2 TOOLS                                                               | `WorkspaceTask` with nullable validated `dueOn`, `areaLabel`, revision and environment display timezone. Dates are YYYY-MM-DD, not instants.                                            |
-| W5-T4 paged all-task summaries                                            | One environment-level bounded query with due filters, stable cursor and completeness. Consume its actual exported query and indexes. Never fall back to per-project `listTasks` fanout. |
-| W5-T7 `ProjectTasksResource`, `WorkspaceTaskRow`, `workspaceTools`        | Shared completion/detail operations and all-status selected-project rows. Calendar hosts the existing resource body; completion remains owned by TOOLS.                                 |
+| Consumed owner/name                                                                           | Boundary and type                                                                                                                                                                                                                         |
+| --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| W4-T1 workspace/workspaceNavigation.ts: WorkspaceSearch, parseWorkspaceSearch, workspaceViews | Consume view agenda/week for Calendar and upcoming/recordings for Meetings. Add only validated day?: string as a date axis; preserve other destination keys.                                                                              |
+| W4-T2 workspace/WorkspaceViewRail.tsx: WorkspaceRailItem, workspaceRailItems                  | Shell renders registry data and selected view. T4 enables Agenda/Upcoming; T5 enables Week. Recordings retains its truthful unavailableReason. No ReactNode rail prop.                                                                    |
+| W4-T3 workspace/WorkspaceHeader.tsx: WorkspaceHeaderModel; WorkspaceEngagement                | Pass the model via WorkspaceEngagement.header with layout="full" and children. No second module header or breadcrumb.                                                                                                                     |
+| W4-T4a workspace/workspaceResourceState.ts: WorkspaceResourcesContext, useWorkspaceResources  | Use the shell-owned context instance. openResource({ tab: "docs", projectId, request: noteRef }) is the sole handoff; no second state hook/store.                                                                                         |
+| W4-T4a workspace/WorkspaceResourceBody.tsx: WorkspaceResourceBodyProps                        | T8 edits only the Docs case. Pass environmentId, projectId, selectedItem: WorkspaceLinkEndpoint or null, request: WorkspaceItemRef or null and onOpen. The frame chooses no tab bodies.                                                   |
+| W4-T4b Linked context entrance and W4-T5 `WorkspaceItemActions`                               | `WorkspaceLinkEndpoint` plus captured environment, native/web/touch/palette actions and provenance. No automatic grants from opening an item.                                                                                             |
+| W4-T7 isolated sample workspace fixture and eight capture recipes                             | Clock, seeded refs, marker and non-writing boundaries. W6-T4 owns dev/calendarMockupModule.tsx and T8 owns dev/notesMockupModule.tsx, both exporting createWorkspaceMockupModule: CreateWorkspaceMockupModule with explicit readyRegions. |
+| W5-T2 TOOLS                                                                                   | `WorkspaceTask` with nullable validated `dueOn`, `areaLabel`, revision and environment display timezone. Dates are YYYY-MM-DD, not instants.                                                                                              |
+| W5-T4 WorkspaceTaskQuery, WorkspaceTaskSummary, queryTasks / workspaceQueryTasks              | Call pulse.workspace.queryTasks through the existing service with state all, dueFrom=startOn, dueTo=endBefore minus one calendar day. Bounds are inclusive; filter null dueOn before projection. No per-project listTasks fanout.         |
+| W5-T7 `ProjectTasksResource`, `WorkspaceTaskRow`, `workspaceTools`                            | Shared completion/detail operations and all-status selected-project rows. Calendar hosts the existing resource body; completion remains owned by TOOLS.                                                                                   |
 
-Dispatch order below is a valid topological order. Code dependencies differ from scheduling edges. Exclusive RPC/migration/context chain is W6-T7 -> W6-T1a -> W6-T1b -> W6-T3 -> W6-T8 -> W6-T2a -> W6-T2b. UI tasks W6-T4 -> W6-T5/W6-T6 -> W6-T9 serialize their shared files. W6-T4 may run before Google work once its own dependencies pass. If Google is held, explicitly splice that branch out; never hold notes/UI behind consent. Across waves the controller must also exclude simultaneous owners of `rpc.ts`, `server.ts`, `ws.ts`, `RpcAuthorization.ts`, migration registration, shared client registration and linked-context tests.
+Dispatch order below is a valid topological order. Code dependencies differ from scheduling edges. Exclusive RPC/migration/context chain is W6-T7 -> W6-T1a -> W6-T1b -> W6-T3 -> W6-T8 -> W6-T2a -> W6-T2b. UI tasks W6-T8 -> W6-T4 -> W6-T5/W6-T6 -> W6-T9 serialize their shared files. T4 depends on T8 and owns Notes & agenda wiring and its route interaction test. W6-T4 may run before Google work once its own dependencies pass. If Google is held, explicitly splice that branch out; never hold notes/UI behind consent. Across waves the controller must also exclude simultaneous owners of `rpc.ts`, `server.ts`, `ws.ts`, `RpcAuthorization.ts`, migration registration, shared client registration and linked-context tests.
+
+Resource-body chain: W4-T4a -> W5-T7 -> W6-T8 -> W7-T3 -> W8-T3a -> W8-T7 -> W8-T8 -> W10-T1 -> W10-T4, with admitted-task splicing. Docs UI chain: W6-T8 -> W8-T3a -> W8-T4 -> W8-T3b -> W8-T5 -> W8-T6 -> W8-T8. W8-T3a must preserve the interim native-note branch until W8-T3b replaces it. Parser/rail registry chain: W4-T1/T2 -> W4-T6 where applicable -> W5-T5a -> W6-T4 -> W6-T5 -> W11-T3; splice T3/T8 and other admitted extensions into their actual file slots before dispatch. Shared docs gate, by wave number and admitted only: W4-T6 -> W5-T7 -> W6-T9 -> W7-T3 -> W8-T8 -> W9-T8 -> W10-T4 -> W11-T7.
 
 New-file anchors are "create" rather than fictitious current line numbers. Current anchors below were read locally and must be reread at implementation dispatch. Use one next-free migration per storage unit, chosen while holding the slot. The exact numbered path is bound to a named PowerShell variable by this reservation step, not to a guessed 065 that other waves may claim:
 
@@ -188,7 +191,7 @@ For T1a and T2a repeat the reservation while holding their slot, binding `$wave6
 
 **Depends on:** W4-T0 only. **Serial slot:** first W6 RPC/migration slot. No Calendar, Google or Wave 5 dependency.
 
-- [ ] Write the public service regression using the existing `WorkspaceTools.test.ts:1-19` layer precedent. Add imports shown below and expose the service through `Context.Service` as in `WorkspaceTools.ts:183-186`.
+- [ ] Write the public service regression using the existing `WorkspaceTools.test.ts:1-19` layer precedent. Add imports shown below and expose the service through `Context.Service` as in `WorkspaceTools.ts:172-175`.
 
 ```ts
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
@@ -288,12 +291,13 @@ git commit -m "feat(workspace): persist revision-safe native notes"
 
 **Files**
 
+- Create `packages/shared/src/calendarLinks.ts`, `calendarLinks.test.ts` and add the `./calendarLinks` subpath to `packages/shared/package.json`. This T2b prerequisite is owned by T1a and requires no Google account. It produces validatedConferenceUrl; T6 later adds only googleScheduleUrl.
 - Create CALENDAR `packages/contracts/src/pulseCalendar.ts`, `pulseCalendar.test.ts`; `apps/server/src/workspace/WorkspaceCalendar.ts`, `WorkspaceCalendar.test.ts`, `WorkspaceCalendarRpc.test.ts`; next-free `_WorkspaceCalendar.ts` migration and numbered `.test.ts`.
 - Modify RPC `packages/contracts/src/index.ts:1-77`, `rpc.ts:1-6,357-375,1768-1785`, `server.ts:603-629`; `apps/server/src/ws.ts:584-605,1240-1260,2001-2018,4225-4305`; `apps/server/src/server.ts:527-592,656-725`; `apps/server/src/auth/RpcAuthorization.ts:29-55`; migration registration `Migrations.ts:1-12,92-159`. Preserve T7 wiring.
 
 **Interfaces**
 
-- Consumes W4-T0 and RPC/SQLite precedents, not Google. Produces CALENDAR `CalendarOccurrenceId`, `CalendarRangeInput`, `CalendarOccurrenceSummary`, `CalendarOccurrence`, `CalendarPage`, `WorkspaceCalendar`.
+- Consumes W4-T0 and RPC/SQLite precedents, not Google. Produces CALENDAR `CalendarOccurrenceId`, `CalendarRangeInput`, `CalendarOccurrenceSummary`, `CalendarOccurrence`, `CalendarPage`, `CalendarIngestItem`, `WorkspaceCalendar` and shared validatedConferenceUrl.
 - Summary `{id,title,time,sourceLabel,status,attendees,attendeesTruncated,joinUrl?,hasDescription,descriptionPreview?,revision}`. `descriptionPreview` is at most 160 characters, generated during ingestion to render content-sized cards without detail fanout. `time` is the following schema; source mapping stays internal. Detail adds bounded `description?:string`. Summary contains no note body or credential.
 
 ```ts
@@ -312,8 +316,33 @@ export const CalendarTime = Schema.Union([
 ]);
 ```
 
+- Export CalendarIngestItem from packages/contracts/src/pulseCalendar.ts alongside its Effect Schema, with this discriminated union. The confirmed branch carries every normalized event field; only ID/revision and derived persistence keys are service-owned. Bound each string/array with the same schema rules as summaries and detail.
+
+```ts
+export type CalendarIngestItem =
+  | {
+      readonly status: "confirmed";
+      readonly externalEventId: string;
+      readonly occurrenceKey: string;
+      readonly title: string;
+      readonly time: CalendarOccurrenceSummary["time"];
+      readonly sourceLabel: string;
+      readonly attendees: CalendarOccurrenceSummary["attendees"];
+      readonly attendeesTruncated: boolean;
+      readonly hasDescription: boolean;
+      readonly descriptionPreview?: string;
+      readonly description?: string;
+      readonly joinUrl?: string;
+    }
+  | {
+      readonly status: "cancelled";
+      readonly externalEventId: string;
+      readonly occurrenceKey: string;
+    };
+```
+
 - `CalendarDate` is a real validated Gregorian YYYY-MM-DD, reusing W5 validation when available without adding a dependency on its unfinished UI. `CalendarRangeInput {startOn,endBefore,timeZone,cursor?,limit?}` has 1-31 days, valid IANA zone and 1-100 limit. `CalendarPage {events,nextCursor?,incomplete,sourceStates}` separates complete empty from disconnected/partial. Each attendee has bounded name and optional initials, max 20 visible records plus truncation; description max 2,000 characters, title max 300, Join URL max 2,048.
-- Methods `listRange(input)`, `get({id})`, `read({id,offset?})`, internal `ingestPage({connectionId,calendarId,generation,items})`, and changes added in T1b. `ingestPage` is a server adapter/test boundary, never a public local-event write RPC. `pulse.calendar.listRange/get` use read scope and optional capability `workspaceCalendar`.
+- Methods `listRange(input)`, `get({id})`, `read({id,offset?})`, internal `ingestPage({connectionId,calendarId,generation,items: readonly CalendarIngestItem[]})`, and changes added in T1b. `ingestPage` is a server adapter/test boundary, never a public local-event write RPC. `pulse.calendar.listRange/get` use read scope and optional capability `workspaceCalendar`.
 - `make(options)` takes a narrow `resolveSource(connectionId,calendarId)` Effect callback returning `{connected,generation,selected}`. Its default returns unavailable when no adapter is installed. T2a binds the real account store; tests inject a fake. This keeps source availability honest without a Google prerequisite or a new provider framework.
 
 **Depends on:** W4-T0. **Serial slot:** RPC/migration after W6-T7.
@@ -379,6 +408,7 @@ it.effect("keeps occurrence identity across moves and isolates source tuples", (
 );
 ```
 
+- [ ] Add pulseCalendar.test.ts schema cases decoding a confirmed CalendarIngestItem and the minimal cancelled tuple without time/title, rejecting a confirmed item missing time and an invalid status. Add a cancelled adapter ingest that tombstones the previous stable occurrence ID.
 - [ ] Run from `apps/server`: `vp test run src/workspace/WorkspaceCalendar.test.ts`. Expect red for absent module/service. Add public-boundary cases for overlap end-exclusivity, all-day endBefore, DST 23/25-hour days, cross-midnight events, limit/cursor mismatch, 101 equal-time rows, restart, cancellation and disconnected-source detail.
 - [ ] Implement one mapping table with unique `(connection_id,calendar_id,external_event_id,occurrence_key)` and opaque `wce_` UUID item ID. `occurrence_key` uses the provider original occurrence, never current start or title. Preserve mappings/tombstones across disconnect, rename, move and cancellation. Persist normalized payload/revision and an indexed range ordering key. Resolve source availability before returning detail. Do not delete rows missing from an incomplete page.
 - [ ] Convert requested local-date bounds to display-zone UTC instants using installed Effect `DateTime`, not `new Date(date)` in the host zone or `+86400000`. For all-day records compare date strings. Use the predicates below and stable `(sortKey,id)` cursors bound to range, timezone and source-selection generation. Fetch at most limit+1; encode explicit nextCursor, no automatic exhaustion.
@@ -401,6 +431,32 @@ const allDayOverlaps = (startOn: string, endBefore: string, from: string, until:
 ```
 
 - [ ] `CalendarError` distinguishes invalid-input, not-found, unavailable, disconnected, conflict and rate-limited. `get` cancellation returns a preserved unavailable reason for linked reads, while range excludes canceled occurrences. Empty source selection returns sourceStates, never invented Google-branded rows. Bound aggregate JSON to <=64 KiB by shrinking the page and retaining a cursor; details/MCP use <=32,000 serialized bytes.
+- [ ] Implement the shared conference validator here before T2b and T4. Both the server normalizer and the client card import validatedConferenceUrl from @t3tools/shared/calendarLinks. Add rejection tests for deceptive hosts, HTTP/file/data URLs, credentials, ports, control characters and unknown paths, and acceptance tests for Meet/Zoom/Teams with exact query preservation. Keep current provider-form verification at adapter admission. Run `vp test run src/calendarLinks.test.ts` in packages/shared and record red then green. No local server copy or later move is permitted.
+
+```ts
+export function validatedConferenceUrl(raw: string): string | undefined {
+  const value = raw.trim();
+  if (value.length > 2048 || /[\u0000-\u0020\u007f]/.test(value)) return;
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return;
+  }
+  if (url.protocol !== "https:" || url.username || url.password || url.port) return;
+  const host = url.hostname.toLowerCase();
+  const meet =
+    host === "meet.google.com" && /^\/[a-z]{3}-[a-z]{4}-[a-z]{3}(?:\/|$)/.test(url.pathname);
+  const zoom =
+    (host === "zoom.us" || host.endsWith(".zoom.us")) &&
+    /^\/(?:j|wc)\/\d+(?:\/|$)/.test(url.pathname);
+  const teams =
+    (host === "teams.microsoft.com" || host === "teams.live.com") &&
+    /^\/(?:l\/meetup-join\/|meet\/)/.test(url.pathname);
+  return meet || zoom || teams ? value : undefined;
+}
+```
+
 - [ ] Register `PulseCalendarRpcs`, `PULSE_CALENDAR_METHODS`, optional `workspaceCalendar`, separate `CalendarWsRpcGroup` and handler layer. Follow `workspaceToolsWsRpcLayer` at `ws.ts:1240-1258`; add services to the captured WS context at `ws.ts:4225-4245`. No operations are added to CoreWsRpcGroup. Read scope protects range/get; no generic public ingest operation. Add old ServerConfig decode regression.
 - [ ] Run `vp test run src/pulseCalendar.test.ts` in contracts, and `vp test run src/workspace/WorkspaceCalendar.test.ts src/workspace/WorkspaceCalendarRpc.test.ts` plus the exact migration test in server. Expect green for paging, restart, unavailable links, no write RPC and auth denial. Run targeted lint and affected package/server typechecks.
 - [ ] Surface checklist: service/read RPC entry points shared by both destinations; web/desktop/phone/native-compatible schema; Codex/Claude/Cursor/Grok/OpenCode/ACP share provider-independent ref identity but reads arrive in T3; contracts/auth covered; disconnect/reconnect and cancel/unavailable preserve refs; all connection modes terminate at owning server; documentation in T9.
@@ -412,6 +468,7 @@ git add -- @(
   'packages/contracts/src/pulseCalendar.ts', 'packages/contracts/src/pulseCalendar.test.ts',
   'packages/contracts/src/index.ts', 'packages/contracts/src/rpc.ts', 'packages/contracts/src/server.ts',
   'apps/server/src/workspace/WorkspaceCalendar.ts', 'apps/server/src/workspace/WorkspaceCalendar.test.ts',
+  'packages/shared/src/calendarLinks.ts', 'packages/shared/src/calendarLinks.test.ts', 'packages/shared/package.json',
   'apps/server/src/workspace/WorkspaceCalendarRpc.test.ts', 'apps/server/src/persistence/Migrations.ts',
   $wave6CalendarMigration, $wave6CalendarMigrationTest,
   'apps/server/src/ws.ts', 'apps/server/src/server.ts', 'apps/server/src/auth/RpcAuthorization.ts'
@@ -425,56 +482,75 @@ git commit -m "feat(calendar): add bounded occurrence range service"
 
 - Modify CALENDAR `packages/contracts/src/pulseCalendar.ts` and tests created in T1a, `WorkspaceCalendar.ts` and tests; RPC contract/client/wiring anchors listed in T1a and `packages/client-runtime/src/rpc/client.ts:47-74`, `package.json:6-10`.
 - Create `packages/client-runtime/src/state/workspaceCalendar.ts`, `workspaceCalendar.test.ts`, `apps/web/src/state/workspaceCalendar.ts`; `apps/server/src/workspace/calendar/dueTasks.ts`, `dueTasks.test.ts`.
-- Consume TOOLS `WorkspaceTools.ts:26-183` and the W5-T4 paged-query additions. Inspect W5 completed export before calling it. Modify only a narrow due-range read if its indexed query lacks the required bounded date range; keep TOOLS ownership serialized with W5.
+- Read TOOLS `WorkspaceTools.ts:26-175` and W5-T4's queryTasks without modifying or staging that file. W5 already supplies inclusive dueFrom/dueTo and the required indexes. Use the existing workspaceQueryTasks / pulse.workspace.queryTasks contract, not a new due-range method.
 
 **Interfaces**
 
-- Consumes W6-T1a CALENDAR; W5-T2 `dueOn` and display timezone; W5-T4 paged all-task summaries; `workspaceSubscribeChanges` and shared runtime query/subscription helpers.
+- Consumes W6-T1a CALENDAR; W5-T2 `dueOn` and display timezone; W5-T4 WorkspaceTaskSummary/WorkspaceTaskQuery and queryTasks (workspaceQueryTasks / pulse.workspace.queryTasks); `workspaceSubscribeChanges` and shared runtime query/subscription helpers.
 - Produces `pulse.calendar.subscribeChanges`, read scope, stream of nonnegative counter; `createWorkspaceCalendarAtoms(runtime)` with `changes`, `range`, `detail`, `refresh`; web binding `workspaceCalendar`.
 - Adds `CalendarPage.dueTasks` as task refs `{ref:{type:"task",taskId},title,projectId,dueOn,done,revision}` and a separate due cursor/completeness when TOOLS paging is incomplete. These are references, never persisted calendar occurrences. `refresh` is a requested read refresh, not a provider write. It later invokes the adapter added in T2b.
 
 **Depends on:** W6-T1a, W5-T2, W5-T4. **Serial slot:** RPC/migration/context after W6-T1a; coordinate TOOLS file ownership with Wave 5.
 
-- [ ] Add a `dueTasks.test.ts` public projection regression. The helper takes only the structural subset supplied by W5 and does not rename its RPC.
+- [ ] Add a `dueTasks.test.ts` public projection regression. The helper takes WorkspaceTaskSummary after hasDueOn narrows its nullable dueOn. The range helper makes W5 inclusive bounds explicit and never renames its RPC.
 
 ```ts
 import { expect, it } from "vite-plus/test";
-import { dueTaskItem } from "./dueTasks.ts";
+import { ProjectId, WorkspaceTaskId } from "@t3tools/contracts";
+import { dueTaskItem, dueTaskQuery } from "./dueTasks.ts";
 it("keeps a task due date untimed and preserves its task identity", () => {
   expect(
     dueTaskItem({
-      id: "task-one",
-      projectId: "project-one",
+      id: WorkspaceTaskId.make("wskt_00000000-0000-0000-0000-000000000001"),
+      projectId: ProjectId.make("project-one"),
       title: "Review",
       dueOn: "2026-10-13",
       done: false,
       revision: 2,
     }),
   ).toEqual({
-    ref: { type: "task", taskId: "task-one" },
+    ref: { type: "task", taskId: "wskt_00000000-0000-0000-0000-000000000001" },
     projectId: "project-one",
     title: "Review",
     dueOn: "2026-10-13",
     done: false,
     revision: 2,
   });
+  expect(dueTaskQuery("2026-10-13", "2026-10-14")).toEqual({
+    state: "all",
+    dueFrom: "2026-10-13",
+    dueTo: "2026-10-13",
+    limit: 100,
+  });
 });
 ```
 
 - [ ] Run from server `vp test run src/workspace/calendar/dueTasks.test.ts src/workspace/WorkspaceCalendar.test.ts`. Expect red because projection and page integration do not exist. Add service tests changing/clearing dueOn and completing/reopening a task through TOOLS; the result moves/removes only the untimed task reference. No duplicate wce event or scheduled task may appear.
-- [ ] Implement the structural projection and call W5's bounded indexed query once per selected range, not once per project. Limit due summaries to 100 with an explicit due cursor. Preserve completed state to let the existing Tasks body determine its display. Never convert dueOn to UTC midnight.
+- [ ] Call WorkspaceTools.queryTasks once per selected range with state: "all", dueFrom: startOn and dueTo: endBefore minus one calendar day. Both W5 bounds are inclusive. Null dueOn is narrowed before mapping. Do not subtract milliseconds or change persisted dates. The UTC Date below is only a Gregorian field carrier, not a scheduled task instant. Test 2026-10-13..2026-10-14 includes 13 and excludes 14, month/year/leap-day boundaries, null dates and completed tasks. Query once per range, not once per project. Limit due summaries to 100 with an explicit due cursor. Preserve completed state to let the existing Tasks body determine its display. Never convert dueOn to UTC midnight.
 
 ```ts
-export function dueTaskItem<
-  T extends {
-    id: string;
-    projectId: string;
-    title: string;
+import type { WorkspaceTaskQuery, WorkspaceTaskSummary } from "@t3tools/contracts";
+
+export function dueTaskQuery(startOn: string, endBefore: string): WorkspaceTaskQuery {
+  const previous = new Date(`${endBefore}T00:00:00.000Z`);
+  previous.setUTCDate(previous.getUTCDate() - 1);
+  return {
+    state: "all",
+    dueFrom: startOn,
+    dueTo: previous.toISOString().slice(0, 10),
+    limit: 100,
+  };
+}
+export function hasDueOn(
+  task: WorkspaceTaskSummary,
+): task is WorkspaceTaskSummary & { dueOn: string } {
+  return task.dueOn !== null;
+}
+export function dueTaskItem(
+  task: Pick<WorkspaceTaskSummary, "id" | "projectId" | "title" | "done" | "revision"> & {
     dueOn: string;
-    done: boolean;
-    revision: number;
   },
->(task: T) {
+) {
   return {
     ref: { type: "task" as const, taskId: task.id },
     projectId: task.projectId,
@@ -484,6 +560,10 @@ export function dueTaskItem<
     revision: task.revision,
   };
 }
+
+// Inside WorkspaceCalendar.listRange, with decoded range input.
+const taskPage = yield * tools.queryTasks(dueTaskQuery(input.startOn, input.endBefore));
+const dueTasks = taskPage.tasks.filter(hasDueOn).map(dueTaskItem);
 ```
 
 - [ ] Add one calendar change counter. Ingest/availability changes increment after storage commit. Merge TOOLS invalidations with Calendar invalidations on the server stream, without executing a range read inside the stream. Reconnect causes mounted local cache queries to revalidate; it must not automatically fan out provider refreshes. Calendar and Meetings use the same atom factory singleton and canonical environment/range/source-selection key.
@@ -507,14 +587,14 @@ const range = createEnvironmentRpcQueryAtomFamily(runtime, {
 - [ ] Run in client-runtime `vp test run src/state/workspaceCalendar.test.ts`; server `vp test run src/workspace/calendar/dueTasks.test.ts src/workspace/WorkspaceCalendar.test.ts src/workspace/WorkspaceCalendarRpc.test.ts`; contracts `vp test run src/pulseCalendar.test.ts`. Expect green, zero provider requests on clock advance, task change visible to two clients via receipt. Targeted lint and affected typechecks follow.
 - [ ] Surface checklist: Calendar/Meetings share read/Refresh entry points; desktop/web/phone use one atom instance, native-compatible runtime has no DOM; provider adapters unchanged; subscription schemas/scopes covered; task complete/reopen and set/clear due handled by TOOLS; local/direct/relay/tunnel and multiple environments have isolated keys; docs in T9.
 - [ ] Visual acceptance: recipes 07/08 and [275,98,648,564], corrected calendar inventory 66-87. Three sample events appear once in each destination. Live due/all-day records use an untimed band requiring reviewed added-state captures. Real tasks/source labels/timezone and shared chrome may differ; no fake 09:00 task time.
-- [ ] Commit explicit CALENDAR/RPC files changed here, `packages/client-runtime/src/state/workspaceCalendar.ts`, its test and package export, `apps/web/src/state/workspaceCalendar.ts`, dueTasks source/test and only any separately listed TOOLS file actually changed. Title `feat(calendar): share range state and due-task invalidation`.
+- [ ] Commit explicit CALENDAR/RPC files changed here, `packages/client-runtime/src/state/workspaceCalendar.ts`, its test and package export, `apps/web/src/state/workspaceCalendar.ts`, dueTasks source/test. Do not stage WorkspaceTools.ts, which is read-only here. Title `feat(calendar): share range state and due-task invalidation`.
 
 ```powershell
 git add -- @(
   'packages/contracts/src/pulseCalendar.ts', 'packages/contracts/src/pulseCalendar.test.ts',
   'packages/contracts/src/rpc.ts', 'apps/server/src/ws.ts', 'apps/server/src/auth/RpcAuthorization.ts',
   'apps/server/src/workspace/WorkspaceCalendar.ts', 'apps/server/src/workspace/WorkspaceCalendar.test.ts',
-  'apps/server/src/workspace/WorkspaceCalendarRpc.test.ts', 'apps/server/src/workspace/WorkspaceTools.ts',
+  'apps/server/src/workspace/WorkspaceCalendarRpc.test.ts',
   'apps/server/src/workspace/calendar/dueTasks.ts', 'apps/server/src/workspace/calendar/dueTasks.test.ts',
   'packages/client-runtime/src/state/workspaceCalendar.ts', 'packages/client-runtime/src/state/workspaceCalendar.test.ts',
   'packages/client-runtime/src/rpc/client.ts', 'packages/client-runtime/package.json',
@@ -527,7 +607,7 @@ git commit -m "feat(calendar): share range state and due-task invalidation"
 
 **Files**
 
-- Modify OPENERS `apps/web/src/components/workspace/useWorkspaceItemOpener.ts:34-81`, `useWorkspaceItemOpener.test.ts:1-19`, `mail/linkedItems.ts:65-125,181-204`, `WorkspaceItemIcon.tsx:11-28`; route/parser `apps/web/src/routes/_chat.workspace.tsx:8-75`, `-_chat.workspace.test.ts` and label tests.
+- Modify OPENERS `apps/web/src/components/workspace/useWorkspaceItemOpener.ts:34-81`, `useWorkspaceItemOpener.test.ts:1-16`, `mail/linkedItems.ts:65-125,126-171`, `WorkspaceItemIcon.tsx:11-25`; route/parser `apps/web/src/routes/_chat.workspace.tsx:8-75`, `-_chat.workspace.test.ts` and label tests.
 - Modify `apps/server/src/mcp/toolkits/workspace/handlers.ts:35-44,73-134`, `tools.ts:1-65`, `handlers.test.ts`; `apps/server/src/workspace/linkedItemsContext.ts:27-35,61-83`, `linkedItemsContext.test.ts`, `linkedItemsTurn.integration.test.ts:47-180`. Inspect `apps/server/src/orchestration-v2/ProviderTurnStartService.ts:1052-1068`; preserve its shared turn-context call, no adapter-specific injection.
 - Modify CALENDAR `WorkspaceCalendar.ts` detail reader and service tests only for bounded exact reading. Modify `server.ts:527-592,656-725` only if the T1a layer is not already available to workspace MCP. Create `apps/web/src/components/workspace/calendar/calendarItemRef.ts` and `calendarItemRef.test.ts`.
 
@@ -568,7 +648,7 @@ export const calendarItemRef = (id: string) => ({
 if (ref.provider === "workspace-calendar" && Option.isSome(calendar)) {
   return (
     yield *
-    calendar.value.read({ id: ref.resourceId, offset }).pipe(
+    calendar.value.read({ id: ref.resourceId, ...(offset !== undefined ? { offset } : {}) }).pipe(
       Effect.flatMap((event) => bounded({ key, type: "calendar-event", ...event })),
       Effect.mapError(
         (error) =>
@@ -623,20 +703,20 @@ git commit -m "feat(workspace): open and read confirmed calendar references"
 
 **Files**
 
-- Modify OPENERS `useWorkspaceItemOpener.ts:34-81`, `useWorkspaceItemOpener.test.ts:1-19`, `mail/linkedItems.ts:65-125,181-204`, `WorkspaceItemIcon.tsx:11-28` and tests; ROUTES parser/view and test at `_chat.workspace.tsx:8-75`.
-- Create `apps/web/src/components/workspace/meetings/meetingNotes.ts`, `meetingNotes.test.ts`, `WorkspaceNoteView.tsx`, `WorkspaceNoteView.test.tsx`. This reader is the explicit W6 interim Docs body, replaced by W8's shared renderer, not a second long-term Docs panel.
-- Modify NOTES contract/shared atoms and their tests created in T7 only for revision-aware continuation. T7's create journal already supplies repair identity; add no composite relationship RPC/service. Modify `WorkspaceResourcesPanel.tsx` created by W4-T4a only at its existing Docs selection hook.
+- Modify OPENERS `useWorkspaceItemOpener.ts:34-81`, `useWorkspaceItemOpener.test.ts:1-16`, `mail/linkedItems.ts:65-125,126-171`, `WorkspaceItemIcon.tsx:11-25` and tests; ROUTES parser/view and test at `_chat.workspace.tsx:8-75`.
+- Create `apps/web/src/components/workspace/meetings/meetingNotes.ts`, `meetingNotes.test.ts`, `WorkspaceNoteView.tsx`, `WorkspaceNoteView.test.tsx`. This is the pure W6 interim Docs body. W8-T3a preserves its branch; W8-T3b must delete meetings/WorkspaceNoteView.tsx and meetings/WorkspaceNoteView.test.tsx and re-point callers to WorkspaceDocsPanel native dispatch backed by W8-T4 WorkspaceDocContent. W6 retains both files until that replacement.
+- Modify NOTES contract/shared atoms and their tests created in T7 only for revision-aware continuation. T7's create journal already supplies repair identity; add no composite relationship RPC/service. Modify `apps/web/src/components/workspace/WorkspaceResourceBody.tsx` only at case "docs", plus `WorkspaceResourcesPanel.test.tsx` for handoff integration. Consume `workspaceResourceState.ts` exports useWorkspaceResources/WorkspaceResourcesContext without editing the frame. Modify W4-T7's `dev/notesMockupModule.tsx` and create `dev/notesMockupModule.test.tsx`, all under components/workspace.
 - Modify server MCP `handlers.ts:35-44,73-134`, `tools.ts:1-65`, `handlers.test.ts`; `linkedItemsContext.ts:27-35,61-83`, `linkedItemsContext.test.ts`, `linkedItemsTurn.integration.test.ts:47-180`. Inspect the shared provider call at `ProviderTurnStartService.ts:1052-1068` without duplicating it.
 
 **Interfaces**
 
-- Consumes W6-T7 NOTES, W6-T3 event ref/read helpers, W4-T4b Linked context and W4-T4a resource project/Docs slot.
+- Consumes W6-T7 NOTES, W6-T3 event ref/read helpers, W4-T4b Linked context and W4-T4a WorkspaceResourceBodyProps and shell-owned useWorkspaceResources context. selectedItem is nullable and request carries the native note ref; these are not renamed local props.
 - Produces exact note ref `{type:"provider-resource",provider:"workspace-note",resourceId:WorkspaceNote.id}`, typed label workspace-note, FileText icon. Google notes remain `{type:"file",provider:"google-drive",fileId}` with existing bound-account reads.
 - `createMeetingNote` captures `{environmentId,meeting:WorkspaceLinkEndpoint,project?:ProjectId,requestId,title,body}`. Create succeeds once, then two independent existing link RPCs confirm meeting-note and, only if explicitly chosen, project-note. Failure returns the same created note ref and a repairable error; retry uses the same requestId and symmetric link pairs.
 - `openMeetingNote` carries original environment, selected event/day, stable note ref and chosen project into Docs. Zero notes offers Create notes / Link existing document; multiple confirmed notes require a picker; never choose by matching title. This is a reviewed unpictured state.
 - A standalone note deep link uses `space:"meetings"`, `item:JSON.stringify(noteRef)`, original environment and explicit project if known. Route parsing recognizes workspace-note separately from workspace-calendar, opens Docs through the shared frame and does not invent a meeting. For an in-place Notes action retain the current event/day while changing the resource selection. W8 may later consume the same note ref from its Docs entrance.
 
-**Depends on:** W6-T7, W6-T3, W4-T4b. **Serial slot:** context/RPC after W6-T3; shared OPENERS/Docs-slot ownership before W8 native-note entrance. No Google dependency.
+**Depends on:** W6-T7, W6-T3, W4-T4b. **Serial slot:** context/RPC after W6-T3; shared OPENERS and WorkspaceResourceBody.tsx after W5-T7, before W7-T3 on the body chain. Docs UI ownership starts here before W8-T3a, which preserves this branch until W8-T3b. No Google dependency.
 
 - [ ] Add an action-level retry test with fake external RPC boundary, not a component prop snapshot. The exported helper accepts the three RPC functions below, which are bound to one captured environment by its caller.
 
@@ -733,14 +813,15 @@ export async function createMeetingNote(
 Bind those promise methods to typed atom commands with `runAtomCommand` and surface command failures as rejected promises. Keep the successful create result in editor state before starting links so a failed link can still offer Open saved note. Do not add a new composite RPC solely for this sequence.
 
 - [ ] Add native note MCP dispatch after existing `resolveLinked`, with optional service availability and `bounded`. Extend `workspace_read_item` with optional revision input for notes; preserve existing key/offset callers. A continuation request with offset >0 must carry the previously returned revision. Initial zero-offset read may omit it. Exact byte boundary, changed revision and >32,000-byte serialized result tests use multibyte/escaped text. Do not expose audioPath or fetch related note bodies automatically.
-- [ ] Map note/calendar service errors into the existing `WorkspaceLinksError` branch or explicitly include their typed errors in `WorkspaceToolError` at `tools.ts:23-31`. Use one consistent choice for handlers and tool schema. Do not allow an undeclared service error to escape MCP serialization.
+- [ ] Map note/calendar errors into the existing WorkspaceLinksError in handlers, keeping WorkspaceToolError unchanged. A revision conflict maps to kind "invalid-input" with message "Note revision changed; re-read before continuing. Your draft has been kept." Pin this exact serialized kind/message in handlers.test.ts for a stale-revision continuation. Preserve not-found; map source absence to unavailable. No undeclared service error escapes MCP serialization.
 - [ ] Add workspace-note to common typed context labels while preserving T3's calendar-event branch. Use the existing sanitizer/budget, no note content in every turn. Extend the shared provider integration with a hostile note title and two refs; assert no saved-only refs and confirmed-resource-only reads. A note's Markdown/HTML stays data, never instructions.
-- [ ] Implement interim `WorkspaceNoteView` with text rendering and a controlled textarea edit mode, 64KiB bound, Save/Cancel, captured revision, retained draft on conflict and explicit Reload current note. Read-only users can read but cannot edit/delete/link. Delete requires a visible explicit action, keeps unavailable references, and never silently deletes its meeting. Heading says "Note preview. Formatted Docs view is not available yet." outside fixture parity claims. Do not implement comments or sharing metadata here.
-- [ ] Connect Notes & agenda to W4's Docs slot with stable ref/project/environment. Preserve selected day/event and focus return when Resources closes. Link existing Drive document uses existing file identity and open/read path. No project link is inferred from an independent resource-picker selection. Wire the callback into CalendarAgenda when T4 lands; its helper is ready before that component exists.
-- [ ] Run web `vp test run src/components/workspace/meetings/meetingNotes.test.ts src/components/workspace/meetings/WorkspaceNoteView.test.tsx src/components/workspace/mail/linkedItems.test.ts src/routes/-_chat.workspace.test.ts`; server `vp test run src/workspace/WorkspaceNotes.test.ts src/mcp/toolkits/workspace/handlers.test.ts src/workspace/linkedItemsContext.test.ts src/workspace/linkedItemsTurn.integration.test.ts`. Expect green for grant boundaries, retry repair, revisions, delete/unavailable and focus/state return. Run changed contract/atom tests and targeted lint/typechecks.
+- [ ] Implement pure interim `WorkspaceNoteView` with controlled props environmentId, note/status/error, canOperate, pending, draft and onEdit/onSave/onCancel/onReload/onDelete. No live atom/router imports. The Docs case binds NOTES state and commands; the fixture injects fake equivalents. Use text rendering and a controlled textarea edit mode, 64KiB bound, Save/Cancel, captured revision, retained draft on conflict and explicit Reload current note. Read-only users can read but cannot edit/delete/link. Delete requires a visible explicit action, keeps unavailable references, and never silently deletes its meeting. Heading says "Note preview. Formatted Docs view is not available yet." outside fixture parity claims. Do not implement comments or sharing metadata here.
+- [ ] Produce openMeetingNote(resources: WorkspaceResourcesState, input) in meetingNotes.ts. The live CalendarSpace/MeetingsSpace reads useWorkspaceResources from components/workspace/workspaceResourceState.ts at render time and passes that context instance to the helper. Never call a hook inside a click handler. Verify the context environment matches the captured environment. With an explicit valid project, call openResource({ tab: "docs", projectId, request: noteRef }). A standalone ref with no project first uses W4's existing chooser; do not invent a nullable OpenWorkspaceResourceInput.projectId. Install only the Docs case in WorkspaceResourceBody.tsx, consuming request and nullable selectedItem. Preserve current day/event and focus on Resources close/reopen. Existing Drive refs retain file identity and their existing open/read path. No graph link follows from resource project selection. T8 owns this handoff and reader; T4 owns CalendarAgenda's Notes & agenda button wiring and its action test.
+- [ ] Modify dev/notesMockupModule.tsx to export createWorkspaceMockupModule: CreateWorkspaceMockupModule, importing only pure WorkspaceNoteView. Inject session.seed.note, clock, in-memory revisioned read/write state and session.record-backed commands. Set readyRegions: ["resource"] for 07, retaining incompleteRegions: ["07.docs-format", "07.docs-comments"]. Plain text readiness never completes full 07. Test stable ref/content, edit/conflict/reset/dispose and settled(), with zero live RPCs. Adapter ownership transfers W6-T8 -> W8-T4 -> W8-T5; those owners remove only their completed subregions.
+- [ ] Run web `vp test run src/components/workspace/dev/notesMockupModule.test.tsx src/components/workspace/WorkspaceResourcesPanel.test.tsx src/components/workspace/meetings/meetingNotes.test.ts src/components/workspace/meetings/WorkspaceNoteView.test.tsx src/components/workspace/mail/linkedItems.test.ts src/routes/-_chat.workspace.test.ts`; server `vp test run src/workspace/WorkspaceNotes.test.ts src/mcp/toolkits/workspace/handlers.test.ts src/workspace/linkedItemsContext.test.ts src/workspace/linkedItemsTurn.integration.test.ts`. Expect green for grant boundaries, retry repair, revisions, delete/unavailable and focus/state return. Run changed contract/atom tests and targeted lint/typechecks.
 - [ ] Surface checklist: Notes action, linked rows, detail/header/palette/keybinding/touch use the same endpoint; desktop/web/phone share Docs slot and note editor, native schemas remain compatible; all providers use common bounded context, unsupported tool capability stays explicit; optional revision is backward-compatible; create/cancel/edit/reload/delete/unlink/relink and connect/disconnect covered; multiple environment and transport routing remain captured; docs T9, formatting/comments W8.
 - [ ] Visual acceptance: W4-T7 recipe 07, PNG 07 [953,145,314,378], inventory meetings 66-72. Launch review opens the same note and preserves paragraphs/list text; day/resources return round-trip is required. Plain view is an intermediate reviewed departure. Live content and Environment access plus chrome substitutions allowed. Do not pass full formatted-note/comment parity until W8.
-- [ ] Commit only note helper/reader/tests, OPENERS/route files/tests, the W4 Docs-slot hook, NOTES files actually changed and MCP/context/test files. Title `feat(meetings): link notes with independent read grants`.
+- [ ] Commit only note helper/reader/tests, OPENERS/route files/tests, WorkspaceResourceBody.tsx Docs case and its handoff test, notes adapter/test, NOTES files actually changed and MCP/context/test files. Title `feat(meetings): link notes with independent read grants`.
 
 ```powershell
 git add -- @(
@@ -752,7 +833,10 @@ git add -- @(
   'apps/web/src/components/workspace/useWorkspaceItemOpener.test.ts',
   'apps/web/src/components/workspace/mail/linkedItems.ts', 'apps/web/src/components/workspace/mail/linkedItems.test.ts',
   'apps/web/src/components/workspace/WorkspaceItemIcon.tsx',
-  'apps/web/src/components/workspace/WorkspaceResourcesPanel.tsx',
+  'apps/web/src/components/workspace/WorkspaceResourceBody.tsx',
+  'apps/web/src/components/workspace/WorkspaceResourcesPanel.test.tsx',
+  'apps/web/src/components/workspace/dev/notesMockupModule.tsx',
+  'apps/web/src/components/workspace/dev/notesMockupModule.test.tsx',
   'apps/web/src/routes/_chat.workspace.tsx', 'apps/web/src/routes/-_chat.workspace.test.ts',
   'packages/contracts/src/pulseNotes.ts', 'packages/contracts/src/pulseNotes.test.ts',
   'packages/client-runtime/src/state/workspaceNotes.ts', 'packages/client-runtime/src/state/workspaceNotes.test.ts',
@@ -769,7 +853,7 @@ git commit -m "feat(meetings): link notes with independent read grants"
 **Files**
 
 - Create `apps/server/src/workspace/calendar/GoogleCalendarOAuth.ts`, `GoogleCalendarOAuth.test.ts`, `CalendarAccountStore.ts`, `CalendarAccountStore.test.ts`, `CalendarAccountsRpc.test.ts`; next-free `_CalendarAccounts.ts` and adjacent numbered test.
-- Modify CALENDAR contract/tests and RPC files/anchors listed under T1a; `packages/client-runtime/src/state/workspaceCalendar.ts` for connection commands, and test; `apps/web/src/components/workspace/calendar/CalendarConnections.tsx`, `CalendarConnections.test.tsx`, both create; `apps/web/src/components/settings/IntegrationsSettings.tsx:1437-1475`, `integrationsSettingsSections.ts:1-12`. Existing `apps/web/src/routes/settings.integrations.tsx:1-7` already mounts the settings panel and needs no new route.
+- Modify CALENDAR contract/tests and RPC files/anchors listed under T1a; `packages/client-runtime/src/state/workspaceCalendar.ts` for connection commands, and test; `apps/web/src/components/workspace/calendar/CalendarConnections.tsx`, `CalendarConnections.test.tsx`, both create; `apps/web/src/components/settings/IntegrationsSettings.tsx:1437-1475`, `integrationsSettingsSections.ts:1-11`. Existing `apps/web/src/routes/settings.integrations.tsx:1-7` already mounts the settings panel and needs no new route.
 - Reuse read-only precedents without modifying them: `apps/server/src/drive/DriveOAuth.ts:16-46,46-281`, `DriveStore.ts:67-152,206-257`, `DriveService.ts:17-45`, `apps/server/src/auth/ServerSecretStore.ts`. Existing desktop `apps/desktop/src/office/OfficeOAuth.ts` remains untouched.
 
 **Interfaces**
@@ -859,8 +943,8 @@ git commit -m "feat(calendar): connect explicit server Google accounts"
 
 **Interfaces**
 
-- Consumes W6-T2a `GoogleCalendarOAuth.accessToken` and `CalendarAccountStore` generation; W6-T1b shared range/Refresh commands.
-- Produces normalized CALENDAR records from selected Google range pages. Reader signature `{connectionId,calendarId,startOn,endBefore,timeZone,cursor?,limit<=100}` -> `{items,nextCursor?,incomplete,sourceState}`. External IDs, recurringEventId and originalStartTime are internal mapping inputs; public IDs stay opaque.
+- Consumes W6-T2a `GoogleCalendarOAuth.accessToken` and `CalendarAccountStore` generation; W6-T1b shared range/Refresh commands; CalendarIngestItem from packages/contracts/src/pulseCalendar.ts and validatedConferenceUrl from @t3tools/shared/calendarLinks, produced by the Google-independent T1a prerequisite.
+- Produces normalized CalendarIngestItem records from selected Google range pages. normalizeGoogleOccurrence returns CalendarIngestItem; items is readonly CalendarIngestItem[]. Reader signature `{connectionId,calendarId,startOn,endBefore,timeZone,cursor?,limit<=100}` -> `{items,nextCursor?,incomplete,sourceState}`. External IDs, recurringEventId and originalStartTime are internal mapping inputs; public IDs stay opaque.
 - Default range open can request one on-demand page for the currently chosen endpoint. Subsequent shared-cache reads and invalidation reads use stored metadata. Explicit Refresh revalidates one visible selected range, never every calendar. One request in flight per connection/calendar/range/cursor/generation; second caller awaits it. "Load more" is explicit.
 
 **Depends on:** W6-T2a, W6-T1b. **Serial slot:** after W6-T2a for RPC/context; GoogleCalendar source has one owner. No background worker/push endpoint.
@@ -883,6 +967,8 @@ it("uses original occurrence time after a recurring exception moves", () => {
     hangoutLink: "https://meet.google.com/abc-defg-hij",
   };
   const normalized = normalizeGoogleOccurrence(event);
+  expect(normalized.status).toBe("confirmed");
+  if (normalized.status !== "confirmed") throw new Error("Expected confirmed occurrence");
   expect(normalized.occurrenceKey).toBe("2026-10-13T07:00:00Z");
   expect(normalized.time).toMatchObject({ kind: "timed", start: "2026-10-14T08:00:00Z" });
   expect(normalized.joinUrl).toBe("https://meet.google.com/abc-defg-hij");
@@ -919,13 +1005,13 @@ return {
   hasDescription: description.length > 0,
   descriptionPreview: description.slice(0, 160),
   description,
-  joinUrl,
+  ...(joinUrl !== undefined ? { joinUrl } : {}),
 };
 ```
 
 Decode raw records into a discriminated timed/all-day union before this branch so missing dates never flow into `new Date`. Normalize originalStartTime dateTime to one UTC representation before keying, so equivalent offsets cannot fork an occurrence. `description`, `attendees`, `joinUrl` and `sourceLabel` above are the bounded decoded values produced by this adapter, not unchecked response properties.
 
-- [ ] SourceLabel comes from actual calendar/conference metadata. A Meet URL does not make a calendar account a conferencing account. Bound descriptions and attendee metadata before persistence, strip HTML to inert text without rendering remote markup, and mark truncation. `hangoutLink` and conference entryPoints are candidates, not trusted URLs. Use T6's validated conference-link rules for Meet/Zoom/Teams. Until T6 lands, keep validation local to this server module and export it for T6 reuse rather than diverging parsers.
+- [ ] SourceLabel comes from actual calendar/conference metadata. A Meet URL does not make a calendar account a conferencing account. Bound descriptions and attendee metadata before persistence, strip HTML to inert text without rendering remote markup, and mark truncation. `hangoutLink` and conference entryPoints are candidates, not trusted URLs. Import validatedConferenceUrl from @t3tools/shared/calendarLinks, already produced/tested in T1a. Use it for Meet/Zoom/Teams before persistence. Never create or move a local validator.
 - [ ] Refuse requests with no explicit selected connection/calendar, stale generation or mismatched cursors. The generation check runs after HTTP and before ingest. Do not infer cancellation from absent events on an incomplete page. Do not auto-follow nextPageToken, full-sync calendars or use an all-calendars refresh button. Keep status for each requested source distinct from a genuinely empty day.
 - [ ] On 429 surface `retryAfter` as a timestamp/duration and keep last-known data labeled stale. No automatic loop or delayed retry fiber. User Refresh before the allowed time returns rate-limited without another provider call. On token errors show reconnect guidance; do not consume other account tokens. GET only; assert the fake receives zero event POST/PATCH/DELETE requests.
 - [ ] Run server `vp test run src/workspace/calendar/GoogleCalendar.test.ts src/workspace/WorkspaceCalendar.test.ts src/workspace/calendar/CalendarAccountsRpc.test.ts`; shared runtime `vp test run src/state/workspaceCalendar.test.ts`. Expect green for recurrence/DST/paging/request counts and no stale-generation ingest. Run targeted lint/typechecks. Keep synthetic normalization proof separate from an unrun real Google account test.
@@ -949,87 +1035,21 @@ git commit -m "feat(calendar): normalize bounded Google occurrence pages"
 
 **Files**
 
-- Create `apps/web/src/components/workspace/calendar/CalendarAgenda.tsx`, `CalendarAgenda.test.tsx`, `CalendarSpace.tsx`, `CalendarNav.tsx`, `CalendarEventCard.tsx`, `CalendarEventCard.test.tsx`, `CalendarDayStrip.tsx`; `apps/web/src/components/workspace/meetings/MeetingsSpace.tsx`, `MeetingsRail.tsx`, `MeetingsSpace.test.tsx`; `packages/client-runtime/src/calendar/dates.ts`, `dates.test.ts` and its package subpath export.
-- Modify ROUTES `_chat.workspace.tsx:8-75`, `-_chat.workspace.test.ts`, `apps/web/src/components/CommandPalette.tsx:472-650` at the W4 workspace command entries; web CALENDAR binding/state from T1b for consumption only.
-- Consume W4 finalized `WorkspaceEngagement`, header/breadcrumb/resource frame. Current `WorkspaceEngagement.tsx:9-104` still has list/children/linked props and one wide aside/sheet. It must already have W4-T3's wide-body path before this task. Consume W5-T7 `ProjectTasksResource`; do not modify its row service or copy the five task rows.
+- Create `apps/web/src/components/workspace/calendar/CalendarAgenda.tsx`, `CalendarAgenda.test.tsx`, `CalendarSpace.tsx`, `CalendarEventCard.tsx`, `CalendarEventCard.test.tsx`, `CalendarDayStrip.tsx`; `apps/web/src/components/workspace/meetings/MeetingsSpace.tsx`, `MeetingsSpace.test.tsx`; `packages/client-runtime/src/calendar/dates.ts`, `dates.test.ts` and its package subpath export.
+- Modify `apps/web/src/components/workspace/workspaceNavigation.ts`, `workspaceNavigation.test.ts`, `WorkspaceViewRail.tsx`, `WorkspaceNavigation.test.tsx`, W4-T7 `dev/calendarMockupModule.tsx`; create `dev/calendarMockupModule.test.tsx` under the same workspace directory. Modify ROUTES `_chat.workspace.tsx:8-75`, `-_chat.workspace.test.ts`, `apps/web/src/components/CommandPalette.tsx:1891-1971` at the W4 workspace command entries; web CALENDAR binding/state from T1b for consumption only.
+- Consume W4 canonical WorkspaceEngagement with layout="full", children and header: WorkspaceHeaderModel, plus its resource frame. Current `WorkspaceEngagement.tsx:9-104` still has list/children/linked props and one wide aside/sheet. It must already have W4-T3's wide-body path before this task. Consume W5-T7 `ProjectTasksResource`; do not modify its row service or copy the five task rows.
 - Consume W6-T8's `meetingNotes.ts` and interim note body; inspect existing legacy `OfficeWorkspace.tsx:118-170`, `office/OfficePanel.tsx:43-143`, `office/TalkPanel.tsx:1-165` to preserve access. Do not change recording/capture behavior.
 
 **Interfaces**
 
-- Consumes W6-T1b `workspaceCalendar.range/detail/changes`, W6-T3 event endpoints, W6-T8 Notes callback, W5-T7 Tasks resource body, W4 shell/ROUTES and per-space rail slots.
+- Consumes W6-T1b `workspaceCalendar.range/detail/changes`, W6-T3 event endpoints, W6-T8 Notes callback, W5-T7 Tasks resource body, W4 shell/ROUTES and workspaceRailItems registry data.
 - Produces `CalendarAgenda` and `CalendarEventCard`, reused by Calendar Agenda and Meetings Upcoming. Props include selected date/timezone, bounded occurrence/due-task summaries, loading/error/completeness and action callbacks with captured endpoint. `CalendarSpace` and `MeetingsSpace` bind these props to one environment's atoms and shell.
-- Calendar route `space:"calendar",calendarView:"agenda",day`; Meetings route `space:"meetings",meetingsView:"upcoming",day`. `item` keeps a stable occurrence ref. Helpers `weekDates(day)` and display-zone date formatting do not mutate provider data or schedule work.
+- Calendar route `space:"calendar",view:"agenda",day`; Meetings route `space:"meetings",view:"upcoming",day`. `item` keeps a stable occurrence ref. Helpers `weekDates(day)` and display-zone date formatting do not mutate provider data or schedule work.
 
-**Depends on:** W6-T1b, W6-T3, W5-T7, W4-T6. W6-T2b is additive. W6-T8 supplies the notes callback when ready; before it lands, preserve a truthful unavailable Notes action rather than build a duplicate note store. **Serial slot:** shared ROUTES/CommandPalette and Calendar UI exclusive; never edit simultaneously with another wave's route writer.
+**Depends on:** W6-T1b, W6-T3, W6-T8, W5-T7, W4-T6. W6-T2b is additive. T8 must land first; T4 owns the Notes & agenda callback wiring and its integration test. Source/capability failures still show a truthful unavailable state. **Serial slot:** shared ROUTES/CommandPalette and Calendar UI exclusive; never edit simultaneously with another wave's route writer.
 
-- [ ] Write a real interaction test that mounts CalendarAgenda in a stateful host. Use `react-test-renderer`, `act`, `create`, `vi`, `expect`, `it` from the repository precedents. `agendaInput` below is a local test constant, not the W4 fixture implementation.
-
-```tsx
-import { useState } from "react";
-import { act, create, type ReactTestRenderer } from "react-test-renderer";
-import { expect, it, vi } from "vite-plus/test";
-import { CalendarAgenda } from "./CalendarAgenda";
-
-const agendaInput = {
-  timeZone: "Africa/Johannesburg",
-  space: "meetings" as const,
-  dueTasks: [],
-  events: [
-    {
-      id: "wce_one",
-      title: "Marketing stand-up",
-      revision: 1,
-      status: "confirmed" as const,
-      sourceLabel: "Test calendar",
-      time: {
-        kind: "timed" as const,
-        start: "2026-10-13T07:00:00Z",
-        end: "2026-10-13T07:30:00Z",
-        sourceTimeZone: "Africa/Johannesburg",
-      },
-      attendees: [],
-      attendeesTruncated: false,
-      hasDescription: false,
-    },
-  ],
-};
-it("selects a day and restores it when opening the same agenda in Calendar", async () => {
-  function Host() {
-    const [day, setDay] = useState("2026-10-13");
-    const [space, setSpace] = useState<"meetings" | "calendar">("meetings");
-    return (
-      <>
-        <button onClick={() => setSpace("calendar")}>Open Calendar</button>
-        <CalendarAgenda
-          {...agendaInput}
-          day={day}
-          space={space}
-          onSelectDay={setDay}
-          onNotes={vi.fn()}
-          onJoin={vi.fn()}
-          onSchedule={vi.fn()}
-        />
-      </>
-    );
-  }
-  let view!: ReactTestRenderer;
-  await act(async () => {
-    view = create(<Host />);
-  });
-  const wednesday = view.root.findByProps({ "aria-label": "Wednesday, 14 October 2026" });
-  await act(async () => wednesday.props.onClick());
-  expect(JSON.stringify(view.toJSON())).toContain("Wednesday, 14 October");
-  const change = view.root
-    .findAllByType("button")
-    .find((b) => b.children.includes("Open Calendar"))!;
-  await act(async () => change.props.onClick());
-  expect(JSON.stringify(view.toJSON())).toContain("Wednesday, 14 October");
-  expect(
-    view.root.findByProps({ "aria-label": "Wednesday, 14 October 2026" }).props["aria-pressed"],
-  ).toBe(true);
-  await act(async () => view.unmount());
-});
-```
+- [ ] Add an action-driven memory-router test to CalendarAgenda.test.tsx, using the actual /workspace route/search validator and CalendarSpace/MeetingsSpace with fake RPC and the real WorkspaceResourcesProvider. Start at /workspace?space=meetings&view=upcoming&day=2026-10-14&environment=fixture-environment&project=fixture-synkek, click Tuesday, 13 October 2026, await router.load and assert router.state.location.search.day is 2026-10-13 and T 13 is selected. Navigate to Calendar through the actual destination link, assert space=calendar/view=agenda/day=2026-10-13; navigate to Projects, then history.back(), await route load and assert Calendar and T 13 return. Navigate back again and assert Meetings Upcoming and T 13. Dispose the renderer/router. Do not hold day/space in local Host state; this test proves URL persistence across unmount and browser history.
+- [ ] In the same route/provider fixture, confirm the launch-review event-note link. Click its Notes & agenda button through CalendarEventCard, await the fake note read receipt inside act, and assert the rendered Docs tab contains Launch review · Meeting notes. Check unchanged router day/item, captured environment/project, and one active resource body. Close/reopen Resources and assert note selection and focus return. Cover zero-note create/link choices and multi-note picker through T8 helpers, no title matching and no implied project links. CalendarAgenda.tsx and this wiring test belong only to T4; T8 does not edit them.
 
 - [ ] Run web `vp test run src/components/workspace/calendar/CalendarAgenda.test.tsx src/components/workspace/meetings/MeetingsSpace.test.tsx`; expect red for absent components. Add service-backed route interaction coverage for menu/palette/direct URL/back, second environment pending response, no-URL event, canceled occurrence, zero events and incomplete page. Tests must assert changed content/selection, not only callback invocation or static HTML.
 - [ ] Build one CalendarAgenda using the full 681px module body. At the reference width, 16px body insets give 648px strip and list. Event rows use `grid-template-columns:40px minmax(0,1fr)` and 12px gap; card width 596px. First card top is 207px. Use 16px row gaps and content padding from the rendered reference. The third card's 531px top follows the second card's description, not its duration. Use feature CSS on feature-owned elements; choose existing UI variants instead of restyling generic buttons through class overrides.
@@ -1046,28 +1066,33 @@ it("selects a day and restores it when opening the same agenda in Calendar", asy
 </div>
 ```
 
-- [ ] Use a visible event title as the selectable detail target; place its item action menu outside nested buttons. The Notes & agenda button invokes T8 with stable endpoint and captured environment/project. Join/Schedule actions delegate to T6's handoff and use inert test boundaries until that task lands. Render `VideoIcon aria-hidden="true"` only for a validated Join URL. It has no onClick or tabIndex. Join is the single named conference action. Show duration from actual timed instants and the real source label; do not label due/all-day rows as meetings with invented duration.
+- [ ] Use a visible event title as the selectable detail target; place its item action menu outside nested buttons. T4 reads useWorkspaceResources at render time and wires each Notes & agenda button to T8 openMeetingNote with that shell context, stable endpoint and captured environment/project, and owns the route/provider test proving the Docs body opens. Join/Schedule actions delegate to T6's handoff and use inert test boundaries until that task lands. Render `VideoIcon aria-hidden="true"` only for a validated Join URL. It has no onClick or tabIndex. Join is the single named conference action. Show duration from actual timed instants and the real source label; do not label due/all-day rows as meetings with invented duration.
 - [ ] Render participant avatars from bounded event data with full-name accessible labels, optional +N only when total is known; three fixture initials are not a live directory. Load selected-event description lazily. To achieve the second fixture card's taller description state, W4-T7's selected Launch review endpoint supplies its detail. List summary `hasDescription` alone never triggers every-row detail fetching. A nonselected description may be a bounded summary snippet only if already returned in the range response, not an extra request per row.
 - [ ] Use T1a's `descriptionPreview?: string`, capped at 160 characters and generated during ingestion, to render the pictured three cards without selecting three details. A full description remains detail-only. Verify the contract/normalization bounds before accepting a source with longer previews. Do not introduce per-card detail requests to fill a list.
 - [ ] Add the seven chip buttons with stable date values and full accessible names. Show exact separate subtitles for Meetings and Calendar. Day switch updates route and selects only the current day's saved range results; late responses remain bound to their original key. Keep same day when switching destinations. Today uses the injected W4 clock and W5 timezone; no ticking timer.
-- [ ] Mount W5's Tasks resource in recipe 08 and T8's note selection in recipe 07 through W4's body slot. Manual resource-project/tab choice survives center date changes. Opening Calendar in live mode does not force Tasks if the user chose another tab. Initial tab selection in W4 fixtures is fixture data. Close/reopen Resources preserves day/note and mounts exactly one body/subscription.
-- [ ] Keep Upcoming and Recordings rail entries. Without an accepted publication source, Recordings says "Published recordings are not available in this environment." Desktop offers the retained local Pulse Talk entrance labeled as local to this device. Web/phone explains local recordings remain on their capture device. Never call `talkInvoke` from Join, Schedule, date navigation or notes. No recording list RPC or audio path is invented.
-- [ ] Run web `vp test run src/components/workspace/calendar/CalendarAgenda.test.tsx src/components/workspace/calendar/CalendarEventCard.test.tsx src/components/workspace/meetings/MeetingsSpace.test.tsx src/routes/-_chat.workspace.test.ts`; client-runtime `vp test run src/calendar/dates.test.ts src/state/workspaceCalendar.test.ts`; contracts/server summary tests if modified. Expect green, one range query and no per-row full-body requests. Run targeted lint/typechecks.
+- [ ] Consume W5's Tasks case for 08 and T8's Docs case for 07 through the existing WorkspaceResourceBody switch; T4 does not add another switch or edit the frame. Manual resource-project/tab choice survives center date changes. Opening Calendar in live mode does not force Tasks if the user chose another tab. Initial tab selection in W4 fixtures is fixture data. Close/reopen Resources preserves day/note and mounts exactly one body/subscription.
+- [ ] Update workspaceRailItems.calendar/meetings, enabling Agenda and Upcoming after their implementation and leaving Week unavailable until T5. Keep Upcoming and Recordings registry entries. Without an accepted publication source, Recordings says "Published recordings are not available in this environment." Desktop offers the retained local Pulse Talk entrance labeled as local to this device. Web/phone explains local recordings remain on their capture device. Never call `talkInvoke` from Join, Schedule, date navigation or notes. No recording list RPC or audio path is invented.
+- [ ] Modify dev/calendarMockupModule.tsx to export createWorkspaceMockupModule: CreateWorkspaceMockupModule. Import only pure CalendarAgenda/CalendarEventCard/CalendarDayStrip, with injected day/timeZone/events/dueTasks/status/completeness and onSelectDay/onNotes/onJoin/onSchedule/onLoadMore callbacks. CalendarSpace/MeetingsSpace map live data to these same props. Map session.seed.events and people to bounded summaries; conference display/actions use inert injected fake validation/opening for the seed's example.invalid URLs, with no DNS or relaxed live allowlist. Use session.clock, session.record and fake reads/commands, and expose settled/dispose. Set readyRegions: ["center"] for 07/08. Test day selection, Notes handoff, inert Join/Schedule, reset/dispose and zero live calls. Notes and Tasks resource readiness remains with their own adapters.
+- [ ] Run web `vp test run src/components/workspace/dev/calendarMockupModule.test.tsx src/components/workspace/workspaceNavigation.test.ts src/components/workspace/WorkspaceNavigation.test.tsx src/components/workspace/calendar/CalendarAgenda.test.tsx src/components/workspace/calendar/CalendarEventCard.test.tsx src/components/workspace/meetings/MeetingsSpace.test.tsx src/routes/-_chat.workspace.test.ts`; client-runtime `vp test run src/calendar/dates.test.ts src/state/workspaceCalendar.test.ts`; contracts/server summary tests if modified. Expect green, one range query and no per-row full-body requests. Run targeted lint/typechecks.
 - [ ] Surface checklist: rail/sidebar/menu/palette/deep-link/back/detail/touch path covered; desktop/web/phone use common cards with native schema compatibility, retained desktop local Talk; all providers get endpoint actions, no new adapter UI or capture tools; contracts optional and revised summary backward-compatible; day/back, Resources close/reopen, task complete/reopen and notes unlink/relink covered; local/direct/relay/tunnel and environment switches scoped; docs in T9.
 - [ ] Visual acceptance: W4-T7 recipes 07 and 08, PNG 07/08 [259,78,681,584], meetings inventory 47-62. Pass exact subtitles, both Schedule buttons, T 13 strip, card bounds/heights/gutter, three decorative Video icons and one Join action each. Live data and shared chrome may substitute; empty/all-day/due/error/Recordings states need proposed captures. 07 formatted note/comment remains pending W8; 08 Tasks must match W5 acceptance without new task implementation.
-- [ ] Commit CalendarAgenda/Card/DayStrip/Space/Nav sources and tests, MeetingsSpace/Rail/test, dates helper/test/package export, route/palette and exact CALENDAR descriptionPreview files changed under the slot. Title `feat(workspace): share Calendar and Meetings day agenda`.
+- [ ] Commit CalendarAgenda/Card/DayStrip/Space sources and tests, MeetingsSpace/test, dates helper/test/package export, canonical parser/rail registry/tests, calendar adapter/test and route/palette. descriptionPreview is already T1a-owned; no new CALENDAR contract edit belongs here. Title `feat(workspace): share Calendar and Meetings day agenda`.
 
 ```powershell
 git add -- @(
+  'apps/web/src/components/workspace/workspaceNavigation.ts',
+  'apps/web/src/components/workspace/workspaceNavigation.test.ts',
+  'apps/web/src/components/workspace/WorkspaceViewRail.tsx',
+  'apps/web/src/components/workspace/WorkspaceNavigation.test.tsx',
+  'apps/web/src/components/workspace/dev/calendarMockupModule.tsx',
+  'apps/web/src/components/workspace/dev/calendarMockupModule.test.tsx',
   'apps/web/src/components/workspace/calendar/CalendarAgenda.tsx',
   'apps/web/src/components/workspace/calendar/CalendarAgenda.test.tsx',
   'apps/web/src/components/workspace/calendar/CalendarSpace.tsx',
-  'apps/web/src/components/workspace/calendar/CalendarNav.tsx',
   'apps/web/src/components/workspace/calendar/CalendarDayStrip.tsx',
   'apps/web/src/components/workspace/calendar/CalendarEventCard.tsx',
   'apps/web/src/components/workspace/calendar/CalendarEventCard.test.tsx',
   'apps/web/src/components/workspace/meetings/MeetingsSpace.tsx',
-  'apps/web/src/components/workspace/meetings/MeetingsRail.tsx',
   'apps/web/src/components/workspace/meetings/MeetingsSpace.test.tsx',
   'packages/client-runtime/src/calendar/dates.ts', 'packages/client-runtime/src/calendar/dates.test.ts',
   'packages/client-runtime/package.json', 'apps/web/src/routes/_chat.workspace.tsx',
@@ -1081,7 +1106,7 @@ git commit -m "feat(workspace): share Calendar and Meetings day agenda"
 **Files**
 
 - Create `apps/web/src/components/workspace/calendar/CalendarWeek.tsx`, `CalendarWeek.test.tsx`, `weekLayout.ts`, `weekLayout.test.ts`, `CalendarDatePicker.tsx`, `CalendarDatePicker.test.tsx`.
-- Modify T4 CalendarSpace/Nav/DayStrip/Agenda and `packages/client-runtime/src/calendar/dates.ts`, `dates.test.ts` only for display-zone week helpers; route parser/test for `calendarView`. Reuse installed `apps/web/src/components/ui/calendar.tsx:44-112` and existing popover primitives. No provider or scheduler module.
+- Modify T4 CalendarSpace/DayStrip/Agenda and `packages/client-runtime/src/calendar/dates.ts`, `dates.test.ts` only for display-zone week helpers; `apps/web/src/components/workspace/workspaceNavigation.ts`, `workspaceNavigation.test.ts`, `WorkspaceViewRail.tsx` and `WorkspaceNavigation.test.tsx` for view="week" support and the registry to clear Week unavailableReason only after Week works. Reuse installed `apps/web/src/components/ui/calendar.tsx:44-112` and existing popover primitives. No provider or scheduler module.
 
 **Interfaces**
 
@@ -1110,7 +1135,7 @@ it("packs simultaneous events but reuses a column when intervals only touch", ()
 });
 ```
 
-- [ ] Run web `vp test run src/components/workspace/calendar/weekLayout.test.ts src/components/workspace/calendar/CalendarWeek.test.tsx src/components/workspace/calendar/CalendarDatePicker.test.tsx`; expect red. Interaction tests switch Agenda -> Week -> Agenda, open an overlap event by keyboard, select a different chip, cancel date picker and choose a date outside the pictured week. Preserve selected date and resource tab.
+- [ ] Run web `vp test run src/components/workspace/workspaceNavigation.test.ts src/components/workspace/WorkspaceNavigation.test.tsx src/components/workspace/calendar/weekLayout.test.ts src/components/workspace/calendar/CalendarWeek.test.tsx src/components/workspace/calendar/CalendarDatePicker.test.tsx`; expect red. Interaction tests switch Agenda -> Week -> Agenda, open an overlap event by keyboard, select a different chip, cancel date picker and choose a date outside the pictured week. Preserve selected date and resource tab.
 - [ ] Implement sorted interval packing. Maintain one connected overlap group at a time; release active columns for `endMinute <= next.startMinute`, pick lowest free column, finalize each group's `columns` with its maximum concurrent active count. Do not use all week's event count as the width denominator. Slice crossing-midnight events into display-day pieces with the same stable ref, using actual UTC boundaries and the selected timezone.
 - [ ] Render Week with static hour labels and no current-minute clock. All-day/due band stays distinct from timed event positions. Fold hours must have distinguishable offset/timezone labels so two 01:30 events do not collapse into one occurrence. Detail announces the complete actual instant range. No drag/reschedule UI or event mutation is added.
 - [ ] Implement date-heading popup with the existing Calendar component and an accessible trigger named Choose date. Closing/cancel leaves day unchanged and restores focus. Choosing a date updates route and seven-chip week. Do not insert prev/next arrows into the original strip. Calendar picker month arrows live inside the new reviewed popup, which has no original PNG target.
@@ -1136,10 +1161,14 @@ The picker adapter treats its Date as a local calendar-field carrier, not a UTC 
 - [ ] Run the same focused web command, plus client-runtime `vp test run src/calendar/dates.test.ts`. Expect green for touch/keyboard cancel, DST, no extra provider query when toggling views, retained Agenda selection and environment isolation. Run targeted lint and affected package/server typechecks.
 - [ ] Surface checklist: Week rail, day chips, date-heading picker, direct route/back, keyboard event details and touch; desktop/web/phone adapt shared data, no native screen; all agent providers receive unchanged refs; no new contracts/provider mutation; select/cancel/return/focus preserved; same range/query and original environment over local/direct/relay/tunnel; docs T9.
 - [ ] Visual acceptance: W4-T7 recipe 08, PNG 08 [207,94,716,91], inventory calendar 71-76. Pass exact Week rail glyph/label, seven chips, no strip arrows and unchanged closed heading/Schedule geometry. Week-open/date picker are separately reviewed additions, not PNG parity. Live week/timezone/overlaps and shared chrome may differ.
-- [ ] Commit only Week/layout/picker sources/tests, CalendarSpace/Nav/DayStrip/Agenda files actually changed, dates helper/tests and route parser/test. Title `feat(calendar): add shared-range Week and date navigation`.
+- [ ] Commit only Week/layout/picker sources/tests, CalendarSpace/DayStrip/Agenda files actually changed, dates helper/tests and route parser/test. Title `feat(calendar): add shared-range Week and date navigation`.
 
 ```powershell
 git add -- @(
+  'apps/web/src/components/workspace/workspaceNavigation.ts',
+  'apps/web/src/components/workspace/workspaceNavigation.test.ts',
+  'apps/web/src/components/workspace/WorkspaceViewRail.tsx',
+  'apps/web/src/components/workspace/WorkspaceNavigation.test.tsx',
   'apps/web/src/components/workspace/calendar/CalendarWeek.tsx',
   'apps/web/src/components/workspace/calendar/CalendarWeek.test.tsx',
   'apps/web/src/components/workspace/calendar/weekLayout.ts',
@@ -1147,7 +1176,6 @@ git add -- @(
   'apps/web/src/components/workspace/calendar/CalendarDatePicker.tsx',
   'apps/web/src/components/workspace/calendar/CalendarDatePicker.test.tsx',
   'apps/web/src/components/workspace/calendar/CalendarSpace.tsx',
-  'apps/web/src/components/workspace/calendar/CalendarNav.tsx',
   'apps/web/src/components/workspace/calendar/CalendarDayStrip.tsx',
   'apps/web/src/components/workspace/calendar/CalendarAgenda.tsx',
   'packages/client-runtime/src/calendar/dates.ts', 'packages/client-runtime/src/calendar/dates.test.ts',
@@ -1160,17 +1188,17 @@ git commit -m "feat(calendar): add shared-range Week and date navigation"
 
 **Files**
 
-- Create `packages/shared/src/calendarLinks.ts`, `calendarLinks.test.ts`, add `./calendarLinks` subpath to `packages/shared/package.json`; no barrel. Create `apps/web/src/components/workspace/calendar/calendarHandoff.ts`, `calendarHandoff.test.ts`.
-- Modify T4 CalendarEventCard/CalendarAgenda/CalendarSpace/MeetingsSpace and tests, CalendarConnections only for explicit Schedule provider selection when needed. Move T2b's conference validation into the shared helper and import it from `apps/server/src/workspace/calendar/GoogleCalendar.ts`, updating its test. If Google is held, the shared validator is still usable by local/fake sources.
+- Extend T1a's existing `packages/shared/src/calendarLinks.ts` and `calendarLinks.test.ts` with googleScheduleUrl; consume the already-added `./calendarLinks` subpath, no package export change or barrel. Create `apps/web/src/components/workspace/calendar/calendarHandoff.ts`, `calendarHandoff.test.ts`.
+- Modify T4 CalendarEventCard/CalendarAgenda/CalendarSpace/MeetingsSpace and tests, CalendarConnections only for explicit Schedule provider selection when needed. Import T1a's validatedConferenceUrl from @t3tools/shared/calendarLinks. T2b already uses that same module; no GoogleCalendar source edit or validator move belongs to T6. The helper exists independently when Google is held.
 - Inspect `apps/web/src/localApi.ts:15-34` for desktop `openExternal` and web fallback; no need to change the global shell API. Inspect actual existing accessible link/button/popover APIs before composing the chooser.
 
 **Interfaces**
 
-- Consumes W6-T4 cards/day/space, explicit selected external provider and existing requesting-client external opening. Produces `validatedConferenceUrl(raw): string | undefined`, `googleScheduleUrl(day,accountHint?)`, and a client `CalendarHandoff` with typed URL/error state. No event-write RPC.
+- Consumes W6-T4 cards/day/space, explicit selected external provider and existing requesting-client external opening. Consumes `validatedConferenceUrl(raw): string | undefined` from T1a; produces `googleScheduleUrl(day,accountHint?)`, and a client `CalendarHandoff` with typed URL/error state. No event-write RPC.
 - Join supports validated Google Meet, Zoom and Teams HTTPS hosts/paths, independent of Calendar OAuth. Schedule uses one explicit chosen provider handoff. Default admitted calendar provider is Google; other external provider destinations require validated fixed builders and a clear user choice, not inferred email-domain guessing.
 - Schedule context is selected date only and explicitly chosen account hint when supported. No title, note body, attendee email list, meeting token or description is sent to a scheduling URL.
 
-**Depends on:** W6-T4. **Serial slot:** Calendar card/toolbar files after T4, serialized with T5; shared helper/package export exclusive. Google consent is not required to Join.
+**Depends on:** W6-T4. **Serial slot:** Calendar card/toolbar files after T4, serialized with T5; shared helper file slot follows T1a; its package export already exists. Google consent is not required to Join.
 
 - [ ] Add URL tests and requesting-device action tests with an injected external opener. Preserve query bytes rather than run `normalizeLinkUrl`, which strips tracking/fragments for relationship keys and is not a conference handoff parser.
 
@@ -1189,32 +1217,10 @@ it("rejects deceptive conferencing URLs and preserves meeting query data", () =>
 });
 ```
 
-- [ ] Run shared `vp test run src/calendarLinks.test.ts`, web `vp test run src/components/workspace/calendar/calendarHandoff.test.ts src/components/workspace/calendar/CalendarEventCard.test.tsx`; expect red for missing validation/handoff. Add HTTP/file/data, username/password, nondefault port, suffix spoof, unrecognized conferencing path, newline/control, malformed URL, missing URL, valid Meet/Zoom/Teams and canceled chooser tests. Assert query preservation and no server/provider mutation when actions cancel or open.
-- [ ] Implement the shared pure parser using URL and a strict allowlist. Preserve the trimmed original URL after validation so encoded conference queries remain intact. Exact Meet host with conference path, Zoom `zoom.us` or dot-delimited subdomain with `/j/` or `/wc/` path, Teams `teams.microsoft.com` or `teams.live.com` with recognized meetup/join path. Account for current valid provider URL forms at implementation admission, with explicit tested additions, never `hostname.includes("zoom")`.
+- [ ] Run shared `vp test run src/calendarLinks.test.ts`, web `vp test run src/components/workspace/calendar/calendarHandoff.test.ts src/components/workspace/calendar/CalendarEventCard.test.tsx`; expect red for the missing Schedule builder/handoff; existing validator cases from T1a remain green. Add HTTP/file/data, username/password, nondefault port, suffix spoof, unrecognized conferencing path, newline/control, malformed URL, missing URL, valid Meet/Zoom/Teams and canceled chooser tests. Assert query preservation and no server/provider mutation when actions cancel or open.
+- [ ] Retain T1a's shared pure conference parser using URL and a strict allowlist. Preserve the trimmed original URL after validation so encoded conference queries remain intact. Exact Meet host with conference path, Zoom `zoom.us` or dot-delimited subdomain with `/j/` or `/wc/` path, Teams `teams.microsoft.com` or `teams.live.com` with recognized meetup/join path. Account for current valid provider URL forms at implementation admission, with explicit tested additions, never `hostname.includes("zoom")`.
 
 ```ts
-export function validatedConferenceUrl(raw: string): string | undefined {
-  const value = raw.trim();
-  if (value.length > 2048 || /[\u0000-\u0020\u007f]/.test(value)) return;
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    return;
-  }
-  if (url.protocol !== "https:" || url.username || url.password || url.port) return;
-  const host = url.hostname.toLowerCase();
-  const meet =
-    host === "meet.google.com" && /^\/[a-z]{3}-[a-z]{4}-[a-z]{3}(?:\/|$)/.test(url.pathname);
-  const zoom =
-    (host === "zoom.us" || host.endsWith(".zoom.us")) &&
-    /^\/(?:j|wc)\/\d+(?:\/|$)/.test(url.pathname);
-  const teams =
-    (host === "teams.microsoft.com" || host === "teams.live.com") &&
-    /^\/(?:l\/meetup-join\/|meet\/)/.test(url.pathname);
-  return meet || zoom || teams ? value : undefined;
-}
-
 export function googleScheduleUrl(day: string, accountHint?: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) throw new Error("Choose a valid calendar date.");
   const candidate = new Date(`${day}T00:00:00.000Z`);
@@ -1237,11 +1243,11 @@ export function googleScheduleUrl(day: string, accountHint?: string) {
 - [ ] Run shared/web commands above plus server `vp test run src/workspace/calendar/GoogleCalendar.test.ts` when that adapter is admitted. Expect green for malicious hosts, exact query bytes, missing URL, canceled Schedule, requesting-client target and blocked-open recovery. Run targeted lint/typechecks in changed packages/server.
 - [ ] Surface checklist: Join on cards/details/menu and Schedule on both toolbars; desktop local shell and web/phone real external anchor, native-compatible pure helper; Codex/Claude/Cursor/Grok/OpenCode/ACP get no auto-join/capture tool; no new wire mutation or write scope; open/cancel/back and unavailable/retry covered; local/direct/relay/tunnel still opens on requester; docs T9. Real call attendance remains unrun and unnecessary for handoff proof.
 - [ ] Visual acceptance: W4-T7 recipes 07/08, Schedule [847,102,76,24] and actions bounding region [340,302,180,347], inventory meetings 48-61. Pass both Schedule buttons, every valid card's Notes then Join control order, decorative blue Video and unchanged card geometry. Actual external provider/valid URLs and shared chrome may differ; chooser/error proposed states need review. No invitation/editor parity is claimed.
-- [ ] Commit shared helper/test/package export, web handoff/test, exact card/toolbar/setup files/tests and Google reader import/test if admitted. Title `feat(calendar): open explicit Join and Schedule handoffs`.
+- [ ] Commit the existing shared helper/test extended with Schedule, web handoff/test and exact card/toolbar/setup files/tests changed. No Google reader import rewrite or package export is needed. Title `feat(calendar): open explicit Join and Schedule handoffs`.
 
 ```powershell
 git add -- @(
-  'packages/shared/src/calendarLinks.ts', 'packages/shared/src/calendarLinks.test.ts', 'packages/shared/package.json',
+  'packages/shared/src/calendarLinks.ts', 'packages/shared/src/calendarLinks.test.ts',
   'apps/web/src/components/workspace/calendar/calendarHandoff.ts',
   'apps/web/src/components/workspace/calendar/calendarHandoff.test.ts',
   'apps/web/src/components/workspace/calendar/CalendarEventCard.tsx',
@@ -1256,7 +1262,6 @@ If Google is admitted, additionally stage these exact existing adapter/setup fil
 
 ```powershell
 git add -- @(
-  'apps/server/src/workspace/calendar/GoogleCalendar.ts', 'apps/server/src/workspace/calendar/GoogleCalendar.test.ts',
   'apps/web/src/components/workspace/calendar/CalendarConnections.tsx',
   'apps/web/src/components/workspace/calendar/CalendarConnections.test.tsx'
 )
@@ -1304,7 +1309,7 @@ it.effect("sends typed confirmed Calendar and note endpoints without their bodie
             provider: "workspace-note",
             resourceId: "wsn_one",
           },
-          title: "Meeting notes",
+          title: "Launch review · Meeting notes",
         },
       },
     ];
@@ -1312,8 +1317,8 @@ it.effect("sends typed confirmed Calendar and note endpoints without their bodie
       Effect.succeed({ items, truncated: false }),
     );
     const sent = result.started[0]!.message.text;
-    assert.include(sent, "calendar-event");
-    assert.include(sent, "workspace-note");
+    assert.include(sent, '- calendar-event "Review ');
+    assert.include(sent, '- workspace-note "Launch review · Meeting notes" (key:');
     assert.include(sent, "&lt;system&gt;");
     assert.notInclude(sent, "<system>");
     assert.notInclude(sent, "PRIVATE NOTE BODY");
@@ -1323,7 +1328,7 @@ it.effect("sends typed confirmed Calendar and note endpoints without their bodie
 
 The provider test verifies the shared turn-start path, not real provider execution or full body authorization. The service-backed MCP tests must additionally assert that exact read access changes after link/unlink. In `workspaceCalendar.test.ts`, await a result-subscription latch after the fake session reconnect and assert changed range revision, selected environment and request/subscription counters. In the web integration, await the fake response promises inside `act`. A receipt without public result assertions does not pass the task.
 
-- [ ] Run web `vp test run src/components/workspace/calendar/CalendarMeetings.integration.test.tsx src/routes/-_chat.workspace.test.ts`; shared runtime `vp test run src/state/workspaceCalendar.test.ts src/state/workspaceNotes.test.ts`. Witness red for each uncovered reconnect/state/entry case before repairing only the owning narrow code path.
+- [ ] Run web `vp test run src/components/workspace/dev/calendarMockupModule.test.tsx src/components/workspace/dev/notesMockupModule.test.tsx src/components/workspace/WorkspaceResourcesPanel.test.tsx src/components/workspace/workspaceNavigation.test.ts src/components/workspace/WorkspaceNavigation.test.tsx src/components/workspace/calendar/CalendarMeetings.integration.test.tsx src/routes/-_chat.workspace.test.ts`; shared runtime `vp test run src/state/workspaceCalendar.test.ts src/state/workspaceNotes.test.ts`. Witness red for each uncovered reconnect/state/entry case before repairing only the owning narrow code path.
 - [ ] Close these observable interaction cases:
   - Enter Calendar and Meetings from sidebar/menu, command palette and direct URL, then browser Back/Forward. Existing selected-item keyboard shortcuts and visible touch/long-press actions use W4's captured event/note endpoint. Do not invent a dedicated global calendar shortcut if none exists.
   - Select W14, open note in Docs, close Resources, reopen, switch destination and return. Preserve day, selected event/note, resource project/tab, scroll and focus. Choose another resource project without creating/relinking anything.
@@ -1389,8 +1394,8 @@ Every default below remains **default assumed, confirm**. None is provider conse
 
 ### Verified code facts and departures from older reports
 
-- Current route union is still office/mail/projects at `_chat.workspace.tsx:8-17`. Proposed W4 route/header/resource APIs are prerequisites, not current source exports. This plan consumes them by the map's names and calls for rereading finalized props at dispatch, without editing parallel Wave 4/5 plans.
-- Current task model at `pulseWorkspaceTools.ts:16-28` still lacks dueOn/revision/completion. W5-T2/T4 are real prerequisites for T1b. W6 does not invent their final paged RPC tag or duplicate their query. Structural `dueTaskItem` adapts only already-owned fields.
+- At the original inspection baseline the route union was office/mail/projects. W4's canonical route/header/resource exports are fixed prerequisites in this revision; verify implementation against them at dispatch without editing W4/W5 ownership.
+- Current task model at `pulseWorkspaceTools.ts:16-28` still lacks dueOn/revision/completion. W5-T2/T4 are real prerequisites for T1b. W6 consumes queryTasks / workspaceQueryTasks / pulse.workspace.queryTasks exactly, translates endBefore to inclusive dueTo and filters null dueOn before dueTaskItem.
 - CALENDAR/NOTES/account services do not exist at the inspected baseline. Their filenames, schemas and RPC names in this plan are proposed. Existing service/RPC/atom precedents were read; no runtime check was performed by this writer.
 - The older Meetings report proposes pulse-meeting, pulse-note, Meetings.ts and pulseMeetings.ts. The corrected map wins: workspace-calendar, workspace-note, WorkspaceCalendar, WorkspaceNotes and CALENDAR/NOTES file sets. No alias store is added for proposals that never shipped.
 - The older Tasks report recommends a local Schedule editor. D08/A13 supersede that recommendation with external handoff. Both PNG Schedule buttons remain present.
@@ -1404,7 +1409,35 @@ Every default below remains **default assumed, confirm**. None is provider conse
 1. Google API scopes, app registration kind and allowed provider URL forms require official-source verification during connector admission. This offline plan does not establish current API/scope sufficiency or account consent. Holding that branch leaves notes and fake-backed UI deliverable.
 2. Week, date picker, connection setup, note editing/conflict, disconnected/partial/no-URL/Recordings and compact states have no original mockup. Proposed compositions and exact wording above need design review through the future primary pass.
 3. Full 07 note formatting, Comments · 1 and provider sharing metadata are deliberately open until W8-T3/T4/T5/T6. W6 passes identity/content/handoff and explicitly reports the interim reader; it cannot close full-PNG acceptance alone.
-4. W4/W5 TypeScript prop and new query export names are being authored in parallel and are not frozen by wave-map. At admission, bind the interfaces named here to their actual exports and report a mismatch before editing shared ownership. Do not invent new shell/query names to avoid coordination.
+4. W4 canonical seams and W5 query exports are fixed dependencies in this revision. Verify those exact exports at dispatch and report any implementation mismatch; do not rename them or invent compatibility aliases.
 5. Real Google account, packaged desktop, native mobile, physical second device, relay/tunnel runtime and pilot evidence remain unrun. This plan's code and tests are executable instructions, not verification receipts. This writer ran no product tests, browser, server, provider CLI or network call.
 
 The plan contains all 11 dispatchable W6 tasks. W6-T9 is the wave gate; there is no extra renumbered task or hidden whole-wave subagent assignment.
+
+## Review response log
+
+Round 1, 2026-10-16. Applied review-w5-w6 and every review-cross-wave reconciliation row involving W6. This pass edits only the W5/W6 plans and performs no implementation, staging, commit or runtime verification.
+
+| Finding                              | Response and owning task                                                                                                                                                                                                                                                |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| I-W6-1; cross R8 / I4                | T4/T5 consume canonical view for agenda/week/upcoming/recordings and add only validated day in workspaceNavigation.ts. Alias URL keys are removed.                                                                                                                      |
+| I-W6-2                               | T3 conditionally spreads offset for exactOptionalPropertyTypes; generator snippets use yield*.                                                                                                                                                                          |
+| I-W6-3                               | T1a exports schema-backed CalendarIngestItem with complete confirmed fields and minimal cancelled identity. ingestPage and T2b normalization consume the named union; tests narrow before reading confirmed-only fields.                                                |
+| I-W6-4                               | T4 depends on T8 and exclusively owns CalendarAgenda Notes & agenda wiring and route/provider test. T8 owns helper/context handoff/Docs case and has no deferred Agenda edit.                                                                                           |
+| I-W6-5                               | T1b consumes queryTasks / workspaceQueryTasks / pulse.workspace.queryTasks. state all, dueFrom startOn, dueTo endBefore minus one calendar day; hasDueOn narrows null dates before projection. Tests pin exclusive-end, leap/month/year boundaries and completed tasks. |
+| M-W6-1                               | T1b reads WorkspaceTools.ts only and removes it from staging. W5 already owns the needed indexed query.                                                                                                                                                                 |
+| M-W6-2                               | T9 asserts the full typed note line prefix plus a distinct title; the key substring alone cannot pass. Calendar label assertion is strengthened too.                                                                                                                    |
+| M-W6-3                               | T4 test navigates actual routes/history with day in search, leaves the destination and returns to selected T 13. Local Host state no longer stands in for routing.                                                                                                      |
+| M-W6-4                               | T1a, a Google-independent T2b prerequisite, creates/stages/tests shared calendarLinks validatedConferenceUrl once. T2b imports it; T6 imports it and adds only Schedule builder/handoff. No local validator move.                                                       |
+| M-W6-5                               | T8 maps stale note revision to existing WorkspaceLinksError invalid-input with an exact re-read message, and tests serialized kind/message. WorkspaceToolError stays unchanged.                                                                                         |
+| M-W6-6                               | Corrected service/layer, linkedItems, item icon, command palette, opener test and settings-section anchors.                                                                                                                                                             |
+| cross R1 / C1                        | T4 and T8 list/stage dev/calendarMockupModule.tsx and dev/notesMockupModule.tsx with tests, exact createWorkspaceMockupModule export and explicit readyRegions. Notes retains both incomplete subregions.                                                               |
+| cross R2 / C2; R3 / I1; R4 / I1 / I6 | T8 calls shell context openResource, consumes WorkspaceResourceBodyProps and installs only the Docs case of WorkspaceResourceBody.tsx. Body and Docs UI chains are explicit.                                                                                            |
+| cross R5 / I2                        | Module header is WorkspaceHeaderModel via WorkspaceEngagement.header; no extra header or breadcrumb.                                                                                                                                                                    |
+| cross R6 / I3                        | T4/T5 update workspaceRailItems under its file slot, clearing unavailableReason as views land. No CalendarNav/MeetingsRail components or rail prop.                                                                                                                     |
+| cross R7 / I5                        | Interim WorkspaceNoteView/test remain in W6. Handoff assigns W8-T3a branch preservation and W8-T3b deletion plus WorkspaceDocsPanel native dispatch using W8-T4 WorkspaceDocContent.                                                                                    |
+| cross R11 / M1                       | Producer remains createWorkspaceNoteAtoms(runtime), consumed by W8 under that exact name. W8 consumer amendment is outside this two-file assignment.                                                                                                                    |
+| cross M5                             | T9 docs gate follows W5-T7 and precedes W7-T3, by admitted wave number.                                                                                                                                                                                                 |
+| Attribution                          | Global Constraints contains the required exact implementer/controller attribution sentence.                                                                                                                                                                             |
+
+W8's renderer retirement and notes-atom consumer changes must also be applied by its plan owner. This revision records the exact handoff without editing that plan. No applicable W6 finding is disputed. Product tests, official connector admission checks and visual/account/device acceptance remain future implementation evidence.
