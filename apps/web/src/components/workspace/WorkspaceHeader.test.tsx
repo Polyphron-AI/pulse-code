@@ -87,3 +87,46 @@ it("updates module metadata, exposes the full owner, and toggles Resources witho
   expect(router.state.location.pathname).toBe("/workspace");
   expect(router.state.location.searchStr).toBe("?space=projects");
 });
+
+it("places Linked context immediately before Resources on wide screens and names it in compact overflow", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const viewport = (width: number) =>
+    (
+      window as unknown as {
+        happyDOM: { setWindowSize: (size: { width: number; height: number }) => void };
+      }
+    ).happyDOM.setWindowSize({ width, height: 800 });
+  viewport(1280);
+  const context = vi.fn();
+  const resources = vi.fn();
+  node = document.createElement("div");
+  document.body.append(node);
+  root = createRoot(node);
+  await act(() =>
+    root.render(
+      <WorkspaceHeader
+        model={{ title: "Inbox", environmentLabel: "A", spaceLabel: "Mail" }}
+        resourcesOpen={false}
+        onResources={resources}
+        onLinkedContext={context}
+      />,
+    ),
+  );
+  const trigger = getByRole(node, "button", { name: "Linked context" });
+  await act(() => trigger.focus());
+  expect(document.body.querySelector('[data-slot="tooltip-popup"]')?.textContent).toBe(
+    "Linked context",
+  );
+  expect(trigger.hasAttribute("title")).toBe(false);
+  expect(trigger.nextElementSibling).toBe(getByRole(node, "button", { name: "Resources" }));
+  await act(() => trigger.click());
+  expect(context).toHaveBeenCalledOnce();
+  await act(() => window.dispatchEvent(new Event("resize")));
+  await act(() => viewport(390));
+  expect(queryByRole(node, "button", { name: "Linked context" })).toBeNull();
+  await act(() => getByRole(node, "button", { name: "Workspace actions" }).click());
+  await act(() => getByRole(document.body, "menuitem", { name: "Linked context" }).click());
+  expect(context).toHaveBeenCalledTimes(2);
+  expect(resources).not.toHaveBeenCalled();
+  expect(getByRole(node, "button", { name: "Resources" })).toBeDefined();
+});

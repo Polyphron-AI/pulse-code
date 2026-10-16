@@ -15,7 +15,7 @@ import { Button } from "../ui/button";
 import { WorkspaceEngagement } from "./WorkspaceEngagement";
 import { WorkspaceProjectResources } from "./WorkspaceResourcesPanel";
 import { WorkspaceItemActions, WorkspaceItemMenu } from "./WorkspaceItemActions";
-import { LinkedSection } from "./mail/LinkedSection";
+import { WorkspaceLinkedContext } from "./WorkspaceLinkedContext";
 import { MailError, MailNotice } from "./mail/MailNotice";
 import { useMailCapabilities } from "./mail/useMailCapabilities";
 import { useWorkspaceItemOpener } from "./useWorkspaceItemOpener";
@@ -257,17 +257,12 @@ function TelegramReader({
         </div>
       }
       resources={<WorkspaceProjectResources selectedItem={item ? { ref: item, title } : null} />}
-      linked={
-        item ? (
-          <LinkedSection
-            key={search.item}
-            environmentId={environmentId}
-            item={item}
-            title={title}
-            onOpen={openItem}
-          />
-        ) : null
-      }
+      linkedContext={{
+        item: item ? { ref: item, title } : null,
+        render: (target) => (
+          <WorkspaceLinkedContext environmentId={environmentId} item={target} onOpen={openItem} />
+        ),
+      }}
     >
       {!requested || !item ? (
         <MailNotice>Select a paired chat to read messages received by this bot.</MailNotice>

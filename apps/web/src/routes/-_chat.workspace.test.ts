@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act, createElement } from "react";
+import { act, createElement, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import {
   createMemoryHistory,
@@ -11,6 +11,20 @@ import {
 import { getByRole, getByText, queryByRole } from "@testing-library/dom";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { parseWorkspaceSearch, Route } from "./_chat.workspace";
+import { EnvironmentId } from "@t3tools/contracts";
+import {
+  useWorkspaceResourceState,
+  WorkspaceResourcesContext,
+} from "../components/workspace/workspaceResourceState";
+
+const storage = { getItem: () => null, setItem: () => {} };
+function ResourceProvider({ children }: { children?: ReactNode }) {
+  const resources = useWorkspaceResourceState(EnvironmentId.make("remote"), {
+    storage,
+    presentation: "sheet",
+  });
+  return createElement(WorkspaceResourcesContext, { value: resources }, children);
+}
 
 // The unavailable containers never mount a data-backed destination.
 vi.mock("../components/workspace/CommunicationsWorkspace", () => ({
@@ -189,7 +203,9 @@ it.each([
   document.body.append(node);
   const root = createRoot(node);
   try {
-    await act(async () => root.render(createElement(RouterProvider, { router })));
+    await act(async () =>
+      root.render(createElement(ResourceProvider, null, createElement(RouterProvider, { router }))),
+    );
     expect(getByRole(node, "heading", { name: heading })).toBeDefined();
     expect(getByText(node, "This view is not available on this server yet.")).toBeDefined();
     const link = queryByRole(node, "link", { name: "Open local Office tools" });

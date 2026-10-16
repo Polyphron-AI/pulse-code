@@ -10,7 +10,6 @@ import {
   type WorkspaceDestination,
 } from "../components/workspace/workspaceNavigation";
 import { EnvironmentId } from "@t3tools/contracts";
-import { useState } from "react";
 import { WorkspaceEngagement } from "../components/workspace/WorkspaceEngagement";
 import { WorkspaceProjectResources } from "../components/workspace/WorkspaceResourcesPanel";
 import { useWorkspaceHeaderModel } from "../components/workspace/useWorkspaceHeaderModel";
@@ -68,15 +67,12 @@ function UnavailableWorkspace({
     heading ?? "Workspace",
     heading ?? "Workspace",
   );
-  const [resourcesOpen, setResourcesOpen] = useState(false);
   return (
     <WorkspaceEngagement
       environmentId={environmentId}
       space={space}
       layout="full"
       header={header}
-      resourcesOpen={resourcesOpen}
-      onResourcesChange={setResourcesOpen}
       resources={<WorkspaceProjectResources />}
     >
       <main className="p-5 sm:p-8">

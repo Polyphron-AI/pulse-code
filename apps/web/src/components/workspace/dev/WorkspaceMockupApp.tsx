@@ -116,8 +116,6 @@ function FixtureReport() {
             space={session.recipe.space}
             header={header}
             storage={session.storage}
-            resourcesOpen={resources.open}
-            onResourcesChange={(open) => (open ? resources.reopen() : resources.close())}
             resources={
               <WorkspaceResourcesPanelView
                 projects={session.seed.projects}

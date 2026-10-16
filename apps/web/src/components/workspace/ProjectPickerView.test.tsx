@@ -61,3 +61,21 @@ it("offers All projects only when explicitly allowed", async () => {
   await act(() => getByRole(document.body, "option", { name: "All projects" }).click());
   expect(choose).toHaveBeenCalledWith(null);
 });
+it("returns from an explicit project to Auto without choosing another project", async () => {
+  const choose = await mount();
+  const automatic = vi.fn();
+  await act(() =>
+    root!.render(
+      <ProjectPickerView
+        projects={[{ id: ProjectId.make("a"), title: "Alpha" }]}
+        selectedProjectId={ProjectId.make("a")}
+        onChooseProject={choose}
+        onAutoProject={automatic}
+      />,
+    ),
+  );
+  await act(() => getByRole(node, "combobox", { name: "Choose project" }).click());
+  await act(() => getByRole(document.body, "option", { name: "Auto" }).click());
+  expect(automatic).toHaveBeenCalledOnce();
+  expect(choose).not.toHaveBeenCalled();
+});

@@ -82,15 +82,6 @@ vi.mock("./mail/useMailCapabilities", () => ({
     mailRead: true,
   }),
 }));
-// Picker behavior has its own integration tests. These named controls expose
-// which real header slot AppSidebarLayout chooses without connector reads.
-vi.mock("./ProjectsNav", () => ({
-  ProjectsNav: () => (
-    <button role="combobox" aria-label="Choose project">
-      Projects
-    </button>
-  ),
-}));
 vi.mock("./mail/MailNav", () => ({
   MailNav: () => <button>Email accounts and folders</button>,
 }));

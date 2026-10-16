@@ -1,18 +1,23 @@
 import {
-  useContext,
+  useCallback,
   useLayoutEffect,
   useRef,
   useState,
   type CSSProperties,
   type ReactNode,
 } from "react";
-import type { EnvironmentId } from "@t3tools/contracts";
+import type { EnvironmentId, WorkspaceLinkEndpoint } from "@t3tools/contracts";
 import { useResizableWidth } from "../../hooks/useResizableWidth";
 import { cn } from "../../lib/utils";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { WorkspaceResourcesHost } from "./WorkspaceShellLayout";
-import { WorkspaceResourcesContext } from "./workspaceResourceState";
+import {
+  useWorkspaceResources,
+  WorkspaceResourcesCloseFocusContext,
+} from "./workspaceResourceState";
 import { WorkspaceHeader, type WorkspaceHeaderModel } from "./WorkspaceHeader";
+import { workspaceEndpointTitle } from "./mail/linkedItems";
+import { XIcon } from "lucide-react";
 import type { WorkspaceDestination } from "./workspaceNavigation";
 
 export interface WorkspaceEngagementCommonProps {
@@ -21,11 +26,10 @@ export interface WorkspaceEngagementCommonProps {
   readonly header: WorkspaceHeaderModel;
   readonly children: ReactNode;
   readonly resources?: ReactNode;
-  /** Temporary selected-item dock until W4-T4b installs Linked context. */
-  readonly linked?: ReactNode;
-  readonly resourcesOpen?: boolean;
-  readonly onResourcesChange?: (open: boolean) => void;
-  readonly onLinkedContext?: () => void;
+  readonly linkedContext?: {
+    readonly item: WorkspaceLinkEndpoint | null;
+    readonly render: (item: WorkspaceLinkEndpoint) => ReactNode;
+  };
   readonly storage?: Pick<Storage, "getItem" | "setItem">;
 }
 export type WorkspaceEngagementProps = WorkspaceEngagementCommonProps &
@@ -44,30 +48,40 @@ export type WorkspaceEngagementProps = WorkspaceEngagementCommonProps &
       }
   );
 
+const emptyLinkedContext = { item: null, render: () => null };
+
 export function WorkspaceEngagement(props: WorkspaceEngagementProps) {
   const wide = useMediaQuery("xl");
-  const state = useContext(WorkspaceResourcesContext);
-  const linkedOnly = props.resources === undefined && props.linked !== undefined;
-  const [linkedDockOpen, setLinkedDockOpen] = useState(linkedOnly);
-  const [linkedSheetOpen, setLinkedSheetOpen] = useState(false);
-  const linkedOpen = wide ? linkedDockOpen : linkedSheetOpen;
-  const setLinkedOpen = wide ? setLinkedDockOpen : setLinkedSheetOpen;
-  const resourcesOpen = !linkedOpen && (state?.open ?? props.resourcesOpen ?? false);
-  const open = linkedOpen || (!linkedOnly && resourcesOpen);
+  const state = useWorkspaceResources();
+  const [contextTarget, setContextTarget] = useState<{
+    readonly environmentId: EnvironmentId | null;
+    readonly presentation: boolean;
+    readonly context: NonNullable<WorkspaceEngagementCommonProps["linkedContext"]>;
+  } | null>(null);
+  if (
+    contextTarget &&
+    (contextTarget.environmentId !== props.environmentId || contextTarget.presentation !== wide)
+  ) {
+    setContextTarget(null);
+  }
+  const context =
+    contextTarget?.environmentId === props.environmentId && contextTarget.presentation === wide
+      ? contextTarget.context
+      : null;
   const resourcesTrigger = useRef<HTMLButtonElement>(null);
-  const wasOpen = useRef(open);
-  useLayoutEffect(() => {
-    if (wide && wasOpen.current && !open) resourcesTrigger.current?.focus();
-    wasOpen.current = open;
-  }, [open, wide]);
-  const resourcesLabel = linkedOnly ? "Linked items" : "Resources";
-  const onResourcesChange = (open: boolean) => {
-    if (linkedOnly) setLinkedOpen(open);
-    else if (state) {
-      if (open) state.reopen();
-      else state.close();
-    } else props.onResourcesChange?.(open);
+  const contextTrigger = useRef<HTMLButtonElement>(null);
+  const restoreResourcesFocus = useCallback(() => resourcesTrigger.current?.focus(), []);
+  const close = () => {
+    state.close();
+    setContextTarget(null);
+    if (wide) (context ? contextTrigger : resourcesTrigger).current?.focus();
   };
+  const backToResources = () => {
+    setContextTarget(null);
+    state.reopen();
+    restoreResourcesFocus();
+  };
+  const open = context !== null || state.open;
   return (
     <div
       data-workspace-engagement=""
@@ -77,22 +91,24 @@ export function WorkspaceEngagement(props: WorkspaceEngagementProps) {
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <WorkspaceHeader
           model={props.header}
-          resourcesOpen={linkedOnly ? linkedOpen : resourcesOpen}
-          resourcesLabel={resourcesLabel}
+          resourcesOpen={context === null && state.open}
           resourcesTriggerRef={resourcesTrigger}
           onResources={() => {
-            if (!linkedOnly) setLinkedOpen(false);
-            onResourcesChange(linkedOnly ? !linkedOpen : !resourcesOpen);
+            setContextTarget(null);
+            if (context || !state.open) state.reopen();
+            else state.close();
           }}
-          {...(props.onLinkedContext
-            ? { onLinkedContext: props.onLinkedContext }
-            : !linkedOnly && props.linked !== undefined
-              ? {
-                  onLinkedContext: () => setLinkedOpen(!linkedOpen),
-                  linkedContextLabel: "Linked items",
-                  linkedContextOpen: linkedOpen,
-                }
-              : {})}
+          linkedContextTriggerRef={contextTrigger}
+          linkedContextOpen={context !== null}
+          onLinkedContext={() => {
+            if (context) setContextTarget(null);
+            else
+              setContextTarget({
+                environmentId: props.environmentId,
+                presentation: wide,
+                context: props.linkedContext ?? emptyLinkedContext,
+              });
+          }}
         />
         {props.layout === "split" ? (
           <WorkspaceSplit {...props} />
@@ -108,16 +124,47 @@ export function WorkspaceEngagement(props: WorkspaceEngagementProps) {
       <WorkspaceResourcesHost
         wide={wide}
         open={open}
-        onOpenChange={linkedOpen ? setLinkedOpen : onResourcesChange}
-        label={linkedOnly || linkedOpen ? "Linked items" : resourcesLabel}
+        onOpenChange={(value) => {
+          if (!value) close();
+        }}
+        label={context ? "Linked context" : "Resources"}
       >
-        {linkedOnly || linkedOpen
-          ? (props.linked ?? (
-              <p className="p-3 text-sm text-muted-foreground">
-                Select an item to see its linked items.
-              </p>
-            ))
-          : props.resources}
+        {context ? (
+          <div data-workspace-linked-context="" className="flex h-full min-h-0 flex-col">
+            <header className="flex shrink-0 items-center gap-2 border-b border-border p-3">
+              <h2 className="min-w-0 flex-1 text-sm font-medium">Linked context</h2>
+              <button
+                type="button"
+                aria-label="Close linked context"
+                className="flex size-7 items-center justify-center"
+                onClick={close}
+              >
+                <XIcon className="size-3" />
+              </button>
+            </header>
+            <div className="min-h-0 flex-1 overflow-y-auto p-3">
+              <button type="button" className="mb-3 text-sm underline" onClick={backToResources}>
+                Back to resources
+              </button>
+              {context.item ? (
+                <>
+                  <h3 className="mb-3 break-words text-sm font-medium">
+                    {workspaceEndpointTitle(context.item)}
+                  </h3>
+                  {context.render(context.item)}
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Select an item to see its linked context.
+                </p>
+              )}
+            </div>
+          </div>
+        ) : (
+          <WorkspaceResourcesCloseFocusContext value={restoreResourcesFocus}>
+            {props.resources}
+          </WorkspaceResourcesCloseFocusContext>
+        )}
       </WorkspaceResourcesHost>
     </div>
   );

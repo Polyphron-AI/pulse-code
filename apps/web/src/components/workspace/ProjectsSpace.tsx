@@ -17,7 +17,7 @@ import { WorkspaceItemActions, WorkspaceItemMenu } from "./WorkspaceItemActions"
 import { useWorkspaceItemOpener } from "./useWorkspaceItemOpener";
 import { WorkspaceEngagement } from "./WorkspaceEngagement";
 import { workspaceEndpointTitle } from "./mail/linkedItems";
-import { LinkedSection } from "./mail/LinkedSection";
+import { WorkspaceLinkedContext } from "./WorkspaceLinkedContext";
 import { useMailCapabilities } from "./mail/useMailCapabilities";
 
 /** Project folders, their threads, and confirmed workspace links. */
@@ -154,17 +154,20 @@ export function ProjectsSpace() {
           }
         />
       }
-      linked={
-        selected === undefined || environmentId === null ? null : (
-          <LinkedSection
-            key={selected.id}
-            environmentId={environmentId}
-            item={taskRef ?? { type: "project", projectId: selected.id }}
-            title={selectedTask?.title ?? selected.title}
-            onOpen={open}
-          />
-        )
-      }
+      linkedContext={{
+        item: selected
+          ? {
+              ref: selectedTask
+                ? { type: "task", taskId: selectedTask.id }
+                : { type: "project", projectId: selected.id },
+              title: selectedTask?.title ?? selected.title,
+            }
+          : null,
+        render: (item) =>
+          environmentId === null ? null : (
+            <WorkspaceLinkedContext environmentId={environmentId} item={item} onOpen={open} />
+          ),
+      }}
     >
       {projectList}
       {selected === undefined || environmentId === null ? (

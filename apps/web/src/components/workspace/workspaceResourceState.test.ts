@@ -98,6 +98,29 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
+it("resets explicit selection and requests for Auto while retaining the saved project tab", async () => {
+  await mount();
+  await act(() =>
+    state.openResource({
+      projectId: p,
+      tab: "browser",
+      request: { type: "url", url: "https://example.invalid/a" },
+    }),
+  );
+  await act(() => state.resetProject());
+  expect(state).toMatchObject({
+    projectId: null,
+    request: null,
+    selectedTab: "browser",
+    open: true,
+  });
+  expect(JSON.parse(values.get("pulse.workspace.resources.v1:a")!)).toMatchObject({
+    projectId: null,
+  });
+  await act(() => state.chooseProject(p));
+  expect(state).toMatchObject({ projectId: p, selectedTab: "browser", request: null });
+});
+
 it("opens project/tab/request atomically, preserves close intent and restores tabs per project", async () => {
   await mount();
   const request = { type: "file" as const, provider: "google-drive" as const, fileId: "file-a" };

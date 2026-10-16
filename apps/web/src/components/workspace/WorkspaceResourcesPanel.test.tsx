@@ -138,7 +138,13 @@ function App({
             footer={<p>Connection status unavailable</p>}
           />
         }
-        linked={linked}
+        linkedContext={{
+          item:
+            linked === null
+              ? null
+              : { ref: { type: "url", url: "https://example.invalid/a" }, title: "Page A" },
+          render: () => linked,
+        }}
       >
         <Opener />
       </WorkspaceEngagement>
@@ -161,7 +167,7 @@ it("chooses resources before selection, mounts one lazy body, retains linked ite
   await mount();
   expect(bodies.files).not.toHaveBeenCalled();
   expect(bodies.browser).not.toHaveBeenCalled();
-  expect(queryByRole(node, "complementary", { name: "Linked items" })).toBeNull();
+  expect(queryByRole(node, "complementary", { name: "Linked context" })).toBeNull();
   await act(() => getByRole(node, "combobox", { name: "Choose project" }).click());
   await act(() => getByRole(document.body, "option", { name: "a project" }).click());
   expect(getByRole(node, "tabpanel").textContent).toContain("Files a");
@@ -196,14 +202,14 @@ it("chooses resources before selection, mounts one lazy body, retains linked ite
 it("shares one dock between live resources and linked items through header controls", async () => {
   await mount();
   const engagement = node.querySelector("[data-workspace-engagement]")!;
-  const linked = getByRole(node, "button", { name: "Linked items" });
+  const linked = getByRole(node, "button", { name: "Linked context" });
   const resources = getByRole(node, "button", { name: "Resources" });
   expect(getAllByRole(node, "complementary")).toHaveLength(1);
   expect(linked.closest("[data-workspace-header-controls]")).not.toBeNull();
   expect(linked.getAttribute("aria-expanded")).toBe("false");
   await act(() => linked.click());
   expect(getAllByRole(node, "complementary")).toHaveLength(1);
-  expect(getByRole(node, "complementary", { name: "Linked items" }).textContent).toContain(
+  expect(getByRole(node, "complementary", { name: "Linked context" }).textContent).toContain(
     "Retained linked page",
   );
   expect(resources.getAttribute("aria-expanded")).toBe("false");
@@ -249,11 +255,29 @@ it("returns dock close focus to the Resources header trigger", async () => {
   });
   expect(document.activeElement).toBe(getByRole(node, "button", { name: "Resources" }));
 });
-it("keeps the empty linked-items explanation reachable beside live resources", async () => {
+
+it("unmounts the tool during Linked context and restores the same resource request on Back", async () => {
+  await mount();
+  await act(() => getByRole(node, "button", { name: "Open file" }).click());
+  expect(bodies.active).toBe(1);
+  expect(getByRole(node, "tabpanel").textContent).toContain("handoff");
+  await act(() => getByRole(node, "button", { name: "Linked context" }).click());
+  expect(bodies.active).toBe(0);
+  expect(queryByRole(node, "tabpanel")).toBeNull();
+  await act(() => getByRole(node, "button", { name: "Back to resources" }).click());
+  expect(bodies.active).toBe(1);
+  expect(bodies.max).toBe(1);
+  expect(getByRole(node, "tabpanel").textContent).toContain("handoff");
+  expect(getByRole(node, "combobox", { name: "Choose project" }).textContent).toContain(
+    "a project",
+  );
+  expect(document.activeElement).toBe(getByRole(node, "button", { name: "Resources" }));
+});
+it("keeps the empty linked-context explanation reachable beside live resources", async () => {
   await mount(<App linked={null} />);
-  await act(() => getByRole(node, "button", { name: "Linked items" }).click());
-  expect(getByRole(node, "complementary", { name: "Linked items" }).textContent).toContain(
-    "Select an item to see its linked items.",
+  await act(() => getByRole(node, "button", { name: "Linked context" }).click());
+  expect(getByRole(node, "complementary", { name: "Linked context" }).textContent).toContain(
+    "Select an item to see its linked context.",
   );
   expect(getAllByRole(node, "complementary")).toHaveLength(1);
 });
@@ -303,4 +327,15 @@ it("keeps deleted selections unavailable until explicitly recovered", async () =
   await act(() => root!.render(<App unavailable />));
   expect(node.textContent).toContain("This project is unavailable");
   expect(bodies.active).toBe(0);
+});
+
+it("keeps focus on the Linked context trigger when toggled closed", async () => {
+  await mount();
+  const trigger = getByRole(node, "button", { name: "Linked context" });
+  await act(() => {
+    trigger.focus();
+    trigger.click();
+  });
+  await act(() => trigger.click());
+  expect(document.activeElement).toBe(trigger);
 });

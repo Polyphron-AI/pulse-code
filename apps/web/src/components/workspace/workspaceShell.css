@@ -409,6 +409,10 @@
   [data-workspace-header-controls] button {
     min-height: 44px;
   }
+  [data-workspace-actions-trigger] {
+    width: 44px;
+    justify-content: center;
+  }
   [data-workspace-sample-marker] {
     max-width: 80px;
     white-space: normal;
@@ -417,6 +421,10 @@
 
 [data-workspace-resources-trigger] {
   width: 74px;
+}
+[data-workspace-linked-context-trigger] {
+  width: 28px;
+  justify-content: center;
 }
 
 [data-workspace-resource-frame] {

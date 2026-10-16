@@ -1,6 +1,9 @@
-import { FolderIcon, LinkIcon } from "lucide-react";
+import { FolderIcon, LinkIcon, EllipsisIcon } from "lucide-react";
 import type { Ref } from "react";
 import { WorkspacePageHeader } from "../WorkspacePageHeader";
+import { Menu, MenuTrigger, MenuPopup, MenuItem } from "../ui/menu";
+import { useMediaQuery } from "../../hooks/useMediaQuery";
+import { Tooltip, TooltipTrigger, TooltipPopup } from "../ui/tooltip";
 
 export interface WorkspaceHeaderModel {
   readonly title: string;
@@ -13,24 +16,23 @@ export interface WorkspaceHeaderModel {
 export interface WorkspaceHeaderProps {
   readonly model: WorkspaceHeaderModel;
   readonly resourcesOpen: boolean;
-  readonly resourcesLabel?: string;
   readonly onResources: () => void;
   readonly resourcesTriggerRef?: Ref<HTMLButtonElement>;
   readonly onLinkedContext?: () => void;
-  readonly linkedContextLabel?: string;
+  readonly linkedContextTriggerRef?: Ref<HTMLButtonElement>;
   readonly linkedContextOpen?: boolean;
 }
 
 export function WorkspaceHeader({
   model,
   resourcesOpen,
-  resourcesLabel = "Resources",
   onResources,
   resourcesTriggerRef,
   onLinkedContext,
-  linkedContextLabel = "Linked context",
+  linkedContextTriggerRef,
   linkedContextOpen,
 }: WorkspaceHeaderProps) {
+  const inlineContext = useMediaQuery("md");
   return (
     <WorkspacePageHeader variant="workspace" data-workspace-engagement-header="">
       <div data-workspace-header-copy="">
@@ -39,24 +41,51 @@ export function WorkspaceHeader({
       </div>
       <div data-workspace-header-controls="">
         {onLinkedContext ? (
-          <button
-            type="button"
-            aria-label={linkedContextLabel}
-            aria-expanded={linkedContextOpen}
-            onClick={onLinkedContext}
-          >
-            <LinkIcon />
-          </button>
+          inlineContext ? (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    ref={linkedContextTriggerRef}
+                    data-workspace-linked-context-trigger=""
+                    type="button"
+                    aria-label="Linked context"
+                    aria-expanded={linkedContextOpen}
+                    onClick={onLinkedContext}
+                  />
+                }
+              >
+                <LinkIcon />
+              </TooltipTrigger>
+              <TooltipPopup>Linked context</TooltipPopup>
+            </Tooltip>
+          ) : (
+            <Menu>
+              <MenuTrigger
+                ref={linkedContextTriggerRef}
+                data-workspace-actions-trigger=""
+                aria-label="Workspace actions"
+              >
+                <EllipsisIcon />
+              </MenuTrigger>
+              <MenuPopup align="end">
+                <MenuItem onClick={onLinkedContext}>
+                  <LinkIcon />
+                  Linked context
+                </MenuItem>
+              </MenuPopup>
+            </Menu>
+          )
         ) : null}
         <button
           ref={resourcesTriggerRef}
-          data-workspace-resources-trigger={resourcesLabel === "Resources" ? "" : undefined}
+          data-workspace-resources-trigger=""
           type="button"
           aria-expanded={resourcesOpen}
           onClick={onResources}
         >
           <FolderIcon />
-          {resourcesLabel}
+          Resources
         </button>
         {model.owner ? (
           <span data-workspace-owner="" role="img" aria-label={model.owner.name}>

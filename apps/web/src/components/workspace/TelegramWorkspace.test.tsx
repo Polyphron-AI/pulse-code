@@ -70,7 +70,7 @@ vi.mock("./WorkspaceItemActions", () => ({
   WorkspaceItemActions: () => null,
   WorkspaceItemMenu: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
-vi.mock("./mail/LinkedSection", () => ({ LinkedSection: () => null }));
+vi.mock("./WorkspaceLinkedContext", () => ({ WorkspaceLinkedContext: () => null }));
 let renderer: ReactTestRenderer | undefined;
 afterEach(async () => {
   if (renderer) await act(() => renderer?.unmount());

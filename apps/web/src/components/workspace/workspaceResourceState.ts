@@ -28,6 +28,7 @@ export interface WorkspaceResourcesState {
   readonly selectedTab: WorkspaceResourceTab;
   readonly request: WorkspaceItemRef | null;
   readonly chooseProject: (projectId: ProjectId) => void;
+  readonly resetProject: () => void;
   readonly selectTab: (tab: WorkspaceResourceTab) => void;
   readonly close: () => void;
   readonly reopen: () => void;
@@ -231,6 +232,10 @@ export function useWorkspaceResourceState(
     },
     [update],
   );
+  const resetProject = useCallback(
+    () => update((value) => ({ ...value, projectId: null, request: null })),
+    [update],
+  );
   const close = useCallback(
     () =>
       update((value) => ({
@@ -290,16 +295,18 @@ export function useWorkspaceResourceState(
       selectedTab: session.selectedTab,
       request: session.request,
       chooseProject,
+      resetProject,
       selectTab,
       close,
       reopen,
       openResource,
     }),
-    [session, chooseProject, selectTab, close, reopen, openResource],
+    [session, chooseProject, resetProject, selectTab, close, reopen, openResource],
   );
 }
 
 export const WorkspaceResourcesContext = createContext<WorkspaceResourcesState | null>(null);
+export const WorkspaceResourcesCloseFocusContext = createContext<(() => void) | null>(null);
 export function WorkspaceResourcesProvider(props: {
   readonly value: WorkspaceResourcesState;
   readonly children: ReactNode;

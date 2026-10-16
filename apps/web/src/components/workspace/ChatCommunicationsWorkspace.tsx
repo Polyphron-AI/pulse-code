@@ -410,7 +410,6 @@ export function ChatCommunicationsWorkspace({
       </article>
     );
   }
-  const [resourcesOpen, setResourcesOpen] = useState(false);
   const header = useWorkspaceHeaderModel(
     environmentId,
     view === "later" ? "Later" : (conversation?.title ?? "Communications"),
@@ -423,8 +422,6 @@ export function ChatCommunicationsWorkspace({
       space="communications"
       layout="split"
       header={header}
-      resourcesOpen={resourcesOpen}
-      onResourcesChange={setResourcesOpen}
       resources={<WorkspaceProjectResources />}
       selected={conversation !== undefined}
       onBack={() => setConversation(undefined)}

@@ -37,6 +37,7 @@ import { useMailCapabilities } from "./useMailCapabilities";
 import { SuggestedSection } from "../SuggestedSection";
 
 interface LinkedSectionProps {
+  readonly mode?: "context" | "legacy";
   readonly environmentId: EnvironmentId;
   readonly item: WorkspaceItemRef;
   readonly title: string;
@@ -58,19 +59,23 @@ export function LinkedSection(props: LinkedSectionProps) {
   return available ? (
     <>
       <div role="group" aria-label="Context views" className="mb-3 flex flex-wrap gap-1">
-        {["links", "projects", ...(workspaceTools ? ["browser", "files", "agents"] : [])].map(
-          (name) => (
-            <Button
-              key={name}
-              size="xs"
-              variant={tab === name ? "secondary" : "ghost"}
-              aria-pressed={tab === name}
-              onClick={() => setTab(name)}
-            >
-              {name[0]!.toUpperCase() + name.slice(1)}
-            </Button>
-          ),
-        )}
+        {[
+          "links",
+          "projects",
+          ...(props.mode !== "context" && workspaceTools ? ["browser", "files", "agents"] : []),
+        ].map((name) => (
+          <Button
+            key={name}
+            size="xs"
+            variant={tab === name ? "secondary" : "ghost"}
+            aria-pressed={tab === name}
+            onClick={() => setTab(name)}
+          >
+            {name === "links" && props.mode === "context"
+              ? "Linked"
+              : name[0]!.toUpperCase() + name.slice(1)}
+          </Button>
+        ))}
       </div>
       {tab === "links" || tab === "projects" ? (
         <LinkedList {...props} projectsOnly={tab === "projects"} />
@@ -84,7 +89,9 @@ export function LinkedSection(props: LinkedSectionProps) {
           onOpen={props.onOpen}
         />
       ) : null}
-      {workspaceTools && (tab === "browser" || tab === "files" || tab === "agents") ? (
+      {props.mode !== "context" &&
+      workspaceTools &&
+      (tab === "browser" || tab === "files" || tab === "agents") ? (
         <WorkspaceToolsPanel
           key={workspaceItemKey(props.item)}
           environmentId={props.environmentId}

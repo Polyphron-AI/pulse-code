@@ -5,6 +5,8 @@ import { getByRole, queryByRole } from "@testing-library/dom";
 import { EnvironmentId } from "@t3tools/contracts";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import { WorkspaceEngagement } from "./WorkspaceEngagement";
+import { useWorkspaceResourceState, WorkspaceResourcesProvider } from "./workspaceResourceState";
+import { useMediaQuery } from "../../hooks/useMediaQuery";
 
 let root: Root;
 let node: HTMLDivElement;
@@ -39,26 +41,47 @@ async function mount(
   };
   const back = vi.fn();
   function App() {
-    const [open, setOpen] = useState(initialOpen);
+    const wide = useMediaQuery("xl");
+    const environmentId =
+      options.environmentId === undefined ? EnvironmentId.make("a") : options.environmentId;
+    const state = useWorkspaceResourceState(environmentId, {
+      presentation: wide ? "dock" : "sheet",
+      storage: {
+        getItem: () => JSON.stringify({ version: 1, open: initialOpen }),
+        setItem: () => {},
+      },
+    });
     return (
-      <WorkspaceEngagement
-        environmentId={
-          options.environmentId === undefined ? EnvironmentId.make("a") : options.environmentId
-        }
-        space="projects"
-        header={{ title: "Projects", environmentLabel: "A", spaceLabel: "Projects" }}
-        resourcesOpen={open}
-        onResourcesChange={setOpen}
-        {...("linked" in options
-          ? { linked: options.linked }
-          : { resources: "resources" in options ? options.resources : <p>Project resources</p> })}
-        storage={storage}
-        {...(layout === "full"
-          ? { layout }
-          : { layout, selected: true, list: <p>Project list</p>, onBack: back })}
-      >
-        <Counter />
-      </WorkspaceEngagement>
+      <WorkspaceResourcesProvider value={state}>
+        <WorkspaceEngagement
+          environmentId={
+            options.environmentId === undefined ? EnvironmentId.make("a") : options.environmentId
+          }
+          space="projects"
+          header={{ title: "Projects", environmentLabel: "A", spaceLabel: "Projects" }}
+          {...("linked" in options
+            ? {
+                linkedContext: {
+                  item:
+                    options.linked === null
+                      ? null
+                      : {
+                          ref: { type: "url" as const, url: "https://example.invalid/a" },
+                          title: "Page A",
+                        },
+                  render: () => options.linked,
+                },
+                resources: <p>Project resources</p>,
+              }
+            : { resources: "resources" in options ? options.resources : <p>Project resources</p> })}
+          storage={storage}
+          {...(layout === "full"
+            ? { layout }
+            : { layout, selected: true, list: <p>Project list</p>, onBack: back })}
+        >
+          <Counter />
+        </WorkspaceEngagement>
+      </WorkspaceResourcesProvider>
     );
   }
   await act(async () => root.render(<App />));
@@ -77,16 +100,18 @@ it("lets a full-width form work without subscribing to list sizing and keeps its
   expect(values.size).toBe(0);
 });
 
-it("shows linked items by default on wide screens with an honest toggle and supports close/reopen", async () => {
+it("opens captured linked context explicitly on wide screens and supports Back and reopen", async () => {
   await mount("full", 1280, false, { linked: <p>Linked page</p> });
-  const dock = getByRole(node, "complementary", { name: "Linked items" });
+  expect(queryByRole(node, "complementary", { name: "Linked context" })).toBeNull();
+  await act(() => getByRole(node, "button", { name: "Linked context" }).click());
+  const dock = getByRole(node, "complementary", { name: "Linked context" });
   expect(dock.textContent).toContain("Linked page");
-  const toggle = getByRole(node, "button", { name: "Linked items" });
+  const toggle = getByRole(node, "button", { name: "Linked context" });
   expect(toggle.getAttribute("aria-expanded")).toBe("true");
   await act(async () => toggle.click());
-  expect(queryByRole(node, "complementary", { name: "Linked items" })).toBeNull();
+  expect(queryByRole(node, "complementary", { name: "Linked context" })).toBeNull();
   await act(async () => toggle.click());
-  expect(getByRole(node, "complementary", { name: "Linked items" }).textContent).toContain(
+  expect(getByRole(node, "complementary", { name: "Linked context" }).textContent).toContain(
     "Linked page",
   );
 });
@@ -94,16 +119,18 @@ it("shows linked items by default on wide screens with an honest toggle and supp
 it("keeps compact linked items closed until requested", async () => {
   await mount("full", 390, false, { linked: <p>Linked page</p> });
   expect(queryByRole(document.body, "dialog")).toBeNull();
-  await act(async () => getByRole(node, "button", { name: "Linked items" }).click());
-  expect(getByRole(document.body, "dialog", { name: "Linked items" }).textContent).toContain(
+  await act(async () => getByRole(node, "button", { name: "Workspace actions" }).click());
+  await act(async () => getByRole(document.body, "menuitem", { name: "Linked context" }).click());
+  expect(getByRole(document.body, "dialog", { name: "Linked context" }).textContent).toContain(
     "Linked page",
   );
 });
 
 it("explains the empty linked dock instead of leaving a blank column", async () => {
   await mount("full", 1280, false, { linked: null });
-  expect(getByRole(node, "complementary", { name: "Linked items" }).textContent).toContain(
-    "Select an item to see its linked items.",
+  await act(() => getByRole(node, "button", { name: "Linked context" }).click());
+  expect(getByRole(node, "complementary", { name: "Linked context" }).textContent).toContain(
+    "Select an item to see its linked context.",
   );
 });
 
@@ -151,4 +178,60 @@ it("uses one compact Resources sheet and retains the center form when it closes"
   expect(node.querySelector("[data-workspace-resources]")).toBeNull();
   await act(async () => getByRole(dialog, "button", { name: "Close" }).click());
   expect(getByRole(node, "button", { name: "Saved 1" })).toBeDefined();
+});
+
+it("does not reopen a compact Linked context sheet after a wide round trip", async () => {
+  await mount("full", 390, false, { linked: <p>Captured linked page</p> });
+  await act(() => window.dispatchEvent(new Event("resize")));
+  await act(() => getByRole(node, "button", { name: "Workspace actions" }).click());
+  await act(() => getByRole(document.body, "menuitem", { name: "Linked context" }).click());
+  expect(getByRole(document.body, "dialog", { name: "Linked context" })).toBeDefined();
+  const resize = (width: number) =>
+    act(() => {
+      (
+        window as unknown as {
+          happyDOM: { setWindowSize: (size: { width: number; height: number }) => void };
+        }
+      ).happyDOM.setWindowSize({ width, height: 800 });
+    });
+  await resize(1280);
+  await resize(390);
+  expect(queryByRole(document.body, "dialog")).toBeNull();
+});
+
+it("keeps focus on the Linked context toggle and returns explicit close to that trigger", async () => {
+  await mount("full", 1280, false, { linked: <p>Linked page</p> });
+  const trigger = getByRole(node, "button", { name: "Linked context" });
+  await act(() => {
+    trigger.focus();
+    trigger.click();
+  });
+  await act(() => trigger.click());
+  expect(document.activeElement).toBe(trigger);
+  await act(() => trigger.click());
+  const close = getByRole(node, "button", { name: "Close linked context" });
+  await act(() => {
+    close.focus();
+    close.click();
+  });
+  expect(document.activeElement).toBe(trigger);
+  expect(queryByRole(node, "complementary", { name: "Linked context" })).toBeNull();
+});
+
+it("returns compact context close to its overflow trigger", async () => {
+  await mount("full", 390, false, { linked: <p>Linked page</p> });
+  const trigger = getByRole(node, "button", { name: "Workspace actions" });
+  await act(() => {
+    trigger.focus();
+    trigger.click();
+  });
+  await act(() => getByRole(document.body, "menuitem", { name: "Linked context" }).click());
+  const dialog = getByRole(document.body, "dialog", { name: "Linked context" });
+  const close = getByRole(dialog, "button", { name: "Close linked context" });
+  await act(() => {
+    close.focus();
+    close.click();
+  });
+  expect(document.activeElement).toBe(trigger);
+  expect(queryByRole(document.body, "dialog", { name: "Linked context" })).toBeNull();
 });

@@ -1,8 +1,9 @@
 import { BotIcon, FileTextIcon, FolderIcon, GlobeIcon, ListTodoIcon, XIcon } from "lucide-react";
-import { useId, useRef, useState, type ReactNode } from "react";
+import { useContext, useId, useRef, useState, type ReactNode } from "react";
 import type { ProjectId } from "@t3tools/contracts";
 import { ProjectPickerView, type WorkspaceProjectOption } from "./ProjectPickerView";
 import type { WorkspaceResourceTab } from "./workspaceResourceState";
+import { WorkspaceResourcesCloseFocusContext } from "./workspaceResourceState";
 import { PullRequestGlyph } from "../pullRequest/pullRequestIcons";
 
 export interface WorkspaceResourcesPanelViewProps {
@@ -12,6 +13,8 @@ export interface WorkspaceResourcesPanelViewProps {
   readonly tab: WorkspaceResourceTab;
   readonly onTabChange: (tab: WorkspaceResourceTab) => void;
   readonly onChooseProject: (id: ProjectId) => void;
+  readonly onAutoProject?: () => void;
+  readonly renderProjectActions?: (id: ProjectId, row: ReactNode) => ReactNode;
   readonly body: ReactNode;
   readonly footer: ReactNode;
   readonly onClose: () => void;
@@ -28,6 +31,7 @@ const resourceTabs = [
 /** Dev-safe chrome. The caller supplies exactly one live or fixture body. */
 export function WorkspaceResourcesPanelView(props: WorkspaceResourcesPanelViewProps): ReactNode {
   const id = useId();
+  const restoreFocus = useContext(WorkspaceResourcesCloseFocusContext);
   const buttons = useRef<(HTMLButtonElement | null)[]>([]);
   const [focused, setFocused] = useState<WorkspaceResourceTab>(props.tab);
   const [selected, setSelected] = useState(props.tab);
@@ -41,11 +45,22 @@ export function WorkspaceResourcesPanelView(props: WorkspaceResourcesPanelViewPr
         <ProjectPickerView
           projects={props.projects}
           selectedProjectId={props.selectedProjectId}
+          {...(props.onAutoProject ? { onAutoProject: props.onAutoProject } : {})}
+          {...(props.renderProjectActions
+            ? { renderProjectActions: props.renderProjectActions }
+            : {})}
           onChooseProject={(projectId) => {
             if (projectId !== null) props.onChooseProject(projectId);
           }}
         />
-        <button type="button" aria-label="Close resources" onClick={props.onClose}>
+        <button
+          type="button"
+          aria-label="Close resources"
+          onClick={() => {
+            props.onClose();
+            restoreFocus?.();
+          }}
+        >
           <XIcon />
         </button>
       </header>

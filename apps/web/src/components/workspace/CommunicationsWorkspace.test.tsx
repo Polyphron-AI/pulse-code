@@ -4,6 +4,23 @@ import { createRoot, type Root } from "react-dom/client";
 import { getByRole } from "@testing-library/dom";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import { CommunicationsWorkspace } from "./CommunicationsWorkspace";
+import { EnvironmentId } from "@t3tools/contracts";
+import { useWorkspaceResourceState, WorkspaceResourcesProvider } from "./workspaceResourceState";
+import { useMediaQuery } from "../../hooks/useMediaQuery";
+
+const storage = { getItem: () => null, setItem: () => {} };
+function App() {
+  const wide = useMediaQuery("xl");
+  const resources = useWorkspaceResourceState(EnvironmentId.make("remote"), {
+    storage,
+    presentation: wide ? "dock" : "sheet",
+  });
+  return (
+    <WorkspaceResourcesProvider value={resources}>
+      <CommunicationsWorkspace />
+    </WorkspaceResourcesProvider>
+  );
+}
 
 // Account/channel tests isolate the separately tested project-resource boundary.
 vi.mock("./WorkspaceResourcesPanel", () => ({
@@ -77,7 +94,7 @@ it("keeps a failed account refresh inside the chat list as a full-width banner",
   node = document.createElement("div");
   document.body.append(node);
   root = createRoot(node);
-  await act(async () => root.render(<CommunicationsWorkspace />));
+  await act(async () => root.render(<App />));
   await act(async () => getByRole(node, "button", { name: /# marketing/ }).click());
   boundary.run.mockRejectedValueOnce(new Error("Account refresh failed"));
   await act(async () => getByRole(node, "button", { name: "Refresh account list" }).click());
@@ -96,7 +113,7 @@ it("keeps desktop account controls reachable and changes the one shared header w
   node = document.createElement("div");
   document.body.append(node);
   root = createRoot(node);
-  await act(async () => root.render(<CommunicationsWorkspace />));
+  await act(async () => root.render(<App />));
   expect(getByRole(node, "combobox", { name: "Connected communications account" })).toBeDefined();
   expect(getByRole(node, "button", { name: "Refresh account list" })).toBeDefined();
   expect(getByRole(node, "button", { name: "Disconnect Team A" })).toBeDefined();

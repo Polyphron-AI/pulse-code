@@ -106,7 +106,23 @@ vi.mock("./ProjectTasks", () => ({
   workspaceToolsError: String,
 }));
 vi.mock("./DriveFiles", () => ({ DriveFileAccess: () => <span>Explicit read available</span> }));
-vi.mock("./WorkspaceItemActions", () => ({ WorkspaceItemActions: () => null }));
+vi.mock("./WorkspaceItemActions", () => ({
+  WorkspaceItemActions: () => null,
+  WorkspaceItemMenu: ({
+    children,
+    item,
+    environmentId,
+  }: {
+    children: import("react").ReactNode;
+    item: WorkspaceLinkEndpoint;
+    environmentId: string;
+  }) => (
+    <div>
+      {children}
+      <button onClick={() => boundary.open(environmentId, item.ref)}>Project row actions</button>
+    </div>
+  ),
+}));
 vi.mock("../preview/openPreviewSession", () => ({ openPreviewSession: boundary.command }));
 vi.mock("../../localApi", () => ({
   readLocalApi: () => ({ shell: { openExternal: boundary.open } }),
@@ -135,6 +151,7 @@ function App({
   }, [state]);
   return (
     <WorkspaceResourcesProvider value={state}>
+      <button>Environment selector</button>
       <WorkspaceEngagement
         environmentId={environmentId}
         space="projects"
@@ -266,4 +283,37 @@ it("renders real disconnected, loading, empty and deleted-project states", async
   boundary.ready = true;
   await act(() => root!.render(<App />));
   expect(getByRole(node, "tabpanel").textContent).toBe("No projects yet.");
+});
+
+it("restores project row actions on the frame picker and Auto resumes item inference", async () => {
+  await mount(
+    <App
+      item={{ ref: { type: "project", projectId: ProjectId.make("same") }, title: "Owned project" }}
+    />,
+  );
+  await act(() => getByRole(node, "combobox", { name: "Choose project" }).click());
+  await act(() => getByRole(document.body, "button", { name: "Project row actions" }).click());
+  expect(boundary.open).toHaveBeenCalledWith("a", { type: "project", projectId: "same" });
+  await act(() => getByRole(document.body, "option", { name: "A project" }).click());
+  expect(resources.projectId).toBe("same");
+  await act(() => getByRole(node, "combobox", { name: "Choose project" }).click());
+  await act(() => getByRole(document.body, "option", { name: "Auto" }).click());
+  expect(resources.projectId).toBeNull();
+  expect(getByRole(node, "combobox", { name: "Choose project" }).textContent).toContain(
+    "A project",
+  );
+  expect(boundary.link).not.toHaveBeenCalled();
+});
+
+it("does not steal environment-selector focus when the next environment has Resources closed", async () => {
+  saved.set(
+    "pulse.workspace.resources.v1:b",
+    JSON.stringify({ version: 1, open: false, projectId: null, tabs: {} }),
+  );
+  await mount();
+  const selector = getByRole(node, "button", { name: "Environment selector" });
+  await act(() => selector.focus());
+  await act(() => root!.render(<App environmentId={EnvironmentId.make("b")} />));
+  expect(resources.open).toBe(false);
+  expect(document.activeElement).toBe(selector);
 });

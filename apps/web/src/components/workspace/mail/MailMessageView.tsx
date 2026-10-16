@@ -73,6 +73,7 @@ export function MailMessageView(props: MailMessageViewProps) {
           ) : null}
           {props.showLinked !== false ? (
             <LinkedSection
+              mode="context"
               environmentId={props.environmentId}
               item={mailItemRef(data)}
               title={mailItemTitle(data.subject)}

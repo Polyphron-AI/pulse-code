@@ -20,6 +20,7 @@ export interface ProjectPickerViewProps {
   readonly projects: readonly WorkspaceProjectOption[];
   readonly selectedProjectId: ProjectId | null;
   readonly allowAll?: boolean;
+  readonly onAutoProject?: () => void;
   readonly onChooseProject: (id: ProjectId | null) => void;
   readonly renderProjectActions?: (id: ProjectId, row: ReactNode) => ReactNode;
 }
@@ -29,6 +30,7 @@ export function ProjectPickerView({
   projects,
   selectedProjectId,
   allowAll = false,
+  onAutoProject,
   onChooseProject,
   renderProjectActions,
 }: ProjectPickerViewProps): ReactNode {
@@ -39,7 +41,11 @@ export function ProjectPickerView({
     readonly title: string;
     readonly icon?: ReactNode;
   }[] = [
-    ...(allowAll ? [{ id: null, title: "All projects", icon: <FolderIcon /> }] : []),
+    ...(onAutoProject
+      ? [{ id: null, title: "Auto", icon: <FolderIcon /> }]
+      : allowAll
+        ? [{ id: null, title: "All projects", icon: <FolderIcon /> }]
+        : []),
     ...projects,
   ];
   const selected = items.find((item) => item.id === selectedProjectId) ?? null;
@@ -59,8 +65,9 @@ export function ProjectPickerView({
         if (!value) setQuery("");
       }}
       onValueChange={(item) => {
-        if (!item || (item.id === null && !allowAll)) return;
-        onChooseProject(item.id);
+        if (!item || (item.id === null && !allowAll && !onAutoProject)) return;
+        if (item.id === null && onAutoProject) onAutoProject();
+        else onChooseProject(item.id);
         setOpen(false);
         setQuery("");
       }}

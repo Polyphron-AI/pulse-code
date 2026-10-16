@@ -5,14 +5,19 @@ import { EnvironmentId, type MailConversation, type MailMessageListItem } from "
 import { MailSpace } from "./MailSpace";
 import { ProjectsSpace } from "../ProjectsSpace";
 import { LinkedSection } from "./LinkedSection";
+import { WorkspaceLinkedContext } from "../WorkspaceLinkedContext";
 import { WorkspaceHeader, type WorkspaceHeaderModel } from "../WorkspaceHeader";
 import { WorkspaceProjectResources } from "../WorkspaceResourcesPanel";
 import { MailMessageView } from "./MailMessageView";
+import { MailConversationList } from "./MailConversationList";
+import { WorkspaceEngagement } from "../WorkspaceEngagement";
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   environment: "remote-env" as string | null,
   search: {} as Record<string, string>,
   view: "messages",
+  listMany: vi.fn(),
+  linksAvailable: true,
 }));
 const message = (uid: number): MailMessageListItem => ({
   ref: { accountId: "account", mailbox: "INBOX", uidValidity: 1, uid },
@@ -39,7 +44,7 @@ vi.mock("./useMailCapabilities", () => ({
     ready: true,
     mailRead: true,
     mailConversations: true,
-    workspaceLinks: true,
+    workspaceLinks: mocks.linksAvailable,
     workspaceTools: true,
   }),
 }));
@@ -50,7 +55,6 @@ vi.mock("../../../state/entities", () => ({
 }));
 vi.mock("../../../state/environments", () => ({ useEnvironment: () => ({ label: "Remote" }) }));
 vi.mock("./MailNav", () => ({ MailNav: () => null }));
-vi.mock("../ProjectsNav", () => ({ ProjectsNav: () => null }));
 // The resource frame has its own provider/query integration suite.
 vi.mock("../WorkspaceResourcesPanel", () => ({
   WorkspaceProjectResources: () => <p>Project resources</p>,
@@ -61,7 +65,10 @@ vi.mock("../../../mail/mailReadState", () => ({ pulseMailMessage: () => "message
 vi.mock("../../../state/workspaceLinks", () => ({
   workspaceLinks: {
     list: () => "links",
-    listMany: () => "conversation-links",
+    listMany: (args: unknown) => {
+      mocks.listMany(args);
+      return "conversation-links";
+    },
     projectHub: () => null,
   },
 }));
@@ -74,13 +81,15 @@ vi.mock("../../../state/query", () => ({
             { id: "account", address: "first@example.test" },
             { id: "second", address: "second@example.test" },
           ]
-        : query === "links"
-          ? {
-              linked: [
-                { id: "link", item: { ref: task, title: "Follow up" }, source: { type: "user" } },
-              ],
-            }
-          : null,
+        : query === "conversation-links"
+          ? { linked: [], suggested: [], truncated: false }
+          : query === "links"
+            ? {
+                linked: [
+                  { id: "link", item: { ref: task, title: "Follow up" }, source: { type: "user" } },
+                ],
+              }
+            : null,
     error: query === "task" ? "This task is unavailable." : null,
     refresh: vi.fn(),
   }),
@@ -93,13 +102,16 @@ vi.mock("../WorkspaceEngagement", () => ({
   WorkspaceEngagement: ({
     children,
     resources,
-    linked,
+    linkedContext,
     header,
     list,
   }: {
     children: ReactNode;
     resources: ReactNode;
-    linked?: ReactNode;
+    linkedContext?: {
+      item: import("@t3tools/contracts").WorkspaceLinkEndpoint | null;
+      render: (item: import("@t3tools/contracts").WorkspaceLinkEndpoint) => ReactNode;
+    };
     header: WorkspaceHeaderModel;
     list?: ReactNode;
   }) => (
@@ -108,7 +120,7 @@ vi.mock("../WorkspaceEngagement", () => ({
       {list}
       <div>{children}</div>
       <aside>
-        {linked}
+        {linkedContext?.item ? linkedContext.render(linkedContext.item) : null}
         {resources}
       </aside>
     </>
@@ -147,6 +159,7 @@ afterEach(async () => {
   renderer = undefined;
   mocks.environment = "remote-env";
   mocks.view = "messages";
+  mocks.linksAvailable = true;
   vi.clearAllMocks();
   vi.unstubAllGlobals();
 });
@@ -170,6 +183,61 @@ it("infers resources from the newest conversation message that the reader expand
   const readers = renderer!.root.findAllByType(MailMessageView);
   expect(readers).toHaveLength(1);
   expect(readers[0]!.props.item.location.uid).toBe(2);
+  expect(mocks.listMany).toHaveBeenCalledWith({
+    environmentId: "remote-env",
+    input: {
+      items: [
+        expect.objectContaining({ type: "mail", location: expect.objectContaining({ uid: 1 }) }),
+        expect.objectContaining({ type: "mail", location: expect.objectContaining({ uid: 2 }) }),
+      ],
+    },
+  });
+  const context = renderer!.root.findByType(WorkspaceLinkedContext);
+  expect(context.props.item.ref.location.uid).toBe(2);
+  expect(context.props.linkedData).toEqual({ linked: [], suggested: [], truncated: false });
+});
+
+it("keeps the captured conversation aggregate and newest link target after selecting another conversation", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  mocks.view = "conversations";
+  mocks.search = { environment: "remote-env", account: "account" };
+  await act(() => {
+    renderer = create(<MailSpace />);
+  });
+  await act(() => renderer!.root.findByType(MailConversationList).props.onSelect(conversation));
+  const captured = renderer!.root.findByType(WorkspaceEngagement).props.linkedContext;
+  const next = { id: "next", messages: [message(3)], newest: message(3) };
+  await act(() => renderer!.root.findByType(MailConversationList).props.onSelect(next));
+  mocks.listMany.mockClear();
+  await act(() => renderer!.update(captured.render(captured.item)));
+  expect(mocks.listMany).toHaveBeenLastCalledWith({
+    environmentId: "remote-env",
+    input: {
+      items: conversation.messages.map((entry) =>
+        expect.objectContaining({
+          type: "mail",
+          location: expect.objectContaining({ uid: entry.ref.uid }),
+        }),
+      ),
+    },
+  });
+  expect(renderer!.root.findByType(WorkspaceLinkedContext).props.item).toMatchObject({
+    ref: { type: "mail", location: { uid: 2 } },
+    title: "Message 2",
+  });
+});
+
+it("does not query conversation links when the server does not support links", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  mocks.view = "conversations";
+  mocks.linksAvailable = false;
+  mocks.search = { environment: "remote-env", account: "account" };
+  await act(() => {
+    renderer = create(<MailSpace />);
+  });
+  await act(() => renderer!.root.findByType(MailConversationList).props.onSelect(conversation));
+  expect(mocks.listMany).not.toHaveBeenCalled();
+  expect(JSON.stringify(renderer!.toJSON())).toContain("Workspace links need a newer server.");
 });
 it("opens a Mail Linked task through its environment-scoped Projects route and shows deleted-task unavailability", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);

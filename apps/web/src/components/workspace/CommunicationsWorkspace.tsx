@@ -74,7 +74,6 @@ function DesktopCommunicationsWorkspace() {
     search.environment ? EnvironmentId.make(search.environment) : undefined,
   );
   const header = useWorkspaceHeaderModel(environmentId, "Communications", "Communications");
-  const [resourcesOpen, setResourcesOpen] = useState(false);
   const controls = (
     <div className="flex flex-wrap items-center gap-2 border-b border-border p-2">
       {error && (
@@ -207,8 +206,6 @@ function DesktopCommunicationsWorkspace() {
       space="communications"
       layout="full"
       header={header}
-      resourcesOpen={resourcesOpen}
-      onResourcesChange={setResourcesOpen}
       resources={<WorkspaceProjectResources />}
     >
       {controls}

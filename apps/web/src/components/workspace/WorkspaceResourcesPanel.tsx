@@ -23,6 +23,7 @@ import {
 import { WorkspaceResourcesPanelView } from "./WorkspaceResourcesPanelView";
 import { WorkspaceResourceBody } from "./WorkspaceResourceBody";
 import type { WorkspaceProjectOption } from "./ProjectPickerView";
+import { WorkspaceItemMenu } from "./WorkspaceItemActions";
 
 export interface WorkspaceResourcesPanelProps {
   readonly environmentId: EnvironmentId | null;
@@ -31,6 +32,7 @@ export interface WorkspaceResourcesPanelProps {
   readonly selectedItem: WorkspaceLinkEndpoint | null;
   readonly onOpen: (ref: WorkspaceItemRef) => void;
   readonly footer: ReactNode;
+  readonly renderProjectActions?: (id: ProjectId, row: ReactNode) => ReactNode;
 }
 export function WorkspaceResourcesPanel(props: WorkspaceResourcesPanelProps): ReactNode {
   const state = useWorkspaceResources();
@@ -70,6 +72,8 @@ export function WorkspaceResourcesPanel(props: WorkspaceResourcesPanelProps): Re
       tab={state.selectedTab}
       onTabChange={state.selectTab}
       onChooseProject={state.chooseProject}
+      onAutoProject={state.resetProject}
+      {...(props.renderProjectActions ? { renderProjectActions: props.renderProjectActions } : {})}
       body={body}
       footer={props.footer}
       onClose={state.close}
@@ -161,6 +165,20 @@ function ResolvedProjectResources({
       selectedItem={selectedItem}
       onOpen={onOpen}
       footer={<span>Connection status unavailable</span>}
+      renderProjectActions={(id, row) => (
+        <WorkspaceItemMenu
+          environmentId={environmentId}
+          item={{
+            ref: { type: "project", projectId: id },
+            title:
+              projects.find(
+                (candidate) => candidate.environmentId === environmentId && candidate.id === id,
+              )?.title ?? "Project",
+          }}
+        >
+          {row}
+        </WorkspaceItemMenu>
+      )}
     />
   );
 }
