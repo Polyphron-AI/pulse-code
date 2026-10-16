@@ -136,10 +136,10 @@ Acquire one exclusive RPC/migration/context slot across all waves for contract e
 - W12 admitted RPC/migrations: W12-T1 -> W12-T2 -> W12-T3 -> W12-T4 -> W12-T5 -> W12-T6 -> W12-T7 -> W12-T8 -> W12-T9 -> W12-T10.
 
 - UI/WorkspaceResourceBody.tsx: W4-T4a -> W5-T7 -> W6-T8 -> W7-T3 -> W8-T3a -> W8-T7 -> W8-T8 -> W10-T1 -> W10-T4. T6 changes the responsive host, not this switch. Each consumer lists the switch in Files and git add.
-- UI/ProjectTasks.tsx: W4-T5 -> W5-T1 -> W5-T2 -> W5-T3 -> W5-T4 (config) -> W7-T1 -> W8-T1a -> W5-T5b -> W5-T7.
+- UI/ProjectTasks.tsx: W4-T5 -> W4-T6 minor-fix gate -> W5-T1 -> W5-T2 -> W5-T3 -> W5-T4 (config) -> W7-T1 -> W8-T1a -> W5-T5b -> W5-T7. T6 preserves its public signatures and successful-delete invalidation; column moves keep Linked context open.
 - UI/WorkspaceShellLayout.tsx: W4-T2 -> W4-T3 -> W4-T4a -> W4-T6. Both live AppSidebarLayout and the fixture mount it; no parallel fixture layout.
 - UI/workspaceNavigation.ts and UI/WorkspaceViewRail.tsx: W4-T1/T2 initial ownership -> W4-T6 gate where applicable -> W5-T5a -> W6-T4 -> W6-T5 -> W11-T3. Only admitted tasks touching that file take the slot; explicitly splice other parser/registry extensions into this chain before dispatch.
-- UI/dev/WorkspaceMockupApp.tsx prop/provider wiring: W4-T7 -> W4-T2 -> W4-T3 -> W4-T4a -> W4-T5. Region geometry is owned only by WorkspaceShellLayout, shared by live and fixture.
+- UI/dev/WorkspaceMockupApp.tsx prop/provider/menu wiring: W4-T7 -> W4-T2 -> W4-T3 -> W4-T4a -> W4-T5 -> W4-T6. Region geometry is owned only by WorkspaceShellLayout, shared by live and fixture.
 - UI/workspaceResourceState.ts: W4-T4a -> W4-T6. W7 adds its convenience wrapper in UI/openFiles.ts instead of a second resource store.
 - UI/dev/tasksMockupModule.tsx: W4-T7 -> W5-T5a -> W5-T7.
 - UI/dev/notesMockupModule.tsx: W4-T7 -> W6-T8 -> W8-T4 -> W8-T5. W8-T3a preserves W6's native-note branch until T3b, which deletes meetings/WorkspaceNoteView.tsx and its test after repointing callers.
@@ -649,7 +649,7 @@ Detailed plan to be written later: `docs/superpowers/plans/2026-10-16-workspace-
 - Files: UI/ProjectsSpace.tsx; UI/ProjectPickerView.tsx selection synchronization only (ProjectsNav retired in W4-T4b); apps/web/src/hooks/useNewProject.ts reuse; focused UI tests.
 - Dependencies: W8-T1b, W4-T6.
 - Decision state: default assumed, confirm D01, D05. Common D24 applies to every task.
-- Work and acceptance: Keep A12 dropdown, add Your projects, search/filter and New project. Selection keeps overview visible and retargets resources. Linked destination preserves shipped hub threads/tasks/direct and labelled one-hop items. Use openThread false.
+- Work and acceptance: Keep A12 dropdown, add Your projects, search/filter and New project. Selection keeps overview visible and retargets resources. Linked destination preserves hub threads, tasks and settings. Its shared header opens Linked context for direct links and one labelled Related through linked items section. Task context retains the task's own links and exposes its actual owning project's discovery beneath them with a project-discovery label. Do not duplicate these rows in the center or retarget them from Resources. Use openThread false.
 - Own test cycle: Test title/description filter, real empty states, card/dropdown agreement, idempotent create recovery and native/touch menus. One-hop discovery never becomes context without confirmation. Apply the focused test contract above; visual acceptance follows the task-specific V1 record below.
 - Visual acceptance: W4-T7, then V1; PNG 04, box [207,26,733,458] at 1280x800; corrected inventory [gap-projects-docs-prs.md:27-36](gap-projects-docs-prs.md#L27). Pass: Your projects/search/+ New project and three 92px cards, one selected, dropdown agrees; V1 dark theme/font/2px criteria apply. Allowed live substitutions: actual projects/descriptions/connection availability; no unsupported roster, plus the W4 chrome table.
 

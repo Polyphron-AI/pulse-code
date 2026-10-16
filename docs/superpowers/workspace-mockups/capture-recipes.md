@@ -78,3 +78,19 @@ Use the unchanged reference PNGs under `mockups/` with corrections recorded in e
 Compare side-by-side crops and an overlay/difference. Boundaries, insets, baselines, row pitch and control bounds must be within 2 CSS px, type sizes within 1px, with matching wrapping, control order, icons, selected states and copy. Exclude text antialiasing from geometry measurements only. The inventories in [gap-shell.md](mockup-waves/gap-shell.md#2-rendered-look-inventory) and the module gap reports refine these boxes. Capture 1024px and 390px adaptations separately; they have no original compact PNG target. Desktop DEV fixture capture is outside this PNG acceptance contract.
 
 The controller still owes all eight authorized browser captures after the shared shell and relevant module owners land. T7's tests and production exclusion check establish fixture readiness only.
+
+## Wave 4 gate handoff
+
+T6 adds deterministic DOM coverage at 390x844, 768, 1024, 1279 and 1280px. It checks one resource owner, retained drafts, focus through dock/sheet transfer, compact Escape/close, list search/scroll and the actual Browser container against a fake preview boundary. Live and fixture mount the same shell region tree; the fixture has its own memory-only compact menu. These tests do not measure rendered geometry or a native browser guest.
+
+`shell.responsive` remains in `incompleteRegions`, and `shellReady` remains false until the authorized controller completes rendered acceptance. Required module `readyRegions` and incomplete Docs regions remain unchanged. No capture manifest or visual-pass receipt was produced by the implementer. Keep the existing 45-second fixture-entry test bound; investigate render/import cost before raising it again.
+
+The integrated pass still owes:
+
+- All eight full 1280x800 fixtures, pinned V1 host/font/theme/locale/time zone, plus side-by-side crops and overlays for navigation, breadcrumb/header, center and resource frame. Check x207/x259/x940, y26/y78/y135/y768, and x429 only for split centers.
+- All eight footer crops `[940,768,340,32]` and header action crops `[822,26,118,52]`. Check static health dot/copy/gear, footer outside body scroll, correct selected resource tab and sample-only labels.
+- Proposed 390x844 and 1024px states, with 768/1279/1280 breakpoint round trips. Check no page overflow, tab-only scrolling, 44px targets, list/detail Back, Resources before item selection, sheet focus trap, Escape, close and keyboard/palette return focus. Check a retained draft and one active preview through resizing and Linked context.
+- Windows caption-overlay and macOS traffic-light states, expanded/collapsed navigation and macOS fullscreen. Also capture Code with current and legacy sidebars, long environment/project/item names and Workspace/Code return. These are separate native-chrome outcomes, not original fixture pixel parity.
+- Linked context open/empty/held/current-item states, X versus Back, task project discovery with Via labels, unavailable/deleted items, suggestion decisions and empty/Auto/manual/unavailable project picker states.
+- Proposed 04 item menus and scoped project settings, including selection changes while settings target A, save to A and cancel. Include disabled/revalidating actions and created-project link retry.
+- A separate light-theme smoke capture. Packaged native controls/guest leases, real accounts, React Native, another physical device and pilot evidence remain separate from phone-web viewport checks.
