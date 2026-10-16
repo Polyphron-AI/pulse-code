@@ -4,9 +4,11 @@ import {
   type WorkspaceTask,
   type WorkspaceProjectConfig,
   type WorkspaceProjectConfigSave,
+  WorkspaceToolsError,
   ThreadId,
 } from "@t3tools/contracts";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import * as Schema from "effect/Schema";
 import { useContext, useState } from "react";
 import { WorkspaceItemMutationContext } from "./WorkspaceEngagement";
 import { useEnvironmentQuery } from "../../state/query";
@@ -20,6 +22,7 @@ import { Button } from "../ui/button";
 import { WorkspaceItemActions, WorkspaceItemMenu } from "./WorkspaceItemActions";
 import { useMailCapabilities } from "./mail/useMailCapabilities";
 import { useWorkspaceCanOperate } from "./useWorkspaceCanOperate";
+const isWorkspaceToolsError = Schema.is(WorkspaceToolsError);
 export const workspaceToolsError = (result: Parameters<typeof squashAtomCommandFailure>[0]) => {
   const cause = squashAtomCommandFailure(result);
   return cause instanceof Error ? cause.message : "The workspace change could not be saved.";
@@ -73,6 +76,7 @@ function ProjectWorkspaceSettingsForm({
   const awaitingConfirmation = workspaceTasksV2 && confirmation !== null;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const taskColumns = columns.split("\n").map((value) => value.trim());
   const submit = async (input: WorkspaceProjectConfigSave) => {
     if (busy || !canOperate || (input.expectedRevision !== undefined && !workspaceTasksV2)) return;
     setBusy(true);
@@ -81,10 +85,12 @@ function ProjectWorkspaceSettingsForm({
     setBusy(false);
     if (result._tag === "Failure") {
       const message = workspaceToolsError(result);
+      const cause = squashAtomCommandFailure(result);
       setError(message);
       setConfirmation(
         workspaceTasksV2 &&
-          /changes completion for \d+ tasks?\. Confirm to continue\.$/.test(message)
+          isWorkspaceToolsError(cause) &&
+          cause.reason === "completion-confirmation-required"
           ? input
           : null,
       );
@@ -98,7 +104,7 @@ function ProjectWorkspaceSettingsForm({
         if (awaitingConfirmation) return;
         await submit({
           projectId: config.projectId,
-          taskColumns: columns.split("\n").map((value) => value.trim()),
+          taskColumns,
           browserThreadId: browserThreadId ? ThreadId.make(browserThreadId) : null,
           ...(workspaceTasksV2
             ? { expectedRevision: config.revision ?? 0, completedColumn: completedColumn || null }
@@ -111,7 +117,12 @@ function ProjectWorkspaceSettingsForm({
         <Textarea
           aria-label="Task columns"
           value={columns}
-          onChange={(event) => setColumns(event.target.value)}
+          onChange={(event) => {
+            const value = event.target.value;
+            setColumns(value);
+            if (!value.split("\n").some((column) => column.trim() === completedColumn))
+              setCompletedColumn("");
+          }}
           maxLength={500}
           disabled={busy || !canOperate || awaitingConfirmation}
         />
@@ -148,15 +159,11 @@ function ProjectWorkspaceSettingsForm({
             disabled={busy || !canOperate || awaitingConfirmation}
           >
             <option value="">Not designated</option>
-            {columns
-              .split("\n")
-              .map((value) => value.trim())
-              .filter(Boolean)
-              .map((value) => (
-                <option key={value} value={value}>
-                  {value}
-                </option>
-              ))}
+            {taskColumns.filter(Boolean).map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
           </select>
         </label>
       ) : (
@@ -192,7 +199,11 @@ function ProjectWorkspaceSettingsForm({
             onClick={() => {
               setConfirmation(null);
               setError(null);
-              setCompletedColumn(config.completedColumn ?? "");
+              setCompletedColumn(
+                config.completedColumn && taskColumns.includes(config.completedColumn)
+                  ? config.completedColumn
+                  : "",
+              );
             }}
           >
             Cancel

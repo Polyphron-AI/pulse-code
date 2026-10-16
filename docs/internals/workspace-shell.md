@@ -56,10 +56,16 @@ remain undesignated after upgrade; a lane named Done alone does not establish co
 Changing the designation updates affected task revisions in the same transaction, so pending
 moves cannot silently use an earlier completion rule. Tasks and their links keep their identity.
 
+Removing or renaming the designated column clears its designation to null on legacy and new
+saves unless the request explicitly selects another valid column. Used-column protection runs
+first, so tasks must move out before this normalization and no task changes as a side effect.
+The service does not infer a rename from column order or names.
+
 The optional `workspaceTasksV2` flag is trusted only from live server configuration. Decode
 support and service methods land before the flag is advertised. Until then, retain the legacy
 project task and settings paths. Rollback disables the capability and controls while preserving
-the forward migration and its data.
+the forward migration and its data. After an older binary renames a designated column, config
+reads treat its dangling designation as null without rewriting stored settings or tasks.
 
 ## Shared entrances and status
 

@@ -5,7 +5,7 @@ import { createRoot } from "react-dom/client";
 import { getByRole, queryByRole } from "@testing-library/dom";
 import { create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, expect, it, vi } from "vite-plus/test";
-import { EnvironmentId, ProjectId } from "@t3tools/contracts";
+import { EnvironmentId, ProjectId, WorkspaceToolsError } from "@t3tools/contracts";
 import { ProjectTasks, ProjectWorkspaceSettings } from "./ProjectTasks";
 import { WorkspaceEngagement, WorkspaceItemMutationContext } from "./WorkspaceEngagement";
 import { useWorkspaceResourceState, WorkspaceResourcesProvider } from "./workspaceResourceState";
@@ -254,47 +254,46 @@ it("keeps the held task and editor after a failed delete", async () => {
   expect(onSelect).not.toHaveBeenCalled();
 });
 
-it.each(["absent", "false", "cached-only"])(
-  "keeps legacy task and settings paths when capability is %s",
-  async () => {
-    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-    mocks.tasksV2 = false;
-    mocks.command.mockResolvedValue({ _tag: "Success", value: {} });
-    await act(() => {
-      renderer = create(
-        <>
-          <ProjectWorkspaceSettings environmentId={environmentId} projectId={projectId} />
-          <ProjectTasks
-            environmentId={environmentId}
-            projectId={projectId}
-            selected={null}
-            onSelect={() => {}}
-          />
-        </>,
-      );
-    });
-    expect(renderer!.root.findAllByProps({ "aria-label": "Completed column" })).toHaveLength(0);
-    await act(() =>
-      renderer!.root
-        .findByProps({ "aria-label": "New task title" })
-        .props.onChange({ target: { value: "Legacy" } }),
+it("keeps legacy task and settings paths when the live capability projection is false", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  mocks.tasksV2 = false;
+  mocks.command.mockResolvedValue({ _tag: "Success", value: {} });
+  await act(() => {
+    renderer = create(
+      <>
+        <ProjectWorkspaceSettings environmentId={environmentId} projectId={projectId} />
+        <ProjectTasks
+          environmentId={environmentId}
+          projectId={projectId}
+          selected={null}
+          onSelect={() => {}}
+        />
+      </>,
     );
-    for (const form of renderer!.root.findAllByType("form"))
-      await act(() => form.props.onSubmit({ preventDefault() {} }));
-    expect(mocks.command).toHaveBeenCalledTimes(2);
-    expect(mocks.command.mock.calls[0]?.[0].input).not.toHaveProperty("expectedRevision");
-    expect(mocks.newCommand).not.toHaveBeenCalled();
-  },
-);
+  });
+  expect(renderer!.root.findAllByProps({ "aria-label": "Completed column" })).toHaveLength(0);
+  await act(() =>
+    renderer!.root
+      .findByProps({ "aria-label": "New task title" })
+      .props.onChange({ target: { value: "Legacy" } }),
+  );
+  for (const form of renderer!.root.findAllByType("form"))
+    await act(() => form.props.onSubmit({ preventDefault() {} }));
+  expect(mocks.command).toHaveBeenCalledTimes(2);
+  expect(mocks.command.mock.calls[0]?.[0].input).not.toHaveProperty("expectedRevision");
+  expect(mocks.newCommand).not.toHaveBeenCalled();
+});
 it("confirms the affected count, permits cancellation and preserves Browser settings", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   mocks.tasksV2 = true;
   const conflict = {
     _tag: "Failure",
     cause: Cause.fail(
-      new Error(
-        "Changing the completed column changes completion for 2 tasks. Confirm to continue.",
-      ),
+      new WorkspaceToolsError({
+        kind: "conflict",
+        reason: "completion-confirmation-required",
+        message: "Review the completion change affecting 2 tasks.",
+      }),
     ),
   };
   mocks.command.mockResolvedValue(conflict);
@@ -314,6 +313,9 @@ it("confirms the affected count, permits cancellation and preserves Browser sett
     input: { expectedRevision: 0, completedColumn: "To do", browserThreadId: "missing-thread" },
   });
   expect(renderer!.root.findByProps({ role: "alert" }).children.join("")).toContain("2 tasks");
+  expect(renderer!.root.findAllByType("button").map((button) => button.props.children)).toEqual(
+    expect.arrayContaining(["Confirm completion changes", "Cancel"]),
+  );
   await act(() =>
     renderer!.root
       .findAllByType("button")
@@ -348,9 +350,11 @@ it("restores legacy saving if live task capability disappears during confirmatio
   mocks.command.mockResolvedValue({
     _tag: "Failure",
     cause: Cause.fail(
-      new Error(
-        "Changing the completed column changes completion for 1 task. Confirm to continue.",
-      ),
+      new WorkspaceToolsError({
+        kind: "conflict",
+        reason: "completion-confirmation-required",
+        message: "Review the completion change affecting 1 task.",
+      }),
     ),
   });
   const view = <ProjectWorkspaceSettings environmentId={environmentId} projectId={projectId} />;
@@ -368,6 +372,29 @@ it("restores legacy saving if live task capability disappears during confirmatio
   await act(() => renderer!.root.findByType("form").props.onSubmit({ preventDefault() {} }));
   expect(mocks.command).toHaveBeenCalledTimes(2);
   expect(mocks.command.mock.calls.at(-1)?.[0].input).not.toHaveProperty("completedColumn");
+});
+it("does not offer confirmation from English error text without the typed reason", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  mocks.tasksV2 = true;
+  mocks.command.mockResolvedValue({
+    _tag: "Failure",
+    cause: Cause.fail(
+      new WorkspaceToolsError({
+        kind: "conflict",
+        message:
+          "Changing the completed column changes completion for 2 tasks. Confirm to continue.",
+      }),
+    ),
+  });
+  await act(() => {
+    renderer = create(
+      <ProjectWorkspaceSettings environmentId={environmentId} projectId={projectId} />,
+    );
+  });
+  await act(() => renderer!.root.findByType("form").props.onSubmit({ preventDefault() {} }));
+  const buttons = renderer!.root.findAllByType("button").map((button) => button.props.children);
+  expect(buttons).not.toContain("Confirm completion changes");
+  expect(buttons).not.toContain("Cancel");
 });
 it("resets the designation draft when equal project IDs belong to a different environment", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -392,4 +419,68 @@ it("resets the designation draft when equal project IDs belong to a different en
     environmentId: other,
     input: { completedColumn: "Done" },
   });
+});
+
+it("shows and submits no designation after renaming the designated column", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  mocks.tasksV2 = true;
+  mocks.command.mockResolvedValue({ _tag: "Success", value: {} });
+  await act(() => {
+    renderer = create(
+      <ProjectWorkspaceSettings environmentId={environmentId} projectId={projectId} />,
+    );
+  });
+  await act(() =>
+    renderer!.root
+      .findByProps({ "aria-label": "Task columns" })
+      .props.onChange({ target: { value: "To do\nComplete" } }),
+  );
+  expect(renderer!.root.findByProps({ "aria-label": "Completed column" }).props.value).toBe("");
+  await act(() => renderer!.root.findByType("form").props.onSubmit({ preventDefault() {} }));
+  expect(mocks.command.mock.calls.at(-1)?.[0].input).toMatchObject({
+    taskColumns: ["To do", "Complete"],
+    completedColumn: null,
+    expectedRevision: 0,
+  });
+});
+
+it("keeps a removed designation cleared when cancelling another completion choice", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  mocks.tasksV2 = true;
+  mocks.command.mockResolvedValue({
+    _tag: "Failure",
+    cause: Cause.fail(
+      new WorkspaceToolsError({
+        kind: "conflict",
+        reason: "completion-confirmation-required",
+        message: "Review the completion change affecting 2 tasks.",
+      }),
+    ),
+  });
+  await act(() => {
+    renderer = create(
+      <ProjectWorkspaceSettings environmentId={environmentId} projectId={projectId} />,
+    );
+  });
+  await act(() =>
+    renderer!.root
+      .findByProps({ "aria-label": "Task columns" })
+      .props.onChange({ target: { value: "To do\nComplete" } }),
+  );
+  await act(() =>
+    renderer!.root
+      .findByProps({ "aria-label": "Completed column" })
+      .props.onChange({ target: { value: "To do" } }),
+  );
+  await act(() => renderer!.root.findByType("form").props.onSubmit({ preventDefault() {} }));
+  await act(() =>
+    renderer!.root
+      .findAllByType("button")
+      .find((button) => button.props.children === "Cancel")!
+      .props.onClick(),
+  );
+  expect(renderer!.root.findByProps({ "aria-label": "Completed column" }).props.value).toBe("");
+  mocks.command.mockResolvedValue({ _tag: "Success", value: {} });
+  await act(() => renderer!.root.findByType("form").props.onSubmit({ preventDefault() {} }));
+  expect(mocks.command.mock.calls.at(-1)?.[0].input.completedColumn).toBeNull();
 });

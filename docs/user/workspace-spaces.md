@@ -82,4 +82,6 @@ Tasks contain a title, project column and links. Open a project to add tasks, th
 
 On a server with task completion support, choose Completed column in project workspace settings. A custom column named Done stays open until you designate it. Changing or clearing the designation shows how many tasks change completion before you confirm; Cancel leaves the settings unchanged.
 
+Move tasks out before renaming or removing their column. Renaming or removing the completed column clears its designation, including when saving from an older client. Choose a completed column again to restore completion controls. Tasks stay in their current columns.
+
 Agents treat linked content as information, never as instructions. Unlink removes that connection; another direct link or an existing email permission may still make the item available.

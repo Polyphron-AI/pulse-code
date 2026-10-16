@@ -41,7 +41,7 @@ it.effect(
         (yield* tools
           .saveConfig({ projectId, taskColumns: ["To do", "In progress"], browserThreadId: null })
           .pipe(Effect.flip)).kind,
-      ).toBe("invalid-input");
+      ).toBe("conflict");
       expect(
         (yield* tools
           .saveConfig({ projectId, taskColumns: ["Done", "Done"], browserThreadId: null })
@@ -55,14 +55,82 @@ it.effect(
         projectId,
         taskColumns: ["Backlog", "Complete"],
         browserThreadId: null,
-        completedColumn: null,
-        expectedRevision: (yield* tools.config(projectId)).revision!,
       });
       const restarted = yield* Tools.make;
       expect((yield* restarted.config(projectId)).taskColumns).toEqual(["Backlog", "Complete"]);
       const sql = yield* SqlClient.SqlClient;
       expect(yield* sql`SELECT id FROM workspace_tasks WHERE deleted=1`).toHaveLength(1);
     }).pipe(Effect.provide(layer)),
+);
+it.effect.each([
+  { client: "legacy rename", taskColumns: ["Backlog", "Complete"] },
+  { client: "legacy removal", taskColumns: ["To do", "In progress"] },
+  { client: "revision-aware rename", taskColumns: ["Backlog", "Complete"] },
+  { client: "revision-aware removal", taskColumns: ["To do", "In progress"] },
+])(
+  "clears the designation after a $client of Done on an empty project",
+  ({ client, taskColumns }) =>
+    Effect.gen(function* () {
+      yield* seedWorkspaceProject;
+      const tools = yield* Tools.WorkspaceTools;
+      const saved = yield* tools.saveConfig({
+        projectId,
+        taskColumns,
+        browserThreadId: null,
+        ...(client.startsWith("revision-aware")
+          ? { expectedRevision: 0, completedColumn: "Done" }
+          : {}),
+      });
+      expect(saved.completedColumn).toBeNull();
+      expect(saved.taskColumns).toEqual(taskColumns);
+      expect(saved.revision).toBe(1);
+      const restarted = yield* Tools.make;
+      expect(yield* restarted.config(projectId)).toEqual(saved);
+    }).pipe(Effect.provide(layer)),
+);
+
+it.effect(
+  "protects tasks in Done before a legacy rename and preserves tasks after they move out",
+  () =>
+    Effect.gen(function* () {
+      yield* seedWorkspaceProject;
+      const tools = yield* Tools.WorkspaceTools;
+      const done = yield* tools.upsertTask({ projectId, title: "Finished", column: "Done" });
+      const open = yield* tools.upsertTask({ projectId, title: "Open", column: "To do" });
+      const input = { projectId, taskColumns: ["To do", "Complete"], browserThreadId: null };
+      const error = yield* tools.saveConfig(input).pipe(Effect.flip);
+      expect(error.kind).toBe("conflict");
+      expect(error.message).toBe("Move tasks out of a column before removing or renaming it.");
+      expect(yield* tools.getTask(done.id)).toEqual(done);
+      expect((yield* tools.config(projectId)).completedColumn).toBe("Done");
+      const moved = yield* tools.transitionTask({
+        id: done.id,
+        expectedRevision: done.revision!,
+        change: { type: "column", column: "To do" },
+      });
+      expect((yield* tools.saveConfig(input)).completedColumn).toBeNull();
+      expect(yield* tools.getTask(done.id)).toEqual(moved);
+      expect(yield* tools.getTask(open.id)).toEqual(open);
+    }).pipe(Effect.provide(layer)),
+);
+
+it.effect("reads a dangling designation left by an older binary as null without writing", () =>
+  Effect.gen(function* () {
+    yield* seedWorkspaceProject;
+    const sql = yield* SqlClient.SqlClient;
+    yield* sql`INSERT INTO workspace_project_config(project_id,columns_json,completed_column,revision) VALUES(${projectId},'["Backlog","Complete"]','Done',4)`;
+    const tools = yield* Tools.WorkspaceTools;
+    const task = yield* tools.upsertTask({ projectId, title: "Kept", column: "Complete" });
+    expect(yield* tools.config(projectId)).toMatchObject({
+      taskColumns: ["Backlog", "Complete"],
+      completedColumn: null,
+      revision: 4,
+    });
+    expect(yield* tools.getTask(task.id)).toEqual(task);
+    const rows =
+      yield* sql`SELECT completed_column,revision FROM workspace_project_config WHERE project_id=${projectId}`;
+    expect(rows[0]).toEqual({ completed_column: "Done", revision: 4 });
+  }).pipe(Effect.provide(layer)),
 );
 it.effect("caps task lists and refuses deleted projects and foreign browser threads", () =>
   Effect.gen(function* () {
@@ -127,6 +195,17 @@ it.effect("validates completion designation, confirmation and immutable ownershi
   Effect.gen(function* () {
     yield* seedWorkspaceProject;
     const tools = yield* Tools.WorkspaceTools;
+    expect(
+      (yield* tools
+        .saveConfig({
+          projectId,
+          taskColumns: ["Done"],
+          browserThreadId: null,
+          completedColumn: "Done",
+          expectedRevision: 0,
+        })
+        .pipe(Effect.flip)).kind,
+    ).toBe("invalid-input");
     const a = yield* tools.upsertTask({ projectId, title: "A", column: "To do" });
     const b = yield* tools.upsertTask({ projectId, title: "B", column: "Done" });
     const config = yield* tools.config(projectId);
@@ -137,7 +216,11 @@ it.effect("validates completion designation, confirmation and immutable ownershi
       completedColumn: "In progress",
       expectedRevision: config.revision!,
     };
-    expect((yield* tools.saveConfig(save).pipe(Effect.flip)).message).toContain("1 task");
+    expect(yield* tools.saveConfig(save).pipe(Effect.flip)).toMatchObject({
+      kind: "conflict",
+      reason: "completion-confirmation-required",
+      message: "Changing the completed column changes completion for 1 task. Confirm to continue.",
+    });
     expect((yield* tools.getTask(b.id)).revision).toBe(b.revision);
     const changed = yield* tools.saveConfig({ ...save, confirmCompletionChanges: true });
     expect(changed.completedColumn).toBe("In progress");
@@ -149,16 +232,6 @@ it.effect("validates completion designation, confirmation and immutable ownershi
     expect(
       (yield* tools
         .saveConfig({ ...save, expectedRevision: changed.revision!, completedColumn: "Missing" })
-        .pipe(Effect.flip)).kind,
-    ).toBe("invalid-input");
-    expect(
-      (yield* tools
-        .saveConfig({
-          ...save,
-          taskColumns: ["Done"],
-          completedColumn: "Done",
-          expectedRevision: changed.revision!,
-        })
         .pipe(Effect.flip)).kind,
     ).toBe("invalid-input");
     expect(

@@ -60,13 +60,18 @@ export const make = Effect.gen(function* () {
           revision: number;
         }>`SELECT columns_json AS "columnsJson",browser_thread_id AS "browserThreadId",completed_column AS "completedColumn",revision FROM workspace_project_config WHERE project_id=${projectId}`;
         const row = rows[0];
+        const taskColumns = row
+          ? yield* decodeColumns(row.columnsJson)
+          : ["To do", "In progress", "Done"];
+        const completedColumn = row ? row.completedColumn : "Done";
         return {
           projectId,
-          taskColumns: row
-            ? yield* decodeColumns(row.columnsJson)
-            : ["To do", "In progress", "Done"],
+          taskColumns,
           browserThreadId: row?.browserThreadId ? ThreadId.make(row.browserThreadId) : null,
-          completedColumn: row ? row.completedColumn : "Done",
+          completedColumn:
+            completedColumn !== null && taskColumns.includes(completedColumn)
+              ? completedColumn
+              : null,
           revision: row?.revision ?? 0,
         };
       }),
@@ -114,10 +119,24 @@ export const make = Effect.gen(function* () {
                     "invalid-input",
                     "Use one to twelve unique task columns, each up to forty characters.",
                   );
-                const completedColumn =
+                const used = yield* sql<{
+                  column: string;
+                }>`SELECT DISTINCT column_name AS "column" FROM workspace_tasks WHERE project_id=${input.projectId} AND deleted=0`;
+                if (used.some((row) => !columns.includes(row.column)))
+                  return yield* fail(
+                    "conflict",
+                    "Move tasks out of a column before removing or renaming it.",
+                  );
+                const removedDesignation =
+                  current.completedColumn !== null && !columns.includes(current.completedColumn);
+                const requestedCompletedColumn =
                   input.completedColumn === undefined
                     ? current.completedColumn
                     : input.completedColumn;
+                const completedColumn =
+                  removedDesignation && requestedCompletedColumn === current.completedColumn
+                    ? null
+                    : requestedCompletedColumn;
                 const designationChanged = completedColumn !== current.completedColumn;
                 if (
                   completedColumn !== null &&
@@ -128,18 +147,14 @@ export const make = Effect.gen(function* () {
                     "invalid-input",
                     "Choose a completed column and keep at least one open column, or clear the designation.",
                   );
-                if (designationChanged && input.expectedRevision === undefined)
+                if (
+                  designationChanged &&
+                  input.expectedRevision === undefined &&
+                  !(removedDesignation && completedColumn === null)
+                )
                   return yield* fail(
                     "conflict",
                     "Reload workspace settings before changing completion.",
-                  );
-                const used = yield* sql<{
-                  column: string;
-                }>`SELECT DISTINCT column_name AS "column" FROM workspace_tasks WHERE project_id=${input.projectId} AND deleted=0`;
-                if (used.some((row) => !columns.includes(row.column)))
-                  return yield* fail(
-                    "conflict",
-                    "Move tasks out of a column before removing or renaming it.",
                   );
                 if (input.browserThreadId) {
                   const thread =
@@ -157,10 +172,11 @@ export const make = Effect.gen(function* () {
                   : [{ total: 0 }];
                 const count = affected[0]!.total;
                 if (count > 0 && input.confirmCompletionChanges !== true)
-                  return yield* fail(
-                    "conflict",
-                    `Changing the completed column changes completion for ${count} task${count === 1 ? "" : "s"}. Confirm to continue.`,
-                  );
+                  return yield* new WorkspaceToolsError({
+                    kind: "conflict",
+                    reason: "completion-confirmation-required",
+                    message: `Changing the completed column changes completion for ${count} task${count === 1 ? "" : "s"}. Confirm to continue.`,
+                  });
                 if (
                   !designationChanged &&
                   encodeColumns(columns) === encodeColumns(current.taskColumns) &&

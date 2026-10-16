@@ -59,6 +59,7 @@ export class WorkspaceToolsError extends Schema.TaggedError<WorkspaceToolsError>
   "WorkspaceToolsError",
   {
     kind: Schema.Literals(["invalid-input", "not-found", "conflict", "unavailable"]),
+    reason: Schema.optionalKey(Schema.Literal("completion-confirmation-required")),
     message: Schema.String,
   },
 ) {}

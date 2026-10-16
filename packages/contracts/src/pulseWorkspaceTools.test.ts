@@ -9,12 +9,15 @@ import {
   WorkspaceProjectConfigSave,
   WorkspaceAutomationSave,
   PulseWorkspaceToolsRpcs,
+  WorkspaceToolsError,
 } from "./pulseWorkspaceTools.ts";
 const decodeTask = Schema.decodeUnknownSync(WorkspaceTask);
 const decodeUpsert = Schema.decodeUnknownSync(WorkspaceTaskUpsert);
 const decodeConfig = Schema.decodeUnknownSync(WorkspaceProjectConfig);
 const decodeConfigSave = Schema.decodeUnknownSync(WorkspaceProjectConfigSave);
 const decodeTransition = Schema.decodeUnknownSync(WorkspaceTaskTransition);
+const decodeToolsError = Schema.decodeUnknownSync(WorkspaceToolsError);
+const encodeToolsError = Schema.encodeSync(WorkspaceToolsError);
 const decodeCapabilities = Schema.decodeUnknownSync(
   Schema.Struct({ pulseCapabilities: ServerConfig.fields.pulseCapabilities }),
 );
@@ -24,6 +27,15 @@ const task = {
   title: "Review",
   column: "To do",
 };
+it("decodes the optional typed confirmation reason and preserves legacy errors", () => {
+  const legacy = { _tag: "WorkspaceToolsError", kind: "conflict", message: "Reload settings." };
+  expect(decodeToolsError(legacy)).toMatchObject(legacy);
+  const confirmation = { ...legacy, reason: "completion-confirmation-required" };
+  const decoded = decodeToolsError(confirmation);
+  expect(decoded).toMatchObject(confirmation);
+  expect(encodeToolsError(decoded)).toEqual(confirmation);
+  expect(() => decodeToolsError({ ...legacy, reason: "unknown" })).toThrow();
+});
 it("decodes legacy tasks, config and upsert without new fields", () => {
   expect(decodeTask(task)).toEqual(task);
   expect(decodeUpsert(task)).toEqual(task);
