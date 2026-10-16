@@ -37,6 +37,12 @@ on macOS and Ctrl on Windows and Linux, including GNOME, KDE Plasma, Niri, and
 Hyprland. If a custom desktop shortcut takes the same keys, choose another binding
 in Settings.
 
+## Workspace panels
+
+Use `mod+alt+o` to toggle Resources and `mod+alt+l` to toggle Linked context.
+These shortcuts leave editable fields and terminal input alone. Change them in
+**Settings → Keybindings**.
+
 ## Copy pull request references
 
 With a PR open in the right panel or on the Pull Requests page, use `mod+shift+c`

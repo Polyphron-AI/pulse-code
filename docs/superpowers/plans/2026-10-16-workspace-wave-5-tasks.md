@@ -141,6 +141,8 @@ Allowed W5 live substitutions: actual project/task titles, dates/area, exact fil
 
 ## Interfaces and serialization
 
+Keep exactly one WorkspaceResourceBody instance. It may stay mounted while CSS-hidden under Linked context or compact layouts. While hidden it starts no timers, polling or animations, and portaled UI must respect the hidden state.
+
 Wave 4's "Canonical seams for Waves 5-11" section freezes these exports and paths, all under apps/web/src/components/workspace unless stated otherwise. Reuse them exactly; a mismatch at dispatch is a dependency defect, not permission to invent another shell API.
 
 | Producer  | Named interface and path                                                                                                           | W5 consumption                                                                                                                                                                         |

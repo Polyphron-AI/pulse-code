@@ -12,9 +12,12 @@ the shared header and split or full center. Viewport width chooses the resource 
 and above, or a modal sheet below it. Under 768px the list/detail center uses one pane and the
 navigation becomes a menu. Observed center width only bounds its resizable divider.
 
-One stable portal container moves the mounted resource tree between hosts. Opening Linked context
-hides that same resource tree while retaining its draft and subscriptions. Do not mount a second
-Browser to handle a breakpoint. Explicit resource close unmounts the tool; a viewport transfer
+One stable portal container moves exactly one WorkspaceResourceBody instance between hosts. It may
+stay mounted while CSS-hidden under Linked context or compact layouts, retaining its draft and
+subscriptions. While hidden it starts no timers, polling or animations, and portaled UI must respect
+the hidden state. The existing resource close-focus context exposes that state. The Browser dialog
+closes when hidden and stays closed until explicitly reopened. Do not mount a second Browser to
+handle a breakpoint. Explicit resource close unmounts the tool; a viewport transfer
 must keep visibility in one state transition. Initial compact entry is closed. Compact dismissal
 does not overwrite the saved wide preference. An environment change drops transient captures and
 remounts environment-owned content.
@@ -29,17 +32,18 @@ reachability and permissions. `resetProject` returns to Auto inference without c
 ## Captured actions and held context
 
 An action host captures environment, item and confirmed endpoints when a menu, chooser or editor
-opens. It keeps those targets while center selection changes. Permission revalidation disables
-writes without remounting the host or discarding text and errors. Mutations recheck current
-permission. If project creation finishes after permission loss, its completion still records the
+opens. It keeps those targets while center selection changes. Session revalidation uses the last
+resolved permissions, keeping inputs focused and editable. Permission loss disables writes without
+remounting the host or discarding text and errors. Mutations recheck current permission. If project
+creation finishes after permission loss, its completion still records the
 created project and attempts the captured link. A failed link leaves a truthful retry against that
 project, preventing duplicate creation.
 
 Linked context separately holds its opened item and render scope. Show current item replaces that
 capture explicitly. X restores prior Resources visibility; Back opens Resources and focuses its
 selected tab inside a compact sheet. `WorkspaceItemMutationContext` invalidates only the matching
-environment/item capture after successful deletion or a move out of scope. A failed mutation or
-task column change preserves context. Item identity and links survive a column change.
+environment/item capture after successful deletion. A failed mutation or task column change preserves
+context. Item identity and links survive a column change.
 
 One-hop discovery appears once in Linked context. For a task it reads the task's actual owning
 project and labels the results as project discovery. Resource selection cannot retarget this read.

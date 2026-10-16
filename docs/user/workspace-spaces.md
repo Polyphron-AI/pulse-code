@@ -12,9 +12,9 @@ The project picker shows Auto: followed by the project name when it infers one p
 
 Linked context opens the selected item's confirmed links, suggestions and their origins. Use the header's link control, or Workspace actions on a phone. It holds the item you opened it for. If you select another item, Held item identifies the original target; choose Show current item to switch. A deleted task closes its held context. Changing a task's column keeps its links open.
 
-Back to resources returns to the chosen project and tab. The X in Linked context closes that context and restores the previous Resources visibility. The X in Resources closes the tool; reopen it from the header. Closing Resources on a wide screen remembers that preference. On a phone or a narrower window, Resources opens over the current view and closing it returns focus to its trigger. Resizing an open panel transfers it between the side panel and sheet. Resource drafts stay mounted through resizing and Linked context; explicitly closing Resources stops its tool.
+Back to resources returns to the chosen project and tab. The X in Linked context closes that context and restores the previous Resources visibility. The X in Resources closes the tool; reopen it from the header. Closing Resources on a wide screen remembers that preference. On a phone or a narrower window, Resources opens over the current view and closing it returns focus to its trigger. Resizing an open panel transfers it between the side panel and sheet. Resource drafts are kept through resizing and Linked context; explicitly closing Resources stops its tool.
 
-The command palette entries Resources and Linked context use the same controls. Their default shortcuts are Mod+Alt+O and Mod+Alt+L. Mod means Ctrl on Windows and Linux, or Command on macOS. These shortcuts do not run while typing in an editable field or using a terminal.
+The command palette entries Resources and Linked context use the same controls. Their default shortcuts are `mod+alt+o` and `mod+alt+l`. `mod` means Ctrl on Windows and Linux, or Command on macOS. These shortcuts do not run while typing in an editable field or using a terminal.
 
 Connection status unavailable means Pulse Code has no supported health information for the selected project's sources. It does not establish whether those sources are connected or have failed. The footer's settings control opens workspace settings for that project.
 
@@ -38,11 +38,11 @@ Linked shows confirmed connections, their type and title, how they were made, an
 
 Choose Link to to find a project or thread, paste a web address, or drag an item onto another item or its Linked panel. Pasted Google Drive and Docs links retain their file identity and open on Google. Pasting a link does not connect a Google account.
 
-Right-click an item, use its actions button, or long-press on touch screens to start a thread or create or add to a project. The same actions are in the selected item's header and command palette. Default shortcuts are Ctrl+Alt+T to start a thread, Ctrl+Alt+P to add to a project, and Ctrl+Alt+Shift+P to start a project. On macOS, use Command instead of Ctrl.
+Right-click an item, use its actions button, or long-press on touch screens to start a thread or create or add to a project. The same actions are in the selected item's header and command palette. Default shortcuts are `mod+alt+t` to start a thread, `mod+alt+p` to add to a project, and `mod+alt+shift+p` to start a project.
 
 Start thread uses the item's linked project or asks you to choose one. Its composer contains removable references to the item and its confirmed links. Remove references you do not want to attach to this thread, write your request, and Send. Opening or canceling the draft creates no links. Sending confirms only the references left in the message before the agent starts. If confirmation fails, the turn shows an error and the agent does not run.
 
-Start project asks for a name and creates a folder under your configured projects directory. It names the source item it will link. Canceling before Create makes no project. If linking fails after creation, Retry links the existing project rather than creating another one. A brief disconnect or permission recheck keeps the form and its text while disabling actions.
+Start project asks for a name and creates a folder under your configured projects directory. It names the source item it will link. Canceling before Create makes no project. If linking fails after creation, Retry links the existing project rather than creating another one. Session revalidation keeps the form focused and its text editable using your last resolved permissions. Losing permission disables actions and keeps the draft.
 
 ## Suggested links
 
