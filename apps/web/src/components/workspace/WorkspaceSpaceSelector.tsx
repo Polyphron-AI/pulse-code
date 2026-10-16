@@ -55,7 +55,7 @@ export function useWorkspaceEnvironment(search?: WorkspaceSearch) {
   return search?.environment
     ? EnvironmentId.make(search.environment)
     : ((target?.kind === "server" ? target.threadRef.environmentId : draftEnvironmentId) ??
-        getLastCodeEnvironmentId());
+        (search ? undefined : getLastCodeEnvironmentId()));
 }
 
 /** Desktop keeps the rail across every space; compact clients use the navigation menu. */

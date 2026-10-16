@@ -6,16 +6,25 @@ import {
   createRootRoute,
   createRoute,
   createRouter,
+  Link,
   Outlet,
   RouterProvider,
+  useLocation,
 } from "@tanstack/react-router";
 import { getByRole } from "@testing-library/dom";
 import { afterEach, beforeEach, expect, it, vi } from "vite-plus/test";
-import { WorkspaceSpaceSelector } from "./WorkspaceSpaceSelector";
+import { useWorkspaceEnvironment, WorkspaceSpaceSelector } from "./WorkspaceSpaceSelector";
+import { useMailCapabilities } from "./mail/useMailCapabilities";
+import {
+  parseWorkspaceSearch,
+  workspaceDestinations,
+  workspaceDestinationSearch,
+} from "./workspaceNavigation";
 
 const state = vi.hoisted(() => ({
   primary: "primary",
   mailRead: true,
+  unavailableMailEnvironment: undefined as string | undefined,
   close: vi.fn(),
 }));
 vi.mock("../ui/sidebar", () => ({
@@ -24,7 +33,8 @@ vi.mock("../ui/sidebar", () => ({
 vi.mock("./mail/useMailCapabilities", () => ({
   useMailCapabilities: (environmentId?: string) => ({
     environmentId: environmentId ?? state.primary,
-    mailRead: state.mailRead,
+    mailRead:
+      state.mailRead && (environmentId ?? state.primary) !== state.unavailableMailEnvironment,
   }),
 }));
 vi.mock("../../composerDraftStore", () => ({
@@ -55,15 +65,35 @@ afterEach(async () => {
   node?.remove();
   state.primary = "primary";
   state.mailRead = true;
+  state.unavailableMailEnvironment = undefined;
   vi.clearAllMocks();
   vi.unstubAllGlobals();
 });
 
-async function mount(href: string, rail = true) {
+// Exercise the palette's shared scope and destination helpers without its unrelated services.
+function PaletteDestinationProbe() {
+  const location = useLocation();
+  const search =
+    location.pathname === "/workspace" ? parseWorkspaceSearch(location.search) : undefined;
+  const scopedEnvironmentId = useWorkspaceEnvironment(search);
+  const { environmentId } = useMailCapabilities(scopedEnvironmentId);
+  return (
+    <nav aria-label="Palette destination probe">
+      {workspaceDestinations.map(({ id, label }) => (
+        <Link key={id} to="/workspace" search={workspaceDestinationSearch(id, environmentId)}>
+          Open {label}
+        </Link>
+      ))}
+    </nav>
+  );
+}
+
+async function mount(href: string, rail = true, probePalette = false) {
   const rootRoute = createRootRoute({
     component: () => (
       <>
         <WorkspaceSpaceSelector rail={rail} />
+        {probePalette && <PaletteDestinationProbe />}
         <Outlet />
       </>
     ),
@@ -211,7 +241,7 @@ it("dismisses compact navigation and uses the same scoped destinations", async (
 
 it("makes an unscoped legacy Workspace return explicit before the primary changes", async () => {
   state.primary = "legacy-primary";
-  const router = await mount("/legacy-primary/thread-initial");
+  const router = await mount("/legacy-other/thread-initial");
   await act(async () =>
     router.navigate({ href: "/workspace?space=mail&account=legacy-account&folder=Sent" }),
   );
@@ -224,6 +254,41 @@ it("makes an unscoped legacy Workspace return explicit before the primary change
     folder: "Sent",
     environment: "legacy-primary",
   });
+});
+
+it("keeps rail and palette destinations on the primary after unscoped Mail", async () => {
+  state.primary = "unscoped-primary";
+  state.unavailableMailEnvironment = "unscoped-other";
+  const router = await mount("/unscoped-other/thread-a", true, true);
+  for (const [label, space, view] of [
+    ["Communications", "communications", "chats"],
+    ["Meetings", "meetings", "upcoming"],
+    ["Calendar", "calendar", "agenda"],
+    ["Email", "mail", "inbox"],
+    ["Tasks", "tasks", "all"],
+    ["Projects", "projects", "projects"],
+  ] as const) {
+    await act(async () =>
+      router.navigate({ href: "/workspace?space=mail&account=primary-account&folder=Sent" }),
+    );
+    const link = getByRole(node, "link", { name: `Open ${label}` });
+    const href = new URL(link.getAttribute("href")!, "https://workspace.invalid");
+    expect(href.pathname).toBe("/workspace");
+    expect(Object.fromEntries(href.searchParams)).toEqual({
+      space,
+      view,
+      environment: "unscoped-primary",
+    });
+    await click(label);
+    expect(router.state.location.search).toEqual({
+      space,
+      view,
+      environment: "unscoped-primary",
+    });
+    expect(getByRole(node, "button", { name: "Email" }).getAttribute("aria-disabled")).toBe(
+      "false",
+    );
+  }
 });
 
 it("retains normalized Telegram source identity when returning from Code", async () => {
@@ -253,6 +318,7 @@ it.each(["/pull-requests", "/usage", "/welcome"])("keeps Code active on %s", asy
 });
 
 it("drops a non-text environment before navigating to another destination", async () => {
+  state.primary = "numeric-primary";
   const router = await mount("/numeric-primary/thread-a");
   await act(async () => router.navigate({ href: "/workspace?space=projects&environment=1" }));
   await click("Meetings");
@@ -264,6 +330,7 @@ it("drops a non-text environment before navigating to another destination", asyn
 });
 
 it("does not reopen local Office tools through the Workspace mode switch", async () => {
+  state.primary = "office-return";
   const router = await mount("/office-return/thread-a");
   await click("Workspace");
   await click("Tasks");
