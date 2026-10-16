@@ -1,5 +1,9 @@
 import { showBootError } from "./lib/bootError";
 
-// Bundled dev can move UI code into shared chunks. Load it only after this
-// entry runs the React refresh preamble, and catch failures before React mounts.
-void import("./main").then(({ startup }) => startup).catch(showBootError);
+if (import.meta.env.DEV && new URL(window.location.href).searchParams.has("fixture")) {
+  void import("./components/workspace/dev/workspaceMockupEntry")
+    .then(({ startWorkspaceMockup }) => startWorkspaceMockup())
+    .catch(showBootError);
+} else {
+  void import("./main").then(({ startup }) => startup).catch(showBootError);
+}
