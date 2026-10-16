@@ -646,7 +646,7 @@ Detailed plan to be written later: `docs/superpowers/plans/2026-10-16-workspace-
 
 - Source: projects §5 P3.
 - Mockup and region: 04: x275..924 center, three 92px cards.
-- Files: UI/ProjectsSpace.tsx; UI/ProjectsNav.tsx selection synchronization only; apps/web/src/hooks/useNewProject.ts reuse; focused UI tests.
+- Files: UI/ProjectsSpace.tsx; UI/ProjectPickerView.tsx selection synchronization only (ProjectsNav retired in W4-T4b); apps/web/src/hooks/useNewProject.ts reuse; focused UI tests.
 - Dependencies: W8-T1b, W4-T6.
 - Decision state: default assumed, confirm D01, D05. Common D24 applies to every task.
 - Work and acceptance: Keep A12 dropdown, add Your projects, search/filter and New project. Selection keeps overview visible and retargets resources. Linked destination preserves shipped hub threads/tasks/direct and labelled one-hop items. Use openThread false.
