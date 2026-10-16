@@ -7,6 +7,19 @@ import { WorkspaceLinkEndpoint } from "./pulseLinks.ts";
 export const WorkspaceTaskId = Schema.String.check(Schema.isPattern(/^wskt_[a-f0-9-]{36}$/));
 const Title = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(240));
 const Column = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(40));
+const isGregorianDate = (value: string) => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return false;
+  const year = Number(match[1]),
+    month = Number(match[2]),
+    day = Number(match[3]);
+  if (year < 1 || month < 1 || month > 12) return false;
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  return day >= 1 && day <= days[month - 1]!;
+};
+export const WorkspaceTaskDueOn = Schema.String.check(Schema.makeFilter(isGregorianDate));
+const AreaLabel = Schema.Trim.check(Schema.isMinLength(1), Schema.isMaxLength(120));
 export const WorkspaceProjectConfig = Schema.Struct({
   projectId: ProjectId,
   taskColumns: Schema.Array(Column).check(Schema.isMinLength(1), Schema.isMaxLength(12)),
@@ -31,6 +44,8 @@ export const WorkspaceTask = Schema.Struct({
   column: Column,
   revision: Schema.optionalKey(NonNegativeInt),
   done: Schema.optionalKey(Schema.Boolean),
+  dueOn: Schema.optionalKey(Schema.NullOr(WorkspaceTaskDueOn)),
+  areaLabel: Schema.optionalKey(Schema.NullOr(AreaLabel)),
 });
 export type WorkspaceTask = typeof WorkspaceTask.Type;
 export const WorkspaceTaskTransition = Schema.Struct({
@@ -42,11 +57,22 @@ export const WorkspaceTaskTransition = Schema.Struct({
   ]),
 });
 export type WorkspaceTaskTransition = typeof WorkspaceTaskTransition.Type;
+export const WorkspaceTaskPatch = Schema.Struct({
+  id: WorkspaceTaskId,
+  expectedRevision: NonNegativeInt,
+  title: Schema.optionalKey(Title),
+  column: Schema.optionalKey(Column),
+  dueOn: Schema.optionalKey(Schema.NullOr(WorkspaceTaskDueOn)),
+  areaLabel: Schema.optionalKey(Schema.NullOr(AreaLabel)),
+});
+export type WorkspaceTaskPatch = typeof WorkspaceTaskPatch.Type;
 export const WorkspaceTaskUpsert = Schema.Struct({
   id: Schema.optionalKey(WorkspaceTaskId),
   projectId: ProjectId,
   title: Title,
   column: Column,
+  dueOn: Schema.optionalKey(Schema.NullOr(WorkspaceTaskDueOn)),
+  areaLabel: Schema.optionalKey(Schema.NullOr(AreaLabel)),
 });
 export type WorkspaceTaskUpsert = typeof WorkspaceTaskUpsert.Type;
 export const WorkspaceAutomationSave = Schema.Struct({
@@ -69,6 +95,7 @@ export const PULSE_WORKSPACE_TOOLS_METHODS = {
   workspaceSaveProjectConfig: "pulse.workspace.saveProjectConfig",
   workspaceListTasks: "pulse.workspace.listTasks",
   workspaceGetTask: "pulse.workspace.getTask",
+  workspacePatchTask: "pulse.workspace.patchTask",
   workspaceTransitionTask: "pulse.workspace.transitionTask",
   workspaceUpsertTask: "pulse.workspace.upsertTask",
   workspaceDeleteTask: "pulse.workspace.deleteTask",
@@ -98,6 +125,11 @@ export const PulseWorkspaceToolsRpcs = [
   }),
   Rpc.make(PULSE_WORKSPACE_TOOLS_METHODS.workspaceUpsertTask, {
     payload: WorkspaceTaskUpsert,
+    success: WorkspaceTask,
+    error,
+  }),
+  Rpc.make(PULSE_WORKSPACE_TOOLS_METHODS.workspacePatchTask, {
+    payload: WorkspaceTaskPatch,
     success: WorkspaceTask,
     error,
   }),

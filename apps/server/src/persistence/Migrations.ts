@@ -1,3 +1,4 @@
+import M066 from "./Migrations/066_WorkspaceTaskMetadata.ts";
 import M065 from "./Migrations/065_WorkspaceTaskCompletion.ts";
 import M064 from "./Migrations/064_WorkspaceTools.ts";
 /**
@@ -158,6 +159,7 @@ export const migrationEntries = [
   [63, "DriveReader", Migration0063],
   [64, "WorkspaceTools", M064],
   [65, "WorkspaceTaskCompletion", M065],
+  [66, "WorkspaceTaskMetadata", M066],
 ] as const;
 
 export const migrationManifest = migrationEntries.map(([id, name]) => [id, name] as const);

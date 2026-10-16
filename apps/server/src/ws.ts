@@ -1247,6 +1247,7 @@ const workspaceToolsWsRpcLayer = WorkspaceToolsWsRpcGroup.toLayer(
       [WS_METHODS.workspaceListTasks]: ({ projectId }) => tools.listTasks(projectId),
       [WS_METHODS.workspaceGetTask]: ({ id }) => tools.getTask(id),
       [WS_METHODS.workspaceTransitionTask]: tools.transitionTask,
+      [WS_METHODS.workspacePatchTask]: tools.patchTask,
       [WS_METHODS.workspaceUpsertTask]: tools.upsertTask,
       [WS_METHODS.workspaceDeleteTask]: ({ id }) => tools.deleteTask(id),
       [WS_METHODS.workspaceSubscribeChanges]: () => tools.changes,

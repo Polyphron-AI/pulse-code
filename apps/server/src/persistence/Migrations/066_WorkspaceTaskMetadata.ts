@@ -1,0 +1,7 @@
+import * as Effect from "effect/Effect";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
+export default Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
+  yield* sql`ALTER TABLE workspace_tasks ADD COLUMN due_on TEXT`;
+  yield* sql`ALTER TABLE workspace_tasks ADD COLUMN area_label TEXT`;
+});

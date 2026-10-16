@@ -4,6 +4,7 @@ import {
   AuthRelayReadScope,
   AuthRelayWriteScope,
   ProjectId,
+  DEFAULT_SERVER_SETTINGS,
   WS_METHODS,
   WsRpcGroup,
 } from "@t3tools/contracts";
@@ -304,4 +305,92 @@ it.effect("authorizes task transitions and revision-aware settings through opera
       }
     }
   }).pipe(Effect.scoped),
+);
+
+it.effect("denies task metadata patches to read sessions and permits operate sessions", () =>
+  Effect.gen(function* () {
+    const method = WS_METHODS.workspacePatchTask;
+    const group = WsRpcGroup.omit(
+      ...[...WsRpcGroup.requests.keys()].filter(
+        (tag): tag is Exclude<keyof typeof RPC_REQUIRED_SCOPES, typeof method> => tag !== method,
+      ),
+    );
+    const task = {
+      id: "wskt_00000000-0000-0000-0000-000000000001",
+      projectId: ProjectId.make("project"),
+      title: "Task",
+      column: "To do",
+      revision: 1,
+      dueOn: "2026-10-16",
+      areaLabel: null,
+    };
+    const handled: string[] = [];
+    for (const scope of [AuthOrchestrationReadScope, AuthOrchestrationOperateScope]) {
+      const client = yield* RpcTest.makeClient(group).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            group.toLayerHandler(method, () =>
+              Effect.sync(() => {
+                handled.push("patch");
+                return task;
+              }),
+            ),
+            rpcScopeAuthorizationLayer([scope]),
+          ),
+        ),
+      );
+      const patch = client[method]({ id: task.id, expectedRevision: 0, dueOn: "2026-10-16" });
+      if (scope === AuthOrchestrationReadScope) {
+        expect(yield* patch.pipe(Effect.flip)).toMatchObject({
+          requiredScope: AuthOrchestrationOperateScope,
+        });
+        expect(handled).toEqual([]);
+      } else {
+        expect(yield* patch).toEqual(task);
+        expect(handled).toEqual(["patch"]);
+      }
+    }
+  }).pipe(Effect.scoped),
+);
+
+it.effect(
+  "requires operate scope for environment timezone writes through existing settings RPC",
+  () =>
+    Effect.gen(function* () {
+      const method = WS_METHODS.serverUpdateSettings;
+      const group = WsRpcGroup.omit(
+        ...[...WsRpcGroup.requests.keys()].filter(
+          (tag): tag is Exclude<keyof typeof RPC_REQUIRED_SCOPES, typeof method> => tag !== method,
+        ),
+      );
+      let handled = 0;
+      for (const scope of [AuthOrchestrationReadScope, AuthOrchestrationOperateScope]) {
+        const client = yield* RpcTest.makeClient(group).pipe(
+          Effect.provide(
+            Layer.mergeAll(
+              group.toLayerHandler(method, ({ patch }) =>
+                Effect.sync(() => {
+                  handled++;
+                  return {
+                    ...DEFAULT_SERVER_SETTINGS,
+                    workspaceDisplayTimeZone: patch.workspaceDisplayTimeZone ?? "UTC",
+                  };
+                }),
+              ),
+              rpcScopeAuthorizationLayer([scope]),
+            ),
+          ),
+        );
+        const save = client[method]({ patch: { workspaceDisplayTimeZone: "Africa/Johannesburg" } });
+        if (scope === AuthOrchestrationReadScope) {
+          expect(yield* save.pipe(Effect.flip)).toMatchObject({
+            requiredScope: AuthOrchestrationOperateScope,
+          });
+          expect(handled).toBe(0);
+        } else {
+          expect((yield* save).workspaceDisplayTimeZone).toBe("Africa/Johannesburg");
+          expect(handled).toBe(1);
+        }
+      }
+    }).pipe(Effect.scoped),
 );

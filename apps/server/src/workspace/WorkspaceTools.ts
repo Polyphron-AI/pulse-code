@@ -3,7 +3,8 @@ import {
   type WorkspaceProjectConfigSave,
   type WorkspaceTaskTransition,
   ThreadId,
-  type WorkspaceTaskUpsert,
+  WorkspaceTaskUpsert,
+  WorkspaceTaskPatch,
   type ProjectId,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
@@ -18,6 +19,8 @@ import { makeKeyedSerialExecutor } from "../orchestration-v2/KeyedSerialExecutor
 const Columns = Schema.fromJsonString(Schema.Array(Schema.String));
 const decodeColumns = Schema.decodeUnknownEffect(Columns);
 const encodeColumns = Schema.encodeSync(Columns);
+const decodeTaskUpsert = Schema.decodeEffect(WorkspaceTaskUpsert);
+const decodeTaskPatch = Schema.decodeEffect(WorkspaceTaskPatch);
 const isToolsError = Schema.is(WorkspaceToolsError);
 const fail = (kind: WorkspaceToolsError["kind"], message: string) =>
   new WorkspaceToolsError({ kind, message });
@@ -28,6 +31,8 @@ interface TaskRow {
   column: string;
   revision: number;
   done: number;
+  dueOn: string | null;
+  areaLabel: string | null;
 }
 export const make = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
@@ -80,7 +85,7 @@ export const make = Effect.gen(function* () {
     safe(
       Effect.gen(function* () {
         const rows =
-          yield* sql<TaskRow>`SELECT t.id,t.project_id AS "projectId",t.title,t.column_name AS "column",t.revision,COALESCE(t.column_name = CASE WHEN c.project_id IS NULL THEN 'Done' ELSE c.completed_column END,0) AS done FROM workspace_tasks t LEFT JOIN workspace_project_config c ON c.project_id=t.project_id WHERE t.id=${id} AND t.deleted=0`;
+          yield* sql<TaskRow>`SELECT t.id,t.project_id AS "projectId",t.title,t.column_name AS "column",t.revision,t.due_on AS "dueOn",t.area_label AS "areaLabel",COALESCE(t.column_name = CASE WHEN c.project_id IS NULL THEN 'Done' ELSE c.completed_column END,0) AS done FROM workspace_tasks t LEFT JOIN workspace_project_config c ON c.project_id=t.project_id WHERE t.id=${id} AND t.deleted=0`;
         const row = rows[0];
         if (!row)
           return yield* fail("not-found", "This task is unavailable. Its links have been kept.");
@@ -88,6 +93,40 @@ export const make = Effect.gen(function* () {
         return { ...row, done: row.done === 1 };
       }),
     );
+  const prepareTransition = (
+    current: Effect.Success<ReturnType<typeof getTask>>,
+    settings: Effect.Success<ReturnType<typeof config>>,
+    input: WorkspaceTaskTransition,
+    otherChanges = false,
+  ) =>
+    Effect.gen(function* () {
+      if (input.change.type === "completion" && settings.completedColumn === null)
+        return yield* fail(
+          "invalid-input",
+          "Choose a completed column in project workspace settings.",
+        );
+      const column =
+        input.change.type === "column"
+          ? input.change.column
+          : input.change.completed
+            ? settings.completedColumn
+            : settings.taskColumns.find((name) => name !== settings.completedColumn);
+      if (!column || !settings.taskColumns.includes(column))
+        return yield* fail(
+          "invalid-input",
+          "Choose a completed column in project workspace settings.",
+        );
+      const changed =
+        otherChanges ||
+        (current.column !== column &&
+          !(input.change.type === "completion" && current.done === input.change.completed));
+      if (changed && current.revision !== input.expectedRevision)
+        return yield* fail(
+          "conflict",
+          "This task changed on another client. Reload before saving.",
+        );
+      return { column, changed };
+    });
   return {
     config,
     getTask,
@@ -127,6 +166,19 @@ export const make = Effect.gen(function* () {
                     "conflict",
                     "Move tasks out of a column before removing or renaming it.",
                   );
+                const legacyOnlyCompletedColumn =
+                  input.completedColumn === undefined &&
+                  current.completedColumn !== null &&
+                  columns.length === 1 &&
+                  columns[0] === current.completedColumn;
+                if (
+                  legacyOnlyCompletedColumn &&
+                  used.some((row) => row.column === current.completedColumn)
+                )
+                  return yield* fail(
+                    "conflict",
+                    "Move tasks out of a column before removing or renaming it.",
+                  );
                 const removedDesignation =
                   current.completedColumn !== null && !columns.includes(current.completedColumn);
                 const requestedCompletedColumn =
@@ -134,7 +186,8 @@ export const make = Effect.gen(function* () {
                     ? current.completedColumn
                     : input.completedColumn;
                 const completedColumn =
-                  removedDesignation && requestedCompletedColumn === current.completedColumn
+                  (removedDesignation || legacyOnlyCompletedColumn) &&
+                  requestedCompletedColumn === current.completedColumn
                     ? null
                     : requestedCompletedColumn;
                 const designationChanged = completedColumn !== current.completedColumn;
@@ -150,7 +203,7 @@ export const make = Effect.gen(function* () {
                 if (
                   designationChanged &&
                   input.expectedRevision === undefined &&
-                  !(removedDesignation && completedColumn === null)
+                  !((removedDesignation || legacyOnlyCompletedColumn) && completedColumn === null)
                 )
                   return yield* fail(
                     "conflict",
@@ -199,7 +252,7 @@ export const make = Effect.gen(function* () {
         Effect.gen(function* () {
           yield* requireProject(projectId);
           const rows =
-            yield* sql<TaskRow>`SELECT t.id,t.project_id AS "projectId",t.title,t.column_name AS "column",t.revision,COALESCE(t.column_name = CASE WHEN c.project_id IS NULL THEN 'Done' ELSE c.completed_column END,0) AS done FROM workspace_tasks t LEFT JOIN workspace_project_config c ON c.project_id=t.project_id WHERE t.project_id=${projectId} AND t.deleted=0 ORDER BY t.id LIMIT 201`;
+            yield* sql<TaskRow>`SELECT t.id,t.project_id AS "projectId",t.title,t.column_name AS "column",t.revision,t.due_on AS "dueOn",t.area_label AS "areaLabel",COALESCE(t.column_name = CASE WHEN c.project_id IS NULL THEN 'Done' ELSE c.completed_column END,0) AS done FROM workspace_tasks t LEFT JOIN workspace_project_config c ON c.project_id=t.project_id WHERE t.project_id=${projectId} AND t.deleted=0 ORDER BY t.id LIMIT 201`;
           return {
             tasks: rows.slice(0, 200).map((row) => ({
               ...row,
@@ -216,7 +269,12 @@ export const make = Effect.gen(function* () {
           Effect.gen(function* () {
             const result = yield* sql.withTransaction(
               Effect.gen(function* () {
+                input = yield* decodeTaskUpsert(input).pipe(
+                  Effect.mapError(() => fail("invalid-input", "Enter valid task metadata.")),
+                );
                 const settings = yield* config(input.projectId);
+                let dueOn = input.dueOn ?? null;
+                let areaLabel = input.areaLabel ?? null;
                 const title = input.title.trim();
                 if (!title || title.length > 240 || !settings.taskColumns.includes(input.column))
                   return yield* fail(
@@ -229,12 +287,28 @@ export const make = Effect.gen(function* () {
                     const previous = yield* getTask(input.id);
                     if (previous.projectId !== input.projectId)
                       return yield* fail("conflict", "A task cannot be moved to another project.");
-                    if (previous.title === title && previous.column === input.column)
+                    dueOn = input.dueOn === undefined ? previous.dueOn : input.dueOn;
+                    areaLabel =
+                      input.areaLabel === undefined ? previous.areaLabel : input.areaLabel;
+                    if (
+                      previous.title === title &&
+                      previous.column === input.column &&
+                      previous.dueOn === dueOn &&
+                      previous.areaLabel === areaLabel
+                    )
                       return { value: previous, changed: false };
+                    yield* sql`UPDATE workspace_tasks SET ${sql.update({
+                      title,
+                      column_name: input.column,
+                      revision: previous.revision + 1,
+                      ...(input.dueOn === undefined ? {} : { due_on: dueOn }),
+                      ...(input.areaLabel === undefined ? {} : { area_label: areaLabel }),
+                    })} WHERE id=${input.id} AND deleted=0`;
+                    return { value: yield* getTask(input.id), changed: true };
                   }
                 }
                 const id = input.id ?? `wskt_${yield* crypto.randomUUIDv4}`;
-                yield* sql`INSERT INTO workspace_tasks(id,project_id,title,column_name) VALUES(${id},${input.projectId},${title},${input.column}) ON CONFLICT(id) DO UPDATE SET title=excluded.title,column_name=excluded.column_name,revision=workspace_tasks.revision+1`;
+                yield* sql`INSERT INTO workspace_tasks(id,project_id,title,column_name,due_on,area_label) VALUES(${id},${input.projectId},${title},${input.column},${dueOn},${areaLabel})`;
                 return { value: yield* getTask(id), changed: true };
               }),
             );
@@ -254,33 +328,55 @@ export const make = Effect.gen(function* () {
                 Effect.gen(function* () {
                   const current = yield* getTask(input.id);
                   const settings = yield* config(current.projectId);
-                  if (input.change.type === "completion" && settings.completedColumn === null)
-                    return yield* fail(
-                      "invalid-input",
-                      "Choose a completed column in project workspace settings.",
-                    );
-                  const target =
-                    input.change.type === "column"
-                      ? input.change.column
-                      : input.change.completed
-                        ? settings.completedColumn
-                        : settings.taskColumns.find((name) => name !== settings.completedColumn);
-                  if (!target || !settings.taskColumns.includes(target))
-                    return yield* fail(
-                      "invalid-input",
-                      "Choose a completed column in project workspace settings.",
-                    );
-                  if (
-                    current.column === target ||
-                    (input.change.type === "completion" && current.done === input.change.completed)
-                  )
-                    return { value: current, changed: false };
-                  if (current.revision !== input.expectedRevision)
-                    return yield* fail(
-                      "conflict",
-                      "This task changed on another client. Reload before saving.",
-                    );
+                  const { column: target, changed } = yield* prepareTransition(
+                    current,
+                    settings,
+                    input,
+                  );
+                  if (!changed) return { value: current, changed: false };
                   yield* sql`UPDATE workspace_tasks SET column_name=${target},revision=revision+1 WHERE id=${input.id} AND deleted=0 AND revision=${input.expectedRevision}`;
+                  return { value: yield* getTask(input.id), changed: true };
+                }),
+              );
+              if (result.changed) yield* announce;
+              return result.value;
+            }),
+          );
+        }),
+      ),
+    patchTask: (input: WorkspaceTaskPatch) =>
+      safe(
+        Effect.gen(function* () {
+          input = yield* decodeTaskPatch(input).pipe(
+            Effect.mapError(() => fail("invalid-input", "Enter valid task metadata.")),
+          );
+          const owner = yield* getTask(input.id);
+          return yield* locks.withLock(
+            owner.projectId,
+            Effect.gen(function* () {
+              const result = yield* sql.withTransaction(
+                Effect.gen(function* () {
+                  const current = yield* getTask(input.id);
+                  const settings = yield* config(current.projectId);
+                  const title = input.title === undefined ? current.title : input.title.trim();
+                  if (!title) return yield* fail("invalid-input", "Enter a task title.");
+                  const dueOn = input.dueOn === undefined ? current.dueOn : input.dueOn;
+                  const areaLabel =
+                    input.areaLabel === undefined ? current.areaLabel : input.areaLabel;
+                  const { column, changed } = yield* prepareTransition(
+                    current,
+                    settings,
+                    {
+                      id: input.id,
+                      expectedRevision: input.expectedRevision,
+                      change: { type: "column", column: input.column ?? current.column },
+                    },
+                    title !== current.title ||
+                      dueOn !== current.dueOn ||
+                      areaLabel !== current.areaLabel,
+                  );
+                  if (!changed) return { value: current, changed: false };
+                  yield* sql`UPDATE workspace_tasks SET title=${title},column_name=${column},due_on=${dueOn},area_label=${areaLabel},revision=revision+1 WHERE id=${input.id} AND deleted=0 AND revision=${input.expectedRevision}`;
                   return { value: yield* getTask(input.id), changed: true };
                 }),
               );

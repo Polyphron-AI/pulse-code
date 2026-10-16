@@ -19,3 +19,20 @@ it.effect("upgrades default columns but leaves custom columns undesignated", () 
     expect(yield* sql`SELECT revision FROM workspace_tasks`).toEqual([{ revision: 0 }]);
   }).pipe(Effect.provide(NodeSqliteClient.layer({ filename: ":memory:" }))),
 );
+
+it.effect("adds nullable civil-date metadata without rewriting existing tasks", () =>
+  Effect.gen(function* () {
+    yield* runMigrations({ toMigrationInclusive: 65 });
+    const sql = yield* SqlClient.SqlClient;
+    yield* sql`INSERT INTO workspace_tasks(id,project_id,title,column_name,revision) VALUES('old','project','Kept','Done',7)`;
+    yield* runMigrations();
+    expect(yield* sql`SELECT title,revision,due_on,area_label FROM workspace_tasks`).toEqual([
+      { title: "Kept", revision: 7, due_on: null, area_label: null },
+    ]);
+    yield* sql`UPDATE workspace_tasks SET due_on='2024-02-29',area_label='Marketing'`;
+    yield* runMigrations();
+    expect(yield* sql`SELECT due_on,area_label FROM workspace_tasks`).toEqual([
+      { due_on: "2024-02-29", area_label: "Marketing" },
+    ]);
+  }).pipe(Effect.provide(NodeSqliteClient.layer({ filename: ":memory:" }))),
+);

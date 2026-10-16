@@ -416,3 +416,156 @@ it.effect("keeps a custom Done lane open until designated and reopens in configu
     ).toBe("not-found");
   }).pipe(Effect.provide(layer)),
 );
+
+it.effect("preserves metadata on legacy upsert and clears only explicitly", () =>
+  Effect.gen(function* () {
+    yield* seedWorkspaceProject;
+    const tools = yield* Tools.WorkspaceTools;
+    const task = yield* tools.upsertTask({ projectId, title: "Launch", column: "To do" });
+    const dated = yield* tools.patchTask({
+      id: task.id,
+      expectedRevision: task.revision!,
+      dueOn: "2026-10-16",
+      areaLabel: "Marketing",
+    });
+    const sql = yield* SqlClient.SqlClient;
+    yield* sql`CREATE TRIGGER reject_legacy_metadata BEFORE UPDATE OF due_on,area_label ON workspace_tasks BEGIN SELECT RAISE(ABORT, 'Legacy save must omit metadata'); END`;
+    const legacy = yield* tools.upsertTask({
+      id: task.id,
+      projectId,
+      title: "Launch review",
+      column: "To do",
+    });
+    expect(legacy.dueOn).toBe("2026-10-16");
+    expect(legacy.areaLabel).toBe("Marketing");
+    expect(legacy.revision).toBeGreaterThan(dated.revision!);
+    yield* sql`DROP TRIGGER reject_legacy_metadata`;
+    const cleared = yield* tools.patchTask({
+      id: task.id,
+      expectedRevision: legacy.revision!,
+      dueOn: null,
+      areaLabel: null,
+    });
+    expect(cleared.dueOn).toBeNull();
+    const restarted = yield* Tools.make;
+    expect((yield* restarted.getTask(task.id)).areaLabel).toBeNull();
+  }).pipe(Effect.provide(layer)),
+);
+it.effect(
+  "creates all metadata atomically and patches title, column and metadata in one revision",
+  () =>
+    Effect.gen(function* () {
+      yield* seedWorkspaceProject;
+      const tools = yield* Tools.WorkspaceTools;
+      const task = yield* tools.upsertTask({
+        projectId,
+        title: "Launch",
+        column: "To do",
+        dueOn: "2024-02-29",
+        areaLabel: "  Marketing  ",
+      });
+      expect(task).toMatchObject({ dueOn: "2024-02-29", areaLabel: "Marketing", revision: 0 });
+      const changed = yield* tools.patchTask({
+        id: task.id,
+        expectedRevision: task.revision!,
+        title: "Review",
+        column: "Done",
+        dueOn: "2026-10-16",
+        areaLabel: null,
+      });
+      expect(changed).toMatchObject({
+        title: "Review",
+        column: "Done",
+        done: true,
+        dueOn: "2026-10-16",
+        areaLabel: null,
+        revision: 1,
+      });
+      expect(yield* tools.patchTask({ id: task.id, expectedRevision: 0, column: "Done" })).toEqual(
+        changed,
+      );
+      expect(
+        (yield* tools
+          .patchTask({ id: task.id, expectedRevision: 0, title: "Stale" })
+          .pipe(Effect.flip)).kind,
+      ).toBe("conflict");
+      expect(
+        (yield* tools
+          .patchTask({ id: task.id, expectedRevision: 1, column: "Missing" })
+          .pipe(Effect.flip)).kind,
+      ).toBe("invalid-input");
+      expect(
+        (yield* tools
+          .patchTask({ id: task.id, expectedRevision: 1, dueOn: "2026-02-30" })
+          .pipe(Effect.flip)).kind,
+      ).toBe("invalid-input");
+      expect(
+        (yield* tools
+          .upsertTask({ projectId, title: "Bad", column: "To do", areaLabel: " " })
+          .pipe(Effect.flip)).kind,
+      ).toBe("invalid-input");
+      expect((yield* tools.listTasks(projectId)).tasks[0]).toEqual(changed);
+      yield* tools.deleteTask(task.id);
+      expect(
+        (yield* tools
+          .patchTask({ id: task.id, expectedRevision: 2, title: "Gone" })
+          .pipe(Effect.flip)).kind,
+      ).toBe("not-found");
+    }).pipe(Effect.provide(layer)),
+);
+it.effect("rolls back a failed metadata write without announcing a change", () =>
+  Effect.gen(function* () {
+    yield* seedWorkspaceProject;
+    const tools = yield* Tools.WorkspaceTools;
+    const task = yield* tools.upsertTask({ projectId, title: "Launch", column: "To do" });
+    const sql = yield* SqlClient.SqlClient;
+    yield* sql`CREATE TRIGGER reject_metadata BEFORE UPDATE ON workspace_tasks BEGIN SELECT RAISE(ABORT, 'Synthetic failure'); END`;
+    expect(
+      (yield* tools
+        .patchTask({ id: task.id, expectedRevision: 0, dueOn: "2026-10-16" })
+        .pipe(Effect.flip)).kind,
+    ).toBe("unavailable");
+    expect(yield* tools.getTask(task.id)).toEqual(task);
+    expect(Option.getOrNull(yield* Stream.runHead(tools.changes))).toBe(1);
+  }).pipe(Effect.provide(layer)),
+);
+it.effect("normalizes legacy Done-only settings only when no completion is affected", () =>
+  Effect.gen(function* () {
+    yield* seedWorkspaceProject;
+    const tools = yield* Tools.WorkspaceTools;
+    const input = { projectId, taskColumns: ["Done"], browserThreadId: null };
+    expect(yield* tools.saveConfig(input)).toMatchObject({ completedColumn: null, revision: 1 });
+    yield* tools.saveConfig({
+      projectId,
+      taskColumns: ["To do", "Done"],
+      browserThreadId: null,
+      completedColumn: "Done",
+      expectedRevision: 1,
+    });
+    const task = yield* tools.upsertTask({ projectId, title: "Done task", column: "Done" });
+    const error = yield* tools.saveConfig(input).pipe(Effect.flip);
+    expect(error.kind).toBe("conflict");
+    expect(error.message).toBe("Move tasks out of a column before removing or renaming it.");
+    expect(yield* tools.getTask(task.id)).toEqual(task);
+    expect((yield* tools.config(projectId)).completedColumn).toBe("Done");
+  }).pipe(Effect.provide(layer)),
+);
+it.effect(
+  "requires revision for an explicit replacement while removing the designated column",
+  () =>
+    Effect.gen(function* () {
+      yield* seedWorkspaceProject;
+      const tools = yield* Tools.WorkspaceTools;
+      expect(
+        (yield* tools
+          .saveConfig({
+            projectId,
+            taskColumns: ["To do", "Review"],
+            browserThreadId: null,
+            completedColumn: "Review",
+          })
+          .pipe(Effect.flip)).kind,
+      ).toBe("conflict");
+      expect((yield* tools.config(projectId)).completedColumn).toBe("Done");
+    }).pipe(Effect.provide(layer)),
+);

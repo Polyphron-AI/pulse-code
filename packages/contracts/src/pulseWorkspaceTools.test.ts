@@ -3,6 +3,8 @@ import * as Schema from "effect/Schema";
 import { ServerConfig } from "./server.ts";
 import {
   WorkspaceTask,
+  WorkspaceTaskDueOn,
+  WorkspaceTaskPatch,
   WorkspaceTaskUpsert,
   WorkspaceTaskTransition,
   WorkspaceProjectConfig,
@@ -77,7 +79,7 @@ const isConfig = Schema.is(WorkspaceProjectConfig);
 const isTask = Schema.is(WorkspaceTaskUpsert);
 const isAutomation = Schema.is(WorkspaceAutomationSave);
 it("bounds basic task settings and exposes an optional workspace family without recurrence or dependency fields", () => {
-  expect(PulseWorkspaceToolsRpcs).toHaveLength(9);
+  expect(PulseWorkspaceToolsRpcs).toHaveLength(10);
   expect(
     isConfig({
       projectId: "p",
@@ -102,4 +104,39 @@ it("keeps task capability optional and preserves false and true when present", (
     expect(decodeCapabilities({ pulseCapabilities: { workspaceTasksV2: flag } })).toEqual({
       pulseCapabilities: { workspaceTasksV2: flag },
     });
+});
+
+it("validates Gregorian date-only values without accepting timestamps", () => {
+  const decode = Schema.decodeUnknownSync(WorkspaceTaskDueOn);
+  for (const value of ["2024-02-29", "2000-02-29", "0001-01-01", "9999-12-31"])
+    expect(decode(value)).toBe(value);
+  for (const value of [
+    "2026-02-29",
+    "2026-02-30",
+    "1900-02-29",
+    "2026-00-10",
+    "0000-01-01",
+    "2026-13-01",
+    "2026-01-00",
+    "2026-10-16T00:00:00Z",
+    "2026-1-01",
+  ])
+    expect(() => decode(value)).toThrow();
+});
+it("preserves absent patch keys and accepts explicit metadata clears and atomic creation", () => {
+  const decode = Schema.decodeUnknownSync(WorkspaceTaskPatch);
+  const input = { id: task.id, expectedRevision: 2 };
+  expect(decode(input)).toEqual(input);
+  expect(decode({ ...input, dueOn: null, areaLabel: null })).toEqual({
+    ...input,
+    dueOn: null,
+    areaLabel: null,
+  });
+  expect(decodeUpsert({ ...task, dueOn: "2026-10-16", areaLabel: "  Marketing  " })).toMatchObject({
+    dueOn: "2026-10-16",
+    areaLabel: "Marketing",
+  });
+  for (const areaLabel of ["", "   ", "x".repeat(121)])
+    expect(() => decode({ ...input, areaLabel })).toThrow();
+  expect(() => decode({ ...input, dueOn: "2026-02-30" })).toThrow();
 });

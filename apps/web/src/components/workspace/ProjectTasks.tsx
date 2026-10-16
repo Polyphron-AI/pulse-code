@@ -9,7 +9,13 @@ import {
 } from "@t3tools/contracts";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import * as Schema from "effect/Schema";
-import { useContext, useState } from "react";
+import * as DateTime from "effect/DateTime";
+import {
+  formatWorkspaceTaskDueOn,
+  millisecondsUntilWorkspaceMidnight,
+} from "@t3tools/client-runtime/state/workspaceTaskDates";
+import { useEnvironmentSettings } from "../../hooks/useSettings";
+import { useContext, useEffect, useState } from "react";
 import { WorkspaceItemMutationContext } from "./WorkspaceEngagement";
 import { useEnvironmentQuery } from "../../state/query";
 import { useAtomCommand } from "../../state/use-atom-command";
@@ -328,15 +334,58 @@ export function ProjectTasks({
       ) : null}
       {selected ? (
         <TaskEditor
-          key={`${selected.id}:${selected.title}:${selected.column}`}
+          key={`${environmentId}:${selected.id}`}
           environmentId={environmentId}
-          task={selected}
+          task={list.data?.tasks.find((task) => task.id === selected.id) ?? selected}
           columns={columns}
           onClose={() => onSelect(null)}
         />
       ) : null}
     </section>
   );
+}
+function taskDraft(task: WorkspaceTask) {
+  return {
+    base: task,
+    title: task.title,
+    column: task.column,
+    dueOn: task.dueOn ?? "",
+    areaLabel: task.areaLabel ?? "",
+  };
+}
+function isTaskDraftDirty(draft: ReturnType<typeof taskDraft>) {
+  return (
+    draft.title.trim() !== draft.base.title ||
+    draft.column !== draft.base.column ||
+    (draft.dueOn || null) !== (draft.base.dueOn ?? null) ||
+    (draft.areaLabel.trim() || null) !== (draft.base.areaLabel ?? null)
+  );
+}
+
+function useTaskDateClock(timeZone: string, enabled: boolean) {
+  const [now, setNow] = useState(DateTime.nowUnsafe);
+  useEffect(() => {
+    if (!enabled) return;
+    let timer: ReturnType<typeof setTimeout>;
+    const refresh = () => {
+      const next = DateTime.nowUnsafe();
+      setNow(next);
+      clearTimeout(timer);
+      timer = setTimeout(refresh, millisecondsUntilWorkspaceMidnight(next, timeZone));
+    };
+    const resume = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    refresh();
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", resume);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", resume);
+    };
+  }, [timeZone, enabled]);
+  return now;
 }
 function TaskEditor({
   environmentId,
@@ -351,10 +400,22 @@ function TaskEditor({
 }) {
   const canOperate = useWorkspaceCanOperate(environmentId);
   const invalidateContext = useContext(WorkspaceItemMutationContext);
+  const { workspaceTasksV2 } = useMailCapabilities(environmentId);
   const save = useAtomCommand(workspaceTools.upsertTask, { reportFailure: false });
+  const patch = useAtomCommand(workspaceTools.patchTask, { reportFailure: false });
   const remove = useAtomCommand(workspaceTools.deleteTask, { reportFailure: false });
-  const [title, setTitle] = useState(task.title);
-  const [column, setColumn] = useState(task.column);
+  const [draft, setDraft] = useState(() => taskDraft(task));
+  const [observedTask, setObservedTask] = useState(task);
+  if (observedTask !== task) {
+    setObservedTask(task);
+    if (!isTaskDraftDirty(draft)) setDraft(taskDraft(task));
+  }
+  const { title, column, dueOn, areaLabel } = draft;
+  const dirty = isTaskDraftDirty(draft);
+  const timeZone =
+    useEnvironmentSettings(environmentId, (settings) => settings.workspaceDisplayTimeZone) ?? "UTC";
+  const now = useTaskDateClock(timeZone, workspaceTasksV2 && !!dueOn);
+  const date = formatWorkspaceTaskDueOn(dueOn || null, now, timeZone, "en-GB");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   return (
@@ -372,33 +433,89 @@ function TaskEditor({
           if (busy || !canOperate) return;
           setBusy(true);
           setError(null);
-          const result = await save({
-            environmentId,
-            input: { id: task.id, projectId: task.projectId, title: title.trim(), column },
-          });
+          const result = workspaceTasksV2
+            ? await patch({
+                environmentId,
+                input: {
+                  id: task.id,
+                  expectedRevision: draft.base.revision ?? 0,
+                  ...(title.trim() !== draft.base.title ? { title: title.trim() } : {}),
+                  ...(column !== draft.base.column ? { column } : {}),
+                  ...((dueOn || null) !== (draft.base.dueOn ?? null)
+                    ? { dueOn: dueOn || null }
+                    : {}),
+                  ...((areaLabel.trim() || null) !== (draft.base.areaLabel ?? null)
+                    ? { areaLabel: areaLabel.trim() || null }
+                    : {}),
+                },
+              })
+            : await save({
+                environmentId,
+                input: { id: task.id, projectId: task.projectId, title: title.trim(), column },
+              });
           setBusy(false);
           if (result._tag === "Failure") setError(workspaceToolsError(result));
+          else setDraft(taskDraft(result.value));
         }}
       >
         <Input
           aria-label="Task title"
           maxLength={240}
           value={title}
-          onChange={(event) => setTitle(event.target.value)}
+          onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))}
           disabled={busy || !canOperate}
         />
         <select
           aria-label="Task column"
           className="rounded-md border border-input bg-background p-2 text-sm"
           value={column}
-          onChange={(event) => setColumn(event.target.value)}
+          onChange={(event) => setDraft((current) => ({ ...current, column: event.target.value }))}
           disabled={busy || !canOperate}
         >
           {columns.map((value) => (
             <option key={value}>{value}</option>
           ))}
         </select>
-        <Button size="sm" type="submit" disabled={busy || !canOperate || !title.trim()}>
+        {workspaceTasksV2 ? (
+          <>
+            <label className="space-y-1 text-sm">
+              <span>Due date</span>
+              <Input
+                type="date"
+                aria-label="Task due date"
+                value={dueOn}
+                min="0001-01-01"
+                max="9999-12-31"
+                disabled={busy || !canOperate}
+                onChange={(event) =>
+                  setDraft((current) => ({ ...current, dueOn: event.target.value }))
+                }
+              />
+            </label>
+            <label className="space-y-1 text-sm">
+              <span>Area</span>
+              <Input
+                aria-label="Task area"
+                value={areaLabel}
+                maxLength={120}
+                disabled={busy || !canOperate}
+                onChange={(event) =>
+                  setDraft((current) => ({ ...current, areaLabel: event.target.value }))
+                }
+              />
+            </label>
+            {date ? (
+              <time
+                dateTime={dueOn}
+                aria-label={`${date.fullDate}${date.overdue ? ", overdue" : ""}`}
+                className="text-xs text-muted-foreground"
+              >
+                {date.label}
+              </time>
+            ) : null}
+          </>
+        ) : null}
+        <Button size="sm" type="submit" disabled={busy || !canOperate || !title.trim() || !dirty}>
           Save task
         </Button>
         <Button

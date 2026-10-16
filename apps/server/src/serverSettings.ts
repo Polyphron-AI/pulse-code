@@ -120,12 +120,24 @@ const foldProviderInstanceEnabledFlags = (settings: ServerSettings): ServerSetti
   };
 };
 
+const materializeWorkspaceTimeZone = (settings: ServerSettings): ServerSettings => {
+  if (settings.workspaceDisplayTimeZone !== null) return settings;
+  let timeZone = "UTC";
+  try {
+    timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  } catch {
+    /* Use UTC when the host has no zone. */
+  }
+  return { ...settings, workspaceDisplayTimeZone: timeZone };
+};
+
 const normalizeServerSettings = (
   settings: ServerSettings,
 ): Effect.Effect<ServerSettings, ServerSettingsError> =>
   encodeServerSettings(settings).pipe(
     Effect.flatMap(decodeServerSettings),
     Effect.map(foldProviderInstanceEnabledFlags),
+    Effect.map(materializeWorkspaceTimeZone),
     Effect.map((next) => ({ ...next, ...deriveLegacyProjectOverrides(next) })),
     Effect.mapError(
       (cause) =>
@@ -795,8 +807,10 @@ const make = Effect.gen(function* () {
       ? foldLegacyProjectSettings(loaded, legacyProjectRows)
       : loaded;
     // Only rewrite a file that decoded cleanly; an untrusted one stays for the user to repair.
-    const migrated = settingsFileTrusted ? yield* moveInlineBitbucketTokens(folded) : folded;
-    if (migrated !== loaded) {
+    const migrated = settingsFileTrusted
+      ? materializeWorkspaceTimeZone(yield* moveInlineBitbucketTokens(folded))
+      : materializeWorkspaceTimeZone(folded);
+    if (settingsFileTrusted && migrated !== loaded) {
       yield* writeSettingsAtomically(migrated);
     }
     return migrated;

@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   operate: true,
   tasksV2: false,
   newCommand: vi.fn(),
+  zone: "Africa/Johannesburg",
 }));
 vi.mock("./mail/useMailCapabilities", () => ({
   useMailCapabilities: () => ({ workspaceTools: true, workspaceTasksV2: mocks.tasksV2 }),
@@ -24,6 +25,7 @@ vi.mock("../../state/session", () => ({
     data: { authenticated: true, scopes: mocks.operate ? ["orchestration:operate"] : [] },
   }),
 }));
+vi.mock("../../hooks/useSettings", () => ({ useEnvironmentSettings: () => mocks.zone }));
 vi.mock("../../state/entities", () => ({ useThreadShells: () => [] }));
 vi.mock("../../state/workspaceTools", () => ({
   workspaceTools: {
@@ -33,6 +35,7 @@ vi.mock("../../state/workspaceTools", () => ({
     upsertTask: {},
     deleteTask: {},
     transitionTask: "transition",
+    patchTask: "patch",
   },
 }));
 vi.mock("../../state/query", () => ({
@@ -52,7 +55,7 @@ vi.mock("../../state/query", () => ({
 }));
 vi.mock("../../state/use-atom-command", () => ({
   useAtomCommand: (command: unknown) =>
-    command === "transition" ? mocks.newCommand : mocks.command,
+    command === "transition" || command === "patch" ? mocks.newCommand : mocks.command,
 }));
 vi.mock("./WorkspaceItemActions", () => ({
   WorkspaceItemActions: () => null,
@@ -69,6 +72,8 @@ afterEach(async () => {
   renderer = undefined;
   mocks.operate = true;
   mocks.tasksV2 = false;
+  mocks.zone = "Africa/Johannesburg";
+  vi.useRealTimers();
   vi.clearAllMocks();
   vi.unstubAllGlobals();
 });
@@ -483,4 +488,164 @@ it("keeps a removed designation cleared when cancelling another completion choic
   mocks.command.mockResolvedValue({ _tag: "Success", value: {} });
   await act(() => renderer!.root.findByType("form").props.onSubmit({ preventDefault() {} }));
   expect(mocks.command.mock.calls.at(-1)?.[0].input.completedColumn).toBeNull();
+});
+
+it("retains dirty metadata and the base revision after a subscription refresh and conflict", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  mocks.tasksV2 = true;
+  const task = {
+    id: "wskt_00000000-0000-0000-0000-000000000001",
+    projectId,
+    title: "Original",
+    column: "To do",
+    dueOn: "2026-10-16",
+    areaLabel: "Marketing",
+    revision: 3,
+  };
+  const view = (selected = task) => (
+    <ProjectTasks
+      environmentId={environmentId}
+      projectId={projectId}
+      selected={selected}
+      onSelect={() => {}}
+    />
+  );
+  mocks.newCommand.mockResolvedValue({
+    _tag: "Failure",
+    cause: Cause.fail(
+      new WorkspaceToolsError({ kind: "conflict", message: "Reload before saving." }),
+    ),
+  });
+  await act(() => {
+    renderer = create(view());
+  });
+  await act(() =>
+    renderer!.root
+      .findByProps({ "aria-label": "Task area" })
+      .props.onChange({ target: { value: "Website" } }),
+  );
+  await act(() => renderer!.update(view({ ...task, title: "Remote title", revision: 4 })));
+  expect(renderer!.root.findByProps({ "aria-label": "Task title" }).props.value).toBe("Original");
+  await act(() => renderer!.root.findAllByType("form")[1]!.props.onSubmit({ preventDefault() {} }));
+  expect(mocks.newCommand).toHaveBeenCalledWith({
+    environmentId,
+    input: { id: task.id, expectedRevision: 3, areaLabel: "Website" },
+  });
+  expect(renderer!.root.findByProps({ "aria-label": "Task area" }).props.value).toBe("Website");
+  expect(renderer!.root.findByProps({ role: "alert" }).children.join("")).toContain(
+    "Reload before saving.",
+  );
+});
+it("clears metadata explicitly and keeps failed drafts until a successful patch", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  mocks.tasksV2 = true;
+  const task = {
+    id: "wskt_00000000-0000-0000-0000-000000000001",
+    projectId,
+    title: "Task",
+    column: "To do",
+    dueOn: "2026-10-16",
+    areaLabel: "Marketing",
+    revision: 2,
+  };
+  mocks.newCommand.mockResolvedValue({ _tag: "Failure", cause: Cause.fail(new Error("Offline")) });
+  await act(() => {
+    renderer = create(
+      <ProjectTasks
+        environmentId={environmentId}
+        projectId={projectId}
+        selected={task}
+        onSelect={() => {}}
+      />,
+    );
+  });
+  for (const label of ["Task due date", "Task area"])
+    await act(() =>
+      renderer!.root.findByProps({ "aria-label": label }).props.onChange({ target: { value: "" } }),
+    );
+  await act(() => renderer!.root.findAllByType("form")[1]!.props.onSubmit({ preventDefault() {} }));
+  expect(mocks.newCommand).toHaveBeenLastCalledWith({
+    environmentId,
+    input: { id: task.id, expectedRevision: 2, dueOn: null, areaLabel: null },
+  });
+  expect(renderer!.root.findByProps({ "aria-label": "Task due date" }).props.value).toBe("");
+  mocks.newCommand.mockResolvedValue({
+    _tag: "Success",
+    value: { ...task, dueOn: null, areaLabel: null, revision: 3 },
+  });
+  await act(() => renderer!.root.findAllByType("form")[1]!.props.onSubmit({ preventDefault() {} }));
+  expect(
+    renderer!.root.findAllByType("button").find((button) => button.props.children === "Save task")!
+      .props.disabled,
+  ).toBe(true);
+});
+it("refreshes date labels at environment midnight, zone changes and resume without RPC", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-10-15T21:59:59Z"));
+  mocks.tasksV2 = true;
+  const task = {
+    id: "wskt_00000000-0000-0000-0000-000000000001",
+    projectId,
+    title: "Task",
+    column: "To do",
+    dueOn: "2026-10-16",
+    areaLabel: null,
+    revision: 0,
+  };
+  const view = () => (
+    <ProjectTasks
+      environmentId={environmentId}
+      projectId={projectId}
+      selected={task}
+      onSelect={() => {}}
+    />
+  );
+  await act(() => {
+    renderer = create(view());
+  });
+  expect(renderer!.root.findByType("time").children.join("")).toBe("16 Oct");
+  await act(() => vi.advanceTimersByTime(1000));
+  expect(renderer!.root.findByType("time").children.join("")).toBe("Today");
+  mocks.zone = "America/New_York";
+  await act(() => renderer!.update(view()));
+  expect(renderer!.root.findByType("time").children.join("")).toBe("16 Oct");
+  vi.setSystemTime(new Date("2026-10-17T12:00:00Z"));
+  await act(() => window.dispatchEvent(new Event("focus")));
+  expect(renderer!.root.findByType("time").props["aria-label"]).toContain("overdue");
+  expect(mocks.newCommand).not.toHaveBeenCalled();
+  expect(mocks.command).not.toHaveBeenCalled();
+  await act(() => renderer!.unmount());
+  renderer = undefined;
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+it("resets a dirty task editor for an equal task ID on a different environment", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  mocks.tasksV2 = true;
+  const task = {
+    id: "wskt_00000000-0000-0000-0000-000000000001",
+    projectId,
+    title: "Original",
+    column: "To do",
+    revision: 2,
+  };
+  const view = (owner: typeof environmentId) => (
+    <ProjectTasks environmentId={owner} projectId={projectId} selected={task} onSelect={() => {}} />
+  );
+  await act(() => {
+    renderer = create(view(environmentId));
+  });
+  await act(() =>
+    renderer!.root
+      .findByProps({ "aria-label": "Task title" })
+      .props.onChange({ target: { value: "Dirty" } }),
+  );
+  const other = EnvironmentId.make("other");
+  await act(() => renderer!.update(view(other)));
+  expect(renderer!.root.findByProps({ "aria-label": "Task title" }).props.value).toBe("Original");
+  mocks.operate = false;
+  await act(() => renderer!.update(view(other)));
+  await act(() => renderer!.root.findAllByType("form")[1]!.props.onSubmit({ preventDefault() {} }));
+  expect(mocks.newCommand).not.toHaveBeenCalled();
 });

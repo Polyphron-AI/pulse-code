@@ -1,3 +1,4 @@
+import { WorkspaceDisplaySettings } from "../workspace/WorkspaceDisplaySettings";
 import { SettingsGroup } from "./SettingsGroup";
 import { Spinner } from "~/components/ui/spinner";
 import { NotificationSettings } from "./NotificationSettings";
@@ -2253,6 +2254,9 @@ export function GeneralSettingsPanel() {
   return (
     <SettingsPageContainer>
       <ProjectDefaultsSettings category="general" />
+      <SettingsSection id="workspace-display" title="Workspace">
+        <WorkspaceDisplaySettings />
+      </SettingsSection>
       <SettingsSection id="organization" title="Organization">
         <SettingsRow
           {...searchableSetting("project-grouping")}

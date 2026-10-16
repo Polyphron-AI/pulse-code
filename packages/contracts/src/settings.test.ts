@@ -1105,3 +1105,15 @@ describe("branch naming settings", () => {
     },
   );
 });
+
+describe("workspace display timezone", () => {
+  it("defaults legacy settings to null and validates explicit zones and reset", () => {
+    expect(decodeServerSettings({}).workspaceDisplayTimeZone).toBeNull();
+    for (const workspaceDisplayTimeZone of [null, "UTC", "Africa/Johannesburg", "America/New_York"])
+      expect(decodeServerSettingsPatch({ workspaceDisplayTimeZone })).toEqual({
+        workspaceDisplayTimeZone,
+      });
+    for (const workspaceDisplayTimeZone of ["", "No/Such_Zone", "2026-10-16", "+02:00"])
+      expect(() => decodeServerSettingsPatch({ workspaceDisplayTimeZone })).toThrow();
+  });
+});

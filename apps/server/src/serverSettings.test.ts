@@ -1,3 +1,4 @@
+import { vi } from "vite-plus/test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import {
   DEFAULT_SERVER_SETTINGS,
@@ -97,6 +98,65 @@ const recordProviderUsage = (provider: string, instanceId: string | null = provi
   });
 
 it.layer(NodeServices.layer)("server settings", (it) => {
+  it.effect(
+    "persists the host workspace timezone once, respects explicit zones and materializes reset",
+    () =>
+      Effect.gen(function* () {
+        const config = yield* ServerConfig.ServerConfig;
+        const fs = yield* FileSystem.FileSystem;
+        const service = yield* ServerSettingsModule.ServerSettingsService;
+        const options = new Intl.DateTimeFormat().resolvedOptions();
+        const host = vi
+          .spyOn(Intl.DateTimeFormat.prototype, "resolvedOptions")
+          .mockReturnValue({ ...options, timeZone: "Africa/Johannesburg" });
+        try {
+          yield* fs.writeFileString(config.settingsPath, "{}");
+          assert.equal(
+            (yield* service.getSettings).workspaceDisplayTimeZone,
+            "Africa/Johannesburg",
+          );
+          host.mockReturnValue({ ...options, timeZone: "America/New_York" });
+          const reopened = yield* ServerSettingsModule.ServerSettingsService.pipe(
+            Effect.provide(ServerSettingsModule.layer.pipe(Layer.provide(ServerSecretStore.layer))),
+          );
+          assert.equal(
+            (yield* reopened.getSettings).workspaceDisplayTimeZone,
+            "Africa/Johannesburg",
+          );
+          assert.equal(
+            (yield* reopened.updateSettings({ workspaceDisplayTimeZone: "Europe/London" }))
+              .workspaceDisplayTimeZone,
+            "Europe/London",
+          );
+          const explicit = yield* ServerSettingsModule.ServerSettingsService.pipe(
+            Effect.provide(ServerSettingsModule.layer.pipe(Layer.provide(ServerSecretStore.layer))),
+          );
+          assert.equal((yield* explicit.getSettings).workspaceDisplayTimeZone, "Europe/London");
+          assert.equal(
+            (yield* explicit.updateSettings({ workspaceDisplayTimeZone: null }))
+              .workspaceDisplayTimeZone,
+            "America/New_York",
+          );
+          const persisted = yield* decodeServerSettingsJson(
+            yield* fs.readFileString(config.settingsPath),
+          );
+          assert.equal(persisted.workspaceDisplayTimeZone, "America/New_York");
+        } finally {
+          host.mockRestore();
+        }
+      }).pipe(Effect.provide(makeServerSettingsLayer())),
+  );
+  it.effect("does not rewrite malformed settings to materialize a workspace timezone", () =>
+    Effect.gen(function* () {
+      const config = yield* ServerConfig.ServerConfig;
+      const fs = yield* FileSystem.FileSystem;
+      const service = yield* ServerSettingsModule.ServerSettingsService;
+      const malformed = '{ "workspaceDisplayTimeZone": "No/Such_Zone" }';
+      yield* fs.writeFileString(config.settingsPath, malformed);
+      yield* service.getSettings;
+      assert.equal(yield* fs.readFileString(config.settingsPath), malformed);
+    }).pipe(Effect.provide(makeServerSettingsLayer())),
+  );
   it.effect("migrates saved token delivery to paragraph buffering without resetting settings", () =>
     Effect.gen(function* () {
       const config = yield* ServerConfig.ServerConfig;
@@ -1268,6 +1328,7 @@ it.layer(NodeServices.layer)("server settings", (it) => {
       const raw = yield* fileSystem.readFileString(serverConfig.settingsPath);
       // @effect-diagnostics-next-line preferSchemaOverJson:off
       assert.deepEqual(JSON.parse(raw), {
+        workspaceDisplayTimeZone: next.workspaceDisplayTimeZone,
         addProjectBaseDirectory: "~/Development",
         observability: {
           otlpTracesUrl: "http://localhost:4318/v1/traces",
@@ -1333,6 +1394,8 @@ it.layer(NodeServices.layer)("server settings", (it) => {
       const original =
         '{"providerInstances":{"codex_personal":{"driver":"codex","environment":[{"name":"API_TOKEN","value":"inline-test-token","sensitive":true}],"config":{}}}}';
       yield* fs.writeFileString(config.settingsPath, original);
+      yield* service.getSettings;
+      const before = yield* fs.readFileString(config.settingsPath);
       const error = yield* Effect.flip(
         service.updateSettings({
           providerInstances: {
@@ -1346,7 +1409,7 @@ it.layer(NodeServices.layer)("server settings", (it) => {
       );
       assert.equal(error.operation, "write-secret");
       assert.strictEqual(error.cause, cause);
-      assert.equal(yield* fs.readFileString(config.settingsPath), original);
+      assert.equal(yield* fs.readFileString(config.settingsPath), before);
       const settings = yield* service.getSettings;
       assert.equal(
         settings.providerInstances[instanceId]?.environment?.[0]?.value,

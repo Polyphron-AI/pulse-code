@@ -1193,7 +1193,22 @@ export const StorageCleanupSettings = Schema.Struct({
 });
 export type StorageCleanupSettings = typeof StorageCleanupSettings.Type;
 
+export const WorkspaceDisplayTimeZone = Schema.String.check(
+  Schema.makeFilter((value) => {
+    if (!value || /^[+-]/.test(value)) return false;
+    try {
+      return (
+        new Intl.DateTimeFormat("en", { timeZone: value }).resolvedOptions().timeZone.length > 0
+      );
+    } catch {
+      return false;
+    }
+  }),
+);
 export const ServerSettings = Schema.Struct({
+  workspaceDisplayTimeZone: Schema.NullOr(WorkspaceDisplayTimeZone).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null)),
+  ),
   worktreeCleanup: WorktreeCleanup.pipe(Schema.withDecodingDefault(Effect.succeed(null))),
   storageCleanup: StorageCleanupSettings.pipe(
     Schema.withDecodingDefault(Effect.succeed(Schema.decodeSync(StorageCleanupSettings)({}))),
@@ -1574,6 +1589,7 @@ const OpenCodeSettingsPatch = Schema.Struct({
 });
 
 export const ServerSettingsPatch = Schema.Struct({
+  workspaceDisplayTimeZone: Schema.optionalKey(Schema.NullOr(WorkspaceDisplayTimeZone)),
   worktreeCleanup: Schema.optionalKey(
     Schema.NullOr(
       Schema.Union([
