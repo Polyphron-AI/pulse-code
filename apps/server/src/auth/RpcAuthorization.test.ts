@@ -3,6 +3,7 @@ import {
   AuthOrchestrationReadScope,
   AuthRelayReadScope,
   AuthRelayWriteScope,
+  ProjectId,
   WS_METHODS,
   WsRpcGroup,
 } from "@t3tools/contracts";
@@ -224,8 +225,83 @@ it("separates workspace settings and task writes from reads", () => {
   for (const method of [
     WS_METHODS.workspaceSaveProjectConfig,
     WS_METHODS.workspaceUpsertTask,
+    WS_METHODS.workspaceTransitionTask,
     WS_METHODS.workspaceDeleteTask,
     WS_METHODS.workspaceSaveAutomation,
   ])
     expect(requiredScopeForRpcMethod(method)).toBe(AuthOrchestrationOperateScope);
 });
+
+it.effect("authorizes task transitions and revision-aware settings through operate scope", () =>
+  Effect.gen(function* () {
+    const tested = [
+      WS_METHODS.workspaceTransitionTask,
+      WS_METHODS.workspaceSaveProjectConfig,
+    ] as const;
+    const group = WsRpcGroup.omit(
+      ...[...WsRpcGroup.requests.keys()].filter(
+        (tag): tag is Exclude<keyof typeof RPC_REQUIRED_SCOPES, (typeof tested)[number]> =>
+          !(tested as readonly string[]).includes(tag),
+      ),
+    );
+    const config = {
+      projectId: ProjectId.make("project"),
+      taskColumns: ["To do", "Done"],
+      browserThreadId: null,
+      completedColumn: "Done",
+      revision: 1,
+    };
+    const task = {
+      id: "wskt_00000000-0000-0000-0000-000000000001",
+      projectId: config.projectId,
+      title: "Task",
+      column: "Done",
+      revision: 1,
+      done: true,
+    };
+    const handled: string[] = [];
+    for (const scope of [AuthOrchestrationReadScope, AuthOrchestrationOperateScope]) {
+      const client = yield* RpcTest.makeClient(group).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            group.toLayerHandler(WS_METHODS.workspaceTransitionTask, () =>
+              Effect.sync(() => {
+                handled.push("transition");
+                return task;
+              }),
+            ),
+            group.toLayerHandler(WS_METHODS.workspaceSaveProjectConfig, () =>
+              Effect.sync(() => {
+                handled.push("config");
+                return config;
+              }),
+            ),
+            rpcScopeAuthorizationLayer([scope]),
+          ),
+        ),
+      );
+      const move = client[WS_METHODS.workspaceTransitionTask]({
+        id: task.id,
+        expectedRevision: 0,
+        change: { type: "completion", completed: true },
+      });
+      const save = client[WS_METHODS.workspaceSaveProjectConfig]({
+        ...config,
+        expectedRevision: 0,
+      });
+      if (scope === AuthOrchestrationReadScope) {
+        expect(yield* move.pipe(Effect.flip)).toMatchObject({
+          requiredScope: AuthOrchestrationOperateScope,
+        });
+        expect(yield* save.pipe(Effect.flip)).toMatchObject({
+          requiredScope: AuthOrchestrationOperateScope,
+        });
+        expect(handled).toEqual([]);
+      } else {
+        expect(yield* move).toEqual(task);
+        expect(yield* save).toEqual(config);
+        expect(handled).toEqual(["transition", "config"]);
+      }
+    }
+  }).pipe(Effect.scoped),
+);

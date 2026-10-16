@@ -56,6 +56,12 @@ export function createWorkspaceToolsAtoms<R, E>(
       scheduler,
       concurrency,
     }),
+    transitionTask: createEnvironmentRpcCommand(runtime, {
+      label: "workspace-tools:transitionTask",
+      tag: WS_METHODS.workspaceTransitionTask,
+      scheduler,
+      concurrency,
+    }),
     deleteTask: createEnvironmentRpcCommand(runtime, {
       label: "workspace-tools:deleteTask",
       tag: WS_METHODS.workspaceDeleteTask,

@@ -3,6 +3,7 @@ import {
   type ProjectId,
   type WorkspaceTask,
   type WorkspaceProjectConfig,
+  type WorkspaceProjectConfigSave,
   ThreadId,
 } from "@t3tools/contracts";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
@@ -17,6 +18,7 @@ import { Input } from "../ui/input";
 import { Textarea } from "../ui/textarea";
 import { Button } from "../ui/button";
 import { WorkspaceItemActions, WorkspaceItemMenu } from "./WorkspaceItemActions";
+import { useMailCapabilities } from "./mail/useMailCapabilities";
 import { useWorkspaceCanOperate } from "./useWorkspaceCanOperate";
 export const workspaceToolsError = (result: Parameters<typeof squashAtomCommandFailure>[0]) => {
   const cause = squashAtomCommandFailure(result);
@@ -41,7 +43,7 @@ export function ProjectWorkspaceSettings({
         </p>
       ) : config.data ? (
         <ProjectWorkspaceSettingsForm
-          key={`${projectId}:${JSON.stringify(config.data)}`}
+          key={`${environmentId}:${projectId}:${JSON.stringify(config.data)}`}
           environmentId={environmentId}
           config={config.data}
         />
@@ -58,6 +60,7 @@ function ProjectWorkspaceSettingsForm({
   environmentId: EnvironmentId;
   config: WorkspaceProjectConfig;
 }) {
+  const { workspaceTasksV2 } = useMailCapabilities(environmentId);
   const canOperate = useWorkspaceCanOperate(environmentId);
   const threads = useThreadShells().filter(
     (thread) => thread.environmentId === environmentId && thread.projectId === config.projectId,
@@ -65,26 +68,42 @@ function ProjectWorkspaceSettingsForm({
   const save = useAtomCommand(workspaceTools.saveConfig, { reportFailure: false });
   const [columns, setColumns] = useState(config.taskColumns.join("\n"));
   const [browserThreadId, setBrowserThreadId] = useState(config.browserThreadId ?? "");
+  const [completedColumn, setCompletedColumn] = useState(config.completedColumn ?? "");
+  const [confirmation, setConfirmation] = useState<WorkspaceProjectConfigSave | null>(null);
+  const awaitingConfirmation = workspaceTasksV2 && confirmation !== null;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const submit = async (input: WorkspaceProjectConfigSave) => {
+    if (busy || !canOperate || (input.expectedRevision !== undefined && !workspaceTasksV2)) return;
+    setBusy(true);
+    setError(null);
+    const result = await save({ environmentId, input });
+    setBusy(false);
+    if (result._tag === "Failure") {
+      const message = workspaceToolsError(result);
+      setError(message);
+      setConfirmation(
+        workspaceTasksV2 &&
+          /changes completion for \d+ tasks?\. Confirm to continue\.$/.test(message)
+          ? input
+          : null,
+      );
+    } else setConfirmation(null);
+  };
   return (
     <form
       className="space-y-3"
       onSubmit={async (event) => {
         event.preventDefault();
-        if (busy || !canOperate) return;
-        setBusy(true);
-        setError(null);
-        const result = await save({
-          environmentId,
-          input: {
-            projectId: config.projectId,
-            taskColumns: columns.split("\n").map((value) => value.trim()),
-            browserThreadId: browserThreadId ? ThreadId.make(browserThreadId) : null,
-          },
+        if (awaitingConfirmation) return;
+        await submit({
+          projectId: config.projectId,
+          taskColumns: columns.split("\n").map((value) => value.trim()),
+          browserThreadId: browserThreadId ? ThreadId.make(browserThreadId) : null,
+          ...(workspaceTasksV2
+            ? { expectedRevision: config.revision ?? 0, completedColumn: completedColumn || null }
+            : {}),
         });
-        setBusy(false);
-        if (result._tag === "Failure") setError(workspaceToolsError(result));
       }}
     >
       <label className="block space-y-1 text-sm">
@@ -94,7 +113,7 @@ function ProjectWorkspaceSettingsForm({
           value={columns}
           onChange={(event) => setColumns(event.target.value)}
           maxLength={500}
-          disabled={busy || !canOperate}
+          disabled={busy || !canOperate || awaitingConfirmation}
         />
       </label>
       <label className="block space-y-1 text-sm">
@@ -104,7 +123,7 @@ function ProjectWorkspaceSettingsForm({
           className="w-full rounded-md border border-input bg-background p-2"
           value={browserThreadId}
           onChange={(event) => setBrowserThreadId(event.target.value)}
-          disabled={busy || !canOperate}
+          disabled={busy || !canOperate || awaitingConfirmation}
         >
           <option value="">No browser thread</option>
           {config.browserThreadId &&
@@ -118,13 +137,68 @@ function ProjectWorkspaceSettingsForm({
           ))}
         </select>
       </label>
+      {workspaceTasksV2 ? (
+        <label className="block space-y-1 text-sm">
+          <span>Completed column</span>
+          <select
+            aria-label="Completed column"
+            className="w-full rounded-md border border-input bg-background p-2"
+            value={completedColumn}
+            onChange={(event) => setCompletedColumn(event.target.value)}
+            disabled={busy || !canOperate || awaitingConfirmation}
+          >
+            <option value="">Not designated</option>
+            {columns
+              .split("\n")
+              .map((value) => value.trim())
+              .filter(Boolean)
+              .map((value) => (
+                <option key={value} value={value}>
+                  {value}
+                </option>
+              ))}
+          </select>
+        </label>
+      ) : (
+        <p className="text-xs text-muted-foreground">Tasks need a newer server.</p>
+      )}
       <p className="text-xs text-muted-foreground">
         Browser uses this project's chosen thread on desktop. Move tasks before removing their
         column.
       </p>
-      <Button size="sm" variant="outline" type="submit" disabled={busy || !canOperate}>
+      <Button
+        size="sm"
+        variant="outline"
+        type="submit"
+        disabled={busy || !canOperate || awaitingConfirmation}
+      >
         Save workspace settings
       </Button>
+      {workspaceTasksV2 && confirmation ? (
+        <div className="flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            type="button"
+            disabled={busy || !canOperate}
+            onClick={() => submit({ ...confirmation, confirmCompletionChanges: true })}
+          >
+            Confirm completion changes
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              setConfirmation(null);
+              setError(null);
+              setCompletedColumn(config.completedColumn ?? "");
+            }}
+          >
+            Cancel
+          </Button>
+        </div>
+      ) : null}
       {error ? (
         <p role="alert" className="text-sm text-destructive">
           {error}
@@ -289,7 +363,7 @@ function TaskEditor({
           setError(null);
           const result = await save({
             environmentId,
-            input: { ...task, title: title.trim(), column },
+            input: { id: task.id, projectId: task.projectId, title: title.trim(), column },
           });
           setBusy(false);
           if (result._tag === "Failure") setError(workspaceToolsError(result));

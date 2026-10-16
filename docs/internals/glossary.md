@@ -25,6 +25,7 @@ Terms whose meaning matters across T3 Code. Architecture and lifecycle constrain
 | Auto project         | A resource project inferred from the current item's owner or confirmed project links when exactly one project resolves.          |
 | Resource footer      | Project-source health and scoped settings below the resource body's independent scroll area. Unknown health is not connected.    |
 | Item mutation signal | `WorkspaceItemMutationContext` invalidates the matching held environment/item capture after successful deletion.                 |
+| Completed column     | The project column that defines task completion. Other columns are open; an undesignated project has no completed tasks.         |
 | Fixture recipe       | An isolated DEV sample defining a space, selection, resource project/tab and required presentation regions for capture.          |
 
 ## Orchestration

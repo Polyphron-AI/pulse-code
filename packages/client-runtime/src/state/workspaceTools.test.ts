@@ -20,7 +20,7 @@ import * as EnvironmentRegistry from "../connection/registry.ts";
 import * as EnvironmentSupervisor from "../connection/supervisor.ts";
 import type { WsRpcProtocolClient } from "../rpc/protocol.ts";
 import type { RpcSession } from "../rpc/session.ts";
-import { executeAtomQuery } from "./runtime.ts";
+import { executeAtomQuery, runAtomCommand } from "./runtime.ts";
 import { createWorkspaceToolsAtoms } from "./workspaceTools.ts";
 
 const TARGET = new PrimaryConnectionTarget({
@@ -107,6 +107,62 @@ it.effect("refreshes project task columns after another device changes the envir
       yield* Effect.addFinalizer(() => Effect.sync(stop));
       text = "after";
       yield* SubscriptionRef.set(counter, 1);
+      yield* refreshed.await;
+    }),
+  ),
+);
+
+it.effect("refreshes a second registry after a persisted task transition", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const counter = yield* SubscriptionRef.make(0);
+      const projectId = importProjectId.make("project");
+      let task = {
+        id: "wskt_00000000-0000-0000-0000-000000000001",
+        projectId,
+        title: "Task",
+        column: "To do",
+        done: false,
+        revision: 0,
+      };
+      const client = {
+        [WS_METHODS.workspaceSubscribeChanges]: () =>
+          SubscriptionRef.changes(counter).pipe(Stream.filter((count) => count > 0)),
+        [WS_METHODS.workspaceGetTask]: () => Effect.sync(() => task),
+        [WS_METHODS.workspaceTransitionTask]: () =>
+          Effect.gen(function* () {
+            task = { ...task, column: "Done", done: true, revision: 1 };
+            yield* SubscriptionRef.update(counter, (n) => n + 1);
+            return task;
+          }),
+      } as unknown as WsRpcProtocolClient;
+      const first = yield* makeTestRuntime(client);
+      const second = yield* makeTestRuntime(client);
+      const query = second.atoms.task({
+        environmentId: TARGET.environmentId,
+        input: { id: task.id },
+      });
+      const unmount = second.registry.mount(query);
+      yield* Effect.addFinalizer(() => Effect.sync(unmount));
+      const initial = yield* Effect.promise(() => executeAtomQuery(second.registry, query));
+      expect(AsyncResult.isSuccess(initial) && initial.value.revision).toBe(0);
+      const refreshed = Latch.makeUnsafe();
+      const stop = second.registry.subscribe(query, (result) => {
+        if (AsyncResult.isSuccess(result) && result.value.revision === 1 && result.value.done)
+          refreshed.openUnsafe();
+      });
+      yield* Effect.addFinalizer(() => Effect.sync(stop));
+      const result = yield* Effect.promise(() =>
+        runAtomCommand(first.registry, first.atoms.transitionTask, {
+          environmentId: TARGET.environmentId,
+          input: {
+            id: task.id,
+            expectedRevision: 0,
+            change: { type: "completion", completed: true },
+          },
+        }),
+      );
+      expect(result._tag).toBe("Success");
       yield* refreshed.await;
     }),
   ),

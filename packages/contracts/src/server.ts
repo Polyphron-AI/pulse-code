@@ -615,6 +615,7 @@ export const ServerConfig = Schema.Struct({
       workspaceSuggestions: Schema.optionalKey(Schema.Boolean),
       driveRead: Schema.optionalKey(Schema.Boolean),
       workspaceTools: Schema.optionalKey(Schema.Boolean),
+      workspaceTasksV2: Schema.optionalKey(Schema.Boolean),
       mailRead: Schema.optionalKey(Schema.Boolean),
       mailReply: Schema.optionalKey(Schema.Boolean),
       mailConversations: Schema.optionalKey(Schema.Boolean),

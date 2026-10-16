@@ -49,6 +49,18 @@ One-hop discovery appears once in Linked context. For a task it reads the task's
 project and labels the results as project discovery. Resource selection cannot retarget this read.
 The center retains threads, tasks and settings. Missing tasks keep their unavailable reason.
 
+## Completion and older clients
+
+Task completion follows the owning project's designated completed column. Custom column lists
+remain undesignated after upgrade; a lane named Done alone does not establish completion.
+Changing the designation updates affected task revisions in the same transaction, so pending
+moves cannot silently use an earlier completion rule. Tasks and their links keep their identity.
+
+The optional `workspaceTasksV2` flag is trusted only from live server configuration. Decode
+support and service methods land before the flag is advertised. Until then, retain the legacy
+project task and settings paths. Rollback disables the capability and controls while preserving
+the forward migration and its data.
+
 ## Shared entrances and status
 
 `WorkspaceHeaderContext` supplies shell-owned environment and space labels to

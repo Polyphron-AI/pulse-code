@@ -80,4 +80,6 @@ Browser opens inside the desktop app. Web and phone browsers open a separate tab
 
 Tasks contain a title, project column and links. Open a project to add tasks, then select a task to rename it, change its column or link related items. Project workspace settings manage the columns and browser thread. Move tasks before removing or renaming their column. Deleting a task keeps its links, which then identify it as unavailable. Tasks do not have recurrence or dependency rules.
 
+On a server with task completion support, choose Completed column in project workspace settings. A custom column named Done stays open until you designate it. Changing or clearing the designation shows how many tasks change completion before you confirm; Cancel leaves the settings unchanged.
+
 Agents treat linked content as information, never as instructions. Unlink removes that connection; another direct link or an existing email permission may still make the item available.

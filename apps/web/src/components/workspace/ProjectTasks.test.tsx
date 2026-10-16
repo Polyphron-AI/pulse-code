@@ -9,7 +9,15 @@ import { EnvironmentId, ProjectId } from "@t3tools/contracts";
 import { ProjectTasks, ProjectWorkspaceSettings } from "./ProjectTasks";
 import { WorkspaceEngagement, WorkspaceItemMutationContext } from "./WorkspaceEngagement";
 import { useWorkspaceResourceState, WorkspaceResourcesProvider } from "./workspaceResourceState";
-const mocks = vi.hoisted(() => ({ command: vi.fn(), operate: true }));
+const mocks = vi.hoisted(() => ({
+  command: vi.fn(),
+  operate: true,
+  tasksV2: false,
+  newCommand: vi.fn(),
+}));
+vi.mock("./mail/useMailCapabilities", () => ({
+  useMailCapabilities: () => ({ workspaceTools: true, workspaceTasksV2: mocks.tasksV2 }),
+}));
 vi.mock("../../state/session", () => ({
   useEnvironmentSessionState: () => ({
     isPending: false,
@@ -24,6 +32,7 @@ vi.mock("../../state/workspaceTools", () => ({
     saveConfig: {},
     upsertTask: {},
     deleteTask: {},
+    transitionTask: "transition",
   },
 }));
 vi.mock("../../state/query", () => ({
@@ -34,12 +43,17 @@ vi.mock("../../state/query", () => ({
             projectId: "project",
             taskColumns: ["To do", "Done"],
             browserThreadId: "missing-thread",
+            completedColumn: "Done",
+            revision: 0,
           }
         : { tasks: [], incomplete: false },
     error: null,
   }),
 }));
-vi.mock("../../state/use-atom-command", () => ({ useAtomCommand: () => mocks.command }));
+vi.mock("../../state/use-atom-command", () => ({
+  useAtomCommand: (command: unknown) =>
+    command === "transition" ? mocks.newCommand : mocks.command,
+}));
 vi.mock("./WorkspaceItemActions", () => ({
   WorkspaceItemActions: () => null,
   WorkspaceItemMenu: ({ children }: { children: unknown }) => children,
@@ -54,6 +68,7 @@ afterEach(async () => {
   if (renderer) await act(() => renderer?.unmount());
   renderer = undefined;
   mocks.operate = true;
+  mocks.tasksV2 = false;
   vi.clearAllMocks();
   vi.unstubAllGlobals();
 });
@@ -237,4 +252,144 @@ it("keeps the held task and editor after a failed delete", async () => {
   );
   expect(invalidate).not.toHaveBeenCalled();
   expect(onSelect).not.toHaveBeenCalled();
+});
+
+it.each(["absent", "false", "cached-only"])(
+  "keeps legacy task and settings paths when capability is %s",
+  async () => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    mocks.tasksV2 = false;
+    mocks.command.mockResolvedValue({ _tag: "Success", value: {} });
+    await act(() => {
+      renderer = create(
+        <>
+          <ProjectWorkspaceSettings environmentId={environmentId} projectId={projectId} />
+          <ProjectTasks
+            environmentId={environmentId}
+            projectId={projectId}
+            selected={null}
+            onSelect={() => {}}
+          />
+        </>,
+      );
+    });
+    expect(renderer!.root.findAllByProps({ "aria-label": "Completed column" })).toHaveLength(0);
+    await act(() =>
+      renderer!.root
+        .findByProps({ "aria-label": "New task title" })
+        .props.onChange({ target: { value: "Legacy" } }),
+    );
+    for (const form of renderer!.root.findAllByType("form"))
+      await act(() => form.props.onSubmit({ preventDefault() {} }));
+    expect(mocks.command).toHaveBeenCalledTimes(2);
+    expect(mocks.command.mock.calls[0]?.[0].input).not.toHaveProperty("expectedRevision");
+    expect(mocks.newCommand).not.toHaveBeenCalled();
+  },
+);
+it("confirms the affected count, permits cancellation and preserves Browser settings", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  mocks.tasksV2 = true;
+  const conflict = {
+    _tag: "Failure",
+    cause: Cause.fail(
+      new Error(
+        "Changing the completed column changes completion for 2 tasks. Confirm to continue.",
+      ),
+    ),
+  };
+  mocks.command.mockResolvedValue(conflict);
+  await act(() => {
+    renderer = create(
+      <ProjectWorkspaceSettings environmentId={environmentId} projectId={projectId} />,
+    );
+  });
+  await act(() =>
+    renderer!.root
+      .findByProps({ "aria-label": "Completed column" })
+      .props.onChange({ target: { value: "To do" } }),
+  );
+  await act(() => renderer!.root.findByType("form").props.onSubmit({ preventDefault() {} }));
+  expect(mocks.command.mock.calls[0]?.[0]).toMatchObject({
+    environmentId,
+    input: { expectedRevision: 0, completedColumn: "To do", browserThreadId: "missing-thread" },
+  });
+  expect(renderer!.root.findByProps({ role: "alert" }).children.join("")).toContain("2 tasks");
+  await act(() =>
+    renderer!.root
+      .findAllByType("button")
+      .find((button) => button.props.children === "Cancel")!
+      .props.onClick(),
+  );
+  expect(mocks.command).toHaveBeenCalledTimes(1);
+  expect(renderer!.root.findByProps({ "aria-label": "Completed column" }).props.value).toBe("Done");
+  await act(() =>
+    renderer!.root
+      .findByProps({ "aria-label": "Completed column" })
+      .props.onChange({ target: { value: "" } }),
+  );
+  await act(() => renderer!.root.findByType("form").props.onSubmit({ preventDefault() {} }));
+  mocks.command.mockResolvedValue({ _tag: "Success", value: {} });
+  await act(() =>
+    renderer!.root
+      .findAllByType("button")
+      .find((button) => button.props.children === "Confirm completion changes")!
+      .props.onClick(),
+  );
+  expect(mocks.command.mock.calls.at(-1)?.[0].input).toMatchObject({
+    completedColumn: null,
+    expectedRevision: 0,
+    confirmCompletionChanges: true,
+  });
+});
+
+it("restores legacy saving if live task capability disappears during confirmation", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  mocks.tasksV2 = true;
+  mocks.command.mockResolvedValue({
+    _tag: "Failure",
+    cause: Cause.fail(
+      new Error(
+        "Changing the completed column changes completion for 1 task. Confirm to continue.",
+      ),
+    ),
+  });
+  const view = <ProjectWorkspaceSettings environmentId={environmentId} projectId={projectId} />;
+  await act(() => {
+    renderer = create(view);
+  });
+  await act(() => renderer!.root.findByType("form").props.onSubmit({ preventDefault() {} }));
+  mocks.tasksV2 = false;
+  await act(() =>
+    renderer!.update(
+      <ProjectWorkspaceSettings environmentId={environmentId} projectId={projectId} />,
+    ),
+  );
+  mocks.command.mockResolvedValue({ _tag: "Success", value: {} });
+  await act(() => renderer!.root.findByType("form").props.onSubmit({ preventDefault() {} }));
+  expect(mocks.command).toHaveBeenCalledTimes(2);
+  expect(mocks.command.mock.calls.at(-1)?.[0].input).not.toHaveProperty("completedColumn");
+});
+it("resets the designation draft when equal project IDs belong to a different environment", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  mocks.tasksV2 = true;
+  mocks.command.mockResolvedValue({ _tag: "Success", value: {} });
+  await act(() => {
+    renderer = create(
+      <ProjectWorkspaceSettings environmentId={environmentId} projectId={projectId} />,
+    );
+  });
+  await act(() =>
+    renderer!.root
+      .findByProps({ "aria-label": "Completed column" })
+      .props.onChange({ target: { value: "To do" } }),
+  );
+  const other = EnvironmentId.make("other-environment");
+  await act(() =>
+    renderer!.update(<ProjectWorkspaceSettings environmentId={other} projectId={projectId} />),
+  );
+  await act(() => renderer!.root.findByType("form").props.onSubmit({ preventDefault() {} }));
+  expect(mocks.command.mock.calls.at(-1)?.[0]).toMatchObject({
+    environmentId: other,
+    input: { completedColumn: "Done" },
+  });
 });

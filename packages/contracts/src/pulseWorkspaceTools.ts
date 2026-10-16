@@ -11,15 +11,37 @@ export const WorkspaceProjectConfig = Schema.Struct({
   projectId: ProjectId,
   taskColumns: Schema.Array(Column).check(Schema.isMinLength(1), Schema.isMaxLength(12)),
   browserThreadId: Schema.NullOr(ThreadId),
+  completedColumn: Schema.optionalKey(Schema.NullOr(Column)),
+  revision: Schema.optionalKey(NonNegativeInt),
 });
 export type WorkspaceProjectConfig = typeof WorkspaceProjectConfig.Type;
+export const WorkspaceProjectConfigSave = Schema.Struct({
+  projectId: ProjectId,
+  taskColumns: WorkspaceProjectConfig.fields.taskColumns,
+  browserThreadId: Schema.NullOr(ThreadId),
+  completedColumn: Schema.optionalKey(Schema.NullOr(Column)),
+  expectedRevision: Schema.optionalKey(NonNegativeInt),
+  confirmCompletionChanges: Schema.optionalKey(Schema.Boolean),
+});
+export type WorkspaceProjectConfigSave = typeof WorkspaceProjectConfigSave.Type;
 export const WorkspaceTask = Schema.Struct({
   id: WorkspaceTaskId,
   projectId: ProjectId,
   title: Title,
   column: Column,
+  revision: Schema.optionalKey(NonNegativeInt),
+  done: Schema.optionalKey(Schema.Boolean),
 });
 export type WorkspaceTask = typeof WorkspaceTask.Type;
+export const WorkspaceTaskTransition = Schema.Struct({
+  id: WorkspaceTaskId,
+  expectedRevision: NonNegativeInt,
+  change: Schema.Union([
+    Schema.Struct({ type: Schema.Literal("completion"), completed: Schema.Boolean }),
+    Schema.Struct({ type: Schema.Literal("column"), column: Column }),
+  ]),
+});
+export type WorkspaceTaskTransition = typeof WorkspaceTaskTransition.Type;
 export const WorkspaceTaskUpsert = Schema.Struct({
   id: Schema.optionalKey(WorkspaceTaskId),
   projectId: ProjectId,
@@ -46,6 +68,7 @@ export const PULSE_WORKSPACE_TOOLS_METHODS = {
   workspaceSaveProjectConfig: "pulse.workspace.saveProjectConfig",
   workspaceListTasks: "pulse.workspace.listTasks",
   workspaceGetTask: "pulse.workspace.getTask",
+  workspaceTransitionTask: "pulse.workspace.transitionTask",
   workspaceUpsertTask: "pulse.workspace.upsertTask",
   workspaceDeleteTask: "pulse.workspace.deleteTask",
   workspaceSubscribeChanges: "pulse.workspace.subscribeChanges",
@@ -58,7 +81,7 @@ export const PulseWorkspaceToolsRpcs = [
     error,
   }),
   Rpc.make(PULSE_WORKSPACE_TOOLS_METHODS.workspaceSaveProjectConfig, {
-    payload: WorkspaceProjectConfig,
+    payload: WorkspaceProjectConfigSave,
     success: WorkspaceProjectConfig,
     error,
   }),
@@ -74,6 +97,11 @@ export const PulseWorkspaceToolsRpcs = [
   }),
   Rpc.make(PULSE_WORKSPACE_TOOLS_METHODS.workspaceUpsertTask, {
     payload: WorkspaceTaskUpsert,
+    success: WorkspaceTask,
+    error,
+  }),
+  Rpc.make(PULSE_WORKSPACE_TOOLS_METHODS.workspaceTransitionTask, {
+    payload: WorkspaceTaskTransition,
     success: WorkspaceTask,
     error,
   }),
