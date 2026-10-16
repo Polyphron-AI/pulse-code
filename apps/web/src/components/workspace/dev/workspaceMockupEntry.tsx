@@ -288,7 +288,9 @@ export async function startWorkspaceMockup(): Promise<void> {
     );
     const container = document.createElement("div");
     container.id = "workspace-mockup-root";
-    document.body.append(container);
+    container.style.height = "100%";
+    // #root fills the viewport and body clips overflow, so a sibling would render off-screen.
+    (document.getElementById("root") ?? document.body).append(container);
     const splash = document.getElementById("boot-shell");
     const hidden = splash?.hidden;
     if (splash) splash.hidden = true;
@@ -351,7 +353,10 @@ export async function startWorkspaceMockup(): Promise<void> {
                       backgroundColor: "#090909",
                       color: "#f0f0f0",
                       fontFamily: '"Segoe UI", system-ui, sans-serif',
-                      minHeight: "100dvh",
+                      height: "100dvh",
+                      // The shell root is a flex-1 child, as it is inside the live app layout.
+                      display: "flex",
+                      flexDirection: "column",
                       "--background": "#090909",
                       "--foreground": "#f0f0f0",
                       "--muted-foreground": "#86868a",

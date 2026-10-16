@@ -135,6 +135,11 @@ it("boots eight isolated memory routes, pins dark and preserves browser storage 
       os: "Windows",
     });
     expect(result.incompleteRegions.length).toBeGreaterThan(0);
+    // #root fills the viewport and body clips overflow, so the fixture must render inside it.
+    const mount = document.getElementById("workspace-mockup-root")!;
+    expect(mount.parentElement?.id).toBe("root");
+    expect(mount.firstElementChild).toHaveProperty("style.display", "flex");
+    expect(mount.firstElementChild).toHaveProperty("style.flexDirection", "column");
     expect(document.body.textContent).toContain("Design preview · sample data");
     expect(document.body.textContent).toContain(`Recipe ${id}`);
     expect(result.incompleteRegions).not.toContain("shell.engagement");
