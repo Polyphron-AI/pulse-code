@@ -13,6 +13,13 @@ Keeping that logic shared prevents reconnect and multi-environment behavior from
 web and mobile. See [connection runtime](./connection-runtime.md) and
 [remote environments](./remote.md).
 
+Workspace resource browsing is environment-scoped client view state, independent of the item held
+in Linked context. Selecting a project or resource tab grants no linked-item access. The shell keeps
+one resource owner across dock/sheet transfers and temporary Linked context replacement; modules
+must not add a second host or selection store. See [workspace shell](./workspace-shell.md) for
+capture, invalidation and resource handoff constraints, and [workspace links](./workspace-links.md)
+for confirmed-link grants.
+
 The [RPC contract](../../packages/contracts/src/rpc.ts) is the boundary between independently
 versioned clients and servers. Subscriptions send the state a client needs, so a client viewing one
 thread does not pay for every thread's history. Authentication of a socket does not authorize every

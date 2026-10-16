@@ -1,8 +1,22 @@
-# Mail, Projects and Code
+# Workspace spaces
 
-Use the workspace rail to switch between Mail, Projects and Code. Inside Code, the space controls offer Workspace and Code while keeping your project and thread navigation. Code restores your previous Code location for this app session. The command palette also has Open Mail and Open Projects. On desktop, choose Slack and Discord in the Projects navigation to open Communications. Office meetings, calendar and local Pulse Talk remain available through Open Office.
+Choose Workspace to open Projects. Communications, Meetings, Calendar, Email, Tasks and Projects share the workspace navigation. A view that needs a newer server explains its availability. Choose Code to restore your previous Code location in the selected environment for this app session. The command palette also offers Open Workspace, Open Mail and Open Projects. Open local Office tools keeps the existing local Office and Pulse Talk tools reachable.
 
-Mail and Projects have a navigation column, a list and detail area, and a context panel. Drag the divider to resize the list. You can also focus the divider and use the arrow keys, Home or End. Each space remembers its width on this device. On a phone, the list opens the detail and Context opens as a sheet. Use Messages or All projects to go back.
+Each space shares an environment breadcrumb and a header naming the current view. Email and Communications have a resizable list beside the selected item. Drag the divider, or focus it and use the arrow keys, Home or End. Each space remembers its width on this device. Other spaces use the full center. On a phone, open the navigation menu to change spaces, and use Back to list to return from an item without clearing the list's search or scroll position.
+
+## Resources and Linked context
+
+Resources shows the project you choose, even before you select an item. Its tabs are Files, Browser, Agents, Tasks, Docs and PRs. A tab explains when its contents are unavailable. Choosing or browsing a project does not create a link or give an agent access to its contents.
+
+The project picker shows Auto: followed by the project name when it infers one project from the current item. Choose a project yourself to keep Resources on that project as you select other items. Choose Auto in the picker to resume inference. If no single project resolves, choose one explicitly. A removed project stays unavailable until you choose another.
+
+Linked context opens the selected item's confirmed links, suggestions and their origins. Use the header's link control, or Workspace actions on a phone. It holds the item you opened it for. If you select another item, Held item identifies the original target; choose Show current item to switch. A deleted task closes its held context. Changing a task's column keeps its links open.
+
+Back to resources returns to the chosen project and tab. The X in Linked context closes that context and restores the previous Resources visibility. The X in Resources closes the tool; reopen it from the header. Closing Resources on a wide screen remembers that preference. On a phone or a narrower window, Resources opens over the current view and closing it returns focus to its trigger. Resizing an open panel transfers it between the side panel and sheet. Resource drafts stay mounted through resizing and Linked context; explicitly closing Resources stops its tool.
+
+The command palette entries Resources and Linked context use the same controls. Their default shortcuts are Mod+Alt+O and Mod+Alt+L. Mod means Ctrl on Windows and Linux, or Command on macOS. These shortcuts do not run while typing in an editable field or using a terminal.
+
+Connection status unavailable means Pulse Code has no supported health information for the selected project's sources. It does not establish whether those sources are connected or have failed. The footer's settings control opens workspace settings for that project.
 
 ## Mail
 
@@ -28,7 +42,7 @@ Right-click an item, use its actions button, or long-press on touch screens to s
 
 Start thread uses the item's linked project or asks you to choose one. Its composer contains removable references to the item and its confirmed links. Remove references you do not want to attach to this thread, write your request, and Send. Opening or canceling the draft creates no links. Sending confirms only the references left in the message before the agent starts. If confirmation fails, the turn shows an error and the agent does not run.
 
-Start project asks for a name and creates a folder under your configured projects directory. It links the source item to that project. Canceling before Create makes no project. If linking fails after creation, Retry links the existing project rather than creating another one.
+Start project asks for a name and creates a folder under your configured projects directory. It names the source item it will link. Canceling before Create makes no project. If linking fails after creation, Retry links the existing project rather than creating another one. A brief disconnect or permission recheck keeps the form and its text while disabling actions.
 
 ## Suggested links
 
@@ -52,11 +66,11 @@ Chats and messages can link to projects and threads. An agent can read confirmed
 
 ## Projects
 
-Use the searchable project dropdown to choose a project or return to All projects. A project hub lists its threads, direct links and related items one hop away. Related rows say which item they came through. These rows are for discovery and give no additional agent access. Link an item directly when you want it to become project context. Large hubs show a bounded selection and say when more items exist.
+Choose a project to see its threads, tasks and workspace settings, or return to All projects. Open Linked context for its direct links and Related through linked items. A selected task's Linked context also offers its owning project's related items, labelled as project discovery. Each related row says which item it came through. These rows are for discovery and give no additional agent access. Link an item directly when you want it to become project context. Large hubs show a bounded selection and say when more items exist.
 
 Code thread details also show confirmed workspace links and the thread's existing pull request links. Pull requests keep their original open and unlink behavior.
 
-The context panel's Links view contains Linked and Suggested. Projects shows confirmed project links. Browser opens a page, Files lists the item's confirmed Drive files, and Agents opens linked threads or starts one with the selected item as context. Before you select an item, the panel explains how to open its context.
+Linked context contains Linked and Suggested. Its Projects view shows confirmed project links. Resources keeps its project selection independently of these item links.
 
 ## Automations, browser and tasks
 

@@ -5,20 +5,27 @@ Terms whose meaning matters across T3 Code. Architecture and lifecycle constrain
 
 ## Workspace and conversation
 
-| Term           | Meaning                                                                                                                          |
-| -------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| Environment    | One running server and the machine, credentials, workspace access, and state it owns.                                            |
-| Client         | A web, desktop, or mobile UI connected to an environment. The desktop app can also host a server.                                |
-| Project        | An environment-local workspace record rooted at a directory.                                                                     |
-| Workspace root | The project's base filesystem directory on the environment.                                                                      |
-| Worktree       | A separate Git checkout a thread can use instead of the project's main checkout.                                                 |
-| Thread         | The durable conversation and work history for a project. It survives provider process exits.                                     |
-| Turn           | One user-to-agent cycle, a V2 run. Provider work can end before checkpoint and diff work settles.                                |
-| Activity       | A non-message timeline item, such as a tool action, approval, or failure.                                                        |
-| T3 home        | The base data directory. Runtime state normally lives under its `userdata` directory.                                            |
-| Link           | A user-confirmed connection between two items, such as a message and a project. See [workspace links](./workspace-links.md).     |
-| Linked items   | The confirmed items linked to a thread or its project. Turns name a bounded list; agents can read linked mail and URL addresses. |
-| Item key       | The stable string a link stores for an item. A mail item is keyed by account and Message-ID when it has one.                     |
+| Term                         | Meaning                                                                                                                          |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Environment                  | One running server and the machine, credentials, workspace access, and state it owns.                                            |
+| Client                       | A web, desktop, or mobile UI connected to an environment. The desktop app can also host a server.                                |
+| Project                      | An environment-local workspace record rooted at a directory.                                                                     |
+| Workspace root               | The project's base filesystem directory on the environment.                                                                      |
+| Worktree                     | A separate Git checkout a thread can use instead of the project's main checkout.                                                 |
+| Thread                       | The durable conversation and work history for a project. It survives provider process exits.                                     |
+| Turn                         | One user-to-agent cycle, a V2 run. Provider work can end before checkpoint and diff work settles.                                |
+| Activity                     | A non-message timeline item, such as a tool action, approval, or failure.                                                        |
+| T3 home                      | The base data directory. Runtime state normally lives under its `userdata` directory.                                            |
+| Link                         | A user-confirmed connection between two items, such as a message and a project. See [workspace links](./workspace-links.md).     |
+| Linked items                 | The confirmed items linked to a thread or its project. Turns name a bounded list; agents can read linked mail and URL addresses. |
+| Item key                     | The stable string a link stores for an item. A mail item is keyed by account and Message-ID when it has one.                     |
+| Resource frame               | The selected environment/project's Files, Browser, Agents, Tasks, Docs and PRs container. Browsing it does not confirm links.    |
+| Linked context               | The explicitly opened view of a selected item's confirmed links, suggestions, origins and labelled project discovery.            |
+| Held item                    | The environment/item captured when Linked context or an item action opens, retained until explicitly replaced or invalidated.    |
+| Auto project                 | A resource project inferred from the current item's owner or confirmed project links when exactly one project resolves.          |
+| Resource footer              | Project-source health and scoped settings below the resource body's independent scroll area. Unknown health is not connected.    |
+| WorkspaceItemMutationContext | The shell callback that invalidates a matching held environment/item after successful deletion or a move out of scope.           |
+| Fixture recipe               | An isolated DEV sample defining a space, selection, resource project/tab and required presentation regions for capture.          |
 
 ## Orchestration
 
