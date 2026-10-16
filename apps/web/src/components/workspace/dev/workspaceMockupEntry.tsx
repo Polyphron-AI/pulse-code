@@ -1,4 +1,6 @@
 import type { CSSProperties } from "react";
+// Only side-effect-free seed helpers load statically. Presentation modules must
+// stay behind the dynamic imports after installNetworkGuard() in startup.
 import {
   createWorkspaceMockupSession,
   parseWorkspaceMockupRequest,
@@ -138,10 +140,10 @@ function installNetworkGuard() {
         new Proxy(window.WebSocket, {
           construct(target, args) {
             const url = new URL(String(args[0]), window.location.href);
-            const protocol = args[1];
+            const protocols = Array.isArray(args[1]) ? args[1] : [args[1]];
             const hmr =
-              protocol === "vite-hmr" ||
-              (Array.isArray(protocol) && protocol.length === 1 && protocol[0] === "vite-hmr");
+              protocols.length === 1 &&
+              (protocols[0] === "vite-hmr" || protocols[0] === "vite-ping");
             const scheme = window.location.protocol === "https:" ? "wss:" : "ws:";
             if (
               url.host !== window.location.host ||
@@ -157,6 +159,7 @@ function installNetworkGuard() {
     if (typeof window.EventSource === "function")
       replace(window, "EventSource", new Proxy(window.EventSource, { construct: blocked }));
     if (typeof navigator.sendBeacon === "function") replace(navigator, "sendBeacon", blocked);
+    if (typeof window.open === "function") replace(window, "open", blocked);
     const seen = new WeakSet<object>();
     function guardBridge(target: object) {
       if (seen.has(target)) return;
@@ -468,6 +471,8 @@ export async function startWorkspaceMockup(): Promise<void> {
               : "seed-only",
             captureKind: "synthetic",
             networkRequests: 0,
+            // All active settled() promises resolved above. operations is history,
+            // not a pending-work queue; adapters must include async work in settled().
             pendingOperations: 0,
           },
         };

@@ -40,6 +40,7 @@ beforeEach(() => {
   vi.doUnmock("./mailMockupModule");
   vi.doUnmock("./driveMockupModule");
   vi.doUnmock("./agentsMockupModule");
+  vi.doUnmock("./notesMockupModule");
   main.mockClear();
   runtimeLocale = "en-GB";
   runtimeTimeZone = "Africa/Johannesburg";
@@ -181,6 +182,7 @@ it("counts every blocked API including caught errors and nested desktop commands
   const beacon = vi.fn();
   Object.defineProperty(navigator, "sendBeacon", { configurable: true, value: beacon });
   const nested = vi.fn();
+  const openWindow = window.open;
   window.desktopBridge = {
     command: { execute: nested },
     shell: { openExternal: nested },
@@ -189,8 +191,10 @@ it("counts every blocked API including caught errors and nested desktop commands
   capture.configureCapture(host);
   await window.fetch("/src/index.css");
   expect(new window.WebSocket("ws://fixture.invalid/", "vite-hmr")).toBeDefined();
+  expect(new window.WebSocket("ws://fixture.invalid/", "vite-ping")).toBeDefined();
+  expect(new window.WebSocket("ws://fixture.invalid/", ["vite-ping"])).toBeDefined();
   expect(fetch).toHaveBeenCalledTimes(1);
-  expect(socket).toHaveBeenCalledTimes(1);
+  expect(socket).toHaveBeenCalledTimes(3);
   const bridge = window.desktopBridge as unknown as {
     command: { execute: () => void };
     shell: { openExternal: () => void };
@@ -206,7 +210,12 @@ it("counts every blocked API including caught errors and nested desktop commands
     () => new XMLHttpRequest().open("GET", "/api/data"),
     () => new window.WebSocket("ws://fixture.invalid/ws", "application"),
     () => new window.WebSocket("ws://external.invalid/", "vite-hmr"),
+    () => new window.WebSocket("ws://external.invalid/", "vite-ping"),
+    () => new window.WebSocket("wss://fixture.invalid/", "vite-ping"),
+    () => new window.WebSocket("ws://fixture.invalid/api/data", "vite-ping"),
+    () => new window.WebSocket("ws://fixture.invalid/ws", "vite-hmr"),
     () => new window.WebSocket("ws://fixture.invalid/", ["vite-hmr", "app"]),
+    () => window.open("https://external.invalid/"),
     () => new window.EventSource("/events"),
     () => navigator.sendBeacon("/log"),
     () => bridge.command.execute(),
@@ -225,7 +234,88 @@ it("counts every blocked API including caught errors and nested desktop commands
   expect(bridge.command.execute).toBe(nested);
   expect(bridge.shell.openExternal).toBe(nested);
   expect(navigator.sendBeacon).toBe(beacon);
+  expect(window.open).toBe(openWindow);
   delete (navigator as Partial<Navigator>).sendBeacon;
+});
+
+it("allows secure Vite HMR and reconnect probes without counting application requests", async () => {
+  (window as unknown as { happyDOM: { setURL: (url: string) => void } }).happyDOM.setURL(
+    "https://fixture.invalid/workspace?space=mail&fixture=01",
+  );
+  const socket = vi.fn();
+  window.WebSocket = vi.fn(function FixtureSocket(...args: unknown[]) {
+    socket(...args);
+  }) as unknown as typeof WebSocket;
+  const capture = await boot();
+  capture.configureCapture(host);
+  expect(new window.WebSocket("wss://fixture.invalid/", ["vite-hmr"])).toBeDefined();
+  expect(new window.WebSocket("wss://fixture.invalid/", "vite-ping")).toBeDefined();
+  expect(socket).toHaveBeenCalledTimes(2);
+  expect((await capture.ready()).manifest.networkRequests).toBe(0);
+});
+
+it("waits for active adapter work before reporting zero pending operations", async () => {
+  let begin = () => {};
+  let finish = () => {};
+  let observed = () => {};
+  const waiting = new Promise<void>((resolve) => {
+    observed = resolve;
+  });
+  vi.doMock("./mailMockupModule", () => ({
+    createWorkspaceMockupModule: (
+      session: import("./workspaceMockupFixtures").WorkspaceMockupSession,
+    ) => {
+      let work: Promise<void> | undefined;
+      begin = () => {
+        void session.record("send", undefined, "demo reply");
+        work = new Promise<void>((resolve) => {
+          finish = resolve;
+        });
+      };
+      return {
+        area: "mail",
+        readyRegions: [],
+        settled: () => {
+          if (work) observed();
+          return work ?? Promise.resolve();
+        },
+        dispose: () => finish(),
+      };
+    },
+  }));
+  const capture = await boot();
+  capture.configureCapture(host);
+  begin();
+  let ready = false;
+  const result = capture.ready().then((report) => {
+    ready = true;
+    return report;
+  });
+  await waiting;
+  expect(ready).toBe(false);
+  finish();
+  expect((await result).manifest.pendingOperations).toBe(0);
+});
+
+it("keeps recipe 07 docs subregions incomplete when only the plain note resource is ready", async () => {
+  const original = await import("./notesMockupModule");
+  vi.doMock("./notesMockupModule", () => ({
+    createWorkspaceMockupModule: (
+      session: import("./workspaceMockupFixtures").WorkspaceMockupSession,
+    ) => ({
+      ...original.createWorkspaceMockupModule(session),
+      readyRegions: ["resource"],
+      resource: "Plain note",
+    }),
+  }));
+  const capture = await boot();
+  expect(document.querySelector('[role="alert"]')?.textContent).toBeUndefined();
+  capture.configureCapture(host);
+  await act(async () => capture.reset("07"));
+  const result = await capture.ready();
+  expect(result.incompleteRegions).not.toContain("07.notes.resource");
+  expect(result.incompleteRegions).toContain("07.docs-format");
+  expect(result.incompleteRegions).toContain("07.docs-comments");
 });
 
 it("rejects stale reset generations and exposes only the newest committed recipe", async () => {

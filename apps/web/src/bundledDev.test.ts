@@ -15,7 +15,7 @@ import { tailwindPlugins } from "../vite/tailwind";
 
 const execFile = NodeUtil.promisify(NodeChildProcess.execFile);
 
-it("initializes React refresh before a shared UI chunk runs in bundled dev", async () => {
+it.each([false, true])("boots bundled dev with the fixture gate set to %s", async (fixture) => {
   const root = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "t3-bootstrap-"));
   const output = NodePath.join(root, "output");
   let resolveBundle!: (files: Map<string, string>) => void;
@@ -39,7 +39,13 @@ it("initializes React refresh before a shared UI chunk runs in bundled dev", asy
     await NodeFSP.writeFile(
       NodePath.join(root, "src/main.tsx"),
       `import { Shared } from "./shared";
+globalThis.onMainImported();
 export const startup = Promise.resolve().then(() => globalThis.onStarted(Shared()));`,
+    );
+    await NodeFSP.mkdir(NodePath.join(root, "src/components/workspace/dev"), { recursive: true });
+    await NodeFSP.writeFile(
+      NodePath.join(root, "src/components/workspace/dev/workspaceMockupEntry.ts"),
+      'export async function startWorkspaceMockup() { globalThis.onStarted("fixture"); }',
     );
 
     server = await createServer({
@@ -101,6 +107,7 @@ export const startup = Promise.resolve().then(() => globalThis.onStarted(Shared(
       `import assert from "node:assert/strict";
 const started = Promise.withResolvers();
 globalThis.window = globalThis;
+globalThis.location = { href: ${JSON.stringify(fixture ? "http://fixture.invalid/workspace?fixture=01" : "http://fixture.invalid/")} };
 globalThis.document = {
   createElement: () => ({ relList: { supports: () => true } }),
   getElementById: () => null,
@@ -111,10 +118,11 @@ globalThis.__rolldown_runtime__ = {
   createModuleHotContext: () => ({ accept() {} }),
 };
 globalThis.onStarted = started.resolve;
+globalThis.onMainImported = () => assert.equal(${fixture}, false, "Fixture must not evaluate main");
 console.error = (_message, error) => started.reject(error);
 await import("./assets/index.js");
 const element = await started.promise;
-assert.equal(element.props.children, "ready");
+assert.equal(${fixture} ? element : element.props.children, ${JSON.stringify(fixture ? "fixture" : "ready")});
 assert.equal(typeof window.$RefreshReg$, "function");
 console.log("App started with React refresh ready.");`,
     );

@@ -82,6 +82,8 @@ export interface WorkspaceMockupSession {
 export interface WorkspaceMockupModule {
   readonly area: WorkspaceMockupArea;
   readonly readyRegions: readonly ("center" | "resource")[];
+  // Notes retains 07.docs-format/07.docs-comments even with resource ready until
+  // those subregions render; each owning wave removes only its completed entry.
   readonly incompleteRegions?: readonly string[];
   readonly settled: () => Promise<void>;
   readonly center?: ReactNode;

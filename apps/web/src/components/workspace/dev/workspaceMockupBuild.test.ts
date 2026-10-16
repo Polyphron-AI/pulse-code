@@ -1,9 +1,65 @@
+// @effect-diagnostics nodeBuiltinImport:off - scans production source files and builds an inert bootstrap.
+import * as NodeFSP from "node:fs/promises";
+import * as NodePath from "node:path";
 import * as NodeURL from "node:url";
+import react from "@vitejs/plugin-react";
 import { build, type Plugin } from "vite-plus";
 import { expect, it, vi } from "vite-plus/test";
 
+const webRoot = NodeURL.fileURLToPath(new URL("../../../../", import.meta.url));
+const sourceRoot = NodePath.join(webRoot, "src");
+const fixtureRoot = NodePath.join(sourceRoot, "components/workspace/dev");
+
+function fixtureImports(file: string, source: string) {
+  const imports = [
+    ...source.matchAll(/\b(?:from\s*|import\s*(?:\(\s*)?|require\s*\(\s*)(["'])([^"']+)\1/g),
+  ];
+  return imports
+    .map((match) => match[2]!)
+    .filter((fileName) => {
+      if (file === "bootstrap.ts" && fileName === "./components/workspace/dev/workspaceMockupEntry")
+        return false;
+      const resolved = NodePath.resolve(sourceRoot, NodePath.dirname(file), fileName);
+      return (
+        resolved.startsWith(`${fixtureRoot}${NodePath.sep}`) ||
+        /workspace\/dev\/|\/dev\/workspaceMockup|MockupModule/.test(fileName)
+      );
+    });
+}
+
+it.each([
+  'import { seed } from "./dev/workspaceMockupFixtures";',
+  'export { seed } from "./dev/workspaceMockupFixtures";',
+  'void import("./dev/workspaceMockupEntry");',
+  'import type { WorkspaceMockupSession } from "./dev/workspaceMockupFixtures";',
+  'import { createWorkspaceMockupModule } from "./dev/notesMockupModule";',
+  'import { helper } from "./dev/otherHelper";',
+])("detects a production fixture import: %s", (source) => {
+  expect(fixtureImports("components/workspace/ProductionView.tsx", source)).toHaveLength(1);
+});
+
+it("keeps non-dev web sources from importing the fixture directory", async () => {
+  const files = (await NodeFSP.readdir(sourceRoot, { recursive: true })).filter((file) => {
+    const normalized = file.replaceAll("\\", "/");
+    return (
+      /\.tsx?$/.test(normalized) &&
+      !/\.(?:test|spec)\.tsx?$|(?:^|\/)__tests__\//.test(normalized) &&
+      !normalized.startsWith("components/workspace/dev/")
+    );
+  });
+  expect(files.length).toBeGreaterThan(0);
+  const leaks = await Promise.all(
+    files.map(async (file) => {
+      const source = await NodeFSP.readFile(NodePath.join(sourceRoot, file), "utf8");
+      return fixtureImports(file.replaceAll("\\", "/"), source).map(
+        (fileName) => `${file}: ${fileName}`,
+      );
+    }),
+  );
+  expect(leaks.flat()).toEqual([]);
+});
+
 it("excludes every fixture module and sample string through the real production bootstrap", async () => {
-  const webRoot = NodeURL.fileURLToPath(new URL("../../../../", import.meta.url));
   vi.stubEnv("NODE_ENV", "production");
   const bootstrap = NodeURL.fileURLToPath(
     new URL("../../../../src/bootstrap.ts", import.meta.url),
@@ -25,9 +81,10 @@ it("excludes every fixture module and sample string through the real production 
   };
   const result = await build({
     root: webRoot,
-    configFile: NodeURL.fileURLToPath(new URL("../../../../vite.config.ts", import.meta.url)),
+    configFile: false,
+    envDir: false,
     mode: "production",
-    plugins: [stubMain],
+    plugins: [react(), stubMain],
     build: { write: false },
   }).finally(() => vi.unstubAllEnvs());
   const outputs = (Array.isArray(result) ? result : [result]).flatMap((output) =>
