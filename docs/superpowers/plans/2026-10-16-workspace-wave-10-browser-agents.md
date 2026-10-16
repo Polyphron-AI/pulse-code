@@ -16,7 +16,7 @@
 
 ## Global Constraints
 
-The following relevant parent-plan constraints are copied verbatim:
+The following parent-plan constraints apply with the controller's attribution decision below:
 
 - Never use an em dash (U+2014) in anything you write: code comments, docs, UI copy, commit messages. Use a comma, a full stop or a spaced hyphen.
 - Run commands from the build worktree. In Git Bash, prefix each command with `cd "C:/Users/qblaa/.t3/worktrees/Pulse Code/unified-workspace" &&` because the shell's directory resets between calls.
@@ -39,13 +39,13 @@ Relevant spec text, copied verbatim:
 
 The first quotation describes selected-item context. A13 and D02/D22 add a separate project resource view. Preserve the item-scoped Linked context entrance when adding project agents.
 
-- Apply ProductOps Build and Ponytail at `full`. Reuse the existing preview/session/link paths. Stop at the smallest correct change. No new dependency or general module registry.
+- Reuse the existing preview/session/link paths. Stop at the smallest correct change. No new dependency or general module registry.
 - No polling, sleep-based readiness, continuous animation, page capture loop, transcript fetch per agent, history synchronization, or all-project query fanout. Await the operation, published event, receipt, or worker drain that proves the state changed.
 - Anything crossing the wire belongs in `packages/contracts`, with no heavy runtime logic. This wave uses existing shapes unchanged. An unexpected missing wire capability returns to the controller as a separately bounded change.
 - Keep live data out of fixtures. Never touch `~/.t3/userdata`. W4-T7 provides isolated, non-writing sample data and a controlled page. Never navigate to production `synkek.com` for the comparison.
 - Keep `VITE_HTTP_URL` and `VITE_WS_URL` unset. Single-origin routing must work over local, direct remote, relay, and tunnel connections.
 - Preserve B-2026-10-16-001 and other writers' work. No checkout, stash, staging, commit, server, browser, provider CLI, network, or product test is authorized by this plan-writing assignment. Commit commands below are instructions for later authorized implementation only.
-- The parent plan's historical fixed Claude co-author line is not appropriate evidence of the future executor. The implementation controller must use its actual model/harness attribution and current commit policy. This plan creates no commit.
+- Implementer commits end with a Co-Authored-By line naming the model that made the commit; controller commits use the controller's attribution line.
 - Acquire the existing exclusive UI-file slots. W10-T1 -> W10-T2 -> W10-T3 -> W10-T4 is a scheduler chain. W10-T4 does not require a W9 connector. Shared RPC/migration/context files are read-only for this wave.
 - W4-T7 and reviewed proposed states are required before visual acceptance. Permission for a server, browser, device, account, or packaged client is a separate prerequisite for the primary controller's integration pass.
 - Never stage `docs/internals/pulse-next-migration.json` in these tasks. The controller owns the ledger. Use explicit file lists, including only changed files from the task's set.
@@ -132,33 +132,31 @@ Live subtitle substitutes the selected project name. Live titles come from scope
 
 ## Earlier-wave interfaces and ownership
 
-Consume the named wave-map responsibilities below. The map specifies names and semantics, not exported TypeScript symbols. Do not invent imports from parallel plans. At dispatch bind the actual W4 props to the structural types below in the existing `WorkspaceToolsPanel` adapter; do not redefine W4 state or make another project picker.
+Consume the exact exports in W4's Canonical seams for Waves 5-11 section. Import WorkspaceResourceBodyProps from apps/web/src/components/workspace/WorkspaceResourceBody.tsx. That file is the only tab body switch: T1 replaces its Browser case and T4 its Agents case. WorkspaceToolsPanel.tsx is edited only to extract/remove legacy bodies; WorkspaceResourcesPanel.tsx remains the W4 frame. Do not redefine shell state or make another project picker. The body-switch serial chain is W4-T4a -> W5-T7 -> W6-T8 -> W7-T3 -> W8-T3a -> W8-T7 -> W8-T8 -> W10-T1 -> W10-T4, splicing non-admitted tasks. Retain earlier cases and add switch-level mount/request tests in WorkspaceResourceBody.test.tsx.
 
 | Producer | Consumed interface by its wave-map name                     | Required type/semantics at the W10 boundary                                                                                                              |
 | -------- | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | W4-T4a   | Project resource frame, selection and six lazy tabs         | `environmentId: EnvironmentId`, selected project `{ id: ProjectId; title: string }                                                                       | null`, selected tab, body visibility, one lazy body, existing project settings callback |
-| W4-T4b   | Linked context entrance and retained provenance             | selected-item `WorkspaceLinkEndpoint                                                                                                                     | null`, independent from resource project; retained Linked/Suggested/origin/unlink UI    |
+| W4-T4b   | Linked context entrance and retained provenance             | selected-item WorkspaceLinkEndpoint or null, independent from resource project; retained Linked/Suggested/origin/unlink UI                               |
 | W4-T5    | Shared item actions, project settings and truthful footer   | captured endpoint, scoped Open callback, `WorkspaceItemActions`/`WorkspaceItemMenu`, existing palette/keybinding/touch dispatch, permission-aware writes |
 | W4-T6    | Compact shell and single-body regression                    | one body transfers between aside and sheet; close/reopen and focus return retain project/tab; no duplicate lease                                         |
 | W4-T7    | Isolated sample workspace fixture and eight capture recipes | non-writing fixture 05/06 selectors, fixed clock/theme/font, controlled page, sample-only activity text, capture manifest                                |
 
-New W10 body props, local to the extracted components:
+W4 WorkspaceResourceBodyProps retains environmentId/projectId, selectedItem: WorkspaceLinkEndpoint | null, request: WorkspaceItemRef | null and onOpen. Import useWorkspaceResources from workspaceResourceState.ts for the single context-owned openResource({ tab, projectId, request }) handoff. Shell header data is WorkspaceHeaderModel via WorkspaceEngagement.header; workspaceRailItems supplies rail data and view is the only rail URL key. These contracts are not redefined here.
+
+New W10 body props extend the canonical props; projectTitle comes from the selected resource project and linkTarget is a derived alias of selectedItem, never a second selection store:
 
 ```ts
-type WorkspaceBrowserProps = {
-  environmentId: EnvironmentId;
-  projectId: ProjectId;
+import type { WorkspaceResourceBodyProps } from "./WorkspaceResourceBody";
+
+type WorkspaceBrowserProps = WorkspaceResourceBodyProps & {
   projectTitle: string;
-  linkTarget: WorkspaceLinkEndpoint | null;
+  linkTarget: WorkspaceResourceBodyProps["selectedItem"];
   visible: boolean;
-  onOpen: (ref: WorkspaceItemRef) => void;
 };
 
-type WorkspaceAgentsProps = {
-  environmentId: EnvironmentId;
-  projectId: ProjectId;
+type WorkspaceAgentsProps = WorkspaceResourceBodyProps & {
   projectTitle: string;
-  onOpen: (ref: WorkspaceItemRef) => void;
 };
 ```
 
@@ -170,20 +168,22 @@ Use `key={`${environmentId}:${projectId}`}` at the body boundary so local addres
 
 **Depends on:** W4-T6. W4-T7 is a visual prerequisite only. No W9 dependency.
 
-**Serial slot:** First W10 Browser/UI extraction slot. Exclusively own `WorkspaceToolsPanel.tsx`, the new Browser body, and the preview component prop changes while editing. Coordinate with any other preview owner. No RPC/migration/context slot.
+**Serial slot:** First W10 Browser/UI extraction slot; acquire WorkspaceResourceBody.tsx after W8-T8 or the nearest admitted body-switch predecessor. Exclusively own `WorkspaceToolsPanel.tsx`, the new Browser body, and the preview component prop changes while editing. Coordinate with any other preview owner. No RPC/migration/context slot.
 
 **Door:** two-way. **Blast Radius:** medium. The shared preview default must remain unchanged for Code. Rollback restores the old presentation adapter without deleting preview sessions or links.
 
 **Files:**
 
-- Modify `apps/web/src/components/workspace/WorkspaceToolsPanel.tsx:1-29,75-112,170-330`, extraction and W4 body adapter only.
-- Create `apps/web/src/components/workspace/WorkspaceBrowser.tsx` and `WorkspaceBrowser.test.tsx`.
+- Modify `apps/web/src/components/workspace/WorkspaceToolsPanel.tsx:1-29,75-112,170-330` only for legacy Browser extraction/removal.
+- Modify `apps/web/src/components/workspace/WorkspaceResourceBody.tsx` Browser case and `WorkspaceResourceBody.test.tsx`; preserve all other cases.
+- Modify `apps/web/src/components/workspace/dev/browserMockupModule.tsx`, the W4-T7-owned adapter transferred to T1.
+- Create `apps/web/src/components/workspace/WorkspaceBrowser.tsx`, `WorkspaceBrowserView.tsx` and `WorkspaceBrowser.test.tsx`. Keep the view free of live container/query/preview imports.
 - Modify `apps/web/src/components/workspace/WorkspaceToolsPanel.test.tsx:1-175`, preserving current Files/Agents tests until T4 takes their ownership.
 - Modify `apps/web/src/components/preview/PreviewPanel.tsx:3-20,23-53` and `PreviewView.tsx:77-88,708-825` for one optional chrome renderer.
 - Modify `apps/web/src/components/preview/PreviewView.test.tsx:1-654` and `apps/web/src/browser/browserSurfaceStore.test.ts:1-200` for relevant regressions.
 - Read/reuse `openPreviewSession.ts:27-65`, `openPreviewSession.test.ts:1-142`, `BrowserSurfaceSlot.tsx:29-82`, `browserSurfaceStore.ts:197-231`, `PreviewPanelShell.tsx:17-38` and `usePreviewSession.ts:31-100`. These are not rewrite targets.
 
-**Interfaces:** Consumes W4-T4a/T6 body selection/visibility, W4-T5 scoped settings, `workspaceTools.config({ environmentId, input: { projectId } })`, `ScopedThreadRef`, and existing preview snapshots/events. Produces `WorkspaceBrowser(props: WorkspaceBrowserProps)`, optional `renderChrome` and optional `surfaceCornerRadius?: number` props on the incumbent preview components. No wire shape changes.
+**Interfaces:** Consumes W4-T4a/T6 WorkspaceResourceBodyProps and body selection/visibility, W4-T5 scoped settings, `workspaceTools.config({ environmentId, input: { projectId } })`, `ScopedThreadRef`, and existing preview snapshots/events. Produces `WorkspaceBrowser(props: WorkspaceBrowserProps)`, optional `renderChrome` and optional `surfaceCornerRadius?: number` props on the incumbent preview components. No wire shape changes.
 
 - [ ] Add a red interaction test before extracting. Extend the existing `WorkspaceToolsPanel.test.tsx` mock harness so its fake PreviewPanel renders a visible `Incumbent Browser` region and follows the `visible` prop. For the post-extraction test, its fake must also render the passed `renderChrome` with navigation controls whose submit uses the fake preview boundary; it cannot discard the tested form. Keep a separate real PreviewView test for the forwarded renderer and its native slot. Preserve the existing mock page/title and configured remote thread. Add this test using its existing `mount`, `renderer`, `mocks`, and `item` declarations:
 
@@ -241,7 +241,7 @@ it("hands one tab between resource and Code without a stale release hiding its o
 
 This is a preservation test and may already pass. It does not replace the red inline journey or prove session reuse alone.
 
-- [ ] Extract the existing Browser function, retaining the environment+project filter on `browserThreadId`, `useWorkspaceCanOperate`, `openPreviewSession`, error messages and external path. Remove the outer bordered Browser tool card and redundant heading/project selector after binding the W4 resource body. Keep missing config guidance and project settings access.
+- [ ] Wire WorkspaceBrowser into the Browser case in WorkspaceResourceBody.tsx, forwarding canonical props and request, plus derived projectTitle/linkTarget/visibility. Test Browser selection, requested URL and switch-away/unmount without losing another case. Extract the existing Browser function, retaining the environment+project filter on `browserThreadId`, `useWorkspaceCanOperate`, `openPreviewSession`, error messages and external path. Remove the outer bordered Browser tool card and redundant heading/project selector after binding the W4 resource body. Keep missing config guidance and project settings access.
 
 - [ ] Add one optional renderer to the incumbent preview, forwarding it unchanged through `PreviewPanel`. Use the exact existing PreviewChromeRow props as its type:
 
@@ -370,11 +370,13 @@ Import Search/SlidersHorizontal from lucide-react and Popover/PopoverTrigger/Pop
 
 - [ ] Add the remaining named tests to `WorkspaceBrowser.test.tsx`: redirect and title event update the active page; hide/unmount and return reuse the same session/tab; Enlarge closes back to inline; missing configured thread gives settings guidance; failed load exposes Retry; resource project and selected chat can differ; older server rejects preview read without an unhandled error. Use actual preview store events and fake preview transport, with one awaited open result. Assert session identity and displayed page after return, not merely an open callback count. A reconnect/epoch change must use the existing runtime-tab-ID path rather than the old native guest.
 
+- [ ] Complete apps/web/src/components/workspace/dev/browserMockupModule.tsx under its per-file slot. Export createWorkspaceMockupModule: CreateWorkspaceMockupModule returning WorkspaceMockupModule. Extract/export pure WorkspaceBrowserView in WorkspaceBrowserView.tsx with controlled addressDraft, linkTarget, displayedUrl, renderPage: ReactNode, menuOpen, unavailableReason and onAddressChange/onSubmit/onMenuChange/onOpenExternal callbacks. The live WorkspaceBrowser supplies real preview state; the adapter supplies local inert site content and fake commands to that same view. Only then set readyRegions: ["resource"] for 05. settled() awaits fake command completion; dispose releases adapter state. Never mount the live container, preview session, native lease or RPC in the fixture. Extend WorkspaceBrowser.test.tsx for fake-backed readiness/isolation; no registration API.
+
 - [ ] Run from `apps/web`:
 
 ```text
-vp test run src/components/workspace/WorkspaceBrowser.test.tsx src/components/workspace/WorkspaceToolsPanel.test.tsx src/components/preview/PreviewView.test.tsx src/components/preview/openPreviewSession.test.ts src/browser/browserSurfaceStore.test.ts
-vp lint src/components/workspace/WorkspaceBrowser.tsx src/components/workspace/WorkspaceBrowser.test.tsx src/components/workspace/WorkspaceToolsPanel.tsx src/components/workspace/WorkspaceToolsPanel.test.tsx src/components/preview/PreviewPanel.tsx src/components/preview/PreviewView.tsx src/components/preview/PreviewView.test.tsx src/browser/browserSurfaceStore.test.ts
+vp test run src/components/workspace/WorkspaceBrowser.test.tsx src/components/workspace/WorkspaceToolsPanel.test.tsx src/components/preview/PreviewView.test.tsx src/components/preview/openPreviewSession.test.ts src/browser/browserSurfaceStore.test.ts src/components/workspace/WorkspaceResourceBody.test.tsx
+vp lint src/components/workspace/WorkspaceBrowser.tsx src/components/workspace/WorkspaceBrowser.test.tsx src/components/workspace/WorkspaceToolsPanel.tsx src/components/workspace/WorkspaceToolsPanel.test.tsx src/components/preview/PreviewPanel.tsx src/components/preview/PreviewView.tsx src/components/preview/PreviewView.test.tsx src/browser/browserSurfaceStore.test.ts src/components/workspace/WorkspaceResourceBody.tsx src/components/workspace/WorkspaceResourceBody.test.tsx src/components/workspace/dev/browserMockupModule.tsx src/components/workspace/WorkspaceBrowserView.tsx
 vp run typecheck
 ```
 
@@ -387,7 +389,7 @@ Expected green: inline journey passes; Code default chrome/profile tests remain 
 - [ ] Commit only the changed paths below during later authorized implementation:
 
 ```text
-git add apps/web/src/components/workspace/WorkspaceBrowser.tsx apps/web/src/components/workspace/WorkspaceBrowser.test.tsx apps/web/src/components/workspace/WorkspaceToolsPanel.tsx apps/web/src/components/workspace/WorkspaceToolsPanel.test.tsx apps/web/src/components/preview/PreviewPanel.tsx apps/web/src/components/preview/PreviewView.tsx apps/web/src/components/preview/PreviewView.test.tsx apps/web/src/browser/browserSurfaceStore.test.ts
+git add -- apps/web/src/components/workspace/WorkspaceBrowser.tsx apps/web/src/components/workspace/WorkspaceBrowser.test.tsx apps/web/src/components/workspace/WorkspaceToolsPanel.tsx apps/web/src/components/workspace/WorkspaceToolsPanel.test.tsx apps/web/src/components/preview/PreviewPanel.tsx apps/web/src/components/preview/PreviewView.tsx apps/web/src/components/preview/PreviewView.test.tsx apps/web/src/browser/browserSurfaceStore.test.ts apps/web/src/components/workspace/WorkspaceResourceBody.tsx apps/web/src/components/workspace/WorkspaceResourceBody.test.tsx apps/web/src/components/workspace/dev/browserMockupModule.tsx apps/web/src/components/workspace/WorkspaceBrowserView.tsx
 git commit -m "feat(web): show project Browser inside resources"
 ```
 
@@ -397,7 +399,7 @@ git commit -m "feat(web): show project Browser inside resources"
 
 **Door:** two-way. **Blast Radius:** low. No protocol or persistence changes.
 
-**Files:** Modify the T1-created `WorkspaceBrowser.tsx` and `WorkspaceBrowser.test.tsx`, and `docs/user/workspace-spaces.md:53-67`. Read `apps/web/src/localApi.ts:20-31` and `localApi.test.ts:1-130`. Do not broaden LocalApi or reinterpret its web return as an observed tab. Extend `WorkspaceEngagement.test.tsx:1-45` only if the new body exposes a regression in W4's compact transfer; it is an exclusive W4/T2 shared-file handoff, not authority to redesign the shell.
+**Files:** Modify the T1-created `WorkspaceBrowser.tsx`, `WorkspaceBrowserView.tsx` and `WorkspaceBrowser.test.tsx`, and `docs/user/workspace-spaces.md:53-67`. Read `apps/web/src/localApi.ts:20-31` and `localApi.test.ts:1-130`. Do not broaden LocalApi or reinterpret its web return as an observed tab. Extend `WorkspaceEngagement.test.tsx:1-45` only if the new body exposes a regression in W4's compact transfer; it is an exclusive W4/T2 shared-file handoff, not authority to redesign the shell.
 
 **Interfaces:** Consumes `WorkspaceBrowserProps`, W4-T6 sheet/back/focus contract, `normalizeLinkUrl`, `readLocalApi().shell.openExternal(url): Promise<void>`. Produces the external-tab card and a validated current pasted address. No PreviewPanel is mounted when `isPreviewSupportedInRuntime()` is false. A desktop client connected to an unsupported preview environment offers an explicit external-open alternative after the existing failure, rather than claiming inline availability.
 
@@ -465,8 +467,8 @@ The helper above launches synchronously up to its first await. The retained inpu
 - [ ] Run from `apps/web`:
 
 ```text
-vp test run src/components/workspace/WorkspaceBrowser.test.tsx src/components/workspace/WorkspaceEngagement.test.tsx src/localApi.test.ts
-vp lint src/components/workspace/WorkspaceBrowser.tsx src/components/workspace/WorkspaceBrowser.test.tsx
+vp test run src/components/workspace/WorkspaceBrowser.test.tsx src/components/workspace/WorkspaceEngagement.test.tsx src/localApi.test.ts src/components/workspace/WorkspaceResourceBody.test.tsx
+vp lint src/components/workspace/WorkspaceBrowser.tsx src/components/workspace/WorkspaceBrowser.test.tsx src/components/workspace/WorkspaceBrowserView.tsx
 vp run typecheck
 ```
 
@@ -479,7 +481,7 @@ Expected green: invalid addresses stay local; external launch failure preserves 
 - [ ] Commit the changed files explicitly. If a W4 compact regression required a test change, name it separately after reviewing that diff.
 
 ```text
-git add apps/web/src/components/workspace/WorkspaceBrowser.tsx apps/web/src/components/workspace/WorkspaceBrowser.test.tsx docs/user/workspace-spaces.md
+git add -- apps/web/src/components/workspace/WorkspaceBrowser.tsx apps/web/src/components/workspace/WorkspaceBrowser.test.tsx docs/user/workspace-spaces.md apps/web/src/components/workspace/WorkspaceBrowserView.tsx
 git commit -m "feat(web): explain project Browser external tabs"
 ```
 
@@ -490,6 +492,8 @@ git commit -m "feat(web): explain project Browser external tabs"
 **Door:** two-way. **Blast Radius:** medium. Captured endpoints affect persistent links and thread context. Rollback removes only new entrances, never stored relations.
 
 **Files:**
+
+- Modify `apps/web/src/components/workspace/WorkspaceBrowserView.tsx` alongside the live Browser to keep page/search/menu presentation shared with the isolated adapter.
 
 - Modify T1-created `WorkspaceBrowser.tsx` and `WorkspaceBrowser.test.tsx`.
 - Create `apps/web/src/components/workspace/workspaceBrowser.logic.ts` and `.test.ts` for canonical capture and bounded local search used by both Browser modes.
@@ -695,8 +699,8 @@ The W4/T1 adapter supplies `openPage` only when it can select the existing Brows
 
 ```text
 # apps/web
-vp test run src/components/workspace/WorkspaceBrowser.test.tsx src/components/workspace/workspaceBrowser.logic.test.ts src/components/workspace/useWorkspaceItemOpener.test.ts src/components/workspace/WorkspaceItemActions.test.tsx
-vp lint src/components/workspace/WorkspaceBrowser.tsx src/components/workspace/WorkspaceBrowser.test.tsx src/components/workspace/workspaceBrowser.logic.ts src/components/workspace/workspaceBrowser.logic.test.ts src/components/workspace/useWorkspaceItemOpener.ts src/components/workspace/useWorkspaceItemOpener.test.ts
+vp test run src/components/workspace/WorkspaceBrowser.test.tsx src/components/workspace/workspaceBrowser.logic.test.ts src/components/workspace/useWorkspaceItemOpener.test.ts src/components/workspace/WorkspaceItemActions.test.tsx src/components/workspace/WorkspaceResourceBody.test.tsx
+vp lint src/components/workspace/WorkspaceBrowser.tsx src/components/workspace/WorkspaceBrowser.test.tsx src/components/workspace/workspaceBrowser.logic.ts src/components/workspace/workspaceBrowser.logic.test.ts src/components/workspace/useWorkspaceItemOpener.ts src/components/workspace/useWorkspaceItemOpener.test.ts src/components/workspace/WorkspaceBrowserView.tsx
 vp run typecheck
 # packages/contracts
 vp test run src/pulseLinks.test.ts
@@ -713,20 +717,22 @@ Expected green: canonical pair/origin tests pass, second-client invalidation rem
 - [ ] Commit only actual owned changes. Add shared item-action files separately only when their diff was required and verified.
 
 ```text
-git add apps/web/src/components/workspace/WorkspaceBrowser.tsx apps/web/src/components/workspace/WorkspaceBrowser.test.tsx apps/web/src/components/workspace/workspaceBrowser.logic.ts apps/web/src/components/workspace/workspaceBrowser.logic.test.ts apps/web/src/components/workspace/useWorkspaceItemOpener.ts apps/web/src/components/workspace/useWorkspaceItemOpener.test.ts
+git add -- apps/web/src/components/workspace/WorkspaceBrowser.tsx apps/web/src/components/workspace/WorkspaceBrowser.test.tsx apps/web/src/components/workspace/workspaceBrowser.logic.ts apps/web/src/components/workspace/workspaceBrowser.logic.test.ts apps/web/src/components/workspace/useWorkspaceItemOpener.ts apps/web/src/components/workspace/useWorkspaceItemOpener.test.ts apps/web/src/components/workspace/WorkspaceBrowserView.tsx
 git commit -m "feat(web): capture project page links and search"
 ```
 
 ### Task W10-T4: Project agents as real linked-thread cards
 
-**Depends on:** W4-T5 and W4-T6. **Serial slot:** W10 Browser/UI, predecessor W10-T3. T3 is a shared-file scheduling edge, not a dependency on Browser data. No W9 dependency. W4-T7 gates only visual acceptance. Acquire user/internal docs ownership before writing shared documents.
+**Depends on:** W4-T5 and W4-T6. **Serial slot:** W10 Browser/UI, predecessor W10-T3. T3 is a shared-file scheduling edge, not a dependency on Browser data. No W9 dependency. W4-T7 gates only visual acceptance. Acquire the WorkspaceResourceBody.tsx slot after T1 and the nearest admitted predecessor, then user/internal docs ownership. Shared docs gate order is by wave number, admitted only: W4 -> W5 -> W6 -> W7 -> W8 -> W9-T8 -> W10-T4 -> W11 gate, splicing cuts. T2's workspace-spaces.md edit also holds this docs slot.
 
 **Door:** two-way. **Blast Radius:** medium. A mistaken assignment would create shared context, so reuse explicit confirmations and environment authorization. Removing an assignment must not delete a thread or stop its run.
 
 **Files:**
 
-- Create `apps/web/src/components/workspace/WorkspaceAgents.tsx` and `.test.tsx`.
-- Modify `WorkspaceToolsPanel.tsx:48-73,135-166` and `WorkspaceToolsPanel.test.tsx:120-175`, replacing the old item-scoped agent-list body in the project resource slot. Retain item-linked threads in Linked context.
+- Create `apps/web/src/components/workspace/WorkspaceAgents.tsx`, `WorkspaceAgentsView.tsx` and `WorkspaceAgents.test.tsx`. Keep the view free of live container/query imports.
+- Modify `apps/web/src/components/workspace/WorkspaceResourceBody.tsx` Agents case and `WorkspaceResourceBody.test.tsx` under the body-switch slot.
+- Modify `WorkspaceToolsPanel.tsx:48-73,135-166` and `WorkspaceToolsPanel.test.tsx:120-175` only to remove/extract the legacy Agents body. Retain item-linked threads in Linked context.
+- Modify `apps/web/src/components/workspace/dev/agentsMockupModule.tsx` under its transferred W4-T7 adapter slot.
 - Extend `useWorkspaceItemOpener.test.ts:1-16` for actual scoped navigation outcomes. T3 owns any production opener changes.
 - Reuse `apps/web/src/state/entities.ts:75-111`, `packages/client-runtime/src/state/models.ts:36-125`, the existing environment connection state, link atom/change stream and shared thread picker/action UI. No transcript/detail hook in a row.
 - Modify `docs/user/workspace-spaces.md:43-69`, `docs/internals/overview.md:1-126` and `docs/internals/glossary.md:6-21` only for the final documented behavior/decision. These anchors are current ranges, not instructions to rewrite whole documents.
@@ -828,6 +834,8 @@ function agentInitials(title: string) {
 
 Use a static blue dot for known active starting/queued/working state; a static neutral dot for known idle; a text reason for error/unavailable/waiting. Do not label a stale/disconnected shell Ready. The fixture-only activity string must enter through W4-T7's dev/test fixture adapter, not a hardcoded thread-title conditional or a new runtime contract.
 
+- [ ] Wire WorkspaceAgents into the Agents case of WorkspaceResourceBody.tsx and test actual switch dispatch with canonical scoped props, retaining the Browser and all earlier cases.
+- [ ] Complete dev/agentsMockupModule.tsx with createWorkspaceMockupModule: CreateWorkspaceMockupModule returning WorkspaceMockupModule. Export pure WorkspaceAgentsView from WorkspaceAgentsView.tsx, taking projectTitle, rows: ReadonlyArray<{ key: string; title: string; initials: string; status: string; active: boolean; unavailableReason?: string }>, onOpen(key), onAssign and onUnassign(key). Live container derives those rows from scoped links/shells; the fixture adapter supplies sample rows and inert callbacks without importing a live container. Set readyRegions: ["resource"] for 06 only after actual view rendering and settled()/dispose cover fake commands. Test adapter readiness/isolation in WorkspaceAgents.test.tsx. No registry registration, live thread subscription or provider launch.
 - [ ] Render the flat 85px-pitch rows. Reserve 29px tile plus 9px gap, title x991, status at the far right, link aligned with the tile's left edge and divider at each row bottom. Use the exact appearance reference. Keep unavailable rows focusable for their menu while disabling unusable Open. An archived conversation can still open through its existing Code path; distinguish archive from deletion.
 
 - [ ] Route `Open conversation →` using the existing environment-scoped opener. Extend its test with a mocked router boundary and verify the resulting `/$environmentId/$threadId` params contain the captured environment/thread, even when an identical thread ID exists elsewhere. Assert no new-thread/turn command or provider launch was emitted. Add `updates title and state from shells without reading histories`: publish the existing shell update, assert the displayed title/status changes, and assert history/detail/LLM boundaries were never called.
@@ -841,8 +849,8 @@ Use a static blue dot for known active starting/queued/working state; a static n
 - [ ] Run from `apps/web`:
 
 ```text
-vp test run src/components/workspace/WorkspaceAgents.test.tsx src/components/workspace/WorkspaceToolsPanel.test.tsx src/components/workspace/useWorkspaceItemOpener.test.ts src/components/workspace/WorkspaceItemActions.test.tsx
-vp lint src/components/workspace/WorkspaceAgents.tsx src/components/workspace/WorkspaceAgents.test.tsx src/components/workspace/WorkspaceToolsPanel.tsx src/components/workspace/WorkspaceToolsPanel.test.tsx src/components/workspace/useWorkspaceItemOpener.test.ts
+vp test run src/components/workspace/WorkspaceAgents.test.tsx src/components/workspace/WorkspaceToolsPanel.test.tsx src/components/workspace/useWorkspaceItemOpener.test.ts src/components/workspace/WorkspaceItemActions.test.tsx src/components/workspace/WorkspaceResourceBody.test.tsx
+vp lint src/components/workspace/WorkspaceAgents.tsx src/components/workspace/WorkspaceAgents.test.tsx src/components/workspace/WorkspaceToolsPanel.tsx src/components/workspace/WorkspaceToolsPanel.test.tsx src/components/workspace/useWorkspaceItemOpener.test.ts src/components/workspace/WorkspaceResourceBody.tsx src/components/workspace/WorkspaceResourceBody.test.tsx src/components/workspace/dev/agentsMockupModule.tsx src/components/workspace/WorkspaceAgentsView.tsx
 vp run typecheck
 ```
 
@@ -863,7 +871,7 @@ This gate is part of W10-T4, not a fifth implementation task or a dependency on 
 - [ ] Run the combined focused gate from `apps/web`:
 
 ```text
-vp test run src/components/workspace/WorkspaceBrowser.test.tsx src/components/workspace/workspaceBrowser.logic.test.ts src/components/workspace/WorkspaceAgents.test.tsx src/components/workspace/WorkspaceToolsPanel.test.tsx src/components/workspace/WorkspaceEngagement.test.tsx src/components/workspace/useWorkspaceItemOpener.test.ts src/components/workspace/WorkspaceItemActions.test.tsx src/components/preview/PreviewView.test.tsx src/components/preview/openPreviewSession.test.ts src/browser/browserSurfaceStore.test.ts src/localApi.test.ts
+vp test run src/components/workspace/WorkspaceBrowser.test.tsx src/components/workspace/workspaceBrowser.logic.test.ts src/components/workspace/WorkspaceAgents.test.tsx src/components/workspace/WorkspaceToolsPanel.test.tsx src/components/workspace/WorkspaceEngagement.test.tsx src/components/workspace/useWorkspaceItemOpener.test.ts src/components/workspace/WorkspaceItemActions.test.tsx src/components/preview/PreviewView.test.tsx src/components/preview/openPreviewSession.test.ts src/browser/browserSurfaceStore.test.ts src/localApi.test.ts src/components/workspace/WorkspaceResourceBody.test.tsx
 vp run typecheck
 ```
 
@@ -882,7 +890,7 @@ Run targeted lint on the final changed web files as in each owning task. Do not 
 - [ ] Commit T4 plus its gate with an explicit changed-file list. Do not stage the ledger, lockfile, other writers' plans or unrelated documentation changes. If internals/glossary review produced a no-change decision, omit the unchanged file from this command and retain its reason in the controller's evidence record.
 
 ```text
-git add apps/web/src/components/workspace/WorkspaceAgents.tsx apps/web/src/components/workspace/WorkspaceAgents.test.tsx apps/web/src/components/workspace/WorkspaceToolsPanel.tsx apps/web/src/components/workspace/WorkspaceToolsPanel.test.tsx apps/web/src/components/workspace/useWorkspaceItemOpener.test.ts docs/user/workspace-spaces.md docs/internals/overview.md docs/internals/glossary.md
+git add -- apps/web/src/components/workspace/WorkspaceAgents.tsx apps/web/src/components/workspace/WorkspaceAgents.test.tsx apps/web/src/components/workspace/WorkspaceToolsPanel.tsx apps/web/src/components/workspace/WorkspaceToolsPanel.test.tsx apps/web/src/components/workspace/useWorkspaceItemOpener.test.ts docs/user/workspace-spaces.md docs/internals/overview.md docs/internals/glossary.md apps/web/src/components/workspace/WorkspaceResourceBody.tsx apps/web/src/components/workspace/WorkspaceResourceBody.test.tsx apps/web/src/components/workspace/dev/agentsMockupModule.tsx apps/web/src/components/workspace/WorkspaceAgentsView.tsx
 git commit -m "feat(web): show assigned project agents and state"
 ```
 
@@ -911,3 +919,18 @@ git commit -m "feat(web): show assigned project agents and state"
 **Open evidence and review gates:** The W4 resource interfaces and W4-T7 controlled-site/native capture adapter are planned prerequisites, written in parallel and not verified implementations here. The external card, search popup, assignment menu/picker, compact layout, failure/unavailable states and optional enlargement require reviewed proposed captures. Packaged/native compositing, actual remote-session reachability, real accounts, physical second device and pilot remain unrun. None is silently waived by this planning document.
 
 **Planning verification:** Source and both PNGs inspected locally. No product tests, server, browser, network, provider CLI, staging or commit run. The writer owns only this file. Four implementation task IDs are preserved; the final documentation/integration gate stays inside W10-T4. No unresolved product choice prevents writing the bounded default plan; D-ID defaults still require the maintainer's existing planning/admission process before execution.
+
+## Review response log
+
+Plan fix round 1, 2026-10-16. Inputs: review-w9-w11.md and review-cross-wave.md in .superpowers/sdd/2026-10-14-unified-workspace/plan-reviews, plus W4's Canonical seams for Waves 5-11.
+
+| Finding                   | Response                                                                                                                                                                                                              |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| W9-W11 I-5                | Global Constraints use the agreed implementer/controller attribution sentence; the historical fixed-trailer discussion is removed.                                                                                    |
+| W9-W11 M-2                | Removed the undefined ProductOps Build and Ponytail instruction; the concrete reuse and scope rules remain.                                                                                                           |
+| Cross R1 / C1             | T1 owns dev/browserMockupModule.tsx, resource for 05; T4 owns dev/agentsMockupModule.tsx, resource for 06. Both appear in Files and git add -- and render pure shared views with fake commands before readiness.      |
+| Cross R2 / C2             | T1/T4 wire only Browser/Agents cases in WorkspaceResourceBody.tsx, list/stage its test, and follow the canonical serial chain. WorkspaceToolsPanel changes are extraction/removal only; the W4 frame stays the frame. |
+| Cross R3 / I1, R5, R6, R8 | Consumers retain WorkspaceResourceBodyProps/request and context-owned openResource, WorkspaceHeaderModel, workspaceRailItems and the single view key. No competing handoff or shell state.                            |
+| Cross M5                  | Shared docs use the admitted wave-number chain through W9-T8 -> W10-T4 -> W11 gate; T2 holds the same docs slot when needed.                                                                                          |
+
+W9 and W11 findings are resolved in their owning plans. No finding is disputed. Runtime checks and rendered acceptance remain future implementation work; this revision stages and commits nothing.

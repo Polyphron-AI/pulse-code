@@ -16,7 +16,7 @@
 
 ## Global Constraints
 
-Relevant main-plan constraints, copied verbatim:
+Relevant main-plan constraints, with the controller's attribution decision applied:
 
 - Never use an em dash (U+2014) in anything you write: code comments, docs, UI copy, commit messages. Use a comma, a full stop or a spaced hyphen.
 - Run commands from the build worktree. In Git Bash, prefix each command with `cd "C:/Users/qblaa/.t3/worktrees/Pulse Code/unified-workspace" &&` because the shell's directory resets between calls.
@@ -24,7 +24,7 @@ Relevant main-plan constraints, copied verbatim:
 - Never stage `pnpm-lock.yaml`. `vp i` rewrites it because develop's lockfile is stale; that churn is not part of this feature.
 - Never start a dev server (subagents), never open a browser, never touch `~/.t3/userdata`, never set `VITE_HTTP_URL` or `VITE_WS_URL`, never kill a process found by name.
 - Never use `--no-verify`, bare `git stash`, or `git add -A`/`git add .`. Stage the files your task names.
-- Commit messages are conventional (`feat(server): ...`) and end with the line `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
+- Commit messages use conventional titles (`feat(server): ...`). Implementer commits end with a Co-Authored-By line naming the model that made the commit; controller commits use the controller's attribution line.
 - Never open a pull request.
 - Every task leaves `apps/server` typechecking. Tasks run one at a time, because they share `packages/contracts/src/rpc.ts`, `apps/server/src/ws.ts`, `apps/server/src/auth/RpcAuthorization.ts`, `apps/server/src/server.ts` and the capability list.
 - New WS RPC families get their own handler layer in `ws.ts`, the way `mailWsRpcLayer` does, and never join the main `CoreWsRpcGroup.of({...})` object. That object sits near TypeScript's instantiation limit (197 handlers; the limit is between 197 and 212), and past it the layer's requirements silently type as `any`, which surfaces as dozens of TS377030 errors in `server.ts` and `cli/`.
@@ -137,17 +137,23 @@ Consume the names below from the map. Their signatures are being written in para
 | W4-T7 fixture/capture recipes                                          | Isolated 02/05/06 seed and settled receipt                                                                                                                          | All visual gates |
 | W5-T7 shared project Tasks resource body                               | Mounted only by shell; text Tasks in a chat body does not query tasks                                                                                               | T8 integration   |
 | W6-T3/T8 linkedItemsContext.ts and linkedItemsTurn.integration.test.ts | Preserve admitted event/note labels, grants and common every-turn integration                                                                                       | T2c/T3c/T7       |
-| W7-T3 ProjectDriveExplorer, openFiles                                  | Captured environment plus stable file WorkspaceItemRef; independent resource project/root; no auto-bind/link                                                        | T5               |
+| W7-T3 ProjectDriveExplorer, useOpenFiles from openFiles.ts             | Captured environment plus stable file WorkspaceItemRef; independent resource project/root; no auto-bind/link                                                        | T5               |
 | W8-T3a WorkspaceDocsPanel stable document-selection interface          | Same file ref, explicit chosen-account read, unavailable MIME/account states                                                                                        | T5               |
 | W8-T4 WorkspaceDocContent                                              | Shared safe document renderer after selection; Wave 9 owns only the small card                                                                                      | T5/T8            |
 
 Existing exact types are WorkspaceItemRef/WorkspaceLinkEndpoint from pulseLinks.ts, WorkspaceLinkOwner/WorkspaceContext from WorkspaceLinks.ts:26-84, and EnvironmentId/ProjectId from contracts. No Wave 9 task changes Calendar, Tasks, notes or project config.
 
+Canonical W4 contracts apply here: WorkspaceEngagement.header receives WorkspaceHeaderModel from WorkspaceHeader.tsx. The shell renders WorkspaceViewRail from workspaceRailItems and WorkspaceRailItem[] in WorkspaceViewRail.tsx; spaces supply data, not a ReactNode rail. Use the single validated view URL key for chats/unread/later. WorkspaceResourceBodyProps has nullable selectedItem and request: WorkspaceItemRef | null. useWorkspaceResources from workspaceResourceState.ts reaches the one shell-owned WorkspaceResourcesContext/openResource instance; no second state hook instance is a handoff.
+
 ## Task graph and admission
 
-Listed order: T1, T7, T2a, T2b, T2c, T3a, T3b, T3c, T4, T5, T6, T8. T4 can start after T1/W4-T6 using fakes if it shares no active file. Release needs any one accepted reader: Slack OR Discord OR existing paired Telegram/desktop. T5 additionally consumes W7-T3 and W8-T3a. Browser/Agents implementation stays independent; only full 05/06 composite captures await T5.
+Default admission order: T1, T7, T2a, T2b, T2c, T4, T5, T6, maintainer stop, then only explicitly admitted T3a, T3b, T3c and T8. T4 can start after T1/W4-T6 using fakes if it shares no active file. Release needs any one accepted reader: Slack OR Discord OR existing paired Telegram/desktop. T5 additionally consumes W7-T3 and W8-T3a. Browser/Agents implementation stays independent; only full 05/06 composite captures await T5.
 
 Exclusive cross-wave RPC/migration/context slot covers contract exports/rpc/server schemas, ws/server wiring, authorization, shared subscription tags, migration registration, linkedItemsContext and turn integration tests. W9 chain: T1 -> T7 -> T2a -> T2b -> T2c -> T3a -> T3b -> T3c -> T8. UI chain: T4 -> T5 -> T6 -> T8. Acquire only when ready to edit. Mark held/cut branches skipped, splice to nearest admitted predecessor, release the slot during consent/API investigation. One owner per UI file.
+
+**Maintainer stop:** After Slack T2a-T2c and UI T4-T6 have passed review and been accepted, the controller must stop and ask the maintainer whether to admit Discord T3a-T3c and T8 read markers. Neither branch is admitted by silence or the default D18 assumptions. Until an explicit answer, keep both held and apply the cut order. If Slack is cut or held, the controller obtains an explicit alternative-reader admission decision before substituting Discord; release still needs one accepted reader. The retained T8 fixture/docs/integration gate can run without marker implementation.
+
+Documentation gate slot: by wave number, admitted only, W4 -> W5 -> W6 -> W7 -> W8 -> W9-T8 -> W10-T4 -> W11 gate, splicing cut gates. This orders overview.md, glossary.md and shared workspace-spaces.md edits. Do not edit the map in this task.
 
 Cut order: T8 marker implementation first, retaining its integration/docs gate and honestly removing Unread filter/numbers; server Discord T3a/b/c second, retaining desktop path; Slack DM exposure in T2b/T4 third, recording D27 departure. Always retain one reader, stable refs, explicit links, bounded selected-message reads, stream/open/back and shared saved refs. A cut is not a passed acceptance test.
 
@@ -241,11 +247,16 @@ export function parseChatResourceId(raw: string): ChatResource | undefined {
 - [ ] Green: contracts command above; apps/web `vp test run src/components/workspace/communicationsEndpoints.test.tsx src/components/workspace/mail/linkedItems.test.ts src/routes/-_chat.workspace.test.ts`; apps/desktop `vp test run src/communications/RestChatAdapter.test.ts`. Add adapter assertions for team/guild source IDs and optional replyCount without changing send behavior. Run targeted lint for these modified sources and contracts/web/desktop/server typechecks. Expect stable byte-for-byte endpoints and old IPC/route compatibility.
 - [ ] Surfaces: menu/detail/palette/existing keybindings/touch agree; shared desktop/web and phone Back; native optional refs remain decodable. Common agent providers use stable keys, Mail-only Draft reply unchanged. Local/direct/relay/tunnel and two environments retain identity. Link/unlink/relink and unavailable/deleted sources covered. Docs waits for T8.
 - [ ] Visual: W4-T7 recipes 02/05/06, [259,26,681,52] and [484,201,260,53], gap-communications:74-83. No resting additions; menus separately reviewed. Actual source/account/channel/title and unavailable Teams reads are allowed with W4 chrome substitutions. V1 tolerances apply.
-- [ ] Commit `feat(workspace): preserve exact communications endpoints`. Stage only packages/contracts/src/communications.ts, packages/contracts/src/communications.test.ts, apps/desktop/src/communications/RestChatAdapter.ts, apps/desktop/src/communications/RestChatAdapter.test.ts, apps/web/src/components/workspace/useWorkspaceItemOpener.ts, apps/web/src/components/workspace/mail/linkedItems.ts, apps/web/src/components/workspace/mail/linkedItems.test.ts, apps/web/src/components/workspace/WorkspaceItemIcon.tsx, apps/web/src/components/workspace/ChatCommunicationsWorkspace.tsx, apps/web/src/components/workspace/communicationsEndpoints.test.tsx, apps/web/src/routes/_chat.workspace.tsx and apps/web/src/routes/-_chat.workspace.test.ts. Use required trailer. Do not stage shared pending edits until their owner has released the slot.
+- [ ] Commit `feat(workspace): preserve exact communications endpoints`. Stage only the changed, admitted paths below after their owner releases the slot. Omit unchanged or cut paths; no catch-all staging. Replace each allocated migration/test placeholder with its literal next-free filename before running. Use the required attribution sentence.
+
+```text
+git add -- packages/contracts/src/communications.ts packages/contracts/src/communications.test.ts apps/desktop/src/communications/RestChatAdapter.ts apps/desktop/src/communications/RestChatAdapter.test.ts apps/web/src/components/workspace/useWorkspaceItemOpener.ts apps/web/src/components/workspace/mail/linkedItems.ts apps/web/src/components/workspace/mail/linkedItems.test.ts apps/web/src/components/workspace/WorkspaceItemIcon.tsx apps/web/src/components/workspace/ChatCommunicationsWorkspace.tsx apps/web/src/components/workspace/communicationsEndpoints.test.tsx apps/web/src/routes/_chat.workspace.tsx apps/web/src/routes/-_chat.workspace.test.ts
+git commit -m "feat(workspace): preserve exact communications endpoints"
+```
 
 ### Task W9-T7: Cross-device saved item references for Later
 
-**Files:** Create packages/contracts/src/pulseWorkspaceSavedItems.ts and .test.ts; apps/server/src/workspace/WorkspaceSavedItems.ts and .test.ts; next-free forward migration named WorkspaceSavedItems and its test; packages/client-runtime/src/state/workspaceSavedItems.ts and .test.ts; apps/web/src/state/workspaceSavedItems.ts. Modify contracts index.ts:64-77, rpc.ts:22-36 and method/group registrations, server.ts:600-620; server ws.ts:593-610,1413-1454,4290-4305, server.ts:527-633, auth/RpcAuthorization.ts:30-113; client-runtime/src/rpc/client.ts:55-72 and package.json subpath exports. Inspect/extend server workspace/linkedItemsContext.ts:61-139, its test, linkedItemsTurn.integration.test.ts:49-604; inspect orchestration-v2/ProviderTurnStartService.ts:1052. No Mail UI changes in this task; W11-T3 consumes this store.
+**Files:** Create packages/contracts/src/pulseWorkspaceSavedItems.ts and .test.ts; apps/server/src/workspace/WorkspaceSavedItems.ts and .test.ts; next-free forward migration named WorkspaceSavedItems and its test; packages/client-runtime/src/state/workspaceSavedItems.ts and .test.ts; apps/web/src/state/workspaceSavedItems.ts. Modify contracts index.ts:64-77, rpc.ts:22-36 and method/group registrations, server.ts:600-620; server ws.ts:593-610,1413-1454,4290-4305, server.ts:527-633, auth/RpcAuthorization.ts:30-113; client-runtime/src/rpc/client.ts:55-72 and package.json subpath exports. Inspect/extend apps/server/src/mcp/toolkits/workspace/handlers.test.ts and server workspace/linkedItemsContext.ts:61-139, its test, linkedItemsTurn.integration.test.ts:49-604; inspect orchestration-v2/ProviderTurnStartService.ts:1052. No Mail UI changes in this task; W11-T3 consumes this store.
 
 **Interfaces:** Produce WorkspaceSavedItem `{ key: string, ref: WorkspaceItemRef, savedAt: IsoDateTime }`, WorkspaceSavedItemPage `{ items: ReadonlyArray<WorkspaceSavedItem>, nextCursor?: string }`, WorkspaceSavedItems service methods add(ref), remove(key), list({cursor?,limit?}), changes, and createWorkspaceSavedItemAtoms(runtime) with list/add/remove/changes. RPC names are pulse.workspaceSavedItems.add/remove/list/subscribeChanges. Advertise optional workspaceSavedItems Boolean. Consume T1 and existing stable Mail refs. Add/remove are idempotent; list limit 100. The collection stores refs only, no bodies, relationships, read grants or snooze dates.
 
@@ -281,24 +292,26 @@ it.effect("saves one stable Mail ref and removes an unavailable original", () =>
 - [ ] In apps/server run `vp test run src/workspace/WorkspaceSavedItems.test.ts`. Expect absent module/table. Allocate the next free number while holding the slot; Migrations.ts:92-158 currently ends at 064, but Waves 5-8 may consume later numbers. Never pin 065 in this parallel plan or edit a shipped migration. Create:
 
 ```ts
-const sql = yield * SqlClient.SqlClient;
-yield *
-  sql`CREATE TABLE workspace_saved_items (
-  item_key TEXT PRIMARY KEY, ref_json TEXT NOT NULL, saved_at TEXT NOT NULL
-)`;
-yield *
-  sql`CREATE INDEX workspace_saved_items_page
-  ON workspace_saved_items(saved_at DESC, item_key ASC)`;
+Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
+  yield* sql`CREATE TABLE workspace_saved_items (
+    item_key TEXT PRIMARY KEY, ref_json TEXT NOT NULL, saved_at TEXT NOT NULL
+  )`;
+  yield* sql`CREATE INDEX workspace_saved_items_page
+    ON workspace_saved_items(saved_at DESC, item_key ASC)`;
+});
 ```
 
 - [ ] Implement Schema JSON encoding of normalized refs and workspaceItemKey. On duplicate add, update a same-key Mail location hint without changing saved_at/order. Use INSERT ON CONFLICT, not a pre-insert existence race. Return at most 100 rows plus an opaque validated cursor bound to last savedAt/key. Bound collection at 500 and return an explicit limit error. Invalid key/ref mismatch is rejected. Remove requires no provider availability. Publish SubscriptionRef only after committed changes; restart loads from SQLite. Do not inject WorkspaceSavedItems into WorkspaceLinks.contextFor or MCP read authorization.
 
 ```ts
-const counter = yield * SubscriptionRef.make(0);
-const announce = SubscriptionRef.update(counter, (n) => n + 1);
-const remove = Effect.fn("WorkspaceSavedItems.remove")(function* (key: string) {
-  yield* sql`DELETE FROM workspace_saved_items WHERE item_key=${key}`;
-  yield* announce;
+Effect.gen(function* () {
+  const counter = yield* SubscriptionRef.make(0);
+  const announce = SubscriptionRef.update(counter, (n) => n + 1);
+  const remove = Effect.fn("WorkspaceSavedItems.remove")(function* (key: string) {
+    yield* sql`DELETE FROM workspace_saved_items WHERE item_key=${key}`;
+    yield* announce;
+  });
 });
 ```
 
@@ -308,11 +321,16 @@ const remove = Effect.fn("WorkspaceSavedItems.remove")(function* (key: string) {
 - [ ] Green: contracts `vp test run src/pulseWorkspaceSavedItems.test.ts`; server `vp test run src/workspace/WorkspaceSavedItems.test.ts src/workspace/linkedItemsContext.test.ts src/workspace/linkedItemsTurn.integration.test.ts src/mcp/toolkits/workspace/handlers.test.ts` plus the explicit newly allocated migration test path; client-runtime `vp test run src/state/workspaceSavedItems.test.ts`. Then targeted lint and typechecks in contracts/server/client-runtime/web. Expect no provider calls from save/remove/subscriptions.
 - [ ] Surfaces: add/remove/list/change shared by Mail and chat; menu/header/palette/keybinding/touch consumers arrive in T4/T8/W11-T3. Desktop/web/phone share server state; native only decodes optional contracts. All agent providers get no saved-only grant. Reverse save/remove/import cancel, disconnect/reconnect, unavailable and moved Mail are covered. Local/direct/relay/tunnel state stays environment-owned. User/internals/glossary updates in T8.
 - [ ] Visual: W4-T7 then 02/05/06 and Mail 01 Later box [207,143,52,45], gap-communications:54-68. Bookmark/label unchanged, no snooze. Actual saved refs and unavailable originals allowed; body copy/read grants prohibited. T4 owns rendering; this task claims service proof only until capture.
-- [ ] Commit `feat(workspace): share saved item references across clients`. Stage exactly the Files paths actually changed and the allocated migration/test plus Migrations.ts, never a directory. Write that migration's literal filename into the implementation commit command after allocation. Include common context tests only when changed; include required trailer.
+- [ ] Commit `feat(workspace): share saved item references across clients`. Stage only the changed, admitted paths below after their owner releases the slot. Omit unchanged or cut paths; no catch-all staging. Replace each allocated migration/test placeholder with its literal next-free filename before running. Use the required attribution sentence.
+
+```text
+git add -- packages/contracts/src/pulseWorkspaceSavedItems.ts packages/contracts/src/pulseWorkspaceSavedItems.test.ts apps/server/src/workspace/WorkspaceSavedItems.ts apps/server/src/workspace/WorkspaceSavedItems.test.ts "apps/server/src/persistence/Migrations/<allocated NNN_WorkspaceSavedItems.ts>" "apps/server/src/persistence/Migrations/<allocated NNN_WorkspaceSavedItems.test.ts>" apps/server/src/persistence/Migrations.ts packages/client-runtime/src/state/workspaceSavedItems.ts packages/client-runtime/src/state/workspaceSavedItems.test.ts apps/web/src/state/workspaceSavedItems.ts packages/contracts/src/index.ts packages/contracts/src/rpc.ts packages/contracts/src/server.ts apps/server/src/ws.ts apps/server/src/server.ts apps/server/src/auth/RpcAuthorization.ts packages/client-runtime/src/rpc/client.ts packages/client-runtime/package.json apps/server/src/mcp/toolkits/workspace/handlers.test.ts apps/server/src/workspace/linkedItemsContext.ts apps/server/src/workspace/linkedItemsContext.test.ts apps/server/src/workspace/linkedItemsTurn.integration.test.ts
+git commit -m "feat(workspace): share saved item references across clients"
+```
 
 ### Task W9-T2a: Slack server connection and secrets
 
-**Files:** Create apps/server/src/communications/SlackConnection.ts, SlackAccountStore.ts and SlackConnection.test.ts; packages/contracts/src/pulseCommunications.ts and .test.ts; next-free SlackConnections forward migration/test. Modify Migrations.ts:74-81,92-158; contracts index.ts:64-77, rpc.ts:22-36 and method/group registration, server.ts:600-620; server ws.ts:593-610,1277-1293,2000-2014,4290-4305; server.ts:527-633; auth/RpcAuthorization.ts:30-113. Read ServerSecretStore.ts:125-317 and desktop RestChatAdapter.ts:67-393, ChatService.ts before changes. Desktop encrypted accounts and useCommunicationsRequest.ts:5-66 stay untouched.
+**Files:** Create apps/server/src/communications/SlackConnection.ts, SlackAccountStore.ts and SlackConnection.test.ts; packages/contracts/src/pulseCommunications.ts and .test.ts; next-free SlackConnections forward migration/test; apps/server/src/auth/RpcAuthorization.test.ts. Modify Migrations.ts:74-81,92-158; contracts index.ts:64-77, rpc.ts:22-36 and method/group registration, server.ts:600-620; server ws.ts:593-610,1277-1293,2000-2014,4290-4305; server.ts:527-633; auth/RpcAuthorization.ts:30-113. Read ServerSecretStore.ts:125-317 and desktop RestChatAdapter.ts:67-393, ChatService.ts before changes. Desktop encrypted accounts and useCommunicationsRequest.ts:5-66 stay untouched.
 
 **Interfaces:** Produce SlackConnection Context.Service with connect({token}), list, disconnect({connectionId}) and authorize({connectionId,workspaceId}) returning a private Redacted token plus connection generation. SlackAccountStore persists metadata only. Public CommunicationConnection is `{ id, provider: "slack"|"discord", identity, label, connected, generation, error?: string }`. RPCs slackConnect/slackListConnections/slackDisconnect use pulse.communications.slack.* names, optional communicationsSlackRead capability. PulseCommunicationsRpcs is a new server RPC family, not ChatRequest IPC. Errors are CommunicationsError with invalid-input/access-denied/not-found/unavailable/rate-limit/unsupported, safe message and optional retryAfterSeconds. Token never appears in public schemas/results.
 
@@ -397,7 +415,12 @@ const disconnect = Effect.fn("SlackConnection.disconnect")(function* (input: {
 - [ ] Green: server `vp test run src/communications/SlackConnection.test.ts src/auth/RpcAuthorization.test.ts` plus allocated migration test; contracts `vp test run src/pulseCommunications.test.ts`. Targeted lint and contracts/server typechecks. Run existing desktop `vp test run src/communications/RestChatAdapter.test.ts src/communications/ChatService.test.ts` from apps/desktop if shared files change; no extraction is planned by default.
 - [ ] Surfaces: connection lifecycle RPC used by existing connect/settings entry in T4; web/desktop/phone choose server or desktop explicitly, native optional capability decode only. No agent may connect or send through workspace_read_item; all adapters read only linked resources later. Connect/disconnect/reconnect, revoked permissions, local/direct/relay/tunnel and environments covered. T8 docs records token location.
 - [ ] Visual: recipes 02/05/06, header [259,26,681,52], gap-communications:74-77, V1. Real explicit connection identity only; setup/health states require reviewed captures. No membership fiction, D26 omissions and W4 chrome substitutions allowed. No resting delta before T4 consumes the service.
-- [ ] Commit `feat(server): add explicit Slack reader connections`. Stage only SlackConnection.ts/.test.ts, SlackAccountStore.ts, pulseCommunications.ts/.test.ts, allocated migration/test, Migrations.ts, contracts index/rpc/server, server ws/server/auth and auth test paths named above. Required trailer, no lockfile/ledger.
+- [ ] Commit `feat(server): add explicit Slack reader connections`. Stage only the changed, admitted paths below after their owner releases the slot. Omit unchanged or cut paths; no catch-all staging. Replace each allocated migration/test placeholder with its literal next-free filename before running. Use the required attribution sentence.
+
+```text
+git add -- apps/server/src/communications/SlackConnection.ts apps/server/src/communications/SlackAccountStore.ts apps/server/src/communications/SlackConnection.test.ts packages/contracts/src/pulseCommunications.ts packages/contracts/src/pulseCommunications.test.ts "apps/server/src/persistence/Migrations/<allocated NNN_SlackConnections.ts>" "apps/server/src/persistence/Migrations/<allocated NNN_SlackConnections.test.ts>" apps/server/src/persistence/Migrations.ts packages/contracts/src/index.ts packages/contracts/src/rpc.ts packages/contracts/src/server.ts apps/server/src/ws.ts apps/server/src/server.ts apps/server/src/auth/RpcAuthorization.ts apps/server/src/auth/RpcAuthorization.test.ts
+git commit -m "feat(server): add explicit Slack reader connections"
+```
 
 ### Task W9-T2b: Slack paged channel, history and reply reads
 
@@ -410,21 +433,21 @@ const disconnect = Effect.fn("SlackConnection.disconnect")(function* (input: {
 - [ ] Add a red public-reader test using the real SlackConnection plus scripted HTTP, not a mocked reader. Reuse the T2a disposable testLayer setup locally; supply auth.test and conversations.list response, then assert listing never asks for history. For clock assertions use TestClock.adjust, never sleep. The main assertions are:
 
 ```ts
-const connection = yield * accounts.connect({ token: "synthetic_slack_token" });
-const page = yield * reader.listConversations({ connectionId: connection.id });
-expect(page.conversations[0]).toMatchObject({ id: "C1", workspaceId: "T123" });
-expect(calls.filter((url) => url.pathname.endsWith("history"))).toHaveLength(0);
-yield * TestClock.adjust("1 hour");
-expect(calls.filter((url) => url.pathname.endsWith("history"))).toHaveLength(0);
-const messages =
-  yield *
-  reader.listMessages({
+Effect.gen(function* () {
+  const connection = yield* accounts.connect({ token: "synthetic_slack_token" });
+  const page = yield* reader.listConversations({ connectionId: connection.id });
+  expect(page.conversations[0]).toMatchObject({ id: "C1", workspaceId: "T123" });
+  expect(calls.filter((url) => url.pathname.endsWith("history"))).toHaveLength(0);
+  yield* TestClock.adjust("1 hour");
+  expect(calls.filter((url) => url.pathname.endsWith("history"))).toHaveLength(0);
+  const messages = yield* reader.listMessages({
     connectionId: connection.id,
     workspaceId: "T123",
     conversationId: "C1",
   });
-expect(messages.messages[0]!.id).toBe("1760343120.000001");
-expect(messages.messages).toHaveLength(1);
+  expect(messages.messages[0]!.id).toBe("1760343120.000001");
+  expect(messages.messages).toHaveLength(1);
+});
 ```
 
 Define scripted payloads with channels C1, response_metadata.next_cursor and one timestamp-bearing message; calls records URL objects in HttpClient.make. Import TestClock from effect/testing/TestClock. Add inline scripts for page 2 and replies; tests call the real public service to consume the cursors.
@@ -462,7 +485,12 @@ Use this existing scheduler for explicit refresh commands if query.refresh canno
 - [ ] Green: server `vp test run src/communications/SlackReader.test.ts`; contracts `vp test run src/pulseCommunications.test.ts`; client-runtime `vp test run src/state/communications.test.ts`. Targeted lint and contracts/server/client-runtime/web typechecks. Expect max page/body budgets and no automatic HTTP requests.
 - [ ] Surfaces: server/direct/relay/tunnel/phone use same read RPC, desktop local reader remains available, native optional schemas decode. Settings/palette/channel selection wired by T4; no agent broad history grant. Read/reply/back/refresh/cancel/disconnect reversible; no remote send or new scopes. Docs T8.
 - [ ] Visual: recipes 02/05/06, [259,78,681,480], gap-communications:50-95, V1. Same grouped list/chronology/supplied replies, no loading animation. Real channel/message/time and approved Slack DMs may substitute; unsupported counts absent, W4 chrome applies. UI capture deferred until T4/T5 consume.
-- [ ] Commit `feat(server): read bounded Slack conversations on demand`. Stage SlackReader.ts/.test.ts, pulseCommunications.ts/.test.ts, client-runtime state/communications.ts/.test.ts and package.json, web state/communications.ts and the exact modified contract/server wiring paths in Files. No wildcard staging.
+- [ ] Commit `feat(server): read bounded Slack conversations on demand`. Stage only the changed, admitted paths below after their owner releases the slot. Omit unchanged or cut paths; no catch-all staging. Replace each allocated migration/test placeholder with its literal next-free filename before running. Use the required attribution sentence.
+
+```text
+git add -- apps/server/src/communications/SlackReader.ts apps/server/src/communications/SlackReader.test.ts packages/contracts/src/pulseCommunications.ts packages/contracts/src/pulseCommunications.test.ts packages/client-runtime/src/state/communications.ts packages/client-runtime/src/state/communications.test.ts packages/client-runtime/src/rpc/client.ts packages/client-runtime/package.json apps/web/src/state/communications.ts packages/contracts/src/index.ts packages/contracts/src/rpc.ts packages/contracts/src/server.ts apps/server/src/ws.ts apps/server/src/server.ts apps/server/src/auth/RpcAuthorization.ts
+git commit -m "feat(server): read bounded Slack conversations on demand"
+```
 
 ### Task W9-T2c: Slack exact linked reads and provider turn labels
 
@@ -522,14 +550,13 @@ const slackLabel = resource
 - [ ] Preserve resolveLinked before dispatch. Add optional SlackReader service lookup and route only parsed server Slack refs. Desktop Slack refs return unsupported on the server. Add CommunicationsError to WorkspaceToolError, keep the tool read-only and document exact-message/continuation semantics. No new broadly scoped provider-history MCP tool.
 
 ```ts
-if (ref.provider === "slack" && Option.isSome(slack)) {
-  return (
-    yield *
-    slack.value
+Effect.gen(function* () {
+  if (ref.provider === "slack" && Option.isSome(slack)) {
+    return yield* slack.value
       .readMessage({ resourceId: ref.resourceId, ...(offset !== undefined ? { offset } : {}) })
-      .pipe(Effect.flatMap((content) => bounded({ key, type: "slack-message", ...content })))
-  );
-}
+      .pipe(Effect.flatMap((content) => bounded({ key, type: "slack-message", ...content })));
+  }
+});
 ```
 
 - [ ] In handlers.test.ts exercise actual WorkspaceLinks plus reader and fake external HTTP. Guessed key, same ts/other channel, same channel/other account, unlinked, saved-only, revoked connection, deleted target and malformed reply root must fail without exposing body. Link A, read A, unlink A, continue A: final call is denied before HTTP. A retained turn chip may grant precisely A only after dispatch confirmation.
@@ -537,7 +564,12 @@ if (ref.provider === "slack" && Option.isSome(slack)) {
 - [ ] Green: server `vp test run src/communications/SlackReader.test.ts src/mcp/toolkits/workspace/handlers.test.ts src/workspace/linkedItemsContext.test.ts src/workspace/linkedItemsTurn.integration.test.ts`; contracts codec test if changed. Targeted lint and server/contracts typechecks. Expect zero body reads on mere context rendering and all denials before external fetch.
 - [ ] Surfaces: all agent providers share one context/MCP path; no connector, send or Draft reply expansion. Web/desktop/phone actions supply exact refs, native decoding unchanged. Link/unlink/relink, reply Back, unavailable targets, two environments and remote transports retain grants. User docs T8.
 - [ ] Visual: recipes 02/05/06, [445,137,482,421], gap-communications:79-92, V1. No new resting controls. Actual sanitized title/summary and explicit unavailable states allowed; common chrome substitutions apply. Service tests prove grants; screenshot alone does not.
-- [ ] Commit `feat(server): read exact linked Slack messages`. Stage only SlackReader.ts/.test.ts, MCP handlers/tools/handlers.test.ts, linkedItemsContext.ts/.test.ts, linkedItemsTurn.integration.test.ts and codec/test if changed, with full paths and trailer. ProviderTurnStartService needs no edit unless source evidence proves the common seam absent.
+- [ ] Commit `feat(server): read exact linked Slack messages`. Stage only the changed, admitted paths below after their owner releases the slot. Omit unchanged or cut paths; no catch-all staging. Replace each allocated migration/test placeholder with its literal next-free filename before running. Use the required attribution sentence.
+
+```text
+git add -- apps/server/src/communications/SlackReader.ts apps/server/src/communications/SlackReader.test.ts apps/server/src/mcp/toolkits/workspace/handlers.ts apps/server/src/mcp/toolkits/workspace/tools.ts apps/server/src/mcp/toolkits/workspace/handlers.test.ts apps/server/src/workspace/linkedItemsContext.ts apps/server/src/workspace/linkedItemsContext.test.ts apps/server/src/workspace/linkedItemsTurn.integration.test.ts packages/contracts/src/communications.ts packages/contracts/src/communications.test.ts
+git commit -m "feat(server): read exact linked Slack messages"
+```
 
 ### Task W9-T3a: Discord server connection and secrets
 
@@ -545,7 +577,7 @@ if (ref.provider === "slack" && Option.isSome(slack)) {
 
 **Interfaces:** DiscordConnection Context.Service with connect({token}), list, disconnect({connectionId}), authorize({connectionId}) returning private Redacted bot token/generation. Public CommunicationConnection from T2a; independent optional communicationsDiscordRead capability and discordConnect/discordListConnections/discordDisconnect RPCs under pulse.communications.discord.*. If Slack is held/cut, this task creates the shared schemas/family without enabling Slack. DiscordAccountStore holds stable bot identity metadata only. No personal tokens/inbox or send method.
 
-**Depends on:** W9-T1, not Slack consent or implementation. **Serial predecessor:** T2c if admitted; otherwise nearest admitted RPC predecessor T7. **Decision:** D18-D independently default assumed, confirm. **Risk:** credentials, two-way.
+**Depends on:** W9-T1 and explicit maintainer admission at the stop above. The default path waits for acceptance of Slack T2a-T2c and UI T4-T6; a separately approved alternative-reader path can replace Slack. **Serial predecessor:** T2c if admitted; otherwise nearest admitted RPC predecessor T7. **Decision:** D18-D independently default assumed, confirm. **Risk:** credentials, two-way.
 
 - [ ] Add red service test with real account store and disposable secrets/SQLite. Define testLayer with DiscordAccountStore.layer, SqlitePersistenceMemory, ServerSecretStore.layer, ServerConfig.layerTest and NodeServices.layer. Import these existing modules and inject external HttpClient only.
 
@@ -598,23 +630,27 @@ it.effect("keeps a stable bot identity and disconnects across restarts", () =>
 - [ ] Implement connect validation before secret/metadata writes, compensate failures, reconnect stable identity and increment generation. Disconnect marks unavailable/increments generation before token removal, cancels request leases, retains saved refs/links. Public errors and observations contain fixed safe text, never provider response token/headers/cause. Local disconnect is not bot deletion or remote token revocation. No guild/history/send calls occur at connect, list or disconnect.
 
 ```ts
-if (user.bot !== true) {
-  return (
-    yield *
-    new CommunicationsError({
+Effect.gen(function* () {
+  if (user.bot !== true) {
+    return yield* new CommunicationsError({
       kind: "unsupported",
       message: "Discord requires a bot token. Personal accounts are not supported.",
-    })
-  );
-}
-yield * secrets.set(secretKey(connectionId), new TextEncoder().encode(input.token));
+    });
+  }
+  yield* secrets.set(secretKey(connectionId), new TextEncoder().encode(input.token));
+});
 ```
 
 - [ ] Register explicit independent Discord connection RPCs and optional capability in the separate CommunicationsWsRpcGroup, using serviceOption only when an unadmitted connector is absent. List requires read; connect/disconnect operate. Add tests for personal token rejection, 401/403, malformed/oversize response, restart, reconnect generation, secret failure compensation, disconnect in-flight, redaction and read-only-session denial. Preserve optional old config decode, existing desktop account tests and retired personal Telegram behavior.
 - [ ] Green: server `vp test run src/communications/DiscordConnection.test.ts src/auth/RpcAuthorization.test.ts` plus allocated migration test; contracts `vp test run src/pulseCommunications.test.ts`. Targeted lint and contracts/server typechecks. If a shared desktop boundary changed, run its explicit RestChatAdapter/ChatService tests in apps/desktop. No live account acceptance claim.
 - [ ] Surfaces: server bot setup is usable from web/desktop/phone in T4, native optional decode only; desktop Discord stays available on its existing credentials. All agents receive no management/send grant. Connect/disconnect/reconnect/revoked state, environments and local/direct/relay/tunnel covered. T8 docs distinguishes bot identity.
 - [ ] Visual: recipes 02/05/06 header [259,26,681,52], gap-communications:74-77, V1. Real Discord bot connection identity, unsupported counts omitted, W4 chrome allowed. New setup/error captures need review; fixture Slack header is not a live Discord claim.
-- [ ] Commit `feat(server): add explicit Discord bot connections`. Stage DiscordConnection.ts/.test.ts, DiscordAccountStore.ts, allocated migration/test, Migrations.ts, pulseCommunications.ts/.test.ts and exact changed contract/server/auth paths in Files. Include trailer; no Slack or other owners' pending edits.
+- [ ] Commit `feat(server): add explicit Discord bot connections`. Stage only the changed, admitted paths below after their owner releases the slot. Omit unchanged or cut paths; no catch-all staging. Replace each allocated migration/test placeholder with its literal next-free filename before running. Use the required attribution sentence.
+
+```text
+git add -- apps/server/src/communications/DiscordConnection.ts apps/server/src/communications/DiscordAccountStore.ts apps/server/src/communications/DiscordConnection.test.ts packages/contracts/src/pulseCommunications.ts packages/contracts/src/pulseCommunications.test.ts "apps/server/src/persistence/Migrations/<allocated NNN_DiscordConnections.ts>" "apps/server/src/persistence/Migrations/<allocated NNN_DiscordConnections.test.ts>" apps/server/src/persistence/Migrations.ts packages/contracts/src/index.ts packages/contracts/src/rpc.ts packages/contracts/src/server.ts apps/server/src/ws.ts apps/server/src/server.ts apps/server/src/auth/RpcAuthorization.ts apps/server/src/auth/RpcAuthorization.test.ts
+git commit -m "feat(server): add explicit Discord bot connections"
+```
 
 ### Task W9-T3b: Discord paged channel, history and reply reads
 
@@ -627,17 +663,21 @@ yield * secrets.set(secretKey(connectionId), new TextEncoder().encode(input.toke
 - [ ] Add red public-reader test with real DiscordConnection, SQLite/secrets and scripted HttpClient. Script /users/@me, one bounded /users/@me/guilds page, /guilds/100/roles, /members/123, /channels and /threads/active. Return guild 100, channel 200 and thread 300 parented to 200. The fake records URLs and must reject unexpected paths. Main assertions:
 
 ```ts
-const account = yield * accounts.connect({ token: "synthetic_discord_token" });
-const page = yield * reader.listConversations({ connectionId: account.id });
-expect(page.conversations.map((row) => row.kind)).not.toContain("dm");
-expect(page.conversations.find((row) => row.id === "300")!.workspaceId).toBe("100");
-expect(calls.filter((url) => /\/messages(?:\/|$)/.test(url.pathname))).toHaveLength(0);
-yield * TestClock.adjust("1 hour");
-expect(calls.filter((url) => /\/messages(?:\/|$)/.test(url.pathname))).toHaveLength(0);
-const history =
-  yield *
-  reader.listMessages({ connectionId: account.id, workspaceId: "100", conversationId: "200" });
-expect(history.messages[0]!.id).toBe("9007199254740993000");
+Effect.gen(function* () {
+  const account = yield* accounts.connect({ token: "synthetic_discord_token" });
+  const page = yield* reader.listConversations({ connectionId: account.id });
+  expect(page.conversations.map((row) => row.kind)).not.toContain("dm");
+  expect(page.conversations.find((row) => row.id === "300")!.workspaceId).toBe("100");
+  expect(calls.filter((url) => /\/messages(?:\/|$)/.test(url.pathname))).toHaveLength(0);
+  yield* TestClock.adjust("1 hour");
+  expect(calls.filter((url) => /\/messages(?:\/|$)/.test(url.pathname))).toHaveLength(0);
+  const history = yield* reader.listMessages({
+    connectionId: account.id,
+    workspaceId: "100",
+    conversationId: "200",
+  });
+  expect(history.messages[0]!.id).toBe("9007199254740993000");
+});
 ```
 
 Use permission strings from existing adapter tests, not JavaScript Number. Message script supplies channel_id 200 and a long string snowflake. Test setup imports TestClock/HttpClient and real service/store layers. No mock of permission evaluation.
@@ -647,17 +687,16 @@ Use permission strings from existing adapter tests, not JavaScript Number. Messa
 - [ ] Implement 50-message native pages with before cursors, ceiling 100/32000 bytes; no hidden page loops to locate old messages. Validate each returned channel_id equals captured destination. Reply counts are optional only if a provider supplies a complete value. Bot-only list omits DMs and source-unsupported member counts. No personal API, reactions, media fetch or guild administration.
 
 ```ts
-if (message.channel_id !== destination) {
-  return (
-    yield *
-    new CommunicationsError({
+Effect.gen(function* () {
+  if (message.channel_id !== destination) {
+    return yield* new CommunicationsError({
       kind: "unavailable",
       message: "Discord returned a message from another channel.",
-    })
-  );
-}
-const compareSnowflakes = (a: string, b: string) =>
-  BigInt(a) < BigInt(b) ? -1 : BigInt(a) > BigInt(b) ? 1 : 0;
+    });
+  }
+  const compareSnowflakes = (a: string, b: string) =>
+    BigInt(a) < BigInt(b) ? -1 : BigInt(a) > BigInt(b) ? 1 : 0;
+});
 ```
 
 - [ ] Hold one endpoint request lease across initial/page/Refresh and validate connection generation after HTTP. 429 honors retry_after/Retry-After on next explicit call, never schedules work. Cancellation releases the lane, disconnect aborts and late results cannot repaint another account/guild. Shared atoms use environmentRpcKey and no refreshIntervalMs; local saved/marker stream never refreshes histories.
@@ -665,7 +704,12 @@ const compareSnowflakes = (a: string, b: string) =>
 - [ ] Green: server `vp test run src/communications/DiscordReader.test.ts`; contracts `vp test run src/pulseCommunications.test.ts`; client-runtime `vp test run src/state/communications.test.ts`. Targeted lint and contracts/server/client-runtime/web typechecks. No Slack confirmation needed.
 - [ ] Surfaces: read-only server web/desktop/phone with native-compatible optional contracts; desktop bot path preserved. Channel/reply/Back/Refresh and settings navigation in T4, all agents need separate exact link grants. Disconnect/reconnect, unavailable/deleted, local/direct/relay/tunnel and environments covered. T8 docs explains bot content limitations.
 - [ ] Visual: recipes 02/05/06 [259,78,681,480], gap-communications:50-95, V1. Same channel/chronology layout with actual guild/channel/message/time, no DM group, unsupported counts absent; static pending and W4 substitutions only. Additional error/reply states reviewed separately.
-- [ ] Commit `feat(server): read bounded Discord bot channels on demand`. Stage DiscordReader.ts/.test.ts, shared communications contract/atom/test/web binding and only necessary explicit RPC/wiring/export paths. No wildcard or unrelated Slack staging; include trailer.
+- [ ] Commit `feat(server): read bounded Discord bot channels on demand`. Stage only the changed, admitted paths below after their owner releases the slot. Omit unchanged or cut paths; no catch-all staging. Replace each allocated migration/test placeholder with its literal next-free filename before running. Use the required attribution sentence.
+
+```text
+git add -- apps/server/src/communications/DiscordReader.ts apps/server/src/communications/DiscordReader.test.ts packages/contracts/src/pulseCommunications.ts packages/contracts/src/pulseCommunications.test.ts packages/client-runtime/src/state/communications.ts packages/client-runtime/src/state/communications.test.ts packages/client-runtime/src/rpc/client.ts packages/client-runtime/package.json apps/web/src/state/communications.ts packages/contracts/src/index.ts packages/contracts/src/rpc.ts packages/contracts/src/server.ts apps/server/src/ws.ts apps/server/src/server.ts apps/server/src/auth/RpcAuthorization.ts
+git commit -m "feat(server): read bounded Discord bot channels on demand"
+```
 
 ### Task W9-T3c: Discord exact linked reads and provider turn labels
 
@@ -707,15 +751,14 @@ it("labels a Discord message without granting its channel siblings", () => {
 - [ ] Implement exact reader with fixed-host GET /channels/{channelId}/messages/{messageId}. Validate connection, generation, requested guild/channel association and provider view/history permissions on every call, including continuations. Validate returned id/channel_id; a mismatch fails without body. Native thread must belong to the captured guild/parent and provider access. No fallback channel scan, personal inbox or privileged endpoint. Missing content intent is an explicit unavailable body. Offset continues only this message, max 8192 content bytes and 32000 serialized response bytes; preserve Unicode boundaries.
 
 ```ts
-if (value.id !== ref.messageId || value.channel_id !== ref.conversationId) {
-  return (
-    yield *
-    new CommunicationsError({
+Effect.gen(function* () {
+  if (value.id !== ref.messageId || value.channel_id !== ref.conversationId) {
+    return yield* new CommunicationsError({
       kind: "not-found",
       message: "This Discord message is unavailable in the linked channel.",
-    })
-  );
-}
+    });
+  }
+});
 ```
 
 - [ ] Add optional DiscordReader service to workspace handler and dispatch after resolveLinked only. Include CommunicationsError in the MCP error union once, retain read-only tool annotations and explain exact Discord continuation. Desktop refs stay unsupported on the server. A failed optional reader yields a visible reason rather than empty success. No send/management MCP tool.
@@ -724,13 +767,18 @@ if (value.id !== ref.messageId || value.channel_id !== ref.conversationId) {
 - [ ] Green: server `vp test run src/communications/DiscordReader.test.ts src/mcp/toolkits/workspace/handlers.test.ts src/workspace/linkedItemsContext.test.ts src/workspace/linkedItemsTurn.integration.test.ts`; targeted lint and server/contracts typechecks. Expected exact response and all grant denials before external body fetch.
 - [ ] Surfaces: common provider context and workspace read for every adapter, no Draft reply/send expansion. Web/desktop/phone source menus carry scoped exact refs; native compatible. Unlink/relink/revoke/delete and local/direct/relay/tunnel/two environments tested. Docs T8.
 - [ ] Visual: recipes 02/05/06 [445,137,482,421], gap-communications:79-92, V1. No resting control changes. Actual sanitized titles/summaries and explicit unavailable reasons allowed with W4 chrome; service tests prove reads independently of pixels.
-- [ ] Commit `feat(server): read exact linked Discord messages`. Stage only DiscordReader.ts/.test.ts, MCP handlers/tools/handlers.test.ts, linkedItemsContext.ts/.test.ts and linkedItemsTurn.integration.test.ts, with full paths/trailer. No adapter-specific provider changes.
+- [ ] Commit `feat(server): read exact linked Discord messages`. Stage only the changed, admitted paths below after their owner releases the slot. Omit unchanged or cut paths; no catch-all staging. Replace each allocated migration/test placeholder with its literal next-free filename before running. Use the required attribution sentence.
+
+```text
+git add -- apps/server/src/communications/DiscordReader.ts apps/server/src/communications/DiscordReader.test.ts apps/server/src/mcp/toolkits/workspace/handlers.ts apps/server/src/mcp/toolkits/workspace/tools.ts apps/server/src/mcp/toolkits/workspace/handlers.test.ts apps/server/src/workspace/linkedItemsContext.ts apps/server/src/workspace/linkedItemsContext.test.ts apps/server/src/workspace/linkedItemsTurn.integration.test.ts
+git commit -m "feat(server): read exact linked Discord messages"
+```
 
 ### Task W9-T4: Conversation navigation, groups and header
 
 **Files:** Modify UI CommunicationsWorkspace.tsx:20-197, ChatCommunicationsWorkspace.tsx:161-334,403-555, TelegramWorkspace.tsx:34-298; ConnectCommunicationsDialog.tsx:16-172 only for explicit server/desktop destination; routes/_chat.workspace.tsx:8-75 and routes/-_chat.workspace.test.ts; apps/web/src/components/CommandPalette.tsx workspace entries in its inspected 1-3680 range, after locating the W4 destination command. Extend UI communicationsChat.ts:1-52 and .test.ts; create CommunicationsNavigation.test.tsx and CommunicationsWorkspace.test.tsx. Add createCommunicationsAtoms connection commands in proposed shared atoms if not delivered by T2b/T3b; use narrow exclusive slot for their exports. No shell implementation changes.
 
-**Interfaces:** Consume W4-T6 shell/rail/header, T1 refs, T7 saved atoms, any admitted reader and existing Telegram atoms. Produce shared ConversationNavigation exported from ChatCommunicationsWorkspace for its real Telegram second caller, with `{ groups: ReadonlyArray<{label,rows}>, selectedKey?: string, onSelect:(endpoint:WorkspaceLinkEndpoint)=>void }`. Each row is `{key,title,endpoint,kind,initials?,knownUnread?}`. Header receives selected channel/provider/project metadata and complete fresh optional member count. No provider call belongs in navigation rendering.
+**Interfaces:** Consume W4-T6 shell/rail/header, T1 refs, T7 saved atoms, any admitted reader and existing Telegram atoms. Produce shared ConversationNavigation exported from ChatCommunicationsWorkspace for its real Telegram second caller, with `{ groups: ReadonlyArray<{label,rows}>, selectedKey?: string, onSelect:(endpoint:WorkspaceLinkEndpoint)=>void }`. Each row is `{key,title,endpoint,kind,initials?,knownUnread?}`. WorkspaceEngagement.header receives a WorkspaceHeaderModel with selected channel/provider/project metadata and complete fresh optional member count. No provider call belongs in navigation rendering.
 
 **Depends on:** W9-T1 and W4-T6 for implementation/fake tests. Release needs W9-T2b OR W9-T3b OR paired Telegram/desktop. T7 enables Later, T8 enables Unread; absence is disabled with explanation or omitted under cut. **Serial slot:** first chat UI slot; route/palette with W4 owner; shared atom edit only after its active owner releases. **Risk:** cross-client, two-way.
 
@@ -800,13 +848,18 @@ Freshness uses source observedAt and invalidation on failure/disconnect. Advanci
 - [ ] Green: apps/web `vp test run src/components/workspace/CommunicationsNavigation.test.tsx src/components/workspace/CommunicationsWorkspace.test.tsx src/components/workspace/communicationsChat.test.ts src/routes/-_chat.workspace.test.ts`. If atoms changed, client-runtime `vp test run src/state/communications.test.ts`. Targeted lint and web/client-runtime/server typechecks. No browser/server launched by task agent.
 - [ ] Surfaces: header/menu/palette/keybinding/touch; web/shared desktop/phone responsive, native optional compatibility only; all providers use shared link actions, Draft reply Mail-only. Connect/disconnect/import cancel, channel/back/resource close/reopen and unavailable sources work across local/direct/relay/tunnel/two environments. T8 docs owns new navigation guidance.
 - [ ] Visual: recipes 02/05/06, [207,26,733,506], gap-communications:50-77, V1. Exact fixture three groups/three DM rows/8 members; real counts only D26, approved Slack DMs only D27, bots omit group. W4 chrome and explicit read-only states allowed. Review 1024/390px and setup/error proposed captures.
-- [ ] Commit `feat(web): align communications navigation and channel header`. Stage only CommunicationsWorkspace.tsx, ChatCommunicationsWorkspace.tsx, TelegramWorkspace.tsx, ConnectCommunicationsDialog.tsx if changed, communicationsChat.ts/.test.ts, CommunicationsNavigation.test.tsx, CommunicationsWorkspace.test.tsx, exact route/test/palette paths and necessary named atom/test/export paths. Include trailer; no shell or unrelated provider work.
+- [ ] Commit `feat(web): align communications navigation and channel header`. Stage only the changed, admitted paths below after their owner releases the slot. Omit unchanged or cut paths; no catch-all staging. Replace each allocated migration/test placeholder with its literal next-free filename before running. Use the required attribution sentence.
+
+```text
+git add -- apps/web/src/components/workspace/CommunicationsWorkspace.tsx apps/web/src/components/workspace/ChatCommunicationsWorkspace.tsx apps/web/src/components/workspace/TelegramWorkspace.tsx apps/web/src/components/workspace/ConnectCommunicationsDialog.tsx apps/web/src/components/workspace/communicationsChat.ts apps/web/src/components/workspace/communicationsChat.test.ts apps/web/src/components/workspace/CommunicationsNavigation.test.tsx apps/web/src/components/workspace/CommunicationsWorkspace.test.tsx apps/web/src/routes/_chat.workspace.tsx apps/web/src/routes/-_chat.workspace.test.ts apps/web/src/components/CommandPalette.tsx packages/client-runtime/src/state/communications.ts packages/client-runtime/src/state/communications.test.ts packages/client-runtime/src/rpc/client.ts packages/client-runtime/package.json apps/web/src/state/communications.ts
+git commit -m "feat(web): align communications navigation and channel header"
+```
 
 ### Task W9-T5: Chronological stream, provider replies and document cards
 
-**Files:** Modify UI ChatCommunicationsWorkspace.tsx:236-401,555-687, TelegramWorkspace.tsx:300-448, communicationsChat.ts:19-35/.test.ts; create CommunicationsStream.test.tsx. Consume DriveFiles.tsx:170-354, proposed W7-T3 ProjectDriveExplorer/openFiles and W8-T3a WorkspaceDocsPanel selection interface. Do not rebuild those bodies or edit WorkspaceToolsPanel resource frame. Shared message renderer CommunicationStream may remain in ChatCommunicationsWorkspace and be exported for Telegram.
+**Files:** Modify UI ChatCommunicationsWorkspace.tsx:236-401,555-687, TelegramWorkspace.tsx:300-448, communicationsChat.ts:19-35/.test.ts; create CommunicationsStream.test.tsx. Consume DriveFiles.tsx:170-354, proposed W7-T3 ProjectDriveExplorer and useOpenFiles from apps/web/src/components/workspace/openFiles.ts and W8-T3a WorkspaceDocsPanel selection interface. Do not rebuild those bodies or edit the W4 resource frame. WorkspaceResourceBody.tsx remains the only tab body switch. Shared message renderer CommunicationStream may remain in ChatCommunicationsWorkspace and be exported for Telegram.
 
-**Interfaces:** CommunicationStream consumes captured environmentId, chronological readonly message rows with exact endpoint, supplied replyCount/links, onOpenReply(endpoint), onOpenFile(file ref), onSelect(endpoint), and shared item actions. It emits no relationship write from render/open. W7 openFiles/W8 document selection receive the underlying stable `{type:"file",provider:"google-drive",fileId}` plus captured environment. Provider replies use a center subview and Back, never a second right panel or an agent thread.
+**Interfaces:** CommunicationStream consumes captured environmentId, chronological readonly message rows with exact endpoint, supplied replyCount/links, onOpenReply(endpoint), onOpenFile(file ref), onSelect(endpoint), and shared item actions. It emits no relationship write from render/open. Import useOpenFiles and type OpenFilesInput from `apps/web/src/components/workspace/openFiles.ts`. Obtain the OpenFiles callback with useOpenFiles() inside the W4 WorkspaceResourcesProvider; call it with captured environmentId/projectId and exactly one folderId or fileId. It delegates to the shell context openResource, not another store. Open Docs through useWorkspaceResources().openResource({ tab: "docs", projectId, request: fileRef }) from workspaceResourceState.ts, retaining W8-T3a dispatch. Provider replies use a center subview and Back, never a second right panel or an agent thread.
 
 **Depends on:** W9-T4, W7-T3, W8-T3a. **Serial predecessor:** T4, exclusive chat UI. **Decision:** D02/D18/D20 default assumed, confirm. **Risk:** cross-client, two-way.
 
@@ -858,7 +911,12 @@ Apply feature/theme colors and fixture spacing from rendered reference, with sha
 - [ ] Green: apps/web `vp test run src/components/workspace/communicationsChat.test.ts src/components/workspace/CommunicationsStream.test.tsx src/components/workspace/CommunicationsWorkspace.test.tsx`; targeted lint and web/server typechecks. Include W7/W8 public-handoff tests only if their integration signatures changed in this task, preserving ownership.
 - [ ] Surfaces: message/card menu, header, palette/shortcut/touch act on captured source; shared desktop/web/phone with existing native refs. All provider agents share links, provider replies start no agent. Open/back/link/unlink/relink, unavailable, local/direct/relay/tunnel/two environments covered. No adapter send changes. T8 docs.
 - [ ] Visual: recipes 02/05/06, [445,98,482,460], gap-communications:78-92, V1. Date separator/four messages/30px avatars/260x53 card/2 replies and whitespace match. Actual author/time/text/reply count/file metadata may substitute, W4 chrome applies. Center remains identical while other owners select Files/Browser/Agents.
-- [ ] Commit `feat(web): render linked conversation streams and replies`. Stage only ChatCommunicationsWorkspace.tsx, TelegramWorkspace.tsx, communicationsChat.ts/.test.ts and CommunicationsStream.test.tsx, plus a narrowly changed Wave 9 handoff binding if one is necessary and explicitly named before editing. Do not stage W7/W8 pending modules. Include trailer.
+- [ ] Commit `feat(web): render linked conversation streams and replies`. Stage only the changed, admitted paths below after their owner releases the slot. Omit unchanged or cut paths; no catch-all staging. Replace each allocated migration/test placeholder with its literal next-free filename before running. Use the required attribution sentence.
+
+```text
+git add -- apps/web/src/components/workspace/ChatCommunicationsWorkspace.tsx apps/web/src/components/workspace/TelegramWorkspace.tsx apps/web/src/components/workspace/communicationsChat.ts apps/web/src/components/workspace/communicationsChat.test.ts apps/web/src/components/workspace/CommunicationsStream.test.tsx
+git commit -m "feat(web): render linked conversation streams and replies"
+```
 
 ### Task W9-T6: Composer layout with acknowledged desktop send
 
@@ -927,17 +985,22 @@ Contract URL parsing may normalize a Drive link to file identity for future acti
 - [ ] Green: apps/web `vp test run src/components/workspace/ChatComposer.test.tsx src/components/workspace/communicationsChat.test.ts src/components/workspace/CommunicationsStream.test.tsx`; apps/desktop `vp test run src/communications/RestChatAdapter.test.ts`. Targeted lint and web/server typechecks; desktop typecheck if a desktop source changed. Expected single acknowledged send, retained text on all failures, no automatic retry.
 - [ ] Surfaces: composer and reply/menu entry, keyboard/touch plus/cancel, shared desktop writable; web/phone remote read-only, native no new screen/send contract. All agent providers stay unable to auto-send. Send/cancel reply, link insert/cancel, failure/back/reopen and local/direct/relay/tunnel/two environments are explicit. Docs T8 explains remote departure.
 - [ ] Visual: recipes 02/05/06 composer [442,687,485,100], gap-communications:93-97, V1. Exact fixture plus/Send demo position, desktop Send live substitution, captured destination/draft and read-only copy allowed. Pending/error/unknown/paste states and 390px adaptation need reviewed proposed captures; no picker promise.
-- [ ] Commit `fix(web): preserve acknowledged communications drafts`. Stage only ChatCommunicationsWorkspace.tsx, TelegramWorkspace.tsx, communicationsChat.ts/.test.ts and ChatComposer.test.tsx. Any desktop change requires an explicitly added owned source/test path before staging; default is none. Include trailer.
+- [ ] Commit `fix(web): preserve acknowledged communications drafts`. Stage only the changed, admitted paths below after their owner releases the slot. Omit unchanged or cut paths; no catch-all staging. Replace each allocated migration/test placeholder with its literal next-free filename before running. Use the required attribution sentence.
+
+```text
+git add -- apps/web/src/components/workspace/ChatCommunicationsWorkspace.tsx apps/web/src/components/workspace/TelegramWorkspace.tsx apps/web/src/components/workspace/communicationsChat.ts apps/web/src/components/workspace/communicationsChat.test.ts apps/web/src/components/workspace/ChatComposer.test.tsx
+git commit -m "fix(web): preserve acknowledged communications drafts"
+```
 
 ### Task W9-T8: Known-message read markers and final Communications wiring
 
 This is also the mandatory wave gate. If marker scope is cut, retain this ID and every integration/documentation step. Remove its new marker table/RPC and Unread numbers/filter honestly. Do not cut the gate.
 
-**Files:** Create proposed apps/server/src/communications/ReadMarkers.ts, ReadMarkerStore.ts, ReadMarkers.test.ts and next-free ReadMarkers migration/test when admitted. Extend proposed pulseCommunications.ts/.test.ts, shared state/communications.ts/.test.ts and web binding. Modify UI CommunicationsWorkspace.tsx:20-197, ChatCommunicationsWorkspace.tsx:161-401, TelegramWorkspace.tsx:70-298, communicationsChat.ts:1-52/.test.ts; create communicationsUnread.test.ts and CommunicationsIntegration.test.tsx. RPC/auth/capability/migration registration ranges are those verified in T2a/T3a. Update docs/user/communications.md:1-34, workspace-spaces.md:1-69 only where guidance changes; review docs/internals/overview.md:1-126 and glossary.md:1-67. Review workspace-links.md's grant wording, changing only if inconsistent with the adopted decisions.
+**Files:** Modify apps/web/src/components/workspace/dev/communicationsMockupModule.tsx under its adapter slot; create apps/web/src/components/workspace/CommunicationsView.tsx for pure presentation extracted from the existing live containers. Create proposed apps/server/src/communications/ReadMarkers.ts, ReadMarkerStore.ts, ReadMarkers.test.ts and next-free ReadMarkers migration/test when admitted. Extend proposed pulseCommunications.ts/.test.ts, shared state/communications.ts/.test.ts and web binding. Modify UI CommunicationsWorkspace.tsx:20-197, ChatCommunicationsWorkspace.tsx:161-401, TelegramWorkspace.tsx:70-298, communicationsChat.ts:1-52/.test.ts; create communicationsUnread.test.ts and CommunicationsIntegration.test.tsx. RPC/auth/capability/migration registration ranges are those verified in T2a/T3a; apps/server/src/auth/RpcAuthorization.test.ts is owned for marker authorization cases. Update docs/user/communications.md:1-34, workspace-spaces.md:1-69 only where guidance changes; review docs/internals/overview.md:1-126 and glossary.md:1-67. Review workspace-links.md's grant wording, changing only if inconsistent with the adopted decisions.
 
 **Interfaces:** Produce KnownReadMarker `{ conversation: WorkspaceItemRef, mode:"read-through"|"unread-from", messageId:string, revision:number }`, ReadMarkers.getMany({conversations}), set({conversation,mode,messageId,expectedRevision}), changes. Max 100 conversation refs per read; marker writes are explicit environment-owned operate actions. Missing marker is unknown, not zero. Optional communicationsReadMarkers capability. Shared knownUnread returns number or undefined from the already loaded recent-page metadata plus marker, never a provider call. Member count D26 remains independent. Consume T7 saved list and every admitted reader.
 
-**Depends on:** W9-T4 and T7. **Serial predecessors:** T3c or nearest admitted RPC predecessor, and T6 for chat UI. Gate also waits for all other admitted Wave 9 tasks; any cut is recorded with its reason and residual behavior. **Decision:** D17/D18/D24 default assumed, confirm. **Risk:** cross-client, two-way, retain markers on rollback.
+**Depends on:** W9-T4 and T7; marker implementation additionally requires explicit maintainer admission after the Slack/UI stop. The retained gate needs no marker admission. **Serial predecessors:** T3c or nearest admitted RPC predecessor, and T6 for chat UI. Gate also waits for all other admitted Wave 9 tasks; any cut is recorded with its reason and residual behavior. **Decision:** D17/D18/D24 default assumed, confirm. **Risk:** cross-client, two-way, retain markers on rollback.
 
 - [ ] Add a red pure unread test in communicationsUnread.test.ts and a real marker service test. The pure helper lives in communicationsChat.ts, takes recentMessages only, and compares source order without Number loss:
 
@@ -1016,13 +1079,19 @@ vp test run src/communications/RestChatAdapter.test.ts src/communications/ChatSe
 
 Run each admitted connector's exact Connection.test.ts/Reader.test.ts and each allocated migration test too, with literal paths recorded in the gate receipt. Omit cut connector/marker test paths explicitly rather than running missing files or claiming them passed. Targeted lint on every changed owned source, affected contracts/server/client-runtime/web typechecks, desktop typecheck if changed. No repo-wide check. Test failures return to the owning task; do not repeatedly rerun unchanged passing suites.
 
+- [ ] Complete W4-T7's apps/web/src/components/workspace/dev/communicationsMockupModule.tsx. Export createWorkspaceMockupModule: CreateWorkspaceMockupModule and return WorkspaceMockupModule. Extract/export the actual pure ConversationNavigation, CommunicationStream and ChatComposer presentation from CommunicationsView.tsx, with no live-container/query/IPC imports; make the existing live containers consume these same exports. Render them with explicit groups/selectedKey/onSelect, captured endpoints/messages/reply/file callbacks, controlled draft and fake acknowledged commands. Live containers map real data to those same presentation props. Add readyRegions: ["center"] only once 02/05/06 center content is rendered with local fake reads/commands and settled() awaits all pending work. Keep missing subregions incomplete; no live container, registry registration or network import. This gate stays required when markers or Discord are cut. Extend CommunicationsIntegration.test.tsx to prove fixture isolation, readiness and disposal.
 - [ ] Update docs/user/communications.md around existing user tasks: chosen environment versus desktop credentials, read-only remote, bot limitations, explicit Refresh/loaded search, provider replies in center, Later across that environment and explicit legacy import, local known-unread definition if admitted. Update workspace-spaces.md only for changed destination/link guidance. Keep shipped-product voice, no source paths or contributor tooling in user text. Remove obsolete Later-on-this-device wording and remote blanket denial only where a server reader is accepted.
 - [ ] Review overview.md and glossary.md for durable cross-component constraints. Record the reason that saved refs never grant reads and marker/subscription changes never fan out provider history. Define Later as environment-owned saved original refs, not snooze; known-message marker as Pulse-local loaded-page boundary, not provider read sync. If marker work is cut, explain its absence rather than define shipped marker behavior. Preserve one owning definition for W4 resource frame, W5 date-only task, W6 calendar occurrence/workspace note, W7 Drive root and W8 project PR collection; link/reuse existing definitions or record specific no-change reasons. Do not append a file catalog or narrate all new service methods.
 - [ ] Primary-only authorized integrated pass: use test-t3-app once after integration, with worktree disposable state and W4-T7 non-writing fixtures, no live userdata. Capture recipes 02/05/06 at pinned 1280x800, then reviewed 1024px and 390px one-pane states. Compare all Wave 9 boxes and crops to each PNG with V1 overlay/difference. Pass channel boundary x259/x429, header, groups, date/avatars/messages/card/replies/composer within tolerance. 02 uses Files; 05 Browser; 06 Agents. Full W10 body proof belongs to W10 and is pending if not delivered; compare Wave 9 center now and return for composite proof at authorized integration, without blocking independent Browser/Agents code. Record this as partial composite evidence, never full-PNG acceptance.
 - [ ] Capture read-only desktop-less web, Telegram received-only, loading/error/429, unavailable saved ref, replies/back, paste insert/cancel, pending/unknown send, Resources/Linked context Back and compact no-overflow/focus states. Real accounts, packaged Electron, native decode, physical other device and pilot are separate rows marked witnessed/unrun with evidence. Local viewport/direct HTTP is not physical other-device proof. Do not start a browser/server in a subagent or seek account consent through a fixture.
 - [ ] Surface checklist: entry points agree; web and shared desktop plus phone responsive, no new RN screen; every configured agent adapter shares context; optional schemas decode against old clients/servers; read/unread/save/remove/link/unlink/relink/connect/disconnect/reopen/cancel and unavailable/deleted cases covered; local/direct/relay/tunnel and multiple environments have explicit outcomes; user/internals/glossary guidance updated or reason recorded.
 - [ ] Visual: W4-T7 recipes 02/05/06, count/rail box [207,89,222,223], gap-communications:55-68, plus all preceding task boxes. Count 3 only for loaded fixture marketing page, no number on unknown/unloaded channels. D26 member count independent, D27 approved Slack DMs only, D03 tab corrections and W4 live chrome allowed. If markers cut, capture the honest omitted Unread/count departure and retain final gate evidence.
-- [ ] Commit `feat(workspace): track known unread messages and complete communications` when markers admitted; otherwise `docs(workspace): verify communications and shared saved items`. Stage only ReadMarkers.ts, ReadMarkerStore.ts, ReadMarkers.test.ts, allocated migration/test/Migrations.ts, exact modified pulseCommunications/shared atoms/web binding/RPC/auth paths, CommunicationsWorkspace.tsx, ChatCommunicationsWorkspace.tsx, TelegramWorkspace.tsx, communicationsChat.ts/.test.ts, communicationsUnread.test.ts, CommunicationsIntegration.test.tsx, docs/user/communications.md, workspace-spaces.md, docs/internals/overview.md, glossary.md and workspace-links.md if changed. Spell all changed paths literally in the actual commit command, omitting unmodified or cut files. Never stage lockfile/ledger or other wave edits. Include required trailer.
+- [ ] Commit `feat(workspace): track known unread messages and complete communications`. Stage only the changed, admitted paths below after their owner releases the slot. Omit unchanged or cut paths; no catch-all staging. Replace each allocated migration/test placeholder with its literal next-free filename before running. Use the required attribution sentence. If markers are cut, use `docs(workspace): verify communications and shared saved items` and omit every marker-only path; the fixture/docs/integration gate remains.
+
+```text
+git add -- apps/server/src/communications/ReadMarkers.ts apps/server/src/communications/ReadMarkerStore.ts apps/server/src/communications/ReadMarkers.test.ts "apps/server/src/persistence/Migrations/<allocated NNN_ReadMarkers.ts>" "apps/server/src/persistence/Migrations/<allocated NNN_ReadMarkers.test.ts>" apps/server/src/persistence/Migrations.ts packages/contracts/src/pulseCommunications.ts packages/contracts/src/pulseCommunications.test.ts packages/client-runtime/src/state/communications.ts packages/client-runtime/src/state/communications.test.ts packages/client-runtime/src/rpc/client.ts packages/client-runtime/package.json apps/web/src/state/communications.ts packages/contracts/src/index.ts packages/contracts/src/rpc.ts packages/contracts/src/server.ts apps/server/src/ws.ts apps/server/src/server.ts apps/server/src/auth/RpcAuthorization.ts apps/server/src/auth/RpcAuthorization.test.ts apps/web/src/components/workspace/CommunicationsWorkspace.tsx apps/web/src/components/workspace/ChatCommunicationsWorkspace.tsx apps/web/src/components/workspace/TelegramWorkspace.tsx apps/web/src/components/workspace/communicationsChat.ts apps/web/src/components/workspace/communicationsChat.test.ts apps/web/src/components/workspace/communicationsUnread.test.ts apps/web/src/components/workspace/CommunicationsIntegration.test.tsx apps/web/src/components/workspace/dev/communicationsMockupModule.tsx docs/user/communications.md docs/user/workspace-spaces.md docs/internals/overview.md docs/internals/glossary.md docs/user/workspace-links.md apps/web/src/components/workspace/CommunicationsView.tsx
+git commit -m "feat(workspace): track known unread messages and complete communications"
+```
 
 ## Self-review and surfaced gaps
 
@@ -1048,7 +1117,7 @@ Every following default remains default assumed, confirm, as the map states. Pla
 1. The inspected communications.ts is desktop IPC, with no server RPC family. pulseCommunications.ts, server communications directory, account/read/marker stores and shared atoms are proposed. Source references are anchors for reread, not claims those proposed files already exist.
 2. Legacy ChatConversation lacks workspaceId, and retained Slack/Discord adapters hold raw workspace identity without exposing it. T1 must carry optional source workspaceId from authenticated team_id/guild_id for new desktop refs. Until available, legacy desktop source stays openable locally but cannot manufacture a stable cross-device ref from a title. This is a necessary clarification to the map's identity work, not a second project model.
 3. Existing TelegramService.ts:71-109 owns a shipped receive long-poll worker. The map's no-polling refresh requirement applies to newly planned history/refresh behavior; preserving A9 ingestion is explicit here. No new timers or workers are proposed. Any request to remove that shipped receiver is a separate scope decision.
-4. W4-T4a/T4b/T5/T6/T7, W5-T7, W6-T3/T8, W7-T3 openFiles/ProjectDriveExplorer and W8-T3a WorkspaceDocsPanel are consumed by their map names. Their parallel files/signatures were not present during this source pass. Implementers must bind delivered exports, preserving behavior and ownership; do not claim interface integration already tested.
+4. W4-T4a/T4b/T5/T6/T7, W5-T7, W6-T3/T8, W7-T3 useOpenFiles from openFiles.ts/ProjectDriveExplorer and W8-T3a WorkspaceDocsPanel are consumed by their map names. Their parallel files/signatures were not present during this source pass. Implementers must bind delivered exports, preserving behavior and ownership; do not claim interface integration already tested.
 5. Real provider permissions/API sufficiency remain unverified offline. Slack bot channel-reply restrictions, exact reply lookup and DM grant coverage need provider admission evidence. Discord Message Content intent/private thread access and bounded guild response behavior need the same. Unsupported states stay explicit; no automatic scope expansion, history scan or provider consent.
 6. New setup/filter/empty/error/reply/paste/pending/compact states have no source PNG. Proposed captures need review before visual acceptance. Fixed reference font is estimated by the source inventory and pinned by V1; different host/font needs rebaseline.
 7. New migration numbers must be allocated under the shared slot. Main source currently ends at 064; never reserve a colliding number while Waves 5-8 write in parallel. The commit trailer above is copied from the main plan and is a plan convention, not a claim that this writer ran that model.
@@ -1061,3 +1130,20 @@ Every following default remains default assumed, confirm, as the map states. Pla
 - Every task includes files, consumes/produces, dependencies, slot, red test, minimal implementation, focused green command, surface checklist, visual region/substitutions and explicit staging boundary.
 - The plan keeps no-polling reads, cut order, provider consent holds, old-server compatibility, per-item grants and shared Later semantics.
 - Only this file is written. The source baseline and all parallel writers' files remain untouched. Product checks and future screenshots are unrun.
+
+## Review response log
+
+Plan fix round 1, 2026-10-16. Review inputs: .superpowers/sdd/2026-10-14-unified-workspace/plan-reviews/review-w9-w11.md and review-cross-wave.md. W4's canonical seams govern producer names and paths.
+
+| Finding              | Response                                                                                                                                                                             |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| W9-W11 I-3           | All 12 commit steps now contain literal git add -- lists with full repository paths. Only next-free migration/test filenames require allocation; cut or unchanged paths are omitted. |
+| W9-W11 I-4           | Controller stops after accepted Slack T2a-T2c and UI T4-T6. Discord and marker implementation require an explicit maintainer decision; the cut order and retained gate remain.       |
+| W9-W11 I-5           | The Global Constraints use the agreed implementer/controller attribution sentence. The fixed model trailer is removed.                                                               |
+| W9-W11 M-1           | Delegated yield uses yield*; standalone yielding fragments have Effect.gen wrappers.                                                                                                 |
+| Cross R1 / C1        | T8 owns dev/communicationsMockupModule.tsx in Files and staging, with actual fake-backed center rendering/readiness for 02/05/06.                                                    |
+| Cross R2, R5, R6, R8 | W4's body switch, WorkspaceHeaderModel, workspaceRailItems data and single view key are the consumer contracts; W9 does not create competing shell state or chrome.                  |
+| Cross R3 / I1        | T5 imports useOpenFiles/OpenFilesInput from components/workspace/openFiles.ts and uses the W4 context handoff. Docs requests use openResource with the stable file ref.              |
+| Cross M5             | Shared docs gate is serialized by admitted wave number through W9-T8, W10-T4 and W11 gate. Map ownership remains with the controller.                                                |
+
+W11-specific preview/flag/picker findings are addressed in W11; W10-specific extraction/adapter findings are addressed in W10. No finding is disputed. This revision changes plans only; no implementation, test, stage or commit is claimed.
