@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import * as Schema from "effect/Schema";
-import type { ChatAccount, ChatConversation, ChatMessage } from "@t3tools/contracts";
+import type { EnvironmentId, ChatAccount, ChatConversation, ChatMessage } from "@t3tools/contracts";
 import {
   BookmarkIcon,
   HashIcon,
@@ -20,6 +20,9 @@ import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { RequestState } from "./office/shared";
 import { useCommunicationsRequest } from "./useCommunicationsRequest";
 import { chatReferenceKey, mergeChatMessages, sendAttempt } from "./communicationsChat";
+
+import { WorkspaceEngagement } from "./WorkspaceEngagement";
+import { useWorkspaceHeaderModel } from "./useWorkspaceHeaderModel";
 
 const SavedReference = Schema.Struct({
   provider: Schema.String,
@@ -158,7 +161,15 @@ function ChatComposer({
   );
 }
 
-export function ChatCommunicationsWorkspace({ account }: { account: ChatAccount }) {
+export function ChatCommunicationsWorkspace({
+  account,
+  environmentId,
+  controls,
+}: {
+  account: ChatAccount;
+  environmentId: EnvironmentId;
+  controls?: ReactNode;
+}) {
   const { run, busy, error } = useCommunicationsRequest();
   const [conversations, setConversations] = useState<readonly ChatConversation[]>([]);
   const [conversationCursor, setConversationCursor] = useState<string>();
@@ -398,149 +409,79 @@ export function ChatCommunicationsWorkspace({ account }: { account: ChatAccount 
       </article>
     );
   }
+  const [resourcesOpen, setResourcesOpen] = useState(false);
+  const header = useWorkspaceHeaderModel(
+    environmentId,
+    view === "later" ? "Later" : (conversation?.title ?? "Communications"),
+    "Communications",
+    `${providerNames[account.provider]} · ${account.identity}`,
+  );
   return (
-    <div ref={root} className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
-      <nav
-        aria-label="Chat views"
-        className="flex w-14 shrink-0 flex-col items-center gap-3 border-r border-border bg-sidebar py-4"
-      >
-        {[
-          { id: "home", label: "Home", icon: HomeIcon },
-          { id: "dms", label: "DMs", icon: MessageCircleIcon },
-          { id: "later", label: "Later", icon: BookmarkIcon },
-        ].map(({ id, label, icon: Icon }) => (
-          <button
-            type="button"
-            key={id}
-            aria-current={view === id ? "page" : undefined}
-            className={cn(
-              "flex w-12 flex-col items-center gap-1 rounded-md px-1 py-2 text-3xs hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring",
-              view === id && "bg-sidebar-row-active",
-            )}
-            onClick={() => {
-              if (id === "home" || id === "dms" || id === "later") setView(id);
-            }}
-          >
-            <Icon className="size-4" />
-            {label}
-          </button>
-        ))}
-      </nav>
-      <aside
-        aria-label="Channels and direct messages"
-        className="hidden w-52 shrink-0 flex-col border-r border-border bg-sidebar lg:flex"
-      >
-        <div className="border-b border-border p-4">
-          <h2 className="text-sm font-semibold">{account.label}</h2>
-          <p className="mt-1 break-words text-xs text-muted-foreground">
-            {providerNames[account.provider]} · {account.identity}
-          </p>
-        </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-2">
-          {visibleConversations.map((item) => (
-            <button
-              type="button"
-              key={item.id}
-              disabled={busy}
-              aria-current={conversation?.id === item.id ? "page" : undefined}
-              className={cn(
-                "my-1 flex w-full items-start gap-2 rounded-md px-2 py-2 text-left text-sm hover:bg-sidebar-row-hover focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-60",
-                conversation?.id === item.id && "bg-sidebar-row-active",
-              )}
-              onClick={() => void openConversation(item)}
-            >
-              {item.kind === "dm" ? (
-                <MessageCircleIcon className="mt-0.5 size-4 shrink-0" />
-              ) : (
-                <HashIcon className="mt-0.5 size-4 shrink-0" />
-              )}
-              <span className="min-w-0">
-                <span className="block truncate">{item.title}</span>
-                <span className="text-xs text-muted-foreground">{item.workspace || item.kind}</span>
-              </span>
-            </button>
-          ))}
-          {loaded && !visibleConversations.length && (
-            <p className="p-2 text-xs text-muted-foreground">
-              No loaded conversations in this view.
-            </p>
-          )}
-          {conversationCursor && (
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={busy}
-              onClick={() => void loadConversations(conversationCursor)}
-            >
-              Load more conversations
-            </Button>
-          )}
-        </div>
-        <p className="border-t border-border p-3 text-xs text-muted-foreground">
-          {account.provider === "discord"
-            ? "Bot-accessible channels only"
-            : account.provider === "telegram"
-              ? "Personal Telegram account"
-              : "Token permissions apply"}
-        </p>
-      </aside>
-      <section aria-label="Chat history" className="flex min-w-0 flex-1 flex-col">
-        <div className="space-y-3 border-b border-border p-4">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <h1 className="truncate text-lg font-semibold">
-                {view === "later" ? "Later" : (conversation?.title ?? "Choose a conversation")}
-              </h1>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {providerNames[account.provider]} · {account.identity}
+    <WorkspaceEngagement
+      environmentId={environmentId}
+      space="communications"
+      layout="split"
+      header={header}
+      resourcesOpen={resourcesOpen}
+      onResourcesChange={setResourcesOpen}
+      resources={null}
+      selected={conversation !== undefined}
+      onBack={() => setConversation(undefined)}
+      list={
+        <div>
+          {controls}
+          <nav aria-label="Chat views" className="flex flex-wrap gap-1 p-2">
+            {[
+              { id: "home", label: "Home", icon: HomeIcon },
+              { id: "dms", label: "DMs", icon: MessageCircleIcon },
+              { id: "later", label: "Later", icon: BookmarkIcon },
+            ].map(({ id, label, icon: Icon }) => (
+              <button
+                type="button"
+                key={id}
+                aria-pressed={view === id}
+                className="p-1 text-xs"
+                onClick={() => {
+                  if (id === "home" || id === "dms" || id === "later") setView(id);
+                }}
+              >
+                <Icon className="size-3" />
+                {label}
+              </button>
+            ))}
+          </nav>
+          <div className="min-h-0 flex-1 overflow-y-auto p-2">
+            {visibleConversations.map((item) => (
+              <button
+                type="button"
+                key={item.id}
+                disabled={busy}
+                aria-current={conversation?.id === item.id ? "page" : undefined}
+                className={cn(
+                  "my-1 flex w-full items-start gap-2 rounded-md px-2 py-2 text-left text-sm hover:bg-sidebar-row-hover focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-60",
+                  conversation?.id === item.id && "bg-sidebar-row-active",
+                )}
+                onClick={() => void openConversation(item)}
+              >
+                {item.kind === "dm" ? (
+                  <MessageCircleIcon className="mt-0.5 size-4 shrink-0" />
+                ) : (
+                  <HashIcon className="mt-0.5 size-4 shrink-0" />
+                )}
+                <span className="min-w-0">
+                  <span className="block truncate">{item.title}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {item.workspace || item.kind}
+                  </span>
+                </span>
+              </button>
+            ))}
+            {loaded && !visibleConversations.length && (
+              <p className="p-2 text-xs text-muted-foreground">
+                No loaded conversations in this view.
               </p>
-            </div>
-            <Button
-              size="icon-sm"
-              variant="ghost"
-              aria-label="Refresh conversations and history"
-              disabled={busy}
-              onClick={() =>
-                void (async () => {
-                  await loadConversations();
-                  if (conversation) await loadMessages(conversation);
-                })()
-              }
-            >
-              <RefreshCwIcon />
-            </Button>
-          </div>
-          <div className="flex items-center gap-2">
-            <SearchIcon className="size-4 shrink-0 text-muted-foreground" />
-            <Input
-              ref={searchInput}
-              aria-label="Search loaded conversations"
-              placeholder="Search loaded conversations · Ctrl K"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-          </div>
-          <label className="block lg:hidden">
-            <span className="sr-only">Conversation</span>
-            <select
-              className="w-full rounded-md border border-input bg-background px-2 py-1 text-sm"
-              disabled={busy}
-              value={conversation?.id ?? ""}
-              onChange={(event) => {
-                const selected = conversations.find((item) => item.id === event.target.value);
-                if (selected) void openConversation(selected);
-              }}
-            >
-              <option value="">Choose a conversation</option>
-              {visibleConversations.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.title}
-                </option>
-              ))}
-            </select>
-          </label>
-          {conversationCursor && (
-            <div className="lg:hidden">
+            )}
+            {conversationCursor && (
               <Button
                 size="sm"
                 variant="outline"
@@ -549,139 +490,210 @@ export function ChatCommunicationsWorkspace({ account }: { account: ChatAccount 
               >
                 Load more conversations
               </Button>
-            </div>
-          )}
-          <RequestState busy={busy} error={error} />
+            )}
+          </div>
+          <p className="border-t border-border p-3 text-xs text-muted-foreground">
+            {account.provider === "discord"
+              ? "Bot-accessible channels only"
+              : account.provider === "telegram"
+                ? "Personal Telegram account"
+                : "Token permissions apply"}
+          </p>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          {!loaded ? (
-            <p className="p-6 text-sm text-muted-foreground">
-              {error
-                ? "Conversations could not be loaded. Use Refresh to retry."
-                : "Loading conversations…"}
-            </p>
-          ) : !conversation ? (
-            <p className="p-6 text-sm text-muted-foreground">
-              Choose a channel or direct message to load its history. Activity notifications and
-              reactions are not available through these connections.
-            </p>
-          ) : (
-            <>
-              {messageCursor && view !== "later" && (
+      }
+    >
+      <div ref={root} className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
+        <section aria-label="Chat history" className="flex min-w-0 flex-1 flex-col">
+          <div className="space-y-3 border-b border-border p-4">
+            <div className="flex items-start justify-between gap-3">
+              <Button
+                size="icon-sm"
+                variant="ghost"
+                aria-label="Refresh conversations and history"
+                disabled={busy}
+                onClick={() =>
+                  void (async () => {
+                    await loadConversations();
+                    if (conversation) await loadMessages(conversation);
+                  })()
+                }
+              >
+                <RefreshCwIcon />
+              </Button>
+            </div>
+            <div className="flex items-center gap-2">
+              <SearchIcon className="size-4 shrink-0 text-muted-foreground" />
+              <Input
+                ref={searchInput}
+                aria-label="Search loaded conversations"
+                placeholder="Search loaded conversations · Ctrl K"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+              />
+            </div>
+            <label className="block lg:hidden">
+              <span className="sr-only">Conversation</span>
+              <select
+                className="w-full rounded-md border border-input bg-background px-2 py-1 text-sm"
+                disabled={busy}
+                value={conversation?.id ?? ""}
+                onChange={(event) => {
+                  const selected = conversations.find((item) => item.id === event.target.value);
+                  if (selected) void openConversation(selected);
+                }}
+              >
+                <option value="">Choose a conversation</option>
+                {visibleConversations.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.title}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {conversationCursor && (
+              <div className="lg:hidden">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => void loadConversations(conversationCursor)}
+                >
+                  Load more conversations
+                </Button>
+              </div>
+            )}
+            <RequestState busy={busy} error={error} />
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            {!loaded ? (
+              <p className="p-6 text-sm text-muted-foreground">
+                {error
+                  ? "Conversations could not be loaded. Use Refresh to retry."
+                  : "Loading conversations…"}
+              </p>
+            ) : !conversation ? (
+              <p className="p-6 text-sm text-muted-foreground">
+                Choose a channel or direct message to load its history. Activity notifications and
+                reactions are not available through these connections.
+              </p>
+            ) : (
+              <>
+                {messageCursor && view !== "later" && (
+                  <div className="p-4">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={busy}
+                      onClick={() => void loadMessages(conversation, messageCursor)}
+                    >
+                      Load earlier messages
+                    </Button>
+                  </div>
+                )}
+                {view === "later" && (
+                  <p className="border-b border-border p-4 text-xs text-muted-foreground">
+                    Saved messages from the loaded history of this conversation. References stay on
+                    this device.
+                  </p>
+                )}
+                {visibleMessages.map((message) => renderMessage(message))}
+                {!visibleMessages.length && !busy && (
+                  <p className="p-6 text-sm text-muted-foreground">
+                    No messages in the loaded history for this view.
+                  </p>
+                )}
+                <div ref={historyEnd} />
+              </>
+            )}
+          </div>
+          {conversation && view !== "later" && (
+            <ChatComposer
+              key={JSON.stringify([account.id, conversation.id])}
+              account={account}
+              conversation={conversation}
+              replyTo={replyTo}
+              onCancelReply={() => setReplyTo(undefined)}
+              onAcknowledged={(message) => acknowledge(message)}
+            />
+          )}
+        </section>
+        {thread && conversation && (
+          <aside
+            aria-label="Message thread"
+            className="absolute inset-y-0 right-0 z-30 flex w-full max-w-md flex-col border-l border-border bg-background shadow-xl xl:static xl:w-80 xl:shrink-0 xl:shadow-none"
+          >
+            <div className="flex shrink-0 items-start justify-between gap-3 border-b border-border p-4">
+              <div className="min-w-0">
+                <h2 className="text-sm font-semibold">Thread</h2>
+                <p className="mt-1 truncate text-xs text-muted-foreground">
+                  {conversation.title} · {providerNames[account.provider]}
+                </p>
+              </div>
+              <Button
+                size="icon-sm"
+                variant="ghost"
+                aria-label="Refresh thread"
+                disabled={busy}
+                onClick={() => void loadThread(thread)}
+              >
+                <RefreshCwIcon />
+              </Button>
+              <Button
+                size="icon-sm"
+                variant="ghost"
+                aria-label="Close thread"
+                onClick={() => {
+                  setThread(undefined);
+                  threadDestination.current = undefined;
+                }}
+              >
+                <XIcon />
+              </Button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <div className="px-4 pt-3">
+                <RequestState busy={busy} error={error} />
+              </div>
+              <p className="border-b border-border p-4 text-sm">{thread.text}</p>
+              {threadCursor && (
                 <div className="p-4">
                   <Button
                     variant="outline"
                     size="sm"
                     disabled={busy}
-                    onClick={() => void loadMessages(conversation, messageCursor)}
+                    onClick={() => void loadThread(thread, threadCursor)}
                   >
-                    Load earlier messages
+                    Load more replies
                   </Button>
                 </div>
               )}
-              {view === "later" && (
-                <p className="border-b border-border p-4 text-xs text-muted-foreground">
-                  Saved messages from the loaded history of this conversation. References stay on
-                  this device.
-                </p>
-              )}
-              {visibleMessages.map((message) => renderMessage(message))}
-              {!visibleMessages.length && !busy && (
-                <p className="p-6 text-sm text-muted-foreground">
-                  No messages in the loaded history for this view.
-                </p>
-              )}
-              <div ref={historyEnd} />
-            </>
-          )}
-        </div>
-        {conversation && view !== "later" && (
-          <ChatComposer
-            key={JSON.stringify([account.id, conversation.id])}
-            account={account}
-            conversation={conversation}
-            replyTo={replyTo}
-            onCancelReply={() => setReplyTo(undefined)}
-            onAcknowledged={(message) => acknowledge(message)}
-          />
-        )}
-      </section>
-      {thread && conversation && (
-        <aside
-          aria-label="Message thread"
-          className="absolute inset-y-0 right-0 z-30 flex w-full max-w-md flex-col border-l border-border bg-background shadow-xl xl:static xl:w-80 xl:shrink-0 xl:shadow-none"
-        >
-          <div className="flex shrink-0 items-start justify-between gap-3 border-b border-border p-4">
-            <div className="min-w-0">
-              <h2 className="text-sm font-semibold">Thread</h2>
-              <p className="mt-1 truncate text-xs text-muted-foreground">
-                {conversation.title} · {providerNames[account.provider]}
+              {threadMessages
+                .filter((message) => message.id !== thread.id)
+                .map((message) => renderMessage(message, true))}
+              <div ref={threadEnd} />
+            </div>
+            {threadConversation ? (
+              <ChatComposer
+                key={JSON.stringify([
+                  account.id,
+                  threadConversation.id,
+                  thread.threadId ?? thread.id,
+                ])}
+                account={account}
+                conversation={threadConversation}
+                replyTo={thread}
+                nativeThread
+                onAcknowledged={(message) => acknowledge(message, true)}
+              />
+            ) : (
+              <p className="border-t border-border p-4 text-xs text-muted-foreground">
+                Load the native Discord thread in the conversation list before sending. Sending
+                permission is checked on that thread.
               </p>
-            </div>
-            <Button
-              size="icon-sm"
-              variant="ghost"
-              aria-label="Refresh thread"
-              disabled={busy}
-              onClick={() => void loadThread(thread)}
-            >
-              <RefreshCwIcon />
-            </Button>
-            <Button
-              size="icon-sm"
-              variant="ghost"
-              aria-label="Close thread"
-              onClick={() => {
-                setThread(undefined);
-                threadDestination.current = undefined;
-              }}
-            >
-              <XIcon />
-            </Button>
-          </div>
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            <div className="px-4 pt-3">
-              <RequestState busy={busy} error={error} />
-            </div>
-            <p className="border-b border-border p-4 text-sm">{thread.text}</p>
-            {threadCursor && (
-              <div className="p-4">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={busy}
-                  onClick={() => void loadThread(thread, threadCursor)}
-                >
-                  Load more replies
-                </Button>
-              </div>
             )}
-            {threadMessages
-              .filter((message) => message.id !== thread.id)
-              .map((message) => renderMessage(message, true))}
-            <div ref={threadEnd} />
-          </div>
-          {threadConversation ? (
-            <ChatComposer
-              key={JSON.stringify([
-                account.id,
-                threadConversation.id,
-                thread.threadId ?? thread.id,
-              ])}
-              account={account}
-              conversation={threadConversation}
-              replyTo={thread}
-              nativeThread
-              onAcknowledged={(message) => acknowledge(message, true)}
-            />
-          ) : (
-            <p className="border-t border-border p-4 text-xs text-muted-foreground">
-              Load the native Discord thread in the conversation list before sending. Sending
-              permission is checked on that thread.
-            </p>
-          )}
-        </aside>
-      )}
-    </div>
+          </aside>
+        )}
+      </div>
+    </WorkspaceEngagement>
   );
 }

@@ -1,11 +1,11 @@
 ﻿import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useSearch } from "@tanstack/react-router";
-import type { ChatAccount } from "@t3tools/contracts";
+import { EnvironmentId, type ChatAccount } from "@t3tools/contracts";
 import { PlusIcon, RefreshCwIcon, UnplugIcon } from "lucide-react";
 import { Button } from "../ui/button";
-import { SidebarInset } from "../ui/sidebar";
-import { COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS } from "../../workspaceTitlebar";
-import { cn } from "../../lib/utils";
+import { WorkspaceEngagement } from "./WorkspaceEngagement";
+import { useMailCapabilities } from "./mail/useMailCapabilities";
+import { useWorkspaceHeaderModel } from "./useWorkspaceHeaderModel";
 import { RequestState } from "./office/shared";
 import { useCommunicationsRequest } from "./useCommunicationsRequest";
 import { ChatCommunicationsWorkspace } from "./ChatCommunicationsWorkspace";
@@ -66,81 +66,81 @@ function DesktopCommunicationsWorkspace() {
     if (!response) return;
     await refresh();
   }
-  return (
-    <SidebarInset className="min-w-0 overflow-hidden">
-      <header
-        className={cn(
-          "flex h-[var(--workspace-topbar-height)] shrink-0 items-center gap-3 border-b border-border px-4",
-          COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS,
-        )}
+  const search = useSearch({ strict: false });
+  const { environmentId } = useMailCapabilities(
+    search.environment ? EnvironmentId.make(search.environment) : undefined,
+  );
+  const header = useWorkspaceHeaderModel(environmentId, "Communications", "Communications");
+  const [resourcesOpen, setResourcesOpen] = useState(false);
+  const controls = (
+    <div className="flex flex-wrap items-center gap-2 border-b border-border p-2">
+      <label className="min-w-0 flex-1">
+        <span className="sr-only">Connected communications account</span>
+        <select
+          aria-label="Connected communications account"
+          value={selectedKey}
+          disabled={busy}
+          onChange={(event) => setSelectedKey(event.target.value)}
+          className="max-w-full rounded-md border border-input bg-background px-2 py-1 text-sm"
+        >
+          <option value="">Choose an account</option>
+          {chatAccounts.map((account) => (
+            <option
+              key={key(account.provider, account.id)}
+              value={key(account.provider, account.id)}
+            >
+              {providerNames[account.provider]} · {account.label} · {account.identity}
+            </option>
+          ))}
+        </select>
+      </label>
+      <Button
+        size="icon-sm"
+        variant="ghost"
+        aria-label="Refresh account list"
+        disabled={busy || !available}
+        onClick={() => void refresh()}
       >
-        <span className="hidden shrink-0 text-sm text-muted-foreground xl:inline">
-          Office / <span className="text-foreground">Communications</span>
-        </span>
-        <label className="min-w-0 flex-1">
-          <span className="sr-only">Connected communications account</span>
-          <select
-            aria-label="Connected communications account"
-            value={selectedKey}
-            disabled={busy}
-            onChange={(event) => setSelectedKey(event.target.value)}
-            className="max-w-full rounded-md border border-input bg-background px-2 py-1 text-sm"
-          >
-            <option value="">Choose an account</option>
-            {chatAccounts.map((account) => (
-              <option
-                key={key(account.provider, account.id)}
-                value={key(account.provider, account.id)}
-              >
-                {providerNames[account.provider]} · {account.label} · {account.identity}
-              </option>
-            ))}
-          </select>
-        </label>
+        <RefreshCwIcon />
+      </Button>
+      {selectedChat && (
         <Button
           size="icon-sm"
           variant="ghost"
-          aria-label="Refresh account list"
-          disabled={busy || !available}
-          onClick={() => void refresh()}
+          aria-label={`Disconnect ${selectedChat.label}`}
+          disabled={busy}
+          onClick={() => void disconnect()}
         >
-          <RefreshCwIcon />
+          <UnplugIcon />
         </Button>
-        {selectedChat && (
-          <Button
-            size="icon-sm"
-            variant="ghost"
-            aria-label={`Disconnect ${selectedChat.label}`}
-            disabled={busy}
-            onClick={() => void disconnect()}
-          >
-            <UnplugIcon />
-          </Button>
-        )}
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={!available}
-          onClick={() => setConnectOpen(true)}
-        >
-          <PlusIcon />
-          <span className="hidden sm:inline">Connect chat</span>
-        </Button>
-        <Link
-          to="/workspace"
-          search={{
-            space: "office",
-            officeView: "communications",
-            communicationProvider: "telegram",
-          }}
-          className="shrink-0 text-sm underline underline-offset-4"
-        >
-          Telegram bots
-        </Link>
-        <Link to="/settings/email" className="shrink-0 text-xs underline underline-offset-4">
-          Email accounts
-        </Link>
-      </header>
+      )}
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={!available}
+        onClick={() => setConnectOpen(true)}
+      >
+        <PlusIcon />
+        <span className="hidden sm:inline">Connect chat</span>
+      </Button>
+      <Link
+        to="/workspace"
+        search={{
+          space: "office",
+          officeView: "communications",
+          communicationProvider: "telegram",
+        }}
+        className="shrink-0 text-sm underline underline-offset-4"
+      >
+        Telegram bots
+      </Link>
+      <Link to="/settings/email" className="shrink-0 text-xs underline underline-offset-4">
+        Email accounts
+      </Link>
+    </div>
+  );
+  const content = (
+    <>
       {error && (
         <div className="border-b border-border px-4 py-2">
           <RequestState busy={busy} error={error} />
@@ -161,6 +161,8 @@ function DesktopCommunicationsWorkspace() {
         <ChatCommunicationsWorkspace
           key={JSON.stringify([selectedChat.provider, selectedChat.id])}
           account={selectedChat}
+          environmentId={environmentId ?? EnvironmentId.make("unavailable")}
+          controls={controls}
         />
       ) : (
         <main className="flex-1 overflow-y-auto p-6">
@@ -192,6 +194,22 @@ function DesktopCommunicationsWorkspace() {
           }}
         />
       )}
-    </SidebarInset>
+    </>
+  );
+  return selectedChat && selectedChat.provider !== "telegram" ? (
+    content
+  ) : (
+    <WorkspaceEngagement
+      environmentId={environmentId ?? EnvironmentId.make("unavailable")}
+      space="communications"
+      layout="full"
+      header={header}
+      resourcesOpen={resourcesOpen}
+      onResourcesChange={setResourcesOpen}
+      resources={null}
+    >
+      {controls}
+      {content}
+    </WorkspaceEngagement>
   );
 }

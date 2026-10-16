@@ -55,6 +55,7 @@ vi.mock("../../state/session", () => ({
 vi.mock("./useWorkspaceItemOpener", () => ({ useWorkspaceItemOpener: () => vi.fn() }));
 vi.mock("../ui/sidebar", () => ({ SidebarInset: "div" }));
 vi.mock("../ui/button", () => ({ Button: "button" }));
+vi.mock("../../state/environments", () => ({ useEnvironment: () => ({ label: "Remote" }) }));
 vi.mock("./WorkspaceEngagement", () => ({
   WorkspaceEngagement: ({ list, children }: { list: ReactNode; children: ReactNode }) => (
     <div>

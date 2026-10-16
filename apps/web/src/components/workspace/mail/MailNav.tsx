@@ -29,7 +29,7 @@ export function MailNav() {
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
         render={<Button size="xs" variant="ghost" />}
-        aria-label="Email accounts and folders"
+        aria-label={`Email folder: ${mailFolderLabel(search.folder ?? "INBOX")}`}
       >
         <InboxIcon className="size-3" />
         {mailFolderLabel(search.folder ?? "INBOX")}

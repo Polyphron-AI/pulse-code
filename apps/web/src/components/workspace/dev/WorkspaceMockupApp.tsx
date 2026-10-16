@@ -10,6 +10,8 @@ import { createContext, useContext, useLayoutEffect, useState } from "react";
 import { WorkspaceNavigation } from "../WorkspaceNavigationView";
 import { WorkspaceViewRail, workspaceRailItems } from "../WorkspaceViewRail";
 import { WorkspaceShellLayout } from "../WorkspaceShellLayout";
+import { WorkspaceEngagement } from "../WorkspaceEngagement";
+import type { WorkspaceHeaderModel } from "../WorkspaceHeader";
 import type { WorkspaceMockupModule, WorkspaceMockupSession } from "./workspaceMockupFixtures";
 
 export const WorkspaceMockupRenderContext = createContext<{
@@ -26,14 +28,50 @@ function FixtureReport() {
   useLayoutEffect(() => {
     runtime?.onCommit({
       shellReady: false,
-      incompleteRegions: ["shell.engagement", "shell.resources", "shell.footer"],
+      incompleteRegions: ["shell.resources", "shell.footer"],
     });
   }, [runtime]);
+  const [resourcesOpen, setResourcesOpen] = useState(true);
   if (!runtime) return null;
   const { session } = runtime;
   const recordNavigation = (value: string) => {
     void session.record("navigate", undefined, value);
   };
+  const title = {
+    mail: "Inbox",
+    communications: "# marketing",
+    tasks: "Tasks",
+    projects: "Projects",
+    meetings: "Meetings",
+    calendar: "Calendar",
+  }[session.recipe.space];
+  const subtitle = {
+    mail: "maya@synkek.com",
+    communications: "SynKEK · Slack · 8 members",
+    tasks: "A clear plan for everything that comes next.",
+    projects: "SynKEK · Brand & growth",
+    meetings: "SynKEK · Brand & growth",
+    calendar: "SynKEK · Brand & growth",
+  }[session.recipe.space];
+  const owner = session.seed.people.find((person) => person.id === session.seed.ownerDisplayId)!;
+  const header: WorkspaceHeaderModel = {
+    title,
+    subtitle,
+    environmentLabel: "SynKEK workspace",
+    spaceLabel:
+      session.recipe.space === "mail"
+        ? "Email"
+        : session.recipe.space.charAt(0).toUpperCase() + session.recipe.space.slice(1),
+    sample: true,
+    owner: { name: owner.name, initials: owner.initials },
+  };
+  const center = runtime.modules.find((module) => module.area === session.recipe.centerArea)
+    ?.center ?? (
+    <main aria-label="Workspace fixture readiness" className="p-4">
+      <h2>Recipe {session.id}</h2>
+      <p>Module body pending its owning wave.</p>
+    </main>
+  );
   return (
     <WorkspaceShellLayout
       navigation={
@@ -49,11 +87,8 @@ function FixtureReport() {
           onToggleSidebar={() => recordNavigation("sidebar:toggle")}
         />
       }
-      breadcrumb={
-        <div className="flex h-[26px] shrink-0 items-center justify-end border-b border-border px-3 text-4xs text-primary">
-          {session.seed.sampleCopy.marker}
-        </div>
-      }
+      header={header}
+      onOpenWorkspace={() => recordNavigation("space:projects")}
       rail={
         <WorkspaceViewRail
           items={workspaceRailItems[session.recipe.space]}
@@ -62,22 +97,24 @@ function FixtureReport() {
         />
       }
       engagement={
-        <main
-          aria-label="Workspace fixture readiness"
-          className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4"
+        <WorkspaceEngagement
+          environmentId={session.environmentId}
+          space={session.recipe.space}
+          header={header}
+          storage={session.storage}
+          resourcesOpen={resourcesOpen}
+          onResourcesChange={setResourcesOpen}
+          resources={<p className="p-3 text-xs">Resources pending W4-T4a.</p>}
+          {...(session.recipe.space === "mail" || session.recipe.space === "communications"
+            ? {
+                layout: "split" as const,
+                selected: true,
+                list: <p className="p-3 text-xs">List pending its owning wave.</p>,
+              }
+            : { layout: "full" as const })}
         >
-          <h1>Recipe {session.id}</h1>
-          <p>{session.recipe.route}</p>
-          <p>Navigation ready. Engagement, resources and footer are pending W4-T3 through W4-T5.</p>
-          <ul>
-            {runtime.modules.map((module) => (
-              <li key={module.area}>
-                {module.area}:{" "}
-                {module.readyRegions.length ? module.readyRegions.join(", ") : "pending"}
-              </li>
-            ))}
-          </ul>
-        </main>
+          {center}
+        </WorkspaceEngagement>
       }
     />
   );

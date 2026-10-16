@@ -16,7 +16,6 @@ import { useCallback, useState, type ReactNode } from "react";
 import { useWorkspaceItemOpener, parseMailLocation } from "../useWorkspaceItemOpener";
 import { WorkspaceEngagement } from "../WorkspaceEngagement";
 import { LinkedSection } from "./LinkedSection";
-import { cn } from "../../../lib/utils";
 import { readLocalApi } from "../../../localApi";
 import { workspaceLinks } from "../../../state/workspaceLinks";
 import { pulseMailMessage } from "../../../mail/mailReadState";
@@ -24,11 +23,9 @@ import { pulseMailAccounts } from "../../../mail/mailState";
 import { useAllEnvironmentProjectSnapshotsReady, useProjects } from "../../../state/entities";
 import { useEnvironmentQuery } from "../../../state/query";
 import { buildThreadRouteParams } from "../../../threadRoutes";
-import {
-  COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS,
-  COMPACT_WORKSPACE_HEADER_INSET_CLASS,
-} from "../../../workspaceTitlebar";
-import { SidebarInset } from "../../ui/sidebar";
+import { MailNav } from "./MailNav";
+import { useWorkspaceHeaderModel } from "../useWorkspaceHeaderModel";
+import type { WorkspaceHeaderModel } from "../WorkspaceHeader";
 import { MailMessageList } from "./MailMessageList";
 import { MailMessageView } from "./MailMessageView";
 import { MailError, MailNotice } from "./MailNotice";
@@ -74,12 +71,14 @@ export function MailSpace() {
           (candidate) =>
             candidate.environmentId === environmentId && candidate.id === search.project,
         );
-  const heading =
-    search.project !== undefined
-      ? `Mail / ${project?.title ?? "Project"}`
-      : account === undefined
-        ? "Mail"
-        : `Mail / ${mailFolderLabel(folder)}`;
+  const [resourcesOpen, setResourcesOpen] = useState(false);
+  const header = useWorkspaceHeaderModel(
+    environmentId,
+    search.project !== undefined ? (project?.title ?? "Project mail") : mailFolderLabel(folder),
+    "Email",
+    account?.address,
+  );
+  const shell = { header, resourcesOpen, onResourcesChange: setResourcesOpen };
 
   const content = (): ReactNode => {
     if (environmentId === null) return <MailNotice>No environment is connected.</MailNotice>;
@@ -98,6 +97,7 @@ export function MailSpace() {
         <MailPanes
           key={`project\n${project.id}`}
           environmentId={environmentId}
+          {...shell}
           source={{ type: "project", projectId: project.id }}
         />
       );
@@ -123,34 +123,50 @@ export function MailSpace() {
       <MailPanes
         key={`${account.id}\n${folder}\n${search.item ?? ""}`}
         environmentId={environmentId}
+        {...shell}
         source={{ type: "folder", accountId: account.id, folder }}
         initialItem={parseMailLocation(search.item)}
       />
     );
   };
 
+  const body = content();
+  const hasPanes =
+    ready &&
+    mailRead &&
+    environmentId !== null &&
+    (search.project !== undefined
+      ? linksAvailable && project !== undefined
+      : accounts.data !== null && account !== undefined);
   return (
-    <SidebarInset className="min-w-0">
-      <header
-        className={cn(
-          "flex h-[var(--workspace-topbar-height)] shrink-0 items-center border-b border-border px-4 text-sm text-muted-foreground",
-          COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS,
-          COMPACT_WORKSPACE_HEADER_INSET_CLASS,
-        )}
-      >
-        <span className="truncate">{heading}</span>
-      </header>
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       {accounts.data !== null && accounts.error !== null ? (
         <MailError className="p-5 sm:p-8" message={accounts.error} onRetry={accounts.refresh} />
       ) : null}
-      {content()}
-    </SidebarInset>
+      {hasPanes ? (
+        body
+      ) : (
+        <WorkspaceEngagement
+          environmentId={environmentId ?? EnvironmentId.make("unavailable")}
+          space="mail"
+          layout="full"
+          {...shell}
+          resources={null}
+        >
+          <MailNav />
+          {body}
+        </WorkspaceEngagement>
+      )}
+    </div>
   );
 }
 
 interface MailPanesProps {
   readonly environmentId: EnvironmentId;
   readonly source: MailSource;
+  readonly header: WorkspaceHeaderModel;
+  readonly resourcesOpen: boolean;
+  readonly onResourcesChange: (open: boolean) => void;
   readonly initialItem?: MailItemRef | null;
 }
 
@@ -215,10 +231,20 @@ function MailPanes(props: MailPanesProps) {
   return (
     <WorkspaceEngagement
       space="mail"
+      environmentId={props.environmentId}
+      layout="split"
+      header={props.header}
+      resourcesOpen={props.resourcesOpen}
+      onResourcesChange={props.onResourcesChange}
+      onBack={() => {
+        setSelected(null);
+        setConversation(null);
+      }}
       selected={selected !== null}
       list={
         props.source.type === "folder" ? (
           <div>
+            <MailNav />
             <div
               className="flex min-w-0 flex-wrap gap-1 border-b border-border p-2"
               role="group"
@@ -284,7 +310,7 @@ function MailPanes(props: MailPanesProps) {
           />
         )
       }
-      linked={
+      resources={
         selected === null || !linksAvailable ? null : conversation !== null ? (
           <ConversationLinked
             environmentId={props.environmentId}

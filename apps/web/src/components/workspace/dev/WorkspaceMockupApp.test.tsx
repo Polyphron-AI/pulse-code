@@ -16,6 +16,11 @@ afterEach(async () => {
 
 it("mounts the shared shell and recipe navigation for all eight samples without marking later regions ready", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  (
+    window as unknown as {
+      happyDOM: { setWindowSize: (size: { width: number; height: number }) => void };
+    }
+  ).happyDOM.setWindowSize({ width: 1280, height: 800 });
   node = document.createElement("div");
   document.body.append(node);
   root = createRoot(node);
@@ -55,9 +60,13 @@ it("mounts the shared shell and recipe navigation for all eight samples without 
         calendar: "Agenda",
       }[recipe.space],
     );
+    expect(node.querySelectorAll("[data-workspace-engagement-header]")).toHaveLength(1);
+    expect(node.querySelectorAll('[aria-label="Resize item list"]')).toHaveLength(
+      recipe.space === "mail" || recipe.space === "communications" ? 1 : 0,
+    );
     expect(onCommit).toHaveBeenLastCalledWith({
       shellReady: false,
-      incompleteRegions: ["shell.engagement", "shell.resources", "shell.footer"],
+      incompleteRegions: ["shell.resources", "shell.footer"],
     });
     await act(async () => getByRole(node, "link", { name: "Meetings" }).click());
     await session.settled();

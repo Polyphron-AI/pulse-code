@@ -11,10 +11,13 @@ import { getLocalStorageItem, setLocalStorageItem } from "./useLocalStorage";
 import { useResizeDrag } from "./useResizeDrag";
 
 const WidthSchema = Schema.Finite;
+const decodeWidth = Schema.decodeSync(Schema.fromJsonString(WidthSchema));
+const encodeWidth = Schema.encodeSync(Schema.fromJsonString(WidthSchema));
 
 export interface UseResizableWidthOptions {
   /** localStorage key the persisted width is stored under. */
   readonly storageKey: string;
+  readonly storage?: Pick<Storage, "getItem" | "setItem">;
   readonly defaultWidth: number;
   readonly minWidth: number;
   readonly maxWidth: number;
@@ -37,7 +40,7 @@ export interface ResizableWidthHandlers {
 /**
  * Width state for a side-anchored panel resized via a drag handle on the
  * specified edge. Width is read on mount or storage-key changes and persisted on
- * drag-end (not on every rAF tick — would otherwise be ~60 writes/sec).
+ * drag-end to avoid roughly 60 writes per second during a drag.
  *
  * The hook updates an internal `width` state during drag (so the panel
  * follows the cursor live) and only commits to localStorage when the user
@@ -48,7 +51,7 @@ export function useResizableWidth(options: UseResizableWidthOptions): {
   readonly setWidth: (value: number) => void;
   readonly handlers: ResizableWidthHandlers;
 } {
-  const { storageKey, defaultWidth, minWidth, maxWidth, edge } = options;
+  const { storageKey, defaultWidth, minWidth, maxWidth, edge, storage } = options;
 
   const clamp = useCallback(
     (value: number): number => {
@@ -60,26 +63,41 @@ export function useResizableWidth(options: UseResizableWidthOptions): {
 
   // No cross-tab subscription: panel width is per-window state.
   const readWidth = () => {
-    if (typeof window === "undefined") return null;
+    if (!storage && typeof window === "undefined") return null;
     try {
-      const stored = getLocalStorageItem(storageKey, WidthSchema);
+      const raw = storage?.getItem(storageKey);
+      const stored = storage
+        ? raw == null
+          ? null
+          : decodeWidth(raw)
+        : getLocalStorageItem(storageKey, WidthSchema);
       return stored === null ? null : clamp(stored);
     } catch (error) {
       console.error("Could not read persisted panel width.", error);
       return null;
     }
   };
-  const [widthState, setWidthState] = useState(() => ({ storageKey, width: readWidth() }));
+  const [widthState, setWidthState] = useState(() => ({
+    storageKey,
+    storage,
+    generation: 0,
+    width: readWidth(),
+  }));
   // Panels stay mounted across threads; restore the destination width before paint.
-  if (widthState.storageKey !== storageKey) {
-    setWidthState({ storageKey, width: readWidth() });
+  if (widthState.storageKey !== storageKey || widthState.storage !== storage) {
+    setWidthState({
+      storageKey,
+      storage,
+      generation: widthState.generation + 1,
+      width: readWidth(),
+    });
   }
 
   const clampedWidth = clamp(widthState.width ?? defaultWidth);
-  const latestOptions = useRef({ clamp, storageKey });
+  const latestOptions = useRef({ clamp, storageKey, storage });
   useLayoutEffect(() => {
-    latestOptions.current = { clamp, storageKey };
-  }, [clamp, storageKey]);
+    latestOptions.current = { clamp, storageKey, storage };
+  }, [clamp, storageKey, storage]);
 
   const handlers = useResizeDrag<HTMLElement>(
     () => ({
@@ -87,19 +105,19 @@ export function useResizableWidth(options: UseResizableWidthOptions): {
       edge,
       resize(value) {
         const nextWidth = latestOptions.current.clamp(value);
-        setWidthState({ storageKey, width: nextWidth });
+        setWidthState((current) => ({ ...current, width: nextWidth }));
         return nextWidth;
       },
       finish(finalWidth) {
         // Commit once at drag-end to avoid 60Hz localStorage writes.
         try {
-          setLocalStorageItem(latestOptions.current.storageKey, finalWidth, WidthSchema);
+          persistWidth(latestOptions.current.storageKey, finalWidth, latestOptions.current.storage);
         } catch (error) {
           console.error("Could not persist panel width.", error);
         }
       },
     }),
-    storageKey,
+    `${storageKey}:${widthState.generation}`,
   );
 
   return {
@@ -107,8 +125,13 @@ export function useResizableWidth(options: UseResizableWidthOptions): {
     handlers,
     setWidth: (value) => {
       const next = clamp(value);
-      setWidthState({ storageKey, width: next });
-      setLocalStorageItem(storageKey, next, WidthSchema);
+      setWidthState((current) => ({ ...current, width: next }));
+      persistWidth(storageKey, next, storage);
     },
   };
+}
+
+function persistWidth(key: string, width: number, storage?: Pick<Storage, "getItem" | "setItem">) {
+  if (storage) storage.setItem(key, encodeWidth(width));
+  else setLocalStorageItem(key, width, WidthSchema);
 }

@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 
+import { getByRole } from "@testing-library/dom";
 import { act } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vite-plus/test";
 
@@ -36,6 +37,11 @@ function storageSnapshot(storage: Storage) {
 }
 
 beforeEach(() => {
+  (
+    window as unknown as {
+      happyDOM: { setWindowSize: (size: { width: number; height: number }) => void };
+    }
+  ).happyDOM.setWindowSize({ width: 1280, height: 800 });
   vi.resetModules();
   vi.doUnmock("./mailMockupModule");
   vi.doUnmock("./driveMockupModule");
@@ -86,6 +92,7 @@ async function boot(): Promise<Capture> {
 }
 
 it("boots eight isolated memory routes, pins dark and preserves browser storage through resets and teardown", async () => {
+  localStorage.setItem("pulse.workspace.fixture-environment.mail.engagement-width.v2", "450");
   const local = storageSnapshot(localStorage);
   const session = storageSnapshot(sessionStorage);
   const originalHtml = document.documentElement.getAttribute("style");
@@ -121,6 +128,21 @@ it("boots eight isolated memory routes, pins dark and preserves browser storage 
     expect(result.incompleteRegions.length).toBeGreaterThan(0);
     expect(document.body.textContent).toContain("Design preview · sample data");
     expect(document.body.textContent).toContain(`Recipe ${id}`);
+    expect(result.incompleteRegions).not.toContain("shell.engagement");
+    if (id === "01" || id === "02" || id === "05" || id === "06") {
+      const separator = getByRole(document.body, "separator", { name: "Resize item list" });
+      expect(separator.getAttribute("aria-valuenow")).toBe("170");
+      await act(async () =>
+        separator.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })),
+      );
+      expect(separator.getAttribute("aria-valuenow")).toBe("190");
+      await act(async () => capture.reset(id));
+      expect(
+        getByRole(document.body, "separator", { name: "Resize item list" }).getAttribute(
+          "aria-valuenow",
+        ),
+      ).toBe("170");
+    }
   }
   expect(storageSnapshot(localStorage)).toEqual(local);
   expect(storageSnapshot(sessionStorage)).toEqual(session);

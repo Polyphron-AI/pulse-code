@@ -7,11 +7,10 @@ import {
   type WorkspaceItemRef,
 } from "@t3tools/contracts";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
-import { useState } from "react";
-import { COMPACT_WORKSPACE_HEADER_INSET_CLASS } from "../../workspaceTitlebar";
+import { useState, type ReactNode } from "react";
+import { useWorkspaceHeaderModel } from "./useWorkspaceHeaderModel";
 import { telegram } from "../../state/telegram";
 import { useEnvironmentQuery } from "../../state/query";
-import { SidebarInset } from "../ui/sidebar";
 import { Button } from "../ui/button";
 import { WorkspaceEngagement } from "./WorkspaceEngagement";
 import { WorkspaceItemActions, WorkspaceItemMenu } from "./WorkspaceItemActions";
@@ -34,40 +33,55 @@ export function TelegramWorkspace() {
     search.environment ? EnvironmentId.make(search.environment) : undefined,
   );
   const environmentId = capability.environmentId;
-  return (
-    <SidebarInset className="min-w-0">
-      <header
-        className={`flex h-[var(--workspace-topbar-height)] shrink-0 items-center gap-3 border-b border-border px-4 ${COMPACT_WORKSPACE_HEADER_INSET_CLASS}`}
+  const header = useWorkspaceHeaderModel(environmentId, "Telegram", "Communications");
+  const [resourcesOpen, setResourcesOpen] = useState(false);
+  const controls = (
+    <div className="flex flex-wrap gap-3 border-b border-border p-2">
+      <Link to="/settings/integrations" hash="telegram" className="text-sm underline">
+        Manage bots
+      </Link>
+      <Link
+        to="/workspace"
+        search={{ space: "office", officeView: "communications" }}
+        className="text-sm underline"
       >
-        <span className="min-w-0 flex-1 truncate text-sm">Telegram</span>
-        <Link
-          to="/settings/integrations"
-          hash="telegram"
-          className="text-sm underline underline-offset-4"
-        >
-          Manage bots
-        </Link>
-        <Link
-          to="/workspace"
-          search={{ space: "office", officeView: "communications" }}
-          className="text-sm underline underline-offset-4"
-        >
-          Slack and Discord
-        </Link>
-      </header>
-      {!environmentId ? (
-        <MailNotice>No environment is connected.</MailNotice>
-      ) : !capability.ready ? (
-        <MailNotice>Connecting...</MailNotice>
-      ) : !capability.telegramRead ? (
-        <MailNotice>Telegram bots need a newer server.</MailNotice>
-      ) : (
-        <TelegramReader environmentId={environmentId} />
-      )}
-    </SidebarInset>
+        Slack and Discord
+      </Link>
+    </div>
+  );
+  const content = !environmentId ? (
+    <MailNotice>No environment is connected.</MailNotice>
+  ) : !capability.ready ? (
+    <MailNotice>Connecting...</MailNotice>
+  ) : !capability.telegramRead ? (
+    <MailNotice>Telegram bots need a newer server.</MailNotice>
+  ) : (
+    <TelegramReader environmentId={environmentId} controls={controls} />
+  );
+  return environmentId && capability.ready && capability.telegramRead ? (
+    content
+  ) : (
+    <WorkspaceEngagement
+      environmentId={environmentId ?? EnvironmentId.make("unavailable")}
+      space="communications"
+      layout="full"
+      header={header}
+      resourcesOpen={resourcesOpen}
+      onResourcesChange={setResourcesOpen}
+      resources={null}
+    >
+      {controls}
+      {content}
+    </WorkspaceEngagement>
   );
 }
-function TelegramReader({ environmentId }: { environmentId: EnvironmentId }) {
+function TelegramReader({
+  environmentId,
+  controls,
+}: {
+  environmentId: EnvironmentId;
+  controls: ReactNode;
+}) {
   const search = useSearch({ strict: false });
   const navigate = useNavigate();
   const openItem = useWorkspaceItemOpener(environmentId);
@@ -106,26 +120,67 @@ function TelegramReader({ environmentId }: { environmentId: EnvironmentId }) {
       },
     });
   };
+  const [resourcesOpen, setResourcesOpen] = useState(false);
+  const header = useWorkspaceHeaderModel(
+    environmentId,
+    chat?.title ?? "Telegram",
+    "Communications",
+    connection ? `Telegram · @${connection.username}` : undefined,
+  );
+  const fallback = (children: ReactNode) => (
+    <WorkspaceEngagement
+      environmentId={environmentId}
+      space="communications"
+      layout="full"
+      header={header}
+      resourcesOpen={resourcesOpen}
+      onResourcesChange={setResourcesOpen}
+      resources={null}
+    >
+      {controls}
+      {children}
+    </WorkspaceEngagement>
+  );
   if (connections.data === null)
-    return connections.error ? (
-      <MailError message={connections.error} onRetry={connections.refresh} />
-    ) : (
-      <MailNotice>Loading bots...</MailNotice>
+    return fallback(
+      connections.error ? (
+        <MailError message={connections.error} onRetry={connections.refresh} />
+      ) : (
+        <MailNotice>Loading bots...</MailNotice>
+      ),
     );
   if (!connection)
-    return (
+    return fallback(
       <MailNotice>
         {accountId
           ? "This bot connection is unavailable."
           : "Connect a bot in Settings, then pair a chat."}
-      </MailNotice>
+      </MailNotice>,
     );
   return (
     <WorkspaceEngagement
-      space="telegram"
+      space="communications"
+      environmentId={environmentId}
+      layout="split"
+      header={header}
+      resourcesOpen={resourcesOpen}
+      onResourcesChange={setResourcesOpen}
+      onBack={() =>
+        void navigate({
+          to: "/workspace",
+          search: {
+            space: "office",
+            officeView: "communications",
+            communicationProvider: "telegram",
+            environment: environmentId,
+            account: connection.id,
+          },
+        })
+      }
       selected={item !== null}
       list={
         <div>
+          {controls}
           <label className="flex flex-col gap-1 border-b border-border p-2 text-xs text-muted-foreground">
             Bot
             <select
@@ -208,7 +263,7 @@ function TelegramReader({ environmentId }: { environmentId: EnvironmentId }) {
           ) : null}
         </div>
       }
-      linked={
+      resources={
         item ? (
           <LinkedSection
             key={search.item}
@@ -225,7 +280,6 @@ function TelegramReader({ environmentId }: { environmentId: EnvironmentId }) {
       ) : (
         <div>
           <header className="space-y-3 border-b border-border p-4">
-            <h1 className="text-lg font-semibold">{chat?.title ?? title}</h1>
             <p className="text-xs text-muted-foreground">
               Received messages only. Media contents are not downloaded. Chat text cannot issue
               agent commands.

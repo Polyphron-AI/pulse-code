@@ -5,7 +5,12 @@ import { EnvironmentId } from "@t3tools/contracts";
 import { MailSpace } from "./MailSpace";
 import { ProjectsSpace } from "../ProjectsSpace";
 import { LinkedSection } from "./LinkedSection";
-const mocks = vi.hoisted(() => ({ navigate: vi.fn(), search: {} as Record<string, string> }));
+import { WorkspaceHeader, type WorkspaceHeaderModel } from "../WorkspaceHeader";
+const mocks = vi.hoisted(() => ({
+  navigate: vi.fn(),
+  environment: "remote-env",
+  search: {} as Record<string, string>,
+}));
 const task = { type: "task" as const, taskId: "wskt_00000000-0000-0000-0000-000000000001" };
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => mocks.navigate,
@@ -15,7 +20,7 @@ vi.mock("@tanstack/react-router", () => ({
 vi.mock("../../../hooks/useLocalStorage", () => ({ useLocalStorage: () => ["messages", vi.fn()] }));
 vi.mock("./useMailCapabilities", () => ({
   useMailCapabilities: () => ({
-    environmentId: EnvironmentId.make("remote-env"),
+    environmentId: EnvironmentId.make(mocks.environment),
     ready: true,
     mailRead: true,
     workspaceLinks: true,
@@ -27,6 +32,9 @@ vi.mock("../../../state/entities", () => ({
   useThreadShells: () => [],
   useAllEnvironmentProjectSnapshotsReady: () => true,
 }));
+vi.mock("../../../state/environments", () => ({ useEnvironment: () => ({ label: "Remote" }) }));
+vi.mock("./MailNav", () => ({ MailNav: () => null }));
+vi.mock("../ProjectsNav", () => ({ ProjectsNav: () => null }));
 vi.mock("../../../hooks/useNewProject", () => ({ useNewProject: () => vi.fn() }));
 vi.mock("../../../mail/mailState", () => ({ pulseMailAccounts: () => "accounts" }));
 vi.mock("../../../mail/mailReadState", () => ({ pulseMailMessage: () => "message" }));
@@ -38,7 +46,10 @@ vi.mock("../../../state/query", () => ({
   useEnvironmentQuery: (query: string) => ({
     data:
       query === "accounts"
-        ? [{ id: "account" }]
+        ? [
+            { id: "account", address: "first@example.test" },
+            { id: "second", address: "second@example.test" },
+          ]
         : query === "links"
           ? {
               linked: [
@@ -55,10 +66,22 @@ vi.mock("./useMailLinks", () => ({
   linkErrorText: String,
 }));
 vi.mock("../WorkspaceEngagement", () => ({
-  WorkspaceEngagement: ({ children, linked }: { children: ReactNode; linked: ReactNode }) => (
+  WorkspaceEngagement: ({
+    children,
+    resources,
+    header,
+    list,
+  }: {
+    children: ReactNode;
+    resources: ReactNode;
+    header: WorkspaceHeaderModel;
+    list?: ReactNode;
+  }) => (
     <>
+      <WorkspaceHeader model={header} resourcesOpen={false} onResources={() => {}} />
+      {list}
       <div>{children}</div>
-      <aside>{linked}</aside>
+      <aside>{resources}</aside>
     </>
   ),
 }));
@@ -89,6 +112,7 @@ let renderer: ReactTestRenderer | undefined;
 afterEach(async () => {
   if (renderer) await act(() => renderer?.unmount());
   renderer = undefined;
+  mocks.environment = "remote-env";
   vi.clearAllMocks();
   vi.unstubAllGlobals();
 });
@@ -148,4 +172,24 @@ it("keeps Projects context linking scoped to project items", async () => {
   expect(
     renderer!.root.findByProps({ "aria-label": "Find an item to link" }).props.placeholder,
   ).toBe("Find a project");
+});
+
+it("updates the shared Mail header on account and folder changes while retaining Resources", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  mocks.search = { environment: "remote-env", account: "account" };
+  await act(() => {
+    renderer = create(<MailSpace />);
+  });
+  expect(renderer!.root.findByType("h1").children.join("")).toBe("Inbox");
+  expect(JSON.stringify(renderer!.toJSON())).toContain("first@example.test");
+  mocks.search = { environment: "remote-env", account: "second", folder: "Sent" };
+  await act(() => renderer!.update(<MailSpace />));
+  expect(renderer!.root.findByType("h1").children.join("")).toBe("Sent");
+  expect(JSON.stringify(renderer!.toJSON())).toContain("second@example.test");
+  expect(JSON.stringify(renderer!.toJSON())).not.toContain("first@example.test");
+  expect(
+    renderer!.root
+      .findAllByType("button")
+      .filter((button) => button.children.includes("Resources")),
+  ).toHaveLength(1);
 });

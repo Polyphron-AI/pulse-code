@@ -16,10 +16,15 @@ import { afterEach, beforeEach, expect, it, vi } from "vite-plus/test";
 import { AppSidebarLayout } from "../AppSidebarLayout";
 import { parseWorkspaceSearch } from "./workspaceNavigation";
 import * as NodeFS from "node:fs";
+import * as NodeURL from "node:url";
 
-const shellCss = NodeFS.readFileSync("src/components/workspace/workspaceShell.css", "utf8");
+const cssFile = "./workspaceShell.css";
+const shellCss = NodeFS.readFileSync(new NodeURL.URL(cssFile, import.meta.url), "utf8");
+const indexCssFile = "../../index.css";
+const indexCss = NodeFS.readFileSync(new NodeURL.URL(indexCssFile, import.meta.url), "utf8");
 
 const state = vi.hoisted(() => ({
+  electron: true,
   environment: "live-a" as string | null,
   mobile: false,
   artwork: true,
@@ -31,7 +36,14 @@ const state = vi.hoisted(() => ({
 vi.mock("@effect/atom-react", () => ({ useAtomValue: () => [] }));
 vi.mock("../../state/server", () => ({ primaryServerKeybindingsAtom: {} }));
 vi.mock("../../state/entities", () => ({ useProjects: () => [] }));
-vi.mock("../../env", () => ({ isElectron: true }));
+vi.mock("../../env", () => ({
+  get isElectron() {
+    return state.electron;
+  },
+}));
+vi.mock("../../state/environments", () => ({
+  useEnvironment: (id: string | null) => (id ? { label: `Environment ${id}` } : null),
+}));
 vi.mock("../../branding", () => ({ APP_BASE_NAME: "Configured app" }));
 vi.mock("../../hooks/useSettings", () => ({
   useEnvironmentIdentificationMode: () => (state.artwork ? "artwork" : "none"),
@@ -98,6 +110,7 @@ afterEach(async () => {
   root = undefined;
   node?.remove();
   delete window.desktopBridge;
+  state.electron = true;
   state.environment = "live-a";
   state.mobile = false;
   state.artwork = true;
@@ -143,7 +156,9 @@ it.each([
     expect(getByRole(node, "link", { name: label }).getAttribute("aria-current")).toBe("page");
     const rail = getByRole(node, "navigation", { name: "Workspace views" });
     expect(getAllByRole(rail, "button").map((button) => button.textContent)).toEqual(views);
-    expect(getByRole(node, role, { name: control })).toBeDefined();
+    const crumb = getByRole(node, "navigation", { name: "Workspace breadcrumb" });
+    expect(crumb.textContent).toBe(`Environment live-a/${label}`);
+    expect(queryByRole(node, role, { name: control })).toBeNull();
     expect(
       queryByRole(node, space === "mail" ? "combobox" : "button", {
         name: space === "mail" ? "Choose project" : "Email accounts and folders",
@@ -245,4 +260,37 @@ it("shares the macOS traffic-light inset and releases it in fullscreen", async (
   );
   await act(async () => state.fullscreenChanged?.(true));
   expect(wrapper.style.getPropertyValue("--workspace-controls-left")).toBe("");
+});
+
+it("renders truthful Office and disconnected breadcrumbs", async () => {
+  const router = await mount("/workspace?space=office&environment=live-a");
+  const crumb = getByRole(node, "navigation", { name: "Workspace breadcrumb" });
+  expect(crumb.textContent).toContain("Local Office tools");
+  expect(crumb.textContent).toContain("Environment live-a");
+  state.environment = null;
+  await act(async () => router.navigate({ href: "/workspace?space=projects" }));
+  expect(crumb.textContent).toContain("No environment connected");
+});
+it("uses the Code drag and Windows overlay reservation and clears the collapsed toggle", async () => {
+  vi.spyOn(navigator, "platform", "get").mockReturnValue("Win32");
+  await mount("/workspace?space=mail&environment=live-a");
+  const strip = node.querySelector<HTMLElement>("[data-workspace-breadcrumb-strip]")!;
+  expect(strip.classList.contains("drag-region")).toBe(true);
+  expect(strip.classList.contains("wco:pr-(--workspace-native-controls-inset)")).toBe(true);
+  expect(strip.classList.contains("pr-3.25")).toBe(true);
+  expect(indexCss).toMatch(/\.drag-region button,[\s\S]*?-webkit-app-region: no-drag/);
+  await act(async () => getByRole(node, "button", { name: "Toggle main sidebar" }).click());
+  expect(shellCss).toMatch(
+    /\[data-workspace-sidebar="closed"\] \[data-workspace-breadcrumb-strip\]/,
+  );
+  expect(shellCss).toMatch(/\[data-workspace-sidebar="closed"\] \[data-workspace-view-rail\]/);
+});
+it("renders a plain web breadcrumb without native controls or a sample marker", async () => {
+  state.electron = false;
+  await mount("/workspace?space=calendar&environment=live-a");
+  const strip = node.querySelector<HTMLElement>("[data-workspace-breadcrumb-strip]")!;
+  expect(strip.classList.contains("drag-region")).toBe(false);
+  expect(strip.className).not.toContain("workspace-native-controls-inset");
+  expect(strip.textContent).toBe("Environment live-a/Calendar");
+  expect(node.querySelector("[data-workspace-sample-marker]")).toBeNull();
 });

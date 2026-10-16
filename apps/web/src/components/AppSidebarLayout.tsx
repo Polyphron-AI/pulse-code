@@ -45,8 +45,7 @@ import { WorkspaceNavigation } from "./workspace/WorkspaceNavigationView";
 import { workspaceDestinations } from "./workspace/workspaceNavigation";
 import { WorkspaceShellLayout } from "./workspace/WorkspaceShellLayout";
 import { WorkspaceViewRail, workspaceRailItems } from "./workspace/WorkspaceViewRail";
-import { ProjectsNav } from "./workspace/ProjectsNav";
-import { MailNav } from "./workspace/mail/MailNav";
+import { useWorkspaceHeaderModel } from "./workspace/useWorkspaceHeaderModel";
 import { MainAppLocationTracker } from "./sidebar/mainAppLocation";
 import { useSidebarStageBackdropVariant } from "./SidebarStageBackdrop";
 import { useProjects } from "../state/entities";
@@ -242,6 +241,12 @@ function WorkspaceLiveShell({ children }: { readonly children: ReactNode }) {
     navigation.environmentId && navigation.search?.space !== "office"
       ? (navigation.search?.space ?? "projects")
       : undefined;
+  const spaceLabel = destination
+    ? workspaceDestinations.find(({ id }) => id === destination)!.label
+    : navigation.environmentId
+      ? "Local Office tools"
+      : "Workspace";
+  const header = useWorkspaceHeaderModel(navigation.environmentId, spaceLabel, spaceLabel);
   const content = (
     <WorkspaceNavigation
       {...navigation}
@@ -275,15 +280,9 @@ function WorkspaceLiveShell({ children }: { readonly children: ReactNode }) {
             content
           )
         }
-        breadcrumb={
-          <div className="flex h-[26px] shrink-0 items-center gap-2 border-b border-border px-3">
-            {destination === "mail" ? (
-              <MailNav />
-            ) : destination === "projects" ? (
-              <ProjectsNav />
-            ) : null}
-          </div>
-        }
+        header={header}
+        electron={isElectron}
+        onOpenWorkspace={() => navigation.onNavigate("projects")}
         rail={
           destination ? (
             <WorkspaceViewRail

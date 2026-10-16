@@ -2,19 +2,46 @@ import type { ComponentProps, ReactNode } from "react";
 
 import { cn } from "../lib/utils";
 
-interface WorkspaceBreadcrumbProps {
+interface LegacyWorkspaceBreadcrumbProps {
   readonly ariaLabel: string;
   readonly children: ReactNode;
   readonly className?: string;
 }
 
-export function WorkspaceBreadcrumb({ ariaLabel, children, className }: WorkspaceBreadcrumbProps) {
+export type WorkspaceBreadcrumbProps =
+  | LegacyWorkspaceBreadcrumbProps
+  | {
+      readonly variant: "workspace";
+      readonly environmentLabel: string;
+      readonly spaceLabel: string;
+      readonly sample?: boolean;
+      readonly onOpenWorkspace: () => void;
+    };
+
+export function WorkspaceBreadcrumb(props: WorkspaceBreadcrumbProps) {
+  if ("variant" in props)
+    return (
+      <nav aria-label="Workspace breadcrumb" data-workspace-breadcrumb="">
+        <ol>
+          <li data-workspace-breadcrumb-environment="">
+            <button type="button" onClick={props.onOpenWorkspace}>
+              {props.environmentLabel}
+            </button>
+          </li>
+          <li aria-hidden="true">/</li>
+          <li data-workspace-breadcrumb-space="">
+            <span>{props.spaceLabel}</span>
+          </li>
+        </ol>
+        {props.sample ? (
+          <span data-workspace-sample-marker="">Design preview · sample data</span>
+        ) : null}
+      </nav>
+    );
   return (
-    <nav aria-label={ariaLabel} className={cn("min-w-0", className)}>
-      {/* Keep the flexible container draggable in Electron. Interactive
-          descendants are excluded by the shared .drag-region CSS rules. */}
+    <nav aria-label={props.ariaLabel} className={cn("min-w-0", props.className)}>
       <ol className="m-0 flex min-w-0 list-none items-center gap-2 p-0 text-sm sm:gap-3">
-        {children}
+        {props.children}
       </ol>
     </nav>
   );

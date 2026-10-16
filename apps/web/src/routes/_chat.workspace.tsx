@@ -8,7 +8,11 @@ import {
   parseWorkspaceSearch,
   workspaceDestinations,
 } from "../components/workspace/workspaceNavigation";
-import { SidebarInset } from "../components/ui/sidebar";
+import { EnvironmentId } from "@t3tools/contracts";
+import { useState } from "react";
+import { WorkspaceEngagement } from "../components/workspace/WorkspaceEngagement";
+import { useWorkspaceHeaderModel } from "../components/workspace/useWorkspaceHeaderModel";
+import { useMailCapabilities } from "../components/workspace/mail/useMailCapabilities";
 
 export {
   parseWorkspaceSearch,
@@ -29,14 +33,36 @@ function WorkspaceRouteView() {
   if (search.space === "mail") return <MailSpace />;
   if (search.space === "communications") return <CommunicationsWorkspace />;
   if (search.space === "office") return <OfficeWorkspace />;
+  return <UnavailableWorkspace />;
+}
+
+function UnavailableWorkspace() {
+  const search = Route.useSearch();
+  const { environmentId } = useMailCapabilities(
+    search.environment ? EnvironmentId.make(search.environment) : undefined,
+  );
   const heading = workspaceDestinations.find(({ id }) => id === search.space)?.label;
+  const header = useWorkspaceHeaderModel(
+    environmentId,
+    heading ?? "Workspace",
+    heading ?? "Workspace",
+  );
+  const [resourcesOpen, setResourcesOpen] = useState(false);
   return (
-    <SidebarInset className="min-w-0">
-      <header className="flex h-[var(--workspace-topbar-height)] items-center border-b border-border px-4 text-sm text-muted-foreground">
-        Workspace / {heading}
-      </header>
+    <WorkspaceEngagement
+      environmentId={environmentId ?? EnvironmentId.make("unavailable")}
+      space={
+        search.space === "tasks" || search.space === "meetings" || search.space === "calendar"
+          ? search.space
+          : "projects"
+      }
+      layout="full"
+      header={header}
+      resourcesOpen={resourcesOpen}
+      onResourcesChange={setResourcesOpen}
+      resources={null}
+    >
       <main className="p-5 sm:p-8">
-        <h1 className="text-2xl font-semibold">{heading}</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           This view is not available on this server yet.
         </p>
@@ -50,6 +76,6 @@ function WorkspaceRouteView() {
           </Link>
         )}
       </main>
-    </SidebarInset>
+    </WorkspaceEngagement>
   );
 }

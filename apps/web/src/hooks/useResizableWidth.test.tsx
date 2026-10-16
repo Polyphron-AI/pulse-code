@@ -45,10 +45,12 @@ function Panel({
   edge = "left",
   maxWidth = 800,
   storageKey = "test-panel-width",
+  storage,
 }: {
   edge?: "left" | "right";
   maxWidth?: number;
   storageKey?: string;
+  storage?: Pick<Storage, "getItem" | "setItem">;
 }) {
   const resize = useResizableWidth({
     storageKey,
@@ -56,6 +58,7 @@ function Panel({
     minWidth: 200,
     maxWidth,
     edge,
+    ...(storage ? { storage } : {}),
   });
   useLayoutEffect(() => {
     result = resize;
@@ -252,4 +255,51 @@ it("keyboard resizing persists independently for each workspace space", async ()
   await act(() => renderer.update(<Panel storageKey="mail-width" />));
   expect(result.width).toBe(300);
   expect(savedWidths.get("projects-width")).toBe("500");
+});
+
+it("isolates injected storage for reads, keyboard writes and drag completion, and restores a new session", async () => {
+  savedWidths.set("test-panel-width", "700");
+  const values = new Map<string, string>();
+  const storage = {
+    getItem: vi.fn((key: string) => values.get(key) ?? null),
+    setItem: vi.fn((key: string, value: string) => values.set(key, value)),
+  };
+  await act(() => renderer.update(<Panel storage={storage} />));
+  expect(result.width).toBe(400);
+  await act(() => result.setWidth(300));
+  expect(values.get("test-panel-width")).toBe("300");
+  await act(() => {
+    result.handlers.onPointerDown(pointer());
+    result.handlers.onPointerUp(pointer(50));
+  });
+  expect(values.get("test-panel-width")).toBe("350");
+  expect(savedWidths.get("test-panel-width")).toBe("700");
+  expect(setItem).not.toHaveBeenCalled();
+  const next = { getItem: () => "525", setItem: vi.fn() };
+  await act(() => renderer.update(<Panel storage={next} />));
+  expect(result.width).toBe(525);
+});
+
+it.each(['"300"', "null", '"Infinity"', "invalid"])(
+  "rejects invalid injected width %s without live fallback",
+  async (stored) => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    savedWidths.set("test-panel-width", "700");
+    await act(() =>
+      renderer.update(<Panel storage={{ getItem: () => stored, setItem: vi.fn() }} />),
+    );
+    expect(result.width).toBe(400);
+  },
+);
+
+it("cancels an active drag when injected storage identity changes", async () => {
+  const first = { getItem: () => "300", setItem: vi.fn() };
+  const next = { getItem: () => "500", setItem: vi.fn() };
+  await act(() => renderer.update(<Panel storage={first} />));
+  await act(() => result.handlers.onPointerDown(pointer()));
+  await act(() => renderer.update(<Panel storage={next} />));
+  await act(() => result.handlers.onPointerUp(pointer(50)));
+  expect(result.width).toBe(500);
+  expect(first.setItem).not.toHaveBeenCalled();
+  expect(next.setItem).not.toHaveBeenCalled();
 });

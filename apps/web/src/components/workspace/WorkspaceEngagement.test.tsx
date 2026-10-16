@@ -1,45 +1,100 @@
-import { act, type ReactNode } from "react";
-import { create, type ReactTestRenderer } from "react-test-renderer";
-import { expect, it, vi } from "vite-plus/test";
+// @vitest-environment happy-dom
+import { act, useState } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { getByRole, queryByRole } from "@testing-library/dom";
+import { EnvironmentId } from "@t3tools/contracts";
+import { afterEach, expect, it, vi } from "vite-plus/test";
 import { WorkspaceEngagement } from "./WorkspaceEngagement";
-vi.mock("../../hooks/useResizableWidth", () => ({
-  useResizableWidth: () => ({ width: 200, handlers: {}, setWidth: vi.fn() }),
-}));
-vi.mock("../ui/sheet", () => ({
-  Sheet: ({ open, children }: { open: boolean; children: ReactNode }) => (open ? children : null),
-  SheetPopup: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  SheetTitle: ({ children }: { children: ReactNode }) => <h2>{children}</h2>,
-}));
-it("keeps context available before selection and mounts selected tools once", async () => {
-  let view!: ReactTestRenderer;
-  await act(async () => {
-    view = create(
-      <WorkspaceEngagement space="mail" selected={false} list={<p>Inbox</p>} linked={null}>
-        <p>Select mail</p>
-      </WorkspaceEngagement>,
-    );
-  });
-  expect(view.root.findAllByType("aside")).toHaveLength(1);
-  const opener = view.root
-    .findAllByType("button")
-    .find((button) => button.children.includes("Context"));
-  expect(opener).toBeDefined();
-  await act(async () => {
-    opener!.props.onClick();
-  });
-  expect(JSON.stringify(view.toJSON())).toContain("Select an item");
-  await act(async () => {
-    view.update(
+
+let root: Root;
+let node: HTMLDivElement;
+afterEach(async () => {
+  if (root) await act(async () => root.unmount());
+  node?.remove();
+  vi.unstubAllGlobals();
+});
+function Counter() {
+  const [count, setCount] = useState(0);
+  return <button onClick={() => setCount(count + 1)}>Saved {count}</button>;
+}
+async function mount(layout: "full" | "split" = "full", viewport = 1280, initialOpen = true) {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  (
+    window as unknown as {
+      happyDOM: { setWindowSize: (size: { width: number; height: number }) => void };
+    }
+  ).happyDOM.setWindowSize({ width: viewport, height: 800 });
+  node = document.createElement("div");
+  document.body.append(node);
+  root = createRoot(node);
+  const values = new Map<string, string>();
+  const storage = {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => values.set(key, value),
+  };
+  const back = vi.fn();
+  function App() {
+    const [open, setOpen] = useState(initialOpen);
+    return (
       <WorkspaceEngagement
-        space="mail"
-        selected
-        list={<p>Inbox</p>}
-        linked={<div data-tools="active" />}
+        environmentId={EnvironmentId.make("a")}
+        space="projects"
+        header={{ title: "Projects", environmentLabel: "A", spaceLabel: "Projects" }}
+        resourcesOpen={open}
+        onResourcesChange={setOpen}
+        resources={<p>Project resources</p>}
+        storage={storage}
+        {...(layout === "full"
+          ? { layout }
+          : { layout, selected: true, list: <p>Project list</p>, onBack: back })}
       >
-        <p>Mail</p>
-      </WorkspaceEngagement>,
+        <Counter />
+      </WorkspaceEngagement>
     );
-  });
-  expect(view.root.findAllByProps({ "data-tools": "active" })).toHaveLength(1);
-  await act(async () => view.unmount());
+  }
+  await act(async () => root.render(<App />));
+  return { values, back };
+}
+it("lets a full-width form work without subscribing to list sizing and keeps its state across Resources", async () => {
+  const { values } = await mount();
+  await act(async () => getByRole(node, "button", { name: "Saved 0" }).click());
+  expect(queryByRole(node, "region", { name: "Item list" })).toBeNull();
+  expect(queryByRole(node, "separator", { name: "Resize item list" })).toBeNull();
+  const resources = getByRole(node, "button", { name: "Resources" });
+  await act(async () => resources.click());
+  expect(resources.getAttribute("aria-expanded")).toBe("false");
+  await act(async () => resources.click());
+  expect(getByRole(node, "button", { name: "Saved 1" })).toBeDefined();
+  expect(values.size).toBe(0);
+});
+it("retains selection, Back and keyboard split sizing with scoped v2 storage", async () => {
+  const { values, back } = await mount("split");
+  const separator = getByRole(node, "separator", { name: "Resize item list" });
+  expect(separator.getAttribute("aria-valuenow")).toBe("170");
+  for (const [key, width] of [
+    ["ArrowRight", "190"],
+    ["ArrowLeft", "170"],
+    ["End", "408.6"],
+    ["Home", "160"],
+  ] as const) {
+    await act(async () =>
+      separator.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true })),
+    );
+    expect(Number(values.get("pulse.workspace.a.projects.engagement-width.v2"))).toBeCloseTo(
+      Number(width),
+    );
+  }
+  await act(async () => getByRole(node, "button", { name: "Back to list" }).click());
+  expect(back).toHaveBeenCalledOnce();
+});
+
+it("uses one compact Resources sheet and retains the center form when it closes", async () => {
+  await mount("full", 390, false);
+  await act(async () => getByRole(node, "button", { name: "Saved 0" }).click());
+  await act(async () => getByRole(node, "button", { name: "Resources" }).click());
+  const dialog = getByRole(document.body, "dialog", { name: "Resources" });
+  expect(dialog.textContent).toContain("Project resources");
+  expect(node.querySelector("[data-workspace-resources]")).toBeNull();
+  await act(async () => getByRole(dialog, "button", { name: "Close" }).click());
+  expect(getByRole(node, "button", { name: "Saved 1" })).toBeDefined();
 });

@@ -64,7 +64,7 @@ it("opens account/folder disclosure, selects Sent on account two and restores tr
   root = createRoot(node);
   await act(async () => root.render(<RouterProvider router={router} />));
   expect(queryByRole(document.body, "link", { name: "Second account" })).toBeNull();
-  const trigger = getByRole(node, "button", { name: "Email accounts and folders" });
+  const trigger = getByRole(node, "button", { name: "Email folder: Inbox" });
   expect(trigger.textContent).toBe("Inbox");
   trigger.focus();
   await act(async () => trigger.click());
@@ -79,6 +79,7 @@ it("opens account/folder disclosure, selects Sent on account two and restores tr
   });
   expect(queryByRole(document.body, "link", { name: "Sent" })).toBeNull();
   expect(trigger.textContent).toBe("Sent");
+  expect(getByRole(node, "button", { name: "Email folder: Sent" })).toBe(trigger);
   expect(document.activeElement).toBe(trigger);
   expect(queryByRole(document.body, "button", { name: "Choose project" })).toBeNull();
 });
