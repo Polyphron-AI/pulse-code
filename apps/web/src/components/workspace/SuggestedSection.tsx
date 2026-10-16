@@ -1,5 +1,4 @@
 import {
-  AuthOrchestrationOperateScope,
   type EnvironmentId,
   type WorkspaceItemRef,
   type WorkspaceLinkEndpoint,
@@ -10,11 +9,11 @@ import { useId, useState } from "react";
 import { workspaceLinks } from "../../state/workspaceLinks";
 import { useEnvironmentQuery } from "../../state/query";
 import { useAtomCommand } from "../../state/use-atom-command";
-import { useEnvironmentSessionState } from "../../state/session";
 import { Button } from "../ui/button";
 import { Popover, PopoverTrigger, PopoverPopup } from "../ui/popover";
 import { canOpenLinkedItem, workspaceEndpointTitle } from "./mail/linkedItems";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import { useWorkspaceCanOperate } from "./useWorkspaceCanOperate";
 
 export function SuggestedSection(props: {
   readonly environmentId: EnvironmentId;
@@ -32,11 +31,7 @@ export function SuggestedSection(props: {
   const refresh = useAtomCommand(workspaceLinks.refreshSuggestions, { reportFailure: false });
   const accept = useAtomCommand(workspaceLinks.acceptSuggestion, { reportFailure: false });
   const dismiss = useAtomCommand(workspaceLinks.dismissSuggestion, { reportFailure: false });
-  const session = useEnvironmentSessionState(props.environmentId);
-  const canOperate =
-    !session.isPending &&
-    session.data?.authenticated === true &&
-    session.data.scopes?.includes(AuthOrchestrationOperateScope) === true;
+  const canOperate = useWorkspaceCanOperate(props.environmentId);
   const [manual, setManual] = useState<WorkspaceSuggestionState | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);

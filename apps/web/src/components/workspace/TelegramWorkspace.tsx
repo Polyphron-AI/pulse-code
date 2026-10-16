@@ -1,5 +1,4 @@
 import {
-  AuthOrchestrationOperateScope,
   EnvironmentId,
   parseTelegramResourceId,
   telegramResourceId,
@@ -20,7 +19,7 @@ import { MailError, MailNotice } from "./mail/MailNotice";
 import { useMailCapabilities } from "./mail/useMailCapabilities";
 import { useWorkspaceItemOpener } from "./useWorkspaceItemOpener";
 import { useAtomCommand } from "../../state/use-atom-command";
-import { useEnvironmentSessionState } from "../../state/session";
+import { useWorkspaceCanOperate } from "./useWorkspaceCanOperate";
 
 const refFor = (connectionId: string, chatId: string, messageId?: string): WorkspaceItemRef => ({
   type: "provider-resource",
@@ -336,11 +335,7 @@ function TelegramReader({
   );
 }
 function RemoveChat(props: { environmentId: EnvironmentId; connectionId: string; chatId: string }) {
-  const session = useEnvironmentSessionState(props.environmentId);
-  const canOperate =
-    !session.isPending &&
-    session.data?.authenticated === true &&
-    session.data.scopes?.includes(AuthOrchestrationOperateScope) === true;
+  const canOperate = useWorkspaceCanOperate(props.environmentId);
   const remove = useAtomCommand(telegram.removeChat, { reportFailure: false });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);

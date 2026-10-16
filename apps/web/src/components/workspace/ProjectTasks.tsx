@@ -1,5 +1,4 @@
 import {
-  AuthOrchestrationOperateScope,
   type EnvironmentId,
   type ProjectId,
   type WorkspaceTask,
@@ -9,7 +8,6 @@ import {
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { useContext, useState } from "react";
 import { WorkspaceItemMutationContext } from "./WorkspaceEngagement";
-import { useEnvironmentSessionState } from "../../state/session";
 import { useEnvironmentQuery } from "../../state/query";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { useThreadShells } from "../../state/entities";
@@ -19,17 +17,12 @@ import { Input } from "../ui/input";
 import { Textarea } from "../ui/textarea";
 import { Button } from "../ui/button";
 import { WorkspaceItemActions, WorkspaceItemMenu } from "./WorkspaceItemActions";
+import { useWorkspaceCanOperate } from "./useWorkspaceCanOperate";
+export { useWorkspaceCanOperate } from "./useWorkspaceCanOperate";
 export const workspaceToolsError = (result: Parameters<typeof squashAtomCommandFailure>[0]) => {
   const cause = squashAtomCommandFailure(result);
   return cause instanceof Error ? cause.message : "The workspace change could not be saved.";
 };
-export function useWorkspaceCanOperate(environmentId: EnvironmentId) {
-  const session = useEnvironmentSessionState(environmentId);
-  return (
-    session.data?.authenticated === true &&
-    session.data.scopes?.includes(AuthOrchestrationOperateScope) === true
-  );
-}
 export function ProjectWorkspaceSettings({
   environmentId,
   projectId,

@@ -1,5 +1,4 @@
 import {
-  AuthOrchestrationOperateScope,
   type DriveFile,
   type DriveReadResult,
   type EnvironmentId,
@@ -10,21 +9,17 @@ import { useEffect, useRef, useState } from "react";
 import { drive } from "../../state/drive";
 import { useEnvironmentQuery } from "../../state/query";
 import { useAtomCommand } from "../../state/use-atom-command";
-import { useEnvironmentSessionState } from "../../state/session";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Dialog, DialogPopup, DialogTitle, DialogHeader, DialogPanel } from "../ui/dialog";
 import { useMailCapabilities } from "./mail/useMailCapabilities";
+import { useWorkspaceCanOperate } from "./useWorkspaceCanOperate";
 const errorText = (result: Parameters<typeof squashAtomCommandFailure>[0]) => {
   const cause = squashAtomCommandFailure(result);
   return cause instanceof Error ? cause.message : "The Drive request could not finish.";
 };
 function useDriveAccess(environmentId: EnvironmentId) {
-  const session = useEnvironmentSessionState(environmentId);
-  const canOperate =
-    !session.isPending &&
-    session.data?.authenticated === true &&
-    session.data.scopes?.includes(AuthOrchestrationOperateScope) === true;
+  const canOperate = useWorkspaceCanOperate(environmentId);
   const connections = useEnvironmentQuery(drive.connections({ environmentId, input: {} }));
   return { connections, canOperate };
 }

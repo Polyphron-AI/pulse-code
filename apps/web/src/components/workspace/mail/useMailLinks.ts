@@ -7,13 +7,13 @@ import type {
   WorkspaceLinkEndpoint,
   WorkspaceLinkSource,
 } from "@t3tools/contracts";
-import { AuthOrchestrationOperateScope } from "@t3tools/contracts";
 import { useCallback, useLayoutEffect, useRef } from "react";
 import { useEnvironmentSessionState } from "../../../state/session";
 
 import { useAtomCommand } from "../../../state/use-atom-command";
 import { workspaceLinks } from "../../../state/workspaceLinks";
 import { endpointTitle, projectItemRef } from "./linkedItems";
+import { canOperateSession } from "../useWorkspaceCanOperate";
 
 /** A command failure's message for the user. */
 export const linkErrorText = (cause: unknown) =>
@@ -28,12 +28,7 @@ export function useMailLinks(environmentId: EnvironmentId) {
   });
   const requireOperate = useCallback(() => {
     const live = current.current;
-    if (
-      live.environmentId !== environmentId ||
-      live.session.isPending ||
-      live.session.data?.authenticated !== true ||
-      live.session.data.scopes?.includes(AuthOrchestrationOperateScope) !== true
-    )
+    if (live.environmentId !== environmentId || !canOperateSession(live.session.data))
       throw new Error("You need operate permission in this environment to change links.");
   }, [environmentId]);
   const link = useAtomCommand(workspaceLinks.link, { reportFailure: false });
