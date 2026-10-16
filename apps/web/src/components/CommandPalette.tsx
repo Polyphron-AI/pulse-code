@@ -31,7 +31,7 @@ import {
 } from "@t3tools/client-runtime/state/runtime";
 import {
   type DesktopWslState,
-  type EnvironmentId,
+  EnvironmentId,
   type EnvironmentMachineKind,
   type FilesystemBrowseResult,
   type ProjectId,
@@ -145,6 +145,7 @@ import {
   newProjectId,
 } from "../lib/utils";
 import { selectThreadTerminalUiState, useTerminalUiStateStore } from "../terminalUiStateStore";
+import { workspaceDestinations, workspaceDestinationSearch } from "./workspace/workspaceNavigation";
 import { buildThreadRouteParams, resolveThreadRouteTarget } from "../threadRoutes";
 import { useAvailableSettingsSearchItems } from "./settings/useAvailableSettingsSearchItems";
 import {
@@ -696,7 +697,9 @@ function OpenCommandPaletteDialog(props: {
   readonly clearOpenIntent: () => void;
 }) {
   const navigate = useNavigate();
-  const pathname = useLocation({ select: (location) => location.pathname });
+  const location = useLocation();
+  const codeTarget = useParams({ strict: false, select: resolveThreadRouteTarget });
+  const pathname = location.pathname;
   const { clearOpenIntent, openIntent, openOverlayMode, setOpen } = props;
   const [query, setQuery] = useState(openIntent?.kind === "search" ? openIntent.query : "");
   const [linkedThreadSearch, setLinkedThreadSearch] = useState(
@@ -796,7 +799,13 @@ function OpenCommandPaletteDialog(props: {
   const projectOrder = useUiStateStore((store) => store.projectOrder);
   const threads = useThreadShells();
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
-  const mailReadAvailable = useMailCapabilities().mailRead;
+  const workspaceEnvironmentId =
+    location.pathname === "/workspace" && location.search.environment
+      ? EnvironmentId.make(location.search.environment)
+      : codeTarget?.kind === "server"
+        ? codeTarget.threadRef.environmentId
+        : (activeDraftThread?.environmentId ?? primaryEnvironmentId);
+  const mailReadAvailable = useMailCapabilities(workspaceEnvironmentId ?? undefined).mailRead;
   const {
     theme,
     themeHalves,
@@ -1889,37 +1898,48 @@ function OpenCommandPaletteDialog(props: {
   const actionItems: Array<CommandPaletteActionItem | CommandPaletteSubmenuItem> = [];
   actionItems.push({
     kind: "action",
-    value: "action:open-office",
-    searchTerms: ["office", "meetings", "calendar", "email"],
-    title: "Open Office workspace",
+    value: "action:open-workspace",
+    searchTerms: ["workspace", "projects", "hub"],
+    title: "Open Workspace",
     icon: <BriefcaseBusinessIcon className={ITEM_ICON_CLASS} />,
-    run: async () => {
-      await navigate({ to: "/workspace", search: { space: "office" } });
-    },
-  });
-  actionItems.push({
-    kind: "action",
-    value: "action:open-communications",
-    searchTerms: ["office", "communications", "discord", "telegram", "slack", "email"],
-    title: "Open Communications",
-    icon: <MessageSquareIcon className={ITEM_ICON_CLASS} />,
     run: async () => {
       await navigate({
         to: "/workspace",
-        search: { space: "office", officeView: "communications" },
+        search: workspaceDestinationSearch("projects", workspaceEnvironmentId),
       });
     },
   });
   actionItems.push({
     kind: "action",
-    value: "action:open-projects",
-    searchTerms: ["projects", "workspace", "hub"],
-    title: "Open Projects",
-    icon: <MailIcon className={ITEM_ICON_CLASS} />,
+    value: "action:open-office",
+    searchTerms: ["office", "local", "talk", "recording"],
+    title: "Open local Office tools",
+    icon: <BriefcaseBusinessIcon className={ITEM_ICON_CLASS} />,
     run: async () => {
-      await navigate({ to: "/workspace", search: { space: "projects" } });
+      await navigate({ to: "/workspace", search: { space: "office" } });
     },
   });
+  for (const { id, label, Icon } of workspaceDestinations) {
+    if (id === "mail" && !mailReadAvailable) continue;
+    actionItems.push({
+      kind: "action",
+      value: `action:open-${id}`,
+      searchTerms: [
+        "workspace",
+        id,
+        label,
+        ...(id === "communications" ? ["discord", "telegram", "slack"] : []),
+      ],
+      title: `Open ${label}`,
+      icon: <Icon className={ITEM_ICON_CLASS} />,
+      run: async () => {
+        await navigate({
+          to: "/workspace",
+          search: workspaceDestinationSearch(id, workspaceEnvironmentId),
+        });
+      },
+    });
+  }
   for (const [action, title, command] of [
     ["startThread", "Start thread from selected item", "workspace.startThread"],
     ["addToProject", "Add selected item to project", "workspace.addToProject"],
@@ -1958,18 +1978,6 @@ function OpenCommandPaletteDialog(props: {
         if (replyButton.isConnected && !replyButton.disabled) replyButton.click();
       },
     });
-  if (mailReadAvailable) {
-    actionItems.push({
-      kind: "action",
-      value: "action:open-mail",
-      searchTerms: ["mail", "email", "inbox"],
-      title: "Open Mail",
-      icon: <MailIcon className={ITEM_ICON_CLASS} />,
-      run: async () => {
-        await navigate({ to: "/workspace", search: { space: "mail" } });
-      },
-    });
-  }
 
   if (projects.length > 0) {
     const activeProjectTitle =

@@ -1,17 +1,30 @@
 import { useEffect } from "react";
-import { useLocation, useNavigate } from "@tanstack/react-router";
+import { useLocation, useNavigate, useParams } from "@tanstack/react-router";
 import { EnvironmentId } from "@t3tools/contracts";
-import { BriefcaseBusinessIcon, Code2Icon, MailIcon } from "lucide-react";
+import { BriefcaseBusinessIcon, Code2Icon } from "lucide-react";
 import { useSidebar } from "../ui/sidebar";
 import { Tooltip, TooltipTrigger, TooltipPopup } from "../ui/tooltip";
 import { Button } from "../ui/button";
 import { useMailCapabilities } from "./mail/useMailCapabilities";
+import { type DraftId, useComposerDraftStore } from "../../composerDraftStore";
+import { resolveThreadRouteTarget } from "../../threadRoutes";
+import {
+  codeReturnHref,
+  parseWorkspaceSearch,
+  rememberCodeLocation,
+  workspaceDestinations,
+  workspaceDestinationSearch,
+  type WorkspaceSearch,
+} from "./workspaceNavigation";
 
-let lastCodeHref = "/";
+const workspaceLocations = new Map<EnvironmentId, WorkspaceSearch>();
 
 export function useOfficeSpace() {
   return useLocation({
-    select: (location) => location.pathname === "/workspace" && location.search.space === "office",
+    select: (location) =>
+      location.pathname === "/workspace" &&
+      location.search.space !== "mail" &&
+      location.search.space !== "projects",
   });
 }
 export function useMailSpace() {
@@ -28,54 +41,52 @@ export function useProjectsSpace() {
 
 /** Desktop keeps the rail across every space; compact clients use the navigation menu. */
 export function WorkspaceSpaceSelector({ rail = false }: { readonly rail?: boolean }) {
-  const projects = useProjectsSpace();
-  const office = useOfficeSpace();
-  const mail = useMailSpace();
   const navigate = useNavigate();
   const location = useLocation();
-  const environment = location.pathname === "/workspace" ? location.search.environment : undefined;
-  const mailAvailable = useMailCapabilities(
-    environment ? EnvironmentId.make(environment) : undefined,
-  ).mailRead;
+  const target = useParams({ strict: false, select: resolveThreadRouteTarget });
+  const draftEnvironmentId = useComposerDraftStore((store) =>
+    target?.kind === "draft"
+      ? store.getDraftThread(target.draftId as DraftId)?.environmentId
+      : undefined,
+  );
+  const workspace = location.pathname === "/workspace";
+  const codeEnvironmentId =
+    target?.kind === "server" ? target.threadRef.environmentId : draftEnvironmentId;
+  const explicitEnvironmentId =
+    workspace && location.search.environment
+      ? EnvironmentId.make(location.search.environment)
+      : codeEnvironmentId;
+  const { mailRead, environmentId } = useMailCapabilities(explicitEnvironmentId);
   const { isMobile, setOpenMobile } = useSidebar();
-  const settings = location.pathname.startsWith("/settings");
-  const inCode = !office && !mail && !projects && !settings;
+  const inCode = !workspace && (location.pathname === "/" || target !== null);
   useEffect(() => {
-    if (inCode && location.pathname !== "/") lastCodeHref = location.href;
-  }, [inCode, location.pathname, location.href]);
+    if (!environmentId) return;
+    if (inCode) rememberCodeLocation(environmentId, location.href);
+    if (workspace)
+      workspaceLocations.set(environmentId, {
+        ...parseWorkspaceSearch(location.search),
+        environment: environmentId,
+      });
+  }, [environmentId, inCode, workspace, location.href, location.search]);
   const leave = () => {
-    if (inCode && location.pathname !== "/") lastCodeHref = location.href;
+    if (inCode && environmentId) rememberCodeLocation(environmentId, location.href);
     if (isMobile) setOpenMobile(false);
   };
-  const workspaceSpaces = [
+  const modeSpaces = [
     {
-      id: "mail",
-      label: "Mail",
-      Icon: MailIcon,
-      active: mail,
-      disabled: !mailAvailable && !mail,
-      run: () => {
-        leave();
-        if (!mail)
-          void navigate({
-            to: "/workspace",
-            search: { space: "mail", ...(environment === undefined ? {} : { environment }) },
-          });
-      },
-    },
-    {
-      id: "projects",
-      label: "Projects",
+      id: "workspace",
+      label: "Workspace",
       Icon: BriefcaseBusinessIcon,
-      active: projects,
+      active: false,
       disabled: false,
       run: () => {
         leave();
-        if (!projects)
-          void navigate({
-            to: "/workspace",
-            search: { space: "projects", ...(environment === undefined ? {} : { environment }) },
-          });
+        void navigate({
+          to: "/workspace",
+          search:
+            (environmentId ? workspaceLocations.get(environmentId) : undefined) ??
+            workspaceDestinationSearch("projects", environmentId),
+        });
       },
     },
     {
@@ -86,26 +97,29 @@ export function WorkspaceSpaceSelector({ rail = false }: { readonly rail?: boole
       disabled: false,
       run: () => {
         leave();
-        if (!inCode) void navigate({ href: lastCodeHref });
+        if (!inCode) void navigate({ href: environmentId ? codeReturnHref(environmentId) : "/" });
       },
     },
   ];
   const spaces = inCode
-    ? [
-        {
-          id: "workspace",
-          label: "Workspace",
-          Icon: BriefcaseBusinessIcon,
-          active: false,
-          disabled: false,
+    ? modeSpaces
+    : [
+        ...workspaceDestinations.map(({ id, label, Icon }) => ({
+          id,
+          label,
+          Icon,
+          active: workspace && location.search.space === id,
+          disabled: id === "mail" && !mailRead && location.search.space !== "mail",
           run: () => {
             leave();
-            void navigate({ to: "/workspace", search: { space: "projects" } });
+            void navigate({
+              to: "/workspace",
+              search: workspaceDestinationSearch(id, environmentId),
+            });
           },
-        },
-        workspaceSpaces[2]!,
-      ]
-    : workspaceSpaces;
+        })),
+        modeSpaces[1]!,
+      ];
   if (rail)
     return (
       <nav

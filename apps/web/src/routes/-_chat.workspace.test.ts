@@ -11,7 +11,13 @@ describe("parseWorkspaceSearch", () => {
       account: "telegram_1000",
       item: "telegram_1000/-42/2",
     };
-    expect(parseWorkspaceSearch(search)).toEqual(search);
+    expect(parseWorkspaceSearch(search)).toEqual({
+      space: "communications",
+      communicationProvider: "telegram",
+      environment: "remote-env",
+      account: "telegram_1000",
+      item: "telegram_1000/-42/2",
+    });
     expect(parseWorkspaceSearch({ ...search, space: "mail" })).not.toHaveProperty(
       "communicationProvider",
     );
@@ -23,8 +29,83 @@ describe("parseWorkspaceSearch", () => {
     }));
   it("opens the Office communications view", () => {
     expect(parseWorkspaceSearch({ space: "office", officeView: "communications" })).toEqual({
-      space: "office",
-      officeView: "communications",
+      space: "communications",
+    });
+  });
+
+  it("keeps a canonical destination's environment and valid view", () => {
+    expect(
+      parseWorkspaceSearch({
+        space: "tasks",
+        view: "open",
+        environment: "remote-a",
+        project: "project-a",
+      }),
+    ).toEqual({ space: "tasks", view: "open", environment: "remote-a", project: "project-a" });
+    expect(
+      parseWorkspaceSearch({ space: "calendar", view: "open", environment: "remote-a" }),
+    ).toEqual({ space: "calendar", environment: "remote-a" });
+  });
+
+  it.each([
+    ["communications", ["chats", "unread", "later"]],
+    ["meetings", ["upcoming", "recordings"]],
+    ["calendar", ["agenda", "week"]],
+    ["mail", ["inbox", "unread", "later"]],
+    ["tasks", ["all", "open", "done"]],
+    ["projects", ["projects", "linked"]],
+  ])("accepts only %s's views", (space, views) => {
+    for (const view of views)
+      expect(parseWorkspaceSearch({ space, view })).toEqual({ space, view });
+    for (const view of ["unknown", "", 7, null, "x".repeat(1025)])
+      expect(parseWorkspaceSearch({ space, view })).toEqual({ space });
+  });
+
+  it("strips fixture, resource and alternative view selectors", () => {
+    expect(
+      parseWorkspaceSearch({
+        space: "mail",
+        view: "inbox",
+        fixture: "01",
+        workspaceMockup: "01",
+        resourceProject: "other",
+        resourceTab: "files",
+        selectedKey: "mail-1",
+        taskView: "open",
+        calendarView: "week",
+      }),
+    ).toEqual({ space: "mail", view: "inbox" });
+    for (const space of ["", undefined, 7, "unknown", "constructor", "__proto__"])
+      expect(parseWorkspaceSearch({ space, environment: "a", view: "open" })).toEqual({});
+  });
+
+  it("preserves bounded mail and Telegram identities without interpreting their contents", () => {
+    expect(
+      parseWorkspaceSearch({ space: "mail", item: "x".repeat(8192), account: "a".repeat(1024) }),
+    ).toEqual({ space: "mail", item: "x".repeat(8192), account: "a".repeat(1024) });
+    expect(
+      parseWorkspaceSearch({
+        space: "mail",
+        item: "x".repeat(8193),
+        account: false,
+        folder: [],
+        environment: "x".repeat(1025),
+      }),
+    ).toEqual({ space: "mail" });
+    expect(
+      parseWorkspaceSearch({
+        space: "communications",
+        communicationProvider: "telegram",
+        environment: "remote-a",
+        account: "bot-1",
+        item: "bot-1/-42/2",
+      }),
+    ).toEqual({
+      space: "communications",
+      communicationProvider: "telegram",
+      environment: "remote-a",
+      account: "bot-1",
+      item: "bot-1/-42/2",
     });
   });
 

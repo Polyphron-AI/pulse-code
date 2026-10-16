@@ -1,0 +1,125 @@
+import type { EnvironmentId } from "@t3tools/contracts";
+import {
+  CalendarDaysIcon,
+  FolderIcon,
+  ListTodoIcon,
+  MailIcon,
+  MessagesSquareIcon,
+  MicIcon,
+} from "lucide-react";
+import { resolveThreadRouteTarget } from "../../threadRoutes";
+
+export const workspaceViews = {
+  communications: ["chats", "unread", "later"],
+  meetings: ["upcoming", "recordings"],
+  calendar: ["agenda", "week"],
+  mail: ["inbox", "unread", "later"],
+  tasks: ["all", "open", "done"],
+  projects: ["projects", "linked"],
+} as const;
+export type WorkspaceDestination = keyof typeof workspaceViews;
+export type WorkspaceView = (typeof workspaceViews)[WorkspaceDestination][number];
+
+export const workspaceDestinations = [
+  { id: "communications", label: "Communications", Icon: MessagesSquareIcon },
+  { id: "meetings", label: "Meetings", Icon: MicIcon },
+  { id: "calendar", label: "Calendar", Icon: CalendarDaysIcon },
+  { id: "mail", label: "Email", Icon: MailIcon },
+  { id: "tasks", label: "Tasks", Icon: ListTodoIcon },
+  { id: "projects", label: "Projects", Icon: FolderIcon },
+] as const;
+
+export interface WorkspaceSearch {
+  readonly space?: WorkspaceDestination | "office";
+  readonly view?: WorkspaceView;
+  readonly officeView?: "communications";
+  readonly communicationProvider?: "telegram";
+  readonly account?: string;
+  readonly folder?: string;
+  readonly project?: string;
+  readonly environment?: string;
+  readonly item?: string;
+}
+
+const text = (value: unknown) =>
+  typeof value === "string" && value.length > 0 && value.length <= 1_024 ? value : undefined;
+
+export function parseWorkspaceSearch(raw: Record<string, unknown>): WorkspaceSearch {
+  const space =
+    raw.space === "office" && raw.officeView === "communications" ? "communications" : raw.space;
+  const destination = workspaceDestinations.find(({ id }) => id === space)?.id;
+  if (!destination) return space === "office" ? { space: "office" } : {};
+  const environment = text(raw.environment);
+  const telegram = destination === "communications" && raw.communicationProvider === "telegram";
+  const carriesIdentity = telegram || destination === "mail" || destination === "projects";
+  const account = carriesIdentity ? text(raw.account) : undefined;
+  const folder = !telegram && carriesIdentity ? text(raw.folder) : undefined;
+  const project = text(raw.project);
+  const item = telegram
+    ? text(raw.item)
+    : carriesIdentity && typeof raw.item === "string" && raw.item.length <= 8192
+      ? raw.item
+      : undefined;
+  const view = (workspaceViews[destination] as readonly unknown[]).includes(raw.view)
+    ? (raw.view as WorkspaceView)
+    : undefined;
+  return {
+    space: destination,
+    ...(view !== undefined ? { view } : {}),
+    ...(environment !== undefined ? { environment } : {}),
+    ...(telegram ? { communicationProvider: "telegram" as const } : {}),
+    ...(account !== undefined ? { account } : {}),
+    ...(folder !== undefined ? { folder } : {}),
+    ...(project !== undefined ? { project } : {}),
+    ...(item !== undefined ? { item } : {}),
+  };
+}
+
+export function workspaceDestinationSearch(
+  destination: WorkspaceDestination,
+  environmentId?: EnvironmentId | null,
+): WorkspaceSearch {
+  return {
+    space: destination,
+    view: workspaceViews[destination][0],
+    ...(environmentId ? { environment: environmentId } : {}),
+  };
+}
+
+const codeLocations = new Map<EnvironmentId, string>();
+
+export function rememberCodeLocation(environmentId: EnvironmentId, href: string): void {
+  let url: URL;
+  try {
+    url = new URL(href, "https://workspace.invalid");
+  } catch {
+    return;
+  }
+  if (url.origin !== "https://workspace.invalid" || href.startsWith("//")) return;
+  if (url.pathname === "/workspace" || url.pathname.startsWith("/settings")) return;
+  const segments = url.pathname.split("/").slice(1);
+  let target: ReturnType<typeof resolveThreadRouteTarget> = null;
+  try {
+    if (segments.length === 2) {
+      target =
+        segments[0] === "draft"
+          ? resolveThreadRouteTarget({ draftId: decodeURIComponent(segments[1]!) })
+          : resolveThreadRouteTarget({
+              environmentId: decodeURIComponent(segments[0]!),
+              threadId: decodeURIComponent(segments[1]!),
+            });
+    }
+  } catch {
+    return;
+  }
+  if (
+    url.pathname !== "/" &&
+    (!target || (target.kind === "server" && target.threadRef.environmentId !== environmentId))
+  )
+    return;
+  codeLocations.set(environmentId, `${url.pathname}${url.search}${url.hash}`);
+}
+
+export function codeReturnHref(environmentId: EnvironmentId): string {
+  return codeLocations.get(environmentId) ?? "/";
+}
