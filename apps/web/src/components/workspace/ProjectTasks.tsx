@@ -18,7 +18,6 @@ import { Textarea } from "../ui/textarea";
 import { Button } from "../ui/button";
 import { WorkspaceItemActions, WorkspaceItemMenu } from "./WorkspaceItemActions";
 import { useWorkspaceCanOperate } from "./useWorkspaceCanOperate";
-export { useWorkspaceCanOperate } from "./useWorkspaceCanOperate";
 export const workspaceToolsError = (result: Parameters<typeof squashAtomCommandFailure>[0]) => {
   const cause = squashAtomCommandFailure(result);
   return cause instanceof Error ? cause.message : "The workspace change could not be saved.";

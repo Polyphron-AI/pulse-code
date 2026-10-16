@@ -17,10 +17,7 @@ import { useResizableWidth } from "../../hooks/useResizableWidth";
 import { cn } from "../../lib/utils";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { WorkspaceResourcesHost } from "./WorkspaceShellLayout";
-import {
-  useWorkspaceResources,
-  WorkspaceResourcesCloseFocusContext,
-} from "./workspaceResourceState";
+import { useWorkspaceResources, WorkspaceResourcesBodyContext } from "./workspaceResourceState";
 import { WorkspaceHeader, type WorkspaceHeaderModel } from "./WorkspaceHeader";
 import { workspaceEndpointTitle } from "./mail/linkedItems";
 import { XIcon } from "lucide-react";
@@ -174,7 +171,7 @@ export function WorkspaceEngagement(props: WorkspaceEngagementProps) {
           closeFocus={() => closeFocus.current ?? false}
         >
           {state.open ? (
-            <WorkspaceResourcesCloseFocusContext
+            <WorkspaceResourcesBodyContext
               value={{ restoreFocus: restoreResourcesFocus, hidden: context !== null }}
             >
               <div
@@ -186,7 +183,7 @@ export function WorkspaceEngagement(props: WorkspaceEngagementProps) {
               >
                 {props.resources}
               </div>
-            </WorkspaceResourcesCloseFocusContext>
+            </WorkspaceResourcesBodyContext>
           ) : null}
           {context ? (
             <div data-workspace-linked-context="" className="flex h-full min-h-0 flex-col">

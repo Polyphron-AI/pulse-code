@@ -15,7 +15,7 @@ navigation becomes a menu. Observed center width only bounds its resizable divid
 One stable portal container moves exactly one WorkspaceResourceBody instance between hosts. It may
 stay mounted while CSS-hidden under Linked context or compact layouts, retaining its draft and
 subscriptions. While hidden it starts no timers, polling or animations, and portaled UI must respect
-the hidden state. The existing resource close-focus context exposes that state. The Browser dialog
+the hidden state. `WorkspaceResourcesBodyContext` exposes visibility and explicit-close focus return. The Browser dialog
 closes when hidden and stays closed until explicitly reopened. Do not mount a second Browser to
 handle a breakpoint. Explicit resource close unmounts the tool; a viewport transfer
 must keep visibility in one state transition. Initial compact entry is closed. Compact dismissal

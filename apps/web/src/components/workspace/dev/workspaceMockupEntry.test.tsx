@@ -179,6 +179,7 @@ it("boots eight isolated memory routes, pins dark and preserves browser storage 
 }, 45_000);
 
 it("rejects a fixture without the #root mount point", async () => {
+  const theme = document.documentElement.getAttribute("style");
   document.getElementById("root")!.remove();
   const { startWorkspaceMockup } = await import("./workspaceMockupEntry");
   await expect(startWorkspaceMockup()).rejects.toThrow(
@@ -186,6 +187,9 @@ it("rejects a fixture without the #root mount point", async () => {
   );
   expect(document.getElementById("workspace-mockup-root")).toBeNull();
   expect(window.__workspaceMockupCapture).toBeUndefined();
+  expect(window.fetch).toBe(originals.fetch);
+  expect(document.documentElement.getAttribute("style")).toBe(theme);
+  expect(document.documentElement.className).toBe("light developer-class");
 });
 
 it.each([

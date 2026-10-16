@@ -310,7 +310,7 @@ export function useWorkspaceResourceState(
 }
 
 export const WorkspaceResourcesContext = createContext<WorkspaceResourcesState | null>(null);
-export const WorkspaceResourcesCloseFocusContext = createContext<{
+export const WorkspaceResourcesBodyContext = createContext<{
   readonly restoreFocus: () => void;
   readonly hidden: boolean;
 } | null>(null);

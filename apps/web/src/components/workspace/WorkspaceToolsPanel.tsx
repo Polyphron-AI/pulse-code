@@ -27,10 +27,11 @@ import { WorkspaceItemActions } from "./WorkspaceItemActions";
 import { DriveFileAccess } from "./DriveFiles";
 import { workspaceEndpointTitle } from "./mail/linkedItems";
 import { useMailLinks } from "./mail/useMailLinks";
-import { useWorkspaceCanOperate, workspaceToolsError } from "./ProjectTasks";
+import { workspaceToolsError } from "./ProjectTasks";
+import { useWorkspaceCanOperate } from "./useWorkspaceCanOperate";
 import { useMailCapabilities } from "./mail/useMailCapabilities";
 import type { WorkspaceResourceScope } from "./workspaceResourceState";
-import { WorkspaceResourcesCloseFocusContext } from "./workspaceResourceState";
+import { WorkspaceResourcesBodyContext } from "./workspaceResourceState";
 import type { WorkspaceResourceBodyProps } from "./WorkspaceResourceBody";
 import { ProjectPickerView } from "./ProjectPickerView";
 export function WorkspaceToolsPanel({
@@ -240,7 +241,7 @@ export function WorkspaceBrowser({
   const canOperate = useWorkspaceCanOperate(environmentId);
   const [address, setAddress] = useState("");
   const [opened, setOpened] = useState(false);
-  const hidden = useContext(WorkspaceResourcesCloseFocusContext)?.hidden ?? false;
+  const hidden = useContext(WorkspaceResourcesBodyContext)?.hidden ?? false;
   if (hidden && opened) setOpened(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);

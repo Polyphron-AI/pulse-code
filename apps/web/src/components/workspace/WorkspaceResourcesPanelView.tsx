@@ -3,7 +3,7 @@ import { useContext, useId, useRef, useState, type ReactNode } from "react";
 import type { ProjectId } from "@t3tools/contracts";
 import { ProjectPickerView, type WorkspaceProjectOption } from "./ProjectPickerView";
 import type { WorkspaceResourceTab } from "./workspaceResourceState";
-import { WorkspaceResourcesCloseFocusContext } from "./workspaceResourceState";
+import { WorkspaceResourcesBodyContext } from "./workspaceResourceState";
 import { PullRequestGlyph } from "../pullRequest/pullRequestIcons";
 
 export interface WorkspaceResourcesPanelViewProps {
@@ -32,7 +32,7 @@ const resourceTabs = [
 /** Dev-safe chrome. The caller supplies exactly one live or fixture body. */
 export function WorkspaceResourcesPanelView(props: WorkspaceResourcesPanelViewProps): ReactNode {
   const id = useId();
-  const resources = useContext(WorkspaceResourcesCloseFocusContext);
+  const resources = useContext(WorkspaceResourcesBodyContext);
   const buttons = useRef<(HTMLButtonElement | null)[]>([]);
   const [focused, setFocused] = useState<WorkspaceResourceTab>(props.tab);
   const [selected, setSelected] = useState(props.tab);

@@ -117,7 +117,6 @@ vi.mock("./ProjectTasks", () => ({
   ProjectTasks: () => {
     throw new Error("Unsupported task body was invoked.");
   },
-  useWorkspaceCanOperate: () => true,
   workspaceToolsError: String,
 }));
 vi.mock("./DriveFiles", () => ({ DriveFileAccess: () => <span>Explicit read available</span> }));
@@ -447,3 +446,5 @@ it("uses the same mounted shell for local, direct, opaque relay/tunnel, disconne
   expect(boundary.open).not.toHaveBeenCalled();
   expect(boundary.link).not.toHaveBeenCalled();
 });
+
+vi.mock("./useWorkspaceCanOperate", () => ({ useWorkspaceCanOperate: () => true }));

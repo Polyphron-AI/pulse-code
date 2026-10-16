@@ -44,7 +44,7 @@ import {
 import { MailDraftReply } from "./mail/MailDraftReply";
 import { linkErrorText, useMailLinks } from "./mail/useMailLinks";
 import { useMailCapabilities } from "./mail/useMailCapabilities";
-import { useWorkspaceCanOperate } from "./ProjectTasks";
+import { useWorkspaceCanOperate } from "./useWorkspaceCanOperate";
 
 const WorkspaceAutomationEditor = lazy(() => import("./WorkspaceAutomationEditor"));
 

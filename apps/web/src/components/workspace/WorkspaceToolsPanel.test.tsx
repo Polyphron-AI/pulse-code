@@ -109,7 +109,6 @@ vi.mock("../../localApi", () => ({
 }));
 vi.mock("./mail/useMailLinks", () => ({ useMailLinks: () => ({ linkItem: mocks.link }) }));
 vi.mock("./ProjectTasks", () => ({
-  useWorkspaceCanOperate: () => true,
   workspaceToolsError: () => "Synthetic error",
 }));
 vi.mock("./mail/useMailCapabilities", () => ({
@@ -341,3 +340,5 @@ it("allows browsing without selection and disables linking with a reason", async
   );
   expect(JSON.stringify(renderer!.toJSON())).toContain("Select an item to link this page.");
 });
+
+vi.mock("./useWorkspaceCanOperate", () => ({ useWorkspaceCanOperate: () => true }));
