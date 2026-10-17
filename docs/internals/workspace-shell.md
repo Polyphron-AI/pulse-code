@@ -141,7 +141,8 @@ operate scope and create no access grants. The form blocks schema failures and r
 server rejections, as with timezone settings. The scoped settings writer compares returned values
 with submitted timezone/profile values, accounting for NFC and trim. Older servers can strip
 unknown keys and still return success; a mismatch reports the unsupported field and retains the
-draft. Reset accepts the materialized host timezone instead of comparing it with null.
+draft with one inline notice. Reset accepts the materialized host timezone instead of comparing
+it with null.
 
 ## Shared entrances and status
 

@@ -3,6 +3,7 @@ import { create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import { DEFAULT_SERVER_SETTINGS, ServerSettingsError } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
+import { toastManager } from "../ui/toast";
 import { useUpdateScopedSettings } from "./useScopedSettings";
 const mocks = vi.hoisted(() => ({ persist: vi.fn(), phase: "connected" }));
 vi.mock("./SettingsScopeContext", () => ({
@@ -145,5 +146,51 @@ it.each(["workspaceDisplayTimeZone", "workspaceOwnerProfile"] as const)(
     await act(() => renderer!.root.findByType("button").props.onClick());
     expect(results).toEqual([false]);
     expect(onUnsupportedSetting).toHaveBeenCalledExactlyOnceWith(key);
+    expect(toastManager.add).not.toHaveBeenCalled();
   },
 );
+
+it.each([
+  {
+    label: "NFC owner",
+    patch: { workspaceOwnerProfile: { displayName: "Jose\u0301", initials: "E\u0301" } },
+    saved: { workspaceOwnerProfile: { displayName: "Jos\u00e9", initials: "\u00c9" } },
+  },
+  {
+    label: "trimmed owner",
+    patch: { workspaceOwnerProfile: { displayName: "  Maya  ", initials: " MC " } },
+    saved: { workspaceOwnerProfile: { displayName: "Maya", initials: "MC" } },
+  },
+  {
+    label: "host timezone reset",
+    patch: { workspaceDisplayTimeZone: null },
+    saved: { workspaceDisplayTimeZone: "Africa/Johannesburg" },
+  },
+])("accepts a successful $label save without unsupported feedback", async ({ patch, saved }) => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  mocks.persist.mockResolvedValue({
+    _tag: "Success",
+    value: { ...DEFAULT_SERVER_SETTINGS, ...saved },
+  });
+  const onUnsupportedSetting = vi.fn();
+  const results: boolean[] = [];
+  function Probe() {
+    const update = useUpdateScopedSettings({ onUnsupportedSetting });
+    return (
+      <button
+        onClick={async () => {
+          results.push(await update(patch));
+        }}
+      >
+        Save
+      </button>
+    );
+  }
+  await act(() => {
+    renderer = create(<Probe />);
+  });
+  await act(() => renderer!.root.findByType("button").props.onClick());
+  expect(results).toEqual([true]);
+  expect(onUnsupportedSetting).not.toHaveBeenCalled();
+  expect(toastManager.add).not.toHaveBeenCalled();
+});

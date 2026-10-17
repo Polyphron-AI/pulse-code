@@ -68,6 +68,7 @@ function useRunScopedPlan(
         });
         return false;
       }
+      const inlineFailures = new Set<string>();
       const { failedEnvironments, savedEnvironmentCount } = await persistScopedSettingsPatch(
         plan,
         async (input) => {
@@ -102,6 +103,7 @@ function useRunScopedPlan(
               unsupported.push("workspaceOwnerProfile");
             if (unsupported.length) {
               for (const key of unsupported) onUnsupportedSetting?.(key);
+              if (onUnsupportedSetting) inlineFailures.add(input.environmentId);
               return { _tag: "Failure" as const };
             }
           }
@@ -110,11 +112,15 @@ function useRunScopedPlan(
         persistClientSettingsPatch,
       );
       if (failedEnvironments.length === 0) return true;
+      const toastFailures = failedEnvironments.filter(
+        (environment) => !inlineFailures.has(environment.environmentId),
+      );
+      if (toastFailures.length === 0) return false;
       toastManager.add({
         type: "error",
         title:
           savedEnvironmentCount > 0 ? "Setting saved on some environments" : "Setting not saved",
-        description: `Could not update ${failedEnvironments.map((environment) => environment.label).join(", ")}.${savedEnvironmentCount > 0 ? " The other selected environments saved the change." : ""}`,
+        description: `Could not update ${toastFailures.map((environment) => environment.label).join(", ")}.${savedEnvironmentCount > 0 ? " The other selected environments saved the change." : ""}`,
       });
       return false;
     },
