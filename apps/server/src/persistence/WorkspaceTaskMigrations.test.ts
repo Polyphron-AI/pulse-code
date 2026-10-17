@@ -58,3 +58,38 @@ it.effect("adds nullable civil-date metadata without rewriting existing tasks", 
     ]);
   }).pipe(Effect.provide(NodeSqliteClient.layer({ filename: ":memory:" }))),
 );
+
+it.effect("indexes project, date and owner queries and invalidates task/config generations", () =>
+  Effect.gen(function* () {
+    yield* runMigrations({ toMigrationInclusive: 67 });
+    const sql = yield* SqlClient.SqlClient;
+    yield* sql`INSERT INTO workspace_tasks(id,project_id,title,column_name,owner) VALUES('kept','p','Kept','To do','environment-owner')`;
+    yield* runMigrations();
+    expect(yield* sql`SELECT title,owner,revision FROM workspace_tasks`).toEqual([
+      { title: "Kept", owner: "environment-owner", revision: 0 },
+    ]);
+    const datePlan = yield* sql<{
+      detail: string;
+    }>`EXPLAIN QUERY PLAN SELECT id FROM workspace_tasks WHERE deleted=0 AND due_on>='2026-10-16' ORDER BY due_on,project_id,id LIMIT 51`;
+    expect(datePlan.some((row) => row.detail.includes("workspace_tasks_due_query"))).toBe(true);
+    const projectPlan = yield* sql<{
+      detail: string;
+    }>`EXPLAIN QUERY PLAN SELECT id FROM workspace_tasks WHERE project_id='p' AND deleted=0 AND column_name='To do' AND due_on>='2026-10-16' LIMIT 51`;
+    expect(projectPlan.some((row) => row.detail.includes("workspace_tasks_project_query"))).toBe(
+      true,
+    );
+    const ownerPlan = yield* sql<{
+      detail: string;
+    }>`EXPLAIN QUERY PLAN SELECT id FROM workspace_tasks WHERE owner IS NULL AND deleted=0 AND due_on>='2026-10-16' LIMIT 51`;
+    expect(ownerPlan.some((row) => row.detail.includes("workspace_tasks_owner_query"))).toBe(true);
+    yield* sql`UPDATE workspace_tasks SET owner=NULL WHERE id='kept'`;
+    yield* sql`INSERT INTO workspace_project_config(project_id,columns_json) VALUES('p','["To do","Done"]')`;
+    expect(yield* sql`SELECT generation FROM workspace_task_query_generation`).toEqual([
+      { generation: 2 },
+    ]);
+    yield* runMigrations();
+    expect(yield* sql`SELECT generation FROM workspace_task_query_generation`).toEqual([
+      { generation: 2 },
+    ]);
+  }).pipe(Effect.provide(NodeSqliteClient.layer({ filename: ":memory:" }))),
+);

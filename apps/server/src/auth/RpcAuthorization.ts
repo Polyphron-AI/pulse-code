@@ -28,6 +28,7 @@ type WsRpcMethod = RpcGroup.Rpcs<typeof WsRpcGroup>["_tag"];
  */
 export const RPC_REQUIRED_SCOPES = {
   [WS_METHODS.workspaceGetProjectConfig]: AuthOrchestrationReadScope,
+  [WS_METHODS.workspaceQueryTasks]: AuthOrchestrationReadScope,
   [WS_METHODS.workspaceListTasks]: AuthOrchestrationReadScope,
   [WS_METHODS.workspaceGetTask]: AuthOrchestrationReadScope,
   [WS_METHODS.workspaceSubscribeChanges]: AuthOrchestrationReadScope,

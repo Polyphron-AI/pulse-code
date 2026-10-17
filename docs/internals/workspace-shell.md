@@ -62,10 +62,33 @@ first, so tasks must move out before this normalization and no task changes as a
 The service does not infer a rename from column order or names.
 
 The optional `workspaceTasksV2` flag is trusted only from live server configuration. Decode
-support and service methods land before the flag is advertised. Until then, retain the legacy
-project task and settings paths. Rollback disables the capability and controls while preserving
+support remains additive. The server advertises it only with task transition, patch and paged
+query handlers installed. Servers without it retain the legacy project task and settings paths.
+Rollback disables the capability and controls while preserving
 the forward migration and its data. After an older binary renames a designated column, config
 reads treat its dangling designation as null without rewriting stored settings or tasks.
+
+## Paged task summaries
+
+All-task discovery uses the read-scoped `workspaceQueryTasks` RPC on the existing WorkspaceTools
+service. It does not grant agents discovery or linked-content access. Pages contain at most 100
+summaries, default 50, including owner and project title. Search, state, owner and inclusive civil
+date bounds apply before paging and before total, open-total and lane counts. A Done filter has
+zero open tasks. Undated tasks sort last and do not match date bounds.
+
+Keyset cursors bind the due-date/project/task tuple to normalized filters, the service instance
+and the database generation. Migration 068 adds date, project/column and owner indexes plus
+transactional generation triggers for task, config and project changes. Restarting the service,
+changing filters or changing that generation rejects the cursor. Substring search still scans
+matches; the indexes do not make arbitrary substring search indexed.
+
+Each query reads one transaction. Configs and grouped lane totals cover only projects represented
+on that page, plus an explicit project scope even when empty. Global consumers cannot infer all
+empty projects from a page. The shared environment/query atom reuses one change subscription,
+invalidates active pages on change and hides old values during refresh or cursor failure.
+Consumers restart pagination instead of appending a new generation to old pages. Reconnects use
+the session generation without polling. The legacy project list keeps its 200-task limit and
+incomplete flag until its UI replacement ships.
 
 ## Task dates and environment timezone
 

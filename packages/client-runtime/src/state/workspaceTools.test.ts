@@ -1,5 +1,5 @@
 import { ProjectId as importProjectId } from "@t3tools/contracts";
-import { EnvironmentId, WS_METHODS } from "@t3tools/contracts";
+import { EnvironmentId, WS_METHODS, WorkspaceToolsError } from "@t3tools/contracts";
 import { expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Latch from "effect/Latch";
@@ -13,6 +13,8 @@ import type { ConnectionCatalogEntry } from "../connection/catalog.ts";
 import {
   AVAILABLE_CONNECTION_STATE,
   PrimaryConnectionTarget,
+  RelayConnectionTarget,
+  type ConnectionTarget,
   type PreparedConnection,
   type SupervisorConnectionState,
 } from "../connection/model.ts";
@@ -41,7 +43,11 @@ function session(client: WsRpcProtocolClient): RpcSession {
   };
 }
 
-const makeTestRuntime = Effect.fn("makeTestRuntime")(function* (client: WsRpcProtocolClient) {
+const makeTestRuntime = Effect.fn("makeTestRuntime")(function* (
+  client: WsRpcProtocolClient,
+  otherClient = client,
+  otherTarget: ConnectionTarget = TARGET,
+) {
   const connectionState: SupervisorConnectionState = {
     ...AVAILABLE_CONNECTION_STATE,
     desired: true,
@@ -59,16 +65,37 @@ const makeTestRuntime = Effect.fn("makeTestRuntime")(function* (client: WsRpcPro
     disconnect: Effect.void,
     retryNow: Effect.void,
   } satisfies EnvironmentSupervisor.EnvironmentSupervisor["Service"]);
+  const other = {
+    ...supervisor,
+    target: otherTarget,
+    session: yield* SubscriptionRef.make(Option.some(session(otherClient))),
+  };
+  const forEnvironment = (id: EnvironmentId) => (id === TARGET.environmentId ? supervisor : other);
   const environmentRegistry = EnvironmentRegistry.EnvironmentRegistry.of({
     entries: yield* SubscriptionRef.make<ReadonlyMap<EnvironmentId, ConnectionCatalogEntry>>(
-      new Map([[TARGET.environmentId, { target: TARGET, profile: Option.none(), enabled: true }]]),
+      new Map([
+        [TARGET.environmentId, { target: TARGET, profile: Option.none(), enabled: true }],
+        [otherTarget.environmentId, { target: otherTarget, profile: Option.none(), enabled: true }],
+      ]),
     ),
-    run: (_environmentId, effect) =>
-      Effect.provideService(effect, EnvironmentSupervisor.EnvironmentSupervisor, supervisor),
-    runStream: (_environmentId, stream) =>
-      Stream.provideService(stream, EnvironmentSupervisor.EnvironmentSupervisor, supervisor),
-    followStream: (_environmentId, stream) =>
-      Stream.provideService(stream, EnvironmentSupervisor.EnvironmentSupervisor, supervisor),
+    run: (environmentId, effect) =>
+      Effect.provideService(
+        effect,
+        EnvironmentSupervisor.EnvironmentSupervisor,
+        forEnvironment(environmentId),
+      ),
+    runStream: (environmentId, stream) =>
+      Stream.provideService(
+        stream,
+        EnvironmentSupervisor.EnvironmentSupervisor,
+        forEnvironment(environmentId),
+      ),
+    followStream: (environmentId, stream) =>
+      Stream.provideService(
+        stream,
+        EnvironmentSupervisor.EnvironmentSupervisor,
+        forEnvironment(environmentId),
+      ),
   } as EnvironmentRegistry.EnvironmentRegistry["Service"]);
   const runtime = Atom.runtime(
     Layer.succeed(EnvironmentRegistry.EnvironmentRegistry, environmentRegistry),
@@ -76,7 +103,7 @@ const makeTestRuntime = Effect.fn("makeTestRuntime")(function* (client: WsRpcPro
   const registry = yield* Effect.acquireRelease(Effect.sync(AtomRegistry.make), (registry) =>
     Effect.sync(() => registry.dispose()),
   );
-  return { atoms: createWorkspaceToolsAtoms(runtime), registry };
+  return { atoms: createWorkspaceToolsAtoms(runtime), registry, supervisor };
 });
 
 it.effect("refreshes project task columns after another device changes the environment", () =>
@@ -201,6 +228,182 @@ it.effect.each(["transition", "metadata"] as const)(
               );
         expect(result._tag).toBe("Success");
         yield* refreshed.await;
+      }),
+    ),
+);
+
+const emptyPage = (total: number, nextCursor: string | null = null) => ({
+  tasks: [],
+  total,
+  openTotal: total,
+  nextCursor,
+  projects: [],
+  laneTotals: [],
+});
+it.effect("shares normalized global summaries and one subscription without project fanout", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      let reads = 0,
+        subscriptions = 0,
+        lists = 0;
+      const counter = yield* SubscriptionRef.make(0);
+      const client = {
+        [WS_METHODS.workspaceSubscribeChanges]: () => {
+          subscriptions++;
+          return SubscriptionRef.changes(counter).pipe(Stream.filter((n) => n > 0));
+        },
+        [WS_METHODS.workspaceQueryTasks]: () =>
+          Effect.sync(() => {
+            reads++;
+            return emptyPage(250);
+          }),
+        [WS_METHODS.workspaceListTasks]: () =>
+          Effect.sync(() => {
+            lists++;
+            return { tasks: [], incomplete: false };
+          }),
+      } as unknown as WsRpcProtocolClient;
+      const { atoms, registry } = yield* makeTestRuntime(client);
+      const first = atoms.queryTasks({
+        environmentId: TARGET.environmentId,
+        input: { text: " launch " },
+      });
+      const second = atoms.queryTasks({
+        environmentId: TARGET.environmentId,
+        input: { state: "all", owner: "all", limit: 50, text: "launch" },
+      });
+      expect(first).toBe(second);
+      const stops = [registry.mount(first), registry.mount(second)];
+      yield* Effect.addFinalizer(() => Effect.sync(() => stops.forEach((stop) => stop())));
+      expect(
+        AsyncResult.getOrThrow(yield* Effect.promise(() => executeAtomQuery(registry, first)))
+          .total,
+      ).toBe(250);
+      expect({ reads, subscriptions, lists }).toEqual({ reads: 1, subscriptions: 1, lists: 0 });
+    }),
+  ),
+);
+it.effect("clears obsolete cursor pages on changes and refreshes the first page on reconnect", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const counter = yield* SubscriptionRef.make(0);
+      const changed = Latch.makeUnsafe(),
+        release = Latch.makeUnsafe();
+      let generation = 0;
+      const calls: (string | undefined)[] = [];
+      const client = {
+        [WS_METHODS.workspaceSubscribeChanges]: () =>
+          SubscriptionRef.changes(counter).pipe(Stream.filter((n) => n > 0)),
+        [WS_METHODS.workspaceQueryTasks]: (input: { cursor?: string }) =>
+          Effect.gen(function* () {
+            calls.push(input.cursor);
+            if (generation > 0) {
+              if (input.cursor) changed.openUnsafe();
+              yield* release.await;
+            }
+            if (input.cursor && generation > 0)
+              return yield* new WorkspaceToolsError({
+                kind: "invalid-input",
+                message: "Restart pagination",
+              });
+            return emptyPage(generation + 1, input.cursor ? null : "old");
+          }),
+      } as unknown as WsRpcProtocolClient;
+      const { atoms, registry, supervisor } = yield* makeTestRuntime(client);
+      const first = atoms.queryTasks({ environmentId: TARGET.environmentId, input: {} });
+      const page = atoms.queryTasks({
+        environmentId: TARGET.environmentId,
+        input: { cursor: "old" },
+      });
+      const stops = [registry.mount(first), registry.mount(page)];
+      yield* Effect.addFinalizer(() => Effect.sync(() => stops.forEach((stop) => stop())));
+      yield* Effect.promise(() => executeAtomQuery(registry, first));
+      yield* Effect.promise(() => executeAtomQuery(registry, page));
+      const cleared = Latch.makeUnsafe();
+      const stopCleared = registry.subscribe(page, (result) => {
+        if (result.waiting && Option.isNone(AsyncResult.value(result))) cleared.openUnsafe();
+      });
+      yield* Effect.addFinalizer(() => Effect.sync(stopCleared));
+      generation = 1;
+      yield* SubscriptionRef.set(counter, 1);
+      yield* changed.await;
+      yield* cleared.await;
+      expect(Option.isNone(AsyncResult.value(registry.get(page)))).toBe(true);
+      release.openUnsafe();
+      const failed = yield* Effect.promise(() => executeAtomQuery(registry, page));
+      expect(AsyncResult.isFailure(failed)).toBe(true);
+      expect(Option.isNone(AsyncResult.value(failed))).toBe(true);
+      expect(
+        AsyncResult.getOrThrow(yield* Effect.promise(() => executeAtomQuery(registry, first)))
+          .total,
+      ).toBe(2);
+      generation = 2;
+      const refreshed = Latch.makeUnsafe();
+      const stop = registry.subscribe(first, (result) => {
+        if (AsyncResult.isSuccess(result) && result.value.total === 3) refreshed.openUnsafe();
+      });
+      yield* Effect.addFinalizer(() => Effect.sync(stop));
+      yield* SubscriptionRef.update(supervisor.state, (state) => ({
+        ...state,
+        generation: state.generation + 1,
+      }));
+      yield* refreshed.await;
+      expect(calls.filter((cursor) => cursor === undefined)).toHaveLength(3);
+    }),
+  ),
+);
+it.effect.each(["local", "direct", "relay", "tunnel"])(
+  "keeps late %s summary responses bound to their environment",
+  (mode) =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const started = Latch.makeUnsafe(),
+          finish = Latch.makeUnsafe();
+        const slow = {
+          [WS_METHODS.workspaceSubscribeChanges]: () => Stream.never,
+          [WS_METHODS.workspaceQueryTasks]: () =>
+            Effect.gen(function* () {
+              started.openUnsafe();
+              yield* finish.await;
+              return emptyPage(1);
+            }),
+        } as unknown as WsRpcProtocolClient;
+        const fast = {
+          [WS_METHODS.workspaceSubscribeChanges]: () => Stream.never,
+          [WS_METHODS.workspaceQueryTasks]: () => Effect.succeed(emptyPage(2)),
+        } as unknown as WsRpcProtocolClient;
+        const environmentId = EnvironmentId.make(mode);
+        const origin =
+          mode === "local"
+            ? "http://127.0.0.1:3773"
+            : mode === "direct"
+              ? "http://remote.tailnet.test:3773"
+              : "https://tunnel.example.test/environment";
+        const target =
+          mode === "relay"
+            ? new RelayConnectionTarget({ environmentId, label: mode })
+            : new PrimaryConnectionTarget({
+                environmentId,
+                label: mode,
+                httpBaseUrl: origin,
+                wsBaseUrl: origin.replace(/^http/, "ws"),
+              });
+        const { atoms, registry } = yield* makeTestRuntime(slow, fast, target);
+        const old = atoms.queryTasks({ environmentId: TARGET.environmentId, input: {} });
+        const current = atoms.queryTasks({ environmentId, input: {} });
+        const stops = [registry.mount(old), registry.mount(current)];
+        yield* Effect.addFinalizer(() => Effect.sync(() => stops.forEach((stop) => stop())));
+        yield* started.await;
+        expect(
+          AsyncResult.getOrThrow(yield* Effect.promise(() => executeAtomQuery(registry, current)))
+            .total,
+        ).toBe(2);
+        finish.openUnsafe();
+        expect(
+          AsyncResult.getOrThrow(yield* Effect.promise(() => executeAtomQuery(registry, old)))
+            .total,
+        ).toBe(1);
+        expect(AsyncResult.getOrThrow(registry.get(current)).total).toBe(2);
       }),
     ),
 );

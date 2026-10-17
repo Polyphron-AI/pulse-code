@@ -884,3 +884,30 @@ it("resets a dirty task editor for an equal task ID on a different environment",
   await act(() => renderer!.root.findAllByType("form")[1]!.props.onSubmit({ preventDefault() {} }));
   expect(mocks.newCommand).not.toHaveBeenCalled();
 });
+
+it.each([undefined, false])(
+  "removes the project task upgrade notice when the live capability changes from %s to true",
+  async (flag) => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    mocks.tasksV2 = flag as boolean;
+    const view = () => (
+      <>
+        <ProjectTasks
+          environmentId={environmentId}
+          projectId={projectId}
+          selected={null}
+          onSelect={() => {}}
+        />
+        <ProjectWorkspaceSettings environmentId={environmentId} projectId={projectId} />
+      </>
+    );
+    await act(() => {
+      renderer = create(view());
+    });
+    expect(JSON.stringify(renderer!.toJSON())).toContain("Tasks need a newer server.");
+    expect(mocks.newCommand).not.toHaveBeenCalled();
+    mocks.tasksV2 = true;
+    await act(() => renderer!.update(view()));
+    expect(JSON.stringify(renderer!.toJSON())).not.toContain("Tasks need a newer server.");
+  },
+);

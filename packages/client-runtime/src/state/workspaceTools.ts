@@ -1,5 +1,6 @@
-import { WS_METHODS } from "@t3tools/contracts";
-import type { Atom } from "effect/unstable/reactivity";
+import { WS_METHODS, WorkspaceTaskQuery, type EnvironmentId } from "@t3tools/contracts";
+import { Atom, AsyncResult } from "effect/unstable/reactivity";
+import * as Schema from "effect/Schema";
 import type { EnvironmentRegistry } from "../connection/registry.ts";
 import {
   createAtomCommandScheduler,
@@ -19,6 +20,46 @@ export function createWorkspaceToolsAtoms<R, E>(
   }: {
     environmentId: import("@t3tools/contracts").EnvironmentId;
   }) => changes({ environmentId, input: {} });
+  const summaries = createEnvironmentRpcQueryAtomFamily(runtime, {
+    label: "workspace-tools:queryTasks",
+    tag: WS_METHODS.workspaceQueryTasks,
+    refreshTrigger,
+    staleTimeMs: 30000,
+  });
+  // A cursor belongs to one dataset generation. Never expose an old page during refresh.
+  type SummaryResult = Atom.Type<ReturnType<typeof summaries>>;
+  const summaryPages = Atom.family((atom: ReturnType<typeof summaries>) =>
+    Atom.map(atom, (result): SummaryResult => {
+      if (result.waiting) return AsyncResult.initial(true);
+      if (AsyncResult.isFailure(result)) return AsyncResult.failure(result.cause);
+      return result;
+    }),
+  );
+  const decodeQuery = Schema.decodeUnknownSync(WorkspaceTaskQuery);
+  const queryTasks = ({
+    environmentId,
+    input,
+  }: {
+    environmentId: EnvironmentId;
+    input: typeof WorkspaceTaskQuery.Encoded;
+  }) => {
+    const query = decodeQuery(input);
+    return summaryPages(
+      summaries({
+        environmentId,
+        input: {
+          ...(query.projectId ? { projectId: query.projectId } : {}),
+          state: query.state,
+          ...(query.text ? { text: query.text } : {}),
+          ...(query.dueFrom ? { dueFrom: query.dueFrom } : {}),
+          ...(query.dueTo ? { dueTo: query.dueTo } : {}),
+          owner: query.owner,
+          limit: query.limit,
+          ...(query.cursor ? { cursor: query.cursor } : {}),
+        },
+      }),
+    );
+  };
   const scheduler = createAtomCommandScheduler();
   const concurrency = {
     mode: "serial",
@@ -26,6 +67,7 @@ export function createWorkspaceToolsAtoms<R, E>(
   } as const;
   return {
     changes,
+    queryTasks,
     config: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "workspace-tools:config",
       tag: WS_METHODS.workspaceGetProjectConfig,

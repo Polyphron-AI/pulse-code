@@ -3,6 +3,8 @@ import * as Schema from "effect/Schema";
 import { ServerConfig } from "./server.ts";
 import {
   WorkspaceTask,
+  WorkspaceTaskQuery,
+  WorkspaceTaskPage,
   WorkspaceTaskDueOn,
   WorkspaceTaskPatch,
   WorkspaceTaskUpsert,
@@ -13,6 +15,8 @@ import {
   PulseWorkspaceToolsRpcs,
   WorkspaceToolsError,
 } from "./pulseWorkspaceTools.ts";
+const decodeQuery = Schema.decodeUnknownSync(WorkspaceTaskQuery);
+const decodePage = Schema.decodeUnknownSync(WorkspaceTaskPage);
 const decodeTask = Schema.decodeUnknownSync(WorkspaceTask);
 const decodeUpsert = Schema.decodeUnknownSync(WorkspaceTaskUpsert);
 const decodeConfig = Schema.decodeUnknownSync(WorkspaceProjectConfig);
@@ -89,7 +93,7 @@ const isConfig = Schema.is(WorkspaceProjectConfig);
 const isTask = Schema.is(WorkspaceTaskUpsert);
 const isAutomation = Schema.is(WorkspaceAutomationSave);
 it("bounds basic task settings and exposes an optional workspace family without recurrence or dependency fields", () => {
-  expect(PulseWorkspaceToolsRpcs).toHaveLength(10);
+  expect(PulseWorkspaceToolsRpcs).toHaveLength(11);
   expect(
     isConfig({
       projectId: "p",
@@ -149,4 +153,47 @@ it("preserves absent patch keys and accepts explicit metadata clears and atomic 
   for (const areaLabel of ["", "   ", "x".repeat(121)])
     expect(() => decode({ ...input, areaLabel })).toThrow();
   expect(() => decode({ ...input, dueOn: "2026-02-30" })).toThrow();
+});
+
+it("normalizes and bounds summary queries before paging", () => {
+  const decode = decodeQuery;
+  expect(decode({})).toEqual({ state: "all", owner: "all", limit: 50 });
+  expect(decode({ text: "  keyword  ", owner: "unassigned", limit: 100 })).toMatchObject({
+    text: "keyword",
+    owner: "unassigned",
+    limit: 100,
+  });
+  for (const input of [
+    { limit: 0 },
+    { limit: 101 },
+    { limit: 1.5 },
+    { text: "x".repeat(241) },
+    { cursor: "x".repeat(8193) },
+    { state: "unknown" },
+    { owner: "maya" },
+    { dueFrom: "2026-02-30" },
+    { dueFrom: "2026-10-17", dueTo: "2026-10-16" },
+  ])
+    expect(() => decode(input)).toThrow();
+  const page = {
+    tasks: [
+      {
+        ...task,
+        projectTitle: "Project",
+        revision: 0,
+        done: false,
+        dueOn: null,
+        areaLabel: null,
+        owner: null,
+      },
+    ],
+    total: 1,
+    openTotal: 1,
+    nextCursor: null,
+    projects: [],
+    laneTotals: [],
+  };
+  expect(decodePage(page)).toEqual(page);
+  const { owner: _owner, ...withoutOwner } = page.tasks[0]!;
+  expect(() => decodePage({ ...page, tasks: [withoutOwner] })).toThrow();
 });

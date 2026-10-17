@@ -6,7 +6,12 @@ import { EnvironmentId } from "@t3tools/contracts";
 import { expect, it, vi } from "vite-plus/test";
 import { ProjectsSpace } from "./ProjectsSpace";
 import { WorkspaceResourcesProvider, useWorkspaceResourceState } from "./workspaceResourceState";
-const mocks = vi.hoisted(() => ({ item: undefined as string | undefined, hub: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  item: undefined as string | undefined,
+  hub: vi.fn(),
+  tasksV2: false,
+  listeners: new Set<() => void>(),
+}));
 vi.mock("@tanstack/react-router", () => ({
   useSearch: () => ({ project: "project", environment: "remote", item: mocks.item }),
   useNavigate: () => vi.fn(),
@@ -24,15 +29,31 @@ vi.mock("./useWorkspaceHeaderModel", () => ({
     spaceLabel: "Projects",
   }),
 }));
-vi.mock("./mail/useMailCapabilities", () => ({
-  useMailCapabilities: () => ({
-    environmentId: "remote",
-    workspaceItemContext: true,
-    workspaceTools: true,
-    workspaceLinks: true,
-  }),
+vi.mock("./mail/useMailCapabilities", async () => {
+  const { useSyncExternalStore } = await import("react");
+  return {
+    useMailCapabilities: () => {
+      const workspaceTasksV2 = useSyncExternalStore(
+        (listener) => {
+          mocks.listeners.add(listener);
+          return () => mocks.listeners.delete(listener);
+        },
+        () => mocks.tasksV2,
+      );
+      return {
+        environmentId: "remote",
+        workspaceItemContext: true,
+        workspaceTools: true,
+        workspaceTasksV2,
+        ready: true,
+        workspaceLinks: true,
+      };
+    },
+  };
+});
+vi.mock("../../state/workspaceTools", () => ({
+  workspaceTools: { task: () => "task", config: () => "config", tasks: () => "tasks" },
 }));
-vi.mock("../../state/workspaceTools", () => ({ workspaceTools: { task: () => "task" } }));
 vi.mock("../../state/workspaceLinks", () => ({
   workspaceLinks: {
     projectHub: () => {
@@ -43,7 +64,19 @@ vi.mock("../../state/workspaceLinks", () => ({
 }));
 vi.mock("../../state/query", () => ({
   useEnvironmentQuery: (query: string | null) => ({
-    data: query === "hub" ? { related: [], truncated: false } : null,
+    data:
+      query === "hub"
+        ? { related: [], truncated: false }
+        : query === "config"
+          ? {
+              projectId: "project",
+              taskColumns: ["To do", "Done"],
+              completedColumn: "Done",
+              revision: 0,
+            }
+          : query === "tasks"
+            ? { tasks: [], incomplete: false }
+            : null,
     error: query === "task" ? "This task was deleted." : null,
     isPending: false,
     refresh() {},
@@ -54,10 +87,19 @@ vi.mock("./WorkspaceItemActions", () => ({
   WorkspaceItemActions: () => null,
   WorkspaceItemMenu: ({ children }: { children: ReactNode }) => children,
 }));
-vi.mock("./ProjectTasks", () => ({
-  ProjectTasks: () => null,
-  ProjectWorkspaceSettings: () => null,
+vi.mock("./ProjectTasks", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./ProjectTasks")>()),
 }));
+vi.mock("../../hooks/useSettings", () => ({
+  useEnvironmentSettings: (_id: unknown, select: (settings: unknown) => unknown) =>
+    select({ workspaceDisplayTimeZone: "UTC", workspaceOwnerProfile: null }),
+}));
+vi.mock("../../state/session", () => ({
+  useEnvironmentSessionState: () => ({
+    data: { authenticated: true, scopes: ["orchestration:operate"] },
+  }),
+}));
+vi.mock("../../state/use-atom-command", () => ({ useAtomCommand: () => vi.fn() }));
 vi.mock("./mail/LinkedSection", () => ({ LinkedSection: () => <p>Direct links</p> }));
 vi.mock("./useWorkspaceItemOpener", () => ({
   useWorkspaceItemOpener: () => vi.fn(),
@@ -110,3 +152,38 @@ it.each([false, true])(
     }
   },
 );
+
+it("removes the upgrade notice throughout the Projects project-task path after a live capability flip", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  mocks.item = undefined;
+  mocks.tasksV2 = false;
+  function App() {
+    const state = useWorkspaceResourceState(EnvironmentId.make("remote"), {
+      storage: { getItem: () => null, setItem() {} },
+    });
+    return (
+      <WorkspaceResourcesProvider value={state}>
+        <ProjectsSpace />
+      </WorkspaceResourcesProvider>
+    );
+  }
+  const node = document.createElement("div");
+  document.body.append(node);
+  const root = createRoot(node);
+  try {
+    await act(() => root.render(<App />));
+    expect(node.textContent).toContain("Tasks need a newer server.");
+    await act(() => {
+      mocks.tasksV2 = true;
+      for (const listener of mocks.listeners) listener();
+    });
+    expect(node.textContent).not.toContain("Tasks need a newer server.");
+    expect(getByRole(node, "heading", { name: "Tasks" })).toBeDefined();
+  } finally {
+    await act(() => root.unmount());
+    node.remove();
+    mocks.tasksV2 = false;
+    vi.clearAllMocks();
+    vi.unstubAllGlobals();
+  }
+});

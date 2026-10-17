@@ -1,11 +1,15 @@
 import {
   WorkspaceToolsError,
+  WorkspaceTaskQuery,
+  WorkspaceTaskDueOn,
+  WorkspaceTaskId,
+  ProjectId,
+  type WorkspaceTaskPage,
   type WorkspaceProjectConfigSave,
   type WorkspaceTaskTransition,
   ThreadId,
   WorkspaceTaskUpsert,
   WorkspaceTaskPatch,
-  type ProjectId,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
@@ -21,6 +25,23 @@ const decodeColumns = Schema.decodeUnknownEffect(Columns);
 const encodeColumns = Schema.encodeSync(Columns);
 const decodeTaskUpsert = Schema.decodeEffect(WorkspaceTaskUpsert);
 const decodeTaskPatch = Schema.decodeEffect(WorkspaceTaskPatch);
+const decodeQuery = Schema.decodeUnknownEffect(WorkspaceTaskQuery);
+const Cursor = Schema.fromJsonString(
+  Schema.Struct({
+    version: Schema.Literal(1),
+    instance: Schema.String,
+    generation: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    fingerprint: Schema.String,
+    dueOn: Schema.NullOr(WorkspaceTaskDueOn),
+    projectId: ProjectId,
+    id: WorkspaceTaskId,
+  }),
+);
+const encodeCursor = Schema.encodeSync(Cursor);
+const encodeFingerprint = Schema.encodeSync(
+  Schema.fromJsonString(Schema.Array(Schema.NullOr(Schema.Union([Schema.String, Schema.Number])))),
+);
+const decodeCursor = Schema.decodeUnknownEffect(Cursor);
 const isToolsError = Schema.is(WorkspaceToolsError);
 const fail = (kind: WorkspaceToolsError["kind"], message: string) =>
   new WorkspaceToolsError({ kind, message });
@@ -38,6 +59,7 @@ interface TaskRow {
 export const make = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   const crypto = yield* Crypto.Crypto;
+  const instance = yield* crypto.randomUUIDv4;
   const locks = yield* makeKeyedSerialExecutor<string>();
   const counter = yield* SubscriptionRef.make(0);
   const announce = SubscriptionRef.update(counter, (n) => n + 1);
@@ -128,6 +150,150 @@ export const make = Effect.gen(function* () {
   return {
     config,
     getTask,
+    queryTasks: (input: typeof WorkspaceTaskQuery.Encoded) =>
+      safe(
+        sql.withTransaction(
+          Effect.gen(function* () {
+            const query = yield* decodeQuery(input).pipe(
+              Effect.mapError(() =>
+                fail("invalid-input", "Choose valid task filters and a page size from 1 to 100."),
+              ),
+            );
+            if (query.projectId) yield* requireProject(query.projectId);
+            const [{ generation } = { generation: 0 }] = yield* sql<{
+              generation: number;
+            }>`SELECT generation FROM workspace_task_query_generation WHERE id=1`;
+            const fingerprint = encodeFingerprint([
+              query.projectId ?? null,
+              query.state,
+              query.text || null,
+              query.dueFrom ?? null,
+              query.dueTo ?? null,
+              query.owner,
+              query.limit,
+            ]);
+            let cursor: typeof Cursor.Type | undefined;
+            if (query.cursor !== undefined) {
+              if (!/^[A-Za-z0-9_-]+$/.test(query.cursor))
+                return yield* fail(
+                  "invalid-input",
+                  "This task page is unavailable. Restart from the first page.",
+                );
+              cursor = yield* decodeCursor(
+                Buffer.from(query.cursor, "base64url").toString("utf8"),
+              ).pipe(
+                Effect.mapError(() =>
+                  fail(
+                    "invalid-input",
+                    "This task page is unavailable. Restart from the first page.",
+                  ),
+                ),
+              );
+              if (
+                cursor.instance !== instance ||
+                cursor.generation !== generation ||
+                cursor.fingerprint !== fingerprint
+              )
+                return yield* fail(
+                  "invalid-input",
+                  "Tasks or filters changed. Restart from the first page.",
+                );
+            }
+            const done = sql`COALESCE(t.column_name=CASE WHEN c.project_id IS NULL THEN 'Done' ELSE c.completed_column END,0)`;
+            const filters = [sql`t.deleted=0`];
+            if (query.projectId) filters.push(sql`t.project_id=${query.projectId}`);
+            if (query.state !== "all") filters.push(sql`${done}=${query.state === "done" ? 1 : 0}`);
+            if (query.owner === "unassigned") filters.push(sql`t.owner IS NULL`);
+            if (query.owner === "environment-owner") filters.push(sql`t.owner=${query.owner}`);
+            if (query.dueFrom) filters.push(sql`t.due_on>=${query.dueFrom}`);
+            if (query.dueTo) filters.push(sql`t.due_on<=${query.dueTo}`);
+            if (query.text) {
+              const text = `%${query.text.replace(/[!%_]/g, (value) => `!${value}`)}%`;
+              filters.push(
+                sql`(t.title LIKE ${text} ESCAPE '!' OR t.area_label LIKE ${text} ESCAPE '!' OR p.title LIKE ${text} ESCAPE '!')`,
+              );
+            }
+            const relation = sql`FROM workspace_tasks t JOIN projection_projects p ON p.project_id=t.project_id AND p.deleted_at IS NULL LEFT JOIN workspace_project_config c ON c.project_id=t.project_id`;
+            const [counts] = yield* sql<{
+              total: number;
+              openTotal: number;
+            }>`SELECT COUNT(*) AS total,COALESCE(SUM(1-${done}),0) AS "openTotal" ${relation} WHERE ${sql.and(filters)}`;
+            const pageFilters = [...filters];
+            if (cursor) {
+              const tie = sql`(t.project_id,t.id)>(${cursor.projectId},${cursor.id})`;
+              pageFilters.push(
+                cursor.dueOn === null
+                  ? sql`(t.due_on IS NULL AND ${tie})`
+                  : sql`(t.due_on IS NULL OR t.due_on>${cursor.dueOn} OR (t.due_on=${cursor.dueOn} AND ${tie}))`,
+              );
+            }
+            const rows = yield* sql<
+              TaskRow & { projectTitle: string }
+            >`SELECT t.id,t.project_id AS "projectId",p.title AS "projectTitle",t.title,t.column_name AS "column",t.revision,t.due_on AS "dueOn",t.area_label AS "areaLabel",t.owner,${done} AS done ${relation} WHERE ${sql.and(pageFilters)} ORDER BY (t.due_on IS NULL),t.due_on,t.project_id,t.id LIMIT ${query.limit + 1}`;
+            const tasks = rows
+              .slice(0, query.limit)
+              .map((row) => ({ ...row, done: row.done === 1 }));
+            const projectIds = [
+              ...new Set([
+                ...tasks.map((task) => task.projectId),
+                ...(query.projectId ? [query.projectId] : []),
+              ]),
+            ];
+            const projects: WorkspaceTaskPage["projects"][number][] = [];
+            let laneTotals: WorkspaceTaskPage["laneTotals"] = [];
+            if (projectIds.length) {
+              const configs = yield* sql<{
+                projectId: ProjectId;
+                columnsJson: string | null;
+                browserThreadId: string | null;
+                completedColumn: string | null;
+                revision: number | null;
+              }>`SELECT p.project_id AS "projectId",c.columns_json AS "columnsJson",c.browser_thread_id AS "browserThreadId",CASE WHEN c.project_id IS NULL THEN 'Done' ELSE c.completed_column END AS "completedColumn",c.revision FROM projection_projects p LEFT JOIN workspace_project_config c ON c.project_id=p.project_id WHERE ${sql.in("p.project_id", projectIds)} AND p.deleted_at IS NULL ORDER BY p.project_id`;
+              for (const row of configs) {
+                const taskColumns =
+                  row.columnsJson === null
+                    ? ["To do", "In progress", "Done"]
+                    : yield* decodeColumns(row.columnsJson);
+                projects.push({
+                  projectId: row.projectId,
+                  taskColumns,
+                  browserThreadId: row.browserThreadId ? ThreadId.make(row.browserThreadId) : null,
+                  completedColumn:
+                    row.completedColumn !== null && taskColumns.includes(row.completedColumn)
+                      ? row.completedColumn
+                      : null,
+                  revision: row.revision ?? 0,
+                });
+              }
+              laneTotals = yield* sql<
+                WorkspaceTaskPage["laneTotals"][number]
+              >`SELECT t.project_id AS "projectId",t.column_name AS "column",COUNT(*) AS total ${relation} WHERE ${sql.and([...filters, sql.in("t.project_id", projectIds)])} GROUP BY t.project_id,t.column_name ORDER BY t.project_id,t.column_name`;
+            }
+            const last = tasks.at(-1);
+            return {
+              tasks,
+              total: counts?.total ?? 0,
+              openTotal: counts?.openTotal ?? 0,
+              projects,
+              laneTotals,
+              nextCursor:
+                rows.length > query.limit && last
+                  ? Buffer.from(
+                      encodeCursor({
+                        version: 1,
+                        instance,
+                        generation,
+                        fingerprint,
+                        dueOn: last.dueOn,
+                        projectId: last.projectId,
+                        id: last.id,
+                      }),
+                    ).toString("base64url")
+                  : null,
+            } satisfies WorkspaceTaskPage;
+          }),
+        ),
+      ),
     changes: SubscriptionRef.changes(counter).pipe(Stream.filter((n) => n > 0)),
     saveConfig: (input: WorkspaceProjectConfigSave) =>
       locks.withLock(

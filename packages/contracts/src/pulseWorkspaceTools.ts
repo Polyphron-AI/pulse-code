@@ -1,3 +1,4 @@
+import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Rpc from "effect/unstable/rpc/Rpc";
 import { EnvironmentAuthorizationError } from "./auth.ts";
@@ -79,6 +80,46 @@ export const WorkspaceTaskUpsert = Schema.Struct({
   owner: Schema.optionalKey(WorkspaceTaskOwner),
 });
 export type WorkspaceTaskUpsert = typeof WorkspaceTaskUpsert.Type;
+export const WorkspaceTaskSummary = Schema.Struct({
+  ...WorkspaceTask.fields,
+  projectTitle: Schema.String,
+  revision: NonNegativeInt,
+  done: Schema.Boolean,
+  dueOn: Schema.NullOr(WorkspaceTaskDueOn),
+  areaLabel: Schema.NullOr(AreaLabel),
+  owner: WorkspaceTaskOwner,
+});
+export type WorkspaceTaskSummary = typeof WorkspaceTaskSummary.Type;
+export const WorkspaceTaskQuery = Schema.Struct({
+  projectId: Schema.optionalKey(ProjectId),
+  state: Schema.Literals(["all", "open", "done"]).pipe(
+    Schema.withDecodingDefault(Effect.succeed("all")),
+  ),
+  text: Schema.optionalKey(Schema.Trim.check(Schema.isMaxLength(240))),
+  dueFrom: Schema.optionalKey(WorkspaceTaskDueOn),
+  dueTo: Schema.optionalKey(WorkspaceTaskDueOn),
+  owner: Schema.Literals(["all", "environment-owner", "unassigned"]).pipe(
+    Schema.withDecodingDefault(Effect.succeed("all")),
+  ),
+  limit: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(100)).pipe(
+    Schema.withDecodingDefault(Effect.succeed(50)),
+  ),
+  cursor: Schema.optionalKey(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(8192))),
+}).check(
+  Schema.makeFilter((query) => !query.dueFrom || !query.dueTo || query.dueFrom <= query.dueTo),
+);
+export type WorkspaceTaskQuery = typeof WorkspaceTaskQuery.Type;
+export const WorkspaceTaskPage = Schema.Struct({
+  tasks: Schema.Array(WorkspaceTaskSummary).check(Schema.isMaxLength(100)),
+  total: NonNegativeInt,
+  openTotal: NonNegativeInt,
+  nextCursor: Schema.NullOr(Schema.String.check(Schema.isMaxLength(8192))),
+  projects: Schema.Array(WorkspaceProjectConfig).check(Schema.isMaxLength(100)),
+  laneTotals: Schema.Array(
+    Schema.Struct({ projectId: ProjectId, column: Column, total: NonNegativeInt }),
+  ).check(Schema.isMaxLength(1200)),
+});
+export type WorkspaceTaskPage = typeof WorkspaceTaskPage.Type;
 export const WorkspaceAutomationSave = Schema.Struct({
   requestId: Schema.String.check(Schema.isPattern(/^[a-f0-9-]{36}$/)),
   source: WorkspaceLinkEndpoint,
@@ -97,6 +138,7 @@ const error = Schema.Union([WorkspaceToolsError, EnvironmentAuthorizationError])
 export const PULSE_WORKSPACE_TOOLS_METHODS = {
   workspaceGetProjectConfig: "pulse.workspace.getProjectConfig",
   workspaceSaveProjectConfig: "pulse.workspace.saveProjectConfig",
+  workspaceQueryTasks: "pulse.workspace.queryTasks",
   workspaceListTasks: "pulse.workspace.listTasks",
   workspaceGetTask: "pulse.workspace.getTask",
   workspacePatchTask: "pulse.workspace.patchTask",
@@ -107,6 +149,11 @@ export const PULSE_WORKSPACE_TOOLS_METHODS = {
   workspaceSaveAutomation: "pulse.workspace.saveAutomation",
 } as const;
 export const PulseWorkspaceToolsRpcs = [
+  Rpc.make(PULSE_WORKSPACE_TOOLS_METHODS.workspaceQueryTasks, {
+    payload: WorkspaceTaskQuery,
+    success: WorkspaceTaskPage,
+    error,
+  }),
   Rpc.make(PULSE_WORKSPACE_TOOLS_METHODS.workspaceGetProjectConfig, {
     payload: Schema.Struct({ projectId: ProjectId }),
     success: WorkspaceProjectConfig,

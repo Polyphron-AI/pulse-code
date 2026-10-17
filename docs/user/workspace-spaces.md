@@ -86,6 +86,8 @@ On a server with task owner support, new tasks start assigned to Me. Choose Unas
 
 To choose that timezone, open Settings, General, select one environment and save its Workspace timezone, such as Africa/Johannesburg. It starts with the server's timezone and keeps that choice if the server moves. Reset uses the server's current timezone. If that timezone is unsupported, the initial choice and Reset use UTC. If the server or your device cannot recognize a saved timezone, task dates use UTC and show a notice. A due date does not schedule a reminder or start an agent.
 
+Task date, owner and completion controls become available when the connected server supports them. If project workspace settings says "Tasks need a newer server.", update that server to enable them.
+
 On a server with task completion support, choose Completed column in project workspace settings. A custom column named Done stays open until you designate it. Changing or clearing the designation shows how many tasks change completion before you confirm; Cancel leaves the settings unchanged.
 
 Move tasks out before renaming or removing their column. Renaming or removing the completed column clears its designation, including when saving from an older client. Choose a completed column again to restore completion controls. Tasks stay in their current columns.
