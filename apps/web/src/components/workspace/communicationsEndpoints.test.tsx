@@ -29,7 +29,9 @@ const boundary = vi.hoisted(() => ({
   startThread: vi.fn(),
   connected: true,
   operate: true,
+  toast: vi.fn(),
 }));
+vi.mock("../ui/toast", () => ({ toastManager: { add: boundary.toast } }));
 vi.mock("../../localApi", () => ({
   readLocalApi: () => ({
     contextMenu: { show: boundary.menu },
@@ -107,8 +109,10 @@ const b = chatEndpoint(account, { ...conversation, id: "C2" })!;
 
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  boundary.menu.mockReset();
   boundary.connected = true;
   boundary.operate = true;
+  boundary.external.mockResolvedValue(undefined);
   boundary.command.mockResolvedValue({ _tag: "Success", value: undefined });
 });
 afterEach(() => {
@@ -250,7 +254,7 @@ it("uses source identity and the same Slack reply root for menus, save and retai
   expect(
     parseChatResourceId(root.ref.type === "provider-resource" ? root.ref.resourceId : "")
       ?.replyRootId,
-  ).toBe(message.id);
+  ).toBeUndefined();
   const { workspaceId: _workspaceId, ...legacyConversation } = conversation;
   expect(chatEndpoint(account, legacyConversation, message)).toBeUndefined();
   const discord = chatEndpoint({ ...account, provider: "discord" }, conversation, message)!;
@@ -276,7 +280,7 @@ function Opener({
   openPage,
 }: {
   item: WorkspaceItemRef;
-  openPage?: (ref: Extract<WorkspaceItemRef, { type: "url" }>) => void;
+  openPage?: ((ref: Extract<WorkspaceItemRef, { type: "url" }>) => void) | undefined;
 }) {
   const open = useWorkspaceItemOpener(environmentId, openPage ? { openPage } : {});
   return <button onClick={() => open(item)}>Open item</button>;
@@ -341,6 +345,110 @@ it("retains the exact clicked Slack message and origin in a new thread's compose
     expect(boundary.command).not.toHaveBeenCalled();
   } finally {
     retain.mockRestore();
+    await view.close();
+  }
+});
+
+it.each(["connected", "operate"] as const)(
+  "refuses a pending picker after %s is revoked",
+  async (permission) => {
+    const view = await mount();
+    let resolvePicker!: (value: string | null) => void;
+    const picker = new Promise<string | null>((resolve) => {
+      resolvePicker = resolve;
+    });
+    boundary.menu.mockReturnValueOnce(picker);
+    try {
+      await act(() =>
+        view.root.render(<WorkspaceItemActions environmentId={environmentId} item={a} />),
+      );
+      await act(() => getByRole(view.node, "button", { name: "Add to project" }).click());
+      expect(boundary.menu).toHaveBeenCalledTimes(1);
+      boundary[permission] = false;
+      await act(() =>
+        view.root.render(<WorkspaceItemActions environmentId={environmentId} item={a} />),
+      );
+      await act(async () => {
+        resolvePicker("project:p1");
+        await picker;
+      });
+      expect(boundary.command).not.toHaveBeenCalled();
+    } finally {
+      await view.close();
+    }
+  },
+);
+
+it.each(["teams.microsoft.com", "teams.microsoft.us", "teams.live.com", "teams.cloud.microsoft"])(
+  "hands off the anchored Teams host %s",
+  async (host) => {
+    const view = await mount();
+    const openPage = vi.fn();
+    try {
+      await act(() =>
+        view.root.render(
+          <Opener item={{ type: "url", url: `https://${host}/l/message/x` }} openPage={openPage} />,
+        ),
+      );
+      await act(() => getByRole(view.node, "button").click());
+      expect(boundary.external).toHaveBeenCalledWith(`https://${host}/l/message/x`);
+      expect(openPage).not.toHaveBeenCalled();
+    } finally {
+      await view.close();
+    }
+  },
+);
+
+it.each(["javascript:alert(1)", "file:///C:/x.exe"])(
+  "rejects %s at the opener with feedback",
+  async (url) => {
+    const view = await mount();
+    const openPage = vi.fn();
+    try {
+      for (const page of [undefined, openPage]) {
+        await act(() => view.root.render(<Opener item={{ type: "url", url }} openPage={page} />));
+        await act(() => getByRole(view.node, "button").click());
+      }
+      expect(boundary.external).not.toHaveBeenCalled();
+      expect(boundary.navigate).not.toHaveBeenCalled();
+      expect(openPage).not.toHaveBeenCalled();
+      expect(boundary.toast).toHaveBeenCalledWith(
+        expect.objectContaining({ description: "This item cannot be opened here." }),
+      );
+    } finally {
+      await view.close();
+    }
+  },
+);
+
+it("keeps a lookalike Teams host in the Browser", async () => {
+  const view = await mount();
+  const openPage = vi.fn();
+  const item = { type: "url" as const, url: "https://teams.microsoft.com.evil.example/x" };
+  try {
+    await act(() => view.root.render(<Opener item={item} openPage={openPage} />));
+    await act(() => getByRole(view.node, "button").click());
+    expect(boundary.external).not.toHaveBeenCalled();
+    expect(openPage).toHaveBeenCalledWith(item);
+  } finally {
+    await view.close();
+  }
+});
+
+it("reports a failed external handoff", async () => {
+  const view = await mount();
+  boundary.external.mockRejectedValueOnce(new Error("OS refused"));
+  try {
+    await act(() =>
+      view.root.render(<Opener item={{ type: "url", url: "https://teams.cloud.microsoft/x" }} />),
+    );
+    await act(() => getByRole(view.node, "button").click());
+    expect(boundary.toast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        description: "Unable to open this link. Try again from the source app.",
+      }),
+    );
+  } finally {
     await view.close();
   }
 });

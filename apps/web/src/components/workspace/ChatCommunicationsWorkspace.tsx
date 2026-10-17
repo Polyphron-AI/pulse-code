@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, useMemo, type ReactNode } from "react";
 import * as Schema from "effect/Schema";
+import { parseChatResourceId } from "@t3tools/contracts";
 import type {
-  ChatResource,
   WorkspaceLinkEndpoint,
   EnvironmentId,
   ChatAccount,
@@ -28,11 +28,17 @@ import { RequestState } from "./office/shared";
 import { useCommunicationsRequest } from "./useCommunicationsRequest";
 import {
   chatEndpoint,
+  chatItem,
   chatReferenceKey,
   mergeChatMessages,
   sendAttempt,
 } from "./communicationsChat";
 
+import type { ChatSource } from "./CommunicationsWorkspace";
+import { useEnvironmentSettings } from "../../hooks/useSettings";
+import { formatEventTime } from "@t3tools/client-runtime/calendar/dates";
+import { useConnectedEnvironmentIds } from "../../state/environments";
+import { useWorkspaceCanOperate } from "./useWorkspaceCanOperate";
 import { WorkspaceItemActions, WorkspaceItemMenu } from "./WorkspaceItemActions";
 import { WorkspaceLinkedContext } from "./WorkspaceLinkedContext";
 import { useWorkspaceItemOpener } from "./useWorkspaceItemOpener";
@@ -53,6 +59,56 @@ const SavedReferences = Schema.Array(SavedReference).check(Schema.isMaxLength(50
 const emptySaved: typeof SavedReferences.Type = [];
 const providerNames = { slack: "Slack", discord: "Discord", telegram: "Telegram" };
 
+function ChatUnavailable({ reasons }: { reasons: readonly (string | undefined)[] }) {
+  return [...new Set(reasons)]
+    .filter((reason) => reason !== undefined)
+    .map((reason) => (
+      <p key={reason} role="status" className="px-4 py-2 text-xs text-muted-foreground">
+        {reason}
+      </p>
+    ));
+}
+function ChatItemRow({
+  environmentId,
+  endpoint,
+  children,
+  onSelect,
+}: {
+  environmentId: EnvironmentId | null;
+  endpoint?: WorkspaceLinkEndpoint | undefined;
+  children: ReactNode;
+  onSelect?: (() => void) | undefined;
+}) {
+  return (
+    <div
+      className="group/chatrow relative min-w-0"
+      onContextMenuCapture={onSelect}
+      onKeyDownCapture={(event) => {
+        if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) onSelect?.();
+      }}
+      onClickCapture={(event) => {
+        if (
+          event.target instanceof Element &&
+          event.target.closest("[data-workspace-menu-trigger]")
+        )
+          onSelect?.();
+      }}
+    >
+      {endpoint && environmentId ? (
+        <WorkspaceItemMenu
+          environmentId={environmentId}
+          item={endpoint}
+          triggerClassName="absolute right-3 top-1 opacity-0 group-hover/chatrow:opacity-100 group-focus-within/chatrow:opacity-100 group-has-[[data-workspace-menu-open=true]]/chatrow:opacity-100 pointer-coarse:opacity-100"
+        >
+          {children}
+        </WorkspaceItemMenu>
+      ) : (
+        children
+      )}
+    </div>
+  );
+}
+
 function ChatComposer({
   account,
   conversation,
@@ -60,6 +116,7 @@ function ChatComposer({
   onAcknowledged,
   onCancelReply,
   nativeThread = false,
+  writable,
 }: {
   account: ChatAccount;
   conversation: ChatConversation;
@@ -67,13 +124,14 @@ function ChatComposer({
   onAcknowledged: (message: ChatMessage) => void;
   onCancelReply?: () => void;
   nativeThread?: boolean;
+  writable: boolean;
 }) {
   const { run, busy, error } = useCommunicationsRequest();
   const [text, setText] = useState("");
   const [notice, setNotice] = useState("");
   const attempt = useRef<ReturnType<typeof sendAttempt> | undefined>(undefined);
   async function send() {
-    if (busy || !text.trim() || !conversation.canSend) return;
+    if (busy || !writable || !text.trim() || !conversation.canSend) return;
     const replyId =
       replyTo && !(nativeThread && account.provider === "discord")
         ? account.provider === "slack"
@@ -165,7 +223,7 @@ function ChatComposer({
           <br />
           Sending as {account.identity}
         </p>
-        <Button type="submit" size="sm" disabled={busy || !text.trim()}>
+        <Button type="submit" size="sm" disabled={busy || !writable || !text.trim()}>
           <SendIcon />
           {busy ? "Sending…" : "Send"}
         </Button>
@@ -180,23 +238,39 @@ function ChatComposer({
   );
 }
 
-export function ChatCommunicationsWorkspace({
-  account,
-  environmentId,
-  controls,
-  initialResource,
-  initialResourceId,
-}: {
+interface ChatWorkspaceProps {
   account: ChatAccount;
   environmentId: EnvironmentId | null;
   controls?: ReactNode;
-  initialResource?: ChatResource | undefined;
-  initialResourceId?: string | undefined;
-}) {
+  source?: ChatSource | undefined;
+}
+export function ChatCommunicationsWorkspace(props: ChatWorkspaceProps) {
+  return props.environmentId ? (
+    <ScopedChatWorkspace {...props} environmentId={props.environmentId} />
+  ) : (
+    <ChatWorkspace {...props} timeZone="UTC" writable={false} />
+  );
+}
+function ScopedChatWorkspace(props: ChatWorkspaceProps & { environmentId: EnvironmentId }) {
+  const timeZone =
+    useEnvironmentSettings(props.environmentId, (settings) => settings.workspaceDisplayTimeZone) ??
+    "UTC";
+  const canOperate = useWorkspaceCanOperate(props.environmentId);
+  const connected = useConnectedEnvironmentIds().includes(props.environmentId);
+  return <ChatWorkspace {...props} timeZone={timeZone} writable={canOperate && connected} />;
+}
+function ChatWorkspace({
+  account,
+  environmentId,
+  controls,
+  source,
+  timeZone,
+  writable,
+}: ChatWorkspaceProps & { timeZone: string; writable: boolean }) {
   const { run, busy, error } = useCommunicationsRequest();
+  const initialResourceId = source?.resourceId;
   const openItem = useWorkspaceItemOpener(environmentId);
   const initialOpened = useRef(false);
-  const messageRoot = useRef<string | undefined>(undefined);
   const [sourceNotice, setSourceNotice] = useState<string>();
   const [selectedMessage, setSelectedMessage] = useState<WorkspaceLinkEndpoint>();
   const [conversations, setConversations] = useState<readonly ChatConversation[]>([]);
@@ -226,6 +300,9 @@ export function ChatCommunicationsWorkspace({
 
   const loadConversations = useCallback(
     async (cursor?: string) => {
+      const initialResource = initialResourceId
+        ? parseChatResourceId(initialResourceId)
+        : undefined;
       const result = await run({
         operation: "conversations.list",
         accountId: account.id,
@@ -251,61 +328,90 @@ export function ChatCommunicationsWorkspace({
             item.workspaceId === initialResource.workspaceId,
         );
         if (!selected) {
+          const wrongWorkspace = result.conversations?.some(
+            (item) =>
+              item.id === initialResource.conversationId &&
+              item.accountId === initialResource.connectionId,
+          );
           setSourceNotice(
-            "Unavailable: this exact source conversation is not in the loaded page. Load more conversations or reopen it at the source.",
+            wrongWorkspace
+              ? "This conversation belongs to a different workspace. Open it from its original account."
+              : `This conversation is unavailable.${result.nextCursor ? " Load more conversations or open it in the source app." : " It may have been removed. Open it in the source app."}`,
           );
           return;
         }
         initialOpened.current = true;
         destination.current = selected.id;
         setConversation(selected);
-        const legacy =
-          account.provider === "slack" && initialResource.messageId && !initialResource.replyRootId;
-        messageRoot.current =
-          account.provider === "slack" ? initialResource.replyRootId : undefined;
-        if (initialResource.messageId && initialResourceId)
-          setSelectedMessage({
-            ref: {
-              type: "provider-resource",
-              provider: account.provider,
-              resourceId: initialResourceId,
-            },
-          });
+        const initialRef =
+          initialResource.messageId && initialResourceId
+            ? {
+                ref: {
+                  type: "provider-resource" as const,
+                  provider: account.provider,
+                  resourceId: initialResourceId,
+                },
+              }
+            : undefined;
+        setSelectedMessage(initialRef);
         const history = await run({
           operation: "messages.list",
           accountId: account.id,
           conversationId: selected.id,
-          ...(account.provider === "slack" && initialResource.replyRootId
-            ? { threadId: initialResource.replyRootId }
-            : {}),
         });
         if (!history || !active.current || destination.current !== selected.id) return;
         setMessages(mergeChatMessages([], history.messages ?? []));
         setMessageCursor(history.nextCursor);
-        const exact = history.messages?.find((message) => message.id === initialResource.messageId);
-        if (initialResource.messageId && initialResourceId) {
-          // Retain the original key, including legacy refs whose reply root was never known.
+        let exact = history.messages?.find((message) => message.id === initialResource.messageId);
+        const replyRoot =
+          account.provider === "slack" &&
+          initialResource.messageId &&
+          initialResource.replyRootId !== initialResource.messageId
+            ? initialResource.replyRootId
+            : undefined;
+        if (replyRoot) {
+          threadDestination.current = replyRoot;
+          const replies = await run({
+            operation: "messages.list",
+            accountId: account.id,
+            conversationId: selected.id,
+            threadId: replyRoot,
+          });
+          if (
+            !active.current ||
+            destination.current !== selected.id ||
+            threadDestination.current !== replyRoot
+          )
+            return;
+          if (!replies) {
+            setSourceNotice(
+              "Replies are unavailable for this connection. Open the thread in Slack.",
+            );
+            return;
+          }
+          exact =
+            replies.messages?.find((message) => message.id === initialResource.messageId) ?? exact;
+          const anchor = replies.messages?.find((message) => message.id === replyRoot) ?? exact;
+          if (anchor) setThread({ ...anchor, threadId: replyRoot });
+          setThreadMessages(mergeChatMessages([], replies.messages ?? []));
+          setThreadCursor(replies.nextCursor);
+        }
+        // Opening a saved link never rewrites its original address.
+        if (initialRef)
           setSelectedMessage({
-            ref: {
-              type: "provider-resource",
-              provider: account.provider,
-              resourceId: initialResourceId,
-            },
+            ...initialRef,
             ...(exact
               ? { title: endpointTitle(`${exact.author}: ${exact.text || "Message"}`) }
               : {}),
           });
-        }
         setSourceNotice(
-          legacy
-            ? "This legacy Slack message has no known reply root. Exact reply reading is unsupported until you reopen the source."
-            : initialResource.messageId && !exact
-              ? "Unavailable: the exact message is not in the loaded page or was removed. Its original reference has been retained."
-              : undefined,
+          initialResource.messageId && !exact
+            ? "This message is unavailable. It may have been deleted or be outside the messages loaded here. Its saved link has been kept."
+            : undefined,
         );
       }
     },
-    [account.id, account.provider, run, initialResource, initialResourceId],
+    [account.id, account.provider, run, initialResourceId],
   );
   useEffect(() => {
     active.current = true;
@@ -327,6 +433,7 @@ export function ChatCommunicationsWorkspace({
       }
       if (event.key === "Escape") {
         setThread(undefined);
+        setSelectedMessage(undefined);
         threadDestination.current = undefined;
       }
     };
@@ -338,7 +445,6 @@ export function ChatCommunicationsWorkspace({
       operation: "messages.list",
       accountId: account.id,
       conversationId: selected.id,
-      ...(messageRoot.current ? { threadId: messageRoot.current } : {}),
       ...(cursor ? { cursor } : {}),
     });
     if (!result || !active.current || destination.current !== selected.id) return;
@@ -348,7 +454,6 @@ export function ChatCommunicationsWorkspace({
   async function openConversation(selected: ChatConversation) {
     if (busy) return;
     initialOpened.current = true;
-    messageRoot.current = undefined;
     setSelectedMessage(undefined);
     setSourceNotice(undefined);
     const changed = destination.current !== selected.id;
@@ -389,12 +494,10 @@ export function ChatCommunicationsWorkspace({
     setThread(message);
     await loadThread(message);
   }
-  function reference(message: ChatMessage) {
-    const source = conversations.find((item) => item.id === message.conversationId);
-    const endpoint = source ? chatEndpoint(account, source, message) : undefined;
+  function reference(message: ChatMessage, endpoint?: WorkspaceLinkEndpoint) {
     return {
       provider: account.provider,
-      accountId: account.id,
+      accountId: message.accountId,
       conversationId: message.conversationId,
       messageId: message.id,
       ...(environmentId ? { environmentId } : {}),
@@ -403,16 +506,21 @@ export function ChatCommunicationsWorkspace({
         : {}),
     };
   }
-  function isSaved(message: ChatMessage) {
-    const key = chatReferenceKey(reference(message));
-    return saved.some((item) => chatReferenceKey(item) === key);
+  const savedKeys = useMemo(() => new Set(saved.map(chatReferenceKey)), [saved]);
+  function savedMessage(message: ChatMessage, endpoint?: WorkspaceLinkEndpoint) {
+    return (
+      savedKeys.has(chatReferenceKey(reference(message, endpoint))) ||
+      savedKeys.has(chatReferenceKey(reference(message)))
+    );
   }
-  function toggleSaved(message: ChatMessage) {
-    const entry = reference(message);
+  function toggleSaved(message: ChatMessage, endpoint: WorkspaceLinkEndpoint) {
+    if (!writable || !environmentId) return;
+    const entry = reference(message, endpoint);
     const key = chatReferenceKey(entry);
+    const legacyKey = chatReferenceKey(reference(message));
     setSaved((previous) =>
-      previous.some((item) => chatReferenceKey(item) === key)
-        ? previous.filter((item) => chatReferenceKey(item) !== key)
+      previous.some((item) => [key, legacyKey].includes(chatReferenceKey(item)))
+        ? previous.filter((item) => ![key, legacyKey].includes(chatReferenceKey(item)))
         : previous.length < 500
           ? [...previous, entry]
           : previous,
@@ -446,37 +554,89 @@ export function ChatCommunicationsWorkspace({
         value.toLowerCase().includes(query.toLowerCase()),
       ),
   );
-  const visibleMessages = messages.filter((message) => view !== "later" || isSaved(message));
+  const selectedResource = useMemo(
+    () =>
+      selectedMessage?.ref.type === "provider-resource"
+        ? parseChatResourceId(selectedMessage.ref.resourceId)
+        : undefined,
+    [selectedMessage],
+  );
+  const conversationRows = useMemo(
+    () => conversations.map((item) => ({ item, ...chatItem(account, item) })),
+    [account, conversations],
+  );
+  const messageRows = useMemo(
+    () =>
+      messages.map((message) => ({
+        message,
+        ...(conversation
+          ? chatItem(account, conversation, message)
+          : { reason: "Open this conversation in the source app." }),
+      })),
+    [account, conversation, messages],
+  );
+  const threadRows = useMemo(
+    () =>
+      threadMessages.map((message) => ({
+        message,
+        ...(threadConversation
+          ? chatItem(account, threadConversation, message)
+          : { reason: "Open this conversation in the source app." }),
+      })),
+    [account, threadConversation, threadMessages],
+  );
+  const visibleMessages = messageRows.filter(
+    ({ message, endpoint }) => view !== "later" || savedMessage(message, endpoint),
+  );
   const legacySaved = saved.filter(
     (item) =>
       !item.resourceId &&
       item.provider === account.provider &&
       item.accountId === account.id &&
-      item.conversationId === conversation?.id,
+      item.conversationId === conversation?.id &&
+      !messages.some((message) => chatReferenceKey(reference(message)) === chatReferenceKey(item)),
   );
-  function renderMessage(message: ChatMessage, inThread = false) {
-    const sourceConversation = inThread ? threadConversation : conversation;
-    const endpoint = sourceConversation
-      ? chatEndpoint(account, sourceConversation, message)
-      : undefined;
+  const listReason = environmentId
+    ? conversationRows.map((row) => row.reason)
+    : ["Choose an environment to use chat actions."];
+  const messageReason = environmentId
+    ? messageRows.map((row) => row.reason)
+    : ["Choose an environment to use chat actions."];
+  function renderMessage(
+    { message, endpoint }: { message: ChatMessage; endpoint?: WorkspaceLinkEndpoint | undefined },
+    inThread = false,
+  ) {
+    const isSaved = savedMessage(message, endpoint);
+    const selected =
+      selectedResource?.connectionId === message.accountId &&
+      selectedResource.conversationId === message.conversationId &&
+      selectedResource.messageId === message.id;
     const row = (
       <article
         tabIndex={0}
-        onFocus={() => setSelectedMessage(endpoint)}
+        aria-current={selected ? "true" : undefined}
         onClick={() => setSelectedMessage(endpoint)}
-        className="group flex min-w-0 flex-1 gap-3 border-b border-border/50 px-4 py-3 focus-visible:outline-2 focus-visible:outline-ring"
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && event.target === event.currentTarget) {
+            event.preventDefault();
+            setSelectedMessage(endpoint);
+          }
+        }}
+        className={cn(
+          "flex min-w-0 flex-1 gap-3 border-b border-border/50 px-4 pr-12 py-3 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring",
+          selected && "bg-sidebar-row-active",
+        )}
       >
         <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-muted text-xs font-semibold">
           {message.author.slice(0, 2).toUpperCase() || "?"}
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-baseline gap-2">
-            <strong className="text-sm font-semibold">{message.author || "Unknown author"}</strong>
+            <strong className="min-w-0 break-words text-sm font-semibold">
+              {message.author || "Unknown author"}
+            </strong>
             <time dateTime={message.date} className="text-3xs text-muted-foreground">
-              {new Date(message.date).toLocaleString("en-GB", {
-                timeZone: "UTC",
-                timeZoneName: "short",
-              })}
+              {formatEventTime(message.date, timeZone)}
             </time>
           </div>
           {message.replyToId && (
@@ -490,11 +650,13 @@ export function ChatCommunicationsWorkspace({
           <div className="mt-2 flex gap-1">
             <Button
               size="icon-xs"
-              variant={isSaved(message) ? "secondary" : "ghost-muted"}
-              aria-label={isSaved(message) ? "Remove from Later" : "Save for Later"}
-              aria-pressed={isSaved(message)}
-              disabled={!endpoint || !environmentId}
-              onClick={() => toggleSaved(message)}
+              variant={isSaved ? "secondary" : "ghost-muted"}
+              aria-label={isSaved ? "Remove from Later" : "Save for Later"}
+              aria-pressed={isSaved}
+              disabled={!endpoint || !environmentId || !writable}
+              onClick={() => {
+                if (endpoint) toggleSaved(message, endpoint);
+              }}
             >
               <BookmarkIcon />
             </Button>
@@ -528,25 +690,18 @@ export function ChatCommunicationsWorkspace({
         </div>
       </article>
     );
-    return endpoint && environmentId ? (
-      <div key={message.id} className="group relative">
-        <WorkspaceItemMenu
-          environmentId={environmentId}
-          item={endpoint}
-          triggerClassName="absolute right-1 top-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 pointer-coarse:opacity-100"
-        >
-          {row}
-        </WorkspaceItemMenu>
-      </div>
-    ) : (
-      <div key={message.id}>
+    return (
+      <ChatItemRow
+        key={message.id}
+        environmentId={environmentId}
+        endpoint={endpoint}
+        onSelect={() => setSelectedMessage(endpoint)}
+      >
         {row}
-        <p className="px-4 text-xs text-muted-foreground">
-          Unavailable: reopen this source to load its workspace identity.
-        </p>
-      </div>
+      </ChatItemRow>
     );
   }
+
   const selectedEndpoint =
     selectedMessage ?? (conversation ? chatEndpoint(account, conversation) : undefined);
   const header = useWorkspaceHeaderModel(
@@ -613,52 +768,41 @@ export function ChatCommunicationsWorkspace({
             ))}
           </nav>
           <div className="min-h-0 flex-1 overflow-y-auto p-2">
-            {visibleConversations.map((item) => {
-              const endpoint = chatEndpoint(account, item);
-              const row = (
-                <button
-                  type="button"
-                  key={item.id}
-                  disabled={busy}
-                  aria-current={conversation?.id === item.id ? "page" : undefined}
-                  className={cn(
-                    "my-1 flex w-full items-start gap-2 rounded-md px-2 py-2 text-left text-sm hover:bg-sidebar-row-hover focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-60",
-                    conversation?.id === item.id && "bg-sidebar-row-active",
-                  )}
-                  onClick={() => void openConversation(item)}
-                >
-                  {item.kind === "dm" ? (
-                    <MessageCircleIcon className="mt-0.5 size-4 shrink-0" />
-                  ) : (
-                    <HashIcon className="mt-0.5 size-4 shrink-0" />
-                  )}
-                  <span className="min-w-0">
-                    <span className="block truncate">{item.title}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {item.workspace || item.kind}
-                    </span>
-                  </span>
-                </button>
-              );
-              return endpoint && environmentId ? (
-                <div key={item.id} className="group relative">
-                  <WorkspaceItemMenu
-                    environmentId={environmentId}
-                    item={endpoint}
-                    triggerClassName="absolute right-1 top-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 pointer-coarse:opacity-100"
+            <ChatUnavailable reasons={listReason} />
+            {conversationRows
+              .filter(({ item }) => visibleConversations.includes(item))
+              .map(({ item, endpoint }) => {
+                const row = (
+                  <button
+                    type="button"
+                    key={item.id}
+                    disabled={busy}
+                    aria-current={conversation?.id === item.id ? "page" : undefined}
+                    className={cn(
+                      "my-1 flex w-full items-start gap-2 rounded-md px-2 pr-12 py-2 text-left text-sm hover:bg-sidebar-row-hover focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-60",
+                      conversation?.id === item.id && "bg-sidebar-row-active",
+                    )}
+                    onClick={() => void openConversation(item)}
                   >
+                    {item.kind === "dm" ? (
+                      <MessageCircleIcon className="mt-0.5 size-4 shrink-0" />
+                    ) : (
+                      <HashIcon className="mt-0.5 size-4 shrink-0" />
+                    )}
+                    <span className="min-w-0">
+                      <span className="block truncate">{item.title}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {item.workspace || item.kind}
+                      </span>
+                    </span>
+                  </button>
+                );
+                return (
+                  <ChatItemRow key={item.id} environmentId={environmentId} endpoint={endpoint}>
                     {row}
-                  </WorkspaceItemMenu>
-                </div>
-              ) : (
-                <div key={item.id}>
-                  {row}
-                  <p className="text-xs text-muted-foreground">
-                    Unavailable: source workspace identity is missing.
-                  </p>
-                </div>
-              );
-            })}
+                  </ChatItemRow>
+                );
+              })}
             {loaded && !visibleConversations.length && (
               <p className="p-2 text-xs text-muted-foreground">
                 No loaded conversations in this view.
@@ -750,6 +894,19 @@ export function ChatCommunicationsWorkspace({
                 {sourceNotice}
               </p>
             ) : null}
+            {selectedMessage ? (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span>{selectedMessage.title ?? "Selected message"}</span>
+                <Button
+                  size="icon-xs"
+                  variant="ghost"
+                  aria-label="Clear message selection"
+                  onClick={() => setSelectedMessage(undefined)}
+                >
+                  <XIcon />
+                </Button>
+              </div>
+            ) : null}
             {environmentId && selectedEndpoint ? (
               <WorkspaceItemActions
                 environmentId={environmentId}
@@ -791,21 +948,22 @@ export function ChatCommunicationsWorkspace({
                     this device.
                   </p>
                 )}
-                {visibleMessages.map((message) => renderMessage(message))}
+                <ChatUnavailable reasons={messageReason} />
+                {visibleMessages.map((row) => renderMessage(row))}
                 {view === "later" && legacySaved.length > 0 ? (
                   <ul aria-label="Unavailable saved references" className="space-y-3 p-4 text-xs">
                     {legacySaved.map((item) => (
                       <li key={chatReferenceKey(item)} className="space-y-1">
-                        <p>Saved message {item.messageId}</p>
+                        <p>{conversation.title}: Saved message (details unavailable)</p>
                         <p className="text-muted-foreground">
-                          Unavailable: this saved reference has no source workspace identity. Reopen
-                          it at the source.
+                          This saved message is outside the messages loaded here or was removed.
                         </p>
                         <Button
                           size="sm"
                           variant="ghost"
-                          aria-label="Remove unavailable saved reference"
+                          disabled={!writable}
                           onClick={() =>
+                            writable &&
                             setSaved((previous) =>
                               previous.filter(
                                 (entry) => chatReferenceKey(entry) !== chatReferenceKey(item),
@@ -832,6 +990,7 @@ export function ChatCommunicationsWorkspace({
             <ChatComposer
               key={JSON.stringify([account.id, conversation.id])}
               account={account}
+              writable={writable}
               conversation={conversation}
               replyTo={replyTo}
               onCancelReply={() => setReplyTo(undefined)}
@@ -889,9 +1048,16 @@ export function ChatCommunicationsWorkspace({
                   </Button>
                 </div>
               )}
-              {threadMessages
-                .filter((message) => message.id !== thread.id)
-                .map((message) => renderMessage(message, true))}
+              <ChatUnavailable
+                reasons={
+                  environmentId
+                    ? threadRows.map((row) => row.reason)
+                    : ["Choose an environment to use chat actions."]
+                }
+              />
+              {threadRows
+                .filter(({ message }) => message.id !== thread.id)
+                .map((row) => renderMessage(row, true))}
               <div ref={threadEnd} />
             </div>
             {threadConversation ? (
@@ -902,6 +1068,7 @@ export function ChatCommunicationsWorkspace({
                   thread.threadId ?? thread.id,
                 ])}
                 account={account}
+                writable={writable}
                 conversation={threadConversation}
                 replyTo={thread}
                 nativeThread

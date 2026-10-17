@@ -1,6 +1,11 @@
 ﻿import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useSearch } from "@tanstack/react-router";
-import { EnvironmentId, type ChatAccount, type ChatResource } from "@t3tools/contracts";
+import {
+  EnvironmentId,
+  parseChatResourceId,
+  type ChatAccount,
+  type ChatResource,
+} from "@t3tools/contracts";
 import { PlusIcon, RefreshCwIcon, UnplugIcon } from "lucide-react";
 import { Button } from "../ui/button";
 import { WorkspaceEngagement } from "./WorkspaceEngagement";
@@ -42,9 +47,12 @@ function DesktopCommunicationsWorkspace({ source }: { source?: ChatSource | unde
   const selectedChat = chatAccounts.find(
     (account) => key(account.provider, account.id) === selectedKey,
   );
+  const sourceId = source?.resourceId;
+  const sourceProvider = source?.provider;
   const refresh = useCallback(async () => {
+    const resource = sourceId ? parseChatResourceId(sourceId) : undefined;
     let chat: readonly ChatAccount[] | undefined;
-    if (available && (!source || source.resource.transport === "desktop")) {
+    if (available && (!sourceId || resource?.transport === "desktop")) {
       const response = await run({ operation: "accounts.list" });
       if (response) chat = response.accounts ?? [];
     }
@@ -54,14 +62,13 @@ function DesktopCommunicationsWorkspace({ source }: { source?: ChatSource | unde
       setSelectedKey((previous) =>
         chat.some((account) => key(account.provider, account.id) === previous)
           ? previous
-          : source
-            ? source.resource.transport === "desktop" &&
+          : resource && sourceProvider
+            ? resource.transport === "desktop" &&
               chat.some(
                 (account) =>
-                  account.provider === source.provider &&
-                  account.id === source.resource.connectionId,
+                  account.provider === sourceProvider && account.id === resource.connectionId,
               )
-              ? key(source.provider, source.resource.connectionId)
+              ? key(sourceProvider, resource.connectionId)
               : ""
             : chat?.[0]
               ? key(chat[0].provider, chat[0].id)
@@ -69,7 +76,7 @@ function DesktopCommunicationsWorkspace({ source }: { source?: ChatSource | unde
       );
     }
     setLoaded(true);
-  }, [available, run, source]);
+  }, [available, run, sourceProvider, sourceId]);
   useEffect(() => {
     mounted.current = true;
     void refresh();
@@ -179,29 +186,31 @@ function DesktopCommunicationsWorkspace({ source }: { source?: ChatSource | unde
           account={selectedChat}
           environmentId={environmentId}
           controls={controls}
-          initialResourceId={
+          source={
             source?.provider === selectedChat.provider &&
             source.resource.connectionId === selectedChat.id
-              ? source.resourceId
-              : undefined
-          }
-          initialResource={
-            source?.provider === selectedChat.provider &&
-            source.resource.connectionId === selectedChat.id
-              ? source.resource
+              ? source
               : undefined
           }
         />
       ) : (
         <main className="flex-1 overflow-y-auto p-6">
-          <h1 className="text-xl font-semibold">Your conversations, together</h1>
+          <h1 className="text-xl font-semibold">
+            {source ? "Conversation unavailable here" : "Your conversations, together"}
+          </h1>
           <p className="mt-3 max-w-xl text-sm leading-relaxed text-muted-foreground">
             {source && !available && source.resource.transport === "desktop"
               ? "This conversation is available only on its desktop connection."
               : source && source.resource.transport === "server"
                 ? "This server conversation reader is not available on this client yet."
                 : source && loaded
-                  ? "Unavailable: the original desktop connection was disconnected or removed."
+                  ? chatAccounts.some(
+                      (account) =>
+                        account.provider === source.provider &&
+                        account.id === source.resource.connectionId,
+                    )
+                    ? "Choose the original account above to open this conversation."
+                    : "This conversation's desktop connection is not on this device or was removed."
                   : !available
                     ? "Open Pulse desktop to connect your accounts. Credentials and sessions stay on that computer; this web connection cannot access them."
                     : !loaded

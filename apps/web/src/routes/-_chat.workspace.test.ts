@@ -9,7 +9,7 @@ import {
   createRouter,
   RouterProvider,
 } from "@tanstack/react-router";
-import { getByRole, getByText, queryByRole } from "@testing-library/dom";
+import { getByRole, getByText, queryByRole, fireEvent } from "@testing-library/dom";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { parseWorkspaceSearch, Route } from "./_chat.workspace";
 import {
@@ -493,6 +493,7 @@ it.each([
   "slack",
   "legacy-slack",
   "legacy-saved",
+  "choose-account",
   "discord",
   "missing-account",
   "missing-workspace",
@@ -615,11 +616,12 @@ it.each([
           createElement(ResourceProvider, null, createElement(RouterProvider, { router })),
         ),
       );
+
       if (kind === "missing-account") {
         expect(
           getByText(
             node,
-            "Unavailable: the original desktop connection was disconnected or removed.",
+            "This conversation's desktop connection is not on this device or was removed.",
           ),
         ).toBeDefined();
         expect(requests).toEqual([{ operation: "accounts.list" }]);
@@ -627,7 +629,7 @@ it.each([
         expect(
           getByText(
             node,
-            "Unavailable: this exact source conversation is not in the loaded page. Load more conversations or reopen it at the source.",
+            "This conversation belongs to a different workspace. Open it from its original account.",
           ),
         ).toBeDefined();
         expect(requests).toEqual([
@@ -640,7 +642,7 @@ it.each([
         ).toBeDefined();
         expect(requests).toEqual([]);
       } else {
-        expect(getByText(node, "Exact source message")).toBeDefined();
+        expect(node.textContent).toContain("Exact source message");
         expect(requests).toEqual([
           { operation: "accounts.list" },
           { operation: "conversations.list", accountId: "original" },
@@ -648,34 +650,41 @@ it.each([
             operation: "messages.list",
             accountId: "original",
             conversationId: "channel",
-            ...(kind === "slack" ? { threadId: "1760343120.000001" } : {}),
           },
+          ...(kind === "slack"
+            ? [
+                {
+                  operation: "messages.list",
+                  accountId: "original",
+                  conversationId: "channel",
+                  threadId: "1760343120.000001",
+                },
+              ]
+            : []),
         ]);
-        if (kind === "legacy-slack")
-          expect(
-            getByText(
-              node,
-              "This legacy Slack message has no known reply root. Exact reply reading is unsupported until you reopen the source.",
-            ),
-          ).toBeDefined();
+        if (kind === "legacy-slack") expect(node.textContent).not.toContain("reply root");
       }
       expect(router.state.location.search.item).toBe(item);
+      if (kind === "choose-account") {
+        await act(() =>
+          fireEvent.change(
+            getByRole(node, "combobox", { name: "Connected communications account" }),
+            { target: { value: "" } },
+          ),
+        );
+        expect(
+          getByText(node, "Choose the original account above to open this conversation."),
+        ).toBeDefined();
+      }
       if (kind === "legacy-saved") {
         await act(() => getByRole(node, "button", { name: "Later" }).click());
-        expect(
-          getByRole(node, "list", { name: "Unavailable saved references" }).textContent,
-        ).toContain("1760343120.000002");
-        expect(
-          getByText(
-            node,
-            "Unavailable: this saved reference has no source workspace identity. Reopen it at the source.",
-          ),
-        ).toBeDefined();
+        expect(queryByRole(node, "list", { name: "Unavailable saved references" })).toBeNull();
+        expect(node.textContent).toContain("Exact source message");
         expect(JSON.parse(window.localStorage.getItem(savedKey)!)).toEqual(oldSaved);
-        await act(() =>
-          getByRole(node, "button", { name: "Remove unavailable saved reference" }).click(),
-        );
-        expect(JSON.parse(window.localStorage.getItem(savedKey)!)).toEqual([]);
+        expect(
+          getByRole(node, "button", { name: "Remove from Later" }).hasAttribute("disabled"),
+        ).toBe(true);
+        expect(JSON.parse(window.localStorage.getItem(savedKey)!)).toEqual(oldSaved);
       }
     } finally {
       await act(() => root.unmount());

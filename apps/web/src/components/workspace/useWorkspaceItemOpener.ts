@@ -18,6 +18,7 @@ import {
 import * as Schema from "effect/Schema";
 import { useCallback } from "react";
 import { useMailCapabilities } from "./mail/useMailCapabilities";
+import { toastManager } from "../ui/toast";
 import { readLocalApi } from "../../localApi";
 import { buildThreadRouteParams } from "../../threadRoutes";
 
@@ -59,14 +60,33 @@ export function useWorkspaceItemOpener(
   const { workspaceTasksV2 } = useMailCapabilities(environmentId ?? undefined);
   return useCallback(
     (ref: WorkspaceItemRef) => {
-      if (environmentId === null || !isWorkspaceItem(ref)) return;
+      if (environmentId === null || !isWorkspaceItem(ref)) {
+        toastManager.add({
+          type: "error",
+          title: "Cannot open item",
+          description:
+            environmentId === null
+              ? "Choose an environment to open this item."
+              : "This item cannot be opened here.",
+        });
+        return;
+      }
       const normalized = normalizeWorkspaceItemRef(ref);
-      if (!normalized) return;
+      if (!normalized) {
+        toastManager.add({
+          type: "error",
+          title: "Cannot open link",
+          description: "This link is invalid or uses an unsupported address.",
+        });
+        return;
+      }
       ref = normalized;
       // Teams links hand off to this client's external browser, including from Resources.
       const teams =
         ref.type === "url" &&
-        /(^|\.)(teams\.microsoft\.(com|us)|teams\.live\.com)$/.test(new URL(ref.url).hostname);
+        /^(teams\.microsoft\.(com|us)|teams\.live\.com|teams\.cloud\.microsoft)$/.test(
+          new URL(ref.url).hostname,
+        );
       if (ref.type === "url" && openPage && !teams) {
         openPage(ref);
         return;
@@ -146,12 +166,26 @@ export function useWorkspaceItemOpener(
             },
           });
       }
-      if (ref.type === "url" || ref.type === "file")
-        void readLocalApi()?.shell.openExternal(
-          ref.type === "url"
-            ? ref.url
-            : `https://drive.google.com/file/d/${encodeURIComponent(ref.fileId)}/view`,
-        );
+      if (ref.type === "url" || ref.type === "file") {
+        const api = readLocalApi();
+        const failed = () =>
+          toastManager.add({
+            type: "error",
+            title: "Cannot open link",
+            description: "Unable to open this link. Try again from the source app.",
+          });
+        if (!api) {
+          failed();
+          return;
+        }
+        void api.shell
+          .openExternal(
+            ref.type === "url"
+              ? ref.url
+              : `https://drive.google.com/file/d/${encodeURIComponent(ref.fileId)}/view`,
+          )
+          .catch(failed);
+      }
     },
     [environmentId, navigate, workspaceTasksV2, openPage],
   );

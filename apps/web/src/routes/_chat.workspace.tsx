@@ -63,19 +63,20 @@ function WorkspaceRouteView() {
 }
 function WorkspaceRouteContent() {
   const search = Route.useSearch();
+  const source = useMemo(() => {
+    const resource = search.item ? parseChatResourceId(search.item) : undefined;
+    return resource &&
+      search.item &&
+      (search.communicationProvider === "slack" || search.communicationProvider === "discord")
+      ? { provider: search.communicationProvider, resource, resourceId: search.item }
+      : undefined;
+  }, [search.communicationProvider, search.item]);
   switch (search.space) {
     case "projects":
       return <ProjectsSpace />;
     case "mail":
       return <MailSpace />;
     case "communications": {
-      const resource = search.item ? parseChatResourceId(search.item) : undefined;
-      const source =
-        resource &&
-        search.item &&
-        (search.communicationProvider === "slack" || search.communicationProvider === "discord")
-          ? { provider: search.communicationProvider, resource, resourceId: search.item }
-          : undefined;
       return (
         <CommunicationsWorkspace
           key={JSON.stringify([search.environment, search.communicationProvider, search.item])}

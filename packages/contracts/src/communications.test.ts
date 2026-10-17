@@ -61,7 +61,30 @@ describe("chat resource identity", () => {
     expect(chatResourceId(exact)).toHaveLength(512);
     expect(parseChatResourceId(chatResourceId(exact))).toEqual(exact);
     expect(() => chatResourceId({ ...exact, messageId: "m".repeat(66) })).toThrow("too long");
-    expect(parseChatResourceId(`v1/${"x".repeat(510)}`)).toBeUndefined();
+    const tooLong = `v1/${encodeURIComponent(JSON.stringify({ ...exact, messageId: "m".repeat(66) }))}`;
+    expect(tooLong).toHaveLength(513);
+    expect(parseChatResourceId(tooLong)).toBeUndefined();
+  });
+
+  it("rejects aliases of canonical resource IDs", () => {
+    const canonical = chatResourceId(input);
+    const { version, ...rest } = input;
+    for (const alias of [
+      `v1/${encodeURIComponent(JSON.stringify({ ...rest, version }))}`,
+      `v1/${encodeURIComponent(JSON.stringify({ ...input, extra: true }))}`,
+      `v1/${encodeURIComponent(JSON.stringify(input, null, 2))}`,
+      `v1/${encodeURIComponent(" " + JSON.stringify(input))}`,
+      canonical.replaceAll("%7B", "%7b"),
+      canonical.replace("slack_a", "%73lack_a"),
+    ]) {
+      expect(alias).not.toBe(canonical);
+      expect(parseChatResourceId(alias)).toBeUndefined();
+    }
+    for (const messageId of ["1760343120.00001", "1760343120.000010"]) {
+      expect(parseChatResourceId(chatResourceId({ ...input, messageId }))?.messageId).toBe(
+        messageId,
+      );
+    }
   });
 
   it.each([

@@ -25,7 +25,8 @@ export function chatResourceId(input: ChatResource): string {
 export function parseChatResourceId(raw: string): ChatResource | undefined {
   if (!raw.startsWith("v1/") || raw.length > 512) return undefined;
   try {
-    return Option.getOrUndefined(decodeResource(decodeURIComponent(raw.slice(3))));
+    const decoded = Option.getOrUndefined(decodeResource(decodeURIComponent(raw.slice(3))));
+    return decoded && chatResourceId(decoded) === raw ? decoded : undefined;
   } catch {
     return undefined;
   }
