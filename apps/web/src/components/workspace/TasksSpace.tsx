@@ -314,7 +314,7 @@ function ConnectedTasksSpace({
   const [createDirty, setCreateDirty] = useState(false);
   const [editorBusy, setEditorBusy] = useState(false);
   const [pendingTaskIds, setPendingTaskIds] = useState<ReadonlySet<string>>(new Set());
-  const hidden = bodyHidden || (compact && taskRef !== null);
+  const hidden = bodyHidden || (compact && (taskRef !== null || creating));
   const now = useTaskDateClock(timeZone, settingsReady && available && !hidden);
   const transition = useAtomCommand(workspaceTools.transitionTask, { reportFailure: false });
   const filters = useMemo<TaskFilters>(
@@ -341,8 +341,11 @@ function ConnectedTasksSpace({
       ? workspaceTools.task({ environmentId, input: { id: taskRef.taskId } })
       : null,
   );
+  const [lastSelected, setLastSelected] = useState(selected.data);
+  if (selected.data && selected.data !== lastSelected) setLastSelected(selected.data);
+  const selectedTask = selected.data ?? (lastSelected?.id === selectedTaskId ? lastSelected : null);
   const configProjectId = taskRef
-    ? selected.data?.projectId
+    ? selectedTask?.projectId
     : creating && createProject
       ? ProjectId.make(createProject)
       : null;
@@ -356,31 +359,36 @@ function ConnectedTasksSpace({
   const origin = useRef<HTMLElement | null>(null);
   const originTaskId = useRef<string | null>(null);
   const scrollReturn = useRef<Array<{ element: HTMLElement; top: number }>>([]);
+  const captureReturn = useCallback(
+    (taskId: string | null, trigger?: HTMLElement | null) => {
+      returnSearch.current = search;
+      originTaskId.current = taskId;
+      origin.current =
+        trigger ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
+      scrollReturn.current = [];
+      for (let element = origin.current?.parentElement; element; element = element.parentElement) {
+        scrollReturn.current.push({ element, top: element.scrollTop });
+      }
+    },
+    [search],
+  );
   const open = useCallback(
     (ref: WorkspaceItemRef) => {
       if (ref.type !== "task") {
         openOther(ref);
         return;
       }
-      returnSearch.current = search;
-      originTaskId.current = ref.taskId;
-      origin.current =
-        document.activeElement instanceof HTMLElement ? document.activeElement : null;
-      scrollReturn.current = [];
-      for (let element = origin.current?.parentElement; element; element = element.parentElement) {
-        if (element.scrollTop) scrollReturn.current.push({ element, top: element.scrollTop });
-      }
+      captureReturn(ref.taskId);
       void navigate({ to: "/workspace", search: { ...search, item: JSON.stringify(ref) } });
     },
-    [navigate, search, openOther],
+    [navigate, search, openOther, captureReturn],
   );
   const close = () => {
-    setCreating(false);
     void navigate({
       to: "/workspace",
       replace: true,
       search: parseWorkspaceSearch({ ...(returnSearch.current ?? search), item: undefined }),
-    });
+    }).then(() => setCreating(false));
   };
   useEffect(() => {
     if (selectedTaskId || creating) return;
@@ -392,6 +400,10 @@ function ConnectedTasksSpace({
       : (restoredRow ?? document.querySelector<HTMLElement>('[aria-label="Tasks list"] h2'));
     target?.focus({ preventScroll: true });
     for (const { element, top } of scrollReturn.current) element.scrollTo(0, top);
+    returnSearch.current = null;
+    origin.current = null;
+    originTaskId.current = null;
+    scrollReturn.current = [];
   }, [selectedTaskId, creating]);
   const onFilter = useCallback<TasksSpaceViewProps["onFilter"]>(
     (next, navigation) => {
@@ -487,15 +499,21 @@ function ConnectedTasksSpace({
             pendingTaskIds={pendingTaskIds}
             onCreate={
               canOperate && available
-                ? () => {
+                ? (trigger) => {
+                    if (creating) return;
                     setCreateProject(search.project ?? "");
-                    if (!taskRef) setCreating(true);
-                    else
+                    if (!taskRef) {
+                      captureReturn(null, trigger);
+                      setCreating(true);
+                    } else
                       void navigate({
                         to: "/workspace",
                         search: parseWorkspaceSearch({ ...search, item: undefined }),
                       }).then(() => {
-                        if (!router.state.location.search.item) setCreating(true);
+                        if (!router.state.location.search.item) {
+                          captureReturn(null, trigger);
+                          setCreating(true);
+                        }
                       });
                   }
                 : undefined
@@ -535,19 +553,15 @@ function ConnectedTasksSpace({
                 ) : null}
               </label>
             ) : null}
-            {available &&
-            config.data &&
-            ((creating && !taskRef) ||
-              (selected.data &&
-                !(isToolsError(selected.failure) && selected.failure.kind === "not-found"))) ? (
+            {available && config.data && ((creating && !taskRef) || selectedTask) ? (
               <WorkspaceTaskEditor
                 environmentId={environmentId}
                 task={
-                  taskRef && selected.data
+                  taskRef && selectedTask
                     ? workspaceTaskSummary(
-                        selected.data,
-                        projects.find((project) => project.id === selected.data?.projectId)
-                          ?.title ?? "Unavailable project",
+                        selectedTask,
+                        projects.find((project) => project.id === selectedTask.projectId)?.title ??
+                          "Unavailable project",
                       )
                     : null
                 }
@@ -557,6 +571,9 @@ function ConnectedTasksSpace({
                   "Unavailable project"
                 }
                 ownerProfile={ownerProfile}
+                unavailable={
+                  isToolsError(selected.failure) && selected.failure.kind === "not-found"
+                }
                 onClose={close}
                 backLabel="Back to tasks"
                 onBusyChange={(busy) => {
@@ -566,8 +583,13 @@ function ConnectedTasksSpace({
                 onDirtyChange={setCreateDirty}
                 onSaved={(task) => {
                   if (creating) {
-                    setCreating(false);
-                    open({ type: "task", taskId: task.id });
+                    void navigate({
+                      to: "/workspace",
+                      search: {
+                        ...search,
+                        item: JSON.stringify({ type: "task", taskId: task.id }),
+                      },
+                    }).then(() => setCreating(false));
                   }
                 }}
               />

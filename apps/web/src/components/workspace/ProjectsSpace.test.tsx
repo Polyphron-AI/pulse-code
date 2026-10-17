@@ -2,7 +2,7 @@
 import { act, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { getByRole, getAllByRole } from "@testing-library/dom";
-import { EnvironmentId } from "@t3tools/contracts";
+import { EnvironmentId, ProjectId, type WorkspaceTask } from "@t3tools/contracts";
 import { expect, it, vi } from "vite-plus/test";
 import { ProjectsSpace } from "./ProjectsSpace";
 import { WorkspaceResourcesProvider, useWorkspaceResourceState } from "./workspaceResourceState";
@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   item: undefined as string | undefined,
   hub: vi.fn(),
   tasksV2: false,
+  task: null as WorkspaceTask | null,
   listeners: new Set<() => void>(),
 }));
 vi.mock("@tanstack/react-router", () => ({
@@ -23,6 +24,7 @@ vi.mock("../../state/entities", () => ({
   useThreadShells: () => [],
 }));
 vi.mock("../../hooks/useNewProject", () => ({ useNewProject: () => vi.fn() }));
+vi.mock("../../state/environments", () => ({ useConnectedEnvironmentIds: () => ["remote"] }));
 vi.mock("./useWorkspaceHeaderModel", () => ({
   useWorkspaceHeaderModel: () => ({
     title: "Projects",
@@ -77,15 +79,19 @@ vi.mock("../../state/query", () => ({
             }
           : query === "tasks"
             ? { tasks: [], incomplete: false }
-            : null,
-    error: query === "task" ? "This task was deleted." : null,
+            : query === "task"
+              ? mocks.task
+              : null,
+    error: query === "task" && !mocks.task ? "This task was deleted." : null,
     isPending: false,
     refresh() {},
   }),
 }));
 vi.mock("./WorkspaceResourcesPanel", () => ({ WorkspaceProjectResources: () => null }));
 vi.mock("./WorkspaceItemActions", () => ({
-  WorkspaceItemActions: () => null,
+  WorkspaceItemActions: ({ item }: { item: { ref: { type: string } } }) => (
+    <button>{item.ref.type} actions</button>
+  ),
   WorkspaceItemMenu: ({ children }: { children: ReactNode }) => children,
 }));
 vi.mock("./ProjectTasks", async (importOriginal) => ({
@@ -184,6 +190,42 @@ it("removes the upgrade notice throughout the Projects project-task path after a
     await act(() => root.unmount());
     node.remove();
     mocks.tasksV2 = false;
+    vi.clearAllMocks();
+    vi.unstubAllGlobals();
+  }
+});
+
+it("shows the selected task actions once in its shared editor", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  mocks.task = {
+    id: "wskt_00000000-0000-0000-0000-000000000001",
+    projectId: ProjectId.make("project"),
+    title: "Selected task",
+    column: "To do",
+  };
+  mocks.item = JSON.stringify({ type: "task", taskId: mocks.task.id });
+  function App() {
+    const state = useWorkspaceResourceState(EnvironmentId.make("remote"), {
+      storage: { getItem: () => null, setItem() {} },
+    });
+    return (
+      <WorkspaceResourcesProvider value={state}>
+        <ProjectsSpace />
+      </WorkspaceResourcesProvider>
+    );
+  }
+  const node = document.createElement("div");
+  document.body.append(node);
+  const root = createRoot(node);
+  try {
+    await act(() => root.render(<App />));
+    expect(getByRole(node, "textbox", { name: "Task title" })).toBeDefined();
+    expect(getAllByRole(node, "button", { name: "task actions" })).toHaveLength(1);
+  } finally {
+    await act(() => root.unmount());
+    node.remove();
+    mocks.task = null;
+    mocks.item = undefined;
     vi.clearAllMocks();
     vi.unstubAllGlobals();
   }

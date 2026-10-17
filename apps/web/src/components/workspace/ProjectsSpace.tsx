@@ -177,27 +177,17 @@ export function ProjectsSpace() {
           <div className="mb-4 flex items-center gap-3">
             <h1 className="min-w-0 flex-1 truncate text-lg font-semibold">{selected.title}</h1>
           </div>
-          {!taskRef || selectedTask ? (
+          {!taskRef ? (
             <>
               <WorkspaceItemActions
                 shortcuts
                 environmentId={environmentId}
-                item={
-                  selectedTask
-                    ? {
-                        ref: { type: "task", taskId: selectedTask.id },
-                        title: selectedTask.title,
-                      }
-                    : { ref: { type: "project", projectId: selected.id }, title: selected.title }
-                }
-                {...(selectedTask
-                  ? { confirmed: [{ ref: { type: "project" as const, projectId: selected.id } }] }
-                  : {})}
+                item={{ ref: { type: "project", projectId: selected.id }, title: selected.title }}
               />
             </>
-          ) : (
+          ) : !selectedTask ? (
             <p className="text-sm text-muted-foreground">{taskQuery.error ?? "Loading task..."}</p>
-          )}
+          ) : null}
           {projectThreads.length === 0 ? (
             <p className="mt-4 text-sm text-muted-foreground">
               No threads yet. Start a thread to work on this project.

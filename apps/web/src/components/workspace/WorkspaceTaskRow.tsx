@@ -55,6 +55,7 @@ export interface WorkspaceTaskRowProps {
   readonly completedColumn: string | null;
   readonly workspaceTasksV2: boolean;
   readonly pending: boolean;
+  readonly refreshFailed?: boolean;
   readonly selected?: boolean;
   readonly settingsReady?: boolean | undefined;
   readonly onTransition: TaskTransitionHandler;
@@ -76,6 +77,7 @@ export const WorkspaceTaskRow = memo(function WorkspaceTaskRow({
   completedColumn,
   workspaceTasksV2,
   pending,
+  refreshFailed = false,
   selected,
   settingsReady,
   onTransition,
@@ -89,6 +91,7 @@ export const WorkspaceTaskRow = memo(function WorkspaceTaskRow({
     id: string;
     revision: number;
   } | null>(null);
+  if (acknowledged && refreshFailed) setAcknowledged(null);
   const explanation = useId();
   const due =
     settingsReady === false ? null : formatWorkspaceTaskDueOn(task.dueOn, now, timeZone, locale);

@@ -57,7 +57,7 @@ export interface TasksSpaceViewProps {
   readonly selectedTaskId?: string | undefined;
   readonly pendingTaskIds?: ReadonlySet<string>;
   readonly loadingMore?: boolean;
-  readonly onCreate?: (() => void) | undefined;
+  readonly onCreate?: ((trigger: HTMLElement | null) => void) | undefined;
   readonly onOpen: (ref: WorkspaceItemRef) => void;
   readonly onTransition: TaskTransitionHandler;
   readonly onFilter: (
@@ -84,6 +84,30 @@ export function TasksSpaceView(props: TasksSpaceViewProps) {
     if (search.trim() !== filters.text) setSearch(filters.text);
   }
   const [editing, setEditing] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDetailsElement>(null);
+  const canCreate = !!props.onCreate && props.canOperate && props.workspaceTasksV2;
+  if ((hidden || !canCreate) && menuOpen) setMenuOpen(false);
+  useEffect(() => {
+    if (hidden || !menuOpen || !canCreate) return;
+    const menu = menuRef.current;
+    menu?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
+    const outside = (event: PointerEvent) => {
+      if (event.target instanceof Node && !menu?.contains(event.target)) setMenuOpen(false);
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      setMenuOpen(false);
+      menu?.querySelector("summary")?.focus();
+    };
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("pointerdown", outside);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [hidden, menuOpen, canCreate]);
   const [draft, setDraft] = useState(filters);
   const [validation, setValidation] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -158,21 +182,47 @@ export function TasksSpaceView(props: TasksSpaceViewProps) {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {props.onCreate && props.canOperate && props.workspaceTasksV2 ? (
-            <details className="relative mt-[7px]">
+          {canCreate ? (
+            <details
+              ref={menuRef}
+              open={menuOpen && !hidden}
+              className="relative"
+              onBlur={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget)) setMenuOpen(false);
+              }}
+            >
               <summary
+                role="button"
                 aria-label="Task actions"
-                className="flex min-h-6 min-w-6 cursor-pointer list-none items-center justify-center rounded-md focus-visible:outline-2 focus-visible:outline-ring"
+                aria-haspopup="menu"
+                aria-expanded={menuOpen && !hidden}
+                className="flex min-h-11 min-w-11 cursor-pointer list-none items-center justify-center rounded-md focus-visible:outline-2 focus-visible:outline-ring"
+                onClick={(event) => {
+                  event.preventDefault();
+                  setMenuOpen(!menuOpen);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                    event.preventDefault();
+                    setMenuOpen(true);
+                  }
+                }}
               >
                 <MoreHorizontal className="size-3" />
               </summary>
-              <button
-                type="button"
-                className="absolute right-0 z-10 min-h-11 w-28 rounded-md border border-border bg-background p-2 text-xs"
-                onClick={props.onCreate}
-              >
-                New task
-              </button>
+              <div role="menu" aria-label="Task actions">
+                <button
+                  role="menuitem"
+                  type="button"
+                  className="absolute right-0 z-10 min-h-11 w-28 rounded-md border border-border bg-background p-2 text-xs"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    props.onCreate?.(menuRef.current?.querySelector("summary") ?? null);
+                  }}
+                >
+                  New task
+                </button>
+              </div>
             </details>
           ) : null}
           <button
@@ -426,6 +476,7 @@ export function TasksSpaceView(props: TasksSpaceViewProps) {
                 completedColumn={completedColumns.get(task.projectId) ?? null}
                 workspaceTasksV2={props.workspaceTasksV2}
                 pending={props.pendingTaskIds?.has(task.id) ?? false}
+                refreshFailed={props.status === "error" || props.status === "disconnected"}
                 selected={props.selectedTaskId === task.id}
                 settingsReady={props.settingsReady}
                 onTransition={props.onTransition}

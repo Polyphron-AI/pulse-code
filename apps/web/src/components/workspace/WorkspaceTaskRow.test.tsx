@@ -64,6 +64,40 @@ it("blocks another transition until the acknowledged revision reaches the row", 
   await act(() => renderer.update(view({ ...task, done: true, revision: 4, column: "Done" })));
   expect(renderer.root.findByType("input").props.disabled).toBe(false);
 });
+it("releases a stale acknowledgement after a failed refresh so a recovered row can retry", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const command = vi.fn<TaskTransitionHandler>(async () =>
+    AsyncResult.success({ ...task, done: true, revision: 4, column: "Done" }),
+  );
+  const view = (failed = false) => (
+    <WorkspaceTaskRow
+      environmentId={EnvironmentId.make("remote")}
+      task={task}
+      density="list"
+      onOpen={() => {}}
+      ownerProfile={null}
+      timeZone="UTC"
+      now={now}
+      canOperate={!failed}
+      completedColumn="Done"
+      workspaceTasksV2
+      pending={false}
+      refreshFailed={failed}
+      onTransition={command}
+    />
+  );
+  await act(() => {
+    renderer = create(view());
+  });
+  await act(() => renderer.root.findByType("input").props.onChange({ target: { checked: true } }));
+  expect(renderer.root.findByType("input").props.disabled).toBe(true);
+  await act(() => renderer.update(view(true)));
+  expect(renderer.root.findByType("input").props.disabled).toBe(true);
+  await act(() => renderer.update(view()));
+  expect(renderer.root.findByType("input").props.disabled).toBe(false);
+  await act(() => renderer.root.findByType("input").props.onChange({ target: { checked: true } }));
+  expect(command).toHaveBeenCalledTimes(2);
+});
 it("completes the captured row without opening it", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const open = vi.fn();

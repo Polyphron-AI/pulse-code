@@ -24,6 +24,7 @@ import { timestampLocale } from "../../timestampFormat";
 import { useEnvironmentQuery } from "../../state/query";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { useThreadShells } from "../../state/entities";
+import { useConnectedEnvironmentIds } from "../../state/environments";
 import { workspaceTools } from "../../state/workspaceTools";
 import { randomUUID } from "../../lib/utils";
 import { Input } from "../ui/input";
@@ -248,7 +249,8 @@ export function ProjectTasks({
     workspaceTools.config({ environmentId, input: { projectId } }),
   );
   const list = useEnvironmentQuery(workspaceTools.tasks({ environmentId, input: { projectId } }));
-  const canOperate = useWorkspaceCanOperate(environmentId);
+  const connected = useConnectedEnvironmentIds().includes(environmentId);
+  const canOperate = useWorkspaceCanOperate(environmentId) && connected;
   const upsert = useAtomCommand(workspaceTools.upsertTask, { reportFailure: false });
   const { workspaceTasksV2 } = useMailCapabilities(environmentId);
   const ownerProfile = useEnvironmentSettings(
@@ -383,6 +385,7 @@ export function ProjectTasks({
                     completedColumn={config.data?.completedColumn ?? null}
                     workspaceTasksV2
                     pending={false}
+                    refreshFailed={list.error !== null || !connected}
                     selected={selected?.id === task.id}
                     onTransition={transition}
                     renderItemMenu={(_, children) => (

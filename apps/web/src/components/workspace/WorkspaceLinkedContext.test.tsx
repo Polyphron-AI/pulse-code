@@ -78,6 +78,7 @@ vi.mock("../../state/session", () => ({
     data: { authenticated: true, scopes: ["orchestration:operate"] },
   }),
 }));
+vi.mock("../../state/environments", () => ({ useConnectedEnvironmentIds: () => ["a"] }));
 vi.mock("../../state/entities", () => ({
   useProjects: () => [{ environmentId: "a", id: "p", title: "Linked project" }],
   useThreadShells: () => [],

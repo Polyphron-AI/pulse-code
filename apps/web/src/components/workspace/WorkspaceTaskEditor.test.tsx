@@ -18,6 +18,7 @@ const boundary = vi.hoisted(() => ({
   latest: null as unknown,
   operate: true,
   v2: true,
+  connected: true,
 }));
 vi.mock("../../state/workspaceTools", () => ({
   workspaceTools: {
@@ -42,6 +43,10 @@ vi.mock("./mail/useMailCapabilities", () => ({
   useMailCapabilities: () => ({ workspaceTasksV2: boundary.v2, ready: true }),
 }));
 vi.mock("./useWorkspaceCanOperate", () => ({ useWorkspaceCanOperate: () => boundary.operate }));
+vi.mock("../../state/environments", () => ({
+  useConnectedEnvironmentIds: () => (boundary.connected ? ["remote", "other"] : []),
+}));
+vi.mock("../../timestampFormat", () => ({ timestampLocale: "en-GB" }));
 vi.mock("../../hooks/useSettings", () => ({
   useEnvironmentSettings: (_: unknown, select: (s: unknown) => unknown) =>
     select({ workspaceDisplayTimeZone: "UTC" }),
@@ -97,6 +102,7 @@ beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   boundary.operate = true;
   boundary.v2 = true;
+  boundary.connected = true;
   boundary.latest = null;
   boundary.patch.mockResolvedValue({
     _tag: "Failure",
@@ -272,9 +278,73 @@ it("retains a deleted task draft as unavailable and never retries it as creation
     "Retained after deletion",
   );
   expect(JSON.stringify(renderer.toJSON())).toContain(
-    "This task is unavailable. Its links have been kept.",
+    "This task was deleted. Its links have been kept.",
   );
   await act(submit);
   expect(boundary.patch).toHaveBeenCalledTimes(1);
   expect(boundary.upsert).not.toHaveBeenCalled();
+});
+
+it("disables saving and deletion while disconnected and retains the draft for reconnect", async () => {
+  await act(() => {
+    renderer = create(view());
+  });
+  await change("Task title", "Offline draft");
+  boundary.connected = false;
+  await act(() => renderer.update(view()));
+  expect(JSON.stringify(renderer.toJSON())).toContain(
+    "Connection unavailable. Reconnect to save task changes.",
+  );
+  for (const label of ["Save task", "Delete task"]) {
+    const button = renderer.root
+      .findAllByType("button")
+      .find((button) => button.children.join("") === label)!;
+    expect(button.props.disabled).toBe(true);
+    if (label === "Delete task") await act(() => button.props.onClick());
+  }
+  await act(submit);
+  expect(boundary.patch).not.toHaveBeenCalled();
+  expect(boundary.remove).not.toHaveBeenCalled();
+  boundary.connected = true;
+  await act(() => renderer.update(view()));
+  expect(renderer.root.findByProps({ "aria-label": "Task title" }).props.value).toBe(
+    "Offline draft",
+  );
+  await act(submit);
+  expect(boundary.patch).toHaveBeenCalledWith({
+    environmentId,
+    input: { id: task.id, expectedRevision: 3, title: "Offline draft" },
+  });
+});
+
+it("dismisses an observed conflict until a newer revision and keeps the original save revision", async () => {
+  await act(() => {
+    renderer = create(view());
+  });
+  await change("Task title", "Unsaved title");
+  const latest = { ...task, revision: 4, title: "Other client" };
+  await act(() => renderer.update(view(latest)));
+  expect(renderer.root.findAllByProps({ "aria-label": "Task conflict" })).toHaveLength(1);
+  const serverValues = renderer.root
+    .findByProps({ "aria-label": "Current server values" })
+    .findAllByType("p")
+    .map((p) => p.children.join(""))
+    .join(" ");
+  expect(serverValues).not.toContain("2026-10-16");
+  expect(serverValues).toContain("16 October 2026");
+  await act(() => click("Keep editing"));
+  expect(renderer.root.findAllByProps({ "aria-label": "Task conflict" })).toHaveLength(0);
+  await act(() => renderer.update(view({ ...latest, revision: 5 })));
+  expect(renderer.root.findAllByProps({ "aria-label": "Task conflict" })).toHaveLength(1);
+  await act(submit);
+  expect(boundary.patch.mock.calls.at(-1)?.[0].input.expectedRevision).toBe(3);
+  const statuses = renderer.root.findAllByProps({ role: "status" });
+  expect(
+    statuses.filter(
+      (status) => status.children.join("") === "This task changed on another client.",
+    ),
+  ).toHaveLength(0);
+  expect(renderer.root.findByProps({ role: "alert" }).children.join("")).toBe(
+    "This task changed on another client.",
+  );
 });

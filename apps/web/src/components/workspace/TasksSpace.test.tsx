@@ -299,6 +299,7 @@ function serviceFixture() {
     registry,
     calls,
     atoms,
+    taskAtoms,
     tasks,
     read,
     invalidate: () => {
@@ -671,6 +672,340 @@ async function mountRouter(component: () => React.ReactNode, initialEntries: str
   });
   return { router, history };
 }
+
+async function mountTasksDom(fixture: ReturnType<typeof serviceFixture>, initialEntry: string) {
+  const rootRoute = createRootRoute();
+  const route = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "workspace",
+    validateSearch: parseWorkspaceSearch,
+    component: () => (
+      <RegistryContext.Provider value={fixture.registry}>
+        <TasksSpace />
+      </RegistryContext.Provider>
+    ),
+  });
+  const router = createRouter({
+    routeTree: rootRoute.addChildren([route]),
+    history: createMemoryHistory({ initialEntries: [initialEntry] }),
+  });
+  await router.load();
+  const node = document.createElement("div");
+  document.body.append(node);
+  const root = createRoot(node);
+  await act(() => root.render(<RouterProvider router={router} />));
+  return {
+    node,
+    router,
+    dispose: async () => {
+      await act(() => root.unmount());
+      node.remove();
+      fixture.dispose();
+    },
+  };
+}
+
+function enterValue(input: HTMLElement, value: string) {
+  const prototype =
+    input instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
+  Object.getOwnPropertyDescriptor(prototype, "value")!.set!.call(input, value);
+  input.dispatchEvent(
+    new Event(input instanceof HTMLSelectElement ? "change" : "input", { bubbles: true }),
+  );
+}
+
+async function createFromMenu(node: HTMLElement) {
+  const trigger = node.querySelector<HTMLElement>('[aria-label="Task actions"]')!;
+  trigger.focus();
+  await act(() => trigger.click());
+  await act(() => getByRole(node, "menuitem", { name: "New task" }).click());
+}
+
+it.each(["create", "edit"])(
+  "unlocks the New task project picker after discarding a dirty %s",
+  async (mode) => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const fixture = serviceFixture();
+    boundary.upsert.mockClear();
+    const { node, dispose } = await mountTasksDom(
+      fixture,
+      "/workspace?space=tasks&environment=remote",
+    );
+    try {
+      if (mode === "create") {
+        await createFromMenu(node);
+        await act(() => enterValue(getByRole(node, "combobox", { name: "New task project" }), "p"));
+      } else await act(() => getByRole(node, "button", { name: "Open First task" }).click());
+      await act(() =>
+        enterValue(
+          getByRole(node, "textbox", { name: mode === "create" ? "New task title" : "Task title" }),
+          "Unsaved title",
+        ),
+      );
+      await act(() =>
+        getByRole(node, "button", { name: mode === "create" ? "Cancel" : "Close task" }).click(),
+      );
+      await act(() => getByRole(node, "button", { name: "Discard changes" }).click());
+      await createFromMenu(node);
+      const project = getByRole(node, "combobox", {
+        name: "New task project",
+      }) as HTMLSelectElement;
+      expect(project.disabled).toBe(false);
+      expect(node.textContent).not.toContain("Cancel this draft to choose another project.");
+      await act(() => enterValue(project, "p"));
+      expect(
+        (getByRole(node, "textbox", { name: "New task title" }) as HTMLInputElement).value,
+      ).toBe("");
+      expect(boundary.upsert).not.toHaveBeenCalled();
+    } finally {
+      await dispose();
+    }
+  },
+);
+
+it("captures fresh create return filters, scroll and trigger after a previous detail close", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const fixture = serviceFixture();
+  const { node, router, dispose } = await mountTasksDom(
+    fixture,
+    "/workspace?space=tasks&environment=remote",
+  );
+  try {
+    const list = getByRole(node, "main", { name: "Tasks list" });
+    list.scrollTop = 25;
+    const first = getByRole(node, "button", { name: "Open First task" });
+    first.focus();
+    await act(() => first.click());
+    await act(() => getByRole(node, "button", { name: "Close task" }).click());
+    await act(() => enterValue(getByRole(node, "searchbox", { name: "Search tasks" }), "Later"));
+    await act(() =>
+      getByRole(node, "form", { name: "Task search" }).dispatchEvent(
+        new Event("submit", { bubbles: true, cancelable: true }),
+      ),
+    );
+    await act(() => getByRole(node, "button", { name: "Filter tasks" }).click());
+    await act(() => {
+      enterValue(getByRole(node, "combobox", { name: "Task owner filter" }), "environment-owner");
+      enterValue(getByRole(node, "spinbutton", { name: "Task page size" }), "1");
+    });
+    await act(() =>
+      getByRole(node, "form", { name: "Task filters" }).dispatchEvent(
+        new Event("submit", { bubbles: true, cancelable: true }),
+      ),
+    );
+    const current = router.state.location.search;
+    expect(current).toMatchObject({
+      taskText: "Later",
+      taskOwner: "environment-owner",
+      taskLimit: 1,
+    });
+    list.scrollTop = 123;
+    await createFromMenu(node);
+    list.scrollTop = 0;
+    await act(() => getByRole(node, "button", { name: "Cancel" }).click());
+    expect(router.state.location.search).toEqual(current);
+    expect((getByRole(node, "searchbox", { name: "Search tasks" }) as HTMLInputElement).value).toBe(
+      "Later",
+    );
+    expect(list.scrollTop).toBe(123);
+    expect(document.activeElement).toBe(node.querySelector('[aria-label="Task actions"]'));
+    await act(() =>
+      router.navigate({ to: "/workspace", search: { ...current, taskText: "First" } }),
+    );
+    list.scrollTop = 0;
+    await createFromMenu(node);
+    list.scrollTop = 45;
+    await act(() => getByRole(node, "button", { name: "Cancel" }).click());
+    expect(router.state.location.search.taskText).toBe("First");
+    expect(list.scrollTop).toBe(0);
+  } finally {
+    await dispose();
+  }
+});
+
+it("keeps an externally deleted task draft mounted for copy or explicit discard", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const fixture = serviceFixture();
+  boundary.patch.mockClear();
+  boundary.upsert.mockClear();
+  const writeText = vi
+    .fn()
+    .mockRejectedValueOnce(new Error("Clipboard denied"))
+    .mockResolvedValue(undefined);
+  vi.stubGlobal("navigator", { clipboard: { writeText } });
+  const { node, dispose } = await mountTasksDom(
+    fixture,
+    "/workspace?space=tasks&environment=remote",
+  );
+  try {
+    await act(() => getByRole(node, "button", { name: "Open First task" }).click());
+    await act(() =>
+      enterValue(getByRole(node, "textbox", { name: "Task title" }), "Keep this draft"),
+    );
+    await act(() =>
+      fixture.registry.set(
+        fixture.taskAtoms.get(fixture.tasks[0]!.id)!,
+        AsyncResult.fail(
+          new WorkspaceToolsError({ kind: "not-found", message: "Deleted on another client" }),
+        ),
+      ),
+    );
+    const title = getByRole(node, "textbox", { name: "Task title" }) as HTMLInputElement;
+    expect(title.value).toBe("Keep this draft");
+    expect(node.textContent).toContain("This task was deleted.");
+    expect((getByRole(node, "button", { name: "Save task" }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+    await act(() => getByRole(node, "button", { name: "Copy draft" }).click());
+    expect(getByRole(node, "alert").textContent).toContain("Failed to copy task draft");
+    expect(title.value).toBe("Keep this draft");
+    await act(() => getByRole(node, "button", { name: "Copy draft" }).click());
+    expect(writeText).toHaveBeenLastCalledWith(
+      "Keep this draft\nProject: SynKEK\nColumn: To do\nDue date: 2026-10-13\nArea: Marketing\nOwner: Me",
+    );
+    expect(node.textContent).toContain("Draft copied.");
+    expect(boundary.patch).not.toHaveBeenCalled();
+    expect(boundary.upsert).not.toHaveBeenCalled();
+    await act(() => getByRole(node, "button", { name: "Discard draft" }).click());
+    await act(() => getByRole(node, "button", { name: "Keep editing" }).click());
+    expect(title.value).toBe("Keep this draft");
+    await act(() => getByRole(node, "button", { name: "Discard draft" }).click());
+    await act(() => getByRole(node, "button", { name: "Discard changes" }).click());
+    expect(queryByRole(node, "textbox", { name: "Task title" })).toBeNull();
+  } finally {
+    await dispose();
+  }
+});
+
+it("keeps the create origin through successful save and detail close", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const fixture = serviceFixture();
+  const { node, router, dispose } = await mountTasksDom(
+    fixture,
+    "/workspace?space=tasks&environment=remote&project=p&taskText=Later&taskLimit=1",
+  );
+  try {
+    const current = router.state.location.search;
+    const list = getByRole(node, "main", { name: "Tasks list" });
+    list.scrollTop = 123;
+    await createFromMenu(node);
+    await act(() =>
+      enterValue(
+        getByRole(node, "textbox", { name: "New task title" }),
+        "Created elsewhere in the list",
+      ),
+    );
+    await act(() => getByRole(node, "button", { name: "Add task" }).click());
+    expect(getByRole(node, "textbox", { name: "Task title" })).toBeDefined();
+    await act(() =>
+      router.navigate({
+        to: "/workspace",
+        search: { ...router.state.location.search, taskText: "First" },
+      }),
+    );
+    list.scrollTop = 0;
+    await act(() => getByRole(node, "button", { name: "Close task" }).click());
+    expect(router.state.location.search).toEqual(current);
+    expect(list.scrollTop).toBe(123);
+    expect(document.activeElement).toBe(getByRole(node, "button", { name: "Task actions" }));
+  } finally {
+    await dispose();
+  }
+});
+
+it("closes Task actions on outside click, focus leave, Escape and selection without listeners while hidden", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const node = document.createElement("div");
+  document.body.append(node);
+  const outside = document.createElement("button");
+  document.body.append(outside);
+  const root = createRoot(node);
+  const created = vi.fn();
+  const add = vi.spyOn(document, "addEventListener");
+  const remove = vi.spyOn(document, "removeEventListener");
+  try {
+    const view = (hidden = false) => (
+      <TasksSpaceView {...defaults} onCreate={created} hidden={hidden} />
+    );
+    await act(() => root.render(view()));
+    const trigger = getByRole(node, "button", { name: "Task actions" });
+    await act(() => trigger.click());
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+    expect(document.activeElement).toBe(getByRole(node, "menuitem", { name: "New task" }));
+    await act(() => outside.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true })));
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    await act(() => trigger.click());
+    await act(() => outside.focus());
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    await act(() => trigger.click());
+    await act(() =>
+      document.activeElement?.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+      ),
+    );
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    expect(document.activeElement).toBe(trigger);
+    await act(() => trigger.click());
+    await act(() => getByRole(node, "menuitem", { name: "New task" }).click());
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    expect(created).toHaveBeenCalledWith(trigger);
+    await act(() => trigger.click());
+    await act(() => root.render(view(true)));
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    const listeners = add.mock.calls.filter(
+      ([type]) => type === "pointerdown" || type === "keydown",
+    );
+    for (const [type, listener] of listeners)
+      expect(
+        remove.mock.calls.some(
+          ([removedType, removedListener]) => removedType === type && removedListener === listener,
+        ),
+      ).toBe(true);
+    const count = listeners.length;
+    await act(() => outside.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true })));
+    expect(
+      add.mock.calls.filter(([type]) => type === "pointerdown" || type === "keydown"),
+    ).toHaveLength(count);
+  } finally {
+    await act(() => root.unmount());
+    add.mockRestore();
+    remove.mockRestore();
+    node.remove();
+    outside.remove();
+  }
+});
+
+it("suspends the compact list clock during create and returns to the list on Cancel", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  boundary.compact = true;
+  const fixture = serviceFixture();
+  const add = vi.spyOn(window, "addEventListener");
+  const remove = vi.spyOn(window, "removeEventListener");
+  const { node, dispose } = await mountTasksDom(
+    fixture,
+    "/workspace?space=tasks&environment=remote&project=p",
+  );
+  try {
+    const list = getByRole(node, "main", { name: "Tasks list" });
+    const clocks = add.mock.calls.filter(([type]) => type === "focus");
+    expect(clocks.length).toBeGreaterThan(0);
+    await createFromMenu(node);
+    expect(list.parentElement?.className).toContain("max-md:hidden");
+    for (const [type, listener] of clocks)
+      expect(
+        remove.mock.calls.some(
+          ([removedType, removedListener]) => type === removedType && listener === removedListener,
+        ),
+      ).toBe(true);
+    await act(() => getByRole(node, "button", { name: "Cancel" }).click());
+    expect(list.parentElement?.className).not.toContain("max-md:hidden");
+    expect(document.activeElement).toBe(getByRole(node, "button", { name: "Task actions" }));
+  } finally {
+    await dispose();
+    add.mockRestore();
+    remove.mockRestore();
+  }
+});
 
 it("keeps loaded depth through first-page refresh and replaces it with a confirmed cursor chain", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);

@@ -51,6 +51,9 @@ vi.mock("../../hooks/useSettings", () => ({
     }),
 }));
 vi.mock("../../state/entities", () => ({ useThreadShells: () => [] }));
+vi.mock("../../state/environments", () => ({
+  useConnectedEnvironmentIds: () => ["remote", "other"],
+}));
 vi.mock("../../state/workspaceTools", () => ({
   workspaceTools: {
     config: () => "config",

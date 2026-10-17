@@ -21,6 +21,8 @@ import { useEnvironmentQuery } from "../../state/query";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { workspaceTools } from "../../state/workspaceTools";
 import { useEnvironmentSettings } from "../../hooks/useSettings";
+import { writeTextToClipboard } from "../../hooks/useCopyToClipboard";
+import { useConnectedEnvironmentIds } from "../../state/environments";
 import { randomUUID } from "../../lib/utils";
 import { timestampLocale } from "../../timestampFormat";
 import { Button } from "../ui/button";
@@ -110,6 +112,7 @@ interface EditorProps {
   readonly projectTitle: string;
   readonly ownerProfile?: ServerSettings["workspaceOwnerProfile"];
   readonly legacy?: boolean;
+  readonly unavailable?: boolean;
   readonly onClose: () => void;
   readonly onSaved?: (task: WorkspaceTask) => void;
   readonly onBusyChange?: (busy: boolean) => void;
@@ -187,6 +190,7 @@ function TaskEditorForm({
   projectTitle,
   ownerProfile = null,
   legacy = false,
+  unavailable = false,
   onClose,
   onSaved,
   onBusyChange,
@@ -194,9 +198,10 @@ function TaskEditorForm({
   backLabel,
 }: EditorProps) {
   const canOperate = useWorkspaceCanOperate(environmentId);
+  const connected = useConnectedEnvironmentIds().includes(environmentId);
   const capability = useMailCapabilities(environmentId);
   const modern = !legacy && capability.workspaceTasksV2;
-  const allowed = canOperate && (legacy || modern);
+  const allowed = connected && canOperate && (legacy || modern);
   const hidden = useContext(WorkspaceResourcesBodyContext)?.hidden ?? false;
   const router = useRouter({ warn: false });
   const invalidate = useContext(WorkspaceItemMutationContext);
@@ -214,14 +219,19 @@ function TaskEditorForm({
   const allowNext = useRef(false);
   const active = useRef(true);
   const busyCallback = useRef(onBusyChange);
+  const dirtyCallback = useRef(onDirtyChange);
   useEffect(() => {
     busyCallback.current = onBusyChange;
   }, [onBusyChange]);
+  useEffect(() => {
+    dirtyCallback.current = onDirtyChange;
+  }, [onDirtyChange]);
   useEffect(() => {
     active.current = true;
     return () => {
       active.current = false;
       if (flight.current) busyCallback.current?.(false);
+      dirtyCallback.current?.(false);
     };
   }, []);
   const [error, setError] = useState<string | null>(null);
@@ -238,6 +248,7 @@ function TaskEditorForm({
     if (conflict && conflictTaskId && modern) refreshLatest();
   }, [conflict, conflictTaskId, modern, refreshLatest]);
   const targetMissing =
+    unavailable ||
     missing ||
     (conflict && isToolsError(latestQuery.failure) && latestQuery.failure.kind === "not-found");
   const latest =
@@ -250,6 +261,10 @@ function TaskEditorForm({
     onDirtyChange?.(dirty);
   }, [dirty, onDirtyChange]);
   const changed = task !== null && (latest?.revision ?? 0) > base.revision;
+  const [dismissedRevision, setDismissedRevision] = useState<number | null>(null);
+  const showConflict =
+    (conflict || (dirty && changed)) && latest?.revision !== dismissedRevision && !targetMissing;
+  const [copied, setCopied] = useState(false);
   const [observed, setObserved] = useState(task);
   if (observed !== task) {
     setObserved(task);
@@ -294,6 +309,7 @@ function TaskEditorForm({
     setError(workspaceToolsError(result));
     if (isToolsError(cause)) {
       if (cause.kind === "conflict") {
+        setDismissedRevision(null);
         setConflict(true);
         if (conflict) latestQuery.refresh();
       }
@@ -337,7 +353,11 @@ function TaskEditorForm({
       ) : null}
       {!allowed ? (
         <p className="text-xs text-muted-foreground">
-          {canOperate ? "Tasks need a newer server." : "This connection is read-only."}
+          {!connected
+            ? "Connection unavailable. Reconnect to save task changes."
+            : canOperate
+              ? "Tasks need a newer server."
+              : "This connection is read-only."}
         </p>
       ) : null}
       <form
@@ -556,14 +576,17 @@ function TaskEditorForm({
           {error}
         </p>
       ) : null}
-      {(conflict || (dirty && changed)) && !targetMissing ? (
+      {showConflict ? (
         <div className="space-y-2 text-xs" aria-label="Task conflict">
-          <p role="status">This task changed on another client.</p>
+          {!error ? <p role="status">This task changed on another client.</p> : null}
           {latest ? (
             <div aria-label="Current server values">
               <p>{latest.title}</p>
               <p>
-                {latest.column} · {latest.dueOn ?? "No due date"} · {latest.areaLabel ?? "No area"}
+                {latest.column} ·{" "}
+                {formatWorkspaceTaskDueOn(latest.dueOn, now, zone ?? "UTC", timestampLocale)
+                  ?.fullDate ?? "No due date"}{" "}
+                · {latest.areaLabel ?? "No area"}
               </p>
               <p>
                 Owner:{" "}
@@ -590,7 +613,10 @@ function TaskEditorForm({
             size="sm"
             variant="ghost"
             disabled={busy}
-            onClick={() => setError(null)}
+            onClick={() => {
+              setDismissedRevision(latest?.revision ?? null);
+              setError(null);
+            }}
           >
             Keep editing
           </Button>
@@ -618,7 +644,49 @@ function TaskEditorForm({
           </Button>
         </div>
       ) : null}
-      {missing ? <p role="status">This task is unavailable. Its links have been kept.</p> : null}
+      {targetMissing ? (
+        <div className="space-y-2 text-xs">
+          <p role="status">
+            This task was deleted. Its links have been kept. Copy your draft or discard it.
+          </p>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={busy || hidden}
+            onClick={async () => {
+              try {
+                const didCopy = await writeTextToClipboard(
+                  [
+                    draft.title,
+                    `Project: ${projectTitle}`,
+                    `Column: ${draft.column}`,
+                    `Due date: ${draft.dueOn || "No due date"}`,
+                    `Area: ${draft.areaLabel || "No area"}`,
+                    `Owner: ${draft.owner === "environment-owner" ? (ownerProfile?.displayName ?? "Me") : "Unassigned"}`,
+                  ].join("\n"),
+                  "task draft",
+                );
+                if (active.current) {
+                  setCopied(didCopy);
+                  setError(null);
+                }
+              } catch (cause) {
+                if (active.current)
+                  setError(
+                    cause instanceof Error ? cause.message : "The draft could not be copied.",
+                  );
+              }
+            }}
+          >
+            Copy draft
+          </Button>
+          <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={close}>
+            Discard draft
+          </Button>
+          {copied ? <p role="status">Draft copied.</p> : null}
+        </div>
+      ) : null}
       {discard && !hidden ? (
         <DiscardPrompt
           onKeep={() => setDiscard(null)}
