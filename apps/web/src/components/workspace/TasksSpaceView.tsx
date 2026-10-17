@@ -44,6 +44,7 @@ export interface TasksSpaceViewProps {
   readonly taskLayout: "list" | "board";
   readonly filters: TaskFilters;
   readonly page: WorkspaceTaskPage | null;
+  readonly totalsTruncated?: boolean;
   readonly status: "loading" | "ready" | "refreshing" | "error" | "unavailable" | "disconnected";
   readonly error: string | null;
   readonly ownerProfile: ServerSettings["workspaceOwnerProfile"];
@@ -168,10 +169,17 @@ export function TasksSpaceView(props: TasksSpaceViewProps) {
           ?.usingUtcFallback;
 
   return (
-    <main aria-label="Tasks list" className="min-w-0 px-4 pt-4 pb-6">
+    <main
+      aria-label={props.taskLayout === "board" ? "Tasks board" : "Tasks list"}
+      className="min-w-0 px-4 pt-4 pb-6"
+    >
       <div className="flex h-10 items-start justify-between gap-3 max-md:h-11 [@media(pointer:coarse)]:h-11">
         <div className="min-w-0">
-          <h2 tabIndex={-1} className="truncate text-sm leading-5 font-semibold">
+          <h2
+            data-workspace-tasks-heading=""
+            tabIndex={-1}
+            className="truncate text-sm leading-5 font-semibold"
+          >
             {projectId ? "Project tasks" : "All tasks"}
           </h2>
           <p className="mt-1 truncate text-3xs leading-3.5 text-muted-foreground">
@@ -466,6 +474,7 @@ export function TasksSpaceView(props: TasksSpaceViewProps) {
               hidden={hidden}
               disconnected={props.status === "disconnected"}
               refreshFailed={props.status === "error" || props.status === "disconnected"}
+              onRecover={props.onRetry}
             />
           ) : (
             <ul className="mt-3" aria-label="Tasks">

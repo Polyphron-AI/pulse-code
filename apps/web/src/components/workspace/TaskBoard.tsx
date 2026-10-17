@@ -15,6 +15,7 @@ import {
 import * as Schema from "effect/Schema";
 
 const isToolsError = Schema.is(WorkspaceToolsError);
+const noColumns: readonly string[] = [];
 export type TaskBoardProps = Pick<
   TasksSpaceViewProps,
   | "environmentId"
@@ -37,127 +38,173 @@ export type TaskBoardProps = Pick<
   readonly page: WorkspaceTaskPage;
   readonly disconnected?: boolean;
   readonly refreshFailed?: boolean;
+  readonly totalsTruncated?: boolean;
+  readonly onRecover?: () => void;
 };
 
-const TaskBoardCard = memo(function TaskBoardCard({
-  columns,
-  ...row
-}: WorkspaceTaskRowProps & { readonly columns: readonly string[] }) {
-  const { task, environmentId, onTransition, onOpen } = row;
-  const [busy, setBusy] = useState(false);
-  const inFlight = useRef(false);
-  const [acknowledged, setAcknowledged] = useState<number | null>(null);
-  const [wasRefreshFailed, setWasRefreshFailed] = useState(row.refreshFailed);
-  if (wasRefreshFailed !== row.refreshFailed) {
-    setWasRefreshFailed(row.refreshFailed);
-    if (row.refreshFailed) setAcknowledged(null);
-  }
-  const [error, setError] = useState<string | null>(null);
-  const [conflict, setConflict] = useState(false);
-  const feedbackId = useId();
-  const disabled =
-    !row.canOperate ||
-    !row.workspaceTasksV2 ||
-    row.pending ||
-    busy ||
-    (acknowledged !== null && acknowledged > task.revision) ||
-    columns.length === 0;
-  const update: TaskTransitionHandler = async (request) => {
-    if (inFlight.current)
-      return AsyncResult.fail(new Error("A task update is already in progress."));
-    inFlight.current = true;
-    setBusy(true);
-    try {
-      const result = await onTransition(request);
-      if (result._tag === "Success" && result.value.revision !== undefined)
-        setAcknowledged(result.value.revision);
-      return result;
-    } finally {
-      inFlight.current = false;
-      setBusy(false);
+const TaskBoardCard = memo(
+  function TaskBoardCard({
+    columns,
+    onRecover,
+    ...row
+  }: WorkspaceTaskRowProps & {
+    readonly columns: readonly string[];
+    readonly onRecover?: (() => void) | undefined;
+  }) {
+    const { task, environmentId, onTransition, onOpen } = row;
+    const [busy, setBusy] = useState(false);
+    const inFlight = useRef(false);
+    const [acknowledged, setAcknowledged] = useState<number | null>(null);
+    const [wasRefreshFailed, setWasRefreshFailed] = useState(row.refreshFailed);
+    if (wasRefreshFailed !== row.refreshFailed) {
+      setWasRefreshFailed(row.refreshFailed);
+      if (row.refreshFailed) setAcknowledged(null);
     }
-  };
-  return (
-    <li
-      data-workspace-board-task-id={task.id}
-      className="min-w-0 rounded-md border border-border bg-background p-2"
-    >
-      <ul>
-        <WorkspaceTaskRow
-          {...row}
-          onTransition={update}
-          pending={row.pending || busy || (acknowledged !== null && acknowledged > task.revision)}
-        />
-      </ul>
-      <select
-        aria-label={`Move ${task.title} to column`}
-        aria-describedby={error ? feedbackId : undefined}
-        className="mt-2 min-h-11 w-full min-w-0 rounded-md border border-input bg-background px-2 text-xs md:min-h-8 [@media(pointer:coarse)]:min-h-11"
-        value={task.column}
-        disabled={disabled}
-        onChange={async (event) => {
-          const column = event.target.value;
-          if (disabled || inFlight.current || column === task.column || !columns.includes(column))
-            return;
-          setError(null);
-          setConflict(false);
-          try {
-            const result = await update({
-              environmentId,
-              input: {
-                id: task.id,
-                expectedRevision: task.revision,
-                change: { type: "column", column },
-              },
-            });
-            if (result._tag === "Failure") {
-              const cause = squashAtomCommandFailure(result);
-              setError(
-                cause instanceof Error ? cause.message : "The workspace change could not be saved.",
-              );
-              setConflict(isToolsError(cause) && cause.kind === "conflict");
-            }
-          } catch (cause) {
-            setError(cause instanceof Error ? cause.message : "The task could not be moved.");
-          }
-        }}
+    const [error, setError] = useState<string | null>(null);
+    const [conflict, setConflict] = useState(false);
+    const [recovering, setRecovering] = useState(false);
+    const [revision, setRevision] = useState(task.revision);
+    if (revision !== task.revision) {
+      setRevision(task.revision);
+      setError(null);
+      setConflict(false);
+      setRecovering(false);
+    }
+    const feedbackId = useId();
+    const disabled =
+      !row.canOperate ||
+      !row.workspaceTasksV2 ||
+      row.pending ||
+      busy ||
+      (acknowledged !== null && acknowledged > task.revision) ||
+      columns.length === 0;
+    const update: TaskTransitionHandler = async (request) => {
+      if (inFlight.current)
+        return AsyncResult.fail(new Error("A task update is already in progress."));
+      inFlight.current = true;
+      setBusy(true);
+      try {
+        const result = await onTransition(request);
+        if (result._tag === "Success" && result.value.revision !== undefined)
+          setAcknowledged(result.value.revision);
+        return result;
+      } finally {
+        inFlight.current = false;
+        setBusy(false);
+      }
+    };
+    return (
+      <li
+        data-workspace-board-task-id={task.id}
+        className="min-w-0 rounded-md border border-border bg-background p-2"
       >
-        {!columns.includes(task.column) ? (
-          <option value={task.column}>{task.column} (unconfigured)</option>
-        ) : null}
-        {columns.map((column) => (
-          <option key={column} value={column}>
-            {column}
-          </option>
-        ))}
-      </select>
-      {busy ? (
-        <p role="status" className="mt-2 text-xs text-muted-foreground">
-          Saving move...
-        </p>
-      ) : null}
-      {error ? (
-        <p id={feedbackId} role="alert" className="mt-2 text-xs text-destructive">
-          {error}
-        </p>
-      ) : null}
-      {conflict ? (
-        <button
-          type="button"
-          aria-label={`Review changes to ${task.title}`}
-          className="mt-2 min-h-11 text-xs underline"
-          onClick={() => onOpen({ type: "task", taskId: task.id })}
+        <ul>
+          <WorkspaceTaskRow
+            {...row}
+            onTransition={update}
+            pending={row.pending || busy || (acknowledged !== null && acknowledged > task.revision)}
+          />
+        </ul>
+        <select
+          aria-label={`Move ${task.title} to column`}
+          aria-describedby={error ? feedbackId : undefined}
+          className="mt-2 min-h-11 w-full min-w-0 rounded-md border border-input bg-background px-2 text-xs md:min-h-8 [@media(pointer:coarse)]:min-h-11"
+          value={task.column}
+          disabled={disabled}
+          onChange={async (event) => {
+            const column = event.target.value;
+            if (disabled || inFlight.current || column === task.column || !columns.includes(column))
+              return;
+            setError(null);
+            setConflict(false);
+            setRecovering(false);
+            try {
+              const result = await update({
+                environmentId,
+                input: {
+                  id: task.id,
+                  expectedRevision: task.revision,
+                  change: { type: "column", column },
+                },
+              });
+              if (result._tag === "Failure") {
+                const cause = squashAtomCommandFailure(result);
+                setError(
+                  cause instanceof Error
+                    ? cause.message
+                    : "The workspace change could not be saved.",
+                );
+                setConflict(isToolsError(cause) && cause.kind === "conflict");
+                if (
+                  isToolsError(cause) &&
+                  (cause.kind === "conflict" || cause.kind === "not-found")
+                ) {
+                  setRecovering(onRecover !== undefined);
+                  onRecover?.();
+                }
+              }
+            } catch (cause) {
+              setError(cause instanceof Error ? cause.message : "The task could not be moved.");
+            }
+          }}
         >
-          Review task changes
-        </button>
-      ) : null}
-    </li>
-  );
-});
+          {!columns.includes(task.column) ? (
+            <option value={task.column}>{task.column} (unconfigured)</option>
+          ) : null}
+          {columns.map((column) => (
+            <option key={column} value={column}>
+              {column}
+            </option>
+          ))}
+        </select>
+        {busy ? (
+          <p role="status" className="mt-2 text-xs text-muted-foreground">
+            Saving move...
+          </p>
+        ) : null}
+        {error ? (
+          <p id={feedbackId} role="alert" className="mt-2 text-xs text-destructive">
+            {error}
+          </p>
+        ) : null}
+        {recovering ? (
+          <p role="status" className="mt-2 text-xs text-muted-foreground">
+            Refreshing tasks to load the latest changes.
+          </p>
+        ) : null}
+        {conflict ? (
+          <button
+            type="button"
+            aria-label={`Review changes to ${task.title}`}
+            className="mt-2 min-h-11 text-xs underline"
+            onClick={() => onOpen({ type: "task", taskId: task.id })}
+          >
+            Review task changes
+          </button>
+        ) : null}
+      </li>
+    );
+  },
+  (previous, next) => {
+    if (
+      Object.keys(previous).length !== Object.keys(next).length ||
+      previous.task.id !== next.task.id ||
+      previous.task.revision !== next.task.revision ||
+      previous.task.projectTitle !== next.task.projectTitle ||
+      previous.columns.length !== next.columns.length ||
+      previous.columns.some((column, index) => column !== next.columns[index])
+    )
+      return false;
+    return (Object.keys(next) as Array<keyof typeof next>).every(
+      (key) => key === "task" || key === "columns" || Object.is(previous[key], next[key]),
+    );
+  },
+);
 
 /** Groups only loaded projects and cards. Totals cover the full filtered query. */
 export function TaskBoard(props: TaskBoardProps) {
   const { page } = props;
+  const totalsTruncated = props.totalsTruncated ?? page.laneTotals.length >= 1200;
   const board = useRef<HTMLDivElement>(null);
   const focused = useRef<{
     element: HTMLElement;
@@ -169,12 +216,14 @@ export function TaskBoard(props: TaskBoardProps) {
     if (props.hidden || !previous || previous.element.isConnected) return;
     focused.current = null;
     if (document.activeElement !== document.body) return;
-    const card = [
-      ...(board.current?.querySelectorAll<HTMLElement>("[data-workspace-board-task-id]") ?? []),
-    ].find((element) => element.dataset.workspaceBoardTaskId === previous.taskId);
+    const card = page.tasks.some((task) => task.id === previous.taskId)
+      ? [
+          ...(board.current?.querySelectorAll<HTMLElement>("[data-workspace-board-task-id]") ?? []),
+        ].find((element) => element.dataset.workspaceBoardTaskId === previous.taskId)
+      : undefined;
     const target = card?.querySelector<HTMLElement>(previous.control) ?? board.current;
     target?.focus({ preventScroll: true });
-  });
+  }, [page.tasks, props.hidden]);
   const groups = useMemo(() => {
     const titles = new Map(props.projects.map((project) => [project.id, project.title]));
     const configs = new Map(page.projects.map((config) => [config.projectId, config]));
@@ -196,7 +245,7 @@ export function TaskBoard(props: TaskBoardProps) {
           lanes: new Map(
             config.taskColumns.map((column) => [
               column,
-              { tasks: [] as WorkspaceTaskSummary[], total: undefined as number | undefined },
+              { tasks: [] as WorkspaceTaskSummary[], total: totalsTruncated ? undefined : 0 },
             ]),
           ),
         },
@@ -229,7 +278,7 @@ export function TaskBoard(props: TaskBoardProps) {
       else group.lanes.set(total.column, { tasks: [], total: total.total });
     }
     return [...grouped.values()];
-  }, [page, props.projects]);
+  }, [page, props.projects, totalsTruncated]);
   const canOperate = props.canOperate && !props.disconnected && !props.hidden;
   return (
     <div
@@ -259,7 +308,7 @@ export function TaskBoard(props: TaskBoardProps) {
           Read-only session. You can browse tasks but cannot move cards.
         </p>
       ) : null}
-      {page.laneTotals.length >= 1200 ? (
+      {totalsTruncated ? (
         <p role="status" className="text-xs text-muted-foreground">
           Some lane totals are unavailable. Loaded cards may be a partial set.
         </p>
@@ -286,6 +335,9 @@ export function TaskBoard(props: TaskBoardProps) {
               <section
                 key={column}
                 aria-label={`${group.title ?? "Unavailable project"}: ${column}`}
+                tabIndex={-1}
+                data-workspace-board-project-id={group.id}
+                data-workspace-board-column={column}
                 className="w-60 shrink-0 rounded-lg border border-border p-3"
               >
                 <h3 className="break-words text-xs font-semibold">{column}</h3>
@@ -300,7 +352,7 @@ export function TaskBoard(props: TaskBoardProps) {
                       key={`${props.environmentId}:${task.id}`}
                       environmentId={props.environmentId}
                       task={task}
-                      columns={group.config?.taskColumns ?? []}
+                      columns={group.config?.taskColumns ?? noColumns}
                       density="resource"
                       onOpen={props.onOpen}
                       ownerProfile={props.ownerProfile}
@@ -316,6 +368,7 @@ export function TaskBoard(props: TaskBoardProps) {
                       selected={props.selectedTaskId === task.id}
                       settingsReady={props.settingsReady}
                       onTransition={props.onTransition}
+                      onRecover={props.onRecover}
                       renderItemMenu={props.renderItemMenu}
                     />
                   ))}

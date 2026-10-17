@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act, useEffect, useState } from "react";
+import { act, useEffect, useState, type ReactNode } from "react";
 import { it as effectIt } from "@effect/vitest";
 import { create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, expect, it, vi } from "vite-plus/test";
@@ -130,14 +130,16 @@ effectIt.effect("moves by keyboard through configured lanes and preserves filter
         tasks: durable.tasks.slice(0, 2),
         openTotal: durable.tasks.filter((candidate) => !candidate.done).length,
         laneTotals: configs.flatMap((config) =>
-          config.taskColumns.map((column) => ({
-            projectId: config.projectId,
-            column,
-            total: durable.tasks.filter(
-              (candidate) =>
-                candidate.projectId === config.projectId && candidate.column === column,
-            ).length,
-          })),
+          config.taskColumns
+            .map((column) => ({
+              projectId: config.projectId,
+              column,
+              total: durable.tasks.filter(
+                (candidate) =>
+                  candidate.projectId === config.projectId && candidate.column === column,
+              ).length,
+            }))
+            .filter((lane) => lane.total > 0),
         ),
       };
       for (const subscriber of subscribers) subscriber(confirmed);
@@ -173,6 +175,12 @@ effectIt.effect("moves by keyboard through configured lanes and preserves filter
     expect(
       lane("Launch: Review").findAllByProps({ "data-workspace-task-id": task.id }),
     ).toHaveLength(0);
+    expect(
+      lane("Launch: Review")
+        .findAllByType("p")
+        .map((p) => p.children.join(""))
+        .join(" "),
+    ).toContain("0 loaded of 0");
     yield* Effect.promise(() =>
       act(() => move(task.title).props.onChange({ target: { value: "Released" } })),
     );
@@ -219,16 +227,19 @@ effectIt.effect("moves by keyboard through configured lanes and preserves filter
   }),
 );
 
-it.each(["conflict", "unavailable"] as const)(
+it.each(["conflict", "not-found", "unavailable"] as const)(
   "keeps the confirmed lane after a %s failure and opens the shared detail for recovery",
   async (kind) => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     const open = vi.fn();
+    const recover = vi.fn();
     const transition = vi.fn<TaskTransitionHandler>(async () =>
       AsyncResult.fail(new WorkspaceToolsError({ kind, message: "Move rejected" })),
     );
     await act(() => {
-      renderer = create(<TaskBoard {...defaults} onTransition={transition} onOpen={open} />);
+      renderer = create(
+        <TaskBoard {...defaults} onTransition={transition} onOpen={open} onRecover={recover} />,
+      );
     });
     await act(() => move(task.title).props.onChange({ target: { value: "Released" } }));
     expect(
@@ -236,6 +247,11 @@ it.each(["conflict", "unavailable"] as const)(
     ).toBeDefined();
     expect(move(task.title).props.value).toBe("Backlog");
     expect(renderer.root.findByProps({ role: "alert" }).children.join("")).toBe("Move rejected");
+    expect(recover).toHaveBeenCalledTimes(kind === "unavailable" ? 0 : 1);
+    if (kind !== "unavailable")
+      expect(JSON.stringify(renderer.toJSON())).toContain(
+        "Refreshing tasks to load the latest changes.",
+      );
     if (kind === "conflict") {
       await act(() =>
         renderer.root
@@ -330,6 +346,71 @@ it("shows missing and capped totals without presenting unknown counts as zero, a
   ).toContain("0 loaded; total unavailable");
   expect(lane("Launch: Legacy").findByProps({ "data-workspace-task-id": task.id })).toBeDefined();
   expect(move(task.title).props.value).toBe("Legacy");
+});
+
+it("keeps totals unknown when a loaded project has no configuration or totals", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  await act(() => {
+    renderer = create(<TaskBoard {...defaults} page={{ ...page, projects: [], laneTotals: [] }} />);
+  });
+  expect(
+    lane("Launch: Backlog")
+      .findAllByType("p")
+      .map((p) => p.children.join(""))
+      .join(" "),
+  ).toContain("1 loaded; total unavailable");
+});
+
+it("skips unchanged cards on refresh and still renders changed revisions, settings and permissions", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const cards = Array.from({ length: 300 }, (_, index) => ({
+    ...task,
+    id: `wskt_00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+    title: `Card ${index}`,
+    projectId: index < 150 ? task.projectId : other.projectId,
+  }));
+  const renderMenu = vi.fn((_task: WorkspaceTaskSummary, children: ReactNode) => children);
+  const original = { ...page, tasks: cards, projects: [configs[0]!] };
+  await act(() => {
+    renderer = create(<TaskBoard {...defaults} page={original} renderItemMenu={renderMenu} />);
+  });
+  expect(renderMenu).toHaveBeenCalledTimes(300);
+  renderMenu.mockClear();
+  const refreshed = {
+    ...original,
+    tasks: cards.map((card) => ({ ...card })),
+    projects: [{ ...configs[0]!, taskColumns: [...configs[0]!.taskColumns] }],
+  };
+  await act(() =>
+    renderer.update(<TaskBoard {...defaults} page={refreshed} renderItemMenu={renderMenu} />),
+  );
+  expect(renderMenu).not.toHaveBeenCalled();
+  const updated = {
+    ...refreshed,
+    tasks: refreshed.tasks.map((card, index) =>
+      index === 0 ? { ...card, title: "Updated card", revision: card.revision + 1 } : card,
+    ),
+  };
+  await act(() =>
+    renderer.update(<TaskBoard {...defaults} page={updated} renderItemMenu={renderMenu} />),
+  );
+  expect(renderMenu).toHaveBeenCalledTimes(1);
+  expect(move("Updated card").props.value).toBe("Backlog");
+  renderMenu.mockClear();
+  await act(() =>
+    renderer.update(
+      <TaskBoard
+        {...defaults}
+        page={updated}
+        renderItemMenu={renderMenu}
+        canOperate={false}
+        ownerProfile={{ displayName: "Quinn", initials: "QB" }}
+      />,
+    ),
+  );
+  expect(renderMenu).toHaveBeenCalledTimes(300);
+  expect(move("Updated card").props.disabled).toBe(true);
+  expect(renderer.root.findAllByProps({ "aria-label": "Quinn" })).toHaveLength(300);
 });
 
 it("blocks duplicate moves until the acknowledged revision is displayed", async () => {

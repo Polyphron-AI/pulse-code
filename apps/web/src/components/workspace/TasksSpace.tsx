@@ -61,13 +61,20 @@ function TaskCursor({
   return null;
 }
 function combinePages(base: WorkspaceTaskPage | null, pages: readonly WorkspaceTaskPage[]) {
-  if (!base || !pages.length) return base;
-  const configs = new Map(base.projects.map((config) => [config.projectId, config]));
-  const laneTotals = new Map(
-    base.laneTotals.map((lane) => [JSON.stringify([lane.projectId, lane.column]), lane]),
-  );
-  for (const page of pages) {
+  if (!base) return base;
+  const configs = new Map<ProjectId, WorkspaceTaskPage["projects"][number]>();
+  const laneTotals = new Map<string, WorkspaceTaskPage["laneTotals"][number]>();
+  const allPages = [base, ...pages];
+  for (const page of allPages) {
     for (const config of page.projects) configs.set(config.projectId, config);
+    // GROUP BY omits empty lanes. Only an uncapped page confirms their zero totals.
+    if (page.laneTotals.length < 1200)
+      for (const config of page.projects)
+        for (const column of config.taskColumns) {
+          const key = JSON.stringify([config.projectId, column]);
+          if (!laneTotals.has(key))
+            laneTotals.set(key, { projectId: config.projectId, column, total: 0 });
+        }
     for (const lane of page.laneTotals)
       laneTotals.set(JSON.stringify([lane.projectId, lane.column]), lane);
   }
@@ -76,7 +83,8 @@ function combinePages(base: WorkspaceTaskPage | null, pages: readonly WorkspaceT
     tasks: [...base.tasks, ...pages.flatMap((page) => page.tasks)],
     projects: [...configs.values()],
     laneTotals: [...laneTotals.values()],
-    nextCursor: pages.at(-1)!.nextCursor,
+    nextCursor: (pages.at(-1) ?? base).nextCursor,
+    totalsTruncated: allPages.some((page) => page.laneTotals.length >= 1200),
   };
 }
 /** Keeps the displayed depth until its replacement cursor chain is confirmed. */
@@ -105,7 +113,7 @@ export function TasksList(props: ListProps) {
     cursor: string | null;
     error: string | null;
     depth: number;
-    held: WorkspaceTaskPage | null;
+    held: ReturnType<typeof combinePages>;
   }>({
     query: firstAtom,
     base: first.data,
@@ -169,7 +177,7 @@ export function TasksList(props: ListProps) {
         ? rebuilding && paging.held
           ? paging.held
           : combinePages(paging.base, paging.pages)
-        : first.data,
+        : combinePages(first.data, []),
     [current, rebuilding, paging.held, paging.base, paging.pages, first.data],
   );
   const receive = useCallback(
@@ -204,25 +212,28 @@ export function TasksList(props: ListProps) {
           : page
             ? "ready"
             : "loading";
+  const refresh = first.refresh;
+  const retry = useCallback(() => {
+    setPaging((state) => ({
+      ...state,
+      error: null,
+      cursor:
+        state.pages.length < state.depth
+          ? ((state.pages.at(-1) ?? state.base)?.nextCursor ?? null)
+          : null,
+    }));
+    refresh();
+  }, [refresh]);
   return (
     <>
       <TasksSpaceView
         {...props}
         page={page}
+        totalsTruncated={page?.totalsTruncated ?? false}
         status={status}
         error={first.error ?? paging.error}
         loadingMore={current && (paging.cursor !== null || rebuilding)}
-        onRetry={() => {
-          setPaging((state) => ({
-            ...state,
-            error: null,
-            cursor:
-              state.pages.length < state.depth
-                ? ((state.pages.at(-1) ?? state.base)?.nextCursor ?? null)
-                : null,
-          }));
-          first.refresh();
-        }}
+        onRetry={retry}
         onLoadMore={() => {
           if (status === "ready" && !paging.error && page?.nextCursor && !paging.cursor)
             setPaging({
@@ -365,6 +376,8 @@ function ConnectedTasksSpace({
   const returnSearch = useRef<WorkspaceSearch | null>(null);
   const origin = useRef<HTMLElement | null>(null);
   const originTaskId = useRef<string | null>(null);
+  const originLane = useRef<{ projectId: string; column: string } | null>(null);
+  const list = useRef<HTMLDivElement>(null);
   const scrollReturn = useRef<Array<{ element: HTMLElement; top: number }>>([]);
   const captureReturn = useCallback(
     (taskId: string | null, trigger?: HTMLElement | null) => {
@@ -372,6 +385,13 @@ function ConnectedTasksSpace({
       originTaskId.current = taskId;
       origin.current =
         trigger ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
+      const lane = origin.current?.closest<HTMLElement>("[data-workspace-board-column]");
+      originLane.current = lane
+        ? {
+            projectId: lane.dataset.workspaceBoardProjectId!,
+            column: lane.dataset.workspaceBoardColumn!,
+          }
+        : null;
       scrollReturn.current = [];
       for (let element = origin.current?.parentElement; element; element = element.parentElement) {
         scrollReturn.current.push({ element, top: element.scrollTop });
@@ -385,11 +405,20 @@ function ConnectedTasksSpace({
         openOther(ref);
         return;
       }
-      captureReturn(ref.taskId);
-      setCreating(false);
-      void navigate({ to: "/workspace", search: { ...search, item: JSON.stringify(ref) } });
+      const trigger = [
+        ...(list.current?.querySelectorAll<HTMLElement>("[data-workspace-task-id]") ?? []),
+      ]
+        .find((row) => row.dataset.workspaceTaskId === ref.taskId)
+        ?.querySelector<HTMLElement>('button[aria-label^="Open "]');
+      captureReturn(ref.taskId, trigger);
+      void navigate({ to: "/workspace", search: { ...search, item: JSON.stringify(ref) } }).then(
+        () => {
+          if (parseTaskLocation(router.state.location.search.item)?.taskId === ref.taskId)
+            setCreating(false);
+        },
+      );
     },
-    [navigate, search, openOther, captureReturn, setCreating],
+    [navigate, search, openOther, captureReturn, router, setCreating],
   );
   const close = () => {
     void navigate({
@@ -400,17 +429,29 @@ function ConnectedTasksSpace({
   };
   useEffect(() => {
     if (selectedTaskId || creating) return;
-    const restoredRow = [...document.querySelectorAll<HTMLElement>("[data-workspace-task-id]")]
+    const restoredRow = [
+      ...(list.current?.querySelectorAll<HTMLElement>("[data-workspace-task-id]") ?? []),
+    ]
       .find((row) => row.dataset.workspaceTaskId === originTaskId.current)
       ?.querySelector<HTMLElement>('button[aria-label^="Open "]');
+    const restoredLane = [
+      ...(list.current?.querySelectorAll<HTMLElement>("[data-workspace-board-column]") ?? []),
+    ].find(
+      (lane) =>
+        lane.dataset.workspaceBoardProjectId === originLane.current?.projectId &&
+        lane.dataset.workspaceBoardColumn === originLane.current?.column,
+    );
     const target = origin.current?.isConnected
       ? origin.current
-      : (restoredRow ?? document.querySelector<HTMLElement>('[aria-label="Tasks list"] h2'));
+      : (restoredRow ??
+        restoredLane ??
+        list.current?.querySelector<HTMLElement>("[data-workspace-tasks-heading]"));
     target?.focus({ preventScroll: true });
     for (const { element, top } of scrollReturn.current) element.scrollTo(0, top);
     returnSearch.current = null;
     origin.current = null;
     originTaskId.current = null;
+    originLane.current = null;
     scrollReturn.current = [];
   }, [selectedTaskId, creating]);
   const onFilter = useCallback<TasksSpaceViewProps["onFilter"]>(
@@ -483,7 +524,7 @@ function ConnectedTasksSpace({
       }}
     >
       <div className="flex min-w-0 items-start max-md:block">
-        <div className={`min-w-0 flex-1 ${taskRef || creating ? "max-md:hidden" : ""}`}>
+        <div ref={list} className={`min-w-0 flex-1 ${taskRef || creating ? "max-md:hidden" : ""}`}>
           <TasksList
             environmentId={environmentId}
             projectId={search.project ? ProjectId.make(search.project) : null}

@@ -262,12 +262,14 @@ function serviceFixture() {
       openTotal: filtered.filter((task) => !task.done).length,
       projects: [...pageProjects].map((projectId) => ({ ...config, projectId })),
       laneTotals: [...pageProjects].flatMap((projectId) =>
-        config.taskColumns.map((column) => ({
-          projectId,
-          column,
-          total: filtered.filter((task) => task.projectId === projectId && task.column === column)
-            .length,
-        })),
+        config.taskColumns
+          .map((column) => ({
+            projectId,
+            column,
+            total: filtered.filter((task) => task.projectId === projectId && task.column === column)
+              .length,
+          }))
+          .filter((lane) => lane.total > 0),
       ),
       nextCursor: offset + limit < filtered.length ? String(offset + limit) : null,
     });
@@ -1559,6 +1561,46 @@ it.each(["create", "save"])(
     }
   },
 );
+it.each(["list", "board"])(
+  "guards a dirty create draft before opening a task from %s",
+  async (layout) => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const fixture = serviceFixture();
+    const { node, router, dispose } = await mountTasksDom(
+      fixture,
+      `/workspace?space=tasks&environment=remote&project=p&taskLayout=${layout}`,
+    );
+    try {
+      await createFromMenu(node);
+      await act(() =>
+        enterValue(getByRole(node, "textbox", { name: "New task title" }), "Unsaved draft"),
+      );
+      const before = router.state.location.href;
+      await act(() => getByRole(node, "button", { name: "Open First task" }).click());
+      expect(getByRole(node, "alertdialog", { name: "Discard task changes?" })).toBeDefined();
+      await act(() => getByRole(node, "button", { name: "Keep editing" }).click());
+      expect(router.state.location.href).toBe(before);
+      expect(
+        (getByRole(node, "textbox", { name: "New task title" }) as HTMLInputElement).value,
+      ).toBe("Unsaved draft");
+      await act(() => getByRole(node, "button", { name: "Open First task" }).click());
+      await act(() => getByRole(node, "button", { name: "Discard changes" }).click());
+      expect(router.state.location.search.item).toBe(
+        JSON.stringify({ type: "task", taskId: fixture.tasks[0]!.id }),
+      );
+      expect((getByRole(node, "textbox", { name: "Task title" }) as HTMLInputElement).value).toBe(
+        "First task",
+      );
+      expect(queryByRole(node, "textbox", { name: "New task title" })).toBeNull();
+      expect(boundary.upsert).not.toHaveBeenCalled();
+      await createFromMenu(node);
+      expect(getByRole(node, "textbox", { name: "New task title" })).toBeDefined();
+    } finally {
+      await dispose();
+    }
+  },
+);
+
 it("switches Board and List without losing URL filters, loaded pages or the selected shared editor", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const fixture = serviceFixture();
@@ -1610,6 +1652,9 @@ it("adds each next page's project groups and full lane totals to the board", asy
     expect(getByRole(node, "region", { name: "SynKEK: To do" }).textContent).toContain(
       "2 loaded of 3",
     );
+    expect(getByRole(node, "region", { name: "SynKEK: Done" }).textContent).toContain(
+      "0 loaded of 0",
+    );
     expect(queryByRole(node, "region", { name: "Other board" })).toBeNull();
     await act(() => getByRole(node, "button", { name: "Load more tasks" }).click());
     expect(getByRole(node, "region", { name: "SynKEK: To do" }).textContent).toContain(
@@ -1618,7 +1663,155 @@ it("adds each next page's project groups and full lane totals to the board", asy
     expect(getByRole(node, "region", { name: "Other: Done" }).textContent).toContain(
       "1 loaded of 1",
     );
+    expect(getByRole(node, "region", { name: "Other: To do" }).textContent).toContain(
+      "0 loaded of 0",
+    );
   } finally {
     await dispose();
   }
 });
+
+it("retains each page's known empty lanes when another page has capped totals", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const fixture = serviceFixture();
+  const first = fixture.read(EnvironmentId.make("remote"), { state: "all", limit: 2 });
+  if (!AsyncResult.isSuccess(first)) throw new Error("Missing page");
+  const base = {
+    ...first.value,
+    nextCursor: "next",
+    laneTotals: Array.from({ length: 1200 }, (_, index) => ({
+      projectId: ProjectId.make("p"),
+      column: `Legacy ${index}`,
+      total: 1,
+    })),
+  };
+  const later = {
+    ...first.value,
+    tasks: [fixture.tasks[3]!],
+    nextCursor: null,
+    projects: [{ ...first.value.projects[0]!, projectId: ProjectId.make("q") }],
+    laneTotals: [{ projectId: ProjectId.make("q"), column: "Done", total: 1 }],
+  };
+  const baseAtom = Atom.make(AsyncResult.success(base));
+  const laterAtom = Atom.make(AsyncResult.success(later));
+  boundary.query.mockImplementation(({ input }: { input: { cursor?: string } }) =>
+    input.cursor ? laterAtom : baseAtom,
+  );
+  const { node, dispose } = await mountTasksDom(
+    fixture,
+    "/workspace?space=tasks&environment=remote&taskLayout=board",
+  );
+  try {
+    await act(() => getByRole(node, "button", { name: "Load more tasks" }).click());
+    expect(getByRole(node, "region", { name: "SynKEK: Done" }).textContent).toContain(
+      "0 loaded; total unavailable",
+    );
+    expect(getByRole(node, "region", { name: "Other: To do" }).textContent).toContain(
+      "0 loaded of 0",
+    );
+    expect(getByRole(node, "region", { name: "Other: Done" }).textContent).toContain(
+      "1 loaded of 1",
+    );
+    expect(node.textContent).toContain("Some lane totals are unavailable");
+  } finally {
+    await dispose();
+  }
+});
+
+it.each(["conflict", "not-found"] as const)(
+  "reloads server truth after a board move returns %s",
+  async (kind) => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const fixture = serviceFixture();
+    const queries = new Map<
+      string,
+      Atom.Atom<AsyncResult.AsyncResult<WorkspaceTaskPage, unknown>>
+    >();
+    boundary.query.mockImplementation(
+      (request: { environmentId: EnvironmentId; input: typeof WorkspaceTaskQuery.Encoded }) => {
+        const key = JSON.stringify(request);
+        if (!queries.has(key))
+          queries.set(
+            key,
+            Atom.make(() => fixture.read(request.environmentId, request.input)),
+          );
+        return queries.get(key)!;
+      },
+    );
+    let reject = true;
+    boundary.transition.mockImplementation(async () => {
+      if (reject) {
+        reject = false;
+        if (kind === "not-found") fixture.tasks.splice(0, 1);
+        else fixture.tasks[0] = { ...fixture.tasks[0]!, column: "Done", done: true, revision: 2 };
+        return AsyncResult.fail(new WorkspaceToolsError({ kind, message: "Move rejected" }));
+      }
+      return AsyncResult.success({ ...fixture.tasks[0]!, revision: 3 });
+    });
+    const { node, dispose } = await mountTasksDom(
+      fixture,
+      "/workspace?space=tasks&environment=remote&taskLayout=board",
+    );
+    try {
+      await act(() =>
+        enterValue(getByRole(node, "combobox", { name: "Move First task to column" }), "Done"),
+      );
+      expect(queryByRole(node, "alert")).toBeNull();
+      if (kind === "not-found") {
+        expect(queryByRole(node, "button", { name: "Open First task" })).toBeNull();
+      } else {
+        const select = getByRole(node, "combobox", {
+          name: "Move First task to column",
+        }) as HTMLSelectElement;
+        expect(select.value).toBe("Done");
+        expect(getByRole(node, "region", { name: "SynKEK: Done" }).contains(select)).toBe(true);
+        await act(() => enterValue(select, "To do"));
+        expect(boundary.transition.mock.calls.at(-1)?.[0].input).toEqual({
+          id: fixture.tasks[0]!.id,
+          expectedRevision: 2,
+          change: { type: "column", column: "To do" },
+        });
+      }
+    } finally {
+      await dispose();
+    }
+  },
+);
+
+it.each(["list", "board", "missing-card"])(
+  "returns detail focus to its opener or lane in %s",
+  async (mode) => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const fixture = serviceFixture();
+    const { node, dispose } = await mountTasksDom(
+      fixture,
+      `/workspace?space=tasks&environment=remote&taskLayout=${mode === "list" ? "list" : "board"}`,
+    );
+    try {
+      expect(
+        getByRole(node, "main", { name: mode === "list" ? "Tasks list" : "Tasks board" }),
+      ).toBeDefined();
+      const opener = getByRole(node, "button", { name: "Open First task" });
+      getByRole(node, "searchbox", { name: "Search tasks" }).focus();
+      await act(() => opener.click());
+      if (mode === "missing-card") {
+        fixture.tasks.splice(0, 1);
+        await act(() => {
+          for (const [key, atom] of fixture.atoms) {
+            const request = JSON.parse(key) as {
+              environmentId: EnvironmentId;
+              input: typeof WorkspaceTaskQuery.Encoded;
+            };
+            fixture.registry.set(atom, fixture.read(request.environmentId, request.input));
+          }
+        });
+      }
+      await act(() => getByRole(node, "button", { name: "Close task" }).click());
+      expect(document.activeElement).toBe(
+        mode === "missing-card" ? getByRole(node, "region", { name: "SynKEK: To do" }) : opener,
+      );
+    } finally {
+      await dispose();
+    }
+  },
+);
