@@ -1,5 +1,6 @@
 import * as WorkspaceTools from "./workspace/WorkspaceTools.ts";
 import * as WorkspaceNotes from "./workspace/WorkspaceNotes.ts";
+import * as WorkspaceCalendar from "./workspace/WorkspaceCalendar.ts";
 import * as WorkspaceAutomation from "./workspace/WorkspaceAutomation.ts";
 import * as DriveService from "./drive/DriveService.ts";
 import * as DriveStore from "./drive/DriveStore.ts";
@@ -657,6 +658,7 @@ const commandReadinessLayer = HttpRouter.middleware(
 const WorkspaceToolsLayerLive = WorkspaceAutomation.layer.pipe(
   Layer.provideMerge(WorkspaceTools.layer),
   Layer.merge(WorkspaceNotes.layer),
+  Layer.merge(WorkspaceCalendar.layer),
 );
 
 const DriveLayerLive = DriveService.layer.pipe(

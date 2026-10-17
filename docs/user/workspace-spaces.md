@@ -4,6 +4,10 @@ Choose Workspace to open Projects. Communications, Meetings, Calendar, Email, Ta
 
 Each space shares an environment breadcrumb and a header naming the current view. Email and Communications have a resizable list beside the selected item. Drag the divider, or focus it and use the arrow keys, Home or End. Each space remembers its width on this device. Other spaces use the full center. On a phone, open the navigation menu to change spaces, and use Back to list to return from an item without clearing the list's search or scroll position.
 
+Calendar availability depends on the connected environment's supported calendar sources. An
+unavailable or partial calendar does not establish that you have no events. Existing local Office
+calendar tools remain available through Open local Office tools.
+
 ## Resources and Linked context
 
 Resources shows the project you choose, even before you select an item. Its tabs are Files, Browser, Agents, Tasks, Docs and PRs. A tab explains when its contents are unavailable. Choosing or browsing a project does not create a link or give an agent access to its contents.

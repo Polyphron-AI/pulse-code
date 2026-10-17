@@ -1,3 +1,4 @@
+import { PULSE_CALENDAR_METHODS, PulseCalendarRpcs } from "./pulseCalendar.ts";
 import { PULSE_NOTES_METHODS, PulseNotesRpcs } from "./pulseNotes.ts";
 import { PULSE_WORKSPACE_TOOLS_METHODS, PulseWorkspaceToolsRpcs } from "./pulseWorkspaceTools.ts";
 import { PULSE_DRIVE_METHODS, PulseDriveRpcs } from "./pulseDrive.ts";
@@ -356,6 +357,7 @@ import { VcsError } from "./vcs.ts";
 import { Project, ProjectMutation, ProjectMutationError } from "./project.ts";
 
 export const WS_METHODS = {
+  ...PULSE_CALENDAR_METHODS,
   ...PULSE_NOTES_METHODS,
   ...PULSE_WORKSPACE_TOOLS_METHODS,
   ...PULSE_DRIVE_METHODS,
@@ -1768,6 +1770,7 @@ export class RpcScopeAuthorization extends RpcMiddleware.Service<RpcScopeAuthori
 ) {}
 
 export const WsRpcGroup = RpcGroup.make(
+  ...PulseCalendarRpcs,
   ...PulseWorkspaceToolsRpcs,
   ...PulseNotesRpcs,
   ...PulseDriveRpcs,

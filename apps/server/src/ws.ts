@@ -1,4 +1,5 @@
-import { PulseWorkspaceToolsRpcs, PulseNotesRpcs } from "@t3tools/contracts";
+import { PulseWorkspaceToolsRpcs, PulseNotesRpcs, PulseCalendarRpcs } from "@t3tools/contracts";
+import { WorkspaceCalendar } from "./workspace/WorkspaceCalendar.ts";
 import { WorkspaceNotes } from "./workspace/WorkspaceNotes.ts";
 import { WorkspaceTools } from "./workspace/WorkspaceTools.ts";
 import { WorkspaceAutomation } from "./workspace/WorkspaceAutomation.ts";
@@ -584,6 +585,7 @@ const ServerWsRpcGroup = WsRpcGroup;
 // together cover the group. Workspace link handlers are split out the same way.
 const WorkspaceToolsWsRpcGroup = RpcGroup.make(...PulseWorkspaceToolsRpcs);
 const NotesWsRpcGroup = RpcGroup.make(...PulseNotesRpcs);
+const CalendarWsRpcGroup = RpcGroup.make(...PulseCalendarRpcs);
 const DriveWsRpcGroup = RpcGroup.make(...PulseDriveRpcs);
 const TelegramWsRpcGroup = RpcGroup.make(...PulseTelegramRpcs);
 const SuggestionWsRpcGroup = RpcGroup.make(...PulseLinkSuggestionRpcs);
@@ -594,6 +596,7 @@ const MailWsRpcGroup = RpcGroup.make(
 );
 const LinksWsRpcGroup = RpcGroup.make(...PulseLinksRpcs);
 const CoreWsRpcGroup = ServerWsRpcGroup.omit(
+  ...PulseCalendarRpcs.map((rpc) => rpc._tag),
   ...PulseNotesRpcs.map((rpc) => rpc._tag),
   ...PulseWorkspaceToolsRpcs.map((rpc) => rpc._tag),
   ...PulseDriveRpcs.map((rpc) => rpc._tag),
@@ -1271,6 +1274,17 @@ const workspaceToolsWsRpcLayer = WorkspaceToolsWsRpcGroup.toLayer(
           [WS_METHODS.notesDelete]: notes.delete,
           [WS_METHODS.notesRestore]: notes.restore,
           [WS_METHODS.notesSubscribeChanges]: () => notes.changes,
+        });
+      }),
+    ),
+  ),
+  Layer.merge(
+    CalendarWsRpcGroup.toLayer(
+      Effect.gen(function* () {
+        const calendar = yield* WorkspaceCalendar;
+        return CalendarWsRpcGroup.of({
+          [WS_METHODS.calendarListRange]: calendar.listRange,
+          [WS_METHODS.calendarGet]: calendar.get,
         });
       }),
     ),
@@ -2035,6 +2049,7 @@ const makeWsRpcLayer = (
               workspaceTools: true,
               workspaceTasksV2: true,
               workspaceNotes: true,
+              workspaceCalendar: true,
               mailConversations: true,
               mailReply: true,
               workspaceLinks: true,
@@ -4260,6 +4275,7 @@ export const websocketRpcRouteLayer = Layer.unwrap(
       Context.add(DriveService, yield* DriveService),
       Context.add(WorkspaceTools, yield* WorkspaceTools),
       Context.add(WorkspaceNotes, yield* WorkspaceNotes),
+      Context.add(WorkspaceCalendar, yield* WorkspaceCalendar),
       Context.add(WorkspaceAutomation, yield* WorkspaceAutomation),
       Context.add(WorkspaceSuggestions, yield* WorkspaceSuggestions),
     );

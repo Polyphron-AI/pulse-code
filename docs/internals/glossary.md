@@ -19,6 +19,7 @@ Terms whose meaning matters across T3 Code. Architecture and lifecycle constrain
 | Link                    | A user-confirmed connection between two items, such as a message and a project. See [workspace links](./workspace-links.md).                                                  |
 | Linked items            | The confirmed items linked to a thread or its project. Turns name a bounded list; agents can read linked mail and URL addresses.                                              |
 | Item key                | The stable string a link stores for an item. A mail item is keyed by account and Message-ID when it has one.                                                                  |
+| Calendar occurrence     | One event instance keyed by its source and original recurrence key. Its opaque ID survives rescheduling and cancellation, shared by Calendar and Meetings.                    |
 | Resource frame          | The selected environment/project's Files, Browser, Agents, Tasks, Docs and PRs container. Browsing it does not confirm links.                                                 |
 | Linked context          | The explicitly opened view of a selected item's confirmed links, suggestions, origins and labelled project discovery.                                                         |
 | Held item               | The environment/item captured when Linked context or an item action opens, retained until explicitly replaced or invalidated.                                                 |
