@@ -71,8 +71,8 @@ export function useWorkspaceItemOpener(
         });
         return;
       }
-      const normalized = normalizeWorkspaceItemRef(ref);
-      if (!normalized) {
+      // Normalization only rejects unsupported addresses; the clicked URL opens with its query and fragment.
+      if (!normalizeWorkspaceItemRef(ref)) {
         toastManager.add({
           type: "error",
           title: "Cannot open link",
@@ -80,7 +80,6 @@ export function useWorkspaceItemOpener(
         });
         return;
       }
-      ref = normalized;
       // Teams links hand off to this client's external browser, including from Resources.
       const url = ref.type === "url" ? new URL(ref.url) : undefined;
       const teams =
