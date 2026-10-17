@@ -63,6 +63,11 @@ export function BrowserSurfaceSlot(props: {
     };
     updateRef.current = update;
     update();
+    const unsubscribe = useBrowserSurfaceStore.subscribe((state, previousState) => {
+      if (previousState.byTabId[tabId]?.owner != null && state.byTabId[tabId]?.owner == null) {
+        update();
+      }
+    });
     const observer = new ResizeObserver(update);
     observer.observe(element);
     // Inline panels animate their outer width while keeping the content at
@@ -72,6 +77,7 @@ export function BrowserSurfaceSlot(props: {
     window.addEventListener("resize", update);
     window.addEventListener("scroll", update, true);
     return () => {
+      unsubscribe();
       observer.disconnect();
       window.removeEventListener("resize", update);
       window.removeEventListener("scroll", update, true);

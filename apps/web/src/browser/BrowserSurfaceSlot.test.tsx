@@ -90,7 +90,7 @@ it.each([false, true])(
 );
 
 it.each(["unmounts", "hides"])(
-  "returns the native surface to the older visible slot when the newer slot %s",
+  "immediately returns the native surface to the older visible slot when the newer slot %s",
   async (departure) => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     useBrowserSurfaceStore.setState({ byTabId: {}, activityByTabId: {} });
@@ -124,8 +124,6 @@ it.each(["unmounts", "hides"])(
       rect: { x: 700 },
     });
     await act(() => root!.render(<>{[older, departure === "hides" ? newer(false) : null]}</>));
-    expect(useBrowserSurfaceStore.getState().byTabId[tabId]?.owner).toBeNull();
-    await act(() => window.dispatchEvent(new Event("resize")));
     expect(useBrowserSurfaceStore.getState().byTabId[tabId]).toMatchObject({
       visible: true,
       rect: { x: 10, width: 314, height: 311 },
@@ -133,3 +131,48 @@ it.each(["unmounts", "hides"])(
     expect(useBrowserSurfaceStore.getState().byTabId[tabId]?.owner).not.toBeNull();
   },
 );
+
+it("installs listeners only while the native slot is visible", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  useBrowserSurfaceStore.setState({ byTabId: {}, activityByTabId: {} });
+  const observe = vi.fn();
+  const disconnect = vi.fn();
+  const resizeObserver = vi.fn(function () {
+    return { observe, disconnect };
+  });
+  vi.stubGlobal("ResizeObserver", resizeObserver);
+  node = document.createElement("div");
+  document.body.append(node);
+  root = createRoot(node);
+  const subscribe = vi.spyOn(useBrowserSurfaceStore, "subscribe");
+  const addListener = vi.spyOn(window, "addEventListener");
+  const removeListener = vi.spyOn(window, "removeEventListener");
+  const tabId = "remote:browser-thread:epoch-1:tab-1";
+
+  await act(() => root!.render(<BrowserSurfaceSlot tabId={tabId} visible={false} />));
+  expect(subscribe).not.toHaveBeenCalled();
+  expect(resizeObserver).not.toHaveBeenCalled();
+  expect(
+    addListener.mock.calls.filter(([type]) => type === "resize" || type === "scroll"),
+  ).toHaveLength(0);
+
+  await act(() => root!.render(<BrowserSurfaceSlot tabId={tabId} visible />));
+  expect(subscribe).toHaveBeenCalledTimes(1);
+  expect(resizeObserver).toHaveBeenCalledTimes(1);
+  expect(observe).toHaveBeenCalledWith(node.firstElementChild);
+  const update = addListener.mock.calls.find(([type]) => type === "resize")?.[1];
+  expect(update).toBeTypeOf("function");
+  expect(addListener).toHaveBeenCalledWith("scroll", update, true);
+
+  await act(() => root!.render(<BrowserSurfaceSlot tabId={tabId} visible={false} />));
+  expect(disconnect).toHaveBeenCalledTimes(1);
+  expect(removeListener).toHaveBeenCalledWith("resize", update);
+  expect(removeListener).toHaveBeenCalledWith("scroll", update, true);
+  const bounds = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect");
+  const otherOwner = Symbol("other-slot");
+  useBrowserSurfaceStore.getState().claim(tabId, otherOwner, false);
+  useBrowserSurfaceStore.getState().release(tabId, otherOwner);
+  expect(bounds).not.toHaveBeenCalled();
+  expect(useBrowserSurfaceStore.getState().byTabId[tabId]?.owner).toBeNull();
+  expect(subscribe).toHaveBeenCalledTimes(1);
+});
