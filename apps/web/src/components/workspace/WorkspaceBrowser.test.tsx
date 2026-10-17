@@ -794,7 +794,7 @@ it("announces Copied briefly and clears its reset timer when hidden", async () =
 
 it("matches the external fixture's hints and copy feedback to the production card", async () => {
   vi.useFakeTimers();
-  const session = createWorkspaceMockupSession("05", null, "external");
+  const session = createWorkspaceMockupSession("05", null, null, "external");
   const module = createWorkspaceMockupModule(session);
   try {
     await act(() => {

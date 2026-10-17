@@ -18,7 +18,7 @@ it("admits the external Browser state only for the dev Browser recipe", () => {
     new URL(`http://fixture.invalid/workspace?fixture=${id}&state=${state}`);
   expect(parseWorkspaceMockupRequest(url("05"), true)).toBe("05");
   expect(parseWorkspaceMockupRequest(url("05"), false)).toBeNull();
-  expect(() => parseWorkspaceMockupRequest(url("01"), true)).toThrow("Unknown task fixture state.");
+  expect(() => parseWorkspaceMockupRequest(url("01"), true)).toThrow("Unknown fixture state.");
   expect(() => parseWorkspaceMockupRequest(url("05", "unknown"), true)).toThrow();
 });
 
