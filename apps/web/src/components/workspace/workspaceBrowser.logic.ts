@@ -20,7 +20,8 @@ export function captureWorkspacePage(input: {
   const raw = input.desktop && navigation?._tag === "Success" ? navigation.url : input.address;
   const url = normalizeLinkUrl(raw);
   if (!url || !input.target) return null;
-  const title = input.desktop && navigation?._tag === "Success" ? navigation.title : url;
+  const title =
+    (input.desktop && navigation?._tag === "Success" ? navigation.title.trim() : "") || url;
   return {
     environmentId: input.environmentId,
     target: structuredClone(input.target),
@@ -35,12 +36,25 @@ export function findLinkedPages(list: WorkspaceLinkList | null, query: string) {
   return (list?.linked ?? [])
     .filter((view) => {
       if (view.status !== "confirmed" || view.item.ref.type !== "url") return false;
+      if (
+        !`${view.item.title ?? ""}\n${view.item.ref.url}`
+          .toLocaleLowerCase("en-GB")
+          .includes(needle)
+      )
+        return false;
       const key = workspaceItemKey(view.item.ref);
       if (seen.has(key)) return false;
       seen.add(key);
-      return `${view.item.title ?? ""}\n${view.item.ref.url}`
-        .toLocaleLowerCase("en-GB")
-        .includes(needle);
+      return true;
     })
     .slice(0, 50);
+}
+
+/** Keep colon title queries local, while rejecting explicit non-web URL attempts. */
+export function hasExplicitScheme(value: string) {
+  const input = value.trim();
+  return (
+    /^(?:javascript|data|file|vbscript):/iu.test(input) ||
+    /^[a-z][a-z0-9+.-]*:(?:\/\/|\S*$)/iu.test(input)
+  );
 }

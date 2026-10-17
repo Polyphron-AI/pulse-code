@@ -26,11 +26,34 @@ it.each(["search-results", "empty-results", "truncated-results", "captured-page"
     try {
       await act(() => root.render(module.resource));
       await act(() => node.querySelector("iframe")!.dispatchEvent(new Event("load")));
+      if (state !== "captured-page")
+        expect(document.activeElement).toBe(
+          getByRole(node, "textbox", { name: "Browser page address" }),
+        );
       const popup = getByRole(document.body, "dialog", {
         name: state === "captured-page" ? "Browser actions" : "Linked pages",
       });
-      if (state === "captured-page") expect(popup.textContent).toContain("Marketing channel");
-      else if (state === "empty-results")
+      if (state === "captured-page") {
+        expect(popup.textContent).toContain("Marketing channel");
+        for (const name of [
+          "Back",
+          "Forward",
+          "Reload",
+          "Start thread",
+          "Add to project",
+          "Start project",
+          "Start automation",
+        ])
+          expect(getByRole(popup, "button", { name })).toBeDefined();
+        await act(() => getByRole(popup, "button", { name: "Add to project" }).click());
+        expect(session.operations).toEqual([
+          {
+            kind: "add-to-project",
+            item: { type: "url", url: "https://synkek.example.invalid/" },
+            value: null,
+          },
+        ]);
+      } else if (state === "empty-results")
         expect(popup.textContent).toContain("No linked pages match.");
       else {
         expect(getByRole(popup, "list").textContent).toContain("Project handbook");
@@ -41,7 +64,8 @@ it.each(["search-results", "empty-results", "truncated-results", "captured-page"
           { kind: "navigate", item: null, value: "https://synkek.example.invalid/handbook" },
         ]);
       }
-      expect(session.operations.every((operation) => operation.kind === "navigate")).toBe(true);
+      if (state !== "captured-page")
+        expect(session.operations.every((operation) => operation.kind === "navigate")).toBe(true);
     } finally {
       await act(() => root.unmount());
       node.remove();

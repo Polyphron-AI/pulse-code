@@ -29,6 +29,7 @@ import { previewRuntimeTabId } from "../../browser/previewRuntimeTabId";
 import { openPreviewSession } from "../preview/openPreviewSession";
 import type { PreviewPanel } from "../preview/PreviewPanel";
 import { WorkspaceBrowser } from "./WorkspaceBrowser";
+import { WorkspaceResourceBody } from "./WorkspaceResourceBody";
 import {
   WorkspaceResourcesBodyContext,
   WorkspaceResourcesProvider,
@@ -49,6 +50,9 @@ const mocks = vi.hoisted(() => ({
   operate: true,
   configured: true,
   configError: null as string | null,
+  configLoading: false,
+  stateUpdates: vi.fn(),
+  trackStateUpdates: false,
   config: vi.fn(),
   configuredThread: "t",
   readError: null as string | null,
@@ -69,6 +73,23 @@ const mocks = vi.hoisted(() => ({
   unlink: vi.fn(),
   actionItems: vi.fn(),
 }));
+// Record attempted late error writes while forwarding updates to React, which silently drops them after unmount.
+vi.mock("react", async (original) => {
+  const actual = await original<typeof import("react")>();
+  return {
+    ...actual,
+    useState: (initial: unknown) => {
+      const [value, setValue] = actual.useState(initial);
+      return [
+        value,
+        (next: unknown) => {
+          if (mocks.trackStateUpdates && initial === null) mocks.stateUpdates(next);
+          setValue(next);
+        },
+      ];
+    },
+  };
+});
 vi.mock("@tanstack/react-router", () => ({ useNavigate: () => vi.fn() }));
 vi.mock("../../state/workspaceLinks", () => ({
   workspaceLinks: {
@@ -148,7 +169,9 @@ vi.mock("../../state/query", () => ({
   useEnvironmentQuery: (input: unknown) => ({
     data:
       input === "config"
-        ? { browserThreadId: mocks.configured ? mocks.configuredThread : "missing" }
+        ? mocks.configLoading
+          ? undefined
+          : { browserThreadId: mocks.configured ? mocks.configuredThread : "missing" }
         : input === "links"
           ? mocks.projectLinks
           : null,
@@ -326,6 +349,8 @@ beforeEach(() => {
   mocks.configured = true;
   mocks.configuredThread = "t";
   mocks.configError = null;
+  mocks.configLoading = false;
+  mocks.trackStateUpdates = false;
   mocks.readError = null;
   mocks.previewMounts = 0;
   mocks.focusUrlNonce = null;
@@ -388,8 +413,214 @@ const clickText = async (label: string) =>
       .props.onClick(),
   );
 
-it("searches only this resource project's loaded direct linked pages", async () => {
+const editInput = (input: HTMLElement, value: string) => {
+  Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!.call(
+    input,
+    value,
+  );
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  input.dispatchEvent(new Event("change", { bubbles: true }));
+};
+
+it.each(["scope change", "unmount"])(
+  "drops a late Link rejection after %s through the keyed resource body",
+  async (transition) => {
+    applyPreviewServerSnapshot(threadRef, snapshot);
+    applyPreviewServerSnapshot(
+      { ...threadRef, environmentId: EnvironmentId.make("other") },
+      snapshot,
+    );
+    let reject!: (cause: Error) => void;
+    mocks.link.mockImplementationOnce(
+      () =>
+        new Promise<void>((_, fail) => {
+          reject = fail;
+        }),
+    );
+    const consoleError = vi.spyOn(console, "error");
+    node = document.createElement("div");
+    document.body.append(node);
+    root = createRoot(node);
+    const render = (environment = environmentId) =>
+      root!.render(
+        <AppAtomRegistryProvider>
+          <WorkspaceResourceBody {...props} environmentId={environment} tab="browser" />
+        </AppAtomRegistryProvider>,
+      );
+    await act(() => render());
+    await act(() => getByRole(node!, "button", { name: "Browser actions" }).click());
+    await act(() => getByRole(document.body, "button", { name: "Link this page" }).click());
+    if (transition === "scope change") await act(() => render(EnvironmentId.make("other")));
+    else {
+      await act(() => root!.unmount());
+      root = undefined;
+    }
+    mocks.stateUpdates.mockClear();
+    mocks.trackStateUpdates = true;
+    await act(() => reject(new Error("late failure")));
+    expect(mocks.stateUpdates).not.toHaveBeenCalledWith("late failure");
+    if (!root) {
+      root = createRoot(node);
+      await act(() => render());
+    }
+    expect(document.body.textContent).not.toContain("late failure");
+    expect(document.body.textContent).not.toContain("already being linked");
+    await act(() => getByRole(node!, "button", { name: "Browser actions" }).click());
+    const link = getByRole(document.body, "button", { name: "Link this page" });
+    expect(link.hasAttribute("disabled")).toBe(false);
+    expect(link.getAttribute("aria-disabled")).not.toBe("true");
+    expect(mocks.linkEnvironment.mock.calls).toEqual([[environmentId]]);
+    expect(
+      consoleError.mock.calls.filter((args) => /unmounted|state update/i.test(String(args))),
+    ).toEqual([]);
+  },
+);
+
+it("admits only one Link before the pending state can render", async () => {
   mocks.desktop = false;
+  let finish!: () => void;
+  mocks.link.mockImplementation(
+    () =>
+      new Promise<void>((done) => {
+        finish = done;
+      }),
+  );
+  await mount();
+  await setAddress("https://example.test/page");
+  const button = renderer!.root
+    .findAllByType("button")
+    .find((button) => button.props.children === "Link this page")!;
+  const click = button.props.onClick;
+  await act(() => {
+    click();
+    click();
+  });
+  expect(mocks.link).toHaveBeenCalledOnce();
+  expect(button.props["aria-disabled"]).toBe(true);
+  expect(text()).toContain("This page is already being linked.");
+  await act(() => finish());
+});
+
+it("closes only results on Escape inside the 390px Resources sheet", async () => {
+  (
+    window as unknown as {
+      happyDOM: { setWindowSize: (size: { width: number; height: number }) => void };
+    }
+  ).happyDOM.setWindowSize({ width: 390, height: 844 });
+  applyPreviewServerSnapshot(threadRef, snapshot);
+  node = document.createElement("div");
+  document.body.append(node);
+  root = createRoot(node);
+  await act(() => root!.render(<ResourceApp engagement />));
+  await act(() => getByRole(node!, "button", { name: "Resources" }).click());
+  const sheet = getByRole(document.body, "dialog", { name: "Resources" });
+  const input = getByRole(sheet, "textbox", { name: "Browser page address" });
+  await act(() => {
+    input.focus();
+    editInput(input, "Q3: roadmap");
+  });
+  await act(() =>
+    input.closest("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+  );
+  const results = getByRole(document.body, "dialog", { name: "Linked pages" });
+  expect(sheet.contains(results)).toBe(true);
+  expect(results.parentElement?.contains(input)).toBe(true);
+  await act(() =>
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })),
+  );
+  expect(queryByRole(document.body, "dialog", { name: "Linked pages" })).toBeNull();
+  expect(getByRole(document.body, "dialog", { name: "Resources" })).toBe(sheet);
+  expect(document.activeElement).toBe(input);
+});
+
+it("keeps a truthful reason when a menu opened during loading reaches Success", async () => {
+  applyPreviewServerSnapshot(threadRef, {
+    ...snapshot,
+    navStatus: { ...snapshot.navStatus, _tag: "Loading" },
+  });
+  node = document.createElement("div");
+  document.body.append(node);
+  root = createRoot(node);
+  await act(() =>
+    root!.render(
+      <AppAtomRegistryProvider>
+        <WorkspaceBrowser {...props} />
+      </AppAtomRegistryProvider>,
+    ),
+  );
+  await act(() => getByRole(node!, "button", { name: "Browser actions" }).click());
+  await act(() => applyPreviewServerSnapshot(threadRef, snapshot));
+  const menu = getByRole(document.body, "dialog", { name: "Browser actions" });
+  expect(menu.textContent).toContain("Reopen this menu to link the loaded page.");
+  expect(menu.textContent).not.toContain("Enter an http or https address before linking.");
+});
+
+it("shows loading instead of choosing a thread while Browser config is pending", async () => {
+  mocks.configLoading = true;
+  await mount({ request: { type: "url", url: "https://example.test/page" } });
+  expect(text()).toContain("Loading Browser settings...");
+  expect(text()).not.toContain("Choose an available Browser thread");
+});
+
+it.each([false, true])(
+  "keeps canonical result menus, provenance and guarded Unlink with failure=%s",
+  async (failure) => {
+    mocks.desktop = false;
+    const id = "wl_00000000-0000-0000-0000-000000000001";
+    mocks.projectLinks = decodeLinkList({
+      linked: [
+        {
+          id,
+          item: {
+            ref: { type: "url", url: "https://example.test/handbook?utm_source=demo#intro" },
+            title: "Project handbook",
+          },
+          status: "confirmed",
+          source: { type: "user" },
+          updatedAt: "2026-10-13T09:00:00.000Z",
+        },
+      ],
+      suggested: [],
+      truncated: false,
+    });
+    let finish!: () => void;
+    let reject!: (cause: Error) => void;
+    mocks.unlink.mockImplementation(
+      () =>
+        new Promise<void>((done, fail) => {
+          finish = done;
+          reject = fail;
+        }),
+    );
+    await mount();
+    await setAddress("handbook");
+    await submit();
+    const row = renderer!.root.findByProps({
+      "data-page-menu": JSON.stringify({
+        item: {
+          ref: { type: "url", url: "https://example.test/handbook" },
+          title: "Project handbook",
+        },
+        environmentId,
+      }),
+    });
+    expect(row.findAllByType("p").map((p) => p.props.children)).toContain("Linked by you");
+    const click = row.findAllByType("button").find((b) => b.props.children === "Unlink")!
+      .props.onClick;
+    await act(() => {
+      click();
+      click();
+    });
+    expect(mocks.unlink).toHaveBeenCalledExactlyOnceWith(id);
+    await act(() => (failure ? reject(new Error("Unlink failed")) : finish()));
+    if (failure) expect(text()).toContain("Unlink failed");
+    else expect(text()).not.toContain("could not be unlinked");
+  },
+);
+
+it.each([false, true])("searches direct pages and opens results in desktop=%s", async (desktop) => {
+  mocks.desktop = desktop;
+  if (desktop) applyPreviewServerSnapshot(threadRef, snapshot);
   mocks.projectLinks = decodeLinkList({
     linked: [
       {
@@ -417,6 +648,7 @@ it("searches only this resource project's loaded direct linked pages", async () 
     ),
   );
   const input = getByRole(node, "textbox", { name: "Browser page address" });
+  expect(mocks.linkQueries).not.toHaveBeenCalled();
   await act(() => {
     const setter = Object.getOwnPropertyDescriptor(
       window.HTMLInputElement.prototype,
@@ -439,9 +671,20 @@ it("searches only this resource project's loaded direct linked pages", async () 
   expect(mocks.external).not.toHaveBeenCalled();
   expect(mocks.open).not.toHaveBeenCalled();
   await act(() => getByRole(results, "button", { name: "Open Project handbook" }).click());
-  expect(mocks.external).toHaveBeenCalledExactlyOnceWith(
-    "https://example.test/handbook?utm_source=demo#intro",
-  );
+  if (desktop)
+    expect(mocks.open).toHaveBeenCalledExactlyOnceWith({
+      environmentId,
+      input: {
+        threadId: "t",
+        url: "https://example.test/handbook?utm_source=demo#intro",
+        profileId: "work",
+        viewport: { _tag: "fill" },
+      },
+    });
+  else
+    expect(mocks.external).toHaveBeenCalledExactlyOnceWith(
+      "https://example.test/handbook?utm_source=demo#intro",
+    );
   expect(queryByRole(document.body, "dialog", { name: "Linked pages" })).toBeNull();
 });
 
@@ -458,19 +701,24 @@ it("links the captured page to the captured target after navigation", async () =
   const render = (overrides: Partial<ComponentProps<typeof WorkspaceBrowser>> = {}) =>
     root!.render(
       <AppAtomRegistryProvider>
-        <WorkspaceBrowser {...props} {...overrides} />
+        <WorkspaceResourceBody {...props} {...overrides} tab="browser" />
       </AppAtomRegistryProvider>,
     );
   await act(() => render());
   await act(() => getByRole(node!, "button", { name: "Browser actions" }).click());
-  await act(() => getByRole(document.body, "button", { name: "Link this page" }).click());
-  const original = structuredClone(mocks.link.mock.calls[0]);
-  expect(original).toEqual([
+  await act(() => {
+    const link = getByRole(document.body, "button", { name: "Link this page" });
+    link.focus();
+    link.click();
+  });
+  expect(mocks.link.mock.calls[0]).toEqual([
     selectedItem,
     { ref: { type: "url", url: "https://example.test/page" }, title: "Original page" },
   ]);
   const link = getByRole(document.body, "button", { name: "Link this page" });
-  expect(link.hasAttribute("disabled")).toBe(true);
+  expect(link.hasAttribute("disabled")).toBe(false);
+  expect(link.getAttribute("aria-disabled")).toBe("true");
+  expect(document.activeElement).toBe(link);
   expect(document.body.textContent).toContain("This page is already being linked.");
   await act(() => {
     applyPreviewServerSnapshot(threadRef, {
@@ -499,7 +747,12 @@ it("links the captured page to the captured target after navigation", async () =
     }),
   );
   await act(() => finish());
-  expect(mocks.link.mock.calls[0]).toEqual(original);
+  expect(mocks.link.mock.calls).toEqual([
+    [
+      selectedItem,
+      { ref: { type: "url", url: "https://example.test/page" }, title: "Original page" },
+    ],
+  ]);
   expect(mocks.linkEnvironment.mock.calls).toEqual([[environmentId]]);
   expect(mocks.link).toHaveBeenCalledOnce();
 });
@@ -647,6 +900,9 @@ it("clears an empty search and reports no matches without opening a page", async
     "No linked pages match. Paste an http or https address to open a page.",
   );
   await act(() => edit(""));
+  await act(() =>
+    input.closest("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+  );
   expect(queryByRole(document.body, "dialog", { name: "Linked pages" })).toBeNull();
   expect(queryByRole(document.body, "alert")).toBeNull();
   expect(mocks.external).not.toHaveBeenCalled();

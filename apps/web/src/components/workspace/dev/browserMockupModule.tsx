@@ -5,15 +5,19 @@ import {
   WorkspaceBrowserExternalPage,
   WorkspaceBrowserView,
   WorkspaceBrowserSearchResults,
+  WorkspaceBrowserPageActions,
 } from "../WorkspaceBrowserView";
-import { captureWorkspacePage, findLinkedPages } from "../workspaceBrowser.logic";
+import {
+  captureWorkspacePage,
+  findLinkedPages,
+  hasExplicitScheme,
+} from "../workspaceBrowser.logic";
+import { WorkspaceItemActionButtons } from "../WorkspaceItemActionButtons";
 import { Button } from "../../ui/button";
 import type { CreateWorkspaceMockupModule } from "./workspaceMockupFixtures";
 
 const decodeEndpoint = Schema.decodeUnknownSync(WorkspaceLinkEndpoint);
 const decodeLinkList = Schema.decodeUnknownSync(WorkspaceLinkList);
-const isEndpoint = Schema.is(WorkspaceLinkEndpoint);
-const isLinkList = Schema.is(WorkspaceLinkList);
 
 export const createWorkspaceMockupModule: CreateWorkspaceMockupModule = (session) => {
   const external = session.browserState === "external";
@@ -39,7 +43,6 @@ export const createWorkspaceMockupModule: CreateWorkspaceMockupModule = (session
     suggested: [],
     truncated: session.browserState === "truncated-results",
   });
-  if (!isLinkList(pages) || !isEndpoint(target)) throw new Error("Invalid Browser fixture.");
   let disposed = false;
   const pending = new Set<Promise<void>>();
   const pageLoads = new Set<() => void>();
@@ -54,6 +57,7 @@ export const createWorkspaceMockupModule: CreateWorkspaceMockupModule = (session
   };
   function Resource() {
     const releasePage = useRef(() => {});
+    const input = useRef<HTMLInputElement>(null);
     useLayoutEffect(() => {
       if (disposed || external) return;
       const pageReady = new Promise<void>((resolve) => {
@@ -75,7 +79,7 @@ export const createWorkspaceMockupModule: CreateWorkspaceMockupModule = (session
     const [error, setError] = useState<string | null>(null);
     const url = normalizeLinkUrl(addressDraft) ?? "";
     const openAddress = () => {
-      if (!url && !/^[a-z][a-z0-9+.-]*:/iu.test(addressDraft.trim())) {
+      if (!url && !hasExplicitScheme(addressDraft)) {
         setError(null);
         setSearchOpen(addressDraft.trim().length > 0);
         return;
@@ -98,6 +102,7 @@ export const createWorkspaceMockupModule: CreateWorkspaceMockupModule = (session
     return (
       <div className="flex h-full min-h-0 min-w-0 flex-col">
         <WorkspaceBrowserView
+          inputRef={input}
           addressDraft={addressDraft}
           linkTarget={external ? null : target}
           displayedUrl={external ? url : session.seed.browser.url}
@@ -119,38 +124,59 @@ export const createWorkspaceMockupModule: CreateWorkspaceMockupModule = (session
           }
           menuActions={
             captured && !external ? (
-              <>
-                <p className="px-1.75 text-sm text-muted-foreground sm:text-xs">
-                  Link to {captured.target.title}
-                </p>
-                <Button
-                  size="xs"
-                  variant="ghost"
-                  onClick={() => {
-                    void session.record("link", captured.page.ref);
-                  }}
-                >
-                  Link this page
-                </Button>
-                <Button
-                  size="xs"
-                  variant="ghost"
-                  onClick={() => {
-                    void session.record("open-thread", captured.page.ref);
-                  }}
-                >
-                  Start thread
-                </Button>
-                <Button
-                  size="xs"
-                  variant="ghost"
-                  onClick={() => {
-                    void session.record("link", captured.page.ref);
-                  }}
-                >
-                  Add to project
-                </Button>
-              </>
+              <WorkspaceBrowserPageActions
+                target={captured.target}
+                permitted
+                controls={{
+                  url: session.seed.browser.url,
+                  loading: false,
+                  canGoBack: false,
+                  canGoForward: false,
+                  refreshDisabled: false,
+                  onBack: () => {},
+                  onForward: () => {},
+                  onRefresh: () => run(session.seed.browser.url),
+                  onSubmit: run,
+                }}
+                linkHint={null}
+                linkAction={
+                  <Button
+                    size="xs"
+                    variant="ghost"
+                    onClick={() => {
+                      void session.record("link", captured.page.ref);
+                    }}
+                  >
+                    Link this page
+                  </Button>
+                }
+                sharedActions={
+                  <div className="flex flex-wrap items-center gap-2">
+                    <WorkspaceItemActionButtons
+                      startThread={{
+                        onClick: () => {
+                          void session.record("open-thread", captured.page.ref);
+                        },
+                      }}
+                      addToProject={{
+                        onClick: () => {
+                          void session.record("add-to-project", captured.page.ref);
+                        },
+                      }}
+                      startProject={{
+                        onClick: () => {
+                          void session.record("start-project", captured.page.ref);
+                        },
+                      }}
+                      startAutomation={{
+                        onClick: () => {
+                          void session.record("start-automation", captured.page.ref);
+                        },
+                      }}
+                    />
+                  </div>
+                }
+              />
             ) : undefined
           }
           unavailableReason={error}
@@ -185,6 +211,7 @@ export const createWorkspaceMockupModule: CreateWorkspaceMockupModule = (session
                 // Same-origin keeps the static page in-process so its paint lands with onLoad; scripts stay blocked.
                 sandbox="allow-same-origin"
                 onLoad={() => {
+                  if (search) input.current?.focus();
                   setSearchOpen(search);
                   setMenuOpen(session.browserState === "captured-page");
                   releasePage.current();

@@ -32,7 +32,6 @@ import { useComposerDraftStore } from "../../composerDraftStore";
 import { randomUUID } from "../../lib/utils";
 import { readLocalApi } from "../../localApi";
 import { WorkspaceItemMenuView } from "./WorkspaceItemMenuView";
-import { Tooltip, TooltipTrigger, TooltipPopup } from "../ui/tooltip";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import {
@@ -46,12 +45,17 @@ import { linkErrorText, useMailLinks } from "./mail/useMailLinks";
 import { useMailCapabilities } from "./mail/useMailCapabilities";
 import { useWorkspaceCanOperate } from "./useWorkspaceCanOperate";
 import { workspaceActionButton } from "./WorkspaceNativeActions.logic";
+import { WorkspaceItemActionButtons } from "./WorkspaceItemActionButtons";
 
 const WorkspaceAutomationEditor = lazy(() => import("./WorkspaceAutomationEditor"));
 
 const EMPTY_CONFIRMED: ReadonlyArray<WorkspaceLinkEndpoint> = [];
 
-function dispatchWorkspaceShortcut(event: KeyboardEvent, keybindings: ResolvedKeybindingsConfig) {
+function dispatchWorkspaceShortcut(
+  event: KeyboardEvent,
+  keybindings: ResolvedKeybindingsConfig,
+  selectedHost: Element | null,
+) {
   if (event.defaultPrevented || event.repeat) return;
   const command = resolveShortcutCommand(event, keybindings, {
     context: { terminalFocus: isTerminalFocused(), editableFocus: isEditableFocused() },
@@ -66,7 +70,7 @@ function dispatchWorkspaceShortcut(event: KeyboardEvent, keybindings: ResolvedKe
           : command === "workspace.startProject"
             ? "startProject"
             : null;
-  const button = action === null ? null : workspaceActionButton(action);
+  const button = action === null ? null : workspaceActionButton(action, selectedHost);
   if (button === null || !button.isConnected || button.disabled) return;
   event.preventDefault();
   button.click();
@@ -121,6 +125,7 @@ export function WorkspaceItemActions(props: ItemActionProps) {
     />
   ) : null;
 }
+
 function AvailableWorkspaceItemActions({
   environmentId,
   item,
@@ -140,6 +145,7 @@ function AvailableWorkspaceItemActions({
 }) {
   const router = useRouter();
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
+  const actionHost = useRef<HTMLDivElement>(null);
   const threadButton = useRef<HTMLButtonElement>(null);
   const addButton = useRef<HTMLButtonElement>(null);
   const projectButton = useRef<HTMLButtonElement>(null);
@@ -147,7 +153,7 @@ function AvailableWorkspaceItemActions({
   useEffect(() => {
     if (!shortcuts) return;
     const keydown = (event: KeyboardEvent) => {
-      dispatchWorkspaceShortcut(event, keybindings);
+      dispatchWorkspaceShortcut(event, keybindings, actionHost.current);
     };
     window.addEventListener("keydown", keydown);
     return () => window.removeEventListener("keydown", keydown);
@@ -306,16 +312,13 @@ function AvailableWorkspaceItemActions({
   if (!capability.workspaceLinks) return null;
   return (
     <div
+      ref={actionHost}
       className="flex flex-wrap items-center gap-2"
       data-workspace-action-host={shortcuts ? "selected" : "item"}
-      onFocusCapture={(event) => {
-        document
-          .querySelector("[data-workspace-action-focused]")
-          ?.removeAttribute("data-workspace-action-focused");
-        event.currentTarget.setAttribute("data-workspace-action-focused", "");
-      }}
       onKeyDown={
-        shortcuts ? undefined : (event) => dispatchWorkspaceShortcut(event.nativeEvent, keybindings)
+        shortcuts
+          ? undefined
+          : (event) => dispatchWorkspaceShortcut(event.nativeEvent, keybindings, actionHost.current)
       }
       onContextMenu={(event) => {
         event.preventDefault();
@@ -374,80 +377,52 @@ function AvailableWorkspaceItemActions({
           });
       }}
     >
-      <Tooltip>
-        <TooltipTrigger render={<span />}>
-          <Button
-            ref={threadButton}
-            data-workspace-action="startThread"
-            size="sm"
-            variant="outline"
-            disabled={
-              busy || !canOperate || links.data === null || !capability.workspaceItemContext
-            }
-            onClick={(event) => void choose(event.currentTarget, "start-thread")}
-          >
-            Start thread
-          </Button>
-        </TooltipTrigger>
-        <TooltipPopup>
-          {capability.workspaceItemContext
+      <WorkspaceItemActionButtons
+        startThread={{
+          ref: threadButton,
+          disabled: busy || !canOperate || links.data === null || !capability.workspaceItemContext,
+          onClick: (event) => void choose(event.currentTarget, "start-thread"),
+        }}
+        addToProject={
+          !onlyStartThread && item.ref.type !== "project"
+            ? {
+                ref: addButton,
+                disabled: busy || !canOperate,
+                onClick: (event) => void choose(event.currentTarget, "add-to-project"),
+              }
+            : undefined
+        }
+        startProject={
+          !onlyStartThread && item.ref.type !== "project"
+            ? {
+                ref: projectButton,
+                disabled: busy || !canOperate,
+                onClick: () => {
+                  hold();
+                  setCreating(true);
+                },
+              }
+            : undefined
+        }
+        startAutomation={
+          !onlyStartThread
+            ? {
+                ref: automationButton,
+                disabled: busy || !canOperate || !capability.workspaceTools || links.data === null,
+                onClick: (event) => void choose(event.currentTarget, "start-automation"),
+              }
+            : undefined
+        }
+        tooltips={{
+          startThread: capability.workspaceItemContext
             ? (shortcutLabelForCommand(keybindings, "workspace.startThread") ?? "Start thread")
-            : "Update this server to start a thread with workspace context"}
-        </TooltipPopup>
-      </Tooltip>
-      {!onlyStartThread && item.ref.type !== "project" ? (
-        <Tooltip>
-          <TooltipTrigger render={<span />}>
-            <Button
-              ref={addButton}
-              data-workspace-action="addToProject"
-              size="sm"
-              variant="ghost"
-              disabled={busy || !canOperate}
-              onClick={(event) => void choose(event.currentTarget, "add-to-project")}
-            >
-              Add to project
-            </Button>
-          </TooltipTrigger>
-          <TooltipPopup>
-            {shortcutLabelForCommand(keybindings, "workspace.addToProject") ?? "Add to project"}
-          </TooltipPopup>
-        </Tooltip>
-      ) : null}
-      {!onlyStartThread && item.ref.type !== "project" ? (
-        <Tooltip>
-          <TooltipTrigger render={<span />}>
-            <Button
-              ref={projectButton}
-              data-workspace-action="startProject"
-              size="sm"
-              variant="ghost"
-              disabled={busy || !canOperate}
-              onClick={() => {
-                hold();
-                setCreating(true);
-              }}
-            >
-              Start project
-            </Button>
-          </TooltipTrigger>
-          <TooltipPopup>
-            {shortcutLabelForCommand(keybindings, "workspace.startProject") ?? "Start project"}
-          </TooltipPopup>
-        </Tooltip>
-      ) : null}
-      {!onlyStartThread ? (
-        <Button
-          ref={automationButton}
-          data-workspace-action="startAutomation"
-          size="sm"
-          variant="ghost"
-          disabled={busy || !canOperate || !capability.workspaceTools || links.data === null}
-          onClick={(event) => void choose(event.currentTarget, "start-automation")}
-        >
-          Start automation
-        </Button>
-      ) : null}
+            : "Update this server to start a thread with workspace context",
+          addToProject:
+            shortcutLabelForCommand(keybindings, "workspace.addToProject") ?? "Add to project",
+          startProject:
+            shortcutLabelForCommand(keybindings, "workspace.startProject") ?? "Start project",
+        }}
+      />
       {automationProject !== null ? (
         <Suspense
           fallback={<p className="text-sm text-muted-foreground">Loading automation editor...</p>}
@@ -579,8 +554,14 @@ export function WorkspaceItemMenu({
   children,
   provenance,
   actions,
+  popupVariant = "default",
   ...props
-}: ItemActionProps & { children: ReactNode; provenance?: ReactNode; actions?: ReactNode }) {
+}: ItemActionProps & {
+  children: ReactNode;
+  provenance?: ReactNode;
+  actions?: ReactNode;
+  popupVariant?: "default" | "opaque";
+}) {
   const [captured, setCaptured] = useState<
     (ItemActionProps & { provenance?: ReactNode; actions?: ReactNode }) | null
   >(null);
@@ -612,6 +593,7 @@ export function WorkspaceItemMenu({
       available={available}
       open={open}
       onOpenChange={setOpen}
+      popupVariant={popupVariant}
       actions={
         <>
           {captured?.provenance}

@@ -290,6 +290,7 @@ it("does not write links, start providers or change roots through actual picker 
   expect(
     (getByRole(node, "textbox", { name: "Browser page address" }) as HTMLInputElement).value,
   ).toBe("https://example.invalid/draft");
+  // Hiding or changing the resource presentation remounts the chrome; its scoped draft survives.
   expect(boundary.linkQuery).toHaveBeenCalledTimes(linkQueries);
 });
 

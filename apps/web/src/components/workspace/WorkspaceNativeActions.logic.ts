@@ -1,6 +1,6 @@
 import type { ContextMenuItem, EnvironmentId, WorkspaceLinkEndpoint } from "@t3tools/contracts";
 
-/** Keep a palette action on its focused item while the palette takes keyboard focus. */
+/** Resolve current focus, falling back to the selected reader's action host. */
 export function workspaceActionButton(
   action:
     | "startThread"
@@ -9,6 +9,7 @@ export function workspaceActionButton(
     | "startAutomation"
     | "resources"
     | "linkedContext",
+  selectedHost?: Element | null,
 ): HTMLButtonElement | null {
   if (typeof document === "undefined") return null;
   const selector = `[data-workspace-action="${action}"]`;
@@ -16,8 +17,9 @@ export function workspaceActionButton(
     return document.querySelector<HTMLButtonElement>(selector);
   const host =
     document.activeElement?.closest("[data-workspace-action-host]") ??
-    document.querySelector("[data-workspace-action-focused]") ??
-    document.querySelector('[data-workspace-action-host="selected"]');
+    (selectedHost === undefined
+      ? document.querySelector('[data-workspace-action-host="selected"]')
+      : selectedHost);
   return host?.querySelector<HTMLButtonElement>(selector) ?? null;
 }
 

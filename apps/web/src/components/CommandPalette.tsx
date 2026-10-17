@@ -707,6 +707,10 @@ function OpenCommandPaletteDialog(props: {
   const location = useLocation();
   const pathname = location.pathname;
   const { clearOpenIntent, openIntent, openOverlayMode, setOpen } = props;
+  // Capture before the palette input takes focus, and keep that target while typing.
+  const [workspaceActionItems] = useState(() =>
+    buildWorkspaceActionItems(<MailIcon className={ITEM_ICON_CLASS} />),
+  );
   const [query, setQuery] = useState(openIntent?.kind === "search" ? openIntent.query : "");
   const [linkedThreadSearch, setLinkedThreadSearch] = useState(
     openIntent?.kind === "search" ? openIntent : null,
@@ -1064,7 +1068,7 @@ function OpenCommandPaletteDialog(props: {
   const browseEnvironment =
     environments.find((environment) => environment.environmentId === browseEnvironmentId) ?? null;
   // A desktop-local secondary backend (today: the WSL backend). The picker is
-  // available against these too — the desktop dispatches pickFolder into the
+  // available against these too. The desktop dispatches pickFolder into the
   // backend's filesystem when routed by its instance id.
   const browseEnvironmentIsDesktopLocal =
     browseEnvironment !== null && isDesktopLocalConnectionTarget(browseEnvironment.entry.target);
@@ -1946,7 +1950,7 @@ function OpenCommandPaletteDialog(props: {
       },
     });
   }
-  actionItems.push(...buildWorkspaceActionItems(<MailIcon className={ITEM_ICON_CLASS} />));
+  actionItems.push(...workspaceActionItems);
   const replyButton =
     typeof document === "undefined"
       ? null

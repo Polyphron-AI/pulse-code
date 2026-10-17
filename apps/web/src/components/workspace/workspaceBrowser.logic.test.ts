@@ -1,7 +1,7 @@
 import { EnvironmentId, ProjectId, WorkspaceLinkList } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import { expect, it } from "vite-plus/test";
-import { captureWorkspacePage, findLinkedPages } from "./workspaceBrowser.logic";
+import { captureWorkspacePage, findLinkedPages, hasExplicitScheme } from "./workspaceBrowser.logic";
 
 const decodeLinkList = Schema.decodeUnknownSync(WorkspaceLinkList);
 const isLinkList = Schema.is(WorkspaceLinkList);
@@ -132,8 +132,55 @@ it("returns at most fifty direct pages without consuming one-hop results", () =>
     })),
     suggested: [],
     truncated: true,
-    related: [{ item: { ref: { type: "url", url: "https://one-hop.test/" } } }],
   });
   expect(findLinkedPages(list, "")).toHaveLength(50);
-  expect(findLinkedPages(list, "one-hop")).toEqual([]);
+  const withDiscovery = {
+    ...list,
+    related: [{ item: { ref: { type: "url" as const, url: "https://one-hop.test/" } } }],
+  };
+  expect(withDiscovery.related).toHaveLength(1);
+  expect(findLinkedPages(withDiscovery, "one-hop")).toEqual([]);
+});
+
+it("matches titles before canonical deduplication", () => {
+  const view = (id: string, title: string) => ({
+    id: `wl_00000000-0000-0000-0000-${id}`,
+    item: { ref: { type: "url", url: "https://example.test/a" }, title },
+    status: "confirmed",
+    source: { type: "user" },
+    updatedAt: "2026-10-13T09:00:00.000Z",
+  });
+  const list = decodeLinkList({
+    linked: [view("000000000001", "Other title"), view("000000000002", "Onboarding guide")],
+    suggested: [],
+    truncated: false,
+  });
+  expect(findLinkedPages(list, "onboarding").map((row) => row.item.title)).toEqual([
+    "Onboarding guide",
+  ]);
+});
+
+it.each(["", "   "])("stores a useful fallback title for untitled pages: %j", (title) => {
+  expect(
+    captureWorkspacePage({
+      environmentId: EnvironmentId.make("remote-a"),
+      target: { ref: { type: "project", projectId: ProjectId.make("p") } },
+      desktop: true,
+      address: "",
+      navigation: { _tag: "Success", url: "https://example.test/a", title },
+    })?.page.title,
+  ).toBe("https://example.test/a");
+});
+
+it.each([
+  ["Q3: roadmap", false],
+  ["RFC: auth", false],
+  ["javascript:alert(1)", true],
+  ["javascript: alert(1)", true],
+  ["data:text/plain,hello world", true],
+  ["file:///tmp/a", true],
+  ["ftp://example.test/a", true],
+  ["", false],
+] as const)("distinguishes title queries from explicit URL schemes: %s", (value, expected) => {
+  expect(hasExplicitScheme(value)).toBe(expected);
 });

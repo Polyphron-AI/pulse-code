@@ -221,6 +221,10 @@ it.each(
     }
     const frame = document.querySelector('iframe[title="Controlled website preview"]')!;
     await act(() => frame.dispatchEvent(new Event("load")));
+    if (state !== "captured-page")
+      expect(document.activeElement).toBe(
+        getByRole(document.body, "textbox", { name: "Browser page address" }),
+      );
     const popup = getByRole(document.body, "dialog", {
       name: state === "captured-page" ? "Browser actions" : "Linked pages",
     });

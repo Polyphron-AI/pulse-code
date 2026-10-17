@@ -143,3 +143,71 @@ it("carries the selected calendar day through the actual palette destination com
     vi.unstubAllGlobals();
   }
 });
+
+it.each(["focused", "blurred"])(
+  "captures the %s workspace action target before the real palette takes focus",
+  async (focus) => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const selected = vi.fn();
+    const inline = vi.fn();
+    const rootRoute = createRootRoute({
+      component: () => (
+        <CommandPalette>
+          <div data-workspace-action-host="selected">
+            <button data-workspace-action="addToProject" onClick={selected}>
+              Selected item action
+            </button>
+          </div>
+          <div data-workspace-action-host="item">
+            <button data-workspace-action="addToProject" onClick={inline}>
+              Inline item action
+            </button>
+          </div>
+          <button>Neutral focus</button>
+          <Outlet />
+        </CommandPalette>
+      ),
+    });
+    const workspace = createRoute({
+      getParentRoute: () => rootRoute,
+      path: "/workspace",
+      validateSearch: parseWorkspaceSearch,
+      component: () => <p>Workspace</p>,
+    });
+    const router = createRouter({
+      routeTree: rootRoute.addChildren([workspace]),
+      history: createMemoryHistory({ initialEntries: ["/workspace?space=projects"] }),
+      defaultPendingMs: 0,
+      defaultPendingMinMs: 0,
+    });
+    await router.load();
+    const node = document.createElement("div");
+    document.body.append(node);
+    const root = createRoot(node);
+    try {
+      await act(() => root.render(<RouterProvider router={router} />));
+      const inlineAction = getByRole(node, "button", { name: "Inline item action" });
+      await act(() => inlineAction.focus());
+      if (focus === "blurred")
+        await act(() => getByRole(node, "button", { name: "Neutral focus" }).focus());
+      await act(() => openCommandPalette());
+      const search = getByRole<HTMLInputElement>(document.body, "combobox");
+      expect(document.activeElement).toBe(search);
+      const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+      await act(() => {
+        setValue.call(search, "Add selected item");
+        search.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+      expect(inlineAction.isConnected).toBe(true);
+      await act(() =>
+        getByRole(document.body, "button", { name: "Add selected item to project" }).click(),
+      );
+      expect(selected).toHaveBeenCalledTimes(focus === "blurred" ? 1 : 0);
+      expect(inline).toHaveBeenCalledTimes(focus === "focused" ? 1 : 0);
+    } finally {
+      await act(() => root.unmount());
+      node.remove();
+      vi.unstubAllGlobals();
+    }
+  },
+);

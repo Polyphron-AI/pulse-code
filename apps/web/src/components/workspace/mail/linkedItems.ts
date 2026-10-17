@@ -12,6 +12,7 @@ import type {
   WorkspaceItemRef,
   WorkspaceLinkOrigin,
   WorkspaceLinkView,
+  WorkspaceLinkSource,
 } from "@t3tools/contracts";
 
 import { isCalendarItem } from "../calendar/calendarItemRef";
@@ -46,6 +47,14 @@ export function originText(
   return viewing === undefined
     ? `You linked this on ${date}`
     : `You linked this on ${date} while viewing '${viewing}'`;
+}
+
+export function linkSourceText(source: WorkspaceLinkSource) {
+  return source.type === "model"
+    ? `Accepted suggestion from ${source.model}: ${source.reason}`
+    : source.type === "action"
+      ? `From ${source.action.replaceAll("-", " ")}`
+      : "Linked by you";
 }
 
 export interface LinkedItemLabel {

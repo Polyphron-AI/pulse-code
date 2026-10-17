@@ -94,6 +94,9 @@ export type WorkspaceMockupView =
   | "projects"
   | "linked";
 export type MockupMutation =
+  | "add-to-project"
+  | "start-project"
+  | "start-automation"
   | "link"
   | "unlink"
   | "save"

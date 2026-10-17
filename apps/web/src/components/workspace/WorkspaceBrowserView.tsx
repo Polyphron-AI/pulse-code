@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState, type ReactNode, type Ref } from "react";
+import { useEffect, useRef, useState, type ReactNode, type Ref, type ComponentProps } from "react";
 import type { WorkspaceLinkEndpoint, WorkspaceLinkView } from "@t3tools/contracts";
 import { Search, SlidersHorizontal } from "lucide-react";
 import { Button } from "../ui/button";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
+import type { PreviewChromeRow } from "../preview/PreviewChromeRow";
 import { cn } from "../../lib/utils";
 
 export function WorkspaceBrowserView({
@@ -46,80 +47,97 @@ export function WorkspaceBrowserView({
 }) {
   const pill = useRef<HTMLFormElement>(null);
   return (
-    <div className={cn("flex min-h-0 min-w-0 flex-col", renderPage ? "flex-1" : "shrink-0")}>
-      <Popover open={searchOpen} onOpenChange={onSearchChange}>
-        <form
-          ref={pill}
-          className="mb-[13px] flex h-[29px] shrink-0 items-center gap-2 rounded-full border border-border/20 bg-muted pl-2 pr-0.5 text-muted-foreground focus-within:ring-2 focus-within:ring-ring"
-          aria-busy={loading}
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (!disabled && !readOnly) onSubmit();
-          }}
-        >
-          <Search className="size-3 shrink-0" aria-hidden="true" />
-          <input
-            className="min-w-0 flex-1 bg-transparent text-3xs text-foreground outline-none placeholder:text-muted-foreground"
-            aria-label="Browser page address"
-            ref={inputRef}
-            placeholder="Search or enter a URL"
-            maxLength={2048}
-            value={addressDraft}
-            disabled={disabled}
-            readOnly={readOnly}
-            aria-disabled={readOnly || undefined}
-            onChange={(event) => onAddressChange(event.target.value)}
-          />
-          <Popover open={menuOpen} onOpenChange={onMenuChange}>
-            <PopoverTrigger
-              render={
-                <Button type="button" size="icon-xs" variant="ghost" aria-label="Browser actions" />
-              }
-            >
-              <SlidersHorizontal className="size-3" aria-hidden="true" />
-            </PopoverTrigger>
-            <PopoverPopup align="end" padding="compact" aria-label="Browser actions">
-              <div className="flex max-w-64 flex-col items-start gap-1">
-                {displayedUrl ? (
-                  <p className="max-w-full break-all px-1.75 text-sm text-muted-foreground sm:text-xs">
-                    {displayedUrl}
-                  </p>
-                ) : null}
-                {menuActions}
-                <Button
-                  type="button"
-                  size="xs"
-                  variant="ghost"
-                  disabled={!displayedUrl || disabled}
-                  aria-disabled={readOnly || undefined}
-                  onClick={() => {
-                    if (!readOnly) onOpenExternal();
-                  }}
-                >
-                  Open in new tab
-                </Button>
-                {linkTarget === null && !menuActions ? (
-                  <p className="px-1.75 text-sm text-muted-foreground sm:text-xs">
-                    Select an item to link this page to.
-                  </p>
-                ) : null}
-              </div>
-            </PopoverPopup>
-          </Popover>
-        </form>
-        {searchOpen ? (
-          <PopoverPopup
-            anchor={pill}
-            align="end"
-            padding="compact"
-            className="w-(--anchor-width)"
-            aria-label="Linked pages"
-            initialFocus={false}
+    <div
+      className={cn("flex min-h-0 min-w-0 flex-col", renderPage ? "flex-1" : "shrink-0")}
+      onKeyDown={(event) => {
+        if (
+          !searchOpen ||
+          event.key !== "Escape" ||
+          event.defaultPrevented ||
+          !(event.target instanceof Node) ||
+          !event.currentTarget.contains(event.target)
+        )
+          return;
+        event.preventDefault();
+        event.stopPropagation();
+        onSearchChange?.(false);
+        pill.current?.querySelector("input")?.focus();
+      }}
+    >
+      <form
+        ref={pill}
+        className="mb-[13px] flex h-[29px] shrink-0 items-center gap-2 rounded-full border border-border/20 bg-muted pl-2 pr-0.5 text-muted-foreground has-[input:focus-visible]:ring-2 has-[input:focus-visible]:ring-ring"
+        aria-busy={loading}
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!disabled && !readOnly) onSubmit();
+        }}
+      >
+        <Search className="size-3 shrink-0" aria-hidden="true" />
+        <input
+          className="min-w-0 flex-1 bg-transparent text-3xs text-foreground outline-none placeholder:text-muted-foreground"
+          aria-label="Browser page address"
+          ref={inputRef}
+          placeholder="Search or enter a URL"
+          maxLength={2048}
+          value={addressDraft}
+          disabled={disabled}
+          readOnly={readOnly}
+          aria-disabled={readOnly || undefined}
+          onChange={(event) => onAddressChange(event.target.value)}
+        />
+        <Popover open={menuOpen} onOpenChange={onMenuChange}>
+          <PopoverTrigger
+            render={
+              <Button type="button" size="icon-xs" variant="ghost" aria-label="Browser actions" />
+            }
           >
-            {searchResults}
+            <SlidersHorizontal className="size-3" aria-hidden="true" />
+          </PopoverTrigger>
+          <PopoverPopup
+            align="end"
+            sideOffset={7}
+            padding="compact"
+            variant="opaque"
+            aria-label="Browser actions"
+          >
+            <div className="flex max-w-64 flex-col items-start gap-1">
+              {displayedUrl ? (
+                <p className="max-w-full break-all px-1.75 text-sm text-muted-foreground sm:text-xs">
+                  {displayedUrl}
+                </p>
+              ) : null}
+              {menuActions}
+              <Button
+                type="button"
+                size="xs"
+                variant="ghost"
+                disabled={!displayedUrl || disabled}
+                aria-disabled={readOnly || undefined}
+                onClick={() => {
+                  if (!readOnly) onOpenExternal();
+                }}
+              >
+                Open in new tab
+              </Button>
+              {linkTarget === null && !menuActions ? (
+                <p className="px-1.75 text-sm text-muted-foreground sm:text-xs">
+                  Select an item to link this page to.
+                </p>
+              ) : null}
+            </div>
           </PopoverPopup>
-        ) : null}
-      </Popover>
+        </Popover>
+      </form>
+      {searchOpen ? (
+        <div
+          role="dialog"
+          aria-label="Linked pages"
+          className="mb-[13px] max-h-80 min-w-0 shrink-0 overflow-y-auto rounded-lg border border-border bg-popover p-2 text-popover-foreground"
+        >
+          {searchResults}
+        </div>
+      ) : null}
       {unavailableReason ? (
         <p role="alert" className="mb-2 text-xs text-destructive">
           {unavailableReason}
@@ -169,10 +187,15 @@ export function WorkspaceBrowserSearchResults({
                 <button
                   type="button"
                   className="min-w-0 flex-1 px-1.75 text-left hover:underline"
+                  aria-label={
+                    page.item.ref.type === "url"
+                      ? `${page.item.title || "Linked page"}: ${page.item.ref.url}`
+                      : page.item.title || "Linked page"
+                  }
                   onClick={() => onOpen(page.item)}
                 >
                   <span className="block break-words">{page.item.title ?? "Linked page"}</span>
-                  <span className="block break-all text-muted-foreground">
+                  <span className="block truncate text-muted-foreground">
                     {page.item.ref.type === "url" ? page.item.ref.url : ""}
                   </span>
                 </button>
@@ -226,7 +249,8 @@ export function WorkspaceBrowserExternalPage({
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
   const copied = copiedAddress === address;
   // Parsing applies host casing and slash normalization without removing query parts or fragments.
-  const removedUrlParts = url && url !== new URL(address.trim()).toString();
+  const removedUrlParts =
+    url && URL.canParse(address.trim()) && url !== new URL(address.trim()).toString();
   useEffect(() => {
     if (!copied) return;
     const timeout = window.setTimeout(() => setCopiedAddress(null), 2000);
@@ -295,5 +319,76 @@ export function WorkspaceBrowserExternalPage({
         If no tab opened, allow pop-ups and try again, or copy this address.
       </p>
     </section>
+  );
+}
+
+/** Shared captured-page menu presentation, with commands supplied by the live or isolated host. */
+export function WorkspaceBrowserPageActions({
+  target,
+  controls,
+  permitted,
+  linkAction,
+  linkHint,
+  retryAction,
+  sharedActions,
+  external = false,
+}: {
+  target: WorkspaceLinkEndpoint | null;
+  controls?: ComponentProps<typeof PreviewChromeRow> | undefined;
+  permitted: boolean;
+  linkAction: ReactNode;
+  linkHint: string | null;
+  retryAction?: ReactNode;
+  sharedActions?: ReactNode;
+  external?: boolean;
+}) {
+  return (
+    <>
+      {target ? (
+        <p className="px-1.75 text-sm text-muted-foreground sm:text-xs">
+          Link to <span className="text-foreground">{target.title ?? target.ref.type}</span>
+        </p>
+      ) : null}
+      {controls ? (
+        <>
+          <Button
+            size="xs"
+            variant="ghost"
+            disabled={!permitted || !controls.canGoBack}
+            onClick={controls.onBack}
+          >
+            Back
+          </Button>
+          <Button
+            size="xs"
+            variant="ghost"
+            disabled={!permitted || !controls.canGoForward}
+            onClick={controls.onForward}
+          >
+            Forward
+          </Button>
+          <Button
+            size="xs"
+            variant="ghost"
+            disabled={!permitted || controls.refreshDisabled}
+            onClick={controls.onRefresh}
+          >
+            Reload
+          </Button>
+          {permitted ? controls.leadingActions : null}
+          {permitted ? controls.trailingActions : null}
+        </>
+      ) : null}
+      {retryAction}
+      {external ? null : (
+        <>
+          {linkAction}
+          {linkHint ? (
+            <p className="px-1.75 text-sm text-muted-foreground sm:text-xs">{linkHint}</p>
+          ) : null}
+        </>
+      )}
+      {sharedActions}
+    </>
   );
 }

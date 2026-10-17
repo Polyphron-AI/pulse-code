@@ -9,6 +9,7 @@ export function WorkspaceItemMenuView({
   onOpenChange,
   actions,
   available,
+  popupVariant = "default",
   children,
   ...props
 }: ComponentProps<"div"> & {
@@ -16,6 +17,7 @@ export function WorkspaceItemMenuView({
   readonly onOpenChange: (open: boolean) => void;
   readonly actions: ReactNode;
   readonly available: boolean;
+  readonly popupVariant?: "default" | "opaque";
 }) {
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
@@ -33,7 +35,11 @@ export function WorkspaceItemMenuView({
           </PopoverTrigger>
         ) : null}
       </div>
-      {available ? <PopoverPopup align="end">{actions}</PopoverPopup> : null}
+      {available ? (
+        <PopoverPopup align="end" variant={popupVariant}>
+          {actions}
+        </PopoverPopup>
+      ) : null}
     </Popover>
   );
 }

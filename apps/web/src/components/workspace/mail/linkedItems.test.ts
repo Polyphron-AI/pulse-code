@@ -27,16 +27,17 @@ const view = (item: WorkspaceLinkView["item"]): WorkspaceLinkView => ({
 
 describe("originText", () => {
   it("says when the link was made and what was open", () => {
+    // This instant stays on 14 Oct in both Los Angeles and Kiritimati.
     expect(
       originText(
         {
-          confirmedAt: "2026-10-14T12:00:00.000Z",
+          confirmedAt: "2026-10-14T08:00:00.000Z",
           viewing: { ref: MESSAGE, title: "Re: Q3 brief" },
         },
         "en-GB",
       ),
     ).toBe("You linked this on 14 Oct while viewing 'Re: Q3 brief'");
-    expect(originText({ confirmedAt: "2026-10-14T12:00:00.000Z" }, "en-GB")).toBe(
+    expect(originText({ confirmedAt: "2026-10-14T08:00:00.000Z" }, "en-GB")).toBe(
       "You linked this on 14 Oct",
     );
     expect(originText(undefined, "en-GB")).toBeUndefined();

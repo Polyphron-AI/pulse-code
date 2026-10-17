@@ -45,11 +45,12 @@ import {
   WorkspaceBrowserExternalPage,
   WorkspaceBrowserView,
   WorkspaceBrowserSearchResults,
+  WorkspaceBrowserPageActions,
 } from "./WorkspaceBrowserView";
-import { captureWorkspacePage, findLinkedPages } from "./workspaceBrowser.logic";
+import { captureWorkspacePage, findLinkedPages, hasExplicitScheme } from "./workspaceBrowser.logic";
 import { WorkspaceItemActions, WorkspaceItemMenu } from "./WorkspaceItemActions";
 import { useWorkspaceItemOpener } from "./useWorkspaceItemOpener";
-import { originText } from "./mail/linkedItems";
+import { originText, linkSourceText } from "./mail/linkedItems";
 
 type CapturedPage = NonNullable<ReturnType<typeof captureWorkspacePage>>;
 
@@ -111,20 +112,14 @@ export function WorkspaceBrowser({
   const admittedRequest = useRef<WorkspaceBrowserProps["request"]>(null);
   const externalOpening = useRef(false);
   const linkingPage = useRef(false);
-  const scope = useRef({ environmentId, projectId, mounted: true });
+  const mounted = useRef(true);
   useLayoutEffect(() => {
-    scope.current = { environmentId, projectId, mounted: true };
+    mounted.current = true;
     return () => {
-      scope.current.mounted = false;
+      mounted.current = false;
     };
-  }, [environmentId, projectId]);
-  const inScope = useCallback(
-    () =>
-      scope.current.mounted &&
-      scope.current.environmentId === environmentId &&
-      scope.current.projectId === projectId,
-    [environmentId, projectId],
-  );
+  }, []);
+  const inScope = useCallback(() => mounted.current, []);
   const linkUnavailableReason = !connected
     ? "Reconnect to link this page."
     : !canOperate
@@ -248,7 +243,10 @@ export function WorkspaceBrowser({
   );
   if (hidden) return null;
   if (desktop) {
-    if (request?.type === "url" && (!connected || !canOperate || config.error || !threadRef))
+    if (
+      request?.type === "url" &&
+      (!connected || !canOperate || config.error || (config.data !== undefined && !threadRef))
+    )
       return (
         <div className="flex min-h-0 min-w-0 flex-col gap-2">
           <p className="text-xs text-muted-foreground">
@@ -359,9 +357,8 @@ function ResourceBrowserChrome({
     () => requestedAddress?.url ?? (draft.read() || (external ? current : "")),
   );
   const [menu, setMenu] = useState<{
-    captured: CapturedPage | null;
     target: WorkspaceLinkEndpoint | null;
-    page: WorkspaceLinkEndpoint | null;
+    page: CapturedPage["page"] | null;
     openExternal: () => void;
   } | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -369,7 +366,7 @@ function ResourceBrowserChrome({
   const input = useRef<HTMLInputElement>(null);
   const { workspaceLinks, ready } = useMailCapabilities(environmentId);
   const projectLinks = useEnvironmentQuery(
-    ready && workspaceLinks
+    searchOpen && ready && workspaceLinks
       ? workspaceLinkQueries.list({
           environmentId,
           input: { item: { type: "project", projectId } },
@@ -377,6 +374,32 @@ function ResourceBrowserChrome({
       : null,
   );
   const { unlink } = useMailLinks(environmentId);
+  const pendingUnlinks = useRef(new Set<string>());
+  const [unlinking, setUnlinking] = useState<ReadonlySet<string>>(() => new Set());
+  const mounted = useRef(true);
+  useLayoutEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  const unlinkPage = async (id: Parameters<typeof unlink>[0]) => {
+    if (!permitted || busy || pendingUnlinks.current.has(id)) return;
+    pendingUnlinks.current.add(id);
+    setUnlinking(new Set(pendingUnlinks.current));
+    setValidationError(null);
+    try {
+      await unlink(id);
+    } catch (cause) {
+      if (mounted.current)
+        setValidationError(
+          cause instanceof Error ? cause.message : "This page could not be unlinked.",
+        );
+    } finally {
+      pendingUnlinks.current.delete(id);
+      if (mounted.current) setUnlinking(new Set(pendingUnlinks.current));
+    }
+  };
   const [previousRequest, setPreviousRequest] = useState(requestedAddress);
   if (previousRequest !== requestedAddress) {
     setPreviousRequest(requestedAddress);
@@ -397,7 +420,6 @@ function ResourceBrowserChrome({
       address,
       navigation,
     });
-  const captured = menu ? menu.captured : capture();
   const linkHint =
     linkUnavailableReason ??
     (linking
@@ -406,23 +428,30 @@ function ResourceBrowserChrome({
         ? "Wait for the current Browser action before linking."
         : (menu ? menu.target : selectedItem) == null
           ? "Select an item to link this page to."
-          : !external && !menu?.captured && navigation?._tag === "Loading"
+          : !external && !menu?.page && navigation?._tag === "Loading"
             ? "Wait for this page to finish loading before linking."
-            : !external && !menu?.captured && navigation?._tag === "LoadFailed"
+            : !external && !menu?.page && navigation?._tag === "LoadFailed"
               ? "This page failed to load. Reload it before linking."
-              : !(menu ? menu.page : page)
-                ? "Enter an http or https address before linking."
-                : !captured
-                  ? "Wait for this page to finish loading before linking."
-                  : null);
+              : menu && !menu.page && !external && navigation?._tag === "Success"
+                ? "Reopen this menu to link the loaded page."
+                : !(menu ? menu.page : page)
+                  ? "Enter an http or https address before linking."
+                  : !external && !menu?.page && navigation?._tag !== "Success"
+                    ? "Wait for this page to finish loading before linking."
+                    : null);
   const link = (
     <Button
       size="xs"
       variant="ghost"
-      disabled={!permitted || Boolean(linkHint)}
+      disabled={!permitted || (Boolean(linkHint) && !busy && !linking)}
+      aria-disabled={busy || linking || undefined}
       title={linkHint ?? undefined}
       onClick={() => {
-        const action = menu ? menu.captured : capture();
+        const action = menu
+          ? menu.target && menu.page
+            ? { environmentId, target: menu.target, page: menu.page }
+            : null
+          : capture();
         if (action && !busy && !linkHint) void onLink(action);
       }}
     >
@@ -432,7 +461,7 @@ function ResourceBrowserChrome({
   const submit = () => {
     const url = normalizeLinkUrl(address);
     if (!url) {
-      if (/^[a-z][a-z0-9+.-]*:/iu.test(address.trim())) {
+      if (hasExplicitScheme(address)) {
         setSearchOpen(false);
         setValidationError("Enter an http or https address.");
       } else {
@@ -449,9 +478,9 @@ function ResourceBrowserChrome({
     else if (controls?.url) controls.onSubmit(address.trim());
     else void onOpen(address.trim());
   };
-  const openPage = useWorkspaceItemOpener(environmentId, {
-    openPage: (ref) => {
-      if (!normalizeLinkUrl(ref.url)) return;
+  const openResourcePage = useCallback(
+    (ref: Extract<WorkspaceLinkEndpoint["ref"], { type: "url" }>) => {
+      if (busy || !normalizeLinkUrl(ref.url)) return;
       const url = ref.url.trim();
       draft.write(url);
       setAddress(url);
@@ -461,7 +490,9 @@ function ResourceBrowserChrome({
       else if (controls) controls.onSubmit(url);
       else void onOpen(url);
     },
-  });
+    [busy, draft, external, onOpenExternal, controls, onOpen],
+  );
+  const openPage = useWorkspaceItemOpener(environmentId, { openPage: openResourcePage });
   const copyAddress = async () => {
     if (!normalizeLinkUrl(address)) return false;
     try {
@@ -479,7 +510,7 @@ function ResourceBrowserChrome({
     <>
       <WorkspaceBrowserView
         addressDraft={address}
-        linkTarget={menu?.captured?.target ?? selectedItem}
+        linkTarget={menu ? menu.target : selectedItem}
         displayedUrl={menu?.page?.ref.type === "url" ? menu.page.ref.url : displayedUrl}
         renderPage={
           external ? (
@@ -499,7 +530,7 @@ function ResourceBrowserChrome({
         onSearchChange={setSearchOpen}
         searchResults={
           <WorkspaceBrowserSearchResults
-            pages={findLinkedPages(projectLinks.data, address)}
+            pages={searchOpen ? findLinkedPages(projectLinks.data, address) : []}
             truncated={projectLinks.data?.truncated ?? false}
             pending={ready && workspaceLinks && projectLinks.data === null && !projectLinks.error}
             error={
@@ -512,6 +543,7 @@ function ResourceBrowserChrome({
             onOpen={(endpoint) => openPage(endpoint.ref)}
             renderRow={(view, row) => (
               <WorkspaceItemMenu
+                popupVariant="opaque"
                 environmentId={environmentId}
                 item={{
                   ...structuredClone(view.item),
@@ -526,26 +558,13 @@ function ResourceBrowserChrome({
                 provenance={
                   <div className="space-y-2 text-sm sm:text-xs">
                     <p>{originText(view.origin) ?? "Linked by you"}</p>
-                    {view.source.type === "action" ? (
-                      <p>From {view.source.action.replaceAll("-", " ")}</p>
-                    ) : view.source.type === "model" ? (
-                      <p>
-                        Accepted suggestion from {view.source.model}: {view.source.reason}
-                      </p>
-                    ) : null}
+                    {view.source.type !== "user" ? <p>{linkSourceText(view.source)}</p> : null}
                     <Button
                       size="xs"
                       variant="ghost"
                       disabled={!permitted || busy}
-                      onClick={() => {
-                        void unlink(view.id).catch((cause) =>
-                          setValidationError(
-                            cause instanceof Error
-                              ? cause.message
-                              : "This page could not be unlinked.",
-                          ),
-                        );
-                      }}
+                      aria-disabled={unlinking.has(view.id) || undefined}
+                      onClick={() => void unlinkPage(view.id)}
                     >
                       Unlink
                     </Button>
@@ -572,30 +591,32 @@ function ResourceBrowserChrome({
         onSubmit={submit}
         onMenuChange={(open) => {
           setSearchOpen(false);
+          if (!open) {
+            setMenu(null);
+            return;
+          }
           const url = normalizeLinkUrl(displayedUrl);
-          const metadata = url
-            ? captureWorkspacePage({
-                environmentId,
-                target: selectedItem ?? { ref: { type: "url", url } },
-                desktop: !external,
-                address,
-                navigation,
-              })
-            : null;
-          setMenu(
-            open
-              ? {
-                  captured: capture(),
-                  target: selectedItem ? structuredClone(selectedItem) : null,
-                  page: metadata?.page ?? null,
-                  openExternal:
-                    controls?.onOpenInBrowser ??
-                    (() => {
-                      if (normalizeLinkUrl(address)) void onOpenExternal(address.trim());
-                    }),
-                }
-              : null,
-          );
+          const captured = capture();
+          const metadata =
+            captured ??
+            (url
+              ? captureWorkspacePage({
+                  environmentId,
+                  target: selectedItem ?? { ref: { type: "url", url } },
+                  desktop: !external,
+                  address,
+                  navigation,
+                })
+              : null);
+          setMenu({
+            target: selectedItem ? (metadata?.target ?? structuredClone(selectedItem)) : null,
+            page: metadata?.page ?? null,
+            openExternal:
+              controls?.onOpenInBrowser ??
+              (() => {
+                if (normalizeLinkUrl(address)) void onOpenExternal(address.trim());
+              }),
+          });
         }}
         onOpenExternal={() => {
           if (menu?.page?.ref.type === "url") menu.openExternal();
@@ -603,68 +624,35 @@ function ResourceBrowserChrome({
           else submit();
         }}
         menuActions={
-          <>
-            {menu?.captured?.target ? (
-              <p className="px-1.75 text-sm text-muted-foreground sm:text-xs">
-                Link to {menu.captured.target.title ?? menu.captured.target.ref.type}
-              </p>
-            ) : null}
-            {controls ? (
-              <>
+          <WorkspaceBrowserPageActions
+            target={menu?.target ?? null}
+            controls={controls}
+            permitted={permitted}
+            external={external}
+            linkAction={link}
+            linkHint={linkHint}
+            retryAction={
+              onRetryRead ? (
+                <Button size="xs" variant="ghost" onClick={onRetryRead}>
+                  Retry
+                </Button>
+              ) : retryUrl ? (
                 <Button
                   size="xs"
                   variant="ghost"
-                  disabled={!permitted || !controls.canGoBack}
-                  onClick={controls.onBack}
+                  disabled={busy || (!external && !permitted)}
+                  onClick={() => void onOpen(retryUrl)}
                 >
-                  Back
+                  Retry
                 </Button>
-                <Button
-                  size="xs"
-                  variant="ghost"
-                  disabled={!permitted || !controls.canGoForward}
-                  onClick={controls.onForward}
-                >
-                  Forward
-                </Button>
-                <Button
-                  size="xs"
-                  variant="ghost"
-                  disabled={!permitted || controls.refreshDisabled}
-                  onClick={controls.onRefresh}
-                >
-                  Reload
-                </Button>
-                {permitted ? controls.leadingActions : null}
-                {permitted ? controls.trailingActions : null}
-              </>
-            ) : null}
-            {onRetryRead ? (
-              <Button size="xs" variant="ghost" onClick={onRetryRead}>
-                Retry
-              </Button>
-            ) : retryUrl ? (
-              <Button
-                size="xs"
-                variant="ghost"
-                disabled={busy || (!external && !permitted)}
-                onClick={() => void onOpen(retryUrl)}
-              >
-                Retry
-              </Button>
-            ) : null}
-            {external ? null : (
-              <>
-                {link}
-                {linkHint ? (
-                  <p className="px-1.75 text-sm text-muted-foreground sm:text-xs">{linkHint}</p>
-                ) : null}
-              </>
-            )}
-            {menu?.page && ready && workspaceLinks ? (
-              <WorkspaceItemActions environmentId={environmentId} item={menu.page} />
-            ) : null}
-          </>
+              ) : null
+            }
+            sharedActions={
+              menu?.page && ready && workspaceLinks ? (
+                <WorkspaceItemActions environmentId={environmentId} item={menu.page} />
+              ) : null
+            }
+          />
         }
       />
     </>

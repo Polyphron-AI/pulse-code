@@ -30,6 +30,7 @@ import {
   parseWorkspaceItemDrag,
   linkedItemLabel,
   originText,
+  linkSourceText,
   type LinkedItemLabel,
 } from "./linkedItems";
 import { MailError } from "./MailNotice";
@@ -463,13 +464,7 @@ function LinkedRow({
       {label.unavailable !== undefined ? (
         <span className="text-xs text-muted-foreground">{label.unavailable}</span>
       ) : null}
-      <span className="text-xs text-muted-foreground">
-        {view.source.type === "model"
-          ? `Accepted suggestion from ${view.source.model}: ${view.source.reason}`
-          : view.source.type === "action"
-            ? `From ${view.source.action.replaceAll("-", " ")}`
-            : "Linked by you"}
-      </span>
+      <span className="text-xs text-muted-foreground">{linkSourceText(view.source)}</span>
       {origin === undefined ? null : viewing !== undefined &&
         workspaceItemKey(viewing.ref) !== itemKey &&
         canOpenLinkedItem(viewing.ref) ? (

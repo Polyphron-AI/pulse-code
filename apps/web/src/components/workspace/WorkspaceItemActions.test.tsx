@@ -654,10 +654,10 @@ it.each([true, false])(
       expect(mocks.linkToProject).toHaveBeenCalledWith(b, expect.anything(), expect.anything());
       mocks.linkToProject.mockClear();
 
-      await act(() => getByRole(node, "textbox", { name: "Palette search" }).focus());
       const palette = buildWorkspaceActionItems(null).find(
         (action) => action.shortcutCommand === "workspace.addToProject",
       )!;
+      await act(() => getByRole(node, "textbox", { name: "Palette search" }).focus());
       expect(palette).toBeDefined();
       await act(async () => palette.run());
       expect(mocks.linkToProject).toHaveBeenCalledTimes(1);
@@ -680,6 +680,64 @@ it.each([true, false])(
       await act(() => root.unmount());
       node.remove();
       globalListener.mockRestore();
+    }
+  },
+);
+
+it.each(["shortcut", "palette"])(
+  "uses the selected item after a still-mounted inline host loses focus through %s",
+  async (entrance) => {
+    const node = document.createElement("div");
+    document.body.append(node);
+    const root = createRoot(node);
+    mocks.keybindings = compileResolvedKeybindingsConfig([
+      { key: "ctrl+alt+q", command: "workspace.addToProject" },
+    ]);
+    mocks.contextMenuShow.mockResolvedValue(choiceId);
+    mocks.linkToProject.mockResolvedValue(undefined);
+    try {
+      await act(() =>
+        root.render(
+          <>
+            <WorkspaceItemActions environmentId={environmentId} item={a} shortcuts />
+            <section aria-label="Inline item">
+              <WorkspaceItemActions environmentId={environmentId} item={b} />
+            </section>
+            <button>Neutral focus</button>
+            <input aria-label="Palette search" />
+          </>,
+        ),
+      );
+      const inline = getByRole(node, "region", { name: "Inline item" });
+      const inlineAction = getByRole(inline, "button", { name: "Add to project" });
+      await act(() => inlineAction.focus());
+      await act(() => getByRole(node, "button", { name: "Neutral focus" }).focus());
+      expect(inlineAction.isConnected).toBe(true);
+      if (entrance === "shortcut") {
+        await act(async () =>
+          document.activeElement!.dispatchEvent(
+            new KeyboardEvent("keydown", {
+              key: "q",
+              code: "KeyQ",
+              ctrlKey: true,
+              altKey: true,
+              bubbles: true,
+              cancelable: true,
+            }),
+          ),
+        );
+      } else {
+        const palette = buildWorkspaceActionItems(null).find(
+          (action) => action.shortcutCommand === "workspace.addToProject",
+        )!;
+        await act(() => getByRole(node, "textbox", { name: "Palette search" }).focus());
+        await act(async () => palette.run());
+      }
+      expect(mocks.linkToProject).toHaveBeenCalledTimes(1);
+      expect(mocks.linkToProject).toHaveBeenCalledWith(a, expect.anything(), expect.anything());
+    } finally {
+      await act(() => root.unmount());
+      node.remove();
     }
   },
 );

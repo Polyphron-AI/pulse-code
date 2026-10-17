@@ -4,7 +4,7 @@ import type {
   WorkspaceItemRef,
   WorkspaceLinkEndpoint,
 } from "@t3tools/contracts";
-import { useState, type ReactNode } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 import {
   useAllEnvironmentProjectSnapshotsReady,
   useProjects,
@@ -160,19 +160,16 @@ function ResolvedProjectResources({
         ),
       })
     : null;
-  const open = useWorkspaceItemOpener(
-    environmentId,
-    project?.kind === "selected"
-      ? {
-          openPage: (ref) =>
-            state.openResource({
-              tab: "browser",
-              projectId: project.scope.projectId,
-              request: ref,
-            }),
-        }
-      : {},
+  const resourceProjectId = project?.kind === "selected" ? project.scope.projectId : null;
+  const { openResource } = state;
+  const openPage = useCallback(
+    (ref: Extract<WorkspaceItemRef, { type: "url" }>) => {
+      if (resourceProjectId)
+        openResource({ tab: "browser", projectId: resourceProjectId, request: ref });
+    },
+    [resourceProjectId, openResource],
   );
+  const open = useWorkspaceItemOpener(environmentId, resourceProjectId ? { openPage } : {});
   return (
     <>
       <WorkspaceResourcesPanel
