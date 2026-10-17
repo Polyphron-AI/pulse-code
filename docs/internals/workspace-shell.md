@@ -67,6 +67,31 @@ project task and settings paths. Rollback disables the capability and controls w
 the forward migration and its data. After an older binary renames a designated column, config
 reads treat its dangling designation as null without rewriting stored settings or tasks.
 
+## Task dates and environment timezone
+
+Task due dates are Gregorian calendar days, stored as `YYYY-MM-DD` text by migration 066.
+They must never pass through device-local midnight or become timestamps. The shared
+[formatter](../../packages/client-runtime/src/state/workspaceTaskDates.ts) uses the environment
+zone to determine today and UTC to format the civil day. Its clock stops while the retained
+resource body is hidden and resyncs on reopening.
+
+`workspaceDisplayTimeZone` belongs to server settings, independently of `workspaceTasksV2`.
+Trusted first load materializes the host zone once through the existing atomic settings writer;
+null resets to the current host zone. Malformed files and dangling settings links must not be
+rewritten for this default. Unchanged watcher reloads do not publish another config update.
+
+Decode timezone names as bounded strings. Calling Intl during contract decoding would let an
+older phone's timezone database reject an entire ServerConfig. Validate timezone writes against
+the server's Intl data; the web form checks its own data as advice. An unsupported stored name
+stays in the settings cache and on disk, while server read responses expose null for display.
+Formatting falls back to UTC on RangeError and the client shows a notice. Loading settings must
+not produce a silent UTC label. Locale follows the existing web timestamp locale resolution.
+
+The operate-scoped `workspacePatchTask` RPC shares the task transition policy and applies its
+revision check and metadata update in one transaction. Omitted metadata preserves existing
+values; null clears them. Legacy upsert uses the same presence rule so an older client's title
+save cannot erase a due date or area.
+
 ## Shared entrances and status
 
 `WorkspaceHeaderContext` supplies shell-owned environment and space labels to

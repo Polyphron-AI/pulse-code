@@ -1113,7 +1113,15 @@ describe("workspace display timezone", () => {
       expect(decodeServerSettingsPatch({ workspaceDisplayTimeZone })).toEqual({
         workspaceDisplayTimeZone,
       });
-    for (const workspaceDisplayTimeZone of ["", "No/Such_Zone", "2026-10-16", "+02:00"])
+    for (const workspaceDisplayTimeZone of ["", "2026-10-16", "+02:00", "A".repeat(65)])
       expect(() => decodeServerSettingsPatch({ workspaceDisplayTimeZone })).toThrow();
+  });
+  it("decodes bounded timezone names independently of local Intl data", () => {
+    expect(() => new Intl.DateTimeFormat(undefined, { timeZone: "No/Such_Zone" })).toThrow(
+      RangeError,
+    );
+    expect(
+      decodeServerSettings({ workspaceDisplayTimeZone: "No/Such_Zone" }).workspaceDisplayTimeZone,
+    ).toBe("No/Such_Zone");
   });
 });

@@ -1193,17 +1193,11 @@ export const StorageCleanupSettings = Schema.Struct({
 });
 export type StorageCleanupSettings = typeof StorageCleanupSettings.Type;
 
-export const WorkspaceDisplayTimeZone = Schema.String.check(
-  Schema.makeFilter((value) => {
-    if (!value || /^[+-]/.test(value)) return false;
-    try {
-      return (
-        new Intl.DateTimeFormat("en", { timeZone: value }).resolvedOptions().timeZone.length > 0
-      );
-    } catch {
-      return false;
-    }
-  }),
+// Decoding must not depend on the client or server's installed timezone data.
+export const WorkspaceDisplayTimeZone = Schema.Trim.check(
+  Schema.isMinLength(1),
+  Schema.isMaxLength(64),
+  Schema.isPattern(/^[A-Za-z][A-Za-z0-9_+\-/]*$/),
 );
 export const ServerSettings = Schema.Struct({
   workspaceDisplayTimeZone: Schema.NullOr(WorkspaceDisplayTimeZone).pipe(
@@ -1477,6 +1471,7 @@ export const resolveProviderInstanceEnabled = (
 
 export const ServerSettingsOperation = Schema.Literals([
   "normalize",
+  "validate-workspace-timezone",
   "check-exists",
   "create-provider-instance",
   "read-file",
@@ -1504,6 +1499,8 @@ export class ServerSettingsError extends Schema.TaggedError<ServerSettingsError>
   },
 ) {
   override get message(): string {
+    if (this.operation === "validate-workspace-timezone")
+      return "Enter a valid IANA timezone, such as Africa/Johannesburg, supported by this server.";
     const provider =
       this.providerInstanceId === undefined ? "" : ` for provider ${this.providerInstanceId}`;
     const variable =

@@ -8,7 +8,18 @@ import { Input } from "../ui/input";
 import { useMailCapabilities } from "./mail/useMailCapabilities";
 import { useWorkspaceCanOperate } from "./useWorkspaceCanOperate";
 
-const isDisplayTimeZone = Schema.is(WorkspaceDisplayTimeZone);
+const isTimeZoneName = Schema.is(WorkspaceDisplayTimeZone);
+const isDisplayTimeZone = (value: string) => {
+  if (!isTimeZoneName(value)) return false;
+  try {
+    return (
+      new Intl.DateTimeFormat(undefined, { timeZone: value }).resolvedOptions().timeZone.length > 0
+    );
+  } catch (error) {
+    if (!(error instanceof RangeError)) throw error;
+    return false;
+  }
+};
 
 export function WorkspaceDisplaySettings() {
   const { scope, environment, connectedEnvironments } = useSettingsScope();
@@ -35,12 +46,12 @@ function WorkspaceDisplaySettingsForm({ environmentId }: { environmentId: Enviro
   const settings = useScopedSettings();
   const update = useUpdateScopedSettings();
   const canOperate = useWorkspaceCanOperate(environmentId);
-  const { workspaceTasksV2 } = useMailCapabilities(environmentId);
+  const { ready } = useMailCapabilities(environmentId);
   const [draft, setDraft] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const zone = draft ?? settings.workspaceDisplayTimeZone ?? "";
-  const disabled = busy || !canOperate || !workspaceTasksV2;
+  const disabled = busy || !canOperate || !ready;
   const save = async (timeZone: string | null) => {
     if (disabled) return;
     if (timeZone !== null && !isDisplayTimeZone(timeZone)) {
@@ -71,7 +82,7 @@ function WorkspaceDisplaySettingsForm({ environmentId }: { environmentId: Enviro
         <Input
           aria-label="Workspace timezone"
           value={zone}
-          maxLength={100}
+          maxLength={64}
           disabled={disabled}
           onChange={(event) => setDraft(event.target.value)}
         />
@@ -94,8 +105,15 @@ function WorkspaceDisplaySettingsForm({ environmentId }: { environmentId: Enviro
           Reset
         </Button>
       </div>
-      {!workspaceTasksV2 ? (
-        <p className="text-xs text-muted-foreground">Tasks need a newer server.</p>
+      {!ready ? (
+        <p className="text-xs text-muted-foreground">Loading workspace settings...</p>
+      ) : null}
+      {ready &&
+      (!settings.workspaceDisplayTimeZone ||
+        !isDisplayTimeZone(settings.workspaceDisplayTimeZone)) ? (
+        <p className="text-xs text-muted-foreground">
+          Workspace timezone unavailable on this server or device. Task dates use UTC.
+        </p>
       ) : null}
       {error ? (
         <p role="alert" className="text-sm text-destructive">

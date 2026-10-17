@@ -19,6 +19,41 @@ const decodeUpsertKeybindingResult = Schema.decodeUnknownSync(ServerUpsertKeybin
 const decodeAvailableEditors = Schema.decodeUnknownSync(ServerConfig.fields.availableEditors);
 
 describe("Pulse capability compatibility", () => {
+  it("decodes settings in ServerConfig without requiring the client's timezone data", () => {
+    const decode = Schema.decodeUnknownSync(ServerConfig);
+    const config = decode({
+      environment: {
+        environmentId: "env-1",
+        label: "Box",
+        platform: { os: "linux", arch: "x64" },
+        serverVersion: "1.0.0",
+        capabilities: {},
+      },
+      auth: {
+        policy: "remote-reachable",
+        bootstrapMethods: [],
+        sessionMethods: [],
+        sessionCookieName: "session",
+      },
+      cwd: "/workspace",
+      keybindingsConfigPath: "/settings/keybindings.json",
+      keybindings: [],
+      issues: [],
+      providers: [],
+      availableEditors: [],
+      observability: {
+        logsDirectoryPath: "/logs",
+        localTracingEnabled: false,
+        otlpTracesEnabled: false,
+        otlpMetricsEnabled: false,
+      },
+      settings: { workspaceDisplayTimeZone: "No/Such_Zone", responseStreamingMode: "turn" },
+    });
+    expect(config.settings).toMatchObject({
+      workspaceDisplayTimeZone: "No/Such_Zone",
+      responseStreamingMode: "turn",
+    });
+  });
   const decode = Schema.decodeUnknownSync(
     Schema.Struct({
       pulseCapabilities: ServerConfig.fields.pulseCapabilities,

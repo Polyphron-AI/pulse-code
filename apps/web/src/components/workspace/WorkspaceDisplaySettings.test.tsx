@@ -5,6 +5,7 @@ import { WorkspaceDisplaySettings } from "./WorkspaceDisplaySettings";
 const mocks = vi.hoisted(() => ({
   operate: true,
   supported: true,
+  ready: true,
   zone: "Africa/Johannesburg",
   ids: ["remote"],
   kind: "environment",
@@ -22,7 +23,7 @@ vi.mock("../settings/useScopedSettings", () => ({
   useUpdateScopedSettings: () => mocks.update,
 }));
 vi.mock("./mail/useMailCapabilities", () => ({
-  useMailCapabilities: () => ({ workspaceTasksV2: mocks.supported }),
+  useMailCapabilities: () => ({ workspaceTasksV2: mocks.supported, ready: mocks.ready }),
 }));
 vi.mock("../../state/session", () => ({
   useEnvironmentSessionState: () => ({
@@ -37,6 +38,7 @@ afterEach(async () => {
   renderer = undefined;
   mocks.operate = true;
   mocks.supported = true;
+  mocks.ready = true;
   mocks.ids = ["remote"];
   mocks.kind = "environment";
   mocks.zone = "Africa/Johannesburg";
@@ -71,12 +73,12 @@ it("saves and resets only the selected environment timezone, retaining failed in
   );
   expect(mocks.update).toHaveBeenLastCalledWith({ workspaceDisplayTimeZone: null });
 });
-it.each(["read", "old", "multiple", "project"])(
+it.each(["read", "loading", "multiple", "project"])(
   "blocks timezone writes for %s scope",
   async (mode) => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     mocks.operate = mode !== "read";
-    mocks.supported = mode !== "old";
+    mocks.ready = mode !== "loading";
     if (mode === "multiple") mocks.ids = ["remote", "other"];
     if (mode === "project") mocks.kind = "project";
     await act(() => {
@@ -87,6 +89,17 @@ it.each(["read", "old", "multiple", "project"])(
     expect(mocks.update).not.toHaveBeenCalled();
   },
 );
+it("saves the server timezone without the task capability and shows no task notice", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  mocks.supported = false;
+  mocks.update.mockResolvedValue(true);
+  await act(() => {
+    renderer = create(<WorkspaceDisplaySettings />);
+  });
+  await act(() => renderer!.root.findByType("form").props.onSubmit({ preventDefault() {} }));
+  expect(mocks.update).toHaveBeenCalledWith({ workspaceDisplayTimeZone: "Africa/Johannesburg" });
+  expect(JSON.stringify(renderer!.toJSON())).not.toContain("Tasks need a newer server.");
+});
 it("rejects invalid IANA zones before any write", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   await act(() => {

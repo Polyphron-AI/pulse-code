@@ -17,6 +17,8 @@ import {
 import { useEnvironmentSettings } from "../../hooks/useSettings";
 import { useContext, useEffect, useState } from "react";
 import { WorkspaceItemMutationContext } from "./WorkspaceEngagement";
+import { WorkspaceResourcesBodyContext } from "./workspaceResourceState";
+import { timestampLocale } from "../../timestampFormat";
 import { useEnvironmentQuery } from "../../state/query";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { useThreadShells } from "../../state/entities";
@@ -400,7 +402,8 @@ function TaskEditor({
 }) {
   const canOperate = useWorkspaceCanOperate(environmentId);
   const invalidateContext = useContext(WorkspaceItemMutationContext);
-  const { workspaceTasksV2 } = useMailCapabilities(environmentId);
+  const { workspaceTasksV2, ready: settingsReady } = useMailCapabilities(environmentId);
+  const hidden = useContext(WorkspaceResourcesBodyContext)?.hidden ?? false;
   const save = useAtomCommand(workspaceTools.upsertTask, { reportFailure: false });
   const patch = useAtomCommand(workspaceTools.patchTask, { reportFailure: false });
   const remove = useAtomCommand(workspaceTools.deleteTask, { reportFailure: false });
@@ -412,10 +415,15 @@ function TaskEditor({
   }
   const { title, column, dueOn, areaLabel } = draft;
   const dirty = isTaskDraftDirty(draft);
-  const timeZone =
-    useEnvironmentSettings(environmentId, (settings) => settings.workspaceDisplayTimeZone) ?? "UTC";
-  const now = useTaskDateClock(timeZone, workspaceTasksV2 && !!dueOn);
-  const date = formatWorkspaceTaskDueOn(dueOn || null, now, timeZone, "en-GB");
+  const configuredTimeZone = useEnvironmentSettings(
+    environmentId,
+    (settings) => settings.workspaceDisplayTimeZone,
+  );
+  const timeZone = configuredTimeZone ?? "UTC";
+  const now = useTaskDateClock(timeZone, workspaceTasksV2 && settingsReady && !!dueOn && !hidden);
+  const date = settingsReady
+    ? formatWorkspaceTaskDueOn(dueOn || null, now, timeZone, timestampLocale)
+    : null;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   return (
@@ -504,6 +512,14 @@ function TaskEditor({
                 }
               />
             </label>
+            {dueOn && !settingsReady ? (
+              <p className="text-xs text-muted-foreground">Loading workspace timezone...</p>
+            ) : null}
+            {date && (!configuredTimeZone || date.usingUtcFallback) ? (
+              <p className="text-xs text-muted-foreground">
+                Workspace timezone unavailable. Dates use UTC.
+              </p>
+            ) : null}
             {date ? (
               <time
                 dateTime={dueOn}

@@ -29,8 +29,10 @@ import {
   ResponseStreamingMode,
   ServerSettings,
   ServerSettingsError,
+  WorkspaceDisplayTimeZone,
   type ServerSettingsPatch,
 } from "@t3tools/contracts";
+import * as NodeUtil from "node:util";
 import * as Cache from "effect/Cache";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
@@ -68,6 +70,7 @@ export { resolveSourceControlWriterModelSelection } from "@t3tools/shared/server
 const encodeServerSettings = Schema.encodeEffect(ServerSettings);
 const encodeServerSettingsJson = Schema.encodeUnknownEffect(fromJsonStringPretty(ServerSettings));
 const decodeServerSettings = Schema.decodeUnknownEffect(ServerSettings);
+const isWorkspaceDisplayTimeZone = Schema.is(WorkspaceDisplayTimeZone);
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
@@ -130,6 +133,33 @@ const materializeWorkspaceTimeZone = (settings: ServerSettings): ServerSettings 
   }
   return { ...settings, workspaceDisplayTimeZone: timeZone };
 };
+
+const validateWorkspaceTimeZonePatch = (patch: ServerSettingsPatch, settingsPath: string) =>
+  Effect.try({
+    try: () => {
+      const zone = patch.workspaceDisplayTimeZone;
+      if (zone === undefined || zone === null) return;
+      if (!isWorkspaceDisplayTimeZone(zone)) throw new RangeError("Invalid timezone name");
+      new Intl.DateTimeFormat(undefined, { timeZone: zone }).resolvedOptions();
+    },
+    catch: (cause) =>
+      new ServerSettingsError({ settingsPath, operation: "validate-workspace-timezone", cause }),
+  });
+
+function resolveSettingsForDisplay(settings: ServerSettings): ServerSettings {
+  const resolved = resolveTextGenerationProvider(settings);
+  if (resolved.workspaceDisplayTimeZone === null) return resolved;
+  try {
+    new Intl.DateTimeFormat(undefined, {
+      timeZone: resolved.workspaceDisplayTimeZone,
+    }).resolvedOptions();
+    return resolved;
+  } catch (error) {
+    if (!(error instanceof RangeError)) throw error;
+    // Keep the stored name in the cache and on disk for a runtime with newer Intl data.
+    return { ...resolved, workspaceDisplayTimeZone: null };
+  }
+}
 
 const normalizeServerSettings = (
   settings: ServerSettings,
@@ -311,7 +341,7 @@ const makeTest = (overrides: DeepPartial<ServerSettings> = {}) =>
     });
     const currentSettingsRef = yield* Ref.make<ServerSettings>(initialSettings);
     const writeSemaphore = yield* Semaphore.make(1);
-    const getSettings = Ref.get(currentSettingsRef).pipe(Effect.map(resolveTextGenerationProvider));
+    const getSettings = Ref.get(currentSettingsRef).pipe(Effect.map(resolveSettingsForDisplay));
 
     const updateTestSettings = (
       update: (current: ServerSettings) => Effect.Effect<ServerSettings, ServerSettingsError>,
@@ -321,7 +351,7 @@ const makeTest = (overrides: DeepPartial<ServerSettings> = {}) =>
           Effect.flatMap(update),
           Effect.flatMap(normalizeServerSettings),
           Effect.tap((nextSettings) => Ref.set(currentSettingsRef, nextSettings)),
-          Effect.map(resolveTextGenerationProvider),
+          Effect.map(resolveSettingsForDisplay),
         ),
       );
 
@@ -331,11 +361,14 @@ const makeTest = (overrides: DeepPartial<ServerSettings> = {}) =>
       getSettings,
       updateSettings: (patch) =>
         updateTestSettings((currentSettings) =>
-          Effect.succeed(applyServerSettingsPatch(currentSettings, patch)),
+          validateWorkspaceTimeZonePatch(patch, "test settings").pipe(
+            Effect.as(applyServerSettingsPatch(currentSettings, patch)),
+          ),
         ),
       updateProviderInstance: (mutation, patch = {}) =>
         updateTestSettings((currentSettings) =>
           Effect.gen(function* () {
+            yield* validateWorkspaceTimeZonePatch(patch, "test settings");
             yield* ensureProviderInstanceMutationAllowed(
               currentSettings,
               mutation,
@@ -728,6 +761,18 @@ const make = Effect.gen(function* () {
     // A file that failed to decode must stay on disk for the user to repair;
     // the fold below only writes when it started from the file's real contents.
     let settingsFileTrusted = true;
+    const danglingSettingsLink = yield* resolveSymlinkTarget(settingsPath).pipe(
+      Effect.provideService(FileSystem.FileSystem, fs),
+      Effect.provideService(Path.Path, pathService),
+      Effect.flatMap((resolved) =>
+        resolved === pathService.resolve(settingsPath)
+          ? Effect.succeed(false)
+          : fs.exists(resolved).pipe(Effect.map((exists) => !exists)),
+      ),
+      Effect.mapError(
+        (cause) => new ServerSettingsError({ settingsPath, operation: "check-exists", cause }),
+      ),
+    );
 
     if (yield* readConfigExists) {
       const raw = yield* readRawConfig;
@@ -810,7 +855,7 @@ const make = Effect.gen(function* () {
     const migrated = settingsFileTrusted
       ? materializeWorkspaceTimeZone(yield* moveInlineBitbucketTokens(folded))
       : materializeWorkspaceTimeZone(folded);
-    if (settingsFileTrusted && migrated !== loaded) {
+    if (settingsFileTrusted && !danglingSettingsLink && migrated !== loaded) {
       yield* writeSettingsAtomically(migrated);
     }
     return migrated;
@@ -914,7 +959,7 @@ const make = Effect.gen(function* () {
           ),
         ),
       ),
-      Stream.map(resolveTextGenerationProvider),
+      Stream.map(resolveSettingsForDisplay),
     );
 
   type SecretChange = {
@@ -1175,7 +1220,7 @@ const make = Effect.gen(function* () {
         );
         yield* Cache.set(settingsCache, cacheKey, next);
         yield* emitChange(next);
-        return resolveTextGenerationProvider(materialized);
+        return resolveSettingsForDisplay(materialized);
       }),
     );
 
@@ -1183,16 +1228,17 @@ const make = Effect.gen(function* () {
     writeSemaphore.withPermits(1)(
       getSettingsFromCache.pipe(
         Effect.flatMap(materializeProviderEnvironmentSecrets),
-        Effect.map(resolveTextGenerationProvider),
+        Effect.map(resolveSettingsForDisplay),
         Effect.flatMap(use),
       ),
     );
 
   const revalidateAndEmit = writeSemaphore.withPermits(1)(
     Effect.gen(function* () {
+      const previous = yield* getSettingsFromCache;
       yield* Cache.invalidate(settingsCache, cacheKey);
       const settings = yield* getSettingsFromCache;
-      yield* emitChange(settings);
+      if (!NodeUtil.isDeepStrictEqual(previous, settings)) yield* emitChange(settings);
     }),
   );
 
@@ -1299,15 +1345,18 @@ const make = Effect.gen(function* () {
     ready: Deferred.await(startedDeferred),
     getSettings: getSettingsFromCache.pipe(
       Effect.flatMap(materializeProviderEnvironmentSecrets),
-      Effect.map(resolveTextGenerationProvider),
+      Effect.map(resolveSettingsForDisplay),
     ),
     updateSettings: (patch) =>
       updateAndPersistSettings((current) =>
-        Effect.succeed(applyServerSettingsPatch(current, patch)),
+        validateWorkspaceTimeZonePatch(patch, settingsPath).pipe(
+          Effect.as(applyServerSettingsPatch(current, patch)),
+        ),
       ),
     updateProviderInstance: (mutation, patch = {}) =>
       updateAndPersistSettings((current) =>
         Effect.gen(function* () {
+          yield* validateWorkspaceTimeZonePatch(patch, settingsPath);
           yield* ensureProviderInstanceMutationAllowed(current, mutation, settingsPath);
           const patched = applyServerSettingsPatch(current, patch);
           return applyProviderInstanceMutation(patched, mutation);

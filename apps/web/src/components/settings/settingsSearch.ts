@@ -158,6 +158,14 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["model workspace environments projects inheritance checkout"],
   },
   {
+    id: "workspace-timezone",
+    title: "Workspace timezone",
+    to: "/settings/general",
+    targetId: "workspace-display",
+    scope: "environment",
+    searchTerms: ["time zone task due dates today midnight IANA reset"],
+  },
+  {
     id: "project-overview",
     title: "Project overview",
     to: "/settings/projects",

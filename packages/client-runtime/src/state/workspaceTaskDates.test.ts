@@ -4,6 +4,33 @@ import {
   formatWorkspaceTaskDueOn,
   millisecondsUntilWorkspaceMidnight,
 } from "./workspaceTaskDates.ts";
+it("falls back to UTC for unsupported zones in labels and midnight scheduling", () => {
+  const now = DateTime.makeUnsafe("2026-10-15T23:00:00Z");
+  expect(formatWorkspaceTaskDueOn("2026-10-15", now, "No/Such_Zone", "en-GB")).toMatchObject({
+    label: "today",
+    overdue: false,
+    usingUtcFallback: true,
+  });
+  expect(millisecondsUntilWorkspaceMidnight(now, "No/Such_Zone")).toBe(60 * 60 * 1000);
+});
+it("localizes today with the supplied locale", () => {
+  expect(
+    formatWorkspaceTaskDueOn(
+      "2026-10-16",
+      DateTime.makeUnsafe("2026-10-16T12:00:00Z"),
+      "UTC",
+      "fr-FR",
+    )?.label,
+  ).toBe("aujourd’hui");
+});
+it.each(["2026-02-30", "2026-02-29", "0000-01-01", "2026-00-01", "2026-10-16T00:00:00Z"])(
+  "does not format an invalid civil date: %s",
+  (dueOn) => {
+    expect(
+      formatWorkspaceTaskDueOn(dueOn, DateTime.makeUnsafe("2026-10-16T12:00:00Z"), "UTC", "en-GB"),
+    ).toBeNull();
+  },
+);
 it("uses the environment's Johannesburg midnight and preserves the civil day", () => {
   const date = "2026-10-16";
   expect(
@@ -21,7 +48,7 @@ it("uses the environment's Johannesburg midnight and preserves the civil day", (
       "Africa/Johannesburg",
       "en-GB",
     ),
-  ).toMatchObject({ label: "Today", overdue: false });
+  ).toMatchObject({ label: "today", overdue: false });
   expect(
     formatWorkspaceTaskDueOn(
       date,
@@ -41,7 +68,7 @@ it.each([
   const dueOn = instant.slice(0, 10);
   expect(
     formatWorkspaceTaskDueOn(dueOn, DateTime.makeUnsafe(instant), "America/New_York", "en-GB"),
-  ).toMatchObject({ label: "Today", overdue: false });
+  ).toMatchObject({ label: "today", overdue: false });
 });
 it("includes a different year, exposes the full date and leaves absent dates empty", () => {
   const now = DateTime.makeUnsafe("2026-12-31T23:00:00Z");

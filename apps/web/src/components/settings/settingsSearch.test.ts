@@ -45,6 +45,15 @@ const ITEMS: ReadonlyArray<SettingsSearchItem> = [
 ];
 
 describe("searchSettings", () => {
+  it("finds the environment timezone setting in General settings", () => {
+    expect(searchSettings("timezone")[0]).toMatchObject({
+      id: "workspace-timezone",
+      to: "/settings/general",
+      targetId: "workspace-display",
+      scope: "environment",
+    });
+    expect(searchSettings("time zone")[0]?.id).toBe("workspace-timezone");
+  });
   it.each(["send shortcut", "multiline", "new line"])("finds Send shortcut for %s", (query) => {
     expect(searchSettings(query).map((item) => item.id)).toContain("send-shortcut");
   });

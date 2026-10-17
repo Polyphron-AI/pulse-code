@@ -21,6 +21,7 @@ import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as PubSub from "effect/PubSub";
 import * as PlatformError from "effect/PlatformError";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
@@ -36,6 +37,7 @@ import { resolveProviderInstanceTerminalEnvironment } from "./terminal/Manager.t
 const decodeSettingsPatch = Schema.decodeUnknownEffect(ServerSettingsPatch);
 const decodeServerSettings = Schema.decodeUnknownEffect(ServerSettings);
 const decodeServerSettingsJson = Schema.decodeUnknownEffect(Schema.fromJsonString(ServerSettings));
+const encodeServerSettingsJson = Schema.encodeEffect(Schema.fromJsonString(ServerSettings));
 
 const makeServerSettingsLayer = () =>
   ServerSettingsModule.layer.pipe(
@@ -151,11 +153,166 @@ it.layer(NodeServices.layer)("server settings", (it) => {
       const config = yield* ServerConfig.ServerConfig;
       const fs = yield* FileSystem.FileSystem;
       const service = yield* ServerSettingsModule.ServerSettingsService;
-      const malformed = '{ "workspaceDisplayTimeZone": "No/Such_Zone" }';
+      const malformed = '{ "workspaceDisplayTimeZone": "" }';
       yield* fs.writeFileString(config.settingsPath, malformed);
       yield* service.getSettings;
       assert.equal(yield* fs.readFileString(config.settingsPath), malformed);
     }).pipe(Effect.provide(makeServerSettingsLayer())),
+  );
+  it.effect("keeps other settings and the stored timezone when local Intl cannot resolve it", () =>
+    Effect.gen(function* () {
+      const config = yield* ServerConfig.ServerConfig;
+      const fs = yield* FileSystem.FileSystem;
+      const service = yield* ServerSettingsModule.ServerSettingsService;
+      const raw = yield* encodeServerSettingsJson({
+        ...DEFAULT_SERVER_SETTINGS,
+        projectSettingsFolded: true,
+        workspaceDisplayTimeZone: "No/Such_Zone",
+        responseStreamingMode: "turn",
+        enableAgentBrowserAccess: false,
+      });
+      yield* fs.writeFileString(config.settingsPath, raw);
+      const settings = yield* service.getSettings;
+      assert.equal(settings.workspaceDisplayTimeZone, null);
+      assert.equal(settings.responseStreamingMode, "turn");
+      assert.isFalse(settings.enableAgentBrowserAccess);
+      assert.equal(yield* fs.readFileString(config.settingsPath), raw);
+      yield* service.updateSettings({ responseStreamingMode: "paragraph" });
+      assert.equal(
+        (yield* decodeServerSettingsJson(yield* fs.readFileString(config.settingsPath)))
+          .workspaceDisplayTimeZone,
+        "No/Such_Zone",
+      );
+    }).pipe(Effect.provide(makeServerSettingsLayer())),
+  );
+  it.effect("rejects an unsupported timezone write with a clear error and no settings change", () =>
+    Effect.gen(function* () {
+      const service = yield* ServerSettingsModule.ServerSettingsService;
+      const before = yield* service.getSettings;
+      const error = yield* service
+        .updateSettings({ workspaceDisplayTimeZone: "No/Such_Zone" })
+        .pipe(Effect.flip);
+      assert.include(error.message, "Enter a valid IANA timezone");
+      assert.deepEqual(yield* service.getSettings, before);
+    }).pipe(Effect.provide(makeServerSettingsLayer())),
+  );
+  it.effect("materializes the host timezone on a normal first boot without a settings file", () =>
+    Effect.gen(function* () {
+      const config = yield* ServerConfig.ServerConfig;
+      const fs = yield* FileSystem.FileSystem;
+      const service = yield* ServerSettingsModule.ServerSettingsService;
+      yield* fs.remove(config.settingsPath, { force: true });
+      const settings = yield* service.getSettings;
+      assert.isString(settings.workspaceDisplayTimeZone);
+      assert.equal(
+        (yield* decodeServerSettingsJson(yield* fs.readFileString(config.settingsPath)))
+          .workspaceDisplayTimeZone,
+        settings.workspaceDisplayTimeZone,
+      );
+    }).pipe(Effect.provide(makeServerSettingsLayer())),
+  );
+  it.effect("does not materialize the host timezone through a dangling settings link", () =>
+    Effect.gen(function* () {
+      const config = yield* ServerConfig.ServerConfig;
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const target = path.join(
+        path.dirname(config.settingsPath),
+        "missing-target",
+        "settings.json",
+      );
+      yield* fs.remove(config.settingsPath, { force: true });
+      yield* fs.symlink(target, config.settingsPath);
+      // Model POSIX exists semantics at this one lookup, including on Windows.
+      const service = yield* ServerSettingsModule.ServerSettingsService.pipe(
+        Effect.provide(
+          Layer.fresh(ServerSettingsModule.layer).pipe(
+            Layer.provide(ServerSecretStore.layer),
+            Layer.provide(
+              Layer.succeed(FileSystem.FileSystem, {
+                ...fs,
+                exists: (filePath) =>
+                  filePath === config.settingsPath ? Effect.succeed(false) : fs.exists(filePath),
+              }),
+            ),
+          ),
+        ),
+      );
+      assert.isString((yield* service.getSettings).workspaceDisplayTimeZone);
+      assert.isFalse(yield* fs.exists(target));
+      assert.isFalse(yield* fs.exists(path.dirname(target)));
+      assert.equal(yield* fs.readLink(config.settingsPath), target);
+    }).pipe(Effect.provide(makeServerSettingsLayer())),
+  );
+  it.effect("skips unchanged watcher notifications and emits a changed settings snapshot", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const config = yield* ServerConfig.ServerConfig;
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const events = yield* PubSub.unbounded<FileSystem.WatchEvent>();
+        const watching = yield* Deferred.make<void>();
+        let read = yield* Deferred.make<void>();
+        const watchedFs = {
+          ...fs,
+          watch: (filePath: string) =>
+            filePath === path.dirname(config.settingsPath)
+              ? Stream.unwrap(
+                  PubSub.subscribe(events).pipe(
+                    Effect.tap(() => Deferred.succeed(watching, undefined)),
+                    Effect.map(Stream.fromSubscription),
+                  ),
+                )
+              : fs.watch(filePath),
+          readFileString: (filePath: string, encoding?: string) =>
+            fs
+              .readFileString(filePath, encoding)
+              .pipe(
+                Effect.tap(() =>
+                  filePath === config.settingsPath
+                    ? Deferred.succeed(read, undefined)
+                    : Effect.void,
+                ),
+              ),
+        };
+        yield* Effect.gen(function* () {
+          const service = yield* ServerSettingsModule.ServerSettingsService;
+          yield* service.start;
+          yield* Deferred.await(watching);
+          const changes = yield* service.subscribeChanges;
+          const emitted = yield* Deferred.make<ServerSettings>();
+          yield* changes.pipe(
+            Stream.runForEach((settings) => Deferred.succeed(emitted, settings)),
+            Effect.forkChild({ startImmediately: true }),
+          );
+          read = yield* Deferred.make<void>();
+          yield* PubSub.publish(events, { _tag: "Update" as const, path: config.settingsPath });
+          yield* TestClock.adjust("100 millis");
+          yield* Deferred.await(read);
+          yield* service.withSettingsSnapshot(() => Effect.void);
+          yield* Effect.yieldNow;
+          assert.isTrue(Option.isNone(yield* Deferred.poll(emitted)));
+          const settings = yield* service.getSettings;
+          yield* fs.writeFileString(
+            config.settingsPath,
+            yield* encodeServerSettingsJson({
+              ...settings,
+              responseStreamingMode: "turn",
+            }),
+          );
+          yield* PubSub.publish(events, { _tag: "Update" as const, path: config.settingsPath });
+          yield* TestClock.adjust("100 millis");
+          assert.equal((yield* Deferred.await(emitted)).responseStreamingMode, "turn");
+        }).pipe(
+          Effect.provide(
+            Layer.fresh(ServerSettingsModule.layer).pipe(
+              Layer.provide(ServerSecretStore.layer),
+              Layer.provide(Layer.succeed(FileSystem.FileSystem, watchedFs)),
+            ),
+          ),
+        );
+      }),
+    ).pipe(Effect.provide(makeServerSettingsLayer())),
   );
   it.effect("migrates saved token delivery to paragraph buffering without resetting settings", () =>
     Effect.gen(function* () {
@@ -292,11 +449,11 @@ it.layer(NodeServices.layer)("server settings", (it) => {
 
         yield* writeFileStringAtomically({
           filePath: linkedSettingsPath,
-          contents: `{ "responseStreamingMode": "paragraph" }`,
+          contents: `{ "responseStreamingMode": "turn" }`,
         });
 
         const change = yield* changes.pipe(Stream.runHead, Effect.timeout("2 seconds"));
-        assert.equal(Option.getOrUndefined(change)?.responseStreamingMode, "paragraph");
+        assert.equal(Option.getOrUndefined(change)?.responseStreamingMode, "turn");
       }),
     ).pipe(TestClock.withLive, Effect.provide(makeServerSettingsLayer())),
   );

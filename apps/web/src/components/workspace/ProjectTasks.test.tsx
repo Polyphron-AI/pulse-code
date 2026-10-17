@@ -8,17 +8,27 @@ import { afterEach, expect, it, vi } from "vite-plus/test";
 import { EnvironmentId, ProjectId, WorkspaceToolsError } from "@t3tools/contracts";
 import { ProjectTasks, ProjectWorkspaceSettings } from "./ProjectTasks";
 import { WorkspaceEngagement, WorkspaceItemMutationContext } from "./WorkspaceEngagement";
-import { useWorkspaceResourceState, WorkspaceResourcesProvider } from "./workspaceResourceState";
+import {
+  useWorkspaceResourceState,
+  WorkspaceResourcesProvider,
+  WorkspaceResourcesBodyContext,
+} from "./workspaceResourceState";
 const mocks = vi.hoisted(() => ({
   command: vi.fn(),
   operate: true,
   tasksV2: false,
   newCommand: vi.fn(),
   zone: "Africa/Johannesburg",
+  settingsReady: true,
 }));
 vi.mock("./mail/useMailCapabilities", () => ({
-  useMailCapabilities: () => ({ workspaceTools: true, workspaceTasksV2: mocks.tasksV2 }),
+  useMailCapabilities: () => ({
+    workspaceTools: true,
+    workspaceTasksV2: mocks.tasksV2,
+    ready: mocks.settingsReady,
+  }),
 }));
+vi.mock("../../timestampFormat", () => ({ timestampLocale: "en-GB" }));
 vi.mock("../../state/session", () => ({
   useEnvironmentSessionState: () => ({
     isPending: false,
@@ -73,6 +83,7 @@ afterEach(async () => {
   mocks.operate = true;
   mocks.tasksV2 = false;
   mocks.zone = "Africa/Johannesburg";
+  mocks.settingsReady = true;
   vi.useRealTimers();
   vi.clearAllMocks();
   vi.unstubAllGlobals();
@@ -606,7 +617,7 @@ it("refreshes date labels at environment midnight, zone changes and resume witho
   });
   expect(renderer!.root.findByType("time").children.join("")).toBe("16 Oct");
   await act(() => vi.advanceTimersByTime(1000));
-  expect(renderer!.root.findByType("time").children.join("")).toBe("Today");
+  expect(renderer!.root.findByType("time").children.join("")).toBe("today");
   mocks.zone = "America/New_York";
   await act(() => renderer!.update(view()));
   expect(renderer!.root.findByType("time").children.join("")).toBe("16 Oct");
@@ -618,6 +629,93 @@ it("refreshes date labels at environment midnight, zone changes and resume witho
   await act(() => renderer!.unmount());
   renderer = undefined;
   expect(vi.getTimerCount()).toBe(0);
+});
+it("stops the date clock while the resource body is hidden and resyncs when shown", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-10-15T21:59:59Z"));
+  mocks.tasksV2 = true;
+  const task = {
+    id: "wskt_00000000-0000-0000-0000-000000000001",
+    projectId,
+    title: "Task",
+    column: "To do",
+    dueOn: "2026-10-16",
+    revision: 0,
+  };
+  const view = (hidden: boolean) => (
+    <WorkspaceResourcesBodyContext value={{ hidden, restoreFocus() {} }}>
+      <ProjectTasks
+        environmentId={environmentId}
+        projectId={projectId}
+        selected={task}
+        onSelect={() => {}}
+      />
+    </WorkspaceResourcesBodyContext>
+  );
+  const focus = vi.spyOn(window, "addEventListener");
+  const visibility = vi.spyOn(document, "addEventListener");
+  const removeFocus = vi.spyOn(window, "removeEventListener");
+  const removeVisibility = vi.spyOn(document, "removeEventListener");
+  try {
+    await act(() => {
+      renderer = create(view(true));
+    });
+    expect(vi.getTimerCount()).toBe(0);
+    expect(focus.mock.calls.some(([type]) => type === "focus")).toBe(false);
+    expect(visibility.mock.calls.some(([type]) => type === "visibilitychange")).toBe(false);
+    await act(() => renderer!.update(view(false)));
+    expect(vi.getTimerCount()).toBe(1);
+    await act(() => renderer!.update(view(true)));
+    expect(vi.getTimerCount()).toBe(0);
+    expect(removeFocus.mock.calls.some(([type]) => type === "focus")).toBe(true);
+    expect(removeVisibility.mock.calls.some(([type]) => type === "visibilitychange")).toBe(true);
+    vi.setSystemTime(new Date("2026-10-16T12:00:00Z"));
+    await act(() => {
+      window.dispatchEvent(new Event("focus"));
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    expect(renderer!.root.findByType("time").children.join("")).toBe("16 Oct");
+    await act(() => renderer!.update(view(false)));
+    expect(renderer!.root.findByType("time").children.join("")).toBe("today");
+    expect(vi.getTimerCount()).toBe(1);
+  } finally {
+    focus.mockRestore();
+    visibility.mockRestore();
+    removeFocus.mockRestore();
+    removeVisibility.mockRestore();
+  }
+});
+it("shows a neutral loading state and announces a timezone fallback", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  mocks.tasksV2 = true;
+  mocks.settingsReady = false;
+  const task = {
+    id: "wskt_00000000-0000-0000-0000-000000000001",
+    projectId,
+    title: "Task",
+    column: "To do",
+    dueOn: "2026-10-16",
+    revision: 0,
+  };
+  const view = () => (
+    <ProjectTasks
+      environmentId={environmentId}
+      projectId={projectId}
+      selected={task}
+      onSelect={() => {}}
+    />
+  );
+  await act(() => {
+    renderer = create(view());
+  });
+  expect(renderer!.root.findAllByType("time")).toHaveLength(0);
+  expect(JSON.stringify(renderer!.toJSON())).toContain("Loading workspace timezone...");
+  mocks.settingsReady = true;
+  mocks.zone = "No/Such_Zone";
+  await act(() => renderer!.update(view()));
+  expect(renderer!.root.findAllByType("time")).toHaveLength(1);
+  expect(JSON.stringify(renderer!.toJSON())).toContain("Dates use UTC");
 });
 
 it("resets a dirty task editor for an equal task ID on a different environment", async () => {
