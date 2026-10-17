@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { getByRole } from "@testing-library/dom";
+import { getByRole, queryByRole } from "@testing-library/dom";
 import type { CommandPaletteRow } from "./CommandPalette.logic";
 import {
   createMemoryHistory,
@@ -12,6 +12,7 @@ import {
   RouterProvider,
 } from "@tanstack/react-router";
 import { expect, it, vi } from "vite-plus/test";
+import { Popover, PopoverPopup, PopoverTrigger } from "./ui/popover";
 import { CommandPalette } from "./CommandPalette";
 import { openCommandPalette } from "../commandPaletteBus";
 import { parseWorkspaceSearch } from "./workspace/workspaceNavigation";
@@ -211,3 +212,56 @@ it.each(["focused", "blurred"])(
     }
   },
 );
+
+it("keeps a listed palette action usable after opening it from a focused page popup", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const run = vi.fn();
+  const rootRoute = createRootRoute({
+    component: () => (
+      <CommandPalette>
+        <Popover>
+          <PopoverTrigger>Page actions</PopoverTrigger>
+          <PopoverPopup aria-label="Captured page actions">
+            <div data-workspace-action-host="item">
+              <button data-workspace-action="addToProject" onClick={run}>
+                Add captured page
+              </button>
+            </div>
+          </PopoverPopup>
+        </Popover>
+        <Outlet />
+      </CommandPalette>
+    ),
+  });
+  const workspace = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/workspace",
+    validateSearch: parseWorkspaceSearch,
+    component: () => <p>Workspace</p>,
+  });
+  const router = createRouter({
+    routeTree: rootRoute.addChildren([workspace]),
+    history: createMemoryHistory({ initialEntries: ["/workspace?space=projects"] }),
+    defaultPendingMs: 0,
+    defaultPendingMinMs: 0,
+  });
+  await router.load();
+  const node = document.createElement("div");
+  document.body.append(node);
+  const root = createRoot(node);
+  try {
+    await act(() => root.render(<RouterProvider router={router} />));
+    await act(() => getByRole(node, "button", { name: "Page actions" }).click());
+    await act(() => getByRole(document.body, "button", { name: "Add captured page" }).focus());
+    await act(() => openCommandPalette());
+    const listed = queryByRole(document.body, "button", { name: "Add selected item to project" });
+    if (listed) {
+      await act(() => listed.click());
+      expect(run).toHaveBeenCalledTimes(1);
+    } else expect(run).not.toHaveBeenCalled();
+  } finally {
+    await act(() => root.unmount());
+    node.remove();
+    vi.unstubAllGlobals();
+  }
+});

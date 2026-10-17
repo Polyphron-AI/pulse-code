@@ -82,7 +82,9 @@ export function WorkspaceItemActionButtons({
     </>
   );
   return layout === "menu" ? (
-    <div className="flex flex-col items-start gap-1">{actions}</div>
+    <div className="flex flex-col items-start gap-1 pointer-coarse:[&_button]:min-h-11 pointer-coarse:[&_button]:min-w-11">
+      {actions}
+    </div>
   ) : (
     actions
   );

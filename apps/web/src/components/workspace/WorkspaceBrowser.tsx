@@ -250,11 +250,12 @@ export function WorkspaceBrowser({
     onLink: linkPage,
     onOpenExternal: openExternal,
     onAddressEdited: () => setError(null),
+    // Link support is the existing compatibility proxy for servers with preview reads.
     onRetryRead:
       previewRead.error && capabilitiesReady && workspaceLinks ? previewRead.refresh : undefined,
   };
   const renderResourceChrome: PreviewChromeRenderer = (controls) => (
-    <ResourceBrowserChrome {...chrome} controls={controls} />
+    <ResourceBrowserChrome key={`${environmentId}:${projectId}`} {...chrome} controls={controls} />
   );
   if (hidden) return null;
   if (desktop) {
@@ -272,7 +273,12 @@ export function WorkspaceBrowser({
                 : (config.error ??
                   "Choose an available Browser thread in this project's workspace settings.")}
           </p>
-          <ResourceBrowserChrome {...chrome} requestedAddress={request} external />
+          <ResourceBrowserChrome
+            key={`${environmentId}:${projectId}`}
+            {...chrome}
+            requestedAddress={request}
+            external
+          />
         </div>
       );
     if (!connected)
@@ -306,7 +312,7 @@ export function WorkspaceBrowser({
     return (
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {previewRead.error ? (
-          <ResourceBrowserChrome {...chrome} external />
+          <ResourceBrowserChrome key={`${environmentId}:${projectId}`} {...chrome} external />
         ) : (
           <Suspense fallback={<p role="status">Loading Browser...</p>}>
             <PreviewPanel
@@ -321,7 +327,7 @@ export function WorkspaceBrowser({
       </div>
     );
   }
-  return <ResourceBrowserChrome {...chrome} external />;
+  return <ResourceBrowserChrome key={`${environmentId}:${projectId}`} {...chrome} external />;
 }
 
 /** Keeps address edits and popup state outside the native preview render tree. */

@@ -43,7 +43,11 @@ export function WorkspaceItemMenuView({
         )}
       </div>
       {available ? (
-        <PopoverPopup align="end" variant={popupVariant}>
+        <PopoverPopup
+          align="end"
+          variant={popupVariant}
+          className="pointer-coarse:[&_button]:min-h-11 pointer-coarse:[&_button]:min-w-11"
+        >
           {actions}
         </PopoverPopup>
       ) : null}

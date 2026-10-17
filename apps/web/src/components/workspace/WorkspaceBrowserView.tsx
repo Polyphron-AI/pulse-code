@@ -46,6 +46,7 @@ export function WorkspaceBrowserView({
   readonly onSearchChange?: (open: boolean) => void;
 }) {
   const pill = useRef<HTMLFormElement>(null);
+  const menuBody = useRef<HTMLDivElement>(null);
   return (
     <div
       className={cn("flex min-h-0 min-w-0 flex-col", renderPage ? "flex-1" : "shrink-0")}
@@ -66,7 +67,7 @@ export function WorkspaceBrowserView({
     >
       <form
         ref={pill}
-        className="mb-[13px] flex h-[29px] shrink-0 items-center gap-2 rounded-full border border-border/20 bg-muted pl-2 pr-0.5 text-muted-foreground has-[input:focus-visible]:ring-2 has-[input:focus-visible]:ring-ring"
+        className="pointer-coarse:h-11 pointer-coarse:[&_button]:min-h-11 pointer-coarse:[&_button]:min-w-11 mb-[13px] flex h-[29px] shrink-0 items-center gap-2 rounded-full border border-border/20 bg-muted pl-2 pr-0.5 text-muted-foreground has-[input:focus-visible]:ring-2 has-[input:focus-visible]:ring-ring"
         aria-busy={loading}
         onSubmit={(event) => {
           event.preventDefault();
@@ -100,10 +101,16 @@ export function WorkspaceBrowserView({
             padding="compact"
             variant="opaque"
             aria-label="Browser actions"
+            initialFocus={() =>
+              menuBody.current?.querySelector<HTMLElement>("button:not(:disabled)") ?? true
+            }
           >
-            <div className="flex max-w-64 flex-col items-start gap-1">
+            <div
+              ref={menuBody}
+              className="flex max-w-64 flex-col items-start gap-1 pointer-coarse:[&_button]:min-h-11 pointer-coarse:[&_button]:min-w-11"
+            >
               {displayedUrl ? (
-                <p className="max-w-full break-all px-1.75 text-sm text-muted-foreground sm:text-xs">
+                <p className="max-w-full truncate px-1.75 text-sm text-muted-foreground sm:text-xs">
                   {displayedUrl}
                 </p>
               ) : null}
@@ -165,7 +172,7 @@ export function WorkspaceBrowserSearchResults({
   readonly renderRow?: (page: WorkspaceLinkView, row: ReactNode) => ReactNode;
 }) {
   return (
-    <div className="min-w-0 space-y-2 text-sm sm:text-xs">
+    <div className="min-w-0 space-y-2 text-sm sm:text-xs pointer-coarse:[&_button]:min-h-11 pointer-coarse:[&_button]:min-w-11">
       <p className="px-1.75 font-medium">Linked pages</p>
       {error ? (
         <p role="alert" className="px-1.75 text-destructive">
@@ -245,20 +252,20 @@ export function WorkspaceBrowserExternalPage({
   readonly onOpen: () => void;
   readonly onCopy: () => Promise<boolean>;
 }) {
-  const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
-  const copied = copiedAddress === address;
+  const [copyReceipt, setCopyReceipt] = useState<{ address: string } | null>(null);
+  const copied = copyReceipt?.address === address;
   // Parsing applies host casing and slash normalization without removing query parts or fragments.
   const removedUrlParts =
     url && URL.canParse(address.trim()) && url !== new URL(address.trim()).toString();
   useEffect(() => {
-    if (!copied) return;
-    const timeout = window.setTimeout(() => setCopiedAddress(null), 2000);
+    if (copyReceipt?.address !== address) return;
+    const timeout = window.setTimeout(() => setCopyReceipt(null), 2000);
     return () => window.clearTimeout(timeout);
-  }, [copied]);
+  }, [address, copyReceipt]);
   return (
     <section
       aria-label="External-tab Browser"
-      className="min-h-[311px] min-w-0 shrink-0 space-y-3 border border-border bg-background p-4 text-sm leading-5 sm:text-xs"
+      className="pointer-coarse:[&_button]:min-h-11 pointer-coarse:[&_button]:min-w-11 min-h-[311px] min-w-0 shrink-0 space-y-3 border border-border bg-background p-4 text-sm leading-5 sm:text-xs"
       style={{ borderRadius: 9 }}
     >
       <h2 data-workspace-browser-heading className="text-base font-semibold">
@@ -285,7 +292,6 @@ export function WorkspaceBrowserExternalPage({
           Paste an http or https address, or search this project's linked pages.
         </p>
       )}
-      {linkHint ? <p className="text-muted-foreground">{linkHint}</p> : null}
       <div className="flex flex-col items-start gap-2">
         <div className="flex gap-2">
           <Button
@@ -304,16 +310,19 @@ export function WorkspaceBrowserExternalPage({
             variant="ghost"
             className="min-w-28 sm:min-w-24"
             disabled={!url}
-            aria-live="polite"
             onClick={async () => {
-              if (await onCopy()) setCopiedAddress(address);
+              if (await onCopy()) setCopyReceipt({ address });
             }}
           >
             {copied ? "Copied" : "Copy address"}
           </Button>
         </div>
         {linkAction}
+        {linkHint ? <p className="text-muted-foreground">{linkHint}</p> : null}
       </div>
+      <p role="status" aria-live="polite" className="sr-only">
+        {copied ? "Address copied." : ""}
+      </p>
       <p className="text-muted-foreground">
         If no tab opened, allow pop-ups and try again, or copy this address.
       </p>

@@ -1,5 +1,13 @@
 // @vitest-environment happy-dom
-import { act, StrictMode, useLayoutEffect, type ComponentProps, type ReactNode } from "react";
+import {
+  act,
+  StrictMode,
+  useCallback,
+  useSyncExternalStore,
+  useLayoutEffect,
+  type ComponentProps,
+  type ReactNode,
+} from "react";
 import { create, type ReactTestRenderer } from "react-test-renderer";
 import { createRoot, type Root } from "react-dom/client";
 import { getByRole, queryByRole } from "@testing-library/dom";
@@ -70,13 +78,19 @@ const mocks = vi.hoisted(() => ({
   linkEnvironment: vi.fn(),
   unlink: vi.fn(),
   actionItems: vi.fn(),
+  linksByEnvironment: new Map<string, WorkspaceLinkList>(),
+  linkListeners: new Map<string, Set<() => void>>(),
+  listRequests: new Map<string, number>(),
 }));
 vi.mock("@tanstack/react-router", () => ({ useNavigate: () => vi.fn() }));
 vi.mock("../../state/workspaceLinks", () => ({
   workspaceLinks: {
-    list: (input: unknown) => {
+    list: (input: {
+      environmentId: EnvironmentId;
+      input: { item: { type: "project"; projectId: ProjectId } };
+    }) => {
       mocks.linkQueries(input);
-      return "links";
+      return input;
     },
   },
 }));
@@ -149,18 +163,42 @@ vi.mock("../../state/preview", () => ({
   },
 }));
 vi.mock("../../state/query", () => ({
-  useEnvironmentQuery: (input: unknown) => ({
-    data:
-      input === "config"
-        ? mocks.configLoading
-          ? undefined
-          : { browserThreadId: mocks.configured ? mocks.configuredThread : "missing" }
-        : input === "links"
-          ? mocks.projectLinks
+  useEnvironmentQuery: (input: unknown) => {
+    const request =
+      typeof input === "object" && input !== null && "environmentId" in input
+        ? (input as { environmentId: string; input: { item: { projectId: string } } })
+        : null;
+    const key = request ? `${request.environmentId}:${request.input.item.projectId}` : "disabled";
+    const linked = useSyncExternalStore(
+      useCallback(
+        (listener) => {
+          const listeners = mocks.linkListeners.get(key) ?? new Set();
+          if (request && listeners.size === 0)
+            mocks.listRequests.set(key, (mocks.listRequests.get(key) ?? 0) + 1);
+          mocks.linkListeners.set(key, listeners);
+          listeners.add(listener);
+          return () => {
+            listeners.delete(listener);
+          };
+        },
+        [key],
+      ),
+      () =>
+        request
+          ? (mocks.linksByEnvironment.get(request.environmentId) ?? mocks.projectLinks)
           : null,
-    error: input === "preview" ? mocks.readError : input === "config" ? mocks.configError : null,
-    refresh: mocks.refresh,
-  }),
+    );
+    return {
+      data:
+        input === "config"
+          ? mocks.configLoading
+            ? undefined
+            : { browserThreadId: mocks.configured ? mocks.configuredThread : "missing" }
+          : linked,
+      error: input === "preview" ? mocks.readError : input === "config" ? mocks.configError : null,
+      refresh: mocks.refresh,
+    };
+  },
 }));
 vi.mock("../../state/use-atom-command", () => ({ useAtomCommand: () => mocks.open }));
 vi.mock("../../previewStateStore", async (original) => ({
@@ -191,6 +229,7 @@ vi.mock("./mail/useMailLinks", () => ({
 }));
 vi.mock("./mail/useMailCapabilities", () => ({
   useMailCapabilities: () => ({
+    workspaceTools: true,
     workspaceLinks: mocks.linksSupported,
     ready: mocks.capabilitiesReady,
   }),
@@ -335,6 +374,8 @@ beforeEach(() => {
   mocks.configLoading = false;
   mocks.readError = null;
   mocks.previewMounts = 0;
+  mocks.linksByEnvironment.clear();
+  mocks.listRequests.clear();
   mocks.focusUrlNonce = null;
   mocks.realLocalApi = false;
   mocks.linksSupported = true;
@@ -497,8 +538,11 @@ it.each(["environment change", "project change", "unmount"])(
       root = undefined;
     }
     if (root) {
-      expect(getByRole(node!, "textbox", { name: "Browser page address" })).toBe(address);
-      expect(address.hasAttribute("disabled")).toBe(false);
+      expect(getByRole(node!, "textbox", { name: "Browser page address" })).not.toBe(address);
+      expect(address.isConnected).toBe(false);
+      expect(
+        getByRole<HTMLInputElement>(node!, "textbox", { name: "Browser page address" }).disabled,
+      ).toBe(false);
     }
     await act(() => reject(new Error("late failure")));
     if (!root) {
@@ -2128,3 +2172,275 @@ it("returns focus to Browser actions when its compact menu closes", async () => 
   expect(queryByRole(document.body, "button", { name: "Reload" })).toBeNull();
   expect(document.activeElement).toBe(trigger);
 });
+
+it.each(["menu", "pending unlink"])(
+  "resets Browser chrome across a non-keyed scope change with %s",
+  async (state) => {
+    mocks.desktop = false;
+    mocks.projectLinks = decodeLinkList({
+      linked: [
+        {
+          id: "wl_00000000-0000-0000-0000-000000000001",
+          item: {
+            ref: { type: "url", url: "https://example.test/handbook" },
+            title: "Project handbook",
+          },
+          status: "confirmed",
+          source: { type: "user" },
+          updatedAt: "2026-10-13T09:00:00.000Z",
+        },
+      ],
+      suggested: [],
+      truncated: false,
+    });
+    let reject!: (cause: Error) => void;
+    mocks.unlink.mockImplementationOnce(
+      () =>
+        new Promise<void>((_, fail) => {
+          reject = fail;
+        }),
+    );
+    node = document.createElement("div");
+    document.body.append(node);
+    root = createRoot(node);
+    const render = (environment = environmentId) =>
+      root!.render(
+        <AppAtomRegistryProvider>
+          <WorkspaceBrowser {...props} environmentId={environment} />
+        </AppAtomRegistryProvider>,
+      );
+    await act(() => render());
+    const input = getByRole<HTMLInputElement>(node, "textbox", { name: "Browser page address" });
+    await act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
+        input,
+        state === "menu" ? "https://example.test/old" : "handbook",
+      );
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    if (state === "menu")
+      await act(() => getByRole(node!, "button", { name: "Browser actions" }).click());
+    else {
+      await act(() =>
+        input
+          .closest("form")!
+          .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+      );
+      await act(() => getByRole(node!, "button", { name: "Unlink" }).click());
+    }
+    await act(() => render(EnvironmentId.make("other")));
+    expect(queryByRole(document.body, "dialog", { name: "Browser actions" })).toBeNull();
+    expect(queryByRole(node!, "region", { name: "Linked pages" })).toBeNull();
+    expect(
+      getByRole<HTMLInputElement>(node!, "textbox", { name: "Browser page address" }).value,
+    ).toBe("");
+    if (state === "pending unlink") await act(() => reject(new Error("Old unlink failed")));
+    expect(document.body.textContent).not.toContain("Old unlink failed");
+  },
+);
+
+it("restarts copied feedback after every successful copy and announces it beside the button", async () => {
+  vi.useFakeTimers();
+  mocks.desktop = false;
+  vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue(undefined);
+  await act(() => {
+    renderer = create(<ResourceApp />);
+  });
+  await setAddress("https://example.test/copy");
+  await clickText("Copy address");
+  await act(() => vi.advanceTimersByTime(1500));
+  await clickText("Copied");
+  const status = renderer!.root.findByProps({ role: "status", "aria-live": "polite" });
+  expect(status.props.children).toBe("Address copied.");
+  await act(() => vi.advanceTimersByTime(600));
+  expect(text()).toContain("Copied");
+  await act(() => vi.advanceTimersByTime(1400));
+  expect(text()).not.toContain("Copied");
+  await clickText("Copy address");
+  await act(() => resourceState.close());
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+it("links after a scope change and keeps the new Link pending when the old one finishes", async () => {
+  mocks.desktop = false;
+  let oldFinish!: () => void;
+  let newFinish!: () => void;
+  mocks.link
+    .mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          oldFinish = resolve;
+        }),
+    )
+    .mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          newFinish = resolve;
+        }),
+    );
+  node = document.createElement("div");
+  document.body.append(node);
+  root = createRoot(node);
+  const render = (env: EnvironmentId) =>
+    root!.render(
+      <AppAtomRegistryProvider>
+        <WorkspaceBrowser {...props} environmentId={env} />
+      </AppAtomRegistryProvider>,
+    );
+  const address = async (value: string) =>
+    act(() => {
+      const input = getByRole<HTMLInputElement>(node!, "textbox", { name: "Browser page address" });
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  await act(() => render(environmentId));
+  await address("https://example.test/old");
+  await act(() => getByRole(node!, "button", { name: "Link this page" }).click());
+  await act(() => render(EnvironmentId.make("other")));
+  await address("https://example.test/new");
+  await act(() => getByRole(node!, "button", { name: "Link this page" }).click());
+  expect(mocks.link.mock.calls).toEqual([
+    [
+      selectedItem,
+      { ref: { type: "url", url: "https://example.test/old" }, title: "https://example.test/old" },
+    ],
+    [
+      selectedItem,
+      { ref: { type: "url", url: "https://example.test/new" }, title: "https://example.test/new" },
+    ],
+  ]);
+  expect(mocks.linkEnvironment.mock.calls).toEqual([
+    [environmentId],
+    [EnvironmentId.make("other")],
+  ]);
+  await act(() => oldFinish());
+  const link = getByRole(node!, "button", { name: "Link this page" });
+  expect(link.getAttribute("aria-disabled")).toBe("true");
+  await act(() => {
+    link.click();
+    link.click();
+  });
+  expect(mocks.link).toHaveBeenCalledTimes(2);
+  await act(() => newFinish());
+  expect(link.getAttribute("aria-disabled")).not.toBe("true");
+});
+
+it("focuses the first enabled external popup action when opened by keyboard", async () => {
+  mocks.desktop = false;
+  node = document.createElement("div");
+  document.body.append(node);
+  root = createRoot(node);
+  await act(() =>
+    root!.render(
+      <ResourceApp initialRequest={{ type: "url", url: "https://example.test/menu" }} />,
+    ),
+  );
+  const trigger = getByRole(node!, "button", { name: "Browser actions" });
+  await act(() => {
+    trigger.focus();
+    trigger.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", code: "Enter", bubbles: true }),
+    );
+    trigger.click();
+  });
+  const popup = getByRole(document.body, "dialog", { name: "Browser actions" });
+  expect(document.activeElement).toBe(popup.querySelector("button:not(:disabled)"));
+});
+
+it.each(["local", "direct", "relay", "tunnel"])(
+  "keeps the Browser request budget and environment isolation at the %s query boundary",
+  async (mode) => {
+    mocks.desktop = false;
+    const remoteList = decodeLinkList({
+      linked: [
+        {
+          id: "wl_00000000-0000-0000-0000-000000000009",
+          item: {
+            ref: { type: "url", url: `https://example.test/${mode}` },
+            title: "Second-client handbook",
+          },
+          status: "confirmed",
+          source: { type: "user" },
+          updatedAt: "2026-10-13T09:00:00.000Z",
+        },
+      ],
+      suggested: [],
+      truncated: false,
+    });
+    node = document.createElement("div");
+    document.body.append(node);
+    root = createRoot(node);
+    const render = () => root!.render(<WorkspaceBrowser {...props} />);
+    await act(() => render());
+    expect(mocks.linkQueries).not.toHaveBeenCalled();
+    expect(mocks.listRequests.size).toBe(0);
+    const input = getByRole<HTMLInputElement>(node, "textbox", { name: "Browser page address" });
+    await act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
+        input,
+        "handbook",
+      );
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input
+        .closest("form")!
+        .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    // A submitted input event commits before the next interaction.
+    await act(() =>
+      input
+        .closest("form")!
+        .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+    expect(mocks.listRequests.get("remote:p")).toBe(1);
+    const before = getByRole(node, "region", { name: "Linked pages" }).textContent;
+    await act(() => {
+      mocks.linksByEnvironment.set("other", remoteList);
+      mocks.linkListeners.get("other:p")?.forEach((listener) => listener());
+    });
+    expect(getByRole(node, "region", { name: "Linked pages" }).textContent).toBe(before);
+    await act(() => {
+      mocks.linksByEnvironment.set("remote", remoteList);
+      mocks.linkListeners.get("remote:p")?.forEach((listener) => listener());
+    });
+    expect(getByRole(node, "region", { name: "Linked pages" }).textContent).toContain(
+      "Second-client handbook",
+    );
+    await act(() => render());
+    expect(mocks.listRequests.get("remote:p")).toBe(1);
+    await act(() =>
+      input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })),
+    );
+    expect(mocks.linkListeners.get("remote:p")?.size).toBe(0);
+    await act(() =>
+      input
+        .closest("form")!
+        .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+    expect(mocks.listRequests.get("remote:p")).toBe(2);
+    expect(mocks.open).not.toHaveBeenCalled();
+    expect(mocks.external).not.toHaveBeenCalled();
+  },
+);
+
+it.each(["t", "missing"])(
+  "guides a web thread without a Resources host, including loaded shell %s",
+  async (threadId) => {
+    mocks.desktop = false;
+    node = document.createElement("div");
+    document.body.append(node);
+    root = createRoot(node);
+    await act(() =>
+      root!.render(
+        <LinkedSection
+          environmentId={environmentId}
+          item={{ type: "thread", threadId: ThreadId.make(threadId) }}
+          title="Thread"
+          onOpen={() => {}}
+        />,
+      ),
+    );
+    expect(node.textContent).toContain("Open Browser from Resources and choose a project.");
+    expect(mocks.open).not.toHaveBeenCalled();
+    expect(mocks.external).not.toHaveBeenCalled();
+  },
+);

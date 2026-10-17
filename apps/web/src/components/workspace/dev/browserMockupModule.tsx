@@ -13,6 +13,8 @@ import {
   hasExplicitScheme,
 } from "../workspaceBrowser.logic";
 import { WorkspaceItemActionButtons } from "../WorkspaceItemActionButtons";
+import { MoreHorizontalIcon } from "lucide-react";
+import { Popover, PopoverPopup, PopoverTrigger } from "../../ui/popover";
 import { Button } from "../../ui/button";
 import type { CreateWorkspaceMockupModule } from "./workspaceMockupFixtures";
 
@@ -112,6 +114,58 @@ export const createWorkspaceMockupModule: CreateWorkspaceMockupModule = (session
           searchResults={
             <WorkspaceBrowserSearchResults
               pages={findLinkedPages(pages, addressDraft)}
+              renderRow={(page, row) => (
+                <Popover>
+                  <div className="flex min-w-0 items-center gap-1">
+                    {row}
+                    <PopoverTrigger
+                      render={<Button size="icon-xs" variant="ghost" aria-label="Item actions" />}
+                    >
+                      <MoreHorizontalIcon />
+                    </PopoverTrigger>
+                  </div>
+                  <PopoverPopup
+                    padding="compact"
+                    variant="opaque"
+                    aria-label="Linked page actions"
+                    className="pointer-coarse:[&_button]:min-h-11 pointer-coarse:[&_button]:min-w-11"
+                  >
+                    <p className="text-sm text-muted-foreground sm:text-xs">Linked by you</p>
+                    <Button
+                      size="xs"
+                      variant="ghost"
+                      onClick={() => {
+                        void session.record("unlink", page.item.ref);
+                      }}
+                    >
+                      Unlink
+                    </Button>
+                    <WorkspaceItemActionButtons
+                      layout="menu"
+                      startThread={{
+                        onClick: () => {
+                          void session.record("open-thread", page.item.ref);
+                        },
+                      }}
+                      addToProject={{
+                        onClick: () => {
+                          void session.record("add-to-project", page.item.ref);
+                        },
+                      }}
+                      startProject={{
+                        onClick: () => {
+                          void session.record("start-project", page.item.ref);
+                        },
+                      }}
+                      startAutomation={{
+                        onClick: () => {
+                          void session.record("start-automation", page.item.ref);
+                        },
+                      }}
+                    />
+                  </PopoverPopup>
+                </Popover>
+              )}
               truncated={pages.truncated}
               onOpen={(endpoint) => {
                 if (endpoint.ref.type === "url") {

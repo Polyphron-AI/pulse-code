@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { getByRole } from "@testing-library/dom";
+import { getByRole, getAllByRole } from "@testing-library/dom";
 import { expect, it, vi } from "vite-plus/test";
 import { createWorkspaceMockupModule } from "./browserMockupModule";
 import {
@@ -62,6 +62,13 @@ it.each(["search-results", "empty-results", "truncated-results", "captured-page"
         expect(popup.textContent).toContain("No linked pages match.");
       else {
         expect(getByRole(popup, "list").textContent).toContain("Project handbook");
+        const actions = getAllByRole(popup, "button", { name: "Item actions" });
+        expect(actions).toHaveLength(2);
+        await act(() => actions[0]!.click());
+        const menu = getByRole(document.body, "dialog", { name: "Linked page actions" });
+        expect(getByRole(menu, "button", { name: "Unlink" })).toBeDefined();
+        expect(getByRole(menu, "button", { name: "Start thread" })).toBeDefined();
+        await act(() => actions[0]!.click());
         if (state === "truncated-results")
           expect(popup.textContent).toContain("Only loaded linked pages are searched.");
         await act(() => getByRole(popup, "button", { name: "Open Project handbook" }).click());

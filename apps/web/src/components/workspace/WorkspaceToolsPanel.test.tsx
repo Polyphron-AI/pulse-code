@@ -113,7 +113,7 @@ vi.mock("./ProjectTasks", () => ({
   workspaceToolsError: () => "Synthetic error",
 }));
 vi.mock("./mail/useMailCapabilities", () => ({
-  useMailCapabilities: () => ({ workspaceLinks: true, workspaceTools: true }),
+  useMailCapabilities: () => ({ ready: true, workspaceLinks: true, workspaceTools: true }),
 }));
 vi.mock("./WorkspaceItemActions", () => ({
   WorkspaceItemActions: () => <button>Start thread</button>,
