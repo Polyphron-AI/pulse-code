@@ -2,7 +2,7 @@
 
 import { useLayoutEffect, useRef } from "react";
 
-import { acquireBrowserSurface } from "./browserSurfaceStore";
+import { acquireBrowserSurface, useBrowserSurfaceStore } from "./browserSurfaceStore";
 
 export function BrowserSurfaceSlot(props: {
   readonly tabId: string;
@@ -29,21 +29,37 @@ export function BrowserSurfaceSlot(props: {
   useLayoutEffect(() => {
     const element = elementRef.current;
     if (!element || !visible) return;
-    const lease = acquireBrowserSurface(tabId, fitSourceContent);
+    let lease = acquireBrowserSurface(tabId, fitSourceContent);
     const update = () => {
       const rect = element.getBoundingClientRect();
       const presentation = presentationRef.current;
-      lease.present(
-        {
-          x: Math.round(rect.x),
-          y: Math.round(rect.y),
-          width: Math.max(1, Math.round(rect.width)),
-          height: Math.max(1, Math.round(rect.height)),
-        },
+      const bounds = {
+        x: Math.round(rect.x),
+        y: Math.round(rect.y),
+        width: Math.max(1, Math.round(rect.width)),
+        height: Math.max(1, Math.round(rect.height)),
+      };
+      const presented = lease.present(
+        bounds,
         presentation.visible && rect.width > 0 && rect.height > 0,
         presentation.cornerRadius,
         presentation.zIndex,
       );
+      // A remaining visible slot can reclaim after its owner leaves, never from a live owner.
+      if (
+        presentation.visible &&
+        !presented &&
+        useBrowserSurfaceStore.getState().byTabId[tabId]?.owner == null
+      ) {
+        lease.release();
+        lease = acquireBrowserSurface(tabId, fitSourceContent);
+        lease.present(
+          bounds,
+          rect.width > 0 && rect.height > 0,
+          presentation.cornerRadius,
+          presentation.zIndex,
+        );
+      }
     };
     updateRef.current = update;
     update();

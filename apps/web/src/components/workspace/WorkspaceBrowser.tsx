@@ -81,10 +81,10 @@ export function WorkspaceBrowser({
   );
   const openPreview = useAtomCommand(previewEnvironment.open, { reportFailure: false });
   const { linkItem } = useMailLinks(environmentId);
-  const { workspaceLinks } = useMailCapabilities(environmentId);
+  const { workspaceLinks, ready: capabilitiesReady } = useMailCapabilities(environmentId);
   const canOperate = useWorkspaceCanOperate(environmentId) && connected && !hidden;
-  const permitted = canOperate && !config.error && !previewRead.error;
   const external = !desktop || Boolean(previewRead.error);
+  const permitted = canOperate && !config.error;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [retryUrl, setRetryUrl] = useState<string | null>(null);
@@ -96,18 +96,18 @@ export function WorkspaceBrowser({
     ? "Reconnect to link this page."
     : !canOperate
       ? "Permission to operate this environment is required to link this page."
-      : !workspaceLinks
-        ? "This server does not support linking yet."
-        : config.error
-          ? "Browser settings are unavailable. Retry before linking this page."
-          : previewRead.error
-            ? "Browser is unavailable. Retry before linking this page."
+      : !capabilitiesReady
+        ? "Checking whether this server supports linking."
+        : !workspaceLinks
+          ? "This server does not support linking yet."
+          : config.error
+            ? "Browser settings are unavailable. Retry before linking this page."
             : null;
   const status = preview.snapshot?.navStatus;
   const current = desktop && status && status._tag !== "Idle" ? status.url : "";
   const openAddress = useCallback(
     async (url: string) => {
-      if (desktop && (!permitted || !threadRef)) return;
+      if (desktop && (!permitted || previewRead.error || !threadRef)) return;
       setBusy(true);
       setError(null);
       setRetryUrl(null);
@@ -128,7 +128,7 @@ export function WorkspaceBrowser({
         setBusy(false);
       }
     },
-    [desktop, permitted, threadRef, openPreview],
+    [desktop, permitted, previewRead.error, threadRef, openPreview],
   );
   const clearRequest = resources?.clearRequest;
   useEffect(() => {
@@ -153,7 +153,7 @@ export function WorkspaceBrowser({
     try {
       await linkItem(selectedItem, {
         ref: { type: "url", url },
-        title: desktop && status?._tag === "Success" ? status.title : url,
+        title: !external && status?._tag === "Success" ? status.title : url,
       });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "This page could not be linked.");
@@ -189,7 +189,8 @@ export function WorkspaceBrowser({
     onLink: linkPage,
     onOpenExternal: openExternal,
     onAddressEdited: () => setError(null),
-    onRetryRead: previewRead.error ? previewRead.refresh : undefined,
+    onRetryRead:
+      previewRead.error && capabilitiesReady && workspaceLinks ? previewRead.refresh : undefined,
   };
   const renderResourceChrome: PreviewChromeRenderer = (controls) => (
     <ResourceBrowserChrome {...chrome} controls={controls} />
@@ -430,7 +431,7 @@ function ResourceBrowserChrome({
             {external ? null : (
               <>
                 {link}
-                {linkHint && selectedItem !== null ? (
+                {linkHint ? (
                   <p className="px-1.75 text-sm text-muted-foreground sm:text-xs">{linkHint}</p>
                 ) : null}
               </>

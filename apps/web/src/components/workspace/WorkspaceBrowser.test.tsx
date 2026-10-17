@@ -55,6 +55,7 @@ const mocks = vi.hoisted(() => ({
   openInBrowser: vi.fn(),
   realLocalApi: false,
   linksSupported: true,
+  capabilitiesReady: true,
 }));
 vi.mock("../../state/entities", () => ({
   useThreadShell: (ref: { environmentId: string; threadId: string } | null) =>
@@ -120,7 +121,10 @@ vi.mock("../../localApi", async (original) => {
 });
 vi.mock("./mail/useMailLinks", () => ({ useMailLinks: () => ({ linkItem: mocks.link }) }));
 vi.mock("./mail/useMailCapabilities", () => ({
-  useMailCapabilities: () => ({ workspaceLinks: mocks.linksSupported }),
+  useMailCapabilities: () => ({
+    workspaceLinks: mocks.linksSupported,
+    ready: mocks.capabilitiesReady,
+  }),
 }));
 vi.mock("./useWorkspaceCanOperate", () => ({ useWorkspaceCanOperate: () => mocks.operate }));
 vi.mock("./ProjectTasks", () => ({ workspaceToolsError: () => "Preview unavailable" }));
@@ -250,6 +254,7 @@ beforeEach(() => {
   mocks.focusUrlNonce = null;
   mocks.realLocalApi = false;
   mocks.linksSupported = true;
+  mocks.capabilitiesReady = true;
   (
     window as unknown as {
       happyDOM: { setWindowSize: (size: { width: number; height: number }) => void };
@@ -543,7 +548,26 @@ it("clears a failed-open alert when the address changes", async () => {
   expect(renderer!.root.findAllByProps({ role: "alert" })).toHaveLength(0);
 });
 
-it("explains a divergent Link target only when it differs from the entered address", async () => {
+it("lets the external card grow without an inner scroll fold", async () => {
+  mocks.desktop = false;
+  await mount({ selectedItem: null });
+  await setAddress(`https://example.test/${"long-address/".repeat(30)}?utm_source=x#a`);
+  // happy-dom cannot measure clipping. Captures must also check scrollHeight <= clientHeight.
+  const card = renderer!.root.findByProps({ "aria-label": "External-tab Browser" });
+  const classes = String(card.props.className).split(/\s+/);
+  expect(classes).toContain("min-h-[311px]");
+  expect(classes.some((name) => /^(?:.*:)?h-/.test(name))).toBe(false);
+  expect(classes).not.toContain("overflow-y-auto");
+  expect(classes).not.toContain("overflow-hidden");
+  expect(card.findAllByType("button").map((button) => button.props.children)).toContain(
+    "Link this page",
+  );
+  expect(card.findAllByType("p").map((paragraph) => paragraph.props.children)).toContain(
+    "If no tab opened, allow pop-ups and try again, or copy this address.",
+  );
+});
+
+it("explains a divergent Link target only when tracking parameters or fragments were removed", async () => {
   mocks.desktop = false;
   await mount();
   const hint = "Tracking parameters and #fragments are left out of the link.";
@@ -553,6 +577,120 @@ it("explains a divergent Link target only when it differs from the entered addre
   expect(text()).toContain(hint);
   await setAddress("https://example.test/page?id=7");
   expect(text()).not.toContain(hint);
+  await setAddress("https://example.test");
+  expect(text()).not.toContain(hint);
+  await setAddress("HTTPS://EXAMPLE.TEST/page?id=7");
+  expect(text()).not.toContain(hint);
+  await setAddress("https://example.test/page?id=7&%55TM_source=x");
+  expect(text()).toContain(hint);
+  await setAddress("https://example.test/page?id=7#/settings");
+  expect(text()).toContain(hint);
+});
+
+it("checks capabilities before describing linking as unsupported", async () => {
+  mocks.desktop = false;
+  mocks.capabilitiesReady = false;
+  mocks.linksSupported = false;
+  await mount();
+  await setAddress("https://example.test/page");
+  expect(text()).toContain("Checking whether this server supports linking.");
+  expect(text()).not.toContain("This server does not support linking yet.");
+  await clickText("Link this page");
+  expect(mocks.link).not.toHaveBeenCalled();
+  mocks.capabilitiesReady = true;
+  mocks.linksSupported = true;
+  await act(() =>
+    renderer!.update(
+      <AppAtomRegistryProvider>
+        <WorkspaceBrowser {...props} onOpen={() => {}} />
+      </AppAtomRegistryProvider>,
+    ),
+  );
+  expect(text()).not.toContain("Checking whether this server supports linking.");
+  await clickText("Link this page");
+  expect(mocks.link).toHaveBeenCalledOnce();
+});
+
+it("explains the disabled desktop Link when no item is selected", async () => {
+  applyPreviewServerSnapshot(threadRef, snapshot);
+  node = document.createElement("div");
+  document.body.append(node);
+  root = createRoot(node);
+  await act(() =>
+    root!.render(
+      <AppAtomRegistryProvider>
+        <WorkspaceBrowser {...props} selectedItem={null} />
+      </AppAtomRegistryProvider>,
+    ),
+  );
+  await act(() => getByRole(node!, "button", { name: "Browser actions" }).click());
+  const link = getByRole(document.body, "button", { name: "Link this page" });
+  expect(link).toHaveProperty("disabled", true);
+  expect(link.nextElementSibling?.textContent).toBe("Select an item to link this page to.");
+  expect(document.body.textContent?.match(/Select an item to link this page to\./g)).toHaveLength(
+    1,
+  );
+});
+
+it("explains unsupported linking on an older desktop server without an impossible retry", async () => {
+  mocks.readError = "Preview is not supported on this server";
+  mocks.linksSupported = false;
+  node = document.createElement("div");
+  document.body.append(node);
+  root = createRoot(node);
+  await act(() =>
+    root!.render(
+      <AppAtomRegistryProvider>
+        <WorkspaceBrowser {...props} />
+      </AppAtomRegistryProvider>,
+    ),
+  );
+  const card = getByRole(node, "region", { name: "External-tab Browser" });
+  expect(card.textContent).toContain("This server does not support linking yet.");
+  expect(card.textContent).not.toContain("Retry before linking");
+  expect(getByRole(card, "button", { name: "Link this page" })).toHaveProperty("disabled", true);
+  await act(() => getByRole(node!, "button", { name: "Browser actions" }).click());
+  expect(queryByRole(document.body, "button", { name: "Retry" })).toBeNull();
+});
+
+it("links the pasted address when desktop preview reads fail but linking is supported", async () => {
+  mocks.readError = "Preview is not supported on this server";
+  applyPreviewServerSnapshot(threadRef, snapshot);
+  await mount();
+  await setAddress("https://example.test/fallback?id=7&utm_source=x#a");
+  await clickText("Link this page");
+  expect(mocks.link).toHaveBeenCalledExactlyOnceWith(selectedItem, {
+    ref: { type: "url", url: "https://example.test/fallback?id=7" },
+    title: "https://example.test/fallback?id=7",
+  });
+});
+
+it("returns focus to Browser actions after Escape in the standard 390px sheet", async () => {
+  (
+    window as unknown as {
+      happyDOM: { setWindowSize: (size: { width: number; height: number }) => void };
+    }
+  ).happyDOM.setWindowSize({ width: 390, height: 844 });
+  applyPreviewServerSnapshot(threadRef, snapshot);
+  node = document.createElement("div");
+  document.body.append(node);
+  root = createRoot(node);
+  await act(() => root!.render(<ResourceApp engagement />));
+  await act(() => getByRole(node!, "button", { name: "Resources" }).click());
+  const dialog = getByRole(document.body, "dialog", { name: "Resources" });
+  const trigger = getByRole(dialog, "button", { name: "Browser actions" });
+  await act(() => {
+    trigger.focus();
+    trigger.click();
+  });
+  const action = getByRole(document.body, "button", { name: "Open in new tab" });
+  await act(() => {
+    action.focus();
+    action.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  expect(document.activeElement).toBe(trigger);
+  expect(trigger.getAttribute("aria-label")).toBe("Browser actions");
+  expect(queryByRole(document.body, "button", { name: "Open in new tab" })).toBeNull();
 });
 
 it.each([

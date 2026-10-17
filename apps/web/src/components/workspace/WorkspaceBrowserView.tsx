@@ -89,7 +89,7 @@ export function WorkspaceBrowserView({
               >
                 Open in new tab
               </Button>
-              {linkTarget === null ? (
+              {linkTarget === null && !menuActions ? (
                 <p className="px-1.75 text-sm text-muted-foreground sm:text-xs">
                   Select an item to link this page to.
                 </p>
@@ -128,6 +128,8 @@ export function WorkspaceBrowserExternalPage({
 }) {
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
   const copied = copiedAddress === address;
+  // Parsing applies host casing and slash normalization without removing query parts or fragments.
+  const removedUrlParts = url && url !== new URL(address.trim()).toString();
   useEffect(() => {
     if (!copied) return;
     const timeout = window.setTimeout(() => setCopiedAddress(null), 2000);
@@ -136,10 +138,12 @@ export function WorkspaceBrowserExternalPage({
   return (
     <section
       aria-label="External-tab Browser"
-      className="h-[311px] min-w-0 shrink-0 space-y-3 overflow-y-auto border border-border bg-background p-4 text-sm leading-5 sm:text-xs"
+      className="min-h-[311px] min-w-0 shrink-0 space-y-3 border border-border bg-background p-4 text-sm leading-5 sm:text-xs"
       style={{ borderRadius: 9 }}
     >
-      <h2 className="text-base font-semibold sm:text-sm">Open this page in your browser</h2>
+      <h2 data-workspace-browser-heading className="text-base font-semibold">
+        Open this page in your browser
+      </h2>
       <p className="text-muted-foreground">
         External tabs do not report navigation here. Paste the current page address before linking
         it.
@@ -150,7 +154,7 @@ export function WorkspaceBrowserExternalPage({
             <dt className="text-muted-foreground">Link target</dt>
             <dd className="select-text break-all">{url}</dd>
           </dl>
-          {url !== address.trim() ? (
+          {removedUrlParts ? (
             <p className="text-muted-foreground">
               Tracking parameters and #fragments are left out of the link.
             </p>
@@ -162,29 +166,32 @@ export function WorkspaceBrowserExternalPage({
         </p>
       )}
       {linkHint ? <p className="text-muted-foreground">{linkHint}</p> : null}
-      <div className="flex flex-wrap gap-2">
-        <Button
-          size="xs"
-          variant="outline"
-          disabled={!url}
-          aria-disabled={busy || undefined}
-          onClick={() => {
-            if (!busy) onOpen();
-          }}
-        >
-          Open in new tab
-        </Button>
-        <Button
-          size="xs"
-          variant="ghost"
-          disabled={!url}
-          aria-live="polite"
-          onClick={async () => {
-            if (await onCopy()) setCopiedAddress(address);
-          }}
-        >
-          {copied ? "Copied" : "Copy address"}
-        </Button>
+      <div className="flex flex-col items-start gap-2">
+        <div className="flex gap-2">
+          <Button
+            size="xs"
+            variant="outline"
+            disabled={!url}
+            aria-disabled={busy || undefined}
+            onClick={() => {
+              if (!busy) onOpen();
+            }}
+          >
+            Open in new tab
+          </Button>
+          <Button
+            size="xs"
+            variant="ghost"
+            className="min-w-28 sm:min-w-24"
+            disabled={!url}
+            aria-live="polite"
+            onClick={async () => {
+              if (await onCopy()) setCopiedAddress(address);
+            }}
+          >
+            {copied ? "Copied" : "Copy address"}
+          </Button>
+        </div>
         {linkAction}
       </div>
       <p className="text-muted-foreground">
