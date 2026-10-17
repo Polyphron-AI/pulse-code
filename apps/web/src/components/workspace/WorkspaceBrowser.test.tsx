@@ -2248,10 +2248,12 @@ it("restarts copied feedback after every successful copy and announces it beside
   });
   await setAddress("https://example.test/copy");
   await clickText("Copy address");
+  const firstAnnouncement = renderer!.root.findByProps({ role: "status", "aria-live": "polite" });
   await act(() => vi.advanceTimersByTime(1500));
   await clickText("Copied");
   const status = renderer!.root.findByProps({ role: "status", "aria-live": "polite" });
   expect(status.props.children).toBe("Address copied.");
+  expect(status).not.toBe(firstAnnouncement);
   await act(() => vi.advanceTimersByTime(600));
   expect(text()).toContain("Copied");
   await act(() => vi.advanceTimersByTime(1400));
@@ -2347,80 +2349,71 @@ it("focuses the first enabled external popup action when opened by keyboard", as
   expect(document.activeElement).toBe(popup.querySelector("button:not(:disabled)"));
 });
 
-it.each(["local", "direct", "relay", "tunnel"])(
-  "keeps the Browser request budget and environment isolation at the %s query boundary",
-  async (mode) => {
-    mocks.desktop = false;
-    const remoteList = decodeLinkList({
-      linked: [
-        {
-          id: "wl_00000000-0000-0000-0000-000000000009",
-          item: {
-            ref: { type: "url", url: `https://example.test/${mode}` },
-            title: "Second-client handbook",
-          },
-          status: "confirmed",
-          source: { type: "user" },
-          updatedAt: "2026-10-13T09:00:00.000Z",
+it("keeps the Browser request budget and environment isolation at the query boundary", async () => {
+  mocks.desktop = false;
+  const remoteList = decodeLinkList({
+    linked: [
+      {
+        id: "wl_00000000-0000-0000-0000-000000000009",
+        item: {
+          ref: { type: "url", url: "https://example.test/handbook" },
+          title: "Second-client handbook",
         },
-      ],
-      suggested: [],
-      truncated: false,
-    });
-    node = document.createElement("div");
-    document.body.append(node);
-    root = createRoot(node);
-    const render = () => root!.render(<WorkspaceBrowser {...props} />);
-    await act(() => render());
-    expect(mocks.linkQueries).not.toHaveBeenCalled();
-    expect(mocks.listRequests.size).toBe(0);
-    const input = getByRole<HTMLInputElement>(node, "textbox", { name: "Browser page address" });
-    await act(() => {
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
-        input,
-        "handbook",
-      );
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-      input
-        .closest("form")!
-        .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
-    });
-    // A submitted input event commits before the next interaction.
-    await act(() =>
-      input
-        .closest("form")!
-        .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+        status: "confirmed",
+        source: { type: "user" },
+        updatedAt: "2026-10-13T09:00:00.000Z",
+      },
+    ],
+    suggested: [],
+    truncated: false,
+  });
+  node = document.createElement("div");
+  document.body.append(node);
+  root = createRoot(node);
+  const render = () => root!.render(<WorkspaceBrowser {...props} />);
+  await act(() => render());
+  expect(mocks.linkQueries).not.toHaveBeenCalled();
+  expect(mocks.listRequests.size).toBe(0);
+  const input = getByRole<HTMLInputElement>(node, "textbox", { name: "Browser page address" });
+  await act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
+      input,
+      "handbook",
     );
-    expect(mocks.listRequests.get("remote:p")).toBe(1);
-    const before = getByRole(node, "region", { name: "Linked pages" }).textContent;
-    await act(() => {
-      mocks.linksByEnvironment.set("other", remoteList);
-      mocks.linkListeners.get("other:p")?.forEach((listener) => listener());
-    });
-    expect(getByRole(node, "region", { name: "Linked pages" }).textContent).toBe(before);
-    await act(() => {
-      mocks.linksByEnvironment.set("remote", remoteList);
-      mocks.linkListeners.get("remote:p")?.forEach((listener) => listener());
-    });
-    expect(getByRole(node, "region", { name: "Linked pages" }).textContent).toContain(
-      "Second-client handbook",
-    );
-    await act(() => render());
-    expect(mocks.listRequests.get("remote:p")).toBe(1);
-    await act(() =>
-      input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })),
-    );
-    expect(mocks.linkListeners.get("remote:p")?.size).toBe(0);
-    await act(() =>
-      input
-        .closest("form")!
-        .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
-    );
-    expect(mocks.listRequests.get("remote:p")).toBe(2);
-    expect(mocks.open).not.toHaveBeenCalled();
-    expect(mocks.external).not.toHaveBeenCalled();
-  },
-);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.closest("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+  });
+  // A submitted input event commits before the next interaction.
+  await act(() =>
+    input.closest("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+  );
+  expect(mocks.listRequests.get("remote:p")).toBe(1);
+  const before = getByRole(node, "region", { name: "Linked pages" }).textContent;
+  await act(() => {
+    mocks.linksByEnvironment.set("other", remoteList);
+    mocks.linkListeners.get("other:p")?.forEach((listener) => listener());
+  });
+  expect(getByRole(node, "region", { name: "Linked pages" }).textContent).toBe(before);
+  await act(() => {
+    mocks.linksByEnvironment.set("remote", remoteList);
+    mocks.linkListeners.get("remote:p")?.forEach((listener) => listener());
+  });
+  expect(getByRole(node, "region", { name: "Linked pages" }).textContent).toContain(
+    "Second-client handbook",
+  );
+  await act(() => render());
+  expect(mocks.listRequests.get("remote:p")).toBe(1);
+  await act(() =>
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })),
+  );
+  expect(mocks.linkListeners.get("remote:p")?.size).toBe(0);
+  await act(() =>
+    input.closest("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+  );
+  expect(mocks.listRequests.get("remote:p")).toBe(2);
+  expect(mocks.open).not.toHaveBeenCalled();
+  expect(mocks.external).not.toHaveBeenCalled();
+});
 
 it.each(["t", "missing"])(
   "guides a web thread without a Resources host, including loaded shell %s",

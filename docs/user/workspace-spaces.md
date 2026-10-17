@@ -124,7 +124,7 @@ Code thread details also show confirmed workspace links and the thread's existin
 
 Linked context contains Linked and Suggested for the selected item. Its Projects view shows confirmed project links. Resources keeps its project selection independently of these item links. Agents in Resources shows only conversations explicitly linked to that resource project. A thread belonging to the project is not an assignment by itself.
 
-Open the project agent menu and choose Link existing thread to assign a conversation. Its row menu offers Unassign from project. Unassigning keeps the conversation, its messages, other links and any running work. Open conversation returns to Code without starting work. Start thread opens a draft with a removable project reference; sending with that reference confirms the assignment before the agent runs. Canceling the draft or removing the project reference creates no assignment. Linked thread transcripts cannot currently be read through workspace tools.
+Open the project agent menu and choose Link existing thread to assign a conversation. Its row menu offers Unassign from project. Unassigning keeps the conversation, its messages, other links and any running work. Open conversation returns to Code without starting work. Start thread opens a draft with a project reference. Opening the draft creates no assignment. You can remove the reference before sending. Confirmed project links appear in Agents. Linked thread transcripts cannot currently be read through workspace tools.
 
 ## Automations, browser and tasks
 

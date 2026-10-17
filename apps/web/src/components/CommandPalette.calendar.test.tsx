@@ -255,10 +255,9 @@ it("keeps a listed palette action usable after opening it from a focused page po
     await act(() => getByRole(document.body, "button", { name: "Add captured page" }).focus());
     await act(() => openCommandPalette());
     const listed = queryByRole(document.body, "button", { name: "Add selected item to project" });
-    if (listed) {
-      await act(() => listed.click());
-      expect(run).toHaveBeenCalledTimes(1);
-    } else expect(run).not.toHaveBeenCalled();
+    expect(listed).not.toBeNull();
+    await act(() => listed!.click());
+    expect(run).toHaveBeenCalledTimes(1);
   } finally {
     await act(() => root.unmount());
     node.remove();

@@ -1,4 +1,5 @@
 import {
+  workspaceItemKey,
   type EnvironmentId,
   type WorkspaceLinkEndpoint,
   type WorkspaceItemRef,
@@ -6,7 +7,6 @@ import {
 } from "@t3tools/contracts";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
-import { workspaceItemKey } from "@t3tools/contracts";
 import { useThreadShells } from "../../state/entities";
 import { useEnvironmentQuery } from "../../state/query";
 import { workspaceLinks } from "../../state/workspaceLinks";
@@ -137,6 +137,7 @@ export function WorkspaceLinkPicker({
   onChoose,
   placeholder,
   empty,
+  threadOnly = false,
 }: {
   candidates: readonly WorkspaceLinkEndpoint[];
   filter: string;
@@ -145,12 +146,13 @@ export function WorkspaceLinkPicker({
   onChoose: (endpoint: WorkspaceLinkEndpoint) => void;
   placeholder: string;
   empty: string;
+  threadOnly?: boolean;
 }) {
   return (
     <div className="flex flex-col gap-2">
       <Input
         autoFocus
-        aria-label="Find an item to link"
+        aria-label={threadOnly ? "Find a thread" : "Find an item to link"}
         placeholder={placeholder}
         value={filter}
         onChange={(event) => onFilterChange(event.target.value)}
@@ -165,7 +167,9 @@ export function WorkspaceLinkPicker({
               disabled={busy}
               onClick={() => onChoose(endpoint)}
             >
-              {endpoint.ref.type}: {endpoint.title}
+              <span className="min-w-0 truncate">
+                {threadOnly ? endpoint.title : `${endpoint.ref.type}: ${endpoint.title}`}
+              </span>
             </Button>
           </li>
         ))}

@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { act, useCallback, useSyncExternalStore } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { getByRole, getAllByRole, queryByRole } from "@testing-library/dom";
+import { getByRole, getAllByRole, queryByRole, getByText } from "@testing-library/dom";
 import { afterEach, beforeEach, expect, it, vi } from "vite-plus/test";
 import {
   EnvironmentId,
@@ -28,9 +28,10 @@ const boundary = vi.hoisted(() => ({
   unlink: vi.fn<(...args: unknown[]) => Promise<void>>(),
   history: vi.fn(),
   detail: vi.fn(),
-  llm: vi.fn(),
+  status: vi.fn(),
+  visibleTurns: vi.fn(),
+  archived: vi.fn(),
   command: vi.fn(),
-  navigate: vi.fn(),
   start: vi.fn<(...args: unknown[]) => Promise<{ draftId: DraftId; threadId: ThreadId } | null>>(),
   operate: true,
   connected: true,
@@ -48,7 +49,23 @@ const assigned = {
 };
 const decode = Schema.decodeUnknownSync(WorkspaceLinkList);
 const projectList = decode({
-  linked: [assigned],
+  linked: [
+    assigned,
+    {
+      ...assigned,
+      id: "wl_00000000-0000-0000-0000-000000000006",
+      item: {
+        ref: { type: "url", url: "https://example.test/project-page" },
+        title: "Project page",
+      },
+    },
+    {
+      ...assigned,
+      id: "wl_00000000-0000-0000-0000-000000000007",
+      status: "suggested",
+      item: { ref: { type: "thread", threadId: "t4" }, title: "Suggested agent" },
+    },
+  ],
   suggested: [
     {
       ...assigned,
@@ -100,10 +117,14 @@ const initialShells = () => [
   }),
 ];
 let shells = initialShells();
+vi.mock("../../lib/archivedThreadsState", () => ({
+  useArchivedThreadSnapshots: boundary.archived,
+}));
 let shellRevision = 0;
 const requests = new Map<string, number>();
 const shellListeners = new Set<() => void>();
 vi.mock("../../state/entities", () => ({
+  useProject: () => ({ id: projectId, environmentId, title: "Project" }),
   useProjects: () => [{ id: projectId, environmentId, title: "Project" }],
   useThreadShells: () => {
     useSyncExternalStore(
@@ -117,7 +138,9 @@ vi.mock("../../state/entities", () => ({
     );
     return shells;
   },
-  useThread: boundary.detail,
+  useThreadProjection: boundary.detail,
+  useThreadStatus: boundary.status,
+  useThreadVisibleTurnItems: boundary.visibleTurns,
   useThreadHistory: boundary.history,
 }));
 vi.mock("../../state/workspaceLinks", () => ({
@@ -199,6 +222,7 @@ beforeEach(() => {
     [projectKey("other"), empty],
   ]);
   shells = initialShells();
+  boundary.archived.mockReturnValue({ snapshots: [], error: null, isLoading: false });
   shellRevision++;
   node = document.createElement("div");
   document.body.append(node);
@@ -233,6 +257,8 @@ it("shows only confirmed project-thread assignments", async () => {
     "Message-only helper",
     "Suggested agent",
     "Other environment collision",
+    "Project page",
+    "Unavailable conversation",
   ])
     expect(node.textContent).not.toContain(absent);
   expect(boundary.query).toHaveBeenCalledWith({
@@ -254,6 +280,11 @@ it.each(["empty", "suggested-only"])("keeps %s assignments empty", async (state)
   await mount();
   expect(node.textContent).toContain("No agents assigned");
   expect(queryByRole(node, "button", { name: "Open conversation →" })).toBeNull();
+  await click("Start thread");
+  expect(boundary.start).toHaveBeenCalledExactlyOnceWith({ environmentId, projectId });
+  await click("Link existing thread");
+  expect(getByRole(node, "region", { name: "Link existing thread" })).toBeDefined();
+  expect(boundary.link).not.toHaveBeenCalled();
 });
 it("updates title and state from shells without reading histories", async () => {
   await mount();
@@ -282,7 +313,8 @@ it("updates title and state from shells without reading histories", async () => 
   for (const spy of [
     boundary.history,
     boundary.detail,
-    boundary.llm,
+    boundary.status,
+    boundary.visibleTurns,
     boundary.command,
     boundary.start,
   ])
@@ -290,6 +322,7 @@ it("updates title and state from shells without reading histories", async () => 
 });
 it.each([
   "waiting",
+  "running",
   "queued",
   "starting",
   "preparing",
@@ -315,6 +348,7 @@ it.each([
   await mount();
   const expected = {
     waiting: "Waiting for your input",
+    running: "Working",
     queued: "Queued",
     starting: "Starting",
     preparing: "Starting",
@@ -326,35 +360,90 @@ it.each([
     idle: "Ready for your next instruction",
   };
   expect(node.textContent).toContain(expected[status]);
+  const dot = node.querySelector("li span.rounded-full")!;
+  expect(dot.getAttribute("aria-hidden")).toBe("true");
+  expect(dot.classList.contains("bg-primary")).toBe(
+    ["running", "queued", "starting", "preparing"].includes(status),
+  );
 });
 it("keeps missing assignments actionable and archived conversations openable", async () => {
   shells = shells.filter((thread) => thread.id !== "t1");
   await mount();
   expect(node.textContent).toContain("Stale title");
+  expect(node.textContent).toContain(
+    "This conversation is unavailable. You can remove its project assignment.",
+  );
   expect(
     getByRole<HTMLButtonElement>(node, "button", { name: "Open conversation →" }).disabled,
   ).toBe(true);
   await click("Actions for Stale title");
   await click("Unassign from project");
   expect(boundary.unlink).toHaveBeenCalledExactlyOnceWith(projectList.linked[0]!.id);
-  shells = initialShells().map((thread) => ({ ...thread, archivedAt: "2026-10-13T09:00:00.000Z" }));
+  boundary.archived.mockReturnValue({
+    snapshots: [
+      {
+        environmentId,
+        snapshot: {
+          threads: [
+            makeThreadFixture({
+              environmentId,
+              projectId,
+              id: ThreadId.make("t1"),
+              title: "Archived analyst",
+              archivedAt: "2026-10-13T09:00:00.000Z",
+            }).source,
+          ],
+        },
+      },
+    ],
+    error: null,
+    isLoading: false,
+  });
   await mount();
+  expect(node.textContent).toContain("Archived analyst");
+  expect(getByText(node, "Archived")).toBeDefined();
+  expect(node.textContent).not.toContain("Status unavailable");
+  expect(boundary.archived).toHaveBeenLastCalledWith([environmentId]);
   await click("Open conversation →");
   expect(onOpen).toHaveBeenCalledExactlyOnceWith({ type: "thread", threadId: "t1" });
   expect(boundary.start).not.toHaveBeenCalled();
 });
 it("awaits assignment acknowledgement, excludes assigned and foreign shells, and cancels cleanly", async () => {
+  shells.push(
+    makeThreadFixture({
+      environmentId: EnvironmentId.make("other"),
+      projectId,
+      id: ThreadId.make("t9"),
+      title: "Foreign unique",
+    }),
+  );
+  shells.push(
+    makeThreadFixture({
+      environmentId,
+      projectId,
+      id: ThreadId.make("child"),
+      title: "Child agent",
+      lineage: {
+        rootThreadId: ThreadId.make("t1"),
+        parentThreadId: ThreadId.make("t1"),
+        relationshipToParent: "subagent",
+      },
+    }),
+  );
   await mount();
+  expect(boundary.archived).toHaveBeenLastCalledWith([]);
   await choose();
   const picker = getByRole(node, "region", { name: "Link existing thread" });
   expect(picker.textContent).not.toContain("SEO analyst");
   expect(picker.textContent).not.toContain("Other environment collision");
+  expect(picker.textContent).not.toContain("Foreign unique");
+  expect(picker.textContent).not.toContain("Child agent");
   await click("Cancel");
   expect(boundary.link).not.toHaveBeenCalled();
   await choose();
   const gate = deferred();
   boundary.link.mockReturnValueOnce(gate.promise);
-  await click("thread: Merely project-owned");
+  await click("Merely project-owned");
   expect(boundary.link).toHaveBeenCalledExactlyOnceWith(
     { ref: { type: "project", projectId }, title: "Project" },
     { ref: { type: "thread", threadId: "t2" }, title: "Merely project-owned" },
@@ -363,26 +452,18 @@ it("awaits assignment acknowledgement, excludes assigned and foreign shells, and
   await act(() => gate.resolve());
   expect(queryByRole(node, "region", { name: "Link existing thread" })).toBeNull();
 });
-it("retains failed assignments and unassignments for retry without deleting or stopping work", async () => {
+it("retains failed assignments and unassignments for retry", async () => {
   await mount();
   await choose();
   boundary.link.mockRejectedValueOnce(new Error("Try assignment again"));
-  await click("thread: Merely project-owned");
+  await click("Merely project-owned");
   expect(getByRole(node, "alert").textContent).toBe("Try assignment again");
-  await click("thread: Merely project-owned");
-  const threadsBefore = shells;
-  const messageBefore = lists.get(
-    keyOf({ environmentId, input: { item: props.selectedItem.ref } }),
-  );
+  await click("Merely project-owned");
   await click("Actions for SEO analyst");
   boundary.unlink.mockRejectedValueOnce(new Error("Try unassign again"));
   await click("Unassign from project");
   expect(getByRole(node, "alert").textContent).toBe("Try unassign again");
   await click("Unassign from project");
-  expect(shells).toBe(threadsBefore);
-  expect(lists.get(keyOf({ environmentId, input: { item: props.selectedItem.ref } }))).toBe(
-    messageBefore,
-  );
   expect(boundary.command).not.toHaveBeenCalled();
   expect(boundary.start).not.toHaveBeenCalled();
 });
@@ -413,7 +494,21 @@ it.each(["denied", "disconnected", "old-server", "loading"])(
         .disabled,
     ).toBe(true);
     expect(boundary.link).not.toHaveBeenCalled();
-    expect(boundary.unlink).not.toHaveBeenCalled();
+    expect(queryByRole(document.body, "button", { name: "Start thread" })).toBeNull();
+    if (state === "denied" || state === "disconnected") {
+      await click("Project agent actions");
+      await click("Actions for SEO analyst");
+      const unassign = getByRole<HTMLButtonElement>(document.body, "button", {
+        name: "Unassign from project",
+      });
+      expect(unassign.disabled).toBe(true);
+      await act(() => unassign.click());
+      expect(boundary.unlink).not.toHaveBeenCalled();
+    }
+    if (state === "loading") {
+      expect(boundary.query).not.toHaveBeenCalled();
+      expect(node.textContent).toContain("Checking project agent support...");
+    }
     if (state === "disconnected") {
       expect(node.textContent).toContain("Status unavailable");
       boundary.connected = true;
@@ -431,7 +526,7 @@ it("keeps capability absence authoritative over cached assignments", async () =>
   boundary.supported = false;
   await mount();
   expect(node.textContent).not.toContain("SEO analyst");
-  expect(node.textContent).toContain("not available on this server");
+  expect(node.textContent).toContain("Project links are unavailable on this server.");
 });
 it("updates only the subscribed environment after a second-client change", async () => {
   await mount();
@@ -462,13 +557,13 @@ it("shows truncation and discards a pending old-project picker on scope change",
   await choose();
   const gate = deferred();
   boundary.link.mockReturnValueOnce(gate.promise);
-  await click("thread: Merely project-owned");
+  await click("Merely project-owned");
   await act(() => root.render(<WorkspaceAgents {...props} projectId={ProjectId.make("q")} />));
   await act(() => gate.reject(new Error("Old project failure")));
   expect(node.textContent).not.toContain("Old project failure");
   expect(queryByRole(node, "region", { name: "Link existing thread" })).toBeNull();
 });
-it("opens a project-context draft without an assignment until submission and supports removing its chip", async () => {
+it("opens a project-context draft without assigning or starting work", async () => {
   const draftId = newDraftId();
   boundary.start.mockResolvedValueOnce({ draftId, threadId: ThreadId.make("draft-thread") });
   await mount();
@@ -486,21 +581,6 @@ it("opens a project-context draft without an assignment until submission and sup
   ).toBe(true);
   expect(boundary.link).not.toHaveBeenCalled();
   expect(boundary.command).not.toHaveBeenCalled();
-  const projectContext = contexts.find(
-    (context) => context.kind === "workspace-item" && context.item.ref.type === "project",
-  )!;
-  useComposerDraftStore.getState().setThreadContexts(
-    draftId,
-    contexts.filter((context) => context.contextId !== projectContext.contextId),
-  );
-  expect(
-    useComposerDraftStore
-      .getState()
-      .draftsByThreadKey[draftId]!.threadContexts.some(
-        (context) => context.kind === "workspace-item" && context.item.ref.type === "project",
-      ),
-  ).toBe(false);
-  expect(boundary.link).not.toHaveBeenCalled();
 });
 it("renders recipe 06 through the pure view with settled fake commands and disposal", async () => {
   const session = createWorkspaceMockupSession("06");
@@ -515,10 +595,25 @@ it("renders recipe 06 through the pure view with settled fake commands and dispo
   expect(session.operations).toEqual([
     { kind: "open-thread", item: { type: "thread", threadId: "thread-seo" }, value: null },
   ]);
+  await click("Project agent actions");
+  await click("Start thread");
+  await module.settled();
+  expect(session.operations[1]).toEqual({
+    kind: "open-thread",
+    item: { type: "project", projectId: session.resourceProjectId },
+    value: null,
+  });
+  await click("Link existing thread");
+  await module.settled();
+  expect(session.operations[2]).toEqual({
+    kind: "link",
+    item: { type: "project", projectId: session.resourceProjectId },
+    value: null,
+  });
   module.dispose();
   await act(() => getAllByRole(node, "button", { name: "Open conversation →" })[0]!.click());
   await module.settled();
-  expect(session.operations).toHaveLength(1);
+  expect(session.operations).toHaveLength(3);
   expect(boundary.query).not.toHaveBeenCalled();
   expect(boundary.start).not.toHaveBeenCalled();
   session.dispose();
@@ -546,9 +641,22 @@ it("keeps one assignment subscription across shell updates and releases it when 
 it.each(["hasPendingApprovals", "hasPendingUserInput"] as const)(
   "prioritizes %s over an idle shell",
   async (flag) => {
-    shells[0] = { ...shells[0]!, [flag]: true };
+    const original = shells[0]!;
+    shells[0] = {
+      ...original,
+      [flag]: true,
+      runtime: {
+        status: "idle",
+        activeRunId: null,
+        providerInstanceId: original.providerInstanceId,
+        providerName: null,
+        lastError: null,
+        updatedAt: "2026-10-13T09:00:00.000Z",
+      },
+    };
     await mount();
     expect(node.textContent).toContain("Waiting for your input");
+    expect(node.textContent).not.toContain("Ready for your next instruction");
   },
 );
 it("cancels the general project-agent menu without creating work", async () => {
@@ -602,4 +710,89 @@ it("shows a confirmed new assignment event after the project-context draft hando
   });
   expect(node.textContent).toContain("New project agent");
   expect(getAllByRole(node, "button", { name: "Open conversation \u2192" })).toHaveLength(2);
+});
+
+it("never labels a disconnected idle shell Ready and blocks Open until reconnect", async () => {
+  const original = shells[0]!;
+  shells[0] = {
+    ...original,
+    runtime: {
+      status: "idle",
+      activeRunId: null,
+      providerInstanceId: original.providerInstanceId,
+      providerName: null,
+      lastError: null,
+      updatedAt: "2026-10-13T09:00:00.000Z",
+    },
+  };
+  boundary.connected = false;
+  await mount();
+  expect(node.textContent).toContain("Status unavailable");
+  expect(node.textContent).not.toContain("Ready for your next instruction");
+  expect(node.textContent).toContain("Reconnect to manage project agents.");
+  expect(node.textContent).toContain("Reconnect to open or change this assignment.");
+  const open = getByRole<HTMLButtonElement>(node, "button", { name: "Open conversation \u2192" });
+  expect(open.disabled).toBe(true);
+  expect(open.getAttribute("aria-description")).toBe(
+    "Reconnect to open or change this assignment.",
+  );
+  expect(node.querySelector("li span.rounded-full")!.classList.contains("bg-primary")).toBe(false);
+  await act(() => open.click());
+  expect(onOpen).not.toHaveBeenCalled();
+  boundary.connected = true;
+  await mount();
+  expect(node.textContent).toContain("Ready for your next instruction");
+  expect(
+    getByRole<HTMLButtonElement>(node, "button", { name: "Open conversation \u2192" }).disabled,
+  ).toBe(false);
+  await click("Open conversation \u2192");
+  expect(onOpen).toHaveBeenCalledExactlyOnceWith({ type: "thread", threadId: "t1" });
+});
+
+it("keeps read-only loading and empty states alongside the write restriction", async () => {
+  boundary.operate = false;
+  lists.delete(projectKey());
+  await mount();
+  expect(node.textContent).toContain("Loading project agents...");
+  expect(node.textContent).toContain("Permission to operate this environment is required");
+  await act(() => publish("remote", empty));
+  expect(node.textContent).toContain("No agents assigned to this project.");
+  expect(node.textContent).toContain("Permission to operate this environment is required");
+});
+
+it("unassigns running work without stopping it and leaves the thread reassignable", async () => {
+  const original = shells[0]!;
+  shells[0] = {
+    ...original,
+    runtime: {
+      status: "running",
+      activeRunId: RunId.make("run"),
+      providerInstanceId: original.providerInstanceId,
+      providerName: null,
+      lastError: null,
+      updatedAt: "2026-10-13T09:00:00.000Z",
+    },
+  };
+  const gate = deferred();
+  boundary.unlink.mockReturnValueOnce(gate.promise);
+  await mount();
+  await click("Actions for SEO analyst");
+  expect(document.body.textContent).toContain("Linked by you");
+  expect(getByRole(document.body, "button", { name: "Start automation" })).toBeDefined();
+  await click("Unassign from project");
+  expect(
+    getByRole<HTMLButtonElement>(document.body, "button", { name: "Unassigning..." }).disabled,
+  ).toBe(true);
+  expect(boundary.unlink).toHaveBeenCalledExactlyOnceWith(assigned.id);
+  for (const spy of [boundary.command, boundary.start, boundary.link])
+    expect(spy).not.toHaveBeenCalled();
+  await act(() => gate.resolve());
+  await act(() => publish("remote", empty));
+  expect(queryByRole(node, "button", { name: "Actions for SEO analyst" })).toBeNull();
+  await act(() => {
+    shellRevision++;
+    shellListeners.forEach((listener) => listener());
+  });
+  await click("Link existing thread");
+  expect(getByRole(node, "button", { name: "SEO analyst" })).toBeDefined();
 });

@@ -236,10 +236,10 @@ vi.mock("../WorkspaceItemActions", () => ({
   WorkspaceItemActions: () => null,
 }));
 vi.mock("../WorkspaceLinkedContext", () => ({ WorkspaceLinkedContext: () => null }));
+vi.mock("../WorkspaceAgents", () => ({ WorkspaceAgents: () => null }));
 vi.mock("../WorkspaceToolsPanel", () => ({
   WorkspaceProjectFiles: () => <p>Files body</p>,
   WorkspaceBrowser: () => null,
-  WorkspaceProjectAgents: () => null,
 }));
 vi.mock("../ProjectsSpace", () => ({ ProjectsSpace: () => <p>Projects destination</p> }));
 // Warm resource imports before the timed route journeys run on a cold worker.

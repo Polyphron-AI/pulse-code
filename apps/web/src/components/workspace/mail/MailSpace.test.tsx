@@ -51,6 +51,7 @@ vi.mock("./useMailCapabilities", () => ({
 vi.mock("../../../state/entities", () => ({
   useProjects: () => [],
   useThreadShells: () => [],
+  useThreadShell: () => null,
   useAllEnvironmentProjectSnapshotsReady: () => true,
 }));
 vi.mock("../../../state/environments", () => ({ useEnvironment: () => ({ label: "Remote" }) }));
@@ -130,7 +131,6 @@ vi.mock("../WorkspaceItemActions", () => ({
   WorkspaceItemMenu: ({ children }: { children: ReactNode }) => children,
   WorkspaceItemActions: () => null,
 }));
-vi.mock("../WorkspaceToolsPanel", () => ({ WorkspaceToolsPanel: () => null }));
 vi.mock("../DriveFiles", () => ({ DriveSearch: () => null, DriveFileAccess: () => null }));
 vi.mock("../SuggestedSection", () => ({ SuggestedSection: () => null }));
 vi.mock("../ProjectTasks", () => ({

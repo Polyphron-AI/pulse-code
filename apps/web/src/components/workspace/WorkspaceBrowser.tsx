@@ -564,6 +564,7 @@ function ResourceBrowserChrome({
             onOpen={(endpoint) => openPage(endpoint.ref)}
             renderRow={(view, row) => (
               <WorkspaceItemMenu
+                layout="menu"
                 popupVariant="opaque"
                 environmentId={environmentId}
                 item={{
@@ -578,8 +579,14 @@ function ResourceBrowserChrome({
                 }}
                 provenance={
                   <div className="space-y-2 text-sm sm:text-xs">
-                    <p>{originText(view.origin) ?? "Linked by you"}</p>
-                    {view.source.type !== "user" ? <p>{linkSourceText(view.source)}</p> : null}
+                    <p className="max-w-56 px-1.75 text-muted-foreground">
+                      {originText(view.origin) ?? "Linked by you"}
+                    </p>
+                    {view.source.type !== "user" ? (
+                      <p className="max-w-56 px-1.75 text-muted-foreground">
+                        {linkSourceText(view.source)}
+                      </p>
+                    ) : null}
                     <Button
                       size="xs"
                       variant="ghost"

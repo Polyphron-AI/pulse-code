@@ -1,10 +1,12 @@
 import { useContext, useLayoutEffect, useRef, useState } from "react";
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/models";
 import { type WorkspaceLinkEndpoint } from "@t3tools/contracts";
-import { useProjects, useThreadShells } from "../../state/entities";
+import { useProject, useThreadShells } from "../../state/entities";
 import { useConnectedEnvironmentIds } from "../../state/environments";
 import { useEnvironmentQuery } from "../../state/query";
 import { workspaceLinks } from "../../state/workspaceLinks";
+import { useArchivedThreadSnapshots } from "../../lib/archivedThreadsState";
+import { linkSourceText } from "./mail/linkedItems";
 import { Button } from "../ui/button";
 import { useMailCapabilities } from "./mail/useMailCapabilities";
 import { linkErrorText, useMailLinks } from "./mail/useMailLinks";
@@ -18,19 +20,32 @@ import { WorkspaceLinkPicker } from "./WorkspaceToolsPanel";
 export type WorkspaceAgentsProps = WorkspaceResourceBodyProps & { readonly projectTitle?: string };
 
 function agentState(thread: EnvironmentThreadShell | undefined, connected: boolean) {
-  if (!connected || !thread) return "Status unavailable";
-  if (thread.hasPendingApprovals || thread.hasPendingUserInput) return "Waiting for your input";
+  if (!connected || !thread) return { label: "Status unavailable", active: false };
+  if (thread.hasPendingApprovals || thread.hasPendingUserInput)
+    return { label: "Waiting for your input", active: false };
   const status = thread.runtime?.status ?? thread.latestRun?.status;
-  if (status === "waiting") return "Waiting for your input";
-  if (status === "running") return "Working";
-  if (status === "queued") return "Queued";
-  if (status === "starting" || status === "preparing") return "Starting";
-  if (status === "failed") return "Last run failed";
-  if (status === "cancelled" || status === "interrupted" || status === "rolled_back")
-    return "Not running";
-  return status === "idle" || status === "completed"
-    ? "Ready for your next instruction"
-    : "Status unavailable";
+  switch (status) {
+    case "waiting":
+      return { label: "Waiting for your input", active: false };
+    case "running":
+      return { label: "Working", active: true };
+    case "queued":
+      return { label: "Queued", active: true };
+    case "starting":
+    case "preparing":
+      return { label: "Starting", active: true };
+    case "failed":
+      return { label: "Last run failed", active: false };
+    case "cancelled":
+    case "interrupted":
+    case "rolled_back":
+      return { label: "Not running", active: false };
+    case "idle":
+    case "completed":
+      return { label: "Ready for your next instruction", active: false };
+    default:
+      return { label: "Status unavailable", active: false };
+  }
 }
 function agentInitials(title: string) {
   const words = title.trim().split(/\s+/u);
@@ -52,12 +67,8 @@ function ProjectAgents({
   projectTitle: suppliedTitle,
   onOpen,
 }: WorkspaceAgentsProps) {
-  const projects = useProjects();
-  const projectTitle =
-    suppliedTitle ??
-    projects.find((project) => project.environmentId === environmentId && project.id === projectId)
-      ?.title ??
-    "Unavailable project";
+  const project = useProject({ environmentId, projectId });
+  const projectTitle = suppliedTitle ?? project?.title ?? "Unavailable project";
   const connected = useConnectedEnvironmentIds().includes(environmentId);
   const capability = useMailCapabilities(environmentId);
   const available = capability.ready && capability.workspaceLinks;
@@ -75,6 +86,7 @@ function ProjectAgents({
   const [filter, setFilter] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [unassigning, setUnassigning] = useState<string | null>(null);
   const pending = useRef(false);
   const mounted = useRef(false);
   const permitted = useRef(canAssign);
@@ -96,42 +108,73 @@ function ProjectAgents({
         (view) => view.status === "confirmed" && view.item.ref.type === "thread",
       )
     : [];
+  const assignedIds = new Set(
+    assignments.flatMap((view) =>
+      view.item.ref.type === "thread" ? [view.item.ref.threadId] : [],
+    ),
+  );
+  const missingActive = [...assignedIds].some((id) => !byId.has(id));
+  const archived = useArchivedThreadSnapshots(missingActive ? [environmentId] : []);
+  const archivedById = new Map(
+    (
+      archived.snapshots.find((entry) => entry.environmentId === environmentId)?.snapshot.threads ??
+      []
+    ).map((thread) => [thread.id, thread]),
+  );
   const rows = assignments.map((view) => {
-    const thread = view.item.ref.type === "thread" ? byId.get(view.item.ref.threadId) : undefined;
-    const title = thread?.title || view.item.title?.trim() || "Unavailable conversation";
-    const status = agentState(thread, connected);
+    const id = view.item.ref.type === "thread" ? view.item.ref.threadId : null;
+    const thread = id ? byId.get(id) : undefined;
+    const archivedThread = id && !thread ? archivedById.get(id) : undefined;
+    const title =
+      thread?.title ||
+      archivedThread?.title ||
+      view.item.title?.trim() ||
+      "Unavailable conversation";
+    const state =
+      connected && archivedThread
+        ? { label: "Archived", active: false }
+        : agentState(thread, connected);
     return {
       key: view.id,
       title,
       initials: agentInitials(title),
-      status,
-      active: ["Working", "Queued", "Starting"].includes(status),
-      ...(!thread || !connected
+      status: state.label,
+      active: state.active,
+      ...(!connected || (!thread && !archivedThread)
         ? {
             unavailableReason: !connected
-              ? "Reconnect to open this conversation."
-              : "This conversation is unavailable. You can remove its assignment.",
+              ? "Reconnect to open or change this assignment."
+              : archived.isLoading
+                ? "Checking archived conversations..."
+                : archived.error
+                  ? "Archived conversations could not be checked. Reopen the panel to retry."
+                  : "This conversation is unavailable. You can remove its project assignment.",
           }
         : {}),
     };
   });
-  const candidates = threads
-    .filter(
-      (thread) =>
-        !assignments.some(
-          (view) => view.item.ref.type === "thread" && view.item.ref.threadId === thread.id,
-        ),
-    )
-    .map((thread): WorkspaceLinkEndpoint => ({
-      ref: { type: "thread", threadId: thread.id },
-      title: thread.title,
-    }))
-    .filter((endpoint) => endpoint.title?.toLocaleLowerCase().includes(filter.toLocaleLowerCase()))
-    .slice(0, 50);
-  const run = async (command: () => Promise<void>, closePicker = false) => {
+  const candidates = picking
+    ? threads
+        .filter(
+          (thread) =>
+            !assignedIds.has(thread.id) && thread.lineage.relationshipToParent !== "subagent",
+        )
+        .filter((thread) => thread.title.toLocaleLowerCase().includes(filter.toLocaleLowerCase()))
+        .slice(0, 50)
+        .map((thread): WorkspaceLinkEndpoint => ({
+          ref: { type: "thread", threadId: thread.id },
+          title: thread.title,
+        }))
+    : [];
+  const run = async (
+    command: () => Promise<void>,
+    closePicker = false,
+    unassignKey: string | null = null,
+  ) => {
     if (!mounted.current || !permitted.current || pending.current) return;
     pending.current = true;
     setBusy(true);
+    setUnassigning(unassignKey);
     setError(null);
     try {
       await command();
@@ -140,13 +183,16 @@ function ProjectAgents({
       if (mounted.current) setError(linkErrorText(cause));
     } finally {
       pending.current = false;
-      if (mounted.current) setBusy(false);
+      if (mounted.current) {
+        setBusy(false);
+        setUnassigning(null);
+      }
     }
   };
   const unavailable = !capability.ready
     ? "Checking project agent support..."
     : !capability.workspaceLinks
-      ? "Project agents are not available on this server yet."
+      ? "Project links are unavailable on this server."
       : !connected
         ? "Reconnect to manage project agents."
         : !canOperate
@@ -158,6 +204,9 @@ function ProjectAgents({
       rows={rows}
       canAssign={canAssign}
       busy={busy}
+      unassigning={unassigning}
+      disabledReason={unavailable}
+      empty={available && Boolean(query.data) && rows.length === 0}
       notice={
         <>
           {unavailable ? (
@@ -170,11 +219,8 @@ function ProjectAgents({
               {error ?? query.error}
             </p>
           ) : null}
-          {!unavailable && !query.data && !query.error ? (
+          {available && !query.data && !query.error ? (
             <p role="status">Loading project agents...</p>
-          ) : null}
-          {!unavailable && query.data && rows.length === 0 ? (
-            <p className="text-muted-foreground">No agents assigned to this project.</p>
           ) : null}
           {query.data?.truncated && available ? (
             <p className="text-muted-foreground">Some project assignments are not shown.</p>
@@ -183,7 +229,11 @@ function ProjectAgents({
       }
       onOpen={(key) => {
         const row = assignments.find((view) => view.id === key);
-        if (row?.item.ref.type === "thread" && connected && byId.has(row.item.ref.threadId))
+        if (
+          row?.item.ref.type === "thread" &&
+          connected &&
+          (byId.has(row.item.ref.threadId) || archivedById.has(row.item.ref.threadId))
+        )
           onOpen(row.item.ref);
       }}
       onAssign={() => {
@@ -195,7 +245,7 @@ function ProjectAgents({
       }}
       onUnassign={(key) => {
         const assignment = assignments.find((view) => view.id === key);
-        if (assignment) void run(() => unlink(assignment.id));
+        if (assignment) void run(() => unlink(assignment.id), false, key);
       }}
       picker={
         picking ? (
@@ -206,6 +256,7 @@ function ProjectAgents({
               onFilterChange={setFilter}
               busy={busy || !canAssign}
               placeholder="Find a thread"
+              threadOnly
               empty="No matching threads."
               onChoose={(endpoint) => {
                 void run(() => linkItem(projectEndpoint, endpoint), true);
@@ -217,6 +268,25 @@ function ProjectAgents({
           </div>
         ) : null
       }
+      renderRowActions={(key) => {
+        const assignment = assignments.find((view) => view.id === key);
+        if (!assignment) return null;
+        const row = rows.find((row) => row.key === key);
+        return (
+          <>
+            <p className="max-w-56 px-1.75 text-muted-foreground">
+              {linkSourceText(assignment.source)}
+            </p>
+            {canAssign && row && !row.unavailableReason ? (
+              <WorkspaceItemActions
+                environmentId={environmentId}
+                item={{ ...assignment.item, title: row.title }}
+                layout="menu"
+              />
+            ) : null}
+          </>
+        );
+      }}
       projectActions={
         canAssign ? (
           <WorkspaceItemActions

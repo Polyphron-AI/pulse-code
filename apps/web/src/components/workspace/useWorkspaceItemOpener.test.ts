@@ -275,7 +275,7 @@ it("binds create and repair to the original environment and refuses read-only wr
   }
 });
 
-it("opens colliding thread IDs in their captured environments without new work", async () => {
+it("opens colliding thread IDs in their captured environments", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   boundary.navigate.mockClear();
   boundary.external.mockClear();

@@ -27,7 +27,7 @@ export function WorkspaceItemActionButtons({
   const actions = (
     <>
       <Tooltip>
-        <TooltipTrigger render={<span />}>
+        <TooltipTrigger render={<span className="flex" />}>
           <Button
             {...startThread}
             data-workspace-action="startThread"
@@ -41,7 +41,7 @@ export function WorkspaceItemActionButtons({
       </Tooltip>
       {addToProject ? (
         <Tooltip>
-          <TooltipTrigger render={<span />}>
+          <TooltipTrigger render={<span className="flex" />}>
             <Button
               {...addToProject}
               data-workspace-action="addToProject"
@@ -56,7 +56,7 @@ export function WorkspaceItemActionButtons({
       ) : null}
       {startProject ? (
         <Tooltip>
-          <TooltipTrigger render={<span />}>
+          <TooltipTrigger render={<span className="flex" />}>
             <Button
               {...startProject}
               data-workspace-action="startProject"

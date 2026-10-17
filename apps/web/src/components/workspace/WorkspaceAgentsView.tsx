@@ -22,6 +22,10 @@ export interface WorkspaceAgentsViewProps {
   readonly notice?: ReactNode;
   readonly picker?: ReactNode;
   readonly projectActions?: ReactNode;
+  readonly renderRowActions?: (key: string) => ReactNode;
+  readonly disabledReason?: string | null;
+  readonly unassigning?: string | null;
+  readonly empty?: boolean;
 }
 
 /** Flat project assignments shared by the live resource and isolated fixture. */
@@ -36,6 +40,10 @@ export function WorkspaceAgentsView({
   notice,
   picker,
   projectActions,
+  renderRowActions,
+  disabledReason,
+  unassigning,
+  empty = rows.length === 0,
 }: WorkspaceAgentsViewProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   return (
@@ -46,7 +54,7 @@ export function WorkspaceAgentsView({
           General agents assigned to {projectTitle}
         </p>
         <Popover open={menuOpen} onOpenChange={setMenuOpen}>
-          <span className="absolute right-0 top-0 opacity-0 group-hover:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-100">
+          <span className="absolute right-0 top-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-within:opacity-100 has-data-popup-open:opacity-100 pointer-coarse:opacity-100">
             <PopoverTrigger
               render={
                 <Button
@@ -67,6 +75,9 @@ export function WorkspaceAgentsView({
             aria-label="Project agent actions"
           >
             <div className="flex flex-col items-start gap-1 pointer-coarse:[&_button]:min-h-11 pointer-coarse:[&_button]:min-w-11">
+              {disabledReason ? (
+                <p className="max-w-56 px-1.75 text-muted-foreground">{disabledReason}</p>
+              ) : null}
               <Button
                 size="xs"
                 variant="ghost"
@@ -85,14 +96,24 @@ export function WorkspaceAgentsView({
       </div>
       {notice}
       {picker}
-      {rows.length === 0 && !notice ? (
-        <p className="text-muted-foreground">No agents assigned to this project.</p>
+      {empty ? (
+        <div className="space-y-2">
+          <p className="text-muted-foreground">No agents assigned to this project.</p>
+          {canAssign ? (
+            <div className="flex flex-col items-start gap-1 pointer-coarse:[&_button]:min-h-11">
+              <Button size="xs" variant="ghost" disabled={busy} onClick={onAssign}>
+                Link existing thread
+              </Button>
+              {projectActions}
+            </div>
+          ) : null}
+        </div>
       ) : null}
       <ul aria-label="Assigned project agents" className="min-w-0">
         {rows.map((row) => (
           <li
             key={row.key}
-            className="group relative h-[85px] pointer-coarse:h-auto pointer-coarse:min-h-[105px] min-w-0 border-b border-border/40 pt-3.75"
+            className="group relative min-h-[85px] pointer-coarse:min-h-[105px] min-w-0 border-b border-border/40 pt-3.25"
           >
             <div className="flex min-w-0 items-start gap-2.25">
               <span
@@ -110,26 +131,22 @@ export function WorkspaceAgentsView({
                   </TooltipTrigger>
                   <TooltipPopup>{row.title}</TooltipPopup>
                 </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <p className="mt-1 truncate text-3xs leading-3.5 text-muted-foreground" />
-                    }
-                  >
-                    {row.status}
-                  </TooltipTrigger>
-                  <TooltipPopup>{row.status}</TooltipPopup>
-                </Tooltip>
+                <p className="mt-1 text-3xs leading-3.5 text-muted-foreground">{row.status}</p>
               </div>
               <span
-                aria-label={row.active ? "Active" : "Inactive"}
+                aria-hidden="true"
                 className={`mt-3 size-[7px] shrink-0 rounded-full ${row.active ? "bg-primary" : "bg-muted-foreground/50"}`}
               />
             </div>
-            <div className="mt-[10px] flex items-center justify-between">
+            {row.unavailableReason ? (
+              <p className="mt-1 text-3xs leading-3.5 text-muted-foreground">
+                {row.unavailableReason}
+              </p>
+            ) : null}
+            <div className="mt-1 flex items-start justify-between">
               <button
                 type="button"
-                className="text-3xs leading-4 text-primary hover:underline focus-visible:outline-2 focus-visible:outline-ring disabled:text-muted-foreground pointer-coarse:min-h-11"
+                className="rounded-sm text-3xs leading-4 text-info-foreground hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:text-muted-foreground pointer-coarse:min-h-11"
                 disabled={Boolean(row.unavailableReason)}
                 aria-description={row.unavailableReason}
                 onClick={() => onOpen(row.key)}
@@ -137,11 +154,11 @@ export function WorkspaceAgentsView({
                 Open conversation →
               </button>
               <Popover>
-                <span className="opacity-0 group-hover:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-100">
+                <span className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-within:opacity-100 has-data-popup-open:opacity-100 pointer-coarse:opacity-100">
                   <PopoverTrigger
                     render={
                       <Button
-                        size="icon-tiny"
+                        size="icon-xs"
                         variant="ghost"
                         className="pointer-coarse:min-h-11 pointer-coarse:min-w-11"
                         aria-label={`Actions for ${row.title}`}
@@ -157,20 +174,26 @@ export function WorkspaceAgentsView({
                   variant="opaque"
                   aria-label={`Actions for ${row.title}`}
                 >
-                  {row.unavailableReason ? (
-                    <p className="text-sm text-muted-foreground sm:text-xs">
-                      {row.unavailableReason}
-                    </p>
-                  ) : null}
-                  <Button
-                    size="xs"
-                    variant="ghost"
-                    className="pointer-coarse:min-h-11 pointer-coarse:min-w-11"
-                    disabled={!canAssign || busy}
-                    onClick={() => onUnassign(row.key)}
-                  >
-                    Unassign from project
-                  </Button>
+                  <div className="flex flex-col items-start gap-1">
+                    {disabledReason ? (
+                      <p className="max-w-56 px-1.75 text-muted-foreground">{disabledReason}</p>
+                    ) : null}
+                    {row.unavailableReason ? (
+                      <p className="max-w-56 px-1.75 text-sm text-muted-foreground sm:text-xs">
+                        {row.unavailableReason}
+                      </p>
+                    ) : null}
+                    <Button
+                      size="xs"
+                      variant="ghost"
+                      className="pointer-coarse:min-h-11 pointer-coarse:min-w-11"
+                      disabled={!canAssign || busy}
+                      onClick={() => onUnassign(row.key)}
+                    >
+                      {unassigning === row.key ? "Unassigning..." : "Unassign from project"}
+                    </Button>
+                    {renderRowActions?.(row.key)}
+                  </div>
                 </PopoverPopup>
               </Popover>
             </div>

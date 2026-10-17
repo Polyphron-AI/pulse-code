@@ -252,7 +252,9 @@ export function WorkspaceBrowserExternalPage({
   readonly onOpen: () => void;
   readonly onCopy: () => Promise<boolean>;
 }) {
-  const [copyReceipt, setCopyReceipt] = useState<{ address: string } | null>(null);
+  const [copyReceipt, setCopyReceipt] = useState<{ address: string; sequence: number } | null>(
+    null,
+  );
   const copied = copyReceipt?.address === address;
   // Parsing applies host casing and slash normalization without removing query parts or fragments.
   const removedUrlParts =
@@ -311,7 +313,11 @@ export function WorkspaceBrowserExternalPage({
             className="min-w-28 sm:min-w-24"
             disabled={!url}
             onClick={async () => {
-              if (await onCopy()) setCopyReceipt({ address });
+              if (await onCopy())
+                setCopyReceipt((previous) => ({
+                  address,
+                  sequence: (previous?.sequence ?? 0) + 1,
+                }));
             }}
           >
             {copied ? "Copied" : "Copy address"}
@@ -320,7 +326,7 @@ export function WorkspaceBrowserExternalPage({
         {linkAction}
         {linkHint ? <p className="text-muted-foreground">{linkHint}</p> : null}
       </div>
-      <p role="status" aria-live="polite" className="sr-only">
+      <p key={copyReceipt?.sequence ?? 0} role="status" aria-live="polite" className="sr-only">
         {copied ? "Address copied." : ""}
       </p>
       <p className="text-muted-foreground">

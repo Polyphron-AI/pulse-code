@@ -130,7 +130,9 @@ export const createWorkspaceMockupModule: CreateWorkspaceMockupModule = (session
                     aria-label="Linked page actions"
                     className="pointer-coarse:[&_button]:min-h-11 pointer-coarse:[&_button]:min-w-11"
                   >
-                    <p className="text-sm text-muted-foreground sm:text-xs">Linked by you</p>
+                    <p className="max-w-56 px-1.75 text-sm text-muted-foreground sm:text-xs">
+                      Linked by you
+                    </p>
                     <Button
                       size="xs"
                       variant="ghost"

@@ -68,6 +68,7 @@ function Body({
     </p>
   );
 }
+vi.mock("./WorkspaceAgents", () => ({ WorkspaceAgents: () => <Body name="Agents" /> }));
 vi.mock("./WorkspaceToolsPanel", () => ({
   WorkspaceProjectFiles: (props: {
     environmentId: string;
@@ -77,7 +78,6 @@ vi.mock("./WorkspaceToolsPanel", () => ({
     bodies.files();
     return <Body {...props} name={`Files ${props.environmentId}`} />;
   },
-  WorkspaceProjectAgents: () => <Body name="Agents" />,
 }));
 vi.mock("./WorkspaceBrowser", () => ({
   WorkspaceBrowser: (props: { environmentId: string; request: unknown; selectedItem: unknown }) => {

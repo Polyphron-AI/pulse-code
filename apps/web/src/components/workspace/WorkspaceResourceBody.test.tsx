@@ -103,7 +103,7 @@ it("fills the resource body with a definite height and remounts Browser for a di
   }
 });
 
-it("dispatches Agents with canonical project scope and keeps Browser and Files available", async () => {
+it("dispatches Agents with canonical project scope", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const node = document.createElement("div");
   const root = createRoot(node);
