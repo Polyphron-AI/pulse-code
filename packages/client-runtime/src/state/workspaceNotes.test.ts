@@ -274,7 +274,7 @@ it.effect("selects lazily, shares one change stream and stops listeners while un
 );
 
 it.effect(
-  "invalidates selected notes on two clients and preserves typed edit conflicts and deletion",
+  "invalidates selected notes on two clients and preserves typed conflicts, deletion and restore",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -307,6 +307,18 @@ it.effect(
           [WS_METHODS.notesDelete]: () =>
             Effect.gen(function* () {
               deleted = true;
+              current = { ...current, revision: current.revision + 1 };
+              yield* SubscriptionRef.update(counter, (n) => n + 1);
+            }),
+          [WS_METHODS.notesRestore]: (input: { expectedRevision: number }) =>
+            Effect.gen(function* () {
+              if (!deleted || input.expectedRevision !== current.revision)
+                return yield* new WorkspaceNotesError({
+                  kind: "conflict",
+                  message: "Reload the note.",
+                });
+              deleted = false;
+              current = { ...current, revision: current.revision + 1 };
               yield* SubscriptionRef.update(counter, (n) => n + 1);
             }),
         } as unknown as WsRpcProtocolClient;
@@ -327,10 +339,12 @@ it.effect(
         yield* Effect.promise(() => executeAtomQuery(second.registry, b));
         const changed = Latch.makeUnsafe();
         const unavailable = Latch.makeUnsafe();
+        const restored = Latch.makeUnsafe();
         const stop = second.registry.subscribe(b, (result) => {
           if (AsyncResult.isSuccess(result) && result.value.revision === 2) changed.openUnsafe();
           if (AsyncResult.isFailure(result) && isNotesError(Cause.squash(result.cause)))
             unavailable.openUnsafe();
+          if (AsyncResult.isSuccess(result) && result.value.revision === 4) restored.openUnsafe();
         });
         yield* Effect.addFinalizer(() => Effect.sync(stop));
         const update = {
@@ -356,6 +370,31 @@ it.effect(
           }),
         );
         yield* unavailable.await;
+        const restoration = {
+          environmentId: TARGET.environmentId,
+          input: { requestId: input.requestId, id: note.id, expectedRevision: 3 },
+        };
+        const conflict = yield* Effect.promise(() =>
+          runAtomCommand(first.registry, first.atoms.restore, {
+            ...restoration,
+            input: { ...restoration.input, expectedRevision: 2 },
+          }),
+        );
+        expect(AsyncResult.isFailure(conflict) && Cause.squash(conflict.cause)).toMatchObject({
+          kind: "conflict",
+        });
+        expect(
+          AsyncResult.isSuccess(
+            yield* Effect.promise(() =>
+              runAtomCommand(first.registry, first.atoms.restore, restoration),
+            ),
+          ),
+        ).toBe(true);
+        yield* restored.await;
+        expect(AsyncResult.getOrThrow(second.registry.get(b))).toMatchObject({
+          body: "Reviewed",
+          revision: 4,
+        });
       }),
     ),
 );

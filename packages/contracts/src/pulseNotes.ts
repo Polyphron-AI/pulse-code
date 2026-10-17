@@ -6,16 +6,21 @@ import { IsoDateTime, NonNegativeInt, PositiveInt } from "./baseSchemas.ts";
 const uuid = "[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}";
 const RequestId = Schema.String.check(Schema.isPattern(new RegExp(`^${uuid}$`)));
 export const WorkspaceNoteId = Schema.String.check(Schema.isPattern(new RegExp(`^wsn_${uuid}$`)));
-const Title = Schema.Trim.check(Schema.isMinLength(1), Schema.isMaxLength(300));
 // UTF-8 bounds also apply in native clients without Buffer or TextEncoder globals.
 const utf8Length = (value: string) => {
   let bytes = 0;
   for (const char of value) {
     const code = char.codePointAt(0)!;
+    if (code >= 0xd800 && code <= 0xdfff) return Infinity;
     bytes += code <= 0x7f ? 1 : code <= 0x7ff ? 2 : code <= 0xffff ? 3 : 4;
   }
   return bytes;
 };
+const Title = Schema.Trim.check(
+  Schema.isMinLength(1),
+  Schema.isMaxLength(300),
+  Schema.makeFilter((text) => Number.isFinite(utf8Length(text))),
+);
 const Body = Schema.String.check(Schema.makeFilter((text) => utf8Length(text) <= 65536));
 export const WorkspaceNote = Schema.Struct({
   id: WorkspaceNoteId,
@@ -45,6 +50,8 @@ export const WorkspaceNoteDelete = Schema.Struct({
   expectedRevision: PositiveInt,
 });
 export type WorkspaceNoteDelete = typeof WorkspaceNoteDelete.Type;
+export const WorkspaceNoteRestore = WorkspaceNoteDelete;
+export type WorkspaceNoteRestore = typeof WorkspaceNoteRestore.Type;
 export const WorkspaceNoteRead = Schema.Struct({
   id: WorkspaceNoteId,
   offset: Schema.optionalKey(NonNegativeInt.check(Schema.isLessThanOrEqualTo(65536))),
@@ -76,6 +83,7 @@ export const PULSE_NOTES_METHODS = {
   notesRead: "pulse.notes.read",
   notesUpdate: "pulse.notes.update",
   notesDelete: "pulse.notes.delete",
+  notesRestore: "pulse.notes.restore",
   notesSubscribeChanges: "pulse.notes.subscribeChanges",
 } as const;
 export const PulseNotesRpcs = [
@@ -101,6 +109,11 @@ export const PulseNotesRpcs = [
   }),
   Rpc.make(PULSE_NOTES_METHODS.notesDelete, {
     payload: WorkspaceNoteDelete,
+    success: Schema.Void,
+    error,
+  }),
+  Rpc.make(PULSE_NOTES_METHODS.notesRestore, {
+    payload: WorkspaceNoteRestore,
     success: Schema.Void,
     error,
   }),

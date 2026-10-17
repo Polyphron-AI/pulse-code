@@ -55,5 +55,11 @@ export function createWorkspaceNoteAtoms<R, E>(
       scheduler,
       concurrency,
     }),
+    restore: createEnvironmentRpcCommand(runtime, {
+      label: "workspace-notes:restore",
+      tag: WS_METHODS.notesRestore,
+      scheduler,
+      concurrency,
+    }),
   };
 }

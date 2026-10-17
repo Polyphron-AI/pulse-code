@@ -160,6 +160,22 @@ unknown keys and still return success; a mismatch reports the unsupported field 
 draft with one inline notice. Reset accepts the materialized host timezone instead of comparing
 it with null.
 
+## Native note recovery and replay
+
+Native note deletion retains the body and existing links. Restore requires operate scope and
+the tombstone revision, which is the successful delete's expected revision plus one.
+`pulse.notes.restore` checks that revision and the deleted state in the same transaction as its
+request journal entry. It returns void; clients refetch after the change invalidation. A stale
+revision or an already active note returns conflict. A missing ID returns not-found. A replay
+returns its original success without restoring again, even after another delete.
+
+Create and update journal only result metadata. The fingerprint-matched replay input supplies
+the original body, so repeated saves do not retain a body history in the request journal.
+Paired Unicode validation at decode keeps that replay text identical to the persisted text.
+Request metadata remains durable for replay; no retention window expires an accepted request.
+The recovery UI belongs to the notes editor work. Unlink and relink remain separate from
+delete and restore.
+
 ## Shared entrances and status
 
 `WorkspaceHeaderContext` supplies shell-owned environment and space labels to

@@ -5,6 +5,7 @@ import {
   WorkspaceNoteCreate,
   WorkspaceNoteUpdate,
   WorkspaceNoteDelete,
+  WorkspaceNoteRestore,
   WorkspaceNoteRead,
   WorkspaceNotesError,
   PulseNotesRpcs,
@@ -17,6 +18,7 @@ const decodeCreate = Schema.decodeUnknownSync(WorkspaceNoteCreate);
 const decodeUpdate = Schema.decodeSync(WorkspaceNoteUpdate);
 const isUpdate = Schema.is(WorkspaceNoteUpdate);
 const isDelete = Schema.is(WorkspaceNoteDelete);
+const isRestore = Schema.is(WorkspaceNoteRestore);
 const decodeRead = Schema.decodeUnknownSync(WorkspaceNoteRead);
 const decodeError = Schema.decodeSync(WorkspaceNotesError);
 const encodeError = Schema.encodeSync(WorkspaceNotesError);
@@ -56,8 +58,21 @@ it("requires positive integer revisions and valid native IDs at every boundary",
   for (const expectedRevision of [0, -1, 1.5]) {
     expect(isUpdate({ ...update, expectedRevision })).toBe(false);
     expect(isDelete({ requestId, id, expectedRevision })).toBe(false);
+    expect(isRestore({ requestId, id, expectedRevision })).toBe(false);
   }
   expect(isUpdate({ ...update, id: "wsn_not-a-uuid" })).toBe(false);
+});
+
+it("rejects lone UTF-16 surrogates at decode and accepts paired Unicode text", () => {
+  for (const invalid of ["\uD800", "\uDC00", "a\uD800b", "a\uDC00b", "\uD800\uD800", "😀\uDC00"]) {
+    expect(() => decodeCreate({ ...create, body: invalid })).toThrow();
+    expect(() => decodeCreate({ ...create, title: invalid })).toThrow();
+    expect(() => decodeUpdate({ ...create, id, expectedRevision: 1, body: invalid })).toThrow();
+  }
+  expect(decodeCreate({ ...create, title: "😀", body: "a😀b�" })).toMatchObject({
+    title: "😀",
+    body: "a😀b�",
+  });
 });
 
 it("requires a revision on continuation reads and rejects unbounded offsets", () => {
@@ -72,7 +87,7 @@ it("requires a revision on continuation reads and rejects unbounded offsets", ()
     expect(() => decode(input)).toThrow();
 });
 
-it("serializes typed conflicts and exposes six notes RPCs", () => {
+it("serializes typed conflicts and exposes seven notes RPCs", () => {
   const error = new WorkspaceNotesError({ kind: "conflict", message: "Reload the note." });
   expect(decodeError(encodeError(error))).toMatchObject({
     _tag: "WorkspaceNotesError",
@@ -85,6 +100,7 @@ it("serializes typed conflicts and exposes six notes RPCs", () => {
     "pulse.notes.read",
     "pulse.notes.update",
     "pulse.notes.delete",
+    "pulse.notes.restore",
     "pulse.notes.subscribeChanges",
   ]);
 });

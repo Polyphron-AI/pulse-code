@@ -4,6 +4,7 @@ import {
   WorkspaceNoteGet,
   WorkspaceNoteUpdate,
   WorkspaceNoteDelete,
+  WorkspaceNoteRestore,
   WorkspaceNoteRead,
   WorkspaceNotesError,
 } from "@t3tools/contracts";
@@ -14,16 +15,19 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
+import * as Struct from "effect/Struct";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as NodeCrypto from "node:crypto";
 import { sliceUtf8 } from "../mail/MailImapRead.ts";
 
-const NoteJson = Schema.fromJsonString(WorkspaceNote);
-const DeleteJson = Schema.fromJsonString(Schema.Null);
+// The fingerprint-matched input supplies the original body without storing it per save.
+const NoteJson = Schema.fromJsonString(WorkspaceNote.mapFields(Struct.omit(["body"])));
+const VoidJson = Schema.fromJsonString(Schema.Null);
 const encodeCreate = Schema.encodeSync(Schema.fromJsonString(WorkspaceNoteCreate));
 const encodeUpdate = Schema.encodeSync(Schema.fromJsonString(WorkspaceNoteUpdate));
 const encodeDelete = Schema.encodeSync(Schema.fromJsonString(WorkspaceNoteDelete));
+const encodeRestore = Schema.encodeSync(Schema.fromJsonString(WorkspaceNoteRestore));
 const isNotesError = Schema.is(WorkspaceNotesError);
 const decodeNote = Schema.decodeUnknownEffect(WorkspaceNote);
 const fail = (kind: WorkspaceNotesError["kind"], message: string) =>
@@ -109,7 +113,7 @@ export const make = Effect.gen(function* () {
     changes: SubscriptionRef.changes(counter).pipe(Stream.filter((n) => n > 0)),
     create: Effect.fnUntraced(function* (raw: WorkspaceNoteCreate) {
       const input = yield* decode(WorkspaceNoteCreate, raw);
-      return yield* mutate(
+      const result = yield* mutate(
         input.requestId,
         `create:${encodeCreate(input)}`,
         NoteJson,
@@ -121,10 +125,11 @@ export const make = Effect.gen(function* () {
           return yield* get({ id });
         }),
       );
+      return { ...result, body: input.body };
     }, safe),
     update: Effect.fnUntraced(function* (raw: WorkspaceNoteUpdate) {
       const input = yield* decode(WorkspaceNoteUpdate, raw);
-      return yield* mutate(
+      const result = yield* mutate(
         input.requestId,
         `update:${encodeUpdate(input)}`,
         NoteJson,
@@ -136,18 +141,37 @@ export const make = Effect.gen(function* () {
           return yield* get({ id: input.id });
         }),
       );
+      return { ...result, body: input.body };
     }, safe),
     delete: Effect.fnUntraced(function* (raw: WorkspaceNoteDelete) {
       const input = yield* decode(WorkspaceNoteDelete, raw);
       yield* mutate(
         input.requestId,
         `delete:${encodeDelete(input)}`,
-        DeleteJson,
+        VoidJson,
         Effect.gen(function* () {
           const now = yield* DateTime.nowAsDate;
           const rows =
             yield* sql`UPDATE workspace_notes SET deleted=1,revision=revision+1,updated_at=${now.toISOString()} WHERE id=${input.id} AND revision=${input.expectedRevision} AND deleted=0 RETURNING revision`;
           if (!rows.length) return yield* requireRevision(input.id);
+          return null;
+        }),
+      );
+    }, safe),
+    restore: Effect.fnUntraced(function* (raw: WorkspaceNoteRestore) {
+      const input = yield* decode(WorkspaceNoteRestore, raw);
+      yield* mutate(
+        input.requestId,
+        `restore:${encodeRestore(input)}`,
+        VoidJson,
+        Effect.gen(function* () {
+          const now = yield* DateTime.nowAsDate;
+          const rows =
+            yield* sql`UPDATE workspace_notes SET deleted=0,revision=revision+1,updated_at=${now.toISOString()} WHERE id=${input.id} AND revision=${input.expectedRevision} AND deleted=1 RETURNING revision`;
+          if (!rows.length) {
+            const exists = yield* sql`SELECT id FROM workspace_notes WHERE id=${input.id}`;
+            return yield* exists.length ? conflict() : missing();
+          }
           return null;
         }),
       );

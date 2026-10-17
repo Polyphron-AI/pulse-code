@@ -30,6 +30,7 @@ export const RPC_REQUIRED_SCOPES = {
   [WS_METHODS.notesCreate]: AuthOrchestrationOperateScope,
   [WS_METHODS.notesUpdate]: AuthOrchestrationOperateScope,
   [WS_METHODS.notesDelete]: AuthOrchestrationOperateScope,
+  [WS_METHODS.notesRestore]: AuthOrchestrationOperateScope,
   [WS_METHODS.notesGet]: AuthOrchestrationReadScope,
   [WS_METHODS.notesRead]: AuthOrchestrationReadScope,
   [WS_METHODS.notesSubscribeChanges]: AuthOrchestrationReadScope,

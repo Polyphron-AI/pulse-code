@@ -1269,6 +1269,7 @@ const workspaceToolsWsRpcLayer = WorkspaceToolsWsRpcGroup.toLayer(
           [WS_METHODS.notesRead]: notes.read,
           [WS_METHODS.notesUpdate]: notes.update,
           [WS_METHODS.notesDelete]: notes.delete,
+          [WS_METHODS.notesRestore]: notes.restore,
           [WS_METHODS.notesSubscribeChanges]: () => notes.changes,
         });
       }),

@@ -35,6 +35,7 @@ it.effect(
         [WS_METHODS.notesRead]: notes.read,
         [WS_METHODS.notesUpdate]: notes.update,
         [WS_METHODS.notesDelete]: notes.delete,
+        [WS_METHODS.notesRestore]: notes.restore,
         [WS_METHODS.notesSubscribeChanges]: () => notes.changes,
       });
       const read = yield* RpcTest.makeClient(group).pipe(
@@ -83,6 +84,28 @@ it.effect(
       expect(yield* read[WS_METHODS.notesGet]({ id: note.id }).pipe(Effect.flip)).toMatchObject({
         kind: "not-found",
       });
+      const restoration = {
+        requestId: "00000000-0000-0000-0000-000000000005",
+        id: note.id,
+        expectedRevision: deletion.expectedRevision + 1,
+      };
+      expect(yield* read[WS_METHODS.notesRestore](restoration).pipe(Effect.flip)).toMatchObject({
+        requiredScope: AuthOrchestrationOperateScope,
+      });
+      expect(
+        yield* operate[WS_METHODS.notesRestore]({
+          ...restoration,
+          expectedRevision: deletion.expectedRevision,
+        }).pipe(Effect.flip),
+      ).toMatchObject({
+        _tag: "WorkspaceNotesError",
+        kind: "conflict",
+      });
+      yield* operate[WS_METHODS.notesRestore](restoration);
+      expect(yield* read[WS_METHODS.notesGet]({ id: note.id })).toMatchObject({
+        body: "Reviewed",
+        revision: restoration.expectedRevision + 1,
+      });
     }).pipe(Effect.scoped, Effect.provide(storage)),
 );
 
@@ -96,6 +119,7 @@ it.effect("requires read scope for note reads and subscriptions", () =>
       [WS_METHODS.notesRead]: notes.read,
       [WS_METHODS.notesUpdate]: notes.update,
       [WS_METHODS.notesDelete]: notes.delete,
+      [WS_METHODS.notesRestore]: notes.restore,
       [WS_METHODS.notesSubscribeChanges]: () => Stream.make(1),
     });
     const client = yield* RpcTest.makeClient(group).pipe(
