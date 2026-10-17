@@ -2,7 +2,7 @@
 import { act, useEffect, useSyncExternalStore, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { getByRole, getAllByRole, getByText } from "@testing-library/dom";
-import { expect, it, vi } from "vite-plus/test";
+import { beforeAll, expect, it, vi } from "vite-plus/test";
 import {
   EnvironmentId,
   chatResourceId,
@@ -127,6 +127,7 @@ vi.mock("./OfficeWorkspace", () => ({ OfficeWorkspace: () => null }));
 vi.mock("./TasksSpace", () => ({ TasksSpace: () => null }));
 vi.mock("./meetings/MeetingsSpace", () => ({ MeetingsSpace: () => null }));
 import { Route } from "../../routes/_chat.workspace";
+import { CommunicationsWorkspace, type ChatSource } from "./CommunicationsWorkspace";
 import { WorkspaceResourcesContext, useWorkspaceResourceState } from "./workspaceResourceState";
 vi.mock("./WorkspaceResourcesPanel", () => ({ WorkspaceProjectResources: () => null }));
 vi.mock("../../hooks/useSettings", () => ({
@@ -162,70 +163,100 @@ function ResourceProvider({ children }: { children: ReactNode }) {
   return <WorkspaceResourcesContext value={resources}>{children}</WorkspaceResourcesContext>;
 }
 
-it("keeps loaded pages and makes no provider requests on an unrelated route search change", async () => {
-  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  boundary.search = {
-    ...boundary.search,
-    item: chatResourceId({
-      version: 1,
-      transport: "desktop",
-      connectionId: account.id,
-      workspaceId: "T1",
-      conversationId: channel.id,
-    }),
-    view: "chats",
-  };
-  boundary.connected = true;
-  boundary.operate = true;
-  const requests: ChatRequest[] = [];
-  const bridge = Object.getOwnPropertyDescriptor(window, "desktopBridge");
-  Object.defineProperty(window, "desktopBridge", {
-    configurable: true,
-    value: {
-      communicationsInvoke: async (request: ChatRequest): Promise<ChatResult> => {
-        requests.push(request);
-        if (request.operation === "accounts.list") return { ok: true, accounts: [account] };
-        if (request.operation === "conversations.list")
-          return request.cursor
-            ? { ok: true, conversations: [{ ...channel, id: "C2", title: "Second page" }] }
-            : { ok: true, conversations: [channel], nextCursor: "page2" };
-        if (request.operation === "messages.list") return { ok: true, messages: [rootMessage] };
-        throw new Error("Unexpected write");
-      },
-    },
-  });
-  const node = document.createElement("div");
-  document.body.append(node);
-  const root = createRoot(node);
-  const Component = Route.options.component!;
+const Component = Route.options.component!;
+beforeAll(async () => {
   await Component.preload?.();
-  try {
-    await act(() =>
+});
+
+it.each(["route search", "equal source"])(
+  "keeps loaded pages and makes no provider requests on a new %s",
+  async (change) => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    boundary.search = {
+      ...boundary.search,
+      item: chatResourceId({
+        version: 1,
+        transport: "desktop",
+        connectionId: account.id,
+        workspaceId: "T1",
+        conversationId: channel.id,
+      }),
+      view: "chats",
+    };
+    boundary.connected = true;
+    boundary.operate = true;
+    const requests: ChatRequest[] = [];
+    const bridge = Object.getOwnPropertyDescriptor(window, "desktopBridge");
+    Object.defineProperty(window, "desktopBridge", {
+      configurable: true,
+      value: {
+        communicationsInvoke: async (request: ChatRequest): Promise<ChatResult> => {
+          requests.push(request);
+          if (request.operation === "accounts.list") return { ok: true, accounts: [account] };
+          if (request.operation === "conversations.list")
+            return request.cursor
+              ? { ok: true, conversations: [{ ...channel, id: "C2", title: "Second page" }] }
+              : { ok: true, conversations: [channel], nextCursor: "page2" };
+          if (request.operation === "messages.list") return { ok: true, messages: [rootMessage] };
+          throw new Error("Unexpected write");
+        },
+      },
+    });
+    const node = document.createElement("div");
+    document.body.append(node);
+    const root = createRoot(node);
+    const source: ChatSource = {
+      provider: "slack",
+      resourceId: boundary.search.item,
+      resource: {
+        version: 1,
+        transport: "desktop",
+        connectionId: account.id,
+        workspaceId: "T1",
+        conversationId: channel.id,
+      },
+    };
+    const render = (nextSource: ChatSource) =>
       root.render(
         <ResourceProvider>
-          <Component />
+          {change === "route search" ? (
+            <Component />
+          ) : (
+            <CommunicationsWorkspace source={nextSource} />
+          )}
         </ResourceProvider>,
-      ),
-    );
-    expect(getByText(node, rootMessage.text)).toBeDefined();
-    await act(() => getAllByRole(node, "button", { name: "Load more conversations" })[0]!.click());
-    expect(getByRole(node, "button", { name: /Second page Team/ })).toBeDefined();
-    const before = requests.length;
-    await act(() => {
-      boundary.search = { ...boundary.search, view: "later" };
-      boundary.listeners.forEach((listener) => listener());
-    });
-    expect(requests).toHaveLength(before);
-    expect(requests.filter((request) => request.operation === "accounts.list")).toHaveLength(1);
-    expect(requests.filter((request) => request.operation === "conversations.list")).toHaveLength(
-      2,
-    );
-    expect(getByRole(node, "button", { name: /Second page Team/ })).toBeDefined();
-  } finally {
-    await act(() => root.unmount());
-    node.remove();
-    if (bridge) Object.defineProperty(window, "desktopBridge", bridge);
-    else Reflect.deleteProperty(window, "desktopBridge");
-    vi.unstubAllGlobals();
-  }
-});
+      );
+    try {
+      await act(() => render(source));
+      expect(getByText(node, rootMessage.text)).toBeDefined();
+      await act(() =>
+        getAllByRole(node, "button", { name: "Load more conversations" })[0]!.click(),
+      );
+      expect(getByRole(node, "button", { name: /Second page Team/ })).toBeDefined();
+      const before = requests.length;
+      await act(() => {
+        if (change === "route search") {
+          boundary.search = { ...boundary.search, view: "later" };
+          boundary.listeners.forEach((listener) => listener());
+        } else {
+          const nextSource = { ...source, resource: { ...source.resource } };
+          expect(nextSource).not.toBe(source);
+          expect(nextSource).toEqual(source);
+          render(nextSource);
+        }
+      });
+      expect(requests).toHaveLength(before);
+      expect(requests.filter((request) => request.operation === "accounts.list")).toHaveLength(1);
+      expect(requests.filter((request) => request.operation === "conversations.list")).toHaveLength(
+        2,
+      );
+      expect(getByRole(node, "button", { name: /Second page Team/ })).toBeDefined();
+    } finally {
+      await act(() => root.unmount());
+      node.remove();
+      if (bridge) Object.defineProperty(window, "desktopBridge", bridge);
+      else Reflect.deleteProperty(window, "desktopBridge");
+      vi.unstubAllGlobals();
+    }
+  },
+);

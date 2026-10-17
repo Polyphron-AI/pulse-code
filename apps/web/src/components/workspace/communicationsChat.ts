@@ -46,9 +46,7 @@ export function chatItem(
     ...(message
       ? {
           messageId: message.id,
-          ...(account.provider === "slack" && message.threadId && message.threadId !== message.id
-            ? { replyRootId: message.threadId }
-            : {}),
+          ...(account.provider === "slack" ? { replyRootId: message.threadId ?? message.id } : {}),
         }
       : {}),
   };

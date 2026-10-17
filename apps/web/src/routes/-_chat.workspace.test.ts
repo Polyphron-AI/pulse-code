@@ -662,7 +662,10 @@ it.each([
               ]
             : []),
         ]);
-        if (kind === "legacy-slack") expect(node.textContent).not.toContain("reply root");
+        if (kind === "legacy-slack")
+          expect(node.textContent).toContain(
+            "This legacy Slack message has no known reply root. Exact reply reading is unsupported until you reopen the source.",
+          );
       }
       expect(router.state.location.search.item).toBe(item);
       if (kind === "choose-account") {

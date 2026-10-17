@@ -36,7 +36,7 @@ import {
 
 import type { ChatSource } from "./CommunicationsWorkspace";
 import { useEnvironmentSettings } from "../../hooks/useSettings";
-import { formatEventTime } from "@t3tools/client-runtime/calendar/dates";
+import { displayDay, formatDay, formatEventTime } from "@t3tools/client-runtime/calendar/dates";
 import { useConnectedEnvironmentIds } from "../../state/environments";
 import { useWorkspaceCanOperate } from "./useWorkspaceCanOperate";
 import { WorkspaceItemActions, WorkspaceItemMenu } from "./WorkspaceItemActions";
@@ -269,6 +269,8 @@ function ChatWorkspace({
 }: ChatWorkspaceProps & { timeZone: string; writable: boolean }) {
   const { run, busy, error } = useCommunicationsRequest();
   const initialResourceId = source?.resourceId;
+  const [now] = useState(() => new Date(Date.now()).toISOString());
+  const today = displayDay(now, timeZone);
   const openItem = useWorkspaceItemOpener(environmentId);
   const initialOpened = useRef(false);
   const [sourceNotice, setSourceNotice] = useState<string>();
@@ -405,9 +407,11 @@ function ChatWorkspace({
               : {}),
           });
         setSourceNotice(
-          initialResource.messageId && !exact
-            ? "This message is unavailable. It may have been deleted or be outside the messages loaded here. Its saved link has been kept."
-            : undefined,
+          account.provider === "slack" && initialResource.messageId && !initialResource.replyRootId
+            ? "This legacy Slack message has no known reply root. Exact reply reading is unsupported until you reopen the source."
+            : initialResource.messageId && !exact
+              ? "This message is unavailable. It may have been deleted or be outside the messages loaded here. Its saved link has been kept."
+              : undefined,
         );
       }
     },
@@ -507,6 +511,20 @@ function ChatWorkspace({
     };
   }
   const savedKeys = useMemo(() => new Set(saved.map(chatReferenceKey)), [saved]);
+  const loadedLegacyKeys = useMemo(
+    () =>
+      new Set(
+        messages.map((message) =>
+          chatReferenceKey({
+            provider: account.provider,
+            accountId: message.accountId,
+            conversationId: message.conversationId,
+            messageId: message.id,
+          }),
+        ),
+      ),
+    [account.provider, messages],
+  );
   function savedMessage(message: ChatMessage, endpoint?: WorkspaceLinkEndpoint) {
     return (
       savedKeys.has(chatReferenceKey(reference(message, endpoint))) ||
@@ -547,13 +565,6 @@ function ChatWorkspace({
       (inThread ? threadEnd : historyEnd).current?.scrollIntoView({ block: "nearest" }),
     );
   }
-  const visibleConversations = conversations.filter(
-    (item) =>
-      (view !== "dms" || item.kind === "dm") &&
-      [item.title, item.workspace].some((value) =>
-        value.toLowerCase().includes(query.toLowerCase()),
-      ),
-  );
   const selectedResource = useMemo(
     () =>
       selectedMessage?.ref.type === "provider-resource"
@@ -565,6 +576,14 @@ function ChatWorkspace({
     () => conversations.map((item) => ({ item, ...chatItem(account, item) })),
     [account, conversations],
   );
+  const visibleConversationRows = conversationRows.filter(
+    ({ item }) =>
+      (view !== "dms" || item.kind === "dm") &&
+      [item.title, item.workspace].some((value) =>
+        value.toLowerCase().includes(query.toLowerCase()),
+      ),
+  );
+  const visibleConversations = visibleConversationRows.map(({ item }) => item);
   const messageRows = useMemo(
     () =>
       messages.map((message) => ({
@@ -594,7 +613,7 @@ function ChatWorkspace({
       item.provider === account.provider &&
       item.accountId === account.id &&
       item.conversationId === conversation?.id &&
-      !messages.some((message) => chatReferenceKey(reference(message)) === chatReferenceKey(item)),
+      !loadedLegacyKeys.has(chatReferenceKey(item)),
   );
   const listReason = environmentId
     ? conversationRows.map((row) => row.reason)
@@ -606,6 +625,7 @@ function ChatWorkspace({
     { message, endpoint }: { message: ChatMessage; endpoint?: WorkspaceLinkEndpoint | undefined },
     inThread = false,
   ) {
+    const day = displayDay(message.date, timeZone);
     const isSaved = savedMessage(message, endpoint);
     const selected =
       selectedResource?.connectionId === message.accountId &&
@@ -636,6 +656,8 @@ function ChatWorkspace({
               {message.author || "Unknown author"}
             </strong>
             <time dateTime={message.date} className="text-3xs text-muted-foreground">
+              {day !== today &&
+                `${formatDay(day, { day: "numeric", month: "short", year: "numeric" })}, `}
               {formatEventTime(message.date, timeZone)}
             </time>
           </div>
@@ -769,40 +791,38 @@ function ChatWorkspace({
           </nav>
           <div className="min-h-0 flex-1 overflow-y-auto p-2">
             <ChatUnavailable reasons={listReason} />
-            {conversationRows
-              .filter(({ item }) => visibleConversations.includes(item))
-              .map(({ item, endpoint }) => {
-                const row = (
-                  <button
-                    type="button"
-                    key={item.id}
-                    disabled={busy}
-                    aria-current={conversation?.id === item.id ? "page" : undefined}
-                    className={cn(
-                      "my-1 flex w-full items-start gap-2 rounded-md px-2 pr-12 py-2 text-left text-sm hover:bg-sidebar-row-hover focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-60",
-                      conversation?.id === item.id && "bg-sidebar-row-active",
-                    )}
-                    onClick={() => void openConversation(item)}
-                  >
-                    {item.kind === "dm" ? (
-                      <MessageCircleIcon className="mt-0.5 size-4 shrink-0" />
-                    ) : (
-                      <HashIcon className="mt-0.5 size-4 shrink-0" />
-                    )}
-                    <span className="min-w-0">
-                      <span className="block truncate">{item.title}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {item.workspace || item.kind}
-                      </span>
+            {visibleConversationRows.map(({ item, endpoint }) => {
+              const row = (
+                <button
+                  type="button"
+                  key={item.id}
+                  disabled={busy}
+                  aria-current={conversation?.id === item.id ? "page" : undefined}
+                  className={cn(
+                    "my-1 flex w-full items-start gap-2 rounded-md px-2 pr-12 py-2 text-left text-sm hover:bg-sidebar-row-hover focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-60",
+                    conversation?.id === item.id && "bg-sidebar-row-active",
+                  )}
+                  onClick={() => void openConversation(item)}
+                >
+                  {item.kind === "dm" ? (
+                    <MessageCircleIcon className="mt-0.5 size-4 shrink-0" />
+                  ) : (
+                    <HashIcon className="mt-0.5 size-4 shrink-0" />
+                  )}
+                  <span className="min-w-0">
+                    <span className="block truncate">{item.title}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {item.workspace || item.kind}
                     </span>
-                  </button>
-                );
-                return (
-                  <ChatItemRow key={item.id} environmentId={environmentId} endpoint={endpoint}>
-                    {row}
-                  </ChatItemRow>
-                );
-              })}
+                  </span>
+                </button>
+              );
+              return (
+                <ChatItemRow key={item.id} environmentId={environmentId} endpoint={endpoint}>
+                  {row}
+                </ChatItemRow>
+              );
+            })}
             {loaded && !visibleConversations.length && (
               <p className="p-2 text-xs text-muted-foreground">
                 No loaded conversations in this view.

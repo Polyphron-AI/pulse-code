@@ -82,10 +82,11 @@ export function useWorkspaceItemOpener(
       }
       ref = normalized;
       // Teams links hand off to this client's external browser, including from Resources.
+      const url = ref.type === "url" ? new URL(ref.url) : undefined;
       const teams =
-        ref.type === "url" &&
-        /^(teams\.microsoft\.(com|us)|teams\.live\.com|teams\.cloud\.microsoft)$/.test(
-          new URL(ref.url).hostname,
+        url?.protocol === "https:" &&
+        /(^|\.)(teams\.microsoft\.(com|us)|teams\.live\.com|teams\.cloud\.microsoft)$/.test(
+          url.hostname,
         );
       if (ref.type === "url" && openPage && !teams) {
         openPage(ref);

@@ -127,6 +127,7 @@ function ResourceProvider({ children }: { children: ReactNode }) {
 }
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-10-13T09:30:00Z"));
   boundary.menu.mockReset();
   boundary.connected = true;
   boundary.operate = true;
@@ -136,6 +137,7 @@ beforeEach(() => {
   window.localStorage.removeItem(savedKey);
 });
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.clearAllMocks();
   vi.unstubAllGlobals();
   window.localStorage.removeItem(savedKey);
@@ -239,6 +241,23 @@ it.each(["America/Los_Angeles", "Pacific/Kiritimati"])(
     }
   },
 );
+
+it.each([
+  ["America/Los_Angeles", rootMessage.date, "02:12"],
+  ["Pacific/Kiritimati", rootMessage.date, "13 Oct 2026, 23:12"],
+  ["America/Los_Angeles", "2025-10-13T09:12:00Z", "13 Oct 2025, 02:12"],
+  ["Pacific/Kiritimati", "2025-10-13T09:12:00Z", "13 Oct 2025, 23:12"],
+])("dates messages outside today in workspace zone %s at %s", async (zone, date, expected) => {
+  vi.mocked(Date.now).mockReturnValue(Date.parse("2026-10-13T10:30:00Z"));
+  boundary.zone = zone;
+  const view = await mountChat({ source: true, message: { ...rootMessage, date } });
+  try {
+    expect(view.node.querySelector("time")?.textContent).toBe(expected);
+    expect(view.node.querySelector("time")?.dateTime).toBe(date);
+  } finally {
+    await view.close();
+  }
+});
 
 it.each(["bot", "user-top-level", "reply"])(
   "reopens %s into the matching history and composer target",
@@ -379,7 +398,7 @@ it("matches exact legacy saved messages, renders them in Later and toggles witho
   };
   const foreign = { ...old, accountId: "other" };
   window.localStorage.setItem(savedKey, JSON.stringify([old, foreign]));
-  const view = await mountChat({ source: true });
+  const view = await mountChat({ source: true, initialRoot: rootMessage.id });
   try {
     expect(
       getByRole(view.node, "button", { name: "Remove from Later" }).getAttribute("aria-pressed"),
@@ -432,7 +451,7 @@ it.each(["no-environment", "reopen", "too-long"])(
 );
 
 it("retains a deleted message with its reason and unchanged reference", async () => {
-  const view = await mountChat({ source: true, missing: true });
+  const view = await mountChat({ source: true, missing: true, initialRoot: rootMessage.id });
   try {
     expect(
       getByText(
@@ -440,6 +459,27 @@ it("retains a deleted message with its reason and unchanged reference", async ()
         "This message is unavailable. It may have been deleted or be outside the messages loaded here. Its saved link has been kept.",
       ),
     ).toBeDefined();
+    boundary.menu.mockResolvedValueOnce("project:p1");
+    await act(() => getByRole(view.node, "button", { name: "Add to project" }).click());
+    expect(boundary.command.mock.calls.at(-1)?.[1].input.a.ref.resourceId).toBe(view.resourceId);
+  } finally {
+    await view.close();
+  }
+});
+
+it("keeps a legacy Slack reply with no known root unavailable without guessing a thread read", async () => {
+  const view = await mountChat({ source: true, message: reply, missing: true });
+  try {
+    expect(
+      getByText(
+        view.node,
+        "This legacy Slack message has no known reply root. Exact reply reading is unsupported until you reopen the source.",
+      ),
+    ).toBeDefined();
+    expect(view.requests.filter((request) => request.operation === "messages.list")).toEqual([
+      { operation: "messages.list", accountId: account.id, conversationId: channel.id },
+    ]);
+    expect(queryByRole(view.node, "complementary", { name: "Message thread" })).toBeNull();
     boundary.menu.mockResolvedValueOnce("project:p1");
     await act(() => getByRole(view.node, "button", { name: "Add to project" }).click());
     expect(boundary.command.mock.calls.at(-1)?.[1].input.a.ref.resourceId).toBe(view.resourceId);

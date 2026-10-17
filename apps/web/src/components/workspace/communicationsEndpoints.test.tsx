@@ -254,7 +254,7 @@ it("uses source identity and the same Slack reply root for menus, save and retai
   expect(
     parseChatResourceId(root.ref.type === "provider-resource" ? root.ref.resourceId : "")
       ?.replyRootId,
-  ).toBeUndefined();
+  ).toBe(parent.id);
   const { workspaceId: _workspaceId, ...legacyConversation } = conversation;
   expect(chatEndpoint(account, legacyConversation, message)).toBeUndefined();
   const discord = chatEndpoint({ ...account, provider: "discord" }, conversation, message)!;
@@ -379,25 +379,29 @@ it.each(["connected", "operate"] as const)(
   },
 );
 
-it.each(["teams.microsoft.com", "teams.microsoft.us", "teams.live.com", "teams.cloud.microsoft"])(
-  "hands off the anchored Teams host %s",
-  async (host) => {
-    const view = await mount();
-    const openPage = vi.fn();
-    try {
-      await act(() =>
-        view.root.render(
-          <Opener item={{ type: "url", url: `https://${host}/l/message/x` }} openPage={openPage} />,
-        ),
-      );
-      await act(() => getByRole(view.node, "button").click());
-      expect(boundary.external).toHaveBeenCalledWith(`https://${host}/l/message/x`);
-      expect(openPage).not.toHaveBeenCalled();
-    } finally {
-      await view.close();
-    }
-  },
-);
+it.each([
+  "teams.microsoft.com",
+  "teams.microsoft.us",
+  "teams.live.com",
+  "teams.cloud.microsoft",
+  "gov.teams.microsoft.us",
+  "dod.teams.microsoft.us",
+])("hands off the anchored Teams host %s", async (host) => {
+  const view = await mount();
+  const openPage = vi.fn();
+  try {
+    await act(() =>
+      view.root.render(
+        <Opener item={{ type: "url", url: `https://${host}/l/message/x` }} openPage={openPage} />,
+      ),
+    );
+    await act(() => getByRole(view.node, "button").click());
+    expect(boundary.external).toHaveBeenCalledWith(`https://${host}/l/message/x`);
+    expect(openPage).not.toHaveBeenCalled();
+  } finally {
+    await view.close();
+  }
+});
 
 it.each(["javascript:alert(1)", "file:///C:/x.exe"])(
   "rejects %s at the opener with feedback",
@@ -421,10 +425,14 @@ it.each(["javascript:alert(1)", "file:///C:/x.exe"])(
   },
 );
 
-it("keeps a lookalike Teams host in the Browser", async () => {
+it.each([
+  "https://teams.microsoft.com.evil.example/x",
+  "https://notteams.microsoft.com/x",
+  "http://teams.microsoft.com/x",
+])("keeps %s in the Browser without a Teams handoff", async (url) => {
   const view = await mount();
   const openPage = vi.fn();
-  const item = { type: "url" as const, url: "https://teams.microsoft.com.evil.example/x" };
+  const item = { type: "url" as const, url };
   try {
     await act(() => view.root.render(<Opener item={item} openPage={openPage} />));
     await act(() => getByRole(view.node, "button").click());
