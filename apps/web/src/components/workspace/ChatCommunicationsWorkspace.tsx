@@ -447,6 +447,13 @@ export function ChatCommunicationsWorkspace({
       ),
   );
   const visibleMessages = messages.filter((message) => view !== "later" || isSaved(message));
+  const legacySaved = saved.filter(
+    (item) =>
+      !item.resourceId &&
+      item.provider === account.provider &&
+      item.accountId === account.id &&
+      item.conversationId === conversation?.id,
+  );
   function renderMessage(message: ChatMessage, inThread = false) {
     const sourceConversation = inThread ? threadConversation : conversation;
     const endpoint = sourceConversation
@@ -785,7 +792,34 @@ export function ChatCommunicationsWorkspace({
                   </p>
                 )}
                 {visibleMessages.map((message) => renderMessage(message))}
-                {!visibleMessages.length && !busy && (
+                {view === "later" && legacySaved.length > 0 ? (
+                  <ul aria-label="Unavailable saved references" className="space-y-3 p-4 text-xs">
+                    {legacySaved.map((item) => (
+                      <li key={chatReferenceKey(item)} className="space-y-1">
+                        <p>Saved message {item.messageId}</p>
+                        <p className="text-muted-foreground">
+                          Unavailable: this saved reference has no source workspace identity. Reopen
+                          it at the source.
+                        </p>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          aria-label="Remove unavailable saved reference"
+                          onClick={() =>
+                            setSaved((previous) =>
+                              previous.filter(
+                                (entry) => chatReferenceKey(entry) !== chatReferenceKey(item),
+                              ),
+                            )
+                          }
+                        >
+                          Remove from Later
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+                {!visibleMessages.length && (view !== "later" || !legacySaved.length) && !busy && (
                   <p className="p-6 text-sm text-muted-foreground">
                     No messages in the loaded history for this view.
                   </p>

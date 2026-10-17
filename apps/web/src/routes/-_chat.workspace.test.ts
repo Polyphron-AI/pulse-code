@@ -492,6 +492,7 @@ it.each(["slack", "discord"] as const)(
 it.each([
   "slack",
   "legacy-slack",
+  "legacy-saved",
   "discord",
   "missing-account",
   "missing-workspace",
@@ -511,6 +512,17 @@ it.each([
       ...(kind === "slack" ? { replyRootId: "1760343120.000001" } : {}),
     };
     const item = chatResourceId(resource);
+    const savedKey = "pulse:communications:later:chat:v1";
+    const savedBefore = window.localStorage.getItem(savedKey);
+    const oldSaved = [
+      {
+        provider,
+        accountId: "original",
+        conversationId: "channel",
+        messageId: "1760343120.000002",
+      },
+    ];
+    if (kind === "legacy-saved") window.localStorage.setItem(savedKey, JSON.stringify(oldSaved));
     const requests: ChatRequest[] = [];
     const bridge = Object.getOwnPropertyDescriptor(window, "desktopBridge");
     Object.defineProperty(window, "desktopBridge", {
@@ -648,9 +660,28 @@ it.each([
           ).toBeDefined();
       }
       expect(router.state.location.search.item).toBe(item);
+      if (kind === "legacy-saved") {
+        await act(() => getByRole(node, "button", { name: "Later" }).click());
+        expect(
+          getByRole(node, "list", { name: "Unavailable saved references" }).textContent,
+        ).toContain("1760343120.000002");
+        expect(
+          getByText(
+            node,
+            "Unavailable: this saved reference has no source workspace identity. Reopen it at the source.",
+          ),
+        ).toBeDefined();
+        expect(JSON.parse(window.localStorage.getItem(savedKey)!)).toEqual(oldSaved);
+        await act(() =>
+          getByRole(node, "button", { name: "Remove unavailable saved reference" }).click(),
+        );
+        expect(JSON.parse(window.localStorage.getItem(savedKey)!)).toEqual([]);
+      }
     } finally {
       await act(() => root.unmount());
       node.remove();
+      if (savedBefore === null) window.localStorage.removeItem(savedKey);
+      else window.localStorage.setItem(savedKey, savedBefore);
       if (bridge) Object.defineProperty(window, "desktopBridge", bridge);
       else Reflect.deleteProperty(window, "desktopBridge");
       vi.unstubAllGlobals();
