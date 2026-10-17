@@ -3,6 +3,7 @@ import {
   WS_METHODS,
   CalendarError,
   EnvironmentAuthorizationError,
+  type ServerConfig,
 } from "@t3tools/contracts";
 import { expect, it } from "@effect/vitest";
 import * as Cause from "effect/Cause";
@@ -191,6 +192,7 @@ it.effect("shares changes and never refreshes on clock advance", () =>
       const entered = yield* Deferred.make<void>();
       const release = yield* Deferred.make<void>();
       const stopped = yield* Deferred.make<void>();
+      const subscriptionStarted = yield* Deferred.make<void>();
       const counter = yield* SubscriptionRef.make(7);
       let reads = 0,
         starts = 0,
@@ -202,7 +204,7 @@ it.effect("shares changes and never refreshes on clock advance", () =>
             Effect.sync(() => {
               starts++;
               return SubscriptionRef.changes(counter);
-            }),
+            }).pipe(Effect.tap(() => Deferred.succeed(subscriptionStarted, undefined))),
           ).pipe(Stream.ensuring(Deferred.succeed(stopped, undefined))),
         [WS_METHODS.calendarListRange]: () =>
           Effect.gen(function* () {
@@ -229,6 +231,7 @@ it.effect("shares changes and never refreshes on clock advance", () =>
         }),
       );
       yield* Deferred.await(entered);
+      yield* Deferred.await(subscriptionStarted);
       expect({ reads, starts }).toEqual({ reads: 1, starts: 1 });
       yield* Deferred.succeed(release, undefined);
       yield* Effect.promise(() => executeAtomQuery(registry, first));
@@ -344,13 +347,14 @@ it.effect("revalidates saved metadata and resubscribes on reconnect without prov
         starts = 0,
         reads = 0;
       const stopped = yield* Deferred.make<void>();
+      const subscriptionStarted = yield* Deferred.make<void>();
       const client = {
         [WS_METHODS.calendarSubscribeChanges]: () =>
           Stream.unwrap(
             Effect.sync(() => {
               starts++;
               return Stream.concat(Stream.succeed(7), Stream.never);
-            }),
+            }).pipe(Effect.tap(() => Deferred.succeed(subscriptionStarted, undefined))),
           ).pipe(Stream.ensuring(Deferred.succeed(stopped, undefined))),
         [WS_METHODS.calendarListRange]: () =>
           Effect.sync(() => {
@@ -368,6 +372,7 @@ it.effect("revalidates saved metadata and resubscribes on reconnect without prov
       const stop = registry.mount(query);
       yield* Effect.addFinalizer(() => Effect.sync(stop));
       yield* Effect.promise(() => executeAtomQuery(registry, query));
+      yield* Deferred.await(subscriptionStarted);
       yield* SubscriptionRef.set(supervisor.session, Option.none());
       yield* SubscriptionRef.update(supervisor.state, (s) => ({
         ...s,
@@ -1493,6 +1498,169 @@ it.effect.each([true, false])(
         expect(AsyncResult.getOrThrow(registry.get(query)).events.map((row) => row.title)).toEqual([
           changed ? "Fresh" : "Review",
         ]);
+      }),
+    ),
+);
+
+it.effect(
+  "discards a cached Calendar capability until a reconnect supplies live legacy config",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const stopped = yield* Deferred.make<void>();
+        const subscriptionStarted = yield* Deferred.make<void>();
+        const configStarted = yield* Deferred.make<void>();
+        const liveConfig = yield* Deferred.make<ServerConfig>();
+        let reads = 0,
+          starts = 0;
+        const client = {
+          [WS_METHODS.calendarListRange]: () =>
+            Effect.sync(() => {
+              reads++;
+              return page();
+            }),
+          [WS_METHODS.calendarSubscribeChanges]: () =>
+            Stream.unwrap(
+              Effect.sync(() => {
+                starts++;
+                return Stream.never;
+              }).pipe(Effect.tap(() => Deferred.succeed(subscriptionStarted, undefined))),
+            ).pipe(Stream.ensuring(Deferred.succeed(stopped, undefined))),
+        } as unknown as WsRpcProtocolClient;
+        const { atoms, registry, supervisor } = yield* makeTestRuntime(client);
+        const query = atoms.range(target);
+        const stop = registry.mount(query);
+        yield* Effect.addFinalizer(() => Effect.sync(stop));
+        yield* Effect.promise(() => executeAtomQuery(registry, query));
+        yield* Deferred.await(subscriptionStarted);
+        expect(AsyncResult.getOrThrow(registry.get(query)).events[0]?.title).toBe("Review");
+        yield* SubscriptionRef.set(supervisor.session, Option.none());
+        yield* Deferred.await(stopped);
+        const legacy = Latch.makeUnsafe();
+        const watch = registry.subscribe(query, (result) => {
+          if (AsyncResult.isSuccess(result) && !result.waiting && result.value.unavailableReason)
+            legacy.openUnsafe();
+        });
+        yield* Effect.addFinalizer(() => Effect.sync(watch));
+        yield* SubscriptionRef.set(
+          supervisor.session,
+          Option.some({
+            ...session(client),
+            initialConfig: Deferred.succeed(configStarted, undefined).pipe(
+              Effect.andThen(Deferred.await(liveConfig)),
+            ),
+          }),
+        );
+        yield* Deferred.await(configStarted);
+        expect(reads).toBe(1);
+        expect(starts).toBe(1);
+        yield* Deferred.succeed(liveConfig, {} as ServerConfig);
+        yield* legacy.await;
+        expect(AsyncResult.getOrThrow(registry.get(query))).toMatchObject({
+          events: [],
+          unavailableReason: "Calendar is unavailable on this server.",
+        });
+        expect(reads).toBe(1);
+        expect(starts).toBe(1);
+      }),
+    ),
+);
+
+it.effect.each([false, true])(
+  "waits for live workspaceCalendar=%s config on a direct session replacement",
+  (available) =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const stopped = yield* Deferred.make<void>();
+        const previousSubscribed = yield* Deferred.make<void>();
+        const configStarted = yield* Deferred.make<void>();
+        const liveConfig = yield* Deferred.make<ServerConfig>();
+        const subscribed = yield* Deferred.make<void>();
+        let reads = 0;
+        let starts = 0;
+        const previousClient = {
+          [WS_METHODS.calendarListRange]: () => Effect.succeed(page()),
+          [WS_METHODS.calendarSubscribeChanges]: () =>
+            Stream.concat(
+              Stream.succeed(0),
+              Stream.fromEffect(Deferred.succeed(previousSubscribed, undefined)).pipe(
+                Stream.drain,
+                Stream.concat(Stream.never),
+              ),
+            ).pipe(Stream.ensuring(Deferred.succeed(stopped, undefined))),
+        } as unknown as WsRpcProtocolClient;
+        const replacementClient = {
+          [WS_METHODS.calendarListRange]: () =>
+            Effect.sync(() => {
+              reads++;
+              return page("Replacement");
+            }),
+          [WS_METHODS.calendarSubscribeChanges]: () =>
+            Stream.unwrap(
+              Effect.sync(() => {
+                starts++;
+                return Stream.concat(
+                  Stream.succeed(0),
+                  Stream.fromEffect(Deferred.succeed(subscribed, undefined)).pipe(
+                    Stream.drain,
+                    Stream.concat(Stream.never),
+                  ),
+                );
+              }),
+            ),
+        } as unknown as WsRpcProtocolClient;
+        const { atoms, registry, supervisor } = yield* makeTestRuntime(previousClient);
+        const query = atoms.range(target);
+        const stop = registry.mount(query);
+        yield* Effect.addFinalizer(() => Effect.sync(stop));
+        yield* Effect.promise(() => executeAtomQuery(registry, query));
+        yield* Deferred.await(previousSubscribed);
+        expect(AsyncResult.getOrThrow(registry.get(query)).events[0]?.title).toBe("Review");
+        const settled = Latch.makeUnsafe();
+        const watch = registry.subscribe(query, (result) => {
+          if (
+            AsyncResult.isSuccess(result) &&
+            !result.waiting &&
+            (available
+              ? result.value.events[0]?.title === "Replacement"
+              : result.value.unavailableReason)
+          ) {
+            settled.openUnsafe();
+          }
+        });
+        yield* Effect.addFinalizer(() => Effect.sync(watch));
+        yield* SubscriptionRef.set(
+          supervisor.session,
+          Option.some({
+            ...session(replacementClient),
+            initialConfig: Deferred.succeed(configStarted, undefined).pipe(
+              Effect.andThen(Deferred.await(liveConfig)),
+            ),
+          }),
+        );
+        yield* Deferred.await(stopped);
+        yield* Deferred.await(configStarted);
+        expect(reads).toBe(0);
+        expect(starts).toBe(0);
+        yield* Deferred.succeed(liveConfig, {
+          pulseCapabilities: { workspaceCalendar: available },
+        } as ServerConfig);
+        yield* settled.await;
+        if (available) yield* Deferred.await(subscribed);
+        const result = AsyncResult.getOrThrow(registry.get(query));
+        expect(registry.get(query).waiting).toBe(false);
+        if (available) {
+          expect(result.events[0]?.title).toBe("Replacement");
+          expect(result.unavailableReason).toBeUndefined();
+        } else {
+          expect(result).toMatchObject({
+            events: [],
+            dueTasks: [],
+            unavailableReason: "Calendar is unavailable on this server.",
+          });
+        }
+        expect(reads).toBe(available ? 1 : 0);
+        expect(starts).toBe(available ? 1 : 0);
       }),
     ),
 );

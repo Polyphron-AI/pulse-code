@@ -12,15 +12,26 @@ import * as Stream from "effect/Stream";
 import { Atom, AsyncResult, type AtomRegistry } from "effect/unstable/reactivity";
 import type { EnvironmentRegistry } from "../connection/registry.ts";
 import * as EnvironmentSupervisor from "../connection/supervisor.ts";
-import { EnvironmentRpcUnavailableError, getInitialServerConfig, request } from "../rpc/client.ts";
+import {
+  EnvironmentRpcUnavailableError,
+  getInitialServerConfig,
+  request,
+  subscribeDynamic,
+  type EnvironmentRpcInput,
+} from "../rpc/client.ts";
 import {
   createAtomCommandScheduler,
   createEnvironmentCommand,
   createEnvironmentQueryAtomFamily,
   createEnvironmentRpcCommand,
-  createEnvironmentRpcSubscriptionAtomFamily,
+  createEnvironmentSubscriptionAtomFamily,
 } from "./runtime.ts";
 
+const hasCalendarCapability = Schema.is(
+  Schema.Struct({
+    pulseCapabilities: Schema.Struct({ workspaceCalendar: Schema.Literal(true) }),
+  }),
+);
 const supported = Effect.gen(function* () {
   const supervisor = yield* EnvironmentSupervisor.EnvironmentSupervisor;
   const config = yield* getInitialServerConfig().pipe(
@@ -32,7 +43,7 @@ const supported = Effect.gen(function* () {
         }),
     ),
   );
-  return config.pulseCapabilities?.workspaceCalendar === true;
+  return hasCalendarCapability(config);
 });
 const isCalendarError = Schema.is(CalendarError);
 const recoverableContinuations = new Set([
@@ -69,17 +80,17 @@ type NormalizedRange = NonNullable<ReturnType<typeof normalizeRange>>;
 export function createWorkspaceCalendarAtoms<R, E>(
   runtime: Atom.AtomRuntime<EnvironmentRegistry | R, E>,
 ) {
-  const changes = createEnvironmentRpcSubscriptionAtomFamily(runtime, {
+  const changes = createEnvironmentSubscriptionAtomFamily(runtime, {
     label: "workspace-calendar:changes",
-    tag: WS_METHODS.calendarSubscribeChanges,
     idleTtlMs: 0,
-    transform: (stream) =>
-      Stream.unwrap(
-        supported.pipe(
-          Effect.orElseSucceed(() => false),
-          Effect.map((available) => (available ? stream.pipe(Stream.drop(1)) : Stream.empty)),
-        ),
-      ),
+    subscribe: (input: EnvironmentRpcInput<typeof WS_METHODS.calendarSubscribeChanges>) =>
+      subscribeDynamic(
+        WS_METHODS.calendarSubscribeChanges,
+        Effect.fnUntraced(function* (session) {
+          const config = yield* session.initialConfig.pipe(Effect.catch(() => Effect.never));
+          return hasCalendarCapability(config) ? input : yield* Effect.never;
+        }),
+      ).pipe(Stream.drop(1)),
   });
   const refreshTrigger = ({ environmentId }: { environmentId: EnvironmentId }) =>
     changes({ environmentId, input: {} });
