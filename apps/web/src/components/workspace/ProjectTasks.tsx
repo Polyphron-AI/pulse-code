@@ -2,7 +2,6 @@ import {
   type EnvironmentId,
   type ProjectId,
   type WorkspaceTask,
-  type ServerSettings,
   type WorkspaceProjectConfig,
   type WorkspaceProjectConfigSave,
   WorkspaceToolsError,
@@ -10,15 +9,16 @@ import {
 } from "@t3tools/contracts";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import * as Schema from "effect/Schema";
-import * as DateTime from "effect/DateTime";
-import {
-  formatWorkspaceTaskDueOn,
-  millisecondsUntilWorkspaceMidnight,
-} from "@t3tools/client-runtime/state/workspaceTaskDates";
 import { useEnvironmentSettings } from "../../hooks/useSettings";
-import { useContext, useEffect, useState } from "react";
-import { TaskOwner } from "./WorkspaceTaskRow";
-import { WorkspaceItemMutationContext } from "./WorkspaceEngagement";
+import { useContext, useState } from "react";
+import { WorkspaceTaskRow } from "./WorkspaceTaskRow";
+import {
+  WorkspaceTaskEditor,
+  workspaceTaskSummary,
+  useTaskDateClock,
+  workspaceToolsError,
+} from "./WorkspaceTaskEditor";
+export { useTaskDateClock, workspaceToolsError } from "./WorkspaceTaskEditor";
 import { WorkspaceResourcesBodyContext } from "./workspaceResourceState";
 import { timestampLocale } from "../../timestampFormat";
 import { useEnvironmentQuery } from "../../state/query";
@@ -29,14 +29,10 @@ import { randomUUID } from "../../lib/utils";
 import { Input } from "../ui/input";
 import { Textarea } from "../ui/textarea";
 import { Button } from "../ui/button";
-import { WorkspaceItemActions, WorkspaceItemMenu } from "./WorkspaceItemActions";
+import { WorkspaceItemMenu } from "./WorkspaceItemActions";
 import { useMailCapabilities } from "./mail/useMailCapabilities";
 import { useWorkspaceCanOperate } from "./useWorkspaceCanOperate";
 const isWorkspaceToolsError = Schema.is(WorkspaceToolsError);
-export const workspaceToolsError = (result: Parameters<typeof squashAtomCommandFailure>[0]) => {
-  const cause = squashAtomCommandFailure(result);
-  return cause instanceof Error ? cause.message : "The workspace change could not be saved.";
-};
 export function ProjectWorkspaceSettings({
   environmentId,
   projectId,
@@ -83,6 +79,7 @@ function ProjectWorkspaceSettingsForm({
   const [browserThreadId, setBrowserThreadId] = useState(config.browserThreadId ?? "");
   const [completedColumn, setCompletedColumn] = useState(config.completedColumn ?? "");
   const [confirmation, setConfirmation] = useState<WorkspaceProjectConfigSave | null>(null);
+  const designatedColumn = taskColumnChoice(columns, completedColumn);
   const awaitingConfirmation = workspaceTasksV2 && confirmation !== null;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -101,7 +98,12 @@ function ProjectWorkspaceSettingsForm({
         workspaceTasksV2 &&
           isWorkspaceToolsError(cause) &&
           cause.reason === "completion-confirmation-required"
-          ? input
+          ? {
+              ...input,
+              ...(cause.affectedCount !== undefined
+                ? { expectedAffectedCount: cause.affectedCount }
+                : {}),
+            }
           : null,
       );
     } else setConfirmation(null);
@@ -117,7 +119,7 @@ function ProjectWorkspaceSettingsForm({
           taskColumns,
           browserThreadId: browserThreadId ? ThreadId.make(browserThreadId) : null,
           ...(workspaceTasksV2
-            ? { expectedRevision: config.revision ?? 0, completedColumn: completedColumn || null }
+            ? { expectedRevision: config.revision ?? 0, completedColumn: designatedColumn || null }
             : {}),
         });
       }}
@@ -130,8 +132,6 @@ function ProjectWorkspaceSettingsForm({
           onChange={(event) => {
             const value = event.target.value;
             setColumns(value);
-            if (!value.split("\n").some((column) => column.trim() === completedColumn))
-              setCompletedColumn("");
           }}
           maxLength={500}
           disabled={busy || !canOperate || awaitingConfirmation}
@@ -164,7 +164,7 @@ function ProjectWorkspaceSettingsForm({
           <select
             aria-label="Completed column"
             className="w-full rounded-md border border-input bg-background p-2"
-            value={completedColumn}
+            value={designatedColumn}
             onChange={(event) => setCompletedColumn(event.target.value)}
             disabled={busy || !canOperate || awaitingConfirmation}
           >
@@ -228,15 +228,20 @@ function ProjectWorkspaceSettingsForm({
     </form>
   );
 }
+function taskColumnChoice(columns: string, value: string) {
+  return columns.split("\n").some((column) => column.trim() === value) ? value : "";
+}
 export function ProjectTasks({
   environmentId,
   projectId,
   selected,
+  projectTitle = "Project",
   onSelect,
 }: {
   environmentId: EnvironmentId;
   projectId: ProjectId;
   selected: WorkspaceTask | null;
+  projectTitle?: string;
   onSelect: (task: WorkspaceTask | null) => void;
 }) {
   const config = useEnvironmentQuery(
@@ -250,7 +255,17 @@ export function ProjectTasks({
     environmentId,
     (settings) => settings.workspaceOwnerProfile,
   );
-  const [owner, setOwner] = useState<"environment-owner" | null>("environment-owner");
+  const [showCreate, setShowCreate] = useState(true);
+  const transition = useAtomCommand(workspaceTools.transitionTask, { reportFailure: false });
+  const hidden = useContext(WorkspaceResourcesBodyContext)?.hidden ?? false;
+  const zone = useEnvironmentSettings(
+    environmentId,
+    (settings) => settings.workspaceDisplayTimeZone,
+  );
+  const now = useTaskDateClock(
+    zone ?? "UTC",
+    workspaceTasksV2 && !hidden && !!list.data?.tasks.some((task) => task.dueOn),
+  );
   const [title, setTitle] = useState("");
   const [column, setColumn] = useState("");
   const [id, setId] = useState(() => `wskt_${randomUUID()}`);
@@ -261,71 +276,86 @@ export function ProjectTasks({
   return (
     <section className="mt-6 space-y-3" aria-label="Project tasks">
       <h2 className="text-sm font-medium">Tasks</h2>
-      <form
-        className="flex flex-wrap gap-2"
-        onSubmit={async (event) => {
-          event.preventDefault();
-          if (busy || !canOperate) return;
-          setBusy(true);
-          setError(null);
-          const result = await upsert({
-            environmentId,
-            input: {
-              id,
-              projectId,
-              title: title.trim(),
-              column: chosen,
-              ...(workspaceTasksV2 ? { owner } : {}),
-            },
-          });
-          setBusy(false);
-          if (result._tag === "Failure") setError(workspaceToolsError(result));
-          else {
-            setTitle("");
-            setOwner("environment-owner");
-            setId(`wskt_${randomUUID()}`);
-            onSelect(result.value);
-          }
-        }}
-      >
-        <Input
-          className="min-w-0 flex-1 basis-40"
-          aria-label="New task title"
-          placeholder="Task title"
-          maxLength={240}
-          value={title}
-          onChange={(event) => setTitle(event.target.value)}
-          disabled={busy || !canOperate}
-        />
-        <select
-          aria-label="New task column"
-          className="rounded-md border border-input bg-background p-2 text-sm"
-          value={chosen}
-          onChange={(event) => setColumn(event.target.value)}
-          disabled={busy || !canOperate}
-        >
-          {columns.map((value) => (
-            <option key={value}>{value}</option>
-          ))}
-        </select>
-        {workspaceTasksV2 ? (
-          <select
-            aria-label="New task owner"
-            className="rounded-md border border-input bg-background p-2 text-sm"
-            value={owner ?? ""}
-            onChange={(event) =>
-              setOwner(event.target.value === "environment-owner" ? "environment-owner" : null)
+      {workspaceTasksV2 ? (
+        showCreate && config.data ? (
+          <WorkspaceTaskEditor
+            environmentId={environmentId}
+            task={null}
+            config={config.data}
+            projectTitle={projectTitle}
+            ownerProfile={ownerProfile}
+            onClose={() => setShowCreate(false)}
+            onSaved={(task) => {
+              setShowCreate(false);
+              onSelect(task);
+            }}
+          />
+        ) : (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={!canOperate}
+            onClick={() => setShowCreate(true)}
+          >
+            Add task
+          </Button>
+        )
+      ) : (
+        <form
+          className="flex flex-wrap gap-2"
+          onSubmit={async (event) => {
+            event.preventDefault();
+            if (busy || !canOperate) return;
+            setBusy(true);
+            setError(null);
+            const result = await upsert({
+              environmentId,
+              input: {
+                id,
+                projectId,
+                title: title.trim(),
+                column: chosen,
+              },
+            });
+            setBusy(false);
+            if (result._tag === "Failure") setError(workspaceToolsError(result));
+            else {
+              setTitle("");
+              setId(`wskt_${randomUUID()}`);
+              onSelect(result.value);
             }
+          }}
+        >
+          <Input
+            className="min-w-0 flex-1 basis-40"
+            aria-label="New task title"
+            placeholder="Task title"
+            maxLength={240}
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            disabled={busy || !canOperate}
+          />
+          <select
+            aria-label="New task column"
+            className="rounded-md border border-input bg-background p-2 text-sm"
+            value={chosen}
+            onChange={(event) => setColumn(event.target.value)}
             disabled={busy || !canOperate}
           >
-            <option value="environment-owner">Me</option>
-            <option value="">Unassigned</option>
+            {columns.map((value) => (
+              <option key={value}>{value}</option>
+            ))}
           </select>
-        ) : null}
-        <Button size="sm" type="submit" disabled={busy || !canOperate || !title.trim() || !chosen}>
-          Add task
-        </Button>
-      </form>
+          <Button
+            size="sm"
+            type="submit"
+            disabled={busy || !canOperate || !title.trim() || !chosen}
+          >
+            Add task
+          </Button>
+        </form>
+      )}
       {error || config.error || list.error ? (
         <p role="alert" className="text-sm text-destructive">
           {error ?? config.error ?? list.error}
@@ -337,27 +367,53 @@ export function ProjectTasks({
           <ul>
             {list.data?.tasks
               .filter((task) => task.column === value)
-              .map((task) => (
-                <li key={task.id}>
-                  <WorkspaceItemMenu
+              .map((task) =>
+                workspaceTasksV2 ? (
+                  <WorkspaceTaskRow
+                    key={task.id}
                     environmentId={environmentId}
-                    item={{ ref: { type: "task", taskId: task.id }, title: task.title }}
-                    confirmed={[{ ref: { type: "project", projectId } }]}
-                  >
-                    <button
-                      type="button"
-                      className="flex w-full items-center gap-2 rounded-md p-2 text-left text-sm hover:bg-accent"
-                      aria-current={selected?.id === task.id ? "true" : undefined}
-                      onClick={() => onSelect(task)}
+                    task={workspaceTaskSummary(task, projectTitle)}
+                    density="list"
+                    onOpen={() => onSelect(task)}
+                    ownerProfile={ownerProfile}
+                    now={now}
+                    timeZone={zone ?? "UTC"}
+                    locale={timestampLocale}
+                    canOperate={canOperate}
+                    completedColumn={config.data?.completedColumn ?? null}
+                    workspaceTasksV2
+                    pending={false}
+                    selected={selected?.id === task.id}
+                    onTransition={transition}
+                    renderItemMenu={(_, children) => (
+                      <WorkspaceItemMenu
+                        environmentId={environmentId}
+                        item={{ ref: { type: "task", taskId: task.id }, title: task.title }}
+                        confirmed={[{ ref: { type: "project", projectId } }]}
+                      >
+                        {children}
+                      </WorkspaceItemMenu>
+                    )}
+                  />
+                ) : (
+                  <li key={task.id}>
+                    <WorkspaceItemMenu
+                      environmentId={environmentId}
+                      item={{ ref: { type: "task", taskId: task.id }, title: task.title }}
+                      confirmed={[{ ref: { type: "project", projectId } }]}
                     >
-                      <span className="min-w-0 flex-1 truncate">{task.title}</span>
-                      {workspaceTasksV2 ? (
-                        <TaskOwner owner={task.owner} profile={ownerProfile} />
-                      ) : null}
-                    </button>
-                  </WorkspaceItemMenu>
-                </li>
-              ))}
+                      <button
+                        type="button"
+                        className="flex w-full items-center gap-2 rounded-md p-2 text-left text-sm hover:bg-accent"
+                        aria-current={selected?.id === task.id ? "true" : undefined}
+                        onClick={() => onSelect(task)}
+                      >
+                        <span className="min-w-0 flex-1 truncate">{task.title}</span>
+                      </button>
+                    </WorkspaceItemMenu>
+                  </li>
+                ),
+              )}
           </ul>
         </div>
       ))}
@@ -367,262 +423,21 @@ export function ProjectTasks({
       {list.data?.incomplete ? (
         <p className="text-xs text-muted-foreground">Showing up to 200 tasks.</p>
       ) : null}
-      {selected ? (
-        <TaskEditor
-          key={`${environmentId}:${selected.id}`}
+      {selected && config.data ? (
+        <WorkspaceTaskEditor
           environmentId={environmentId}
-          task={list.data?.tasks.find((task) => task.id === selected.id) ?? selected}
-          columns={columns}
+          task={workspaceTaskSummary(
+            list.data?.tasks.find((task) => task.id === selected.id) ?? selected,
+            projectTitle,
+          )}
+          config={config.data}
+          projectTitle={projectTitle}
           ownerProfile={ownerProfile}
+          legacy={!workspaceTasksV2}
           onClose={() => onSelect(null)}
+          onSaved={onSelect}
         />
       ) : null}
-    </section>
-  );
-}
-function taskDraft(task: WorkspaceTask) {
-  return {
-    base: task,
-    title: task.title,
-    column: task.column,
-    dueOn: task.dueOn ?? "",
-    areaLabel: task.areaLabel ?? "",
-    owner: task.owner ?? null,
-  };
-}
-function isTaskDraftDirty(draft: ReturnType<typeof taskDraft>) {
-  return (
-    draft.title.trim() !== draft.base.title ||
-    draft.column !== draft.base.column ||
-    (draft.dueOn || null) !== (draft.base.dueOn ?? null) ||
-    (draft.areaLabel.trim() || null) !== (draft.base.areaLabel ?? null) ||
-    draft.owner !== (draft.base.owner ?? null)
-  );
-}
-
-export function useTaskDateClock(timeZone: string, enabled: boolean) {
-  const [now, setNow] = useState(DateTime.nowUnsafe);
-  useEffect(() => {
-    if (!enabled) return;
-    let timer: ReturnType<typeof setTimeout>;
-    const refresh = () => {
-      const next = DateTime.nowUnsafe();
-      setNow(next);
-      clearTimeout(timer);
-      timer = setTimeout(refresh, millisecondsUntilWorkspaceMidnight(next, timeZone));
-    };
-    const resume = () => {
-      if (document.visibilityState === "visible") refresh();
-    };
-    refresh();
-    window.addEventListener("focus", refresh);
-    document.addEventListener("visibilitychange", resume);
-    return () => {
-      clearTimeout(timer);
-      window.removeEventListener("focus", refresh);
-      document.removeEventListener("visibilitychange", resume);
-    };
-  }, [timeZone, enabled]);
-  return now;
-}
-function TaskEditor({
-  environmentId,
-  task,
-  columns,
-  ownerProfile,
-  onClose,
-}: {
-  environmentId: EnvironmentId;
-  task: WorkspaceTask;
-  columns: readonly string[];
-  ownerProfile: ServerSettings["workspaceOwnerProfile"];
-  onClose: () => void;
-}) {
-  const canOperate = useWorkspaceCanOperate(environmentId);
-  const invalidateContext = useContext(WorkspaceItemMutationContext);
-  const { workspaceTasksV2, ready: settingsReady } = useMailCapabilities(environmentId);
-  const hidden = useContext(WorkspaceResourcesBodyContext)?.hidden ?? false;
-  const save = useAtomCommand(workspaceTools.upsertTask, { reportFailure: false });
-  const patch = useAtomCommand(workspaceTools.patchTask, { reportFailure: false });
-  const remove = useAtomCommand(workspaceTools.deleteTask, { reportFailure: false });
-  const [draft, setDraft] = useState(() => taskDraft(task));
-  const [observedTask, setObservedTask] = useState(task);
-  if (observedTask !== task) {
-    setObservedTask(task);
-    if (!isTaskDraftDirty(draft)) setDraft(taskDraft(task));
-  }
-  const { title, column, dueOn, areaLabel, owner } = draft;
-  const dirty = isTaskDraftDirty(draft);
-  const configuredTimeZone = useEnvironmentSettings(
-    environmentId,
-    (settings) => settings.workspaceDisplayTimeZone,
-  );
-  const timeZone = configuredTimeZone ?? "UTC";
-  const now = useTaskDateClock(timeZone, workspaceTasksV2 && settingsReady && !!dueOn && !hidden);
-  const date = settingsReady
-    ? formatWorkspaceTaskDueOn(dueOn || null, now, timeZone, timestampLocale)
-    : null;
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  return (
-    <section aria-label="Selected task" className="space-y-3 rounded-lg border border-border p-3">
-      <h3 className="text-sm font-medium">{task.title}</h3>
-      <WorkspaceItemActions
-        environmentId={environmentId}
-        item={{ ref: { type: "task", taskId: task.id }, title: task.title }}
-        confirmed={[{ ref: { type: "project", projectId: task.projectId } }]}
-      />
-      <form
-        className="flex flex-wrap gap-2"
-        onSubmit={async (event) => {
-          event.preventDefault();
-          if (busy || !canOperate) return;
-          setBusy(true);
-          setError(null);
-          const result = workspaceTasksV2
-            ? await patch({
-                environmentId,
-                input: {
-                  id: task.id,
-                  expectedRevision: draft.base.revision ?? 0,
-                  ...(title.trim() !== draft.base.title ? { title: title.trim() } : {}),
-                  ...(column !== draft.base.column ? { column } : {}),
-                  ...((dueOn || null) !== (draft.base.dueOn ?? null)
-                    ? { dueOn: dueOn || null }
-                    : {}),
-                  ...((areaLabel.trim() || null) !== (draft.base.areaLabel ?? null)
-                    ? { areaLabel: areaLabel.trim() || null }
-                    : {}),
-                  ...(owner !== (draft.base.owner ?? null) ? { owner } : {}),
-                },
-              })
-            : await save({
-                environmentId,
-                input: { id: task.id, projectId: task.projectId, title: title.trim(), column },
-              });
-          setBusy(false);
-          if (result._tag === "Failure") setError(workspaceToolsError(result));
-          else setDraft(taskDraft(result.value));
-        }}
-      >
-        <Input
-          aria-label="Task title"
-          maxLength={240}
-          value={title}
-          onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))}
-          disabled={busy || !canOperate}
-        />
-        <select
-          aria-label="Task column"
-          className="rounded-md border border-input bg-background p-2 text-sm"
-          value={column}
-          onChange={(event) => setDraft((current) => ({ ...current, column: event.target.value }))}
-          disabled={busy || !canOperate}
-        >
-          {columns.map((value) => (
-            <option key={value}>{value}</option>
-          ))}
-        </select>
-        {workspaceTasksV2 ? (
-          <>
-            <label className="space-y-1 text-sm">
-              <span>Owner</span>
-              <select
-                aria-label="Task owner"
-                className="rounded-md border border-input bg-background p-2 text-sm"
-                value={owner ?? ""}
-                disabled={busy || !canOperate}
-                onChange={(event) =>
-                  setDraft((current) => ({
-                    ...current,
-                    owner: event.target.value === "environment-owner" ? "environment-owner" : null,
-                  }))
-                }
-              >
-                <option value="environment-owner">Me</option>
-                <option value="">Unassigned</option>
-              </select>
-            </label>
-            <TaskOwner owner={owner} profile={ownerProfile} />
-            <label className="space-y-1 text-sm">
-              <span>Due date</span>
-              <Input
-                type="date"
-                aria-label="Task due date"
-                value={dueOn}
-                min="0001-01-01"
-                max="9999-12-31"
-                disabled={busy || !canOperate}
-                onChange={(event) =>
-                  setDraft((current) => ({ ...current, dueOn: event.target.value }))
-                }
-              />
-            </label>
-            <label className="space-y-1 text-sm">
-              <span>Area</span>
-              <Input
-                aria-label="Task area"
-                value={areaLabel}
-                maxLength={120}
-                disabled={busy || !canOperate}
-                onChange={(event) =>
-                  setDraft((current) => ({ ...current, areaLabel: event.target.value }))
-                }
-              />
-            </label>
-            {dueOn && !settingsReady ? (
-              <p className="text-xs text-muted-foreground">Loading workspace timezone...</p>
-            ) : null}
-            {date && (!configuredTimeZone || date.usingUtcFallback) ? (
-              <p className="text-xs text-muted-foreground">
-                Workspace timezone unavailable. Dates use UTC.
-              </p>
-            ) : null}
-            {date ? (
-              <time
-                dateTime={dueOn}
-                aria-label={`${date.fullDate}${date.overdue && !task.done ? ", overdue" : ""}`}
-                className="text-xs text-muted-foreground"
-              >
-                {date.label}
-              </time>
-            ) : null}
-          </>
-        ) : null}
-        <Button size="sm" type="submit" disabled={busy || !canOperate || !title.trim() || !dirty}>
-          Save task
-        </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          disabled={busy || !canOperate}
-          onClick={async () => {
-            if (busy || !canOperate) return;
-            setBusy(true);
-            setError(null);
-            const result = await remove({ environmentId, input: { id: task.id } });
-            setBusy(false);
-            if (result._tag === "Failure") setError(workspaceToolsError(result));
-            else {
-              invalidateContext?.(environmentId, { type: "task", taskId: task.id });
-              onClose();
-            }
-          }}
-        >
-          Delete task
-        </Button>
-        <Button size="sm" variant="ghost" onClick={onClose}>
-          Close task
-        </Button>
-      </form>
-      {error ? (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
-      ) : null}
-      <p className="text-xs text-muted-foreground">
-        Deleting a task keeps its links; the task will be unavailable when opened from them.
-      </p>
     </section>
   );
 }

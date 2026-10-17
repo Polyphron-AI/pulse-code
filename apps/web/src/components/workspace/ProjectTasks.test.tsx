@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   newCommand: vi.fn(),
   zone: "Africa/Johannesburg",
   settingsReady: true,
+  liveSource: true,
   profiles: {
     remote: { displayName: "Maya Chen", initials: "MC" },
     other: { displayName: "Alex", initials: "AL" },
@@ -28,7 +29,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("./mail/useMailCapabilities", () => ({
   useMailCapabilities: () => ({
     workspaceTools: true,
-    workspaceTasksV2: mocks.tasksV2,
+    workspaceTasksV2: mocks.liveSource && mocks.tasksV2,
     ready: mocks.settingsReady,
   }),
 }));
@@ -59,6 +60,7 @@ vi.mock("../../state/workspaceTools", () => ({
     deleteTask: {},
     transitionTask: "transition",
     patchTask: "patch",
+    task: () => "task",
   },
 }));
 vi.mock("../../state/query", () => ({
@@ -74,6 +76,7 @@ vi.mock("../../state/query", () => ({
           }
         : { tasks: [], incomplete: false },
     error: null,
+    refresh: vi.fn(),
   }),
 }));
 vi.mock("../../state/use-atom-command", () => ({
@@ -145,7 +148,7 @@ it("edits owner through the captured revision and displays the selected environm
   expect(renderer!.root.findByProps({ "aria-label": "Maya Chen", role: "img" }).children).toEqual([
     "MC",
   ]);
-  const owner = () => renderer!.root.findByProps({ "aria-label": "Task owner" });
+  const owner = () => renderer!.root.findByProps({ "aria-label": "Owner" });
   await act(() => owner().props.onChange({ target: { value: "" } }));
   await act(() => renderer!.root.findAllByType("form")[1]!.props.onSubmit({ preventDefault() {} }));
   expect(mocks.newCommand).toHaveBeenLastCalledWith({
@@ -192,7 +195,7 @@ it("starts legacy tasks unassigned, assigns Me and denies owner writes for read 
   await act(() => {
     renderer = create(view());
   });
-  const owner = () => renderer!.root.findByProps({ "aria-label": "Task owner" });
+  const owner = () => renderer!.root.findByProps({ "aria-label": "Owner" });
   expect(owner().props.value).toBe("");
   await act(() => owner().props.onChange({ target: { value: "environment-owner" } }));
   const submit = () =>
@@ -217,6 +220,7 @@ afterEach(async () => {
   mocks.tasksV2 = false;
   mocks.zone = "Africa/Johannesburg";
   mocks.settingsReady = true;
+  mocks.liveSource = true;
   mocks.profiles = {
     remote: { displayName: "Maya Chen", initials: "MC" },
     other: { displayName: "Alex", initials: "AL" },
@@ -446,6 +450,7 @@ it("confirms the affected count, permits cancellation and preserves Browser sett
         kind: "conflict",
         reason: "completion-confirmation-required",
         message: "Review the completion change affecting 2 tasks.",
+        affectedCount: 2,
       }),
     ),
   };
@@ -494,6 +499,7 @@ it("confirms the affected count, permits cancellation and preserves Browser sett
     completedColumn: null,
     expectedRevision: 0,
     confirmCompletionChanges: true,
+    expectedAffectedCount: 2,
   });
 });
 
@@ -597,6 +603,24 @@ it("shows and submits no designation after renaming the designated column", asyn
   });
 });
 
+it("retains a designated column through a temporary textarea edit", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  mocks.tasksV2 = true;
+  mocks.command.mockResolvedValue({ _tag: "Success", value: {} });
+  await act(() => {
+    renderer = create(
+      <ProjectWorkspaceSettings environmentId={environmentId} projectId={projectId} />,
+    );
+  });
+  const columns = () => renderer!.root.findByProps({ "aria-label": "Task columns" });
+  await act(() => columns().props.onChange({ target: { value: "To do\nDon" } }));
+  expect(renderer!.root.findByProps({ "aria-label": "Completed column" }).props.value).toBe("");
+  await act(() => columns().props.onChange({ target: { value: "To do\nDone" } }));
+  expect(renderer!.root.findByProps({ "aria-label": "Completed column" }).props.value).toBe("Done");
+  await act(() => renderer!.root.findByType("form").props.onSubmit({ preventDefault() {} }));
+  expect(mocks.command.mock.calls.at(-1)?.[0].input.completedColumn).toBe("Done");
+});
+
 it("keeps a removed designation cleared when cancelling another completion choice", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   mocks.tasksV2 = true;
@@ -607,6 +631,7 @@ it("keeps a removed designation cleared when cancelling another completion choic
         kind: "conflict",
         reason: "completion-confirmation-required",
         message: "Review the completion change affecting 2 tasks.",
+        affectedCount: 2,
       }),
     ),
   });
@@ -669,7 +694,7 @@ it("retains dirty metadata and the base revision after a subscription refresh an
   });
   await act(() =>
     renderer!.root
-      .findByProps({ "aria-label": "Task area" })
+      .findByProps({ "aria-label": "Area" })
       .props.onChange({ target: { value: "Website" } }),
   );
   await act(() => renderer!.update(view({ ...task, title: "Remote title", revision: 4 })));
@@ -679,7 +704,7 @@ it("retains dirty metadata and the base revision after a subscription refresh an
     environmentId,
     input: { id: task.id, expectedRevision: 3, areaLabel: "Website" },
   });
-  expect(renderer!.root.findByProps({ "aria-label": "Task area" }).props.value).toBe("Website");
+  expect(renderer!.root.findByProps({ "aria-label": "Area" }).props.value).toBe("Website");
   expect(renderer!.root.findByProps({ role: "alert" }).children.join("")).toContain(
     "Reload before saving.",
   );
@@ -707,7 +732,7 @@ it("clears metadata explicitly and keeps failed drafts until a successful patch"
       />,
     );
   });
-  for (const label of ["Task due date", "Task area"])
+  for (const label of ["Due date", "Area"])
     await act(() =>
       renderer!.root.findByProps({ "aria-label": label }).props.onChange({ target: { value: "" } }),
     );
@@ -716,7 +741,7 @@ it("clears metadata explicitly and keeps failed drafts until a successful patch"
     environmentId,
     input: { id: task.id, expectedRevision: 2, dueOn: null, areaLabel: null },
   });
-  expect(renderer!.root.findByProps({ "aria-label": "Task due date" }).props.value).toBe("");
+  expect(renderer!.root.findByProps({ "aria-label": "Due date" }).props.value).toBe("");
   mocks.newCommand.mockResolvedValue({
     _tag: "Success",
     value: { ...task, dueOn: null, areaLabel: null, revision: 3 },
@@ -909,5 +934,50 @@ it.each([undefined, false])(
     mocks.tasksV2 = true;
     await act(() => renderer!.update(view()));
     expect(JSON.stringify(renderer!.toJSON())).not.toContain("Tasks need a newer server.");
+  },
+);
+
+it.each(["absent", "false", "cached-only"])(
+  "keeps legacy title edits on a %s task capability",
+  async (state) => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    mocks.tasksV2 =
+      state === "cached-only"
+        ? true
+        : state === "false"
+          ? false
+          : (undefined as unknown as boolean);
+    mocks.liveSource = state !== "cached-only";
+    const task = {
+      id: "wskt_00000000-0000-4000-8000-000000000001",
+      projectId,
+      title: "Legacy",
+      column: "To do",
+    };
+    mocks.command.mockResolvedValue({ _tag: "Success", value: { ...task, title: "Renamed" } });
+    await act(() => {
+      renderer = create(
+        <ProjectTasks
+          environmentId={environmentId}
+          projectId={projectId}
+          selected={task}
+          onSelect={() => {}}
+        />,
+      );
+    });
+    await act(() =>
+      renderer!.root
+        .findByProps({ "aria-label": "Task title" })
+        .props.onChange({ target: { value: "Renamed" } }),
+    );
+    await act(() =>
+      renderer!.root.findAllByType("form")[1]!.props.onSubmit({ preventDefault() {} }),
+    );
+    expect(mocks.command).toHaveBeenLastCalledWith({
+      environmentId,
+      input: { id: task.id, projectId, title: "Renamed", column: "To do" },
+    });
+    expect(mocks.newCommand).not.toHaveBeenCalled();
+    expect(renderer!.root.findAllByProps({ "aria-label": "Due date" })).toHaveLength(0);
   },
 );

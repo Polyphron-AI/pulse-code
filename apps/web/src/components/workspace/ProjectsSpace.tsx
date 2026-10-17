@@ -232,6 +232,7 @@ export function ProjectsSpace() {
                 key={selected.id}
                 environmentId={environmentId}
                 projectId={selected.id}
+                projectTitle={selected.title}
                 selected={selectedTask}
                 onSelect={selectTask}
               />

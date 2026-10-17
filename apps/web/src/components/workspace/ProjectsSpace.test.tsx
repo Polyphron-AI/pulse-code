@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@tanstack/react-router", () => ({
   useSearch: () => ({ project: "project", environment: "remote", item: mocks.item }),
   useNavigate: () => vi.fn(),
+  useRouter: () => null,
   Link: ({ children }: { children: ReactNode }) => <a>{children}</a>,
 }));
 vi.mock("../../state/entities", () => ({

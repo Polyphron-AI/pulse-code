@@ -29,6 +29,41 @@ afterEach(async () => {
   if (renderer) await act(() => renderer.unmount());
   vi.unstubAllGlobals();
 });
+it("blocks another transition until the acknowledged revision reaches the row", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const command = vi.fn<TaskTransitionHandler>(async () =>
+    AsyncResult.success({ ...task, done: true, revision: 4, column: "Done" }),
+  );
+  const view = (current = task) => (
+    <WorkspaceTaskRow
+      environmentId={EnvironmentId.make("remote")}
+      task={current}
+      density="list"
+      onOpen={() => {}}
+      ownerProfile={null}
+      timeZone="UTC"
+      now={now}
+      canOperate
+      completedColumn="Done"
+      workspaceTasksV2
+      pending={false}
+      onTransition={command}
+    />
+  );
+  await act(() => {
+    renderer = create(view());
+  });
+  await act(async () =>
+    renderer.root.findByType("input").props.onChange({ target: { checked: true } }),
+  );
+  expect(renderer.root.findByType("input").props.disabled).toBe(true);
+  await act(async () =>
+    renderer.root.findByType("input").props.onChange({ target: { checked: true } }),
+  );
+  expect(command).toHaveBeenCalledTimes(1);
+  await act(() => renderer.update(view({ ...task, done: true, revision: 4, column: "Done" })));
+  expect(renderer.root.findByType("input").props.disabled).toBe(false);
+});
 it("completes the captured row without opening it", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const open = vi.fn();
@@ -164,5 +199,5 @@ it("keeps the checkbox confirmed and blocks duplicate writes while the captured 
     await operation;
   });
   expect(command.mock.calls[0]?.[0].environmentId).toBe("remote");
-  expect(checkbox().props.disabled).toBe(false);
+  expect(checkbox().props.disabled).toBe(true);
 });

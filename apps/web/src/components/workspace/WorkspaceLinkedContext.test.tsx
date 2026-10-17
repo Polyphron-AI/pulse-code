@@ -68,6 +68,10 @@ vi.mock("../../state/query", () => ({
 vi.mock("../../state/use-atom-command", () => ({
   useAtomCommand: (name: "accept" | "dismiss" | "refresh") => mocks[name],
 }));
+vi.mock("../../hooks/useSettings", () => ({
+  useEnvironmentSettings: (_id: unknown, select: (settings: unknown) => unknown) =>
+    select({ workspaceDisplayTimeZone: "UTC", workspaceOwnerProfile: null }),
+}));
 vi.mock("../../state/session", () => ({
   useEnvironmentSessionState: () => ({
     isPending: false,

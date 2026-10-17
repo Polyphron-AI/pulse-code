@@ -7,7 +7,9 @@ import { getByRole } from "@testing-library/dom";
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { DEFAULT_RESOLVED_KEYBINDINGS } from "@t3tools/shared/keybindings";
-import { EnvironmentId, ProjectId, type ScopedProjectRef } from "@t3tools/contracts";
+import { EnvironmentId, ProjectId, ThreadId, type ScopedProjectRef } from "@t3tools/contracts";
+import { useComposerDraftStore, type DraftId } from "../../composerDraftStore";
+import { newDraftId } from "../../lib/utils";
 import { WorkspaceItemActions, WorkspaceItemMenu } from "./WorkspaceItemActions";
 import { projectMenuItems } from "./mail/linkedItems";
 import { buildWorkspaceActionItems } from "../CommandPalette.logic";
@@ -18,7 +20,9 @@ const mocks = vi.hoisted(() => ({
       (input: { onCreated?: (project: ScopedProjectRef) => Promise<void> }) => Promise<boolean>
     >(),
   linkToProject: vi.fn<(...args: unknown[]) => Promise<void>>(),
-  startThread: vi.fn(async () => null),
+  startThread: vi.fn<
+    (...args: unknown[]) => Promise<{ draftId: DraftId; threadId: ThreadId } | null>
+  >(async () => null),
   contextMenuShow: vi.fn(),
   operate: true,
   pending: false,
@@ -618,5 +622,78 @@ it("retries source linking against the created project without creating a duplic
   } finally {
     await act(async () => renderer.unmount());
     vi.unstubAllGlobals();
+  }
+});
+
+it("cancels a task menu's Start thread chooser without a thread or link", async () => {
+  const task = {
+    ref: { type: "task" as const, taskId: "wskt_00000000-0000-4000-8000-000000000001" },
+    title: "Launch",
+  };
+  mocks.contextMenuShow.mockResolvedValue(null);
+  let view!: ReactTestRenderer;
+  await act(() => {
+    view = create(
+      <WorkspaceItemMenu environmentId={environmentId} item={task}>
+        <button>Task</button>
+      </WorkspaceItemMenu>,
+    );
+  });
+  try {
+    await act(() =>
+      view.root.findByProps({ draggable: true }).props.onContextMenu({ preventDefault() {} }),
+    );
+    await act(() =>
+      view.root
+        .findAllByType("button")
+        .find((b) => b.children.join("") === "Start thread")!
+        .props.onClick({ currentTarget: target }),
+    );
+    expect(mocks.contextMenuShow).toHaveBeenCalled();
+    expect(mocks.startThread).not.toHaveBeenCalled();
+    expect(mocks.linkToProject).not.toHaveBeenCalled();
+  } finally {
+    await act(() => view.unmount());
+  }
+});
+it("starts from a stable task ref with its structural project as explicit context", async () => {
+  const task = {
+    ref: { type: "task" as const, taskId: "wskt_00000000-0000-4000-8000-000000000001" },
+    title: "Launch",
+  };
+  const project = { ref: { type: "project" as const, projectId: ProjectId.make("project-a") } };
+  const draftId = newDraftId();
+  mocks.startThread.mockResolvedValueOnce({ draftId, threadId: ThreadId.make("thread-a") });
+  const addContexts = vi
+    .spyOn(useComposerDraftStore.getState(), "addThreadContexts")
+    .mockImplementation(() => {});
+  let view!: ReactTestRenderer;
+  await act(() => {
+    view = create(
+      <WorkspaceItemActions environmentId={environmentId} item={task} confirmed={[project]} />,
+    );
+  });
+  try {
+    await act(() =>
+      view.root
+        .findAllByType("button")
+        .find((b) => b.children.join("") === "Start thread")!
+        .props.onClick({ currentTarget: target }),
+    );
+    expect(mocks.startThread).toHaveBeenCalledWith(
+      scopeProjectRef(environmentId, project.ref.projectId),
+    );
+    expect(addContexts).toHaveBeenCalledWith(
+      draftId,
+      [
+        expect.objectContaining({ item: task, viewing: task }),
+        expect.objectContaining({ item: project, viewing: task }),
+      ],
+      { insertAtCaret: false },
+    );
+    expect(mocks.linkToProject).not.toHaveBeenCalled();
+  } finally {
+    addContexts.mockRestore();
+    await act(() => view.unmount());
   }
 });

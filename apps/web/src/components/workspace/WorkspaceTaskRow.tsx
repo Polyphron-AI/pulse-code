@@ -84,10 +84,20 @@ export const WorkspaceTaskRow = memo(function WorkspaceTaskRow({
   const [busy, setBusy] = useState(false);
   const inFlight = useRef(false);
   const [error, setError] = useState<string | null>(null);
+  const [acknowledged, setAcknowledged] = useState<{
+    environmentId: EnvironmentId;
+    id: string;
+    revision: number;
+  } | null>(null);
   const explanation = useId();
   const due =
     settingsReady === false ? null : formatWorkspaceTaskDueOn(task.dueOn, now, timeZone, locale);
-  const disabled = !workspaceTasksV2 || !canOperate || pending || busy || completedColumn === null;
+  const awaitingRow =
+    acknowledged?.environmentId === environmentId &&
+    acknowledged.id === task.id &&
+    acknowledged.revision > task.revision;
+  const disabled =
+    !workspaceTasksV2 || !canOperate || pending || busy || awaitingRow || completedColumn === null;
   const title = (
     <button
       type="button"
@@ -113,7 +123,11 @@ export const WorkspaceTaskRow = memo(function WorkspaceTaskRow({
     </button>
   );
   return (
-    <li data-workspace-task-row="" className="border-b border-border">
+    <li
+      data-workspace-task-row=""
+      data-workspace-task-id={task.id}
+      className="border-b border-border"
+    >
       <div className="flex h-[58px] min-w-0 items-center">
         <label className="relative mr-[6px] flex h-11 w-5 shrink-0 items-center justify-start pl-1 max-md:mr-0 max-md:w-11">
           <input
@@ -143,6 +157,12 @@ export const WorkspaceTaskRow = memo(function WorkspaceTaskRow({
                   setError(
                     cause instanceof Error ? cause.message : "The task could not be updated.",
                   );
+                } else if (result.value.revision !== undefined) {
+                  setAcknowledged({
+                    environmentId: request.environmentId,
+                    id: request.input.id,
+                    revision: result.value.revision,
+                  });
                 }
               } catch (cause) {
                 setError(cause instanceof Error ? cause.message : "The task could not be updated.");
