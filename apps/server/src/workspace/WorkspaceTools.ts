@@ -132,6 +132,10 @@ export const make = Effect.gen(function* () {
           ? yield* decodeColumns(row.columnsJson)
           : ["To do", "In progress", "Done"];
         const completedColumn = row ? row.completedColumn : "Done";
+        const driveRoot =
+          row?.driveRootJson == null
+            ? null
+            : yield* decodeRoot(row.driveRootJson).pipe(Effect.orElseSucceed(() => undefined));
         return {
           projectId,
           taskColumns,
@@ -141,7 +145,7 @@ export const make = Effect.gen(function* () {
               ? completedColumn
               : null,
           revision: row?.revision ?? 0,
-          driveRoot: row?.driveRootJson == null ? null : yield* decodeRoot(row.driveRootJson),
+          ...(driveRoot !== undefined ? { driveRoot } : {}),
         };
       }),
     );

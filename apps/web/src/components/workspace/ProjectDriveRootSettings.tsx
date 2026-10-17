@@ -1,10 +1,12 @@
-import type {
-  DriveProjectRootResult,
-  EnvironmentId,
-  ProjectId,
-  WorkspaceDriveRoot,
+import {
+  DriveError,
+  type DriveProjectRootResult,
+  type EnvironmentId,
+  type ProjectId,
+  type WorkspaceDriveRoot,
 } from "@t3tools/contracts";
 import { useContext, useEffect, useRef, useState } from "react";
+import * as Schema from "effect/Schema";
 import { useConnectedEnvironmentIds } from "../../state/environments";
 import { drive } from "../../state/drive";
 import { workspaceLinks } from "../../state/workspaceLinks";
@@ -18,6 +20,7 @@ import { WorkspaceResourcesBodyContext } from "./workspaceResourceState";
 import { useWorkspaceItemOpener } from "./useWorkspaceItemOpener";
 
 type Props = { environmentId: EnvironmentId; projectId: ProjectId };
+const isDriveError = Schema.is(DriveError);
 const rootMessages: Record<DriveProjectRootResult["state"], string> = {
   unconfigured: "Choose a confirmed project folder to browse Drive.",
   available: "Files stay in Google Drive.",
@@ -70,6 +73,26 @@ function ProjectDriveLinks({ environmentId, projectId }: Props) {
   );
 }
 
+function DriveFolderOption({
+  environmentId,
+  fileId,
+  linkId,
+  title,
+}: {
+  environmentId: EnvironmentId;
+  fileId: string;
+  linkId: string;
+  title: string;
+}) {
+  const binding = useEnvironmentQuery(drive.binding({ environmentId, input: { fileId } }));
+  if (
+    binding.data?.binding &&
+    binding.data.binding.file.mimeType !== "application/vnd.google-apps.folder"
+  )
+    return null;
+  return <option value={linkId}>{title}</option>;
+}
+
 function AvailableRootSettings({ environmentId, projectId }: Props) {
   const root = useEnvironmentQuery(drive.projectRoot({ environmentId, input: { projectId } }));
   const links = useEnvironmentQuery(
@@ -85,6 +108,10 @@ function AvailableRootSettings({ environmentId, projectId }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const active = useRef(true);
+  const chooseButton = useRef<HTMLButtonElement>(null);
+  const useButton = useRef<HTMLButtonElement>(null);
+  const linkSelect = useRef<HTMLSelectElement>(null);
+  const [focusAfterAction, setFocusAfterAction] = useState<"choose" | "use" | null>(null);
   const refreshRoot = root.refresh;
   const linksUpdatedAt = links.dataUpdatedAt;
   useEffect(() => {
@@ -109,9 +136,6 @@ function AvailableRootSettings({ environmentId, projectId }: Props) {
     fileId ? drive.binding({ environmentId, input: { fileId } }) : null,
   );
   const saved = root.data?.root;
-  const savedConnection = connections.data?.find(
-    (connection) => connection.id === saved?.connectionId,
-  );
   const selectedBinding = binding.data?.binding;
   const folder =
     selectedBinding?.file.mimeType === "application/vnd.google-apps.folder"
@@ -122,9 +146,9 @@ function AvailableRootSettings({ environmentId, projectId }: Props) {
   );
   const accountLabel = (id: string) => {
     const connection = connections.data?.find((value) => value.id === id);
-    return connection
-      ? `${connection.nickname} (${connection.identity?.email ?? connection.identity?.name ?? "Disconnected"})`
-      : `Unavailable connection: ${id}`;
+    if (!connection) return `Unavailable connection: ${id}`;
+    const identity = connection.identity?.email || connection.identity?.name;
+    return `${connection.nickname}${identity ? ` (${identity})` : ""}${connection.connected ? "" : " (disconnected)"}`;
   };
   const state =
     saved &&
@@ -139,8 +163,28 @@ function AvailableRootSettings({ environmentId, projectId }: Props) {
       ? "unlinked"
       : root.data?.state;
   const unavailable = root.error !== null || !root.data;
+  const clearUnavailable = isDriveError(root.failure) && root.failure.kind === "unavailable";
+  useEffect(() => {
+    if (choosing) linkSelect.current?.focus();
+  }, [choosing]);
+  useEffect(() => {
+    if (busy || unavailable || focusAfterAction === null) return;
+    const target =
+      focusAfterAction === "use" && useButton.current && !useButton.current.disabled
+        ? useButton.current
+        : chooseButton.current;
+    if (!target || target.disabled) return;
+    target.focus();
+    setFocusAfterAction(null);
+  }, [busy, focusAfterAction, unavailable]);
   const save = async (value: WorkspaceDriveRoot | null) => {
-    if (!active.current || !canOperate || busy || unavailable) return;
+    if (
+      !active.current ||
+      !canOperate ||
+      busy ||
+      (unavailable && !(value === null && clearUnavailable))
+    )
+      return;
     setBusy(true);
     setError(null);
     const result = await setRoot({ environmentId, input: { projectId, root: value } });
@@ -152,6 +196,7 @@ function AvailableRootSettings({ environmentId, projectId }: Props) {
       setLinkId("");
       setConnectionId("");
       root.refresh();
+      setFocusAfterAction("choose");
     }
   };
   return (
@@ -163,12 +208,13 @@ function AvailableRootSettings({ environmentId, projectId }: Props) {
       {saved ? (
         <p className="break-words text-xs text-muted-foreground">
           Drive connection: {accountLabel(saved.connectionId)}
-          {savedConnection && !savedConnection.connected ? " (disconnected)" : ""}
         </p>
       ) : null}
-      <p className="text-xs text-muted-foreground">
-        {state ? rootMessages[state] : "Loading project Drive folder..."}
-      </p>
+      {state || !root.error ? (
+        <p className="text-xs text-muted-foreground">
+          {state ? rootMessages[state] : "Loading project Drive folder..."}
+        </p>
+      ) : null}
       {root.error || links.error || connections.error || error ? (
         <p role="alert" className="text-sm text-destructive">
           {error ?? root.error ?? links.error ?? connections.error}
@@ -181,6 +227,7 @@ function AvailableRootSettings({ environmentId, projectId }: Props) {
       ) : null}
       <div className="flex flex-wrap gap-2">
         <Button
+          ref={chooseButton}
           type="button"
           size="sm"
           variant="outline"
@@ -192,12 +239,12 @@ function AvailableRootSettings({ environmentId, projectId }: Props) {
         >
           {saved ? "Replace folder" : "Choose folder"}
         </Button>
-        {saved ? (
+        {saved || clearUnavailable ? (
           <Button
             type="button"
             size="sm"
             variant="ghost"
-            disabled={!canOperate || busy || unavailable}
+            disabled={!canOperate || busy || (unavailable && !clearUnavailable)}
             onClick={() => save(null)}
           >
             Clear project folder
@@ -214,6 +261,7 @@ function AvailableRootSettings({ environmentId, projectId }: Props) {
           <label className="block space-y-1 text-sm">
             <span>Confirmed Drive link</span>
             <select
+              ref={linkSelect}
               aria-label="Confirmed Drive link"
               className="w-full rounded-md border border-input bg-background p-2"
               value={selected ? linkId : ""}
@@ -225,11 +273,17 @@ function AvailableRootSettings({ environmentId, projectId }: Props) {
               }}
             >
               <option value="">Choose a linked item to verify</option>
-              {candidates.map((link) => (
-                <option key={link.id} value={link.id}>
-                  {link.item.title ?? (link.item.ref.type === "file" ? link.item.ref.fileId : "")}
-                </option>
-              ))}
+              {candidates.map((link) =>
+                link.item.ref.type === "file" ? (
+                  <DriveFolderOption
+                    key={link.id}
+                    environmentId={environmentId}
+                    fileId={link.item.ref.fileId}
+                    linkId={link.id}
+                    title={link.item.title ?? link.item.ref.fileId}
+                  />
+                ) : null,
+              )}
             </select>
           </label>
           {selectedBinding ? (
@@ -289,6 +343,7 @@ function AvailableRootSettings({ environmentId, projectId }: Props) {
                     setConnectionId("");
                     binding.refresh();
                     root.refresh();
+                    setFocusAfterAction("use");
                   }
                 }}
               >
@@ -304,6 +359,7 @@ function AvailableRootSettings({ environmentId, projectId }: Props) {
           {folder ? <p className="text-sm">Folder: {folder.file.name}</p> : null}
           <div className="flex flex-wrap gap-2">
             <Button
+              ref={useButton}
               type="button"
               size="sm"
               disabled={
@@ -333,11 +389,19 @@ function AvailableRootSettings({ environmentId, projectId }: Props) {
                 setLinkId("");
                 setConnectionId("");
                 setError(null);
+                setFocusAfterAction("choose");
               }}
             >
               Cancel
             </Button>
           </div>
+          {connectionId || (folder && !boundConnection?.connected) ? (
+            <p className="text-xs text-muted-foreground">
+              {connectionId
+                ? "Verify and bind first, or clear the connection choice."
+                : "The bound Drive connection is disconnected. Reconnect it in Settings or verify with another connection."}
+            </p>
+          ) : null}
         </div>
       ) : null}
       {links.data?.truncated ? (

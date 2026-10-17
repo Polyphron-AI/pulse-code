@@ -9,6 +9,7 @@ import * as Deferred from "effect/Deferred";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Stream from "effect/Stream";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as Secrets from "../auth/ServerSecretStore.ts";
 import * as ServerConfig from "../config.ts";
@@ -79,6 +80,11 @@ describe("Drive read-only account and file lifecycle", () => {
       yield* oauth.complete(sign.flow.flowId, sign.returned.href);
       yield* seedRootLink;
       expect((yield* service.getProjectRoot({ projectId })).state).toBe("unconfigured");
+      const initialSql = yield* SqlClient.SqlClient;
+      const beforeClear = fake.calls.length;
+      yield* service.setProjectRoot({ projectId, root: null });
+      expect(yield* initialSql`SELECT * FROM workspace_project_config`).toEqual([]);
+      expect(fake.calls).toHaveLength(beforeClear);
       fake.state.mimeType = "application/vnd.google-apps.folder";
       yield* service.bindFile({ connectionId: connection.id, fileId: "synkek-root" });
       const root = { linkId: rootLinkId, connectionId: connection.id, fileId: "synkek-root" };
@@ -123,6 +129,8 @@ describe("Drive read-only account and file lifecycle", () => {
     "suggested",
     "dismissed",
     "foreign",
+    "ref-only",
+    "key-only",
     "non-folder",
     "missing-binding",
     "mismatched-binding",
@@ -141,69 +149,117 @@ describe("Drive read-only account and file lifecycle", () => {
         const root = { linkId: rootLinkId, connectionId: connection.id, fileId: "synkek-root" };
         yield* service.setProjectRoot({ projectId, root });
         const sql = yield* SqlClient.SqlClient;
+        const nextFile = {
+          type: "file" as const,
+          provider: "google-drive" as const,
+          fileId: "replacement",
+        };
+        const nextId = "wl_00000000-0000-0000-0000-000000000002";
+        yield* sql`INSERT INTO workspace_links(link_id,key_a,key_b,ref_a_json,ref_b_json,status,source_json,created_at,updated_at) SELECT ${nextId},${workspaceItemKey(nextFile)},key_b,${encodeJson(nextFile)},ref_b_json,status,source_json,created_at,updated_at FROM workspace_links WHERE link_id=${rootLinkId}`;
+        yield* service.bindFile({ connectionId: connection.id, fileId: nextFile.fileId });
+        const next = { linkId: nextId, connectionId: connection.id, fileId: nextFile.fileId };
         if (invalid === "suggested" || invalid === "dismissed")
-          yield* sql`UPDATE workspace_links SET status=${invalid}`;
-        if (invalid === "foreign") yield* sql`UPDATE workspace_links SET key_b='project:other'`;
+          yield* sql`UPDATE workspace_links SET status=${invalid} WHERE link_id=${nextId}`;
+        if (invalid === "foreign" || invalid === "key-only")
+          yield* sql`UPDATE workspace_links SET key_b='project:other' WHERE link_id=${nextId}`;
+        if (invalid === "foreign" || invalid === "ref-only")
+          yield* sql`UPDATE workspace_links SET ref_b_json=${encodeJson({ type: "project", projectId: "other" })} WHERE link_id=${nextId}`;
         if (invalid === "non-folder") fake.state.mimeType = "text/plain";
-        if (invalid === "missing-binding") yield* sql`DELETE FROM drive_file_bindings`;
+        if (invalid === "missing-binding")
+          yield* sql`DELETE FROM drive_file_bindings WHERE file_id=${next.fileId}`;
         if (invalid === "mismatched-binding")
-          yield* sql`UPDATE drive_file_bindings SET connection_id='other'`;
+          yield* sql`UPDATE drive_file_bindings SET connection_id='other' WHERE file_id=${next.fileId}`;
         if (invalid === "deleted-project")
           yield* sql`UPDATE projection_projects SET deleted_at='2026-10-14T00:00:00Z'`;
         if (invalid === "removed-connection") yield* store.disconnect(connection.id, true);
         const before = yield* sql`SELECT * FROM workspace_project_config`;
         const bindings = yield* sql`SELECT * FROM drive_file_bindings`;
         const links = yield* sql`SELECT * FROM workspace_links`;
-        const error = yield* service.setProjectRoot({ projectId, root }).pipe(Effect.flip);
-        expect(error.kind).toMatch(
-          /invalid-input|conflict|not-found|connection-required|auth-required/,
-        );
+        const calls = fake.calls.length;
+        const tokenCalls = fake.state.tokenCalls;
+        const error = yield* service.setProjectRoot({ projectId, root: next }).pipe(Effect.flip);
+        const expectedKind =
+          invalid === "missing-binding" || invalid === "mismatched-binding"
+            ? "connection-required"
+            : invalid === "deleted-project"
+              ? "not-found"
+              : invalid === "removed-connection"
+                ? "auth-required"
+                : "invalid-input";
+        expect(error.kind).toBe(expectedKind);
+        expect(fake.state.tokenCalls).toBe(tokenCalls);
+        expect(fake.calls).toHaveLength(calls + (invalid === "non-folder" ? 1 : 0));
+        expect(before[0]!.drive_root_json).toBe(encodeJson(root));
+        if (invalid !== "deleted-project")
+          expect((yield* service.getProjectRoot({ projectId })).root).toEqual(root);
         expect(yield* sql`SELECT * FROM workspace_project_config`).toEqual(before);
         expect(yield* sql`SELECT * FROM drive_file_bindings`).toEqual(bindings);
         expect(yield* sql`SELECT * FROM workspace_links`).toEqual(links);
       }).pipe(Effect.scoped, Effect.provide(testLayer())),
   );
-  it.effect.each(["disconnect", "rebind", "unlink", "delete-project"] as const)(
-    "rechecks %s after a pending metadata read before saving a root",
-    (change) =>
-      Effect.gen(function* () {
-        const { fake, oauth, service, store, connection, signIn } = yield* setup;
-        const sign = yield* signIn;
-        yield* oauth.complete(sign.flow.flowId, sign.returned.href);
-        yield* seedRootLink;
-        fake.state.mimeType = "application/vnd.google-apps.folder";
-        yield* service.bindFile({ connectionId: connection.id, fileId: "synkek-root" });
-        const entered = yield* Deferred.make<void>();
-        const release = yield* Deferred.make<void>();
-        fake.state.metadataGate = { entered, release };
-        const pending = yield* service
-          .setProjectRoot({
-            projectId,
-            root: { linkId: rootLinkId, connectionId: connection.id, fileId: "synkek-root" },
-          })
-          .pipe(Effect.flip, Effect.forkChild);
-        yield* Deferred.await(entered);
-        const sql = yield* SqlClient.SqlClient;
-        if (change === "disconnect") yield* store.disconnect(connection.id);
-        if (change === "rebind") yield* sql`UPDATE drive_file_bindings SET connection_id='other'`;
-        if (change === "unlink") yield* sql`UPDATE workspace_links SET status='dismissed'`;
-        if (change === "delete-project")
-          yield* sql`UPDATE projection_projects SET deleted_at='2026-10-14T00:00:00Z'`;
-        yield* Deferred.succeed(release, undefined);
-        expect((yield* Fiber.join(pending)).kind).toBe("conflict");
-        expect(yield* sql`SELECT * FROM workspace_project_config`).toHaveLength(0);
-      }).pipe(Effect.scoped, Effect.provide(testLayer())),
+  it.effect.each([
+    "disconnect",
+    "reconnect",
+    "rebind",
+    "unlink",
+    "delete-project",
+    "storage-error",
+    "storage-read-error",
+  ] as const)("rechecks %s after a pending metadata read before saving a root", (change) =>
+    Effect.gen(function* () {
+      const { fake, oauth, service, store, connection, signIn } = yield* setup;
+      const sign = yield* signIn;
+      yield* oauth.complete(sign.flow.flowId, sign.returned.href);
+      yield* seedRootLink;
+      fake.state.mimeType = "application/vnd.google-apps.folder";
+      yield* service.bindFile({ connectionId: connection.id, fileId: "synkek-root" });
+      const generation = (yield* store.get(connection.id)).generation;
+      const entered = yield* Deferred.make<void>();
+      const release = yield* Deferred.make<void>();
+      fake.state.metadataGate = { entered, release };
+      const pending = yield* service
+        .setProjectRoot({
+          projectId,
+          root: { linkId: rootLinkId, connectionId: connection.id, fileId: "synkek-root" },
+        })
+        .pipe(Effect.flip, Effect.forkChild);
+      yield* Deferred.await(entered);
+      const sql = yield* SqlClient.SqlClient;
+      if (change === "disconnect" || change === "reconnect") yield* store.disconnect(connection.id);
+      if (change === "reconnect") {
+        const reconnect = yield* signIn;
+        yield* oauth.complete(reconnect.flow.flowId, reconnect.returned.href);
+        expect((yield* store.get(connection.id)).connected).toBe(true);
+        expect((yield* store.get(connection.id)).generation).toBe(generation + 1);
+      }
+      if (change === "storage-error")
+        yield* sql`UPDATE drive_file_bindings SET file_json='broken' WHERE file_id='synkek-root'`;
+      if (change === "storage-read-error")
+        yield* sql`ALTER TABLE workspace_links RENAME TO unavailable_links`;
+      if (change === "rebind") yield* sql`UPDATE drive_file_bindings SET connection_id='other'`;
+      if (change === "unlink") yield* sql`UPDATE workspace_links SET status='dismissed'`;
+      if (change === "delete-project")
+        yield* sql`UPDATE projection_projects SET deleted_at='2026-10-14T00:00:00Z'`;
+      yield* Deferred.succeed(release, undefined);
+      expect((yield* Fiber.join(pending)).kind).toBe(
+        change === "storage-error" || change === "storage-read-error" ? "unavailable" : "conflict",
+      );
+      expect(yield* sql`SELECT * FROM workspace_project_config`).toHaveLength(0);
+    }).pipe(Effect.scoped, Effect.provide(testLayer())),
   );
   it.effect("keeps a root designation separate from links and legacy settings saves", () =>
     Effect.gen(function* () {
-      const { fake, oauth, service, connection, signIn } = yield* setup;
+      const { fake, oauth, service, store, connection, signIn } = yield* setup;
       const sign = yield* signIn;
       yield* oauth.complete(sign.flow.flowId, sign.returned.href);
       yield* seedRootLink;
       fake.state.mimeType = "application/vnd.google-apps.folder";
       yield* service.bindFile({ connectionId: connection.id, fileId: "synkek-root" });
       const root = { linkId: rootLinkId, connectionId: connection.id, fileId: "synkek-root" };
+      const beforeSet = Option.getOrThrow(yield* Stream.runHead(store.changes));
       expect((yield* service.setProjectRoot({ projectId, root })).state).toBe("available");
+      const afterSet = Option.getOrThrow(yield* Stream.runHead(store.changes));
+      expect(afterSet).toBe(beforeSet + 1);
       const sql = yield* SqlClient.SqlClient;
       expect(yield* sql`SELECT link_id FROM workspace_links`).toHaveLength(1);
       const tools = yield* Tools.make;
@@ -218,6 +274,7 @@ describe("Drive read-only account and file lifecycle", () => {
       expect(currentConfig.completedColumn).toBe("Done");
       expect((yield* tools.config(projectId)).completedColumn).toBe("Done");
       yield* service.setProjectRoot({ projectId, root: null });
+      expect(Option.getOrThrow(yield* Stream.runHead(store.changes))).toBe(afterSet + 1);
       expect((yield* service.getProjectRoot({ projectId })).state).toBe("unconfigured");
       expect(yield* sql`SELECT link_id FROM workspace_links WHERE status='confirmed'`).toHaveLength(
         1,

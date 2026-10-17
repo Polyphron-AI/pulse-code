@@ -235,40 +235,47 @@ export const make = Effect.gen(function* () {
     validateProjectRoot,
     saveProjectRoot: (
       projectId: ProjectId,
-      root: WorkspaceDriveRoot | null,
-      verified?: { generation: number; file: typeof DriveFile.Type },
+      root: WorkspaceDriveRoot,
+      verified: { generation: number; file: DriveFile },
     ) =>
       mutate(
         sql.withTransaction(
           Effect.gen(function* () {
-            if (root !== null) {
-              yield* validateProjectRoot(projectId, root).pipe(
-                Effect.catch(() =>
+            yield* validateProjectRoot(projectId, root).pipe(
+              Effect.catchIf(
+                (error) => error.kind !== "unavailable",
+                () =>
                   fail(
                     "conflict",
                     "The project folder, link or connection changed. Choose the project folder again.",
                   ),
-                ),
+              ),
+            );
+            const connection = yield* get(root.connectionId);
+            if (
+              !connection.connected ||
+              connection.generation !== verified.generation ||
+              verified.file.id !== root.fileId
+            )
+              return yield* fail(
+                "conflict",
+                "The Drive connection changed. Choose the project folder again.",
               );
-              const connection = yield* get(root.connectionId);
-              if (
-                !verified ||
-                !connection.connected ||
-                connection.generation !== verified.generation ||
-                verified.file.id !== root.fileId
-              )
-                return yield* fail(
-                  "conflict",
-                  "The Drive connection changed. Choose the project folder again.",
-                );
-              if (verified.file.mimeType !== "application/vnd.google-apps.folder")
-                return yield* fail("invalid-input", "Choose a Google Drive folder.");
-            } else yield* requireProject(projectId);
-            const rootJson = root === null ? null : encodeRoot(root);
+            if (verified.file.mimeType !== "application/vnd.google-apps.folder")
+              return yield* fail("invalid-input", "Choose a Google Drive folder.");
+            const rootJson = encodeRoot(root);
             yield* sql`INSERT INTO workspace_project_config(project_id,columns_json,browser_thread_id,completed_column,drive_root_json) VALUES(${projectId},${encodeColumns(["To do", "In progress", "Done"])},NULL,'Done',${rootJson}) ON CONFLICT(project_id) DO UPDATE SET drive_root_json=excluded.drive_root_json`;
-            return root === null
-              ? ({ root: null, state: "unconfigured" } satisfies DriveProjectRootResult)
-              : yield* inspectRoot(projectId, root);
+            return yield* inspectRoot(projectId, root);
+          }),
+        ),
+      ),
+    clearProjectRoot: (projectId: ProjectId) =>
+      mutate(
+        sql.withTransaction(
+          Effect.gen(function* () {
+            yield* requireProject(projectId);
+            yield* sql`UPDATE workspace_project_config SET drive_root_json=NULL WHERE project_id=${projectId}`;
+            return { root: null, state: "unconfigured" } satisfies DriveProjectRootResult;
           }),
         ),
       ),

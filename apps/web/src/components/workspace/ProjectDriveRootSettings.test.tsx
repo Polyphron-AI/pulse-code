@@ -1,12 +1,16 @@
+// @vitest-environment happy-dom
 import * as Cause from "effect/Cause";
 import { act } from "react";
-import { create, type ReactTestRenderer } from "react-test-renderer";
+import { createRoot, type Root } from "react-dom/client";
+import { getByRole, queryByRole } from "@testing-library/dom";
 import { afterEach, beforeEach, expect, it, vi } from "vite-plus/test";
 import {
+  DriveError,
   EnvironmentId,
   ProjectId,
   type DriveProjectRootResult,
   type WorkspaceLinkList,
+  type DriveIdentity,
 } from "@t3tools/contracts";
 import { ProjectDriveRootSettings } from "./ProjectDriveRootSettings";
 import { WorkspaceResourcesBodyContext } from "./workspaceResourceState";
@@ -16,7 +20,10 @@ const state = vi.hoisted(() => ({
   connected: true,
   operate: true,
   connectionConnected: true,
-  root: { root: null, state: "unconfigured" } as DriveProjectRootResult,
+  identity: { id: "owner", name: "Owner", email: "owner@example.test" } as
+    | DriveIdentity
+    | undefined,
+  root: { root: null, state: "unconfigured" } as DriveProjectRootResult | undefined,
   rootError: null as string | null,
   links: { linked: [], suggested: [], truncated: false } as WorkspaceLinkList,
   linkVersion: 1,
@@ -55,7 +62,7 @@ vi.mock("../../state/drive", () => ({
       return "root";
     },
     connections: () => "connections",
-    binding: () => "binding",
+    binding: ({ input }: { input: { fileId: string } }) => `binding:${input.fileId}`,
     setProjectRoot: "set",
     bind: "bind",
   },
@@ -77,20 +84,21 @@ vi.mock("../../state/query", () => ({
                   id: "drv_00000000-0000-0000-0000-000000000001",
                   nickname: "Work",
                   connected: state.connectionConnected,
-                  identity: { email: "owner@example.test" },
+                  identity: state.identity,
                 },
               ]
-            : query === "binding"
+            : query?.startsWith("binding:")
               ? {
                   binding: state.bound
                     ? {
                         connectionId: "drv_00000000-0000-0000-0000-000000000001",
                         file: {
-                          id: "folder",
-                          name: "SynKEK",
-                          mimeType: state.folder
-                            ? "application/vnd.google-apps.folder"
-                            : "text/plain",
+                          id: query.slice("binding:".length),
+                          name: query === "binding:other-folder" ? "Another folder" : "SynKEK",
+                          mimeType:
+                            state.folder && query !== "binding:document"
+                              ? "application/vnd.google-apps.folder"
+                              : "text/plain",
                         },
                       }
                     : undefined,
@@ -98,7 +106,14 @@ vi.mock("../../state/query", () => ({
               : null,
     dataUpdatedAt: query === "links" ? state.linkVersion : 1,
     error: query === "root" ? state.rootError : null,
-    refresh: query === "binding" ? state.bindRefresh : state.refresh,
+    failure:
+      query === "root" && state.rootError
+        ? new DriveError({
+            kind: state.rootError === "This project is unavailable." ? "not-found" : "unavailable",
+            message: state.rootError,
+          })
+        : null,
+    refresh: query?.startsWith("binding:") ? state.bindRefresh : state.refresh,
   }),
 }));
 vi.mock("./mail/LinkedSection", () => ({
@@ -114,7 +129,8 @@ vi.mock("../ui/dialog", () => ({
   DialogPanel: "div",
   DialogTitle: "h2",
 }));
-let renderer: ReactTestRenderer | undefined;
+let domRoot: Root;
+let node: HTMLDivElement;
 const environmentId = EnvironmentId.make("remote");
 const projectId = ProjectId.make("project");
 const view = (hidden = false) => (
@@ -122,18 +138,30 @@ const view = (hidden = false) => (
     <ProjectDriveRootSettings environmentId={environmentId} projectId={projectId} />
   </WorkspaceResourcesBodyContext>
 );
-const button = (label: string) =>
-  renderer!.root.findAllByType("button").find((item) => item.children.join("") === label)!;
-const choose = async () => {
-  await act(() => button(state.root.root ? "Replace folder" : "Choose folder").props.onClick());
-  await act(() =>
-    renderer!.root
-      .findByProps({ "aria-label": "Confirmed Drive link" })
-      .props.onChange({ target: { value: linkId } }),
-  );
+const button = (label: string) => getByRole<HTMLButtonElement>(node, "button", { name: label });
+const select = (label: string) => getByRole<HTMLSelectElement>(node, "combobox", { name: label });
+const change = async (label: string, value: string) => {
+  await act(() => {
+    const input = select(label);
+    input.value = value;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+};
+const click = async (label: string) => {
+  await act(() => button(label).click());
+};
+const render = async (hidden = false) => {
+  await act(() => domRoot.render(view(hidden)));
+};
+const choose = async (id = linkId) => {
+  await click(state.root?.root ? "Replace folder" : "Choose folder");
+  await change("Confirmed Drive link", id);
 };
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  node = document.createElement("div");
+  document.body.append(node);
+  domRoot = createRoot(node);
   state.capable =
     state.connected =
     state.operate =
@@ -141,6 +169,7 @@ beforeEach(() => {
     state.bound =
     state.folder =
       true;
+  state.identity = { id: "owner", name: "Owner", email: "owner@example.test" };
   state.root = { root: null, state: "unconfigured" };
   state.rootError = null;
   state.linkVersion = 1;
@@ -166,152 +195,293 @@ beforeEach(() => {
       state: request.input.root ? "available" : "unconfigured",
       ...(request.input.root ? { file } : {}),
     };
+    state.rootError = null;
     return { _tag: "Success", value: state.root };
+  });
+  state.bind.mockImplementation(async () => {
+    state.bound = true;
+    return { _tag: "Success", value: { connectionId, file } };
   });
 });
 afterEach(async () => {
-  await act(() => renderer?.unmount());
-  renderer = undefined;
+  await act(() => domRoot.unmount());
+  node.remove();
   vi.clearAllMocks();
   vi.unstubAllGlobals();
 });
 
 it("selects only an explicitly confirmed bound folder and cancels without writing", async () => {
+  const candidate = state.links.linked[0]!;
   state.links = {
     ...state.links,
-    suggested: [
+    linked: [
+      candidate,
       {
-        ...state.links.linked[0]!,
+        ...candidate,
         id: "wl_00000000-0000-0000-0000-000000000002",
         status: "suggested",
+        item: { ...candidate.item, title: "Suggested folder" },
+      },
+      {
+        ...candidate,
+        id: "wl_00000000-0000-0000-0000-000000000003",
+        item: { ref: { type: "url", url: "https://example.test" }, title: "Website" },
+      },
+      {
+        ...candidate,
+        id: "wl_00000000-0000-0000-0000-000000000004",
+        item: {
+          ref: { type: "file", provider: "google-drive", fileId: "document" },
+          title: "Document",
+        },
       },
     ],
+    suggested: [
+      { ...candidate, id: "wl_00000000-0000-0000-0000-000000000005", status: "suggested" },
+    ],
   };
-  await act(() => {
-    renderer = create(view());
-  });
+  await render();
+  expect(node.textContent).toContain("Choose a confirmed project folder to browse Drive.");
   expect(state.setRoot).not.toHaveBeenCalled();
   await choose();
   expect(
-    renderer!.root.findByProps({ "aria-label": "Confirmed Drive link" }).findAllByType("option"),
-  ).toHaveLength(2);
+    Array.from(select("Confirmed Drive link").options, (option) => option.textContent),
+  ).toEqual(["Choose a linked item to verify", "SynKEK"]);
+  expect(button("Use as project folder").disabled).toBe(false);
   expect(state.bind).not.toHaveBeenCalled();
-  await act(() => button("Cancel").props.onClick());
+  await click("Cancel");
+  expect(queryByRole(node, "combobox", { name: "Confirmed Drive link" })).toBeNull();
+  expect(node.textContent).toContain("Choose a confirmed project folder to browse Drive.");
   expect(state.setRoot).not.toHaveBeenCalled();
   await choose();
-  await act(() => button("Use as project folder").props.onClick());
+  await click("Use as project folder");
   expect(state.setRoot).toHaveBeenCalledExactlyOnceWith({
     environmentId,
     input: { projectId, root },
   });
-  expect(JSON.stringify(renderer!.toJSON())).toContain("owner@example.test");
+  expect(node.textContent).toContain("owner@example.test");
+  expect(node.textContent).toContain("Files stay in Google Drive.");
+  expect(button("Replace folder")).toBeTruthy();
 });
 it("retains the saved root on failed replacement and clears with a disconnected Drive account", async () => {
-  state.root = {
-    root: { ...root, fileId: "old-folder" },
-    state: "available",
-    file: { ...file, id: "old-folder", name: "Previous folder" },
-  };
-  await act(() => {
-    renderer = create(view());
-  });
+  await render();
   await choose();
+  await click("Use as project folder");
+  expect(state.root?.root).toEqual(root);
+  const nextLink = "wl_00000000-0000-0000-0000-000000000002";
+  state.links = {
+    ...state.links,
+    linked: [
+      ...state.links.linked,
+      {
+        ...state.links.linked[0]!,
+        id: nextLink,
+        item: {
+          ref: { type: "file", provider: "google-drive", fileId: "other-folder" },
+          title: "Another folder",
+        },
+      },
+    ],
+  };
+  await render();
+  await choose(nextLink);
   state.setRoot.mockResolvedValueOnce({
     _tag: "Failure",
     cause: Cause.fail(new Error("The folder changed. Retry.")),
   });
-  await act(() => button("Use as project folder").props.onClick());
-  expect(JSON.stringify(renderer!.toJSON())).toContain("Previous folder");
-  expect(JSON.stringify(renderer!.toJSON())).toContain("The folder changed. Retry.");
-  await act(() => button("Cancel").props.onClick());
+  await click("Use as project folder");
+  expect(state.setRoot).toHaveBeenLastCalledWith({
+    environmentId,
+    input: { projectId, root: { ...root, linkId: nextLink, fileId: "other-folder" } },
+  });
+  expect(state.root?.root).toEqual(root);
+  expect(getByRole(node, "alert").textContent).toBe("The folder changed. Retry.");
+  expect(node.textContent).toContain("SynKEK");
+  expect(node.textContent).toContain("Files stay in Google Drive.");
+  expect(select("Confirmed Drive link").value).toBe(nextLink);
+  await click("Cancel");
   state.connectionConnected = false;
-  state.root = { ...state.root, state: "disconnected" };
-  await act(() => renderer!.update(view()));
-  expect(button("Clear project folder").props.disabled).toBe(false);
-  await act(() => button("Clear project folder").props.onClick());
-  expect(state.setRoot.mock.calls.at(-1)?.[0].input.root).toBeNull();
+  state.root = { ...state.root!, state: "disconnected" };
+  await render();
+  expect(node.textContent).toContain("Reconnect this Drive connection in Settings.");
+  expect(button("Clear project folder").disabled).toBe(false);
+  await click("Clear project folder");
+  expect(state.setRoot).toHaveBeenLastCalledWith({
+    environmentId,
+    input: { projectId, root: null },
+  });
+  expect(node.textContent).toContain("Choose a confirmed project folder to browse Drive.");
+  expect(queryByRole(node, "button", { name: "Clear project folder" })).toBeNull();
   expect(state.bind).not.toHaveBeenCalled();
 });
-it("requires explicit verification and account selection for missing metadata, and excludes non-folders", async () => {
-  state.bound = false;
-  await act(() => {
-    renderer = create(view());
-  });
+it("focuses the link select on Choose and returns focus after Cancel, save and Clear", async () => {
+  await render();
+  await click("Choose folder");
+  expect(document.activeElement).toBe(select("Confirmed Drive link"));
+  await click("Cancel");
+  expect(document.activeElement).toBe(button("Choose folder"));
   await choose();
-  expect(button("Use as project folder").props.disabled).toBe(true);
-  expect(button("Verify and bind linked item").props.disabled).toBe(true);
+  await click("Use as project folder");
+  expect(document.activeElement).toBe(button("Replace folder"));
+  await click("Clear project folder");
+  expect(document.activeElement).toBe(button("Choose folder"));
+});
+it("requires explicit verification and account selection for missing metadata, then focuses Use", async () => {
+  state.bound = false;
+  await render();
+  await choose();
+  expect(button("Use as project folder").disabled).toBe(true);
+  expect(button("Verify and bind linked item").disabled).toBe(true);
+  expect(node.textContent).toContain("Choose a connection and verify this linked item");
   expect(state.bind).not.toHaveBeenCalled();
-  await act(() =>
-    renderer!.root
-      .findByProps({ "aria-label": "Drive connection" })
-      .props.onChange({ target: { value: connectionId } }),
-  );
-  state.bind.mockResolvedValueOnce({ _tag: "Success", value: { connectionId, file } });
-  await act(() => button("Verify and bind linked item").props.onClick());
+  await change("Drive connection", connectionId);
+  await click("Verify and bind linked item");
   expect(state.bind).toHaveBeenCalledExactlyOnceWith({
     environmentId,
     input: { connectionId, fileId: "folder" },
   });
   expect(state.setRoot).not.toHaveBeenCalled();
-  state.bound = true;
-  state.folder = false;
-  await act(() => renderer!.update(view()));
-  expect(button("Use as project folder").props.disabled).toBe(true);
-  expect(JSON.stringify(renderer!.toJSON())).toContain("not a folder");
+  expect(document.activeElement).toBe(button("Use as project folder"));
+});
+it("focuses Choose after binding if refreshed folder metadata is still unavailable", async () => {
+  state.bound = false;
+  state.bind.mockResolvedValueOnce({ _tag: "Success", value: { connectionId, file } });
+  await render();
+  await choose();
+  await change("Drive connection", connectionId);
+  await click("Verify and bind linked item");
+  expect(button("Use as project folder").disabled).toBe(true);
+  expect(document.activeElement).toBe(button("Choose folder"));
 });
 it("refreshes after link removal and renders another client's changed root without using config authority", async () => {
   state.root = { root, state: "available", file };
-  await act(() => {
-    renderer = create(view());
-  });
+  await render();
+  expect(node.textContent).toContain("SynKEK");
   state.refresh.mockClear();
   state.links = { linked: [], suggested: [], truncated: false };
   state.linkVersion++;
-  await act(() => renderer!.update(view()));
+  await render();
   expect(state.refresh).toHaveBeenCalled();
-  expect(JSON.stringify(renderer!.toJSON())).toContain("no longer linked");
+  expect(node.textContent).toContain("no longer linked");
   state.root = {
     root: { ...root, fileId: "other-root" },
     state: "disconnected",
     file: { ...file, name: "Changed by another client" },
   };
-  await act(() => renderer!.update(view()));
-  expect(JSON.stringify(renderer!.toJSON())).toContain("Changed by another client");
+  await render();
+  expect(node.textContent).toContain("Changed by another client");
+  expect(node.textContent).not.toContain("SynKEK");
+  expect(state.rootQuery).toHaveBeenLastCalledWith({ environmentId, input: { projectId } });
+  // A dedicated-root unconfiguration must remove the old designation and restore the fallback.
+  state.root = { root: null, state: "unconfigured" };
+  await render();
+  expect(node.textContent).toContain("Choose a confirmed project folder to browse Drive.");
+  expect(node.textContent).not.toContain("Changed by another client");
+  expect(button("Choose folder")).toBeTruthy();
 });
 it("shows truncated-link recovery and rejects deleted projects, read-only and disconnected writes", async () => {
   state.links = { ...state.links, truncated: true };
-  await act(() => {
-    renderer = create(view());
-  });
-  expect(JSON.stringify(renderer!.toJSON())).toContain("More links may exist");
-  await act(() => button("Link to").props.onClick());
-  expect(JSON.stringify(renderer!.toJSON())).toContain("Existing Link to search");
+  await render();
+  expect(node.textContent).toContain("More links may exist");
+  await click("Link to");
+  expect(node.textContent).toContain("Existing Link to search");
   state.operate = false;
-  await act(() => renderer!.update(view()));
-  expect(button("Choose folder").props.disabled).toBe(true);
+  await render();
+  expect(button("Choose folder").disabled).toBe(true);
+  state.root = { root, state: "available", file };
+  await render();
+  expect(button("Replace folder").disabled).toBe(true);
+  expect(button("Clear project folder").disabled).toBe(true);
+  expect(node.textContent).toContain("SynKEK");
+  expect(node.textContent).toContain("You need operate permission");
   state.operate = true;
+  state.root = undefined;
   state.rootError = "This project is unavailable.";
-  await act(() => renderer!.update(view()));
-  expect(button("Choose folder").props.disabled).toBe(true);
+  await render();
+  expect(button("Choose folder").disabled).toBe(true);
   state.connected = false;
-  await act(() => renderer!.update(view()));
-  expect(renderer!.root.findAllByType("button")).toHaveLength(0);
+  await render();
+  expect(node.textContent).toContain(
+    "Connect to this environment to manage its project Drive folder.",
+  );
+  expect(queryByRole(node, "button")).toBeNull();
   expect(state.setRoot).not.toHaveBeenCalled();
+});
+it("offers Clear and Retry on an unavailable root read without claiming it is loading", async () => {
+  state.root = undefined;
+  state.rootError =
+    "Drive settings or credentials could not be saved or read. Retry when server storage is available.";
+  await render();
+  expect(node.textContent).not.toContain("Loading project Drive folder");
+  expect(getByRole(node, "alert").textContent).toBe(state.rootError);
+  expect(button("Choose folder").disabled).toBe(true);
+  expect(button("Clear project folder").disabled).toBe(false);
+  await click("Retry");
+  expect(state.refresh).toHaveBeenCalled();
+  await click("Clear project folder");
+  expect(state.setRoot).toHaveBeenCalledExactlyOnceWith({
+    environmentId,
+    input: { projectId, root: null },
+  });
+  expect(node.textContent).toContain("Choose a confirmed project folder to browse Drive.");
+  expect(document.activeElement).toBe(button("Choose folder"));
+});
+it.each([undefined, { id: "owner", name: "" }, { id: "owner", name: "Owner" }])(
+  "labels accounts truthfully with optional identity %j",
+  async (identity) => {
+    state.identity = identity;
+    state.root = { root, state: "available", file };
+    await render();
+    await choose();
+    const expected = identity?.name ? "Work (Owner)" : "Work";
+    expect(select("Drive connection").options[1]!.textContent).toBe(expected);
+    expect(node.textContent).not.toContain("Disconnected");
+    expect(node.textContent).not.toContain("(disconnected)");
+    state.connectionConnected = false;
+    await render();
+    expect(node.textContent?.match(/\(disconnected\)/g)).toHaveLength(2);
+    expect(node.textContent).not.toContain("(disconnected) (disconnected)");
+    expect(select("Drive connection").options).toHaveLength(1);
+  },
+);
+it("explains pending verification and a disconnected binding below the action row", async () => {
+  await render();
+  await choose();
+  await change("Drive connection", connectionId);
+  expect(button("Use as project folder").disabled).toBe(true);
+  expect(node.textContent).toContain("Verify and bind first, or clear the connection choice.");
+  await change("Drive connection", "");
+  state.connectionConnected = false;
+  await render();
+  expect(button("Use as project folder").disabled).toBe(true);
+  expect(node.textContent).toContain("The bound Drive connection is disconnected.");
 });
 it("makes no root RPCs on old servers, after capability downgrade, or while hidden", async () => {
   state.capable = false;
-  await act(() => {
-    renderer = create(view());
-  });
+  await render();
   expect(state.rootQuery).not.toHaveBeenCalled();
+  expect(node.textContent).toContain("Project Drive folders need a newer server.");
+  await click("Link to");
+  expect(node.textContent).toContain("Existing Link to search");
   state.capable = true;
-  await act(() => renderer!.update(view(true)));
+  await render(true);
   expect(state.rootQuery).not.toHaveBeenCalled();
-  await act(() => renderer!.update(view()));
+  expect(node.textContent).toBe("");
+  await render();
   expect(state.rootQuery).toHaveBeenCalled();
   state.rootQuery.mockClear();
   state.capable = false;
-  await act(() => renderer!.update(view()));
+  await render();
   expect(state.rootQuery).not.toHaveBeenCalled();
+  expect(node.textContent).toContain("Project Drive folders need a newer server.");
+  expect(node.textContent).toContain("Existing Link to search");
+  await click("Close linked files");
+  expect(button("Link to")).toBeTruthy();
+  state.connected = false;
+  await render();
+  expect(node.textContent).toContain(
+    "Connect to this environment to manage its project Drive folder.",
+  );
+  expect(queryByRole(node, "button")).toBeNull();
   expect(state.setRoot).not.toHaveBeenCalled();
 });

@@ -51,7 +51,28 @@ it.effect("preserves a designated Drive root through legacy and forged-property 
     expect(legacy.driveRoot).toEqual(root);
     expect((yield* tools.config(projectId)).driveRoot).toEqual(root);
     yield* sql`UPDATE workspace_project_config SET drive_root_json='invalid-json' WHERE project_id=${projectId}`;
-    expect((yield* tools.config(projectId).pipe(Effect.flip)).kind).toBe("unavailable");
+    const damaged = yield* tools.config(projectId);
+    expect(damaged).not.toHaveProperty("driveRoot");
+    expect(damaged.taskColumns).toEqual(original.taskColumns);
+    expect(damaged.completedColumn).toBe("Review");
+    const savedWithDamage = yield* tools.saveConfig({
+      projectId,
+      taskColumns: original.taskColumns,
+      browserThreadId: null,
+    });
+    expect(savedWithDamage).not.toHaveProperty("driveRoot");
+    const task = yield* tools.upsertTask({ projectId, title: "Root recovery", column: "To do" });
+    expect(
+      (yield* tools.transitionTask({
+        id: task.id,
+        expectedRevision: task.revision,
+        change: { type: "completion", completed: true },
+      })).column,
+    ).toBe("Review");
+    expect(
+      (yield* sql`SELECT drive_root_json FROM workspace_project_config WHERE project_id=${projectId}`)[0]!
+        .drive_root_json,
+    ).toBe("invalid-json");
   }).pipe(Effect.provide(layer)),
 );
 it.effect("defaults new tasks to owner and preserves explicit unassignment", () =>

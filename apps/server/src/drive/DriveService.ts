@@ -39,7 +39,7 @@ export const make = Effect.gen(function* () {
       root: WorkspaceDriveRoot | null;
     }) =>
       Effect.gen(function* () {
-        if (root === null) return yield* store.saveProjectRoot(projectId, null);
+        if (root === null) return yield* store.clearProjectRoot(projectId);
         yield* store.validateProjectRoot(projectId, root);
         const access = yield* oauth.accessToken(root.connectionId);
         const file = yield* observe(
