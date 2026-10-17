@@ -8,11 +8,13 @@ import {
   ThreadId,
 } from "@t3tools/contracts";
 import { act, createElement, Profiler } from "react";
+import { create, type ReactTestRenderer } from "react-test-renderer";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(async (_tabId: string, _url: string): Promise<void> => undefined),
+  refresh: vi.fn(),
   rememberPreviewUrl: vi.fn(),
   readPreparedConnection: vi.fn(() => ({ httpBaseUrl: "http://172.25.85.75:3773" })),
   submittedUrl: null as ((url: string) => void) | null,
@@ -33,6 +35,7 @@ const mocks = vi.hoisted(() => ({
   pictureInPicture: false,
   showEmptyState: false,
   loading: false,
+  failed: false,
   serverEpoch: null as string | null,
   recordingTabIds: new Set<string>(),
   recordingRuntimeTabId: null as string | null,
@@ -123,11 +126,19 @@ vi.mock("~/previewStateStore", () => ({
           "tab-1": {
             threadId: "thread-1",
             tabId: "tab-1",
-            navStatus: {
-              _tag: "Success",
-              url: "http://example.com/",
-              title: "Example",
-            },
+            navStatus: mocks.failed
+              ? {
+                  _tag: "LoadFailed",
+                  url: "http://example.com/",
+                  title: "Example",
+                  code: -105,
+                  description: "ERR_NAME_NOT_RESOLVED",
+                }
+              : {
+                  _tag: "Success",
+                  url: "http://example.com/",
+                  title: "Example",
+                },
             canGoBack: false,
             canGoForward: false,
             updatedAt: "2026-07-13T00:00:00.000Z",
@@ -206,6 +217,7 @@ vi.mock("~/components/ui/toast", () => ({
 vi.mock("./previewBridge", () => ({
   previewBridge: {
     navigate: mocks.navigate,
+    refresh: mocks.refresh,
     pickElement: mocks.pickElement,
     pictureInPicture: {
       open: mocks.openPictureInPicture,
@@ -246,12 +258,19 @@ vi.mock("./PreviewMoreMenu", () => ({
     return null;
   },
 }));
-vi.mock("./PreviewUnreachable", () => ({ PreviewUnreachable: () => null }));
+vi.mock("./PreviewUnreachable", () => ({
+  PreviewUnreachable: ({ onReload }: { onReload: () => void }) => (
+    <button onClick={onReload}>Retry</button>
+  ),
+}));
 vi.mock("./ZoomIndicator", () => ({ ZoomIndicator: () => null }));
 vi.mock("./AgentBrowserCursor", () => ({
   AgentBrowserCursor: () => createElement("agent-cursor"),
 }));
-vi.mock("~/browser/BrowserSurfaceSlot", () => ({ BrowserSurfaceSlot: () => null }));
+vi.mock("~/browser/BrowserSurfaceSlot", () => ({
+  BrowserSurfaceSlot: (props: { tabId: string; cornerRadius?: number }) =>
+    createElement("native-slot", props),
+}));
 vi.mock("./usePreviewSession", () => ({ usePreviewSession: vi.fn() }));
 
 import { PreviewView } from "./PreviewView";
@@ -350,10 +369,59 @@ describe("PreviewView navigation", () => {
     mocks.pictureInPicture = false;
     mocks.showEmptyState = false;
     mocks.loading = false;
+    mocks.failed = false;
+    mocks.refresh.mockClear();
     mocks.serverEpoch = null;
     mocks.recordingTabIds = new Set();
     mocks.recordingRuntimeTabId = null;
     mocks.recordVisitForThread.mockClear();
+  });
+
+  it("navigates through custom chrome and rounds the incumbent native slot", async () => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    let renderer: ReactTestRenderer | undefined;
+    try {
+      await act(() => {
+        renderer = create(
+          <PreviewView
+            threadRef={TEST_THREAD_REF}
+            visible
+            surfaceCornerRadius={9}
+            renderChrome={(controls) => (
+              <form onSubmit={() => controls.onSubmit("https://example.test/resource")} />
+            )}
+          />,
+        );
+      });
+      await act(() => renderer!.root.findByType("form").props.onSubmit());
+      expect(mocks.navigate).toHaveBeenCalledWith(
+        TEST_RUNTIME_TAB_ID,
+        "https://example.test/resource",
+      );
+      const slot = renderer!.root.findByProps({ tabId: TEST_RUNTIME_TAB_ID, cornerRadius: 9 });
+      expect(slot.props.cornerRadius).toBe(9);
+      expect(slot.props.tabId).toBe(TEST_RUNTIME_TAB_ID);
+      expect(renderer!.root.findAll((node) => String(node.type) === "native-slot")).toHaveLength(1);
+    } finally {
+      await act(() => renderer?.unmount());
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("retries a failed load through the existing native tab", async () => {
+    mocks.failed = true;
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    let renderer: ReactTestRenderer | undefined;
+    try {
+      await act(() => {
+        renderer = create(<PreviewView threadRef={TEST_THREAD_REF} visible />);
+      });
+      await act(() => renderer!.root.findByType("button").props.onClick());
+      expect(mocks.refresh).toHaveBeenCalledExactlyOnceWith(TEST_RUNTIME_TAB_ID);
+    } finally {
+      await act(() => renderer?.unmount());
+      vi.unstubAllGlobals();
+    }
   });
 
   it("shows the cursor in a replacement browser while the old instance still records", async () => {

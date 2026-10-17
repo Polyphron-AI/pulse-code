@@ -12,6 +12,23 @@ describe("browserSurfaceStore", () => {
     useBrowserSurfaceStore.setState({ activityByTabId: {}, byTabId: {} });
   });
 
+  it("hands one tab between resource and Code without a stale release hiding its owner", () => {
+    const tab = "remote:browser-thread:epoch-1:tab-1";
+    const resource = acquireBrowserSurface(tab);
+    expect(resource.present({ x: 953, y: 191, width: 314, height: 311 }, true, 9)).toBe(true);
+    const code = acquireBrowserSurface(tab);
+    expect(resource.present({ x: 953, y: 191, width: 314, height: 311 }, true)).toBe(false);
+    expect(code.present({ x: 700, y: 80, width: 580, height: 720 }, true)).toBe(true);
+    resource.release();
+    expect(useBrowserSurfaceStore.getState().byTabId[tab]?.visible).toBe(true);
+    code.release();
+    const returned = acquireBrowserSurface(tab);
+    expect(returned.present({ x: 953, y: 191, width: 314, height: 311 }, true, 9)).toBe(true);
+    expect(Object.keys(useBrowserSurfaceStore.getState().byTabId)).toEqual([tab]);
+    returned.release();
+    expect(useBrowserSurfaceStore.getState().byTabId[tab]?.visible).toBe(false);
+  });
+
   it("keeps concurrent background work active until every lease is released", () => {
     const first = acquireBrowserSurfaceActivity("background-browser");
     const second = acquireBrowserSurfaceActivity("background-browser");

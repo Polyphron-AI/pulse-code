@@ -13,7 +13,14 @@ import {
   type ScopedThreadRef,
 } from "@t3tools/contracts";
 import { normalizePreviewUrl } from "@t3tools/shared/preview";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ComponentProps,
+  type ReactNode,
+} from "react";
 
 import {
   BROWSER_HISTORY_MAX_ENTRIES_PER_PROJECT,
@@ -73,11 +80,17 @@ import {
 import { stackedThreadToast, toastManager } from "~/components/ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 
+export type PreviewChromeRenderer = (
+  controls: ComponentProps<typeof PreviewChromeRow>,
+) => ReactNode;
+
 interface Props {
   threadRef: ScopedThreadRef;
   tabId?: string | null;
   configuredUrls?: ReadonlyArray<string> | undefined;
   visible: boolean;
+  renderChrome?: PreviewChromeRenderer;
+  surfaceCornerRadius?: number;
   onSendAnnotation?: (
     annotation: PreviewAnnotationPayload,
     image: ComposerImageAttachment | null,
@@ -102,6 +115,8 @@ export function PreviewView({
   tabId: requestedTabId,
   configuredUrls,
   visible,
+  renderChrome,
+  surfaceCornerRadius = 0,
   onSendAnnotation,
 }: Props) {
   const [focusUrlNonce, setFocusUrlNonce] = useState<number | undefined>(undefined);
@@ -705,83 +720,73 @@ export function PreviewView({
     });
   }, [handleRefresh, handleResetZoom, handleZoomIn, handleZoomOut, visible]);
 
+  const chromeProps = {
+    url,
+    loading,
+    canGoBack,
+    canGoForward,
+    refreshDisabled,
+    focusUrlNonce,
+    onBack: handleBack,
+    onForward: handleForward,
+    onRefresh: handleRefresh,
+    onSubmit: (next) => void handleSubmitUrl(next),
+    onOpenInBrowser: tabId ? handleOpenInBrowser : undefined,
+    onCapture: previewBridge && tabId ? handleCapture : undefined,
+    captureDisabled: !desktopOverlay || isUnreachable,
+    recording: recordingRuntimeTabId !== null,
+    onPictureInPicture: previewBridge && tabId ? handlePictureInPicture : undefined,
+    pictureInPicture: miniPlayerTabId === tabId,
+    pictureInPictureDisabled: !desktopOverlay?.hasWebContents || isUnreachable,
+    onPickElement: previewBridge && tabId ? handlePickElement : undefined,
+    pickActive,
+    pickDisabled: !tabId || isUnreachable,
+    pickDisabledReason: isUnreachable
+      ? "Page didn't load, pick unavailable until the page renders"
+      : undefined,
+    leadingActions:
+      activeProfileId !== browserDefaults.profileId ? (
+        <Tooltip>
+          <TooltipTrigger render={<Badge variant="outline" className="max-w-28 shrink-0" />}>
+            <span className="truncate">{activeProfileName}</span>
+          </TooltipTrigger>
+          <TooltipPopup side="top">{activeProfileName}</TooltipPopup>
+        </Tooltip>
+      ) : null,
+    trailingActions: previewBridge ? (
+      <PreviewMoreMenu
+        environmentId={threadRef.environmentId}
+        profileId={activeProfileId}
+        profileName={activeProfileName}
+        tabId={runtimeTabId}
+        hasWebContents={desktopOverlay?.hasWebContents ?? false}
+        zoomFactor={desktopOverlay?.zoomFactor ?? 1}
+        colorScheme={desktopOverlay?.colorScheme ?? "system"}
+        deviceToolbarVisible={viewport._tag !== "fill"}
+        onToggleDeviceToolbar={handleToggleDeviceToolbar}
+        nativePictureInPicture={desktopOverlay?.pictureInPicture ?? false}
+        onNativePictureInPicture={handleNativePictureInPicture}
+      />
+    ) : null,
+  } satisfies ComponentProps<typeof PreviewChromeRow>;
+
   return (
     <div
       className="flex min-h-0 flex-1 flex-col bg-background"
       data-thread-key={scopedThreadKey(threadRef)}
     >
-      <PreviewChromeRow
-        url={url}
-        loading={loading}
-        canGoBack={canGoBack}
-        canGoForward={canGoForward}
-        refreshDisabled={refreshDisabled}
-        focusUrlNonce={focusUrlNonce}
-        onBack={handleBack}
-        onForward={handleForward}
-        onRefresh={handleRefresh}
-        onSubmit={(next) => void handleSubmitUrl(next)}
-        onOpenInBrowser={tabId ? handleOpenInBrowser : undefined}
-        onCapture={previewBridge && tabId ? handleCapture : undefined}
-        captureDisabled={!desktopOverlay || isUnreachable}
-        recording={recordingRuntimeTabId !== null}
-        onPictureInPicture={previewBridge && tabId ? handlePictureInPicture : undefined}
-        pictureInPicture={miniPlayerTabId === tabId}
-        pictureInPictureDisabled={!desktopOverlay?.hasWebContents || isUnreachable}
-        onPickElement={previewBridge && tabId ? handlePickElement : undefined}
-        pickActive={pickActive}
-        // Disable when there's no tab (nothing to pick on) OR the page
-        // failed to load (a React overlay covers the webview, so the
-        // user wouldn't be able to actually click anything underneath).
-        pickDisabled={!tabId || isUnreachable}
-        pickDisabledReason={
-          isUnreachable ? "Page didn't load — pick unavailable until the page renders" : undefined
-        }
-        leadingActions={
-          // Only when it differs from the default: labelling every tab
-          // "Default" would be noise on the common case, while a tab in
-          // another profile is exactly what needs calling out.
-          activeProfileId !== browserDefaults.profileId ? (
-            // Capped: profile names run to 48 characters, and an unbounded
-            // badge in this row takes its width from the URL input, the only
-            // flexible element in the compact chrome. The cap sits on the
-            // badge and the truncation on an inner span, because `Badge` is an
-            // `inline-flex` with `whitespace-nowrap` — `text-overflow` never
-            // reaches a bare text node inside it, so the name would be cut off
-            // at both ends with no ellipsis.
-            <Tooltip>
-              <TooltipTrigger render={<Badge variant="outline" className="max-w-28 shrink-0" />}>
-                <span className="truncate">{activeProfileName}</span>
-              </TooltipTrigger>
-              <TooltipPopup side="top">{activeProfileName}</TooltipPopup>
-            </Tooltip>
-          ) : null
-        }
-        trailingActions={
-          previewBridge ? (
-            <PreviewMoreMenu
-              environmentId={threadRef.environmentId}
-              profileId={activeProfileId}
-              profileName={activeProfileName}
-              tabId={runtimeTabId}
-              hasWebContents={desktopOverlay?.hasWebContents ?? false}
-              zoomFactor={desktopOverlay?.zoomFactor ?? 1}
-              colorScheme={desktopOverlay?.colorScheme ?? "system"}
-              deviceToolbarVisible={viewport._tag !== "fill"}
-              onToggleDeviceToolbar={handleToggleDeviceToolbar}
-              nativePictureInPicture={desktopOverlay?.pictureInPicture ?? false}
-              onNativePictureInPicture={handleNativePictureInPicture}
-            />
-          ) : null
-        }
-      />
+      {renderChrome ? renderChrome(chromeProps) : <PreviewChromeRow {...chromeProps} />}
 
-      <div className="relative min-h-0 flex-1 overflow-hidden">
+      <div
+        className="relative min-h-0 flex-1 overflow-hidden"
+        style={{ borderRadius: surfaceCornerRadius }}
+      >
         {runtimeTabId && snapshot && !showEmptyState ? (
           <BrowserSurfaceSlot
             key={runtimeTabId}
             tabId={runtimeTabId}
             visible={visible && !isUnreachable}
+            cornerRadius={surfaceCornerRadius}
             className="absolute inset-0 h-full w-full"
           />
         ) : null}

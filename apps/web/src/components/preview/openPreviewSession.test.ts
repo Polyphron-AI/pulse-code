@@ -13,7 +13,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test"
 import * as browserDefaults from "~/browser/browserDefaults";
 import { BrowserSettingsReadError, openUrlInPreview } from "~/browser/openFileInPreview";
 import { __setClientSettingsForTests } from "~/hooks/useSettings";
-import { readThreadPreviewState, resetPreviewStateForTests } from "~/previewStateStore";
+import {
+  applyPreviewServerEvent,
+  readThreadPreviewState,
+  reconcilePreviewServerSessions,
+  resetPreviewStateForTests,
+} from "~/previewStateStore";
 
 import { openPreviewSession } from "./openPreviewSession";
 
@@ -45,6 +50,38 @@ afterEach(() => {
 });
 
 describe("openPreviewSession", () => {
+  it("keeps a redirected resource session when Code reconciles an older list", async () => {
+    const scoped = { ...threadRef, environmentId: "remote" as ScopedThreadRef["environmentId"] };
+    const openPreview = vi.fn(async () => AsyncResult.success(snapshot));
+    await openPreviewSession({ openPreview, threadRef: scoped, url: "https://t3.chat/" });
+    const redirected = {
+      ...snapshot,
+      profileId: "work",
+      navStatus: {
+        _tag: "Success" as const,
+        url: "https://t3.chat/redirect",
+        title: "Redirected page",
+      },
+    };
+    applyPreviewServerEvent(scoped, {
+      type: "navigated",
+      threadId: scoped.threadId,
+      tabId: snapshot.tabId,
+      snapshot: redirected,
+      serverEpoch: "epoch-1",
+      revision: 2,
+      createdAt: snapshot.updatedAt,
+    });
+    reconcilePreviewServerSessions(scoped, {
+      sessions: [snapshot],
+      serverEpoch: "epoch-1",
+      revision: 1,
+    });
+    expect(readThreadPreviewState(scoped).snapshot).toBe(redirected);
+    expect(readThreadPreviewState(scoped).activeTabId).toBe(snapshot.tabId);
+    expect(readThreadPreviewState(threadRef).snapshot).toBeNull();
+    expect(openPreview).toHaveBeenCalledOnce();
+  });
   it("creates an idle tab without recording a recently visited URL", async () => {
     const idleSnapshot: PreviewSessionSnapshot = {
       ...snapshot,

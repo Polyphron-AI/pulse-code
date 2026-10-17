@@ -6,7 +6,7 @@ import type { ComposerImageAttachment } from "~/composerDraftStore";
 import { isPreviewSupportedInRuntime } from "~/previewStateStore";
 
 import { PreviewPanelShell, type PreviewPanelMode } from "./PreviewPanelShell";
-import { PreviewView } from "./PreviewView";
+import { PreviewView, type PreviewChromeRenderer } from "./PreviewView";
 
 interface Props {
   mode: PreviewPanelMode;
@@ -14,6 +14,8 @@ interface Props {
   tabId?: string | null;
   configuredUrls?: ReadonlyArray<string> | undefined;
   visible: boolean;
+  renderChrome?: PreviewChromeRenderer;
+  surfaceCornerRadius?: number;
   onSendAnnotation?: (
     annotation: PreviewAnnotationPayload,
     image: ComposerImageAttachment | null,
@@ -26,6 +28,8 @@ export function PreviewPanel({
   tabId,
   configuredUrls,
   visible,
+  renderChrome,
+  surfaceCornerRadius,
   onSendAnnotation,
 }: Props) {
   if (!isPreviewSupportedInRuntime()) {
@@ -47,6 +51,8 @@ export function PreviewPanel({
         {...(tabId !== undefined ? { tabId } : {})}
         configuredUrls={configuredUrls}
         visible={visible}
+        {...(renderChrome ? { renderChrome } : {})}
+        {...(surfaceCornerRadius !== undefined ? { surfaceCornerRadius } : {})}
         {...(onSendAnnotation ? { onSendAnnotation } : {})}
       />
     </PreviewPanelShell>

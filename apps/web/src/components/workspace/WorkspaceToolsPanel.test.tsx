@@ -7,11 +7,10 @@ import { afterEach, expect, it, vi } from "vite-plus/test";
 import { EnvironmentId, ProjectId } from "@t3tools/contracts";
 import { WorkspaceEngagement } from "./WorkspaceEngagement";
 import { useWorkspaceResourceState, WorkspaceResourcesProvider } from "./workspaceResourceState";
-import {
-  WorkspaceToolsPanel,
-  WorkspaceBrowser,
-  WorkspaceProjectFiles,
-} from "./WorkspaceToolsPanel";
+import { WorkspaceToolsPanel, WorkspaceProjectFiles } from "./WorkspaceToolsPanel";
+import { WorkspaceBrowser } from "./WorkspaceBrowser";
+import type { ComponentProps } from "react";
+import type { PreviewPanel } from "../preview/PreviewPanel";
 const mocks = vi.hoisted(() => ({
   desktop: false,
   external: vi.fn(),
@@ -90,7 +89,8 @@ vi.mock("../../state/query", () => ({
     };
   },
 }));
-vi.mock("../../state/preview", () => ({ previewEnvironment: { open: {} } }));
+vi.mock("../../state/preview", () => ({ previewEnvironment: { open: {}, list: () => "preview" } }));
+vi.mock("../../state/environments", () => ({ useConnectedEnvironmentIds: () => ["remote"] }));
 vi.mock("../../state/use-atom-command", () => ({ useAtomCommand: () => vi.fn() }));
 vi.mock("../../previewStateStore", () => ({
   isPreviewSupportedInRuntime: () => mocks.desktop,
@@ -121,7 +121,27 @@ vi.mock("./DriveFiles", () => ({ DriveFileAccess: () => <button>Read file</butto
 vi.mock("../preview/openPreviewSession", () => ({
   openPreviewSession: (input: unknown) => mocks.preview(input),
 }));
-vi.mock("../preview/PreviewPanel", () => ({ PreviewPanel: () => <div>Incumbent Browser</div> }));
+vi.mock("../preview/PreviewPanel", () => ({
+  PreviewPanel: ({ visible, renderChrome, threadRef }: ComponentProps<typeof PreviewPanel>) =>
+    visible ? (
+      <div>
+        {renderChrome?.({
+          url: "https://example.test/current",
+          loading: false,
+          canGoBack: false,
+          canGoForward: false,
+          refreshDisabled: false,
+          onBack() {},
+          onForward() {},
+          onRefresh() {},
+          onSubmit: (url) => {
+            void mocks.preview({ threadRef, url });
+          },
+        })}
+        <div>Incumbent Browser</div>
+      </div>
+    ) : null,
+}));
 vi.mock("../ui/button", () => ({ Button: "button" }));
 vi.mock("../ui/input", () => ({ Input: "input" }));
 let renderer: ReactTestRenderer | undefined;
@@ -231,7 +251,11 @@ it("opens the incumbent desktop preview through the configured environment-local
     );
     input.dispatchEvent(new Event("input", { bubbles: true }));
   });
-  await act(() => getByRole(node!, "button", { name: "Open Browser" }).click());
+  await act(() =>
+    node!
+      .querySelector("form")!
+      .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+  );
   expect(mocks.preview).toHaveBeenCalledWith(
     expect.objectContaining({
       threadRef: { environmentId: "remote", threadId: "t" },
@@ -241,7 +265,7 @@ it("opens the incumbent desktop preview through the configured environment-local
   expect(mocks.external).not.toHaveBeenCalled();
 });
 
-it("closes the portaled Browser dialog in Linked context and returns without an orphan dialog", async () => {
+it("releases the inline Browser in Linked context and restores it without a dialog", async () => {
   mocks.desktop = true;
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   (
@@ -280,16 +304,14 @@ it("closes the portaled Browser dialog in Linked context and returns without an 
     );
   }
   await act(() => domRoot!.render(<App />));
-  await act(() => getByRole(node!, "button", { name: "Show Browser" }).click());
-  const dialog = getByRole(document.body, "dialog", { name: "Project Browser" });
-  expect(node.contains(dialog)).toBe(false);
-  expect(dialog.textContent).toContain("Incumbent Browser");
+  expect(node.textContent).toContain("Incumbent Browser");
+  expect(queryByRole(document.body, "dialog")).toBeNull();
   await act(() => getByRole(node!, "button", { name: "Linked context", hidden: true }).click());
-  expect(queryByRole(document.body, "dialog", { name: "Project Browser" })).toBeNull();
+  expect(node.textContent).not.toContain("Incumbent Browser");
+  expect(queryByRole(document.body, "dialog")).toBeNull();
   await act(() => getByRole(node!, "button", { name: "Back to resources" }).click());
-  expect(queryByRole(document.body, "dialog", { name: "Project Browser" })).toBeNull();
-  await act(() => getByRole(node!, "button", { name: "Show Browser" }).click());
-  expect(getByRole(document.body, "dialog", { name: "Project Browser" })).toBeDefined();
+  expect(node.textContent).toContain("Incumbent Browser");
+  expect(queryByRole(document.body, "dialog")).toBeNull();
 });
 
 it("reads Files through the resource project rather than the selected item", async () => {

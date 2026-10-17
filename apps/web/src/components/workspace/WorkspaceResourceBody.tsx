@@ -42,7 +42,7 @@ export function WorkspaceResourceBody(props: WorkspaceResourceBodySwitchProps): 
       body = <Files {...props} />;
       break;
     case "browser":
-      body = <Browser {...props} />;
+      body = <Browser key={`${props.environmentId}:${props.projectId}`} {...props} />;
       break;
     case "agents":
       body = <Agents {...props} />;
