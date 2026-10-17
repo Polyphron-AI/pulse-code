@@ -10,7 +10,7 @@ import {
   type WorkspaceLinkList,
 } from "@t3tools/contracts";
 import { LinkIcon, InfoIcon } from "lucide-react";
-import { useId, useMemo, useState, type ReactNode } from "react";
+import { useContext, useId, useMemo, useState, type ReactNode } from "react";
 
 import { Popover, PopoverTrigger, PopoverPopup } from "../../ui/popover";
 import { WorkspaceItemMenu } from "../WorkspaceItemActions";
@@ -18,6 +18,7 @@ import {
   useAllEnvironmentProjectSnapshotsReady,
   useProjects,
   useThreadShells,
+  useThreadShell,
 } from "../../../state/entities";
 import { useEnvironmentQuery } from "../../../state/query";
 import { workspaceLinks } from "../../../state/workspaceLinks";
@@ -35,6 +36,9 @@ import { MailError } from "./MailNotice";
 import { linkErrorText, useMailLinks } from "./useMailLinks";
 import { useMailCapabilities } from "./useMailCapabilities";
 import { SuggestedSection } from "../SuggestedSection";
+import { WorkspaceResourcesContext } from "../workspaceResourceState";
+import { useRightPanelStore } from "../../../rightPanelStore";
+import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 
 interface LinkedSectionProps {
   readonly mode?: "context" | "legacy";
@@ -62,7 +66,7 @@ export function LinkedSection(props: LinkedSectionProps) {
         {[
           "links",
           "projects",
-          ...(props.mode !== "context" && workspaceTools ? ["browser", "files", "agents"] : []),
+          ...(props.mode !== "context" && workspaceTools ? ["files", "agents"] : []),
         ].map((name) => (
           <Button
             key={name}
@@ -76,6 +80,7 @@ export function LinkedSection(props: LinkedSectionProps) {
               : name[0]!.toUpperCase() + name.slice(1)}
           </Button>
         ))}
+        {props.mode !== "context" && workspaceTools ? <BrowserResourceAction {...props} /> : null}
       </div>
       {tab === "links" || tab === "projects" ? (
         <LinkedList {...props} projectsOnly={tab === "projects"} />
@@ -89,9 +94,7 @@ export function LinkedSection(props: LinkedSectionProps) {
           onOpen={props.onOpen}
         />
       ) : null}
-      {props.mode !== "context" &&
-      workspaceTools &&
-      (tab === "browser" || tab === "files" || tab === "agents") ? (
+      {props.mode !== "context" && workspaceTools && (tab === "files" || tab === "agents") ? (
         <WorkspaceToolsPanel
           key={workspaceItemKey(props.item)}
           environmentId={props.environmentId}
@@ -105,6 +108,47 @@ export function LinkedSection(props: LinkedSectionProps) {
   ) : (
     <p className="text-sm text-muted-foreground">Workspace links need a newer server.</p>
   );
+}
+
+/** Opens the one project Browser in Resources, or Code's existing preview outside that host. */
+function BrowserResourceAction(props: LinkedSectionProps) {
+  const resources = useContext(WorkspaceResourcesContext);
+  const thread = useThreadShell(
+    props.item.type === "thread" ? scopeThreadRef(props.environmentId, props.item.threadId) : null,
+  );
+  const hasResources = resources?.environmentId === props.environmentId;
+  const projectId =
+    props.item.type === "project"
+      ? props.item.projectId
+      : (thread?.projectId ?? (hasResources ? resources.projectId : null));
+  return hasResources ? (
+    <Button
+      size="xs"
+      variant="ghost"
+      onClick={() => {
+        if (projectId) resources.openResource({ tab: "browser", projectId });
+        else {
+          resources.selectTab("browser");
+          resources.reopen();
+        }
+      }}
+    >
+      Open Browser in Resources
+    </Button>
+  ) : props.item.type === "thread" ? (
+    <Button
+      size="xs"
+      variant="ghost"
+      onClick={() => {
+        if (props.item.type === "thread")
+          useRightPanelStore
+            .getState()
+            .open(scopeThreadRef(props.environmentId, props.item.threadId), "preview");
+      }}
+    >
+      Open Code preview
+    </Button>
+  ) : null;
 }
 
 function LinkedList(props: LinkedSectionProps & { projectsOnly?: boolean }) {

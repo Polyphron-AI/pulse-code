@@ -77,11 +77,13 @@ vi.mock("./WorkspaceToolsPanel", () => ({
     bodies.files();
     return <Body {...props} name={`Files ${props.environmentId}`} />;
   },
+  WorkspaceProjectAgents: () => <Body name="Agents" />,
+}));
+vi.mock("./WorkspaceBrowser", () => ({
   WorkspaceBrowser: (props: { environmentId: string; request: unknown; selectedItem: unknown }) => {
     bodies.browser();
     return <Body {...props} name={`Browser ${props.environmentId}`} />;
   },
-  WorkspaceProjectAgents: () => <Body name="Agents" />,
 }));
 vi.mock("./ProjectTasksResource", () => ({ ProjectTasksResource: () => <Body name="Tasks" /> }));
 vi.mock("./mail/useMailCapabilities", () => ({

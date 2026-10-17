@@ -740,10 +740,12 @@ export function PreviewView({
     pictureInPictureDisabled: !desktopOverlay?.hasWebContents || isUnreachable,
     onPickElement: previewBridge && tabId ? handlePickElement : undefined,
     pickActive,
+    // The failure overlay covers the webview, so picking cannot reach the page.
     pickDisabled: !tabId || isUnreachable,
     pickDisabledReason: isUnreachable
       ? "Page didn't load, pick unavailable until the page renders"
       : undefined,
+    // Cap the profile badge and truncate its inner span because Badge uses inline-flex whitespace-nowrap.
     leadingActions:
       activeProfileId !== browserDefaults.profileId ? (
         <Tooltip>
@@ -778,8 +780,8 @@ export function PreviewView({
       {renderChrome ? renderChrome(chromeProps) : <PreviewChromeRow {...chromeProps} />}
 
       <div
-        className="relative min-h-0 flex-1 overflow-hidden"
-        style={{ borderRadius: surfaceCornerRadius }}
+        className={`relative min-h-0 flex-1 overflow-hidden${surfaceCornerRadius ? " border border-border" : ""}`}
+        style={surfaceCornerRadius ? { borderRadius: surfaceCornerRadius } : undefined}
       >
         {runtimeTabId && snapshot && !showEmptyState ? (
           <BrowserSurfaceSlot

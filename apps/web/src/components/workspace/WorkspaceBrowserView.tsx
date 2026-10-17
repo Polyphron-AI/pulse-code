@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ReactNode, Ref } from "react";
 import type { WorkspaceLinkEndpoint } from "@t3tools/contracts";
 import { Search, SlidersHorizontal } from "lucide-react";
 import { Button } from "../ui/button";
@@ -17,6 +17,8 @@ export function WorkspaceBrowserView({
   onSubmit,
   onMenuChange,
   onOpenExternal,
+  inputRef,
+  loading = false,
 }: {
   readonly addressDraft: string;
   readonly linkTarget: WorkspaceLinkEndpoint | null;
@@ -25,6 +27,8 @@ export function WorkspaceBrowserView({
   readonly menuOpen: boolean;
   readonly unavailableReason: string | null;
   readonly disabled?: boolean;
+  readonly inputRef?: Ref<HTMLInputElement>;
+  readonly loading?: boolean;
   readonly menuActions?: ReactNode;
   readonly onAddressChange: (value: string) => void;
   readonly onSubmit: () => void;
@@ -34,16 +38,18 @@ export function WorkspaceBrowserView({
   return (
     <div className={`flex min-h-0 min-w-0 flex-col ${renderPage ? "flex-1" : "shrink-0"}`}>
       <form
-        className="mb-[13px] flex h-[29px] shrink-0 items-center gap-1 rounded-full border border-border bg-muted px-3 text-muted-foreground focus-within:ring-2 focus-within:ring-ring"
+        className="mb-[13px] flex h-[29px] shrink-0 items-center gap-2 rounded-full border border-border/20 bg-muted pl-2 pr-0.5 text-muted-foreground focus-within:ring-2 focus-within:ring-ring"
+        aria-busy={loading}
         onSubmit={(event) => {
           event.preventDefault();
           if (!disabled) onSubmit();
         }}
       >
-        <Search size={12} aria-hidden="true" />
+        <Search className="size-3 shrink-0" aria-hidden="true" />
         <input
           className="min-w-0 flex-1 bg-transparent text-3xs text-foreground outline-none placeholder:text-muted-foreground"
           aria-label="Browser page address"
+          ref={inputRef}
           placeholder="Search or enter a URL"
           maxLength={2048}
           value={addressDraft}
@@ -56,7 +62,7 @@ export function WorkspaceBrowserView({
               <Button type="button" size="icon-xs" variant="ghost" aria-label="Browser actions" />
             }
           >
-            <SlidersHorizontal size={12} aria-hidden="true" />
+            <SlidersHorizontal className="size-3" aria-hidden="true" />
           </PopoverTrigger>
           <PopoverPopup align="end" padding="compact">
             <div className="flex max-w-64 flex-col items-start gap-1">

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { normalizeLinkUrl } from "@t3tools/contracts";
 import { WorkspaceBrowserView } from "../WorkspaceBrowserView";
 import type { CreateWorkspaceMockupModule } from "./workspaceMockupFixtures";
@@ -6,10 +6,7 @@ import type { CreateWorkspaceMockupModule } from "./workspaceMockupFixtures";
 export const createWorkspaceMockupModule: CreateWorkspaceMockupModule = (session) => {
   let disposed = false;
   const pending = new Set<Promise<void>>();
-  let releasePage = () => {};
-  const pageReady = new Promise<void>((resolve) => {
-    releasePage = resolve;
-  });
+  const pageLoads = new Set<() => void>();
   const run = (value: string) => {
     if (disposed) return;
     const command = session.record("navigate", undefined, value);
@@ -20,11 +17,25 @@ export const createWorkspaceMockupModule: CreateWorkspaceMockupModule = (session
     );
   };
   function Resource() {
+    const releasePage = useRef(() => {});
+    useLayoutEffect(() => {
+      if (disposed) return;
+      const pageReady = new Promise<void>((resolve) => {
+        releasePage.current = () => {
+          pending.delete(pageReady);
+          pageLoads.delete(releasePage.current);
+          resolve();
+        };
+      });
+      pending.add(pageReady);
+      pageLoads.add(releasePage.current);
+      return () => releasePage.current();
+    }, []);
     const [addressDraft, setAddressDraft] = useState("");
     const [menuOpen, setMenuOpen] = useState(false);
     const [error, setError] = useState<string | null>(null);
     return (
-      <div className="flex h-[353px] min-w-0 flex-col">
+      <div className="flex h-full min-h-0 min-w-0 flex-col">
         <WorkspaceBrowserView
           addressDraft={addressDraft}
           linkTarget={null}
@@ -43,17 +54,17 @@ export const createWorkspaceMockupModule: CreateWorkspaceMockupModule = (session
             <iframe
               title="Controlled website preview"
               sandbox=""
-              onLoad={() => releasePage()}
-              className="h-[311px] w-full shrink-0 border border-border bg-background"
+              onLoad={() => releasePage.current()}
+              className="min-h-0 w-full flex-1 border border-border bg-background"
               style={{ borderRadius: 9 }}
               srcDoc={`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="color-scheme" content="dark"><style>
                 * { box-sizing: border-box; } body { margin: 0; background: #090909; color: #ececf1; font-family: 'Segoe UI', system-ui, sans-serif; padding: 16px; }
                 .brand { color: #356bff; font-size: 10px; font-weight: 600; line-height: 20px; }
-                h1 { margin: 34px 0 12px; font-size: 24px; font-weight: 700; line-height: 31px; }
-                p { margin: 0; color: #85858e; font-size: 12px; line-height: 20px; }
+                h1 { margin: 37px 0 12px; font-size: 24px; font-weight: 600; line-height: 31px; }
+                p { margin: 0; color: #85858e; font-size: 11.5px; line-height: 20px; letter-spacing: -0.03em; }
                 button { margin-top: 18px; height: 24px; padding: 0 11px; border: 0; border-radius: 7px; background: #376aff; color: white; font: 600 11px 'Segoe UI', system-ui, sans-serif; }
-                footer { margin-top: 37px; border-top: 1px solid #1c1c20; padding-top: 10px; color: #85858e; font-size: 10px; line-height: 20px; }
-              </style><div class="brand">SynKEK</div><h1>Built for<br>what's next.</h1><p>Meet the new collection. Thoughtful products, made for everyday life.</p><button type="button">Explore products</button><footer>synkek.com · Website preview</footer></html>`}
+                footer { margin-top: 39px; border-top: 1px solid #1c1c20; padding-top: 8px; color: #85858e; font-size: 10px; line-height: 20px; }
+              </style><div class="brand">SynKEK</div><h1>Built for<br>what's next.</h1><p>Meet the new collection. Thoughtful products, made for<br>everyday life.</p><button type="button">Explore products</button><footer>synkek.com · Website preview</footer></html>`}
             />
           }
         />
@@ -65,13 +76,12 @@ export const createWorkspaceMockupModule: CreateWorkspaceMockupModule = (session
     readyRegions: ["resource"],
     resource: <Resource />,
     settled: async () => {
-      await pageReady;
       await Promise.all(pending);
       await session.settled();
     },
     dispose: () => {
       disposed = true;
-      releasePage();
+      for (const release of pageLoads) release();
     },
   };
 };

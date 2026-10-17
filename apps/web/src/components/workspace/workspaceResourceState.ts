@@ -30,6 +30,7 @@ export interface WorkspaceResourcesState {
   readonly projectId: ProjectId | null;
   readonly selectedTab: WorkspaceResourceTab;
   readonly request: WorkspaceItemRef | null;
+  readonly clearRequest: (request: WorkspaceItemRef) => void;
   readonly chooseProject: (projectId: ProjectId) => void;
   readonly resetProject: () => void;
   readonly selectTab: (tab: WorkspaceResourceTab) => void;
@@ -119,6 +120,7 @@ interface ResourceSession {
   readonly selectedTab: WorkspaceResourceTab;
   readonly tabs: Readonly<Record<string, WorkspaceResourceTab>>;
   readonly request: WorkspaceItemRef | null;
+  readonly queuedRequests: readonly WorkspaceItemRef[];
 }
 function readSession(
   environmentId: EnvironmentId | null,
@@ -155,6 +157,7 @@ function readSession(
     selectedTab: projectId === null ? "files" : projectTab(savedTabs, projectId),
     tabs: savedTabs,
     request: null,
+    queuedRequests: [],
   };
 }
 
@@ -217,6 +220,7 @@ export function useWorkspaceResourceState(
               projectId,
               selectedTab: projectTab(value.tabs, projectId),
               request: null,
+              queuedRequests: [],
             },
       );
     },
@@ -232,6 +236,7 @@ export function useWorkspaceResourceState(
               ...value,
               selectedTab: tab,
               request: null,
+              queuedRequests: [],
               tabs:
                 value.projectId === null ? value.tabs : { ...value.tabs, [value.projectId]: tab },
             },
@@ -240,7 +245,20 @@ export function useWorkspaceResourceState(
     [update],
   );
   const resetProject = useCallback(
-    () => update((value) => ({ ...value, projectId: null, request: null })),
+    () => update((value) => ({ ...value, projectId: null, request: null, queuedRequests: [] })),
+    [update],
+  );
+  const clearRequest = useCallback(
+    (request: WorkspaceItemRef) =>
+      update((value) =>
+        value.request === request
+          ? {
+              ...value,
+              request: value.queuedRequests[0] ?? null,
+              queuedRequests: value.queuedRequests.slice(1),
+            }
+          : value,
+      ),
     [update],
   );
   const close = useCallback(
@@ -282,15 +300,24 @@ export function useWorkspaceResourceState(
         if (!matches) throw new Error("This item does not belong in the requested resource tab.");
       }
       if (environmentId === null) return;
-      update((value) => ({
-        ...value,
-        projectId: input.projectId,
-        selectedTab: input.tab,
-        request,
-        tabs: { ...value.tabs, [input.projectId]: input.tab },
-        open: true,
-        wideOpen: value.presentation === "dock" ? true : value.wideOpen,
-      }));
+      update((value) => {
+        const queue =
+          input.tab === "browser" &&
+          request !== null &&
+          value.request !== null &&
+          value.projectId === input.projectId &&
+          value.selectedTab === input.tab;
+        return {
+          ...value,
+          projectId: input.projectId,
+          selectedTab: input.tab,
+          request: queue ? value.request : request,
+          queuedRequests: queue && request ? [...value.queuedRequests, request] : [],
+          tabs: { ...value.tabs, [input.projectId]: input.tab },
+          open: true,
+          wideOpen: value.presentation === "dock" ? true : value.wideOpen,
+        };
+      });
     },
     [environmentId, update],
   );
@@ -301,6 +328,7 @@ export function useWorkspaceResourceState(
       projectId: session.projectId,
       selectedTab: session.selectedTab,
       request: session.request,
+      clearRequest,
       chooseProject,
       resetProject,
       selectTab,
@@ -308,7 +336,7 @@ export function useWorkspaceResourceState(
       reopen,
       openResource,
     }),
-    [session, chooseProject, resetProject, selectTab, close, reopen, openResource],
+    [session, clearRequest, chooseProject, resetProject, selectTab, close, reopen, openResource],
   );
 }
 

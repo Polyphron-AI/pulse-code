@@ -98,6 +98,30 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
+it("consumes Browser requests in order and ignores a stale acknowledgement", async () => {
+  await mount();
+  const open = (url: string) =>
+    state.openResource({ projectId: p, tab: "browser", request: { type: "url", url } });
+  await act(() => open("https://example.invalid/first"));
+  const first = state.request!;
+  await act(() => open("https://example.invalid/second"));
+  await act(() => open("https://example.invalid/third"));
+  expect(state.request).toBe(first);
+  await act(() => state.clearRequest(first));
+  const second = state.request!;
+  expect(second).toEqual({ type: "url", url: "https://example.invalid/second" });
+  await act(() => state.clearRequest(first));
+  expect(state.request).toBe(second);
+  await act(() => state.clearRequest(second));
+  expect(state.request).toEqual({ type: "url", url: "https://example.invalid/third" });
+  await act(() => state.clearRequest(state.request!));
+  await act(() => state.close());
+  await act(() => state.reopen());
+  expect(state.request).toBeNull();
+  await act(() => open("https://example.invalid/first"));
+  expect(state.request).toEqual(first);
+});
+
 it("resets explicit selection and requests for Auto while retaining the saved project tab", async () => {
   await mount();
   await act(() =>

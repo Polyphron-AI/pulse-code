@@ -394,6 +394,7 @@ describe("PreviewView navigation", () => {
         );
       });
       await act(() => renderer!.root.findByType("form").props.onSubmit());
+      expect(mocks.submittedUrl).toBeNull();
       expect(mocks.navigate).toHaveBeenCalledWith(
         TEST_RUNTIME_TAB_ID,
         "https://example.test/resource",
@@ -401,7 +402,36 @@ describe("PreviewView navigation", () => {
       const slot = renderer!.root.findByProps({ tabId: TEST_RUNTIME_TAB_ID, cornerRadius: 9 });
       expect(slot.props.cornerRadius).toBe(9);
       expect(slot.props.tabId).toBe(TEST_RUNTIME_TAB_ID);
+      const frame = slot.parent!;
+      expect(frame.props.className).toContain("min-h-0 flex-1");
+      expect(frame.props.className).toContain("border border-border");
+      expect(frame.props.style).toEqual({ borderRadius: 9 });
       expect(renderer!.root.findAll((node) => String(node.type) === "native-slot")).toHaveLength(1);
+    } finally {
+      await act(() => renderer?.unmount());
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("replaces the one native slot when the server epoch changes", async () => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    let renderer: ReactTestRenderer | undefined;
+    try {
+      mocks.serverEpoch = "epoch-1";
+      await act(() => {
+        renderer = create(<PreviewView threadRef={TEST_THREAD_REF} visible />);
+      });
+      const before = renderer!.root.findAll((node) => String(node.type) === "native-slot");
+      expect(before).toHaveLength(1);
+      const beforeId = before[0]!.props.tabId;
+      mocks.serverEpoch = "replacement";
+      await act(() => renderer!.update(<PreviewView threadRef={TEST_THREAD_REF} visible />));
+      const after = renderer!.root.findAll((node) => String(node.type) === "native-slot");
+      expect(after).toHaveLength(1);
+      expect(after[0]!.props.tabId).toBe(
+        previewRuntimeTabId(TEST_THREAD_REF, "replacement", "tab-1"),
+      );
+      expect(after[0]!.props.tabId).not.toBe(beforeId);
     } finally {
       await act(() => renderer?.unmount());
       vi.unstubAllGlobals();
@@ -416,6 +446,10 @@ describe("PreviewView navigation", () => {
       await act(() => {
         renderer = create(<PreviewView threadRef={TEST_THREAD_REF} visible />);
       });
+      const surface = renderer!.root.findByProps({
+        className: "relative min-h-0 flex-1 overflow-hidden",
+      });
+      expect(surface.props.style).toBeUndefined();
       await act(() => renderer!.root.findByType("button").props.onClick());
       expect(mocks.refresh).toHaveBeenCalledExactlyOnceWith(TEST_RUNTIME_TAB_ID);
     } finally {

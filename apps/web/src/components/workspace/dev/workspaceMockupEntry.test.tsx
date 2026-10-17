@@ -93,6 +93,39 @@ async function boot(): Promise<Capture> {
   return window.__workspaceMockupCapture!;
 }
 
+it.each([
+  [1024, 800],
+  [390, 844],
+])(
+  "makes recipe 05 capture-ready at %ix%i before and after opening Resources",
+  async (width, height) => {
+    const dom = (
+      window as unknown as {
+        happyDOM: {
+          setWindowSize: (size: { width: number; height: number }) => void;
+          setURL: (url: string) => void;
+        };
+      }
+    ).happyDOM;
+    dom.setWindowSize({ width, height });
+    dom.setURL("http://fixture.invalid/workspace?space=communications&fixture=05");
+    const capture = await boot();
+    capture.configureCapture({
+      ...host,
+      viewport: { width, height, deviceScaleFactor: 1, zoom: 1 },
+    });
+    const closed = await capture.ready();
+    expect(closed.manifest).toMatchObject({ fixtureId: "05", networkRequests: 0 });
+    await act(() => getByRole(document.body, "button", { name: "Resources" }).click());
+    const dialog = getByRole(document.body, "dialog", { name: "Resources" });
+    const iframe = dialog.querySelector('iframe[title="Controlled website preview"]')!;
+    expect(iframe).not.toBeNull();
+    await act(() => iframe.dispatchEvent(new Event("load")));
+    const opened = await capture.ready();
+    expect(opened.manifest).toMatchObject({ fixtureId: "05", networkRequests: 0 });
+  },
+);
+
 it("keeps task URL state through capture resets and records light-theme smoke honestly", async () => {
   (window as unknown as { happyDOM: { setURL: (url: string) => void } }).happyDOM.setURL(
     "http://fixture.invalid/workspace?space=tasks&fixture=03&state=board-move&theme=light",

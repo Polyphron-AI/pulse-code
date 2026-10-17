@@ -25,7 +25,7 @@ const Files = lazy(() =>
   import("./WorkspaceToolsPanel").then((module) => ({ default: module.WorkspaceProjectFiles })),
 );
 const Browser = lazy(() =>
-  import("./WorkspaceToolsPanel").then((module) => ({ default: module.WorkspaceBrowser })),
+  import("./WorkspaceBrowser").then((module) => ({ default: module.WorkspaceBrowser })),
 );
 const Agents = lazy(() =>
   import("./WorkspaceToolsPanel").then((module) => ({ default: module.WorkspaceProjectAgents })),
@@ -42,7 +42,11 @@ export function WorkspaceResourceBody(props: WorkspaceResourceBodySwitchProps): 
       body = <Files {...props} />;
       break;
     case "browser":
-      body = <Browser key={`${props.environmentId}:${props.projectId}`} {...props} />;
+      body = (
+        <div className="flex h-full min-h-0 min-w-0 flex-col">
+          <Browser key={`${props.environmentId}:${props.projectId}`} {...props} />
+        </div>
+      );
       break;
     case "agents":
       body = <Agents {...props} />;

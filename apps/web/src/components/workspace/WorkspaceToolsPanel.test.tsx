@@ -27,6 +27,7 @@ vi.mock("../../state/entities", () => ({
     { id: "q", environmentId: "remote", title: "Second project" },
     { id: "other", environmentId: "other", title: "Other environment" },
   ],
+  useThreadShell: () => ({ id: "t", projectId: "p", environmentId: "remote" }),
   useThreadShells: () => [
     { id: "t", projectId: "p", environmentId: "remote", title: "Live thread title" },
   ],
@@ -163,33 +164,6 @@ afterEach(async () => {
   vi.clearAllMocks();
   vi.unstubAllGlobals();
 });
-it.each([
-  { count: 0, ids: [] },
-  { count: 2, ids: ["p", "q"] },
-])("lets legacy Browser callers choose a project with $count related projects", async ({ ids }) => {
-  mocks.relatedIds = ids;
-  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  node = document.createElement("div");
-  document.body.append(node);
-  domRoot = createRoot(node);
-  await act(() =>
-    domRoot!.render(
-      <WorkspaceToolsPanel
-        environmentId={environmentId}
-        item={{ ref: { type: "url", url: "https://example.test/item" } }}
-        tool="browser"
-        onOpen={() => {}}
-      />,
-    ),
-  );
-  expect(node.textContent).toContain("Choose the project whose browser you want to use.");
-  await act(() => getByRole(node!, "combobox", { name: "Choose project" }).click());
-  expect(queryByRole(document.body, "option", { name: "Other environment" })).toBeNull();
-  await act(() => getByRole(document.body, "option", { name: "Second project" }).click());
-  expect(getByRole(node!, "textbox", { name: "Browser page address" })).toBeDefined();
-  expect(node.textContent).not.toContain("Choose the project whose browser you want to use.");
-  expect(mocks.configQuery).toHaveBeenCalledWith({ environmentId, input: { projectId: "q" } });
-});
 const mount = async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   await act(() => {
@@ -198,9 +172,7 @@ const mount = async () => {
     );
   });
 };
-it("lists confirmed Files and Agents, uses live thread titles, and links the current external page to the captured source", async () => {
-  mocks.external.mockResolvedValue(undefined);
-  mocks.link.mockResolvedValue(undefined);
+it("lists confirmed Files and Agents without mounting a Browser tool", async () => {
   await mount();
   expect(renderer!.root.findAllByProps({ "aria-label": "Files tool" })).toHaveLength(1);
   expect(renderer!.root.findAllByProps({ "aria-label": "Agents tool" })).toHaveLength(1);
@@ -208,63 +180,9 @@ it("lists confirmed Files and Agents, uses live thread titles, and links the cur
   expect(text).toContain("Brief");
   expect(text).toContain("Live thread title");
   expect(text).not.toContain("Suggested only");
-  await act(() =>
-    renderer!.root
-      .findByProps({ "aria-label": "Browser page address" })
-      .props.onChange({ target: { value: "https://example.test/page?utm_source=fixture" } }),
-  );
-  await act(() =>
-    renderer!.root
-      .findAllByType("button")
-      .find((button) => button.props.children === "Open in new tab")!
-      .props.onClick(),
-  );
-  expect(mocks.external).toHaveBeenCalledWith("https://example.test/page");
-  await act(() =>
-    renderer!.root
-      .findAllByType("button")
-      .find((button) => button.props.children === "Link this page")!
-      .props.onClick(),
-  );
-  expect(mocks.link).toHaveBeenCalledWith(item, {
-    ref: { type: "url", url: "https://example.test/page" },
-    title: "https://example.test/page",
-  });
+  expect(text).not.toContain("Browser tool");
+  expect(renderer!.root.findAllByType(WorkspaceBrowser)).toHaveLength(0);
 });
-it("opens the incumbent desktop preview through the configured environment-local Browser thread", async () => {
-  mocks.desktop = true;
-  mocks.preview.mockResolvedValue({ _tag: "Success", value: {} });
-  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  node = document.createElement("div");
-  document.body.append(node);
-  domRoot = createRoot(node);
-  await act(() =>
-    domRoot!.render(
-      <WorkspaceToolsPanel environmentId={environmentId} item={item} onOpen={() => {}} />,
-    ),
-  );
-  const input = getByRole<HTMLInputElement>(node, "textbox", { name: "Browser page address" });
-  await act(() => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
-      input,
-      "https://example.test/page",
-    );
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-  await act(() =>
-    node!
-      .querySelector("form")!
-      .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
-  );
-  expect(mocks.preview).toHaveBeenCalledWith(
-    expect.objectContaining({
-      threadRef: { environmentId: "remote", threadId: "t" },
-      url: "https://example.test/page",
-    }),
-  );
-  expect(mocks.external).not.toHaveBeenCalled();
-});
-
 it("releases the inline Browser in Linked context and restores it without a dialog", async () => {
   mocks.desktop = true;
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -360,7 +278,7 @@ it("allows browsing without selection and disables linking with a reason", async
   expect(buttons.find((button) => button.props.children === "Link this page")!.props.disabled).toBe(
     true,
   );
-  expect(JSON.stringify(renderer!.toJSON())).toContain("Select an item to link this page.");
+  expect(JSON.stringify(renderer!.toJSON())).toContain("Select an item to link this page to.");
 });
 
 vi.mock("./useWorkspaceCanOperate", () => ({ useWorkspaceCanOperate: () => true }));

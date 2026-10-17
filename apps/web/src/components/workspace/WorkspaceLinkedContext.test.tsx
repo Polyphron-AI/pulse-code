@@ -5,6 +5,7 @@ import { getByRole, getAllByRole, queryByRole } from "@testing-library/dom";
 import {
   EnvironmentId,
   ProjectId,
+  ThreadId,
   type WorkspaceLinkList,
   type WorkspaceLinkView,
   type WorkspaceLinkEndpoint,
@@ -13,6 +14,7 @@ import { afterEach, expect, it, vi } from "vite-plus/test";
 import { WorkspaceLinkedContext } from "./WorkspaceLinkedContext";
 import { WorkspaceEngagement } from "./WorkspaceEngagement";
 import { WorkspaceResourcesPanel } from "./WorkspaceResourcesPanel";
+import { LinkedSection } from "./mail/LinkedSection";
 import { useWorkspaceResourceState, WorkspaceResourcesProvider } from "./workspaceResourceState";
 
 const mocks = vi.hoisted(() => ({
@@ -25,6 +27,10 @@ const mocks = vi.hoisted(() => ({
   refresh: vi.fn(),
   related: [] as { item: WorkspaceLinkEndpoint; via: WorkspaceLinkEndpoint }[],
   taskLoading: false,
+  openPanel: vi.fn(),
+}));
+vi.mock("../../rightPanelStore", () => ({
+  useRightPanelStore: { getState: () => ({ open: mocks.openPanel }) },
 }));
 vi.mock("../../state/workspaceLinks", () => ({
   workspaceLinks: {
@@ -72,6 +78,7 @@ vi.mock("../../hooks/useSettings", () => ({
   useEnvironmentSettings: (_id: unknown, select: (settings: unknown) => unknown) =>
     select({ workspaceDisplayTimeZone: "UTC", workspaceOwnerProfile: null }),
 }));
+vi.mock("../../state/server", () => ({ serverEnvironment: { configProjection: () => null } }));
 vi.mock("../../state/session", () => ({
   useEnvironmentSessionState: () => ({
     isPending: false,
@@ -103,8 +110,9 @@ vi.mock("./WorkspaceItemActions", () => ({
 vi.mock("./DriveFiles", () => ({ DriveSearch: () => null, DriveFileAccess: () => null }));
 vi.mock("./WorkspaceToolsPanel", () => ({
   WorkspaceProjectFiles: () => <p>Files body</p>,
-  WorkspaceBrowser: () => <p>Browser body</p>,
 }));
+
+vi.mock("./WorkspaceBrowser", () => ({ WorkspaceBrowser: () => <p>Browser body</p> }));
 
 const environmentId = EnvironmentId.make("a");
 const item: WorkspaceLinkEndpoint = {
@@ -195,6 +203,50 @@ it("opens confirmed context and preserves Linked, Suggested, projects, provenanc
   expect(mocks.accept).not.toHaveBeenCalled();
   expect(mocks.dismiss).not.toHaveBeenCalled();
   expect(mocks.refresh).not.toHaveBeenCalled();
+});
+
+it("opens Browser in Resources from legacy Linked sections without mounting another preview", async () => {
+  function App() {
+    const state = useWorkspaceResourceState(environmentId, {
+      storage: { getItem: () => null, setItem() {} },
+    });
+    return (
+      <WorkspaceResourcesProvider value={state}>
+        <LinkedSection
+          environmentId={environmentId}
+          item={{ type: "project", projectId: p }}
+          title="Project"
+          onOpen={() => {}}
+        />
+        <p data-resource-tab="">
+          {state.selectedTab} {state.projectId}
+        </p>
+      </WorkspaceResourcesProvider>
+    );
+  }
+  await mount(<App />);
+  expect(queryByRole(node, "button", { name: "Browser" })).toBeNull();
+  await act(() => getByRole(node, "button", { name: "Open Browser in Resources" }).click());
+  expect(node.querySelector("[data-resource-tab]")!.textContent).toBe("browser p");
+  expect(node.textContent).not.toContain("Browser body");
+  expect(queryByRole(node, "textbox", { name: "Browser page address" })).toBeNull();
+});
+
+it("opens Code's existing preview from thread details outside the Resources provider", async () => {
+  await mount(
+    <LinkedSection
+      environmentId={environmentId}
+      item={{ type: "thread", threadId: ThreadId.make("t") }}
+      title="Thread"
+      onOpen={() => {}}
+    />,
+  );
+  await act(() => getByRole(node, "button", { name: "Open Code preview" }).click());
+  expect(mocks.openPanel).toHaveBeenCalledExactlyOnceWith(
+    { environmentId, threadId: "t" },
+    "preview",
+  );
+  expect(node.textContent).not.toContain("Browser body");
 });
 it.each(["Accept", "Dismiss"])(
   "runs only the explicit %s command and renders the returned relationship",
