@@ -27,6 +27,16 @@ grant. Calendar refresh is request driven, with no clock polling. See
 [Calendar ownership and refresh](./workspace-calendar.md) and
 [note lifetime and revision rules](./workspace-shell.md).
 
+Code and Workspace share the thread's browser session; only its presentation lease moves between
+visible hosts. Hiding or closing one host must let the remaining visible host reclaim that lease,
+without opening a second guest. See [native surface ownership](../../apps/web/src/browser/BrowserSurfaceSlot.tsx).
+Browser captures page metadata and the selected link target together when a menu opens. Scope
+changes remount its chrome and invalidate pending command completions, so an old environment or
+project cannot update the next one's controls. Palette actions capture the currently focused item
+host before focus enters the palette, then fall back to the selected-item host. See
+[Browser](../../apps/web/src/components/workspace/WorkspaceBrowser.tsx) and
+[shared action dispatch](../../apps/web/src/components/workspace/WorkspaceNativeActions.logic.ts).
+
 Task completion derives from the project's configured completed column on every client, rather
 than an independent checkbox value. Task due dates remain Gregorian calendar dates, never UTC
 instants or scheduled jobs. The environment's display timezone determines Today without changing
