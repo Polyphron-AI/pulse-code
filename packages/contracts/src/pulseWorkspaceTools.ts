@@ -37,6 +37,7 @@ export const WorkspaceProjectConfigSave = Schema.Struct({
   completedColumn: Schema.optionalKey(Schema.NullOr(Column)),
   expectedRevision: Schema.optionalKey(NonNegativeInt),
   confirmCompletionChanges: Schema.optionalKey(Schema.Boolean),
+  expectedAffectedCount: Schema.optionalKey(NonNegativeInt),
 });
 export type WorkspaceProjectConfigSave = typeof WorkspaceProjectConfigSave.Type;
 export const WorkspaceTask = Schema.Struct({
@@ -131,6 +132,7 @@ export class WorkspaceToolsError extends Schema.TaggedError<WorkspaceToolsError>
   {
     kind: Schema.Literals(["invalid-input", "not-found", "conflict", "unavailable"]),
     reason: Schema.optionalKey(Schema.Literal("completion-confirmation-required")),
+    affectedCount: Schema.optionalKey(NonNegativeInt),
     message: Schema.String,
   },
 ) {}

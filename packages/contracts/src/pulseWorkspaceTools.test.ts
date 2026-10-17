@@ -52,6 +52,37 @@ it("decodes the optional typed confirmation reason and preserves legacy errors",
   expect(encodeToolsError(decoded)).toEqual(confirmation);
   expect(() => decodeToolsError({ ...legacy, reason: "unknown" })).toThrow();
 });
+it("serializes bounded confirmation counts while preserving omitted counts", () => {
+  const config = {
+    projectId: "project",
+    taskColumns: ["To do", "Done"],
+    browserThreadId: null,
+    expectedRevision: 0,
+    confirmCompletionChanges: true,
+  };
+  const error = {
+    _tag: "WorkspaceToolsError",
+    kind: "conflict",
+    reason: "completion-confirmation-required",
+    message: "Confirm completion changes.",
+  };
+  expect(decodeConfigSave(config)).not.toHaveProperty("expectedAffectedCount");
+  expect(decodeToolsError(error)).not.toHaveProperty("affectedCount");
+  for (const count of [0, 2]) {
+    expect(decodeConfigSave({ ...config, expectedAffectedCount: count })).toHaveProperty(
+      "expectedAffectedCount",
+      count,
+    );
+    expect(encodeToolsError(decodeToolsError({ ...error, affectedCount: count }))).toEqual({
+      ...error,
+      affectedCount: count,
+    });
+  }
+  for (const count of [-1, 1.5, "2", null]) {
+    expect(() => decodeConfigSave({ ...config, expectedAffectedCount: count })).toThrow();
+    expect(() => decodeToolsError({ ...error, affectedCount: count })).toThrow();
+  }
+});
 it("decodes legacy tasks, config and upsert without new fields", () => {
   expect(decodeTask(task)).toEqual(task);
   expect(decodeUpsert(task)).toEqual(task);

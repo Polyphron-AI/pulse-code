@@ -400,10 +400,16 @@ export const make = Effect.gen(function* () {
                     }>`SELECT COUNT(*) AS total FROM workspace_tasks WHERE project_id=${input.projectId} AND deleted=0 AND ((column_name IS ${current.completedColumn}) != (column_name IS ${completedColumn}))`
                   : [{ total: 0 }];
                 const count = affected[0]!.total;
-                if (count > 0 && input.confirmCompletionChanges !== true)
+                if (
+                  (count > 0 && input.confirmCompletionChanges !== true) ||
+                  (input.confirmCompletionChanges === true &&
+                    input.expectedAffectedCount !== undefined &&
+                    input.expectedAffectedCount !== count)
+                )
                   return yield* new WorkspaceToolsError({
                     kind: "conflict",
                     reason: "completion-confirmation-required",
+                    affectedCount: count,
                     message: `Changing the completed column changes completion for ${count} task${count === 1 ? "" : "s"}. Confirm to continue.`,
                   });
                 if (

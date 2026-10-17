@@ -246,6 +246,60 @@ it.effect("derives completion from the designated column and rejects stale moves
   }).pipe(Effect.provide(layer)),
 );
 
+it.effect.each([
+  { change: "enters", affectedCount: 2 },
+  { change: "leaves", affectedCount: 0 },
+])(
+  "requires fresh confirmation when a task $change the affected columns",
+  ({ change, affectedCount }) =>
+    Effect.gen(function* () {
+      yield* seedWorkspaceProject;
+      const tools = yield* Tools.WorkspaceTools;
+      const done = yield* tools.upsertTask({ projectId, title: "Done", column: "Done" });
+      const open = yield* tools.upsertTask({ projectId, title: "Open", column: "To do" });
+      const config = yield* tools.config(projectId);
+      const save = {
+        projectId,
+        taskColumns: config.taskColumns,
+        browserThreadId: null,
+        completedColumn: "In progress",
+        expectedRevision: config.revision,
+      };
+      const prompt = yield* tools.saveConfig(save).pipe(Effect.flip);
+      yield* tools.transitionTask({
+        id: change === "enters" ? open.id : done.id,
+        expectedRevision: 0,
+        change: { type: "column", column: change === "enters" ? "Done" : "To do" },
+      });
+      const tasksBeforeConfirmation = yield* tools.listTasks(projectId);
+      const revisionBeforeConfirmation = Option.getOrNull(yield* Stream.runHead(tools.changes));
+      const stale = yield* tools
+        .saveConfig({ ...save, confirmCompletionChanges: true, expectedAffectedCount: 1 })
+        .pipe(Effect.flip);
+      expect(stale).toMatchObject({
+        kind: "conflict",
+        reason: "completion-confirmation-required",
+        affectedCount,
+      });
+      expect(prompt).toMatchObject({
+        reason: "completion-confirmation-required",
+        affectedCount: 1,
+      });
+      expect(yield* tools.config(projectId)).toEqual(config);
+      expect(yield* tools.listTasks(projectId)).toEqual(tasksBeforeConfirmation);
+      expect(Option.getOrNull(yield* Stream.runHead(tools.changes))).toBe(
+        revisionBeforeConfirmation,
+      );
+      const saved = yield* tools.saveConfig({
+        ...save,
+        confirmCompletionChanges: true,
+        expectedAffectedCount: affectedCount,
+      });
+      expect(saved.completedColumn).toBe("In progress");
+      expect(saved.revision).toBe(config.revision + 1);
+    }).pipe(Effect.provide(layer)),
+);
+
 it.effect("validates completion designation, confirmation and immutable ownership", () =>
   Effect.gen(function* () {
     yield* seedWorkspaceProject;
