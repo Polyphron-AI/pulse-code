@@ -3,6 +3,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./state/workspaceNotes": {
+      "types": "./src/state/workspaceNotes.ts",
+      "default": "./src/state/workspaceNotes.ts"
+    },
     "./state/workspaceTaskDates": {
       "types": "./src/state/workspaceTaskDates.ts",
       "default": "./src/state/workspaceTaskDates.ts"

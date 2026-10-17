@@ -1,3 +1,4 @@
+import { PULSE_NOTES_METHODS, PulseNotesRpcs } from "./pulseNotes.ts";
 import { PULSE_WORKSPACE_TOOLS_METHODS, PulseWorkspaceToolsRpcs } from "./pulseWorkspaceTools.ts";
 import { PULSE_DRIVE_METHODS, PulseDriveRpcs } from "./pulseDrive.ts";
 import { PULSE_TELEGRAM_METHODS, PulseTelegramRpcs } from "./pulseTelegram.ts";
@@ -355,6 +356,7 @@ import { VcsError } from "./vcs.ts";
 import { Project, ProjectMutation, ProjectMutationError } from "./project.ts";
 
 export const WS_METHODS = {
+  ...PULSE_NOTES_METHODS,
   ...PULSE_WORKSPACE_TOOLS_METHODS,
   ...PULSE_DRIVE_METHODS,
   ...PULSE_TELEGRAM_METHODS,
@@ -1767,6 +1769,7 @@ export class RpcScopeAuthorization extends RpcMiddleware.Service<RpcScopeAuthori
 
 export const WsRpcGroup = RpcGroup.make(
   ...PulseWorkspaceToolsRpcs,
+  ...PulseNotesRpcs,
   ...PulseDriveRpcs,
   ...PulseTelegramRpcs,
   ...PulseMailRpcs,

@@ -1,3 +1,4 @@
+import M069 from "./Migrations/069_WorkspaceNotes.ts";
 import M068 from "./Migrations/068_WorkspaceTaskQuery.ts";
 import M067 from "./Migrations/067_WorkspaceTaskOwner.ts";
 import M066 from "./Migrations/066_WorkspaceTaskMetadata.ts";
@@ -164,6 +165,7 @@ export const migrationEntries = [
   [66, "WorkspaceTaskMetadata", M066],
   [67, "WorkspaceTaskOwner", M067],
   [68, "WorkspaceTaskQuery", M068],
+  [69, "WorkspaceNotes", M069],
 ] as const;
 
 export const migrationManifest = migrationEntries.map(([id, name]) => [id, name] as const);

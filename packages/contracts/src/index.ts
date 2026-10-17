@@ -75,3 +75,4 @@ export * from "./pulseTelegram.ts";
 export * from "./pulseDrive.ts";
 
 export * from "./pulseWorkspaceTools.ts";
+export * from "./pulseNotes.ts";

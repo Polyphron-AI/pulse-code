@@ -1,4 +1,5 @@
-import { PulseWorkspaceToolsRpcs } from "@t3tools/contracts";
+import { PulseWorkspaceToolsRpcs, PulseNotesRpcs } from "@t3tools/contracts";
+import { WorkspaceNotes } from "./workspace/WorkspaceNotes.ts";
 import { WorkspaceTools } from "./workspace/WorkspaceTools.ts";
 import { WorkspaceAutomation } from "./workspace/WorkspaceAutomation.ts";
 import { PulseDriveRpcs } from "@t3tools/contracts";
@@ -582,6 +583,7 @@ const ServerWsRpcGroup = WsRpcGroup;
 // full ServerWsRpcGroup and resolves each handler by tag, so the two layers
 // together cover the group. Workspace link handlers are split out the same way.
 const WorkspaceToolsWsRpcGroup = RpcGroup.make(...PulseWorkspaceToolsRpcs);
+const NotesWsRpcGroup = RpcGroup.make(...PulseNotesRpcs);
 const DriveWsRpcGroup = RpcGroup.make(...PulseDriveRpcs);
 const TelegramWsRpcGroup = RpcGroup.make(...PulseTelegramRpcs);
 const SuggestionWsRpcGroup = RpcGroup.make(...PulseLinkSuggestionRpcs);
@@ -592,6 +594,7 @@ const MailWsRpcGroup = RpcGroup.make(
 );
 const LinksWsRpcGroup = RpcGroup.make(...PulseLinksRpcs);
 const CoreWsRpcGroup = ServerWsRpcGroup.omit(
+  ...PulseNotesRpcs.map((rpc) => rpc._tag),
   ...PulseWorkspaceToolsRpcs.map((rpc) => rpc._tag),
   ...PulseDriveRpcs.map((rpc) => rpc._tag),
   ...PulseLinkSuggestionRpcs.map((rpc) => rpc._tag),
@@ -1255,6 +1258,22 @@ const workspaceToolsWsRpcLayer = WorkspaceToolsWsRpcGroup.toLayer(
       [WS_METHODS.workspaceSaveAutomation]: automation.save,
     });
   }),
+).pipe(
+  Layer.merge(
+    NotesWsRpcGroup.toLayer(
+      Effect.gen(function* () {
+        const notes = yield* WorkspaceNotes;
+        return NotesWsRpcGroup.of({
+          [WS_METHODS.notesCreate]: notes.create,
+          [WS_METHODS.notesGet]: notes.get,
+          [WS_METHODS.notesRead]: notes.read,
+          [WS_METHODS.notesUpdate]: notes.update,
+          [WS_METHODS.notesDelete]: notes.delete,
+          [WS_METHODS.notesSubscribeChanges]: () => notes.changes,
+        });
+      }),
+    ),
+  ),
 );
 
 const driveWsRpcLayer = DriveWsRpcGroup.toLayer(
@@ -2014,6 +2033,7 @@ const makeWsRpcLayer = (
               driveRead: true,
               workspaceTools: true,
               workspaceTasksV2: true,
+              workspaceNotes: true,
               mailConversations: true,
               mailReply: true,
               workspaceLinks: true,
@@ -4238,6 +4258,7 @@ export const websocketRpcRouteLayer = Layer.unwrap(
       Context.add(TelegramService, yield* TelegramService),
       Context.add(DriveService, yield* DriveService),
       Context.add(WorkspaceTools, yield* WorkspaceTools),
+      Context.add(WorkspaceNotes, yield* WorkspaceNotes),
       Context.add(WorkspaceAutomation, yield* WorkspaceAutomation),
       Context.add(WorkspaceSuggestions, yield* WorkspaceSuggestions),
     );
