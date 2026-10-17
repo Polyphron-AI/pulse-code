@@ -2,6 +2,7 @@ import { isWorkspaceNote } from "../meetings/meetingNotes";
 import * as Schema from "effect/Schema";
 import {
   parseTelegramResourceId,
+  parseChatResourceId,
   WorkspaceLinkEndpoint,
   type EnvironmentId,
 } from "@t3tools/contracts";
@@ -119,8 +120,9 @@ export function canOpenLinkedItem(ref: WorkspaceItemRef): boolean {
     ref.type === "url" ||
     ref.type === "file" ||
     (ref.type === "provider-resource" &&
-      ref.provider === "telegram" &&
-      parseTelegramResourceId(ref.resourceId) !== undefined)
+      ((ref.provider === "telegram" && parseTelegramResourceId(ref.resourceId) !== undefined) ||
+        ((ref.provider === "slack" || ref.provider === "discord") &&
+          parseChatResourceId(ref.resourceId) !== undefined)))
   );
 }
 

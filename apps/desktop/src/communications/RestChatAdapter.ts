@@ -1,6 +1,7 @@
 // @effect-diagnostics nodeBuiltinImport:off globalDate:off globalTimers:off -- Native Promise REST adapters own fetch cancellation and provider rate-limit deadlines outside Effect.
 import * as NodeCrypto from "node:crypto";
 import type { ChatConversation, ChatMessage } from "@t3tools/contracts";
+import * as Schema from "effect/Schema";
 import { ChatError, type ChatAdapter } from "./ChatAdapter.ts";
 
 type Provider = "slack" | "discord";
@@ -36,11 +37,15 @@ function id(value: unknown, provider: Provider): string {
   return result;
 }
 
+const isSlackTimestamp = Schema.is(
+  Schema.String.check(Schema.isMaxLength(64), Schema.isPattern(/^\d+\.\d+$/)),
+);
+const isReplyCount = Schema.is(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)));
+
 function slackTimestamp(value: unknown): string {
-  const result = string(value, 64);
-  if (!/^\d+\.\d+$/.test(result) || !Number.isFinite(Number(result)))
+  if (!isSlackTimestamp(value))
     throw new ChatError("network", "Slack returned an invalid message timestamp.");
-  return result;
+  return value;
 }
 
 function date(value: unknown): string {
@@ -227,6 +232,7 @@ class SlackAdapter implements ChatAdapter {
   private readonly known = new Map<string, ChatConversation>();
   private readonly authors = new Map<string, string>();
   private readonly userId: string;
+  private readonly workspaceId: string;
   private readonly isBot: boolean;
   private readonly transport: Transport;
   private readonly threadRoots = new Map<string, string>();
@@ -234,7 +240,7 @@ class SlackAdapter implements ChatAdapter {
   constructor(transport: Transport, auth: Row) {
     this.transport = transport;
     this.userId = id(auth.user_id, "slack");
-    id(auth.team_id, "slack");
+    this.workspaceId = id(auth.team_id, "slack");
     this.isBot = auth.bot_id !== undefined;
     this.account = {
       provider: "slack" as const,
@@ -298,6 +304,7 @@ class SlackAdapter implements ChatAdapter {
           optionalString(channel.name) || optionalString(channel.user) || id(channel.id, "slack"),
         kind: channel.is_im === true ? "dm" : channel.is_mpim === true ? "group" : "channel",
         workspace: this.account.label,
+        workspaceId: this.workspaceId,
         canSend: this.canWrite(channel),
       }));
     conversations.forEach((conversation) => this.known.set(conversation.id, conversation));
@@ -347,12 +354,18 @@ class SlackAdapter implements ChatAdapter {
     value: Row,
   ): Promise<ChatMessage> {
     const ts = slackTimestamp(value.ts);
-    const timestamp = new Date(Number(ts) * 1000);
+    // Derive display milliseconds from separate date parts, keeping the source ID untouched.
+    const [seconds, fraction] = ts.split(".");
+    const timestamp = new Date(
+      Number.parseInt(seconds!, 10) * 1000 +
+        Number.parseInt(fraction!.padEnd(3, "0").slice(0, 3), 10),
+    );
     if (!Number.isFinite(timestamp.getTime()))
       throw new ChatError("network", "Slack returned an invalid message date.");
+    const replyCount = isReplyCount(value.reply_count) ? value.reply_count : undefined;
     const threadId =
       value.thread_ts === undefined
-        ? typeof value.reply_count === "number" && value.reply_count > 0
+        ? replyCount !== undefined && replyCount > 0
           ? ts
           : undefined
         : slackTimestamp(value.thread_ts);
@@ -364,6 +377,7 @@ class SlackAdapter implements ChatAdapter {
       author: await this.author(value),
       date: timestamp.toISOString(),
       text: value.text === undefined ? "" : string(value.text, 200000),
+      ...(replyCount !== undefined ? { replyCount } : {}),
       ...(threadId ? { threadId, ...(threadId !== ts ? { replyToId: threadId } : {}) } : {}),
     };
   }
@@ -595,6 +609,7 @@ class DiscordAdapter implements ChatAdapter {
             title: string(channel.name),
             kind: isThread ? "thread" : "channel",
             workspace,
+            workspaceId: guildId,
             canSend:
               sendAllowed &&
               threadWritable &&

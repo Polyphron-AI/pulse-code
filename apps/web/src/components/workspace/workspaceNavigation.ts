@@ -1,3 +1,4 @@
+import { parseChatResourceId } from "@t3tools/contracts";
 import { parseNoteLocation } from "./meetings/meetingNotes";
 import { parseCalendarLocation } from "./calendar/calendarItemRef";
 import { WorkspaceTaskDueOn } from "@t3tools/contracts";
@@ -37,7 +38,7 @@ export interface WorkspaceSearch {
   readonly space?: WorkspaceDestination | "office";
   readonly view?: WorkspaceView;
   readonly officeView?: "communications";
-  readonly communicationProvider?: "telegram";
+  readonly communicationProvider?: "telegram" | "slack" | "discord";
   readonly account?: string;
   readonly folder?: string;
   readonly project?: string;
@@ -63,10 +64,13 @@ export function parseWorkspaceSearch(raw: Record<string, unknown>): WorkspaceSea
   if (!destination) return space === "office" ? { space: "office" } : {};
   const environment = text(raw.environment);
   const telegram = destination === "communications" && raw.communicationProvider === "telegram";
-  const carriesIdentity = telegram || destination === "mail" || destination === "projects";
+  const chat =
+    destination === "communications" &&
+    (raw.communicationProvider === "slack" || raw.communicationProvider === "discord");
+  const carriesIdentity = telegram || chat || destination === "mail" || destination === "projects";
   const taskScope = destination === "tasks";
   const account = carriesIdentity ? text(raw.account) : undefined;
-  const folder = !telegram && carriesIdentity ? text(raw.folder) : undefined;
+  const folder = !telegram && !chat && carriesIdentity ? text(raw.folder) : undefined;
   const project = text(raw.project);
   const calendar = destination === "calendar" || destination === "meetings";
   const day = isTaskDate(raw.day) ? raw.day : undefined;
@@ -77,11 +81,15 @@ export function parseWorkspaceSearch(raw: Record<string, unknown>): WorkspaceSea
         (destination === "meetings" && parseNoteLocation(raw.item)))
       ? raw.item
       : undefined
-    : telegram
-      ? text(raw.item)
-      : (carriesIdentity || taskScope) && typeof raw.item === "string" && raw.item.length <= 8192
+    : chat
+      ? typeof raw.item === "string" && parseChatResourceId(raw.item)?.connectionId === account
         ? raw.item
-        : undefined;
+        : undefined
+      : telegram
+        ? text(raw.item)
+        : (carriesIdentity || taskScope) && typeof raw.item === "string" && raw.item.length <= 8192
+          ? raw.item
+          : undefined;
   const view = (workspaceViews[destination] as readonly unknown[]).includes(raw.view)
     ? (raw.view as WorkspaceView)
     : undefined;
@@ -122,7 +130,11 @@ export function parseWorkspaceSearch(raw: Record<string, unknown>): WorkspaceSea
     ...(day ? { day } : {}),
     ...(view !== undefined ? { view } : {}),
     ...(environment !== undefined ? { environment } : {}),
-    ...(telegram ? { communicationProvider: "telegram" as const } : {}),
+    ...(telegram
+      ? { communicationProvider: "telegram" as const }
+      : chat
+        ? { communicationProvider: raw.communicationProvider as "slack" | "discord" }
+        : {}),
     ...(account !== undefined ? { account } : {}),
     ...(folder !== undefined ? { folder } : {}),
     ...(project !== undefined ? { project } : {}),

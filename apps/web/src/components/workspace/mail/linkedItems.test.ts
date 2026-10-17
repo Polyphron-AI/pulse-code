@@ -1,4 +1,11 @@
-import { EnvironmentId, ThreadId, ProjectId, type WorkspaceLinkView } from "@t3tools/contracts";
+import {
+  chatResourceId,
+  workspaceItemFromUrl,
+  EnvironmentId,
+  ThreadId,
+  ProjectId,
+  type WorkspaceLinkView,
+} from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
@@ -210,4 +217,45 @@ it("opens exact native note references while retaining unavailable aliases", () 
   expect(canOpenLinkedItem(ref)).toBe(true);
   expect(workspaceEndpointTitle({ ref })).toBe("Workspace note");
   expect(canOpenLinkedItem({ ...ref, resourceId: "wsn_invalid" })).toBe(false);
+});
+
+it.each(["slack", "discord"])(
+  "opens exact %s refs and keeps malformed sources visible",
+  (provider) => {
+    const resourceId = chatResourceId({
+      version: 1,
+      transport: "desktop",
+      connectionId: "account",
+      workspaceId: "workspace",
+      conversationId: "channel",
+      messageId: "1760343120.000001",
+    });
+    const ref = { type: "provider-resource" as const, provider, resourceId };
+    expect(canOpenLinkedItem(ref)).toBe(true);
+    expect(linkedItemLabel(view({ ref, title: "Original message" }), null)).toEqual({
+      title: "Original message",
+    });
+    expect(canOpenLinkedItem({ ...ref, resourceId: "bad" })).toBe(false);
+    expect(
+      linkedItemLabel(
+        view({ ref: { ...ref, resourceId: "bad" }, title: "Original message" }),
+        null,
+      ),
+    ).toEqual({
+      title: "Original message",
+      unavailable: "Unavailable: this source cannot be opened here.",
+    });
+  },
+);
+
+it("keeps Teams as a normalized web URL and rejects executable schemes", () => {
+  expect(
+    workspaceItemFromUrl(
+      "https://teams.microsoft.com/l/message/19%3Aroom/1760343120000?context=kept&utm_source=mail#fragment",
+    ),
+  ).toEqual({
+    type: "url",
+    url: "https://teams.microsoft.com/l/message/19%3Aroom/1760343120000?context=kept",
+  });
+  expect(workspaceItemFromUrl("javascript:alert(1)")).toBeUndefined();
 });

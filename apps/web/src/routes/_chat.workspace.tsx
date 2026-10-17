@@ -6,7 +6,7 @@ import {
 import { MeetingsSpace } from "../components/workspace/meetings/MeetingsSpace";
 import { parseNoteLocation, openMeetingNote } from "../components/workspace/meetings/meetingNotes";
 import { useWorkspaceResources } from "../components/workspace/workspaceResourceState";
-import { ProjectId } from "@t3tools/contracts";
+import { parseChatResourceId, ProjectId } from "@t3tools/contracts";
 import { createFileRoute, Link, redirect, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useMemo } from "react";
 import { useEnvironmentQuery } from "../state/query";
@@ -68,8 +68,21 @@ function WorkspaceRouteContent() {
       return <ProjectsSpace />;
     case "mail":
       return <MailSpace />;
-    case "communications":
-      return <CommunicationsWorkspace />;
+    case "communications": {
+      const resource = search.item ? parseChatResourceId(search.item) : undefined;
+      const source =
+        resource &&
+        search.item &&
+        (search.communicationProvider === "slack" || search.communicationProvider === "discord")
+          ? { provider: search.communicationProvider, resource, resourceId: search.item }
+          : undefined;
+      return (
+        <CommunicationsWorkspace
+          key={JSON.stringify([search.environment, search.communicationProvider, search.item])}
+          source={source}
+        />
+      );
+    }
     case "office":
       return <OfficeWorkspace />;
     case "tasks":

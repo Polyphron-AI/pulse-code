@@ -147,6 +147,7 @@ describe("REST chat adapters", () => {
             thread_ts: "1720000000.000001",
             user: "U123",
             text: "Actual parent",
+            reply_count: 2,
           },
         ],
         response_metadata: { next_cursor: "older-replies" },
@@ -154,7 +155,7 @@ describe("REST chat adapters", () => {
     });
     const channels = await adapter.conversations("account", "channel-next");
     expect(channels).toMatchObject({
-      conversations: [{ id: "C123", title: "actual-channel", canSend: true }],
+      conversations: [{ id: "C123", title: "actual-channel", workspaceId: "T123", canSend: true }],
       nextCursor: "native-next",
     });
     expect(requests[1]?.searchParams.get("cursor")).toBe("channel-next");
@@ -164,6 +165,7 @@ describe("REST chat adapters", () => {
       id: "1720000000.000001",
       author: "Asha",
       text: "Actual parent",
+      replyCount: 2,
       date: "2024-07-03T09:46:40.000Z",
     });
     expect(history.messages[1]).toMatchObject({
@@ -276,6 +278,7 @@ describe("REST chat adapters", () => {
         accountId: "account",
         title: "engineering",
         workspace: "Real guild",
+        workspaceId: "100",
         kind: "channel",
         canSend: true,
       },
@@ -284,6 +287,7 @@ describe("REST chat adapters", () => {
         accountId: "account",
         title: "Actual thread",
         workspace: "Real guild",
+        workspaceId: "100",
         kind: "thread",
         canSend: true,
       },
@@ -442,6 +446,7 @@ describe("REST chat adapters", () => {
         title: "overflow thread",
         kind: "thread",
         workspace: "Real guild",
+        workspaceId: "100",
         canSend: true,
       },
     ]);
@@ -547,3 +552,31 @@ describe("REST chat adapters", () => {
     await adapter.close();
   });
 });
+
+it.each([0, 3, -1, 1.5, "2", null, undefined])(
+  "retains only a source-supplied nonnegative integer reply count: %j",
+  async (replyCount) => {
+    const adapter = await connectRestChat("slack", "secret", async (input) => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith("auth.test")) return slackResponse(slackAuth);
+      if (url.pathname.endsWith("conversations.list"))
+        return slackResponse({ ok: true, channels: [{ id: "C123", name: "general" }] });
+      return slackResponse({
+        ok: true,
+        messages: [
+          { ts: "1760343120.000001", user: "U123", text: "Hello", reply_count: replyCount },
+        ],
+      });
+    });
+    try {
+      await adapter.conversations("account");
+      const message = (await adapter.messages("account", "C123")).messages[0]!;
+      expect(message.id).toBe("1760343120.000001");
+      if (typeof replyCount === "number" && Number.isInteger(replyCount) && replyCount >= 0)
+        expect(message.replyCount).toBe(replyCount);
+      else expect(message).not.toHaveProperty("replyCount");
+    } finally {
+      await adapter.close();
+    }
+  },
+);

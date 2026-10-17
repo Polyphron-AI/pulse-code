@@ -806,7 +806,7 @@ it("retries source linking against the created project without creating a duplic
   mocks.createProject.mockClear();
   mocks.linkToProject.mockReset();
   mocks.startThread.mockClear();
-  const environmentId = EnvironmentId.make("test-env");
+  const environmentId = EnvironmentId.make("a");
   const project = scopeProjectRef(environmentId, ProjectId.make("created-project"));
   mocks.createProject.mockImplementation(async (input) => {
     await input.onCreated?.(project);

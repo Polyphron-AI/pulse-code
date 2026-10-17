@@ -12,7 +12,13 @@ import {
 import { getByRole, getByText, queryByRole } from "@testing-library/dom";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { parseWorkspaceSearch, Route } from "./_chat.workspace";
-import { ProjectId, EnvironmentId } from "@t3tools/contracts";
+import {
+  chatResourceId,
+  ProjectId,
+  EnvironmentId,
+  type ChatRequest,
+  type ChatResult,
+} from "@t3tools/contracts";
 import {
   useWorkspaceResourceState,
   useWorkspaceResources,
@@ -29,9 +35,14 @@ function ResourceProvider({ children }: { children?: ReactNode }) {
 }
 
 // Destination dispatch is isolated here; Calendar integration owns its real bindings.
-vi.mock("../components/workspace/CommunicationsWorkspace", () => ({
-  CommunicationsWorkspace: () => null,
-}));
+vi.mock("../components/workspace/CommunicationsWorkspace", async (original) => {
+  const actual = await original<typeof import("../components/workspace/CommunicationsWorkspace")>();
+  return {
+    ...actual,
+    CommunicationsWorkspace: (props: Parameters<typeof actual.CommunicationsWorkspace>[0]) =>
+      props.source ? createElement(actual.CommunicationsWorkspace, props) : null,
+  };
+});
 vi.mock("../components/workspace/mail/MailSpace", () => ({ MailSpace: () => null }));
 vi.mock("../components/workspace/ProjectsSpace", () => ({ ProjectsSpace: () => null }));
 vi.mock("../components/workspace/OfficeWorkspace", () => ({ OfficeWorkspace: () => null }));
@@ -386,6 +397,262 @@ it.each([undefined, "explicit"])(
     } finally {
       await act(() => root.unmount());
       node.remove();
+      vi.unstubAllGlobals();
+    }
+  },
+);
+
+it.each(["slack", "discord"])(
+  "retains exact %s route identity and legacy Office handoff",
+  (communicationProvider) => {
+    const item = chatResourceId({
+      version: 1,
+      transport: "desktop",
+      connectionId: "account",
+      workspaceId: "source",
+      conversationId: "channel",
+      messageId: "1760343120.000001",
+      ...(communicationProvider === "slack" ? { replyRootId: "1760343120.000001" } : {}),
+    });
+    const expected = {
+      space: "communications",
+      communicationProvider,
+      environment: "remote",
+      account: "account",
+      item,
+    };
+    expect(parseWorkspaceSearch(expected)).toEqual(expected);
+    expect(
+      parseWorkspaceSearch({ ...expected, space: "office", officeView: "communications" }),
+    ).toEqual(expected);
+    expect(parseWorkspaceSearch({ ...expected, account: "different" })).not.toHaveProperty("item");
+    expect(parseWorkspaceSearch({ ...expected, item: "v1/%GG" })).not.toHaveProperty("item");
+    expect(parseWorkspaceSearch({ ...expected, space: "mail" })).not.toHaveProperty(
+      "communicationProvider",
+    );
+  },
+);
+
+it.each(["slack", "discord"] as const)(
+  "shows the original desktop %s endpoint as unavailable on a remote web client",
+  async (communicationProvider) => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const item = chatResourceId({
+      version: 1,
+      transport: "desktop",
+      connectionId: "account",
+      workspaceId: "source",
+      conversationId: "channel",
+      messageId: "1760343120.000001",
+    });
+    const search = {
+      space: "communications",
+      communicationProvider,
+      environment: "remote",
+      account: "account",
+      item,
+    };
+    const rootRoute = createRootRoute();
+    const chatRoute = createRoute({ getParentRoute: () => rootRoute, id: "_chat" });
+    const workspaceRoute = createRoute({
+      getParentRoute: () => chatRoute,
+      path: "workspace",
+      validateSearch: parseWorkspaceSearch,
+      component: Route.options.component!,
+    });
+    const router = createRouter({
+      routeTree: rootRoute.addChildren([chatRoute.addChildren([workspaceRoute])]),
+      history: createMemoryHistory({
+        initialEntries: ["/workspace" + defaultStringifySearch(search)],
+      }),
+    });
+    await router.load();
+    const node = document.createElement("div");
+    document.body.append(node);
+    const root = createRoot(node);
+    try {
+      await act(() =>
+        root.render(
+          createElement(ResourceProvider, null, createElement(RouterProvider, { router })),
+        ),
+      );
+      expect(
+        getByText(node, "This conversation is available only on its desktop connection."),
+      ).toBeDefined();
+      expect(router.state.location.search.item).toBe(item);
+      expect(router.state.location.search.account).toBe("account");
+    } finally {
+      await act(() => root.unmount());
+      node.remove();
+      vi.unstubAllGlobals();
+    }
+  },
+);
+
+it.each([
+  "slack",
+  "legacy-slack",
+  "discord",
+  "missing-account",
+  "missing-workspace",
+  "server",
+] as const)(
+  "reopens the exact %s desktop source without substituting a similarly named account",
+  async (kind) => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const provider = kind === "discord" ? "discord" : "slack";
+    const resource = {
+      version: 1 as const,
+      transport: kind === "server" ? ("server" as const) : ("desktop" as const),
+      connectionId: "original",
+      workspaceId: "source",
+      conversationId: "channel",
+      messageId: "1760343120.000002",
+      ...(kind === "slack" ? { replyRootId: "1760343120.000001" } : {}),
+    };
+    const item = chatResourceId(resource);
+    const requests: ChatRequest[] = [];
+    const bridge = Object.getOwnPropertyDescriptor(window, "desktopBridge");
+    Object.defineProperty(window, "desktopBridge", {
+      configurable: true,
+      value: {
+        communicationsInvoke: async (request: ChatRequest): Promise<ChatResult> => {
+          requests.push(request);
+          if (request.operation === "accounts.list")
+            return {
+              ok: true,
+              accounts: [
+                { id: "other", provider, label: "Same name", identity: "Other" },
+                ...(kind === "missing-account"
+                  ? []
+                  : [
+                      {
+                        id: "original",
+                        provider,
+                        label: "Same name",
+                        identity: "Original",
+                      } as const,
+                    ]),
+              ],
+            };
+          if ("accountId" in request) expect(request.accountId).toBe("original");
+          if (request.operation === "conversations.list")
+            return {
+              ok: true,
+              conversations: [
+                {
+                  id: "channel",
+                  accountId: "original",
+                  title: "marketing",
+                  workspace: "Same name",
+                  workspaceId: kind === "missing-workspace" ? "different-source" : "source",
+                  kind: "channel",
+                  canSend: false,
+                },
+              ],
+            };
+          if (request.operation === "messages.list")
+            return {
+              ok: true,
+              messages: [
+                {
+                  id: resource.messageId,
+                  accountId: "original",
+                  conversationId: "channel",
+                  author: "Asha",
+                  date: "2026-10-13T09:12:00Z",
+                  text: "Exact source message",
+                  ...(kind === "slack" ? { threadId: resource.replyRootId } : {}),
+                },
+              ],
+            };
+          throw new Error("Unexpected desktop write");
+        },
+      },
+    });
+    const rootRoute = createRootRoute();
+    const chatRoute = createRoute({ getParentRoute: () => rootRoute, id: "_chat" });
+    const workspaceRoute = createRoute({
+      getParentRoute: () => chatRoute,
+      path: "workspace",
+      validateSearch: parseWorkspaceSearch,
+      component: Route.options.component!,
+    });
+    const router = createRouter({
+      routeTree: rootRoute.addChildren([chatRoute.addChildren([workspaceRoute])]),
+      history: createMemoryHistory({
+        initialEntries: [
+          "/workspace" +
+            defaultStringifySearch({
+              space: "communications",
+              communicationProvider: provider,
+              environment: "remote",
+              account: "original",
+              item,
+            }),
+        ],
+      }),
+    });
+    await router.load();
+    const node = document.createElement("div");
+    document.body.append(node);
+    const root = createRoot(node);
+    try {
+      await act(() =>
+        root.render(
+          createElement(ResourceProvider, null, createElement(RouterProvider, { router })),
+        ),
+      );
+      if (kind === "missing-account") {
+        expect(
+          getByText(
+            node,
+            "Unavailable: the original desktop connection was disconnected or removed.",
+          ),
+        ).toBeDefined();
+        expect(requests).toEqual([{ operation: "accounts.list" }]);
+      } else if (kind === "missing-workspace") {
+        expect(
+          getByText(
+            node,
+            "Unavailable: this exact source conversation is not in the loaded page. Load more conversations or reopen it at the source.",
+          ),
+        ).toBeDefined();
+        expect(requests).toEqual([
+          { operation: "accounts.list" },
+          { operation: "conversations.list", accountId: "original" },
+        ]);
+      } else if (kind === "server") {
+        expect(
+          getByText(node, "This server conversation reader is not available on this client yet."),
+        ).toBeDefined();
+        expect(requests).toEqual([]);
+      } else {
+        expect(getByText(node, "Exact source message")).toBeDefined();
+        expect(requests).toEqual([
+          { operation: "accounts.list" },
+          { operation: "conversations.list", accountId: "original" },
+          {
+            operation: "messages.list",
+            accountId: "original",
+            conversationId: "channel",
+            ...(kind === "slack" ? { threadId: "1760343120.000001" } : {}),
+          },
+        ]);
+        if (kind === "legacy-slack")
+          expect(
+            getByText(
+              node,
+              "This legacy Slack message has no known reply root. Exact reply reading is unsupported until you reopen the source.",
+            ),
+          ).toBeDefined();
+      }
+      expect(router.state.location.search.item).toBe(item);
+    } finally {
+      await act(() => root.unmount());
+      node.remove();
+      if (bridge) Object.defineProperty(window, "desktopBridge", bridge);
+      else Reflect.deleteProperty(window, "desktopBridge");
       vi.unstubAllGlobals();
     }
   },

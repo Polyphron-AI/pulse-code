@@ -1,4 +1,35 @@
 import * as Schema from "effect/Schema";
+import * as Option from "effect/Option";
+
+const Part = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(80));
+export const ChatResource = Schema.Struct({
+  version: Schema.Literal(1),
+  transport: Schema.Literals(["server", "desktop"]),
+  connectionId: Part,
+  workspaceId: Part,
+  conversationId: Part,
+  messageId: Schema.optionalKey(Part),
+  replyRootId: Schema.optionalKey(Part),
+});
+export type ChatResource = typeof ChatResource.Type;
+const encodeResource = Schema.encodeSync(Schema.fromJsonString(ChatResource));
+const decodeResource = Schema.decodeUnknownOption(Schema.fromJsonString(ChatResource));
+
+/** Preserve provider IDs as exact strings in every link and retained reference. */
+export function chatResourceId(input: ChatResource): string {
+  const encoded = `v1/${encodeURIComponent(encodeResource(input))}`;
+  if (encoded.length > 512) throw new Error("This chat reference is too long.");
+  return encoded;
+}
+
+export function parseChatResourceId(raw: string): ChatResource | undefined {
+  if (!raw.startsWith("v1/") || raw.length > 512) return undefined;
+  try {
+    return Option.getOrUndefined(decodeResource(decodeURIComponent(raw.slice(3))));
+  } catch {
+    return undefined;
+  }
+}
 
 const Id = Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(1024));
 const Text = Schema.String.check(Schema.isMaxLength(4096));
@@ -18,6 +49,7 @@ export const ChatConversation = Schema.Struct({
   title: Text,
   kind: Schema.Literals(["channel", "group", "dm", "thread"]),
   workspace: Text,
+  workspaceId: Schema.optionalKey(Id),
   canSend: Schema.Boolean,
 });
 export type ChatConversation = typeof ChatConversation.Type;
@@ -30,6 +62,7 @@ export const ChatMessage = Schema.Struct({
   text: Schema.String.check(Schema.isMaxLength(200000)),
   replyToId: Schema.optionalKey(Id),
   threadId: Schema.optionalKey(Id),
+  replyCount: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
 });
 export type ChatMessage = typeof ChatMessage.Type;
 export const ChatChallenge = Schema.Struct({

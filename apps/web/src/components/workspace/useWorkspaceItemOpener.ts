@@ -8,7 +8,13 @@ import { createMeetingNote } from "./meetings/meetingNotes";
 import { isWorkspaceNote } from "./meetings/meetingNotes";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { useNavigate } from "@tanstack/react-router";
-import { WorkspaceItemRef, parseTelegramResourceId, type EnvironmentId } from "@t3tools/contracts";
+import {
+  WorkspaceItemRef,
+  parseChatResourceId,
+  normalizeWorkspaceItemRef,
+  parseTelegramResourceId,
+  type EnvironmentId,
+} from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import { useCallback } from "react";
 import { useMailCapabilities } from "./mail/useMailCapabilities";
@@ -53,8 +59,15 @@ export function useWorkspaceItemOpener(
   const { workspaceTasksV2 } = useMailCapabilities(environmentId ?? undefined);
   return useCallback(
     (ref: WorkspaceItemRef) => {
-      if (environmentId === null) return;
-      if (ref.type === "url" && openPage) {
+      if (environmentId === null || !isWorkspaceItem(ref)) return;
+      const normalized = normalizeWorkspaceItemRef(ref);
+      if (!normalized) return;
+      ref = normalized;
+      // Teams links hand off to this client's external browser, including from Resources.
+      const teams =
+        ref.type === "url" &&
+        /(^|\.)(teams\.microsoft\.(com|us)|teams\.live\.com)$/.test(new URL(ref.url).hostname);
+      if (ref.type === "url" && openPage && !teams) {
         openPage(ref);
         return;
       }
@@ -101,6 +114,23 @@ export function useWorkspaceItemOpener(
             item: JSON.stringify(ref),
           },
         });
+      if (
+        ref.type === "provider-resource" &&
+        (ref.provider === "slack" || ref.provider === "discord")
+      ) {
+        const resource = parseChatResourceId(ref.resourceId);
+        if (resource)
+          void navigate({
+            to: "/workspace",
+            search: {
+              space: "communications",
+              communicationProvider: ref.provider,
+              environment: environmentId,
+              account: resource.connectionId,
+              item: ref.resourceId,
+            },
+          });
+      }
       if (ref.type === "provider-resource" && ref.provider === "telegram") {
         const resource = parseTelegramResourceId(ref.resourceId);
         if (resource)

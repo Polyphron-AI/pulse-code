@@ -90,13 +90,14 @@ type ItemActionProps = {
 export function WorkspaceItemActions(props: ItemActionProps) {
   const capability = useMailCapabilities(props.environmentId);
   const canOperate = useWorkspaceCanOperate(props.environmentId);
+  const connected = useConnectedEnvironmentIds().includes(props.environmentId);
   const [captured, setCaptured] = useState<ItemActionProps | null>(null);
   if (captured && (captured.environmentId !== props.environmentId || !capability.workspaceLinks))
     setCaptured(null);
   const active = captured?.environmentId === props.environmentId ? captured : props;
-  const current = useRef({ environmentId: props.environmentId, capability, canOperate });
+  const current = useRef({ environmentId: props.environmentId, capability, canOperate, connected });
   useLayoutEffect(() => {
-    current.current = { environmentId: props.environmentId, capability, canOperate };
+    current.current = { environmentId: props.environmentId, capability, canOperate, connected };
   });
   const mounted = useRef(true);
   useEffect(() => {
@@ -112,6 +113,7 @@ export function WorkspaceItemActions(props: ItemActionProps) {
       live.environmentId === props.environmentId &&
       live.capability.workspaceLinks &&
       live.canOperate &&
+      live.connected &&
       (action !== "start-thread" || live.capability.workspaceItemContext) &&
       (action !== "start-automation" || live.capability.workspaceTools)
     );
@@ -121,7 +123,7 @@ export function WorkspaceItemActions(props: ItemActionProps) {
       key={`${active.environmentId}:${workspaceItemKey(active.item.ref)}:${active.initialAction ?? ""}`}
       {...active}
       canAct={canAct}
-      canOperate={canOperate}
+      canOperate={canOperate && connected}
       hold={() => setCaptured((target) => target ?? props)}
       release={() => setCaptured(null)}
     />

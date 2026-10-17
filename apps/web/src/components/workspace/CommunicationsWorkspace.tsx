@@ -1,6 +1,6 @@
 ﻿import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useSearch } from "@tanstack/react-router";
-import { EnvironmentId, type ChatAccount } from "@t3tools/contracts";
+import { EnvironmentId, type ChatAccount, type ChatResource } from "@t3tools/contracts";
 import { PlusIcon, RefreshCwIcon, UnplugIcon } from "lucide-react";
 import { Button } from "../ui/button";
 import { WorkspaceEngagement } from "./WorkspaceEngagement";
@@ -19,15 +19,20 @@ const providerNames = {
   discord: "Discord",
   telegram: "Telegram (personal login retired)",
 };
-export function CommunicationsWorkspace() {
+export type ChatSource = {
+  provider: "slack" | "discord";
+  resource: ChatResource;
+  resourceId: string;
+};
+export function CommunicationsWorkspace({ source }: { source?: ChatSource | undefined }) {
   const search = useSearch({ strict: false });
   return search.communicationProvider === "telegram" ? (
     <TelegramWorkspace key={`${search.environment}:${search.account}:${search.item}`} />
   ) : (
-    <DesktopCommunicationsWorkspace />
+    <DesktopCommunicationsWorkspace source={source} />
   );
 }
-function DesktopCommunicationsWorkspace() {
+function DesktopCommunicationsWorkspace({ source }: { source?: ChatSource | undefined }) {
   const { run, available, busy, error } = useCommunicationsRequest();
   const [chatAccounts, setChatAccounts] = useState<readonly ChatAccount[]>([]);
   const [selectedKey, setSelectedKey] = useState("");
@@ -39,7 +44,7 @@ function DesktopCommunicationsWorkspace() {
   );
   const refresh = useCallback(async () => {
     let chat: readonly ChatAccount[] | undefined;
-    if (available) {
+    if (available && (!source || source.resource.transport === "desktop")) {
       const response = await run({ operation: "accounts.list" });
       if (response) chat = response.accounts ?? [];
     }
@@ -49,13 +54,22 @@ function DesktopCommunicationsWorkspace() {
       setSelectedKey((previous) =>
         chat.some((account) => key(account.provider, account.id) === previous)
           ? previous
-          : chat?.[0]
-            ? key(chat[0].provider, chat[0].id)
-            : "",
+          : source
+            ? source.resource.transport === "desktop" &&
+              chat.some(
+                (account) =>
+                  account.provider === source.provider &&
+                  account.id === source.resource.connectionId,
+              )
+              ? key(source.provider, source.resource.connectionId)
+              : ""
+            : chat?.[0]
+              ? key(chat[0].provider, chat[0].id)
+              : "",
       );
     }
     setLoaded(true);
-  }, [available, run]);
+  }, [available, run, source]);
   useEffect(() => {
     mounted.current = true;
     void refresh();
@@ -165,16 +179,34 @@ function DesktopCommunicationsWorkspace() {
           account={selectedChat}
           environmentId={environmentId}
           controls={controls}
+          initialResourceId={
+            source?.provider === selectedChat.provider &&
+            source.resource.connectionId === selectedChat.id
+              ? source.resourceId
+              : undefined
+          }
+          initialResource={
+            source?.provider === selectedChat.provider &&
+            source.resource.connectionId === selectedChat.id
+              ? source.resource
+              : undefined
+          }
         />
       ) : (
         <main className="flex-1 overflow-y-auto p-6">
           <h1 className="text-xl font-semibold">Your conversations, together</h1>
           <p className="mt-3 max-w-xl text-sm leading-relaxed text-muted-foreground">
-            {!available
-              ? "Open Pulse desktop to connect your accounts. Credentials and sessions stay on that computer; this web connection cannot access them."
-              : !loaded
-                ? "Loading connected accounts…"
-                : "Choose an account above, connect Slack, or add a Discord bot. Connect Telegram bots in Settings."}
+            {source && !available && source.resource.transport === "desktop"
+              ? "This conversation is available only on its desktop connection."
+              : source && source.resource.transport === "server"
+                ? "This server conversation reader is not available on this client yet."
+                : source && loaded
+                  ? "Unavailable: the original desktop connection was disconnected or removed."
+                  : !available
+                    ? "Open Pulse desktop to connect your accounts. Credentials and sessions stay on that computer; this web connection cannot access them."
+                    : !loaded
+                      ? "Loading connected accounts…"
+                      : "Choose an account above, connect Slack, or add a Discord bot. Connect Telegram bots in Settings."}
           </p>
           <p className="mt-3 max-w-xl text-xs leading-relaxed text-muted-foreground">
             Slack uses your token permissions. Telegram bots read received messages from paired
