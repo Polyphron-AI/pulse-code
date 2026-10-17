@@ -2,6 +2,11 @@ import {
   DriveError,
   DriveIdentity,
   DriveFile,
+  WorkspaceDriveRoot,
+  WorkspaceItemRef,
+  workspaceItemKey,
+  type ProjectId,
+  type DriveProjectRootResult,
   type DriveConnectionInput,
   type DriveConnection,
   type DriveBinding,
@@ -52,6 +57,10 @@ const decodeCredential = Schema.decodeUnknownEffect(credentialJson);
 const encodeIdentity = Schema.encodeSync(identityJson);
 const encodeFile = Schema.encodeSync(fileJson);
 const encodeCredential = Schema.encodeSync(credentialJson);
+const encodeRoot = Schema.encodeSync(Schema.fromJsonString(WorkspaceDriveRoot));
+const decodeRoot = Schema.decodeUnknownEffect(Schema.fromJsonString(WorkspaceDriveRoot));
+const decodeRef = Schema.decodeUnknownEffect(Schema.fromJsonString(WorkspaceItemRef));
+const encodeColumns = Schema.encodeSync(Schema.fromJsonString(Schema.Array(Schema.String)));
 const isDriveError = Schema.is(DriveError);
 const fail = (kind: DriveError["kind"], message: string) => new DriveError({ kind, message });
 const unavailable = () =>
@@ -130,10 +139,139 @@ export const make = Effect.gen(function* () {
         return Option.some(yield* decodeCredential(new TextDecoder().decode(secret.value)));
       }),
     );
+  const requireProject = Effect.fnUntraced(function* (projectId: ProjectId) {
+    const rows =
+      yield* sql`SELECT project_id FROM projection_projects WHERE project_id=${projectId} AND deleted_at IS NULL`;
+    if (!rows.length) return yield* fail("not-found", "This project is unavailable.");
+  });
+  const binding = (fileId: string) =>
+    safe(
+      Effect.gen(function* () {
+        const [found] = yield* sql<{
+          connectionId: string;
+          fileJson: string;
+        }>`SELECT connection_id AS "connectionId", file_json AS "fileJson" FROM drive_file_bindings WHERE file_id=${fileId}`;
+        return found
+          ? Option.some({
+              connectionId: found.connectionId,
+              file: yield* decodeFile(found.fileJson),
+            } satisfies DriveBinding)
+          : Option.none<DriveBinding>();
+      }),
+    );
+  const inspectRoot = Effect.fnUntraced(function* (projectId: ProjectId, root: WorkspaceDriveRoot) {
+    const fileBinding = yield* binding(root.fileId);
+    const file = Option.isSome(fileBinding) ? fileBinding.value.file : undefined;
+    const result = (state: DriveProjectRootResult["state"]): DriveProjectRootResult => ({
+      root,
+      state,
+      ...(file ? { file } : {}),
+    });
+    const [link] = yield* sql<{
+      keyA: string;
+      keyB: string;
+      refA: string;
+      refB: string;
+      status: string;
+    }>`SELECT key_a AS "keyA",key_b AS "keyB",ref_a_json AS "refA",ref_b_json AS "refB",status FROM workspace_links WHERE link_id=${root.linkId}`;
+    if (!link || link.status !== "confirmed") return result("unlinked");
+    const expected = [
+      workspaceItemKey({ type: "project", projectId }),
+      workspaceItemKey({ type: "file", provider: "google-drive", fileId: root.fileId }),
+    ].sort();
+    const refs = [
+      workspaceItemKey(yield* decodeRef(link.refA)),
+      workspaceItemKey(yield* decodeRef(link.refB)),
+    ].sort();
+    const keys = [link.keyA, link.keyB].sort();
+    if (expected.some((key, index) => key !== refs[index] || key !== keys[index]))
+      return result("unlinked");
+    if (Option.isNone(fileBinding) || fileBinding.value.connectionId !== root.connectionId)
+      return result("binding-changed");
+    const connection = yield* row(root.connectionId);
+    if (!connection || connection.removed || !connection.connected) return result("disconnected");
+    return result(
+      file?.id === root.fileId && file.mimeType === "application/vnd.google-apps.folder"
+        ? "available"
+        : "unavailable",
+    );
+  });
+  const validateProjectRoot = (projectId: ProjectId, root: WorkspaceDriveRoot) =>
+    safe(
+      Effect.gen(function* () {
+        yield* requireProject(projectId);
+        const result = yield* inspectRoot(projectId, root);
+        if (result.state !== "available")
+          return yield* fail(
+            result.state === "disconnected"
+              ? "auth-required"
+              : result.state === "binding-changed"
+                ? "connection-required"
+                : "invalid-input",
+            "Choose a confirmed project folder with its explicit connected Drive binding.",
+          );
+        return result;
+      }),
+    );
+  const getProjectRoot = (projectId: ProjectId) =>
+    safe(
+      sql.withTransaction(
+        Effect.gen(function* () {
+          yield* requireProject(projectId);
+          const [config] = yield* sql<{
+            rootJson: string | null;
+          }>`SELECT drive_root_json AS "rootJson" FROM workspace_project_config WHERE project_id=${projectId}`;
+          if (config?.rootJson == null)
+            return { root: null, state: "unconfigured" } satisfies DriveProjectRootResult;
+          return yield* inspectRoot(projectId, yield* decodeRoot(config.rootJson));
+        }),
+      ),
+    );
   return {
     get,
     list,
     readCredential,
+    getProjectRoot,
+    validateProjectRoot,
+    saveProjectRoot: (
+      projectId: ProjectId,
+      root: WorkspaceDriveRoot | null,
+      verified?: { generation: number; file: typeof DriveFile.Type },
+    ) =>
+      mutate(
+        sql.withTransaction(
+          Effect.gen(function* () {
+            if (root !== null) {
+              yield* validateProjectRoot(projectId, root).pipe(
+                Effect.catch(() =>
+                  fail(
+                    "conflict",
+                    "The project folder, link or connection changed. Choose the project folder again.",
+                  ),
+                ),
+              );
+              const connection = yield* get(root.connectionId);
+              if (
+                !verified ||
+                !connection.connected ||
+                connection.generation !== verified.generation ||
+                verified.file.id !== root.fileId
+              )
+                return yield* fail(
+                  "conflict",
+                  "The Drive connection changed. Choose the project folder again.",
+                );
+              if (verified.file.mimeType !== "application/vnd.google-apps.folder")
+                return yield* fail("invalid-input", "Choose a Google Drive folder.");
+            } else yield* requireProject(projectId);
+            const rootJson = root === null ? null : encodeRoot(root);
+            yield* sql`INSERT INTO workspace_project_config(project_id,columns_json,browser_thread_id,completed_column,drive_root_json) VALUES(${projectId},${encodeColumns(["To do", "In progress", "Done"])},NULL,'Done',${rootJson}) ON CONFLICT(project_id) DO UPDATE SET drive_root_json=excluded.drive_root_json`;
+            return root === null
+              ? ({ root: null, state: "unconfigured" } satisfies DriveProjectRootResult)
+              : yield* inspectRoot(projectId, root);
+          }),
+        ),
+      ),
     upsert: (input: DriveConnectionInput) =>
       mutate(
         Effect.gen(function* () {
@@ -219,22 +357,7 @@ export const make = Effect.gen(function* () {
           Effect.ensuring(announce),
         ),
       ),
-    binding: (fileId: string) =>
-      safe(
-        Effect.gen(function* () {
-          const rows = yield* sql<{
-            connectionId: string;
-            fileJson: string;
-          }>`SELECT connection_id AS "connectionId", file_json AS "fileJson" FROM drive_file_bindings WHERE file_id = ${fileId}`;
-          const found = rows[0];
-          return found
-            ? Option.some({
-                connectionId: found.connectionId,
-                file: yield* decodeFile(found.fileJson),
-              } satisfies DriveBinding)
-            : Option.none<DriveBinding>();
-        }),
-      ),
+    binding,
     bind: (connectionId: string, generation: number, file: typeof DriveFile.Type) =>
       mutate(
         Effect.gen(function* () {

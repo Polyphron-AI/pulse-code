@@ -1,5 +1,6 @@
 import * as Schema from "effect/Schema";
 import * as Effect from "effect/Effect";
+import * as Deferred from "effect/Deferred";
 import * as Layer from "effect/Layer";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
@@ -15,9 +16,21 @@ export const makeFakeDrive = () => {
     mimeType: "application/vnd.google-apps.document",
     refreshToken: true,
     tokenCalls: 0,
+    metadataGate: undefined as
+      | { entered: Deferred.Deferred<void>; release: Deferred.Deferred<void> }
+      | undefined,
   };
   const client = HttpClient.make((request, url) =>
-    Effect.sync(() => {
+    Effect.gen(function* () {
+      if (
+        /\/files\/[^/]+$/.test(url.pathname) &&
+        !url.searchParams.has("alt") &&
+        state.metadataGate
+      ) {
+        const gate = state.metadataGate;
+        yield* Deferred.succeed(gate.entered, undefined);
+        yield* Deferred.await(gate.release);
+      }
       const body = new URLSearchParams(
         request.body._tag === "Uint8Array" ? new TextDecoder().decode(request.body.body) : "",
       );

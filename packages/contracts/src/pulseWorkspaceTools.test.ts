@@ -20,6 +20,11 @@ const decodePage = Schema.decodeUnknownSync(WorkspaceTaskPage);
 const decodeTask = Schema.decodeUnknownSync(WorkspaceTask);
 const decodeUpsert = Schema.decodeUnknownSync(WorkspaceTaskUpsert);
 const decodeConfig = Schema.decodeUnknownSync(WorkspaceProjectConfig);
+it("decodes legacy and explicitly cleared Drive root configurations", () => {
+  const legacy = { projectId: "project", taskColumns: ["To do", "Done"], browserThreadId: null };
+  expect(decodeConfig(legacy).driveRoot).toBeUndefined();
+  expect(decodeConfig({ ...legacy, driveRoot: null }).driveRoot).toBeNull();
+});
 const decodeConfigSave = Schema.decodeUnknownSync(WorkspaceProjectConfigSave);
 const decodeTransition = Schema.decodeUnknownSync(WorkspaceTaskTransition);
 const decodeToolsError = Schema.decodeUnknownSync(WorkspaceToolsError);

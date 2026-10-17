@@ -54,6 +54,8 @@ export const RPC_REQUIRED_SCOPES = {
   [WS_METHODS.driveSearch]: AuthOrchestrationReadScope,
   [WS_METHODS.driveGetBinding]: AuthOrchestrationReadScope,
   [WS_METHODS.driveReadFile]: AuthOrchestrationReadScope,
+  [WS_METHODS.driveGetProjectRoot]: AuthOrchestrationReadScope,
+  [WS_METHODS.driveSetProjectRoot]: AuthOrchestrationOperateScope,
   [WS_METHODS.driveUpsertConnection]: AuthOrchestrationOperateScope,
   [WS_METHODS.driveDisconnectConnection]: AuthOrchestrationOperateScope,
   [WS_METHODS.driveRemoveConnection]: AuthOrchestrationOperateScope,

@@ -24,6 +24,18 @@ export function createDriveAtoms<R, E>(runtime: Atom.AtomRuntime<EnvironmentRegi
   } as const;
   return {
     changes,
+    projectRoot: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "drive:projectRoot",
+      tag: WS_METHODS.driveGetProjectRoot,
+      refreshTrigger,
+      staleTimeMs: 30000,
+    }),
+    setProjectRoot: createEnvironmentRpcCommand(runtime, {
+      label: "drive:setProjectRoot",
+      tag: WS_METHODS.driveSetProjectRoot,
+      scheduler,
+      concurrency,
+    }),
     connections: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "drive:connections",
       tag: WS_METHODS.driveListConnections,

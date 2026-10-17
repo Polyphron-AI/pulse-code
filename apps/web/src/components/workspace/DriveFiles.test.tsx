@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   query: vi.fn(),
   binding: "first",
 }));
+vi.mock("../../state/environments", () => ({ useConnectedEnvironmentIds: () => ["remote"] }));
 vi.mock("../../state/session", () => ({
   useEnvironmentSessionState: () => ({
     isPending: false,

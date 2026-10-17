@@ -1,3 +1,4 @@
+import M072 from "./Migrations/072_WorkspaceDriveRoot.ts";
 import M071 from "./Migrations/071_WorkspaceCalendarSources.ts";
 import M070 from "./Migrations/070_WorkspaceCalendar.ts";
 import M069 from "./Migrations/069_WorkspaceNotes.ts";
@@ -170,6 +171,7 @@ export const migrationEntries = [
   [69, "WorkspaceNotes", M069],
   [70, "WorkspaceCalendar", M070],
   [71, "WorkspaceCalendarSources", M071],
+  [72, "WorkspaceDriveRoot", M072],
 ] as const;
 
 export const migrationManifest = migrationEntries.map(([id, name]) => [id, name] as const);

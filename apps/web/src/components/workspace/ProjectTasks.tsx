@@ -33,6 +33,7 @@ import { Button } from "../ui/button";
 import { WorkspaceItemActions, WorkspaceItemMenu } from "./WorkspaceItemActions";
 import { useMailCapabilities } from "./mail/useMailCapabilities";
 import { useWorkspaceCanOperate } from "./useWorkspaceCanOperate";
+import { ProjectDriveRootSettings } from "./ProjectDriveRootSettings";
 const isWorkspaceToolsError = Schema.is(WorkspaceToolsError);
 export function ProjectWorkspaceSettings({
   environmentId,
@@ -53,13 +54,18 @@ export function ProjectWorkspaceSettings({
         </p>
       ) : config.data ? (
         <ProjectWorkspaceSettingsForm
-          key={`${environmentId}:${projectId}:${JSON.stringify(config.data)}`}
+          key={`${environmentId}:${projectId}:${JSON.stringify([config.data.taskColumns, config.data.browserThreadId, config.data.completedColumn, config.data.revision])}`}
           environmentId={environmentId}
           config={config.data}
         />
       ) : (
         <p className="text-sm text-muted-foreground">Loading project settings...</p>
       )}
+      <ProjectDriveRootSettings
+        key={`${environmentId}:${projectId}`}
+        environmentId={environmentId}
+        projectId={projectId}
+      />
     </section>
   );
 }
@@ -71,7 +77,8 @@ function ProjectWorkspaceSettingsForm({
   config: WorkspaceProjectConfig;
 }) {
   const { workspaceTasksV2 } = useMailCapabilities(environmentId);
-  const canOperate = useWorkspaceCanOperate(environmentId);
+  const connected = useConnectedEnvironmentIds().includes(environmentId);
+  const canOperate = useWorkspaceCanOperate(environmentId) && connected;
   const threads = useThreadShells().filter(
     (thread) => thread.environmentId === environmentId && thread.projectId === config.projectId,
   );

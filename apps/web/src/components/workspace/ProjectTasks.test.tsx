@@ -5,7 +5,12 @@ import { createRoot } from "react-dom/client";
 import { getByRole, queryByRole } from "@testing-library/dom";
 import { create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, expect, it, vi } from "vite-plus/test";
-import { EnvironmentId, ProjectId, WorkspaceToolsError } from "@t3tools/contracts";
+import {
+  EnvironmentId,
+  ProjectId,
+  WorkspaceToolsError,
+  type WorkspaceDriveRoot,
+} from "@t3tools/contracts";
 import { ProjectTasks, ProjectWorkspaceSettings } from "./ProjectTasks";
 import { WorkspaceEngagement, WorkspaceItemMutationContext } from "./WorkspaceEngagement";
 import {
@@ -21,6 +26,7 @@ const mocks = vi.hoisted(() => ({
   zone: "Africa/Johannesburg",
   settingsReady: true,
   liveSource: true,
+  driveRoot: null as WorkspaceDriveRoot | null,
   profiles: {
     remote: { displayName: "Maya Chen", initials: "MC" },
     other: { displayName: "Alex", initials: "AL" },
@@ -52,7 +58,7 @@ vi.mock("../../hooks/useSettings", () => ({
 }));
 vi.mock("../../state/entities", () => ({ useThreadShells: () => [] }));
 vi.mock("../../state/environments", () => ({
-  useConnectedEnvironmentIds: () => ["remote", "other"],
+  useConnectedEnvironmentIds: () => ["remote", "other", "other-environment"],
 }));
 vi.mock("../../state/workspaceTools", () => ({
   workspaceTools: {
@@ -76,6 +82,7 @@ vi.mock("../../state/query", () => ({
             browserThreadId: "missing-thread",
             completedColumn: "Done",
             revision: 0,
+            driveRoot: mocks.driveRoot,
           }
         : { tasks: [], incomplete: false },
     error: null,
@@ -96,6 +103,30 @@ vi.mock("../ui/textarea", () => ({ Textarea: "textarea" }));
 let renderer: ReactTestRenderer | undefined;
 const environmentId = EnvironmentId.make("remote");
 const projectId = ProjectId.make("project");
+it("keeps unsaved task columns when the config's Drive root changes on another client", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const view = () => (
+    <ProjectWorkspaceSettings environmentId={environmentId} projectId={projectId} />
+  );
+  await act(() => {
+    renderer = create(view());
+  });
+  await act(() =>
+    renderer!.root
+      .findByProps({ "aria-label": "Task columns" })
+      .props.onChange({ target: { value: "Draft\nApproved" } }),
+  );
+  mocks.driveRoot = {
+    linkId: "wl_00000000-0000-0000-0000-000000000001",
+    connectionId: "drv_00000000-0000-0000-0000-000000000001",
+    fileId: "folder",
+  };
+  await act(() => renderer!.update(view()));
+  expect(renderer!.root.findByProps({ "aria-label": "Task columns" }).props.value).toBe(
+    "Draft\nApproved",
+  );
+  mocks.driveRoot = null;
+});
 it("creates Me or Unassigned atomically and keeps legacy creates free of owner fields", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   mocks.tasksV2 = true;

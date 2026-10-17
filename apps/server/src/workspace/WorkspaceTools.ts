@@ -10,6 +10,7 @@ import {
   ThreadId,
   WorkspaceTaskUpsert,
   WorkspaceTaskPatch,
+  WorkspaceDriveRoot,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
@@ -22,6 +23,7 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { makeKeyedSerialExecutor } from "../orchestration-v2/KeyedSerialExecutor.ts";
 const Columns = Schema.fromJsonString(Schema.Array(Schema.String));
 const decodeColumns = Schema.decodeUnknownEffect(Columns);
+const decodeRoot = Schema.decodeUnknownEffect(Schema.fromJsonString(WorkspaceDriveRoot));
 const encodeColumns = Schema.encodeSync(Columns);
 const decodeTaskUpsert = Schema.decodeEffect(WorkspaceTaskUpsert);
 const decodeTaskPatch = Schema.decodeEffect(WorkspaceTaskPatch);
@@ -123,7 +125,8 @@ export const make = Effect.gen(function* () {
           browserThreadId: string | null;
           completedColumn: string | null;
           revision: number;
-        }>`SELECT columns_json AS "columnsJson",browser_thread_id AS "browserThreadId",completed_column AS "completedColumn",revision FROM workspace_project_config WHERE project_id=${projectId}`;
+          driveRootJson: string | null;
+        }>`SELECT columns_json AS "columnsJson",browser_thread_id AS "browserThreadId",completed_column AS "completedColumn",revision,drive_root_json AS "driveRootJson" FROM workspace_project_config WHERE project_id=${projectId}`;
         const row = rows[0];
         const taskColumns = row
           ? yield* decodeColumns(row.columnsJson)
@@ -138,6 +141,7 @@ export const make = Effect.gen(function* () {
               ? completedColumn
               : null,
           revision: row?.revision ?? 0,
+          driveRoot: row?.driveRootJson == null ? null : yield* decodeRoot(row.driveRootJson),
         };
       }),
     );

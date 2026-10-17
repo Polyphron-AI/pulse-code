@@ -1,7 +1,8 @@
 import * as Schema from "effect/Schema";
 import * as Rpc from "effect/unstable/rpc/Rpc";
 import { EnvironmentAuthorizationError } from "./auth.ts";
-import { NonNegativeInt, PositiveInt } from "./baseSchemas.ts";
+import { NonNegativeInt, PositiveInt, ProjectId } from "./baseSchemas.ts";
+import { WorkspaceLinkId } from "./pulseLinks.ts";
 
 export const DriveConnectionId = Schema.String.check(Schema.isPattern(/^drv_[a-f0-9-]{36}$/));
 export const DriveFileId = Schema.String.check(Schema.isPattern(/^[A-Za-z0-9_-]{1,256}$/));
@@ -33,6 +34,25 @@ export const DriveFile = Schema.Struct({
 export type DriveFile = typeof DriveFile.Type;
 export const DriveBinding = Schema.Struct({ connectionId: DriveConnectionId, file: DriveFile });
 export type DriveBinding = typeof DriveBinding.Type;
+export const WorkspaceDriveRoot = Schema.Struct({
+  linkId: WorkspaceLinkId,
+  connectionId: DriveConnectionId,
+  fileId: DriveFileId,
+});
+export type WorkspaceDriveRoot = typeof WorkspaceDriveRoot.Type;
+export const DriveProjectRootResult = Schema.Struct({
+  root: Schema.NullOr(WorkspaceDriveRoot),
+  state: Schema.Literals([
+    "unconfigured",
+    "available",
+    "unlinked",
+    "disconnected",
+    "binding-changed",
+    "unavailable",
+  ]),
+  file: Schema.optionalKey(DriveFile),
+});
+export type DriveProjectRootResult = typeof DriveProjectRootResult.Type;
 export const DriveReadResult = Schema.Struct({
   connectionId: DriveConnectionId,
   file: DriveFile,
@@ -80,8 +100,20 @@ export const PULSE_DRIVE_METHODS = {
   driveGetBinding: "pulse.drive.getBinding",
   driveBindFile: "pulse.drive.bindFile",
   driveReadFile: "pulse.drive.readFile",
+  driveGetProjectRoot: "pulse.drive.getProjectRoot",
+  driveSetProjectRoot: "pulse.drive.setProjectRoot",
 } as const;
 export const PulseDriveRpcs = [
+  Rpc.make(PULSE_DRIVE_METHODS.driveGetProjectRoot, {
+    payload: Schema.Struct({ projectId: ProjectId }),
+    success: DriveProjectRootResult,
+    error,
+  }),
+  Rpc.make(PULSE_DRIVE_METHODS.driveSetProjectRoot, {
+    payload: Schema.Struct({ projectId: ProjectId, root: Schema.NullOr(WorkspaceDriveRoot) }),
+    success: DriveProjectRootResult,
+    error,
+  }),
   Rpc.make(PULSE_DRIVE_METHODS.driveListConnections, {
     payload: Schema.Struct({}),
     success: Schema.Array(DriveConnection),

@@ -5,6 +5,7 @@ import { EnvironmentAuthorizationError } from "./auth.ts";
 import { ProjectId, ThreadId, NonNegativeInt } from "./baseSchemas.ts";
 import { ScheduledTaskUpsertInput, ScheduledTaskMutationResult } from "./scheduledTask.ts";
 import { WorkspaceLinkEndpoint } from "./pulseLinks.ts";
+import { WorkspaceDriveRoot } from "./pulseDrive.ts";
 export const WorkspaceTaskId = Schema.String.check(Schema.isPattern(/^wskt_[a-f0-9-]{36}$/));
 const Title = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(240));
 const Column = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(40));
@@ -23,6 +24,7 @@ export const WorkspaceTaskDueOn = Schema.String.check(Schema.makeFilter(isGregor
 const AreaLabel = Schema.Trim.check(Schema.isMinLength(1), Schema.isMaxLength(120));
 export const WorkspaceTaskOwner = Schema.NullOr(Schema.Literal("environment-owner"));
 export const WorkspaceProjectConfig = Schema.Struct({
+  driveRoot: Schema.optionalKey(Schema.NullOr(WorkspaceDriveRoot)),
   projectId: ProjectId,
   taskColumns: Schema.Array(Column).check(Schema.isMinLength(1), Schema.isMaxLength(12)),
   browserThreadId: Schema.NullOr(ThreadId),

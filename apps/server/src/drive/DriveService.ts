@@ -1,4 +1,9 @@
-import { DriveError, type DriveReadResult } from "@t3tools/contracts";
+import {
+  DriveError,
+  type DriveReadResult,
+  type ProjectId,
+  type WorkspaceDriveRoot,
+} from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -25,6 +30,33 @@ export const make = Effect.gen(function* () {
     );
 
   return {
+    getProjectRoot: ({ projectId }: { projectId: ProjectId }) => store.getProjectRoot(projectId),
+    setProjectRoot: ({
+      projectId,
+      root,
+    }: {
+      projectId: ProjectId;
+      root: WorkspaceDriveRoot | null;
+    }) =>
+      Effect.gen(function* () {
+        if (root === null) return yield* store.saveProjectRoot(projectId, null);
+        yield* store.validateProjectRoot(projectId, root);
+        const access = yield* oauth.accessToken(root.connectionId);
+        const file = yield* observe(
+          root.connectionId,
+          access.generation,
+          api.file(access.token, root.fileId),
+        );
+        if (file.mimeType !== "application/vnd.google-apps.folder")
+          return yield* new DriveError({
+            kind: "invalid-input",
+            message: "Choose a Google Drive folder.",
+          });
+        return yield* store.saveProjectRoot(projectId, root, {
+          generation: access.generation,
+          file,
+        });
+      }),
     listConnections: store.list,
     upsertConnection: store.upsert,
     disconnectConnection: ({ connectionId }: { connectionId: string }) =>

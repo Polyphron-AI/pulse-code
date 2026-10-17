@@ -14,14 +14,16 @@ import { Input } from "../ui/input";
 import { Dialog, DialogPopup, DialogTitle, DialogHeader, DialogPanel } from "../ui/dialog";
 import { useMailCapabilities } from "./mail/useMailCapabilities";
 import { useWorkspaceCanOperate } from "./useWorkspaceCanOperate";
-const errorText = (result: Parameters<typeof squashAtomCommandFailure>[0]) => {
+import { useConnectedEnvironmentIds } from "../../state/environments";
+export const errorText = (result: Parameters<typeof squashAtomCommandFailure>[0]) => {
   const cause = squashAtomCommandFailure(result);
   return cause instanceof Error ? cause.message : "The Drive request could not finish.";
 };
-function useDriveAccess(environmentId: EnvironmentId) {
+export function useDriveAccess(environmentId: EnvironmentId) {
   const canOperate = useWorkspaceCanOperate(environmentId);
+  const connected = useConnectedEnvironmentIds().includes(environmentId);
   const connections = useEnvironmentQuery(drive.connections({ environmentId, input: {} }));
-  return { connections, canOperate };
+  return { connections, canOperate: canOperate && connected };
 }
 export function DriveSearch(props: {
   environmentId: EnvironmentId;

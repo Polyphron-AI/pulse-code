@@ -1,6 +1,7 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import { expect, it } from "@effect/vitest";
-import { ProjectId, ThreadId } from "@t3tools/contracts";
+import { ProjectId, ThreadId, WorkspaceDriveRoot } from "@t3tools/contracts";
+import * as Schema from "effect/Schema";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Stream from "effect/Stream";
@@ -10,6 +11,7 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { SqlitePersistenceMemory } from "../persistence/Layers/Sqlite.ts";
 import * as Tools from "./WorkspaceTools.ts";
 const projectId = ProjectId.make("project-tools");
+const encodeRoot = Schema.encodeSync(Schema.fromJsonString(WorkspaceDriveRoot));
 const seedWorkspaceProject = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   yield* sql`INSERT INTO projection_projects(project_id,title,workspace_root,scripts_json,created_at,updated_at) VALUES(${projectId},'Tools','/synthetic','[]','2026-10-15T12:00:00Z','2026-10-15T12:00:00Z')`;
@@ -18,6 +20,39 @@ const seedWorkspaceProject = Effect.gen(function* () {
 const layer = Tools.layer.pipe(
   Layer.provideMerge(SqlitePersistenceMemory),
   Layer.provideMerge(NodeCrypto.layer),
+);
+it.effect("preserves a designated Drive root through legacy and forged-property config saves", () =>
+  Effect.gen(function* () {
+    yield* seedWorkspaceProject;
+    const tools = yield* Tools.WorkspaceTools;
+    const sql = yield* SqlClient.SqlClient;
+    const root = {
+      linkId: "wl_00000000-0000-0000-0000-000000000001",
+      connectionId: "drv_00000000-0000-0000-0000-000000000001",
+      fileId: "folder",
+    };
+    const original = yield* tools.saveConfig({
+      projectId,
+      taskColumns: ["To do", "Review", "Done"],
+      browserThreadId: null,
+      completedColumn: "Review",
+      expectedRevision: 0,
+    });
+    yield* sql`UPDATE workspace_project_config SET drive_root_json=${encodeRoot(root)} WHERE project_id=${projectId}`;
+    const forged = { ...original, driveRoot: null };
+    const saved = yield* tools.saveConfig(forged);
+    expect(saved.driveRoot).toEqual(root);
+    expect(saved.completedColumn).toBe("Review");
+    const legacy = yield* tools.saveConfig({
+      projectId,
+      taskColumns: original.taskColumns,
+      browserThreadId: null,
+    });
+    expect(legacy.driveRoot).toEqual(root);
+    expect((yield* tools.config(projectId)).driveRoot).toEqual(root);
+    yield* sql`UPDATE workspace_project_config SET drive_root_json='invalid-json' WHERE project_id=${projectId}`;
+    expect((yield* tools.config(projectId).pipe(Effect.flip)).kind).toBe("unavailable");
+  }).pipe(Effect.provide(layer)),
 );
 it.effect("defaults new tasks to owner and preserves explicit unassignment", () =>
   Effect.gen(function* () {
