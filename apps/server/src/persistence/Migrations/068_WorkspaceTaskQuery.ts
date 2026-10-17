@@ -2,9 +2,9 @@ import * as Effect from "effect/Effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 export default Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
-  yield* sql`CREATE INDEX workspace_tasks_due_query ON workspace_tasks(deleted,due_on,project_id,id)`;
-  yield* sql`CREATE INDEX workspace_tasks_project_query ON workspace_tasks(project_id,deleted,column_name,due_on,id)`;
-  yield* sql`CREATE INDEX workspace_tasks_owner_query ON workspace_tasks(owner,deleted,due_on,project_id,id)`;
+  yield* sql`CREATE INDEX workspace_tasks_due_query ON workspace_tasks(deleted,(due_on IS NULL),COALESCE(due_on,''),project_id,id)`;
+  yield* sql`CREATE INDEX workspace_tasks_project_query ON workspace_tasks(project_id,deleted,(due_on IS NULL),COALESCE(due_on,''),id)`;
+  yield* sql`CREATE INDEX workspace_tasks_owner_query ON workspace_tasks(owner,deleted,(due_on IS NULL),COALESCE(due_on,''),project_id,id)`;
   yield* sql`CREATE TABLE workspace_task_query_generation(id INTEGER PRIMARY KEY CHECK(id=1),generation INTEGER NOT NULL)`;
   yield* sql`INSERT INTO workspace_task_query_generation VALUES(1,0)`;
   // Invalidate cursors even for project projection writes and legacy task callers.

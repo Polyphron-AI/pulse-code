@@ -1,11 +1,18 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import { expect, it } from "@effect/vitest";
-import { ProjectId, WorkspaceTaskId, type WorkspaceTaskQuery } from "@t3tools/contracts";
+import {
+  ProjectId,
+  WorkspaceTaskId,
+  type WorkspaceTaskQuery,
+  WorkspaceTaskPage,
+} from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import * as Layer from "effect/Layer";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { SqlitePersistenceMemory } from "../persistence/Layers/Sqlite.ts";
 import * as Tools from "./WorkspaceTools.ts";
+const isTaskPage = Schema.is(WorkspaceTaskPage);
 const layer = Tools.layer.pipe(
   Layer.provideMerge(SqlitePersistenceMemory),
   Layer.provideMerge(NodeCrypto.layer),
@@ -162,6 +169,18 @@ it.effect("rejects malformed, mismatched, restarted and changed-generation curso
     expect(
       (yield* tools.queryTasks({ limit: 1, cursor: second.nextCursor! }).pipe(Effect.flip)).kind,
     ).toBe("invalid-input");
+    expect((yield* tools.queryTasks({ limit: 1 })).tasks[0]?.projectTitle).toBe("Renamed");
+    for (const change of [
+      sql`INSERT INTO projection_projects(project_id,title,workspace_root,scripts_json,created_at,updated_at) VALUES('new','New','/synthetic','[]','2026-10-16T00:00:00Z','2026-10-16T00:00:00Z')`,
+      sql`DELETE FROM projection_projects WHERE project_id='new'`,
+    ]) {
+      const before = yield* tools.queryTasks({ limit: 1 });
+      yield* change;
+      expect(
+        (yield* tools.queryTasks({ limit: 1, cursor: before.nextCursor! }).pipe(Effect.flip)).kind,
+      ).toBe("invalid-input");
+      expect((yield* tools.queryTasks({ limit: 1 })).total).toBe(250);
+    }
   }).pipe(Effect.provide(layer)),
 );
 it.effect("isolates matching task IDs and cursors in separate SQL environments", () =>
@@ -205,5 +224,50 @@ it.effect("pages within undated ties and returns configs for an actually empty p
       laneTotals: [],
     });
     expect(empty.projects.map((project) => project.projectId)).toEqual([b]);
+  }).pipe(Effect.provide(layer)),
+);
+
+it.effect("continues across distinct due dates, split date groups and undated tasks", () =>
+  Effect.gen(function* () {
+    const tools = yield* seed;
+    const sql = yield* SqlClient.SqlClient;
+    yield* sql`DELETE FROM workspace_tasks`;
+    const dates = [
+      null,
+      "2026-10-18",
+      "2026-10-16",
+      "2026-10-17",
+      "2026-10-16",
+      "2026-10-16",
+      null,
+    ];
+    yield* sql`INSERT INTO workspace_tasks ${sql.insert(dates.map((due_on, n) => ({ id: id(n), project_id: n % 2 ? b : a, title: "Dated", column_name: "To do", due_on })))}`;
+    let cursor: string | undefined;
+    const seen: string[] = [];
+    for (let n = 0; n < 4; n++) {
+      const page = yield* tools.queryTasks({ limit: 2, ...(cursor ? { cursor } : {}) });
+      expect(page.total).toBe(7);
+      seen.push(...page.tasks.map((task) => task.id));
+      if (!page.nextCursor) break;
+      cursor = page.nextCursor;
+    }
+    expect(seen).toEqual([id(2), id(4), id(5), id(3), id(1), id(0), id(6)]);
+  }).pipe(Effect.provide(layer)),
+);
+it.effect("bounds lane totals even when removed legacy columns exceed the config limit", () =>
+  Effect.gen(function* () {
+    const tools = yield* seed;
+    const sql = yield* SqlClient.SqlClient;
+    yield* sql`DELETE FROM workspace_tasks`;
+    // Batch inserts stay below SQLite's parameter bound.
+    for (let offset = 0; offset < 1201; offset += 100) {
+      yield* sql`INSERT INTO workspace_tasks ${sql.insert(Array.from({ length: Math.min(100, 1201 - offset) }, (_, n) => ({ id: id(offset + n), project_id: a, title: "Legacy", column_name: `Removed ${String(offset + n).padStart(4, "0")}` })))}`;
+    }
+    const page = yield* tools.queryTasks({ projectId: a, limit: 1 });
+    expect(page.total).toBe(1201);
+    expect(page.laneTotals).toHaveLength(1200);
+    expect(page.laneTotals[0]?.column).toBe("Removed 0000");
+    expect(page.laneTotals.at(-1)?.column).toBe("Removed 1199");
+    expect(isTaskPage(page)).toBe(true);
   }).pipe(Effect.provide(layer)),
 );

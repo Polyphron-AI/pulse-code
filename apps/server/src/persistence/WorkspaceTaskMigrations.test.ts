@@ -2,7 +2,11 @@ import { expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
+import { WorkspaceTaskQuery, ProjectId, WorkspaceTaskId } from "@t3tools/contracts";
+import * as Schema from "effect/Schema";
+import { taskQuerySql } from "../workspace/WorkspaceTools.ts";
 import { runMigrations } from "./Migrations.ts";
+const decodeQuery = Schema.decodeUnknownEffect(WorkspaceTaskQuery);
 it.effect("keeps pre-owner tasks unassigned and constrains new owner values", () =>
   Effect.gen(function* () {
     yield* runMigrations({ toMigrationInclusive: 66 });
@@ -68,20 +72,40 @@ it.effect("indexes project, date and owner queries and invalidates task/config g
     expect(yield* sql`SELECT title,owner,revision FROM workspace_tasks`).toEqual([
       { title: "Kept", owner: "environment-owner", revision: 0 },
     ]);
-    const datePlan = yield* sql<{
-      detail: string;
-    }>`EXPLAIN QUERY PLAN SELECT id FROM workspace_tasks WHERE deleted=0 AND due_on>='2026-10-16' ORDER BY due_on,project_id,id LIMIT 51`;
-    expect(datePlan.some((row) => row.detail.includes("workspace_tasks_due_query"))).toBe(true);
-    const projectPlan = yield* sql<{
-      detail: string;
-    }>`EXPLAIN QUERY PLAN SELECT id FROM workspace_tasks WHERE project_id='p' AND deleted=0 AND column_name='To do' AND due_on>='2026-10-16' LIMIT 51`;
-    expect(projectPlan.some((row) => row.detail.includes("workspace_tasks_project_query"))).toBe(
-      true,
-    );
-    const ownerPlan = yield* sql<{
-      detail: string;
-    }>`EXPLAIN QUERY PLAN SELECT id FROM workspace_tasks WHERE owner IS NULL AND deleted=0 AND due_on>='2026-10-16' LIMIT 51`;
-    expect(ownerPlan.some((row) => row.detail.includes("workspace_tasks_owner_query"))).toBe(true);
+    for (const input of [
+      {},
+      { dueFrom: "2026-10-16" },
+      { projectId: "p" },
+      { owner: "unassigned" },
+      { owner: "environment-owner" },
+    ]) {
+      const query = yield* decodeQuery(input);
+      for (const cursor of [
+        undefined,
+        {
+          dueOn: "2026-10-16",
+          projectId: ProjectId.make("p"),
+          id: WorkspaceTaskId.make("wskt_00000000-0000-0000-0000-000000000001"),
+        },
+        {
+          dueOn: null,
+          projectId: ProjectId.make("p"),
+          id: WorkspaceTaskId.make("wskt_00000000-0000-0000-0000-000000000001"),
+        },
+      ]) {
+        const [statement, parameters] = taskQuerySql(sql, query, cursor).page.compile();
+        const plan = yield* sql.unsafe<{ detail: string }>(
+          `EXPLAIN QUERY PLAN ${statement}`,
+          parameters,
+        );
+        expect(
+          plan.some(
+            (row) => row.detail.includes("workspace_tasks_") && row.detail.includes("query"),
+          ),
+        ).toBe(true);
+        expect(plan.filter((row) => row.detail.includes("TEMP B-TREE"))).toEqual([]);
+      }
+    }
     yield* sql`UPDATE workspace_tasks SET owner=NULL WHERE id='kept'`;
     yield* sql`INSERT INTO workspace_project_config(project_id,columns_json) VALUES('p','["To do","Done"]')`;
     expect(yield* sql`SELECT generation FROM workspace_task_query_generation`).toEqual([

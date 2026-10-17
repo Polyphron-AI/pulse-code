@@ -56,6 +56,37 @@ interface TaskRow {
   areaLabel: string | null;
   owner: "environment-owner" | null;
 }
+export function taskQuerySql(
+  sql: SqlClient.SqlClient,
+  query: WorkspaceTaskQuery,
+  cursor?: Pick<typeof Cursor.Type, "dueOn" | "projectId" | "id">,
+) {
+  const done = sql`COALESCE(t.column_name=CASE WHEN c.project_id IS NULL THEN 'Done' ELSE c.completed_column END,0)`;
+  const filters = [sql`t.deleted=0`];
+  if (query.projectId) filters.push(sql`t.project_id=${query.projectId}`);
+  if (query.state !== "all") filters.push(sql`${done}=${query.state === "done" ? 1 : 0}`);
+  if (query.owner === "unassigned") filters.push(sql`t.owner IS NULL`);
+  if (query.owner === "environment-owner") filters.push(sql`t.owner=${query.owner}`);
+  if (query.dueFrom) filters.push(sql`t.due_on>=${query.dueFrom}`);
+  if (query.dueTo) filters.push(sql`t.due_on<=${query.dueTo}`);
+  if (query.text) {
+    const text = `%${query.text.replace(/[!%_]/g, (value) => `!${value}`)}%`;
+    filters.push(
+      sql`(t.title LIKE ${text} ESCAPE '!' OR t.area_label LIKE ${text} ESCAPE '!' OR p.title LIKE ${text} ESCAPE '!')`,
+    );
+  }
+  const relation = sql`FROM workspace_tasks t JOIN projection_projects p ON p.project_id=t.project_id AND p.deleted_at IS NULL LEFT JOIN workspace_project_config c ON c.project_id=t.project_id`;
+  const pageFilters = [...filters];
+  if (cursor) {
+    pageFilters.push(
+      sql`(t.due_on IS NULL,COALESCE(t.due_on,''),t.project_id,t.id)>(${cursor.dueOn === null ? 1 : 0},${cursor.dueOn ?? ""},${cursor.projectId},${cursor.id})`,
+    );
+  }
+  const page = sql<
+    TaskRow & { projectTitle: string }
+  >`SELECT t.id,t.project_id AS "projectId",p.title AS "projectTitle",t.title,t.column_name AS "column",t.revision,t.due_on AS "dueOn",t.area_label AS "areaLabel",t.owner,${done} AS done ${relation} WHERE ${sql.and(pageFilters)} ORDER BY (t.due_on IS NULL),COALESCE(t.due_on,''),t.project_id,t.id LIMIT ${query.limit + 1}`;
+  return { done, filters, relation, page };
+}
 export const make = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   const crypto = yield* Crypto.Crypto;
@@ -199,37 +230,12 @@ export const make = Effect.gen(function* () {
                   "Tasks or filters changed. Restart from the first page.",
                 );
             }
-            const done = sql`COALESCE(t.column_name=CASE WHEN c.project_id IS NULL THEN 'Done' ELSE c.completed_column END,0)`;
-            const filters = [sql`t.deleted=0`];
-            if (query.projectId) filters.push(sql`t.project_id=${query.projectId}`);
-            if (query.state !== "all") filters.push(sql`${done}=${query.state === "done" ? 1 : 0}`);
-            if (query.owner === "unassigned") filters.push(sql`t.owner IS NULL`);
-            if (query.owner === "environment-owner") filters.push(sql`t.owner=${query.owner}`);
-            if (query.dueFrom) filters.push(sql`t.due_on>=${query.dueFrom}`);
-            if (query.dueTo) filters.push(sql`t.due_on<=${query.dueTo}`);
-            if (query.text) {
-              const text = `%${query.text.replace(/[!%_]/g, (value) => `!${value}`)}%`;
-              filters.push(
-                sql`(t.title LIKE ${text} ESCAPE '!' OR t.area_label LIKE ${text} ESCAPE '!' OR p.title LIKE ${text} ESCAPE '!')`,
-              );
-            }
-            const relation = sql`FROM workspace_tasks t JOIN projection_projects p ON p.project_id=t.project_id AND p.deleted_at IS NULL LEFT JOIN workspace_project_config c ON c.project_id=t.project_id`;
+            const { done, filters, relation, page } = taskQuerySql(sql, query, cursor);
             const [counts] = yield* sql<{
               total: number;
               openTotal: number;
             }>`SELECT COUNT(*) AS total,COALESCE(SUM(1-${done}),0) AS "openTotal" ${relation} WHERE ${sql.and(filters)}`;
-            const pageFilters = [...filters];
-            if (cursor) {
-              const tie = sql`(t.project_id,t.id)>(${cursor.projectId},${cursor.id})`;
-              pageFilters.push(
-                cursor.dueOn === null
-                  ? sql`(t.due_on IS NULL AND ${tie})`
-                  : sql`(t.due_on IS NULL OR t.due_on>${cursor.dueOn} OR (t.due_on=${cursor.dueOn} AND ${tie}))`,
-              );
-            }
-            const rows = yield* sql<
-              TaskRow & { projectTitle: string }
-            >`SELECT t.id,t.project_id AS "projectId",p.title AS "projectTitle",t.title,t.column_name AS "column",t.revision,t.due_on AS "dueOn",t.area_label AS "areaLabel",t.owner,${done} AS done ${relation} WHERE ${sql.and(pageFilters)} ORDER BY (t.due_on IS NULL),t.due_on,t.project_id,t.id LIMIT ${query.limit + 1}`;
+            const rows = yield* page;
             const tasks = rows
               .slice(0, query.limit)
               .map((row) => ({ ...row, done: row.done === 1 }));
@@ -267,7 +273,7 @@ export const make = Effect.gen(function* () {
               }
               laneTotals = yield* sql<
                 WorkspaceTaskPage["laneTotals"][number]
-              >`SELECT t.project_id AS "projectId",t.column_name AS "column",COUNT(*) AS total ${relation} WHERE ${sql.and([...filters, sql.in("t.project_id", projectIds)])} GROUP BY t.project_id,t.column_name ORDER BY t.project_id,t.column_name`;
+              >`SELECT t.project_id AS "projectId",t.column_name AS "column",COUNT(*) AS total ${relation} WHERE ${sql.and([...filters, sql.in("t.project_id", projectIds)])} GROUP BY t.project_id,t.column_name ORDER BY t.project_id,t.column_name LIMIT 1200`;
             }
             const last = tasks.at(-1);
             return {

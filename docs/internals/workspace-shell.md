@@ -77,16 +77,22 @@ date bounds apply before paging and before total, open-total and lane counts. A 
 zero open tasks. Undated tasks sort last and do not match date bounds.
 
 Keyset cursors bind the due-date/project/task tuple to normalized filters, the service instance
-and the database generation. Migration 068 adds date, project/column and owner indexes plus
-transactional generation triggers for task, config and project changes. Restarting the service,
+and the database generation. Migration 068 adds expression indexes matching the null-last
+date/project/task order for global, project and owner queries, plus transactional generation
+triggers for task, config and project changes. Restarting the service,
 changing filters or changing that generation rejects the cursor. Substring search still scans
 matches; the indexes do not make arbitrary substring search indexed.
 
 Each query reads one transaction. Configs and grouped lane totals cover only projects represented
 on that page, plus an explicit project scope even when empty. Global consumers cannot infer all
-empty projects from a page. The shared environment/query atom reuses one change subscription,
-invalidates active pages on change and hides old values during refresh or cursor failure.
-Consumers restart pagination instead of appending a new generation to old pages. Reconnects use
+empty projects from a page. Lane totals are capped at 1200, including removed legacy column names,
+so a missing lane total must not be treated as zero. T6 takes empty lanes from `configs`, the
+page's `projects` config entries, and also renders columns absent from the config.
+The shared environment/query atom reuses one change subscription,
+invalidates active pages on change and hides old cursor pages during refresh or failure.
+The first page keeps its rows while refreshing. A rejected cursor refreshes the matching first
+page even when a project generation change emitted no task event. Consumers drop cursor pages
+and treat invalid-input cursor failures as a restart signal without a toast. Reconnects use
 the session generation without polling. The legacy project list keeps its 200-task limit and
 incomplete flag until its UI replacement ships.
 

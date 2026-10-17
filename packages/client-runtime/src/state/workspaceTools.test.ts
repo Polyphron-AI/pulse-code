@@ -1,6 +1,7 @@
 import { ProjectId as importProjectId } from "@t3tools/contracts";
 import { EnvironmentId, WS_METHODS, WorkspaceToolsError } from "@t3tools/contracts";
 import { expect, it } from "@effect/vitest";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Latch from "effect/Latch";
 import * as Layer from "effect/Layer";
@@ -306,7 +307,12 @@ it.effect("clears obsolete cursor pages on changes and refreshes the first page 
                 kind: "invalid-input",
                 message: "Restart pagination",
               });
-            return emptyPage(generation + 1, input.cursor ? null : "old");
+            return {
+              ...emptyPage(generation + 1, input.cursor ? null : "old"),
+              tasks: [
+                { id: "kept-row", title: "Keep focus", projectTitle: `Project ${generation}` },
+              ],
+            };
           }),
       } as unknown as WsRpcProtocolClient;
       const { atoms, registry, supervisor } = yield* makeTestRuntime(client);
@@ -319,6 +325,9 @@ it.effect("clears obsolete cursor pages on changes and refreshes the first page 
       yield* Effect.addFinalizer(() => Effect.sync(() => stops.forEach((stop) => stop())));
       yield* Effect.promise(() => executeAtomQuery(registry, first));
       yield* Effect.promise(() => executeAtomQuery(registry, page));
+      const firstStates: string[] = [];
+      const stopFirst = registry.subscribe(first, (result) => firstStates.push(result._tag));
+      yield* Effect.addFinalizer(() => Effect.sync(stopFirst));
       const cleared = Latch.makeUnsafe();
       const stopCleared = registry.subscribe(page, (result) => {
         if (result.waiting && Option.isNone(AsyncResult.value(result))) cleared.openUnsafe();
@@ -329,6 +338,10 @@ it.effect("clears obsolete cursor pages on changes and refreshes the first page 
       yield* changed.await;
       yield* cleared.await;
       expect(Option.isNone(AsyncResult.value(registry.get(page)))).toBe(true);
+      expect(firstStates).not.toContain("Initial");
+      expect(AsyncResult.getOrThrow(registry.get(first)).tasks).toEqual([
+        { id: "kept-row", title: "Keep focus", projectTitle: "Project 0" },
+      ]);
       release.openUnsafe();
       const failed = yield* Effect.promise(() => executeAtomQuery(registry, page));
       expect(AsyncResult.isFailure(failed)).toBe(true);
@@ -348,7 +361,35 @@ it.effect("clears obsolete cursor pages on changes and refreshes the first page 
         generation: state.generation + 1,
       }));
       yield* refreshed.await;
-      expect(calls.filter((cursor) => cursor === undefined)).toHaveLength(3);
+      expect(calls.filter((cursor) => cursor === undefined)).toHaveLength(4);
+      expect(firstStates).not.toContain("Initial");
+    }),
+  ),
+);
+it.effect.each([
+  { text: "x".repeat(241) },
+  { dueFrom: "2026-10-18", dueTo: "2026-10-17" },
+  { limit: 0 },
+])("returns a recoverable typed failure for invalid filters %j", (input) =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const client = {
+        [WS_METHODS.workspaceSubscribeChanges]: () => Stream.never,
+        [WS_METHODS.workspaceQueryTasks]: () => Effect.succeed(emptyPage(1)),
+      } as unknown as WsRpcProtocolClient;
+      const { atoms, registry } = yield* makeTestRuntime(client);
+      const result = registry.get(atoms.queryTasks({ environmentId: TARGET.environmentId, input }));
+      expect(AsyncResult.isFailure(result)).toBe(true);
+      if (AsyncResult.isFailure(result)) {
+        const error = Cause.squash(result.cause);
+        expect(error).toBeInstanceOf(WorkspaceToolsError);
+        expect((error as WorkspaceToolsError).kind).toBe("invalid-input");
+      }
+      const valid = atoms.queryTasks({ environmentId: TARGET.environmentId, input: {} });
+      expect(
+        AsyncResult.getOrThrow(yield* Effect.promise(() => executeAtomQuery(registry, valid)))
+          .total,
+      ).toBe(1);
     }),
   ),
 );
@@ -406,4 +447,36 @@ it.effect.each(["local", "direct", "relay", "tunnel"])(
         expect(AsyncResult.getOrThrow(registry.get(current)).total).toBe(2);
       }),
     ),
+);
+it.effect("restarts the first page after a generation mismatch without a change event", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      let title = "Before";
+      const client = {
+        [WS_METHODS.workspaceSubscribeChanges]: () => Stream.never,
+        [WS_METHODS.workspaceQueryTasks]: (input: { cursor?: string }) =>
+          input.cursor
+            ? Effect.fail(
+                new WorkspaceToolsError({ kind: "invalid-input", message: "Restart pagination" }),
+              )
+            : Effect.succeed({ ...emptyPage(1, title), tasks: [{ projectTitle: title }] }),
+      } as unknown as WsRpcProtocolClient;
+      const { atoms, registry } = yield* makeTestRuntime(client);
+      const first = atoms.queryTasks({ environmentId: TARGET.environmentId, input: {} });
+      const unmount = registry.mount(first);
+      yield* Effect.addFinalizer(() => Effect.sync(unmount));
+      yield* Effect.promise(() => executeAtomQuery(registry, first));
+      title = "After";
+      const page = atoms.queryTasks({
+        environmentId: TARGET.environmentId,
+        input: { cursor: "Before" },
+      });
+      const failure = yield* Effect.promise(() => executeAtomQuery(registry, page));
+      expect(AsyncResult.isFailure(failure)).toBe(true);
+      expect(Option.isNone(AsyncResult.value(failure))).toBe(true);
+      const refreshed = yield* Effect.promise(() => executeAtomQuery(registry, first));
+      expect(AsyncResult.getOrThrow(refreshed).tasks).toEqual([{ projectTitle: "After" }]);
+      expect(AsyncResult.getOrThrow(refreshed).nextCursor).toBe("After");
+    }),
+  ),
 );
