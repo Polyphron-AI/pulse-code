@@ -1601,6 +1601,36 @@ it.each(["list", "board"])(
   },
 );
 
+it("keeps the create origin after abandoned navigation and Cancel then Discard", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const fixture = serviceFixture();
+  const { node, router, dispose } = await mountTasksDom(
+    fixture,
+    "/workspace?space=tasks&environment=remote&project=p&taskLimit=1",
+  );
+  try {
+    const list = getByRole(node, "main", { name: "Tasks list" });
+    list.scrollTop = 87;
+    await createFromMenu(node);
+    await act(() => enterValue(getByRole(node, "textbox", { name: "New task title" }), "Draft"));
+    await act(() =>
+      router.navigate({
+        to: "/workspace",
+        search: { ...router.state.location.search, taskText: "First" },
+      }),
+    );
+    await act(() => getByRole(node, "button", { name: "Open First task" }).click());
+    await act(() => getByRole(node, "button", { name: "Keep editing" }).click());
+    await act(() => getByRole(node, "button", { name: "Cancel" }).click());
+    await act(() => getByRole(node, "button", { name: "Discard changes" }).click());
+    expect(router.state.location.search.taskText).toBeUndefined();
+    expect(list.scrollTop).toBe(87);
+    expect(document.activeElement).toBe(node.querySelector('[aria-label="Task actions"]'));
+  } finally {
+    await dispose();
+  }
+});
+
 it("switches Board and List without losing URL filters, loaded pages or the selected shared editor", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const fixture = serviceFixture();
@@ -1777,6 +1807,46 @@ it.each(["conflict", "not-found"] as const)(
     }
   },
 );
+
+it("refreshes a later-page board card after a conflict without a change signal", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const fixture = serviceFixture();
+  const queries = new Map<string, Atom.Atom<AsyncResult.AsyncResult<WorkspaceTaskPage, unknown>>>();
+  boundary.query.mockImplementation(
+    (request: { environmentId: EnvironmentId; input: typeof WorkspaceTaskQuery.Encoded }) => {
+      const key = JSON.stringify(request);
+      if (!queries.has(key))
+        queries.set(
+          key,
+          Atom.make(() => fixture.read(request.environmentId, request.input)).pipe(Atom.keepAlive),
+        );
+      return queries.get(key)!;
+    },
+  );
+  boundary.transition.mockImplementation(async () => {
+    fixture.tasks[1] = { ...fixture.tasks[1]!, column: "Done", done: true, revision: 2 };
+    return AsyncResult.fail(
+      new WorkspaceToolsError({ kind: "conflict", message: "Move rejected" }),
+    );
+  });
+  const { node, dispose } = await mountTasksDom(
+    fixture,
+    "/workspace?space=tasks&environment=remote&taskLayout=board&taskLimit=1",
+  );
+  try {
+    await act(() => getByRole(node, "button", { name: "Load more tasks" }).click());
+    await act(() =>
+      enterValue(getByRole(node, "combobox", { name: "Move Second task to column" }), "Done"),
+    );
+    const select = getByRole(node, "combobox", {
+      name: "Move Second task to column",
+    }) as HTMLSelectElement;
+    expect(select.value).toBe("Done");
+    expect(node.textContent).not.toContain("Refreshing tasks to load");
+  } finally {
+    await dispose();
+  }
+});
 
 it.each(["list", "board", "missing-card"])(
   "returns detail focus to its opener or lane in %s",

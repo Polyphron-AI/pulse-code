@@ -9,6 +9,7 @@ import {
 } from "react";
 import { useNavigate, useSearch, useRouter } from "@tanstack/react-router";
 import * as Schema from "effect/Schema";
+import { RegistryContext } from "@effect/atom-react";
 import {
   EnvironmentId,
   ProjectId,
@@ -102,9 +103,32 @@ export function TasksList(props: ListProps) {
     }),
     [props.view, filters],
   );
-  const firstAtom = props.workspaceTasksV2
-    ? workspaceTools.queryTasks({ environmentId, input })
-    : null;
+  const query = useWorkspaceTaskPages({
+    environmentId,
+    input,
+    available: props.workspaceTasksV2,
+    connected: props.connected,
+    selectedTaskId: props.selectedTaskId,
+  });
+  return (
+    <>
+      <TasksSpaceView {...props} {...query.view} />
+      {query.cursor}
+    </>
+  );
+}
+
+/** Re-walks the loaded cursor chain for both Tasks presentations after invalidation. */
+export function useWorkspaceTaskPages(props: {
+  environmentId: EnvironmentId;
+  input: typeof WorkspaceTaskQuery.Encoded;
+  available: boolean;
+  connected: boolean;
+  selectedTaskId?: string | undefined;
+}) {
+  const { environmentId, input } = props;
+  const registry = useContext(RegistryContext);
+  const firstAtom = props.available ? workspaceTools.queryTasks({ environmentId, input }) : null;
   const first = useEnvironmentQuery(firstAtom);
   const [paging, setPaging] = useState<{
     query: typeof firstAtom;
@@ -199,7 +223,7 @@ export function TasksList(props: ListProps) {
     },
     [first.data, firstAtom],
   );
-  const status = !props.workspaceTasksV2
+  const status: TasksSpaceViewProps["status"] = !props.available
     ? "unavailable"
     : !props.connected
       ? "disconnected"
@@ -214,6 +238,15 @@ export function TasksList(props: ListProps) {
             : "loading";
   const refresh = first.refresh;
   const retry = useCallback(() => {
+    for (const page of [paging.base, ...paging.pages]) {
+      if (page?.nextCursor)
+        registry.refresh(
+          workspaceTools.queryTasks({
+            environmentId,
+            input: { ...input, cursor: page.nextCursor },
+          }),
+        );
+    }
     setPaging((state) => ({
       ...state,
       error: null,
@@ -223,31 +256,31 @@ export function TasksList(props: ListProps) {
           : null,
     }));
     refresh();
-  }, [refresh]);
-  return (
-    <>
-      <TasksSpaceView
-        {...props}
-        page={page}
-        totalsTruncated={page?.totalsTruncated ?? false}
-        status={status}
-        error={first.error ?? paging.error}
-        loadingMore={current && (paging.cursor !== null || rebuilding)}
-        onRetry={retry}
-        onLoadMore={() => {
-          if (status === "ready" && !paging.error && page?.nextCursor && !paging.cursor)
-            setPaging({
-              ...paging,
-              depth: paging.pages.length + 1,
-              held: null,
-              cursor: page.nextCursor,
-            });
-        }}
-      />
-      {current &&
+  }, [refresh, registry, environmentId, input, paging.base, paging.pages]);
+  return {
+    failure: first.failure,
+    view: {
+      page,
+      totalsTruncated: page?.totalsTruncated ?? false,
+      status,
+      error: first.error ?? paging.error,
+      loadingMore: current && (paging.cursor !== null || rebuilding),
+      onRetry: retry,
+      onLoadMore: () => {
+        if (status === "ready" && !paging.error && page?.nextCursor && !paging.cursor)
+          setPaging({
+            ...paging,
+            depth: paging.pages.length + 1,
+            held: null,
+            cursor: page.nextCursor,
+          });
+      },
+    },
+    cursor:
+      current &&
       paging.cursor &&
       props.connected &&
-      props.workspaceTasksV2 &&
+      props.available &&
       !first.isPending &&
       !first.error ? (
         <TaskCursor
@@ -256,9 +289,8 @@ export function TasksList(props: ListProps) {
           input={{ ...input, cursor: paging.cursor }}
           onResult={receive}
         />
-      ) : null}
-    </>
-  );
+      ) : null,
+  };
 }
 export function TasksSpace() {
   const rawSearch = useSearch({ strict: false });
@@ -410,11 +442,12 @@ function ConnectedTasksSpace({
       ]
         .find((row) => row.dataset.workspaceTaskId === ref.taskId)
         ?.querySelector<HTMLElement>('button[aria-label^="Open "]');
-      captureReturn(ref.taskId, trigger);
       void navigate({ to: "/workspace", search: { ...search, item: JSON.stringify(ref) } }).then(
         () => {
-          if (parseTaskLocation(router.state.location.search.item)?.taskId === ref.taskId)
+          if (parseTaskLocation(router.state.location.search.item)?.taskId === ref.taskId) {
+            captureReturn(ref.taskId, trigger);
             setCreating(false);
+          }
         },
       );
     },
