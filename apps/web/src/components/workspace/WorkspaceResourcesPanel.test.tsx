@@ -61,7 +61,11 @@ vi.mock("./WorkspaceToolsPanel", () => ({
 }));
 vi.mock("./ProjectTasksResource", () => ({ ProjectTasksResource: () => <Body name="Tasks" /> }));
 vi.mock("./mail/useMailCapabilities", () => ({
-  useMailCapabilities: () => ({ workspaceTools: bodies.toolsAvailable, workspaceLinks: true }),
+  useMailCapabilities: () => ({
+    ready: true,
+    workspaceTools: bodies.toolsAvailable,
+    workspaceLinks: true,
+  }),
 }));
 vi.mock("./mail/useMailLinks", () => ({ useMailLinks: () => ({ linkItem: bodies.writes }) }));
 vi.mock("../../state/use-atom-command", () => ({ useAtomCommand: () => bodies.start }));

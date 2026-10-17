@@ -21,12 +21,14 @@ export interface ProjectTasksResourceViewProps extends Omit<
     task: WorkspaceTaskPage["tasks"][number],
   ) => WorkspaceTaskRowProps["ownerProfile"];
   readonly children?: ReactNode;
+  readonly detail?: ReactNode;
 }
 
 /** The resource's rows share task identity and commands with the central list. */
 export function ProjectTasksResourceView(props: ProjectTasksResourceViewProps) {
   const { page, status } = props;
-  if (props.projectId === null) return <p>Choose a project to see its tasks.</p>;
+  if (props.projectId === null)
+    return <p className="text-xs text-muted-foreground">Choose a project to see its tasks.</p>;
   if (props.missingProject)
     return (
       <p role="alert" className="text-xs text-muted-foreground">
@@ -37,13 +39,21 @@ export function ProjectTasksResourceView(props: ProjectTasksResourceViewProps) {
     return <p className="text-xs text-muted-foreground">Tasks need a newer server.</p>;
   return (
     <section aria-label="Project tasks" className="min-w-0">
-      <h2 className="text-sm font-semibold">Project tasks</h2>
+      <h2 tabIndex={-1} className="leading-5 font-semibold" style={{ fontSize: 13 }}>
+        Project tasks
+      </h2>
       {page ? (
         <p className="mt-1 text-3xs text-muted-foreground">{`${props.projectTitle} · ${page.openTotal} open`}</p>
       ) : null}
-      {status === "loading" ? <p role="status">Loading tasks...</p> : null}
+      {status === "loading" ? (
+        <p role="status" className="text-xs text-muted-foreground">
+          Loading tasks...
+        </p>
+      ) : null}
       {status === "refreshing" || props.loadingMore ? (
-        <p role="status">Refreshing tasks...</p>
+        <p role="status" className="text-xs text-muted-foreground">
+          Refreshing tasks...
+        </p>
       ) : null}
       {status === "disconnected" ? (
         <p role="status" className="text-xs text-muted-foreground">
@@ -63,40 +73,41 @@ export function ProjectTasksResourceView(props: ProjectTasksResourceViewProps) {
           </button>
         </div>
       ) : null}
-      {page ? (
-        <ul className="mt-3">
-          {page.tasks.map((task) => (
-            <WorkspaceTaskRow
-              key={task.id}
-              environmentId={props.environmentId}
-              task={task}
-              density="resource"
-              ownerProfile={props.ownerProfile}
-              ownerPresentation={props.ownerPresentation?.(task)}
-              now={props.now}
-              timeZone={props.timeZone}
-              locale={props.locale}
-              settingsReady={props.settingsReady}
-              workspaceTasksV2={props.workspaceTasksV2}
-              canOperate={props.canOperate && status === "ready" && !props.error}
-              completedColumn={
-                page.projects.find((config) => config.projectId === task.projectId)
-                  ?.completedColumn ?? null
-              }
-              pending={props.pendingTaskIds?.has(task.id) ?? false}
-              refreshFailed={status === "error" || status === "disconnected"}
-              selected={props.selectedTaskId === task.id}
-              onOpen={props.onOpen}
-              onTransition={props.onTransition}
-              renderItemMenu={props.renderItemMenu}
-            />
-          ))}
-        </ul>
-      ) : null}
-      {page?.tasks.length === 0 ? (
+      {props.detail ??
+        (page ? (
+          <ul className="mt-2">
+            {page.tasks.map((task) => (
+              <WorkspaceTaskRow
+                key={task.id}
+                environmentId={props.environmentId}
+                task={task}
+                density="resource"
+                ownerProfile={props.ownerProfile}
+                ownerPresentation={props.ownerPresentation?.(task)}
+                now={props.now}
+                timeZone={props.timeZone}
+                locale={props.locale}
+                settingsReady={props.settingsReady}
+                workspaceTasksV2={props.workspaceTasksV2}
+                canOperate={props.canOperate && status === "ready" && !props.error}
+                completedColumn={
+                  page.projects.find((config) => config.projectId === task.projectId)
+                    ?.completedColumn ?? null
+                }
+                pending={props.pendingTaskIds?.has(task.id) ?? false}
+                refreshFailed={status === "error" || status === "disconnected"}
+                selected={props.selectedTaskId === task.id}
+                onOpen={props.onOpen}
+                onTransition={props.onTransition}
+                renderItemMenu={props.renderItemMenu}
+              />
+            ))}
+          </ul>
+        ) : null)}
+      {!props.detail && page?.tasks.length === 0 ? (
         <p className="mt-3 text-xs text-muted-foreground">No tasks yet.</p>
       ) : null}
-      {page?.nextCursor ? (
+      {!props.detail && page?.nextCursor ? (
         <button
           type="button"
           aria-label="Load more tasks"

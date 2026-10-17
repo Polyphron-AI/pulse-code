@@ -101,6 +101,7 @@ vi.mock("../../state/query", () => ({
 }));
 vi.mock("./mail/useMailCapabilities", () => ({
   useMailCapabilities: () => ({
+    ready: true,
     workspaceLinks: boundary.linksAvailable,
     workspaceTools: boundary.toolsAvailable,
   }),
@@ -435,9 +436,7 @@ it("uses the same mounted shell for local, direct, opaque relay/tunnel, disconne
         await act(async () => {
           await vi.dynamicImportSettled();
         });
-        expect(getByRole(node, "tabpanel").textContent).toContain(
-          "Tasks are not available on this server yet.",
-        );
+        expect(getByRole(node, "tabpanel").textContent).toContain("Tasks need a newer server.");
         expect(boundary.linkQuery).not.toHaveBeenCalled();
       }
     } else expect(node.textContent).toContain("Connect an environment to see project resources.");

@@ -1,5 +1,7 @@
 // @vitest-environment happy-dom
 import { act } from "react";
+import { createRoot } from "react-dom/client";
+import { getByRole, queryByRole } from "@testing-library/dom";
 import { create, type ReactTestRenderer, type ReactTestRendererJSON } from "react-test-renderer";
 import { afterEach, expect, vi } from "vite-plus/test";
 import { it } from "@effect/vitest";
@@ -40,19 +42,27 @@ const boundary = vi.hoisted(() => ({
   available: true,
   operate: true,
   connected: true,
+  legacy: false,
+  ready: true,
+  projects: true,
 }));
 vi.mock("../../state/workspaceTools", () => ({
   workspaceTools: new Proxy({}, { get: (_, name) => Reflect.get(boundary.tools as object, name) }),
 }));
 vi.mock("../../state/entities", () => ({
-  useProjects: () => [{ environmentId: "remote", id: "p", title: "SynKEK" }],
+  useProjects: () =>
+    boundary.projects ? [{ environmentId: "remote", id: "p", title: "SynKEK" }] : [],
 }));
 vi.mock("../../state/environments", () => ({
   useConnectedEnvironmentIds: () => (boundary.connected ? ["remote"] : []),
 }));
 vi.mock("../../hooks/useSettings", () => ({ useEnvironmentSettings: () => null }));
 vi.mock("./mail/useMailCapabilities", () => ({
-  useMailCapabilities: () => ({ workspaceTasksV2: boundary.available, ready: true }),
+  useMailCapabilities: () => ({
+    ...(boundary.available ? { workspaceTasksV2: true } : {}),
+    workspaceTools: boundary.legacy,
+    ready: boundary.ready,
+  }),
 }));
 vi.mock("./useWorkspaceCanOperate", () => ({ useWorkspaceCanOperate: () => boundary.operate }));
 vi.mock("./WorkspaceItemActions", () => ({
@@ -73,6 +83,8 @@ function visibleText(
 afterEach(async () => {
   if (renderer) await act(() => renderer.unmount());
   boundary.available = boundary.operate = boundary.connected = true;
+  boundary.ready = boundary.projects = true;
+  boundary.legacy = false;
   vi.unstubAllGlobals();
 });
 
@@ -104,6 +116,9 @@ const fixture = Effect.fn("fixture")(function* () {
   }));
   const counter = yield* SubscriptionRef.make(0);
   const requests: string[] = [];
+  const patchTask = vi.fn(() =>
+    Effect.fail(new WorkspaceToolsError({ kind: "unavailable", message: "Unexpected patch" })),
+  );
   let fail = false;
   const client = {
     [WS_METHODS.workspaceSubscribeChanges]: () =>
@@ -128,6 +143,8 @@ const fixture = Effect.fn("fixture")(function* () {
           : Effect.fail(new WorkspaceToolsError({ kind: "not-found", message: "Task deleted" }));
       }),
     [WS_METHODS.workspaceGetProjectConfig]: () => Effect.succeed(config),
+    [WS_METHODS.workspaceListTasks]: () => Effect.succeed({ tasks: tasks.slice() }),
+    [WS_METHODS.workspacePatchTask]: patchTask,
     [WS_METHODS.workspaceTransitionTask]: ({
       id,
       expectedRevision,
@@ -138,6 +155,7 @@ const fixture = Effect.fn("fixture")(function* () {
       change: { completed: boolean };
     }) =>
       Effect.gen(function* () {
+        requests.push("transitionTask");
         if (fail)
           return yield* new WorkspaceToolsError({ kind: "unavailable", message: "Save rejected" });
         const task = tasks.find((task) => task.id === id)!;
@@ -206,6 +224,7 @@ const fixture = Effect.fn("fixture")(function* () {
     other,
     tools,
     requests,
+    patchTask,
     reject: () => {
       fail = true;
     },
@@ -219,6 +238,182 @@ const fixture = Effect.fn("fixture")(function* () {
     },
   };
 });
+
+it.effect("keeps the legacy resource list on tools-only servers without V2 calls", () =>
+  Effect.gen(function* () {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const f = yield* fixture();
+    boundary.available = false;
+    boundary.legacy = true;
+    const queryTasks = vi.fn(f.tools.queryTasks);
+    boundary.tools = { ...f.tools, queryTasks };
+    const open = vi.fn();
+    try {
+      yield* Effect.promise(async () =>
+        act(async () => {
+          renderer = create(
+            <RegistryContext.Provider value={f.registry}>
+              <ProjectTasksResource
+                environmentId={environmentId}
+                projectId={projectId}
+                selectedItem={null}
+                request={null}
+                onOpen={open}
+              />
+            </RegistryContext.Provider>,
+          );
+          await executeAtomQuery(
+            f.registry,
+            f.tools.tasks({ environmentId, input: { projectId } }),
+          );
+          await executeAtomQuery(
+            f.registry,
+            f.tools.config({ environmentId, input: { projectId } }),
+          );
+        }),
+      );
+      expect(visibleText(renderer.toJSON())).toContain("Approve homepage copy");
+      expect(visibleText(renderer.toJSON())).not.toContain("Tasks need a newer server.");
+      yield* Effect.promise(async () =>
+        act(() =>
+          renderer.root
+            .findAllByType("button")
+            .find((button) =>
+              button
+                .findAllByType("span")
+                .some((span) => span.children.join("") === "Approve homepage copy"),
+            )!
+            .props.onClick(),
+        ),
+      );
+      expect(open).toHaveBeenCalledWith({
+        type: "task",
+        taskId: "wskt_00000000-0000-4000-8000-000000000001",
+      });
+      expect(queryTasks).not.toHaveBeenCalled();
+      expect(f.patchTask).not.toHaveBeenCalled();
+      expect(f.requests.filter((method) => method === "transitionTask")).toHaveLength(0);
+    } finally {
+      yield* Effect.promise(async () => act(() => renderer.unmount()));
+      f.dispose();
+    }
+  }),
+);
+
+it.effect("replaces resource rows with the editor and restores row focus on Back", () =>
+  Effect.gen(function* () {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const f = yield* fixture();
+    const node = document.createElement("div");
+    node.dataset.workspaceResourceBody = "";
+    document.body.append(node);
+    const root = createRoot(node);
+    try {
+      yield* Effect.promise(async () =>
+        act(() =>
+          root.render(
+            <RegistryContext.Provider value={f.registry}>
+              <ProjectTasksResource
+                environmentId={environmentId}
+                projectId={projectId}
+                selectedItem={null}
+                request={null}
+                onOpen={() => {}}
+              />
+            </RegistryContext.Provider>,
+          ),
+        ),
+      );
+      yield* Effect.promise(async () =>
+        act(async () => {
+          await executeAtomQuery(
+            f.registry,
+            f.tools.queryTasks({ environmentId, input: { projectId, state: "all", limit: 50 } }),
+          );
+        }),
+      );
+      const trigger = getByRole(node, "button", { name: "Open Approve homepage copy" });
+      node.scrollTop = 900;
+      trigger.focus();
+      yield* Effect.promise(async () => act(() => trigger.click()));
+      yield* Effect.promise(async () =>
+        act(async () => {
+          await executeAtomQuery(
+            f.registry,
+            f.tools.task({
+              environmentId,
+              input: { id: "wskt_00000000-0000-4000-8000-000000000001" },
+            }),
+          );
+          await executeAtomQuery(
+            f.registry,
+            f.tools.config({ environmentId, input: { projectId } }),
+          );
+        }),
+      );
+      expect(getByRole(node, "textbox", { name: "Task title" })).toBeDefined();
+      expect(queryByRole(node, "button", { name: "Open Review October keyword plan" })).toBeNull();
+      expect(node.scrollTop).toBe(0);
+      yield* Effect.promise(async () =>
+        act(() => getByRole(node, "button", { name: "Back to project tasks" }).click()),
+      );
+      expect(queryByRole(node, "textbox", { name: "Task title" })).toBeNull();
+      expect(document.activeElement).toBe(
+        getByRole(node, "button", { name: "Open Approve homepage copy" }),
+      );
+      expect(node.scrollTop).toBe(900);
+    } finally {
+      yield* Effect.promise(async () => act(() => root.unmount()));
+      node.remove();
+      f.dispose();
+    }
+  }),
+);
+
+it.effect("waits for capability and project names without showing unavailable copy", () =>
+  Effect.gen(function* () {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const f = yield* fixture();
+    boundary.ready = boundary.projects = false;
+    boundary.available = false;
+    try {
+      const resource = () => (
+        <RegistryContext.Provider value={f.registry}>
+          <ProjectTasksResource
+            environmentId={environmentId}
+            projectId={projectId}
+            selectedItem={null}
+            request={null}
+            onOpen={() => {}}
+          />
+        </RegistryContext.Provider>
+      );
+      yield* Effect.promise(async () =>
+        act(() => {
+          renderer = create(resource());
+        }),
+      );
+      expect(visibleText(renderer.toJSON())).toContain("Loading tasks...");
+      expect(visibleText(renderer.toJSON())).not.toContain("Tasks need a newer server.");
+      expect(f.requests).toHaveLength(0);
+      boundary.available = boundary.ready = true;
+      yield* Effect.promise(async () =>
+        act(async () => {
+          renderer.update(resource());
+          await executeAtomQuery(
+            f.registry,
+            f.tools.queryTasks({ environmentId, input: { projectId, state: "all", limit: 50 } }),
+          );
+        }),
+      );
+      expect(visibleText(renderer.toJSON())).toContain("4 open");
+      expect(visibleText(renderer.toJSON())).not.toContain("Unavailable project");
+    } finally {
+      yield* Effect.promise(async () => act(() => renderer.unmount()));
+      f.dispose();
+    }
+  }),
+);
 
 it.effect(
   "completes and reopens five real rows across two subscribed list registries while Calendar stays selected",
@@ -404,9 +599,17 @@ it.effect("keeps a deleted task draft available and guards local task switches",
       );
       yield* Effect.promise(async () =>
         act(() =>
-          renderer.root
-            .findByProps({ "aria-label": "Open Review October keyword plan" })
-            .props.onClick(),
+          renderer.update(
+            <RegistryContext.Provider value={f.registry}>
+              <ProjectTasksResource
+                environmentId={environmentId}
+                projectId={projectId}
+                selectedItem={null}
+                request={{ type: "task", taskId: "wskt_00000000-0000-4000-8000-000000000002" }}
+                onOpen={() => {}}
+              />
+            </RegistryContext.Provider>,
+          ),
         ),
       );
       expect(renderer.root.findByProps({ role: "alertdialog" })).toBeDefined();

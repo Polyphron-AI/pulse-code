@@ -26,6 +26,9 @@ Terms whose meaning matters across T3 Code. Architecture and lifecycle constrain
 | Resource footer         | Project-source health and scoped settings below the resource body's independent scroll area. Unknown health is not connected.                                                 |
 | Item mutation signal    | `WorkspaceItemMutationContext` invalidates the matching held environment/item capture after successful deletion.                                                              |
 | Completed column        | The project column that defines task completion. Other columns are open; an undesignated project has no completed tasks.                                                      |
+| Lane                    | A Board column within one project, using that project's configured task column name and order.                                                                                |
+| Lane total              | The full number of tasks in one project's lane that match the current filters, including tasks not yet loaded.                                                                |
+| Partial totals          | Lane counts that are incomplete because the server capped its totals response. An omitted lane has an unknown total, not zero; loaded card counts remain visible.             |
 | Date-only task due date | A Gregorian calendar date attached to a workspace task, with no time or scheduled job. The environment display timezone determines Today; it does not change the stored date. |
 | Fixture recipe          | An isolated DEV sample defining a space, selection, resource project/tab and required presentation regions for capture.                                                       |
 
