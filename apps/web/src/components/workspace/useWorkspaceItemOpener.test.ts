@@ -3,7 +3,11 @@ import { describe, expect, it, vi } from "vite-plus/test";
 import { createElement } from "react";
 import { act } from "react";
 import { create, type ReactTestRenderer } from "react-test-renderer";
-import { ProjectId as importProjectId, EnvironmentId } from "@t3tools/contracts";
+import {
+  ThreadId as importThreadId,
+  ProjectId as importProjectId,
+  EnvironmentId,
+} from "@t3tools/contracts";
 import {
   parseTaskLocation,
   useWorkspaceItemOpener,
@@ -267,6 +271,39 @@ it("binds create and repair to the original environment and refuses read-only wr
   } finally {
     noteBoundary.operate = true;
     await act(() => renderer.unmount());
+    vi.unstubAllGlobals();
+  }
+});
+
+it("opens colliding thread IDs in their captured environments without new work", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  boundary.navigate.mockClear();
+  boundary.external.mockClear();
+  const captured: Array<(ref: import("@t3tools/contracts").WorkspaceItemRef) => void> = [];
+  function Harness({ environment }: { environment: string }) {
+    const open = useWorkspaceItemOpener(EnvironmentId.make(environment));
+    return createElement("button", { onClick: () => captured.push(open) });
+  }
+  let view!: ReactTestRenderer;
+  try {
+    await act(() => {
+      view = create(createElement(Harness, { environment: "remote" }));
+    });
+    await act(() => view.root.findByType("button").props.onClick());
+    await act(() => view.update(createElement(Harness, { environment: "other" })));
+    await act(() => view.root.findByType("button").props.onClick());
+    await act(() => {
+      for (const open of captured)
+        open({ type: "thread", threadId: importThreadId.make("same-thread") });
+    });
+    expect(boundary.navigate.mock.calls).toEqual(
+      ["remote", "other"].map((environmentId) => [
+        { to: "/$environmentId/$threadId", params: { environmentId, threadId: "same-thread" } },
+      ]),
+    );
+    expect(boundary.external).not.toHaveBeenCalled();
+  } finally {
+    await act(() => view.unmount());
     vi.unstubAllGlobals();
   }
 });

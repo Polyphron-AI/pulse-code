@@ -4,6 +4,9 @@ import {
   type WorkspaceItemRef,
   type WorkspaceLinkList,
 } from "@t3tools/contracts";
+import { Button } from "../ui/button";
+import { Input } from "../ui/input";
+import { workspaceItemKey } from "@t3tools/contracts";
 import { useThreadShells } from "../../state/entities";
 import { useEnvironmentQuery } from "../../state/query";
 import { workspaceLinks } from "../../state/workspaceLinks";
@@ -124,16 +127,50 @@ export function WorkspaceProjectFiles(props: WorkspaceResourceBodyProps) {
     <p>Project files are not available on this server yet.</p>
   );
 }
-export function WorkspaceProjectAgents(props: WorkspaceResourceBodyProps) {
-  const capability = useMailCapabilities(props.environmentId);
-  return capability.workspaceLinks ? (
-    <WorkspaceToolsPanel
-      {...props}
-      scope={props}
-      item={{ ref: { type: "project", projectId: props.projectId } }}
-      tool="agents"
-    />
-  ) : (
-    <p>Project agents are not available on this server yet.</p>
+
+/** Shared W4 candidate picker. Callers own scoped candidates and confirmation. */
+export function WorkspaceLinkPicker({
+  candidates,
+  filter,
+  onFilterChange,
+  busy,
+  onChoose,
+  placeholder,
+  empty,
+}: {
+  candidates: readonly WorkspaceLinkEndpoint[];
+  filter: string;
+  onFilterChange: (value: string) => void;
+  busy: boolean;
+  onChoose: (endpoint: WorkspaceLinkEndpoint) => void;
+  placeholder: string;
+  empty: string;
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      <Input
+        autoFocus
+        aria-label="Find an item to link"
+        placeholder={placeholder}
+        value={filter}
+        onChange={(event) => onFilterChange(event.target.value)}
+      />
+      <ul className="max-h-60 overflow-y-auto">
+        {candidates.map((endpoint) => (
+          <li key={workspaceItemKey(endpoint.ref)}>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="w-full justify-start pointer-coarse:min-h-11"
+              disabled={busy}
+              onClick={() => onChoose(endpoint)}
+            >
+              {endpoint.ref.type}: {endpoint.title}
+            </Button>
+          </li>
+        ))}
+      </ul>
+      {candidates.length === 0 ? <p className="text-xs text-muted-foreground">{empty}</p> : null}
+    </div>
   );
 }

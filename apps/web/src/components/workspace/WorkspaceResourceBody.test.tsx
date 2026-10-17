@@ -6,10 +6,16 @@ import { expect, it, vi } from "vite-plus/test";
 import { EnvironmentId, ProjectId } from "@t3tools/contracts";
 import { WorkspaceResourceBody, type WorkspaceResourceBodyProps } from "./WorkspaceResourceBody";
 import { WorkspaceResourcesPanelView } from "./WorkspaceResourcesPanelView";
-const mounts = vi.hoisted(() => ({ browser: vi.fn() }));
+const mounts = vi.hoisted(() => ({ browser: vi.fn(), agents: vi.fn() }));
 
 vi.mock("./WorkspaceToolsPanel", () => ({
   WorkspaceProjectFiles: () => <p>Project files</p>,
+}));
+vi.mock("./WorkspaceAgents", () => ({
+  WorkspaceAgents: (props: WorkspaceResourceBodyProps) => {
+    mounts.agents(props);
+    return <p>Assigned project agents</p>;
+  },
 }));
 vi.mock("./WorkspaceBrowser", () => ({
   WorkspaceBrowser: ({ request, onOpen }: WorkspaceResourceBodyProps) => {
@@ -91,6 +97,28 @@ it("fills the resource body with a definite height and remounts Browser for a di
     expect(mounts.browser).toHaveBeenCalledTimes(1);
     await act(() => root.render(render(ProjectId.make("other-project"))));
     expect(mounts.browser).toHaveBeenCalledTimes(2);
+  } finally {
+    await act(() => root.unmount());
+    vi.unstubAllGlobals();
+  }
+});
+
+it("dispatches Agents with canonical project scope and keeps Browser and Files available", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  const props = {
+    environmentId: EnvironmentId.make("remote"),
+    projectId: ProjectId.make("p"),
+    projectTitle: "Resource project",
+    selectedItem: { ref: { type: "project" as const, projectId: ProjectId.make("different") } },
+    request: null,
+    onOpen: vi.fn(),
+  };
+  try {
+    await act(() => root.render(<WorkspaceResourceBody {...props} tab="agents" />));
+    expect(node.textContent).toBe("Assigned project agents");
+    expect(mounts.agents).toHaveBeenLastCalledWith(expect.objectContaining(props));
   } finally {
     await act(() => root.unmount());
     vi.unstubAllGlobals();

@@ -1,4 +1,4 @@
-import { WorkspaceToolsPanel } from "../WorkspaceToolsPanel";
+import { WorkspaceToolsPanel, WorkspaceLinkPicker } from "../WorkspaceToolsPanel";
 import { DriveSearch, DriveFileAccess } from "../DriveFiles";
 import {
   workspaceItemKey,
@@ -152,7 +152,7 @@ function BrowserResourceAction(props: LinkedSectionProps) {
     >
       Open Code preview
     </Button>
-  ) : threadRef && thread === null ? (
+  ) : threadRef ? (
     <p className="text-sm text-muted-foreground sm:text-xs">
       Open Browser from Resources and choose a project.
     </p>
@@ -295,28 +295,17 @@ function LinkedList(props: LinkedSectionProps & { projectsOnly?: boolean }) {
       </p>
       {picking ? (
         <div className="flex flex-col gap-2">
-          <Input
-            autoFocus
-            aria-label="Find an item to link"
+          <WorkspaceLinkPicker
+            candidates={candidates}
+            filter={filter}
+            onFilterChange={setFilter}
+            busy={busy}
+            onChoose={(endpoint) => void linkEndpoint(endpoint)}
             placeholder={props.projectsOnly ? "Find a project" : "Find a project or thread"}
-            value={filter}
-            onChange={(event) => setFilter(event.target.value)}
+            empty={
+              props.projectsOnly ? "No matching projects." : "No matching projects or threads."
+            }
           />
-          <ul className="max-h-60 overflow-y-auto">
-            {candidates.map((endpoint) => (
-              <li key={workspaceItemKey(endpoint.ref)}>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="w-full justify-start"
-                  disabled={busy}
-                  onClick={() => void linkEndpoint(endpoint)}
-                >
-                  {endpoint.ref.type}: {endpoint.title}
-                </Button>
-              </li>
-            ))}
-          </ul>
           {!props.projectsOnly ? (
             <DriveSearch
               environmentId={props.environmentId}
@@ -325,11 +314,6 @@ function LinkedList(props: LinkedSectionProps & { projectsOnly?: boolean }) {
                 setPicking(false);
               }}
             />
-          ) : null}
-          {candidates.length === 0 ? (
-            <p className="text-xs text-muted-foreground">
-              {props.projectsOnly ? "No matching projects." : "No matching projects or threads."}
-            </p>
           ) : null}
         </div>
       ) : null}

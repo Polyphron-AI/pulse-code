@@ -28,7 +28,7 @@ const Browser = lazy(() =>
   import("./WorkspaceBrowser").then((module) => ({ default: module.WorkspaceBrowser })),
 );
 const Agents = lazy(() =>
-  import("./WorkspaceToolsPanel").then((module) => ({ default: module.WorkspaceProjectAgents })),
+  import("./WorkspaceAgents").then((module) => ({ default: module.WorkspaceAgents })),
 );
 const Tasks = lazy(() =>
   import("./ProjectTasksResource").then((module) => ({ default: module.ProjectTasksResource })),
