@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { CalendarOccurrenceSummary } from "@t3tools/contracts";
 import { CalendarAgenda } from "../calendar/CalendarAgenda";
+import type { CalendarHandoffClient } from "../calendar/calendarHandoff";
 import type { CreateWorkspaceMockupModule } from "./workspaceMockupFixtures";
 export const createWorkspaceMockupModule: CreateWorkspaceMockupModule = (session) => {
   const state = session.calendarState;
@@ -41,7 +42,7 @@ export const createWorkspaceMockupModule: CreateWorkspaceMockupModule = (session
       attendeesTruncated: false,
       hasDescription: Boolean(event.description),
       ...(event.description ? { descriptionPreview: event.description.slice(0, 160) } : {}),
-      joinUrl: event.joinUrl,
+      ...(state === "no-url" && event.id === "event-handoff" ? {} : { joinUrl: event.joinUrl }),
     }));
   const foldEvents: readonly CalendarOccurrenceSummary[] = [
     {
@@ -98,6 +99,17 @@ export const createWorkspaceMockupModule: CreateWorkspaceMockupModule = (session
     time: { kind: "all-day", startOn: "2026-10-14", endBefore: "2026-10-16" },
   };
   const initial = fold ? "2026-11-01" : gap ? "2026-03-08" : session.clock.today();
+  const handoffClient: CalendarHandoffClient = {
+    preventNavigation: true,
+    copyText: async () => {},
+    ...(state === "desktop-reject"
+      ? {
+          openExternal: async () => {
+            throw new Error("Fixture rejected external opening.");
+          },
+        }
+      : {}),
+  };
   function Center() {
     const [day, setDay] = useState<string>(initial);
     return (
@@ -152,10 +164,8 @@ export const createWorkspaceMockupModule: CreateWorkspaceMockupModule = (session
             url,
           )
         }
-        onSchedule={() => record("schedule", undefined, day)}
-        validateJoin={(raw) =>
-          session.seed.events.some((e) => e.joinUrl === raw) ? raw : undefined
-        }
+        onSchedule={(url) => record("schedule", undefined, url)}
+        handoffClient={handoffClient}
       />
     );
   }

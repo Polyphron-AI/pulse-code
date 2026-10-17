@@ -36,6 +36,7 @@ export const workspaceTasksMockupStates = [
   "board-disconnected",
 ] as const;
 export type WorkspaceTasksMockupState = (typeof workspaceTasksMockupStates)[number];
+export const workspaceCalendarHandoffMockupStates = ["no-url", "desktop-reject"] as const;
 export const workspaceCalendarMockupStates = [
   "week",
   "picker",
@@ -44,6 +45,7 @@ export const workspaceCalendarMockupStates = [
   "week-allday",
   "week-overflow",
   "week-390",
+  ...workspaceCalendarHandoffMockupStates,
 ] as const;
 export type WorkspaceCalendarMockupState = (typeof workspaceCalendarMockupStates)[number];
 export type WorkspaceMockupArea =
@@ -548,7 +550,7 @@ export function createWorkspaceMockupSeed(): WorkspaceMockupSeed {
       source: "Google Calendar",
       attendeeIds: ["maya", "leo", "nina"],
       description: null,
-      joinUrl: "https://meet.example.invalid/standup",
+      joinUrl: "https://meet.google.com/abc-defg-hij?authuser=2&hs=122",
       noteId: "note-launch-review",
     },
     {
@@ -559,7 +561,7 @@ export function createWorkspaceMockupSeed(): WorkspaceMockupSeed {
       source: "Google Meet",
       attendeeIds: ["maya", "leo", "nina"],
       description: "Campaign readiness, homepage feedback and remaining launch tasks.",
-      joinUrl: "https://meet.example.invalid/review",
+      joinUrl: "https://tenant.zoom.us/j/123456789?pwd=AbC%2B123&tk=exact",
       noteId: "note-launch-review",
     },
     {
@@ -570,7 +572,7 @@ export function createWorkspaceMockupSeed(): WorkspaceMockupSeed {
       source: "Google Calendar",
       attendeeIds: ["maya", "leo", "nina"],
       description: null,
-      joinUrl: "https://meet.example.invalid/handoff",
+      joinUrl: "https://teams.microsoft.com/l/meetup-join/19%3Ameeting/thread?context=%7B%7D",
       noteId: "note-launch-review",
     },
   ];
@@ -835,7 +837,8 @@ export function parseWorkspaceMockupRequest(url: URL, dev: boolean): WorkspaceMo
     !(
       ((id === "03" || id === "08") &&
         workspaceTasksMockupStates.some((value) => value === state)) ||
-      (id === "08" && workspaceCalendarMockupStates.some((value) => value === state))
+      (id === "08" && workspaceCalendarMockupStates.some((value) => value === state)) ||
+      (id === "07" && workspaceCalendarHandoffMockupStates.some((value) => value === state))
     )
   )
     throw new Error("Unknown fixture state.");
@@ -886,7 +889,10 @@ export function createWorkspaceMockupSession(
     environmentId: seed.environmentId,
     resourceProjectId: seed.resourceProjectId,
     recipe:
-      calendarState && calendarState !== "picker"
+      calendarState &&
+      calendarState !== "picker" &&
+      calendarState !== "no-url" &&
+      calendarState !== "desktop-reject"
         ? { ...workspaceMockupRecipes[id], view: "week" }
         : workspaceMockupRecipes[id],
     seed,

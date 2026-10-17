@@ -191,6 +191,25 @@ it.each(["week", "picker", "dst-fold", "dst-gap", "week-allday", "week-overflow"
   },
 );
 
+it.each([
+  ["07", "no-url"],
+  ["07", "desktop-reject"],
+  ["08", "no-url"],
+  ["08", "desktop-reject"],
+])("admits %s %s captures through the isolated entry without external work", async (id, state) => {
+  (window as unknown as { happyDOM: { setURL: (url: string) => void } }).happyDOM.setURL(
+    `http://fixture.invalid/workspace?space=${id === "07" ? "meetings" : "calendar"}&fixture=${id}&state=${state}`,
+  );
+  const capture = await boot();
+  capture.configureCapture(host);
+  const result = await capture.ready();
+  expect(result.manifest.route).toContain(`state=${state}`);
+  expect(result.manifest.networkRequests).toBe(0);
+  expect(getByRole(document.body, "button", { name: "Schedule" })).toBeDefined();
+  if (state === "no-url")
+    expect(document.body.textContent).toContain("No meeting link is available.");
+});
+
 it("boots eight isolated memory routes, pins dark and preserves browser storage through resets and teardown", async () => {
   localStorage.setItem("pulse.workspace.fixture-environment.mail.engagement-width.v2", "450");
   localStorage.setItem(

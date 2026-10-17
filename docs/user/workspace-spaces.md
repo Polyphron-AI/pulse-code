@@ -14,6 +14,16 @@ events keep their calendar date. Close event returns to the same date and resour
 Opening an event creates no links or agent access. A cancelled event or disconnected calendar
 keeps its link and explains why the event is unavailable.
 
+Choose Join meeting from Calendar or Meetings to open a supported Google Meet, Zoom or Teams link
+on the device you are using. Joining does not require a connected calendar account. Pulse does not
+attend, record or transcribe the call. If nothing opens, use Open meeting link or copy the address.
+An event without a supported meeting link explains that no link is available.
+
+To schedule, select a date in Calendar or Meetings, choose Schedule, then Google Calendar and
+Open calendar. Google Calendar opens outside Pulse on your device. Only the selected date is sent.
+You finish creating the event there. Cancel closes the chooser without creating anything. This
+handoff works independently of your calendar connection and does not reconnect or import events.
+
 ## Resources and Linked context
 
 Resources shows the project you choose, even before you select an item. Its tabs are Files, Browser, Agents, Tasks, Docs and PRs. A tab explains when its contents are unavailable. Choosing or browsing a project does not create a link or give an agent access to its contents.

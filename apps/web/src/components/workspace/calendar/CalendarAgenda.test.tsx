@@ -378,6 +378,21 @@ it("switches Agenda and Week, keeps the date and resource project, and returns f
     await act(() => router.load());
     expect(router.state.location.search.view).toBe("week");
     expect(router.state.location.search.item).toContain(event.id);
+    rpc.detailTime = event.time;
+    rpc.detail = true;
+    await notify();
+    const join = getByRole(node, "link", { name: "Join meeting" });
+    expect(join.getAttribute("href")).toBe(event.joinUrl);
+    const suppressNavigation = (click: Event) => {
+      expect(click.defaultPrevented).toBe(false);
+      click.preventDefault();
+    };
+    node.addEventListener("click", suppressNavigation, { once: true });
+    await act(() => fireEvent.click(join));
+    expect(node.textContent).toContain(
+      "If nothing opened, use Open meeting link or copy the address.",
+    );
+    expect(rpc.commands).not.toHaveBeenCalled();
     await click(node, "button", "Close event");
     await act(() => router.load());
     expect(getByRole(node, "region", { name: "Week schedule" })).toBeDefined();

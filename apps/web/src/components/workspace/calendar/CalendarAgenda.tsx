@@ -1,6 +1,5 @@
 import type { CalendarDueTask, CalendarOccurrenceSummary } from "@t3tools/contracts";
 import { useMemo, type ReactNode } from "react";
-import { PlusIcon } from "lucide-react";
 import { formatEventTime, formatWeek, displayDay } from "@t3tools/client-runtime/calendar/dates";
 import { Button } from "../../ui/button";
 import { CalendarEventCard, type CalendarEventCardProps } from "./CalendarEventCard";
@@ -8,6 +7,7 @@ import { CalendarDayStrip } from "./CalendarDayStrip";
 import { CalendarWeek } from "./CalendarWeek";
 import { CalendarDatePicker } from "./CalendarDatePicker";
 import { sortCalendarEvents } from "./weekLayout";
+import { CalendarSchedule } from "./CalendarSchedule";
 export interface CalendarAgendaProps {
   readonly day: string;
   readonly today: string;
@@ -29,8 +29,8 @@ export interface CalendarAgendaProps {
   readonly onSelect: CalendarEventCardProps["onSelect"];
   readonly onNotes: CalendarEventCardProps["onNotes"];
   readonly onJoin?: CalendarEventCardProps["onJoin"];
-  readonly validateJoin?: CalendarEventCardProps["validateJoin"];
-  readonly onSchedule?: () => void;
+  readonly handoffClient?: CalendarEventCardProps["handoffClient"];
+  readonly onSchedule?: (url: string) => void;
   readonly onRetry?: () => void;
   readonly onLoadMore?: (kind: "events" | "dueTasks") => void;
   readonly onOpenTask?: (task: CalendarDueTask) => void;
@@ -65,7 +65,7 @@ export function CalendarAgenda(props: CalendarAgendaProps) {
         onNotes={props.onNotes}
         notesOpen={props.notesEventId === event.id}
         {...(props.onJoin ? { onJoin: props.onJoin } : {})}
-        {...(props.validateJoin ? { validateJoin: props.validateJoin } : {})}
+        {...(props.handoffClient ? { handoffClient: props.handoffClient } : {})}
         menu={props.renderMenu?.(event)}
       />
     </div>
@@ -82,7 +82,7 @@ export function CalendarAgenda(props: CalendarAgendaProps) {
       className="min-w-0 p-4"
     >
       <div className="mb-[17px] flex min-h-[41px] items-start justify-between gap-2">
-        <div>
+        <div className="min-w-0">
           <h2 className="text-calendar-heading font-semibold">
             <CalendarDatePicker
               day={day}
@@ -98,10 +98,12 @@ export function CalendarAgenda(props: CalendarAgendaProps) {
           </p>
         </div>
         <div className="pt-2">
-          <Button size="xs" onClick={props.onSchedule}>
-            <PlusIcon />
-            Schedule
-          </Button>
+          <CalendarSchedule
+            key={day}
+            day={day}
+            {...(props.handoffClient ? { client: props.handoffClient } : {})}
+            {...(props.onSchedule ? { onOpen: props.onSchedule } : {})}
+          />
         </div>
       </div>
       {props.view !== "week" ? (

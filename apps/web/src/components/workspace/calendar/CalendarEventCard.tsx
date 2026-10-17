@@ -2,13 +2,15 @@ import type { CalendarOccurrenceSummary } from "@t3tools/contracts";
 import type { ReactNode } from "react";
 import { VideoIcon } from "lucide-react";
 import { validatedConferenceUrl } from "@t3tools/shared/calendarLinks";
+import { CalendarHandoffLink } from "./CalendarHandoffLink";
+import type { CalendarHandoffClient } from "./calendarHandoff";
 export interface CalendarEventCardProps {
   readonly event: CalendarOccurrenceSummary;
   readonly onSelect: (event: CalendarOccurrenceSummary) => void;
   readonly onNotes: (event: CalendarOccurrenceSummary, trigger: HTMLButtonElement) => void;
   readonly notesOpen?: boolean;
   readonly onJoin?: (event: CalendarOccurrenceSummary, url: string) => void;
-  readonly validateJoin?: (url: string) => string | undefined;
+  readonly handoffClient?: CalendarHandoffClient;
   readonly menu?: ReactNode;
 }
 export function CalendarEventCard({
@@ -16,11 +18,11 @@ export function CalendarEventCard({
   onSelect,
   onNotes,
   onJoin,
-  validateJoin = validatedConferenceUrl,
+  handoffClient,
   menu,
   notesOpen = false,
 }: CalendarEventCardProps) {
-  const url = event.joinUrl ? validateJoin(event.joinUrl) : undefined;
+  const url = event.joinUrl ? validatedConferenceUrl(event.joinUrl) : undefined;
   const copies = new Map<string, number>();
   const attendees = event.attendees.slice(0, 3).map((person) => {
     const identity = JSON.stringify([person.name, person.initials]);
@@ -85,17 +87,12 @@ export function CalendarEventCard({
         >
           Notes &amp; agenda
         </button>
-        {url ? (
-          <button
-            type="button"
-            className="relative inline-flex h-[23px] cursor-pointer shrink-0 items-center justify-center whitespace-nowrap rounded-md border border-transparent px-0 text-2xs font-semibold underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring pointer-coarse:after:absolute pointer-coarse:after:size-full pointer-coarse:after:min-h-11 pointer-coarse:after:min-w-11"
-            onClick={() => onJoin?.(event, url)}
-          >
-            Join meeting
-          </button>
-        ) : (
-          <span className="text-3xs text-muted-foreground">No meeting link is available.</span>
-        )}
+        <CalendarHandoffLink
+          key={url ?? "missing"}
+          target={{ kind: "meeting", ...(url ? { raw: url } : {}) }}
+          {...(handoffClient ? { client: handoffClient } : {})}
+          {...(onJoin ? { onOpen: (address) => onJoin(event, address) } : {})}
+        />
       </div>
     </article>
   );

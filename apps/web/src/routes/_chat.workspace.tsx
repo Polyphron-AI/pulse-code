@@ -1,3 +1,4 @@
+import { CalendarHandoffLink } from "../components/workspace/calendar/CalendarHandoffLink";
 import {
   CalendarSpace,
   CalendarNotesProvider,
@@ -252,6 +253,12 @@ function LinkedCalendarEvent({
             {event.description ? (
               <p className="whitespace-pre-wrap text-sm">{event.description}</p>
             ) : null}
+            <div className="flex flex-wrap items-center gap-3">
+              <CalendarHandoffLink
+                key={event.joinUrl ?? "missing"}
+                target={{ kind: "meeting", ...(event.joinUrl ? { raw: event.joinUrl } : {}) }}
+              />
+            </div>
             <WorkspaceItemActions environmentId={environmentId} item={endpoint} shortcuts />
           </>
         ) : null}

@@ -332,7 +332,7 @@ export async function startWorkspaceMockup(): Promise<void> {
             nextId === "03" || nextId === "08"
               ? (workspaceTasksMockupStates.find((value) => value === state) ?? null)
               : null,
-            nextId === "08"
+            nextId === "07" || nextId === "08"
               ? (workspaceCalendarMockupStates.find((value) => value === state) ?? null)
               : null,
           );
