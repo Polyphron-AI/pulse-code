@@ -112,7 +112,11 @@ export function TasksList(props: ListProps) {
   });
   return (
     <>
-      <TasksSpaceView {...props} {...query.view} />
+      <TasksSpaceView
+        {...props}
+        {...query.view}
+        status={props.settingsReady === false ? "loading" : query.view.status}
+      />
       {query.cursor}
     </>
   );
@@ -321,7 +325,7 @@ export function TasksSpace() {
       key={capability.environmentId}
       environmentId={capability.environmentId}
       search={search}
-      available={capability.workspaceTasksV2}
+      available={capability.ready && capability.workspaceTasksV2}
       settingsReady={capability.ready}
     />
   );
@@ -413,24 +417,38 @@ function ConnectedTasksSpace({
   const scrollReturn = useRef<Array<{ element: HTMLElement; top: number }>>([]);
   const captureReturn = useCallback(
     (taskId: string | null, trigger?: HTMLElement | null) => {
-      returnSearch.current = search;
-      originTaskId.current = taskId;
-      origin.current =
+      const element =
         trigger ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
-      const lane = origin.current?.closest<HTMLElement>("[data-workspace-board-column]");
-      originLane.current = lane
-        ? {
-            projectId: lane.dataset.workspaceBoardProjectId!,
-            column: lane.dataset.workspaceBoardColumn!,
-          }
-        : null;
-      scrollReturn.current = [];
-      for (let element = origin.current?.parentElement; element; element = element.parentElement) {
-        scrollReturn.current.push({ element, top: element.scrollTop });
+      const lane = element?.closest<HTMLElement>("[data-workspace-board-column]");
+      const scroll = [];
+      for (let parent = element?.parentElement; parent; parent = parent.parentElement) {
+        const saved = hidden
+          ? scrollReturn.current.find((entry) => entry.element === parent)
+          : null;
+        scroll.push({ element: parent, top: saved?.top ?? parent.scrollTop });
       }
+      return {
+        search,
+        taskId,
+        element,
+        scroll,
+        lane: lane
+          ? {
+              projectId: lane.dataset.workspaceBoardProjectId!,
+              column: lane.dataset.workspaceBoardColumn!,
+            }
+          : null,
+      };
     },
-    [search],
+    [search, hidden],
   );
+  const commitReturn = useCallback((snapshot: ReturnType<typeof captureReturn>) => {
+    returnSearch.current = snapshot.search;
+    originTaskId.current = snapshot.taskId;
+    origin.current = snapshot.element;
+    originLane.current = snapshot.lane;
+    scrollReturn.current = snapshot.scroll;
+  }, []);
   const open = useCallback(
     (ref: WorkspaceItemRef) => {
       if (ref.type !== "task") {
@@ -442,16 +460,17 @@ function ConnectedTasksSpace({
       ]
         .find((row) => row.dataset.workspaceTaskId === ref.taskId)
         ?.querySelector<HTMLElement>('button[aria-label^="Open "]');
+      const snapshot = captureReturn(ref.taskId, trigger);
       void navigate({ to: "/workspace", search: { ...search, item: JSON.stringify(ref) } }).then(
         () => {
           if (parseTaskLocation(router.state.location.search.item)?.taskId === ref.taskId) {
-            captureReturn(ref.taskId, trigger);
+            commitReturn(snapshot);
             setCreating(false);
           }
         },
       );
     },
-    [navigate, search, openOther, captureReturn, router, setCreating],
+    [navigate, search, openOther, captureReturn, commitReturn, router, setCreating],
   );
   const close = () => {
     void navigate({
@@ -584,8 +603,9 @@ function ConnectedTasksSpace({
                 ? (trigger) => {
                     if (creating) return;
                     setCreateProject(search.project ?? "");
+                    const snapshot = captureReturn(null, trigger);
                     if (!taskRef) {
-                      captureReturn(null, trigger);
+                      commitReturn(snapshot);
                       setCreating(true);
                     } else
                       void navigate({
@@ -593,7 +613,7 @@ function ConnectedTasksSpace({
                         search: parseWorkspaceSearch({ ...search, item: undefined }),
                       }).then(() => {
                         if (!router.state.location.search.item) {
-                          captureReturn(null, trigger);
+                          commitReturn(snapshot);
                           setCreating(true);
                         }
                       });
@@ -684,20 +704,22 @@ function ConnectedTasksSpace({
                   role={selected.error || config.error ? "alert" : "status"}
                   className="text-xs text-muted-foreground"
                 >
-                  {!available
-                    ? "Tasks need a newer server."
-                    : creating && !createProject
-                      ? "Choose a project to add a task."
-                      : selected.isPending || config.isPending
-                        ? "Loading task..."
-                        : taskRef &&
-                            (!selected.data ||
-                              (isToolsError(selected.failure) &&
-                                selected.failure.kind === "not-found"))
-                          ? "This task is unavailable. Its links have been kept."
-                          : (config.error ??
-                            selected.error ??
-                            "This task is unavailable. Its links have been kept.")}
+                  {!settingsReady
+                    ? "Loading tasks..."
+                    : !available
+                      ? "Tasks need a newer server."
+                      : creating && !createProject
+                        ? "Choose a project to add a task."
+                        : selected.isPending || config.isPending
+                          ? "Loading task..."
+                          : taskRef &&
+                              (!selected.data ||
+                                (isToolsError(selected.failure) &&
+                                  selected.failure.kind === "not-found"))
+                            ? "This task is unavailable. Its links have been kept."
+                            : (config.error ??
+                              selected.error ??
+                              "This task is unavailable. Its links have been kept.")}
                 </p>
                 {creating ? (
                   <Button type="button" size="sm" variant="ghost" onClick={close}>

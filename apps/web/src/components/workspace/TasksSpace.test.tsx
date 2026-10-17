@@ -521,9 +521,15 @@ it("retries an initial query error and gates old-server and read-only controls",
   );
   const query = Atom.make(() => result);
   boundary.query.mockImplementation(() => query);
-  const view = (available = true, canOperate = false) => (
+  const view = (available = true, canOperate = false, settingsReady = true) => (
     <RegistryContext.Provider value={fixture.registry}>
-      <TasksList {...defaults} connected workspaceTasksV2={available} canOperate={canOperate} />
+      <TasksList
+        {...defaults}
+        connected
+        workspaceTasksV2={available}
+        canOperate={canOperate}
+        settingsReady={settingsReady}
+      />
     </RegistryContext.Provider>
   );
   try {
@@ -561,6 +567,10 @@ it("retries an initial query error and gates old-server and read-only controls",
         .every((input) => input.props.disabled),
     ).toBe(true);
     const calls = boundary.query.mock.calls.length;
+    await act(() => renderer.update(view(false, false, false)));
+    expect(JSON.stringify(renderer.toJSON())).toContain("Loading tasks...");
+    expect(JSON.stringify(renderer.toJSON())).not.toContain("Tasks need a newer server.");
+    expect(boundary.query.mock.calls.length).toBe(calls);
     await act(() => renderer.update(view(false)));
     expect(JSON.stringify(renderer.toJSON())).toContain("Tasks need a newer server.");
     expect(boundary.query.mock.calls.length).toBe(calls);
@@ -1247,10 +1257,19 @@ it("restores phone query, pages, scroll and focus after dirty detail Back", asyn
     await act(() => getByRole(node, "button", { name: "Load more tasks" }).click());
     const origin = getByRole(node, "button", { name: "Open Later launch" });
     const list = getByRole(node, "main", { name: "Tasks list" });
+    let scrollTop = 0;
+    Object.defineProperty(list, "scrollTop", {
+      configurable: true,
+      get: () => (list.closest(".max-md\\:hidden") ? 0 : scrollTop),
+      set: (value: number) => {
+        scrollTop = value;
+      },
+    });
     list.scrollTop = 123;
     origin.focus();
     await act(() => origin.click());
     expect(list.parentElement?.className).toContain("max-md:hidden");
+    expect(list.scrollTop).toBe(0);
     const title = getByRole(node, "textbox", { name: "Task title" }) as HTMLInputElement;
     const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
     await act(() => {
@@ -1625,6 +1644,36 @@ it("keeps the create origin after abandoned navigation and Cancel then Discard",
     await act(() => getByRole(node, "button", { name: "Discard changes" }).click());
     expect(router.state.location.search.taskText).toBeUndefined();
     expect(list.scrollTop).toBe(87);
+    expect(document.activeElement).toBe(node.querySelector('[aria-label="Task actions"]'));
+  } finally {
+    await dispose();
+  }
+});
+
+it("keeps phone scroll when creating from an open task before Cancel", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  boundary.compact = true;
+  const fixture = serviceFixture();
+  const { node, dispose } = await mountTasksDom(
+    fixture,
+    "/workspace?space=tasks&environment=remote&project=p",
+  );
+  try {
+    const list = getByRole(node, "main", { name: "Tasks list" });
+    let scrollTop = 88;
+    Object.defineProperty(list, "scrollTop", {
+      configurable: true,
+      get: () => (list.closest(".max-md\\:hidden") ? 0 : scrollTop),
+      set: (value: number) => {
+        scrollTop = value;
+      },
+    });
+    await act(() => getByRole(node, "button", { name: "Open First task" }).click());
+    expect(list.scrollTop).toBe(0);
+    await createFromMenu(node);
+    expect(getByRole(node, "textbox", { name: "New task title" })).toBeDefined();
+    await act(() => getByRole(node, "button", { name: "Cancel" }).click());
+    expect(list.scrollTop).toBe(88);
     expect(document.activeElement).toBe(node.querySelector('[aria-label="Task actions"]'));
   } finally {
     await dispose();
