@@ -23,7 +23,11 @@ const isGregorianDate = (value: string) => {
 export const WorkspaceTaskDueOn = Schema.String.check(Schema.makeFilter(isGregorianDate));
 const AreaLabel = Schema.Trim.check(Schema.isMinLength(1), Schema.isMaxLength(120));
 export const WorkspaceTaskOwner = Schema.NullOr(Schema.Literal("environment-owner"));
+export const WorkspaceProjectDescriptionMaxLength = 600;
 export const WorkspaceProjectConfig = Schema.Struct({
+  description: Schema.optionalKey(
+    Schema.NullOr(Schema.String.check(Schema.isMaxLength(WorkspaceProjectDescriptionMaxLength))),
+  ),
   driveRoot: Schema.optionalKey(Schema.NullOr(WorkspaceDriveRoot)),
   projectId: ProjectId,
   taskColumns: Schema.Array(Column).check(Schema.isMinLength(1), Schema.isMaxLength(12)),
@@ -33,6 +37,7 @@ export const WorkspaceProjectConfig = Schema.Struct({
 });
 export type WorkspaceProjectConfig = typeof WorkspaceProjectConfig.Type;
 export const WorkspaceProjectConfigSave = Schema.Struct({
+  description: WorkspaceProjectConfig.fields.description,
   projectId: ProjectId,
   taskColumns: WorkspaceProjectConfig.fields.taskColumns,
   browserThreadId: Schema.NullOr(ThreadId),

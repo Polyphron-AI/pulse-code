@@ -1,5 +1,6 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import { expect, it } from "@effect/vitest";
+import { vi } from "vite-plus/test";
 import { ProjectId, ThreadId, WorkspaceDriveRoot } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import * as Effect from "effect/Effect";
@@ -775,5 +776,143 @@ it.effect("reads the current counter without changing the existing changes strea
     yield* tools.upsertTask({ projectId, title: "Second", column: "To do" });
     expect(yield* tools.currentChange).toBe(2);
     expect(yield* Fiber.join(emitted)).toEqual([1, 2]);
+  }).pipe(Effect.provide(layer)),
+);
+
+it.effect("preserves description when an old client omits it", () =>
+  Effect.gen(function* () {
+    yield* seedWorkspaceProject;
+    const tools = yield* Tools.WorkspaceTools;
+    const sql = yield* SqlClient.SqlClient;
+    const root = {
+      linkId: "wl_00000000-0000-0000-0000-000000000001",
+      connectionId: "drv_00000000-0000-0000-0000-000000000001",
+      fileId: "folder",
+    };
+    yield* sql`INSERT INTO workspace_project_config(project_id,columns_json,completed_column,revision,drive_root_json) VALUES(${projectId},'["To do","Review","Done"]','Review',7,${encodeRoot(root)})`;
+    const saved = yield* tools.saveConfig({
+      ...(yield* tools.config(projectId)),
+      description: " Brand and growth ",
+    });
+    expect(saved.description).toBe("Brand and growth");
+    expect(saved.completedColumn).toBe("Review");
+    expect(saved.driveRoot).toEqual(root);
+    const {
+      description: ignored,
+      completedColumn: _completed,
+      driveRoot: _root,
+      ...oldWire
+    } = yield* tools.config(projectId);
+    expect(ignored).toBe("Brand and growth");
+    yield* tools.saveConfig(oldWire);
+    expect(yield* tools.config(projectId)).toEqual(saved);
+    const cleared = yield* tools.saveConfig({ ...oldWire, description: null });
+    expect(cleared).toEqual({ ...saved, description: null, revision: saved.revision + 1 });
+    const restarted = yield* Tools.make;
+    expect(yield* restarted.config(projectId)).toEqual(cleared);
+  }).pipe(Effect.provide(layer)),
+);
+it.effect("defaults descriptions to null and persists them across a service restart", () =>
+  Effect.gen(function* () {
+    yield* seedWorkspaceProject;
+    const tools = yield* Tools.WorkspaceTools;
+    const original = yield* tools.config(projectId);
+    expect(original.description).toBeNull();
+    const saved = yield* tools.saveConfig({ ...original, description: "  Launch \u{1f680}  " });
+    const restarted = yield* Tools.make;
+    expect((yield* restarted.config(projectId)).description).toBe("Launch \u{1f680}");
+    expect(yield* tools.currentChange).toBe(1);
+    expect(yield* tools.saveConfig({ ...saved, description: "  Launch \u{1f680}  " })).toEqual(
+      saved,
+    );
+    expect(yield* tools.currentChange).toBe(1);
+    const cleared = yield* tools.saveConfig({ ...saved, description: " \n\t\u2003 " });
+    expect(cleared.description).toBeNull();
+    expect(yield* tools.currentChange).toBe(2);
+    expect(Option.getOrNull(yield* Stream.runHead(tools.changes))).toBe(2);
+  }).pipe(Effect.provide(layer)),
+);
+it.effect.each(["x".repeat(600), "\u{1f680}".repeat(300), ` ${"x".repeat(598)} `])(
+  "accepts 600 raw UTF-16 units and trims only after validation %#",
+  (description) =>
+    Effect.gen(function* () {
+      yield* seedWorkspaceProject;
+      const tools = yield* Tools.WorkspaceTools;
+      const saved = yield* tools.saveConfig({ ...(yield* tools.config(projectId)), description });
+      expect(saved.description).toBe(description.trim());
+      expect((yield* tools.config(projectId)).description).toBe(description.trim());
+    }).pipe(Effect.provide(layer)),
+);
+it.effect.each(["x".repeat(601), "\u{1f680}".repeat(300) + "x", ` ${"x".repeat(600)} `])(
+  "rejects oversize raw service descriptions without changing storage or announcing %#",
+  (description) =>
+    Effect.gen(function* () {
+      yield* seedWorkspaceProject;
+      const tools = yield* Tools.WorkspaceTools;
+      const saved = yield* tools.saveConfig({
+        ...(yield* tools.config(projectId)),
+        description: "Kept",
+      });
+      const error = yield* tools.saveConfig({ ...saved, description }).pipe(Effect.flip);
+      expect(error.kind).toBe("invalid-input");
+      expect(yield* tools.config(projectId)).toEqual(saved);
+      expect(yield* tools.currentChange).toBe(1);
+    }).pipe(Effect.provide(layer)),
+);
+it.effect("rejects 601 raw description units before opening a storage transaction", () =>
+  Effect.gen(function* () {
+    const tools = yield* Tools.WorkspaceTools;
+    const sql = yield* SqlClient.SqlClient;
+    const transaction = vi.spyOn(sql, "withTransaction");
+    try {
+      const error = yield* tools
+        .saveConfig({
+          projectId,
+          description: "x".repeat(601),
+          taskColumns: ["To do", "Done"],
+          browserThreadId: null,
+        })
+        .pipe(Effect.flip);
+      expect(error).toMatchObject({
+        kind: "invalid-input",
+        message: "Use a project description of at most 600 characters.",
+      });
+      expect(transaction).not.toHaveBeenCalled();
+      expect(yield* tools.currentChange).toBe(0);
+    } finally {
+      transaction.mockRestore();
+    }
+  }).pipe(Effect.provide(layer)),
+);
+it.effect("preserves descriptions through concurrent omitted-field saves", () =>
+  Effect.gen(function* () {
+    yield* seedWorkspaceProject;
+    const tools = yield* Tools.WorkspaceTools;
+    const original = yield* tools.config(projectId);
+    yield* Effect.all(
+      [
+        tools.saveConfig({ ...original, description: "Concurrent description" }),
+        tools.saveConfig({ projectId, taskColumns: ["Backlog", "Done"], browserThreadId: null }),
+      ],
+      { concurrency: "unbounded" },
+    );
+    const current = yield* tools.config(projectId);
+    expect(current.description).toBe("Concurrent description");
+    for (const input of [
+      { ...current, taskColumns: ["Done", "Done"], description: "Invalid columns" },
+      { ...current, browserThreadId: ThreadId.make("foreign"), description: "Invalid browser" },
+    ])
+      expect((yield* tools.saveConfig(input).pipe(Effect.flip)).kind).toBe("invalid-input");
+    expect(yield* tools.config(projectId)).toEqual(current);
+    const sql = yield* SqlClient.SqlClient;
+    yield* sql`UPDATE projection_projects SET deleted_at='2026-10-17T12:00:00Z' WHERE project_id=${projectId}`;
+    expect(
+      (yield* tools.saveConfig({ ...current, description: null }).pipe(Effect.flip)).kind,
+    ).toBe("not-found");
+    expect((yield* tools.config(projectId).pipe(Effect.flip)).kind).toBe("not-found");
+    expect(
+      (yield* sql`SELECT description FROM workspace_project_config WHERE project_id=${projectId}`)[0]
+        ?.description,
+    ).toBe("Concurrent description");
   }).pipe(Effect.provide(layer)),
 );

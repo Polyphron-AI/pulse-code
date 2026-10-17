@@ -5,12 +5,13 @@ import {
   type WorkspaceProjectConfig,
   type WorkspaceProjectConfigSave,
   WorkspaceToolsError,
+  WorkspaceProjectDescriptionMaxLength,
   ThreadId,
 } from "@t3tools/contracts";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import * as Schema from "effect/Schema";
 import { useEnvironmentSettings } from "../../hooks/useSettings";
-import { useContext, useState } from "react";
+import { useContext, useId, useState } from "react";
 import { WorkspaceTaskRow } from "./WorkspaceTaskRow";
 import {
   WorkspaceTaskEditor,
@@ -35,6 +36,7 @@ import { useMailCapabilities } from "./mail/useMailCapabilities";
 import { useWorkspaceCanOperate } from "./useWorkspaceCanOperate";
 import { ProjectDriveRootSettings } from "./ProjectDriveRootSettings";
 const isWorkspaceToolsError = Schema.is(WorkspaceToolsError);
+const descriptionLimitError = `Use a project description of at most ${WorkspaceProjectDescriptionMaxLength} characters.`;
 export function ProjectWorkspaceSettings({
   environmentId,
   projectId,
@@ -54,7 +56,10 @@ export function ProjectWorkspaceSettings({
         </p>
       ) : config.data ? (
         <ProjectWorkspaceSettingsForm
-          key={`${environmentId}:${projectId}:${JSON.stringify([config.data.taskColumns, config.data.browserThreadId, config.data.completedColumn, config.data.revision])}`}
+          key={
+            // The { description } wrapper distinguishes an old server's undefined from null.
+            `${environmentId}:${projectId}:${JSON.stringify([config.data.taskColumns, config.data.browserThreadId, config.data.completedColumn, config.data.revision, { description: config.data.description }])}`
+          }
           environmentId={environmentId}
           config={config.data}
         />
@@ -84,6 +89,9 @@ function ProjectWorkspaceSettingsForm({
   );
   const save = useAtomCommand(workspaceTools.saveConfig, { reportFailure: false });
   const [columns, setColumns] = useState(config.taskColumns.join("\n"));
+  const [description, setDescription] = useState(config.description ?? "");
+  const descriptionHintId = useId();
+  const descriptionServerHintId = useId();
   const [browserThreadId, setBrowserThreadId] = useState(config.browserThreadId ?? "");
   const [completedColumn, setCompletedColumn] = useState(config.completedColumn ?? "");
   const [confirmation, setConfirmation] = useState<WorkspaceProjectConfigSave | null>(null);
@@ -94,6 +102,10 @@ function ProjectWorkspaceSettingsForm({
   const taskColumns = columns.split("\n").map((value) => value.trim());
   const submit = async (input: WorkspaceProjectConfigSave) => {
     if (busy || !canOperate || (input.expectedRevision !== undefined && !workspaceTasksV2)) return;
+    if (description.length > WorkspaceProjectDescriptionMaxLength) {
+      setError(descriptionLimitError);
+      return;
+    }
     setBusy(true);
     setError(null);
     const result = await save({ environmentId, input });
@@ -124,6 +136,9 @@ function ProjectWorkspaceSettingsForm({
         if (awaitingConfirmation) return;
         await submit({
           projectId: config.projectId,
+          ...(config.description !== undefined
+            ? { description: description.trim() ? description : null }
+            : {}),
           taskColumns,
           browserThreadId: browserThreadId ? ThreadId.make(browserThreadId) : null,
           ...(workspaceTasksV2
@@ -132,6 +147,38 @@ function ProjectWorkspaceSettingsForm({
         });
       }}
     >
+      <label className="block space-y-1 text-sm">
+        <span>Project description</span>
+        <Textarea
+          aria-label="Project description"
+          aria-describedby={
+            config.description === undefined
+              ? `${descriptionHintId} ${descriptionServerHintId}`
+              : descriptionHintId
+          }
+          aria-invalid={description.length > WorkspaceProjectDescriptionMaxLength || undefined}
+          value={description}
+          onChange={(event) => {
+            const value = event.target.value;
+            setDescription(value);
+            if (
+              value.length <= WorkspaceProjectDescriptionMaxLength &&
+              error === descriptionLimitError
+            )
+              setError(null);
+          }}
+          maxLength={WorkspaceProjectDescriptionMaxLength}
+          disabled={busy || !canOperate || awaitingConfirmation || config.description === undefined}
+        />
+      </label>
+      <p id={descriptionHintId} className="text-xs text-muted-foreground">
+        Up to {WorkspaceProjectDescriptionMaxLength} characters.
+      </p>
+      {config.description === undefined ? (
+        <p id={descriptionServerHintId} className="text-xs text-muted-foreground">
+          Project descriptions need a newer server.
+        </p>
+      ) : null}
       <label className="block space-y-1 text-sm">
         <span>Task columns, one per line</span>
         <Textarea

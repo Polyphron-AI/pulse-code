@@ -1,5 +1,6 @@
 import {
   WorkspaceToolsError,
+  WorkspaceProjectDescriptionMaxLength,
   WorkspaceTaskQuery,
   WorkspaceTaskDueOn,
   WorkspaceTaskId,
@@ -122,11 +123,12 @@ export const make = Effect.gen(function* () {
         yield* requireProject(projectId);
         const rows = yield* sql<{
           columnsJson: string;
+          description: string | null;
           browserThreadId: string | null;
           completedColumn: string | null;
           revision: number;
           driveRootJson: string | null;
-        }>`SELECT columns_json AS "columnsJson",browser_thread_id AS "browserThreadId",completed_column AS "completedColumn",revision,drive_root_json AS "driveRootJson" FROM workspace_project_config WHERE project_id=${projectId}`;
+        }>`SELECT description,columns_json AS "columnsJson",browser_thread_id AS "browserThreadId",completed_column AS "completedColumn",revision,drive_root_json AS "driveRootJson" FROM workspace_project_config WHERE project_id=${projectId}`;
         const row = rows[0];
         const taskColumns = row
           ? yield* decodeColumns(row.columnsJson)
@@ -138,6 +140,7 @@ export const make = Effect.gen(function* () {
             : yield* decodeRoot(row.driveRootJson).pipe(Effect.orElseSucceed(() => undefined));
         return {
           projectId,
+          description: row?.description ?? null,
           taskColumns,
           browserThreadId: row?.browserThreadId ? ThreadId.make(row.browserThreadId) : null,
           completedColumn:
@@ -316,14 +319,28 @@ export const make = Effect.gen(function* () {
       ),
     currentChange: SubscriptionRef.get(counter),
     changes: SubscriptionRef.changes(counter).pipe(Stream.filter((n) => n > 0)),
-    saveConfig: (input: WorkspaceProjectConfigSave) =>
-      locks.withLock(
+    saveConfig: (input: WorkspaceProjectConfigSave) => {
+      if (
+        input.description != null &&
+        input.description.length > WorkspaceProjectDescriptionMaxLength
+      )
+        return Effect.fail(
+          fail(
+            "invalid-input",
+            `Use a project description of at most ${WorkspaceProjectDescriptionMaxLength} characters.`,
+          ),
+        );
+      return locks.withLock(
         input.projectId,
         safe(
           Effect.gen(function* () {
             const result = yield* sql.withTransaction(
               Effect.gen(function* () {
                 const current = yield* config(input.projectId);
+                const description =
+                  input.description === undefined
+                    ? current.description
+                    : input.description?.trim() || null;
                 if (
                   input.expectedRevision !== undefined &&
                   input.expectedRevision !== current.revision
@@ -423,11 +440,12 @@ export const make = Effect.gen(function* () {
                   });
                 if (
                   !designationChanged &&
+                  description === current.description &&
                   encodeColumns(columns) === encodeColumns(current.taskColumns) &&
                   input.browserThreadId === current.browserThreadId
                 )
                   return { value: current, changed: false };
-                yield* sql`INSERT INTO workspace_project_config(project_id,columns_json,browser_thread_id,completed_column,revision) VALUES(${input.projectId},${encodeColumns(columns)},${input.browserThreadId},${completedColumn},${current.revision + 1}) ON CONFLICT(project_id) DO UPDATE SET columns_json=excluded.columns_json,browser_thread_id=excluded.browser_thread_id,completed_column=excluded.completed_column,revision=excluded.revision`;
+                yield* sql`INSERT INTO workspace_project_config(project_id,columns_json,browser_thread_id,completed_column,revision,description) VALUES(${input.projectId},${encodeColumns(columns)},${input.browserThreadId},${completedColumn},${current.revision + 1},${description}) ON CONFLICT(project_id) DO UPDATE SET columns_json=excluded.columns_json,browser_thread_id=excluded.browser_thread_id,completed_column=excluded.completed_column,revision=excluded.revision,description=excluded.description`;
                 if (count > 0)
                   yield* sql`UPDATE workspace_tasks SET revision=revision+1 WHERE project_id=${input.projectId} AND deleted=0 AND ((column_name IS ${current.completedColumn}) != (column_name IS ${completedColumn}))`;
                 return { value: yield* config(input.projectId), changed: true };
@@ -437,7 +455,8 @@ export const make = Effect.gen(function* () {
             return result.value;
           }),
         ),
-      ),
+      );
+    },
     listTasks: (projectId: ProjectId) =>
       safe(
         Effect.gen(function* () {

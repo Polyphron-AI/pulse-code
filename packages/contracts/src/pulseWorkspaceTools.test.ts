@@ -233,3 +233,51 @@ it("normalizes and bounds summary queries before paging", () => {
   const { owner: _owner, ...withoutOwner } = page.tasks[0]!;
   expect(() => decodePage({ ...page, tasks: [withoutOwner] })).toThrow();
 });
+
+it("decodes old-server descriptions and preserves upstream config fields on the wire", () => {
+  const legacy = {
+    projectId: "project",
+    taskColumns: ["Inbox", "Released"],
+    browserThreadId: null,
+    completedColumn: "Released",
+    revision: 7,
+    driveRoot: {
+      linkId: "wl_00000000-0000-0000-0000-000000000001",
+      connectionId: "drv_00000000-0000-0000-0000-000000000001",
+      fileId: "folder",
+    },
+  };
+  expect(decodeConfig(legacy)).toEqual(legacy);
+  expect(decodeConfigSave(legacy)).not.toHaveProperty("description");
+  for (const description of [null, "", "  Brand and growth  "]) {
+    expect(decodeConfig({ ...legacy, description })).toEqual({ ...legacy, description });
+    expect(decodeConfigSave({ ...legacy, description })).toHaveProperty("description", description);
+  }
+});
+it.each(["x".repeat(600), "\u{1f680}".repeat(300), ` ${"x".repeat(598)} `])(
+  "accepts a raw description of exactly 600 UTF-16 units %#",
+  (description) => {
+    const input = {
+      projectId: "project",
+      taskColumns: ["To do", "Done"],
+      browserThreadId: null,
+      description,
+    };
+    expect(description.length).toBe(600);
+    expect(decodeConfig(input).description).toBe(description);
+    expect(decodeConfigSave(input).description).toBe(description);
+  },
+);
+it.each(["x".repeat(601), "\u{1f680}".repeat(300) + "x", ` ${"x".repeat(600)} `])(
+  "rejects oversized raw descriptions before trimming %#",
+  (description) => {
+    const input = {
+      projectId: "project",
+      taskColumns: ["To do", "Done"],
+      browserThreadId: null,
+      description,
+    };
+    expect(() => decodeConfig(input)).toThrow();
+    expect(() => decodeConfigSave(input)).toThrow();
+  },
+);

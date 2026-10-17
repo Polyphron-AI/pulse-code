@@ -27,6 +27,7 @@ const mocks = vi.hoisted(() => ({
   settingsReady: true,
   liveSource: true,
   driveRoot: null as WorkspaceDriveRoot | null,
+  description: undefined as string | null | undefined,
   profiles: {
     remote: { displayName: "Maya Chen", initials: "MC" },
     other: { displayName: "Alex", initials: "AL" },
@@ -83,6 +84,7 @@ vi.mock("../../state/query", () => ({
             completedColumn: "Done",
             revision: 0,
             driveRoot: mocks.driveRoot,
+            ...(mocks.description !== undefined ? { description: mocks.description } : {}),
           }
         : { tasks: [], incomplete: false },
     error: null,
@@ -251,6 +253,7 @@ afterEach(async () => {
   if (renderer) await act(() => renderer?.unmount());
   renderer = undefined;
   mocks.operate = true;
+  mocks.description = undefined;
   mocks.tasksV2 = false;
   mocks.zone = "Africa/Johannesburg";
   mocks.settingsReady = true;
@@ -1015,3 +1018,129 @@ it.each(["absent", "false", "cached-only"])(
     expect(renderer!.root.findAllByProps({ "aria-label": "Due date" })).toHaveLength(0);
   },
 );
+
+it("reads, saves and clears the owning project's description without changing raw whitespace", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  mocks.description = "Brand and growth";
+  mocks.command.mockResolvedValue({ _tag: "Success", value: {} });
+  const view = (env = environmentId) => (
+    <ProjectWorkspaceSettings environmentId={env} projectId={projectId} />
+  );
+  await act(() => {
+    renderer = create(view());
+  });
+  const description = () => renderer!.root.findByProps({ "aria-label": "Project description" });
+  expect(description().props.value).toBe("Brand and growth");
+  expect(description().props.maxLength).toBe(600);
+  const submit = () => renderer!.root.findByType("form").props.onSubmit({ preventDefault() {} });
+  const raw = ` ${"x".repeat(598)} `;
+  await act(() => description().props.onChange({ target: { value: raw } }));
+  await act(submit);
+  expect(mocks.command.mock.calls.at(-1)?.[0]).toMatchObject({
+    environmentId,
+    input: {
+      projectId,
+      description: raw,
+      taskColumns: ["To do", "Done"],
+      browserThreadId: "missing-thread",
+    },
+  });
+  await act(() => description().props.onChange({ target: { value: "" } }));
+  await act(submit);
+  expect(mocks.command.mock.calls.at(-1)?.[0].input.description).toBeNull();
+  await act(() => description().props.onChange({ target: { value: " \n\t\u2003 " } }));
+  await act(submit);
+  expect(mocks.command.mock.calls.at(-1)?.[0].input.description).toBeNull();
+  mocks.description = "Another device";
+  await act(() => renderer!.update(view()));
+  expect(description().props.value).toBe("Another device");
+  await act(() => description().props.onChange({ target: { value: "Unsaved" } }));
+  mocks.description = "Other environment";
+  await act(() => renderer!.update(view(EnvironmentId.make("other"))));
+  expect(description().props.value).toBe("Other environment");
+});
+it("keeps old-server settings compatible and prevents read-only description saves", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  mocks.command.mockResolvedValue({ _tag: "Success", value: {} });
+  const view = () => (
+    <ProjectWorkspaceSettings environmentId={environmentId} projectId={projectId} />
+  );
+  await act(() => {
+    renderer = create(view());
+  });
+  const description = () => renderer!.root.findByProps({ "aria-label": "Project description" });
+  expect(description().props.value).toBe("");
+  expect(description().props.disabled).toBe(true);
+  expect(JSON.stringify(renderer!.toJSON())).toContain("Project descriptions need a newer server.");
+  const submit = () => renderer!.root.findByType("form").props.onSubmit({ preventDefault() {} });
+  await act(submit);
+  expect(mocks.command.mock.calls.at(-1)?.[0].input).not.toHaveProperty("description");
+  mocks.description = null;
+  await act(() => renderer!.update(view()));
+  expect(description().props.disabled).toBe(false);
+  expect(JSON.stringify(renderer!.toJSON())).not.toContain(
+    "Project descriptions need a newer server.",
+  );
+  await act(() => description().props.onChange({ target: { value: "Draft" } }));
+  mocks.command.mockClear();
+  mocks.operate = false;
+  await act(() => renderer!.update(view()));
+  await act(submit);
+  expect(mocks.command).not.toHaveBeenCalled();
+  expect(description().props.value).toBe("Draft");
+});
+it("associates the description limit and old-server hints with the textarea", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const view = () => (
+    <ProjectWorkspaceSettings environmentId={environmentId} projectId={projectId} />
+  );
+  await act(() => {
+    renderer = create(view());
+  });
+  const description = () => renderer!.root.findByProps({ "aria-label": "Project description" });
+  const hintIds = () => description().props["aria-describedby"].split(" ");
+  const limit = () =>
+    renderer!.root.findAllByType("p").find((p) => p.children.join("") === "Up to 600 characters.")!;
+  const oldServer = renderer!.root
+    .findAllByType("p")
+    .find((p) => p.children.join("") === "Project descriptions need a newer server.")!;
+  expect(limit()).toBeDefined();
+  expect(limit().props.className).toContain("text-muted-foreground");
+  expect(limit().props.id).toBeTruthy();
+  expect(oldServer.props.id).toBeTruthy();
+  expect(hintIds()).toContain(limit().props.id);
+  expect(hintIds()).toContain(oldServer.props.id);
+  const oldServerId = oldServer.props.id;
+  mocks.description = null;
+  await act(() => renderer!.update(view()));
+  expect(hintIds()).toEqual([limit().props.id]);
+  expect(hintIds()).not.toContain(oldServerId);
+});
+it("marks oversize descriptions invalid and clears the error when the draft fits", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  mocks.description = null;
+  mocks.command.mockResolvedValue({ _tag: "Success", value: {} });
+  await act(() => {
+    renderer = create(
+      <ProjectWorkspaceSettings environmentId={environmentId} projectId={projectId} />,
+    );
+  });
+  const description = () => renderer!.root.findByProps({ "aria-label": "Project description" });
+  const submit = () => renderer!.root.findByType("form").props.onSubmit({ preventDefault() {} });
+  expect(description().props["aria-invalid"]).toBeUndefined();
+  for (const value of [` ${"x".repeat(600)} `, " ".repeat(601)]) {
+    await act(() => description().props.onChange({ target: { value } }));
+    mocks.command.mockClear();
+    await act(submit);
+    expect(mocks.command).not.toHaveBeenCalled();
+    expect(renderer!.root.findByProps({ role: "alert" }).children.join("")).toBe(
+      "Use a project description of at most 600 characters.",
+    );
+    expect(description().props["aria-invalid"]).toBe(true);
+  }
+  await act(() => description().props.onChange({ target: { value: "x".repeat(600) } }));
+  expect(description().props["aria-invalid"]).toBeUndefined();
+  expect(renderer!.root.findAllByProps({ role: "alert" })).toHaveLength(0);
+  await act(submit);
+  expect(mocks.command.mock.calls.at(-1)?.[0].input.description).toBe("x".repeat(600));
+});

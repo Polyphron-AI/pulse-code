@@ -544,3 +544,118 @@ it.effect("restarts the first page after a generation mismatch without a change 
     }),
   ),
 );
+
+it.effect.each(["local", "direct", "relay", "tunnel"])(
+  "keeps %s project descriptions environment-scoped across saves, changes and late reads",
+  (mode) =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const projectId = importProjectId.make("same-project");
+        const started = Latch.makeUnsafe(),
+          finish = Latch.makeUnsafe();
+        const counter = yield* SubscriptionRef.make(0);
+        let description: string | null | undefined = undefined;
+        const oldClient = {
+          [WS_METHODS.workspaceSubscribeChanges]: () => Stream.never,
+          [WS_METHODS.workspaceGetProjectConfig]: () =>
+            Effect.gen(function* () {
+              started.openUnsafe();
+              yield* finish.await;
+              return { projectId, taskColumns: ["To do", "Done"], browserThreadId: null };
+            }),
+        } as unknown as WsRpcProtocolClient;
+        const savedInputs: unknown[] = [];
+        const client = {
+          [WS_METHODS.workspaceSubscribeChanges]: () =>
+            SubscriptionRef.changes(counter).pipe(Stream.filter((n) => n > 0)),
+          [WS_METHODS.workspaceGetProjectConfig]: () =>
+            Effect.sync(() => ({
+              projectId,
+              taskColumns: ["To do", "Done"],
+              browserThreadId: null,
+              description,
+            })),
+          [WS_METHODS.workspaceSaveProjectConfig]: (input: { description?: string | null }) =>
+            Effect.gen(function* () {
+              savedInputs.push(input);
+              if (input.description !== undefined) description = input.description;
+              yield* SubscriptionRef.update(counter, (n) => n + 1);
+              return {
+                projectId,
+                taskColumns: ["To do", "Done"],
+                browserThreadId: null,
+                description,
+              };
+            }),
+        } as unknown as WsRpcProtocolClient;
+        const environmentId = EnvironmentId.make(`description-${mode}`);
+        const target =
+          mode === "relay"
+            ? new RelayConnectionTarget({ environmentId, label: mode })
+            : new PrimaryConnectionTarget({
+                environmentId,
+                label: mode,
+                httpBaseUrl:
+                  mode === "local" ? "http://127.0.0.1:3773" : "https://remote.example.test",
+                wsBaseUrl: mode === "local" ? "ws://127.0.0.1:3773" : "wss://remote.example.test",
+              });
+        const first = yield* makeTestRuntime(oldClient, client, target);
+        const second = yield* makeTestRuntime(oldClient, client, target);
+        const old = first.atoms.config({
+          environmentId: TARGET.environmentId,
+          input: { projectId },
+        });
+        const current = first.atoms.config({ environmentId, input: { projectId } });
+        const otherDevice = second.atoms.config({ environmentId, input: { projectId } });
+        const stops = [
+          first.registry.mount(old),
+          first.registry.mount(current),
+          second.registry.mount(otherDevice),
+        ];
+        yield* Effect.addFinalizer(() => Effect.sync(() => stops.forEach((stop) => stop())));
+        yield* started.await;
+        const initial = yield* Effect.promise(() => executeAtomQuery(second.registry, otherDevice));
+        expect(AsyncResult.getOrThrow(initial).description).toBeUndefined();
+        for (const value of ["Brand and growth", null]) {
+          const refreshed = Latch.makeUnsafe();
+          const stop = second.registry.subscribe(otherDevice, (result) => {
+            if (AsyncResult.isSuccess(result) && result.value.description === value)
+              refreshed.openUnsafe();
+          });
+          yield* Effect.addFinalizer(() => Effect.sync(stop));
+          const result = yield* Effect.promise(() =>
+            runAtomCommand(first.registry, first.atoms.saveConfig, {
+              environmentId,
+              input: {
+                projectId,
+                taskColumns: ["To do", "Done"],
+                browserThreadId: null,
+                description: value,
+              },
+            }),
+          );
+          expect(result._tag).toBe("Success");
+          yield* refreshed.await;
+          expect(
+            AsyncResult.getOrThrow(
+              yield* Effect.promise(() => executeAtomQuery(first.registry, current)),
+            ).description,
+          ).toBe(value);
+        }
+        expect(savedInputs).toEqual(
+          ["Brand and growth", null].map((description) => ({
+            projectId,
+            taskColumns: ["To do", "Done"],
+            browserThreadId: null,
+            description,
+          })),
+        );
+        finish.openUnsafe();
+        expect(
+          AsyncResult.getOrThrow(yield* Effect.promise(() => executeAtomQuery(first.registry, old)))
+            .description,
+        ).toBeUndefined();
+        expect(AsyncResult.getOrThrow(first.registry.get(current)).description).toBeNull();
+      }),
+    ),
+);

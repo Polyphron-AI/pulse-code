@@ -1,3 +1,7 @@
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
+import { SqlitePersistenceMemory } from "../persistence/Layers/Sqlite.ts";
+import * as Tools from "../workspace/WorkspaceTools.ts";
 import {
   AuthOrchestrationOperateScope,
   AuthOrchestrationReadScope,
@@ -413,4 +417,64 @@ it.effect(
         }
       }
     }).pipe(Effect.scoped),
+);
+
+it.effect(
+  "reads descriptions with read scope and requires operate scope to set or clear them",
+  () =>
+    Effect.gen(function* () {
+      const tools = yield* Tools.WorkspaceTools;
+      const sql = yield* SqlClient.SqlClient;
+      const projectId = ProjectId.make("description-auth");
+      yield* sql`INSERT INTO projection_projects(project_id,title,workspace_root,scripts_json,created_at,updated_at) VALUES(${projectId},'Description','/synthetic','[]','2026-10-17T12:00:00Z','2026-10-17T12:00:00Z')`;
+      const tested = [
+        WS_METHODS.workspaceGetProjectConfig,
+        WS_METHODS.workspaceSaveProjectConfig,
+      ] as const;
+      const group = WsRpcGroup.omit(
+        ...[...WsRpcGroup.requests.keys()].filter(
+          (tag): tag is Exclude<keyof typeof RPC_REQUIRED_SCOPES, (typeof tested)[number]> =>
+            !(tested as readonly string[]).includes(tag),
+        ),
+      );
+      for (const scope of [AuthOrchestrationReadScope, AuthOrchestrationOperateScope]) {
+        const client = yield* RpcTest.makeClient(group).pipe(
+          Effect.provide(
+            Layer.mergeAll(
+              group.toLayerHandler(WS_METHODS.workspaceGetProjectConfig, ({ projectId }) =>
+                tools.config(projectId),
+              ),
+              group.toLayerHandler(WS_METHODS.workspaceSaveProjectConfig, tools.saveConfig),
+              rpcScopeAuthorizationLayer([AuthOrchestrationReadScope, scope]),
+            ),
+          ),
+        );
+        const original = yield* client[WS_METHODS.workspaceGetProjectConfig]({ projectId });
+        expect(original.description).toBeNull();
+        for (const description of ["  Authorized description  ", null]) {
+          const save = client[WS_METHODS.workspaceSaveProjectConfig]({ ...original, description });
+          if (scope === AuthOrchestrationReadScope) {
+            expect(yield* save.pipe(Effect.flip)).toMatchObject({
+              requiredScope: AuthOrchestrationOperateScope,
+            });
+            expect((yield* tools.config(projectId)).description).toBeNull();
+            expect(yield* tools.currentChange).toBe(0);
+          } else {
+            const saved = yield* save;
+            expect(saved.description).toBe(description?.trim() ?? null);
+            expect(
+              (yield* client[WS_METHODS.workspaceGetProjectConfig]({ projectId })).description,
+            ).toBe(saved.description);
+          }
+        }
+      }
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        Tools.layer.pipe(
+          Layer.provideMerge(SqlitePersistenceMemory),
+          Layer.provide(NodeCrypto.layer),
+        ),
+      ),
+    ),
 );
