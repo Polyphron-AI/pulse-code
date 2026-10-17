@@ -41,6 +41,7 @@ it.each([
   "https://teams.microsoft.com/l/meetup-join/19%3Ameeting/thread?context=%7b%7d",
   "https://teams.live.com/meet/123456?p=abc%2Bdef",
   "HTTPS://Zoom.us/j/1?pwd=X",
+  "https://ZOOM.US/j/1?pwd=lower%2bcase&bare&empty=&punct=!'~*#keep%2b",
 ])("opens the exact meeting query on the requesting client in the gesture %s", async (url) => {
   const requestingClientOpener = vi.fn().mockResolvedValue(undefined);
   const result = openCalendarHandoff(

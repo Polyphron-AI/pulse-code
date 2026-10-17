@@ -1,16 +1,19 @@
 // @vitest-environment happy-dom
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { fireEvent, getByRole, getAllByRole, getByText, queryByRole } from "@testing-library/dom";
+import { fireEvent, getByRole, getAllByRole, queryByRole } from "@testing-library/dom";
 import { expect, it, vi } from "vite-plus/test";
 import { createWorkspaceMockupModule } from "./calendarMockupModule";
 import {
   createWorkspaceMockupSession,
   parseWorkspaceMockupRequest,
   workspaceCalendarMockupStates,
+  workspaceCalendarHandoffMockupStates,
 } from "./workspaceMockupFixtures";
 it.each(
-  workspaceCalendarMockupStates.filter((state) => state !== "no-url" && state !== "desktop-reject"),
+  workspaceCalendarMockupStates.filter(
+    (state) => !workspaceCalendarHandoffMockupStates.some((handoff) => handoff === state),
+  ),
 )("offers isolated %s capture with no live calls", async (state) => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const fetch = vi.fn();
@@ -48,7 +51,7 @@ it.each(
       ]);
       expect(
         blocks.map((block) => block.querySelector(".shrink-0.whitespace-nowrap")!.textContent),
-      ).toEqual(["01:30 GMT-4", "01:30 GMT-5"]);
+      ).toEqual(["GMT-4", "GMT-5"]);
     }
     if (state === "dst-gap") expect(document.body.textContent).toContain("02:00 skipped");
     if (state === "week-allday" || state === "week-overflow") {
@@ -177,7 +180,8 @@ it.each(["07", "08"] as const)(
           expect(
             queryByRole(cards[2]! as HTMLElement, "button", { name: "Item actions" }),
           ).toBeNull();
-          const menuHost = getByText(cards[2]! as HTMLElement, "Event actions").parentElement!;
+          const menuHost = cards[2]! as HTMLElement;
+          expect(menuHost.textContent).not.toContain("Event actions");
           await act(() => fireEvent.contextMenu(menuHost));
           await act(() => fireEvent.keyDown(menuHost, { key: "F10", shiftKey: true }));
           expect(queryByRole(document.body, "dialog")).toBeNull();
@@ -241,3 +245,61 @@ it.each(["07", "08"] as const)(
     }
   },
 );
+
+it.each([
+  "empty",
+  "partial",
+  "error",
+  "loading",
+  "disconnected",
+  "unavailable",
+  "no-url-menu",
+  "recordings",
+] as const)("provides the isolated %s controller capture state", async (state) => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const fetch = vi.fn();
+  vi.stubGlobal("fetch", fetch);
+  const session = createWorkspaceMockupSession("07", null, state);
+  const module = createWorkspaceMockupModule(session);
+  const node = document.createElement("div");
+  document.body.append(node);
+  const root = createRoot(node);
+  try {
+    expect(
+      parseWorkspaceMockupRequest(
+        new URL(`https://fixture.invalid/workspace?space=meetings&fixture=07&state=${state}`),
+        true,
+      ),
+    ).toBe("07");
+    await act(() => root.render(module.center));
+    const expected = {
+      empty: "No meetings on this day.",
+      partial: "Some calendars could not be refreshed.",
+      error: "Fixture calendar read failed.",
+      loading: "Loading calendar...",
+      disconnected: "Calendar is disconnected.",
+      unavailable: "Calendar is unavailable on this server.",
+      "no-url-menu": "No meeting link is available.",
+      recordings: "Local recordings remain on their capture device.",
+    }[state];
+    expect(node.textContent).toContain(expected);
+    if (state === "no-url-menu") {
+      const card = node.querySelectorAll("article")[0]!;
+      expect(queryByRole(card as HTMLElement, "link", { name: "Join meeting" })).toBeNull();
+      await act(() =>
+        fireEvent.click(getByRole(card as HTMLElement, "button", { name: "Item actions" })),
+      );
+      expect(getByRole(document.body, "button", { name: "Start thread" })).toBeDefined();
+      expect(
+        queryByRole(getByRole(document.body, "dialog"), "link", { name: "Join meeting" }),
+      ).toBeNull();
+    }
+    expect(fetch).not.toHaveBeenCalled();
+  } finally {
+    await act(() => root.unmount());
+    node.remove();
+    module.dispose();
+    session.dispose();
+    vi.unstubAllGlobals();
+  }
+});

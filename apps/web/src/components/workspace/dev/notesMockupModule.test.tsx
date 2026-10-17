@@ -94,3 +94,28 @@ it("uses the production note view, revision conflicts, retained drafts, Undo and
     vi.unstubAllGlobals();
   }
 });
+
+it("opens the controller conflict capture with the retained draft and unchanged note identity", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const session = createWorkspaceMockupSession("07", null, "note-conflict");
+  const module = createWorkspaceMockupModule(session);
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  try {
+    await act(() => root.render(module.resource));
+    expect(getByRole(node, "alert").textContent).toContain("draft has been kept");
+    expect(
+      (getByRole(node, "textbox", { name: "Note text" }) as HTMLTextAreaElement).value,
+    ).toContain("Unsaved meeting follow-up");
+    expect((getByRole(node, "textbox", { name: "Note title" }) as HTMLInputElement).value).toBe(
+      session.seed.note.title,
+    );
+    expect(module.incompleteRegions).toEqual(["07.docs-format", "07.docs-comments"]);
+    expect(session.operations).toHaveLength(0);
+  } finally {
+    await act(() => root.unmount());
+    module.dispose();
+    session.dispose();
+    vi.unstubAllGlobals();
+  }
+});

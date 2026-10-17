@@ -1,4 +1,5 @@
 import { Link, useSearch } from "@tanstack/react-router";
+import { MeetingRecordingsView } from "./MeetingRecordingsView";
 import { CalendarSpace } from "../calendar/CalendarSpace";
 import { parseWorkspaceSearch } from "../workspaceNavigation";
 import { EnvironmentId } from "@t3tools/contracts";
@@ -24,17 +25,15 @@ function RecordingsSpace() {
       header={header}
       resources={<WorkspaceProjectResources />}
     >
-      <section aria-label="Recordings" className="p-4">
-        <p>Published recordings are not available in this environment.</p>
-        {window.desktopBridge?.talkInvoke ? (
-          // Office tools belong to this device, independently of the selected environment.
-          <Link to="/workspace" search={{ space: "office" }}>
-            Open Pulse Talk, local to this device
-          </Link>
-        ) : (
-          <p>Local recordings remain on their capture device. Open Pulse Talk on that device.</p>
-        )}
-      </section>
+      <MeetingRecordingsView
+        localTalk={
+          window.desktopBridge?.talkInvoke ? (
+            <Link to="/workspace" search={{ space: "office" }}>
+              Open Pulse Talk, local to this device
+            </Link>
+          ) : undefined
+        }
+      />
     </WorkspaceEngagement>
   );
 }

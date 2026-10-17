@@ -38,7 +38,7 @@ const rpc = vi.hoisted(() => ({
   max: 0,
   notes: 1,
   detail: false,
-  detailMissingLink: false,
+  detailMissingLink: false as boolean | string,
   detailTime: undefined as CalendarOccurrenceSummary["time"] | undefined,
   error: null as string | null,
   commands: vi.fn(),
@@ -144,7 +144,12 @@ vi.mock("../../../state/query", () => ({
         : query?.kind === "detail" && rpc.detail
           ? {
               ...event,
-              ...(rpc.detailMissingLink ? { joinUrl: undefined } : {}),
+              ...(rpc.detailMissingLink
+                ? {
+                    joinUrl:
+                      typeof rpc.detailMissingLink === "string" ? rpc.detailMissingLink : undefined,
+                  }
+                : {}),
               time: rpc.detailTime ?? {
                 kind: "all-day",
                 startOn: "2026-12-02",
@@ -239,6 +244,8 @@ vi.mock("../WorkspaceToolsPanel", () => ({
 vi.mock("../ProjectsSpace", () => ({ ProjectsSpace: () => <p>Projects destination</p> }));
 // Warm resource imports before the timed route journeys run on a cold worker.
 await Promise.all([
+  import("./CalendarSpace"),
+  import("../meetings/MeetingsSpace"),
   import("../WorkspaceToolsPanel"),
   import("../WorkspaceBrowser"),
   import("../ProjectTasksResource"),
@@ -418,7 +425,7 @@ it("switches Agenda and Week, keeps the date and resource project, and returns f
 it("moves the route and seven chips to a picked date outside the pictured week", async () => {
   const { node, router, dispose } = await mount(undefined, "calendar");
   try {
-    await click(node, "button", "Choose date");
+    await act(() => getByRole(node, "button", { name: /Choose date/ }).click());
     await act(() => vi.dynamicImportSettled());
     await click(document.body, "button", "Go to the Next Month");
     await act(() =>
@@ -1192,22 +1199,26 @@ it("shows an inclusive en-GB all-day range in event detail", async () => {
   }
 });
 
-it("shows the missing-link explanation in exact event detail without Join", async () => {
-  const { node, dispose } = await mount(
-    JSON.stringify({
-      type: "provider-resource",
-      provider: "workspace-calendar",
-      resourceId: event.id,
-    }),
-  );
-  try {
-    rpc.detail = true;
-    rpc.detailMissingLink = true;
-    await notify();
-    expect(node.textContent).toContain("No meeting link is available.");
-    expect(queryByRole(node, "link", { name: "Join meeting" })).toBeNull();
-    expect(rpc.commands).not.toHaveBeenCalled();
-  } finally {
-    await dispose();
-  }
-});
+it.each([undefined, "http://meet.google.com/abc-defg-hij", "https://zoom.us.evil.test/j/123"])(
+  "shows the unavailable-link explanation in exact event detail without Join for %s",
+  async (joinUrl) => {
+    const { node, dispose } = await mount(
+      JSON.stringify({
+        type: "provider-resource",
+        provider: "workspace-calendar",
+        resourceId: event.id,
+      }),
+    );
+    try {
+      rpc.detail = true;
+      rpc.detailMissingLink = joinUrl ?? true;
+      await notify();
+      expect(node.textContent).toContain("No meeting link is available.");
+      expect(queryByRole(node, "link", { name: "Join meeting" })).toBeNull();
+      expect(queryByRole(node, "button", { name: "Join meeting" })).toBeNull();
+      expect(rpc.commands).not.toHaveBeenCalled();
+    } finally {
+      await dispose();
+    }
+  },
+);

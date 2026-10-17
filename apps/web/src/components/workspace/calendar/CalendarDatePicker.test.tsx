@@ -53,7 +53,8 @@ it("cancels by Escape or touch without changing the day and restores trigger foc
     await act(() =>
       root.render(<CalendarDatePicker day="2026-10-13" today="2026-10-13" onSelectDay={select} />),
     );
-    const trigger = getByRole(node, "button", { name: "Choose date" });
+    const trigger = getByRole(node, "button", { name: /Choose date/ });
+    expect(trigger.getAttribute("aria-label")).toContain(trigger.textContent);
     for (const mode of ["escape", "touch"]) {
       await act(() => trigger.click());
       await act(() => vi.dynamicImportSettled());
@@ -83,14 +84,14 @@ it("chooses a date in another month as local calendar fields", async () => {
     await act(() =>
       root.render(<CalendarDatePicker day="2026-10-13" today="2026-10-13" onSelectDay={select} />),
     );
-    await act(() => getByRole(node, "button", { name: "Choose date" }).click());
+    await act(() => getByRole(node, "button", { name: /Choose date/ }).click());
     await act(() => vi.dynamicImportSettled());
     await act(() => getByRole(document.body, "button", { name: /next month/i }).click());
     await act(() =>
       getByRole(document.body, "button", { name: "Monday, 2 November 2026" }).click(),
     );
     expect(select).toHaveBeenCalledExactlyOnceWith("2026-11-02");
-    expect(document.activeElement).toBe(getByRole(node, "button", { name: "Choose date" }));
+    expect(document.activeElement).toBe(getByRole(node, "button", { name: /Choose date/ }));
     expect(queryByRole(document.body, "grid")).toBeNull();
   } finally {
     await act(() => root.unmount());

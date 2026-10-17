@@ -95,7 +95,7 @@ it.each(["web", "desktop-open", "desktop-reject"])(
     const forbidden = {
       oauth: vi.fn(),
       microphone: vi.fn(),
-      systemSettings: vi.fn(),
+      officeInvoke: vi.fn(),
       talkInvoke: vi.fn(),
       mutation: vi.fn(),
     };
@@ -115,7 +115,7 @@ it.each(["web", "desktop-open", "desktop-reject"])(
           : {
               openExternal,
               receiveProviderAuthCallback: forbidden.oauth,
-              openSystemSettings: forbidden.systemSettings,
+              officeInvoke: forbidden.officeInvoke,
               talkInvoke: forbidden.talkInvoke,
             },
     });

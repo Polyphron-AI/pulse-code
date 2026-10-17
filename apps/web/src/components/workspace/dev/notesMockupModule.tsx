@@ -14,7 +14,7 @@ export const createWorkspaceMockupModule: CreateWorkspaceMockupModule = (session
     createdAt: at,
     updatedAt: at,
   };
-  let note = initial;
+  let note = session.calendarState === "note-conflict" ? { ...initial, revision: 2 } : initial;
   let deleted = false;
   let disposed = false;
   const listeners = new Set<() => void>();
@@ -52,9 +52,21 @@ export const createWorkspaceMockupModule: CreateWorkspaceMockupModule = (session
       },
       () => note,
     );
-    const [draft, setDraft] = useState<NoteDraft | null>(null);
+    const [draft, setDraft] = useState<NoteDraft | null>(() =>
+      session.calendarState === "note-conflict"
+        ? {
+            title: initial.title,
+            body: `${initial.body}\nUnsaved meeting follow-up`,
+            revision: initial.revision,
+          }
+        : null,
+    );
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<string | null>(
+      session.calendarState === "note-conflict"
+        ? "This note changed. Reload it before saving. Your draft has been kept."
+        : null,
+    );
     const [confirming, setConfirming] = useState<"cancel" | "reload" | null>(null);
     const run = async (revision: number, change: () => void) => {
       setBusy(true);

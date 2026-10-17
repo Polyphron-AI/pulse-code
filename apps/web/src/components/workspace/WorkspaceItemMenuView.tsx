@@ -19,7 +19,11 @@ export function WorkspaceItemMenuView({
 }) {
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
-      <div className="flex min-w-0 items-center gap-1" {...props}>
+      <div
+        className="flex min-w-0 items-center gap-1"
+        data-workspace-menu-open={open ? "true" : undefined}
+        {...props}
+      >
         {children}
         {available ? (
           <PopoverTrigger

@@ -89,6 +89,7 @@ it("opens overlapping and cross-midnight segments through focused native buttons
 it("keeps fold time labels unshrinkable before truncating their titles", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const node = document.createElement("div");
+  document.body.append(node);
   const root = createRoot(node);
   try {
     await act(() =>
@@ -116,22 +117,38 @@ it("keeps fold time labels unshrinkable before truncating their titles", async (
       ["Second fold", "GMT-5"],
     ]) {
       const block = getByRole(node, "button", { name: new RegExp(`^${name},`) });
-      expect(block.textContent).toBe(`${name}01:30 ${offset}`);
+      expect(block.textContent).toBe(`${name}${offset}`);
+      expect(block.querySelector(".font-semibold")!.className).toContain("min-w-[4ch]");
       expect(block.getAttribute("aria-label")).toContain(`01:30 ${offset}`);
       expect(block.getAttribute("aria-label")).toContain(`01:45 ${offset}`);
       const time = block.querySelector(".text-muted-foreground")!;
       expect(time.classList.contains("shrink-0")).toBe(true);
       expect(time.classList.contains("whitespace-nowrap")).toBe(true);
       expect(time.classList.contains("truncate")).toBe(false);
-      expect(time.previousElementSibling!.classList.contains("min-w-0")).toBe(true);
+      expect(time.previousElementSibling!.classList.contains("min-w-[4ch]")).toBe(true);
       expect(time.previousElementSibling!.classList.contains("truncate")).toBe(true);
     }
+    const notice = node.querySelector<HTMLElement>("[data-slot=tooltip-trigger]")!;
+    // Happy DOM does not implement keyboard :focus-visible matching.
+    const matches = notice.matches.bind(notice);
+    const focusVisible = vi
+      .spyOn(notice, "matches")
+      .mockImplementation((selector) => selector === ":focus-visible" || matches(selector));
+    try {
+      await act(() => notice.focus());
+    } finally {
+      focusVisible.mockRestore();
+    }
+    expect(document.querySelector("[data-slot=tooltip-popup]")?.textContent).toBe(
+      "Clocks go back, 01:00 to 02:00 repeats",
+    );
     expect(node.textContent).not.toContain("24:00");
     const region = getByRole(node, "region", { name: "Week schedule" });
     expect(region.tabIndex).toBe(0);
     expect(region.className).toContain("overflow-auto");
   } finally {
     await act(() => root.unmount());
+    node.remove();
     vi.unstubAllGlobals();
   }
 });
@@ -400,6 +417,35 @@ it("pins the opaque all-day gutter outside the capped item scroller", async () =
     }
     expect(items.parentElement!.className).not.toContain("overflow");
     expect(getAllByRole(items, "button", { name: "Planning" })).toHaveLength(3);
+  } finally {
+    await act(() => root.unmount());
+    vi.unstubAllGlobals();
+  }
+});
+
+it("wraps taller Week titles to two lines without enlarging the event duration", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  try {
+    await act(() =>
+      root.render(
+        <CalendarWeek
+          day="2026-10-13"
+          timeZone="UTC"
+          events={[
+            timed("Long launch review title", "2026-10-13T09:00:00Z", "2026-10-13T09:45:00Z"),
+          ]}
+          dueTasks={[]}
+          onSelectDay={() => {}}
+          onSelect={() => {}}
+        />,
+      ),
+    );
+    const block = getByRole(node, "button", { name: /^Long launch review title,/ });
+    expect(block.style.height).toBe("36px");
+    expect(block.querySelector(".font-semibold")!.className).toContain("line-clamp-2");
+    expect(block.querySelector(".font-semibold")!.className).toContain("whitespace-normal");
   } finally {
     await act(() => root.unmount());
     vi.unstubAllGlobals();

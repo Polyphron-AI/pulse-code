@@ -29,7 +29,7 @@ export function CalendarDatePicker({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
         ref={trigger}
-        aria-label="Choose date"
+        aria-label={`Choose date, ${formatDayHeading(day)}`}
         render={
           <button
             type="button"

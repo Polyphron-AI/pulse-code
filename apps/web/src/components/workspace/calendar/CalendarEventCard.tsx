@@ -40,7 +40,7 @@ export function CalendarEventCard({
         <button
           type="button"
           onClick={() => onSelect(event)}
-          className={`min-w-0 flex-1 text-left text-xs leading-5 font-semibold hover:underline focus-visible:outline-2 focus-visible:outline-ring${menu ? " mr-8" : ""}`}
+          className={`min-w-0 flex-1 text-left text-xs leading-5 font-semibold hover:underline focus-visible:outline-2 focus-visible:outline-ring${menu ? (url ? " mr-8" : " mr-10") : ""}`}
         >
           {event.title}
         </button>
@@ -49,7 +49,9 @@ export function CalendarEventCard({
         ) : null}
       </div>
       {menu ? (
-        <div className="absolute top-2 right-7 opacity-0 group-hover/event:opacity-100 group-focus-within/event:opacity-100 pointer-coarse:opacity-100">
+        <div
+          className={`absolute top-2 ${url ? "right-7" : "right-3"} opacity-0 has-[[data-workspace-menu-open=true]]:opacity-100 group-hover/event:opacity-100 group-focus-within/event:opacity-100 pointer-coarse:opacity-100`}
+        >
           {menu}
         </div>
       ) : null}

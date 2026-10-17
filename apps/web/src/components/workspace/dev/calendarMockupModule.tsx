@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { Button } from "../../ui/button";
+import { MeetingRecordingsView } from "../meetings/MeetingRecordingsView";
 import type { CalendarOccurrenceSummary } from "@t3tools/contracts";
 import { CalendarAgenda } from "../calendar/CalendarAgenda";
 import { WorkspaceItemMenuView } from "../WorkspaceItemMenuView";
@@ -45,7 +47,9 @@ export const createWorkspaceMockupModule: CreateWorkspaceMockupModule = (session
       attendeesTruncated: false,
       hasDescription: Boolean(event.description),
       ...(event.description ? { descriptionPreview: event.description.slice(0, 160) } : {}),
-      ...(state === "no-url" && event.id === "event-handoff" ? {} : { joinUrl: event.joinUrl }),
+      ...((state === "no-url" && event.id === "event-handoff") || state === "no-url-menu"
+        ? {}
+        : { joinUrl: event.joinUrl }),
     }));
   const foldEvents: readonly CalendarOccurrenceSummary[] = [
     {
@@ -115,19 +119,20 @@ export const createWorkspaceMockupModule: CreateWorkspaceMockupModule = (session
   function EventMenu({ event }: { readonly event: CalendarOccurrenceSummary }) {
     const [open, setOpen] = useState(false);
     const url = event.joinUrl ? validatedConferenceUrl(event.joinUrl) : undefined;
+    const available = Boolean(url) || state === "no-url-menu";
     return (
       <WorkspaceItemMenuView
-        available={Boolean(url)}
+        available={available}
         open={open}
-        onOpenChange={(value) => setOpen(value && Boolean(url))}
+        onOpenChange={(value) => setOpen(value && available)}
         onContextMenu={(event) => {
           event.preventDefault();
-          setOpen(Boolean(url));
+          setOpen(available);
         }}
         onKeyDown={(event) => {
           if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
             event.preventDefault();
-            setOpen(Boolean(url));
+            setOpen(available);
           }
         }}
         actions={
@@ -150,6 +155,20 @@ export const createWorkspaceMockupModule: CreateWorkspaceMockupModule = (session
                 }
               />
             </div>
+          ) : open && state === "no-url-menu" ? (
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                type="button"
+                onClick={() => record("open-thread")}
+              >
+                Start thread
+              </Button>
+              <Button size="sm" variant="ghost" type="button" onClick={() => record("link")}>
+                Add to project
+              </Button>
+            </div>
           ) : null
         }
       >
@@ -159,6 +178,7 @@ export const createWorkspaceMockupModule: CreateWorkspaceMockupModule = (session
   }
   function Center() {
     const [day, setDay] = useState<string>(initial);
+    if (state === "recordings") return <MeetingRecordingsView />;
     return (
       <div
         onClickCapture={(event) => {
@@ -172,7 +192,17 @@ export const createWorkspaceMockupModule: CreateWorkspaceMockupModule = (session
           view={session.recipe.view === "week" ? "week" : "agenda"}
           pickerDefaultOpen={state === "picker"}
           space={session.recipe.space === "meetings" ? "meetings" : "calendar"}
-          events={fold ? foldEvents : gap ? gapEvents : untimed ? [...events, allDay] : events}
+          events={
+            state === "empty" || state === "loading" || state === "unavailable"
+              ? []
+              : fold
+                ? foldEvents
+                : gap
+                  ? gapEvents
+                  : untimed
+                    ? [...events, allDay]
+                    : events
+          }
           dueTasks={
             untimed
               ? Array.from({ length: state === "week-overflow" ? 12 : 1 }, (_, index) => ({
@@ -188,7 +218,14 @@ export const createWorkspaceMockupModule: CreateWorkspaceMockupModule = (session
                 }))
               : []
           }
-          status="ready"
+          status={
+            state === "loading" || state === "disconnected" || state === "unavailable"
+              ? state
+              : "ready"
+          }
+          incomplete={state === "partial"}
+          error={state === "error" ? "Fixture calendar read failed." : null}
+          fetchedAt={session.clock.now().getTime()}
           onSelectDay={(value) => {
             if (disposed) return;
             setDay(value);
@@ -218,7 +255,11 @@ export const createWorkspaceMockupModule: CreateWorkspaceMockupModule = (session
           }
           onSchedule={(url) => record("schedule", undefined, url)}
           handoffClient={handoffClient}
-          renderMenu={(event) => <EventMenu event={event} />}
+          renderMenu={(event) =>
+            (event.joinUrl && validatedConferenceUrl(event.joinUrl)) || state === "no-url-menu" ? (
+              <EventMenu event={event} />
+            ) : null
+          }
         />
       </div>
     );

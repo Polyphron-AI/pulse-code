@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { act, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
-import { fireEvent, getByRole, getAllByRole, getByText, queryByRole } from "@testing-library/dom";
+import { fireEvent, getByRole, getAllByRole, queryByRole } from "@testing-library/dom";
 import { expect, it, vi } from "vite-plus/test";
 import { CalendarNotesProvider, CalendarSpace } from "./CalendarSpace";
 import { MeetingsSpace } from "../meetings/MeetingsSpace";
@@ -11,12 +11,13 @@ const boundaries = vi.hoisted(() => ({
   rpcRequests: vi.fn(),
   copy: vi.fn().mockResolvedValue(undefined),
   oauth: vi.fn(),
-  systemSettings: vi.fn(),
+  officeInvoke: vi.fn(),
   talkInvoke: vi.fn(),
   agentTool: vi.fn(),
   microphone: vi.fn(),
   navigate: vi.fn(),
   workspaceLinks: false,
+  canOperate: false,
   joinUrl: "https://meet.google.com/abc-defg-hij?authuser=2&hs=122#keep" as string | undefined,
   search: { space: "calendar", day: "2026-10-13", environment: "remote-server" },
 }));
@@ -27,10 +28,12 @@ vi.mock("../../../rpc/requestLatencyState", async (original) => ({
 vi.mock("@tanstack/react-router", () => ({
   useSearch: () => boundaries.search,
   useNavigate: () => boundaries.navigate,
+  useRouter: () => ({ state: { location: { href: "/workspace" } } }),
 }));
 vi.mock("../../../state/query", () => ({
   useEnvironmentQuery: () => ({
     data: {
+      linked: [],
       events: [
         {
           id: "remote-event",
@@ -60,7 +63,9 @@ vi.mock("../../../state/use-atom-command", () => ({ useAtomCommand: () => bounda
 vi.mock("../../../hooks/useSettings", () => ({
   useEnvironmentSettings: () => "Africa/Johannesburg",
 }));
-vi.mock("../../../state/environments", () => ({ useConnectedEnvironmentIds: () => [] }));
+vi.mock("../../../state/environments", () => ({
+  useConnectedEnvironmentIds: () => (boundaries.canOperate ? ["remote-server"] : []),
+}));
 vi.mock("../mail/useMailCapabilities", () => ({
   useMailCapabilities: () => ({
     environmentId: "remote-server",
@@ -76,7 +81,16 @@ vi.mock("../workspaceResourceState", () => ({
 vi.mock("../useWorkspaceItemOpener", () => ({
   useWorkspaceItemOpener: () => boundaries.agentTool,
 }));
-vi.mock("../useWorkspaceCanOperate", () => ({ useWorkspaceCanOperate: () => false }));
+vi.mock("../useWorkspaceCanOperate", () => ({
+  useWorkspaceCanOperate: () => boundaries.canOperate,
+}));
+vi.mock("../../../state/entities", () => ({ useProjects: () => [], useThreadShells: () => [] }));
+vi.mock("../../../state/server", () => ({ primaryServerKeybindingsAtom: {} }));
+vi.mock("@effect/atom-react", () => ({ useAtomValue: () => ({ bindings: [] }) }));
+vi.mock("../../../hooks/useHandleNewThread", () => ({
+  useNewThreadHandler: () => boundaries.mutation,
+}));
+vi.mock("../../../hooks/useNewProject", () => ({ useNewProject: () => boundaries.mutation }));
 vi.mock("../WorkspaceEngagement", () => ({
   WorkspaceEngagement: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
@@ -110,7 +124,7 @@ it.each([
         ? {
             openExternal,
             receiveProviderAuthCallback: boundaries.oauth,
-            openSystemSettings: boundaries.systemSettings,
+            officeInvoke: boundaries.officeInvoke,
             talkInvoke: boundaries.talkInvoke,
           }
         : undefined,
@@ -199,7 +213,7 @@ it.each([
         boundaries.mutation,
         boundaries.oauth,
         boundaries.microphone,
-        boundaries.systemSettings,
+        boundaries.officeInvoke,
         boundaries.talkInvoke,
         boundaries.agentTool,
       ])
@@ -269,7 +283,9 @@ it.each([false, true])(
       );
       expect(queryByRole(node, "button", { name: "Item actions" })).toBeNull();
       const card = node.querySelector("article")!;
-      const menuHost = getByText(card, "Event actions").parentElement!;
+      expect(card.textContent).not.toContain("Event actions");
+      expect(getByRole(card, "button", { name: "Remote meeting" }).className).not.toContain("mr-");
+      const menuHost = card;
       await act(() => fireEvent.contextMenu(menuHost));
       await act(() => fireEvent.keyDown(menuHost, { key: "F10", shiftKey: true }));
       expect(queryByRole(document.body, "dialog")).toBeNull();
@@ -286,6 +302,11 @@ it.each([false, true])(
       const trigger = getByRole(node, "button", { name: "Item actions" });
       await act(() => fireEvent.click(trigger));
       const menu = getByRole(document.body, "dialog");
+      const host = trigger.closest("[data-workspace-menu-open=true]");
+      expect(host).not.toBeNull();
+      expect(host!.parentElement!.className).toContain(
+        "has-[[data-workspace-menu-open=true]]:opacity-100",
+      );
       expect(getByRole(menu, "link", { name: "Join meeting" }).getAttribute("href")).toBe(url);
       expect(getAllByRole(menu, "button").map((button) => button.textContent)).toEqual([
         "Copy meeting link",
@@ -304,3 +325,43 @@ it.each([false, true])(
     }
   },
 );
+
+it("offers generic actions on an operate-capable no-URL card without overlapping its title", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const node = document.createElement("div");
+  document.body.append(node);
+  const root = createRoot(node);
+  const url = boundaries.joinUrl;
+  boundaries.canOperate = true;
+  boundaries.workspaceLinks = true;
+  boundaries.joinUrl = undefined;
+  try {
+    await act(() =>
+      root.render(
+        <CalendarNotesProvider>
+          <CalendarSpace />
+        </CalendarNotesProvider>,
+      ),
+    );
+    const title = getByRole(node, "button", { name: "Remote meeting" });
+    const trigger = getByRole(node, "button", { name: "Item actions" });
+    expect(title.className).toContain("mr-10");
+    expect(trigger.parentElement!.parentElement!.className).toContain("right-3");
+    await act(() => fireEvent.click(trigger));
+    const menu = getByRole(document.body, "dialog");
+    expect(getByRole(menu, "button", { name: /Add to project/ })).toBeDefined();
+    expect(queryByRole(menu, "link", { name: "Join meeting" })).toBeNull();
+    expect(queryByRole(menu, "button", { name: "Join meeting" })).toBeNull();
+    expect(queryByRole(menu, "button", { name: "Copy meeting link" })).toBeNull();
+    await act(() => fireEvent.keyDown(trigger, { key: "Escape" }));
+    expect(queryByRole(document.body, "dialog")).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  } finally {
+    boundaries.canOperate = false;
+    boundaries.workspaceLinks = false;
+    boundaries.joinUrl = url;
+    await act(() => root.unmount());
+    node.remove();
+    vi.unstubAllGlobals();
+  }
+});

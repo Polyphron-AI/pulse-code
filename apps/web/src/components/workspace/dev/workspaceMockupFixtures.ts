@@ -36,7 +36,19 @@ export const workspaceTasksMockupStates = [
   "board-disconnected",
 ] as const;
 export type WorkspaceTasksMockupState = (typeof workspaceTasksMockupStates)[number];
-export const workspaceCalendarHandoffMockupStates = ["no-url", "desktop-reject"] as const;
+export const workspaceCalendarHandoffMockupStates = [
+  "no-url",
+  "desktop-reject",
+  "no-url-menu",
+  "empty",
+  "partial",
+  "error",
+  "loading",
+  "disconnected",
+  "unavailable",
+  "recordings",
+  "note-conflict",
+] as const;
 export const workspaceCalendarMockupStates = [
   "week",
   "picker",
@@ -896,10 +908,11 @@ export function createWorkspaceMockupSession(
     recipe:
       calendarState &&
       calendarState !== "picker" &&
-      calendarState !== "no-url" &&
-      calendarState !== "desktop-reject"
+      !workspaceCalendarHandoffMockupStates.some((state) => state === calendarState)
         ? { ...workspaceMockupRecipes[id], view: "week" }
-        : workspaceMockupRecipes[id],
+        : calendarState === "recordings"
+          ? { ...workspaceMockupRecipes[id], view: "recordings" }
+          : workspaceMockupRecipes[id],
     seed,
     clock: { now: () => new Date(fixedInstant), today: () => "2026-10-13" },
     locale: "en-GB",

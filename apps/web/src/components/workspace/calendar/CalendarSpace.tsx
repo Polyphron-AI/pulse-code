@@ -101,6 +101,8 @@ function CalendarBinding({
   }, [day, timeZone]);
   const query = useEnvironmentQuery(workspaceCalendar.range({ environmentId, input: range }));
   const connected = useConnectedEnvironmentIds().includes(environmentId);
+  const canOperate = useWorkspaceCanOperate(environmentId);
+  const capability = useMailCapabilities(environmentId);
   const loadMore = useAtomCommand(workspaceCalendar.loadMore, { reportFailure: false });
   const [loadError, setLoadError] = useState<{
     range: string;
@@ -205,6 +207,7 @@ function CalendarBinding({
         onOpenTask={(task) => open(task.ref)}
         renderMenu={(event) => {
           const url = event.joinUrl ? validatedConferenceUrl(event.joinUrl) : undefined;
+          if (!url && !(capability.workspaceLinks && canOperate)) return null;
           return (
             <WorkspaceItemMenu
               environmentId={environmentId}

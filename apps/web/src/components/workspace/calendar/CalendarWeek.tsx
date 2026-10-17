@@ -5,6 +5,7 @@ import {
   formatEventRange,
   formatEventTime,
 } from "@t3tools/client-runtime/calendar/dates";
+import { Tooltip, TooltipTrigger, TooltipPopup } from "../../ui/tooltip";
 import { CalendarDayStrip } from "./CalendarDayStrip";
 import type { CalendarAgendaProps } from "./CalendarAgenda";
 import {
@@ -92,7 +93,7 @@ export function CalendarWeek(
                 <span className="sticky left-0 z-10 border-r border-border/60 bg-background p-1 text-3xs text-muted-foreground">
                   All day
                 </span>
-                {days.map(({ date, note }) => (
+                {days.map(({ date, note, description }) => (
                   <div key={date} className="min-w-0 border-l border-border/60 p-1">
                     <p
                       className={
@@ -104,7 +105,19 @@ export function CalendarWeek(
                       {formatDay(date, { weekday: "short", day: "numeric" })}
                     </p>
                     {note ? (
-                      <p className="mb-2 truncate text-3xs text-muted-foreground">{note}</p>
+                      <Tooltip>
+                        <TooltipTrigger
+                          render={
+                            <p
+                              tabIndex={0}
+                              className="mb-2 truncate text-3xs text-muted-foreground"
+                            />
+                          }
+                        >
+                          {note}
+                        </TooltipTrigger>
+                        <TooltipPopup>{description}</TooltipPopup>
+                      </Tooltip>
                     ) : null}
                   </div>
                 ))}
@@ -222,7 +235,10 @@ export function CalendarWeek(
                           )
                         : "All day";
                     const start = segment.ambiguous
-                      ? formatEventOffsetTime(segment.start, timeZone)
+                      ? formatEventOffsetTime(segment.start, timeZone).replace(
+                          /^\d{2}:\d{2}\s/u,
+                          "",
+                        )
                       : formatEventTime(segment.start, timeZone);
                     return (
                       <button
@@ -243,7 +259,9 @@ export function CalendarWeek(
                         }
                       >
                         <span className="flex h-full min-w-0 items-center gap-1 overflow-hidden rounded-md bg-white/[0.015] px-1 whitespace-nowrap">
-                          <span className="min-w-0 truncate font-semibold">
+                          <span
+                            className={`${segment.ambiguous ? "min-w-[4ch]" : "min-w-0"} ${(segment.endMinute - segment.startMinute) * PX_PER_MINUTE >= 36 ? "line-clamp-2 whitespace-normal" : "truncate"} font-semibold`}
+                          >
                             {segment.event.title}
                           </span>
                           {segment.ambiguous ? (
