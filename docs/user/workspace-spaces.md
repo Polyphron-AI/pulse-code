@@ -25,6 +25,37 @@ Open calendar. Google Calendar opens outside Pulse on your device. Only the sele
 You finish creating the event there. Cancel closes the chooser without creating anything. This
 handoff works independently of your calendar connection and does not reconnect or import events.
 
+Calendar and Meetings use the selected environment's saved events. Calendar account connections
+belong to that environment; using another desktop or browser does not move an account connection.
+A disconnected source keeps its last saved results. Reconnect the account in the environment that
+owns it when account connection controls are available. Retry calendar requests the selected range
+again. Refresh is explicit; leaving a view open does not poll your calendar.
+
+Calendar offers Agenda and Week. Meetings keeps Upcoming and Recordings separate. Choosing an
+event in Upcoming and closing it returns to Upcoming. Choose a day chip, or open the date heading
+to choose a date in another week. Dates and event times use the environment's workspace timezone
+and day-first English labels. A repeated daylight-saving hour shows its offset so the two times
+can be distinguished; a skipped hour has no event time. Week shows a short clock-change notice.
+Short adjacent events keep their true duration, so some touch targets can be smaller than other
+controls. Select an event to read its full time range. Due tasks have no invented start time and
+keep the same completion state as Tasks and Resources.
+
+Choose Notes & agenda to open the linked note in Docs. If several notes are linked, choose one.
+If none is linked, a writable connection can create a note. Linking it to the selected project is
+an explicit choice at confirmation. After a partial save, Retry keeps that original project and
+request so it cannot create a duplicate note. The saved note can still be opened while its links
+are being repaired. Choosing another resource project creates no links.
+
+A note has its own links and access. Linking a meeting does not give an agent access to its notes.
+Save note checks the revision you edited. A conflict keeps your draft; reload the current note
+only after deciding whether to discard it. Closing Resources or switching tabs keeps an unsaved
+note draft for this workspace session. Leaving the workspace or reloading ends that session.
+Delete note keeps its links as unavailable; Undo delete restores the note when its revision still
+matches. Documents stored by an external provider open and edit with that provider.
+
+Recordings describes availability for the selected environment. Local recordings remain on their
+capture device. Publishing recordings is unavailable. Opening Pulse Talk does not start capture.
+
 ## Resources and Linked context
 
 Resources shows the project you choose, even before you select an item. Its tabs are Files, Browser, Agents, Tasks, Docs and PRs. A tab explains when its contents are unavailable. Choosing or browsing a project does not create a link or give an agent access to its contents.
@@ -59,7 +90,7 @@ Linked shows confirmed connections, their type and title, how they were made, an
 
 Choose Link to to find a project or thread, paste a web address, or drag an item onto another item or its Linked panel. Pasted Google Drive and Docs links retain their file identity and open on Google. Pasting a link does not connect a Google account.
 
-Right-click an item, use its actions button, or long-press on touch screens to start a thread or create or add to a project. The same actions are in the selected item's header and command palette. Default shortcuts are `mod+alt+t` to start a thread, `mod+alt+p` to add to a project, and `mod+alt+shift+p` to start a project.
+Right-click an item, use its actions button, or long-press on touch screens to start a thread or create or add to a project. In Calendar, the ellipsis appears on hover or keyboard focus and stays visible while its menu is open. Touch screens keep it visible. Shift+F10 opens the focused item's menu. Read-only sessions hide menus that offer only changes, including Mail and Tasks menus. An event with a supported meeting link still offers local Join and Copy actions. The same actions are in the selected item's header and command palette. Default shortcuts are `mod+alt+t` to start a thread, `mod+alt+p` to add to a project, and `mod+alt+shift+p` to start a project.
 
 Start thread uses the item's linked project or asks you to choose one. Its composer contains removable references to the item and its confirmed links. Remove references you do not want to attach to this thread, write your request, and Send. Opening or canceling the draft creates no links. Sending confirms only the references left in the message before the agent starts. If confirmation fails, the turn shows an error and the agent does not run.
 

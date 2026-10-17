@@ -20,6 +20,13 @@ must not add a second host or selection store. See [workspace shell](./workspace
 capture, invalidation and resource handoff constraints, and [workspace links](./workspace-links.md)
 for confirmed-link grants.
 
+Calendar and native notes belong to the selected environment. Desktop account tokens are not
+migrated into the Calendar service. Occurrence identity survives rescheduling, and a confirmed
+meeting link never grants access through a meeting-to-note edge. Each note needs its own direct
+grant. Calendar refresh is request driven, with no clock polling. See
+[Calendar ownership and refresh](./workspace-calendar.md) and
+[note lifetime and revision rules](./workspace-shell.md).
+
 Task completion derives from the project's configured completed column on every client, rather
 than an independent checkbox value. Task due dates remain Gregorian calendar dates, never UTC
 instants or scheduled jobs. The environment's display timezone determines Today without changing

@@ -20,3 +20,14 @@ An agent can read a Calendar event only when that exact event is directly linked
 project. A saved reference, suggestion, meeting note or related item does not grant access. Unlinking
 revokes future reads unless another direct thread or project link remains. Event reads return bounded
 text and metadata; they do not browse calendars, refresh a provider or read related notes.
+
+Workspace notes open in the Docs resource tab. They are revisioned text or Markdown items owned by
+the selected environment. Agents read a note only through its exact confirmed thread or project
+link. A meeting-to-note link alone grants no note access. Unlinking removes that grant unless
+another direct link remains. Reading an event or note does not refresh external accounts or scan
+related content. Calendar and note tools require support from the selected server; older servers
+keep their existing Office tools and basic project tasks.
+
+Join and Schedule open on the requesting device. They need no permission to change workspace
+items. Read-only sessions can browse dates and linked content and follow these external handoffs;
+creating links or changing notes requires a connected session with permission to operate.
