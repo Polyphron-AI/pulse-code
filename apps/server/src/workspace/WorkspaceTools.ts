@@ -112,10 +112,7 @@ export const make = Effect.gen(function* () {
             ? settings.completedColumn
             : settings.taskColumns.find((name) => name !== settings.completedColumn);
       if (!column || !settings.taskColumns.includes(column))
-        return yield* fail(
-          "invalid-input",
-          "Choose a completed column in project workspace settings.",
-        );
+        return yield* fail("invalid-input", "Choose a column from this project's task columns.");
       const changed =
         otherChanges ||
         (current.column !== column &&
@@ -177,7 +174,7 @@ export const make = Effect.gen(function* () {
                 )
                   return yield* fail(
                     "conflict",
-                    "Move tasks out of a column before removing or renaming it.",
+                    "Keep at least one open column, or move tasks out of the completed column.",
                   );
                 const removedDesignation =
                   current.completedColumn !== null && !columns.includes(current.completedColumn);
@@ -269,13 +266,18 @@ export const make = Effect.gen(function* () {
           Effect.gen(function* () {
             const result = yield* sql.withTransaction(
               Effect.gen(function* () {
-                input = yield* decodeTaskUpsert(input).pipe(
+                const title = input.title.trim();
+                if (!title || title.length > 240)
+                  return yield* fail(
+                    "invalid-input",
+                    "Enter a task title and choose one of this project's columns.",
+                  );
+                input = yield* decodeTaskUpsert({ ...input, title }).pipe(
                   Effect.mapError(() => fail("invalid-input", "Enter valid task metadata.")),
                 );
                 const settings = yield* config(input.projectId);
                 let dueOn = input.dueOn ?? null;
                 let areaLabel = input.areaLabel ?? null;
-                const title = input.title.trim();
                 if (!title || title.length > 240 || !settings.taskColumns.includes(input.column))
                   return yield* fail(
                     "invalid-input",

@@ -490,10 +490,13 @@ it.effect(
           .pipe(Effect.flip)).kind,
       ).toBe("conflict");
       expect(
-        (yield* tools
+        yield* tools
           .patchTask({ id: task.id, expectedRevision: 1, column: "Missing" })
-          .pipe(Effect.flip)).kind,
-      ).toBe("invalid-input");
+          .pipe(Effect.flip),
+      ).toMatchObject({
+        kind: "invalid-input",
+        message: "Choose a column from this project's task columns.",
+      });
       expect(
         (yield* tools
           .patchTask({ id: task.id, expectedRevision: 1, dueOn: "2026-02-30" })
@@ -545,9 +548,30 @@ it.effect("normalizes legacy Done-only settings only when no completion is affec
     const task = yield* tools.upsertTask({ projectId, title: "Done task", column: "Done" });
     const error = yield* tools.saveConfig(input).pipe(Effect.flip);
     expect(error.kind).toBe("conflict");
-    expect(error.message).toBe("Move tasks out of a column before removing or renaming it.");
+    expect(error.message).toBe(
+      "Keep at least one open column, or move tasks out of the completed column.",
+    );
     expect(yield* tools.getTask(task.id)).toEqual(task);
     expect((yield* tools.config(projectId)).completedColumn).toBe("Done");
+  }).pipe(Effect.provide(layer)),
+);
+it.effect("keeps legacy trimmed titles and title-specific validation errors", () =>
+  Effect.gen(function* () {
+    yield* seedWorkspaceProject;
+    const tools = yield* Tools.WorkspaceTools;
+    expect(
+      (yield* tools.upsertTask({ projectId, title: `  ${"a".repeat(240)}  `, column: "To do" }))
+        .title,
+    ).toBe("a".repeat(240));
+    for (const title of ["", " ", "a".repeat(241)]) {
+      const error = yield* tools
+        .upsertTask({ projectId, title, column: "To do" })
+        .pipe(Effect.flip);
+      expect(error).toMatchObject({
+        kind: "invalid-input",
+        message: "Enter a task title and choose one of this project's columns.",
+      });
+    }
   }).pipe(Effect.provide(layer)),
 );
 it.effect(
