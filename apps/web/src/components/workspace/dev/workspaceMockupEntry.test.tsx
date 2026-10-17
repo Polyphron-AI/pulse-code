@@ -91,6 +91,24 @@ async function boot(): Promise<Capture> {
   return window.__workspaceMockupCapture!;
 }
 
+it("keeps task URL state through capture resets and records light-theme smoke honestly", async () => {
+  (window as unknown as { happyDOM: { setURL: (url: string) => void } }).happyDOM.setURL(
+    "http://fixture.invalid/workspace?space=tasks&fixture=03&state=board-move&theme=light",
+  );
+  const capture = await boot();
+  capture.configureCapture(host);
+  const first = await capture.ready();
+  expect(first.manifest.theme).toBe("light");
+  expect(first.manifest.route).toContain("state=board-move&theme=light");
+  expect(document.documentElement.classList.contains("dark")).toBe(false);
+  expect(document.body.textContent).toContain("Review");
+  await act(async () => capture.reset("08"));
+  const resource = await capture.ready();
+  expect(resource.incompleteRegions).not.toContain("08.tasks.resource");
+  expect(resource.incompleteRegions).toContain("08.calendar.center");
+  expect(resource.manifest.networkRequests).toBe(0);
+});
+
 it("boots eight isolated memory routes, pins dark and preserves browser storage through resets and teardown", async () => {
   localStorage.setItem("pulse.workspace.fixture-environment.mail.engagement-width.v2", "450");
   localStorage.setItem(
@@ -147,6 +165,7 @@ it("boots eight isolated memory routes, pins dark and preserves browser storage 
     expect(document.body.textContent).toContain(id === "03" ? "Project tasks" : `Recipe ${id}`);
     expect(result.incompleteRegions).not.toContain("shell.engagement");
     expect(result.incompleteRegions).not.toContain("shell.resources");
+    if (id === "08") expect(result.incompleteRegions).not.toContain("08.tasks.resource");
     expect(getByRole(document.body, "combobox", { name: "Choose project" }).textContent).toContain(
       "SynKEK",
     );

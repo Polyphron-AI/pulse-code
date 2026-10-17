@@ -13,6 +13,29 @@ import {
 } from "@t3tools/contracts";
 
 export type WorkspaceMockupId = "01" | "02" | "03" | "04" | "05" | "06" | "07" | "08";
+// Task state recipes stay inside the isolated entry; none reaches live route parsing.
+export const workspaceTasksMockupStates = [
+  "detail",
+  "create",
+  "create-dirty",
+  "discard",
+  "conflict",
+  "deleted",
+  "read-only",
+  "disconnected",
+  "menu",
+  "phone-return",
+  "empty",
+  "board",
+  "board-move",
+  "board-saving",
+  "board-conflict",
+  "board-page2-conflict",
+  "board-partial",
+  "board-read-only",
+  "board-disconnected",
+] as const;
+export type WorkspaceTasksMockupState = (typeof workspaceTasksMockupStates)[number];
 export type WorkspaceMockupArea =
   | "mail"
   | "communications"
@@ -62,6 +85,7 @@ export interface WorkspaceMockupRecipe {
 }
 export interface WorkspaceMockupSession {
   readonly id: WorkspaceMockupId;
+  readonly taskState: WorkspaceTasksMockupState | null;
   readonly environmentId: EnvironmentId;
   readonly resourceProjectId: ProjectId;
   readonly recipe: WorkspaceMockupRecipe;
@@ -272,7 +296,7 @@ export interface WorkspaceMockupCaptureManifest {
   readonly resolvedLocale: string;
   readonly resolvedTimeZone: string;
   readonly clock: "2026-10-13T10:30:00+02:00";
-  readonly theme: "dark";
+  readonly theme: "dark" | "light";
   readonly fontFamily: string;
   readonly resolvedFont: string;
   readonly os: string;
@@ -781,7 +805,7 @@ export function parseWorkspaceMockupRequest(url: URL, dev: boolean): WorkspaceMo
   if (!dev || !url.searchParams.has("fixture")) return null;
   const keys = [...url.searchParams.keys()];
   if (
-    keys.some((key) => key !== "fixture" && key !== "space") ||
+    keys.some((key) => !["fixture", "space", "state", "theme"].includes(key)) ||
     new Set(keys).size !== keys.length
   )
     throw new Error("Fixture state is in memory only.");
@@ -794,13 +818,25 @@ export function parseWorkspaceMockupRequest(url: URL, dev: boolean): WorkspaceMo
   )
     throw new Error("Unknown fixture.");
   const selected = workspaceMockupRecipes[id as WorkspaceMockupId];
+  const state = url.searchParams.get("state");
+  if (
+    state !== null &&
+    ((id !== "03" && id !== "08") || !workspaceTasksMockupStates.some((value) => value === state))
+  )
+    throw new Error("Unknown task fixture state.");
+  const theme = url.searchParams.get("theme");
+  if (theme !== null && theme !== "light" && theme !== "dark")
+    throw new Error("Unknown fixture theme.");
   const space = url.searchParams.get("space");
   if (space !== null && space !== selected.space)
     throw new Error(`Fixture space does not match recipe ${id}.`);
   return selected.id;
 }
 
-export function createWorkspaceMockupSession(id: WorkspaceMockupId): WorkspaceMockupSession {
+export function createWorkspaceMockupSession(
+  id: WorkspaceMockupId,
+  taskState: WorkspaceTasksMockupState | null = null,
+): WorkspaceMockupSession {
   if (!Object.hasOwn(workspaceMockupRecipes, id)) throw new Error("Unknown fixture.");
   const seed = createWorkspaceMockupSeed();
   const days = [
@@ -829,6 +865,7 @@ export function createWorkspaceMockupSession(id: WorkspaceMockupId): WorkspaceMo
   let disposed = false;
   return {
     id,
+    taskState,
     environmentId: seed.environmentId,
     resourceProjectId: seed.resourceProjectId,
     recipe: workspaceMockupRecipes[id],

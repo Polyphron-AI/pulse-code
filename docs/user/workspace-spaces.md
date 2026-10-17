@@ -86,6 +86,8 @@ Lane labels distinguish loaded cards from the full matching total. Load more can
 
 The open count covers every matching task, including later pages. Load more adds the next page. If tasks change while you browse, the list keeps its loaded rows while it refreshes the same number of pages. If refresh fails, an inline message offers Retry tasks and Load more stays unavailable until refresh succeeds.
 
+In Resources, choose a project and Tasks to browse that project's paged list. Completing, reopening or editing a task updates other connected task views. Opening its details stays inside Resources, preserving your current space, date and project choice. Back to project tasks returns to that resource list. Opening the central Tasks space keeps the resource tab you already chose.
+
 Use a task's checkbox to complete or reopen it. Completion moves it into the project's designated completed column; reopening returns it to an open column. Select the title to open task details, and use Back to tasks to return to the list. The task menu offers the same linking and agent actions as other workspace items. Read-only sessions can browse tasks but cannot change them. The Tasks list needs a server with task-list support. Older servers keep the task list inside each project, which shows up to 200 tasks.
 
 Choose New task from the Tasks menu, then choose its project, or add a task inside a project. Cancel leaves no new task and returns to the filters and list position from when you started it. Discarding a draft lets you choose another project for the next task. On a phone, opening or creating a task shows its editor; Back to tasks returns to the list.

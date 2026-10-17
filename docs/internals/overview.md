@@ -20,6 +20,11 @@ must not add a second host or selection store. See [workspace shell](./workspace
 capture, invalidation and resource handoff constraints, and [workspace links](./workspace-links.md)
 for confirmed-link grants.
 
+Task completion derives from the project's configured completed column on every client, rather
+than an independent checkbox value. Task due dates remain Gregorian calendar dates, never UTC
+instants or scheduled jobs. The environment's display timezone determines Today without changing
+the stored date. See [task contracts](../../packages/contracts/src/pulseWorkspaceTools.ts).
+
 The [RPC contract](../../packages/contracts/src/rpc.ts) is the boundary between independently
 versioned clients and servers. Subscriptions send the state a client needs, so a client viewing one
 thread does not pay for every thread's history. Authentication of a socket does not authorize every

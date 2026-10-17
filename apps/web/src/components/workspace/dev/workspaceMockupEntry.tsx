@@ -4,6 +4,7 @@ import type { CSSProperties } from "react";
 import {
   createWorkspaceMockupSession,
   parseWorkspaceMockupRequest,
+  workspaceTasksMockupStates,
 } from "./workspaceMockupFixtures";
 import type {
   CreateWorkspaceMockupModule,
@@ -191,7 +192,7 @@ function installNetworkGuard() {
   };
 }
 
-function pinDarkTheme() {
+function pinTheme(light: boolean) {
   const html = document.documentElement;
   const original = new Map(
     ["class", "style", "data-theme-id", "data-theme-selected", "lang"].map((key) => [
@@ -199,8 +200,8 @@ function pinDarkTheme() {
       html.getAttribute(key),
     ]),
   );
-  html.classList.remove("light");
-  html.classList.add("dark");
+  html.classList.remove(light ? "dark" : "light");
+  html.classList.add(light ? "light" : "dark");
   delete html.dataset.themeId;
   delete html.dataset.themeSelected;
   html.lang = "en-GB";
@@ -234,7 +235,8 @@ export async function startWorkspaceMockup(): Promise<void> {
   const id = parseWorkspaceMockupRequest(new URL(window.location.href), true);
   if (id === null) throw new Error("Unknown fixture.");
   const guard = installNetworkGuard();
-  const restoreTheme = pinDarkTheme();
+  const light = new URL(window.location.href).searchParams.get("theme") === "light";
+  const restoreTheme = pinTheme(light);
   let disposeView = () => {};
   let disposed = false;
   let session: WorkspaceMockupSession | undefined;
@@ -323,7 +325,13 @@ export async function startWorkspaceMockup(): Promise<void> {
           flushSync(() => root.render(null));
           disposeModules();
           guard.reset();
-          session = createWorkspaceMockupSession(nextId);
+          const state = new URL(window.location.href).searchParams.get("state");
+          session = createWorkspaceMockupSession(
+            nextId,
+            nextId === "03" || nextId === "08"
+              ? (workspaceTasksMockupStates.find((value) => value === state) ?? null)
+              : null,
+          );
           const current = session;
           if (!current.recipe) throw new Error("Unknown fixture.");
           for (const factory of factories) {
@@ -348,21 +356,21 @@ export async function startWorkspaceMockup(): Promise<void> {
             flushSync(() =>
               root.render(
                 <div
-                  className="dark"
+                  className={light ? "light" : "dark"}
                   style={
                     {
-                      colorScheme: "dark",
-                      backgroundColor: "#090909",
-                      color: "#f0f0f0",
+                      colorScheme: light ? "light" : "dark",
+                      backgroundColor: "var(--background)",
+                      color: "var(--foreground)",
                       fontFamily: '"Segoe UI", system-ui, sans-serif',
                       height: "100dvh",
                       // The shell root is a flex-1 child, as it is inside the live app layout.
                       display: "flex",
                       flexDirection: "column",
-                      "--background": "#090909",
-                      "--foreground": "#f0f0f0",
-                      "--muted-foreground": "#86868a",
-                      "--border": "#1c1c20",
+                      "--background": light ? "#fafafa" : "#090909",
+                      "--foreground": light ? "#171717" : "#f0f0f0",
+                      "--muted-foreground": light ? "#656569" : "#86868a",
+                      "--border": light ? "#e1e1e5" : "#1c1c20",
                       "--primary": "#3268ff",
                     } as CSSProperties
                   }
@@ -451,14 +459,14 @@ export async function startWorkspaceMockup(): Promise<void> {
             version: 1,
             fixtureId: current.id,
             referencePng: current.recipe.png,
-            route: current.recipe.route,
+            route: `${current.recipe.route}${current.taskState ? `&state=${current.taskState}` : ""}${light ? "&theme=light" : ""}`,
             viewport: { ...context.viewport },
             locale: current.locale,
             timeZone: current.timeZone,
             resolvedLocale: context.resolvedLocale,
             resolvedTimeZone: context.resolvedTimeZone,
             clock: "2026-10-13T10:30:00+02:00",
-            theme: "dark",
+            theme: light ? "light" : "dark",
             fontFamily: '"Segoe UI", system-ui, sans-serif',
             resolvedFont: context.resolvedFont,
             os: context.os,
