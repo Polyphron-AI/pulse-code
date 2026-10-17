@@ -37,18 +37,32 @@ export function createWorkspaceToolsAtoms<R, E>(
   // Cursor pages belong to one generation. The first page keeps its rows during refresh.
   type SummaryResult = Atom.Type<ReturnType<typeof summaries>>;
   const summaryPages = Atom.family((first: ReturnType<typeof summaries>) =>
-    Atom.family((atom: ReturnType<typeof summaries>) =>
-      Atom.transform(atom, (get): SummaryResult => {
+    Atom.family((atom: ReturnType<typeof summaries>) => {
+      let firstValue: import("@t3tools/contracts").WorkspaceTaskPage | undefined;
+      let observed = false;
+      return Atom.transform(atom, (get): SummaryResult => {
         const result = get(atom);
+        const currentFirst = get.once(first);
+        const currentValue = Option.getOrUndefined(AsyncResult.value(currentFirst));
+        if (!observed || result.waiting) {
+          firstValue = currentValue;
+          observed = true;
+        }
         if (result.waiting) return AsyncResult.initial(true);
         if (AsyncResult.isFailure(result)) {
           const error = Cause.squash(result.cause);
-          if (isToolsError(error) && error.kind === "invalid-input") get.refresh(first);
+          if (
+            isToolsError(error) &&
+            error.kind === "invalid-input" &&
+            !currentFirst.waiting &&
+            currentValue === firstValue
+          )
+            get.refresh(first);
           return AsyncResult.failure(result.cause);
         }
         return result;
-      }),
-    ),
+      });
+    }),
   );
   const decodeQuery = Schema.decodeUnknownOption(WorkspaceTaskQuery);
   const invalidQuery = Atom.make((): SummaryResult =>

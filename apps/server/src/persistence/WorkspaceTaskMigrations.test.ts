@@ -106,6 +106,17 @@ it.effect("indexes project, date and owner queries and invalidates task/config g
         expect(plan.filter((row) => row.detail.includes("TEMP B-TREE"))).toEqual([]);
       }
     }
+    const bounded = yield* decodeQuery({ dueFrom: "2026-10-16", dueTo: "2026-10-18" });
+    const { done, relation, filters } = taskQuerySql(sql, bounded);
+    const [countStatement, countParameters] =
+      sql`SELECT COUNT(*) AS total,COALESCE(SUM(1-${done}),0) AS "openTotal" ${relation} WHERE ${sql.and(filters)}`.compile();
+    const countPlan = yield* sql.unsafe<{ detail: string }>(
+      `EXPLAIN QUERY PLAN ${countStatement}`,
+      countParameters,
+    );
+    expect(
+      countPlan.some((row) => row.detail.includes("<expr>>?") && row.detail.includes("<expr><?")),
+    ).toBe(true);
     yield* sql`UPDATE workspace_tasks SET owner=NULL WHERE id='kept'`;
     yield* sql`INSERT INTO workspace_project_config(project_id,columns_json) VALUES('p','["To do","Done"]')`;
     expect(yield* sql`SELECT generation FROM workspace_task_query_generation`).toEqual([

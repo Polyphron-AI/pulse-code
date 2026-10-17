@@ -67,8 +67,10 @@ export function taskQuerySql(
   if (query.state !== "all") filters.push(sql`${done}=${query.state === "done" ? 1 : 0}`);
   if (query.owner === "unassigned") filters.push(sql`t.owner IS NULL`);
   if (query.owner === "environment-owner") filters.push(sql`t.owner=${query.owner}`);
-  if (query.dueFrom) filters.push(sql`t.due_on>=${query.dueFrom}`);
-  if (query.dueTo) filters.push(sql`t.due_on<=${query.dueTo}`);
+  if (query.dueFrom)
+    filters.push(sql`(t.due_on IS NULL)=0 AND COALESCE(t.due_on,'')>=${query.dueFrom}`);
+  if (query.dueTo)
+    filters.push(sql`(t.due_on IS NULL)=0 AND COALESCE(t.due_on,'')<=${query.dueTo}`);
   if (query.text) {
     const text = `%${query.text.replace(/[!%_]/g, (value) => `!${value}`)}%`;
     filters.push(
@@ -82,9 +84,13 @@ export function taskQuerySql(
       sql`(t.due_on IS NULL,COALESCE(t.due_on,''),t.project_id,t.id)>(${cursor.dueOn === null ? 1 : 0},${cursor.dueOn ?? ""},${cursor.projectId},${cursor.id})`,
     );
   }
+  const order =
+    query.dueFrom || query.dueTo
+      ? sql`COALESCE(t.due_on,''),t.project_id,t.id`
+      : sql`(t.due_on IS NULL),COALESCE(t.due_on,''),t.project_id,t.id`;
   const page = sql<
     TaskRow & { projectTitle: string }
-  >`SELECT t.id,t.project_id AS "projectId",p.title AS "projectTitle",t.title,t.column_name AS "column",t.revision,t.due_on AS "dueOn",t.area_label AS "areaLabel",t.owner,${done} AS done ${relation} WHERE ${sql.and(pageFilters)} ORDER BY (t.due_on IS NULL),COALESCE(t.due_on,''),t.project_id,t.id LIMIT ${query.limit + 1}`;
+  >`SELECT t.id,t.project_id AS "projectId",p.title AS "projectTitle",t.title,t.column_name AS "column",t.revision,t.due_on AS "dueOn",t.area_label AS "areaLabel",t.owner,${done} AS done ${relation} WHERE ${sql.and(pageFilters)} ORDER BY ${order} LIMIT ${query.limit + 1}`;
   return { done, filters, relation, page };
 }
 export const make = Effect.gen(function* () {

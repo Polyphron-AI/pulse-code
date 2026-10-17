@@ -339,6 +339,7 @@ it.effect("clears obsolete cursor pages on changes and refreshes the first page 
       yield* cleared.await;
       expect(Option.isNone(AsyncResult.value(registry.get(page)))).toBe(true);
       expect(firstStates).not.toContain("Initial");
+      expect(registry.get(first).waiting).toBe(true);
       expect(AsyncResult.getOrThrow(registry.get(first)).tasks).toEqual([
         { id: "kept-row", title: "Keep focus", projectTitle: "Project 0" },
       ]);
@@ -361,7 +362,7 @@ it.effect("clears obsolete cursor pages on changes and refreshes the first page 
         generation: state.generation + 1,
       }));
       yield* refreshed.await;
-      expect(calls.filter((cursor) => cursor === undefined)).toHaveLength(4);
+      expect(calls.filter((cursor) => cursor === undefined)).toHaveLength(3);
       expect(firstStates).not.toContain("Initial");
     }),
   ),
