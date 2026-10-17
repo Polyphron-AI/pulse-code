@@ -13,6 +13,7 @@ export interface WorkspaceAgentsViewProps {
     status: string;
     active: boolean;
     unavailableReason?: string;
+    hideOpen?: boolean;
   }>;
   readonly onOpen: (key: string) => void;
   readonly onAssign: () => void;
@@ -22,6 +23,7 @@ export interface WorkspaceAgentsViewProps {
   readonly notice?: ReactNode;
   readonly picker?: ReactNode;
   readonly projectActions?: ReactNode;
+  readonly renderRowProvenance?: (key: string) => ReactNode;
   readonly renderRowActions?: (key: string) => ReactNode;
   readonly disabledReason?: string | null;
   readonly unassigning?: string | null;
@@ -40,6 +42,7 @@ export function WorkspaceAgentsView({
   notice,
   picker,
   projectActions,
+  renderRowProvenance,
   renderRowActions,
   disabledReason,
   unassigning,
@@ -76,7 +79,9 @@ export function WorkspaceAgentsView({
           >
             <div className="flex flex-col items-start gap-1 pointer-coarse:[&_button]:min-h-11 pointer-coarse:[&_button]:min-w-11">
               {disabledReason ? (
-                <p className="max-w-56 px-1.75 text-muted-foreground">{disabledReason}</p>
+                <p className="max-w-56 px-1.75 text-sm text-muted-foreground sm:text-xs">
+                  {disabledReason}
+                </p>
               ) : null}
               <Button
                 size="xs"
@@ -143,18 +148,20 @@ export function WorkspaceAgentsView({
                 {row.unavailableReason}
               </p>
             ) : null}
-            <div className="mt-1 flex items-start justify-between">
-              <button
-                type="button"
-                className="rounded-sm text-3xs leading-4 text-info-foreground hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:text-muted-foreground pointer-coarse:min-h-11"
-                disabled={Boolean(row.unavailableReason)}
-                aria-description={row.unavailableReason}
-                onClick={() => onOpen(row.key)}
-              >
-                Open conversation →
-              </button>
+            <div className="mt-2 flex items-start justify-between">
+              {!row.hideOpen ? (
+                <button
+                  type="button"
+                  className="rounded-sm text-3xs leading-4 text-info-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:text-muted-foreground pointer-coarse:min-h-11"
+                  disabled={Boolean(row.unavailableReason)}
+                  aria-description={row.unavailableReason}
+                  onClick={() => onOpen(row.key)}
+                >
+                  Open conversation →
+                </button>
+              ) : null}
               <Popover>
-                <span className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-within:opacity-100 has-data-popup-open:opacity-100 pointer-coarse:opacity-100">
+                <span className="ml-auto opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-within:opacity-100 has-data-popup-open:opacity-100 pointer-coarse:opacity-100">
                   <PopoverTrigger
                     render={
                       <Button
@@ -175,8 +182,11 @@ export function WorkspaceAgentsView({
                   aria-label={`Actions for ${row.title}`}
                 >
                   <div className="flex flex-col items-start gap-1">
+                    {renderRowProvenance?.(row.key)}
                     {disabledReason ? (
-                      <p className="max-w-56 px-1.75 text-muted-foreground">{disabledReason}</p>
+                      <p className="max-w-56 px-1.75 text-sm text-muted-foreground sm:text-xs">
+                        {disabledReason}
+                      </p>
                     ) : null}
                     {row.unavailableReason ? (
                       <p className="max-w-56 px-1.75 text-sm text-muted-foreground sm:text-xs">

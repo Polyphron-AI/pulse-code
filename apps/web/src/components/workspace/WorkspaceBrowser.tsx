@@ -50,7 +50,7 @@ import {
 import { captureWorkspacePage, findLinkedPages, hasExplicitScheme } from "./workspaceBrowser.logic";
 import { WorkspaceItemActions, WorkspaceItemMenu } from "./WorkspaceItemActions";
 import { useWorkspaceItemOpener } from "./useWorkspaceItemOpener";
-import { originText, linkSourceText } from "./mail/linkedItems";
+import { WorkspaceLinkProvenance } from "./mail/WorkspaceLinkProvenance";
 
 type CapturedPage = NonNullable<ReturnType<typeof captureWorkspacePage>>;
 
@@ -578,15 +578,8 @@ function ResourceBrowserChrome({
                       : view.item.ref,
                 }}
                 provenance={
-                  <div className="space-y-2 text-sm sm:text-xs">
-                    <p className="max-w-56 px-1.75 text-muted-foreground">
-                      {originText(view.origin) ?? "Linked by you"}
-                    </p>
-                    {view.source.type !== "user" ? (
-                      <p className="max-w-56 px-1.75 text-muted-foreground">
-                        {linkSourceText(view.source)}
-                      </p>
-                    ) : null}
+                  <div className="mb-1 space-y-2">
+                    <WorkspaceLinkProvenance {...view} />
                     <Button
                       size="xs"
                       variant="ghost"

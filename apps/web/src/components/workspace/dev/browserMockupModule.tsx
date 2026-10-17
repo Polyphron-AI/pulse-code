@@ -13,6 +13,7 @@ import {
   hasExplicitScheme,
 } from "../workspaceBrowser.logic";
 import { WorkspaceItemActionButtons } from "../WorkspaceItemActionButtons";
+import { WorkspaceLinkProvenance } from "../mail/WorkspaceLinkProvenance";
 import { MoreHorizontalIcon } from "lucide-react";
 import { Popover, PopoverPopup, PopoverTrigger } from "../../ui/popover";
 import { Button } from "../../ui/button";
@@ -130,18 +131,18 @@ export const createWorkspaceMockupModule: CreateWorkspaceMockupModule = (session
                     aria-label="Linked page actions"
                     className="pointer-coarse:[&_button]:min-h-11 pointer-coarse:[&_button]:min-w-11"
                   >
-                    <p className="max-w-56 px-1.75 text-sm text-muted-foreground sm:text-xs">
-                      Linked by you
-                    </p>
-                    <Button
-                      size="xs"
-                      variant="ghost"
-                      onClick={() => {
-                        void session.record("unlink", page.item.ref);
-                      }}
-                    >
-                      Unlink
-                    </Button>
+                    <div className="mb-1 space-y-2">
+                      <WorkspaceLinkProvenance {...page} />
+                      <Button
+                        size="xs"
+                        variant="ghost"
+                        onClick={() => {
+                          void session.record("unlink", page.item.ref);
+                        }}
+                      >
+                        Unlink
+                      </Button>
+                    </div>
                     <WorkspaceItemActionButtons
                       layout="menu"
                       startThread={{

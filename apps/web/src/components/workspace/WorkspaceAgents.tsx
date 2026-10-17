@@ -6,7 +6,7 @@ import { useConnectedEnvironmentIds } from "../../state/environments";
 import { useEnvironmentQuery } from "../../state/query";
 import { workspaceLinks } from "../../state/workspaceLinks";
 import { useArchivedThreadSnapshots } from "../../lib/archivedThreadsState";
-import { linkSourceText } from "./mail/linkedItems";
+import { WorkspaceLinkProvenance } from "./mail/WorkspaceLinkProvenance";
 import { Button } from "../ui/button";
 import { useMailCapabilities } from "./mail/useMailCapabilities";
 import { linkErrorText, useMailLinks } from "./mail/useMailLinks";
@@ -113,8 +113,9 @@ function ProjectAgents({
       view.item.ref.type === "thread" ? [view.item.ref.threadId] : [],
     ),
   );
+  const assignmentsById = new Map(assignments.map((view) => [view.id, view]));
   const missingActive = [...assignedIds].some((id) => !byId.has(id));
-  const archived = useArchivedThreadSnapshots(missingActive ? [environmentId] : []);
+  const archived = useArchivedThreadSnapshots(connected && missingActive ? [environmentId] : []);
   const archivedById = new Map(
     (
       archived.snapshots.find((entry) => entry.environmentId === environmentId)?.snapshot.threads ??
@@ -140,6 +141,8 @@ function ProjectAgents({
       initials: agentInitials(title),
       status: state.label,
       active: state.active,
+      hideOpen:
+        connected && !thread && !archivedThread && (archived.isLoading || Boolean(archived.error)),
       ...(!connected || (!thread && !archivedThread)
         ? {
             unavailableReason: !connected
@@ -147,12 +150,13 @@ function ProjectAgents({
               : archived.isLoading
                 ? "Checking archived conversations..."
                 : archived.error
-                  ? "Archived conversations could not be checked. Reopen the panel to retry."
+                  ? "Archived conversations could not be checked."
                   : "This conversation is unavailable. You can remove its project assignment.",
           }
         : {}),
     };
   });
+  const rowsById = new Map(rows.map((row) => [row.key, row]));
   const candidates = picking
     ? threads
         .filter(
@@ -228,7 +232,7 @@ function ProjectAgents({
         </>
       }
       onOpen={(key) => {
-        const row = assignments.find((view) => view.id === key);
+        const row = assignmentsById.get(key);
         if (
           row?.item.ref.type === "thread" &&
           connected &&
@@ -244,7 +248,7 @@ function ProjectAgents({
         }
       }}
       onUnassign={(key) => {
-        const assignment = assignments.find((view) => view.id === key);
+        const assignment = assignmentsById.get(key);
         if (assignment) void run(() => unlink(assignment.id), false, key);
       }}
       picker={
@@ -268,15 +272,29 @@ function ProjectAgents({
           </div>
         ) : null
       }
+      renderRowProvenance={(key) => {
+        const assignment = assignmentsById.get(key);
+        return assignment ? <WorkspaceLinkProvenance {...assignment} /> : null;
+      }}
       renderRowActions={(key) => {
-        const assignment = assignments.find((view) => view.id === key);
+        const assignment = assignmentsById.get(key);
         if (!assignment) return null;
-        const row = rows.find((row) => row.key === key);
+        const row = rowsById.get(key);
         return (
           <>
-            <p className="max-w-56 px-1.75 text-muted-foreground">
-              {linkSourceText(assignment.source)}
-            </p>
+            {row?.hideOpen && !archived.isLoading && archived.error ? (
+              <Button
+                size="xs"
+                variant="ghost"
+                className="pointer-coarse:min-h-11 pointer-coarse:min-w-11"
+                disabled={!canAssign || busy}
+                onClick={() => {
+                  if (mounted.current && permitted.current && !pending.current) archived.refresh();
+                }}
+              >
+                Retry
+              </Button>
+            ) : null}
             {canAssign && row && !row.unavailableReason ? (
               <WorkspaceItemActions
                 environmentId={environmentId}

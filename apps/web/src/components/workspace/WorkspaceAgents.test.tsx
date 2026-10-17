@@ -31,6 +31,7 @@ const boundary = vi.hoisted(() => ({
   status: vi.fn(),
   visibleTurns: vi.fn(),
   archived: vi.fn(),
+  refreshArchived: vi.fn(),
   command: vi.fn(),
   start: vi.fn<(...args: unknown[]) => Promise<{ draftId: DraftId; threadId: ThreadId } | null>>(),
   operate: true,
@@ -222,7 +223,12 @@ beforeEach(() => {
     [projectKey("other"), empty],
   ]);
   shells = initialShells();
-  boundary.archived.mockReturnValue({ snapshots: [], error: null, isLoading: false });
+  boundary.archived.mockReturnValue({
+    snapshots: [],
+    error: null,
+    isLoading: false,
+    refresh: boundary.refreshArchived,
+  });
   shellRevision++;
   node = document.createElement("div");
   document.body.append(node);
@@ -408,6 +414,134 @@ it("keeps missing assignments actionable and archived conversations openable", a
   expect(onOpen).toHaveBeenCalledExactlyOnceWith({ type: "thread", threadId: "t1" });
   expect(boundary.start).not.toHaveBeenCalled();
 });
+it.each([
+  { isLoading: true, error: null, reason: "Checking archived conversations..." },
+  {
+    isLoading: false,
+    error: "Archive lookup failed",
+    reason: "Archived conversations could not be checked.",
+  },
+])("keeps Unassign available while $reason", async ({ isLoading, error, reason }) => {
+  shells = shells.filter((thread) => thread.id !== "t1");
+  boundary.archived.mockReturnValue({
+    snapshots: [],
+    isLoading,
+    error,
+    refresh: boundary.refreshArchived,
+  });
+  await mount();
+  expect(getByText(node, reason)).toBeDefined();
+  expect(queryByRole(node, "button", { name: "Open conversation →" })).toBeNull();
+  await click("Actions for Stale title");
+  expect(getAllByRole(document.body, "button", { name: "Unassign from project" })).toHaveLength(1);
+  expect(
+    getByRole<HTMLButtonElement>(document.body, "button", { name: "Unassign from project" })
+      .disabled,
+  ).toBe(false);
+  if (error) {
+    await click("Retry");
+    expect(boundary.refreshArchived).toHaveBeenCalledExactlyOnceWith();
+  } else {
+    expect(queryByRole(document.body, "button", { name: "Retry" })).toBeNull();
+  }
+});
+
+it("prioritizes reconnect over a cached archived assignment and skips its lookup", async () => {
+  shells = shells.filter((thread) => thread.id !== "t1");
+  boundary.archived.mockReturnValue({
+    snapshots: [
+      {
+        environmentId,
+        snapshot: {
+          threads: [
+            makeThreadFixture({
+              environmentId,
+              projectId,
+              id: ThreadId.make("t1"),
+              title: "Archived analyst",
+              archivedAt: "2026-10-13T09:00:00.000Z",
+            }).source,
+          ],
+        },
+      },
+    ],
+    error: "Archive lookup failed",
+    isLoading: false,
+    refresh: boundary.refreshArchived,
+  });
+  boundary.connected = false;
+  await mount();
+  expect(boundary.archived).toHaveBeenLastCalledWith([]);
+  expect(getByText(node, "Status unavailable")).toBeDefined();
+  expect(getByText(node, "Reconnect to open or change this assignment.")).toBeDefined();
+  expect(node.textContent).not.toContain("could not be checked");
+  const open = getByRole<HTMLButtonElement>(node, "button", { name: "Open conversation →" });
+  expect(open.disabled).toBe(true);
+  expect(open.getAttribute("aria-description")).toBe(
+    "Reconnect to open or change this assignment.",
+  );
+  await act(() => open.click());
+  expect(onOpen).not.toHaveBeenCalled();
+  await click("Actions for Archived analyst");
+  expect(queryByRole(document.body, "button", { name: "Retry" })).toBeNull();
+});
+
+it("places row provenance before Unassign", async () => {
+  await mount();
+  await click("Actions for SEO analyst");
+  const provenance = getByText(document.body, "Linked by you");
+  const unassign = getByRole(document.body, "button", { name: "Unassign from project" });
+  expect(provenance.compareDocumentPosition(unassign) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(
+    0,
+  );
+});
+
+it("shows the link origin before its non-user source", async () => {
+  lists.set(
+    projectKey(),
+    decode({
+      linked: [
+        {
+          ...assigned,
+          origin: {
+            confirmedAt: "2026-10-13T08:00:00.000Z",
+            viewing: { ref: { type: "project", projectId }, title: "Project brief" },
+          },
+          source: { type: "action", action: "start-thread" },
+        },
+      ],
+      suggested: [],
+      truncated: false,
+    }),
+  );
+  await mount();
+  await click("Actions for SEO analyst");
+  const origin = getByText(document.body, /You linked this on .* while viewing 'Project brief'/);
+  const source = getByText(document.body, "From start thread");
+  expect(origin.compareDocumentPosition(source) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+  expect(queryByRole(document.body, "button", { name: "Retry" })).toBeNull();
+});
+
+it.each(["denied", "disconnected"])("blocks archived Retry when %s", async (state) => {
+  shells = shells.filter((thread) => thread.id !== "t1");
+  boundary.archived.mockReturnValue({
+    snapshots: [],
+    error: "Archive lookup failed",
+    isLoading: false,
+    refresh: boundary.refreshArchived,
+  });
+  await mount();
+  await click("Actions for Stale title");
+  const retry = getByRole<HTMLButtonElement>(document.body, "button", { name: "Retry" });
+  if (state === "denied") boundary.operate = false;
+  else boundary.connected = false;
+  await mount();
+  await act(() => retry.click());
+  expect(boundary.refreshArchived).not.toHaveBeenCalled();
+  if (state === "denied") expect(retry.disabled).toBe(true);
+  else expect(queryByRole(document.body, "button", { name: "Retry" })).toBeNull();
+});
+
 it("awaits assignment acknowledgement, excludes assigned and foreign shells, and cancels cleanly", async () => {
   shells.push(
     makeThreadFixture({
@@ -795,4 +929,36 @@ it("unassigns running work without stopping it and leaves the thread reassignabl
   });
   await click("Link existing thread");
   expect(getByRole(node, "button", { name: "SEO analyst" })).toBeDefined();
+});
+
+it("labels only the targeted assignment Unassigning while the other row stays busy", async () => {
+  lists.set(
+    projectKey(),
+    decode({
+      linked: [
+        assigned,
+        {
+          ...assigned,
+          id: "wl_00000000-0000-0000-0000-000000000002",
+          item: { ref: { type: "thread", threadId: "t2" }, title: "Merely project-owned" },
+        },
+      ],
+      suggested: [],
+      truncated: false,
+    }),
+  );
+  const gate = deferred();
+  boundary.unlink.mockReturnValueOnce(gate.promise);
+  await mount();
+  await click("Actions for SEO analyst");
+  await click("Unassign from project");
+  expect(getAllByRole(document.body, "button", { name: "Unassigning..." })).toHaveLength(1);
+  await click("Actions for Merely project-owned");
+  const other = getByRole<HTMLButtonElement>(document.body, "button", {
+    name: "Unassign from project",
+  });
+  expect(other.disabled).toBe(true);
+  await act(() => other.click());
+  expect(boundary.unlink).toHaveBeenCalledExactlyOnceWith(assigned.id);
+  await act(() => gate.resolve());
 });

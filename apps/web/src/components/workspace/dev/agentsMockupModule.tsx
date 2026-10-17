@@ -1,5 +1,6 @@
 import { WorkspaceItemActionButtons } from "../WorkspaceItemActionButtons";
 import { WorkspaceAgentsView } from "../WorkspaceAgentsView";
+import { WorkspaceLinkProvenance } from "../mail/WorkspaceLinkProvenance";
 import type { CreateWorkspaceMockupModule, MockupMutation } from "./workspaceMockupFixtures";
 
 export const createWorkspaceMockupModule: CreateWorkspaceMockupModule = (session) => {
@@ -42,17 +43,15 @@ export const createWorkspaceMockupModule: CreateWorkspaceMockupModule = (session
             startThread={{ onClick: () => run("open-thread") }}
           />
         }
+        renderRowProvenance={() => <WorkspaceLinkProvenance source={{ type: "user" }} />}
         renderRowActions={(key) => (
-          <>
-            <p className="max-w-56 px-1.75 text-muted-foreground">Linked by you</p>
-            <WorkspaceItemActionButtons
-              layout="menu"
-              startThread={{ onClick: () => run("open-thread", key) }}
-              addToProject={{ onClick: () => run("add-to-project", key) }}
-              startProject={{ onClick: () => run("start-project", key) }}
-              startAutomation={{ onClick: () => run("start-automation", key) }}
-            />
-          </>
+          <WorkspaceItemActionButtons
+            layout="menu"
+            startThread={{ onClick: () => run("open-thread", key) }}
+            addToProject={{ onClick: () => run("add-to-project", key) }}
+            startProject={{ onClick: () => run("start-project", key) }}
+            startAutomation={{ onClick: () => run("start-automation", key) }}
+          />
         )}
         onUnassign={(key) => run("unlink", key)}
       />
