@@ -1201,7 +1201,7 @@ export const WorkspaceDisplayTimeZone = Schema.Trim.check(
 );
 export const WorkspaceOwnerProfile = Schema.Struct({
   displayName: Schema.Trim.check(Schema.isMinLength(1), Schema.isMaxLength(80)),
-  initials: Schema.Trim.check(Schema.isMinLength(1), Schema.isMaxLength(3)),
+  initials: Schema.Trim.check(Schema.isMinLength(1), Schema.isMaxLength(80)),
 });
 export const ServerSettings = Schema.Struct({
   workspaceOwnerProfile: Schema.NullOr(WorkspaceOwnerProfile).pipe(

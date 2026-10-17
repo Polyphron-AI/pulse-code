@@ -82,9 +82,11 @@ Tasks contain a title, project column and links. Open a project to add tasks, th
 
 On a server with task date support, select a task to set or clear its due date and area. A due date is a calendar day. It stays on that day when you open the task on another device. Today and overdue labels follow midnight in the environment's workspace timezone.
 
-On a server with task owner support, new tasks start assigned to Me. Choose Unassigned when adding or editing a task to clear its owner. Older tasks start Unassigned. In Settings, General, select one environment to save its Environment owner name and initials. Every connected device shows that display profile for Me. Renaming or clearing the profile keeps tasks assigned to Me. This display label does not identify a signed-in person or grant access to tasks or linked items.
+On a server with task owner support, new tasks start assigned to Me. Choose Unassigned when adding or editing a task to clear its owner. Older tasks start Unassigned. In Settings, General, select one environment to save its Environment owner name and initials. Use one to three letters or digits for initials; combining marks are accepted. Every connected device shows that display profile for Me. Renaming or clearing the profile keeps tasks assigned to Me. This display label does not identify a signed-in person or grant access to tasks or linked items.
 
 To choose that timezone, open Settings, General, select one environment and save its Workspace timezone, such as Africa/Johannesburg. It starts with the server's timezone and keeps that choice if the server moves. Reset uses the server's current timezone. If that timezone is unsupported, the initial choice and Reset use UTC. If the server or your device cannot recognize a saved timezone, task dates use UTC and show a notice. A due date does not schedule a reminder or start an agent.
+
+If an older server accepts a timezone or owner save without keeping the change, Settings says "This server does not support ... yet." and keeps your draft. Update the server, then save again.
 
 Task date, owner and completion controls become available when the connected server supports them. If project workspace settings says "Tasks need a newer server.", update that server to enable them.
 

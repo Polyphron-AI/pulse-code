@@ -1151,7 +1151,7 @@ describe("workspace owner profile", () => {
       { displayName: " ", initials: "MC" },
       { displayName: "x".repeat(81), initials: "MC" },
       { displayName: "Maya", initials: "" },
-      { displayName: "Maya", initials: "ABCD" },
+      { displayName: "Maya", initials: "x".repeat(81) },
     ])
       expect(() => decodeServerSettingsPatch({ workspaceOwnerProfile })).toThrow();
     const workspaceOwnerProfile = { displayName: "李明", initials: "李" };
@@ -1159,4 +1159,14 @@ describe("workspace owner profile", () => {
       workspaceOwnerProfile,
     );
   });
+});
+
+it("keeps bounded combining initials decodable across settings clients", () => {
+  const workspaceOwnerProfile = {
+    displayName: "Owner",
+    initials: "\u0936\u093f\u0936\u093f\u0936\u093f",
+  };
+  expect(decodeServerSettings({ workspaceOwnerProfile }).workspaceOwnerProfile).toEqual(
+    workspaceOwnerProfile,
+  );
 });

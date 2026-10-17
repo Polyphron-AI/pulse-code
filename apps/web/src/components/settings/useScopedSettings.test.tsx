@@ -45,7 +45,10 @@ it.each(["Success", "Failure", "unavailable"])(
   "reports %s from the existing scoped settings write",
   async (outcome) => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-    mocks.persist.mockResolvedValue({ _tag: outcome });
+    mocks.persist.mockResolvedValue({
+      _tag: outcome,
+      value: { ...DEFAULT_SERVER_SETTINGS, workspaceDisplayTimeZone: "Europe/London" },
+    });
     if (outcome === "unavailable") mocks.phase = "disconnected";
     const results: boolean[] = [];
     function Probe() {
@@ -89,7 +92,13 @@ it.each(["validate-workspace-timezone", "validate-workspace-owner-profile"] as c
       return (
         <button
           onClick={async () => {
-            results.push(await update({ workspaceDisplayTimeZone: "Europe/London" }));
+            results.push(
+              await update(
+                operation === "validate-workspace-owner-profile"
+                  ? { workspaceOwnerProfile: { displayName: "Maya", initials: "MC" } }
+                  : { workspaceDisplayTimeZone: "Europe/London" },
+              ),
+            );
           }}
         >
           Save
@@ -102,5 +111,39 @@ it.each(["validate-workspace-timezone", "validate-workspace-owner-profile"] as c
     await act(() => renderer!.root.findByType("button").props.onClick());
     expect(results).toEqual([false]);
     expect(onError).toHaveBeenCalledExactlyOnceWith(error);
+  },
+);
+
+it.each(["workspaceDisplayTimeZone", "workspaceOwnerProfile"] as const)(
+  "reports an unsupported %s when the server succeeds without saving it",
+  async (key) => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    mocks.persist.mockResolvedValue({ _tag: "Success", value: DEFAULT_SERVER_SETTINGS });
+    const onUnsupportedSetting = vi.fn();
+    const results: boolean[] = [];
+    function Probe() {
+      const update = useUpdateScopedSettings({ onUnsupportedSetting });
+      return (
+        <button
+          onClick={async () => {
+            results.push(
+              await update(
+                key === "workspaceOwnerProfile"
+                  ? { workspaceOwnerProfile: { displayName: "Maya", initials: "MC" } }
+                  : { workspaceDisplayTimeZone: "Europe/London" },
+              ),
+            );
+          }}
+        >
+          Save
+        </button>
+      );
+    }
+    await act(() => {
+      renderer = create(<Probe />);
+    });
+    await act(() => renderer!.root.findByType("button").props.onClick());
+    expect(results).toEqual([false]);
+    expect(onUnsupportedSetting).toHaveBeenCalledExactlyOnceWith(key);
   },
 );

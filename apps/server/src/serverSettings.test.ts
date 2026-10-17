@@ -155,6 +155,51 @@ it.layer(NodeServices.layer)("server settings", (it) => {
       ),
     ),
   );
+  it.effect("normalizes real owner names and combining initials on both settings write paths", () =>
+    Effect.gen(function* () {
+      const service = yield* ServerSettingsModule.ServerSettingsService;
+      const mutation = {
+        operation: "upsert" as const,
+        instanceId: ProviderInstanceId.make("owner-accept-test"),
+        instance: { driver: ProviderDriverKind.make("codex"), config: {} },
+      };
+      for (const workspaceOwnerProfile of [
+        { displayName: "\u0639\u0644\u06cc\u200c\u0631\u0636\u0627", initials: "\u0639" },
+        { displayName: "\u0928\u093e\u092e", initials: "\u0936\u093f" },
+        { displayName: "  Jose\u0301  ", initials: " E\u0301 " },
+        { displayName: "A\u200dB", initials: "\u0936\u093f\u0936\u093f\u0936\u093f" },
+      ]) {
+        const expected = {
+          displayName: workspaceOwnerProfile.displayName.normalize("NFC").trim(),
+          initials: workspaceOwnerProfile.initials.normalize("NFC").trim(),
+        };
+        for (const write of [
+          service.updateSettings({ workspaceOwnerProfile }),
+          service.updateProviderInstance(mutation, { workspaceOwnerProfile }),
+        ])
+          assert.deepEqual((yield* write).workspaceOwnerProfile, expected);
+      }
+      for (const control of [
+        "\u0000",
+        "\u000a",
+        "\u2028",
+        "\u2029",
+        "\u202a",
+        "\u202e",
+        "\u2066",
+        "\u2069",
+        "\u200b",
+      ])
+        assert.equal(
+          (yield* service
+            .updateSettings({
+              workspaceOwnerProfile: { displayName: `A${control}B`, initials: "AB" },
+            })
+            .pipe(Effect.flip)).operation,
+          "validate-workspace-owner-profile",
+        );
+    }).pipe(Effect.provide(makeServerSettingsLayer())),
+  );
   it.effect(
     "rejects invalid owner display values on both settings write paths without persisting",
     () =>

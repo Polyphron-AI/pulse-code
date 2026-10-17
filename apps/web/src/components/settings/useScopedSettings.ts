@@ -52,7 +52,11 @@ export function useScopedSettingSource(keys: readonly (keyof ServerSettings)[]) 
   return scopedSettingsSource(targets, keys);
 }
 
-function useRunScopedPlan(onError?: (error: unknown) => void) {
+type WorkspaceDisplaySetting = "workspaceDisplayTimeZone" | "workspaceOwnerProfile";
+function useRunScopedPlan(
+  onError?: (error: unknown) => void,
+  onUnsupportedSetting?: (key: WorkspaceDisplaySetting) => void,
+) {
   const persistServer = useAtomCommand(serverEnvironment.updateSettings, { reportFailure: false });
   return useCallback(
     async (plan: ReturnType<typeof planScopedSettingsPatch>) => {
@@ -69,6 +73,38 @@ function useRunScopedPlan(onError?: (error: unknown) => void) {
         async (input) => {
           const result = await persistServer(input);
           if (result._tag === "Failure") onError?.(squashAtomCommandFailure(result));
+          else {
+            const patch = input.input.patch;
+            const saved = result.value;
+            const zone = patch.workspaceDisplayTimeZone;
+            const owner =
+              patch.workspaceOwnerProfile === undefined || patch.workspaceOwnerProfile === null
+                ? patch.workspaceOwnerProfile
+                : {
+                    displayName: patch.workspaceOwnerProfile.displayName.normalize("NFC").trim(),
+                    initials: patch.workspaceOwnerProfile.initials.normalize("NFC").trim(),
+                  };
+            const unsupported: WorkspaceDisplaySetting[] = [];
+            if (
+              zone !== undefined &&
+              (zone === null
+                ? saved.workspaceDisplayTimeZone === null
+                : saved.workspaceDisplayTimeZone !== zone)
+            )
+              unsupported.push("workspaceDisplayTimeZone");
+            if (
+              owner !== undefined &&
+              (owner === null
+                ? saved.workspaceOwnerProfile !== null
+                : saved.workspaceOwnerProfile?.displayName !== owner.displayName ||
+                  saved.workspaceOwnerProfile?.initials !== owner.initials)
+            )
+              unsupported.push("workspaceOwnerProfile");
+            if (unsupported.length) {
+              for (const key of unsupported) onUnsupportedSetting?.(key);
+              return { _tag: "Failure" as const };
+            }
+          }
           return result;
         },
         persistClientSettingsPatch,
@@ -82,13 +118,16 @@ function useRunScopedPlan(onError?: (error: unknown) => void) {
       });
       return false;
     },
-    [persistServer, onError],
+    [persistServer, onError, onUnsupportedSetting],
   );
 }
 
-export function useUpdateScopedSettings(options?: { readonly onError?: (error: unknown) => void }) {
+export function useUpdateScopedSettings(options?: {
+  readonly onError?: (error: unknown) => void;
+  readonly onUnsupportedSetting?: (key: WorkspaceDisplaySetting) => void;
+}) {
   const { scope, environments } = useSettingsScope();
-  const run = useRunScopedPlan(options?.onError);
+  const run = useRunScopedPlan(options?.onError, options?.onUnsupportedSetting);
   return useCallback(
     (patch: ScopedSettingsPatch) => run(planScopedSettingsPatch(scope, environments, patch)),
     [environments, run, scope],

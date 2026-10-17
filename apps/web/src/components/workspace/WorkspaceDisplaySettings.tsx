@@ -61,6 +61,11 @@ function WorkspaceDisplaySettingsForm({ environmentId }: { environmentId: Enviro
   );
   const [ownerError, setOwnerError] = useState<string | null>(null);
   const update = useUpdateScopedSettings({
+    onUnsupportedSetting(key) {
+      if (key === "workspaceDisplayTimeZone")
+        setError("This server does not support the workspace timezone yet.");
+      else setOwnerError("This server does not support the owner profile yet.");
+    },
     onError(error) {
       if (isServerSettingsError(error) && error.operation === "validate-workspace-timezone")
         setError(error.message);
@@ -75,9 +80,25 @@ function WorkspaceDisplaySettingsForm({ environmentId }: { environmentId: Enviro
     if (disabled) return;
     let workspaceOwnerProfile;
     try {
-      workspaceOwnerProfile = profile === null ? null : decodeOwnerProfile(profile);
+      workspaceOwnerProfile =
+        profile === null
+          ? null
+          : decodeOwnerProfile({
+              displayName: profile.displayName.normalize("NFC"),
+              initials: profile.initials.normalize("NFC"),
+            });
+      if (
+        workspaceOwnerProfile !== null &&
+        (!/^(?:[\p{L}\p{N}]\p{M}*){1,3}$/u.test(workspaceOwnerProfile.initials) ||
+          /[\p{Cc}\p{Zl}\p{Zp}\u202a-\u202e\u2066-\u2069\u200b]/u.test(
+            workspaceOwnerProfile.displayName + workspaceOwnerProfile.initials,
+          ))
+      )
+        throw new RangeError("Invalid owner profile");
     } catch {
-      setOwnerError("Enter an owner name of 1 to 80 characters and initials of 1 to 3 characters.");
+      setOwnerError(
+        "Enter an owner name of 1 to 80 characters and initials of 1 to 3 letters or digits.",
+      );
       return;
     }
     setBusy(true);
@@ -196,7 +217,6 @@ function WorkspaceDisplaySettingsForm({ environmentId }: { environmentId: Enviro
           <span>Initials</span>
           <Input
             aria-label="Owner initials"
-            maxLength={3}
             value={owner.initials}
             disabled={disabled}
             onChange={(event) => setOwnerDraft({ ...owner, initials: event.target.value })}

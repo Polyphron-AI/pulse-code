@@ -154,15 +154,19 @@ const validateWorkspaceTimeZonePatch = (patch: ServerSettingsPatch, settingsPath
 
 const validateWorkspaceOwnerProfilePatch = (patch: ServerSettingsPatch, settingsPath: string) => {
   const profile = patch.workspaceOwnerProfile;
-  if (profile === undefined || profile === null) return Effect.void;
-  return decodeWorkspaceOwnerProfile(profile).pipe(
+  if (profile === undefined || profile === null) return Effect.succeed(patch);
+  return decodeWorkspaceOwnerProfile({
+    displayName: profile.displayName.normalize("NFC"),
+    initials: profile.initials.normalize("NFC"),
+  }).pipe(
     Effect.filterOrFail(
       (decoded) =>
-        !/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(profile.displayName + profile.initials) &&
-        /^[\p{L}\p{N}]{1,3}$/u.test(decoded.initials),
+        !/[\p{Cc}\p{Zl}\p{Zp}\u202a-\u202e\u2066-\u2069\u200b]/u.test(
+          decoded.displayName + decoded.initials + profile.displayName + profile.initials,
+        ) && /^(?:[\p{L}\p{N}]\p{M}*){1,3}$/u.test(decoded.initials),
       () => new RangeError("Invalid owner display profile"),
     ),
-    Effect.asVoid,
+    Effect.map((workspaceOwnerProfile) => ({ ...patch, workspaceOwnerProfile })),
     Effect.mapError(
       (cause) =>
         new ServerSettingsError({
@@ -391,20 +395,20 @@ const makeTest = (overrides: DeepPartial<ServerSettings> = {}) =>
         updateTestSettings((currentSettings) =>
           validateWorkspaceTimeZonePatch(patch, "test settings").pipe(
             Effect.andThen(validateWorkspaceOwnerProfilePatch(patch, "test settings")),
-            Effect.as(applyServerSettingsPatch(currentSettings, patch)),
+            Effect.map((decodedPatch) => applyServerSettingsPatch(currentSettings, decodedPatch)),
           ),
         ),
       updateProviderInstance: (mutation, patch = {}) =>
         updateTestSettings((currentSettings) =>
           Effect.gen(function* () {
             yield* validateWorkspaceTimeZonePatch(patch, "test settings");
-            yield* validateWorkspaceOwnerProfilePatch(patch, "test settings");
+            const decodedPatch = yield* validateWorkspaceOwnerProfilePatch(patch, "test settings");
             yield* ensureProviderInstanceMutationAllowed(
               currentSettings,
               mutation,
               "test settings",
             );
-            const patched = applyServerSettingsPatch(currentSettings, patch);
+            const patched = applyServerSettingsPatch(currentSettings, decodedPatch);
             return applyProviderInstanceMutation(patched, mutation);
           }),
         ),
@@ -1382,16 +1386,16 @@ const make = Effect.gen(function* () {
       updateAndPersistSettings((current) =>
         validateWorkspaceTimeZonePatch(patch, settingsPath).pipe(
           Effect.andThen(validateWorkspaceOwnerProfilePatch(patch, settingsPath)),
-          Effect.as(applyServerSettingsPatch(current, patch)),
+          Effect.map((decodedPatch) => applyServerSettingsPatch(current, decodedPatch)),
         ),
       ),
     updateProviderInstance: (mutation, patch = {}) =>
       updateAndPersistSettings((current) =>
         Effect.gen(function* () {
           yield* validateWorkspaceTimeZonePatch(patch, settingsPath);
-          yield* validateWorkspaceOwnerProfilePatch(patch, settingsPath);
+          const decodedPatch = yield* validateWorkspaceOwnerProfilePatch(patch, settingsPath);
           yield* ensureProviderInstanceMutationAllowed(current, mutation, settingsPath);
-          const patched = applyServerSettingsPatch(current, patch);
+          const patched = applyServerSettingsPatch(current, decodedPatch);
           return applyProviderInstanceMutation(patched, mutation);
         }),
       ),

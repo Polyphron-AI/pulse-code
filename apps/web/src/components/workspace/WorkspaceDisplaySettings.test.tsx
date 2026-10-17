@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   ids: ["remote"],
   kind: "environment",
   update: vi.fn(),
+  unsupported: null as "workspaceDisplayTimeZone" | "workspaceOwnerProfile" | null,
 }));
 vi.mock("../settings/SettingsScopeContext", () => ({
   useSettingsScope: () => ({
@@ -28,8 +29,13 @@ vi.mock("../settings/useScopedSettings", () => ({
     workspaceOwnerProfile: mocks.profile,
   }),
   useUpdateScopedSettings:
-    (options?: { onError?: (error: unknown) => void }) => async (patch: unknown) => {
+    (options?: {
+      onError?: (error: unknown) => void;
+      onUnsupportedSetting?: (key: "workspaceDisplayTimeZone" | "workspaceOwnerProfile") => void;
+    }) =>
+    async (patch: unknown) => {
       const saved = await mocks.update(patch);
+      if (!saved && mocks.unsupported) options?.onUnsupportedSetting?.(mocks.unsupported);
       if (!saved && mocks.error) options?.onError?.(mocks.error);
       return saved;
     },
@@ -57,6 +63,7 @@ afterEach(async () => {
   mocks.profile = null;
   mocks.environmentId = "remote";
   mocks.error = null;
+  mocks.unsupported = null;
   vi.clearAllMocks();
   vi.unstubAllGlobals();
 });
@@ -265,7 +272,7 @@ it("shows the server owner-profile rejection and keeps drafts isolated across en
   });
   for (const [label, value] of [
     ["Owner display name", "Maya"],
-    ["Owner initials", "M!"],
+    ["Owner initials", "MC"],
   ])
     await act(() =>
       renderer!.root.findByProps({ "aria-label": label }).props.onChange({ target: { value } }),
@@ -278,7 +285,7 @@ it("shows the server owner-profile rejection and keeps drafts isolated across en
   expect(renderer!.root.findByProps({ role: "alert" }).children.join("")).toBe(
     (mocks.error as ServerSettingsError).message,
   );
-  expect(renderer!.root.findByProps({ "aria-label": "Owner initials" }).props.value).toBe("M!");
+  expect(renderer!.root.findByProps({ "aria-label": "Owner initials" }).props.value).toBe("MC");
   mocks.environmentId = "other";
   mocks.ids = ["other"];
   mocks.profile = { displayName: "Alex", initials: "AL" };
@@ -287,4 +294,53 @@ it("shows the server owner-profile rejection and keeps drafts isolated across en
     "Alex",
   );
   expect(renderer!.root.findAllByProps({ role: "alert" })).toHaveLength(0);
+});
+
+it.each(["workspaceDisplayTimeZone", "workspaceOwnerProfile"] as const)(
+  "shows the older-server notice for %s and retains the draft",
+  async (key) => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    mocks.update.mockResolvedValue(false);
+    mocks.unsupported = key;
+    await act(() => {
+      renderer = create(<WorkspaceDisplaySettings />);
+    });
+    for (const [label, value] of key === "workspaceOwnerProfile"
+      ? [
+          ["Owner display name", "Maya"],
+          ["Owner initials", "MC"],
+        ]
+      : [["Workspace timezone", "Europe/London"]])
+      await act(() =>
+        renderer!.root.findByProps({ "aria-label": label }).props.onChange({ target: { value } }),
+      );
+    const form = renderer!.root.findAllByType("form")[key === "workspaceOwnerProfile" ? 1 : 0]!;
+    await act(() => form.props.onSubmit({ preventDefault() {} }));
+    expect(renderer!.root.findByProps({ role: "alert" }).children.join("")).toBe(
+      key === "workspaceOwnerProfile"
+        ? "This server does not support the owner profile yet."
+        : "This server does not support the workspace timezone yet.",
+    );
+    expect(
+      renderer!.root.findByProps({
+        "aria-label": key === "workspaceOwnerProfile" ? "Owner display name" : "Workspace timezone",
+      }).props.value,
+    ).toBe(key === "workspaceOwnerProfile" ? "Maya" : "Europe/London");
+  },
+);
+it("rejects punctuation initials before sending a profile", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  await act(() => {
+    renderer = create(<WorkspaceDisplaySettings />);
+  });
+  for (const [label, value] of [
+    ["Owner display name", "Maya"],
+    ["Owner initials", "M!"],
+  ])
+    await act(() =>
+      renderer!.root.findByProps({ "aria-label": label }).props.onChange({ target: { value } }),
+    );
+  await act(() => renderer!.root.findAllByType("form")[1]!.props.onSubmit({ preventDefault() {} }));
+  expect(mocks.update).not.toHaveBeenCalled();
+  expect(JSON.stringify(renderer!.toJSON())).toContain("letters or digits");
 });
