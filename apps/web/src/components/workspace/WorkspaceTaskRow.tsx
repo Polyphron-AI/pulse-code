@@ -103,7 +103,12 @@ export const WorkspaceTaskRow = memo(function WorkspaceTaskRow({
       </span>
       <span className="block truncate text-3xs leading-4.5 text-muted-foreground">
         {task.projectTitle}
-        {task.areaLabel ? ` · ${task.areaLabel}` : ""}
+        {task.areaLabel ? (
+          <>
+            <span className="mx-1">·</span>
+            {task.areaLabel}
+          </>
+        ) : null}
       </span>
     </button>
   );
@@ -148,7 +153,9 @@ export const WorkspaceTaskRow = memo(function WorkspaceTaskRow({
             }}
           />
         </label>
-        <div className="min-w-0 flex-1">{renderItemMenu ? renderItemMenu(task, title) : title}</div>
+        <div className={`min-w-0 flex-1 ${density === "list" ? "pt-1.5" : ""}`}>
+          {renderItemMenu ? renderItemMenu(task, title) : title}
+        </div>
         <span className="w-[58px] shrink-0 text-right text-3xs text-muted-foreground">
           {due ? (
             <time
@@ -165,13 +172,7 @@ export const WorkspaceTaskRow = memo(function WorkspaceTaskRow({
       </div>
       {completedColumn === null ? (
         <span id={explanation} className="sr-only">
-          Choose a completed column in{" "}
-          <a
-            href={`/workspace?space=projects&environment=${encodeURIComponent(environmentId)}&project=${encodeURIComponent(task.projectId)}`}
-          >
-            project workspace settings
-          </a>{" "}
-          to complete or reopen tasks.
+          Choose a completed column in project workspace settings to complete or reopen tasks.
         </span>
       ) : null}
       {error ? (

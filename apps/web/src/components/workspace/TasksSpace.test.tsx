@@ -5,6 +5,13 @@ import { afterEach, expect, it, vi } from "vite-plus/test";
 import * as DateTime from "effect/DateTime";
 import { TasksSpaceView, type TasksSpaceViewProps } from "./TasksSpaceView";
 import {
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  RouterProvider,
+} from "@tanstack/react-router";
+import {
   EnvironmentId,
   ProjectId,
   WorkspaceToolsError,
@@ -16,7 +23,8 @@ import { Atom, AsyncResult, AtomRegistry } from "effect/unstable/reactivity";
 import * as Cause from "effect/Cause";
 import * as Option from "effect/Option";
 import { RegistryContext } from "@effect/atom-react";
-import { TasksList } from "./TasksSpace";
+import { TasksList, TasksSpace } from "./TasksSpace";
+import { parseWorkspaceSearch } from "./workspaceNavigation";
 const boundary = vi.hoisted(() => ({ query: vi.fn() }));
 vi.mock("../../state/workspaceTools", () => ({
   workspaceTools: { queryTasks: (request: unknown) => boundary.query(request) },
@@ -36,6 +44,9 @@ vi.mock("./WorkspaceItemActions", () => ({
   WorkspaceItemMenu: ({ children }: { children: React.ReactNode }) => children,
 }));
 vi.mock("./WorkspaceResourcesPanel", () => ({ WorkspaceProjectResources: () => null }));
+vi.mock("./WorkspaceEngagement", () => ({
+  WorkspaceEngagement: ({ children }: { children: React.ReactNode }) => children,
+}));
 vi.mock("./WorkspaceLinkedContext", () => ({ WorkspaceLinkedContext: () => null }));
 vi.mock("./useWorkspaceHeaderModel", () => ({
   useWorkspaceHeaderModel: () => ({ title: "Tasks" }),
@@ -85,7 +96,10 @@ it("debounces stable search, validates controls and cancels work while hidden", 
   await act(() => input.props.onChange({ target: { value: "launch" } }));
   expect(filter).not.toHaveBeenCalled();
   await act(() => vi.advanceTimersByTime(300));
-  expect(filter).toHaveBeenLastCalledWith({ ...defaults.filters, text: "launch" });
+  expect(filter).toHaveBeenLastCalledWith(
+    { ...defaults.filters, text: "launch" },
+    { replace: true },
+  );
   await act(() => input.props.onChange({ target: { value: "x".repeat(241) } }));
   await act(() => vi.advanceTimersByTime(300));
   expect(filter).toHaveBeenCalledTimes(1);
@@ -458,4 +472,227 @@ it("distinguishes an empty list from no matches and clears the filter", async ()
       .props.onClick(),
   );
   expect(JSON.stringify(renderer.toJSON())).toContain("No tasks yet. Add tasks from a project.");
+});
+
+it("keeps raw trailing spaces after the debounced query is trimmed", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  vi.useFakeTimers();
+  const filter = vi.fn();
+  function Harness() {
+    const [filters, setFilters] = useState(defaults.filters);
+    return (
+      <TasksSpaceView
+        {...defaults}
+        filters={filters}
+        onFilter={(next) => {
+          filter(next.text.trim());
+          setFilters({ ...next, text: next.text.trim() });
+        }}
+      />
+    );
+  }
+  await act(() => {
+    renderer = create(<Harness />);
+  });
+  const input = renderer.root.findByProps({ "aria-label": "Search tasks" });
+  await act(() => input.props.onChange({ target: { value: "launch " } }));
+  await act(() => vi.advanceTimersByTime(300));
+  expect(filter).toHaveBeenLastCalledWith("launch");
+  expect(input.props.value).toBe("launch ");
+  expect(vi.getTimerCount()).toBe(0);
+  await act(() => input.props.onChange({ target: { value: `${input.props.value}assets` } }));
+  await act(() => vi.advanceTimersByTime(300));
+  expect(filter).toHaveBeenLastCalledWith("launch assets");
+});
+
+it.each([false, true])(
+  "keeps project scope separate from user filters (filtered: %s)",
+  async (filtered) => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    function Harness() {
+      const [filters, setFilters] = useState({
+        ...defaults.filters,
+        project: "p",
+        ...(filtered
+          ? {
+              text: "missing",
+              owner: "unassigned" as const,
+              dueFrom: "2026-10-13",
+              dueTo: "2026-10-16",
+              limit: 1,
+            }
+          : {}),
+      });
+      return (
+        <TasksSpaceView
+          {...defaults}
+          projectId={filters.project ? ProjectId.make(filters.project) : null}
+          projects={[{ id: ProjectId.make("p"), title: "SynKEK" }]}
+          filters={filters}
+          onFilter={setFilters}
+        />
+      );
+    }
+    await act(() => {
+      renderer = create(<Harness />);
+    });
+    const clear = () =>
+      renderer.root
+        .findAllByType("button")
+        .filter((button) => button.children.join("") === "Clear");
+    if (filtered) {
+      expect(JSON.stringify(renderer.toJSON())).toContain("No matching tasks.");
+      await act(() => clear()[0]!.props.onClick());
+      expect(renderer.root.findByType(TasksSpaceView).props.filters).toEqual({
+        ...defaults.filters,
+        project: "p",
+      });
+    }
+    expect(clear()).toHaveLength(0);
+    expect(JSON.stringify(renderer.toJSON())).toContain("Project tasks");
+    expect(JSON.stringify(renderer.toJSON())).toContain("No tasks yet. Add tasks from a project.");
+  },
+);
+
+async function mountRouter(component: () => React.ReactNode, initialEntries: string[]) {
+  const rootRoute = createRootRoute();
+  const route = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "workspace",
+    validateSearch: parseWorkspaceSearch,
+    component,
+  });
+  const history = createMemoryHistory({ initialEntries });
+  const router = createRouter({ routeTree: rootRoute.addChildren([route]), history });
+  await router.load();
+  await act(() => {
+    renderer = create(<RouterProvider router={router} />);
+  });
+  return { router, history };
+}
+
+it("shows one named settings notice and navigates in the router without per-row links", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const fixture = serviceFixture();
+  try {
+    const page: WorkspaceTaskPage = {
+      ...defaults.page!,
+      tasks: fixture.tasks,
+      total: 4,
+      openTotal: 3,
+      projects: ["p", "q"].map((id) => ({
+        projectId: ProjectId.make(id),
+        taskColumns: ["Backlog", "Review"],
+        completedColumn: null,
+        revision: 0,
+        browserThreadId: null,
+      })),
+    };
+    const { router } = await mountRouter(
+      () => <TasksSpaceView {...defaults} page={page} />,
+      ["/workspace?space=tasks&environment=remote"],
+    );
+    const notices = renderer.root
+      .findAllByType("p")
+      .filter((node) =>
+        node.children.some(
+          (child) => typeof child === "string" && child.includes("Choose a completed column"),
+        ),
+      );
+    expect(notices).toHaveLength(1);
+    const links = notices[0]!.findAllByType("a");
+    expect(links.map((link) => link.children.join(""))).toEqual(["SynKEK", "Other"]);
+    for (const row of renderer.root.findAllByProps({ "data-workspace-task-row": "" })) {
+      expect(row.findAllByType("a")).toHaveLength(0);
+    }
+    const preventDefault = vi.fn();
+    await act(async () =>
+      links[0]!.props.onClick({
+        button: 0,
+        defaultPrevented: false,
+        preventDefault,
+        currentTarget: { getAttribute: () => null },
+      }),
+    );
+    expect(preventDefault).toHaveBeenCalled();
+    expect(router.state.location.search).toEqual({
+      space: "projects",
+      environment: "remote",
+      project: "p",
+    });
+  } finally {
+    fixture.dispose();
+  }
+});
+
+it("replaces search history, pushes applied filters and clears user filters within the project", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const fixture = serviceFixture();
+  try {
+    const { router, history } = await mountRouter(
+      () => (
+        <RegistryContext.Provider value={fixture.registry}>
+          <TasksSpace />
+        </RegistryContext.Provider>
+      ),
+      [
+        "/workspace?space=projects&environment=remote",
+        "/workspace?space=tasks&environment=remote&project=p",
+      ],
+    );
+    vi.useFakeTimers();
+    const initialLength = history.length;
+    const input = renderer.root.findByProps({ "aria-label": "Search tasks" });
+    for (const text of ["launch ", "launch assets"]) {
+      await act(() => input.props.onChange({ target: { value: text } }));
+      await act(async () => vi.advanceTimersByTime(300));
+      expect(history.length).toBe(initialLength);
+      expect(router.state.location.search).toMatchObject({ project: "p", taskText: text.trim() });
+      expect(input.props.value).toBe(text);
+    }
+    await act(() => renderer.root.findByProps({ "aria-label": "Filter tasks" }).props.onClick());
+    await act(() =>
+      renderer.root
+        .findByProps({ "aria-label": "Task owner filter" })
+        .props.onChange({ target: { value: "unassigned" } }),
+    );
+    await act(async () =>
+      renderer.root
+        .findByProps({ "aria-label": "Task filters" })
+        .props.onSubmit({ preventDefault() {} }),
+    );
+    expect(history.length).toBe(initialLength + 1);
+    expect(router.state.location.search).toMatchObject({ project: "p", taskOwner: "unassigned" });
+    await act(async () =>
+      router.navigate({
+        to: "/workspace",
+        search: { ...router.state.location.search, space: "tasks", view: "done" },
+      }),
+    );
+    expect(history.length).toBe(initialLength + 2);
+    await act(async () =>
+      renderer.root
+        .findAllByType("button")
+        .find((button) => button.children.join("") === "Clear")!
+        .props.onClick(),
+    );
+    expect(router.state.location.search).toEqual({
+      space: "tasks",
+      environment: "remote",
+      project: "p",
+      view: "all",
+    });
+    const latestQuery = boundary.query.mock.calls.at(-1)?.[0].input;
+    expect(latestQuery).toMatchObject({ projectId: "p", state: "all", owner: "all", limit: 50 });
+    expect(latestQuery.text).toBeUndefined();
+    expect(
+      renderer.root
+        .findAllByType("button")
+        .map((button) => button.props["aria-label"])
+        .filter((label) => label?.startsWith("Open ")),
+    ).toEqual(["Open First task", "Open Second task", "Open Later launch"]);
+  } finally {
+    await act(() => renderer.unmount());
+    fixture.dispose();
+  }
 });

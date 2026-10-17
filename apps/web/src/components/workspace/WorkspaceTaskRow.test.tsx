@@ -115,7 +115,12 @@ it("keeps confirmed state on failure and explains unavailable completion", async
   expect(command).toHaveBeenCalledTimes(1);
   await act(() => renderer.update(view(true, null)));
   expect(renderer.root.findByType("input").props.disabled).toBe(true);
-  expect(renderer.root.findAllByType("a").length).toBe(1);
+  const explanation = renderer.root.findByProps({
+    id: renderer.root.findByType("input").props["aria-describedby"],
+  });
+  expect(explanation.children.join("")).toContain("Choose a completed column");
+  expect(explanation.findAllByType("a")).toHaveLength(0);
+  expect(explanation.findAllByType("button")).toHaveLength(0);
 });
 
 it("keeps the checkbox confirmed and blocks duplicate writes while the captured request waits", async () => {

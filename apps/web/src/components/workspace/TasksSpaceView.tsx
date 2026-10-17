@@ -1,6 +1,7 @@
 import { useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { formatWorkspaceTaskDueOn } from "@t3tools/client-runtime/state/workspaceTaskDates";
 import { LayoutGrid, Search, SlidersHorizontal } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 import * as Schema from "effect/Schema";
 import type * as DateTime from "effect/DateTime";
 import {
@@ -14,6 +15,7 @@ import {
 } from "@t3tools/contracts";
 import { WorkspaceTaskRow, type TaskTransitionHandler } from "./WorkspaceTaskRow";
 import { WorkspaceResourcesBodyContext } from "./workspaceResourceState";
+import { parseWorkspaceSearch } from "./workspaceNavigation";
 export interface TaskFilters {
   readonly text: string;
   readonly project: string;
@@ -57,7 +59,10 @@ export interface TasksSpaceViewProps {
   readonly loadingMore?: boolean;
   readonly onOpen: (ref: WorkspaceItemRef) => void;
   readonly onTransition: TaskTransitionHandler;
-  readonly onFilter: (filters: TaskFilters) => void;
+  readonly onFilter: (
+    filters: TaskFilters,
+    navigation?: { readonly replace?: boolean; readonly resetView?: boolean },
+  ) => void;
   readonly onLoadMore: () => void;
   readonly onRetry: () => void;
   readonly onLayout: (layout: "list" | "board") => void;
@@ -75,7 +80,7 @@ export function TasksSpaceView(props: TasksSpaceViewProps) {
   const [observedSearch, setObservedSearch] = useState(filters.text);
   if (observedSearch !== filters.text) {
     setObservedSearch(filters.text);
-    setSearch(filters.text);
+    if (search.trim() !== filters.text) setSearch(filters.text);
   }
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(filters);
@@ -88,10 +93,10 @@ export function TasksSpaceView(props: TasksSpaceViewProps) {
   const id = useId();
   const searchError = filterError({ ...filters, text: search });
   useEffect(() => {
-    if (hidden || search === filters.text || searchError) return;
+    if (hidden || search.trim() === filters.text || searchError) return;
     timer.current = setTimeout(() => {
       timer.current = null;
-      filterRef.current({ ...filters, text: search.trim() });
+      filterRef.current({ ...filters, text: search.trim() }, { replace: true });
     }, 300);
     return () => {
       if (timer.current !== null) clearTimeout(timer.current);
@@ -105,14 +110,18 @@ export function TasksSpaceView(props: TasksSpaceViewProps) {
     setSearch("");
     setValidation(null);
     setEditing(false);
-    onFilter({ text: "", project: "", owner: "all", dueFrom: "", dueTo: "", limit: 50 });
+    onFilter(
+      { text: "", project: filters.project, owner: "all", dueFrom: "", dueTo: "", limit: 50 },
+      { resetView: true },
+    );
   };
   const hasFilters = !!(
     filters.text ||
-    filters.project ||
     filters.dueFrom ||
     filters.dueTo ||
-    filters.owner !== "all"
+    filters.owner !== "all" ||
+    filters.limit !== 50 ||
+    props.view !== "all"
   );
   const project = props.projects.find((project) => project.id === projectId);
   const projectTitle =
@@ -123,6 +132,8 @@ export function TasksSpaceView(props: TasksSpaceViewProps) {
       new Map(page?.projects.map((config) => [config.projectId, config.completedColumn ?? null])),
     [page?.projects],
   );
+  const projectsWithoutCompletion =
+    page?.projects.filter((config) => config.completedColumn === null) ?? [];
   const datedTask = page?.tasks.find((task) => task.dueOn);
   const dateFallback =
     props.settingsReady === false || !datedTask
@@ -352,20 +363,31 @@ export function TasksSpaceView(props: TasksSpaceViewProps) {
       ) : null}
       {page ? (
         <>
-          {page.projects
-            .filter((config) => config.completedColumn === null)
-            .map((config) => (
-              <p key={config.projectId} className="mt-3 text-xs text-muted-foreground">
-                Choose a completed column in{" "}
-                <a
-                  className="underline"
-                  href={`/workspace?space=projects&environment=${encodeURIComponent(props.environmentId)}&project=${encodeURIComponent(config.projectId)}`}
-                >
-                  project workspace settings
-                </a>{" "}
-                to complete or reopen tasks.
-              </p>
-            ))}
+          {projectsWithoutCompletion.length > 0 ? (
+            <p className="mt-3 text-xs text-muted-foreground">
+              Choose a completed column in project workspace settings for{" "}
+              {projectsWithoutCompletion.map((config, index) => (
+                <span key={config.projectId}>
+                  {index > 0 ? ", " : ""}
+                  <Link
+                    className="underline"
+                    to="/workspace"
+                    search={parseWorkspaceSearch({
+                      space: "projects",
+                      environment: props.environmentId,
+                      project: config.projectId,
+                    })}
+                  >
+                    {props.projects.find((project) => project.id === config.projectId)?.title ??
+                      page.tasks.find((task) => task.projectId === config.projectId)
+                        ?.projectTitle ??
+                      "Unavailable project"}
+                  </Link>
+                </span>
+              ))}{" "}
+              to complete or reopen tasks.
+            </p>
+          ) : null}
           <ul className="mt-3" aria-label="Tasks">
             {page.tasks.map((task) => (
               <WorkspaceTaskRow
@@ -392,9 +414,7 @@ export function TasksSpaceView(props: TasksSpaceViewProps) {
           </ul>
           {page.tasks.length === 0 && ready ? (
             <p className="mt-4 text-xs text-muted-foreground">
-              {hasFilters || props.view !== "all"
-                ? "No matching tasks."
-                : "No tasks yet. Add tasks from a project."}
+              {hasFilters ? "No matching tasks." : "No tasks yet. Add tasks from a project."}
             </p>
           ) : null}
           {page.nextCursor ? (

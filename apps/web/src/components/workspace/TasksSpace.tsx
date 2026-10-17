@@ -273,13 +273,15 @@ function ConnectedTasksSpace({
       for (const { element, top } of scrollReturn.current) element.scrollTop = top;
     });
   };
-  const onFilter = useCallback(
-    (next: TaskFilters) => {
+  const onFilter = useCallback<TasksSpaceViewProps["onFilter"]>(
+    (next, navigation) => {
       setPageSize(next.limit);
       void navigate({
         to: "/workspace",
+        replace: navigation?.replace ?? false,
         search: parseWorkspaceSearch({
           ...search,
+          view: navigation?.resetView ? "all" : search.view,
           project: next.project || undefined,
           taskText: next.text.trim() || undefined,
           taskOwner: next.owner === "all" ? undefined : next.owner,
