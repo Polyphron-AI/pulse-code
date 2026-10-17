@@ -63,12 +63,19 @@ function TaskCursor({
 function combinePages(base: WorkspaceTaskPage | null, pages: readonly WorkspaceTaskPage[]) {
   if (!base || !pages.length) return base;
   const configs = new Map(base.projects.map((config) => [config.projectId, config]));
-  for (const page of pages)
+  const laneTotals = new Map(
+    base.laneTotals.map((lane) => [JSON.stringify([lane.projectId, lane.column]), lane]),
+  );
+  for (const page of pages) {
     for (const config of page.projects) configs.set(config.projectId, config);
+    for (const lane of page.laneTotals)
+      laneTotals.set(JSON.stringify([lane.projectId, lane.column]), lane);
+  }
   return {
     ...base,
     tasks: [...base.tasks, ...pages.flatMap((page) => page.tasks)],
     projects: [...configs.values()],
+    laneTotals: [...laneTotals.values()],
     nextCursor: pages.at(-1)!.nextCursor,
   };
 }
@@ -382,7 +389,7 @@ function ConnectedTasksSpace({
       setCreating(false);
       void navigate({ to: "/workspace", search: { ...search, item: JSON.stringify(ref) } });
     },
-    [navigate, search, openOther, captureReturn],
+    [navigate, search, openOther, captureReturn, setCreating],
   );
   const close = () => {
     void navigate({

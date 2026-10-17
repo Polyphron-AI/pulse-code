@@ -34,6 +34,7 @@ const boundary = vi.hoisted(() => ({
   patch: vi.fn(),
   upsert: vi.fn(),
   remove: vi.fn(),
+  transition: vi.fn(),
   operate: true,
   compact: false,
   v2: true,
@@ -46,6 +47,7 @@ vi.mock("../../state/workspaceTools", () => ({
     patchTask: "patch",
     upsertTask: "upsert",
     deleteTask: "remove",
+    transitionTask: "transition",
   },
 }));
 const projects = [
@@ -58,7 +60,8 @@ vi.mock("../../state/environments", () => ({
 vi.mock("../../hooks/useMediaQuery", () => ({ useMediaQuery: () => boundary.compact }));
 vi.mock("../../hooks/useSettings", () => ({ useEnvironmentSettings: () => null }));
 vi.mock("../../state/use-atom-command", () => ({
-  useAtomCommand: (command: "patch" | "upsert" | "remove") => boundary[command] ?? vi.fn(),
+  useAtomCommand: (command: "patch" | "upsert" | "remove" | "transition") =>
+    boundary[command] ?? vi.fn(),
 }));
 vi.mock("./mail/useMailCapabilities", () => ({
   useMailCapabilities: (target?: string) => ({
@@ -248,16 +251,24 @@ function serviceFixture() {
     );
     const offset = Number(input.cursor ?? 0),
       limit = input.limit ?? 2;
+    const pageTasks = filtered.slice(offset, offset + limit);
+    const pageProjects = new Set(pageTasks.map((task) => task.projectId));
+    if (input.projectId) pageProjects.add(ProjectId.make(input.projectId));
     return AsyncResult.success({
-      tasks: filtered
-        .slice(offset, offset + limit)
-        .map((task) =>
-          environmentId === "other" ? { ...task, title: `Other environment ${task.title}` } : task,
-        ),
+      tasks: pageTasks.map((task) =>
+        environmentId === "other" ? { ...task, title: `Other environment ${task.title}` } : task,
+      ),
       total: filtered.length,
       openTotal: filtered.filter((task) => !task.done).length,
-      projects: [config, { ...config, projectId: ProjectId.make("q") }],
-      laneTotals: [],
+      projects: [...pageProjects].map((projectId) => ({ ...config, projectId })),
+      laneTotals: [...pageProjects].flatMap((projectId) =>
+        config.taskColumns.map((column) => ({
+          projectId,
+          column,
+          total: filtered.filter((task) => task.projectId === projectId && task.column === column)
+            .length,
+        })),
+      ),
       nextCursor: offset + limit < filtered.length ? String(offset + limit) : null,
     });
   };
@@ -1548,3 +1559,66 @@ it.each(["create", "save"])(
     }
   },
 );
+it("switches Board and List without losing URL filters, loaded pages or the selected shared editor", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const fixture = serviceFixture();
+  const { node, router, dispose } = await mountTasksDom(
+    fixture,
+    "/workspace?space=tasks&environment=remote&taskLimit=1&taskOwner=environment-owner&taskText=a&taskDueFrom=2026-10-13&taskDueTo=2026-10-16",
+  );
+  try {
+    await act(() => getByRole(node, "button", { name: "Load more tasks" }).click());
+    await act(() => getByRole(node, "button", { name: "Board" }).click());
+    expect(router.state.location.search).toMatchObject({
+      taskLayout: "board",
+      taskLimit: 1,
+      taskOwner: "environment-owner",
+    });
+    expect(getByRole(node, "region", { name: "SynKEK board" }).textContent).toContain(
+      "2 loaded of 2",
+    );
+    const origin = getByRole(node, "button", { name: "Open Later launch" });
+    origin.focus();
+    await act(() => origin.click());
+    const title = getByRole(node, "textbox", { name: "Task title" });
+    expect((title as HTMLInputElement).value).toBe("Later launch");
+    const selected = router.state.location.search.item;
+    await act(() => getByRole(node, "button", { name: "List" }).click());
+    expect(router.state.location.search).toMatchObject({
+      taskLayout: "list",
+      taskLimit: 1,
+      taskOwner: "environment-owner",
+      item: selected,
+    });
+    expect(getByRole(node, "textbox", { name: "Task title" })).toBe(title);
+    expect(getByRole(node, "button", { name: "Open Later launch" })).toBeDefined();
+    await act(() => getByRole(node, "button", { name: "Close task" }).click());
+    expect(router.state.location.search.taskLayout).toBe("board");
+    expect(document.activeElement).toBe(getByRole(node, "button", { name: "Open Later launch" }));
+  } finally {
+    await dispose();
+  }
+});
+it("adds each next page's project groups and full lane totals to the board", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const fixture = serviceFixture();
+  const { node, dispose } = await mountTasksDom(
+    fixture,
+    "/workspace?space=tasks&environment=remote&taskLayout=board&taskLimit=2",
+  );
+  try {
+    expect(getByRole(node, "region", { name: "SynKEK: To do" }).textContent).toContain(
+      "2 loaded of 3",
+    );
+    expect(queryByRole(node, "region", { name: "Other board" })).toBeNull();
+    await act(() => getByRole(node, "button", { name: "Load more tasks" }).click());
+    expect(getByRole(node, "region", { name: "SynKEK: To do" }).textContent).toContain(
+      "3 loaded of 3",
+    );
+    expect(getByRole(node, "region", { name: "Other: Done" }).textContent).toContain(
+      "1 loaded of 1",
+    );
+  } finally {
+    await dispose();
+  }
+});

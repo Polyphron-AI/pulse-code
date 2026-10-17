@@ -1,6 +1,6 @@
 import { useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { formatWorkspaceTaskDueOn } from "@t3tools/client-runtime/state/workspaceTaskDates";
-import { LayoutGrid, MoreHorizontal, Search, SlidersHorizontal } from "lucide-react";
+import { LayoutGrid, List, MoreHorizontal, Search, SlidersHorizontal } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import * as Schema from "effect/Schema";
 import type * as DateTime from "effect/DateTime";
@@ -14,6 +14,7 @@ import {
   type WorkspaceTaskSummary,
 } from "@t3tools/contracts";
 import { WorkspaceTaskRow, type TaskTransitionHandler } from "./WorkspaceTaskRow";
+import { TaskBoard } from "./TaskBoard";
 import { WorkspaceResourcesBodyContext } from "./workspaceResourceState";
 import { parseWorkspaceSearch } from "./workspaceNavigation";
 export interface TaskFilters {
@@ -168,7 +169,7 @@ export function TasksSpaceView(props: TasksSpaceViewProps) {
 
   return (
     <main aria-label="Tasks list" className="min-w-0 px-4 pt-4 pb-6">
-      <div className="flex h-10 items-start justify-between gap-3">
+      <div className="flex h-10 items-start justify-between gap-3 max-md:h-11 [@media(pointer:coarse)]:h-11">
         <div className="min-w-0">
           <h2 tabIndex={-1} className="truncate text-sm leading-5 font-semibold">
             {projectId ? "Project tasks" : "All tasks"}
@@ -227,19 +228,18 @@ export function TasksSpaceView(props: TasksSpaceViewProps) {
           ) : null}
           <button
             type="button"
-            className="mt-[7px] flex h-6 shrink-0 items-center gap-1 rounded-md border border-border bg-muted px-1.75 text-2xs font-semibold focus-visible:outline-2 focus-visible:outline-ring"
+            className="mt-[7px] flex h-6 shrink-0 items-center gap-1 rounded-md border border-border bg-muted px-1.75 text-2xs font-semibold focus-visible:outline-2 focus-visible:outline-ring max-md:mt-0 max-md:h-11 max-md:px-3 [@media(pointer:coarse)]:mt-0 [@media(pointer:coarse)]:h-11"
             onClick={() => props.onLayout(props.taskLayout === "board" ? "list" : "board")}
           >
-            <LayoutGrid aria-hidden="true" className="size-3" />{" "}
+            {props.taskLayout === "board" ? (
+              <List aria-hidden="true" className="size-3" />
+            ) : (
+              <LayoutGrid aria-hidden="true" className="size-3" />
+            )}{" "}
             {props.taskLayout === "board" ? "List" : "Board"}
           </button>
         </div>
       </div>
-      {props.taskLayout === "board" ? (
-        <p role="status" className="mt-3 text-xs text-muted-foreground">
-          Board is not available yet. Tasks are shown as a list.
-        </p>
-      ) : null}
       <form
         aria-label="Task search"
         className="mt-4 flex h-[29px] min-w-0 items-center gap-1.75 rounded-xl bg-muted pl-2.5"
@@ -459,31 +459,41 @@ export function TasksSpaceView(props: TasksSpaceViewProps) {
               to complete or reopen tasks.
             </p>
           ) : null}
-          <ul className="mt-3" aria-label="Tasks">
-            {page.tasks.map((task) => (
-              <WorkspaceTaskRow
-                key={task.id}
-                environmentId={props.environmentId}
-                task={task}
-                density="list"
-                onOpen={props.onOpen}
-                ownerProfile={props.ownerProfile}
-                ownerPresentation={props.ownerPresentation?.(task)}
-                now={props.now}
-                timeZone={props.timeZone}
-                locale={props.locale}
-                canOperate={props.canOperate && props.status !== "disconnected"}
-                completedColumn={completedColumns.get(task.projectId) ?? null}
-                workspaceTasksV2={props.workspaceTasksV2}
-                pending={props.pendingTaskIds?.has(task.id) ?? false}
-                refreshFailed={props.status === "error" || props.status === "disconnected"}
-                selected={props.selectedTaskId === task.id}
-                settingsReady={props.settingsReady}
-                onTransition={props.onTransition}
-                renderItemMenu={props.renderItemMenu}
-              />
-            ))}
-          </ul>
+          {props.taskLayout === "board" ? (
+            <TaskBoard
+              {...props}
+              page={page}
+              hidden={hidden}
+              disconnected={props.status === "disconnected"}
+              refreshFailed={props.status === "error" || props.status === "disconnected"}
+            />
+          ) : (
+            <ul className="mt-3" aria-label="Tasks">
+              {page.tasks.map((task) => (
+                <WorkspaceTaskRow
+                  key={task.id}
+                  environmentId={props.environmentId}
+                  task={task}
+                  density="list"
+                  onOpen={props.onOpen}
+                  ownerProfile={props.ownerProfile}
+                  ownerPresentation={props.ownerPresentation?.(task)}
+                  now={props.now}
+                  timeZone={props.timeZone}
+                  locale={props.locale}
+                  canOperate={props.canOperate && props.status !== "disconnected"}
+                  completedColumn={completedColumns.get(task.projectId) ?? null}
+                  workspaceTasksV2={props.workspaceTasksV2}
+                  pending={props.pendingTaskIds?.has(task.id) ?? false}
+                  refreshFailed={props.status === "error" || props.status === "disconnected"}
+                  selected={props.selectedTaskId === task.id}
+                  settingsReady={props.settingsReady}
+                  onTransition={props.onTransition}
+                  renderItemMenu={props.renderItemMenu}
+                />
+              ))}
+            </ul>
+          )}
           {page.tasks.length === 0 && ready ? (
             <p className="mt-4 text-xs text-muted-foreground">
               {hasFilters ? "No matching tasks." : "No tasks yet. Add tasks from a project."}
