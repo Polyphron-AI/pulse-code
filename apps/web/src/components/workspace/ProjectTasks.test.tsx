@@ -28,7 +28,10 @@ vi.mock("./mail/useMailCapabilities", () => ({
     ready: mocks.settingsReady,
   }),
 }));
-vi.mock("../../timestampFormat", () => ({ timestampLocale: "en-GB" }));
+vi.mock("../../timestampFormat", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../timestampFormat")>()),
+  timestampLocale: "en-GB",
+}));
 vi.mock("../../state/session", () => ({
   useEnvironmentSessionState: () => ({
     isPending: false,
@@ -617,7 +620,7 @@ it("refreshes date labels at environment midnight, zone changes and resume witho
   });
   expect(renderer!.root.findByType("time").children.join("")).toBe("16 Oct");
   await act(() => vi.advanceTimersByTime(1000));
-  expect(renderer!.root.findByType("time").children.join("")).toBe("today");
+  expect(renderer!.root.findByType("time").children.join("")).toBe("Today");
   mocks.zone = "America/New_York";
   await act(() => renderer!.update(view()));
   expect(renderer!.root.findByType("time").children.join("")).toBe("16 Oct");
@@ -677,7 +680,7 @@ it("stops the date clock while the resource body is hidden and resyncs when show
     });
     expect(renderer!.root.findByType("time").children.join("")).toBe("16 Oct");
     await act(() => renderer!.update(view(false)));
-    expect(renderer!.root.findByType("time").children.join("")).toBe("today");
+    expect(renderer!.root.findByType("time").children.join("")).toBe("Today");
     expect(vi.getTimerCount()).toBe(1);
   } finally {
     focus.mockRestore();

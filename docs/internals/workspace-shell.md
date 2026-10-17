@@ -76,13 +76,16 @@ zone to determine today and UTC to format the civil day. Its clock stops while t
 resource body is hidden and resyncs on reopening.
 
 `workspaceDisplayTimeZone` belongs to server settings, independently of `workspaceTasksV2`.
-Trusted first load materializes the host zone once through the existing atomic settings writer;
-null resets to the current host zone. Malformed files and dangling settings links must not be
-rewritten for this default. Unchanged watcher reloads do not publish another config update.
+Trusted first load materializes the host zone once through the existing atomic settings writer.
+The host zone must pass the name schema and the server's Intl check, otherwise it uses UTC.
+Null resets to the current host zone with the same validation. Malformed files and dangling
+settings links must not be rewritten for this default. Unchanged watcher reloads do not publish
+another config update.
 
 Decode timezone names as bounded strings. Calling Intl during contract decoding would let an
 older phone's timezone database reject an entire ServerConfig. Validate timezone writes against
-the server's Intl data; the web form checks its own data as advice. An unsupported stored name
+the server's Intl data; the web form warns when its own data does not recognize a name but still
+submits it. Server timezone rejections retain their specific reason. An unsupported stored name
 stays in the settings cache and on disk, while server read responses expose null for display.
 Formatting falls back to UTC on RangeError and the client shows a notice. Loading settings must
 not produce a silent UTC label. Locale follows the existing web timestamp locale resolution.

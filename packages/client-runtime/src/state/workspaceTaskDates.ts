@@ -43,7 +43,9 @@ export function formatWorkspaceTaskDueOn(
   }).format(civil);
   const label =
     today === dueOn
-      ? new Intl.RelativeTimeFormat(locale, { numeric: "auto" }).format(0, "day")
+      ? typeof Intl.RelativeTimeFormat === "function"
+        ? new Intl.RelativeTimeFormat(locale, { numeric: "auto" }).format(0, "day")
+        : "Today"
       : new Intl.DateTimeFormat(locale, {
           timeZone: "UTC",
           day: "numeric",
@@ -51,7 +53,7 @@ export function formatWorkspaceTaskDueOn(
           ...(dueOn.slice(0, 4) === year ? {} : { year: "numeric" as const }),
         }).format(civil);
   return {
-    label,
+    label: label.charAt(0).toLocaleUpperCase(locale) + label.slice(1),
     fullDate,
     overdue: dueOn < today,
     ...(usingUtcFallback ? { usingUtcFallback: true as const } : {}),

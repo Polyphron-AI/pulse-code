@@ -100,6 +100,47 @@ const recordProviderUsage = (provider: string, instanceId: string | null = provi
   });
 
 it.layer(NodeServices.layer)("server settings", (it) => {
+  it.effect.each(["+05:00", "Etc/Unknown"])(
+    "uses UTC for an unsupported host timezone: %s",
+    (timeZone) =>
+      Effect.gen(function* () {
+        const config = yield* ServerConfig.ServerConfig;
+        const fs = yield* FileSystem.FileSystem;
+        const service = yield* ServerSettingsModule.ServerSettingsService;
+        const options = new Intl.DateTimeFormat().resolvedOptions();
+        const host = vi
+          .spyOn(Intl.DateTimeFormat.prototype, "resolvedOptions")
+          .mockReturnValue({ ...options, timeZone });
+        try {
+          yield* fs.writeFileString(
+            config.settingsPath,
+            '{ "responseStreamingMode": "turn", "enableAgentBrowserAccess": false }',
+          );
+          const settings = yield* service.getSettings;
+          assert.equal(settings.workspaceDisplayTimeZone, "UTC");
+          assert.equal(settings.responseStreamingMode, "turn");
+          assert.isFalse(settings.enableAgentBrowserAccess);
+          const stored = yield* decodeServerSettingsJson(
+            yield* fs.readFileString(config.settingsPath),
+          );
+          assert.equal(stored.workspaceDisplayTimeZone, "UTC");
+          assert.equal(stored.responseStreamingMode, "turn");
+          assert.isFalse(stored.enableAgentBrowserAccess);
+          yield* service.updateSettings({ workspaceDisplayTimeZone: "Europe/London" });
+          const reset = yield* service.updateSettings({ workspaceDisplayTimeZone: null });
+          assert.equal(reset.workspaceDisplayTimeZone, "UTC");
+          assert.equal(reset.responseStreamingMode, "turn");
+          assert.isFalse(reset.enableAgentBrowserAccess);
+          assert.equal(
+            (yield* decodeServerSettingsJson(yield* fs.readFileString(config.settingsPath)))
+              .workspaceDisplayTimeZone,
+            "UTC",
+          );
+        } finally {
+          host.mockRestore();
+        }
+      }).pipe(Effect.provide(makeServerSettingsLayer())),
+  );
   it.effect(
     "persists the host workspace timezone once, respects explicit zones and materializes reset",
     () =>

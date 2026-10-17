@@ -1,5 +1,5 @@
 import * as DateTime from "effect/DateTime";
-import { expect, it } from "vite-plus/test";
+import { expect, it, vi } from "vite-plus/test";
 import {
   formatWorkspaceTaskDueOn,
   millisecondsUntilWorkspaceMidnight,
@@ -7,7 +7,7 @@ import {
 it("falls back to UTC for unsupported zones in labels and midnight scheduling", () => {
   const now = DateTime.makeUnsafe("2026-10-15T23:00:00Z");
   expect(formatWorkspaceTaskDueOn("2026-10-15", now, "No/Such_Zone", "en-GB")).toMatchObject({
-    label: "today",
+    label: "Today",
     overdue: false,
     usingUtcFallback: true,
   });
@@ -21,7 +21,22 @@ it("localizes today with the supplied locale", () => {
       "UTC",
       "fr-FR",
     )?.label,
-  ).toBe("aujourd’hui");
+  ).toBe("Aujourd’hui");
+});
+it("uses a plain Today label when RelativeTimeFormat is unavailable", () => {
+  vi.stubGlobal("Intl", { DateTimeFormat: Intl.DateTimeFormat });
+  try {
+    expect(
+      formatWorkspaceTaskDueOn(
+        "2026-10-16",
+        DateTime.makeUnsafe("2026-10-16T12:00:00Z"),
+        "UTC",
+        "en-GB",
+      ),
+    ).toMatchObject({ label: "Today", fullDate: "16 October 2026", overdue: false });
+  } finally {
+    vi.unstubAllGlobals();
+  }
 });
 it.each(["2026-02-30", "2026-02-29", "0000-01-01", "2026-00-01", "2026-10-16T00:00:00Z"])(
   "does not format an invalid civil date: %s",
@@ -48,7 +63,7 @@ it("uses the environment's Johannesburg midnight and preserves the civil day", (
       "Africa/Johannesburg",
       "en-GB",
     ),
-  ).toMatchObject({ label: "today", overdue: false });
+  ).toMatchObject({ label: "Today", overdue: false });
   expect(
     formatWorkspaceTaskDueOn(
       date,
@@ -68,7 +83,7 @@ it.each([
   const dueOn = instant.slice(0, 10);
   expect(
     formatWorkspaceTaskDueOn(dueOn, DateTime.makeUnsafe(instant), "America/New_York", "en-GB"),
-  ).toMatchObject({ label: "today", overdue: false });
+  ).toMatchObject({ label: "Today", overdue: false });
 });
 it("includes a different year, exposes the full date and leaves absent dates empty", () => {
   const now = DateTime.makeUnsafe("2026-12-31T23:00:00Z");

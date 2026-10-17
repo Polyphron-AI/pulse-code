@@ -4,6 +4,7 @@ import {
   type ServerSettings,
   type UnifiedSettings,
 } from "@t3tools/contracts";
+import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { useCallback, useMemo } from "react";
 
 import {
@@ -51,7 +52,7 @@ export function useScopedSettingSource(keys: readonly (keyof ServerSettings)[]) 
   return scopedSettingsSource(targets, keys);
 }
 
-function useRunScopedPlan() {
+function useRunScopedPlan(onError?: (error: unknown) => void) {
   const persistServer = useAtomCommand(serverEnvironment.updateSettings, { reportFailure: false });
   return useCallback(
     async (plan: ReturnType<typeof planScopedSettingsPatch>) => {
@@ -65,7 +66,11 @@ function useRunScopedPlan() {
       }
       const { failedEnvironments, savedEnvironmentCount } = await persistScopedSettingsPatch(
         plan,
-        persistServer,
+        async (input) => {
+          const result = await persistServer(input);
+          if (result._tag === "Failure") onError?.(squashAtomCommandFailure(result));
+          return result;
+        },
         persistClientSettingsPatch,
       );
       if (failedEnvironments.length === 0) return true;
@@ -77,13 +82,13 @@ function useRunScopedPlan() {
       });
       return false;
     },
-    [persistServer],
+    [persistServer, onError],
   );
 }
 
-export function useUpdateScopedSettings() {
+export function useUpdateScopedSettings(options?: { readonly onError?: (error: unknown) => void }) {
   const { scope, environments } = useSettingsScope();
-  const run = useRunScopedPlan();
+  const run = useRunScopedPlan(options?.onError);
   return useCallback(
     (patch: ScopedSettingsPatch) => run(planScopedSettingsPatch(scope, environments, patch)),
     [environments, run, scope],

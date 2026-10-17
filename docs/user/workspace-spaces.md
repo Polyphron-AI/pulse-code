@@ -82,7 +82,7 @@ Tasks contain a title, project column and links. Open a project to add tasks, th
 
 On a server with task date support, select a task to set or clear its due date and area. A due date is a calendar day. It stays on that day when you open the task on another device. Today and overdue labels follow midnight in the environment's workspace timezone.
 
-To choose that timezone, open Settings, General, select one environment and save its Workspace timezone, such as Africa/Johannesburg. It starts with the server's timezone and keeps that choice if the server moves. Reset uses the server's current timezone. If the server or your device cannot recognize a saved timezone, task dates use UTC and show a notice. A due date does not schedule a reminder or start an agent.
+To choose that timezone, open Settings, General, select one environment and save its Workspace timezone, such as Africa/Johannesburg. It starts with the server's timezone and keeps that choice if the server moves. Reset uses the server's current timezone. If that timezone is unsupported, the initial choice and Reset use UTC. If the server or your device cannot recognize a saved timezone, task dates use UTC and show a notice. A due date does not schedule a reminder or start an agent.
 
 On a server with task completion support, choose Completed column in project workspace settings. A custom column named Done stays open until you designate it. Changing or clearing the designation shows how many tasks change completion before you confirm; Cancel leaves the settings unchanged.
 

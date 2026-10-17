@@ -127,9 +127,13 @@ const materializeWorkspaceTimeZone = (settings: ServerSettings): ServerSettings 
   if (settings.workspaceDisplayTimeZone !== null) return settings;
   let timeZone = "UTC";
   try {
-    timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+    const hostTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (isWorkspaceDisplayTimeZone(hostTimeZone)) {
+      new Intl.DateTimeFormat(undefined, { timeZone: hostTimeZone }).resolvedOptions();
+      timeZone = hostTimeZone;
+    }
   } catch {
-    /* Use UTC when the host has no zone. */
+    /* Use UTC when the host zone is unavailable or unsupported. */
   }
   return { ...settings, workspaceDisplayTimeZone: timeZone };
 };
@@ -855,6 +859,7 @@ const make = Effect.gen(function* () {
     const migrated = settingsFileTrusted
       ? materializeWorkspaceTimeZone(yield* moveInlineBitbucketTokens(folded))
       : materializeWorkspaceTimeZone(folded);
+    // Dangling links deliberately skip all boot-time writes, including legacy settings folds.
     if (settingsFileTrusted && !danglingSettingsLink && migrated !== loaded) {
       yield* writeSettingsAtomically(migrated);
     }

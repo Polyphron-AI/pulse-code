@@ -1,7 +1,8 @@
 import { act } from "react";
 import { create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, expect, it, vi } from "vite-plus/test";
-import { DEFAULT_SERVER_SETTINGS } from "@t3tools/contracts";
+import { DEFAULT_SERVER_SETTINGS, ServerSettingsError } from "@t3tools/contracts";
+import * as Cause from "effect/Cause";
 import { useUpdateScopedSettings } from "./useScopedSettings";
 const mocks = vi.hoisted(() => ({ persist: vi.fn(), phase: "connected" }));
 vi.mock("./SettingsScopeContext", () => ({
@@ -72,3 +73,31 @@ it.each(["Success", "Failure", "unavailable"])(
       });
   },
 );
+it("returns failure and exposes the server's structured rejection to the caller", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const error = new ServerSettingsError({
+    settingsPath: "remote/settings.json",
+    operation: "validate-workspace-timezone",
+  });
+  mocks.persist.mockResolvedValue({ _tag: "Failure", cause: Cause.fail(error) });
+  const onError = vi.fn();
+  const results: boolean[] = [];
+  function Probe() {
+    const update = useUpdateScopedSettings({ onError });
+    return (
+      <button
+        onClick={async () => {
+          results.push(await update({ workspaceDisplayTimeZone: "Europe/London" }));
+        }}
+      >
+        Save
+      </button>
+    );
+  }
+  await act(() => {
+    renderer = create(<Probe />);
+  });
+  await act(() => renderer!.root.findByType("button").props.onClick());
+  expect(results).toEqual([false]);
+  expect(onError).toHaveBeenCalledExactlyOnceWith(error);
+});

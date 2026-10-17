@@ -1,12 +1,14 @@
 import { act } from "react";
 import { create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, expect, it, vi } from "vite-plus/test";
+import { ServerSettingsError } from "@t3tools/contracts";
 import { WorkspaceDisplaySettings } from "./WorkspaceDisplaySettings";
 const mocks = vi.hoisted(() => ({
   operate: true,
   supported: true,
   ready: true,
-  zone: "Africa/Johannesburg",
+  zone: "Africa/Johannesburg" as string | null,
+  error: null as unknown,
   ids: ["remote"],
   kind: "environment",
   update: vi.fn(),
@@ -20,7 +22,12 @@ vi.mock("../settings/SettingsScopeContext", () => ({
 }));
 vi.mock("../settings/useScopedSettings", () => ({
   useScopedSettings: () => ({ workspaceDisplayTimeZone: mocks.zone }),
-  useUpdateScopedSettings: () => mocks.update,
+  useUpdateScopedSettings:
+    (options?: { onError?: (error: unknown) => void }) => async (patch: unknown) => {
+      const saved = await mocks.update(patch);
+      if (!saved && mocks.error) options?.onError?.(mocks.error);
+      return saved;
+    },
 }));
 vi.mock("./mail/useMailCapabilities", () => ({
   useMailCapabilities: () => ({ workspaceTasksV2: mocks.supported, ready: mocks.ready }),
@@ -42,6 +49,7 @@ afterEach(async () => {
   mocks.ids = ["remote"];
   mocks.kind = "environment";
   mocks.zone = "Africa/Johannesburg";
+  mocks.error = null;
   vi.clearAllMocks();
   vi.unstubAllGlobals();
 });
@@ -100,8 +108,23 @@ it("saves the server timezone without the task capability and shows no task noti
   expect(mocks.update).toHaveBeenCalledWith({ workspaceDisplayTimeZone: "Africa/Johannesburg" });
   expect(JSON.stringify(renderer!.toJSON())).not.toContain("Tasks need a newer server.");
 });
-it("rejects invalid IANA zones before any write", async () => {
+it.each(["", "+05:00", "not a zone"])("rejects malformed timezone names: %s", async (zone) => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  await act(() => {
+    renderer = create(<WorkspaceDisplaySettings />);
+  });
+  await act(() =>
+    renderer!.root
+      .findByProps({ "aria-label": "Workspace timezone" })
+      .props.onChange({ target: { value: zone } }),
+  );
+  await act(() => renderer!.root.findByType("form").props.onSubmit({ preventDefault() {} }));
+  expect(mocks.update).not.toHaveBeenCalled();
+  expect(renderer!.root.findByProps({ role: "alert" }).children.join("")).toContain("IANA");
+});
+it("warns about a timezone unknown to this device and still submits it", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  mocks.update.mockResolvedValue(true);
   await act(() => {
     renderer = create(<WorkspaceDisplaySettings />);
   });
@@ -110,7 +133,45 @@ it("rejects invalid IANA zones before any write", async () => {
       .findByProps({ "aria-label": "Workspace timezone" })
       .props.onChange({ target: { value: "No/Such_Zone" } }),
   );
+  expect(JSON.stringify(renderer!.toJSON())).toContain(
+    "This device does not recognize this timezone",
+  );
+  expect(renderer!.root.findAllByType("button").every((button) => !button.props.disabled)).toBe(
+    true,
+  );
   await act(() => renderer!.root.findByType("form").props.onSubmit({ preventDefault() {} }));
-  expect(mocks.update).not.toHaveBeenCalled();
-  expect(renderer!.root.findByProps({ role: "alert" }).children.join("")).toContain("IANA");
+  expect(mocks.update).toHaveBeenCalledWith({ workspaceDisplayTimeZone: "No/Such_Zone" });
+  expect(renderer!.root.findAllByProps({ role: "alert" })).toHaveLength(0);
+});
+it("shows the server timezone rejection reason and retains the draft", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const error = new ServerSettingsError({
+    settingsPath: "remote/settings.json",
+    operation: "validate-workspace-timezone",
+  });
+  mocks.error = error;
+  mocks.update.mockResolvedValue(false);
+  await act(() => {
+    renderer = create(<WorkspaceDisplaySettings />);
+  });
+  await act(() =>
+    renderer!.root
+      .findByProps({ "aria-label": "Workspace timezone" })
+      .props.onChange({ target: { value: "Europe/London" } }),
+  );
+  await act(() => renderer!.root.findByType("form").props.onSubmit({ preventDefault() {} }));
+  expect(renderer!.root.findByProps({ role: "alert" }).children.join("")).toBe(error.message);
+  expect(renderer!.root.findByProps({ "aria-label": "Workspace timezone" }).props.value).toBe(
+    "Europe/London",
+  );
+});
+it.each([null, "No/Such_Zone"])("shows the unavailable notice for timezone %s", async (zone) => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  mocks.zone = zone;
+  await act(() => {
+    renderer = create(<WorkspaceDisplaySettings />);
+  });
+  expect(JSON.stringify(renderer!.toJSON())).toContain(
+    "Workspace timezone unavailable on this server or device. Task dates use UTC.",
+  );
 });

@@ -1,4 +1,8 @@
-import { type EnvironmentId, WorkspaceDisplayTimeZone } from "@t3tools/contracts";
+import {
+  type EnvironmentId,
+  ServerSettingsError,
+  WorkspaceDisplayTimeZone,
+} from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import { useState } from "react";
 import { useSettingsScope } from "../settings/SettingsScopeContext";
@@ -9,6 +13,7 @@ import { useMailCapabilities } from "./mail/useMailCapabilities";
 import { useWorkspaceCanOperate } from "./useWorkspaceCanOperate";
 
 const isTimeZoneName = Schema.is(WorkspaceDisplayTimeZone);
+const isServerSettingsError = Schema.is(ServerSettingsError);
 const isDisplayTimeZone = (value: string) => {
   if (!isTimeZoneName(value)) return false;
   try {
@@ -44,17 +49,22 @@ export function WorkspaceDisplaySettings() {
 
 function WorkspaceDisplaySettingsForm({ environmentId }: { environmentId: EnvironmentId }) {
   const settings = useScopedSettings();
-  const update = useUpdateScopedSettings();
   const canOperate = useWorkspaceCanOperate(environmentId);
   const { ready } = useMailCapabilities(environmentId);
   const [draft, setDraft] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const update = useUpdateScopedSettings({
+    onError(error) {
+      if (isServerSettingsError(error) && error.operation === "validate-workspace-timezone")
+        setError(error.message);
+    },
+  });
   const zone = draft ?? settings.workspaceDisplayTimeZone ?? "";
   const disabled = busy || !canOperate || !ready;
   const save = async (timeZone: string | null) => {
     if (disabled) return;
-    if (timeZone !== null && !isDisplayTimeZone(timeZone)) {
+    if (timeZone !== null && !isTimeZoneName(timeZone)) {
       setError("Enter a valid IANA timezone, such as Africa/Johannesburg.");
       return;
     }
@@ -62,7 +72,7 @@ function WorkspaceDisplaySettingsForm({ environmentId }: { environmentId: Enviro
     setError(null);
     try {
       if (await update({ workspaceDisplayTimeZone: timeZone })) setDraft(null);
-      else setError("The workspace timezone could not be saved. Try again.");
+      else setError((reason) => reason ?? "The workspace timezone could not be saved. Try again.");
     } catch {
       setError("The workspace timezone could not be saved. Try again.");
     } finally {
@@ -107,6 +117,11 @@ function WorkspaceDisplaySettingsForm({ environmentId }: { environmentId: Enviro
       </div>
       {!ready ? (
         <p className="text-xs text-muted-foreground">Loading workspace settings...</p>
+      ) : null}
+      {ready && isTimeZoneName(zone.trim()) && !isDisplayTimeZone(zone.trim()) ? (
+        <p className="text-xs text-muted-foreground">
+          This device does not recognize this timezone. The server will validate it when you save.
+        </p>
       ) : null}
       {ready &&
       (!settings.workspaceDisplayTimeZone ||
