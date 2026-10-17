@@ -99,9 +99,10 @@ incomplete flag until its UI replacement ships.
 
 The Tasks center keeps its search input and list controller mounted across filter and detail
 changes. Debounced search and the date clock stop while hidden. Filters select a new atom;
-confirmed cursor pages are discarded whenever the first-page value changes or refresh starts.
-A failed first-page refresh retains only its confirmed rows and an inline error, with Load more
-disabled until success. Totals always come from the first page. Project renames do not announce
+a refreshed first page starts a sequential cursor walk to the previously loaded depth. Confirmed
+rows stay mounted until that replacement chain settles. A failed refresh retains those rows and
+an inline error, with Load more disabled until success. Cursor generations prevent combining
+old and new pages. Totals always come from the first page. Project renames do not announce
 a task change, so a title can stay stale until a task change, reconnect, cursor recovery or a
 remount after the 30-second stale window. This is an accepted constraint of the current projection
 boundary, rather than a reason for a second subscription or polling.

@@ -1,6 +1,6 @@
 import { useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { formatWorkspaceTaskDueOn } from "@t3tools/client-runtime/state/workspaceTaskDates";
-import { LayoutGrid, Search, SlidersHorizontal } from "lucide-react";
+import { LayoutGrid, MoreHorizontal, Search, SlidersHorizontal } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import * as Schema from "effect/Schema";
 import type * as DateTime from "effect/DateTime";
@@ -57,6 +57,7 @@ export interface TasksSpaceViewProps {
   readonly selectedTaskId?: string | undefined;
   readonly pendingTaskIds?: ReadonlySet<string>;
   readonly loadingMore?: boolean;
+  readonly onCreate?: (() => void) | undefined;
   readonly onOpen: (ref: WorkspaceItemRef) => void;
   readonly onTransition: TaskTransitionHandler;
   readonly onFilter: (
@@ -145,7 +146,7 @@ export function TasksSpaceView(props: TasksSpaceViewProps) {
     <main aria-label="Tasks list" className="min-w-0 px-4 pt-4 pb-6">
       <div className="flex h-10 items-start justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="truncate text-sm leading-5 font-semibold">
+          <h2 tabIndex={-1} className="truncate text-sm leading-5 font-semibold">
             {projectId ? "Project tasks" : "All tasks"}
           </h2>
           <p className="mt-1 truncate text-3xs leading-3.5 text-muted-foreground">
@@ -156,14 +157,33 @@ export function TasksSpaceView(props: TasksSpaceViewProps) {
                 : "Task count unavailable"}
           </p>
         </div>
-        <button
-          type="button"
-          className="mt-[7px] flex h-6 shrink-0 items-center gap-1 rounded-md border border-border bg-muted px-1.75 text-2xs font-semibold focus-visible:outline-2 focus-visible:outline-ring"
-          onClick={() => props.onLayout(props.taskLayout === "board" ? "list" : "board")}
-        >
-          <LayoutGrid aria-hidden="true" className="size-3" />{" "}
-          {props.taskLayout === "board" ? "List" : "Board"}
-        </button>
+        <div className="flex items-center gap-2">
+          {props.onCreate && props.canOperate && props.workspaceTasksV2 ? (
+            <details className="relative mt-[7px]">
+              <summary
+                aria-label="Task actions"
+                className="flex min-h-6 min-w-6 cursor-pointer list-none items-center justify-center rounded-md focus-visible:outline-2 focus-visible:outline-ring"
+              >
+                <MoreHorizontal className="size-3" />
+              </summary>
+              <button
+                type="button"
+                className="absolute right-0 z-10 min-h-11 w-28 rounded-md border border-border bg-background p-2 text-xs"
+                onClick={props.onCreate}
+              >
+                New task
+              </button>
+            </details>
+          ) : null}
+          <button
+            type="button"
+            className="mt-[7px] flex h-6 shrink-0 items-center gap-1 rounded-md border border-border bg-muted px-1.75 text-2xs font-semibold focus-visible:outline-2 focus-visible:outline-ring"
+            onClick={() => props.onLayout(props.taskLayout === "board" ? "list" : "board")}
+          >
+            <LayoutGrid aria-hidden="true" className="size-3" />{" "}
+            {props.taskLayout === "board" ? "List" : "Board"}
+          </button>
+        </div>
       </div>
       {props.taskLayout === "board" ? (
         <p role="status" className="mt-3 text-xs text-muted-foreground">
@@ -370,6 +390,7 @@ export function TasksSpaceView(props: TasksSpaceViewProps) {
                 <span key={config.projectId}>
                   {index > 0 ? ", " : ""}
                   <Link
+                    aria-label={`${props.projects.find((project) => project.id === config.projectId)?.title ?? page.tasks.find((task) => task.projectId === config.projectId)?.projectTitle ?? "Unavailable project"} workspace settings`}
                     className="underline"
                     to="/workspace"
                     search={parseWorkspaceSearch({

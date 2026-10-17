@@ -67,7 +67,7 @@ export function WorkspaceNavigation({
 }: WorkspaceNavigationProps) {
   const reasonId = useId();
   const href = (id: WorkspaceDestination) =>
-    `/workspace?${new URLSearchParams({ ...workspaceDestinationSearch(id, environmentId) }).toString()}`;
+    `/workspace?${new URLSearchParams(Object.entries(workspaceDestinationSearch(id, environmentId)).map(([key, value]) => [key, String(value)])).toString()}`;
   const navigate = (event: MouseEvent<HTMLAnchorElement>, id: WorkspaceDestination) => {
     if (unavailableDestinations?.[id]) {
       event.preventDefault();

@@ -43,6 +43,7 @@ export interface WorkspaceSearch {
   readonly item?: string;
   readonly taskLayout?: "list" | "board";
   readonly taskText?: string;
+  readonly taskLimit?: number;
   readonly taskDueFrom?: string;
   readonly taskDueTo?: string;
   readonly taskOwner?: "all" | "environment-owner" | "unassigned";
@@ -74,9 +75,21 @@ export function parseWorkspaceSearch(raw: Record<string, unknown>): WorkspaceSea
     : undefined;
   const dueFrom = taskScope && isTaskDate(raw.taskDueFrom) ? raw.taskDueFrom : undefined;
   const dueTo = taskScope && isTaskDate(raw.taskDueTo) ? raw.taskDueTo : undefined;
+  const limit =
+    typeof raw.taskLimit === "string" && /^\d{1,3}$/.test(raw.taskLimit)
+      ? Number(raw.taskLimit)
+      : raw.taskLimit;
   const ordered = !dueFrom || !dueTo || dueFrom <= dueTo;
   return {
     space: destination,
+    ...(taskScope &&
+    typeof limit === "number" &&
+    Number.isInteger(limit) &&
+    limit >= 1 &&
+    limit <= 100 &&
+    limit !== 50
+      ? { taskLimit: limit }
+      : {}),
     ...(taskScope && (raw.taskLayout === "list" || raw.taskLayout === "board")
       ? { taskLayout: raw.taskLayout }
       : {}),

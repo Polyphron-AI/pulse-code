@@ -180,3 +180,18 @@ it("retains valid task scope and drops unknown filters", () => {
     }),
   ).toEqual({ space: "mail" });
 });
+
+it("bounds page size in Tasks URLs and strips it outside Tasks", () => {
+  for (const value of [1, 100, "25"])
+    expect(parseWorkspaceSearch({ space: "tasks", taskLimit: value }).taskLimit).toBe(
+      Number(value),
+    );
+  for (const value of [0, 101, -1, 1.5, "1e2", "01.5", "NaN", null])
+    expect(parseWorkspaceSearch({ space: "tasks", taskLimit: value })).not.toHaveProperty(
+      "taskLimit",
+    );
+  expect(parseWorkspaceSearch({ space: "tasks", taskLimit: 50 })).not.toHaveProperty("taskLimit");
+  expect(parseWorkspaceSearch({ space: "projects", taskLimit: 25 })).not.toHaveProperty(
+    "taskLimit",
+  );
+});

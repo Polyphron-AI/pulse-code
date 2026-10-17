@@ -1,5 +1,7 @@
 // @vitest-environment happy-dom
 import { act, useState } from "react";
+import { createRoot } from "react-dom/client";
+import { getByRole, queryByRole } from "@testing-library/dom";
 import { create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import * as DateTime from "effect/DateTime";
@@ -25,16 +27,45 @@ import * as Option from "effect/Option";
 import { RegistryContext } from "@effect/atom-react";
 import { TasksList, TasksSpace } from "./TasksSpace";
 import { parseWorkspaceSearch } from "./workspaceNavigation";
-const boundary = vi.hoisted(() => ({ query: vi.fn() }));
-vi.mock("../../state/workspaceTools", () => ({
-  workspaceTools: { queryTasks: (request: unknown) => boundary.query(request) },
+const boundary = vi.hoisted(() => ({
+  query: vi.fn(),
+  task: vi.fn(),
+  config: vi.fn(),
+  patch: vi.fn(),
+  upsert: vi.fn(),
+  remove: vi.fn(),
+  operate: true,
+  compact: false,
+  v2: true,
 }));
-vi.mock("../../state/entities", () => ({ useProjects: () => [] }));
-vi.mock("../../state/environments", () => ({ useConnectedEnvironmentIds: () => ["remote"] }));
+vi.mock("../../state/workspaceTools", () => ({
+  workspaceTools: {
+    queryTasks: (request: unknown) => boundary.query(request),
+    task: (request: unknown) => boundary.task(request),
+    config: (request: unknown) => boundary.config(request),
+    patchTask: "patch",
+    upsertTask: "upsert",
+    deleteTask: "remove",
+  },
+}));
+const projects = [
+  { id: ProjectId.make("p"), environmentId: EnvironmentId.make("remote"), title: "SynKEK" },
+];
+vi.mock("../../state/entities", () => ({ useProjects: () => projects }));
+vi.mock("../../state/environments", () => ({
+  useConnectedEnvironmentIds: () => ["remote", "other"],
+}));
+vi.mock("../../hooks/useMediaQuery", () => ({ useMediaQuery: () => boundary.compact }));
 vi.mock("../../hooks/useSettings", () => ({ useEnvironmentSettings: () => null }));
-vi.mock("../../state/use-atom-command", () => ({ useAtomCommand: () => vi.fn() }));
+vi.mock("../../state/use-atom-command", () => ({
+  useAtomCommand: (command: "patch" | "upsert" | "remove") => boundary[command] ?? vi.fn(),
+}));
 vi.mock("./mail/useMailCapabilities", () => ({
-  useMailCapabilities: () => ({ environmentId: "remote", ready: true, workspaceTasksV2: true }),
+  useMailCapabilities: (target?: string) => ({
+    environmentId: target ?? "remote",
+    ready: true,
+    workspaceTasksV2: boundary.v2,
+  }),
 }));
 vi.mock("./ProjectTasks", () => ({
   useTaskDateClock: () => DateTime.makeUnsafe("2026-10-13T08:30:00Z"),
@@ -44,16 +75,17 @@ vi.mock("./WorkspaceItemActions", () => ({
   WorkspaceItemMenu: ({ children }: { children: React.ReactNode }) => children,
 }));
 vi.mock("./WorkspaceResourcesPanel", () => ({ WorkspaceProjectResources: () => null }));
-vi.mock("./WorkspaceEngagement", () => ({
+vi.mock("./WorkspaceEngagement", async () => ({
+  WorkspaceItemMutationContext: (await import("react")).createContext(null),
   WorkspaceEngagement: ({ children }: { children: React.ReactNode }) => children,
 }));
 vi.mock("./WorkspaceLinkedContext", () => ({ WorkspaceLinkedContext: () => null }));
 vi.mock("./useWorkspaceHeaderModel", () => ({
   useWorkspaceHeaderModel: () => ({ title: "Tasks" }),
 }));
-vi.mock("./useWorkspaceCanOperate", () => ({ useWorkspaceCanOperate: () => true }));
-vi.mock("./useWorkspaceItemOpener", () => ({
-  parseTaskLocation: () => null,
+vi.mock("./useWorkspaceCanOperate", () => ({ useWorkspaceCanOperate: () => boundary.operate }));
+vi.mock("./useWorkspaceItemOpener", async (original) => ({
+  ...(await original<typeof import("./useWorkspaceItemOpener")>()),
   useWorkspaceItemOpener: () => vi.fn(),
 }));
 
@@ -82,6 +114,9 @@ const defaults: TasksSpaceViewProps = {
 };
 afterEach(async () => {
   if (renderer) await act(() => renderer.unmount());
+  boundary.operate = true;
+  boundary.compact = false;
+  boundary.v2 = true;
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
@@ -152,6 +187,48 @@ function serviceFixture() {
   const atoms = new Map<string, Atom.Writable<Result, Result>>();
   const calls: Array<{ environmentId: EnvironmentId; input: typeof WorkspaceTaskQuery.Encoded }> =
     [];
+  const taskAtoms = new Map<
+    string,
+    Atom.Writable<
+      AsyncResult.AsyncResult<WorkspaceTaskSummary, unknown>,
+      AsyncResult.AsyncResult<WorkspaceTaskSummary, unknown>
+    >
+  >();
+  boundary.task.mockImplementation(({ input }: { input: { id: string } }) => {
+    if (!taskAtoms.has(input.id)) {
+      const task = tasks.find((task) => task.id === input.id);
+      taskAtoms.set(
+        input.id,
+        Atom.make<AsyncResult.AsyncResult<WorkspaceTaskSummary, unknown>>(
+          task
+            ? AsyncResult.success(task)
+            : AsyncResult.fail(
+                new WorkspaceToolsError({ kind: "not-found", message: "Missing task" }),
+              ),
+        ),
+      );
+    }
+    return taskAtoms.get(input.id)!;
+  });
+  const configAtom = Atom.make(AsyncResult.success(config));
+  boundary.config.mockReturnValue(configAtom);
+  boundary.patch.mockImplementation(
+    async ({ input }: { input: { id: string; expectedRevision: number; title?: string } }) => {
+      const index = tasks.findIndex((task) => task.id === input.id);
+      const task = tasks[index]!;
+      if (!task || task.revision !== input.expectedRevision)
+        return AsyncResult.fail(
+          new WorkspaceToolsError({
+            kind: "conflict",
+            message: "This task changed on another client.",
+          }),
+        );
+      tasks[index] = { ...task, ...input, revision: task.revision + 1 };
+      const atom = taskAtoms.get(task.id);
+      if (atom) registry.set(atom, AsyncResult.success(tasks[index]!));
+      return AsyncResult.success(tasks[index]!);
+    },
+  );
   let staleCursor = false;
   const read = (environmentId: EnvironmentId, input: typeof WorkspaceTaskQuery.Encoded): Result => {
     if (input.cursor && staleCursor)
@@ -192,6 +269,30 @@ function serviceFixture() {
         atoms.set(key, Atom.make(read(request.environmentId, request.input)));
       }
       return atoms.get(key)!;
+    },
+  );
+  boundary.upsert.mockImplementation(
+    async ({
+      input,
+    }: {
+      input: { id: string; projectId: ProjectId; title: string; column: string };
+    }) => {
+      const created: WorkspaceTaskSummary = {
+        ...tasks[0]!,
+        ...input,
+        projectTitle: "SynKEK",
+        revision: 0,
+        done: false,
+      };
+      tasks.push(created);
+      for (const [key, atom] of atoms) {
+        const request = JSON.parse(key) as {
+          environmentId: EnvironmentId;
+          input: typeof WorkspaceTaskQuery.Encoded;
+        };
+        registry.set(atom, read(request.environmentId, request.input));
+      }
+      return AsyncResult.success(created);
     },
   );
   return {
@@ -570,6 +671,344 @@ async function mountRouter(component: () => React.ReactNode, initialEntries: str
   });
   return { router, history };
 }
+
+it("keeps loaded depth through first-page refresh and replaces it with a confirmed cursor chain", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const fixture = serviceFixture();
+  try {
+    await act(() => {
+      renderer = create(
+        <RegistryContext.Provider value={fixture.registry}>
+          <TasksList {...defaults} filters={{ ...defaults.filters, limit: 2 }} connected />
+        </RegistryContext.Provider>,
+      );
+    });
+    await act(() => renderer.root.findByProps({ "aria-label": "Load more tasks" }).props.onClick());
+    const rows = () => renderer.root.findAllByProps({ "data-workspace-task-row": "" });
+    const last = rows()[3];
+    expect(rows()).toHaveLength(4);
+    const firstAtom = fixture.atoms.values().next().value!;
+    const success = fixture.registry.get(firstAtom);
+    await act(() => fixture.registry.set(firstAtom, AsyncResult.waiting(success)));
+    expect(rows()).toHaveLength(4);
+    expect(rows()[3]).toBe(last);
+    fixture.tasks[0] = { ...fixture.tasks[0]!, title: "Changed elsewhere", revision: 2 };
+    await act(() =>
+      fixture.registry.set(firstAtom, fixture.read(EnvironmentId.make("remote"), { limit: 2 })),
+    );
+    expect(rows()).toHaveLength(4);
+    expect(rows()[3]).toBe(last);
+    expect(JSON.stringify(renderer.toJSON())).toContain("Changed elsewhere");
+  } finally {
+    await act(() => renderer.unmount());
+    fixture.dispose();
+  }
+});
+
+it("keeps the selected page size through connected search pauses and Enter", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const fixture = serviceFixture();
+  try {
+    const { router } = await mountRouter(
+      () => (
+        <RegistryContext.Provider value={fixture.registry}>
+          <TasksSpace />
+        </RegistryContext.Provider>
+      ),
+      ["/workspace?space=tasks&environment=remote&taskLimit=1"],
+    );
+    vi.useFakeTimers();
+    expect(renderer.root.findAllByProps({ "data-workspace-task-row": "" })).toHaveLength(1);
+    const input = renderer.root.findByProps({ "aria-label": "Search tasks" });
+    await act(() => input.props.onChange({ target: { value: "task" } }));
+    await act(async () => vi.advanceTimersByTime(300));
+    expect(router.state.location.search.taskLimit).toBe(1);
+    expect(fixture.calls.at(-1)?.input.limit).toBe(1);
+    await act(async () =>
+      renderer.root
+        .findByProps({ "aria-label": "Task search" })
+        .props.onSubmit({ preventDefault() {} }),
+    );
+    expect(router.state.location.search.taskLimit).toBe(1);
+    await act(() => renderer.root.findByProps({ "aria-label": "Filter tasks" }).props.onClick());
+    expect(renderer.root.findByProps({ "aria-label": "Task page size" }).props.value).toBe(1);
+  } finally {
+    await act(() => renderer.unmount());
+    fixture.dispose();
+  }
+});
+
+it("loads a filtered-out direct task, retains its draft through search and confirms Back", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const fixture = serviceFixture();
+  try {
+    const item = JSON.stringify({ type: "task", taskId: fixture.tasks[2]!.id });
+    const { router, history } = await mountRouter(
+      () => (
+        <RegistryContext.Provider value={fixture.registry}>
+          <TasksSpace />
+        </RegistryContext.Provider>
+      ),
+      [
+        `/workspace?space=tasks&environment=remote&taskText=missing&item=${encodeURIComponent(JSON.stringify(item))}`,
+      ],
+    );
+    expect(renderer.root.findByProps({ "aria-label": "Task title" }).props.value).toBe(
+      "Later launch",
+    );
+    await act(() =>
+      renderer.root
+        .findByProps({ "aria-label": "Task title" })
+        .props.onChange({ target: { value: "Unsaved launch" } }),
+    );
+    const length = history.length;
+    await act(async () =>
+      renderer.root
+        .findByProps({ "aria-label": "Task search" })
+        .props.onSubmit({ preventDefault() {} }),
+    );
+    expect(router.state.location.search.item).toBe(item);
+    expect(renderer.root.findByProps({ "aria-label": "Task title" }).props.value).toBe(
+      "Unsaved launch",
+    );
+    const back = () =>
+      renderer.root
+        .findAllByType("button")
+        .find((button) => button.children.join("") === "Back to tasks")!
+        .props.onClick();
+    await act(back);
+    expect(renderer.root.findByProps({ role: "alertdialog" })).toBeDefined();
+    await act(() =>
+      renderer.root
+        .findAllByType("button")
+        .find((button) => button.children.join("") === "Keep editing")!
+        .props.onClick(),
+    );
+    expect(router.state.location.search.item).toBe(item);
+    await act(back);
+    await act(async () =>
+      renderer.root
+        .findAllByType("button")
+        .find((button) => button.children.join("") === "Discard changes")!
+        .props.onClick(),
+    );
+    expect(router.state.location.search.item).toBeUndefined();
+    expect(history.length).toBe(length);
+  } finally {
+    await act(() => renderer.unmount());
+    fixture.dispose();
+  }
+});
+
+it("keeps a missing direct URL unavailable and never creates a replacement", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const fixture = serviceFixture();
+  try {
+    const item = JSON.stringify({
+      type: "task",
+      taskId: "wskt_00000000-0000-4000-8000-000000000099",
+    });
+    await mountRouter(
+      () => (
+        <RegistryContext.Provider value={fixture.registry}>
+          <TasksSpace />
+        </RegistryContext.Provider>
+      ),
+      [
+        `/workspace?space=tasks&environment=remote&item=${encodeURIComponent(JSON.stringify(item))}`,
+      ],
+    );
+    expect(JSON.stringify(renderer.toJSON())).toContain(
+      "This task is unavailable. Its links have been kept.",
+    );
+    expect(renderer.root.findAllByProps({ "aria-label": "New task title" })).toHaveLength(0);
+    expect(boundary.upsert).not.toHaveBeenCalled();
+  } finally {
+    await act(() => renderer.unmount());
+    fixture.dispose();
+  }
+});
+
+it("restores phone query, pages, scroll and focus after dirty detail Back", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  boundary.compact = true;
+  const fixture = serviceFixture();
+  const rootRoute = createRootRoute();
+  const route = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "workspace",
+    validateSearch: parseWorkspaceSearch,
+    component: () => (
+      <RegistryContext.Provider value={fixture.registry}>
+        <TasksSpace />
+      </RegistryContext.Provider>
+    ),
+  });
+  const history = createMemoryHistory({
+    initialEntries: ["/workspace?space=tasks&environment=remote&view=open&taskLimit=1"],
+  });
+  const router = createRouter({ routeTree: rootRoute.addChildren([route]), history });
+  await router.load();
+  const node = document.createElement("div");
+  document.body.append(node);
+  const root = createRoot(node);
+  try {
+    await act(() => root.render(<RouterProvider router={router} />));
+    await act(() => getByRole(node, "button", { name: "Load more tasks" }).click());
+    await act(() => getByRole(node, "button", { name: "Load more tasks" }).click());
+    const origin = getByRole(node, "button", { name: "Open Later launch" });
+    const list = getByRole(node, "main", { name: "Tasks list" });
+    list.scrollTop = 123;
+    origin.focus();
+    await act(() => origin.click());
+    expect(list.parentElement?.className).toContain("max-md:hidden");
+    const title = getByRole(node, "textbox", { name: "Task title" }) as HTMLInputElement;
+    const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+    await act(() => {
+      setValue.call(title, "Dirty launch");
+      title.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect((getByRole(node, "button", { name: "Save task" }) as HTMLButtonElement).disabled).toBe(
+      false,
+    );
+    const searchInput = getByRole(node, "searchbox", { name: "Search tasks" }) as HTMLInputElement;
+    await act(() => {
+      setValue.call(searchInput, "First");
+      searchInput.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(() =>
+      getByRole(node, "form", { name: "Task search" }).dispatchEvent(
+        new Event("submit", { bubbles: true, cancelable: true }),
+      ),
+    );
+    expect(router.state.location.search.item).toBeDefined();
+    expect(title.value).toBe("Dirty launch");
+    expect(node.querySelectorAll("[data-workspace-task-row]")).toHaveLength(1);
+    await act(() => {
+      void router.navigate({
+        to: "/workspace",
+        search: { space: "tasks", environment: "remote", view: "done" },
+      });
+    });
+    expect(getByRole(node, "alertdialog", { name: "Discard task changes?" })).toBeDefined();
+    expect(router.state.location.search.item).toBeDefined();
+    await act(() => getByRole(node, "button", { name: "Keep editing" }).click());
+    expect(title.value).toBe("Dirty launch");
+    await act(() => getByRole(node, "button", { name: "Back to tasks" }).click());
+    await act(() => getByRole(node, "button", { name: "Discard changes" }).click());
+    expect(queryByRole(node, "textbox", { name: "Task title" })).toBeNull();
+    expect(router.state.location.search).toEqual({
+      space: "tasks",
+      environment: "remote",
+      view: "open",
+      taskLimit: 1,
+    });
+    expect(node.querySelectorAll("[data-workspace-task-row]")).toHaveLength(3);
+    expect(list.scrollTop).toBe(123);
+    expect(list.parentElement?.className).not.toContain("max-md:hidden");
+    expect(document.activeElement).toBe(getByRole(node, "button", { name: "Open Later launch" }));
+  } finally {
+    await act(() => root.unmount());
+    node.remove();
+    fixture.dispose();
+  }
+});
+
+it("creates from the Tasks menu in the chosen project and refreshes the query", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const fixture = serviceFixture();
+  try {
+    const { router } = await mountRouter(
+      () => (
+        <RegistryContext.Provider value={fixture.registry}>
+          <TasksSpace />
+        </RegistryContext.Provider>
+      ),
+      ["/workspace?space=tasks&environment=remote&project=p"],
+    );
+    await act(() =>
+      renderer.root
+        .findAllByType("button")
+        .find((button) => button.children.join("") === "New task")!
+        .props.onClick(),
+    );
+    await act(() =>
+      renderer.root
+        .findByProps({ "aria-label": "New task title" })
+        .props.onChange({ target: { value: "New durable task" } }),
+    );
+    await act(async () =>
+      renderer.root
+        .findAllByType("form")
+        .find((form) => !form.props["aria-label"])!
+        .props.onSubmit({ preventDefault() {} }),
+    );
+    expect(fixture.tasks.some((task) => task.title === "New durable task")).toBe(true);
+    expect(JSON.stringify(renderer.toJSON())).toContain("Open New durable task");
+    expect(router.state.location.search.item).toContain(
+      boundary.upsert.mock.calls.at(-1)?.[0].input.id,
+    );
+    expect(boundary.upsert.mock.calls.at(-1)?.[0].environmentId).toBe("remote");
+  } finally {
+    await act(() => renderer.unmount());
+    fixture.dispose();
+  }
+});
+
+it("resets the connected loaded pages when the environment key changes", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const fixture = serviceFixture();
+  try {
+    const { router } = await mountRouter(
+      () => (
+        <RegistryContext.Provider value={fixture.registry}>
+          <TasksSpace />
+        </RegistryContext.Provider>
+      ),
+      ["/workspace?space=tasks&environment=remote&taskLimit=1"],
+    );
+    await act(() => renderer.root.findByProps({ "aria-label": "Load more tasks" }).props.onClick());
+    expect(renderer.root.findAllByProps({ "data-workspace-task-row": "" })).toHaveLength(2);
+    await act(() =>
+      router.navigate({
+        to: "/workspace",
+        search: { space: "tasks", environment: "other", taskLimit: 1 },
+      }),
+    );
+    expect(renderer.root.findAllByProps({ "data-workspace-task-row": "" })).toHaveLength(1);
+    expect(JSON.stringify(renderer.toJSON())).toContain("Other environment First task");
+    expect(fixture.calls.at(-1)?.environmentId).toBe("other");
+  } finally {
+    await act(() => renderer.unmount());
+    fixture.dispose();
+  }
+});
+
+it("has no create affordance in the connected read-only Tasks view", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  boundary.operate = false;
+  const fixture = serviceFixture();
+  try {
+    await mountRouter(
+      () => (
+        <RegistryContext.Provider value={fixture.registry}>
+          <TasksSpace />
+        </RegistryContext.Provider>
+      ),
+      ["/workspace?space=tasks&environment=remote"],
+    );
+    expect(renderer.root.findAllByProps({ "aria-label": "Task actions" })).toHaveLength(0);
+    expect(
+      renderer.root
+        .findAllByType("input")
+        .filter((input) => input.props.type === "checkbox")
+        .every((input) => input.props.disabled),
+    ).toBe(true);
+  } finally {
+    await act(() => renderer.unmount());
+    fixture.dispose();
+  }
+});
 
 it("shows one named settings notice and navigates in the router without per-row links", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);

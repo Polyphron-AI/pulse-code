@@ -2,6 +2,8 @@ import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { useNavigate } from "@tanstack/react-router";
 import { WorkspaceItemRef, parseTelegramResourceId, type EnvironmentId } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
+import { useCallback } from "react";
+import { useMailCapabilities } from "./mail/useMailCapabilities";
 import { readLocalApi } from "../../localApi";
 import { buildThreadRouteParams } from "../../threadRoutes";
 
@@ -30,53 +32,61 @@ export function parseTaskLocation(raw: string | undefined) {
 /** Open an item in its own environment, preserving the exact source-message reference. */
 export function useWorkspaceItemOpener(environmentId: EnvironmentId | null) {
   const navigate = useNavigate();
-  return (ref: WorkspaceItemRef) => {
-    if (environmentId === null) return;
-    if (ref.type === "thread")
-      void navigate({
-        to: "/$environmentId/$threadId",
-        params: buildThreadRouteParams(scopeThreadRef(environmentId, ref.threadId)),
-      });
-    if (ref.type === "project")
-      void navigate({
-        to: "/workspace",
-        search: { space: "projects", environment: environmentId, project: ref.projectId },
-      });
-    if (ref.type === "task")
-      void navigate({
-        to: "/workspace",
-        search: { space: "projects", environment: environmentId, item: JSON.stringify(ref) },
-      });
-    if (ref.type === "mail")
-      void navigate({
-        to: "/workspace",
-        search: {
-          space: "mail",
-          environment: environmentId,
-          account: ref.accountId,
-          item: JSON.stringify(ref),
-        },
-      });
-    if (ref.type === "provider-resource" && ref.provider === "telegram") {
-      const resource = parseTelegramResourceId(ref.resourceId);
-      if (resource)
+  const { workspaceTasksV2 } = useMailCapabilities(environmentId ?? undefined);
+  return useCallback(
+    (ref: WorkspaceItemRef) => {
+      if (environmentId === null) return;
+      if (ref.type === "thread")
+        void navigate({
+          to: "/$environmentId/$threadId",
+          params: buildThreadRouteParams(scopeThreadRef(environmentId, ref.threadId)),
+        });
+      if (ref.type === "project")
+        void navigate({
+          to: "/workspace",
+          search: { space: "projects", environment: environmentId, project: ref.projectId },
+        });
+      if (ref.type === "task")
         void navigate({
           to: "/workspace",
           search: {
-            space: "office",
-            officeView: "communications",
-            communicationProvider: "telegram",
+            space: workspaceTasksV2 ? "tasks" : "projects",
             environment: environmentId,
-            account: resource.connectionId,
-            item: ref.resourceId,
+            item: JSON.stringify(ref),
           },
         });
-    }
-    if (ref.type === "url" || ref.type === "file")
-      void readLocalApi()?.shell.openExternal(
-        ref.type === "url"
-          ? ref.url
-          : `https://drive.google.com/file/d/${encodeURIComponent(ref.fileId)}/view`,
-      );
-  };
+      if (ref.type === "mail")
+        void navigate({
+          to: "/workspace",
+          search: {
+            space: "mail",
+            environment: environmentId,
+            account: ref.accountId,
+            item: JSON.stringify(ref),
+          },
+        });
+      if (ref.type === "provider-resource" && ref.provider === "telegram") {
+        const resource = parseTelegramResourceId(ref.resourceId);
+        if (resource)
+          void navigate({
+            to: "/workspace",
+            search: {
+              space: "office",
+              officeView: "communications",
+              communicationProvider: "telegram",
+              environment: environmentId,
+              account: resource.connectionId,
+              item: ref.resourceId,
+            },
+          });
+      }
+      if (ref.type === "url" || ref.type === "file")
+        void readLocalApi()?.shell.openExternal(
+          ref.type === "url"
+            ? ref.url
+            : `https://drive.google.com/file/d/${encodeURIComponent(ref.fileId)}/view`,
+        );
+    },
+    [environmentId, navigate, workspaceTasksV2],
+  );
 }

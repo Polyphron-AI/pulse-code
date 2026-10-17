@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { useNavigate, useSearch } from "@tanstack/react-router";
+import { useNavigate, useSearch, useRouter } from "@tanstack/react-router";
 import * as Schema from "effect/Schema";
 import {
   EnvironmentId,
@@ -30,14 +30,15 @@ import { TasksSpaceView, type TaskFilters, type TasksSpaceViewProps } from "./Ta
 import { WorkspaceEngagement } from "./WorkspaceEngagement";
 import { WorkspaceProjectResources } from "./WorkspaceResourcesPanel";
 import { WorkspaceLinkedContext } from "./WorkspaceLinkedContext";
-import { WorkspaceItemActions, WorkspaceItemMenu } from "./WorkspaceItemActions";
+import { WorkspaceItemMenu } from "./WorkspaceItemActions";
 import { useWorkspaceHeaderModel } from "./useWorkspaceHeaderModel";
 import { useMailCapabilities } from "./mail/useMailCapabilities";
 import { useWorkspaceCanOperate } from "./useWorkspaceCanOperate";
 import { parseTaskLocation, useWorkspaceItemOpener } from "./useWorkspaceItemOpener";
 import { parseWorkspaceSearch, type WorkspaceSearch } from "./workspaceNavigation";
 import { WorkspaceResourcesBodyContext } from "./workspaceResourceState";
-import { useTaskDateClock } from "./ProjectTasks";
+import { WorkspaceTaskEditor, workspaceTaskSummary, useTaskDateClock } from "./WorkspaceTaskEditor";
+import { Button } from "../ui/button";
 import { formatWorkspaceTaskDueOn } from "@t3tools/client-runtime/state/workspaceTaskDates";
 const isToolsError = Schema.is(WorkspaceToolsError);
 type ListProps = Omit<
@@ -59,7 +60,19 @@ function TaskCursor({
   }, [query, onResult]);
   return null;
 }
-/** Accumulates only confirmed pages from the current first-page value. */
+function combinePages(base: WorkspaceTaskPage | null, pages: readonly WorkspaceTaskPage[]) {
+  if (!base || !pages.length) return base;
+  const configs = new Map(base.projects.map((config) => [config.projectId, config]));
+  for (const page of pages)
+    for (const config of page.projects) configs.set(config.projectId, config);
+  return {
+    ...base,
+    tasks: [...base.tasks, ...pages.flatMap((page) => page.tasks)],
+    projects: [...configs.values()],
+    nextCursor: pages.at(-1)!.nextCursor,
+  };
+}
+/** Keeps the displayed depth until its replacement cursor chain is confirmed. */
 export function TasksList(props: ListProps) {
   const { environmentId, filters } = props;
   const input = useMemo(
@@ -84,41 +97,83 @@ export function TasksList(props: ListProps) {
     pages: readonly WorkspaceTaskPage[];
     cursor: string | null;
     error: string | null;
-  }>({ query: firstAtom, base: first.data, pages: [], cursor: null, error: null });
-  if (
-    paging.query !== firstAtom ||
-    paging.base !== first.data ||
-    ((first.isPending || first.error || !props.workspaceTasksV2) &&
-      (paging.pages.length > 0 || paging.cursor !== null || paging.error !== null))
-  )
-    setPaging({ query: firstAtom, base: first.data, pages: [], cursor: null, error: null });
-  const current =
-    paging.query === firstAtom && paging.base === first.data && !first.isPending && !first.error;
-  const pages = current ? paging.pages : [];
-  const page = useMemo(() => {
-    if (!first.data) return null;
-    if (!pages.length) return first.data;
-    const configs = new Map(first.data.projects.map((config) => [config.projectId, config]));
-    for (const page of pages)
-      for (const config of page.projects) configs.set(config.projectId, config);
-    return {
-      ...first.data,
-      tasks: [...first.data.tasks, ...pages.flatMap((page) => page.tasks)],
-      projects: [...configs.values()],
-      nextCursor: pages.at(-1)!.nextCursor,
-    };
-  }, [first.data, pages]);
+    depth: number;
+    held: WorkspaceTaskPage | null;
+  }>({
+    query: firstAtom,
+    base: first.data,
+    pages: [],
+    cursor: null,
+    error: null,
+    depth: 0,
+    held: null,
+  });
+  const [returnPages, setReturnPages] = useState({
+    environmentId,
+    pages: new Map<typeof firstAtom, typeof paging>(),
+  });
+  if (paging.query !== firstAtom) {
+    const pages =
+      returnPages.environmentId === environmentId
+        ? new Map(returnPages.pages)
+        : new Map<typeof firstAtom, typeof paging>();
+    const retained = pages.get(firstAtom);
+    if (returnPages.environmentId === environmentId && paging.query)
+      pages.set(paging.query, paging);
+    if (pages.size > 8) pages.delete(pages.keys().next().value!);
+    setReturnPages({ environmentId, pages });
+    setPaging(
+      retained ?? {
+        query: firstAtom,
+        base: first.data,
+        pages: [],
+        cursor: null,
+        error: null,
+        depth: 0,
+        held: null,
+      },
+    );
+  } else if (first.data && paging.base !== first.data) {
+    const depth = Math.max(paging.depth, paging.pages.length);
+    setPaging({
+      query: firstAtom,
+      base: first.data,
+      pages: [],
+      cursor: depth ? first.data.nextCursor : null,
+      error: null,
+      depth,
+      held: depth ? (paging.held ?? combinePages(paging.base, paging.pages)) : null,
+    });
+  }
+  const current = paging.query === firstAtom && paging.base === first.data;
+  const rebuilding =
+    current &&
+    paging.pages.length < paging.depth &&
+    (paging.pages.at(-1) ?? paging.base)?.nextCursor != null;
+  const page = useMemo(
+    () =>
+      current
+        ? rebuilding && paging.held
+          ? paging.held
+          : combinePages(paging.base, paging.pages)
+        : first.data,
+    [current, rebuilding, paging.held, paging.base, paging.pages, first.data],
+  );
   const receive = useCallback(
     (query: EnvironmentQueryView<WorkspaceTaskPage>) => {
-      setPaging((current) => {
-        if (current.query !== firstAtom || current.base !== first.data || current.cursor === null)
-          return current;
+      setPaging((state) => {
+        if (state.query !== firstAtom || state.base !== first.data || !state.cursor) return state;
         if (isToolsError(query.failure) && query.failure.kind === "invalid-input")
-          return { ...current, pages: [], cursor: null, error: null };
-        if (query.error) return { ...current, cursor: null, error: query.error };
-        return query.data
-          ? { ...current, pages: [...current.pages, query.data], cursor: null, error: null }
-          : current;
+          return { ...state, pages: [], cursor: null, depth: 0, held: null, error: null };
+        if (query.error) return { ...state, cursor: null, error: query.error };
+        if (!query.data) return state;
+        const pages = [...state.pages, query.data];
+        return {
+          ...state,
+          pages,
+          cursor: pages.length < state.depth ? query.data.nextCursor : null,
+          error: null,
+        };
       });
     },
     [first.data, firstAtom],
@@ -129,11 +184,11 @@ export function TasksList(props: ListProps) {
       ? "disconnected"
       : first.error
         ? "error"
-        : first.isPending
-          ? first.data
+        : first.isPending || rebuilding
+          ? page
             ? "refreshing"
             : "loading"
-          : first.data
+          : page
             ? "ready"
             : "loading";
   return (
@@ -143,17 +198,34 @@ export function TasksList(props: ListProps) {
         page={page}
         status={status}
         error={first.error ?? paging.error}
-        loadingMore={current && paging.cursor !== null}
+        loadingMore={current && (paging.cursor !== null || rebuilding)}
         onRetry={() => {
-          setPaging({ query: firstAtom, base: first.data, pages: [], cursor: null, error: null });
+          setPaging((state) => ({
+            ...state,
+            error: null,
+            cursor:
+              state.pages.length < state.depth
+                ? ((state.pages.at(-1) ?? state.base)?.nextCursor ?? null)
+                : null,
+          }));
           first.refresh();
         }}
         onLoadMore={() => {
           if (status === "ready" && !paging.error && page?.nextCursor && !paging.cursor)
-            setPaging({ ...paging, cursor: page.nextCursor });
+            setPaging({
+              ...paging,
+              depth: paging.pages.length + 1,
+              held: null,
+              cursor: page.nextCursor,
+            });
         }}
       />
-      {current && paging.cursor && props.connected && props.workspaceTasksV2 ? (
+      {current &&
+      paging.cursor &&
+      props.connected &&
+      props.workspaceTasksV2 &&
+      !first.isPending &&
+      !first.error ? (
         <TaskCursor
           key={paging.cursor}
           environmentId={environmentId}
@@ -165,7 +237,8 @@ export function TasksList(props: ListProps) {
   );
 }
 export function TasksSpace() {
-  const search = useSearch({ strict: false });
+  const rawSearch = useSearch({ strict: false });
+  const search = useMemo(() => parseWorkspaceSearch(rawSearch), [rawSearch]);
   const capability = useMailCapabilities(
     search.environment ? EnvironmentId.make(search.environment) : undefined,
   );
@@ -191,7 +264,7 @@ export function TasksSpace() {
     <ConnectedTasksSpace
       key={capability.environmentId}
       environmentId={capability.environmentId}
-      search={parseWorkspaceSearch(search)}
+      search={search}
       available={capability.workspaceTasksV2}
       settingsReady={capability.ready}
     />
@@ -209,7 +282,12 @@ function ConnectedTasksSpace({
   settingsReady: boolean;
 }) {
   const navigate = useNavigate();
-  const projects = useProjects().filter((project) => project.environmentId === environmentId);
+  const router = useRouter();
+  const allProjects = useProjects();
+  const projects = useMemo(
+    () => allProjects.filter((project) => project.environmentId === environmentId),
+    [allProjects, environmentId],
+  );
   const connected = useConnectedEnvironmentIds().includes(environmentId);
   const canOperate = useWorkspaceCanOperate(environmentId) && connected;
   const compact = useMediaQuery("max-md");
@@ -224,6 +302,12 @@ function ConnectedTasksSpace({
   );
   const timeZone = configuredTimeZone ?? "UTC";
   const taskRef = parseTaskLocation(search.item);
+  const selectedTaskId = taskRef?.taskId;
+  const [creating, setCreating] = useState(false);
+  const [createProject, setCreateProject] = useState(search.project ?? "");
+  const [createDirty, setCreateDirty] = useState(false);
+  const [editorBusy, setEditorBusy] = useState(false);
+  const [pendingTaskIds, setPendingTaskIds] = useState<ReadonlySet<string>>(new Set());
   const hidden = bodyHidden || (compact && taskRef !== null);
   const now = useTaskDateClock(timeZone, settingsReady && available && !hidden);
   const transition = useAtomCommand(workspaceTools.transitionTask, { reportFailure: false });
@@ -234,19 +318,37 @@ function ConnectedTasksSpace({
       owner: search.taskOwner ?? "all",
       dueFrom: search.taskDueFrom ?? "",
       dueTo: search.taskDueTo ?? "",
-      limit: 50,
+      limit: search.taskLimit ?? 50,
     }),
-    [search.taskText, search.project, search.taskOwner, search.taskDueFrom, search.taskDueTo],
+    [
+      search.taskText,
+      search.project,
+      search.taskOwner,
+      search.taskDueFrom,
+      search.taskDueTo,
+      search.taskLimit,
+    ],
   );
-  const [pageSize, setPageSize] = useState(50);
-  const queryFilters = useMemo(() => ({ ...filters, limit: pageSize }), [filters, pageSize]);
+
   const selected = useEnvironmentQuery(
     taskRef && available
       ? workspaceTools.task({ environmentId, input: { id: taskRef.taskId } })
       : null,
   );
+  const configProjectId = taskRef
+    ? selected.data?.projectId
+    : creating && createProject
+      ? ProjectId.make(createProject)
+      : null;
+  const config = useEnvironmentQuery(
+    available && configProjectId
+      ? workspaceTools.config({ environmentId, input: { projectId: configProjectId } })
+      : null,
+  );
   const openOther = useWorkspaceItemOpener(environmentId);
+  const returnSearch = useRef<WorkspaceSearch | null>(null);
   const origin = useRef<HTMLElement | null>(null);
+  const originTaskId = useRef<string | null>(null);
   const scrollReturn = useRef<Array<{ element: HTMLElement; top: number }>>([]);
   const open = useCallback(
     (ref: WorkspaceItemRef) => {
@@ -254,6 +356,8 @@ function ConnectedTasksSpace({
         openOther(ref);
         return;
       }
+      returnSearch.current = search;
+      originTaskId.current = ref.taskId;
       origin.current =
         document.activeElement instanceof HTMLElement ? document.activeElement : null;
       scrollReturn.current = [];
@@ -265,17 +369,26 @@ function ConnectedTasksSpace({
     [navigate, search, openOther],
   );
   const close = () => {
+    setCreating(false);
     void navigate({
       to: "/workspace",
-      search: parseWorkspaceSearch({ ...search, item: undefined }),
-    }).then(() => {
-      origin.current?.focus({ preventScroll: true });
-      for (const { element, top } of scrollReturn.current) element.scrollTop = top;
+      replace: true,
+      search: parseWorkspaceSearch({ ...(returnSearch.current ?? search), item: undefined }),
     });
   };
+  useEffect(() => {
+    if (selectedTaskId || creating) return;
+    const restoredRow = [...document.querySelectorAll<HTMLElement>("[data-workspace-task-id]")]
+      .find((row) => row.dataset.workspaceTaskId === originTaskId.current)
+      ?.querySelector<HTMLElement>('button[aria-label^="Open "]');
+    const target = origin.current?.isConnected
+      ? origin.current
+      : (restoredRow ?? document.querySelector<HTMLElement>('[aria-label="Tasks list"] h2'));
+    target?.focus({ preventScroll: true });
+    for (const { element, top } of scrollReturn.current) element.scrollTo(0, top);
+  }, [selectedTaskId, creating]);
   const onFilter = useCallback<TasksSpaceViewProps["onFilter"]>(
     (next, navigation) => {
-      setPageSize(next.limit);
       void navigate({
         to: "/workspace",
         replace: navigation?.replace ?? false,
@@ -287,17 +400,18 @@ function ConnectedTasksSpace({
           taskOwner: next.owner === "all" ? undefined : next.owner,
           taskDueFrom: next.dueFrom || undefined,
           taskDueTo: next.dueTo || undefined,
-          item: undefined,
+          taskLimit: next.limit === 50 ? undefined : next.limit,
         }),
       });
     },
-    [navigate, search, setPageSize],
+    [navigate, search],
   );
   const menu = useCallback(
     (task: WorkspaceTaskSummary, children: ReactNode) => (
       <WorkspaceItemMenu
         environmentId={environmentId}
         item={{ ref: { type: "task", taskId: task.id }, title: task.title }}
+        confirmed={[{ ref: { type: "project", projectId: task.projectId } }]}
       >
         {children}
       </WorkspaceItemMenu>
@@ -342,77 +456,149 @@ function ConnectedTasksSpace({
         ),
       }}
     >
-      <div className={taskRef ? "max-md:hidden" : undefined}>
-        <TasksList
-          environmentId={environmentId}
-          projectId={search.project ? ProjectId.make(search.project) : null}
-          projects={projects}
-          view={search.view === "open" || search.view === "done" ? search.view : "all"}
-          taskLayout={search.taskLayout ?? "list"}
-          filters={queryFilters}
-          ownerProfile={ownerProfile}
-          timeZone={timeZone}
-          now={now}
-          locale={timestampLocale}
-          settingsReady={settingsReady}
-          utcFallback={
-            settingsReady && (!configuredTimeZone || selectedDate?.usingUtcFallback === true)
-          }
-          canOperate={canOperate}
-          workspaceTasksV2={available}
-          hidden={hidden}
-          connected={connected}
-          selectedTaskId={taskRef?.taskId}
-          onOpen={open}
-          onTransition={transition}
-          onFilter={onFilter}
-          onLayout={(layout) => {
-            void navigate({ to: "/workspace", search: { ...search, taskLayout: layout } });
-          }}
-          renderItemMenu={menu}
-        />
-      </div>
-      {taskRef ? (
-        <section
-          aria-label="Selected task"
-          className="m-4 space-y-3 rounded-lg border border-border p-3"
-        >
-          <button type="button" onClick={close} className="text-xs underline">
-            Back to tasks
-          </button>
-          {selected.data ? (
-            <>
-              <h3 className="text-sm font-semibold">{selected.data.title}</h3>
-              <p className="text-xs text-muted-foreground">
-                {selected.data.column}
-                {selected.data.areaLabel ? ` · ${selected.data.areaLabel}` : ""}
-              </p>
-              {selectedDate ? (
-                <time
-                  dateTime={selected.data.dueOn!}
-                  aria-label={selectedDate.fullDate}
+      <div className="flex min-w-0 items-start max-md:block">
+        <div className={`min-w-0 flex-1 ${taskRef || creating ? "max-md:hidden" : ""}`}>
+          <TasksList
+            environmentId={environmentId}
+            projectId={search.project ? ProjectId.make(search.project) : null}
+            projects={projects}
+            view={search.view === "open" || search.view === "done" ? search.view : "all"}
+            taskLayout={search.taskLayout ?? "list"}
+            filters={filters}
+            ownerProfile={ownerProfile}
+            timeZone={timeZone}
+            now={now}
+            locale={timestampLocale}
+            settingsReady={settingsReady}
+            utcFallback={
+              settingsReady && (!configuredTimeZone || selectedDate?.usingUtcFallback === true)
+            }
+            canOperate={canOperate}
+            workspaceTasksV2={available}
+            hidden={hidden}
+            connected={connected}
+            selectedTaskId={taskRef?.taskId}
+            pendingTaskIds={pendingTaskIds}
+            onCreate={
+              canOperate && available
+                ? () => {
+                    setCreateProject(search.project ?? "");
+                    if (!taskRef) setCreating(true);
+                    else
+                      void navigate({
+                        to: "/workspace",
+                        search: parseWorkspaceSearch({ ...search, item: undefined }),
+                      }).then(() => {
+                        if (!router.state.location.search.item) setCreating(true);
+                      });
+                  }
+                : undefined
+            }
+            onOpen={open}
+            onTransition={transition}
+            onFilter={onFilter}
+            onLayout={(layout) => {
+              void navigate({ to: "/workspace", search: { ...search, taskLayout: layout } });
+            }}
+            renderItemMenu={menu}
+          />
+        </div>
+        {taskRef || creating ? (
+          <aside className="m-4 min-w-0 flex-1 space-y-3 md:max-w-sm" aria-label="Task detail">
+            {creating && !taskRef ? (
+              <label className="block text-sm">
+                Project
+                <select
+                  aria-label="New task project"
+                  className="block min-h-11 w-full rounded-md border border-input bg-background p-2"
+                  value={createProject}
+                  disabled={createDirty || editorBusy}
+                  onChange={(event) => setCreateProject(event.target.value)}
+                >
+                  <option value="">Choose a project</option>
+                  {projects.map((project) => (
+                    <option key={project.id} value={project.id}>
+                      {project.title}
+                    </option>
+                  ))}
+                </select>
+                {createDirty ? (
+                  <span className="text-xs text-muted-foreground">
+                    Cancel this draft to choose another project.
+                  </span>
+                ) : null}
+              </label>
+            ) : null}
+            {available &&
+            config.data &&
+            ((creating && !taskRef) ||
+              (selected.data &&
+                !(isToolsError(selected.failure) && selected.failure.kind === "not-found"))) ? (
+              <WorkspaceTaskEditor
+                environmentId={environmentId}
+                task={
+                  taskRef && selected.data
+                    ? workspaceTaskSummary(
+                        selected.data,
+                        projects.find((project) => project.id === selected.data?.projectId)
+                          ?.title ?? "Unavailable project",
+                      )
+                    : null
+                }
+                config={config.data}
+                projectTitle={
+                  projects.find((project) => project.id === config.data?.projectId)?.title ??
+                  "Unavailable project"
+                }
+                ownerProfile={ownerProfile}
+                onClose={close}
+                backLabel="Back to tasks"
+                onBusyChange={(busy) => {
+                  setEditorBusy(busy);
+                  setPendingTaskIds(busy && taskRef ? new Set([taskRef.taskId]) : new Set());
+                }}
+                onDirtyChange={setCreateDirty}
+                onSaved={(task) => {
+                  if (creating) {
+                    setCreating(false);
+                    open({ type: "task", taskId: task.id });
+                  }
+                }}
+              />
+            ) : (
+              <>
+                <Button type="button" size="sm" variant="ghost" onClick={close}>
+                  Back to tasks
+                </Button>
+                <p
+                  role={selected.error || config.error ? "alert" : "status"}
                   className="text-xs text-muted-foreground"
                 >
-                  {selectedDate.label}
-                </time>
-              ) : null}
-              <WorkspaceItemActions
-                shortcuts
-                environmentId={environmentId}
-                item={{ ref: taskRef, title: selected.data.title }}
-                confirmed={[{ ref: { type: "project", projectId: selected.data.projectId } }]}
-              />
-            </>
-          ) : (
-            <p role={selected.error ? "alert" : "status"} className="text-xs text-muted-foreground">
-              {!available
-                ? "Tasks need a newer server."
-                : (selected.error ??
-                  (selected.isPending ? "Loading task..." : "This task is unavailable."))}
-            </p>
-          )}
-        </section>
-      ) : null}
+                  {!available
+                    ? "Tasks need a newer server."
+                    : creating && !createProject
+                      ? "Choose a project to add a task."
+                      : selected.isPending || config.isPending
+                        ? "Loading task..."
+                        : taskRef &&
+                            (!selected.data ||
+                              (isToolsError(selected.failure) &&
+                                selected.failure.kind === "not-found"))
+                          ? "This task is unavailable. Its links have been kept."
+                          : (config.error ??
+                            selected.error ??
+                            "This task is unavailable. Its links have been kept.")}
+                </p>
+                {creating ? (
+                  <Button type="button" size="sm" variant="ghost" onClick={close}>
+                    Cancel
+                  </Button>
+                ) : null}
+              </>
+            )}
+          </aside>
+        ) : null}
+      </div>
     </WorkspaceEngagement>
   );
 }

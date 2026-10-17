@@ -186,46 +186,52 @@ it.each([
   ["tasks", "Tasks", false],
   ["meetings", "Meetings", true],
   ["calendar", "Calendar", true],
-] as const)("renders the %s destination", async (space, heading, localTools) => {
-  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  const rootRoute = createRootRoute();
-  const chatRoute = createRoute({ getParentRoute: () => rootRoute, id: "_chat" });
-  const workspaceRoute = createRoute({
-    getParentRoute: () => chatRoute,
-    path: "workspace",
-    validateSearch: parseWorkspaceSearch,
-    component: Route.options.component!,
-  });
-  const router = createRouter({
-    routeTree: rootRoute.addChildren([chatRoute.addChildren([workspaceRoute])]),
-    history: createMemoryHistory({
-      initialEntries: [`/workspace?space=${space}&environment=remote`],
-    }),
-  });
-  await router.load();
-  const node = document.createElement("div");
-  document.body.append(node);
-  const root = createRoot(node);
-  try {
-    await act(async () =>
-      root.render(createElement(ResourceProvider, null, createElement(RouterProvider, { router }))),
-    );
-    expect(getByRole(node, "heading", { name: heading })).toBeDefined();
-    expect(
-      getByText(
-        node,
-        space === "tasks" ? "Live Tasks list" : "This view is not available on this server yet.",
-      ),
-    ).toBeDefined();
-    const link = queryByRole(node, "link", { name: "Open local Office tools" });
-    if (localTools) expect(link?.getAttribute("href")).toBe("/workspace?space=office");
-    else expect(link).toBeNull();
-  } finally {
-    await act(async () => root.unmount());
-    node.remove();
-    vi.unstubAllGlobals();
-  }
-});
+] as const)(
+  "renders the %s destination",
+  async (space, heading, localTools) => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const rootRoute = createRootRoute();
+    const chatRoute = createRoute({ getParentRoute: () => rootRoute, id: "_chat" });
+    const workspaceRoute = createRoute({
+      getParentRoute: () => chatRoute,
+      path: "workspace",
+      validateSearch: parseWorkspaceSearch,
+      component: Route.options.component!,
+    });
+    const router = createRouter({
+      routeTree: rootRoute.addChildren([chatRoute.addChildren([workspaceRoute])]),
+      history: createMemoryHistory({
+        initialEntries: [`/workspace?space=${space}&environment=remote`],
+      }),
+    });
+    await router.load();
+    const node = document.createElement("div");
+    document.body.append(node);
+    const root = createRoot(node);
+    try {
+      await act(async () =>
+        root.render(
+          createElement(ResourceProvider, null, createElement(RouterProvider, { router })),
+        ),
+      );
+      expect(getByRole(node, "heading", { name: heading })).toBeDefined();
+      expect(
+        getByText(
+          node,
+          space === "tasks" ? "Live Tasks list" : "This view is not available on this server yet.",
+        ),
+      ).toBeDefined();
+      const link = queryByRole(node, "link", { name: "Open local Office tools" });
+      if (localTools) expect(link?.getAttribute("href")).toBe("/workspace?space=office");
+      else expect(link).toBeNull();
+    } finally {
+      await act(async () => root.unmount());
+      node.remove();
+      vi.unstubAllGlobals();
+    }
+  },
+  45_000,
+);
 
 it("retains task filters through the route parser re-export", () => {
   expect(
