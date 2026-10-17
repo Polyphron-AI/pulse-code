@@ -265,7 +265,7 @@ it("hides the unsupported Code preview action on web", async () => {
   expect(mocks.openPanel).not.toHaveBeenCalled();
 });
 
-it("does not substitute the current resource project while a thread's project is unavailable", async () => {
+it("opens the project chooser for an unloaded or deleted thread", async () => {
   function App() {
     const state = useWorkspaceResourceState(environmentId, {
       storage: { getItem: () => JSON.stringify({ version: 1, projectId: p }), setItem() {} },
@@ -288,9 +288,23 @@ it("does not substitute the current resource project while a thread's project is
   const action = getByRole<HTMLButtonElement>(node, "button", {
     name: "Open Browser in Resources",
   });
-  expect(action.disabled).toBe(true);
+  expect(action.disabled).toBe(false);
   await act(() => action.click());
-  expect(node.querySelector("[data-resource-tab]")!.textContent).toBe("files p");
+  expect(node.querySelector("[data-resource-tab]")!.textContent).toBe("browser ");
+});
+
+it("explains visibly when an unavailable thread has no Resources chooser on web", async () => {
+  mocks.desktop = false;
+  await mount(
+    <LinkedSection
+      environmentId={environmentId}
+      item={{ type: "thread", threadId: ThreadId.make("deleted") }}
+      title="Thread"
+      onOpen={() => {}}
+    />,
+  );
+  expect(node.textContent).toContain("Open Browser from Resources and choose a project.");
+  expect(queryByRole(node, "button", { name: "Open Code preview" })).toBeNull();
 });
 it.each(["Accept", "Dismiss"])(
   "runs only the explicit %s command and renders the returned relationship",

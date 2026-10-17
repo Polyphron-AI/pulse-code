@@ -1,4 +1,4 @@
-import type { ReactNode, Ref } from "react";
+import { useEffect, useState, type ReactNode, type Ref } from "react";
 import type { WorkspaceLinkEndpoint } from "@t3tools/contracts";
 import { Search, SlidersHorizontal } from "lucide-react";
 import { Button } from "../ui/button";
@@ -13,6 +13,7 @@ export function WorkspaceBrowserView({
   menuOpen,
   unavailableReason,
   disabled = false,
+  readOnly = false,
   menuActions,
   onAddressChange,
   onSubmit,
@@ -28,6 +29,7 @@ export function WorkspaceBrowserView({
   readonly menuOpen: boolean;
   readonly unavailableReason: string | null;
   readonly disabled?: boolean;
+  readonly readOnly?: boolean;
   readonly inputRef?: Ref<HTMLInputElement>;
   readonly loading?: boolean;
   readonly menuActions?: ReactNode;
@@ -43,7 +45,7 @@ export function WorkspaceBrowserView({
         aria-busy={loading}
         onSubmit={(event) => {
           event.preventDefault();
-          if (!disabled) onSubmit();
+          if (!disabled && !readOnly) onSubmit();
         }}
       >
         <Search className="size-3 shrink-0" aria-hidden="true" />
@@ -55,6 +57,8 @@ export function WorkspaceBrowserView({
           maxLength={2048}
           value={addressDraft}
           disabled={disabled}
+          readOnly={readOnly}
+          aria-disabled={readOnly || undefined}
           onChange={(event) => onAddressChange(event.target.value)}
         />
         <Popover open={menuOpen} onOpenChange={onMenuChange}>
@@ -78,7 +82,10 @@ export function WorkspaceBrowserView({
                 size="xs"
                 variant="ghost"
                 disabled={!displayedUrl || disabled}
-                onClick={onOpenExternal}
+                aria-disabled={readOnly || undefined}
+                onClick={() => {
+                  if (!readOnly) onOpenExternal();
+                }}
               >
                 Open in new tab
               </Button>
@@ -104,48 +111,79 @@ export function WorkspaceBrowserView({
 /** The pasted address is metadata for linking, never an observed external page. */
 export function WorkspaceBrowserExternalPage({
   url,
+  address,
   busy,
+  linkHint,
   linkAction,
   onOpen,
   onCopy,
 }: {
   readonly url: string;
+  readonly address: string;
   readonly busy: boolean;
+  readonly linkHint: string | null;
   readonly linkAction: ReactNode;
   readonly onOpen: () => void;
-  readonly onCopy: () => void;
+  readonly onCopy: () => Promise<boolean>;
 }) {
+  const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
+  const copied = copiedAddress === address;
+  useEffect(() => {
+    if (!copied) return;
+    const timeout = window.setTimeout(() => setCopiedAddress(null), 2000);
+    return () => window.clearTimeout(timeout);
+  }, [copied]);
   return (
     <section
       aria-label="External-tab Browser"
-      className="h-[311px] min-w-0 shrink-0 space-y-3 overflow-y-auto border border-border bg-background p-4 text-xs leading-5"
+      className="h-[311px] min-w-0 shrink-0 space-y-3 overflow-y-auto border border-border bg-background p-4 text-sm leading-5 sm:text-xs"
       style={{ borderRadius: 9 }}
     >
-      <h2 className="font-semibold" style={{ fontSize: 13 }}>
-        Open this page in your browser
-      </h2>
+      <h2 className="text-base font-semibold sm:text-sm">Open this page in your browser</h2>
       <p className="text-muted-foreground">
         External tabs do not report navigation here. Paste the current page address before linking
         it.
       </p>
       {url ? (
         <div className="min-w-0">
-          <p className="text-muted-foreground">Link target</p>
-          <p className="select-text break-all" aria-label="Link target">
-            {url}
-          </p>
+          <dl>
+            <dt className="text-muted-foreground">Link target</dt>
+            <dd className="select-text break-all">{url}</dd>
+          </dl>
+          {url !== address.trim() ? (
+            <p className="text-muted-foreground">
+              Tracking parameters and #fragments are left out of the link.
+            </p>
+          ) : null}
         </div>
       ) : (
         <p className="text-muted-foreground">
           Paste an http or https address, or search this project's linked pages.
         </p>
       )}
+      {linkHint ? <p className="text-muted-foreground">{linkHint}</p> : null}
       <div className="flex flex-wrap gap-2">
-        <Button size="xs" variant="outline" disabled={busy || !url} onClick={onOpen}>
+        <Button
+          size="xs"
+          variant="outline"
+          disabled={!url}
+          aria-disabled={busy || undefined}
+          onClick={() => {
+            if (!busy) onOpen();
+          }}
+        >
           Open in new tab
         </Button>
-        <Button size="xs" variant="ghost" disabled={!url} onClick={onCopy}>
-          Copy address
+        <Button
+          size="xs"
+          variant="ghost"
+          disabled={!url}
+          aria-live="polite"
+          onClick={async () => {
+            if (await onCopy()) setCopiedAddress(address);
+          }}
+        >
+          {copied ? "Copied" : "Copy address"}
         </Button>
         {linkAction}
       </div>

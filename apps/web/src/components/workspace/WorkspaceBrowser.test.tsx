@@ -54,6 +54,7 @@ const mocks = vi.hoisted(() => ({
   focusUrlNonce: null as number | null,
   openInBrowser: vi.fn(),
   realLocalApi: false,
+  linksSupported: true,
 }));
 vi.mock("../../state/entities", () => ({
   useThreadShell: (ref: { environmentId: string; threadId: string } | null) =>
@@ -118,6 +119,9 @@ vi.mock("../../localApi", async (original) => {
   };
 });
 vi.mock("./mail/useMailLinks", () => ({ useMailLinks: () => ({ linkItem: mocks.link }) }));
+vi.mock("./mail/useMailCapabilities", () => ({
+  useMailCapabilities: () => ({ workspaceLinks: mocks.linksSupported }),
+}));
 vi.mock("./useWorkspaceCanOperate", () => ({ useWorkspaceCanOperate: () => mocks.operate }));
 vi.mock("./ProjectTasks", () => ({ workspaceToolsError: () => "Preview unavailable" }));
 vi.mock("../preview/PreviewPanel", () => ({
@@ -190,9 +194,11 @@ const storage = { getItem: () => null, setItem() {} };
 function ResourceApp({
   initialRequest = null,
   engagement = false,
+  onOpen = props.onOpen,
 }: {
   initialRequest?: ComponentProps<typeof WorkspaceBrowser>["request"];
   engagement?: boolean;
+  onOpen?: ComponentProps<typeof WorkspaceBrowser>["onOpen"];
 }) {
   const wide = useMediaQuery("xl");
   const state = useWorkspaceResourceState(environmentId, {
@@ -207,7 +213,7 @@ function ResourceApp({
     if (initialRequest)
       openResource({ tab: "browser", projectId: props.projectId, request: initialRequest });
   }, [initialRequest, openResource]);
-  const body = <WorkspaceBrowser {...props} request={state.request} />;
+  const body = <WorkspaceBrowser {...props} request={state.request} onOpen={onOpen} />;
   return (
     <AppAtomRegistryProvider>
       <WorkspaceResourcesProvider value={state}>
@@ -243,6 +249,7 @@ beforeEach(() => {
   mocks.previewMounts = 0;
   mocks.focusUrlNonce = null;
   mocks.realLocalApi = false;
+  mocks.linksSupported = true;
   (
     window as unknown as {
       happyDOM: { setWindowSize: (size: { width: number; height: number }) => void };
@@ -260,6 +267,7 @@ afterEach(async () => {
   vi.clearAllMocks();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 const mount = async (overrides: Partial<ComponentProps<typeof WorkspaceBrowser>> = {}) => {
   await act(() => {
@@ -295,7 +303,8 @@ it("keeps the pasted link target when external opening is blocked", async () => 
   mocks.desktop = false;
   mocks.external.mockResolvedValue(undefined);
   await mount();
-  await setAddress("https://example.test/pasted?utm_source=test#section");
+  const address = "https://example.test/pasted?id=7&utm_source=x#/settings";
+  await setAddress(address);
   await clickText("Open in new tab");
   expect(text()).toContain("Open this page in your browser");
   expect(text()).toContain("Link target");
@@ -308,7 +317,7 @@ it("keeps the pasted link target when external opening is blocked", async () => 
       .findAllByType("button")
       .find((button) => button.props.children === "Open in new tab")!.props.disabled,
   ).toBe(false);
-  expect(mocks.external).toHaveBeenCalledExactlyOnceWith("https://example.test/pasted");
+  expect(mocks.external).toHaveBeenCalledExactlyOnceWith(address);
 });
 
 it("prefills and acknowledges web requests without opening an external tab automatically", async () => {
@@ -351,14 +360,28 @@ it("prefills an unsupported desktop's external alternative and acknowledges it w
 
 it("resets the address for another project or environment with the same project id", async () => {
   mocks.desktop = false;
+  function ScopedBrowser({
+    environment,
+    project,
+  }: {
+    environment: EnvironmentId;
+    project: ProjectId;
+  }) {
+    const state = useWorkspaceResourceState(environment, { storage });
+    return (
+      <WorkspaceResourcesProvider value={state}>
+        <WorkspaceBrowser
+          key={`${environment}:${project}`}
+          {...props}
+          environmentId={environment}
+          projectId={project}
+        />
+      </WorkspaceResourcesProvider>
+    );
+  }
   const render = (environment = environmentId, project = props.projectId) => (
     <AppAtomRegistryProvider>
-      <WorkspaceBrowser
-        key={`${environment}:${project}`}
-        {...props}
-        environmentId={environment}
-        projectId={project}
-      />
+      <ScopedBrowser environment={environment} project={project} />
     </AppAtomRegistryProvider>
   );
   await act(() => {
@@ -370,6 +393,8 @@ it("resets the address for another project or environment with the same project 
   await setAddress("https://example.test/other-project");
   await act(() => renderer!.update(render(EnvironmentId.make("other"), ProjectId.make("q"))));
   expect(renderer!.root.findByType("input").props.value).toBe("");
+  await act(() => renderer!.update(render()));
+  expect(renderer!.root.findByType("input").props.value).toBe("https://example.test/private");
 });
 
 it.each(["disconnected", "reader", "missing-thread"])(
@@ -378,7 +403,17 @@ it.each(["disconnected", "reader", "missing-thread"])(
     mocks.connected = reason !== "disconnected";
     mocks.operate = reason !== "reader";
     mocks.configured = reason !== "missing-thread";
-    await mount({ request: { type: "url", url: "https://example.test/first" } });
+    await act(() => {
+      renderer = create(<ResourceApp />);
+    });
+    // Every request is sent while the gate is closed, including the newest one.
+    await act(() =>
+      resourceState.openResource({
+        tab: "browser",
+        projectId: props.projectId,
+        request: { type: "url", url: "https://example.test/first" },
+      }),
+    );
     for (const path of ["second", "latest"])
       await act(() =>
         resourceState.openResource({
@@ -388,14 +423,15 @@ it.each(["disconnected", "reader", "missing-thread"])(
         }),
       );
     expect(mocks.open).not.toHaveBeenCalled();
+    expect(resourceState.request).toEqual({ type: "url", url: "https://example.test/latest" });
     mocks.connected = true;
     mocks.operate = true;
     mocks.configured = true;
     await act(() =>
-      renderer!.update(
-        <ResourceApp initialRequest={{ type: "url", url: "https://example.test/latest" }} />,
-      ),
+      // Mock hook values do not notify consumers, so invalidate the Browser's compiled JSX cache.
+      renderer!.update(<ResourceApp onOpen={() => {}} />),
     );
+    expect(resourceState.request).toBeNull();
     expect(mocks.open).toHaveBeenCalledOnce();
     expect(mocks.open).toHaveBeenLastCalledWith(
       expect.objectContaining({
@@ -470,12 +506,14 @@ it("pasting a new address replaces only the external link target", async () => {
   await mount();
   await setAddress("https://example.test/first");
   await clickText("Open in new tab");
-  await setAddress("https://example.test/next?utm_source=test#section");
+  await setAddress("https://example.test/next?id=7&utm_source=x#a");
+  const card = renderer!.root.findByType("section");
+  expect(card.findByType("dd").props.children).toBe("https://example.test/next?id=7");
   await clickText("Link this page");
   expect(mocks.external).toHaveBeenCalledExactlyOnceWith("https://example.test/first");
   expect(mocks.link).toHaveBeenCalledExactlyOnceWith(selectedItem, {
-    ref: { type: "url", url: "https://example.test/next" },
-    title: "https://example.test/next",
+    ref: { type: "url", url: "https://example.test/next?id=7" },
+    title: "https://example.test/next?id=7",
   });
   expect(readThreadPreviewState(threadRef).snapshot).toEqual(snapshot);
   expect(mocks.previewMounts).toBe(0);
@@ -494,6 +532,165 @@ it("keeps a rejected external address editable and retries it", async () => {
   expect(renderer!.root.findAllByProps({ role: "alert" })).toHaveLength(0);
 });
 
+it("clears a failed-open alert when the address changes", async () => {
+  mocks.desktop = false;
+  mocks.external.mockRejectedValueOnce(new Error("Unable to open link."));
+  await mount();
+  await setAddress("https://example.test/failed");
+  await clickText("Open in new tab");
+  expect(text()).toContain("Unable to open link.");
+  await setAddress("https://example.test/edited");
+  expect(renderer!.root.findAllByProps({ role: "alert" })).toHaveLength(0);
+});
+
+it("explains a divergent Link target only when it differs from the entered address", async () => {
+  mocks.desktop = false;
+  await mount();
+  const hint = "Tracking parameters and #fragments are left out of the link.";
+  await setAddress("https://example.test/page");
+  expect(text()).not.toContain(hint);
+  await setAddress("https://example.test/page?id=7&utm_source=x#a");
+  expect(text()).toContain(hint);
+  await setAddress("https://example.test/page?id=7");
+  expect(text()).not.toContain(hint);
+});
+
+it.each([
+  ["reader", "Permission to operate this environment is required to link this page."],
+  ["disconnected", "Reconnect to link this page."],
+  ["older-server", "This server does not support linking yet."],
+])("explains the disabled Link action for %s", async (reason, hint) => {
+  mocks.desktop = false;
+  mocks.operate = reason !== "reader";
+  mocks.connected = reason !== "disconnected";
+  mocks.linksSupported = reason !== "older-server";
+  await mount();
+  await setAddress("https://example.test/page");
+  const card = renderer!.root.findByType("section");
+  expect(card.findAllByType("p").map((p) => p.props.children)).toContain(hint);
+  expect(
+    card.findAllByType("button").find((button) => button.props.children === "Link this page")!.props
+      .disabled,
+  ).toBe(true);
+  await clickText("Link this page");
+  expect(mocks.link).not.toHaveBeenCalled();
+  await clickText("Open in new tab");
+  expect(mocks.external).toHaveBeenCalledExactlyOnceWith("https://example.test/page");
+});
+
+it("keeps the no-selection hint inside the external card", async () => {
+  mocks.desktop = false;
+  await mount({ selectedItem: null });
+  expect(
+    renderer!.root
+      .findByType("section")
+      .findAllByType("p")
+      .map((p) => p.props.children),
+  ).toContain("Select an item to link this page to.");
+});
+
+it.each(["address", "Open"])(
+  "keeps focus on %s throughout a pending external open",
+  async (focused) => {
+    mocks.desktop = false;
+    let finish = () => {};
+    mocks.external.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    node = document.createElement("div");
+    document.body.append(node);
+    root = createRoot(node);
+    await act(() =>
+      root!.render(
+        <ResourceApp
+          initialRequest={{ type: "url", url: "https://example.test/focus#/settings" }}
+        />,
+      ),
+    );
+    const input = getByRole<HTMLInputElement>(node, "textbox", { name: "Browser page address" });
+    const card = getByRole(node, "region", { name: "External-tab Browser" });
+    const open = getByRole<HTMLButtonElement>(card, "button", { name: "Open in new tab" });
+    const control = focused === "address" ? input : open;
+    const invoke = () =>
+      focused === "address"
+        ? input
+            .closest("form")!
+            .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
+        : open.click();
+    await act(() => {
+      control.focus();
+      invoke();
+    });
+    expect(document.activeElement).toBe(control);
+    expect(control.disabled).toBe(false);
+    expect(input.readOnly).toBe(true);
+    expect(open.getAttribute("aria-disabled")).toBe("true");
+    await act(() => invoke());
+    expect(mocks.external).toHaveBeenCalledOnce();
+    await act(() => finish());
+    expect(document.activeElement).toBe(control);
+    expect(input.readOnly).toBe(false);
+  },
+);
+
+it("announces Copied briefly and clears its reset timer when hidden", async () => {
+  vi.useFakeTimers();
+  mocks.desktop = false;
+  vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue(undefined);
+  await act(() => {
+    renderer = create(<ResourceApp />);
+  });
+  await setAddress("https://example.test/copy#a");
+  await clickText("Copy address");
+  expect(text()).toContain("Copied");
+  await act(() => vi.advanceTimersByTime(2000));
+  expect(text()).not.toContain("Copied");
+  await clickText("Copy address");
+  expect(vi.getTimerCount()).toBe(1);
+  await act(() => resourceState.close());
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+it("matches the external fixture's hints and copy feedback to the production card", async () => {
+  vi.useFakeTimers();
+  const session = createWorkspaceMockupSession("05", null, "external");
+  const module = createWorkspaceMockupModule(session);
+  try {
+    await act(() => {
+      renderer = create(<>{module.resource}</>);
+    });
+    const hint = "Select an item to link this page to.";
+    expect(
+      renderer!.root
+        .findByType("section")
+        .findAllByType("p")
+        .map((p) => p.props.children),
+    ).toContain(hint);
+    const address = "https://example.test/fixture?id=7&utm_source=x#/settings";
+    await setAddress(address);
+    expect(renderer!.root.findByType("dd").props.children).toBe(
+      "https://example.test/fixture?id=7",
+    );
+    expect(text()).toContain("Tracking parameters and #fragments are left out of the link.");
+    await clickText("Copy address");
+    expect(text()).toContain("Copied");
+    await clickText("Open in new tab");
+    await module.settled();
+    expect(session.operations.map((operation) => operation.value)).toEqual([address, address]);
+    expect(mocks.external).not.toHaveBeenCalled();
+    expect(mocks.link).not.toHaveBeenCalled();
+    await act(() => renderer!.unmount());
+    renderer = undefined;
+    expect(vi.getTimerCount()).toBe(0);
+  } finally {
+    module.dispose();
+    session.dispose();
+  }
+});
+
 it("offers Copy address through the existing clipboard path and retains copy failures", async () => {
   mocks.desktop = false;
   const copy = vi
@@ -505,7 +702,8 @@ it("offers Copy address through the existing clipboard path and retains copy fai
   await clickText("Copy address");
   expect(text()).toContain("Failed to copy page address to the clipboard.");
   await clickText("Copy address");
-  expect(copy).toHaveBeenLastCalledWith("https://example.test/copy");
+  expect(copy).toHaveBeenLastCalledWith("https://example.test/copy?utm_source=test#section");
+  expect(text()).toContain("Copied");
   expect(renderer!.root.findByType("input").props.value).toBe(
     "https://example.test/copy?utm_source=test#section",
   );
@@ -535,6 +733,8 @@ it("keeps retry and focus usable when the real browser helper returns an unknown
   expect(card.textContent).toContain(
     "If no tab opened, allow pop-ups and try again, or copy this address.",
   );
+  expect(queryByRole(node, "alert")).toBeNull();
+  expect(node.textContent).not.toContain("Page opened successfully");
   expect(input.value).toBe("https://example.test/popup");
   await act(() => {
     input.focus();
@@ -636,7 +836,9 @@ it("shows the configured desktop page in the resource body without opening a dia
 });
 
 it("keeps address edits from rendering the preview tree", async () => {
-  await mount();
+  await act(() => {
+    renderer = create(<ResourceApp />);
+  });
   const renders = mocks.previewMounts;
   await setAddress("https://example.test/a");
   await setAddress("https://example.test/another");

@@ -25,6 +25,7 @@ import { openPreviewSession } from "../preview/openPreviewSession";
 import type { PreviewChromeRenderer } from "../preview/PreviewView";
 import type { PreviewChromeRow } from "../preview/PreviewChromeRow";
 import { useMailLinks } from "./mail/useMailLinks";
+import { useMailCapabilities } from "./mail/useMailCapabilities";
 import { workspaceToolsError } from "./ProjectTasks";
 import { useWorkspaceCanOperate } from "./useWorkspaceCanOperate";
 import {
@@ -80,6 +81,7 @@ export function WorkspaceBrowser({
   );
   const openPreview = useAtomCommand(previewEnvironment.open, { reportFailure: false });
   const { linkItem } = useMailLinks(environmentId);
+  const { workspaceLinks } = useMailCapabilities(environmentId);
   const canOperate = useWorkspaceCanOperate(environmentId) && connected && !hidden;
   const permitted = canOperate && !config.error && !previewRead.error;
   const external = !desktop || Boolean(previewRead.error);
@@ -89,6 +91,18 @@ export function WorkspaceBrowser({
   const [requestedAddress, setRequestedAddress] = useState<{ url: string } | null>(null);
   const draft = useWorkspaceBrowserDraft(environmentId, projectId);
   const admittedRequest = useRef<WorkspaceBrowserProps["request"]>(null);
+  const externalOpening = useRef(false);
+  const linkUnavailableReason = !connected
+    ? "Reconnect to link this page."
+    : !canOperate
+      ? "Permission to operate this environment is required to link this page."
+      : !workspaceLinks
+        ? "This server does not support linking yet."
+        : config.error
+          ? "Browser settings are unavailable. Retry before linking this page."
+          : previewRead.error
+            ? "Browser is unavailable. Retry before linking this page."
+            : null;
   const status = preview.snapshot?.navStatus;
   const current = desktop && status && status._tag !== "Idle" ? status.url : "";
   const openAddress = useCallback(
@@ -132,7 +146,7 @@ export function WorkspaceBrowser({
   }, [external, request, permitted, threadRef, busy, clearRequest, openAddress, hidden, draft]);
 
   const linkPage = async (url: string) => {
-    if (!permitted || busy || selectedItem === null) return;
+    if (!permitted || linkUnavailableReason || busy || selectedItem === null) return;
     setBusy(true);
     setError(null);
     setRetryUrl(null);
@@ -148,6 +162,8 @@ export function WorkspaceBrowser({
     }
   };
   const openExternal = async (url: string) => {
+    if (externalOpening.current) return;
+    externalOpening.current = true;
     setBusy(true);
     setError(null);
     try {
@@ -155,12 +171,14 @@ export function WorkspaceBrowser({
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "The page could not be opened.");
     } finally {
+      externalOpening.current = false;
       setBusy(false);
     }
   };
   const chrome = {
     selectedItem,
     permitted,
+    linkUnavailableReason,
     busy,
     error: error ?? previewRead.error,
     retryUrl,
@@ -170,6 +188,7 @@ export function WorkspaceBrowser({
     onOpen: openAddress,
     onLink: linkPage,
     onOpenExternal: openExternal,
+    onAddressEdited: () => setError(null),
     onRetryRead: previewRead.error ? previewRead.refresh : undefined,
   };
   const renderResourceChrome: PreviewChromeRenderer = (controls) => (
@@ -231,6 +250,7 @@ function ResourceBrowserChrome({
   controls,
   selectedItem,
   permitted,
+  linkUnavailableReason,
   busy,
   error,
   retryUrl,
@@ -240,12 +260,14 @@ function ResourceBrowserChrome({
   onOpen,
   onLink,
   onOpenExternal,
+  onAddressEdited,
   onRetryRead,
   external = false,
 }: {
   controls?: ComponentProps<typeof PreviewChromeRow>;
   selectedItem: WorkspaceBrowserProps["selectedItem"];
   permitted: boolean;
+  linkUnavailableReason: string | null;
   busy: boolean;
   error: string | null;
   retryUrl: string | null;
@@ -255,6 +277,7 @@ function ResourceBrowserChrome({
   onOpen: (url: string) => Promise<void>;
   onLink: (url: string) => Promise<void>;
   onOpenExternal: (url: string) => Promise<void>;
+  onAddressEdited: () => void;
   onRetryRead: (() => void) | undefined;
   external?: boolean;
 }) {
@@ -274,13 +297,23 @@ function ResourceBrowserChrome({
   }, [controls?.focusUrlNonce]);
   const displayedUrl = external ? (normalizeLinkUrl(address) ?? "") : (controls?.url ?? current);
   const page = normalizeLinkUrl(displayedUrl);
+  const linkHint =
+    linkUnavailableReason ??
+    (selectedItem === null
+      ? "Select an item to link this page to."
+      : !page
+        ? "Enter an http or https address before linking."
+        : busy
+          ? "Wait for the current Browser action before linking."
+          : null);
   const link = (
     <Button
       size="xs"
       variant="ghost"
-      disabled={busy || !permitted || !page || selectedItem === null}
+      disabled={!permitted || Boolean(linkUnavailableReason) || !page || selectedItem === null}
+      aria-disabled={busy || undefined}
       onClick={() => {
-        if (page) void onLink(page);
+        if (page && !busy && !linkHint) void onLink(page);
       }}
     >
       Link this page
@@ -294,19 +327,21 @@ function ResourceBrowserChrome({
     }
     setValidationError(null);
     if (busy || (!external && !permitted)) return;
-    if (external) void onOpenExternal(url);
+    if (external) void onOpenExternal(address.trim());
     else if (controls?.url) controls.onSubmit(url);
     else void onOpen(url);
   };
   const copyAddress = async () => {
-    if (!page) return;
+    if (!normalizeLinkUrl(address)) return false;
     try {
-      await writeTextToClipboard(page, "page address");
+      await writeTextToClipboard(address.trim(), "page address");
       setValidationError(null);
+      return true;
     } catch (cause) {
       setValidationError(
         cause instanceof Error ? cause.message : "The address could not be copied.",
       );
+      return false;
     }
   };
   return (
@@ -319,10 +354,12 @@ function ResourceBrowserChrome({
           external ? (
             <WorkspaceBrowserExternalPage
               url={page ?? ""}
+              address={address}
               busy={busy}
+              linkHint={linkHint}
               linkAction={link}
               onOpen={submit}
-              onCopy={() => void copyAddress()}
+              onCopy={copyAddress}
             />
           ) : null
         }
@@ -330,17 +367,19 @@ function ResourceBrowserChrome({
         unavailableReason={validationError ?? error}
         inputRef={input}
         loading={controls?.loading ?? false}
-        disabled={busy || (!external && !permitted) || controls?.inputDisabled === true}
+        disabled={!external && (busy || !permitted || controls?.inputDisabled === true)}
+        readOnly={external && busy}
         onAddressChange={(value) => {
           draft.write(value);
           setAddress(value);
           setValidationError(null);
+          onAddressEdited();
         }}
         onSubmit={submit}
         onMenuChange={setMenuOpen}
         onOpenExternal={() => {
           if (controls?.onOpenInBrowser) controls.onOpenInBrowser();
-          else if (page) void onOpenExternal(page);
+          else submit();
         }}
         menuActions={
           <>
@@ -388,17 +427,17 @@ function ResourceBrowserChrome({
                 Retry
               </Button>
             ) : null}
-            {external ? null : link}
+            {external ? null : (
+              <>
+                {link}
+                {linkHint && selectedItem !== null ? (
+                  <p className="px-1.75 text-sm text-muted-foreground sm:text-xs">{linkHint}</p>
+                ) : null}
+              </>
+            )}
           </>
         }
       />
-      {external ? (
-        <div>
-          {selectedItem === null ? (
-            <p className="text-xs text-muted-foreground">Select an item to link this page to.</p>
-          ) : null}
-        </div>
-      ) : null}
     </>
   );
 }

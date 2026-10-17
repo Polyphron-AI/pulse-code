@@ -130,15 +130,10 @@ function BrowserResourceAction(props: LinkedSectionProps) {
     <Button
       size="xs"
       variant="ghost"
-      disabled={threadRef !== null && thread === null}
-      title={
-        threadRef !== null && thread === null
-          ? "The conversation's project is not available yet."
-          : undefined
-      }
       onClick={() => {
         if (projectId) resources.openResource({ tab: "browser", projectId });
         else {
+          resources.resetProject();
           resources.selectTab("browser");
           resources.reopen();
         }
@@ -156,6 +151,10 @@ function BrowserResourceAction(props: LinkedSectionProps) {
     >
       Open Code preview
     </Button>
+  ) : threadRef && thread === null ? (
+    <p className="text-sm text-muted-foreground sm:text-xs">
+      Open Browser from Resources and choose a project.
+    </p>
   ) : null;
 }
 

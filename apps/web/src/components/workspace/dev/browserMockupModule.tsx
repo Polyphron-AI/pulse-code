@@ -39,7 +39,7 @@ export const createWorkspaceMockupModule: CreateWorkspaceMockupModule = (session
     const url = normalizeLinkUrl(addressDraft) ?? "";
     const openAddress = () => {
       setError(url ? null : "Enter an http or https address.");
-      if (url) run(url);
+      if (url) run(external ? addressDraft.trim() : url);
     };
     return (
       <div className="flex h-full min-h-0 min-w-0 flex-col">
@@ -57,9 +57,14 @@ export const createWorkspaceMockupModule: CreateWorkspaceMockupModule = (session
             external ? (
               <WorkspaceBrowserExternalPage
                 url={url}
+                address={addressDraft}
                 busy={false}
+                linkHint="Select an item to link this page to."
                 onOpen={openAddress}
-                onCopy={() => run(url)}
+                onCopy={async () => {
+                  run(addressDraft.trim());
+                  return true;
+                }}
                 linkAction={
                   <Button size="xs" variant="ghost" disabled>
                     Link this page
