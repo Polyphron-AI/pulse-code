@@ -829,6 +829,32 @@ it("keeps a missing direct URL unavailable and never creates a replacement", asy
   }
 });
 
+it("gates a direct Tasks URL on an older server without querying task extensions", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const fixture = serviceFixture();
+  boundary.v2 = false;
+  const calls = boundary.query.mock.calls.length;
+  try {
+    const item = JSON.stringify({ type: "task", taskId: fixture.tasks[0]!.id });
+    await mountRouter(
+      () => (
+        <RegistryContext.Provider value={fixture.registry}>
+          <TasksSpace />
+        </RegistryContext.Provider>
+      ),
+      [
+        `/workspace?space=tasks&environment=remote&item=${encodeURIComponent(JSON.stringify(item))}`,
+      ],
+    );
+    expect(JSON.stringify(renderer.toJSON())).toContain("Tasks need a newer server.");
+    expect(boundary.query.mock.calls.length).toBe(calls);
+    expect(renderer.root.findAllByProps({ "aria-label": "Task title" })).toHaveLength(0);
+  } finally {
+    await act(() => renderer.unmount());
+    fixture.dispose();
+  }
+});
+
 it("restores phone query, pages, scroll and focus after dirty detail Back", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   boundary.compact = true;
@@ -884,6 +910,13 @@ it("restores phone query, pages, scroll and focus after dirty detail Back", asyn
     expect(router.state.location.search.item).toBeDefined();
     expect(title.value).toBe("Dirty launch");
     expect(node.querySelectorAll("[data-workspace-task-row]")).toHaveLength(1);
+    for (let index = 0; index < 9; index++)
+      await act(() =>
+        router.navigate({
+          to: "/workspace",
+          search: { ...router.state.location.search, taskText: `Search ${index}` },
+        }),
+      );
     await act(() => {
       void router.navigate({
         to: "/workspace",

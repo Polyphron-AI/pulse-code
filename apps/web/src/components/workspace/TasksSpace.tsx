@@ -112,6 +112,9 @@ export function TasksList(props: ListProps) {
     environmentId,
     pages: new Map<typeof firstAtom, typeof paging>(),
   });
+  const [returnScope, setReturnScope] = useState(props.selectedTaskId ? firstAtom : null);
+  if (props.selectedTaskId && firstAtom && returnScope === null) setReturnScope(firstAtom);
+  else if ((!props.selectedTaskId || !firstAtom) && returnScope !== null) setReturnScope(null);
   if (paging.query !== firstAtom) {
     const pages =
       returnPages.environmentId === environmentId
@@ -120,7 +123,10 @@ export function TasksList(props: ListProps) {
     const retained = pages.get(firstAtom);
     if (returnPages.environmentId === environmentId && paging.query)
       pages.set(paging.query, paging);
-    if (pages.size > 8) pages.delete(pages.keys().next().value!);
+    if (pages.size > 8) {
+      const oldest = [...pages.keys()].find((scope) => scope !== returnScope);
+      if (oldest) pages.delete(oldest);
+    }
     setReturnPages({ environmentId, pages });
     setPaging(
       retained ?? {
