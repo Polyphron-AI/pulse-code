@@ -1,3 +1,4 @@
+import { isWorkspaceNote } from "../meetings/meetingNotes";
 import * as Schema from "effect/Schema";
 import {
   parseTelegramResourceId,
@@ -83,7 +84,13 @@ export function linkedItemLabel(
       return { title: title ?? "Task" };
     case "provider-resource":
       return {
-        title: title ?? (isCalendarItem(ref) ? "Calendar event" : ref.resourceId),
+        title:
+          title ??
+          (isCalendarItem(ref)
+            ? "Calendar event"
+            : isWorkspaceNote(ref)
+              ? "Workspace note"
+              : ref.resourceId),
         ...(!canOpenLinkedItem(ref)
           ? { unavailable: "Unavailable: this source cannot be opened here." }
           : {}),
@@ -95,6 +102,7 @@ export function linkedItemLabel(
 export function canOpenLinkedItem(ref: WorkspaceItemRef): boolean {
   return (
     isCalendarItem(ref) ||
+    isWorkspaceNote(ref) ||
     ref.type === "task" ||
     ref.type === "mail" ||
     ref.type === "project" ||
@@ -173,6 +181,10 @@ export function workspaceEndpointTitle(endpoint: WorkspaceLinkEndpoint): string 
     case "url":
       return endpoint.ref.url;
     case "provider-resource":
-      return isCalendarItem(endpoint.ref) ? "Calendar event" : endpoint.ref.resourceId;
+      return isCalendarItem(endpoint.ref)
+        ? "Calendar event"
+        : isWorkspaceNote(endpoint.ref)
+          ? "Workspace note"
+          : endpoint.ref.resourceId;
   }
 }

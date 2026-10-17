@@ -1,8 +1,9 @@
+import { WorkspaceNotes } from "../../../workspace/WorkspaceNotes.ts";
 import { WorkspaceTools } from "../../../workspace/WorkspaceTools.ts";
 import { DriveService } from "../../../drive/DriveService.ts";
 import { WorkspaceCalendar } from "../../../workspace/WorkspaceCalendar.ts";
 import * as Schema from "effect/Schema";
-import { CalendarError, WorkspaceLinksError } from "@t3tools/contracts";
+import { CalendarError, WorkspaceLinksError, WorkspaceNotesError } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 
@@ -16,6 +17,8 @@ import { WorkspaceLinks } from "../../../workspace/WorkspaceLinks.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import { bounded, RESULT_MAX_BYTES } from "../mail/handlers.ts";
 import { WorkspaceToolkit } from "./tools.ts";
+
+const isNotesError = Schema.is(WorkspaceNotesError);
 
 const isCalendarError = Schema.is(CalendarError);
 
@@ -42,6 +45,7 @@ export const make = (options: { readonly imap?: MailConnectionOptions } = {}) =>
     const tools = yield* Effect.serviceOption(WorkspaceTools);
     const drive = yield* Effect.serviceOption(DriveService);
     const calendar = yield* Effect.serviceOption(WorkspaceCalendar);
+    const notes = yield* Effect.serviceOption(WorkspaceNotes);
     const telegram = yield* Effect.serviceOption(TelegramService);
     const orchestrator = yield* Orchestrator.OrchestratorV2;
     const config = yield* MailConfigService;
@@ -73,7 +77,7 @@ export const make = (options: { readonly imap?: MailConnectionOptions } = {}) =>
             ),
           ),
         ),
-      workspace_read_item: ({ key, offset }) =>
+      workspace_read_item: ({ key, offset, revision }) =>
         Effect.gen(function* () {
           const found = yield* links.resolveLinked(yield* owner, key);
           if (Option.isNone(found)) {
@@ -101,6 +105,40 @@ export const make = (options: { readonly imap?: MailConnectionOptions } = {}) =>
               return yield* bounded({ key, type: "mail", ...message });
             }
             case "provider-resource":
+              if (ref.provider === "workspace-note") {
+                if (Option.isNone(notes))
+                  return yield* new WorkspaceLinksError({
+                    kind: "unavailable",
+                    message: "Notes are unavailable. Their links have been kept.",
+                  });
+                return yield* notes.value
+                  .read({
+                    id: ref.resourceId,
+                    ...(offset !== undefined ? { offset } : {}),
+                    ...(revision !== undefined ? { revision } : {}),
+                  })
+                  .pipe(
+                    Effect.mapError(
+                      (error) =>
+                        new WorkspaceLinksError({
+                          kind:
+                            isNotesError(error) && error.kind === "not-found"
+                              ? "not-found"
+                              : isNotesError(error) &&
+                                  (error.kind === "conflict" || error.kind === "invalid-input")
+                                ? "invalid-input"
+                                : "unavailable",
+                          message:
+                            isNotesError(error) && error.kind === "conflict"
+                              ? "Note revision changed; re-read before continuing. Your draft has been kept."
+                              : isNotesError(error)
+                                ? error.message
+                                : "Notes are unavailable. Their links have been kept.",
+                        }),
+                    ),
+                    Effect.flatMap((note) => bounded({ key, type: "workspace-note", ...note })),
+                  );
+              }
               if (ref.provider === "workspace-calendar") {
                 if (Option.isNone(calendar))
                   return yield* new WorkspaceLinksError({

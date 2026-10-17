@@ -72,8 +72,15 @@ export const renderLinkedItems = (context: WorkspaceContext): string => {
     const label =
       item.ref.type === "provider-resource" && item.ref.provider === "workspace-calendar"
         ? "calendar-event"
-        : item.ref.type;
-    const fallback = label === "calendar-event" ? "Calendar event" : UNTITLED[item.ref.type];
+        : item.ref.type === "provider-resource" && item.ref.provider === "workspace-note"
+          ? "workspace-note"
+          : item.ref.type;
+    const fallback =
+      label === "calendar-event"
+        ? "Calendar event"
+        : label === "workspace-note"
+          ? "Workspace note"
+          : UNTITLED[item.ref.type];
     const title = sanitizeLinkTitle(item.title ?? "") || fallback;
     const line = `- ${label} "${title}" (key: ${key})\n`;
     const size = byteLength(line);

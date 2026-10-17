@@ -3,6 +3,7 @@ import { act, createElement, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import {
   createMemoryHistory,
+  defaultStringifySearch,
   createRootRoute,
   createRoute,
   createRouter,
@@ -11,9 +12,10 @@ import {
 import { getByRole, getByText, queryByRole } from "@testing-library/dom";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { parseWorkspaceSearch, Route } from "./_chat.workspace";
-import { EnvironmentId } from "@t3tools/contracts";
+import { ProjectId, EnvironmentId } from "@t3tools/contracts";
 import {
   useWorkspaceResourceState,
+  useWorkspaceResources,
   WorkspaceResourcesContext,
 } from "../components/workspace/workspaceResourceState";
 
@@ -279,3 +281,96 @@ it("retains exact calendar deep links and validates the independent selected day
   expect(parseWorkspaceSearch({ space: "calendar", item: "{" })).toEqual({ space: "calendar" });
   expect(parseWorkspaceSearch({ space: "mail", day: "2026-10-13" })).not.toHaveProperty("day");
 });
+
+vi.mock("../components/workspace/mail/useMailCapabilities", () => ({
+  useMailCapabilities: (environmentId?: EnvironmentId) => ({
+    environmentId: environmentId ?? EnvironmentId.make("remote"),
+    ready: true,
+  }),
+}));
+vi.mock("../components/workspace/WorkspaceResourcesPanel", () => ({
+  WorkspaceProjectResources: () => {
+    const resources = useWorkspaceResources();
+    return createElement(
+      "div",
+      null,
+      createElement(
+        "output",
+        { "aria-label": "Resource selection" },
+        JSON.stringify({
+          tab: resources.selectedTab,
+          project: resources.projectId,
+          request: resources.request,
+        }),
+      ),
+      createElement(
+        "button",
+        { onClick: () => resources.chooseProject(ProjectId.make("chosen")) },
+        "Choose resource project",
+      ),
+    );
+  },
+}));
+
+it.each([undefined, "explicit"])(
+  "opens an exact standalone note in Docs using project %s without inventing an event",
+  async (project) => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const ref = {
+      type: "provider-resource",
+      provider: "workspace-note",
+      resourceId: "wsn_00000000-0000-0000-0000-000000000001",
+    };
+    const search = {
+      space: "meetings",
+      environment: "remote",
+      item: JSON.stringify(ref),
+      day: "2026-10-13",
+      ...(project ? { project } : {}),
+    };
+    const rootRoute = createRootRoute();
+    const chatRoute = createRoute({ getParentRoute: () => rootRoute, id: "_chat" });
+    const workspaceRoute = createRoute({
+      getParentRoute: () => chatRoute,
+      path: "workspace",
+      validateSearch: parseWorkspaceSearch,
+      component: Route.options.component!,
+    });
+    const router = createRouter({
+      routeTree: rootRoute.addChildren([chatRoute.addChildren([workspaceRoute])]),
+      history: createMemoryHistory({
+        initialEntries: ["/workspace" + defaultStringifySearch(search)],
+      }),
+    });
+    await router.load();
+    const node = document.createElement("div");
+    document.body.append(node);
+    const root = createRoot(node);
+    try {
+      await act(async () =>
+        root.render(
+          createElement(ResourceProvider, null, createElement(RouterProvider, { router })),
+        ),
+      );
+      if (!project) {
+        expect(
+          getByRole(document.body, "status", { name: "Resource selection" }).textContent,
+        ).toContain('"request":null');
+        await act(() =>
+          getByRole(document.body, "button", { name: "Choose resource project" }).click(),
+        );
+      }
+      const state = JSON.parse(
+        getByRole(document.body, "status", { name: "Resource selection" }).textContent!,
+      );
+      expect(state).toEqual({ tab: "docs", project: project ?? "chosen", request: ref });
+      expect(router.state.location.search.item).toBe(JSON.stringify(ref));
+      expect(router.state.location.search.day).toBe("2026-10-13");
+      expect(node.querySelector('[aria-label="Calendar event"]')).toBeNull();
+    } finally {
+      await act(() => root.unmount());
+      node.remove();
+      vi.unstubAllGlobals();
+    }
+  },
+);

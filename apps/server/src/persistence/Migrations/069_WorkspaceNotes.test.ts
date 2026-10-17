@@ -40,7 +40,7 @@ it.effect.each([
   ["invalid tombstone", "Title", "Body", 1, 2],
 ] as const)(
   "rejects a note with %s at the database boundary",
-  (_name, title, body, revision, deleted) =>
+  ([_name, title, body, revision, deleted]) =>
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       yield* workspaceNotesMigration;

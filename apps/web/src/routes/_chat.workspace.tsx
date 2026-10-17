@@ -1,5 +1,8 @@
+import { parseNoteLocation, openMeetingNote } from "../components/workspace/meetings/meetingNotes";
+import { useWorkspaceResources } from "../components/workspace/workspaceResourceState";
+import { ProjectId } from "@t3tools/contracts";
 import { createFileRoute, Link, redirect, useNavigate } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { useEffect, useRef, useMemo } from "react";
 import { useEnvironmentQuery } from "../state/query";
 import { workspaceCalendar } from "../state/workspaceCalendar";
 import { useEnvironmentSettings } from "../hooks/useSettings";
@@ -58,7 +61,7 @@ function WorkspaceRouteView() {
     case "tasks":
       return <TasksSpace />;
     case "meetings":
-      return <UnavailableWorkspace space={search.space} />;
+      return <NoteWorkspace />;
     case "calendar":
       return <CalendarWorkspace />;
     case undefined:
@@ -68,6 +71,55 @@ function WorkspaceRouteView() {
       throw new Error(`Unknown workspace destination: ${unknownSpace}`);
     }
   }
+}
+
+function NoteWorkspace() {
+  const search = Route.useSearch();
+  const { environmentId } = useMailCapabilities(
+    search.environment ? EnvironmentId.make(search.environment) : undefined,
+  );
+  const resources = useWorkspaceResources();
+  const note = useMemo(() => parseNoteLocation(search.item), [search.item]);
+  const handled = useRef<string | null>(null);
+  const projectId = search.project ? ProjectId.make(search.project) : resources.projectId;
+  const header = useWorkspaceHeaderModel(environmentId, "Notes", "Notes");
+  const open = useWorkspaceItemOpener(environmentId);
+  useEffect(() => {
+    if (!environmentId || !note || resources.environmentId !== environmentId) return;
+    const key = JSON.stringify([environmentId, note, projectId]);
+    if (handled.current === key) return;
+    handled.current = key;
+    if (projectId) openMeetingNote(resources, { environmentId, note, projectId });
+    else resources.reopen();
+  }, [environmentId, note, projectId, resources]);
+  if (!note) return <UnavailableWorkspace space="meetings" />;
+  return (
+    <WorkspaceEngagement
+      environmentId={environmentId}
+      space="meetings"
+      layout="full"
+      header={header}
+      resources={<WorkspaceProjectResources selectedItem={note ? { ref: note } : null} />}
+      {...(note && environmentId
+        ? {
+            linkedContext: {
+              item: { ref: note },
+              render: (item: import("@t3tools/contracts").WorkspaceLinkEndpoint) => (
+                <WorkspaceLinkedContext environmentId={environmentId} item={item} onOpen={open} />
+              ),
+            },
+          }
+        : {})}
+    >
+      <section aria-label="Notes" className="p-5 sm:p-8">
+        <p className="text-sm text-muted-foreground">
+          {note
+            ? "Open this note in Docs. Choose a resource project if needed."
+            : "Open a linked workspace note to preview it in Docs."}
+        </p>
+      </section>
+    </WorkspaceEngagement>
+  );
 }
 
 function CalendarWorkspace() {

@@ -199,3 +199,14 @@ it("recognizes calendar events and keeps unsupported references visible", () => 
     });
   }
 });
+
+it("opens exact native note references while retaining unavailable aliases", () => {
+  const ref = {
+    type: "provider-resource",
+    provider: "workspace-note",
+    resourceId: "wsn_00000000-0000-0000-0000-000000000001",
+  } as const;
+  expect(canOpenLinkedItem(ref)).toBe(true);
+  expect(workspaceEndpointTitle({ ref })).toBe("Workspace note");
+  expect(canOpenLinkedItem({ ...ref, resourceId: "wsn_invalid" })).toBe(false);
+});

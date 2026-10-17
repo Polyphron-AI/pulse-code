@@ -1,7 +1,9 @@
 // @vitest-environment happy-dom
-import { act, useEffect, type ReactNode } from "react";
+import * as Cause from "effect/Cause";
+import { openMeetingNote } from "./meetings/meetingNotes";
+import { act, useEffect, useSyncExternalStore, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { getByRole, getAllByRole, queryByRole } from "@testing-library/dom";
+import { fireEvent, getByRole, getAllByRole, queryByRole } from "@testing-library/dom";
 import { EnvironmentId, ProjectId } from "@t3tools/contracts";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import { WorkspaceResourcesPanel } from "./WorkspaceResourcesPanel";
@@ -21,6 +23,18 @@ const bodies = vi.hoisted(() => ({
   writes: vi.fn(),
   start: vi.fn(),
   toolsAvailable: true,
+  noteReads: vi.fn(),
+  note: {
+    id: "wsn_00000000-0000-0000-0000-000000000001",
+    title: "Launch review",
+    body: "Paragraph one.\n\n1. Preserve this list",
+    revision: 3,
+    createdAt: "2026-10-17T00:00:00Z",
+    updatedAt: "2026-10-17T00:00:00Z",
+  },
+  operate: true,
+  connected: true,
+  connectionListeners: new Set<() => void>(),
 }));
 function Body({
   name,
@@ -68,7 +82,49 @@ vi.mock("./mail/useMailCapabilities", () => ({
   }),
 }));
 vi.mock("./mail/useMailLinks", () => ({ useMailLinks: () => ({ linkItem: bodies.writes }) }));
-vi.mock("../../state/use-atom-command", () => ({ useAtomCommand: () => bodies.start }));
+vi.mock("../../state/use-atom-command", () => ({
+  useAtomCommand: (name: string) => (value: unknown) => bodies.start(name, value),
+}));
+vi.mock("../../state/workspaceNotes", () => ({
+  workspaceNotes: {
+    get: (input: unknown) => {
+      bodies.noteReads(input);
+      return "note";
+    },
+    update: "update",
+    delete: "delete",
+    restore: "restore",
+  },
+}));
+vi.mock("../../state/server", () => ({ serverEnvironment: { configProjection: () => "config" } }));
+vi.mock("../../state/query", () => ({
+  useEnvironmentQuery: (query: unknown) => ({
+    data:
+      query === "config"
+        ? { source: "live", config: { pulseCapabilities: { workspaceNotes: true } } }
+        : query === "note"
+          ? bodies.note
+          : null,
+    error: null,
+    isPending: false,
+    refresh: () => {},
+  }),
+}));
+vi.mock("../../state/environments", () => ({
+  useConnectedEnvironmentIds: () => {
+    const connected = useSyncExternalStore(
+      (listener) => {
+        bodies.connectionListeners.add(listener);
+        return () => {
+          bodies.connectionListeners.delete(listener);
+        };
+      },
+      () => bodies.connected,
+    );
+    return connected ? ["a"] : [];
+  },
+}));
+vi.mock("./useWorkspaceCanOperate", () => ({ useWorkspaceCanOperate: () => bodies.operate }));
 const a = EnvironmentId.make("a");
 const p = ProjectId.make("project");
 let root: Root | undefined;
@@ -86,19 +142,37 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 function Opener() {
-  const { openResource } = useWorkspaceResources();
+  const resources = useWorkspaceResources();
+  const { openResource } = resources;
   return (
-    <button
-      onClick={() =>
-        openResource({
-          projectId: p,
-          tab: "files",
-          request: { type: "file", provider: "google-drive", fileId: "handoff" },
-        })
-      }
-    >
-      Open file
-    </button>
+    <>
+      <button
+        onClick={() =>
+          openMeetingNote(resources, {
+            environmentId: a,
+            projectId: p,
+            note: {
+              type: "provider-resource",
+              provider: "workspace-note",
+              resourceId: bodies.note.id,
+            },
+          })
+        }
+      >
+        Open note
+      </button>
+      <button
+        onClick={() =>
+          openResource({
+            projectId: p,
+            tab: "files",
+            request: { type: "file", provider: "google-drive", fileId: "handoff" },
+          })
+        }
+      >
+        Open file
+      </button>
+    </>
   );
 }
 function App({
@@ -339,4 +413,113 @@ it("keeps focus on the Linked context trigger when toggled closed", async () => 
   });
   await act(() => trigger.click());
   expect(document.activeElement).toBe(trigger);
+});
+
+it("hands an exact native note to Docs, saves with its captured revision, keeps conflict drafts and restores deletion", async () => {
+  bodies.start.mockReset();
+  bodies.noteReads.mockClear();
+  await mount();
+  await act(async () => {
+    await import("./meetings/WorkspaceNoteView");
+    await import("../../state/workspaceNotes");
+    getByRole(node, "button", { name: "Open note" }).click();
+  });
+  expect(getByRole(node, "tab", { name: "Docs" }).getAttribute("aria-selected")).toBe("true");
+  expect(getByRole(node, "region", { name: "Workspace note" }).textContent).toContain(
+    bodies.note.body,
+  );
+  expect(bodies.noteReads).toHaveBeenLastCalledWith({
+    environmentId: a,
+    input: { id: bodies.note.id },
+  });
+  await act(() => getByRole(node, "button", { name: "Edit note" }).click());
+  await act(() =>
+    fireEvent.change(getByRole(node, "textbox", { name: "Note title" }), {
+      target: { value: "Local proposal" },
+    }),
+  );
+  bodies.start.mockResolvedValueOnce({
+    _tag: "Failure",
+    cause: Cause.fail(new Error("This note changed. Your draft has been kept.")),
+  });
+  await act(() =>
+    node
+      .querySelector("form")!
+      .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+  );
+  expect(bodies.start).toHaveBeenLastCalledWith("update", {
+    environmentId: a,
+    input: {
+      id: bodies.note.id,
+      requestId: expect.any(String),
+      title: "Local proposal",
+      body: bodies.note.body,
+      expectedRevision: 3,
+    },
+  });
+  expect(getByRole(node, "alert").textContent).toContain("draft has been kept");
+  expect(getByRole(node, "textbox", { name: "Note text" })).toBeDefined();
+  await act(() => getByRole(node, "button", { name: "Cancel" }).click());
+  expect(node.textContent).toContain("Discard unsaved changes?");
+  await act(() => getByRole(node, "button", { name: "Keep editing" }).click());
+  await act(() => getByRole(node, "button", { name: "Reload current note" }).click());
+  await act(() => getByRole(node, "button", { name: "Discard changes" }).click());
+  bodies.start.mockResolvedValue({ _tag: "Success", value: undefined });
+  await act(() => getByRole(node, "button", { name: "Delete note" }).click());
+  expect(bodies.start).toHaveBeenLastCalledWith("delete", {
+    environmentId: a,
+    input: { id: bodies.note.id, requestId: expect.any(String), expectedRevision: 3 },
+  });
+  expect(node.textContent).toContain("Their links have been kept");
+  await act(() => getByRole(node, "button", { name: "Undo delete" }).click());
+  expect(bodies.start).toHaveBeenLastCalledWith("restore", {
+    environmentId: a,
+    input: { id: bodies.note.id, requestId: expect.any(String), expectedRevision: 4 },
+  });
+  expect(node.textContent).toContain(bodies.note.body);
+  const reads = bodies.noteReads.mock.calls.length;
+  await act(() => getByRole(node, "button", { name: "Close resources" }).click());
+  expect(document.activeElement).toBe(getByRole(node, "button", { name: "Resources" }));
+  expect(bodies.noteReads).toHaveBeenCalledTimes(reads);
+  await act(() => getByRole(node, "button", { name: "Resources" }).click());
+  expect(getByRole(node, "tab", { name: "Docs" }).getAttribute("aria-selected")).toBe("true");
+  expect(node.textContent).toContain(bodies.note.body);
+  expect(bodies.writes).not.toHaveBeenCalled();
+});
+it("unmounts note reads when disconnected and keeps read-only writes disabled after reconnect", async () => {
+  bodies.operate = false;
+  bodies.connected = true;
+  bodies.start.mockReset();
+  bodies.noteReads.mockClear();
+  try {
+    await mount();
+    await act(async () => {
+      await import("./meetings/WorkspaceNoteView");
+      await import("../../state/workspaceNotes");
+      getByRole(node, "button", { name: "Open note" }).click();
+    });
+    const edit = getByRole(node, "button", { name: "Edit note" }) as HTMLButtonElement;
+    expect(edit.disabled).toBe(true);
+    await act(() => edit.click());
+    expect(bodies.start).not.toHaveBeenCalled();
+    const reads = bodies.noteReads.mock.calls.length;
+    await act(() => {
+      bodies.connected = false;
+      for (const listener of bodies.connectionListeners) listener();
+    });
+    expect(bodies.noteReads).toHaveBeenCalledTimes(reads);
+    expect(node.textContent).toContain("Notes are unavailable. Their links have been kept.");
+    await act(() => {
+      bodies.connected = true;
+      for (const listener of bodies.connectionListeners) listener();
+    });
+    expect(node.textContent).toContain(bodies.note.body);
+    expect((getByRole(node, "button", { name: "Delete note" }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+    expect(bodies.start).not.toHaveBeenCalled();
+  } finally {
+    bodies.operate = true;
+    bodies.connected = true;
+  }
 });

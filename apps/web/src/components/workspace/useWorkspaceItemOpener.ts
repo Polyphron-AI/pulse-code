@@ -1,3 +1,11 @@
+import * as Cause from "effect/Cause";
+import { useAtomCommand } from "../../state/use-atom-command";
+import { workspaceNotes } from "../../state/workspaceNotes";
+import { workspaceLinks } from "../../state/workspaceLinks";
+import { useConnectedEnvironmentIds } from "../../state/environments";
+import { useWorkspaceCanOperate } from "./useWorkspaceCanOperate";
+import { createMeetingNote } from "./meetings/meetingNotes";
+import { isWorkspaceNote } from "./meetings/meetingNotes";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { useNavigate } from "@tanstack/react-router";
 import { WorkspaceItemRef, parseTelegramResourceId, type EnvironmentId } from "@t3tools/contracts";
@@ -67,6 +75,11 @@ export function useWorkspaceItemOpener(environmentId: EnvironmentId | null) {
             item: JSON.stringify(ref),
           },
         });
+      if (isWorkspaceNote(ref))
+        void navigate({
+          to: "/workspace",
+          search: { space: "meetings", environment: environmentId, item: JSON.stringify(ref) },
+        });
       if (isCalendarItem(ref))
         void navigate({
           to: "/workspace",
@@ -99,5 +112,39 @@ export function useWorkspaceItemOpener(environmentId: EnvironmentId | null) {
         );
     },
     [environmentId, navigate, workspaceTasksV2],
+  );
+}
+
+/** Capture one environment for the entire create/link sequence and any repair. */
+export function useMeetingNoteCreator(environmentId: EnvironmentId) {
+  const create = useAtomCommand(workspaceNotes.create, { reportFailure: false });
+  const link = useAtomCommand(workspaceLinks.link, { reportFailure: false });
+  const connected = useConnectedEnvironmentIds().includes(environmentId);
+  const canOperate = useWorkspaceCanOperate(environmentId);
+  return useCallback(
+    async (
+      input: Omit<Parameters<typeof createMeetingNote>[1], "environmentId">,
+      onCreated?: Parameters<typeof createMeetingNote>[2],
+    ) => {
+      if (!connected || !canOperate)
+        throw new Error("Connect with operate access to create or link notes.");
+      return createMeetingNote(
+        {
+          create: async (input) => {
+            const result = await create({ environmentId, input });
+            if (result._tag === "Failure") throw Cause.squash(result.cause);
+            return result.value;
+          },
+          link: async (input) => {
+            const result = await link({ environmentId, input });
+            if (result._tag === "Failure") throw Cause.squash(result.cause);
+            return result.value;
+          },
+        },
+        { ...input, environmentId },
+        onCreated,
+      );
+    },
+    [environmentId, create, link, connected, canOperate],
   );
 }

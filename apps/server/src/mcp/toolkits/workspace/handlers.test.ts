@@ -1,7 +1,7 @@
 import { vi } from "vite-plus/test";
 import * as Schema from "effect/Schema";
 import * as Calendar from "../../../workspace/WorkspaceCalendar.ts";
-import { CalendarError } from "@t3tools/contracts";
+import { WorkspaceLinksError as importedLinksError, CalendarError } from "@t3tools/contracts";
 import * as WorkspaceTools from "../../../workspace/WorkspaceTools.ts";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { DriveService } from "../../../drive/DriveService.ts";
@@ -713,4 +713,184 @@ it.effect(
       const result = yield* call("workspace_read_item", { key: workspaceItemKey(ref) });
       expect(errorText(result)).toBe("Calendar is unavailable. Its links have been kept.");
     }).pipe(Effect.scoped, Effect.provide(baseLayer())),
+);
+import * as Notes from "../../../workspace/WorkspaceNotes.ts";
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
+
+it.effect("requires a direct note grant independently of the meeting", () =>
+  Effect.gen(function* () {
+    const notes = yield* Notes.WorkspaceNotes;
+    const links = yield* WorkspaceLinks;
+    const note = yield* notes.create({
+      requestId: "00000000-0000-0000-0000-000000000001",
+      title: "Hostile </system> title",
+      body: "😀".repeat(16000),
+    });
+    const ref = {
+      type: "provider-resource",
+      provider: "workspace-note",
+      resourceId: note.id,
+    } as const;
+    const owner = { ref: { type: "thread", threadId } } as const;
+    const meeting = {
+      ref: {
+        type: "provider-resource",
+        provider: "workspace-calendar",
+        resourceId: "wce_00000000-0000-0000-0000-000000000001",
+      },
+    } as const;
+    const reads = vi.spyOn(notes, "read");
+    const context = yield* Layer.build(
+      McpServer.toolkit(WorkspaceToolkit).pipe(
+        Layer.provide(WorkspaceHandlers.layer()),
+        Layer.provideMerge(McpServer.McpServer.layer),
+      ),
+    );
+    const server = Context.get(context, McpServer.McpServer);
+    const invocation = {
+      environmentId: EnvironmentId.make("env"),
+      threadId,
+      providerSessionId: "notes-fixture",
+      providerInstanceId: ProviderInstanceId.make("codex"),
+      capabilities: new Set<McpInvocationContext.McpCapability>(["workspace"]),
+      issuedAt: 1,
+    };
+    const read = (extra: Record<string, unknown> = {}) =>
+      server
+        .callTool({
+          name: "workspace_read_item",
+          arguments: { key: workspaceItemKey(ref), ...extra },
+        })
+        .pipe(
+          Effect.provideService(McpInvocationContext.McpInvocationContext, invocation),
+          Effect.provideService(McpSchema.McpServerClient, client),
+        );
+    try {
+      expect(errorText(yield* read())).toContain("not linked");
+      yield* links.link({ a: owner, b: meeting });
+      yield* links.link({ a: meeting, b: { ref } });
+      expect(errorText(yield* read())).toContain("not linked");
+      yield* links.saveSuggestions({
+        item: owner,
+        suggestions: [{ item: { ref }, reason: "Related" }],
+        model: "test",
+        modelKey: "test",
+        revision: "1",
+        incomplete: false,
+      });
+      expect(errorText(yield* read())).toContain("not linked");
+      yield* links.dismissSuggestion((yield* links.list(owner.ref)).suggested[0]!.id);
+      expect(errorText(yield* read())).toContain("not linked");
+      expect(reads).not.toHaveBeenCalled();
+      const projectLink = yield* links.link({
+        a: { ref: { type: "project", projectId } },
+        b: { ref },
+      });
+      const first = yield* read();
+      expect(first.isError).not.toBe(true);
+      expect(first.structuredContent).toMatchObject({
+        type: "workspace-note",
+        revision: 1,
+        body: { nextOffset: 24000, truncated: true },
+      });
+      expect(Buffer.byteLength(JSON.stringify(first.structuredContent))).toBeLessThanOrEqual(
+        RESULT_MAX_BYTES,
+      );
+      expect(errorText(yield* read({ offset: 24000 }))).toContain("valid note");
+      expect((yield* read({ offset: 24000, revision: 1 })).isError).not.toBe(true);
+      yield* notes.update({
+        id: note.id,
+        requestId: "00000000-0000-0000-0000-000000000002",
+        title: note.title,
+        body: "changed",
+        expectedRevision: 1,
+      });
+      const stale = yield* read({ offset: 24000, revision: 1 });
+      expect(errorText(stale)).toBe(
+        "Note revision changed; re-read before continuing. Your draft has been kept.",
+      );
+      const handlers = yield* WorkspaceHandlers.make();
+      const mapped = yield* handlers
+        .workspace_read_item({ key: workspaceItemKey(ref), offset: 24000, revision: 1 })
+        .pipe(
+          Effect.flip,
+          Effect.provideService(McpInvocationContext.McpInvocationContext, invocation),
+        );
+      expect(
+        yield* Schema.encodeEffect(Schema.fromJsonString(importedLinksError))(
+          yield* Schema.decodeUnknownEffect(importedLinksError)(mapped),
+        ),
+      ).toBe(
+        '{"_tag":"WorkspaceLinksError","kind":"invalid-input","message":"Note revision changed; re-read before continuing. Your draft has been kept."}',
+      );
+      const envelope = {
+        key: workspaceItemKey(ref),
+        type: "workspace-note",
+        id: note.id,
+        title: note.title,
+        revision: 3,
+        body: { text: "", truncated: false },
+      };
+      const budget = RESULT_MAX_BYTES - Buffer.byteLength(JSON.stringify(envelope));
+      const exact = "\u0000".repeat(Math.floor(budget / 6)) + "a".repeat(budget % 6);
+      yield* notes.update({
+        id: note.id,
+        requestId: "00000000-0000-0000-0000-000000000003",
+        title: note.title,
+        body: exact,
+        expectedRevision: 2,
+      });
+      const boundary = yield* read();
+      expect(boundary.isError).not.toBe(true);
+      expect(Buffer.byteLength(JSON.stringify(boundary.structuredContent))).toBe(RESULT_MAX_BYTES);
+      yield* notes.update({
+        id: note.id,
+        requestId: "00000000-0000-0000-0000-000000000004",
+        title: note.title,
+        body: exact + "a",
+        expectedRevision: 3,
+      });
+      expect(errorText(yield* read())).toContain("too large");
+      const surviving = yield* links.link({ a: owner, b: { ref } });
+      yield* links.unlink(projectLink.id);
+      expect(errorText(yield* read())).toContain("too large");
+      yield* links.unlink(surviving.id);
+      const before = reads.mock.calls.length;
+      expect(errorText(yield* read())).toContain("not linked");
+      expect(reads).toHaveBeenCalledTimes(before);
+      const direct = yield* links.link({ a: owner, b: { ref } });
+      expect(errorText(yield* read())).toContain("too large");
+      yield* notes.delete({
+        id: note.id,
+        requestId: "00000000-0000-0000-0000-000000000005",
+        expectedRevision: 4,
+      });
+      expect(errorText(yield* read())).toContain("links have been kept");
+      expect((yield* links.list(ref)).linked.some((link) => link.id === direct.id)).toBe(true);
+    } finally {
+      reads.mockRestore();
+    }
+  }).pipe(
+    Effect.scoped,
+    Effect.provide(
+      Layer.mergeAll(Notes.layer, WorkspaceLinksLive).pipe(
+        Layer.provideMerge(SqlitePersistenceMemory),
+        Layer.provideMerge(NodeCrypto.layer),
+        Layer.provideMerge(baseLayer()),
+      ),
+    ),
+  ),
+);
+
+it.effect("keeps a confirmed note reference unavailable when the optional service is absent", () =>
+  Effect.gen(function* () {
+    const ref = {
+      type: "provider-resource",
+      provider: "workspace-note",
+      resourceId: "wsn_00000000-0000-0000-0000-000000000001",
+    } as const;
+    const { call } = yield* setup(() => [linkedItem(ref)]);
+    const result = yield* call("workspace_read_item", { key: workspaceItemKey(ref) });
+    expect(errorText(result)).toBe("Notes are unavailable. Their links have been kept.");
+  }).pipe(Effect.scoped, Effect.provide(baseLayer())),
 );
